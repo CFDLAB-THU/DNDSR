@@ -144,12 +144,16 @@ namespace DNDS::Geom
     //     // DNDS_assert(this->adjC2FState == Adj_PointToLocal);
     // }
 
-    void UnstructuredMesh::ObtainLocalFactFillOrdering(int method)
+    void UnstructuredMesh::ObtainLocalFactFillOrdering(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control)
     {
+        if (!control.useDirectPrec)
+            return;
         cell2cellFaceVLocal = this->GetCell2CellFaceVLocal();
+        auto &localFillOrderingNew2Old = symLU.localFillOrderingNew2Old;
+        auto &localFillOrderingOld2New = symLU.localFillOrderingOld2New;
         if (!this->NumCell())
             return;
-        if (method == -1)
+        if (control.getOrderingCode() == -1)
         {
             localFillOrderingNew2Old.reserve(this->NumCell());
             for (index i = 0; i < this->NumCell(); i++)
@@ -162,7 +166,7 @@ namespace DNDS::Geom
             for (index i = 0; i < this->NumCell(); i++)
                 localFillOrderingOld2New.at(localFillOrderingNew2Old.at(i)) = i;
         }
-        if (method == 1)
+        if (control.getOrderingCode() == 1)
         {
             _METIS::idx_t nCell = _METIS::indexToIdx(this->NumCell());
             _METIS::idx_t nCon{1}, options[METIS_NOPTIONS];
@@ -211,7 +215,7 @@ namespace DNDS::Geom
                 localFillOrderingOld2New[i] = iPerm[i];
             }
         }
-        else if (method == 2)
+        else if (control.getOrderingCode() == 2)
         {
             using namespace boost;
             typedef adjacency_list<vecS, vecS, directedS> Graph;

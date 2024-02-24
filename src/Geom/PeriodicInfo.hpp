@@ -275,11 +275,11 @@ namespace DNDS::Geom
                 return v;
             Eigen::Matrix<real, dim, nVec> ret = v;
             if (bits.getP3())
-                ret = this->TransVector(ret, BC_ID_PERIODIC_3);
+                ret = this->TransVector<dim, nVec>(ret, BC_ID_PERIODIC_3);
             if (bits.getP2())
-                ret = this->TransVector(ret, BC_ID_PERIODIC_2);
+                ret = this->TransVector<dim, nVec>(ret, BC_ID_PERIODIC_2);
             if (bits.getP1())
-                ret = this->TransVector(ret, BC_ID_PERIODIC_1);
+                ret = this->TransVector<dim, nVec>(ret, BC_ID_PERIODIC_1);
             return ret;
         }
 
@@ -304,11 +304,11 @@ namespace DNDS::Geom
                 return v;
             Eigen::Matrix<real, dim, nVec> ret = v;
             if (bits.getP1())
-                ret = this->TransVectorBack(ret, BC_ID_PERIODIC_1);
+                ret = this->TransVectorBack<dim, nVec>(ret, BC_ID_PERIODIC_1);
             if (bits.getP2())
-                ret = this->TransVectorBack(ret, BC_ID_PERIODIC_2);
+                ret = this->TransVectorBack<dim, nVec>(ret, BC_ID_PERIODIC_2);
             if (bits.getP3())
-                ret = this->TransVectorBack(ret, BC_ID_PERIODIC_3);
+                ret = this->TransVectorBack<dim, nVec>(ret, BC_ID_PERIODIC_3);
             return ret;
         }
     };

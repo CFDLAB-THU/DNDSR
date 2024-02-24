@@ -1,5 +1,9 @@
 #pragma once
 
+// #ifndef __DNDS_REALLY_COMPILING__
+// #define __DNDS_REALLY_COMPILING__
+// #define __DNDS_REALLY_COMPILING__HEADER_ON__
+// #endif
 #include "DNDS/Defines.hpp"
 #include "DNDS/MPI.hpp"
 #include "Geom/Quadrature.hpp"
@@ -7,14 +11,15 @@
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenMatirx.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenVector.hpp"
-
 #include "BaseFunction.hpp"
 #include "Limiters.hpp"
+#include "DNDS/JsonUtil.hpp"
+// #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
+// #undef __DNDS_REALLY_COMPILING__
+// #endif
 
 #define JSON_ASSERT DNDS_assert
 #include "json.hpp"
-
-#include "DNDS/JsonUtil.hpp"
 
 namespace DNDS::CFV
 {
@@ -41,6 +46,7 @@ namespace DNDS::CFV
         bool normWBAP = false;       /// @brief if switch to normWBAP
         int limiterBiwayAlter = 0;   /// @brief 0=wbap-L2-biway, 1=minmod-biway
         int subs2ndOrder = 0;        /// @brief 0: vfv; 1: gauss rule; 2: least square
+        real svdTolerance = 0;       /// @brief tolerance used in svd
 
         bool ignoreMeshGeometryDeficiency = false;
         real bcWeight = 1;
@@ -132,13 +138,13 @@ namespace DNDS::CFV
             }
         } functionalSettings;
 
-        VRSettings()
-        {
-        }
+        // VRSettings()
+        // {
+        // }
 
         VRSettings(int dim)
         {
-            cacheDiffBaseSize = dim + 1;
+            cacheDiffBaseSize = uint8_t(dim + 1);
         }
 
         /**
@@ -161,6 +167,8 @@ namespace DNDS::CFV
             jsonSetting["limiterBiwayAlter"] = limiterBiwayAlter;
             jsonSetting["subs2ndOrder"] = subs2ndOrder;
             jsonSetting["ignoreMeshGeometryDeficiency"] = ignoreMeshGeometryDeficiency;
+
+            jsonSetting["svdTolerance"] = svdTolerance;
 
             jsonSetting["baseSettings"] = baseSettings;
             jsonSetting["functionalSettings"] = functionalSettings;
@@ -187,6 +195,8 @@ namespace DNDS::CFV
             limiterBiwayAlter = jsonSetting["limiterBiwayAlter"];
             subs2ndOrder = jsonSetting["subs2ndOrder"];
             ignoreMeshGeometryDeficiency = jsonSetting["ignoreMeshGeometryDeficiency"];
+
+            svdTolerance = jsonSetting["svdTolerance"];
 
             baseSettings = jsonSetting["baseSettings"];
             functionalSettings = jsonSetting["functionalSettings"];

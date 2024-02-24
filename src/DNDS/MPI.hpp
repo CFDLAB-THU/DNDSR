@@ -228,8 +228,8 @@ namespace DNDS
             MPI_Buffer_detach(&obuf, &osize);
 
             buf.resize(1024 * 1024);
-            MPI_Buffer_attach(buf.data(), buf.size());
-        };
+            MPI_Buffer_attach(buf.data(), int(buf.size())); //! warning, bufsize could overflow
+        }
         MPIBufferHandler(const MPIBufferHandler &);
         MPIBufferHandler &operator=(const MPIBufferHandler &);
 
@@ -238,7 +238,7 @@ namespace DNDS
         MPI_int size()
         {
             DNDS_assert(buf.size() <= MAX_MPI_int);
-            return buf.size();
+            return MPI_int(buf.size()); // could overflow!
         }
         void claim(MPI_Aint cs, int reportRank = 0)
         {

@@ -335,7 +335,7 @@ namespace DNDS
                         auto faceID = mesh->GetFaceZone(iFace);
                         DNDS_assert(FaceIDIsExternalBC(faceID));
 
-                        int nVars = u[iCell].size();
+                        int nVars = (int)u[iCell].size();
 
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC;
                         BCC.setZero(uRec[iCell].rows(), uRec[iCell].cols());

@@ -1,22 +1,29 @@
 #pragma once
-#include "Gas.hpp"
-#include "Geom/Mesh.hpp"
-#include "CFV/VariationalReconstruction.hpp"
-
-#include "Solver/Linear.hpp"
-#include "EulerEvaluator.hpp"
-#include "DNDS/JsonUtil.hpp"
 
 #include <iomanip>
 #include <functional>
 #include <tuple>
+#include <filesystem>
+
+// #ifndef __DNDS_REALLY_COMPILING__
+// #define __DNDS_REALLY_COMPILING__
+// #define __DNDS_REALLY_COMPILING__HEADER_ON__
+// #endif
+#include "Gas.hpp"
+#include "Geom/Mesh.hpp"
+#include "CFV/VariationalReconstruction.hpp"
+#include "Solver/Linear.hpp"
+#include "EulerEvaluator.hpp"
+#include "DNDS/JsonUtil.hpp"
+#include "EulerBC.hpp"
+#include "DNDS/SerializerJSON.hpp"
+// #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
+// #undef __DNDS_REALLY_COMPILING__
+// #endif
 
 #define JSON_ASSERT DNDS_assert
 #include "json.hpp"
-#include "EulerBC.hpp"
 
-#include "DNDS/SerializerJSON.hpp"
-#include <filesystem>
 
 namespace DNDS::Euler
 {
@@ -43,12 +50,13 @@ namespace DNDS::Euler
         typedef typename TEval::TDof TDof;
         typedef typename TEval::TRec TRec;
         typedef typename TEval::TScalar TScalar;
-        typedef ssp<CFV::VariationalReconstruction<gDim>> TVFV;
+        typedef CFV::VariationalReconstruction<gDim> TVFV;
+        typedef ssp<CFV::VariationalReconstruction<gDim>> TpVFV;
 
     private:
         MPIInfo mpi;
         ssp<Geom::UnstructuredMesh> mesh, meshBnd;
-        TVFV vfv; // ! gDim -> 3 for intellisense
+        TpVFV vfv; // ! gDim -> 3 for intellisense
         ssp<Geom::UnstructuredMeshSerialRW> reader, readerBnd;
         ssp<EulerEvaluator<model>> pEval;
 
@@ -326,17 +334,7 @@ namespace DNDS::Euler
                     preserveLimited)
             } limiterControl;
 
-            struct DirectPrecControl
-            {
-                bool useDirectPrec = false;
-                int iluCode = 0;      // 0 for no fill, -1 for complete
-                int orderingCode = INT32_MIN; // INT32_MIN for auto 0 for natural, 1 for metis, 2 for MMD
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    DirectPrecControl,
-                    useDirectPrec,
-                    iluCode,
-                    orderingCode)
-            } directPrecControl;
+            
 
             struct LinearSolverControl
             {
@@ -349,13 +347,15 @@ namespace DNDS::Euler
                 int nSgsConsoleCheck = 100;
                 int nGmresConsoleCheck = 100;
                 bool initWithLastURecInc = false;
+                Direct::DirectPrecControl directPrecControl;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     LinearSolverControl,
                     jacobiCode,
                     sgsIter, sgsWithRec, gmresCode,
                     nGmresSpace, nGmresIter,
                     nSgsConsoleCheck, nGmresConsoleCheck,
-                    initWithLastURecInc)
+                    initWithLastURecInc,
+                    directPrecControl)
             } linearSolverControl;
 
             struct RestartState
@@ -403,7 +403,6 @@ namespace DNDS::Euler
                 __DNDS__json_to_config(boundaryDefinition);
                 __DNDS__json_to_config(limiterControl);
                 __DNDS__json_to_config(linearSolverControl);
-                __DNDS__json_to_config(directPrecControl);
                 __DNDS__json_to_config(timeAverageControl);
                 __DNDS__json_to_config(others);
                 __DNDS__json_to_config(restartState);
@@ -428,7 +427,7 @@ namespace DNDS::Euler
             Configuration(int nVars)
             {
                 vfvSettings = CFV::VRSettings{gDim};
-                typename TEval::Setting().ReadWriteJSON(eulerSettings, nVars, false);
+                EulerEvaluatorSettings<model>().ReadWriteJSON(eulerSettings, nVars, false);
                 bcSettings = BoundaryHandler<model>();
             }
 
@@ -816,7 +815,6 @@ namespace DNDS::Euler
             DNDS_MPI_InsertCheck(mpi, "ReadMeshAndInitialize -1 nvars " + std::to_string(nVars));
         }
 
-        void RunImplicitEuler();
 
         void PrintConfig(bool updateCommit = false)
         {
@@ -911,7 +909,7 @@ namespace DNDS::Euler
                        tAdditionalCellScalarList &additionalCellScalars,
                        TEval &eval, PrintDataMode mode = PrintDataLatest);
 
-        void WriteSerializer(SerializerBase *serializer, const std::string &name)
+        void WriteSerializer(SerializerBase *serializer, const std::string &name) // currently not using
         {
             auto cwd = serializer->GetCurrentPath();
             serializer->CreatePath(name);
@@ -933,5 +931,8 @@ namespace DNDS::Euler
             else
                 serializer->WriteInt("hasReconstructionValue", 0);
         }
+
+        void RunImplicitEuler();
+        void doPrecondition(real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp, TDof &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone);
     };
 }

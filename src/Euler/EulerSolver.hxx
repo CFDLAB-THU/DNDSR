@@ -1,6 +1,15 @@
+// #ifndef __DNDS_REALLY_COMPILING__
+// #define __DNDS_REALLY_COMPILING__
+// #define __DNDS_REALLY_COMPILING__HEADER_ON__
+// #endif
 #include "EulerSolver.hpp"
 #include "DNDS/EigenUtil.hpp"
 #include "Solver/ODE.hpp"
+#include "SpecialFields.hpp"
+// #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
+// #undef __DNDS_REALLY_COMPILING__
+// #endif
+// #include "fmt/ranges.h"
 
 namespace DNDS::Euler
 {
@@ -20,7 +29,10 @@ namespace DNDS::Euler
     void EulerSolver<model>::RunImplicitEuler()
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        using namespace std::literals;
+
         DNDS_MPI_InsertCheck(mpi, "Implicit 1 nvars " + std::to_string(nVars));
+        EulerEvaluator<model> &eval = *pEval;
         auto hashCoord = mesh->coords.hash();
         if (mpi.rank == 0)
         {
@@ -44,22 +56,11 @@ namespace DNDS::Euler
         DNDS_assert(logErr);
         /************* Files **************/
 
-        if (config.directPrecControl.useDirectPrec)
+        mesh->ObtainLocalFactFillOrdering(*eval.symLU, config.linearSolverControl.directPrecControl);
+        mesh->ObtainSymmetricSymbolicFactorization(*eval.symLU, config.linearSolverControl.directPrecControl);
+        if (config.linearSolverControl.jacobiCode == 2) // do lu on mean-value jacobian
         {
-            int orderingCode = config.directPrecControl.orderingCode;
-            if (orderingCode == INT32_MIN)
-            {
-                if(config.directPrecControl.iluCode >= 0)
-                    orderingCode = 0; // TODO: make a manual natural ordering
-                else
-                    orderingCode = 2;
-            }
-            mesh->ObtainLocalFactFillOrdering(orderingCode);
-            mesh->ObtainSymmetricSymbolicFactorization(config.directPrecControl.iluCode);
-            if (config.linearSolverControl.jacobiCode == 2) // do lu on mean-value jacobian
-            {
-                DNDS_MAKE_SSP(JLocalLU, mesh, nVars);
-            }
+            DNDS_MAKE_SSP(JLocalLU, eval.symLU, nVars);
         }
 
         std::shared_ptr<ODE::ImplicitDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>> ode;
@@ -164,7 +165,6 @@ namespace DNDS::Euler
                 });
 
         // fmt::print("pEval is {}", (void*)(pEval.get()));
-        EulerEvaluator<model> &eval = *pEval;
 
         eval.InitializeUDOF(u);
         if (config.timeAverageControl.enabled)
@@ -177,8 +177,8 @@ namespace DNDS::Euler
         OutputPicker outputPicker;
         {
             OutputPicker::tMap outMap;
-            outMap["R"] = [&](index iCell)
-            { return u[iCell](0); };
+            // outMap["R"] = [&](index iCell)
+            // { return u[iCell](0); };
             outMap["RU"] = [&](index iCell)
             { return u[iCell](1); };
             outMap["RV"] = [&](index iCell)
@@ -233,8 +233,8 @@ namespace DNDS::Euler
         double tstart = MPI_Wtime();
         double trec{0}, tcomm{0}, trhs{0}, tLim{0};
         int stepCount = 0;
-        Eigen::Vector<real, -1> resBaseC;
-        Eigen::Vector<real, -1> resBaseCInternal;
+        Eigen::VectorFMTSafe<real, -1> resBaseC;
+        Eigen::VectorFMTSafe<real, -1> resBaseCInternal;
         resBaseC.resize(nVars);
         resBaseCInternal.resize(nVars);
         resBaseC.setConstant(config.convergenceControl.res_base);
@@ -307,7 +307,7 @@ namespace DNDS::Euler
             }
             real recIncBase = 0;
             double tstartA = MPI_Wtime();
-            typename TVFV::element_type::template TFBoundary<nVarsFixed>
+            typename TVFV::template TFBoundary<nVarsFixed>
                 FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace,
                                 const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType) -> TU
             {
@@ -320,7 +320,7 @@ namespace DNDS::Euler
                     compressed);
                 return eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, normOutV, normBase, pPhy(Seq012), tSimu + ct * curDtImplicit, bType, true);
             };
-            typename TVFV::element_type::template TFBoundaryDiff<nVarsFixed>
+            typename TVFV::template TFBoundaryDiff<nVarsFixed>
                 FBoundaryDiff = [&](const TU &UL, const TU &dU, const TU &UMean, index iCell, index iFace,
                                     const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType) -> TU
             {
@@ -365,7 +365,7 @@ namespace DNDS::Euler
                         if (iRec % config.implicitReconstructionControl.nRecConsolCheck == 0)
                         {
                             if (mpi.rank == 0)
-                                std::cout << iRec << " Rec inc: " << recIncBase << " -> " << recInc << std::endl;
+                                log() << iRec << " Rec inc: " << recIncBase << " -> " << recInc << std::endl;
                         }
                         if (recInc < recIncBase * config.implicitReconstructionControl.recThreshold)
                             break;
@@ -448,7 +448,10 @@ namespace DNDS::Euler
                 // vfv->ReconstructionWBAPLimitFacial(
                 //     cx, uRecC, uRecNew, uF0, uF1, ifUseLimiter,
 
-                auto fML = [&](const auto &UL, const auto &UR, const auto &n) -> auto
+                using tLimitBatch = typename TVFV::template tLimitBatch<nVarsFixed>;
+
+                auto fML = [&](const TU &UL, const TU &UR, const Geom::tPoint &n,
+                               const Eigen::Ref<tLimitBatch> &data) -> tLimitBatch
                 {
                     PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterA);
                     Eigen::Vector<real, I4 + 1> UC = (UL + UR)(Seq01234) * 0.5;
@@ -462,10 +465,11 @@ namespace DNDS::Euler
                     ret.setIdentity();
                     ret(Seq01234, Seq01234) = M;
                     PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterA);
-                    return ret;
+                    return (ret * data.transpose()).transpose();
                     // return real(1);
                 };
-                auto fMR = [&](const auto &UL, const auto &UR, const auto &n) -> auto
+                auto fMR = [&](const TU &UL, const TU &UR, const Geom::tPoint &n,
+                               const Eigen::Ref<tLimitBatch> &data) -> tLimitBatch
                 {
                     PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterA);
                     Eigen::Vector<real, I4 + 1> UC = (UL + UR)(Seq01234) * 0.5;
@@ -480,56 +484,36 @@ namespace DNDS::Euler
                     ret(Seq01234, Seq01234) = M;
 
                     PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterA);
-                    return ret;
+                    return (ret * data.transpose()).transpose();
                     // return real(1);
                 };
                 if (config.limiterControl.smoothIndicatorProcedure == 0)
-                    vfv->DoCalculateSmoothIndicator(
+                    vfv->template DoCalculateSmoothIndicator<nVarsFixed, 2>(
                         ifUseLimiter, (uRecC), (u),
                         std::array<int, 2>{0, I4});
                 else if (config.limiterControl.smoothIndicatorProcedure == 1)
-                {
-                    if constexpr (dim == 2)
-                        vfv->DoCalculateSmoothIndicatorV1(
-                            ifUseLimiter, (uRecC), (u),
-                            std::array<int, 4>{0, 1, 2, 3},
-                            [&](auto &v)
+                    vfv->template DoCalculateSmoothIndicatorV1<nVarsFixed>(
+                        ifUseLimiter, (uRecC), (u),
+                        TU::Ones(nVars),
+                        (
+                            [&](Eigen::Matrix<real, 1, nVarsFixed> &v)
                             {
-                                TU prim;
-                                TU cons;
-                                cons.setZero();
-                                cons(Seq01234) = v.transpose();
-                                Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, eval.settings.idealGasProperty.gamma);
-                                v.setConstant(prim(I4));
-                            });
-                    else
-                        vfv->DoCalculateSmoothIndicatorV1(
-                            ifUseLimiter, (uRecC), (u),
-                            std::array<int, 5>{0, 1, 2, 3, 4},
-                            [&](auto &v)
+                            TU prim;
+                            TU cons;
+                            cons = v.transpose();
+                            if (cons(0) < verySmallReal)
                             {
-                                TU prim;
-                                TU cons;
-                                cons.setZero();
-                                cons(Seq01234) = v.transpose();
-                                if (cons(0) < verySmallReal)
-                                {
-                                    v.setConstant(-veryLargeReal * v(I4));
-                                }    // to make the values absurd
-                                else // could get a p
-                                {
-                                    Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, eval.settings.idealGasProperty.gamma);
-                                    v.setConstant(prim(I4));
-                                }
-                            });
-                }
+                                v.setConstant(-veryLargeReal * v(I4));
+                            }
+                            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, eval.settings.idealGasProperty.gamma);
+                            v.setConstant(prim(I4)); }));
+
                 else
                 {
                     DNDS_assert(false);
                 }
                 if (config.limiterControl.limiterProcedure == 1)
-                    vfv->DoLimiterWBAP_C(
-                        eval,
+                    vfv->template DoLimiterWBAP_C<nVarsFixed>(
                         (cx),
                         (uRecC),
                         (uRecNew),
@@ -538,8 +522,7 @@ namespace DNDS::Euler
                         iter < config.limiterControl.nPartialLimiterStartLocal && step < config.limiterControl.nPartialLimiterStart,
                         fML, fMR, true);
                 else if (config.limiterControl.limiterProcedure == 0)
-                    vfv->DoLimiterWBAP_3(
-                        eval,
+                    vfv->template DoLimiterWBAP_3<nVarsFixed>(
                         (cx),
                         (uRecC),
                         (uRecNew),
@@ -684,14 +667,14 @@ namespace DNDS::Euler
                 if (nLimFRes)
                     if (mpi.rank == 0)
                     {
-                        std::cout << std::scientific << std::setw(3);
-                        std::cout << "PPFResLimiter: nLimFRes[" << nLimFRes << "] minAlpha [" << alphaMinFRes << "]" << std::endl;
+                        log() << std::scientific << std::setw(3);
+                        log() << "PPFResLimiter: nLimFRes[" << nLimFRes << "] minAlpha [" << alphaMinFRes << "]" << std::endl;
                     }
 
                 crhs *= alphaPP_tmp;
             }
 
-            typename TVFV::element_type::template TFBoundary<nVarsFixed>
+            typename TVFV::template TFBoundary<nVarsFixed>
                 FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace,
                                 const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType) -> TU
             {
@@ -719,46 +702,6 @@ namespace DNDS::Euler
             // }
 
             TU sgsRes(nVars), sgsRes0(nVars);
-
-            auto doPrecondition = [&](real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp, TDof &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone)
-            {
-                if (config.linearSolverControl.jacobiCode <= 1)
-                {
-                    bool useJacobi = config.linearSolverControl.jacobiCode == 0;
-                    eval.UpdateSGS(alphaDiag, crhs, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, true, sgsRes);
-                    if (useJacobi)
-                        cxInc = uTemp;
-                    cxInc.trans.startPersistentPull();
-                    cxInc.trans.waitPersistentPull();
-                    eval.UpdateSGS(alphaDiag, crhs, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, false, sgsRes);
-                    if (useJacobi)
-                        cxInc = uTemp;
-                    cxInc.trans.startPersistentPull();
-                    cxInc.trans.waitPersistentPull();
-                    // eval.UpdateLUSGSForward(alphaDiag, crhs, cx, cxInc, JDC, cxInc);
-                    // cxInc.trans.startPersistentPull();
-                    // cxInc.trans.waitPersistentPull();
-                    // eval.UpdateLUSGSBackward(alphaDiag, crhs, cx, cxInc, JDC, cxInc);
-                    // cxInc.trans.startPersistentPull();
-                    // cxInc.trans.waitPersistentPull();
-                    inputIsZero = false;
-                }
-                else if (config.linearSolverControl.jacobiCode == 2)
-                {
-                    DNDS_assert_info(config.directPrecControl.useDirectPrec, "need to use config.directPrecControl.useDirectPrec first !");
-                    if (!hasLUDone)
-                        eval.LUSGSMatrixToJacobianLU(alphaDiag, cx, JDC, *JLocalLU), hasLUDone = true;
-                    for (int iii = 0; iii < 2; iii++)
-                    {
-                        eval.LUSGSMatrixSolveJacobianLU(alphaDiag, crhs, cx, cxInc, uTemp, rhsTemp, JDC, *JLocalLU, sgsRes);
-                        uTemp.SwapDataFatherSon(cxInc);
-                        // cxInc = uTemp;
-                        cxInc.trans.startPersistentPull();
-                        cxInc.trans.waitPersistentPull();
-                    }
-                    inputIsZero = false;
-                }
-            };
 
             if (config.linearSolverControl.gmresCode == 0 || config.linearSolverControl.gmresCode == 2)
             {
@@ -1067,8 +1010,8 @@ namespace DNDS::Euler
                 if (mpi.rank == 0 &&
                     (config.outputControl.consoleOutputEveryFix == 1 || config.outputControl.consoleOutputEveryFix == 2))
                 {
-                    std::cout << std::scientific << std::setw(3);
-                    std::cout << "PPIncrementLimiter: nIncrementRes[" << nLimInc << "] minAlpha [" << alphaMinInc << "]" << std::endl;
+                    log() << std::scientific << std::setw(3);
+                    log() << "PPIncrementLimiter: nIncrementRes[" << nLimInc << "] minAlpha [" << alphaMinInc << "]" << std::endl;
                 }
 
             uTemp = cxInc;
@@ -1086,19 +1029,20 @@ namespace DNDS::Euler
         {
             // auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
 
-            Eigen::Vector<real, -1> res(nVars);
+            Eigen::VectorFMTSafe<real, -1> res(nVars);
             eval.EvaluateNorm(res, cxinc, 1, config.convergenceControl.useVolWiseResidual);
             // if (iter == 1 && iStep == 1) // * using 1st rk step for reference
             if (iter == 1)
                 resBaseCInternal = res;
             else
                 resBaseCInternal = resBaseCInternal.array().max(res.array()); //! using max !
-            Eigen::Vector<real, -1> resRel = (res.array() / (resBaseCInternal.array() + verySmallReal)).matrix();
+            Eigen::VectorFMTSafe<real, -1> resRel = (res.array() / (resBaseCInternal.array() + verySmallReal)).matrix();
             bool ifStop = resRel(0) < config.convergenceControl.rhsThresholdInternal; // ! using only rho's residual
             if (iter < config.convergenceControl.nTimeStepInternalMin)
                 ifStop = false;
             if (iter % config.outputControl.nConsoleCheckInternal == 0 || iter > config.convergenceControl.nTimeStepInternal || ifStop)
             {
+                double tWall = MPI_Wtime();
                 double telapsed = MPI_Wtime() - tstart;
                 tcomm = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Comm, mpi);
                 real tLimiterA = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::LimiterA, mpi);
@@ -1106,28 +1050,48 @@ namespace DNDS::Euler
                 if (mpi.rank == 0)
                 {
                     auto fmt = log().flags();
-                    log() << std::setprecision(config.outputControl.nPrecisionConsole) << std::scientific
-                          << "\t Internal === Step [" << step << ", " << iStep << ", " << iter << "]   "
-                          << "res \033[91m[" << resRel.transpose() << "]\033[39m   "
-                          << "t,dTaumin,CFL,nFix \033[92m["
-                          << tSimu << ", " << curDtMin << ", " << CFLNow << ", "
-                          << fmt::format("[alphaInc({},{}), betaRec({},{}), alphaRes({},{})]",
-                                         nLimInc, alphaMinInc, nLimBeta, minBeta, nLimAlpha, minAlpha)
-                          << "]\033[39m   "
-                          << std::setprecision(config.outputControl.nPrecisionConsole) << std::fixed
-                          << "Time [" << telapsed << "]   recTime ["
-                          << trec << "]   rhsTime ["
-                          << trhs << "]   commTime ["
-                          << tcomm << "]  limTime ["
-                          << tLim << "]  limtimeA [" << tLimiterA << "]  limtimeB ["
-                          << tLimiterB << "]  ";
-                    if (config.outputControl.consoleOutputMode == 1)
-                    {
-                        log() << std::setprecision(config.outputControl.nPrecisionConsole + 2) << std::setw(10) << std::scientific
-                              << "Wall Flux \033[93m[" << eval.fluxWallSum.transpose() << "]\033[39m";
-                    }
+
+                    log() << fmt::format(
+                        "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   "s +
+                            "res {termRed}{resRel:.3e}{termReset}   "s +
+                            "t,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   "s +
+                            "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]" +
+                            "  "s +
+                            (config.outputControl.consoleOutputMode == 1
+                                 ? "WallFlux {termYellow}{wallFlux:.6e}{termReset}"s
+                                 : ""s),
+                        DNDS_FMT_ARG(step),
+                        DNDS_FMT_ARG(iStep),
+                        DNDS_FMT_ARG(iter),
+                        fmt::arg("resRel", resRel.transpose()),
+                        fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
+                        DNDS_FMT_ARG(tSimu),
+                        DNDS_FMT_ARG(curDtMin),
+                        DNDS_FMT_ARG(CFLNow),
+                        DNDS_FMT_ARG(nLimInc),
+                        DNDS_FMT_ARG(alphaMinInc),
+                        DNDS_FMT_ARG(nLimBeta),
+                        DNDS_FMT_ARG(minBeta),
+                        DNDS_FMT_ARG(nLimAlpha),
+                        DNDS_FMT_ARG(minAlpha),
+                        DNDS_FMT_ARG(telapsed),
+                        DNDS_FMT_ARG(trec),
+                        DNDS_FMT_ARG(trhs),
+                        DNDS_FMT_ARG(tcomm),
+                        DNDS_FMT_ARG(tLim),
+                        DNDS_FMT_ARG(tLimiterA),
+                        DNDS_FMT_ARG(tLimiterB),
+                        DNDS_FMT_ARG(tWall),
+                        fmt::arg("termRed", TermColor::Red),
+                        fmt::arg("termBlue", TermColor::Blue),
+                        fmt::arg("termGreen", TermColor::Green),
+                        fmt::arg("termCyan", TermColor::Cyan),
+                        fmt::arg("termYellow", TermColor::Yellow),
+                        fmt::arg("termBold", TermColor::Bold),
+                        fmt::arg("termReset", TermColor::Reset));
                     log() << std::endl;
                     log().setf(fmt);
+
                     std::string delimC = " ";
                     logErr
                         << std::left
@@ -1206,7 +1170,7 @@ namespace DNDS::Euler
             tSimu += curDtImplicit;
             if (ifOutT)
                 tSimu = nextTout;
-            Eigen::Vector<real, -1> res(nVars);
+            Eigen::VectorFMTSafe<real, -1> res(nVars);
             eval.EvaluateNorm(res, ode->getLatestRHS(), 1, config.convergenceControl.useVolWiseResidual);
             if (stepCount == 0 && resBaseC.norm() == 0)
                 resBaseC = res;
@@ -1219,19 +1183,52 @@ namespace DNDS::Euler
 
             if (step % config.outputControl.nConsoleCheck == 0)
             {
+                double tWall = MPI_Wtime();
                 double telapsed = MPI_Wtime() - tstart;
                 tcomm = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Comm, mpi);
+                real tLimiterA = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::LimiterA, mpi);
+                real tLimiterB = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::LimiterB, mpi);
                 if (mpi.rank == 0)
                 {
                     auto fmt = log().flags();
-                    log() << std::setprecision(config.outputControl.nPrecisionConsole) << std::scientific
-                          << "=== Step [" << step << "]   "
-                          << "res \033[91m[" << (res.array() / resBaseC.array()).transpose() << "]\033[39m   "
-                          << "t,dt(min) \033[92m[" << tSimu << ", " << curDtMin << "]\033[39m   "
-                          << fmt::format("[alphaInc({},{}), betaRec({},{}), alphaRes({},{})]",
-                                         nLimInc, alphaMinInc, nLimBeta, minBeta, nLimAlpha, minAlpha)
-                          << std::setprecision(config.outputControl.nPrecisionConsole) << std::fixed
-                          << " Time [" << telapsed << "]   recTime [" << trec << "]   rhsTime [" << trhs << "]   commTime [" << tcomm << "]  limTime [" << tLim << "]  " << std::endl;
+                    log() << fmt::format(
+                        "=== Step {termBold}[{step:4d}]   "s +
+                            "res {termBold}{termRed}{resRel:.3e}{termReset}   "s +
+                            "t,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   "s +
+                            "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]" +
+                            "  "s +
+                            (config.outputControl.consoleOutputMode == 1
+                                 ? "WallFlux {termYellow}{wallFlux:.6e}{termReset}"s
+                                 : ""s),
+                        DNDS_FMT_ARG(step),
+                        // DNDS_FMT_ARG(iStep),
+                        // DNDS_FMT_ARG(iter),
+                        fmt::arg("resRel", (res.array() / (resBaseC.array() + verySmallReal)).transpose()),
+                        fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
+                        DNDS_FMT_ARG(tSimu),
+                        DNDS_FMT_ARG(curDtMin),
+                        DNDS_FMT_ARG(CFLNow),
+                        DNDS_FMT_ARG(nLimInc),
+                        DNDS_FMT_ARG(alphaMinInc),
+                        DNDS_FMT_ARG(nLimBeta),
+                        DNDS_FMT_ARG(minBeta),
+                        DNDS_FMT_ARG(nLimAlpha),
+                        DNDS_FMT_ARG(minAlpha),
+                        DNDS_FMT_ARG(telapsed),
+                        DNDS_FMT_ARG(trec),
+                        DNDS_FMT_ARG(trhs),
+                        DNDS_FMT_ARG(tcomm),
+                        DNDS_FMT_ARG(tLim),
+                        DNDS_FMT_ARG(tLimiterA),
+                        DNDS_FMT_ARG(tLimiterB),
+                        DNDS_FMT_ARG(tWall),
+                        fmt::arg("termRed", TermColor::Red),
+                        fmt::arg("termBlue", TermColor::Blue),
+                        fmt::arg("termGreen", TermColor::Green),
+                        fmt::arg("termCyan", TermColor::Cyan),
+                        fmt::arg("termYellow", TermColor::Yellow),
+                        fmt::arg("termBold", TermColor::Bold),
+                        fmt::arg("termReset", TermColor::Reset));
                     log().setf(fmt);
                     std::string delimC = " ";
                     logErr
@@ -1334,78 +1331,23 @@ namespace DNDS::Euler
             }
             if (eval.settings.specialBuiltinInitializer == 2 && (step % config.outputControl.nConsoleCheck == 0)) // IV problem special: reduction on solution
             {
-                real xymin = 5 - 2;
-                real xymax = 5 + 2;
-                real xyc = 5;
-
-                real sumErrRho = 0.0;
-                real sumErrRhoSum = std::nan("1");
-                real sumVol = 0.0;
-                real sumVolSum = std::nan("1");
-                for (index iCell = 0; iCell < u.father->Size(); iCell++)
-                {
-                    Geom::tPoint pos = vfv->GetCellBary(iCell);
-                    real chi = 5;
-                    real gamma = eval.settings.idealGasProperty.gamma;
-                    auto c2n = mesh->cell2node[iCell];
-                    auto gCell = vfv->GetCellQuad(iCell);
-                    TU um;
-                    um.setZero();
-                    gCell.IntegrationSimple(
-                        um,
-                        [&](TU &inc, int ig)
-                        {
-                            // std::cout << coords<< std::endl << std::endl;
-                            // std::cout << DiNj << std::endl;
-                            Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
-                            pPhysics[0] = float_mod(pPhysics[0] - tSimu, 10);
-                            pPhysics[1] = float_mod(pPhysics[1] - tSimu, 10);
-                            real r = std::sqrt(sqr(pPhysics(0) - xyc) + sqr(pPhysics(1) - xyc));
-                            real dT = -(gamma - 1) / (8 * gamma * sqr(pi)) * sqr(chi) * std::exp(1 - sqr(r));
-                            real dux = chi / 2 / pi * std::exp((1 - sqr(r)) / 2) * -(pPhysics(1) - xyc);
-                            real duy = chi / 2 / pi * std::exp((1 - sqr(r)) / 2) * +(pPhysics(0) - xyc);
-                            real T = dT + 1;
-                            real ux = dux + 1;
-                            real uy = duy + 1;
-                            real S = 1;
-                            real rho = std::pow(T / S, 1 / (gamma - 1));
-                            real p = T * rho;
-
-                            real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + p / (gamma - 1);
-
-                            // std::cout << T << " " << rho << std::endl;
-                            inc.setZero();
-                            inc(0) = rho;
-                            inc(1) = rho * ux;
-                            inc(2) = rho * uy;
-                            inc(dim + 1) = E;
-
-                            TU upoint = u[iCell] + (vfv->GetIntPointDiffBaseValue(iCell, -1, -1, ig, 0, 1) * uRec[iCell]).transpose();
-                            inc -= upoint;
-                            TU abserr = inc.array().abs();
-                            inc = abserr;
-
-                            inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
-                        });
-                    auto cP = vfv->GetCellBary(iCell);
-                    cP[0] = float_mod(cP[0] - tSimu, 10);
-                    cP[1] = float_mod(cP[1] - tSimu, 10);
-
-                    if (cP(0) > xymin && cP(0) < xymax && cP(1) > xymin && cP(1) < xymax)
+                Eigen::Vector<real, -1> err;
+                eval.EvaluateRecNorm( 
+                    err, u, uRec, 1, true,
+                    [&](const Geom::tPoint &p, real t)
                     {
-                        um /= vfv->GetCellVol(iCell); // mean value (now mean value of error)
-                        real errRhoMean = u[iCell](0) * 0 - um(0);
-                        sumErrRho += std::abs(errRhoMean) * vfv->GetCellVol(iCell);
-                        sumVol += vfv->GetCellVol(iCell);
-                    }
-                }
-                MPI::Allreduce(&sumErrRho, &sumErrRhoSum, 1, DNDS_MPI_REAL, MPI_SUM, mpi.comm);
-                MPI::Allreduce(&sumVol, &sumVolSum, 1, DNDS_MPI_REAL, MPI_SUM, mpi.comm);
+                        return SpecialFields::IsentropicVortex10(eval, p, t, nVars);
+                    },
+                    [&](const Geom::tPoint &p, real t)
+                    {
+                        return real(1.0);
+                    },
+                    tSimu);
                 if (mpi.rank == 0)
                 {
                     log() << "=== Mean Error IV: [" << std::scientific
-                          << std::setprecision(config.outputControl.nPrecisionConsole + 4) << sumErrRhoSum << ", "
-                          << sumErrRhoSum / sumVolSum << "]" << std::endl;
+                          << std::setprecision(config.outputControl.nPrecisionConsole + 4) << err(0) << ", "
+                          << err(0) / vfv->GetGlobalVol() << "]" << std::endl;
                 }
             }
             if (config.implicitReconstructionControl.zeroGrads)
@@ -1524,5 +1466,48 @@ namespace DNDS::Euler
 
         // u.trans.waitPersistentPull();
         logErr.close();
+    }
+
+    template <EulerModel model>
+    void EulerSolver<model>::doPrecondition(real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp, TDof &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone)
+    {
+        DNDS_assert(pEval);
+        auto &eval = *pEval;
+        if (config.linearSolverControl.jacobiCode <= 1)
+        {
+            bool useJacobi = config.linearSolverControl.jacobiCode == 0;
+            eval.UpdateSGS(alphaDiag, crhs, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, true, sgsRes);
+            if (useJacobi)
+                cxInc = uTemp;
+            cxInc.trans.startPersistentPull();
+            cxInc.trans.waitPersistentPull();
+            eval.UpdateSGS(alphaDiag, crhs, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, false, sgsRes);
+            if (useJacobi)
+                cxInc = uTemp;
+            cxInc.trans.startPersistentPull();
+            cxInc.trans.waitPersistentPull();
+            // eval.UpdateLUSGSForward(alphaDiag, crhs, cx, cxInc, JDC, cxInc);
+            // cxInc.trans.startPersistentPull();
+            // cxInc.trans.waitPersistentPull();
+            // eval.UpdateLUSGSBackward(alphaDiag, crhs, cx, cxInc, JDC, cxInc);
+            // cxInc.trans.startPersistentPull(); 
+            // cxInc.trans.waitPersistentPull();
+            inputIsZero = false;
+        }
+        else if (config.linearSolverControl.jacobiCode == 2)
+        {
+            DNDS_assert_info(config.linearSolverControl.directPrecControl.useDirectPrec, "need to use config.linearSolverControl.directPrecControl.useDirectPrec first !");
+            if (!hasLUDone)
+                eval.LUSGSMatrixToJacobianLU(alphaDiag, cx, JDC, *JLocalLU), hasLUDone = true;
+            for (int iii = 0; iii < 2; iii++)
+            {
+                eval.LUSGSMatrixSolveJacobianLU(alphaDiag, crhs, cx, cxInc, uTemp, rhsTemp, JDC, *JLocalLU, sgsRes);
+                uTemp.SwapDataFatherSon(cxInc);
+                // cxInc = uTemp;
+                cxInc.trans.startPersistentPull();
+                cxInc.trans.waitPersistentPull();
+            }
+            inputIsZero = false;
+        }
     }
 }

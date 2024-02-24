@@ -503,9 +503,9 @@ namespace DNDS::Euler
         real lam0{0}, lam123{0}, lam4{0};
         lam123 = std::abs(UL(1) / UL(0) + UR(1) / UR(0)) * 0.5;
 
-#ifdef USE_NO_RIEMANN_ON_WALL
         if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall)
         {
+#ifdef USE_NO_RIEMANN_ON_WALL
             TU UL_Prim, UR_Prim;
             UL_Prim.resizeLike(UL);
             UL_Prim.resizeLike(UR);
@@ -516,8 +516,14 @@ namespace DNDS::Euler
             Gas::IdealGasThermalPrimitive2Conservative<dim>(UL_Prim, UL, gamma);
             // Gas::IdealGasThermalPrimitive2Conservative<dim>(UR_Prim, UR, gamma);
             UR = UL;
-        }
+#else
+
 #endif
+        }
+        if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis)
+        {
+
+        }
 
         auto RSWrapper = [&](Gas::RiemannSolverType rsType, auto &UL, auto &UR, auto &ULm, auto &URm, real gamma, auto &finc, real dLambda)
         {

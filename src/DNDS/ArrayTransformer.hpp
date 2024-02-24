@@ -752,7 +752,7 @@ namespace DNDS
                     {
                     }
                     else
-                        MPI_Startall(PullReqVec->size(), PullReqVec->data());
+                        MPI_Startall(int(PullReqVec->size()), PullReqVec->data());
                 }
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)

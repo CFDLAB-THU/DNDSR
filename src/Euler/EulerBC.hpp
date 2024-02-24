@@ -36,7 +36,8 @@ namespace DNDS::Euler
     {
     public:
         static const int nVarsFixed = getnVarsFixed(model);
-        using TU = Eigen::Vector<real, nVarsFixed>;
+        using TU_R = Eigen::Vector<real, nVarsFixed>;
+        using TU = Eigen::VectorFMTSafe<real, nVarsFixed>;
 
     private:
         std::vector<TU> BCValues;
@@ -95,7 +96,7 @@ namespace DNDS::Euler
 
                     bc.BCTypes.push_back(bcType);
                     bc.BCValues.push_back(bcValue);
-                    DNDS_assert(bc.name2ID.count(bcName) == 0);
+                    DNDS_assert_info(bc.name2ID.count(bcName) == 0, "the bc names are duplicate");
                     bc.name2ID[bcName] = bc.BCValues.size() - 1;
                 }
                 break;
@@ -125,7 +126,7 @@ namespace DNDS::Euler
                 {
                     item["type"] = bcType;
                     item["name"] = bc.ID2name.at(i);
-                    item["value"] = bc.BCValues.at(i);
+                    item["value"] = static_cast<TU_R>(bc.BCValues.at(i)); // force begin() and end() to be exposed
                 }
                 break;
 

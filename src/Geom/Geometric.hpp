@@ -17,7 +17,7 @@ namespace DNDS::Geom
             return tSmallCoords::operator()(Eigen::all, i);
         }
 
-        const auto operator[](Eigen::Index i) const
+        auto operator[](Eigen::Index i) const
         {
             return tSmallCoords::operator()(Eigen::all, i);
         }

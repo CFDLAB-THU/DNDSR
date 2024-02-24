@@ -4,8 +4,20 @@
 namespace DNDS::HardEigen
 {
 
-    real EigenLeastSquareInverse(const Eigen::MatrixXd &A, Eigen::MatrixXd &AI);
-    real EigenLeastSquareInverse_Filtered(const Eigen::MatrixXd &A, Eigen::MatrixXd &AI);
+    real EigenLeastSquareInverse(const Eigen::MatrixXd &A, Eigen::MatrixXd &AI, real svdTol = 0);
+
+    /**
+     * @brief 
+     * 
+     * @param A input
+     * @param AI output, inverse of A
+     * @param svdTol tolerance
+     * @param mode 
+     *  if mode == 0, use regular SVD's "lsqminnorm", filters smallest singular values; 
+     *  if mode == 1, use inverse filtering, which filters out largest ones
+     * @return real, condition number of A
+     */
+    real EigenLeastSquareInverse_Filtered(const Eigen::MatrixXd &A, Eigen::MatrixXd &AI, real svdTol = 0, int mode = 0);
 
     Eigen::Index EigenLeastSquareSolve(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, Eigen::MatrixXd &AIB);
 

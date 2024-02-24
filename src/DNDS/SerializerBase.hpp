@@ -7,7 +7,7 @@ namespace DNDS
     class SerializerBase
     {
     public:
-        virtual ~SerializerBase(){};
+        virtual ~SerializerBase(){}
         virtual void OpenFile(const std::string &fName, bool read) = 0;
         virtual void CloseFile() = 0;
         virtual void CreatePath(const std::string &p) = 0;

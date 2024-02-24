@@ -17,7 +17,7 @@ namespace DNDS::Geom
         {
             auto found = name_2_id.find(name);
             if (found == name_2_id.end())
-                return name_2_id[name] = name_2_id.size();
+                return name_2_id[name] = static_cast<t_index>(name_2_id.size());
             else
                 return (*found).second;
         }

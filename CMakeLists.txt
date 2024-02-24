@@ -1,10 +1,14 @@
+## For configuration on Windows, use clang/gcc + makefile
+## cmake .. -G "Unix Makefiles" -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+
+
 if(UNIX OR MINGW)
     cmake_minimum_required(VERSION 3.6 FATAL_ERROR)
 else()
     cmake_minimum_required(VERSION 3.20)
 endif()
 
-set(CMAKE_INSTALL_PREFIX build/bin CACHE FILEPATH "install place")
+set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/bin CACHE FILEPATH "install place")
 
 set(CMAKE_BUILD_TYPE Release CACHE STRING "Release or Debug")
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
@@ -38,6 +42,7 @@ set(DNDS_USE_NO_OMIT_FRAME_POINTER OFf CACHE BOOL "in fast build fast part, use 
 set(DNDS_UNSAFE_MATH_OPT OFF CACHE BOOL "use -funsafe-math-optimizations")
 set(DNDS_NATIVE_ARCH     OFF CACHE BOOL "use -march=native")
 set(DNDS_LTO OFF CACHE BOOL "use -flto")
+set(DNDS_USE_FULL_TEMPLATE_TRACE OFF CACHE BOOL "use -ftemplate-backtrace-limit=0")
 
 
 set(DNDS_EIGEN_USE_BLAS OFF CACHE BOOL "use blas in eigen")
@@ -49,7 +54,7 @@ set(DNDS_RECORD_COMMIT ON CACHE BOOL "record commit id for each cmake configure"
 set(DNDS_VERBOSE_BUILDING ON CACHE BOOL "make the makefile verbose, overrides CMAKE_VERBOSE_MAKEFILE")
 
 if(DNDS_RECORD_COMMIT)
-    execute_process(COMMAND git rev-parse HEAD OUTPUT_FILE commitID.txt WORKING_DIRECTORY ${CMAKE_BINARY_DIR} TIMEOUT 120 RESULT_VARIABLE RET)
+    execute_process(COMMAND git rev-parse HEAD OUTPUT_FILE ${CMAKE_BINARY_DIR}/commitID.txt WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} TIMEOUT 120 RESULT_VARIABLE RET)
     message(STATUS "git rev-parse returned ${RET}")
     if(NOT RET EQUAL 0)
         message(WARNING "git rev-parse failed")
@@ -73,6 +78,10 @@ endif()
 if(DNDS_LTO)
     string(APPEND CMAKE_CXX_FLAGS_RELEASE " -flto")
     # ! todo: add changing to gcc-ar gcc-ranlib gcc-nm
+endif()
+
+if(DNDS_USE_FULL_TEMPLATE_TRACE)
+    add_compile_options(-ftemplate-backtrace-limit=0)
 endif()
 
 
@@ -102,7 +111,7 @@ set(CMAKE_USE_RELATIVE_PATHS ON)
 
 
 # ##########################################
-find_library(EXTERNAL_LIB_ZLIB NAMES z z_D libzlibstatic.a REQUIRED)
+find_library(EXTERNAL_LIB_ZLIB NAMES z z_D  zlib libzlibstatic.a REQUIRED)
 find_library(EXTERNAL_LIB_HDF5 NAMES libhdf5.a hdf5 PATHS 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
@@ -395,30 +404,44 @@ elseif(WIN32 OR MSVC)
     set(EXTERNAL_LIBS ${EXTERNAL_LIBS} # no dl
     )
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-        add_compile_options(-Wall)
+        # add_compile_options(-Wall)
         add_compile_options(/std:c++17 /IGNORE:C2124) # cl is buggy in c++17 mode ...
-        
+        add_compile_options(-Wall)
+        add_compile_options(-Wno-unused-variable -Wno-sign-compare -Wno-unused-but-set-variable -Wno-unused-parameter) # for clang-cl!
+        add_compile_options(-Wno-reserved-identifier -Wno-documentation  -Wno-old-style-cast)
+        add_compile_options(-Wno-old-style-cast -Wno-exit-time-destructors -Wno-global-constructors -Wno-zero-as-null-pointer-constant)
+        add_compile_options(-Wno-sign-conversion -Wno-unused-template)
+        add_compile_options(-Wno-documentation-unknown-command)
+        add_compile_options(-Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-c++11-compat -Wno-c++11-compat-pedantic -Wno-c++14-compat -Wno-c++14-compat-pedantic)
+        add_compile_options(-Wno-extra-semi-stmt -Wno-comma -Wno-float-equal -Wno-missing-noreturn)
+        add_compile_options(-Wno-undef -Wno-implicit-fallthrough -Wno-redundant-parens)
+        # add_compile_options(-Wextra-semi-stmt  -Wshorten-64-to-32 -Wnewline-eof)
     endif()
     set(EXTERNAL_LIBS ${EXTERNAL_LIBS} # no dl
     )
     message(${CMAKE_CXX_COMPILER_ID})
     
     
-    
     if (DNDS_USE_OMP)
-        find_package(OpenMP REQUIRED)
-        if(OpenMP_CXX_FLAGS)
-            set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS})
+        #
+        if(MSVC AND ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")) #! force use /openmp
+            # set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} "/openmp")
+            add_compile_options(-openmp)
         else()
-            message(FATAL_ERROR "OMP not found")
+            find_package(OpenMP REQUIRED)
+            if(OpenMP_CXX_FLAGS)
+                set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS})
+            else()
+                message(FATAL_ERROR "OMP not found")
+            endif()
         endif()
+
+        
+
     endif()
     if (DNDS_USE_PARALLEL_MACRO)
         # ! to be tested
     endif()
-
-    ### set warnings
-    add_compile_options(-Wall)
 else()
     message(FATAL_ERROR "NOT YET IMPLEMENTED HERE")
 endif()
@@ -502,10 +525,10 @@ jacobiLUTest
 )
 
 
-add_subdirectory(src/DNDS)
-add_subdirectory(src/Geom)
-add_subdirectory(src/CFV)
-add_subdirectory(src/Euler)
+add_subdirectory(${CMAKE_SOURCE_DIR}/src/DNDS)
+add_subdirectory(${CMAKE_SOURCE_DIR}/src/Geom)
+add_subdirectory(${CMAKE_SOURCE_DIR}/src/CFV)
+add_subdirectory(${CMAKE_SOURCE_DIR}/src/Euler)
 
 set(LIBS
 euler_library

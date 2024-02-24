@@ -8,14 +8,14 @@
         "tEnd": 3e+200
     },
     "convergenceControl": {
-        "nTimeStepInternal": 2000,
+        "nTimeStepInternal": 70000,
         "rhsThresholdInternal": 1e-30,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
     "outputControl": {
         "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 1,
+        "nConsoleCheckInternal": 10,
         "consoleOutputMode": 1,
         "nDataOutC": 100,
         "nDataOut": 10,
@@ -115,20 +115,19 @@
         },
         "ignoreMeshGeometryDeficiency": false
     },
-    "directPrecControl": {
-        "useDirectPrec": true,
-        "iluCode": -1,
-        "orderingCode": 2
-    },
     "linearSolverControl": {
         "jacobiCode": 2,
-        "sgsIter": 2,
+        "sgsIter": 0,
         "nSgsConsoleCheck": 100,
-        "gmresCode": 0,
-        "nGmresSpace": 10,
-        "nGmresIter": 5,
+        "gmresCode": 1,
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
         "sgsWithRec": 0,
-        "initWithLastURecInc": false
+        "initWithLastURecInc": false,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 1
+        }
     },
     "others": {
         "nFreezePassiveInner": 0

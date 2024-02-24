@@ -61,6 +61,8 @@ static const std::string DNDS_Defines_state =
 #define DNDS_SWITCH_INTELLISENSE(real, intellisense) intellisense
 #endif
 
+#define DNDS_FMT_ARG(V) fmt::arg(#V, V)
+
 /***************/ // DNDS_assertS
 
 inline void __DNDS_assert_false(const char *expr, const char *file, int line)
@@ -247,6 +249,11 @@ namespace DNDS
         return a > 0 ? 1 : (a < 0 ? -1 : 0);
     }
 
+    inline constexpr real signTol(real a, real tol)
+    {
+        return a > tol ? 1 : (a < -tol ? -1 : 0);
+    }
+
     inline constexpr real signP(real a)
     {
         return a >= 0 ? 1 : -1;
@@ -392,6 +399,24 @@ namespace DNDS
                           !is_fixed_data_real_eigen_matrix_v<Eigen::Matrix<real, -1, -1, Eigen::DontAlign, -1, 2>> &&
                           !is_fixed_data_real_eigen_matrix_v<Eigen::MatrixXd>,
                       "is_fixed_data_real_eigen_matrix_v bad");
+
+        template <typename T>
+        inline constexpr bool is_eigen_dense_v = std::is_base_of_v<Eigen::DenseBase<T>, T>;
+
+        template <class T>
+        struct is_real_eigen_matrix
+        {
+            static constexpr bool value = false;
+        };
+
+        template <int M, int N, int options, int max_m, int max_n>
+        struct is_real_eigen_matrix<Eigen::Matrix<real, M, N, options, max_m, max_n>>
+        {
+            static constexpr bool value = true;
+        };
+
+        template <class T>
+        inline constexpr bool is_real_eigen_matrix_v = is_real_eigen_matrix<T>::value;
     }
 }
 
@@ -426,6 +451,27 @@ struct std::hash<std::array<T, s>>
         return r;
     }
 };
+
+namespace DNDS::TermColor
+{
+    constexpr std::string_view Red = "\033[91m";
+    constexpr std::string_view Green = "\033[92m";
+    constexpr std::string_view Yellow = "\033[93m";
+    constexpr std::string_view Blue = "\033[94m";
+    constexpr std::string_view Magenta = "\033[95m";
+    constexpr std::string_view Cyan = "\033[96m";
+    constexpr std::string_view White = "\033[97m";
+    constexpr std::string_view Reset = "\033[0m";
+    constexpr std::string_view Bold = "\033[1m";
+    constexpr std::string_view Underline = "\033[4m"; 
+    constexpr std::string_view Blink = "\033[5m"; 
+    constexpr std::string_view Reverse = "\033[7m";
+    constexpr std::string_view Hidden = "\033[8m";
+
+
+
+
+}
 
 /*
 

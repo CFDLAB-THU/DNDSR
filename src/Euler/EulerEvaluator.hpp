@@ -1,21 +1,30 @@
 #pragma once
+
+// #ifndef __DNDS_REALLY_COMPILING__
+// #define __DNDS_REALLY_COMPILING__
+// #define __DNDS_REALLY_COMPILING__HEADER_ON__
+// #endif
+
 #include "Gas.hpp"
 #include "Geom/Mesh.hpp"
 #include "CFV/VariationalReconstruction.hpp"
-
-#include <iomanip>
-#include <functional>
-
-#define JSON_ASSERT DNDS_assert
-#include "json.hpp"
 #include "DNDS/JsonUtil.hpp"
-
 #include "Euler.hpp"
 #include "EulerBC.hpp"
 #include "EulerJacobian.hpp"
+#include "EulerEvaluatorSettings.hpp"
 #include "RANS_ke.hpp"
 #include "DNDS/SerializerBase.hpp"
+
+// #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
+// #undef __DNDS_REALLY_COMPILING__
+// #endif
+
+#define JSON_ASSERT DNDS_assert
+#include "json.hpp"
 #include "fmt/core.h"
+#include <iomanip>
+#include <functional>
 
 // #define DNDS_FV_EULEREVALUATOR_SOURCE_TERM_ZERO
 // // #define DNDS_FV_EULEREVALUATOR_IGNORE_SOURCE_TERM
@@ -37,18 +46,12 @@ namespace DNDS::Euler
         static const int gDim = getGeomDim_Fixed(model);
         static const auto I4 = dim + 1;
 
-#define DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS                              \
-    static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);   \
-    static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);       \
-    static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>); \
-    static const auto I4 = dim + 1;
-
-        typedef Eigen::Vector<real, dim> TVec;
-        typedef Eigen::Matrix<real, dim, dim> TMat;
-        typedef Eigen::Vector<real, nVarsFixed> TU;
-        typedef Eigen::Matrix<real, nVarsFixed, nVarsFixed> TJacobianU;
-        typedef Eigen::Matrix<real, dim, nVarsFixed> TDiffU;
-        typedef Eigen::Matrix<real, nVarsFixed, dim> TDiffUTransposed;
+        typedef Eigen::VectorFMTSafe<real, dim> TVec;
+        typedef Eigen::MatrixFMTSafe<real, dim, dim> TMat;
+        typedef Eigen::VectorFMTSafe<real, nVarsFixed> TU;
+        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, nVarsFixed> TJacobianU;
+        typedef Eigen::MatrixFMTSafe<real, dim, nVarsFixed> TDiffU;
+        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, dim> TDiffUTransposed;
         typedef ArrayDOFV<nVarsFixed> TDof;
         typedef ArrayRECV<nVarsFixed> TRec;
         typedef ArrayRECV<1> TScalar;
@@ -87,209 +90,9 @@ namespace DNDS::Euler
         std::vector<Eigen::Vector<real, nVarsFixed>> fluxBnd;
         index nFaceReducedOrder = 0;
 
-        struct Setting
-        {
-            nlohmann::ordered_json jsonSettings;
+        ssp<Direct::SerialSymLUStructure> symLU;
 
-            Gas::RiemannSolverType rsType = Gas::Roe;
-            Gas::RiemannSolverType rsTypeAux = Gas::UnknownRS;
-            int rsMeanValueEig = 0;
-            int nCentralSmoothStep = 0;
-            int rsRotateScheme = 0;
-            real minWallDist = 1e-10;
-
-            struct IdealGasProperty
-            {
-                real gamma = 1.4;
-                real Rgas = 1;
-                real muGas = 1;
-                real prGas = 0.72;
-                real CpGas = Rgas * gamma / (gamma - 1);
-                real TRef = 273.15;
-                real CSutherland = 110.4;
-                int muModel = 1; // 0=constant, 1=sutherland, 2=constant_nu
-
-                void ReadWriteJSON(nlohmann::ordered_json &jsonObj, bool read)
-                {
-                    __DNDS__json_to_config(gamma);
-                    __DNDS__json_to_config(Rgas);
-                    __DNDS__json_to_config(muGas);
-                    __DNDS__json_to_config(prGas);
-                    __DNDS__json_to_config(TRef);
-                    __DNDS__json_to_config(CSutherland);
-                    __DNDS__json_to_config(muModel);
-                    CpGas = Rgas * gamma / (gamma - 1);
-                }
-            } idealGasProperty;
-
-            Eigen::Vector<real, -1> farFieldStaticValue = Eigen::Vector<real, 5>{1, 0, 0, 0, 2.5};
-
-            struct BoxInitializer
-            {
-                real x0, x1, y0, y1, z0, z1;
-                Eigen::Vector<real, -1> v;
-                void ReadWriteJSON(nlohmann::ordered_json &jsonObj, int nVars, bool read)
-                {
-                    __DNDS__json_to_config(x0);
-                    __DNDS__json_to_config(x1);
-                    __DNDS__json_to_config(y0);
-                    __DNDS__json_to_config(y1);
-                    __DNDS__json_to_config(z0);
-                    __DNDS__json_to_config(z1);
-                    __DNDS__json_to_config(v);
-                    // std::cout << "here2" << std::endl;
-                    if (read)
-                        DNDS_assert(v.size() == nVars);
-                    // if (read)
-                    //     v = JsonGetEigenVector(jsonObj["v"]), DNDS_assert(v.size() == nVars);
-                    // else
-                    //     jsonObj["v"] = EigenVectorGetJson(v);
-                }
-            };
-            std::vector<BoxInitializer> boxInitializers;
-
-            struct PlaneInitializer
-            {
-                real a, b, c, h;
-                Eigen::Vector<real, -1> v;
-                void ReadWriteJSON(nlohmann::ordered_json &jsonObj, int nVars, bool read)
-                {
-                    __DNDS__json_to_config(a);
-                    __DNDS__json_to_config(b);
-                    __DNDS__json_to_config(c);
-                    __DNDS__json_to_config(h);
-                    __DNDS__json_to_config(v);
-                    if (read)
-                        DNDS_assert(v.size() == nVars);
-                    // if (read)
-                    //     v = JsonGetEigenVector(jsonObj["v"]), DNDS_assert(v.size() == nVars);
-                    // else
-                    //     jsonObj["v"] = EigenVectorGetJson(v);
-                }
-            };
-
-            std::vector<PlaneInitializer> planeInitializers;
-
-            int specialBuiltinInitializer = 0;
-
-            real uRecBetaCompressPower = 11;
-            real uRecAlphaCompressPower = 2;
-
-            Eigen::Vector<real, 3> constMassForce = Eigen::Vector<real, 3>{0, 0, 0};
-
-            bool ignoreSourceTerm = false;
-            bool useScalarJacobian = false;
-
-            Eigen::Vector<real, -1> refU;
-            Eigen::Vector<real, -1> refUPrim;
-
-            /***************************************************************************************************/
-            /***************************************************************************************************/
-
-            void ReadWriteSerializer(bool read, SerializerBase *serializer, const std::string &name)
-            {
-                auto cwd = serializer->GetCurrentPath();
-                if (!read)
-                    serializer->CreatePath(name);
-                serializer->GoToPath(name);
-                // TODO: find some convenient solution
-
-                serializer->GoToPath(cwd);
-            }
-
-            void ReadWriteJSON(nlohmann::ordered_json &jsonObj, int nVars, bool read)
-            {
-
-                //********* root entries
-
-                __DNDS__json_to_config(useScalarJacobian);
-                __DNDS__json_to_config(ignoreSourceTerm);
-                __DNDS__json_to_config(specialBuiltinInitializer);
-                __DNDS__json_to_config(uRecAlphaCompressPower);
-                __DNDS__json_to_config(uRecBetaCompressPower);
-                Gas::RiemannSolverType riemannSolverType = rsType;
-                __DNDS__json_to_config(riemannSolverType);
-                rsType = riemannSolverType;
-                Gas::RiemannSolverType riemannSolverTypeAux = rsTypeAux;
-                __DNDS__json_to_config(riemannSolverTypeAux);
-                rsTypeAux = riemannSolverTypeAux;
-                // std::cout << rsType << std::endl;
-                __DNDS__json_to_config(rsMeanValueEig);
-                __DNDS__json_to_config(rsRotateScheme);
-                __DNDS__json_to_config(minWallDist);
-                __DNDS__json_to_config(nCentralSmoothStep);
-                __DNDS__json_to_config(constMassForce);
-                if (read)
-                    DNDS_assert(constMassForce.size() == 3);
-                __DNDS__json_to_config(farFieldStaticValue);
-                if (read)
-                    DNDS_assert(farFieldStaticValue.size() == nVars);
-
-                //********* box entries
-                if (read)
-                {
-                    boxInitializers.clear();
-                    DNDS_assert(jsonObj["boxInitializers"].is_array());
-                    for (auto &boxJson : jsonObj["boxInitializers"])
-                    {
-                        DNDS_assert(boxJson.is_object());
-                        BoxInitializer box;
-                        box.ReadWriteJSON(boxJson, nVars, read);
-                        boxInitializers.push_back(box);
-                    }
-                }
-                else
-                {
-                    jsonObj["boxInitializers"] = nlohmann::ordered_json::array();
-                    for (auto &b : boxInitializers)
-                    {
-                        nlohmann::ordered_json j;
-                        b.ReadWriteJSON(j, nVars, read);
-                        jsonObj["boxInitializers"].push_back(j);
-                    }
-                }
-
-                //********* plane entries
-                if (read)
-                {
-                    planeInitializers.clear();
-                    DNDS_assert(jsonObj["planeInitializers"].is_array());
-                    for (auto &planeJson : jsonObj["planeInitializers"])
-                    {
-                        DNDS_assert(planeJson.is_object());
-                        PlaneInitializer p;
-                        p.ReadWriteJSON(planeJson, nVars, read);
-                        planeInitializers.push_back(p);
-                    }
-                }
-                else
-                {
-                    jsonObj["planeInitializers"] = nlohmann::ordered_json::array();
-                    for (auto &p : planeInitializers)
-                    {
-                        nlohmann::ordered_json j;
-                        p.ReadWriteJSON(j, nVars, read);
-                        jsonObj["planeInitializers"].push_back(j);
-                    }
-                }
-
-                //********* idealGasProperty
-                if (read)
-                    DNDS_assert(jsonObj["idealGasProperty"].is_object());
-                idealGasProperty.ReadWriteJSON(jsonObj["idealGasProperty"], read);
-
-                if (read)
-                {
-                    DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-                    refU = farFieldStaticValue;
-                    refUPrim = refU;
-                    Gas::IdealGasThermalConservative2Primitive<dim>(refU, refUPrim, idealGasProperty.gamma);
-                    refU(Seq123).setConstant(refU(Seq123).norm());
-                    refUPrim(Seq123).setConstant(refUPrim(Seq123).norm());
-                }
-            }
-
-        } settings;
+        EulerEvaluatorSettings<model> settings;
 
         EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler)
             : mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->settings.maxOrder + 1)
@@ -306,8 +109,9 @@ namespace DNDS::Euler
             for (auto &v : fluxBnd)
                 v.resize(nVars);
 
-            real maxD = 0.1;
             this->GetWallDist(); // TODO: put this after settings is set
+
+            DNDS_MAKE_SSP(symLU, mesh->getMPI(), mesh->NumCell());
         }
 
         void GetWallDist();
@@ -432,10 +236,22 @@ namespace DNDS::Euler
         void MeanValueCons2Prim(ArrayDOFV<nVarsFixed> &u, ArrayDOFV<nVarsFixed> &w);
         void MeanValuePrim2Cons(ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &u);
 
-        void EvaluateNorm(
+        using tFCompareField = std::function<TU(const Geom::tPoint &, real)>;
+        using tFCompareFieldWeight = std::function<real(const Geom::tPoint &, real)>;
+
+        void EvaluateNorm(Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P = 1, bool volWise = false);
+
+        void EvaluateRecNorm(
             Eigen::Vector<real, -1> &res,
-            ArrayDOFV<nVarsFixed> &rhs,
-            index P = 1, bool volWise = false);
+            ArrayDOFV<nVarsFixed> &u,
+            ArrayRECV<nVarsFixed> &uRec,
+            index P = 1,
+            bool compare = false,
+            const tFCompareField &FCompareField = [](const Geom::tPoint &p, real t)
+            { return TU::Zero(); },
+            const tFCompareFieldWeight &FCompareFieldWeight = [](const Geom::tPoint &p, real t)
+            { return 1.0; },
+            real t = 0);
 
         void EvaluateURecBeta(
             ArrayDOFV<nVarsFixed> &u,
@@ -990,7 +806,7 @@ namespace DNDS::Euler
             const TVec &n,
             Geom::t_index btype,
             real lambdaMain, real lambdaC)
-        { //TODO: optimize this
+        { // TODO: optimize this
             TJacobianU J;
             J.resize(nVars, nVars);
             J.setIdentity();
@@ -1735,190 +1551,6 @@ namespace DNDS::Euler
             }
         }
 
-        void InitializeUDOF(ArrayDOFV<nVarsFixed> &u)
-        {
-            Eigen::VectorXd initConstVal = this->settings.farFieldStaticValue;
-            u.setConstant(initConstVal);
-            if (model == EulerModel::NS_SA || model == NS_SA_3D)
-            {
-                for (int iCell = 0; iCell < mesh->NumCell(); iCell++)
-                {
-                    auto c2f = mesh->cell2face[iCell];
-                    for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
-                    {
-                        index iFace = c2f[ic2f];
-                        if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(iFace)) == EulerBCType::BCWall)
-                            u[iCell](I4 + 1) *= 1.0; // ! not fixing first layer!
-                    }
-                }
-            }
-
-            switch (settings.specialBuiltinInitializer)
-            {
-            case 1: // for RT problem
-                DNDS_assert(model == NS || model == NS_2D || model == NS_3D);
-                if constexpr (model == NS || model == NS_2D)
-                    for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                    {
-                        Geom::tPoint pos = vfv->GetCellBary(iCell);
-                        real gamma = settings.idealGasProperty.gamma;
-                        real rho = 2;
-                        real p = 1 + 2 * pos(1);
-                        if (pos(1) >= 0.5)
-                        {
-                            rho = 1;
-                            p = 1.5 + pos(1);
-                        }
-                        real v = -0.025 * sqrt(gamma * p / rho) * std::cos(8 * pi * pos(0));
-                        if constexpr (dim == 3)
-                            u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gamma - 1)};
-                        else
-                            u[iCell] = Eigen::Vector<real, 4>{rho, 0, rho * v, 0.5 * rho * sqr(v) + p / (gamma - 1)};
-                    }
-                else if constexpr (model == NS_3D)
-                    for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                    {
-                        Geom::tPoint pos = vfv->GetCellBary(iCell);
-                        real gamma = settings.idealGasProperty.gamma;
-                        real rho = 2;
-                        real p = 1 + 2 * pos(1);
-                        if (pos(1) >= 0.5)
-                        {
-                            rho = 1;
-                            p = 1.5 + pos(1);
-                        }
-                        real v = -0.025 * sqrt(gamma * p / rho) * std::cos(8 * pi * pos(0)) * std::cos(8 * pi * pos(2));
-                        u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gamma - 1)};
-                    }
-                break;
-            case 2: // for IV10 problem
-                DNDS_assert(model == NS || model == NS_2D);
-                if constexpr (model == NS || model == NS_2D)
-                    for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                    {
-                        Geom::tPoint pos = vfv->GetCellBary(iCell);
-                        real chi = 5;
-                        real gamma = settings.idealGasProperty.gamma;
-                        auto c2n = mesh->cell2node[iCell];
-                        auto gCell = vfv->GetCellQuad(iCell);
-                        TU um;
-                        um.resizeLike(u[iCell]);
-                        um.setZero();
-                        // Eigen::MatrixXd coords;
-                        // mesh->GetCoords(c2n, coords);
-                        gCell.IntegrationSimple(
-                            um,
-                            [&](TU &inc, int ig)
-                            {
-                                // std::cout << coords<< std::endl << std::endl;
-                                // std::cout << DiNj << std::endl;
-                                Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
-                                real rm = 8;
-                                real r = std::sqrt(sqr(pPhysics(0) - 5) + sqr(pPhysics(1) - 5));
-                                real dT = -(gamma - 1) / (8 * gamma * sqr(pi)) * sqr(chi) * std::exp(1 - sqr(r)) * (1 - 1. / std::exp(std::max(sqr(rm) - sqr(r), 0.0)));
-                                real dux = chi / 2 / pi * std::exp((1 - sqr(r)) / 2) * -(pPhysics(1) - 5) * (1 - 1. / std::exp(std::max(sqr(rm) - sqr(r), 0.0)));
-                                real duy = chi / 2 / pi * std::exp((1 - sqr(r)) / 2) * +(pPhysics(0) - 5) * (1 - 1. / std::exp(std::max(sqr(rm) - sqr(r), 0.0)));
-                                real T = dT + 1;
-                                real ux = dux + 1;
-                                real uy = duy + 1;
-                                real S = 1;
-                                real rho = std::pow(T / S, 1 / (gamma - 1));
-                                real p = T * rho;
-
-                                real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + p / (gamma - 1);
-
-                                // std::cout << T << " " << rho << std::endl;
-                                inc.setZero();
-                                inc(0) = rho;
-                                inc(1) = rho * ux;
-                                inc(2) = rho * uy;
-                                inc(dim + 1) = E;
-
-                                inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
-                            });
-                        u[iCell] = um / vfv->GetCellVol(iCell); // mean value
-                    }
-                break;
-            case 3: // for taylor-green vortex problem
-                DNDS_assert(model == NS_3D);
-                if constexpr (model == NS_3D)
-                {
-                    for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                    {
-                        Geom::tPoint pos = vfv->GetCellBary(iCell);
-                        real M0 = 0.1;
-                        real gamma = settings.idealGasProperty.gamma;
-                        auto c2n = mesh->cell2node[iCell];
-                        auto gCell = vfv->GetCellQuad(iCell);
-                        TU um;
-                        um.resizeLike(u[iCell]);
-                        um.setZero();
-                        // Eigen::MatrixXd coords;
-                        // mesh->GetCoords(c2n, coords);
-                        gCell.IntegrationSimple(
-                            um,
-                            [&](TU &inc, int ig)
-                            {
-                                // std::cout << coords<< std::endl << std::endl;
-                                // std::cout << DiNj << std::endl;
-                                Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
-                                real x{pPhysics(0)}, y{pPhysics(1)}, z{pPhysics(2)};
-                                real ux = std::sin(x) * std::cos(y) * std::cos(z);
-                                real uy = -std::cos(x) * std::sin(y) * std::cos(z);
-                                real p = 1. / (gamma * sqr(M0)) + 1. / 16 * ((std::cos(2 * x) + std::cos(2 * y)) * (2 + std::cos(2 * z)));
-                                real rho = gamma * sqr(M0) * p;
-                                real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + p / (gamma - 1);
-
-                                // std::cout << T << " " << rho << std::endl;
-                                inc.setZero();
-                                inc(0) = rho;
-                                inc(1) = rho * ux;
-                                inc(2) = rho * uy;
-                                inc(dim + 1) = E;
-
-                                inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
-                            });
-                        u[iCell] = um / vfv->GetCellVol(iCell); // mean value
-                    }
-                }
-                break;
-            case 0:
-                break;
-            default:
-                log() << "Wrong specialBuiltinInitializer" << std::endl;
-                DNDS_assert(false);
-                break;
-            }
-
-            // Box
-            for (auto &i : settings.boxInitializers)
-            {
-                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                {
-                    Geom::tPoint pos = vfv->GetCellBary(iCell);
-                    if (pos(0) > i.x0 && pos(0) < i.x1 &&
-                        pos(1) > i.y0 && pos(1) < i.y1 &&
-                        pos(2) > i.z0 && pos(2) < i.z1)
-                    {
-                        u[iCell] = i.v;
-                    }
-                }
-            }
-
-            // Plane
-            for (auto &i : settings.planeInitializers)
-            {
-                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                {
-                    Geom::tPoint pos = vfv->GetCellBary(iCell);
-                    if (pos(0) * i.a + pos(1) * i.b + pos(2) * i.c + i.h > 0)
-                    {
-                        // std::cout << pos << std::endl << i.a << i.b << std::endl << i.h <<std::endl;
-                        // DNDS_assert(false);
-                        u[iCell] = i.v;
-                    }
-                }
-            }
-        }
+        void InitializeUDOF(ArrayDOFV<nVarsFixed> &u);
     };
 }

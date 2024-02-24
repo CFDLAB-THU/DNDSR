@@ -69,8 +69,15 @@
         "meshRotZ": 0.0,
         "meshScale": 1.0,
         "meshElevation": 0,
-        "meshElevationIter": 60,
+        "meshElevationInternalSmoother": 0,
+        "meshElevationIter": 1000,
         "meshElevationRBFRadius": 1.0,
+        "meshElevationRBFPower": 1.0,
+        "meshElevationRBFKernel": "InversedDistanceA1",
+        "meshElevationMaxIncludedAngle": 15.0,
+        "meshElevationNSearch": 30,
+        "meshElevationRefDWall": 0.001,
+        "meshElevationBoundaryMode": 0,
         "meshFile": "data/mesh/NACA0012_WIDE_H3.cgns",
         "outPltName": "data/out/debugData_",
         "outLogName": "",
@@ -82,6 +89,7 @@
         "outAtPointData": true,
         "outAtCellData": true,
         "nASCIIPrecision": 5,
+        "vtuFloatEncodeMode": "binary",
         "outVolumeData": true,
         "outBndData": false,
         "outCellScalarNames": [],
@@ -120,7 +128,14 @@
         "gmresCode": 0,
         "nGmresSpace": 10,
         "nGmresIter": 2,
-        "initWithLastURecInc": false
+        "nSgsConsoleCheck": 100,
+        "nGmresConsoleCheck": 100,
+        "initWithLastURecInc": false,
+        "directPrecControl": {
+            "useDirectPrec": false,
+            "iluCode": 0,
+            "orderingCode": -2147483648
+        }
     },
     "timeAverageControl": {
         "enabled": false
@@ -181,6 +196,7 @@
         "normWBAP": false,
         "limiterBiwayAlter": 0,
         "subs2ndOrder": 0,
+        "ignoreMeshGeometryDeficiency": false,
         "baseSettings": {
             "localOrientation": false,
             "anisotropicLengths": false

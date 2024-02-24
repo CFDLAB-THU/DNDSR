@@ -576,7 +576,7 @@ namespace DNDS::Euler::Gas
 #ifdef USE_SIGN_MINUS_AT_ROE_M4_FLUX
             real uStar = signM(veloRoe(0)) * std::max(aRoe * scaleLD, std::abs(veloRoe(0)));
 #else
-            real uStar = sign(veloRoe(0)) * std::max(aRoe * scaleLD, std::abs(veloRoe(0))); //! why signM here?
+            real uStar = signTol(veloRoe(0), aRoe * smallReal) * std::max(aRoe * scaleLD, std::abs(veloRoe(0))); //! why signM here?
 #endif
             lam0 = std::abs(uStar - aRoe);
             lam123 = std::abs(uStar);

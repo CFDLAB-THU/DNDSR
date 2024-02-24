@@ -4,7 +4,7 @@
 
 namespace py = pybind11;
 
-using namespace pybind11::literals;
+using namespace pybind11::literals; 
 
 namespace DNDS::Python
 {
@@ -26,7 +26,13 @@ namespace DNDS::Python
         py::class_<DNDS::MPIInfo>(m, "MPIInfo")
             .def(py::init<>())
             .def_property_readonly("comm", [](const MPIInfo &mpi)
-                                   { return intptr_t(static_cast<void *>(mpi.comm)); })
+                                   {
+#ifndef _WIN32
+                                       return intptr_t(static_cast<void *>(mpi.comm));
+#else
+                    return intptr_t(mpi.comm);
+#endif
+                                   })
             .def_property_readonly("size", [](const MPIInfo &mpi)
                                    { return mpi.size; })
             .def_property_readonly("rank", [](const MPIInfo &mpi)
@@ -34,8 +40,12 @@ namespace DNDS::Python
             .def("setWorld", &MPIInfo::setWorld)
             .def("__repr__", [](const MPIInfo &mpi)
                  { return "<DNDS::MPIInfo: " + std::to_string(intptr_t(&mpi)) + ">\n" +
+#ifndef _WIN32
                           " comm: " + std::to_string(intptr_t(static_cast<void *>(mpi.comm))) + "\n" +
-                          " size: " + std::to_string(mpi.size) + "\n" +
-                          " rank: " + std::to_string(mpi.rank) + "\n"; });
+#else
+                         " comm: " + std::to_string(intptr_t((mpi.comm))) + "\n" +
+#endif
+                         " size: " + std::to_string(mpi.size) + "\n" +
+                         " rank: " + std::to_string(mpi.rank) + "\n"; });
     }
 }

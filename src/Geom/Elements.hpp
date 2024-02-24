@@ -1492,7 +1492,7 @@ namespace DNDS::Geom::Elem
             };
             Eigen::Index iMin{-1};
             real minLen = lengths.minCoeff(&iMin);
-            return iMin;
+            return t_index(iMin);
         }
         break;
         case Pyramid14:
@@ -1503,7 +1503,7 @@ namespace DNDS::Geom::Elem
             };
             Eigen::Index iMin{-1};
             real minLen = lengths.minCoeff(&iMin);
-            return iMin;
+            return t_index(iMin);
         }
         break;
         default:

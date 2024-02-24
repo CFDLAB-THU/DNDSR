@@ -76,7 +76,8 @@
             "includePath": [
                 "${default}",
                 "external\\Windows-AMD64\\include",
-                "C:\\Program Files (x86)\\Microsoft SDKs\\MPI\\Include"
+                "C:\\Program Files (x86)\\Microsoft SDKs\\MPI\\Include",
+                "C:/ProgramData/anaconda3/Include"
             ],
             "defines": [
                 "_DEBUG",
@@ -84,9 +85,9 @@
                 "_UNICODE"
             ],
             "windowsSdkVersion": "10.0.22000.0",
-            "compilerPath": "cl.exe",
+            "compilerPath": "clang.exe",
             "cStandard": "c17",
-            "intelliSenseMode": "windows-msvc-x64",
+            "intelliSenseMode": "windows-clang-x64",
             "cppStandard": "c++17"
         }
     ],

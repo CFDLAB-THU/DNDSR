@@ -26,7 +26,7 @@ namespace DNDS
     private:
         real timer[Ntype] = {0};
         real tStart[Ntype];
-        PerformanceTimer(){};
+        PerformanceTimer(){}
         PerformanceTimer(const PerformanceTimer &);
         PerformanceTimer &operator=(const PerformanceTimer &);
 

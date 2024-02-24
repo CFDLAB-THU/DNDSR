@@ -1079,7 +1079,7 @@ namespace DNDS::Geom
             std::sort(b2nRow.begin(), b2nRow.end());
             int nFound = 0;
             auto faceID = bndElemInfo[iBnd]->zone;
-            for (DNDS::index ic2f = 0; ic2f < cell2face.RowSize(pCell); ic2f++)
+            for (int ic2f = 0; ic2f < cell2face.RowSize(pCell); ic2f++)
             {
                 auto iFace = cell2face(pCell, ic2f);
                 if (iFace < 0) //==-1, pointing to ghost face
@@ -1472,159 +1472,11 @@ namespace DNDS::Geom
         bMesh.adjPrimaryState = Adj_PointToLocal;
     }
 
-    void UnstructuredMesh::ObtainSymmetricSymbolicFactorization(int iluCode)
+    void UnstructuredMesh::ObtainSymmetricSymbolicFactorization(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control)
     {
-        auto &cell2cellFaceV = cell2cellFaceVLocal;
-        std::vector<std::unordered_set<index>> cell2cellFaceVEnlarged;
-        if (iluCode > 0) // do expansion of stencil
-        {
-            DNDS_assert(iluCode <= 5);
-            cell2cellFaceVEnlarged.resize(this->NumCell());
-            for (index iCell = 0; iCell < this->NumCell(); iCell++)
-                for (auto iCO : cell2cellFaceV[iCell])
-                    cell2cellFaceVEnlarged[iCell].insert(iCO);
-            for (int iFill = 0; iFill < iluCode; iFill++)
-            {
-                for (index iCell = 0; iCell < this->NumCell(); iCell++)
-                {
-                    std::unordered_set<index> newNeighbor;
-                    for (auto iCO : cell2cellFaceVEnlarged[iCell])
-                        for (auto iCOO : cell2cellFaceV[iCO])
-                            newNeighbor.insert(iCOO);
-                    for (auto iCN : newNeighbor)
-                        cell2cellFaceVEnlarged[iCell].insert(iCN);
-                }
-            }
-            for (index iCell = 0; iCell < this->NumCell(); iCell++)
-                cell2cellFaceVEnlarged[iCell].erase(iCell); // this is redundant
-        }
-
-        std::vector<std::unordered_set<index>> triLowRows;
-        std::vector<std::unordered_set<index>> triUppRows;
-        std::vector<std::unordered_set<index>> midSymMatCols;
-        triLowRows.resize(this->NumCell());
-        triUppRows.resize(this->NumCell());
-        midSymMatCols.resize(this->NumCell());
-        index nnzOrig{this->NumCell()};
-
-        for (index iCellP = 0; iCellP < this->NumCell(); iCellP++) // iterate over the columns
-        {
-            index iCell = this->CellFillingReorderNew2Old(iCellP);
-            midSymMatCols[iCellP].insert(iCellP);
-            for (auto iCellOther : cell2cellFaceV[iCell])
-            {
-                index iCellOtherP = this->CellFillingReorderOld2New(iCellOther);
-                midSymMatCols[iCellP].insert(iCellOtherP); // assuming cell2cellFaceV is symmetric
-            }
-            nnzOrig += cell2cellFaceV[iCell].size();
-        }
-
-        for (index iCellP = 0; iCellP < this->NumCell(); iCellP++) // iterate over the columns
-        {
-            for (auto iCellOtherP : midSymMatCols[iCellP]) // emulate the symmetric factorization A L1L2L3...LN D LNT...L1T
-                if (iCellOtherP > iCellP)
-                {
-                    index iCellOther = this->CellFillingReorderNew2Old(iCellOtherP);
-                    for (auto iCellOtherPP : midSymMatCols[iCellP])
-                        if (iCellOtherPP > iCellOtherP)
-                        {
-                            index iCellOtherOther = this->CellFillingReorderNew2Old(iCellOtherPP);
-                            // to be always symmetric
-                            // control over here to get incomplete LU structure
-                            if (iluCode < 0 || (iluCode > 0 && cell2cellFaceVEnlarged[iCellOther].count(iCellOtherOther)))
-                            {
-                                midSymMatCols[iCellOtherPP].insert(iCellOtherP); // upper part
-                                midSymMatCols[iCellOtherP].insert(iCellOtherPP); // lower part
-                            }
-                        }
-                    triLowRows[iCellOtherP].insert(iCellP); // iCellP is iCol, iCellOtherP is iRow
-                    triUppRows[iCellP].insert(iCellOtherP);
-                }
-        }
-
-        lowerTriStructure.resize(this->NumCell());
-        upperTriStructure.resize(this->NumCell());
-        lowerTriStructureNew.resize(this->NumCell());
-        upperTriStructureNew.resize(this->NumCell());
-        index nnzLower{0}, nnzUpper{0};
-        for (index iCellP = 0; iCellP < this->NumCell(); iCellP++)
-        {
-            index iCell = this->CellFillingReorderNew2Old(iCellP);
-            lowerTriStructure[iCell].reserve(triLowRows[iCellP].size());
-            upperTriStructure[iCell].reserve(triUppRows[iCellP].size());
-            lowerTriStructureNew[iCellP].reserve(triLowRows[iCellP].size());
-            upperTriStructureNew[iCellP].reserve(triUppRows[iCellP].size());
-            for (auto iCellOtherP : triLowRows[iCellP])
-                lowerTriStructureNew[iCellP].push_back(iCellOtherP);
-            for (auto iCellOtherP : triUppRows[iCellP])
-                upperTriStructureNew[iCellP].push_back(iCellOtherP);
-            std::sort(lowerTriStructureNew[iCellP].begin(), lowerTriStructureNew[iCellP].end());
-            std::sort(upperTriStructureNew[iCellP].begin(), upperTriStructureNew[iCellP].end());
-            for (auto iCellOtherP : lowerTriStructureNew[iCellP])
-                lowerTriStructure[iCell].push_back(this->CellFillingReorderNew2Old(iCellOtherP));
-            for (auto iCellOtherP : upperTriStructureNew[iCellP])
-                upperTriStructure[iCell].push_back(this->CellFillingReorderNew2Old(iCellOtherP));
-
-            nnzLower += lowerTriStructure[iCell].size();
-            nnzUpper += upperTriStructure[iCell].size();
-            // the lowerTriStructure and upperTriStructure's col indices are corresponding to
-            // those of in *New Rows
-            // col indices in *New Rows are sorted
-        }
-        if (mpi.rank == mRank)
-            log() << "UnstructuredMesh::ObtainSymmetricSymbolicFactorization(): Factorizing Done" << std::endl;
-        MPISerialDo(mpi, [&]()
-                    { log() << fmt::format("  ({}, {}/{})", mpi.rank,
-                                           nnzLower + nnzUpper + this->NumCell(),
-                                           nnzOrig)
-                            << std::flush; });
-        MPI::Barrier(mpi.comm);
-        if (mpi.rank == mRank)
-            log() << std::endl;
-        DNDS_assert(nnzLower == nnzUpper);
-
-        // pre-search
-        lowerTriStructureNewInUpper.resize(lowerTriStructureNew.size());
-        for (index iP = 0; iP < this->NumCell(); iP++)
-        {
-            auto &&lowerRow = lowerTriStructureNew[iP];
-            lowerTriStructureNewInUpper[iP].resize(lowerRow.size());
-            for (int ijP = 0; ijP < lowerRow.size(); ijP++)
-            {
-                index jP = lowerRow[ijP];
-                auto &&upperRow = upperTriStructureNew[jP];
-                auto ret = std::lower_bound(upperRow.begin(), upperRow.end(), iP);
-                DNDS_assert(ret != upperRow.end()); // has to be found
-                lowerTriStructureNewInUpper[iP][ijP] = ret - upperRow.begin();
-            }
-        }
-
-        cell2cellFaceVLocal2FullRowPos.resize(this->NumCell());
-        for (index i = 0; i < this->NumCell(); i++)
-        {
-            index iP = this->CellFillingReorderOld2New(i);
-            cell2cellFaceVLocal2FullRowPos[i].resize(cell2cellFaceVLocal[i].size(), -1);
-            for (int ic2c = 0; ic2c < cell2cellFaceVLocal[i].size(); ic2c++)
-            {
-                index j = cell2cellFaceVLocal[i][ic2c];
-                index jP = this->CellFillingReorderOld2New(j);
-                if (jP < iP)
-                {
-                    auto &&row = lowerTriStructureNew[iP];
-                    auto ret = std::lower_bound(row.begin(), row.end(), jP);
-                    DNDS_assert(ret != row.end());
-                    cell2cellFaceVLocal2FullRowPos[i][ic2c] =
-                        (ret - row.begin()) + 1;
-                }
-                else if (jP > iP)
-                {
-                    auto &&row = upperTriStructureNew[iP];
-                    auto ret = std::lower_bound(row.begin(), row.end(), jP);
-                    DNDS_assert(ret != row.end());
-                    cell2cellFaceVLocal2FullRowPos[i][ic2c] =
-                        (ret - row.begin()) + lowerTriStructureNew[iP].size() + 1;
-                }
-            }
-        }
+        if (control.useDirectPrec)
+            symLU.ObtainSymmetricSymbolicFactorization(
+                cell2cellFaceVLocal,
+                control.getILUCode());
     }
 }

@@ -3,6 +3,7 @@
 #include "Defines.hpp"
 #define JSON_ASSERT DNDS_assert
 #include "json.hpp"
+#include "EigenUtil.hpp"
 
 namespace DNDS
 {
@@ -25,7 +26,34 @@ namespace DNDS
         }
     }
 
+    inline Eigen::VectorFMTSafe<real, -1> JsonGetEigenVectorFMTSafe(const nlohmann::json &arr)
+    {
+        try
+        {
+            DNDS_assert(arr.is_array());
+            Eigen::VectorFMTSafe<real, -1> ret;
+            ret.resize(arr.size());
+            for (int i = 0; i < ret.size(); i++)
+                ret(i) = arr.at(i).get<double>();
+            return ret;
+        }
+        catch (...)
+        {
+            DNDS_assert_info(false, "array parse bad");
+            return Eigen::VectorFMTSafe<real, -1>{0};
+        }
+    }
+
     inline nlohmann::json EigenVectorGetJson(const Eigen::VectorXd &ve)
+    {
+        std::vector<real> v;
+        v.resize(ve.size());
+        for (size_t i = 0; i < ve.size(); i++)
+            v[i] = ve[i];
+        return nlohmann::json(v);
+    }
+
+    inline nlohmann::json EigenVectorFMTSafeGetJson(const Eigen::VectorFMTSafe<real, -1> &ve)
     {
         std::vector<real> v;
         v.resize(ve.size());
@@ -74,6 +102,16 @@ namespace Eigen // why doesn't work?
     inline void from_json(const nlohmann::ordered_json &j, VectorXd &v)
     {
         v = DNDS::JsonGetEigenVector(j);
+    }
+
+    inline void to_json(nlohmann::ordered_json &j, const VectorFMTSafe<DNDS::real, -1> &v)
+    {
+        j = DNDS::EigenVectorFMTSafeGetJson(v);
+    }
+
+    inline void from_json(const nlohmann::ordered_json &j, VectorFMTSafe<DNDS::real, -1> &v)
+    {
+        v = DNDS::JsonGetEigenVectorFMTSafe(j);
     }
 
     inline void to_json(nlohmann::ordered_json &j, const Vector3d &v)

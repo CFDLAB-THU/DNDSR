@@ -7,6 +7,7 @@
 #include "DNDS/ArrayPair.hpp"
 #include "PeriodicInfo.hpp"
 #include "RadialBasisFunction.hpp"
+#include "Solver/Direct.hpp"
 
 namespace DNDS::Geom
 {
@@ -126,24 +127,7 @@ namespace DNDS::Geom
 
         /// for cell local factorization
         using tLocalMatStruct = std::vector<std::vector<index>>;
-        std::vector<index> localFillOrderingNew2Old;
-        std::vector<index> localFillOrderingOld2New;
-        tLocalMatStruct lowerTriStructure;
-        tLocalMatStruct upperTriStructure;
-        tLocalMatStruct lowerTriStructureNew;
-        tLocalMatStruct upperTriStructureNew;
         tLocalMatStruct cell2cellFaceVLocal;
-        tLocalMatStruct lowerTriStructureNewInUpper;
-        tLocalMatStruct cell2cellFaceVLocal2FullRowPos; // diag-lower-upper
-
-        index CellFillingReorderOld2New(index v)
-        {
-            return localFillOrderingOld2New.size() ? localFillOrderingOld2New[v] : v;
-        }
-        index CellFillingReorderNew2Old(index v)
-        {
-            return localFillOrderingNew2Old.size() ? localFillOrderingNew2Old[v] : v;
-        }
 
         UnstructuredMesh(const DNDS::MPIInfo &n_mpi, int n_dim)
             : mpi(n_mpi), dim(n_dim) {}
@@ -175,8 +159,8 @@ namespace DNDS::Geom
 
         // void ReorderCellLocal();
 
-        void ObtainLocalFactFillOrdering(int method = 0); // 1 uses metis, 2 uses MMD, //TODO 10 uses geometric based searching
-        void ObtainSymmetricSymbolicFactorization(int iluCode = -1); // -1 use full LU, 0-3 use ilu(code), 
+        void ObtainLocalFactFillOrdering(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control);          // 1 uses metis, 2 uses MMD, //TODO 10 uses geometric based searching
+        void ObtainSymmetricSymbolicFactorization(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control); // -1 use full LU, 0-3 use ilu(code),
 
         index NumNode() { return coords.father->Size(); }
         index NumCell() { return cell2node.father->Size(); }

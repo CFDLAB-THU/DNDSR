@@ -70,6 +70,8 @@
             JacobianLocalLU<nVarsFixed> &jacLU,                                               \
             TU &sumInc);                                                                      \
                                                                                               \
+        template void EulerEvaluator<model>::InitializeUDOF(ArrayDOFV<nVarsFixed> &u);        \
+                                                                                              \
         template void EulerEvaluator<model>::FixUMaxFilter(                                   \
             ArrayDOFV<nVarsFixed> &u);                                                        \
                                                                                               \
@@ -82,6 +84,16 @@
                                                                                               \
         template void EulerEvaluator<model>::EvaluateNorm(                                    \
             Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P, bool volWise); \
+                                                                                              \
+        template void EulerEvaluator<model>::EvaluateRecNorm(                                 \
+            Eigen::Vector<real, -1> &res,                                                     \
+            ArrayDOFV<nVarsFixed> &u,                                                         \
+            ArrayRECV<nVarsFixed> &uRec,                                                      \
+            index P,                                                                          \
+            bool compare,                                                                     \
+            const tFCompareField &FCompareField,                                              \
+            const tFCompareFieldWeight &FCompareFieldWeight,                                  \
+            real t);                                                                          \
                                                                                               \
         template void EulerEvaluator<model>::EvaluateURecBeta(                                \
             ArrayDOFV<nVarsFixed> &u,                                                         \

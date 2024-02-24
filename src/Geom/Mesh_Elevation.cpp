@@ -249,7 +249,7 @@ namespace DNDS::Geom
             SmallCoordsAsVector coordsC;
             meshO1.GetCoordsOnCell(iCell, coordsC);
 
-            for (index iNNode = 0; iNNode < eCell.GetNumElev_O1O2(); iNNode++)
+            for (int iNNode = 0; iNNode < eCell.GetNumElev_O1O2(); iNNode++)
             {
                 auto eSpan = eCell.ObtainElevNodeSpan(iNNode);
                 std::array<index, Elem::CellNumNodeMax> spanNodes;
@@ -682,7 +682,7 @@ namespace DNDS::Geom
                 {
                     tPoint uNormC = uNorm;
                     if (isPeriodic)
-                        uNormC = periodicInfo.GetVectorBackByBits(uNorm, face2nodePbiExtended[iFace][if2n]);
+                        uNormC = periodicInfo.GetVectorBackByBits<3, 1>(uNorm, face2nodePbiExtended[iFace][if2n]);
                     nodeNormClusters(iNode, nodeBndNum.at(iNode)++) = uNormC;
                 }
             }
@@ -804,7 +804,7 @@ namespace DNDS::Geom
                     {
                         tPoint normN = nodeNormClusters(spanO2Node[iN], iNorm);
                         if (isPeriodic)
-                            normN = periodicInfo.GetVectorByBits(normN, face2nodePbiExtended[iFace][if2n]);
+                            normN = periodicInfo.GetVectorByBits<3, 1>(normN, face2nodePbiExtended[iFace][if2n]);
                         real sinValMax = 0;
                         for (auto e : edges)
                             sinValMax = std::max(sinValMax, std::abs(e.dot(normN.stableNormalized())));
@@ -863,7 +863,7 @@ namespace DNDS::Geom
                 }
 
                 if (isPeriodic)
-                    cooInc = periodicInfo.GetVectorBackByBits(cooInc, face2nodePbiExtended[iFace][if2n]);
+                    cooInc = periodicInfo.GetVectorBackByBits<3, 1>(cooInc, face2nodePbiExtended[iFace][if2n]);
                 // if (cooInc.stableNorm() > 0) //! could use a threshold
                 {
 
@@ -1472,7 +1472,7 @@ namespace DNDS::Geom
             MatC[iN].resize(nFound);
             for (index in2n = 0; in2n < nFound; in2n++)
             {
-                MatC[iN][in2n] = std::make_pair<index, real>(index(idxFound[in2n]), real(fBasis(in2n)));
+                MatC[iN][in2n] = std::make_pair(index(idxFound[in2n]), real(fBasis(in2n)));
                 // idxFound[in2n] is a global indexing!
                 auto [search_good, rank, val] = boundInterpCoo.trans.pLGlobalMapping->search(idxFound[in2n]);
                 DNDS_assert(search_good);
@@ -2131,7 +2131,7 @@ namespace DNDS::Geom
                         eCell.ExtractO2BisectElemNodes(iBi, iBiVariant, coordsC, coordsCSub);
                         eCell.ExtractO2BisectElemNodes(iBi, iBiVariant, coordsCu, coordsCuSub);
                         auto qCellSub = Elem::Quadrature{eCellSub, 6}; // for O1 FEM
-                        rowsize nnLocSub = c2nSubLocal.size();
+                        rowsize nnLocSub = rowsize(c2nSubLocal.size());
                         Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> ALocSub, mLoc;
                         ALocSub.setZero(3 * nnLocSub, 3 * nnLocSub + 1);
                         mLoc.resize(6, 3 * nnLocSub);

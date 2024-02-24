@@ -15,7 +15,6 @@ namespace DNDS::CFV
 
         /***************************************/
         // get volumes
-        real sumVolume{0}, minVolume{veryLargeReal}, maxVolume{0};
         volumeLocal.resize(mesh->NumCellProc());
         cellAtr.resize(mesh->NumCellProc());
         this->MakePairDefaultOnCell(cellIntJacobiDet);
@@ -167,7 +166,7 @@ namespace DNDS::CFV
                        "VariationalReconstruction<dim>::ConstructMetrics() === \n ===Sum/Min/Max Volume [{:.10g};  {:.5g}, {:.5g}]",
                        sumVolume, minVolume, maxVolume)
                 << std::endl;
-        volGlobal = sumVolumeAll;
+        volGlobal = sumVolume;
         cellIntJacobiDet.CompressBoth();
         cellIntPPhysics.CompressBoth();
         /***************************************/
@@ -791,7 +790,8 @@ namespace DNDS::CFV
                 matrixAHalf_GG[iCell] = AHalf_GG;
             }
             decltype(A) AInv;
-            real aCond = HardEigen::EigenLeastSquareInverse(A, AInv);
+            real aCond = HardEigen::EigenLeastSquareInverse_Filtered(A, AInv, settings.svdTolerance, 1);
+            // real aCond = HardEigen::EigenLeastSquareInverse(A, AInv, settings.svdTolerance);
             matrixAB(iCell, 0) = A;
             matrixAAInvB(iCell, 0) = AInv;
 

@@ -85,7 +85,7 @@ namespace DNDS
             if (RankOffsets.size() == 0) // in case the communicator is of size 0 ??
                 return false;
             auto place = std::lower_bound(RankOffsets.begin(), RankOffsets.end(), globalQuery, std::less_equal<index>());
-            rank = place - 1 - RankOffsets.begin();
+            rank = static_cast<MPI_int>(place - 1 - RankOffsets.begin()); // ! could overflow
             if (rank < RankLengths.size() && rank >= 0)
             {
                 val = globalQuery - RankOffsets[rank];
@@ -267,7 +267,7 @@ namespace DNDS
         void sort()
         {
             std::sort(ghostIndex.begin(), ghostIndex.end());
-        };
+        }
 
         index &ghostAt(MPI_int rank, index ighost)
         {

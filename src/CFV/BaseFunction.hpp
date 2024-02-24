@@ -291,7 +291,7 @@ namespace DNDS::CFV
                     T(idiff, ibase) =
                         FPolynomial3D(px, py, pz, ndx, ndy, ndz,
                                       x, y, z / 1.) /
-                        (iPow(lx, ndx) * iPow(ly, ndy) * iPow(1, ndz));
+                        (iPow(ndx, lx) * iPow(ndy, ly) * iPow(ndz, 1.0));
                 }
         }
     }
@@ -563,7 +563,7 @@ namespace DNDS::CFV
                     T(idiff, ibase) =
                         FPolynomial3D(px, py, pz, ndx, ndy, ndz,
                                       x, y, z) /
-                        (iPow(lx, ndx) * iPow(ly, ndy) * iPow(lz, ndz));
+                        (iPow(ndx, lx) * iPow(ndy, ly) * iPow(ndz, lz));
                 }
         }
     }
@@ -918,3 +918,4 @@ namespace DNDS::CFV
         return maxNDOF;
     }
 }
+

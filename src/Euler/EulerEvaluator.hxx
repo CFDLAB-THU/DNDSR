@@ -1,6 +1,9 @@
 #pragma once
+
+#include "DNDS/Defines.hpp" // for correct  DNDS_SWITCH_INTELLISENSE
 #include "EulerEvaluator.hpp"
 #include "DNDS/HardEigen.hpp"
+#include "SpecialFields.hpp"
 
 namespace DNDS::Euler
 {
@@ -135,8 +138,10 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixVec -1");
     }
 
+    
+
     DNDS_SWITCH_INTELLISENSE(
-        template <EulerModel model>, template <>
+        template <EulerModel model>, template <EulerModel model_masked>
     )
     void EulerEvaluator<model>::LUSGSMatrixToJacobianLU(
         real alphaDiag,
@@ -165,7 +170,7 @@ namespace DNDS::Euler
                     int iC2CInLocal = -1;
                     for (int ic2c = 0; ic2c < mesh->cell2cellFaceVLocal[iCell].size(); ic2c++)
                         if (iCellOther == mesh->cell2cellFaceVLocal[iCell][ic2c])
-                            iC2CInLocal = ic2c;
+                            iC2CInLocal = ic2c; //TODO: pre-search this
                     DNDS_assert(iC2CInLocal != -1);
                     TJacobianU jacIJ;
                     {
@@ -176,7 +181,7 @@ namespace DNDS::Euler
                             unitNorm,
                             Geom::BC_ID_INTERNAL, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                     }
-                    jacLU.LDU(iCell, mesh->cell2cellFaceVLocal2FullRowPos[iCell][iC2CInLocal]) =
+                    jacLU.LDU(iCell, symLU->cell2cellFaceVLocal2FullRowPos[iCell][iC2CInLocal]) =
                         (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacIJ;
                 }
             }
@@ -573,6 +578,167 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    void EulerEvaluator<model>::InitializeUDOF(ArrayDOFV<nVarsFixed> &u)
+    {
+        Eigen::VectorXd initConstVal = this->settings.farFieldStaticValue;
+        u.setConstant(initConstVal);
+        if (model == EulerModel::NS_SA || model == NS_SA_3D)
+        {
+            for (int iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                auto c2f = mesh->cell2face[iCell];
+                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+                {
+                    index iFace = c2f[ic2f];
+                    if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(iFace)) == EulerBCType::BCWall)
+                        u[iCell](I4 + 1) *= 1.0; // ! not fixing first layer!
+                }
+            }
+        }
+
+        switch (settings.specialBuiltinInitializer)
+        {
+        case 1: // for RT problem
+            DNDS_assert(model == NS || model == NS_2D || model == NS_3D);
+            if constexpr (model == NS || model == NS_2D)
+                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                {
+                    Geom::tPoint pos = vfv->GetCellBary(iCell);
+                    real gamma = settings.idealGasProperty.gamma;
+                    real rho = 2;
+                    real p = 1 + 2 * pos(1);
+                    if (pos(1) >= 0.5)
+                    {
+                        rho = 1;
+                        p = 1.5 + pos(1);
+                    }
+                    real v = -0.025 * sqrt(gamma * p / rho) * std::cos(8 * pi * pos(0));
+                    if constexpr (dim == 3)
+                        u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gamma - 1)};
+                    else
+                        u[iCell] = Eigen::Vector<real, 4>{rho, 0, rho * v, 0.5 * rho * sqr(v) + p / (gamma - 1)};
+                }
+            else if constexpr (model == NS_3D)
+                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                {
+                    Geom::tPoint pos = vfv->GetCellBary(iCell);
+                    real gamma = settings.idealGasProperty.gamma;
+                    real rho = 2;
+                    real p = 1 + 2 * pos(1);
+                    if (pos(1) >= 0.5)
+                    {
+                        rho = 1;
+                        p = 1.5 + pos(1);
+                    }
+                    real v = -0.025 * sqrt(gamma * p / rho) * std::cos(8 * pi * pos(0)) * std::cos(8 * pi * pos(2));
+                    u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gamma - 1)};
+                }
+            break;
+        case 2: // for IV10 problem
+            DNDS_assert(model == NS || model == NS_2D);
+            if constexpr (model == NS || model == NS_2D)
+                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                {
+                    Geom::tPoint pos = vfv->GetCellBary(iCell);
+                    auto c2n = mesh->cell2node[iCell];
+                    auto gCell = vfv->GetCellQuad(iCell);
+                    TU um;
+                    um.resizeLike(u[iCell]);
+                    um.setZero();
+                    gCell.IntegrationSimple(
+                        um,
+                        [&](TU &inc, int ig)
+                        {
+                            Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
+                            inc = SpecialFields::IsentropicVortex10(*this, pPhysics, 0, nVars);
+                            inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
+                        });
+                    u[iCell] = um / vfv->GetCellVol(iCell); // mean value
+                }
+            break;
+        case 3: // for taylor-green vortex problem
+            DNDS_assert(model == NS_3D);
+            if constexpr (model == NS_3D)
+            {
+                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                {
+                    Geom::tPoint pos = vfv->GetCellBary(iCell);
+                    real M0 = 0.1;
+                    real gamma = settings.idealGasProperty.gamma;
+                    auto c2n = mesh->cell2node[iCell];
+                    auto gCell = vfv->GetCellQuad(iCell);
+                    TU um;
+                    um.resizeLike(u[iCell]);
+                    um.setZero();
+                    // Eigen::MatrixXd coords;
+                    // mesh->GetCoords(c2n, coords);
+                    gCell.IntegrationSimple(
+                        um,
+                        [&](TU &inc, int ig)
+                        {
+                            // std::cout << coords<< std::endl << std::endl;
+                            // std::cout << DiNj << std::endl;
+                            Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
+                            real x{pPhysics(0)}, y{pPhysics(1)}, z{pPhysics(2)};
+                            real ux = std::sin(x) * std::cos(y) * std::cos(z);
+                            real uy = -std::cos(x) * std::sin(y) * std::cos(z);
+                            real p = 1. / (gamma * sqr(M0)) + 1. / 16 * ((std::cos(2 * x) + std::cos(2 * y)) * (2 + std::cos(2 * z)));
+                            real rho = gamma * sqr(M0) * p;
+                            real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + p / (gamma - 1);
+
+                            // std::cout << T << " " << rho << std::endl;
+                            inc.setZero();
+                            inc(0) = rho;
+                            inc(1) = rho * ux;
+                            inc(2) = rho * uy;
+                            inc(dim + 1) = E;
+
+                            inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
+                        });
+                    u[iCell] = um / vfv->GetCellVol(iCell); // mean value
+                }
+            }
+            break;
+        case 0:
+            break;
+        default:
+            log() << "Wrong specialBuiltinInitializer" << std::endl;
+            DNDS_assert(false);
+            break;
+        }
+
+        // Box
+        for (auto &i : settings.boxInitializers)
+        {
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                Geom::tPoint pos = vfv->GetCellBary(iCell);
+                if (pos(0) > i.x0 && pos(0) < i.x1 &&
+                    pos(1) > i.y0 && pos(1) < i.y1 &&
+                    pos(2) > i.z0 && pos(2) < i.z1)
+                {
+                    u[iCell] = i.v;
+                }
+            }
+        }
+
+        // Plane
+        for (auto &i : settings.planeInitializers)
+        {
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                Geom::tPoint pos = vfv->GetCellBary(iCell);
+                if (pos(0) * i.a + pos(1) * i.b + pos(2) * i.c + i.h > 0)
+                {
+                    // std::cout << pos << std::endl << i.a << i.b << std::endl << i.h <<std::endl;
+                    // DNDS_assert(false);
+                    u[iCell] = i.v;
+                }
+            }
+        }
+    }
+
+    template <EulerModel model>
     void EulerEvaluator<model>::FixUMaxFilter(ArrayDOFV<nVarsFixed> &u)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -645,6 +811,53 @@ namespace DNDS::Euler
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 resc = resc.array().max(rhs[iCell].array().abs()).matrix();
             MPI::Allreduce(resc.data(), res.data(), res.size(), DNDS_MPI_REAL, MPI_MAX, rhs.father->getMPI().comm);
+        }
+    }
+
+    template <EulerModel model>
+    void EulerEvaluator<model>::EvaluateRecNorm(
+        Eigen::Vector<real, -1> &res,
+        ArrayDOFV<nVarsFixed> &u,
+        ArrayRECV<nVarsFixed> &uRec,
+        index P,
+        bool compare,
+        const tFCompareField &FCompareField,
+        const tFCompareFieldWeight &FCompareFieldWeight,
+        real t)
+    {
+        res.resize(nVars);
+        TU resc;
+        resc.setZero(nVars);
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        {
+            auto qCell = vfv->GetCellQuad(iCell);
+            TU rescCell;
+            rescCell.setZero(nVars);
+            qCell.IntegrationSimple(
+                rescCell,
+                [&](auto &inc, int iG)
+                {
+                    TU uR = u[iCell] + (vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iG, 0, 1) * uRec[iCell]).transpose();
+                    if (compare)
+                    {
+                        Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, iG);
+                        uR -= FCompareField(pPhysics, t);
+                        uR *= FCompareFieldWeight(pPhysics, t);
+                    }
+                    if (P >= 3)
+                        resc = resc.array().min(inc.array());
+                    inc = uR.array().abs().pow(P);
+                    inc *= vfv->GetCellJacobiDet(iCell, iG);
+                });
+            if (P < 3)
+                resc += rescCell;
+        }
+        if (P > 3)
+            MPI::Allreduce(resc.data(), res.data(), res.size(), DNDS_MPI_REAL, MPI_MAX, u.father->getMPI().comm);
+        else
+        {
+            MPI::Allreduce(resc.data(), res.data(), res.size(), DNDS_MPI_REAL, MPI_SUM, u.father->getMPI().comm);
+            res = res.array().pow(1.0 / P).matrix();
         }
     }
 
