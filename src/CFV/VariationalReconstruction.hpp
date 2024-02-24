@@ -64,7 +64,7 @@ namespace DNDS::CFV
         tVecsPair vectorB;         /// @brief constructed using ConstructRecCoeff()
         tMatsPair matrixAAInvB;    /// @brief constructed using ConstructRecCoeff()
         tMatsPair vectorAInvB;     /// @brief constructed using ConstructRecCoeff()
-        tVMatPair matrixSecondary; /// @brief constructed using ConstructRecCoeff()
+        tVMatPair matrixSecondary; /// @brief constructed using ConstructRecCoeff(), secondary-rec matrices on each face
         tVMatPair matrixAHalf_GG;  /// @brief constructed using ConstructRecCoeff()
 
     public:

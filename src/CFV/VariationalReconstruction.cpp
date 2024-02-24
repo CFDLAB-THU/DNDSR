@@ -790,7 +790,7 @@ namespace DNDS::CFV
                 matrixAHalf_GG[iCell] = AHalf_GG;
             }
             decltype(A) AInv;
-            real aCond = HardEigen::EigenLeastSquareInverse(A, AInv);
+            real aCond = HardEigen::EigenLeastSquareInverse_Filtered(A, AInv, settings.svdTolerance, 1);
             matrixAB(iCell, 0) = A;
             matrixAAInvB(iCell, 0) = AInv;
 

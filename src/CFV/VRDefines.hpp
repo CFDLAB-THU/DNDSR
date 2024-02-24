@@ -39,6 +39,7 @@ namespace DNDS::CFV
     struct RecAtr
     {
         real relax = UnInitReal;
+        uint8_t Order = -1;
         uint8_t NDOF = -1;
         uint8_t NDIFF = -1;
         uint8_t intOrder = 1;

@@ -21,7 +21,6 @@
 #define JSON_ASSERT DNDS_assert
 #include "json.hpp"
 
-
 namespace DNDS::CFV
 {
     /**
@@ -47,6 +46,7 @@ namespace DNDS::CFV
         bool normWBAP = false;       /// @brief if switch to normWBAP
         int limiterBiwayAlter = 0;   /// @brief 0=wbap-L2-biway, 1=minmod-biway
         int subs2ndOrder = 0;        /// @brief 0: vfv; 1: gauss rule; 2: least square
+        real svdTolerance = 0;       /// @brief tolerance used in svd
 
         bool ignoreMeshGeometryDeficiency = false;
 
@@ -137,9 +137,9 @@ namespace DNDS::CFV
             }
         } functionalSettings;
 
-        VRSettings()
-        {
-        }
+        // VRSettings()
+        // {
+        // }
 
         VRSettings(int dim)
         {
@@ -167,6 +167,8 @@ namespace DNDS::CFV
             jsonSetting["subs2ndOrder"] = subs2ndOrder;
             jsonSetting["ignoreMeshGeometryDeficiency"] = ignoreMeshGeometryDeficiency;
 
+            jsonSetting["svdTolerance"] = svdTolerance;
+
             jsonSetting["baseSettings"] = baseSettings;
             jsonSetting["functionalSettings"] = functionalSettings;
         }
@@ -190,6 +192,8 @@ namespace DNDS::CFV
             limiterBiwayAlter = jsonSetting["limiterBiwayAlter"];
             subs2ndOrder = jsonSetting["subs2ndOrder"];
             ignoreMeshGeometryDeficiency = jsonSetting["ignoreMeshGeometryDeficiency"];
+
+            svdTolerance = jsonSetting["svdTolerance"];
 
             baseSettings = jsonSetting["baseSettings"];
             functionalSettings = jsonSetting["functionalSettings"];

@@ -5,30 +5,45 @@ namespace DNDS::HardEigen
 {
     /// @todo test these eigen solvers !!
     // #define EIGEN_USE_LAPACKE
-    real EigenLeastSquareInverse(const Eigen::MatrixXd &A, Eigen::MatrixXd &AI)
+    real EigenLeastSquareInverse(const Eigen::MatrixXd &A, Eigen::MatrixXd &AI, real svdTol)
     {
         // static const double sVmin = 1e-12;
         // auto SVDResult = A.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
         auto SVDResult = A.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
+        if (svdTol > 0)
+            SVDResult.setThreshold(svdTol);
         AI = SVDResult.solve(Eigen::MatrixXd::Identity(A.rows(), A.rows()));
         Eigen::VectorXd svs = SVDResult.singularValues().array().abs();
         return svs.maxCoeff() / (svs.minCoeff() + verySmallReal);
     }
 
-    real EigenLeastSquareInverse_Filtered(const Eigen::MatrixXd &A, Eigen::MatrixXd &AI)
+    real EigenLeastSquareInverse_Filtered(const Eigen::MatrixXd &A, Eigen::MatrixXd &AI, real svdTol, int mode)
     {
-        static const double sVmin = 1e-12;
+        double sVmin = svdTol == 0 ? Eigen::NumTraits<real>::epsilon() : svdTol;
+        double sVminInv = 1. / (sVmin + verySmallReal);
         auto SVDResult = A.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
         // auto SVDResult = A.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
 
         // AI = SVDResult.solve(Eigen::MatrixXd::Identity(A.rows(), A.rows()));
         auto sVs = SVDResult.singularValues();
-        real sVsMax = SVDResult.singularValues().array().abs().maxCoeff();
-        for (auto &i : sVs)
-            if (std::fabs(i) > sVmin * sVsMax) //! note this filtering!
-                i = 1. / i;
-            else
-                i = 0.;
+        if (mode == 0)
+        {
+            real sVsMax = SVDResult.singularValues().array().abs().maxCoeff();
+            for (auto &i : sVs)
+                if (std::fabs(i) > sVmin * sVsMax) //! note this filtering!
+                    i = 1. / i;
+                else
+                    i = 0.;
+        }
+        else if (mode == 1)
+        {
+            real sVsMin = SVDResult.singularValues().array().abs().minCoeff();
+            for (auto &i : sVs)
+                if (std::fabs(i) < sVsMin * sVminInv) //! note this filtering!
+                    i = 1. / i;
+                else
+                    i = 0.;
+        }
         AI = SVDResult.matrixV() * sVs.asDiagonal() * SVDResult.matrixU().transpose();
         Eigen::VectorXd svs = SVDResult.singularValues().array().abs();
         return svs.maxCoeff() / (svs.minCoeff() + verySmallReal);
