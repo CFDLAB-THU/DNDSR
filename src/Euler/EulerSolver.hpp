@@ -747,10 +747,8 @@ namespace DNDS::Euler
             DNDS_MPI_InsertCheck(mpi, "ReadMeshAndInitialize 2 nvars " + std::to_string(nVars));
             /*******************************/
             // initialize pEval
-            DNDS_MAKE_SSP(pEval, mesh, vfv, pBCHandler);
+            DNDS_MAKE_SSP(pEval, mesh, vfv, pBCHandler, config.eulerSettings);
             EulerEvaluator<model> &eval = *pEval;
-            eval.settings.jsonSettings = config.eulerSettings;
-            eval.settings.ReadWriteJSON(eval.settings.jsonSettings, nVars, true);
             /*******************************/
             // ** initialize output Array
 

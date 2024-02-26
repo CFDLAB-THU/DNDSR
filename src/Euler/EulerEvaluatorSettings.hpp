@@ -22,7 +22,7 @@ namespace DNDS::Euler
         int rsMeanValueEig = 0;
         int nCentralSmoothStep = 0;
         int rsRotateScheme = 0;
-        real minWallDist;
+        real minWallDist = 1e-12;
 
         struct IdealGasProperty
         {

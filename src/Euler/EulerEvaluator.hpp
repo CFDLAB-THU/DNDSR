@@ -94,10 +94,13 @@ namespace DNDS::Euler
 
         EulerEvaluatorSettings<model> settings;
 
-        EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler)
+        EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler, const decltype(settings.jsonSettings)& nJsonSettings)
             : mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->settings.maxOrder + 1)
         {
-            nVars = getNVars(model);
+            nVars = getNVars(model); //! // TODO: dynamic setting it
+
+            this->settings.jsonSettings = nJsonSettings;
+            this->settings.ReadWriteJSON(settings.jsonSettings, nVars, true);
 
             lambdaCell.resize(mesh->NumCellProc()); // but only dist part are used, ghost part to not judge for it in facial iter
             lambdaFace.resize(mesh->NumFaceProc());
@@ -109,7 +112,7 @@ namespace DNDS::Euler
             for (auto &v : fluxBnd)
                 v.resize(nVars);
 
-            this->GetWallDist(); // TODO: put this after settings is set
+            this->GetWallDist();
 
             DNDS_MAKE_SSP(symLU, mesh->getMPI(), mesh->NumCell());
         }

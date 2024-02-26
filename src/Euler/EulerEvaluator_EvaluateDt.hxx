@@ -79,7 +79,8 @@ namespace DNDS::Euler
         TrianglesTransformer.createMPITypes();
         TrianglesTransformer.pullOnce();
         if (mesh->coords.father->getMPI().rank == 0)
-            log() << "To search in " << TrianglesFull->Size() << std::endl;
+            log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() with minWallDist = {:.4e}, ", settings.minWallDist)
+                  << " To search in " << TrianglesFull->Size() << std::endl;
 
         typedef CGAL::Simple_cartesian<double> K;
         typedef K::FT FT;
@@ -129,7 +130,7 @@ namespace DNDS::Euler
                     // Point closest_point = tree.closest_point(pQ);
                     FT sqd = tree.squared_distance(pQ);
                     // std::cout << "sqd" << sqd << std::endl;
-                    dWall[iCell][ig] = std::max(std::sqrt(sqd), 1e-12);
+                    dWall[iCell][ig] = std::sqrt(sqd);
                     // dWall[iCell][ig] = p(0) < 0 ? p({0, 1}).norm() : p(1); // test for plate BL
                     if (dWall[iCell][ig] < minDist)
                         minDist = dWall[iCell][ig];
@@ -522,7 +523,6 @@ namespace DNDS::Euler
         }
         if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis)
         {
-
         }
 
         auto RSWrapper = [&](Gas::RiemannSolverType rsType, auto &UL, auto &UR, auto &ULm, auto &URm, real gamma, auto &finc, real dLambda)
