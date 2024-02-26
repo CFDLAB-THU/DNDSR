@@ -24,7 +24,6 @@
 #define JSON_ASSERT DNDS_assert
 #include "json.hpp"
 
-
 namespace DNDS::Euler
 {
 
@@ -334,8 +333,6 @@ namespace DNDS::Euler
                     preserveLimited)
             } limiterControl;
 
-            
-
             struct LinearSolverControl
             {
                 int jacobiCode = 1; // 0 for jacobi, 1 for gs, 2 for ilu
@@ -539,8 +536,10 @@ namespace DNDS::Euler
             }
             else
             {
+                using namespace std::literals;
                 std::filesystem::path meshPath{config.dataIOControl.meshFile};
-                auto meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) + ".dir";
+                auto meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
+                                   (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) + ".dir";
                 std::filesystem::path meshOutDir{meshOutName};
                 // std::filesystem::create_directories(meshOutDir); // reading not writing
                 std::string meshPartPath = getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
@@ -600,7 +599,9 @@ namespace DNDS::Euler
 
             if (config.timeMarchControl.partitonMeshOnly)
             {
-                auto meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) + ".dir";
+                using namespace std::literals;
+                auto meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
+                                   (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) + ".dir";
                 std::filesystem::path meshOutDir{meshOutName};
                 std::filesystem::create_directories(meshOutDir);
                 std::string meshPartPath = DNDS::getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
@@ -814,7 +815,6 @@ namespace DNDS::Euler
             }
             DNDS_MPI_InsertCheck(mpi, "ReadMeshAndInitialize -1 nvars " + std::to_string(nVars));
         }
-
 
         void PrintConfig(bool updateCommit = false)
         {
