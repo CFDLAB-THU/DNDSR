@@ -138,8 +138,6 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixVec -1");
     }
 
-    
-
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, template <EulerModel model_masked>
     )
@@ -170,7 +168,7 @@ namespace DNDS::Euler
                     int iC2CInLocal = -1;
                     for (int ic2c = 0; ic2c < mesh->cell2cellFaceVLocal[iCell].size(); ic2c++)
                         if (iCellOther == mesh->cell2cellFaceVLocal[iCell][ic2c])
-                            iC2CInLocal = ic2c; //TODO: pre-search this
+                            iC2CInLocal = ic2c; // TODO: pre-search this
                     DNDS_assert(iC2CInLocal != -1);
                     TJacobianU jacIJ;
                     {
@@ -1053,7 +1051,7 @@ namespace DNDS::Euler
         ArrayRECV<nVarsFixed> &uRec,
         ArrayDOFV<1> &uRecBeta,
         ArrayDOFV<nVarsFixed> &res,
-        ArrayDOFV<1> &cellRHSAlpha, index &nLim, real &alphaMin,
+        ArrayDOFV<1> &cellRHSAlpha, index &nLim, real &alphaMin, real relax,
         int flag)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -1068,8 +1066,9 @@ namespace DNDS::Euler
             real alphaRho = 1;
             TU inc = res[iCell];
             DNDS_assert(u[iCell](0) >= rhoEps);
+            real relaxedRho = rhoEps + (u[iCell](0) - rhoEps) * (1 - relax);
             if (inc(0) < 0) // not < rhoEps!!!
-                alphaRho = std::min(1.0, (u[iCell](0) - rhoEps) / (-inc(0) - smallReal * inc(0)));
+                alphaRho = std::min(1.0, (u[iCell](0) - relaxedRho) / (-inc(0) - smallReal * inc(0)));
             DNDS_assert(alphaRho >= 0 && alphaRho <= 1);
             if constexpr (model == NS_SA || model == NS_SA_3D)
             {
@@ -1104,13 +1103,17 @@ namespace DNDS::Euler
 
             TU uNew = u[iCell] + inc;
             real pNew = (uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0)) * (gamma - 1);
+            real pOld = (u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0)) * (gamma - 1);
+            real relaxedP = pEps;
+            if (pNew < pOld)
+                relaxedP = pEps + (pOld - pEps) * (1 - relax);
 
             real alphaP = 1;
-            if (pNew < pEps)
+            if (pNew < relaxedP)
             {
                 // todo: use high order accurate (add control switch)
                 real alphaC = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
-                    u[iCell], inc, pEps / (gamma - 1));
+                    u[iCell], inc, relaxedP / (gamma - 1));
                 alphaP = std::min(alphaP, alphaC);
             }
             cellRHSAlpha[iCell](0) = alphaRho * alphaP;
@@ -1131,6 +1134,9 @@ namespace DNDS::Euler
                 if (cellRHSAlpha[iCell](0) < 1)
                     cellRHSAlpha[iCell](0) = alphaMin;
             }
+        if (flag == -1)
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                cellRHSAlpha[iCell](0) = alphaMin;
     }
 
     template <EulerModel model>
@@ -1200,9 +1206,10 @@ namespace DNDS::Euler
             }
             if constexpr (model == NS_SA || model == NS_SA_3D)
             {
-                static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
-                if (uNew(I4 + 1) < v1Eps)
-                    cellRHSAlpha[iCell](0) = alphaMin;
+                // ** ! currently do not mass - fix for SA
+                // static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
+                // if (uNew(I4 + 1) < v1Eps)
+                //     cellRHSAlpha[iCell](0) = alphaMin;
             }
             if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {

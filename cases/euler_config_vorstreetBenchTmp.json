@@ -9,9 +9,9 @@
         "odeSetting2": 0,
         "odeSetting3": 1.333,
         "odeSetting4": 0,
-        "useRHSfPP": false,
+        "rhsFPPMode": 0,
         "useRestart": true,
-        "rhsfPPScale": 1,
+        "rhsFPPScale": 1,
         "_tail": 0
     },
     "convergenceControl": {

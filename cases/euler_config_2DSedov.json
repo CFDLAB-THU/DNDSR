@@ -4,8 +4,8 @@
         "nTimeStep": 100,
         "steadyQuit": false,
         "useImplicitPP": true,
-        "useRHSfPP": false,
-        "rhsfPPScale": 1,
+        "rhsFPPMode": 0,
+        "rhsFPPScale": 1,
         "odeCode": 1,
         "tEnd": 1e-3,
         "odeSetting1": 0.5,
@@ -84,7 +84,7 @@
         "intOrder": 3,
         "cacheDiffBase": true,
         "jacobiRelax": 0.5,
-        "SORInstead": false,
+        "SORInstead": true,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
@@ -103,7 +103,7 @@
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 0,
+        "jacobiCode": 2,
         "sgsIter": 4,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,

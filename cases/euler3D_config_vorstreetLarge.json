@@ -9,8 +9,8 @@
         "odeSetting1": 0.55,
         "odeSetting2": 0,
         "odeSetting3": 1.333, // 0.5-1; 0.55-1.333; 0.6- >1.6
-        "useRHSfPP": false,
-        "rhsfPPScale": 1,
+        "rhsFPPMode": 0,
+        "rhsFPPScale": 1,
         "_tail": 0
     },
     "convergenceControl": {

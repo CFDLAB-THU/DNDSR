@@ -8,9 +8,9 @@
         "odeSetting1": 0.55,
         "odeSetting2": 0,
         "odeSetting3": 1.333,
-        "useRHSfPP": false,
-        "rhsfPPScale": 1,
-        "partitonMeshOnly": false,
+        "rhsFPPMode": 0,
+        "rhsFPPScale": 1,
+        "partitionMeshOnly": false,
         "_tail": 0
     },
     "convergenceControl": {

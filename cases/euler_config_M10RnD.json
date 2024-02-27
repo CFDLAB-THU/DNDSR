@@ -4,8 +4,8 @@
         "nTimeStep": 25000,
         "steadyQuit": false,
         "useImplicitPP": true, //!
-        "useRHSfPP": false,
-        "rhsfPPScale": 1,
+        "rhsFPPMode": 0,
+        "rhsFPPScale": 1,
         "odeCode": 102,
         "tEnd": 0.25e0,
         "odeSetting1": 0.5,

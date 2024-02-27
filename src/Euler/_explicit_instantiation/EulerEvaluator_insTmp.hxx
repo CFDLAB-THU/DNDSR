@@ -108,7 +108,7 @@
             ArrayRECV<nVarsFixed> &uRec,                                                      \
             ArrayDOFV<1> &uRecBeta,                                                           \
             ArrayDOFV<nVarsFixed> &rhs,                                                       \
-            ArrayDOFV<1> &cellRHSAlpha, index &nLim, real &alphaMin,                          \
+            ArrayDOFV<1> &cellRHSAlpha, index &nLim, real &alphaMin, real relax,              \
             int flag);                                                                        \
                                                                                               \
         template void EulerEvaluator<model>::EvaluateCellRHSAlphaExpansion(                   \

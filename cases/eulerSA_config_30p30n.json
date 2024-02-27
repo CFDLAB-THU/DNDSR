@@ -4,7 +4,7 @@
         "nTimeStep": 1,
         "steadyQuit": true,
         "useRestart": false,
-        "useRHSfPP": false,
+        "rhsFPPMode": 0,
         "odeCode": 0,
         "tEnd": 3e+200
     },

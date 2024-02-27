@@ -104,24 +104,24 @@ namespace DNDS::Euler
                 bool steadyQuit = false;
                 bool useRestart = false;
                 bool useImplicitPP = false;
-                bool useRHSfPP = false;
-                real rhsfPPScale = 1.0;
+                int rhsFPPMode = 0;
+                real rhsFPPScale = 1.0;
                 int odeCode = 0;
                 real tEnd = veryLargeReal;
                 real odeSetting1 = 0;
                 real odeSetting2 = 0;
                 real odeSetting3 = 0;
                 real odeSetting4 = 0;
-                bool partitonMeshOnly = false;
+                bool partitionMeshOnly = false;
                 real dtIncreaseLimit = 2;
                 int dtIncreaseAfterCount = 0;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     TimeMarchControl,
                     dtImplicit, nTimeStep,
                     steadyQuit, useRestart,
-                    useImplicitPP, useRHSfPP, rhsfPPScale,
+                    useImplicitPP, rhsFPPMode, rhsFPPScale,
                     odeCode, tEnd, odeSetting1, odeSetting2, odeSetting3, odeSetting4,
-                    partitonMeshOnly,
+                    partitionMeshOnly,
                     dtIncreaseLimit, dtIncreaseAfterCount)
             } timeMarchControl;
 
@@ -597,7 +597,7 @@ namespace DNDS::Euler
                 mesh->AdjGlobal2LocalPrimary();
             }
 
-            if (config.timeMarchControl.partitonMeshOnly)
+            if (config.timeMarchControl.partitionMeshOnly)
             {
                 using namespace std::literals;
                 auto meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +

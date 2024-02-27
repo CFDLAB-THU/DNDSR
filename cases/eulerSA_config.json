@@ -8,7 +8,7 @@
         "tEnd": 3e+200
     },
     "convergenceControl": {
-        "nTimeStepInternal": 70000,
+        "nTimeStepInternal": 40000,
         "rhsThresholdInternal": 1e-30,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -19,7 +19,7 @@
         "consoleOutputMode": 1,
         "nDataOutC": 100,
         "nDataOut": 10,
-        "nDataOutCInternal": 10,
+        "nDataOutCInternal": 100,
         "nDataOutInternal": 1000000000,
         "nRestartOut": 100,
         "nRestartOutC": 10,
@@ -38,13 +38,13 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshElevation": 0,
+        "meshElevation": 1,
         "meshElevationIter": 10,
         "meshElevationRBFRadius": 1,
-        "meshElevationMaxIncludedAngle": 55,
+        "meshElevationMaxIncludedAngle": 10,
         "meshElevationRBFKernel": "CPC0",
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2",
+        "outPltName": "../data/out/NACA0012_H2_testCurve/lifted",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -52,9 +52,11 @@
         "outAtPointData": true,
         "outAtCellData": true,
         "nASCIIPrecision": 16,
+        // "vtuFloatEncodeMode": "ascii",
         "outCellScalarNames": [
             "minJacobiDetRel",
-            "cellVolume"
+            "cellVolume",
+            "ACond"
         ],
         "_tail": 0
     },
@@ -65,7 +67,7 @@
         "recLinearScheme": 0,
         "nGmresSpace": 5,
         "nGmresIter": 10,
-        "recThreshold": 1e-05,
+        "recThreshold": 1e-02,
         "nRecConsolCheck": 1,
         "storeRecInc": true,
         "dampRecIncDTau": false
@@ -79,7 +81,7 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": true,
         "jacobiRelax": 1.0,
         "SORInstead": true,
@@ -93,6 +95,7 @@
         },
         "functionalSettings": {
             // "scaleType": "MeanAACBB",
+            // "dirWeightScheme": "HQM_OPT",
             "dirWeightScheme": "TEST_OPT",
             // "dirWeightScheme": "ManualDirWeight",
             // "manualDirWeights": [
@@ -103,7 +106,7 @@
             // ],
             // "geomWeightScheme": "HQM_SD",
             "geomWeightScheme": "GWNone",
-            "geomWeightPower": 0.5,
+            // "geomWeightPower": 0.5,
             // "geomWeightScheme": "SD_Power",
             // "geomWeightPower1": -0.5,
             // "geomWeightPower2": 0.5,
@@ -113,6 +116,7 @@
             // "scaleMultiplier": 1,
             "_tail": 0
         },
+        "svdTolerance": 1e-15,
         "ignoreMeshGeometryDeficiency": false
     },
     "linearSolverControl": {
@@ -126,7 +130,7 @@
         "initWithLastURecInc": false,
         "directPrecControl": {
             "useDirectPrec": true,
-            "iluCode": 1
+            "iluCode": 2
         }
     },
     "others": {
@@ -135,7 +139,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe_M4",
+        "riemannSolverType": "HLLC",
         "constMassForce": [
             0.0,
             0.0,

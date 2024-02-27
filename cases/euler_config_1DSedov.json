@@ -4,7 +4,7 @@
         "nTimeStep": 100,
         "steadyQuit": false,
         "useImplicitPP": true,
-        "useRHSfPP": true,
+        "rhsFPPMode": 1,
         "odeCode": 1,
         "tEnd": 3e+200,
         "odeSetting1": 0.5,
