@@ -85,6 +85,23 @@ namespace DNDS::Euler
                           << std::endl;
             }
         }
+
+        tComponent InvertDiag(const tComponent& v)
+        {
+            tComponent AI;
+            {
+                // auto luDiag = v.fullPivLu();
+                // DNDS_assert(luDiag.isInvertible());
+                // AI = luDiag.inverse();
+            }
+            {
+                Eigen::MatrixXd A = v;
+                Eigen::MatrixXd AII;
+                HardEigen::EigenLeastSquareInverse(A, AII, 0.0);
+                AI = AII;
+            }
+            return AI;
+        }
     };
 
     template <int nVarsFixed>
@@ -153,6 +170,23 @@ namespace DNDS::Euler
                     log() << v << std::endl
                           << std::endl;
             }
+        }
+
+        tComponent InvertDiag(const tComponent &v)
+        {
+            tComponent AI;
+            {
+                // auto luDiag = v.fullPivLu();
+                // DNDS_assert(luDiag.isInvertible());
+                // AI = luDiag.inverse();
+            }
+            {
+                Eigen::MatrixXd A = v;
+                Eigen::MatrixXd AII;
+                HardEigen::EigenLeastSquareInverse(A, AII, 0.0);
+                AI = AII;
+            }
+            return AI;
         }
     };
 }

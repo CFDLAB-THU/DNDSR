@@ -270,6 +270,7 @@ namespace DNDS::Direct
         void GetDiag(index i);          // pure "virtual" do not implement
         void GetLower(index i, int ij); // pure "virtual" do not implement
         void GetUpper(index i, int ij); // pure "virtual" do not implement
+        void InvertDiag(const tComponent &v);
 
         void InPlaceDecompose()
         {
@@ -322,12 +323,8 @@ namespace DNDS::Direct
                     if (iPInUpperPos != -1)
                         dThis->GetDiag(i) -= dThis->GetLower(i, ikP) * dThis->GetUpper(k, iPInUpperPos);
                 }
-                tComponent AI;
-                // HardEigen::EigenLeastSquareInverse(this->GetDiag(i), , AI);
-                auto luDiag = dThis->GetDiag(i).fullPivLu();
-                DNDS_assert(luDiag.isInvertible());
-                AI = luDiag.inverse();
-                dThis->GetDiag(i) = AI; // * note here only stores
+                
+                dThis->GetDiag(i) = dThis->InvertDiag(dThis->GetDiag(i)); // * note here only stores
                 /*********************/
                 // upper part
                 auto &&upperRow = symLU->upperTriStructureNew[iP];
@@ -421,6 +418,7 @@ namespace DNDS::Direct
 
         void GetDiag(index i);
         void GetLower(index i, int ij);
+        void InvertDiag(const tComponent& v);
 
         void InPlaceDecompose()
         {
@@ -470,13 +468,8 @@ namespace DNDS::Direct
                     auto k = symLU->FillingReorderNew2Old(kP);
                     dThis->GetDiag(i) -= dThis->GetLower(i, ikP) * diagNoInv[k] * dThis->GetLower(i, ikP).transpose();
                 }
-                tComponent AI;
-                // HardEigen::EigenLeastSquareInverse(this->GetDiag(i), , AI);
-                auto luDiag = dThis->GetDiag(i).fullPivLu();
-                DNDS_assert(luDiag.isInvertible());
-                AI = luDiag.inverse();
                 diagNoInv[i] = dThis->GetDiag(i);
-                dThis->GetDiag(i) = AI; // * note here only stores the inverse
+                dThis->GetDiag(i) = dThis->InvertDiag(dThis->GetDiag(i)); // * note here only stores the inverse
             }
             isDecomposed = true;
         }
