@@ -1162,7 +1162,7 @@ namespace DNDS::Euler
             else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis)
             {
                 URxy = ULxy;
-                URxy(Seq123) -= URxy(Seq123).dot(uNorm) * uNorm;
+                URxy(Seq123) -= 2 * URxy(Seq123).dot(uNorm) * uNorm;
             }
             else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall)
             {
