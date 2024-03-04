@@ -23,6 +23,7 @@ namespace DNDS::Euler
         int nCentralSmoothStep = 0;
         int rsRotateScheme = 0;
         real minWallDist = 1e-12;
+        int wallDistScheme = 0;
 
         struct IdealGasProperty
         {
@@ -132,6 +133,7 @@ namespace DNDS::Euler
             __DNDS__json_to_config(rsMeanValueEig);
             __DNDS__json_to_config(rsRotateScheme);
             __DNDS__json_to_config(minWallDist);
+            __DNDS__json_to_config(wallDistScheme);
             __DNDS__json_to_config(nCentralSmoothStep);
             __DNDS__json_to_config(constMassForce);
             if (read)
