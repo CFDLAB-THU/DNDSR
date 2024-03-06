@@ -194,6 +194,7 @@ namespace DNDS::Euler
                     distGRP += faceBCType == EulerBCType::BCWall ? veryLargeReal : 0.0;
 #endif
                     distGRP += faceBCType == EulerBCType::BCWallInvis ? veryLargeReal : 0.0;
+                    distGRP += faceBCType == EulerBCType::BCSym ? veryLargeReal : 0.0;
                     // real distGRP = (vfv->cellBaries[f2c[0]] -
                     //                 (f2c[1] != FACE_2_VOL_EMPTY
                     //                      ? vfv->cellBaries[f2c[1]]
@@ -214,7 +215,8 @@ namespace DNDS::Euler
                         // faceBCType == EulerBCType::BCIn ||
                         faceBCType == EulerBCType::BCOut ||
                         faceBCType == EulerBCType::BCFar ||
-                        faceBCType == EulerBCType::BCSpecial)
+                        faceBCType == EulerBCType::BCSpecial ||
+                        faceBCType == EulerBCType::BCSym)
                         GradUMeanXy *= 0; // force no viscid flux
 
                     TU FLFix, FRFix;

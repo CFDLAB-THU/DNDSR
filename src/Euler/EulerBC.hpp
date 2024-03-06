@@ -16,6 +16,7 @@ namespace DNDS::Euler
         BCWallInvis,
         BCOut,
         BCIn,
+        BCSym,
         BCSpecial,
     };
 
@@ -26,31 +27,37 @@ namespace DNDS::Euler
             {BCFar, "BCFar"},
             {BCWall, "BCWall"},
             {BCWallInvis, "BCWallInvis"},
-            {BCSpecial, "BCSpecial"},
             {BCOut, "BCOut"},
             {BCIn, "BCIn"},
+            {BCSym, "BCSym"},
+            {BCSpecial, "BCSpecial"},
         });
 
     template <EulerModel model>
     class BoundaryHandler
     {
+        int nVars;
+
     public:
         static const int nVarsFixed = getnVarsFixed(model);
         using TU_R = Eigen::Vector<real, nVarsFixed>;
         using TU = Eigen::VectorFMTSafe<real, nVarsFixed>;
+        using TFlags = std::map<std::string, uint32_t>;
 
     private:
         std::vector<TU> BCValues;
         std::vector<EulerBCType> BCTypes;
+        std::vector<TFlags> BCFlags;
         std::unordered_map<std::string, Geom::t_index> name2ID;
         std::unordered_map<Geom::t_index, std::string> ID2name;
 
     public:
-        BoundaryHandler()
+        BoundaryHandler(int _nVars) : nVars(_nVars)
         {
             BCValues.resize(Geom::BC_ID_DEFAULT_MAX);
             for (auto &v : BCValues)
                 v.setConstant(UnInitReal);
+            BCFlags.resize(Geom::BC_ID_DEFAULT_MAX);
             name2ID = Geom::GetFaceName2IDDefault();
             BCTypes.resize(Geom::BC_ID_DEFAULT_MAX, BCUnknown);
             BCTypes[Geom::BC_ID_DEFAULT_FAR] = BCFar;
@@ -83,21 +90,32 @@ namespace DNDS::Euler
             for (auto &item : j)
             {
                 EulerBCType bcType = item["type"].get<EulerBCType>();
+                std::string bcName = item["name"];
                 switch (bcType)
                 {
                 case EulerBCType::BCFar:
-                case EulerBCType::BCWall:
-                case EulerBCType::BCWallInvis:
                 case EulerBCType::BCOut:
                 case EulerBCType::BCIn:
                 {
-                    std::string bcName = item["name"];
                     Eigen::VectorXd bcValue = item["value"];
-
-                    bc.BCTypes.push_back(bcType);
+                    DNDS_assert_info(bcValue.size() == bc.nVars, "bc value dim not right");
                     bc.BCValues.push_back(bcValue);
-                    DNDS_assert_info(bc.name2ID.count(bcName) == 0, "the bc names are duplicate");
-                    bc.name2ID[bcName] = bc.BCValues.size() - 1;
+                    bc.BCFlags.emplace_back(TFlags{});
+                }
+                break;
+
+                case EulerBCType::BCWall:
+                case EulerBCType::BCWallInvis:
+                {
+                }
+                break;
+
+                case EulerBCType::BCSym:
+                {
+                    uint32_t rectifyOption = item["rectifyOption"];
+                    bc.BCValues.push_back(TU::Zero(bc.nVars));
+                    bc.BCFlags.emplace_back(TFlags{});
+                    bc.BCFlags.back()["rectifyOpt"] = rectifyOption;
                 }
                 break;
 
@@ -105,6 +123,14 @@ namespace DNDS::Euler
                     DNDS_assert(false);
                     break;
                 }
+
+                bc.BCTypes.push_back(bcType);
+                DNDS_assert_info(bc.name2ID.count(bcName) == 0, "the bc names are duplicate");
+                bc.name2ID[bcName] = bc.BCTypes.size() - 1;
+
+                DNDS_assert(
+                    bc.BCFlags.size() == bc.BCTypes.size() &&
+                    bc.BCValues.size() == bc.BCTypes.size());
             }
             bc.RenewID2name();
         }
@@ -116,17 +142,27 @@ namespace DNDS::Euler
             {
                 json item;
                 EulerBCType bcType = bc.BCTypes[i];
+                item["type"] = bcType;
+                item["name"] = bc.ID2name.at(i);
                 switch (bcType)
                 {
                 case EulerBCType::BCFar:
-                case EulerBCType::BCWall:
-                case EulerBCType::BCWallInvis:
                 case EulerBCType::BCOut:
                 case EulerBCType::BCIn:
                 {
-                    item["type"] = bcType;
-                    item["name"] = bc.ID2name.at(i);
                     item["value"] = static_cast<TU_R>(bc.BCValues.at(i)); // force begin() and end() to be exposed
+                }
+                break;
+
+                case EulerBCType::BCWall:
+                case EulerBCType::BCWallInvis:
+                {
+                }
+                break;
+
+                case EulerBCType::BCSym:
+                {
+                    item["rectifyOption"] = bc.BCFlags.at(i).at("rectifyOpt");
                 }
                 break;
 
@@ -162,6 +198,13 @@ namespace DNDS::Euler
             if (!Geom::FaceIDIsExternalBC(id))
                 return BCValues.at(0);
             return BCValues.at(id);
+        }
+
+        uint32_t GetFlagFromID(Geom::t_index id, const std::string &key)
+        {
+            if (!Geom::FaceIDIsExternalBC(id))
+                return 0;
+            return BCFlags.at(id).at(key);
         }
     };
 

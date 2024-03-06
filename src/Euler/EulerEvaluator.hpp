@@ -94,7 +94,7 @@ namespace DNDS::Euler
 
         EulerEvaluatorSettings<model> settings;
 
-        EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler, const decltype(settings.jsonSettings)& nJsonSettings)
+        EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler, const decltype(settings.jsonSettings) &nJsonSettings)
             : mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->settings.maxOrder + 1)
         {
             nVars = getNVars(model); //! // TODO: dynamic setting it
@@ -1159,10 +1159,11 @@ namespace DNDS::Euler
                 else
                     DNDS_assert(false);
             }
-            else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis)
+            else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
+                     pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
             {
                 URxy = ULxy;
-                URxy(Seq123) -= 2 * URxy(Seq123).dot(uNorm) * uNorm;
+                URxy(Seq123) -= 2 * ULxy(Seq123).dot(uNorm) * uNorm; // mirrored!
             }
             else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall)
             {

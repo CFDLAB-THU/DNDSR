@@ -452,6 +452,11 @@ namespace DNDS::Euler
             k,
             settings.idealGasProperty.CpGas,
             VisFlux);
+        if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
+            pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
+        {
+            // VisFlux *= 0.0;
+        }
 
         // if (mesh->face2cellLocal[iFace][0] == 10756)
         // {
@@ -549,8 +554,17 @@ namespace DNDS::Euler
 
 #endif
         }
-        if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis)
+        if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis||
+            pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
         {
+            // UR(Seq123) = UL(Seq123);
+            // UR(1) = -UL(1);
+            // DNDS_assert_info(std::abs(unitNorm(1) - 1) < 1e-10 && std::abs(unitNorm(0)) < 1e-5,
+            //                  [&]()
+            //                  {
+            //                      std::cerr << unitNorm.transpose() << std::endl;
+            //                      return "";
+            //                  }());
         }
 
         auto RSWrapper = [&](Gas::RiemannSolverType rsType, auto &UL, auto &UR, auto &ULm, auto &URm, real gamma, auto &finc, real dLambda)

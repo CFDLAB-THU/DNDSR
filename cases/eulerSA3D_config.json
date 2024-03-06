@@ -30,7 +30,7 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 5.0,
+        "CFL": 50,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 2147483647,
         "nCFLRampLength": 2147483647,
@@ -48,7 +48,7 @@
         "meshElevationRBFKernel": "CPC0",
         "meshElevationMaxIncludedAngle": 20,
         "meshFile": "../data/mesh/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse.cgns",
-        "outPltName": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_TestA6_BCW10/out",
+        "outPltName": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_TestC/out3_noelev_nogmres",
         "outPltMode": 0,
         "readMeshMode": 1,
         "outPltTecplotFormat": true,
@@ -57,8 +57,9 @@
         "outAtCellData": true,
         "outBndData": true,
         "outCellScalarNames": [
-            "minJacobiDetRel",
-            "cellVolume"
+            // "minJacobiDetRel",
+            // "cellVolume",
+            "dWall"
         ],
         "_tail": 0
     },
@@ -88,31 +89,36 @@
         "WBAP_nStd": 10.0,
         "normWBAP": false,
         "subs2ndOrder": 1,
-        "bcWeight": 2,
+        // "bcWeight": 2,
+        "svdTolerance": 1e-3,
         "baseSettings": {
             "localOrientation": true,
             "anisotropicLengths": false
         },
         "functionalSettings": {
             "dirWeightScheme": "HQM_OPT",
-            // "geomWeightScheme": "HQM_SD",
-            "geomWeightScheme": "SD_Power",
-            "geomWeightPower1": 0.125,
-            "geomWeightPower2": -0.5,
+            "geomWeightScheme": "HQM_SD",
+            // "geomWeightScheme": "SD_Power",
+            // "geomWeightPower1": 0.125,
+            // "geomWeightPower2": -0.5,
             // "useAnisotropicFunctional": true,
-            "anisotropicType": "InertiaCoord",
+            // "anisotropicType": "InertiaCoord",
             "_tail": 0
         },
-        "ignoreMeshGeometryDeficiency": true,
+        "ignoreMeshGeometryDeficiency": false,
         "_tail": 0
     },
     "linearSolverControl": {
-        "jacobiCode": 0,
-        "sgsIter": 2,
+        "jacobiCode": 1,
+        "sgsIter": 0,
         "sgsWithRec": 0,
         "gmresCode": 0,
-        "nGmresSpace": 10,
-        "nGmresIter": 2
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 1
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
@@ -120,8 +126,10 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "minWallDist": 1e-6,
-        "riemannSolverType": "Roe_M2",
+        "minWallDist": 1e-9,
+        "wallDistScheme": 1,
+        "riemannSolverType": "Roe",
+        "rsMeanValueEig": 0,
         "constMassForce": [
             0.0,
             0.0,
@@ -144,6 +152,13 @@
             "CSutherland": 110.4
         }
     },
+    "bcSettings": [
+        {
+            "type": "BCSym",
+            "name": "SymY",
+            "rectifyOption": 2
+        }
+    ],
     "restartState": {
         "iStep": 1,
         "iStepInternal": 4800,

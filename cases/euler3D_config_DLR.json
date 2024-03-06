@@ -3,26 +3,11 @@
         "dtImplicit": 2e30,
         "nTimeStep": 1,
         "steadyQuit": true,
+        "useRestart": false,
         "odeCode": 1, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
-        "tEnd": 3e+200
-    },
-    "outputControl": {
-        "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 1,
-        "consoleOutputMode": 1,
-        "nDataOutC": 20,
-        "nDataOut": 100,
-        "nDataOutCInternal": 200,
-        "nDataOutInternal": 1000000000,
-        "tDataOut": 3e+200
-    },
-    "implicitCFLControl": {
-        "CFL": 50.0,
-        "nForceLocalStartStep": 2147483647,
-        "nCFLRampStart": 2147483647,
-        "nCFLRampLength": 2147483647,
-        "CFLRampEnd": 0.0,
-        "useLocalDt": true
+        "tEnd": 3e+200,
+        "partitonMeshOnly": false,
+        "_tail": 0
     },
     "convergenceControl": {
         "nTimeStepInternal": 20000,
@@ -30,17 +15,53 @@
         "res_base": 0.0,
         "useVolWiseResidual": false
     },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 1,
+        "nDataOutC": 20,
+        "nDataOut": 100,
+        "nDataOutCInternal": 100,
+        "nDataOutInternal": 1000000000,
+        "nRestartOutC": 10,
+        "nRestartOut": 100,
+        "nRestartOutCInternal": 10000,
+        "nRestartOutInternal": 1000000000,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 50,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 2147483647,
+        "nCFLRampLength": 2147483647,
+        "CFLRampEnd": 0.0,
+        "nSmoothDTau": 2,
+        "useLocalDt": true
+    },
     "dataIOControl": {
         "uniqueStamps": false,
+        "meshElevation": 1,
+        "meshElevationInternalSmoother": 0,
+        "meshElevationIter": 20,
+        "meshElevationNSearch": 100,
+        "meshElevationRBFRadius": 5,
+        "meshElevationRBFKernel": "CPC0",
+        "meshElevationMaxIncludedAngle": 20,
         "meshFile": "../data/mesh/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse.cgns",
-        "outPltName": "../data/outUnsteady/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse",
-        "outLogName": "../data/outUnsteady/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse",
+        "outPltName": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_TestLaminar/out0",
         "outPltMode": 0,
-        "readMeshMode": 0,
+        "readMeshMode": 1,
         "outPltTecplotFormat": true,
-        "outPltVTKFormat": false,
+        "outPltVTKFormat": true,
         "outAtPointData": true,
-        "outAtCellData": true
+        "outAtCellData": true,
+        "outBndData": true,
+        "outCellScalarNames": [
+            // "minJacobiDetRel",
+            // "cellVolume",
+            "dWall"
+        ],
+        "_tail": 0
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
@@ -55,31 +76,59 @@
         "useLimiter": false,
         "smoothIndicatorProcedure": 0,
         "limiterProcedure": 1, //1 == CWBAP
-        "nPartialLimiterStart": 2147483647,
-        "nPartialLimiterStartLocal": 2147483647
+        "nPartialLimiterStart": 10,
+        "nPartialLimiterStartLocal": 10
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
-        "cacheDiffBase": false,
+        "intOrder": 5,
+        "cacheDiffBase": true,
         "jacobiRelax": 1.0,
-        "SORInstead": true,
+        "SORInstead": false,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
-        "normWBAP": false
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        // "bcWeight": 2,
+        "svdTolerance": 1e-3,
+        "baseSettings": {
+            "localOrientation": true,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "dirWeightScheme": "HQM_OPT",
+            "geomWeightScheme": "HQM_SD",
+            // "geomWeightScheme": "SD_Power",
+            // "geomWeightPower1": 0.125,
+            // "geomWeightPower2": -0.5,
+            // "useAnisotropicFunctional": true,
+            // "anisotropicType": "InertiaCoord",
+            "_tail": 0
+        },
+        "ignoreMeshGeometryDeficiency": false,
+        "_tail": 0
     },
     "linearSolverControl": {
-        "gmresCode": 0,
-        "nGmresSpace": 10,
-        "nGmresIter": 2
+        "jacobiCode": 2,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
+        "gmresCode": 1,
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 1
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
     },
     "eulerSettings": {
-        "ignoreSourceTerm": true,
-        "useScalarJacobian": true,
-        "riemannSolverType": "HLLC",
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": false,
+        "minWallDist": 5e-8,
+        "riemannSolverType": "Roe_M2",
+        "rsMeanValueEig": 0,
         "constMassForce": [
             0.0,
             0.0,
@@ -90,15 +139,21 @@
             1,
             0,
             0,
-            2.880952380952381 //M 0.75
+            3.674603174603174 //M 0.75
         ],
         "idealGasProperty": {
             "gamma": 1.4,
             "Rgas": 0.003486659170349,
-            "muGas": 1e-3,
+            "muGas": 4.706666666666667e-08,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4
         }
+    },
+    "restartState": {
+        "iStep": 1,
+        "iStepInternal": 4800,
+        "odeCodePrev": -1,
+        "lastRestartFile": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_RE_O2Starter1_C_p480_restart.dir"
     }
 }

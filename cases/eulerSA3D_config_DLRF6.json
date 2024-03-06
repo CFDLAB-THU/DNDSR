@@ -5,7 +5,9 @@
         "steadyQuit": true,
         "useRestart": false,
         "odeCode": 1, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
-        "tEnd": 3e+200
+        "tEnd": 3e+200,
+        "partitonMeshOnly": true,
+        "_tail": 0
     },
     "convergenceControl": {
         "nTimeStepInternal": 20000,
@@ -28,26 +30,40 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 50.0,
+        "CFL": 50,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 2147483647,
         "nCFLRampLength": 2147483647,
         "CFLRampEnd": 0.0,
+        "nSmoothDTau": 2,
         "useLocalDt": true
     },
     "dataIOControl": {
-        "uniqueStamps": true,
+        "uniqueStamps": false,
+        "meshElevation": 1,
+        "meshElevationInternalSmoother": 0,
+        "meshElevationIter": 20,
+        "meshElevationNSearch": 100,
+        "meshElevationRBFRadius": 5,
+        "meshElevationRBFKernel": "CPC0",
+        "meshElevationMaxIncludedAngle": 20,
+        "rectifyNearPlane": 2,
+        "rectifyNearPlaneThres": 1e-4,
         "meshFile": "../data/mesh/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse.cgns",
-        "outPltName": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_RE",
-        "outLogName": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_RE",
-        "outRestartName": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_RE_O2Starter",
+        "outPltName": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_TestC/out3",
         "outPltMode": 0,
-        "readMeshMode": 1,
+        "readMeshMode": 0,
         "outPltTecplotFormat": true,
-        "outPltVTKFormat": false,
+        "outPltVTKFormat": true,
         "outAtPointData": true,
         "outAtCellData": true,
-        "outBndData": true
+        "outBndData": true,
+        "outCellScalarNames": [
+            // "minJacobiDetRel",
+            // "cellVolume",
+            "dWall"
+        ],
+        "_tail": 0
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
@@ -67,35 +83,44 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": true,
         "jacobiRelax": 1.0,
-        "SORInstead": true,
+        "SORInstead": false,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
         "subs2ndOrder": 1,
+        // "bcWeight": 2,
+        "svdTolerance": 1e-3,
         "baseSettings": {
             "localOrientation": true,
             "anisotropicLengths": false
         },
         "functionalSettings": {
-            // "dirWeightScheme": "HQM_OPT",
+            "dirWeightScheme": "HQM_OPT",
             "geomWeightScheme": "HQM_SD",
             // "geomWeightScheme": "SD_Power",
-            "geomWeightPower1": 0.5,
-            "geomWeightPower2": -0.5,
+            // "geomWeightPower1": 0.125,
+            // "geomWeightPower2": -0.5,
             // "useAnisotropicFunctional": true,
-            "anisotropicType": "InertiaCoord",
+            // "anisotropicType": "InertiaCoord",
             "_tail": 0
-        }
+        },
+        "ignoreMeshGeometryDeficiency": false,
+        "_tail": 0
     },
     "linearSolverControl": {
+        "jacobiCode": 2,
         "sgsIter": 0,
-        "sgsWithRec": 1,
-        "gmresCode": 0,
-        "nGmresSpace": 10,
-        "nGmresIter": 2
+        "sgsWithRec": 0,
+        "gmresCode": 1,
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 1
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
@@ -103,7 +128,10 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe_M2",
+        "minWallDist": 1e-9,
+        "wallDistScheme": 1,
+        "riemannSolverType": "Roe",
+        "rsMeanValueEig": 0,
         "constMassForce": [
             0.0,
             0.0,
@@ -126,6 +154,13 @@
             "CSutherland": 110.4
         }
     },
+    "bcSettings": [
+        {
+            "type": "BCSym",
+            "name": "SymY",
+            "rectifyOption": 2
+        }
+    ],
     "restartState": {
         "iStep": 1,
         "iStepInternal": 4800,
