@@ -1385,10 +1385,29 @@ namespace DNDS::Euler
             real curDtImplicitOld = curDtImplicit;
             curDtImplicit = config.timeMarchControl.dtImplicit;
             CFLNow = config.implicitCFLControl.CFL;
-            fdtau(u, dTauTmp, 1., 0); // generates a curDtMin / CFLNow value as a CFL=1 dt value
-            curDtImplicit = std::min(curDtMin / CFLNow * config.timeMarchControl.dtCFLLimitScale, curDtImplicit); // CFL limits dt
+            fdtau(u, dTauTmp, 1., 0);                                                                             // generates a curDtMin / CFLNow value as a CFL=1 dt value
+            curDtImplicit = std::min(curDtMin / CFLNow * config.timeMarchControl.dtCFLLimitScale, curDtImplicit); // limits dt by CFL
+            
+            if (config.timeMarchControl.useDtPPLimit)
+            {
+                dTauTmp.setConstant(curDtImplicit * config.timeMarchControl.dtPPLimitScale); //? used as damper here, appropriate?
+                frhs(rhsTemp, u, dTauTmp, 1, 0.0, 0);
+                uTemp = u;
+                rhsTemp *= curDtImplicit * config.timeMarchControl.dtPPLimitScale;
+                index nLim = 0;
+                real minLim = 1;
+                eval.EvaluateCellRHSAlpha(u, uRec, betaPP, rhsTemp, alphaPP_tmp, nLim, minLim, 0.8, 0);
+                if (nLim)
+                    curDtImplicit = std::min(curDtImplicit, minLim * curDtImplicit);
+                if (mpi.rank == 0 && nLim) 
+                {
+                    log() << "##################################################################" << std::endl;
+                    log() << fmt::format("At Step [{:d}] t [{:.8g}] Changing dt to {}", step, tSimu, curDtImplicit) << std::endl;
+                    log() << "##################################################################" << std::endl;
+                }
+            }
 
-            if (tSimu + curDtImplicit > nextTout + nextTout * smallReal) // output limits dt
+            if (tSimu + curDtImplicit > nextTout + nextTout * smallReal) // limits dt by output nodes
             {
                 ifOutT = true;
                 curDtImplicit = (nextTout - tSimu);

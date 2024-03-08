@@ -116,6 +116,8 @@ namespace DNDS::Euler
                 real dtIncreaseLimit = 2;
                 int dtIncreaseAfterCount = 0;
                 real dtCFLLimitScale = 1e100;
+                bool useDtPPLimit = false;
+                real dtPPLimitScale = 1;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     TimeMarchControl,
                     dtImplicit, nTimeStep,
@@ -124,7 +126,8 @@ namespace DNDS::Euler
                     odeCode, tEnd, odeSetting1, odeSetting2, odeSetting3, odeSetting4,
                     partitionMeshOnly,
                     dtIncreaseLimit, dtIncreaseAfterCount,
-                    dtCFLLimitScale)
+                    dtCFLLimitScale,
+                    useDtPPLimit, dtPPLimitScale)
             } timeMarchControl;
 
             struct ImplicitReconstructionControl
