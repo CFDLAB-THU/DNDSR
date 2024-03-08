@@ -39,7 +39,7 @@ namespace DNDS::Euler
             log() << "Mesh coord hash is: [" << std::hex << hashCoord << std::dec << "]" << std::endl
                   << std::scientific;
         }
-        if (config.timeMarchControl.partitonMeshOnly)
+        if (config.timeMarchControl.partitionMeshOnly)
         {
             if (mpi.rank == 0)
             {
@@ -655,15 +655,15 @@ namespace DNDS::Euler
             auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
             bool inputIsZero{true}, hasLUDone{false};
 
-            if (config.timeMarchControl.useRHSfPP)
+            if (config.timeMarchControl.rhsFPPMode == 1)
             {
                 // ! experimental: bad now ?
                 rhsTemp = crhs;
                 rhsTemp *= dTau;
-                rhsTemp *= config.timeMarchControl.rhsfPPScale;
+                rhsTemp *= config.timeMarchControl.rhsFPPScale;
                 index nLimFRes = 0;
                 real alphaMinFRes = 1;
-                eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, 1);
+                eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, 0.9, 1);
                 if (nLimFRes)
                     if (mpi.rank == 0)
                     {
@@ -673,6 +673,24 @@ namespace DNDS::Euler
 
                 crhs *= alphaPP_tmp;
             }
+            else if (config.timeMarchControl.rhsFPPMode == 2)
+            {
+                rhsTemp = crhs;
+                rhsTemp *= dTau;
+                rhsTemp *= config.timeMarchControl.rhsFPPScale;
+                index nLimFRes = 0;
+                real alphaMinFRes = 1;
+                eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, 0.9, 1);
+                if (nLimFRes)
+                    if (mpi.rank == 0)
+                    {
+                        log() << std::scientific << std::setw(3);
+                        log() << "PPFResLimiter: nLimFRes[" << nLimFRes << "] minAlpha [" << alphaMinFRes << "]" << std::endl;
+                    }
+                dTauTmp = dTau;
+                dTauTmp *= alphaPP_tmp;
+            }
+            auto &dTauC = config.timeMarchControl.rhsFPPMode == 2 ? dTauTmp : dTau;
 
             typename TVFV::template TFBoundary<nVarsFixed>
                 FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace,
@@ -685,13 +703,13 @@ namespace DNDS::Euler
 
             if (config.limiterControl.useLimiter) // uses urec value
                 eval.LUSGSMatrixInit(JDC, JSourceC,
-                                     dTau, dt, alphaDiag,
+                                     dTauC, dt, alphaDiag,
                                      cx, uRecNew,
                                      0,
                                      tSimu);
             else
                 eval.LUSGSMatrixInit(JDC, JSourceC,
-                                     dTau, dt, alphaDiag,
+                                     dTauC, dt, alphaDiag,
                                      cx, uRec,
                                      0,
                                      tSimu);
@@ -947,7 +965,7 @@ namespace DNDS::Euler
             renewRhsIncPart(); // un-fixed now
             // rhsIncPart.trans.startPersistentPull();
             // rhsIncPart.trans.waitPersistentPull(); //seems not needed
-            eval.EvaluateCellRHSAlpha(xPrev, uRecC, betaPPC, rhsIncPart, alphaPP_tmp, nLimAlpha, minAlpha, 0);
+            eval.EvaluateCellRHSAlpha(xPrev, uRecC, betaPPC, rhsIncPart, alphaPP_tmp, nLimAlpha, minAlpha, 1., 0);
             alphaPP_tmp.trans.startPersistentPull();
             alphaPP_tmp.trans.waitPersistentPull();
             if (nLimAlpha)
@@ -1005,7 +1023,7 @@ namespace DNDS::Euler
             auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
             nLimInc = 0;
             alphaMinInc = 1;
-            eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, cxInc, alphaPP_tmp, nLimInc, alphaMinInc, 0);
+            eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, cxInc, alphaPP_tmp, nLimInc, alphaMinInc, 0.9, 0);
             if (nLimInc)
                 if (mpi.rank == 0 &&
                     (config.outputControl.consoleOutputEveryFix == 1 || config.outputControl.consoleOutputEveryFix == 2))
@@ -1332,7 +1350,7 @@ namespace DNDS::Euler
             if (eval.settings.specialBuiltinInitializer == 2 && (step % config.outputControl.nConsoleCheck == 0)) // IV problem special: reduction on solution
             {
                 Eigen::Vector<real, -1> err;
-                eval.EvaluateRecNorm( 
+                eval.EvaluateRecNorm(
                     err, u, uRec, 1, true,
                     [&](const Geom::tPoint &p, real t)
                     {
@@ -1399,7 +1417,7 @@ namespace DNDS::Euler
                     odeVBDF->LimitDt_StepPPV2(
                         u, [&](ArrayDOFV<nVarsFixed> &u, ArrayDOFV<nVarsFixed> &uInc) -> real
                         {
-                            eval.EvaluateCellRHSAlpha(u, uRec, betaPP, uInc, alphaPP_tmp, nLimAlpha, minAlpha, 0);
+                            eval.EvaluateCellRHSAlpha(u, uRec, betaPP, uInc, alphaPP_tmp, nLimAlpha, minAlpha, 1., 0);
                             return minAlpha; },
                         curDtImplicit, 2); // curDtImplicit modified
                     if (curDtImplicit > curDtImplicitOld)
@@ -1490,7 +1508,7 @@ namespace DNDS::Euler
             // cxInc.trans.startPersistentPull();
             // cxInc.trans.waitPersistentPull();
             // eval.UpdateLUSGSBackward(alphaDiag, crhs, cx, cxInc, JDC, cxInc);
-            // cxInc.trans.startPersistentPull(); 
+            // cxInc.trans.startPersistentPull();
             // cxInc.trans.waitPersistentPull();
             inputIsZero = false;
         }

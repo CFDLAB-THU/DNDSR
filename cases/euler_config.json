@@ -4,9 +4,9 @@
         "nTimeStep": 100,
         "steadyQuit": false,
         "useImplicitPP": false,
-        "rhsFPPMode": 0,
+        "rhsFPPMode": 1,
         "rhsFPPScale": 1,
-        "odeCode": 1,
+        "odeCode": 0,
         "tEnd": 1e-3,
         "odeSetting1": 0.5,
         "odeSetting2": 1
@@ -29,7 +29,7 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 0.01,
+        "CFL": 1,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 0,
         "nCFLRampLength": 20,
@@ -102,8 +102,8 @@
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 0,
-        "sgsIter": 4,
+        "jacobiCode": 2,
+        "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
@@ -113,7 +113,7 @@
         "directPrecControl":
         {
             "useDirectPrec": true,
-            "iluCode": 2
+            "iluCode": -1
         }
     },
     "others": {

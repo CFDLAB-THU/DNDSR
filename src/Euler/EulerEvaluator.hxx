@@ -139,7 +139,7 @@ namespace DNDS::Euler
     }
 
     DNDS_SWITCH_INTELLISENSE(
-        template <EulerModel model>, template <EulerModel model_masked>
+        template <EulerModel model>, 
     )
     void EulerEvaluator<model>::LUSGSMatrixToJacobianLU(
         real alphaDiag,

@@ -94,7 +94,7 @@ namespace DNDS::Euler
 
         EulerEvaluatorSettings<model> settings;
 
-        EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler, const decltype(settings.jsonSettings)& nJsonSettings)
+        EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler, const decltype(settings.jsonSettings) &nJsonSettings)
             : mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->settings.maxOrder + 1)
         {
             nVars = getNVars(model); //! // TODO: dynamic setting it
@@ -273,6 +273,7 @@ namespace DNDS::Euler
             ArrayDOFV<1> &uRecBeta,
             ArrayDOFV<nVarsFixed> &res,
             ArrayDOFV<1> &cellRHSAlpha, index &nLim, real &alphaMin,
+            real relax,
             int flag = 0);
 
         /**

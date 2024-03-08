@@ -90,15 +90,15 @@ namespace DNDS::Euler
         {
             tComponent AI;
             {
-                // auto luDiag = v.fullPivLu();
-                // DNDS_assert(luDiag.isInvertible());
-                // AI = luDiag.inverse();
+                auto luDiag = v.fullPivLu();
+                DNDS_assert(luDiag.isInvertible());
+                AI = luDiag.inverse();
             }
             {
-                Eigen::MatrixXd A = v;
-                Eigen::MatrixXd AII;
-                HardEigen::EigenLeastSquareInverse(A, AII, 0.0);
-                AI = AII;
+                // Eigen::MatrixXd A = v;
+                // Eigen::MatrixXd AII;
+                // HardEigen::EigenLeastSquareInverse(A, AII, 0.0);
+                // AI = AII;
             }
             return AI;
         }
@@ -176,15 +176,15 @@ namespace DNDS::Euler
         {
             tComponent AI;
             {
-                // auto luDiag = v.fullPivLu();
-                // DNDS_assert(luDiag.isInvertible());
-                // AI = luDiag.inverse();
+                auto luDiag = v.fullPivLu();
+                DNDS_assert(luDiag.isInvertible());
+                AI = luDiag.inverse();
             }
             {
-                Eigen::MatrixXd A = v;
-                Eigen::MatrixXd AII;
-                HardEigen::EigenLeastSquareInverse(A, AII, 0.0);
-                AI = AII;
+                // Eigen::MatrixXd A = v;
+                // Eigen::MatrixXd AII;
+                // HardEigen::EigenLeastSquareInverse(A, AII, 0.0);
+                // AI = AII;
             }
             return AI;
         }

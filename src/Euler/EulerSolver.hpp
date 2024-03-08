@@ -63,7 +63,7 @@ namespace DNDS::Euler
         ArrayRECV<nVarsFixed> uRec, uRecNew, uRecNew1, uRecOld, uRec1, uRecInc, uRecInc1;
         ArrayDOFV<nVarsFixed> JD, JD1, JSource, JSource1;
         ssp<JacobianLocalLU<nVarsFixed>> JLocalLU;
-        ArrayDOFV<1> alphaPP, alphaPP1, betaPP, betaPP1, alphaPP_tmp;
+        ArrayDOFV<1> alphaPP, alphaPP1, betaPP, betaPP1, alphaPP_tmp, dTauTmp;
 
         int nOUTS = {-1};
         int nOUTSPoint{-1};
@@ -723,6 +723,7 @@ namespace DNDS::Euler
             vfv->BuildUDof(betaPP, 1);
             vfv->BuildUDof(alphaPP, 1);
             vfv->BuildUDof(alphaPP_tmp, 1);
+            vfv->BuildUDof(dTauTmp, 1);
             betaPP.setConstant(1.0);
             alphaPP.setConstant(1.0);
             if (config.timeMarchControl.odeCode == 401)
