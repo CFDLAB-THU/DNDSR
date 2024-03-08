@@ -2,6 +2,9 @@
 #include "boost/graph/adjacency_list.hpp"
 #include "boost/graph/graph_utility.hpp"
 #include "boost/graph/minimum_degree_ordering.hpp"
+#include <boost/graph/cuthill_mckee_ordering.hpp>
+#include <boost/graph/properties.hpp>
+#include <boost/graph/bandwidth.hpp>
 
 namespace _METIS
 {
@@ -166,7 +169,7 @@ namespace DNDS::Geom
             for (index i = 0; i < this->NumCell(); i++)
                 localFillOrderingOld2New.at(localFillOrderingNew2Old.at(i)) = i;
         }
-        if (control.getOrderingCode() == 1)
+        if (control.getOrderingCode() == 1) // Metis
         {
             _METIS::idx_t nCell = _METIS::indexToIdx(this->NumCell());
             _METIS::idx_t nCon{1}, options[METIS_NOPTIONS];
@@ -215,7 +218,7 @@ namespace DNDS::Geom
                 localFillOrderingOld2New[i] = iPerm[i];
             }
         }
-        else if (control.getOrderingCode() == 2)
+        else if (control.getOrderingCode() == 2) // MMD
         {
             using namespace boost;
             typedef adjacency_list<vecS, vecS, directedS> Graph;
@@ -229,7 +232,7 @@ namespace DNDS::Geom
             localFillOrderingOld2New.resize(this->NumCell(), 0);
             boost::property_map<Graph, vertex_index_t>::type id = get(vertex_index, cell2cellG);
             if (mpi.rank == mRank)
-                log() << "UnstructuredMesh::ObtainLocalFactFillOrdering(): start calling boost" << std::endl;
+                log() << "UnstructuredMesh::ObtainLocalFactFillOrdering(): start calling boost::minimum_degree_ordering" << std::endl;
             minimum_degree_ordering(
                 cell2cellG,
                 make_iterator_property_map(degree.data(), id, degree[0]),
@@ -240,6 +243,40 @@ namespace DNDS::Geom
                 id);
             if (mpi.rank == mRank)
                 log() << "UnstructuredMesh::ObtainLocalFactFillOrdering(): boost done" << std::endl;
+        }
+        else if (control.getOrderingCode() == 3)
+        {
+            using namespace boost;
+            typedef adjacency_list<vecS, vecS, undirectedS, property<vertex_color_t, default_color_type, property<vertex_degree_t, int>>> Graph;
+            typedef graph_traits<Graph>::vertex_descriptor Vertex;
+            // typedef graph_traits<Graph>::vertices_size_type size_type;
+            Graph cell2cellG(this->NumCell());
+            std::vector<std::vector<index>> &cell2cellFaceV = cell2cellFaceVLocal;
+            index bandWidthOld = 0;
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+                for (auto iCOther : cell2cellFaceV[iCell])
+                    add_edge(iCell, iCOther, cell2cellG), bandWidthOld = std::max(bandWidthOld, std::abs(iCell - iCOther));
+            MPI::AllreduceOneIndex(bandWidthOld, MPI_MAX, this->mpi);
+            if (mpi.rank == mRank)
+                log() << "UnstructuredMesh::ObtainLocalFactFillOrdering(): start calling boost::cuthill_mckee_ordering, BW: " << bandWidthOld << std::endl;
+            localFillOrderingNew2Old.resize(this->NumCell(), 0);
+            localFillOrderingOld2New.resize(this->NumCell(), 0);
+            Vertex startVert = vertex(0, cell2cellG);
+            cuthill_mckee_ordering(cell2cellG, startVert, localFillOrderingNew2Old.rbegin(),
+                                   get(vertex_color, cell2cellG), get(vertex_degree, cell2cellG));
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+                localFillOrderingOld2New[localFillOrderingNew2Old[iCell]] = iCell;
+            index bandWidthNew = 0;
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+                for (auto iCOther : cell2cellFaceV[iCell])
+                    bandWidthNew = std::max(bandWidthNew, std::abs(localFillOrderingOld2New[iCell] - localFillOrderingOld2New[iCOther]));
+            MPI::AllreduceOneIndex(bandWidthNew, MPI_MAX, this->mpi);
+            if (mpi.rank == mRank)
+                log() << "UnstructuredMesh::ObtainLocalFactFillOrdering(): boost done, new BW: " << bandWidthNew << std::endl;
+        }
+        else
+        {
+            DNDS_assert_info(false, "No such ordering code");
         }
     }
 }
