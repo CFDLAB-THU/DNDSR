@@ -101,7 +101,7 @@ namespace DNDS::Euler
         case 1: // BDF2
             if (mpi.rank == 0)
                 log() << "=== ODE: BDF2 " << std::endl;
-            ode = std::make_shared<ODE::ImplicitBDFDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
+            ode = std::make_shared<ODE::ImplicitVBDFDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
                 mesh->NumCell(),
                 buildDOF, buildScalar,
                 2);
@@ -241,7 +241,7 @@ namespace DNDS::Euler
 
         real tSimu = 0.0;
         real tAverage = 0.0;
-        real nextTout = config.outputControl.tDataOut;
+        real nextTout = std::min(config.outputControl.tDataOut, config.timeMarchControl.tEnd); // ensures the destination time output
         int nextStepOut = config.outputControl.nDataOut;
         int nextStepOutC = config.outputControl.nDataOutC;
         int nextStepRestart = config.outputControl.nRestartOut;
@@ -623,18 +623,14 @@ namespace DNDS::Euler
             // uRec.trans.waitPersistentPull();
             auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
             eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt);
-            // for (auto &i: dTau)
-            //     i = std::min({i, curDtMin * 1000, curDtImplicit * 100});
             for (int iS = 1; iS <= config.implicitCFLControl.nSmoothDTau; iS++)
             {
                 // ArrayDOFV<1> dTauNew = dTau; //TODO: copying is still unusable; consider doing copiers on the level of ArrayDOFV and ArrayRecV
-                ArrayDOFV<1> dTauNew;
-                vfv->BuildUDof(dTauNew, 1);
-                dTauNew = dTau;
+                dTauTmp = dTau;
                 dTau.trans.startPersistentPull();
                 dTau.trans.waitPersistentPull();
-                eval.MinSmoothDTau(dTau, dTauNew);
-                dTau = dTauNew;
+                eval.MinSmoothDTau(dTau, dTauTmp);
+                dTau = dTauTmp;
             }
 
             dTau *= 1. / alphaDiag;
@@ -1072,7 +1068,7 @@ namespace DNDS::Euler
                     log() << fmt::format(
                         "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   "s +
                             "res {termRed}{resRel:.3e}{termReset}   "s +
-                            "t,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   "s +
+                            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   "s +
                             "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]" +
                             "  "s +
                             (config.outputControl.consoleOutputMode == 1
@@ -1084,6 +1080,7 @@ namespace DNDS::Euler
                         fmt::arg("resRel", resRel.transpose()),
                         fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
                         DNDS_FMT_ARG(tSimu),
+                        DNDS_FMT_ARG(curDtImplicit),
                         DNDS_FMT_ARG(curDtMin),
                         DNDS_FMT_ARG(CFLNow),
                         DNDS_FMT_ARG(nLimInc),
@@ -1212,7 +1209,7 @@ namespace DNDS::Euler
                     log() << fmt::format(
                         "=== Step {termBold}[{step:4d}]   "s +
                             "res {termBold}{termRed}{resRel:.3e}{termReset}   "s +
-                            "t,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   "s +
+                            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   "s +
                             "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]" +
                             "  "s +
                             (config.outputControl.consoleOutputMode == 1
@@ -1224,6 +1221,7 @@ namespace DNDS::Euler
                         fmt::arg("resRel", (res.array() / (resBaseC.array() + verySmallReal)).transpose()),
                         fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
                         DNDS_FMT_ARG(tSimu),
+                        DNDS_FMT_ARG(curDtImplicit),
                         DNDS_FMT_ARG(curDtMin),
                         DNDS_FMT_ARG(CFLNow),
                         DNDS_FMT_ARG(nLimInc),
@@ -1385,13 +1383,17 @@ namespace DNDS::Euler
             DNDS_MPI_InsertCheck(mpi, "Implicit Step");
             ifOutT = false;
             real curDtImplicitOld = curDtImplicit;
-            curDtImplicit = config.timeMarchControl.dtImplicit; //* could add CFL driven dt here
-            if (tSimu + curDtImplicit > nextTout)
+            curDtImplicit = config.timeMarchControl.dtImplicit;
+            CFLNow = config.implicitCFLControl.CFL;
+            fdtau(u, dTauTmp, 1., 0); // generates a curDtMin / CFLNow value as a CFL=1 dt value
+            curDtImplicit = std::min(curDtMin / CFLNow * config.timeMarchControl.dtCFLLimitScale, curDtImplicit); // CFL limits dt
+
+            if (tSimu + curDtImplicit > nextTout + nextTout * smallReal) // output limits dt
             {
                 ifOutT = true;
                 curDtImplicit = (nextTout - tSimu);
             }
-            CFLNow = config.implicitCFLControl.CFL;
+
             if (config.timeMarchControl.useImplicitPP)
             {
                 switch (config.timeMarchControl.odeCode)
