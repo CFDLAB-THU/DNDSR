@@ -67,6 +67,9 @@ namespace DNDS::CFV
         tVMatPair matrixSecondary; /// @brief constructed using ConstructRecCoeff(), secondary-rec matrices on each face
         tVMatPair matrixAHalf_GG;  /// @brief constructed using ConstructRecCoeff()
 
+        std::vector<Eigen::MatrixXd> volIntCholeskyL;
+        std::vector<Eigen::MatrixXd> matrixACholeskyL;
+
     public:
         VariationalReconstruction(MPIInfo nMpi, std::shared_ptr<Geom::UnstructuredMesh> nMesh)
             : mpi(nMpi), mesh(nMesh)
@@ -732,6 +735,89 @@ namespace DNDS::CFV
             static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
             auto lens = this->cellMajorHBox[iCell](Seq012);
             return (lens.maxCoeff() + verySmallReal) / (lens.minCoeff() + verySmallReal);
+        }
+
+        int GetCellOrder(index iCell)
+        {
+            return cellAtr[iCell].Order;
+        }
+
+        template <int nVarsFixed = 1>
+        auto DownCastURecOrder(
+            int curOrder,
+            index iCell,
+            tURec<nVarsFixed> &uRec,
+            int downCastMethod)
+        {
+            int degree2Start = dim == 3 ? 3 : 2;
+            int degree3Start = dim == 3 ? 9 : 5;
+
+            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> ret = uRec[iCell];
+
+            auto toOrtho = [&]()
+            {
+                switch (downCastMethod)
+                {
+                case 0:
+                    break;
+                case 1:
+                    volIntCholeskyL.at(iCell).triangularView<Eigen::Lower>().applyThisOnTheLeft(ret);
+                    break;
+                case 2:
+                    matrixACholeskyL.at(iCell).triangularView<Eigen::Lower>().applyThisOnTheLeft(ret);
+                    break;
+                default:
+                    DNDS_assert(false);
+                    break;
+                }
+            };
+
+            auto toOrigin = [&]()
+            {
+                switch (downCastMethod)
+                {
+                case 0:
+                    break;
+                case 1:
+                    ret = volIntCholeskyL.at(iCell).triangularView<Eigen::Lower>().solve(ret);
+                    break;
+                case 2:
+                    ret = matrixACholeskyL.at(iCell).triangularView<Eigen::Lower>().solve(ret);
+                    break;
+                default:
+                    DNDS_assert(false);
+                    break;
+                }
+            };
+
+            switch (curOrder)
+            {
+            case 0:
+                break;
+            case 1:
+                ret *= 0.0;
+                break;
+            case 2:
+            {
+                toOrtho();
+                ret(Eigen::seq(degree2Start, Eigen::last), Eigen::all) *= 0.0;
+                toOrigin();
+            }
+            break;
+            case 3:
+            {
+                toOrtho();
+                ret(Eigen::seq(degree3Start, Eigen::last), Eigen::all) *= 0.0;
+                toOrigin();
+            }
+            break;
+            default:
+                std::cout << "bad input order : " << curOrder << std::endl;
+                DNDS_assert(false);
+                break;
+            }
+
+            return ret;
         }
 
         template <int nVarsFixed = 1>

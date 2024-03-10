@@ -31,6 +31,7 @@ namespace DNDS::CFV
         for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
         {
             cellAtr[iCell].intOrder = settings.intOrder;
+            cellAtr[iCell].Order = settings.maxOrder;
             auto eCell = mesh->GetCellElement(iCell);
             auto qCell = Quadrature{eCell, cellAtr[iCell].intOrder};
             auto qCellO1 = Quadrature{eCell, 1};
@@ -298,6 +299,8 @@ namespace DNDS::CFV
                 cellDiffBaseCacheCent,
                 std::min(maxNDIFF, static_cast<int>(settings.cacheDiffBaseSize)), maxNDOF);
         }
+        volIntCholeskyL.resize(mesh->NumCellProc());
+
 #ifdef DNDS_USE_OMP
 #pragma omp parallel for
 #endif
@@ -366,6 +369,21 @@ namespace DNDS::CFV
                         cellDiffBaseCacheCent[iCell] = dbv;
                     }
                 });
+
+            //****** Get Orthogonization Coefs
+            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> MBiBj;
+            MBiBj.setZero(cellAtr[iCell].NDOF - 1, cellAtr[iCell].NDOF - 1);
+            qCell.Integration(
+                MBiBj,
+                [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
+                {
+                    Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> D0Bj =
+                        this->GetIntPointDiffBaseValue(iCell, -1, -1, iG, std::array<int, 1>{0}, 1);
+                    vInc = (D0Bj.transpose() * D0Bj);
+                    vInc *= this->GetCellJacobiDet(iCell, iG);
+                });
+            volIntCholeskyL.at(iCell).resizeLike(MBiBj);
+            volIntCholeskyL.at(iCell) = MBiBj.llt().matrixL();
         }
 
         /******************************/
@@ -698,6 +716,7 @@ namespace DNDS::CFV
         this->MakePairDefaultOnCell(vectorAInvB, maxNDOF - 1, 1);
         if (settings.functionalSettings.greenGauss1Weight != 0)
             this->MakePairDefaultOnCell(matrixAHalf_GG, dim, (maxNDOF - 1));
+        matrixACholeskyL.resize(mesh->NumCellProc());
         real maxCond = 0.0;
 #ifdef DNDS_USE_OMP
 #pragma omp parallel for
@@ -796,6 +815,7 @@ namespace DNDS::CFV
             matrixAAInvB(iCell, 0) = AInv;
 
             maxCond = std::max(aCond, maxCond);
+            matrixACholeskyL.at(iCell) = A.llt().matrixL();
 
             // if (iCell == 71)
             // {

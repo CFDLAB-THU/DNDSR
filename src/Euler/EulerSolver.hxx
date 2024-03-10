@@ -98,13 +98,16 @@ namespace DNDS::Euler
                 buildDOF, buildScalar,
                 0);
             break;
-        case 1: // BDF2
-            if (mpi.rank == 0)
+        case 1: // BDF2 // Backward Euler
+        case 103:
+            if (mpi.rank == 0 && config.timeMarchControl.odeCode == 1)
                 log() << "=== ODE: BDF2 " << std::endl;
+            if (mpi.rank == 0 && config.timeMarchControl.odeCode == 103)
+                log() << "=== ODE: Backward Euler " << std::endl;
             ode = std::make_shared<ODE::ImplicitVBDFDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
                 mesh->NumCell(),
                 buildDOF, buildScalar,
-                2);
+                config.timeMarchControl.odeCode == 1 ? 2 : 1);
             break;
         case 102: // VBDF2
             if (mpi.rank == 0)
@@ -255,6 +258,7 @@ namespace DNDS::Euler
         bool ifOutT = false;
         real curDtMin;
         real curDtImplicit = config.timeMarchControl.dtImplicit;
+        std::vector<real> curDtImplicitHistory;
         int step;
         bool gradIsZero = true;
 
@@ -272,12 +276,12 @@ namespace DNDS::Euler
         /*                   DEFINE LAMBDAS                    */
         /*******************************************************/
 
-        auto frhs =
+        auto frhsOuter =
             [&](
                 ArrayDOFV<nVarsFixed> &crhs,
                 ArrayDOFV<nVarsFixed> &cx,
                 ArrayDOFV<1> &dTau,
-                int iter, real ct, int uPos)
+                int iter, real ct, int uPos, int reconstructionFlag)
         {
             cx.trans.startPersistentPull();
             cx.trans.waitPersistentPull(); // for hermite3
@@ -295,6 +299,13 @@ namespace DNDS::Euler
 
             // for (index iCell = 0; iCell < uOld.size(); iCell++)
             //     uOld[iCell].m() = uRec[iCell].m();
+            if (!reconstructionFlag)
+            {
+                betaPPC.setConstant(1.0);
+                uRecNew.setConstant(0.0);
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
+                return;
+            }
 
             DNDS_MPI_InsertCheck(mpi, " Lambda RHS: StartRec");
             int nRec = (gradIsZero ? config.implicitReconstructionControl.nRecMultiplyForZeroedGrad : 1) *
@@ -579,10 +590,9 @@ namespace DNDS::Euler
             {
                 nLimBeta = 0;
                 minBeta = 1;
-                if (config.limiterControl.useLimiter)
-                    eval.EvaluateURecBeta(cx, uRecNew, betaPPC, nLimBeta, minBeta); //*cx instead of u!
-                else
-                    eval.EvaluateURecBeta(cx, uRecC, betaPPC, nLimBeta, minBeta);
+                if (!config.limiterControl.useLimiter)
+                    uRecNew = uRec;
+                eval.EvaluateURecBeta(cx, uRecNew, betaPPC, nLimBeta, minBeta); //*cx instead of u!
                 if (nLimBeta)
                     if (mpi.rank == 0 &&
                         (config.outputControl.consoleOutputEveryFix == 1 || config.outputControl.consoleOutputEveryFix == 3))
@@ -591,11 +601,13 @@ namespace DNDS::Euler
                               << "PPRecLimiter: nLimBeta [" << nLimBeta << "]"
                               << " minBeta[" << minBeta << "]" << std::endl;
                     }
+                uRecNew.trans.startPersistentPull();
                 betaPPC.trans.startPersistentPull();
+                uRecNew.trans.waitPersistentPull();
                 betaPPC.trans.waitPersistentPull();
             }
 
-            if (config.limiterControl.useLimiter)
+            if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter)
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
             else
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
@@ -612,6 +624,16 @@ namespace DNDS::Euler
             trhs += MPI_Wtime() - tstartE;
 
             DNDS_MPI_InsertCheck(mpi, " Lambda RHS: End");
+        };
+
+        auto frhs =
+            [&](
+                ArrayDOFV<nVarsFixed> &crhs,
+                ArrayDOFV<nVarsFixed> &cx,
+                ArrayDOFV<1> &dTau,
+                int iter, real ct, int uPos)
+        {
+            return frhsOuter(crhs, cx, dTau, iter, ct, uPos, 1); // reconstructionFlag == 1
         };
 
         auto fdtau = [&](ArrayDOFV<nVarsFixed> &cx, ArrayDOFV<1> &dTau, real alphaDiag, int uPos)
@@ -973,7 +995,7 @@ namespace DNDS::Euler
                           << " minAlpha[" << minAlpha << "]" << std::endl;
                 }
             alphaPPC = alphaPP_tmp;
-            if (config.limiterControl.useLimiter)
+            if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter)
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
             else
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
@@ -999,7 +1021,7 @@ namespace DNDS::Euler
                               << " minAlpha[" << minAlpha << "]" << std::endl;
                     }
                 alphaPPC = alphaPP_tmp;
-                if (config.limiterControl.useLimiter)
+                if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter)
                     eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
                 else
                     eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
@@ -1387,11 +1409,11 @@ namespace DNDS::Euler
             CFLNow = config.implicitCFLControl.CFL;
             fdtau(u, dTauTmp, 1., 0);                                                                             // generates a curDtMin / CFLNow value as a CFL=1 dt value
             curDtImplicit = std::min(curDtMin / CFLNow * config.timeMarchControl.dtCFLLimitScale, curDtImplicit); // limits dt by CFL
-            
+
             if (config.timeMarchControl.useDtPPLimit)
             {
                 dTauTmp.setConstant(curDtImplicit * config.timeMarchControl.dtPPLimitScale); //? used as damper here, appropriate?
-                frhs(rhsTemp, u, dTauTmp, 1, 0.0, 0);
+                frhsOuter(rhsTemp, u, dTauTmp, 1, 0.0, 0, 0);
                 uTemp = u;
                 rhsTemp *= curDtImplicit * config.timeMarchControl.dtPPLimitScale;
                 index nLim = 0;
@@ -1399,7 +1421,11 @@ namespace DNDS::Euler
                 eval.EvaluateCellRHSAlpha(u, uRec, betaPP, rhsTemp, alphaPP_tmp, nLim, minLim, 0.8, 0);
                 if (nLim)
                     curDtImplicit = std::min(curDtImplicit, minLim * curDtImplicit);
-                if (mpi.rank == 0 && nLim) 
+                if (curDtImplicitHistory.size() && curDtImplicit > curDtImplicitHistory.back() * config.timeMarchControl.dtIncreaseLimit)
+                {
+                    curDtImplicit = curDtImplicitHistory.back() * config.timeMarchControl.dtIncreaseLimit;
+                }
+                if (mpi.rank == 0 && nLim)
                 {
                     log() << "##################################################################" << std::endl;
                     log() << fmt::format("At Step [{:d}] t [{:.8g}] Changing dt to {}", step, tSimu, curDtImplicit) << std::endl;
@@ -1417,7 +1443,7 @@ namespace DNDS::Euler
             {
                 switch (config.timeMarchControl.odeCode)
                 {
-                case 1:
+                case 1: // BDF2
                     std::dynamic_pointer_cast<ODE::ImplicitBDFDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(ode)
                         ->StepPP(
                             u, uInc,
@@ -1430,7 +1456,7 @@ namespace DNDS::Euler
                             falphaLimSource,
                             fresidualIncPP);
                     break;
-                case 102:
+                case 102: // VBDFPP
                 {
                     index nLimAlpha;
                     real minAlpha;
@@ -1498,9 +1524,9 @@ namespace DNDS::Euler
                         config.convergenceControl.nTimeStepInternal,
                         fstop, fincrement,
                         curDtImplicit + verySmallReal);
-
             if (fmainloop())
                 break;
+            curDtImplicitHistory.push_back(curDtImplicit);
         }
 
         // u.trans.waitPersistentPull();

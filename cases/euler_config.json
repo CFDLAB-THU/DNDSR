@@ -1,18 +1,22 @@
 {
     "timeMarchControl": {
         "dtImplicit": 10e-6,
-        "nTimeStep": 100,
+        "nTimeStep": 1000000,
         "steadyQuit": false,
         "useImplicitPP": false,
-        "rhsFPPMode": 1,
+        "rhsFPPMode": 0,
         "rhsFPPScale": 1,
-        "odeCode": 0,
+        "odeCode": 103,
         "tEnd": 1e-3,
         "odeSetting1": 0.5,
-        "odeSetting2": 1
+        "odeSetting2": 1,
+        "dtCFLLimitScale": 100,
+        "dtIncreaseLimit": 1.2,
+        "useDtPPLimit": true,
+        "dtPPLimitScale": 1
     },
     "convergenceControl": {
-        "nTimeStepInternal": 200,
+        "nTimeStepInternal": 20,
         "rhsThresholdInternal": 1e-4,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -33,7 +37,7 @@
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 0,
         "nCFLRampLength": 20,
-        "CFLRampEnd": 2.0,
+        "CFLRampEnd": 10.0,
         "useLocalDt": true
     },
     "dataIOControl": {
@@ -80,10 +84,10 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": true,
-        "jacobiRelax": 0.5,
-        "SORInstead": true,
+        "jacobiRelax": 1,
+        "SORInstead": false,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
@@ -102,7 +106,7 @@
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 2,
+        "jacobiCode": 0,
         "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
@@ -125,6 +129,7 @@
         "riemannSolverType": "Roe_M2",
         "rsMeanValueEig": 1,
         "nCentralSmoothStep": 0,
+        "uRecBetaCompressPower": 2.0,
         "constMassForce": [
             0.0,
             0.0,

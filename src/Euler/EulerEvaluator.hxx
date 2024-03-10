@@ -139,8 +139,7 @@ namespace DNDS::Euler
     }
 
     DNDS_SWITCH_INTELLISENSE(
-        template <EulerModel model>, 
-    )
+        template <EulerModel model>, )
     void EulerEvaluator<model>::LUSGSMatrixToJacobianLU(
         real alphaDiag,
         ArrayDOFV<nVarsFixed> &u,
@@ -859,7 +858,9 @@ namespace DNDS::Euler
         }
     }
 
-    template <EulerModel model>
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, template <>
+    )
     void EulerEvaluator<model>::EvaluateURecBeta(
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,
@@ -895,65 +896,108 @@ namespace DNDS::Euler
                 nPoint += gFace.GetNumPoints();
             }
             /***********/
-
-            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> recInc = quadBase * uRec[iCell];
-            Eigen::Vector<real, Eigen::Dynamic> rhoS = recInc(Eigen::all, 0).array() + u[iCell](0);
-            real rhoMin = rhoS.minCoeff();
-            real theta1 = 1;
             DNDS_assert(u[iCell](0) >= rhoEps);
+            real gamma = settings.idealGasProperty.gamma;
+            real pCent = (gamma - 1) * (u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0));
+            DNDS_assert(pCent >= pEps);
+
+            // alter uRec if necessary
+            int curOrder = vfv->GetCellOrder(iCell);
+            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecBase = uRec[iCell];
+            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> recBase; // * has to call checkRecBaseGood() to hold valid value
+            auto checkRecBaseGood = [&]()
+            {
+                recBase = (quadBase * uRecBase).rowwise() + u[iCell].transpose();
+                if (recBase(Eigen::all, 0).minCoeff() < rhoEps)
+                    return false;
+                if constexpr (model == NS_SA || model == NS_SA_3D)
+                    if (recBase(Eigen::all, I4 + 1).minCoeff() < rhoEps)
+                        return false;
+                if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+                    if (recBase(Eigen::all, I4 + 1).minCoeff() < rhoEps || recBase(Eigen::all, I4 + 2).minCoeff() < rhoEps)
+                        return false;
+                Eigen::Vector<real, Eigen::Dynamic> ek =
+                    0.5 * (recBase(Eigen::all, Seq123).array().square().rowwise().sum()) / recBase(Eigen::all, 0).array();
+                Eigen::Vector<real, Eigen::Dynamic> eInternalS = (recBase(Eigen::all, I4) - ek);
+                if (eInternalS.minCoeff() < pEps)
+                    return false;
+                return true;
+            };
+            if (checkRecBaseGood())
+            {
+                uRecBeta[iCell](0) = 1;
+                continue; // early exit, reconstruction is good it self
+            }
+            while (curOrder > 0)
+            {
+                uRecBase = vfv->template DownCastURecOrder<nVarsFixed>(curOrder, iCell, uRec, 0);
+                if (checkRecBaseGood())
+                    break;
+                uRec[iCell] = uRecBase; // uRec[iCell] could be altered
+                curOrder--;
+            }
+
+            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed>
+                recInc = quadBase * (uRec[iCell] - uRecBase);
+            Eigen::Vector<real, Eigen::Dynamic> rhoS = recInc(Eigen::all, 0) + recBase(Eigen::all, 0);
+            Eigen::Index rhoMinIdx;
+            real rhoMin = rhoS.minCoeff(&rhoMinIdx);
+            real theta1 = 1;
             if (rhoMin < rhoEps)
-                theta1 = std::min(1.0, (u[iCell](0) - rhoEps) / (u[iCell](0) - rhoMin + verySmallReal));
+                for (int iG = 0; iG < rhoS.size(); iG++)
+                    if (recInc(iG, 0) < 0) // negative increment
+                        theta1 = std::min(theta1, (recBase(iG, 0) - rhoEps) / (-recInc(iG, 0) + verySmallReal));
 #ifdef USE_NS_SA_NUT_REDUCED_ORDER
             if constexpr (model == NS_SA || model == NS_SA_3D)
             {
                 static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
-                Eigen::Vector<real, Eigen::Dynamic> v1S = recInc(Eigen::all, I4 + 1).array() + u[iCell](I4 + 1);
+                Eigen::Vector<real, Eigen::Dynamic> v1S = recInc(Eigen::all, I4 + 1) + recBase(Eigen::all, I4 + 1);
                 real v1Min = v1S.minCoeff();
                 if (v1Min < v1Eps)
-                    theta1 = std::min(theta1,
-                                      (u[iCell](I4 + 1) - v1Eps) / (u[iCell](I4 + 1) - v1Min + verySmallReal))
-                        // * 0 // to gain fully reduced order
-                        ;
+                    for (int iG = 0; iG < rhoS.size(); iG++)
+                        if (recInc(iG, I4 + 1) < 0) // negative increment
+                            theta1 = std::min(theta1, (recBase(iG, I4 + 1) - v1Eps) / (-recInc(iG, I4 + 1) + verySmallReal))
+                                // * 0 // to gain fully reduced order
+                                ;
             }
 #endif
             if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
+
                 static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
                 static real v2Eps = smallReal * settings.refUPrim(I4 + 2);
-                Eigen::Vector<real, Eigen::Dynamic> v1S = recInc(Eigen::all, I4 + 1).array() + u[iCell](I4 + 1);
+                Eigen::Vector<real, Eigen::Dynamic> v1S = recInc(Eigen::all, I4 + 1) + recBase(Eigen::all, I4 + 1);
+                Eigen::Vector<real, Eigen::Dynamic> v2S = recInc(Eigen::all, I4 + 2) + recBase(Eigen::all, I4 + 2);
                 real v1Min = v1S.minCoeff();
-                if (v1Min < v1Eps)
-                    theta1 = std::min(theta1,
-                                      (u[iCell](I4 + 1) - v1Eps) / (u[iCell](I4 + 1) - v1Min + verySmallReal));
-                Eigen::Vector<real, Eigen::Dynamic> v2S = recInc(Eigen::all, I4 + 2).array() + u[iCell](I4 + 2);
                 real v2Min = v2S.minCoeff();
+                if (v1Min < v1Eps)
+                    for (int iG = 0; iG < rhoS.size(); iG++)
+                        if (recInc(iG, I4 + 1) < 0) // negative increment
+                            theta1 = std::min(theta1, (recBase(iG, I4 + 1) - v1Eps) / (-recInc(iG, I4 + 1) + verySmallReal));
                 if (v2Min < v2Eps)
-                    theta1 = std::min(theta1,
-                                      (u[iCell](I4 + 2) - v2Eps) / (u[iCell](I4 + 2) - v2Min + verySmallReal));
+                    for (int iG = 0; iG < rhoS.size(); iG++)
+                        if (recInc(iG, I4 + 2) < 0) // negative increment
+                            theta1 = std::min(theta1, (recBase(iG, I4 + 2) - v2Eps) / (-recInc(iG, I4 + 2) + verySmallReal));
             }
 
             recInc *= theta1;
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed>
-                recVRhoG = recInc.rowwise() + u[iCell].transpose();
+                recVRhoG = recInc + recBase;
 
-            real gamma = settings.idealGasProperty.gamma;
-            Eigen::Vector<real, Eigen::Dynamic> ek =
-                0.5 * (recVRhoG(Eigen::all, Seq123).array().square().rowwise().sum()) / recVRhoG(Eigen::all, 0).array();
-            Eigen::Vector<real, Eigen::Dynamic> pS =
-                (gamma - 1) *
-                (recVRhoG(Eigen::all, I4) -
-                 ek);
+            Eigen::Vector<real, Eigen::Dynamic> ek = 0.5 * (recVRhoG(Eigen::all, Seq123).array().square().rowwise().sum()) / recVRhoG(Eigen::all, 0).array();
+            Eigen::Vector<real, Eigen::Dynamic> eInternalS = recVRhoG(Eigen::all, I4) - ek;
             real thetaP = 1.0;
-            real pCent = (gamma - 1) * (u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0));
+
             if (pCent <= 2 * pEps)
                 thetaP = 0;
             else
-                for (int iG = 0; iG < pS.size(); iG++)
+                for (int iG = 0; iG < rhoS.size(); iG++)
                 {
-                    if (pS(iG) < 2 * pEps)
+                    if (eInternalS(iG) < 2 * pEps)
                     {
                         real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
-                            u[iCell], recInc(iG, Eigen::all).transpose(), 1 * pEps / (gamma - 1));
+                            recBase(iG, Eigen::all).transpose(), recInc(iG, Eigen::all).transpose(),
+                            pEps);
                         thetaP = std::min(thetaP, thetaThis);
                     }
                 }
@@ -974,26 +1018,24 @@ namespace DNDS::Euler
                 std::cout << fmt::format("theta1 {}, thetaP {}", theta1, thetaP) << std::endl;
                 DNDS_assert(false);
             }
+            uRec[iCell] = (uRec[iCell] - uRecBase) * uRecBeta[iCell](0) + uRecBase;
 
             // validation:
-            recInc = quadBase * uRec[iCell] * uRecBeta[iCell](0);
+            recInc = quadBase * uRec[iCell];
             recVRhoG = recInc.rowwise() + u[iCell].transpose();
-            ek =
-                0.5 * (recVRhoG(Eigen::all, Seq123).array().square().rowwise().sum()) / recVRhoG(Eigen::all, 0).array();
-            pS =
-                (gamma - 1) *
-                (recVRhoG(Eigen::all, I4) -
-                 ek);
-            for (int iG = 0; iG < pS.size(); iG++)
+            ek = 0.5 * (recVRhoG(Eigen::all, Seq123).array().square().rowwise().sum()) / recVRhoG(Eigen::all, 0).array();
+            eInternalS = (recVRhoG(Eigen::all, I4) - ek);
+            for (int iG = 0; iG < eInternalS.size(); iG++)
             {
-                if (pS(iG) < pEps)
+                if (eInternalS(iG) < pEps)
                 {
-                    // std::cout << std::scientific;
-                    // std::cout << pS.transpose() << std::endl;
-                    // std::cout << fmt::format("{} {} {}", theta1, thetaP, uRecBeta[iCell](0)) << std::endl;
-                    // std::cout << u[iCell] << std::endl;
-                    // std::cout << recInc.transpose() << std::endl;
-                    // DNDS_assert(false);
+                    std::cout << std::scientific;
+                    std::cout << eInternalS.transpose() << std::endl;
+                    std::cout << curOrder << std::endl;
+                    std::cout << fmt::format("{} {} {}", theta1, thetaP, uRecBeta[iCell](0)) << std::endl;
+                    std::cout << u[iCell] << std::endl;
+                    std::cout << recInc.transpose() << std::endl;
+                    DNDS_assert(false);
                 }
             }
         }
