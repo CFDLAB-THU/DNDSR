@@ -1160,10 +1160,11 @@ namespace DNDS::Euler
                 else
                     DNDS_assert(false);
             }
-            else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis)
+            else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
+                     pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
             {
                 URxy = ULxy;
-                URxy(Seq123) -= URxy(Seq123).dot(uNorm) * uNorm;
+                URxy(Seq123) -= 2 * ULxy(Seq123).dot(uNorm) * uNorm; // mirrored!
             }
             else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall)
             {

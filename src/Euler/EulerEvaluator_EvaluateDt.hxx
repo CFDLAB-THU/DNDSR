@@ -11,143 +11,171 @@ namespace DNDS::Euler
     template <EulerModel model>
     void EulerEvaluator<model>::GetWallDist()
     {
-        using TriArray = ArrayEigenMatrix<3, 3>;
-        ssp<TriArray> TrianglesLocal, TrianglesFull;
-        DNDS_MAKE_SSP(TrianglesLocal, mesh->getMPI());
-        DNDS_MAKE_SSP(TrianglesFull, mesh->getMPI());
-        std::vector<Eigen::Matrix<real, 3, 3>> Triangles;
-        for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
+        if (settings.wallDistScheme == 0 || settings.wallDistScheme == 1)
         {
-            if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall)
+            using TriArray = ArrayEigenMatrix<3, 3>;
+            ssp<TriArray> TrianglesLocal, TrianglesFull;
+            DNDS_MAKE_SSP(TrianglesLocal, mesh->getMPI());
+            DNDS_MAKE_SSP(TrianglesFull, mesh->getMPI());
+            std::vector<Eigen::Matrix<real, 3, 3>> Triangles;
+            for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
             {
-                index iFace = mesh->bnd2face[iBnd];
-                auto elem = mesh->GetFaceElement(iFace);
-                if (elem.type == Geom::Elem::ElemType::Line2 || elem.type == Geom::Elem::ElemType::Line3) //!
+                if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall)
                 {
-                    Geom::tSmallCoords coords;
-                    mesh->GetCoordsOnFace(iFace, coords);
-                    Eigen::Matrix<real, 3, 3> tri;
-                    mesh->GetCoordsOnFace(iFace, coords);
-                    tri(Eigen::all, 0) = coords(Eigen::all, 0);
-                    tri(Eigen::all, 1) = coords(Eigen::all, 1);
-                    tri(Eigen::all, 2) = coords(Eigen::all, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
-                    Triangles.push_back(tri);
-                }
-                else if (elem.type == Geom::Elem::ElemType::Tri3 || elem.type == Geom::Elem::ElemType::Tri6) //! TODO
-                {
-                    Geom::tSmallCoords coords;
-                    mesh->GetCoordsOnFace(iFace, coords);
-                    Eigen::Matrix<real, 3, 3> tri;
-                    tri(Eigen::all, 0) = coords(Eigen::all, 0);
-                    tri(Eigen::all, 1) = coords(Eigen::all, 1);
-                    tri(Eigen::all, 2) = coords(Eigen::all, 2);
-                    Triangles.push_back(tri);
-                }
-                else if (elem.type == Geom::Elem::ElemType::Quad4 || elem.type == Geom::Elem::ElemType::Quad9)
-                {
-                    Geom::tSmallCoords coords;
-                    mesh->GetCoordsOnFace(iFace, coords);
-                    Eigen::Matrix<real, 3, 3> tri;
-                    tri(Eigen::all, 0) = coords(Eigen::all, 0);
-                    tri(Eigen::all, 1) = coords(Eigen::all, 1);
-                    tri(Eigen::all, 2) = coords(Eigen::all, 2);
-                    Triangles.push_back(tri);
-                    tri(Eigen::all, 0) = coords(Eigen::all, 0);
-                    tri(Eigen::all, 1) = coords(Eigen::all, 2);
-                    tri(Eigen::all, 2) = coords(Eigen::all, 3);
-                    Triangles.push_back(tri);
-                }
-                else
-                {
-                    DNDS_assert_info(false, "This elem not implemented yet for GetWallDist()");
+                    index iFace = mesh->bnd2face[iBnd];
+                    auto elem = mesh->GetFaceElement(iFace);
+                    auto quad = vfv->GetFaceQuad(iFace);
+                    if (settings.wallDistScheme == 0)
+                    {
+                        if (elem.type == Geom::Elem::ElemType::Line2 || elem.type == Geom::Elem::ElemType::Line3) //!
+                        {
+                            Geom::tSmallCoords coords;
+                            mesh->GetCoordsOnFace(iFace, coords);
+                            Eigen::Matrix<real, 3, 3> tri;
+                            mesh->GetCoordsOnFace(iFace, coords);
+                            tri(Eigen::all, 0) = coords(Eigen::all, 0);
+                            tri(Eigen::all, 1) = coords(Eigen::all, 1);
+                            tri(Eigen::all, 2) = coords(Eigen::all, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
+                            Triangles.push_back(tri);
+                        }
+                        else if (elem.type == Geom::Elem::ElemType::Tri3 || elem.type == Geom::Elem::ElemType::Tri6) //! TODO
+                        {
+                            Geom::tSmallCoords coords;
+                            mesh->GetCoordsOnFace(iFace, coords);
+                            Eigen::Matrix<real, 3, 3> tri;
+                            tri(Eigen::all, 0) = coords(Eigen::all, 0);
+                            tri(Eigen::all, 1) = coords(Eigen::all, 1);
+                            tri(Eigen::all, 2) = coords(Eigen::all, 2);
+                            Triangles.push_back(tri);
+                        }
+                        else if (elem.type == Geom::Elem::ElemType::Quad4 || elem.type == Geom::Elem::ElemType::Quad9)
+                        {
+                            Geom::tSmallCoords coords;
+                            mesh->GetCoordsOnFace(iFace, coords);
+                            Eigen::Matrix<real, 3, 3> tri;
+                            tri(Eigen::all, 0) = coords(Eigen::all, 0);
+                            tri(Eigen::all, 1) = coords(Eigen::all, 1);
+                            tri(Eigen::all, 2) = coords(Eigen::all, 2);
+                            Triangles.push_back(tri);
+                            tri(Eigen::all, 0) = coords(Eigen::all, 0);
+                            tri(Eigen::all, 1) = coords(Eigen::all, 2);
+                            tri(Eigen::all, 2) = coords(Eigen::all, 3);
+                            Triangles.push_back(tri);
+                        }
+                        else
+                        {
+                            DNDS_assert_info(false, "This elem not implemented yet for GetWallDist()");
+                        }
+                    }
+                    else if (settings.wallDistScheme == 1)
+                    {
+                        auto qPatches = Geom::Elem::GetQuadPatches(quad);
+                        for (auto &qPatch : qPatches)
+                        {
+                            Eigen::Matrix<real, 3, 3> tri;
+                            Geom::tSmallCoords coords;
+                            mesh->GetCoordsOnFace(iFace, coords);
+                            for (int iV = 0; iV < 3; iV++)
+                                if (qPatch[iV] > 0)
+                                    tri(Eigen::all, iV) = coords(Eigen::all, qPatch[iV] - 1);
+                                else if (qPatch[iV] < 0)
+                                    tri(Eigen::all, iV) = vfv->GetFaceQuadraturePPhys(iFace, -qPatch[iV] - 1);
+                                else
+                                    tri(Eigen::all, iV) = coords(Eigen::all, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
+                            Triangles.push_back(tri);
+                        }
+                    }
                 }
             }
-        }
-        TrianglesLocal->Resize(Triangles.size(), 3, 3);
-        for (index i = 0; i < TrianglesLocal->Size(); i++)
-            (*TrianglesLocal)[i] = Triangles[i];
-        Triangles.clear();
-        ArrayTransformerType<TriArray>::Type TrianglesTransformer;
-        TrianglesTransformer.setFatherSon(TrianglesLocal, TrianglesFull);
-        TrianglesTransformer.createFatherGlobalMapping();
+            TrianglesLocal->Resize(Triangles.size(), 3, 3);
+            for (index i = 0; i < TrianglesLocal->Size(); i++)
+                (*TrianglesLocal)[i] = Triangles[i];
+            Triangles.clear();
+            ArrayTransformerType<TriArray>::Type TrianglesTransformer;
+            TrianglesTransformer.setFatherSon(TrianglesLocal, TrianglesFull);
+            TrianglesTransformer.createFatherGlobalMapping();
 
-        std::vector<index> pullingSet;
-        pullingSet.resize(TrianglesTransformer.pLGlobalMapping->globalSize());
-        for (index i = 0; i < pullingSet.size(); i++)
-            pullingSet[i] = i;
-        TrianglesTransformer.createGhostMapping(pullingSet);
-        TrianglesTransformer.createMPITypes();
-        TrianglesTransformer.pullOnce();
-        if (mesh->coords.father->getMPI().rank == 0)
-            log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() with minWallDist = {:.4e}, ", settings.minWallDist)
-                  << " To search in " << TrianglesFull->Size() << std::endl;
+            std::vector<index> pullingSet;
+            pullingSet.resize(TrianglesTransformer.pLGlobalMapping->globalSize());
+            for (index i = 0; i < pullingSet.size(); i++)
+                pullingSet[i] = i;
+            TrianglesTransformer.createGhostMapping(pullingSet);
+            TrianglesTransformer.createMPITypes();
+            TrianglesTransformer.pullOnce();
+            if (mesh->coords.father->getMPI().rank == 0)
+                log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() with minWallDist = {:.4e}, ", settings.minWallDist)
+                      << " To search in " << TrianglesFull->Size() << std::endl;
 
-        typedef CGAL::Simple_cartesian<double> K;
-        typedef K::FT FT;
-        // typedef K::Ray_3 Ray;
-        // typedef K::Line_3 Line;
-        typedef K::Point_3 Point;
-        typedef K::Triangle_3 Triangle;
-        typedef std::vector<Triangle>::iterator Iterator;
-        typedef CGAL::AABB_triangle_primitive<K, Iterator> Primitive;
-        typedef CGAL::AABB_traits<K, Primitive> AABB_triangle_traits;
-        typedef CGAL::AABB_tree<AABB_triangle_traits> Tree;
+            typedef CGAL::Simple_cartesian<double> K;
+            typedef K::FT FT;
+            // typedef K::Ray_3 Ray;
+            // typedef K::Line_3 Line;
+            typedef K::Point_3 Point;
+            typedef K::Triangle_3 Triangle;
+            typedef std::vector<Triangle>::iterator Iterator;
+            typedef CGAL::AABB_triangle_primitive<K, Iterator> Primitive;
+            typedef CGAL::AABB_traits<K, Primitive> AABB_triangle_traits;
+            typedef CGAL::AABB_tree<AABB_triangle_traits> Tree;
 
-        std::vector<Triangle> triangles;
-        triangles.reserve(TrianglesFull->Size());
+            std::vector<Triangle> triangles;
+            triangles.reserve(TrianglesFull->Size());
 
-        for (index i = 0; i < TrianglesFull->Size(); i++)
-        {
-            Point p0((*TrianglesFull)[i](0, 0), (*TrianglesFull)[i](1, 0), (*TrianglesFull)[i](2, 0));
-            Point p1((*TrianglesFull)[i](0, 1), (*TrianglesFull)[i](1, 1), (*TrianglesFull)[i](2, 1));
-            Point p2((*TrianglesFull)[i](0, 2), (*TrianglesFull)[i](1, 2), (*TrianglesFull)[i](2, 2));
-            triangles.push_back(Triangle(p0, p1, p2));
-        }
-        TrianglesLocal->Resize(0, 3, 3);
-        TrianglesFull->Resize(0, 3, 3);
-        double minDist = veryLargeReal;
-        this->dWall.resize(mesh->NumCellProc());
-
-        if (!triangles.empty())
-        {
-            // std::cout << "tree building" << std::endl;
-            Tree tree(triangles.begin(), triangles.end());
-
-            // std::cout << "tree built" << std::endl;
-            // search
-
-            for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+            for (index i = 0; i < TrianglesFull->Size(); i++)
             {
-                // std::cout << "iCell " << iCell << std::endl;
-                auto quadCell = vfv->GetCellQuad(iCell);
-                dWall[iCell].resize(quadCell.GetNumPoints());
-                for (int ig = 0; ig < quadCell.GetNumPoints(); ig++)
+                Point p0((*TrianglesFull)[i](0, 0), (*TrianglesFull)[i](1, 0), (*TrianglesFull)[i](2, 0));
+                Point p1((*TrianglesFull)[i](0, 1), (*TrianglesFull)[i](1, 1), (*TrianglesFull)[i](2, 1));
+                Point p2((*TrianglesFull)[i](0, 2), (*TrianglesFull)[i](1, 2), (*TrianglesFull)[i](2, 2));
+                triangles.push_back(Triangle(p0, p1, p2));
+            }
+            TrianglesLocal->Resize(0, 3, 3);
+            TrianglesFull->Resize(0, 3, 3);
+            double minDist = veryLargeReal;
+            this->dWall.resize(mesh->NumCellProc());
+
+            if (!triangles.empty())
+            {
+                // std::cout << "tree building" << std::endl;
+                Tree tree(triangles.begin(), triangles.end());
+
+                // std::cout << "tree built" << std::endl;
+                // search
+
+                for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
                 {
-                    // std::cout << "iG " << ig << std::endl;
-                    auto p = vfv->GetCellQuadraturePPhys(iCell, ig);
-                    Point pQ(p[0], p[1], p[2]);
-                    // std::cout << "pQ " << pQ << std::endl;
-                    // Point closest_point = tree.closest_point(pQ);
-                    FT sqd = tree.squared_distance(pQ);
-                    // std::cout << "sqd" << sqd << std::endl;
-                    dWall[iCell][ig] = std::sqrt(sqd);
-                    // dWall[iCell][ig] = p(0) < 0 ? p({0, 1}).norm() : p(1); // test for plate BL
-                    if (dWall[iCell][ig] < minDist)
-                        minDist = dWall[iCell][ig];
-                    dWall[iCell][ig] = std::max(settings.minWallDist, dWall[iCell][ig]);
+                    // std::cout << "iCell " << iCell << std::endl;
+                    auto quadCell = vfv->GetCellQuad(iCell);
+                    dWall[iCell].resize(quadCell.GetNumPoints());
+                    for (int ig = 0; ig < quadCell.GetNumPoints(); ig++)
+                    {
+                        // std::cout << "iG " << ig << std::endl;
+                        auto p = vfv->GetCellQuadraturePPhys(iCell, ig);
+                        Point pQ(p[0], p[1], p[2]);
+                        // std::cout << "pQ " << pQ << std::endl;
+                        // Point closest_point = tree.closest_point(pQ);
+                        FT sqd = tree.squared_distance(pQ);
+                        // std::cout << "sqd" << sqd << std::endl;
+                        dWall[iCell][ig] = std::sqrt(sqd);
+                        // dWall[iCell][ig] = p(0) < 0 ? p({0, 1}).norm() : p(1); // test for plate BL
+                        if (dWall[iCell][ig] < minDist)
+                            minDist = dWall[iCell][ig];
+                        dWall[iCell][ig] = std::max(settings.minWallDist, dWall[iCell][ig]);
+                    }
                 }
             }
-        }
-        else
-        {
-            for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+            else
             {
-                // std::cout << "iCell " << iCell << std::endl;
-                auto quadCell = vfv->GetCellQuad(iCell);
-                dWall[iCell].setConstant(quadCell.GetNumPoints(), std::pow(veryLargeReal, 1. / 4.));
+                for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+                {
+                    // std::cout << "iCell " << iCell << std::endl;
+                    auto quadCell = vfv->GetCellQuad(iCell);
+                    dWall[iCell].setConstant(quadCell.GetNumPoints(), std::pow(veryLargeReal, 1. / 4.));
+                }
             }
+            std::cout << "MinDist: " << minDist << std::endl;
         }
-        std::cout << "MinDist: " << minDist << std::endl;
+        else if (settings.wallDistScheme == 2)
+        {
+        }
     }
 
     // Eigen::Vector<real, -1> EulerEvaluator::CompressRecPart(
@@ -424,6 +452,11 @@ namespace DNDS::Euler
             k,
             settings.idealGasProperty.CpGas,
             VisFlux);
+        if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
+            pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
+        {
+            // VisFlux *= 0.0;
+        }
 
         // if (mesh->face2cellLocal[iFace][0] == 10756)
         // {
@@ -521,8 +554,17 @@ namespace DNDS::Euler
 
 #endif
         }
-        if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis)
+        if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis||
+            pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
         {
+            // UR(Seq123) = UL(Seq123);
+            // UR(1) = -UL(1);
+            // DNDS_assert_info(std::abs(unitNorm(1) - 1) < 1e-10 && std::abs(unitNorm(0)) < 1e-5,
+            //                  [&]()
+            //                  {
+            //                      std::cerr << unitNorm.transpose() << std::endl;
+            //                      return "";
+            //                  }());
         }
 
         auto RSWrapper = [&](Gas::RiemannSolverType rsType, auto &UL, auto &UR, auto &ULm, auto &URm, real gamma, auto &finc, real dLambda)

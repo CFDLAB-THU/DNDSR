@@ -262,6 +262,9 @@ namespace DNDS::Euler
 
                 bool serializerSaveURec = false;
 
+                int rectifyNearPlane = 0; // 1: x 2: y 4: z
+                real rectifyNearPlaneThres = 1e-10;
+
                 const std::string &getOutLogName()
                 {
                     return outLogName.empty() ? outPltName : outLogName;
@@ -296,7 +299,8 @@ namespace DNDS::Euler
                     outVolumeData,
                     outBndData,
                     outCellScalarNames,
-                    serializerSaveURec)
+                    serializerSaveURec,
+                    rectifyNearPlane, rectifyNearPlaneThres)
             } dataIOControl;
 
             struct BoundaryDefinition
@@ -430,7 +434,7 @@ namespace DNDS::Euler
             {
                 vfvSettings = CFV::VRSettings{gDim};
                 EulerEvaluatorSettings<model>().ReadWriteJSON(eulerSettings, nVars, false);
-                bcSettings = BoundaryHandler<model>();
+                bcSettings = BoundaryHandler<model>(nVars);
             }
 
         } config = Configuration{};
@@ -500,10 +504,11 @@ namespace DNDS::Euler
 
             int gDimLocal = gDim; //! or else the linker breaks down here (with clang++ or g++, -g -O0,2; c++ non-optimizer bug?)
 
-            DNDS_MAKE_SSP(pBCHandler);
+            DNDS_MAKE_SSP(pBCHandler, nVars);
             auto &BCHandler = *pBCHandler;
             // using tBC = typename BoundaryHandler<model>;
-            BCHandler = config.bcSettings;
+            // BCHandler = config.bcSettings; // using from_json()
+            from_json(config.bcSettings, BCHandler);
 
             DNDS_MAKE_SSP(mesh, mpi, gDimLocal);
             DNDS_MAKE_SSP(meshBnd, mpi, gDimLocal - 1);
@@ -576,7 +581,8 @@ namespace DNDS::Euler
                         auto bType = pBCHandler->GetTypeFromID(bndId);
                         if (bType == BCWall)
                             return true;
-                        if (config.dataIOControl.meshElevationBoundaryMode == 1 && bType == BCWallInvis)
+                        if (config.dataIOControl.meshElevationBoundaryMode == 1 &&
+                            (bType == BCWallInvis || bType == BCSym))
                             return true;
                         return false;
                     });
@@ -670,6 +676,53 @@ namespace DNDS::Euler
                 for (auto &i : mesh->periodicInfo.rotationCenter)
                     i *= scale;
             }
+            if (config.dataIOControl.rectifyNearPlane)
+            {
+                auto fTrans = [&](const Geom::tPoint &p)
+                {
+                    Geom::tPoint ret = p;
+                    if (config.dataIOControl.rectifyNearPlane & 1)
+                        if (std::abs(ret(0)) < config.dataIOControl.rectifyNearPlaneThres)
+                            ret(0) = 0;
+                    if (config.dataIOControl.rectifyNearPlane & 2)
+                        if (std::abs(ret(1)) < config.dataIOControl.rectifyNearPlaneThres)
+                            ret(1) = 0;
+                    if (config.dataIOControl.rectifyNearPlane & 4)
+                        if (std::abs(ret(2)) < config.dataIOControl.rectifyNearPlaneThres)
+                            ret(2) = 0;
+                    return ret;
+                };
+                mesh->TransformCoords(fTrans);
+                meshBnd->TransformCoords(fTrans);
+            }
+            { //* symBnd's rectifying: !  altering mesh
+                for (index iB = 0; iB < mesh->NumBnd(); iB++)
+                {
+                    index iFace = mesh->bnd2face.at(iB);
+                    auto bndID = mesh->bndElemInfo(iB, 0).zone;
+                    EulerBCType bndType = pBCHandler->GetTypeFromID(bndID);
+                    if (bndType == BCSym)
+                    {
+                        auto rectifyOpt = pBCHandler->GetFlagFromID(bndID, "rectifyOpt");
+                        if (rectifyOpt >= 1 && rectifyOpt <= 3)
+                            for (auto iNode : mesh->bnd2node[iB])
+                                mesh->coords[iNode](rectifyOpt - 1) = 0.0;
+                    }
+                }
+                mesh->coords.trans.pullOnce();
+                for(index iB = 0; iB < meshBnd->NumCell(); iB++)
+                {
+                    auto bndID = meshBnd->cellElemInfo(iB, 0).zone;
+                    EulerBCType bndType = pBCHandler->GetTypeFromID(bndID);
+                    if (bndType == BCSym)
+                    {
+                        auto rectifyOpt = pBCHandler->GetFlagFromID(bndID, "rectifyOpt");
+                        if (rectifyOpt >= 1 && rectifyOpt <= 3)
+                            for (auto iNode : meshBnd->cell2node[iB])
+                                meshBnd->coords[iNode](rectifyOpt - 1) = 0.0;
+                    }
+                }
+            }
             /// @todo //todo: upgrade to optional
             if (config.dataIOControl.outPltMode == 0)
                 reader->coordSerialOutTrans.pullOnce(),
@@ -691,7 +744,7 @@ namespace DNDS::Euler
                             return 0;
                         return 1;
                     }
-                    if (type == BCWallInvis)
+                    if (type == BCWallInvis || type == BCSym)
                     {
                         // // suppress higher order
                         // return 1;
