@@ -995,7 +995,7 @@ namespace DNDS::Euler
                 {
                     if (eInternalS(iG) < 2 * pEps)
                     {
-                        real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
+                        real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
                             recBase(iG, Eigen::all).transpose(), recInc(iG, Eigen::all).transpose(),
                             pEps);
                         thetaP = std::min(thetaP, thetaThis);

@@ -839,6 +839,13 @@ namespace DNDS::Euler::Gas
             if (alpha < smallReal)
                 alpha = 0;
         }
+        else if constexpr (scheme == 1)
+        {
+            // has used convex
+            alpha *= (1 - 1e-5);
+            if (alpha < smallReal)
+                alpha = 0;
+        }
 
         ret *= alpha;
 

@@ -1471,7 +1471,7 @@ namespace DNDS::Euler
             MPI::Allreduce(&alpha_fix_min_c, &alpha_fix_min, 1, DNDS_MPI_REAL, MPI_MIN, cx.father->getMPI().comm);
             if (alpha_fix_min < 1.0)
                 if (cx.father->getMPI().rank == 0)
-                    std::cout << "Increment fixed " << std::scientific << std::setprecision(5) << alpha_fix_min << std::endl;
+                    log() << TermColor::Magenta << "Increment fixed " << std::scientific << std::setprecision(5) << alpha_fix_min << TermColor::Reset << std::endl;
         }
 
         // void AddFixedIncrement(
