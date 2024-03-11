@@ -6,6 +6,42 @@ wg = wg / 2^2 / 2;
 %%
 [xg, wg] = GaussLegendre(5)
 
+%% Hammer Tri 3
+xs = [2. / 3., 1. / 6., 1. / 6.];
+ys = [1. / 6., 2. / 3., 1. / 6.];
+ws = [1. / 6., 1. / 6., 1. / 6.];
+
+
+ plot(xs,ys,'o');
+ text(xs,ys,compose("%d",1:numel(xs)))
+fprintf("{\n{");
+fprintf("%.16g", xs(1));
+fprintf(",%.16g", xs(2:end));
+fprintf("},\n{");
+fprintf("%.16g", ys(1));
+fprintf(",%.16g", ys(2:end));
+fprintf("},\n{");
+fprintf("%.16g", ws(1));
+fprintf(",%.16g", ws(2:end));
+fprintf("}};\n");
+
+%% Hammer Tri 6
+xs = [0.09157621350977102, 0.8168475729804585, 0.09157621350977052, 0.445948490915965, 0.10810301816807, 0.445948490915965];
+ys = [0.09157621350977102, 0.09157621350977052, 0.8168475729804585, 0.445948490915965, 0.445948490915965, 0.10810301816807];
+ws = [0.1125, 0.066197076394253, 0.066197076394253, 0.066197076394253, 0.0629695902724135, 0.0629695902724135, 0.0629695902724135];
+ 
+plot(xs,ys,'o');
+ text(xs,ys,compose("%d",1:numel(xs)))
+fprintf("{\n{");
+fprintf("%.16g", xs(1));
+fprintf(",%.16g", xs(2:end));
+fprintf("},\n{");
+fprintf("%.16g", ys(1));
+fprintf(",%.16g", ys(2:end));
+fprintf("},\n{");
+fprintf("%.16g", ws(1));
+fprintf(",%.16g", ws(2:end));
+fprintf("}};\n");
 %% Hammer Tri 7
 
 xs = [-0.333333333333333
@@ -34,6 +70,7 @@ ys = (ys + 1)/2;
 ws = ws/4;
 
  plot(xs,ys,'o');
+  text(xs,ys,compose("%d",1:numel(xs)))
 fprintf("{\n{");
 fprintf("%.16g", xs(1));
 fprintf(",%.16g", xs(2:end));
@@ -125,6 +162,7 @@ ys = (ys + 1)/2;
 ws = ws/4;
 
  plot(xs,ys,'o');
+ text(xs,ys,compose("%d",1:numel(xs)));
 fprintf("{\n{");
 fprintf("%.16g", xs(1));
 fprintf(",%.16g", xs(2:end));

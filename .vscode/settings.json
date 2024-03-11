@@ -169,7 +169,8 @@
         "cstdatomic": "cpp",
         "hashtable": "cpp",
         "sparselu": "cpp",
-        "sparse": "cpp"
+        "sparse": "cpp",
+        "resumable": "cpp"
     },
     "cSpell.words": [
         "Bary",

@@ -948,6 +948,7 @@ namespace DNDS::Geom
                     if (isPeriodic)
                         face2nodePbiV.emplace_back(faceNodePeriodicBits);
                     face2cellV.emplace_back(std::make_pair(iCell, DNDS::UnInitIndex));
+                    // important note: f2nPbi node pbi is always same as cell f2c[0]'s corresponding nodes
                     faceElemInfoV.emplace_back(ElemInfo{eFace.type, 0});
                     for (auto iV : faceVerts)
                         node2face[iV].push_back(nFaces);

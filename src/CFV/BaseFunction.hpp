@@ -2,6 +2,7 @@
 
 #include "DNDS/Defines.hpp"
 #include "Geom/EigenTensor.hpp"
+#include "Geom/PeriodicInfo.hpp"
 
 namespace DNDS::CFV
 {
@@ -861,6 +862,7 @@ namespace DNDS::CFV
                 break;
 
             default:
+                std::cerr << mat.rows() << std::endl;
                 DNDS_assert(false);
                 break;
             }
@@ -917,5 +919,39 @@ namespace DNDS::CFV
         }
         return maxNDOF;
     }
-}
 
+    class CFVPeriodicity : public Geom::Periodicity
+    {
+    public:
+        using tBase = Geom::Periodicity;
+        using tBase::tBase;
+
+        CFVPeriodicity(const tBase &vBase) : tBase(vBase) {} // copy from tBase
+
+        template <int dim, class TU>
+        void TransDiValueInplace(TU &u, Geom::t_index id)
+        {
+            using namespace Geom;
+            DNDS_assert(FaceIDIsPeriodic(id));
+            t_index i{0};
+            if (FaceIDIsPeriodicDonor(id))
+                i = -id - 3;
+            else
+                i = -id;
+            ConvertDiffsLinMap<dim>(u, rotation[i]);
+        }
+
+        template <int dim, class TU>
+        void TransDiValueBackInplace(TU &u, Geom::t_index id)
+        {
+            using namespace Geom;
+            DNDS_assert(FaceIDIsPeriodic(id));
+            t_index i{0};
+            if (FaceIDIsPeriodicDonor(id))
+                i = -id - 3;
+            else
+                i = -id;
+            ConvertDiffsLinMap<dim>(u, rotation[i].transpose());
+        }
+    };
+}

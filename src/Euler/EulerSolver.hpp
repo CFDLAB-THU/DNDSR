@@ -308,6 +308,12 @@ namespace DNDS::Euler
                 Eigen::Vector<real, -1> PeriodicTranslation1;
                 Eigen::Vector<real, -1> PeriodicTranslation2;
                 Eigen::Vector<real, -1> PeriodicTranslation3;
+                Eigen::Vector<real, -1> PeriodicRotationCent1;
+                Eigen::Vector<real, -1> PeriodicRotationCent2;
+                Eigen::Vector<real, -1> PeriodicRotationCent3;
+                Eigen::Vector<real, -1> PeriodicRotationEulerAngles1;
+                Eigen::Vector<real, -1> PeriodicRotationEulerAngles2;
+                Eigen::Vector<real, -1> PeriodicRotationEulerAngles3;
                 BoundaryDefinition()
                 {
                     PeriodicTranslation1.resize(3);
@@ -316,13 +322,25 @@ namespace DNDS::Euler
                     PeriodicTranslation1 << 1, 0, 0;
                     PeriodicTranslation2 << 0, 1, 0;
                     PeriodicTranslation3 << 0, 0, 1;
+                    PeriodicRotationCent1.setZero(3);
+                    PeriodicRotationCent2.setZero(3);
+                    PeriodicRotationCent3.setZero(3);
+                    PeriodicRotationEulerAngles1.setZero(3);
+                    PeriodicRotationEulerAngles2.setZero(3);
+                    PeriodicRotationEulerAngles3.setZero(3);
                 }
 
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     BoundaryDefinition,
                     PeriodicTranslation1,
                     PeriodicTranslation2,
-                    PeriodicTranslation3)
+                    PeriodicTranslation3,
+                    PeriodicRotationCent1,
+                    PeriodicRotationCent2,
+                    PeriodicRotationCent3,
+                    PeriodicRotationEulerAngles1,
+                    PeriodicRotationEulerAngles2,
+                    PeriodicRotationEulerAngles3)
             } boundaryDefinition;
 
             struct LimiterControl
@@ -520,6 +538,21 @@ namespace DNDS::Euler
             mesh->periodicInfo.translation[1] = config.boundaryDefinition.PeriodicTranslation1;
             mesh->periodicInfo.translation[2] = config.boundaryDefinition.PeriodicTranslation2;
             mesh->periodicInfo.translation[3] = config.boundaryDefinition.PeriodicTranslation3;
+            mesh->periodicInfo.rotationCenter[1] = config.boundaryDefinition.PeriodicRotationCent1;
+            mesh->periodicInfo.rotationCenter[2] = config.boundaryDefinition.PeriodicRotationCent2;
+            mesh->periodicInfo.rotationCenter[3] = config.boundaryDefinition.PeriodicRotationCent3;
+            mesh->periodicInfo.rotation[1] =
+                Geom::RotZ(config.boundaryDefinition.PeriodicRotationEulerAngles1[2]) *
+                Geom::RotY(config.boundaryDefinition.PeriodicRotationEulerAngles1[1]) *
+                Geom::RotX(config.boundaryDefinition.PeriodicRotationEulerAngles1[0]);
+            mesh->periodicInfo.rotation[2] =
+                Geom::RotZ(config.boundaryDefinition.PeriodicRotationEulerAngles2[2]) *
+                Geom::RotY(config.boundaryDefinition.PeriodicRotationEulerAngles2[1]) *
+                Geom::RotX(config.boundaryDefinition.PeriodicRotationEulerAngles2[0]);
+            mesh->periodicInfo.rotation[3] =
+                Geom::RotZ(config.boundaryDefinition.PeriodicRotationEulerAngles3[2]) *
+                Geom::RotY(config.boundaryDefinition.PeriodicRotationEulerAngles3[1]) *
+                Geom::RotX(config.boundaryDefinition.PeriodicRotationEulerAngles3[0]);
 
             if (config.dataIOControl.readMeshMode == 0)
             {
@@ -710,7 +743,7 @@ namespace DNDS::Euler
                     }
                 }
                 mesh->coords.trans.pullOnce();
-                for(index iB = 0; iB < meshBnd->NumCell(); iB++)
+                for (index iB = 0; iB < meshBnd->NumCell(); iB++)
                 {
                     auto bndID = meshBnd->cellElemInfo(iB, 0).zone;
                     EulerBCType bndType = pBCHandler->GetTypeFromID(bndID);
@@ -729,6 +762,17 @@ namespace DNDS::Euler
                     readerBnd->coordSerialOutTrans.pullOnce();
 
             DNDS_MAKE_SSP(vfv, mpi, mesh);
+            vfv->SetPeriodicTransformations(
+                [&](auto u, Geom::t_index id)
+                {
+                    DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+                    u(Eigen::all, Seq123) = mesh->periodicInfo.TransVector<dim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
+                },
+                [&](auto u, Geom::t_index id)
+                {
+                    DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+                    u(Eigen::all, Seq123) = mesh->periodicInfo.TransVectorBack<dim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
+                });
             vfv->settings.ParseFromJson(config.vfvSettings);
             vfv->ConstructMetrics();
             vfv->ConstructBaseAndWeight(
@@ -752,6 +796,12 @@ namespace DNDS::Euler
                         if (iOrder > 0)
                             return 0;
                         return 1;
+                    }
+                    if(Geom::FaceIDIsPeriodic(id))
+                    {
+                        if (iOrder > 0)
+                            return 1;
+                        return 1; //! treat as real internal
                     }
                     // others: use Dirichlet type
                     if (iOrder > 0)

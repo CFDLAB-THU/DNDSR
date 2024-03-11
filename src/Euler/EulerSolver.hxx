@@ -685,7 +685,7 @@ namespace DNDS::Euler
                 if (nLimFRes)
                     if (mpi.rank == 0)
                     {
-                        log() << std::scientific << std::setw(3) << TermColor::Red;
+                        log() << std::scientific << std::setprecision(config.outputControl.nPrecisionConsole) << std::setw(3) << TermColor::Red;
                         log() << "PPFResLimiter: nLimFRes[" << nLimFRes << "] minAlpha [" << alphaMinFRes << "]" << TermColor::Reset << std::endl;
                     }
 
@@ -1092,7 +1092,7 @@ namespace DNDS::Euler
                     log() << fmt::format(
                         "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   "s +
                             "res {termRed}{resRel:.3e}{termReset}   "s +
-                            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   "s +
+                            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   "s +
                             "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]" +
                             "  "s +
                             (config.outputControl.consoleOutputMode == 1

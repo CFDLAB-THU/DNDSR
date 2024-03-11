@@ -351,6 +351,22 @@ namespace DNDS::Euler
                 u(Seq123) = mesh->periodicInfo.TransVectorBack(Eigen::Vector<real, dim>{u(Seq123)}, faceID);
         }
 
+        void UFromOtherCell(TU &u, index iFace, index iCell, index iCellOther, rowsize if2c)
+        {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+            if (!mesh->isPeriodic)
+                return;
+            auto faceID = mesh->GetFaceZone(iFace);
+            if (!Geom::FaceIDIsPeriodic(faceID))
+                return;
+            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
+                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
+                u(Seq123) = mesh->periodicInfo.TransVector(Eigen::Vector<real, dim>{u(Seq123)}, faceID);
+            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
+                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
+                u(Seq123) = mesh->periodicInfo.TransVectorBack(Eigen::Vector<real, dim>{u(Seq123)}, faceID);
+        }
+
         void DiffUFromCell2Face(TDiffU &u, index iFace, index iCell, rowsize if2c)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS

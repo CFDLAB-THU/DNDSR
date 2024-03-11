@@ -668,6 +668,7 @@ namespace DNDS::CFV
                 break;
             }
 
+            // if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)) || FaceIDIsPeriodic(mesh->GetFaceZone(iFace)))
             if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)))
             {
                 for (int iOrder = 0; iOrder <= settings.maxOrder; iOrder++)
@@ -834,6 +835,7 @@ namespace DNDS::CFV
                 auto qFace = this->GetFaceQuad(iFace);
                 index iCellOther = CellFaceOther(iCell, iFace);
                 int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                auto faceID = mesh->GetFaceZone(iFace);
                 if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)))
                 {
                     DNDS_assert(iCellOther == UnInitIndex);
@@ -848,6 +850,20 @@ namespace DNDS::CFV
                     {
                         decltype(B) DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, Eigen::all);
                         decltype(B) DiffJ = this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, iG, Eigen::all);
+                        if (mesh->isPeriodic)
+                        {
+                            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
+                                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
+                            {
+                                periodicity.TransDiValueInplace<dim>(DiffJ, faceID);
+                            }
+                            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
+                                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
+                            {
+                                periodicity.TransDiValueBackInplace<dim>(DiffJ, faceID);
+                            }
+                        }
+
                         vInc = this->FFaceFunctional(DiffI, DiffJ, iFace, iG, iCell, iCellOther);
                         vInc *= this->GetFaceJacobiDet(iFace, iG);
                     });

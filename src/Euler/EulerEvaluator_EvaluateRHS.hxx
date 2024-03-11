@@ -137,7 +137,6 @@ namespace DNDS::Euler
                     if (f2c[1] != UnInitIndex)
                     {
                         URxy = u[f2c[1]];
-                        this->UFromCell2Face(URxy, iFace, f2c[1], 1);
                         if (!faceOrderReducedR)
                         {
                             URxy +=
@@ -146,6 +145,7 @@ namespace DNDS::Euler
                                     .transpose() *
                                 IF_NOT_NOREC;
                         }
+                        this->UFromCell2Face(URxy, iFace, f2c[1], 1);
 
                         URMeanXy = u[f2c[1]];
                         this->UFromCell2Face(URMeanXy, iFace, f2c[1], 1);

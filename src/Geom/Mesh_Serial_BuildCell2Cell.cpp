@@ -106,7 +106,9 @@ namespace DNDS::Geom
                 DNDS_assert_info(nResults == 1, "Tree Search of periodic result number not 1");
 
                 // std::cout << outDistancesSqr[0] << std::endl;
-                DNDS_assert_info(outDistancesSqr[0] < sqr(search_eps), "nearest neighbour not matching under the threshold");
+                DNDS_assert_info(outDistancesSqr[0] < sqr(search_eps),
+                                 fmt::format("nearest neighbour dist{} not matching under the threshold",
+                                             outDistancesSqr[0]));
                 index donorIBnd{-1};
                 if (faceID == BC_ID_PERIODIC_1)
                     donorIBnd = periodicDonorIBnd1.at(outIndices[0]), periodicMainToDonor1[iBnd] = donorIBnd;
@@ -220,7 +222,7 @@ namespace DNDS::Geom
         {
             while (iNodeOld2New.at(iNode) < 0)
                 iNode = -1 - iNodeOld2New[iNode];
-            return iNodeOld2New.at(iNode); //recursive tracker 
+            return iNodeOld2New.at(iNode); // recursive tracker
         };
 
         for (index i = 0; i < cell2nodeSerial->Size(); i++)

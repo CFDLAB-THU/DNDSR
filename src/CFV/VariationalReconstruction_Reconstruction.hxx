@@ -32,12 +32,28 @@ namespace DNDS
                     {
                         index iFace = c2f[ic2f];
                         index iCellOther = CellFaceOther(iCell, iFace);
+                        auto faceID = mesh->GetFaceZone(iFace);
+                        int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
 
                         if (iCellOther != UnInitIndex)
                         {
-                            grad += (u[iCellOther] - u[iCell]) * 0.5 *
-                                    this->GetFaceNorm(iFace, -1)(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>)).transpose() *
-                                    this->GetFaceArea(iFace) * (CellIsFaceBack(iCell, iFace) ? 1. : -1.);
+                            Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther].transpose();
+                            if (mesh->isPeriodic)
+                            {
+                                DNDS_assert(FTransPeriodic && FTransPeriodicBack);
+                                if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
+                                    (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
+                                    FTransPeriodic(uOther, faceID);
+                                if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
+                                    (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
+                                    FTransPeriodicBack(uOther, faceID);
+                            }
+                            Eigen::Matrix<real, nVarsFixed, dim> gradInc =
+                                (uOther.transpose() - u[iCell]) * 0.5 *
+                                this->GetFaceNormFromCell(iFace, iCell, -1, -1)(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>)).transpose() *
+                                this->GetFaceArea(iFace) * (CellIsFaceBack(iCell, iFace) ? 1. : -1.);
+
+                            grad += gradInc;
                         }
                         else
                         {
@@ -65,6 +81,11 @@ namespace DNDS
                     }
 
                     grad /= GetCellVol(iCell);
+                    // tPoint cellBary = GetCellBary(iCell);
+                    // Eigen::MatrixXd vvv = (grad * (Geom::RotZ(90) * cellBary)(Eigen::seq(0, dim - 1))).transpose();
+                    // std::cout << cellBary.transpose() << " ---- " << vvv << std::endl;
+                    // DNDS_assert(vvv(0) < 1e-10);
+
                     Eigen::Matrix<real, dim, dim> d1bv;
                     if constexpr (dim == 2)
                         d1bv =
@@ -87,7 +108,7 @@ namespace DNDS
                     // std::abort();
                 }
             }
-            else if (method == 2)
+            else if (method == 2) //! warning, periodic not implemented here
             {
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
@@ -209,22 +230,36 @@ namespace DNDS
                 {
                     index iFace = c2f[ic2f];
                     index iCellOther = CellFaceOther(iCell, iFace);
+                    auto faceID = mesh->GetFaceZone(iFace);
+                    int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
                     if (iCellOther != UnInitIndex)
                     {
+                        Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther];
+                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOther = uRec[iCellOther];
+                        if (mesh->isPeriodic)
+                        {
+                            DNDS_assert(FTransPeriodic && FTransPeriodicBack);
+                            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
+                                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
+                                FTransPeriodic(uOther, faceID), FTransPeriodic(uRecOther, faceID);
+                            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
+                                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
+                                FTransPeriodicBack(uOther, faceID), FTransPeriodicBack(uRecOther, faceID);
+                        }
                         if (recordInc)
                             uRecNew[iCell] -=
-                                (matrixAAInvBRow[ic2f + 1] * uRec[iCellOther] +
-                                 vectorAInvBRow[ic2f] * (u[iCellOther] - u[iCell]).transpose());
+                                (matrixAAInvBRow[ic2f + 1] * uRecOther +
+                                 vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
                         else if (settings.SORInstead)
                             uRec[iCell] +=
                                 relax *
-                                (matrixAAInvBRow[ic2f + 1] * uRec[iCellOther] +
-                                 vectorAInvBRow[ic2f] * (u[iCellOther] - u[iCell]).transpose());
+                                (matrixAAInvBRow[ic2f + 1] * uRecOther +
+                                 vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
                         else
                             uRecNew[iCell] +=
                                 relax *
-                                (matrixAAInvBRow[ic2f + 1] * uRec[iCellOther] +
-                                 vectorAInvBRow[ic2f] * (u[iCellOther] - u[iCell]).transpose());
+                                (matrixAAInvBRow[ic2f + 1] * uRecOther +
+                                 vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
                     }
                     else
                     {
@@ -326,9 +361,22 @@ namespace DNDS
                 {
                     index iFace = c2f[ic2f];
                     index iCellOther = CellFaceOther(iCell, iFace);
+                    auto faceID = mesh->GetFaceZone(iFace);
+                    int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
                     if (iCellOther != UnInitIndex)
                     {
-                        uRecNew[iCell] -= matrixAAInvBRow[ic2f + 1] * uRecDiff[iCellOther]; // mind the sign
+                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOtherDiff = uRecDiff[iCellOther];
+                        if (mesh->isPeriodic)
+                        {
+                            DNDS_assert(FTransPeriodic && FTransPeriodicBack);
+                            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
+                                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
+                                FTransPeriodic(uRecOtherDiff, faceID);
+                            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
+                                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
+                                FTransPeriodicBack(uRecOtherDiff, faceID);
+                        }
+                        uRecNew[iCell] -= matrixAAInvBRow[ic2f + 1] * uRecOtherDiff; // mind the sign
                     }
                     else
                     {
@@ -414,10 +462,22 @@ namespace DNDS
                 {
                     index iFace = c2f[ic2f];
                     index iCellOther = CellFaceOther(iCell, iFace);
-
+                    auto faceID = mesh->GetFaceZone(iFace);
+                    int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
                     if (iCellOther != UnInitIndex)
                     {
-                        uRecNew[iCell] += relax * matrixAAInvBRow[ic2f + 1] * uRecNew[iCellOther]; // mind the sign
+                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOtherNew = uRecNew[iCellOther];
+                        if (mesh->isPeriodic)
+                        {
+                            DNDS_assert(FTransPeriodic && FTransPeriodicBack);
+                            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
+                                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
+                                FTransPeriodic(uRecOtherNew, faceID);
+                            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
+                                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
+                                FTransPeriodicBack(uRecOtherNew, faceID);
+                        }
+                        uRecNew[iCell] += relax * matrixAAInvBRow[ic2f + 1] * uRecOtherNew; // mind the sign
                     }
                     else
                     {

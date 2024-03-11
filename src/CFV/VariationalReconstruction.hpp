@@ -29,6 +29,7 @@ namespace DNDS::CFV
         MPIInfo mpi;
         VRSettings settings = VRSettings{dim};
         std::shared_ptr<Geom::UnstructuredMesh> mesh;
+        using TFTrans = std::function<void(Eigen::Ref<Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>>, Geom::t_index)>;
 
     private:
         real sumVolume{0}, minVolume{veryLargeReal}, maxVolume{0};
@@ -70,12 +71,22 @@ namespace DNDS::CFV
         std::vector<Eigen::MatrixXd> volIntCholeskyL;
         std::vector<Eigen::MatrixXd> matrixACholeskyL;
 
+        CFVPeriodicity periodicity;
+        TFTrans FTransPeriodic, FTransPeriodicBack;
+
     public:
         VariationalReconstruction(MPIInfo nMpi, std::shared_ptr<Geom::UnstructuredMesh> nMesh)
             : mpi(nMpi), mesh(nMesh)
         {
             DNDS_assert(dim == mesh->dim);
             mRank = mesh->mRank;
+            periodicity = mesh->periodicInfo; //! copy here
+        }
+
+        void SetPeriodicTransformations(const TFTrans &nFTransPeriodic, const TFTrans &nFTransPeriodicBack)
+        {
+            FTransPeriodic = nFTransPeriodic;
+            FTransPeriodicBack = nFTransPeriodicBack;
         }
 
         void ConstructMetrics();

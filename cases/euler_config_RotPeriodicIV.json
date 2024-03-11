@@ -85,7 +85,7 @@
         "maxOrder": 3,
         "intOrder": 5,
         "cacheDiffBase": false,
-        "jacobiRelax": 1,
+        "jacobiRelax": 0,
         "SORInstead": false,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
@@ -113,8 +113,7 @@
         "nGmresSpace": 5,
         "nGmresIter": 1,
         "initWithLastURecInc": false,
-        "directPrecControl":
-        {
+        "directPrecControl": {
             "useDirectPrec": true,
             "iluCode": -1
         }

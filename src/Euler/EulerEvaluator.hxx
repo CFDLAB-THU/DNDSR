@@ -90,8 +90,10 @@ namespace DNDS::Euler
 
                     if (true)
                     {
-                        auto uINCj = uInc[iCellOther];
-                        auto uj = u[iCellOther];
+                        TU uINCj = uInc[iCellOther];
+                        TU uj = u[iCellOther];
+                        this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
+                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
                         TU fInc;
                         {
                             TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
@@ -163,7 +165,8 @@ namespace DNDS::Euler
                 index iCellAtFace = f2c[0] == iCell ? 0 : 1;
                 if (iCellOther != UnInitIndex && iCellOther != iCell && iCellOther < mesh->NumCell())
                 {
-                    auto uj = u[iCellOther];
+                    TU uj = u[iCellOther];
+                    this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
                     int iC2CInLocal = -1;
                     for (int ic2c = 0; ic2c < mesh->cell2cellFaceVLocal[iCell].size(); ic2c++)
                         if (iCellOther == mesh->cell2cellFaceVLocal[iCell][ic2c])
@@ -173,7 +176,7 @@ namespace DNDS::Euler
                     {
                         TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
                                         (iCellAtFace ? -1 : 1); // faces out
-                        jacIJ = fluxJacobian0_Right_Times_du_AsMatrix(
+                        jacIJ = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
                             uj,
                             unitNorm,
                             Geom::BC_ID_INTERNAL, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
@@ -225,14 +228,17 @@ namespace DNDS::Euler
                     if (iScanOther < iScan)
                     {
                         TU fInc;
-                        auto uINCj = uInc[iCellOther];
+                        TU uINCj = uInc[iCellOther];
+                        TU uj = u[iCellOther];
+                        this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
+                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
 
                         {
                             TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
                                             (iCellAtFace ? -1 : 1); // faces out
 
                             fInc = fluxJacobian0_Right_Times_du(
-                                u[iCellOther],
+                                uj,
                                 unitNorm,
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
@@ -301,15 +307,19 @@ namespace DNDS::Euler
                     if (iScanOther > iScan) // backward
                     {
                         TU fInc;
+                        TU uINCj = uInc[iCellOther];
+                        TU uj = u[iCellOther];
+                        this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
+                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
 
                         {
                             TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
                                             (iCellAtFace ? -1 : 1); // faces out
 
                             fInc = fluxJacobian0_Right_Times_du(
-                                u[iCellOther],
+                                uj,
                                 unitNorm,
-                                Geom::BC_ID_INTERNAL, uInc[iCellOther], lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
+                                Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
 
                         uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
@@ -361,14 +371,17 @@ namespace DNDS::Euler
                     if (iCell != iCellOther)
                     {
                         TU fInc;
-                        auto uINCj = uInc[iCellOther];
+                        TU uINCj = uInc[iCellOther];
+                        TU uj = u[iCellOther];
+                        this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
+                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
 
                         {
                             TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
                                             (iCellAtFace ? -1 : 1); // faces out
 
                             fInc = fluxJacobian0_Right_Times_du(
-                                u[iCellOther],
+                                uj,
                                 unitNorm,
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
@@ -454,7 +467,7 @@ namespace DNDS::Euler
                                         (iCellAtFace ? -1 : 1); // faces out
                         {
                             fInc = fluxJacobian0_Right_Times_du(
-                                u[iCellOther],
+                                u[iCellOther], //! TODO periodic here
                                 unitNorm,
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
@@ -465,7 +478,7 @@ namespace DNDS::Euler
                                     .transpose();
                             TU uRecSRInc =
                                 (vfv->GetIntPointDiffBaseValue(iCellOther, iFace, 1 - iCellAtFace, -1, std::array<int, 1>{0}, 1) *
-                                 uRecInc[iCellOther])
+                                 uRecInc[iCellOther]) //! TODO periodic here
                                     .transpose();
                             TU fIncSL = fluxJacobianC_Right_Times_du(u[iCell], unitNorm, Geom::BC_ID_INTERNAL, uRecSLInc);
                             TU fIncSR = fluxJacobianC_Right_Times_du(u[iCellOther], unitNorm, Geom::BC_ID_INTERNAL, uRecSRInc);
@@ -542,13 +555,16 @@ namespace DNDS::Euler
                     && iCellOther >= mesh->NumCell())
                 {
                     TU fInc;
-                    auto uINCj = uInc[iCellOther];
+                    TU uINCj = uInc[iCellOther];
+                    TU uj = u[iCellOther];
+                    this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
+                    this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
                     {
                         TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
                                         (iCellAtFace ? -1 : 1); // faces out
 
                         fInc = fluxJacobian0_Right_Times_du(
-                            u[iCellOther],
+                            uj,
                             unitNorm,
                             Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                     }
@@ -648,6 +664,28 @@ namespace DNDS::Euler
                         {
                             Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
                             inc = SpecialFields::IsentropicVortex10(*this, pPhysics, 0, nVars);
+                            inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
+                        });
+                    u[iCell] = um / vfv->GetCellVol(iCell); // mean value
+                }
+            break;
+        case 201: // for IVCent problem
+            DNDS_assert(model == NS || model == NS_2D);
+            if constexpr (model == NS || model == NS_2D)
+                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                {
+                    Geom::tPoint pos = vfv->GetCellBary(iCell);
+                    auto c2n = mesh->cell2node[iCell];
+                    auto gCell = vfv->GetCellQuad(iCell);
+                    TU um;
+                    um.resizeLike(u[iCell]);
+                    um.setZero();
+                    gCell.IntegrationSimple(
+                        um,
+                        [&](TU &inc, int ig)
+                        {
+                            Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
+                            inc = SpecialFields::IsentropicVortexCent(*this, pPhysics, 0, nVars);
                             inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
                         });
                     u[iCell] = um / vfv->GetCellVol(iCell); // mean value

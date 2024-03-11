@@ -110,4 +110,29 @@ namespace DNDS::Geom
         }
         return base;
     }
+
+    inline tGPoint RotZ(real theta)
+    {
+        theta *= pi / 180.0;
+        return tGPoint{{cos(theta), -sin(theta), 0},
+                       {sin(theta), cos(theta), 0},
+                       {0, 0, 1}};
+    }
+
+    inline tGPoint RotX(real theta)
+    {
+        theta *= pi / 180.0;
+        return tGPoint{{1, 0, 0},
+                       {0, cos(theta), -sin(theta)},
+                       {0, sin(theta), cos(theta)}};
+    }
+
+    inline tGPoint RotY(real theta)
+    {
+        theta *= pi / 180.0;
+        return tGPoint{
+            {cos(theta), 0, sin(theta)},
+            {0, 1, 0},
+            {-sin(theta), 0, cos(theta)}};
+    }
 }
