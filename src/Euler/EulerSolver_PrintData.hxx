@@ -5,10 +5,10 @@ namespace DNDS::Euler
     template <EulerModel model>
     void EulerSolver<model>::PrintData(
         const std::string &fname,
+        const std::string &fnameSeries,
         const tCellScalarFGet &odeResidualF,
         tAdditionalCellScalarList &additionalCellScalars,
-        TEval &eval,
-        PrintDataMode mode)
+        TEval &eval, real tSimu, PrintDataMode mode)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         reader->SetASCIIPrecision(config.dataIOControl.nASCIIPrecision);
@@ -62,7 +62,7 @@ namespace DNDS::Euler
                     for (auto &out : additionalCellScalars)
                     {
                         (*outDist)[iCell][iCur] = std::get<1>(out)(iCell);
-                        iCur ++;
+                        iCur++;
                     }
                 }
 
@@ -202,7 +202,7 @@ namespace DNDS::Euler
                         { return namesPoint[idata] + "_p"; }, // pointNames
                         [&](int idata, index in)
                         { return (*outSerialPoint)[in][idata]; }, // pointData
-                        0.0,
+                        tSimu,
                         0);
                 }
                 else if (config.dataIOControl.outPltMode == 1)
@@ -221,7 +221,7 @@ namespace DNDS::Euler
                         { return namesPoint[idata] + "_p"; }, // pointNames
                         [&](int idata, index in)
                         { return outDistPointPair[in][idata]; }, // pointData
-                        0.0,
+                        tSimu,
                         1);
                 }
             }
@@ -231,7 +231,7 @@ namespace DNDS::Euler
                 if (config.dataIOControl.outPltMode == 0)
                 {
                     reader->PrintSerialPartVTKDataArray(
-                        fname,
+                        fname, fnameSeries,
                         std::max(NOUTS_C - cDim, 0), std::min(NOUTS_C, 1),
                         std::max(NOUTSPoint_C - cDim, 0), std::min(NOUTSPoint_C, 1), //! vectors number is not cDim but 1
                         [&](int idata)
@@ -271,13 +271,13 @@ namespace DNDS::Euler
                             idata += 1;
                             return (*outSerialPoint)[iv][1 + idim]; // pointVecData
                         },
-                        0.0,
+                        tSimu,
                         0);
                 }
                 else if (config.dataIOControl.outPltMode == 1)
                 {
                     reader->PrintSerialPartVTKDataArray(
-                        fname,
+                        fname, fnameSeries,
                         std::max(NOUTS_C - cDim, 0), std::min(NOUTS_C, 1),
                         std::max(NOUTSPoint_C - cDim, 0), std::min(NOUTSPoint_C, 1), //! vectors number is not cDim but 1
                         [&](int idata)
@@ -316,7 +316,7 @@ namespace DNDS::Euler
                         {
                             return idim < cDim ? outDistPointPair[iv][1 + idim] : 0.0; // pointVecData
                         },
-                        0.0,
+                        tSimu,
                         1);
                 }
             }
@@ -334,9 +334,9 @@ namespace DNDS::Euler
                 // recu = EulerEvaluator::CompressRecPart(uOut[iCell], recu);
                 index iCell = mesh->bnd2cell[iBnd][0];
                 index iFace = mesh->bnd2face.at(iBnd);
-                if(iFace == -1)
+                if (iFace == -1)
                 {
-                    DNDS_assert(mesh->isPeriodic); //only internal bnd is valid, periodic bnd should be omitted
+                    DNDS_assert(mesh->isPeriodic);                                  // only internal bnd is valid, periodic bnd should be omitted
                     (*outDistBnd)[iBnd](nOUTSBnd - 4) = meshBnd->GetCellZone(iBnd); // add this to enable blanking
                     continue;
                 }
@@ -422,7 +422,7 @@ namespace DNDS::Euler
                         { return "ERROR"; }, // pointNames
                         [&](int idata, index in)
                         { return std::nan("0"); }, // pointData
-                        0.0,
+                        tSimu,
                         0);
                 }
                 else if (config.dataIOControl.outPltMode == 1)
@@ -441,7 +441,7 @@ namespace DNDS::Euler
                         { return "ERROR"; }, // pointNames
                         [&](int idata, index in)
                         { return std::nan("0"); }, // pointData
-                        0.0,
+                        tSimu,
                         1);
                 }
             }
@@ -454,6 +454,7 @@ namespace DNDS::Euler
                 {
                     readerBnd->PrintSerialPartVTKDataArray(
                         fname + "_bnd",
+                        fnameSeries + "_bnd",
                         NOUTS_C - cDim - 3, 2,
                         0, 0, //! vectors number is not cDim but 2
                         [&](int idata)
@@ -493,13 +494,14 @@ namespace DNDS::Euler
                         {
                             return std::nan("0"); // pointData
                         },
-                        0.0,
+                        tSimu,
                         0);
                 }
                 else if (config.dataIOControl.outPltMode == 1)
                 {
                     readerBnd->PrintSerialPartVTKDataArray(
                         fname + "_bnd",
+                        fnameSeries + "_bnd",
                         NOUTS_C - cDim - 3, 2,
                         0, 0, //! vectors number is not cDim but 2
                         [&](int idata)
@@ -539,7 +541,7 @@ namespace DNDS::Euler
                         {
                             return std::nan("0"); // pointData
                         },
-                        0.0,
+                        tSimu,
                         1);
                 }
             }

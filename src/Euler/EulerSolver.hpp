@@ -961,10 +961,10 @@ namespace DNDS::Euler
             PrintDataTimeAverage = 1,
         };
 
-        void PrintData(const std::string &fname,
+        void PrintData(const std::string &fname, const std::string &fnameSeries,
                        const tCellScalarFGet &odeResidualF,
                        tAdditionalCellScalarList &additionalCellScalars,
-                       TEval &eval, PrintDataMode mode = PrintDataLatest);
+                       TEval &eval, real TSimu = -1.0, PrintDataMode mode = PrintDataLatest);
 
         void WriteSerializer(SerializerBase *serializer, const std::string &name) // currently not using
         {

@@ -83,6 +83,7 @@ void testCGNS()
         1);
     reader.PrintSerialPartVTKDataArray(
         "../data/out/debug",
+        "../data/out/debug",
         1, 1, 1, 1,
         [](int)
         { return "aScalar"; },
@@ -103,6 +104,7 @@ void testCGNS()
         0.0,
         0);
     reader.PrintSerialPartVTKDataArray(
+        "../data/out/debug",
         "../data/out/debug",
         1, 1, 1, 1,
         [](int)
@@ -152,6 +154,7 @@ void testCGNS()
         0);
     readerBnd.PrintSerialPartVTKDataArray(
         "../data/out/debugBnd",
+        "../data/out/debugBnd",
         1, 1, 1, 1,
         [](int)
         { return "aScalar"; },
@@ -172,6 +175,7 @@ void testCGNS()
         0.0,
         0);
     readerBnd.PrintSerialPartVTKDataArray(
+        "../data/out/debugBnd",
         "../data/out/debugBnd",
         1, 1, 1, 1,
         [](int)

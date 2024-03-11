@@ -1,25 +1,29 @@
 {
     "timeMarchControl": {
         "dtImplicit": 10e-6,
-        "nTimeStep": 100,
+        "nTimeStep": 1000000,
         "steadyQuit": false,
-        "useImplicitPP": true,
-        "rhsFPPMode": 0,
+        "useImplicitPP": false,
+        "rhsFPPMode": 1,
         "rhsFPPScale": 1,
-        "odeCode": 1,
+        "odeCode": 0,
         "tEnd": 1e-3,
         "odeSetting1": 0.5,
-        "odeSetting2": 1
+        "odeSetting2": 1,
+        "dtCFLLimitScale": 100,
+        "dtIncreaseLimit": 1.2,
+        "useDtPPLimit": true,
+        "dtPPLimitScale": 1
     },
     "convergenceControl": {
-        "nTimeStepInternal": 200,
+        "nTimeStepInternal": 20,
         "rhsThresholdInternal": 1e-4,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
     "outputControl": {
         "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 1,
+        "nConsoleCheckInternal": 10,
         "consoleOutputMode": 0,
         "consoleOutputEveryFix": 1,
         "nDataOutC": 1,
@@ -29,23 +33,23 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 0.01,
+        "CFL": 1,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 0,
         "nCFLRampLength": 20,
-        "CFLRampEnd": 2.0,
+        "CFLRampEnd": 10.0,
         "useLocalDt": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_WallCent.cgns",
+        "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_C1.cgns",
+        // "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_WallCent.cgns",
         "outPltName": "../data/outUnsteady/Unifrom_2DSedov5EM3",
-        "outLogName": "../data/outUnsteady/Unifrom_2DSedov5EM3",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
-        "outPltVTKFormat": false,
+        "outPltVTKFormat": true,
         "outAtPointData": true,
         "outAtCellData": true,
         "outCellScalarNames": [
@@ -81,10 +85,10 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": true,
-        "jacobiRelax": 0.5,
-        "SORInstead": true,
+        "jacobiRelax": 1,
+        "SORInstead": false,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
@@ -96,7 +100,7 @@
         "functionalSettings": {
             "scaleType": "BaryDiff",
             "scaleMultiplier": 1,
-            // "dirWeightScheme": "HQM_OPT",
+            "dirWeightScheme": "HQM_OPT",
             // "useAnisotropicFunctional": true,
             // "scaleMultiplier": 3.464101615137754,
             "_tail": 0
@@ -104,13 +108,17 @@
     },
     "linearSolverControl": {
         "jacobiCode": 2,
-        "sgsIter": 4,
+        "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
         "nGmresSpace": 5,
         "nGmresIter": 1,
-        "initWithLastURecInc": false
+        "initWithLastURecInc": false,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
@@ -121,6 +129,8 @@
         "riemannSolverType": "Roe_M2",
         "rsMeanValueEig": 1,
         "nCentralSmoothStep": 0,
+        "uRecAlphaCompressPower": 1,
+        "uRecBetaCompressPower": 1,
         "constMassForce": [
             0.0,
             0.0,

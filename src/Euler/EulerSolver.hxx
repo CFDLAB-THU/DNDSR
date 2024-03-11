@@ -685,8 +685,8 @@ namespace DNDS::Euler
                 if (nLimFRes)
                     if (mpi.rank == 0)
                     {
-                        log() << std::scientific << std::setw(3);
-                        log() << "PPFResLimiter: nLimFRes[" << nLimFRes << "] minAlpha [" << alphaMinFRes << "]" << std::endl;
+                        log() << std::scientific << std::setw(3) << TermColor::Red;
+                        log() << "PPFResLimiter: nLimFRes[" << nLimFRes << "] minAlpha [" << alphaMinFRes << "]" << TermColor::Reset << std::endl;
                     }
 
                 crhs *= alphaPP_tmp;
@@ -702,8 +702,8 @@ namespace DNDS::Euler
                 if (nLimFRes)
                     if (mpi.rank == 0)
                     {
-                        log() << std::scientific << std::setw(3);
-                        log() << "PPFResLimiter: nLimFRes[" << nLimFRes << "] minAlpha [" << alphaMinFRes << "]" << std::endl;
+                        log() << std::scientific << std::setw(3) << TermColor::Red;
+                        log() << "PPFResLimiter: nLimFRes[" << nLimFRes << "] minAlpha [" << alphaMinFRes << "]" << TermColor::Reset << std::endl;
                     }
                 dTauTmp = dTau;
                 dTauTmp *= alphaPP_tmp;
@@ -1159,20 +1159,22 @@ namespace DNDS::Euler
                 eval.FixUMaxFilter(u);
                 PrintData(
                     config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step) + "_" + std::to_string(iter),
+                    config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step), // internal series
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
-                    eval);
+                    eval, tSimu);
             }
             if (iter % config.outputControl.nDataOutCInternal == 0)
             {
                 eval.FixUMaxFilter(u);
                 PrintData(
                     config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                    "",
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
-                    eval);
+                    eval, tSimu);
             }
             if (iter % config.outputControl.nRestartOutInternal == 0)
             {
@@ -1297,10 +1299,11 @@ namespace DNDS::Euler
                 eval.FixUMaxFilter(u);
                 PrintData(
                     config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
+                    config.dataIOControl.outPltName + "_" + output_stamp, // physical ts series
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
-                    eval);
+                    eval, tSimu);
                 nextStepOut += config.outputControl.nDataOut;
             }
             if (step == nextStepOutC)
@@ -1308,10 +1311,11 @@ namespace DNDS::Euler
                 eval.FixUMaxFilter(u);
                 PrintData(
                     config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                    "",
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
-                    eval);
+                    eval, tSimu);
                 nextStepOutC += config.outputControl.nDataOutC;
             }
             if (step == nextStepOutAverage)
@@ -1321,10 +1325,11 @@ namespace DNDS::Euler
                 eval.FixUMaxFilter(uAveraged);
                 PrintData(
                     config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + std::to_string(step),
+                    config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp, // time average series
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
-                    eval,
+                    eval, tSimu,
                     PrintDataTimeAverage);
                 nextStepOutAverage += config.outputControl.nTimeAverageOut;
             }
@@ -1335,10 +1340,11 @@ namespace DNDS::Euler
                 eval.FixUMaxFilter(uAveraged);
                 PrintData(
                     config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + "C",
+                    "",
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
-                    eval,
+                    eval, tSimu,
                     PrintDataTimeAverage);
                 nextStepOutAverageC += config.outputControl.nTimeAverageOutC;
             }
@@ -1361,10 +1367,11 @@ namespace DNDS::Euler
                 eval.FixUMaxFilter(u);
                 PrintData(
                     config.dataIOControl.outPltName + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
+                    config.dataIOControl.outPltName + "_" + output_stamp, // physical ts series
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
-                    eval);
+                    eval, tSimu);
                 nextTout += config.outputControl.tDataOut;
                 if (nextTout > config.timeMarchControl.tEnd)
                     nextTout = config.timeMarchControl.tEnd;

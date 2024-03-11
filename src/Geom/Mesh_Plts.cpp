@@ -412,8 +412,59 @@ namespace DNDS::Geom
         fout.close();
     }
 
+    static void updateVTKSeries(std::string seriesName, std::string fname, real tSimu)
+    {
+        using json = nlohmann::json;
+        json j;
+        if (std::filesystem::exists(seriesName))
+        {
+            std::ifstream fin(seriesName);
+            fin >> j;
+            fin.close();
+            DNDS_assert(j["files"].is_array());
+        }
+        else
+        {
+            j["file-series-version"] = "1.0";
+            j["files"] = json::array();
+        }
+        std::map<std::string, real> series;
+        for (auto &f : j["files"])
+            series[f["name"].get<std::string>()] = f["time"].get<real>();
+        series[fname] = tSimu;
+        j["files"].clear();
+        for (auto &[fn, tS] : series)
+        {
+            j["files"].emplace_back(json::object());
+            j["files"].back()["name"] = fn;
+            j["files"].back()["time"] = tS;
+        }
+        std::ofstream fout(seriesName);
+        fout << j.dump(4);
+        fout.close();
+    }
+
+    /**
+     * @brief referencing https://docs.vtk.org/en/latest/design_documents/VTKFileFormats.html
+     *
+     * @param fname
+     * @param arraySiz
+     * @param vecArraySiz
+     * @param arraySizPoint
+     * @param vecArraySizPoint
+     * @param names
+     * @param data
+     * @param vectorNames
+     * @param vectorData
+     * @param namesPoint
+     * @param dataPoint
+     * @param vectorNamesPoint
+     * @param vectorDataPoint
+     * @param t
+     * @param flag
+     */
     void UnstructuredMeshSerialRW::PrintSerialPartVTKDataArray(
-        std::string fname,
+        std::string fname, std::string seriesName,
         int arraySiz, int vecArraySiz, int arraySizPoint, int vecArraySizPoint,
         const std::function<std::string(int)> &names,
         const std::function<DNDS::real(int, DNDS::index)> &data,
@@ -437,6 +488,8 @@ namespace DNDS::Geom
             std::filesystem::path outFile{fname};
             std::filesystem::create_directories(outFile.parent_path() / ".");
             DNDS_assert(mode == SerialOutput && dataIsSerialOut);
+            if (seriesName.size())
+                updateVTKSeries(seriesName + ".vtu.series", getStringForcePath(outFile.filename()), t);
         }
         std::filesystem::path outPath; // only valid if parallel out
         if (flag == 1)
@@ -941,6 +994,23 @@ namespace DNDS::Geom
                     {},
                     [&](auto &out, int level)
                     {
+                        writeXMLEntity( // https://www.visitusers.org/index.php?title=Time_and_Cycle_in_VTK_files
+                            out, level, "FieldData",
+                            {},
+                            [&](auto &out, int level)
+                            {
+                                writeXMLEntity(
+                                    out, level, "DataArray",
+                                    {{"type", "Float64"},
+                                     {"name", "TIME"},
+                                     {"NumberOfTuples", "1"},
+                                     {"format", "ascii"}},
+                                    [&](auto &out, int level)
+                                    {
+                                        out << std::setprecision(16);
+                                        out << t << '\n';
+                                    });
+                            });
                         writeXMLEntity(
                             out, level, "Piece",
                             {{"NumberOfPoints", std::to_string(nNode + nodesExtra.size())},
@@ -963,8 +1033,11 @@ namespace DNDS::Geom
 
         if (mpi.rank == mRank && flag == 1)
         {
-            std::ofstream foutP{fnameIN + ".pvtu"};
+            std::filesystem::path foutPP{fnameIN + ".pvtu"};
+            std::ofstream foutP{foutPP};
             DNDS_assert(foutP);
+            if (seriesName.size())
+                updateVTKSeries(seriesName + ".pvtu.series", getStringForcePath(foutPP.filename()), t);
 
             writeXMLEntity(
                 foutP, 0, "VTKFile",

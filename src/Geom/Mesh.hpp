@@ -494,7 +494,7 @@ namespace DNDS::Geom
          * @todo //TODO add support for bnd export
          */
         void PrintSerialPartVTKDataArray(
-            std::string fname,
+            std::string fname, std::string seriesName,
             int arraySiz, int vecArraySiz, int arraySizPoint, int vecArraySizPoint,
             const std::function<std::string(int)> &names,
             const std::function<DNDS::real(int, DNDS::index)> &data,
