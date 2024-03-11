@@ -6,7 +6,7 @@
         "useImplicitPP": false,
         "rhsFPPMode": 0,
         "rhsFPPScale": 1,
-        "odeCode": 103,
+        "odeCode": 0,
         "tEnd": 1e-3,
         "odeSetting1": 0.5,
         "odeSetting2": 1,
@@ -23,7 +23,7 @@
     },
     "outputControl": {
         "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 1,
+        "nConsoleCheckInternal": 10,
         "consoleOutputMode": 0,
         "consoleOutputEveryFix": 1,
         "nDataOutC": 1,
@@ -43,7 +43,8 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_WallCent.cgns",
+        "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_C1.cgns",
+        // "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_WallCent.cgns",
         "outPltName": "../data/outUnsteady/Unifrom_2DSedov5EM3",
         "outPltMode": 0,
         "readMeshMode": 0,
@@ -99,14 +100,14 @@
         "functionalSettings": {
             "scaleType": "BaryDiff",
             "scaleMultiplier": 1,
-            // "dirWeightScheme": "HQM_OPT",
+            "dirWeightScheme": "HQM_OPT",
             // "useAnisotropicFunctional": true,
             // "scaleMultiplier": 3.464101615137754,
             "_tail": 0
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 0,
+        "jacobiCode": 2,
         "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
@@ -117,7 +118,7 @@
         "directPrecControl":
         {
             "useDirectPrec": true,
-            "iluCode": -1
+            "iluCode": 2
         }
     },
     "others": {
@@ -129,7 +130,8 @@
         "riemannSolverType": "Roe_M2",
         "rsMeanValueEig": 1,
         "nCentralSmoothStep": 0,
-        "uRecBetaCompressPower": 2.0,
+        "uRecAlphaCompressPower": 1,
+        "uRecBetaCompressPower": 1,
         "constMassForce": [
             0.0,
             0.0,

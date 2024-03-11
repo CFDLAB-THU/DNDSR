@@ -169,7 +169,11 @@ namespace DNDS::Geom
             for (index i = 0; i < this->NumCell(); i++)
                 localFillOrderingOld2New.at(localFillOrderingNew2Old.at(i)) = i;
         }
-        if (control.getOrderingCode() == 1) // Metis
+        else if (control.getOrderingCode() == 0)
+        {
+            // do nothing, natural order
+        }
+        else if (control.getOrderingCode() == 1) // Metis
         {
             _METIS::idx_t nCell = _METIS::indexToIdx(this->NumCell());
             _METIS::idx_t nCon{1}, options[METIS_NOPTIONS];
