@@ -259,7 +259,7 @@ namespace DNDS::Euler
         void EvaluateURecBeta(
             ArrayDOFV<nVarsFixed> &u,
             ArrayRECV<nVarsFixed> &uRec,
-            ArrayDOFV<1> &uRecBeta, index &nLim, real &betaMin);
+            ArrayDOFV<1> &uRecBeta, index &nLim, real &betaMin, int flag);
 
         bool AssertMeanValuePP(
             ArrayDOFV<nVarsFixed> &u, bool panic);

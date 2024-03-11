@@ -98,7 +98,7 @@
         template void EulerEvaluator<model>::EvaluateURecBeta(                                \
             ArrayDOFV<nVarsFixed> &u,                                                         \
             ArrayRECV<nVarsFixed> &uRec,                                                      \
-            ArrayDOFV<1> &uRecBeta, index &nLim, real &betaMin);                              \
+            ArrayDOFV<1> &uRecBeta, index &nLim, real &betaMin, int flag);                    \
                                                                                               \
         template bool EulerEvaluator<model>::AssertMeanValuePP(                               \
             ArrayDOFV<nVarsFixed> &u, bool panic);                                            \

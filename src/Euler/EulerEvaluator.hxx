@@ -864,7 +864,8 @@ namespace DNDS::Euler
     void EulerEvaluator<model>::EvaluateURecBeta(
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,
-        ArrayDOFV<1> &uRecBeta, index &nLim, real &betaMin)
+        ArrayDOFV<1> &uRecBeta, index &nLim, real &betaMin,
+        int flag)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         real rhoEps = smallReal * settings.refUPrim(0);
@@ -908,7 +909,7 @@ namespace DNDS::Euler
             auto checkRecBaseGood = [&]()
             {
                 recBase = (quadBase * uRecBase).rowwise() + u[iCell].transpose();
-                if (recBase(Eigen::all, 0).minCoeff() < rhoEps)
+                if (recBase(Eigen::all, 0).minCoeff() < rhoEps) // TODO: add relaxation to eps values
                     return false;
                 if constexpr (model == NS_SA || model == NS_SA_3D)
                     if (recBase(Eigen::all, I4 + 1).minCoeff() < rhoEps)
@@ -928,6 +929,8 @@ namespace DNDS::Euler
                 uRecBeta[iCell](0) = 1;
                 continue; // early exit, reconstruction is good it self
             }
+            if (flag == 1)
+                curOrder = 1;
             while (curOrder > 0)
             {
                 uRecBase = vfv->template DownCastURecOrder<nVarsFixed>(curOrder, iCell, uRec, 0);
@@ -995,7 +998,7 @@ namespace DNDS::Euler
                 {
                     if (eInternalS(iG) < 2 * pEps)
                     {
-                        real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
+                        real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
                             recBase(iG, Eigen::all).transpose(), recInc(iG, Eigen::all).transpose(),
                             pEps);
                         thetaP = std::min(thetaP, thetaThis);
