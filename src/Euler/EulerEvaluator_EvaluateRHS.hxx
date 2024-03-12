@@ -170,7 +170,7 @@ namespace DNDS::Euler
                             ULxy, ULMeanXy, f2c[0], iFace,
                             unitNorm,
                             normBase,
-                            vfv->GetFaceQuadraturePPhys(iFace, -1)(Seq012),
+                            vfv->GetFaceQuadraturePPhys(iFace, -1),
                             t,
                             mesh->GetFaceZone(iFace), true);
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
@@ -180,7 +180,7 @@ namespace DNDS::Euler
                             ULMeanXy, ULMeanXy, f2c[0], iFace,
                             unitNorm,
                             normBase,
-                            vfv->GetFaceQuadraturePPhys(iFace, -1)(Seq012),
+                            vfv->GetFaceQuadraturePPhys(iFace, -1),
                             t,
                             mesh->GetFaceZone(iFace), false);
                     }
@@ -209,7 +209,7 @@ namespace DNDS::Euler
                                              (unitNorm * (URxy - ULxy).transpose());
 
 #else
-                    TDiffU GradUMeanXy; 
+                    TDiffU GradUMeanXy;
 #endif
                     if (faceBCType == EulerBCType::BCWallInvis ||
                         // faceBCType == EulerBCType::BCIn ||
@@ -302,7 +302,7 @@ namespace DNDS::Euler
                 (faceBCType == EulerBCType::BCWallInvis && settings.idealGasProperty.muGas < 1e-99))
             {
                 fluxWallSumLocal -= fluxEs(Eigen::all, 0);
-                if(iFace >= mesh->NumFace())
+                if (iFace >= mesh->NumFace())
                     DNDS_assert(false);
             }
             if (f2c[1] == UnInitIndex)
@@ -371,16 +371,21 @@ namespace DNDS::Euler
                         finc.resizeLike(sourceV);
                         if constexpr (nVarsFixed > 0)
                         {
-                            finc(Eigen::seq(Eigen::fix<0>, Eigen::fix<nVarsFixed - 1>)) =
+                            TU s =
                                 source(
                                     ULxy,
                                     GradU,
-                                    iCell, iG);
-                            finc(Eigen::seq(Eigen::fix<nVarsFixed>, Eigen::fix<2 * nVarsFixed - 1>)) =
+                                    vfv->GetCellQuadraturePPhys(iCell, iG),
+                                    iCell,
+                                    iG);
+                            finc(Eigen::seq(Eigen::fix<0>, Eigen::fix<nVarsFixed - 1>)) = s;
+                            TU sjd =
                                 sourceJacobianDiag(
                                     ULxy,
                                     GradU,
+                                    vfv->GetCellQuadraturePPhys(iCell, iG),
                                     iCell, iG);
+                            finc(Eigen::seq(Eigen::fix<nVarsFixed>, Eigen::fix<2 * nVarsFixed - 1>)) = sjd;
                         }
                         else
                         {
@@ -388,11 +393,13 @@ namespace DNDS::Euler
                                 source(
                                     ULxy,
                                     GradU,
+                                    vfv->GetCellQuadraturePPhys(iCell, iG),
                                     iCell, iG);
                             finc(Eigen::seq(cnvars, 2 * cnvars - 1)) =
                                 sourceJacobianDiag(
                                     ULxy,
                                     GradU,
+                                    vfv->GetCellQuadraturePPhys(iCell, iG),
                                     iCell, iG);
                         }
 

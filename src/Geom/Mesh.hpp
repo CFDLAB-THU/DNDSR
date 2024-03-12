@@ -299,6 +299,36 @@ namespace DNDS::Geom
         }
 
         /**
+         * @brief fA executes when if2c points to the donor side; fB the main side
+         *
+         * @tparam FA
+         * @tparam FB
+         * @tparam F0
+         * @param iFace
+         * @param if2c
+         * @param fA
+         * @param fB
+         * @param f0
+         * @return auto
+         */
+        template <class FA, class FB, class F0 = std::function<void(void)>>
+        auto CellOtherCellPeriodicHandle(
+            index iFace, rowsize if2c, FA &&fA, FB &&fB, F0 &&f0 = []() {})
+        {
+            if (!this->isPeriodic)
+                return f0();
+            auto faceID = this->GetFaceZone(iFace);
+            if (!Geom::FaceIDIsPeriodic(faceID))
+                return f0();
+            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
+                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
+                return fA();
+            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
+                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
+                return fB();
+        }
+
+        /**
          * \return
          * cell2cell for local mesh, which do not contain
          * the diagonal part; should be a diag-less symmetric adjacency matrix
@@ -428,7 +458,7 @@ namespace DNDS::Geom
         /// @param fName file name of .cgns file
         void ReadFromCGNSSerial(const std::string &fName, const t_FBCName_2_ID &FBCName_2_ID = FBC_Name_2_ID_Default);
 
-        void Deduplicate1to1Periodic();
+        void Deduplicate1to1Periodic(real searchEps = 1e-8);
 
         // void InterpolateTopology();
 

@@ -314,6 +314,7 @@ namespace DNDS::Euler
                 Eigen::Vector<real, -1> PeriodicRotationEulerAngles1;
                 Eigen::Vector<real, -1> PeriodicRotationEulerAngles2;
                 Eigen::Vector<real, -1> PeriodicRotationEulerAngles3;
+                real periodicTolerance = 1e-8;
                 BoundaryDefinition()
                 {
                     PeriodicTranslation1.resize(3);
@@ -340,7 +341,8 @@ namespace DNDS::Euler
                     PeriodicRotationCent3,
                     PeriodicRotationEulerAngles1,
                     PeriodicRotationEulerAngles2,
-                    PeriodicRotationEulerAngles3)
+                    PeriodicRotationEulerAngles3,
+                    periodicTolerance)
             } boundaryDefinition;
 
             struct LimiterControl
@@ -493,7 +495,10 @@ namespace DNDS::Euler
             else
             {
                 gSetting = nlohmann::ordered_json::object();
+                BoundaryHandler<model> BCHandler(nVars);
+                from_json(config.bcSettings, BCHandler);
                 config.ReadWriteJson(gSetting, nVars, read);
+                gSetting["bcSettings"] = BCHandler;
                 if (mpi.rank == 0) // single call for output
                 {
                     std::filesystem::path outFile{jsonName};
@@ -559,7 +564,7 @@ namespace DNDS::Euler
                 reader->ReadFromCGNSSerial(config.dataIOControl.meshFile,
                                            [&](const std::string &name) -> Geom::t_index
                                            { return BCHandler.GetIDFromName(name); });
-                reader->Deduplicate1to1Periodic();
+                reader->Deduplicate1to1Periodic(config.boundaryDefinition.periodicTolerance);
                 reader->BuildCell2Cell();
                 reader->MeshPartitionCell2Cell();
                 reader->PartitionReorderToMeshCell2Cell();
@@ -781,32 +786,14 @@ namespace DNDS::Euler
                     auto type = BCHandler.GetTypeFromID(id);
                     if (type == BCSpecial || type == BCOut)
                         return 0;
-                    if (type == BCFar)
-                    {
-                        // use Dirichlet type
-                        if (iOrder > 0)
-                            return 0;
-                        return 1;
-                    }
+                    if (type == BCFar) // use Dirichlet type
+                        return iOrder ? 0. : 1.;
                     if (type == BCWallInvis || type == BCSym)
-                    {
-                        // // suppress higher order
-                        // return 1;
-                        // use Dirichlet type
-                        if (iOrder > 0)
-                            return 0;
-                        return 1;
-                    }
-                    if(Geom::FaceIDIsPeriodic(id))
-                    {
-                        if (iOrder > 0)
-                            return 1;
-                        return 1; //! treat as real internal
-                    }
+                        return iOrder ? 0. : 1.;
+                    if (Geom::FaceIDIsPeriodic(id))
+                        return iOrder ? 1. : 1.; //! treat as real internal
                     // others: use Dirichlet type
-                    if (iOrder > 0)
-                        return 0;
-                    return 1;
+                    return iOrder ? 0. : 1.;
                 });
             vfv->ConstructRecCoeff();
 

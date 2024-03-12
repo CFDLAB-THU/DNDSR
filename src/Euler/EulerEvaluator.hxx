@@ -162,7 +162,7 @@ namespace DNDS::Euler
                 index iFace = c2f[ic2f];
                 auto f2c = mesh->face2cell[iFace];
                 index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
-                index iCellAtFace = f2c[0] == iCell ? 0 : 1;
+                rowsize iCellAtFace = f2c[0] == iCell ? 0 : 1;
                 if (iCellOther != UnInitIndex && iCellOther != iCell && iCellOther < mesh->NumCell())
                 {
                     TU uj = u[iCellOther];
@@ -175,12 +175,25 @@ namespace DNDS::Euler
                     TJacobianU jacIJ;
                     {
                         TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
-                                        (iCellAtFace ? -1 : 1); // faces out
+                                        (iCellAtFace ? -1 : 1);        // faces out
                         jacIJ = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
                             uj,
                             unitNorm,
                             Geom::BC_ID_INTERNAL, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                     }
+                    auto faceID = mesh->GetFaceZone(iFace);
+                    mesh->CellOtherCellPeriodicHandle(
+                        iFace, iCellAtFace,
+                        [&]()
+                        { jacIJ(Eigen::all, Seq123) =
+                              mesh->periodicInfo.TransVectorBack<dim, nVarsFixed>(
+                                                    jacIJ(Eigen::all, Seq123).transpose(), faceID)
+                                  .transpose(); },
+                        [&]()
+                        { jacIJ(Eigen::all, Seq123) =
+                              mesh->periodicInfo.TransVector<dim, nVarsFixed>(
+                                                    jacIJ(Eigen::all, Seq123).transpose(), faceID)
+                                  .transpose(); });
                     jacLU.LDU(iCell, symLU->cell2cellFaceVLocal2FullRowPos[iCell][iC2CInLocal]) =
                         (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacIJ;
                 }
@@ -539,7 +552,7 @@ namespace DNDS::Euler
         int cnvars = nVars;
         index nCellDist = mesh->NumCell();
         sumInc.setZero(cnvars);
-        for (index iScan = 0; iScan < nCellDist; iScan++)
+        for (index iScan = 0; iScan < nCellDist; iScan++) // update the ghost part (non proc-block) rhs
         {
             index iCell = iScan;
             auto c2f = mesh->cell2face[iCell];
@@ -593,6 +606,7 @@ namespace DNDS::Euler
     template <EulerModel model>
     void EulerEvaluator<model>::InitializeUDOF(ArrayDOFV<nVarsFixed> &u)
     {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         Eigen::VectorXd initConstVal = this->settings.farFieldStaticValue;
         u.setConstant(initConstVal);
         if (model == EulerModel::NS_SA || model == NS_SA_3D)
@@ -608,6 +622,7 @@ namespace DNDS::Euler
                 }
             }
         }
+        
 
         switch (settings.specialBuiltinInitializer)
         {
@@ -740,6 +755,16 @@ namespace DNDS::Euler
             log() << "Wrong specialBuiltinInitializer" << std::endl;
             DNDS_assert(false);
             break;
+        }
+
+        if (settings.frameConstRotation.enabled)
+        {
+            for (int iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                TU ui = u[iCell];
+                TransformURotatingFrame(ui, vfv->GetCellQuadraturePPhys(iCell, -1), -1);
+                u[iCell] = ui;
+            }
         }
 
         // Box

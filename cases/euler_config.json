@@ -1,6 +1,6 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-1,
+        "dtImplicit": 1e-2,
         "nTimeStep": 100,
         "steadyQuit": false,
         "odeCode": 0,
@@ -41,7 +41,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/UniformRot120.cgns",
-        "outPltName": "../data/outUnsteady/UniformRot120",
+        "outPltName": "../data/outUnsteady/UniformRot120Rot",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -86,7 +86,7 @@
         "intOrder": 5,
         "cacheDiffBase": false,
         "jacobiRelax": 1,
-        "SORInstead": false,
+        "SORInstead": true,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
@@ -105,25 +105,25 @@
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 0,
+        "jacobiCode": 2,
         "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
-        "gmresCode": 0,
+        "gmresCode": 1,
         "nGmresSpace": 5,
         "nGmresIter": 1,
         "initWithLastURecInc": false,
         "directPrecControl":
         {
             "useDirectPrec": true,
-            "iluCode": -1
+            "iluCode": 2
         }
     },
     "others": {
         "nFreezePassiveInner": 0
     },
     "eulerSettings": {
-        "ignoreSourceTerm": true,
+        "ignoreSourceTerm": false,
         "useScalarJacobian": true,
         "riemannSolverType": "Roe",
         "specialBuiltinInitializer": 201,
@@ -133,6 +133,20 @@
             0.0,
             0.0
         ],
+        "frameConstRotation": {
+            "enabled": true,
+            "axis": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "rpm": -1
+        },
         "farFieldStaticValue": [
             1,
             1,

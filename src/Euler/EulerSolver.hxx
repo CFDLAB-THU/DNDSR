@@ -329,7 +329,7 @@ namespace DNDS::Euler
                     UMean,
                     UL - UMean,
                     compressed);
-                return eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, normOutV, normBase, pPhy(Seq012), tSimu + ct * curDtImplicit, bType, true);
+                return eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true);
             };
             typename TVFV::template TFBoundaryDiff<nVarsFixed>
                 FBoundaryDiff = [&](const TU &UL, const TU &dU, const TU &UMean, index iCell, index iFace,
@@ -346,8 +346,8 @@ namespace DNDS::Euler
                     UMean,
                     UL - UMean + dU,
                     compressed);
-                return eval.generateBoundaryValue(ULfixedPlus, UMean, iCell, iFace, normOutV, normBase, pPhy(Seq012), tSimu + ct * curDtImplicit, bType, true) -
-                       eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, normOutV, normBase, pPhy(Seq012), tSimu + ct * curDtImplicit, bType, true);
+                return eval.generateBoundaryValue(ULfixedPlus, UMean, iCell, iFace, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true) -
+                       eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true);
             };
             if (config.implicitReconstructionControl.storeRecInc)
                 uRecOld = uRecC;
@@ -1547,6 +1547,10 @@ namespace DNDS::Euler
     {
         DNDS_assert(pEval);
         auto &eval = *pEval;
+        // static int nCall{0};
+        // nCall++;
+        // if (mpi.rank == 0)
+        //     std::cout << "doPrecondition nCall " << nCall << fmt::format(" {} ", hasLUDone) << std::endl;
         if (config.linearSolverControl.jacobiCode <= 1)
         {
             bool useJacobi = config.linearSolverControl.jacobiCode == 0;

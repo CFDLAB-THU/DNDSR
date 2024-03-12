@@ -354,17 +354,13 @@ namespace DNDS::Euler
         void UFromOtherCell(TU &u, index iFace, index iCell, index iCellOther, rowsize if2c)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            if (!mesh->isPeriodic)
-                return;
             auto faceID = mesh->GetFaceZone(iFace);
-            if (!Geom::FaceIDIsPeriodic(faceID))
-                return;
-            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                u(Seq123) = mesh->periodicInfo.TransVector(Eigen::Vector<real, dim>{u(Seq123)}, faceID);
-            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                u(Seq123) = mesh->periodicInfo.TransVectorBack(Eigen::Vector<real, dim>{u(Seq123)}, faceID);
+            mesh->CellOtherCellPeriodicHandle(
+                iFace, if2c,
+                [&]()
+                { u(Seq123) = mesh->periodicInfo.TransVector(Eigen::Vector<real, dim>{u(Seq123)}, faceID); },
+                [&]()
+                { u(Seq123) = mesh->periodicInfo.TransVectorBack(Eigen::Vector<real, dim>{u(Seq123)}, faceID); });
         }
 
         void DiffUFromCell2Face(TDiffU &u, index iFace, index iCell, rowsize if2c)
@@ -406,22 +402,30 @@ namespace DNDS::Euler
         TU source(
             const TU &UMeanXy,
             const TDiffU &DiffUxy,
+            const Geom::tPoint &pPhy,
             index iCell, index ig)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-#ifdef DNDS_FV_EULEREVALUATOR_SOURCE_TERM_ZERO
             TU ret;
             ret.resizeLike(UMeanXy);
             ret.setZero();
+#ifdef DNDS_FV_EULEREVALUATOR_SOURCE_TERM_ZERO
             return ret;
 #endif
+            ret(Seq123) = settings.constMassForce(Seq012) * UMeanXy(0);
+            if (settings.frameConstRotation.enabled)
+            {
+                Geom::tPoint radi = pPhy - settings.frameConstRotation.center;
+                Geom::tPoint radiR = radi - settings.frameConstRotation.axis * (settings.frameConstRotation.axis.dot(radi));
+                ret(Seq123) += (radiR * sqr(settings.frameConstRotation.Omega()) * UMeanXy(0))(Seq012);
+                Geom::tPoint rV;
+                rV.setZero();
+                rV(Seq012) = UMeanXy(Seq123);
+                ret(Seq123) += -2.0 * settings.frameConstRotation.vOmega().cross(rV)(Seq012);
+            }
+            ret(I4) += ret(Seq123).dot(UMeanXy(Seq123)) / UMeanXy(0); // work of volume force!
             if constexpr (model == NS || model == NS_2D || model == NS_3D)
             {
-                TU ret;
-                ret.resizeLike(UMeanXy);
-                ret.setZero();
-                ret(Seq123) = settings.constMassForce(Seq012) * UMeanXy(0);
-                return ret;
             }
             else if constexpr (model == NS_SA || model == NS_SA_3D)
             {
@@ -501,11 +505,6 @@ namespace DNDS::Euler
                 }
 #endif
 
-                TU ret;
-                ret.resizeLike(UMeanXy);
-                ret.setZero();
-                ret(Seq123) = settings.constMassForce * UMeanXy(0);
-
                 if (passiveDiscardSource)
                     P = D = 0;
                 ret(I4 + 1) = UMeanXy(0) * (P - D + diffNu.squaredNorm() * cb2 / sigma) / muRef -
@@ -528,15 +527,9 @@ namespace DNDS::Euler
                 }
                 // if (passiveDiscardSource)
                 //     ret(Eigen::seq(5, Eigen::last)).setZero();
-                return ret;
             }
             else if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
-                TU ret;
-                ret.resizeLike(UMeanXy);
-                ret.setZero();
-                ret(Seq123) = settings.constMassForce * UMeanXy(0);
-
                 real pMean, asqrMean, Hmean;
                 real gamma = settings.idealGasProperty.gamma;
                 Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0), (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
@@ -548,27 +541,37 @@ namespace DNDS::Euler
                 real mufPhy, muf;
                 mufPhy = muf = muEff(UMeanXy, T);
                 RANS::GetSource_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, ret);
-                return ret;
             }
             else
             {
                 DNDS_assert(false);
             }
+            return ret;
         }
 
         // zeroth means needs not derivative
         TU sourceJacobianDiag(
             const TU &UMeanXy,
             const TDiffU &DiffUxy,
+            const Geom::tPoint &pPhy,
             index iCell, index ig)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-#ifdef DNDS_FV_EULEREVALUATOR_SOURCE_TERM_ZERO
             TU ret;
             ret.resizeLike(UMeanXy);
             ret.setZero();
+#ifdef DNDS_FV_EULEREVALUATOR_SOURCE_TERM_ZERO
             return ret;
 #endif
+            // ret(Seq123) = settings.constMassForce * UMeanXy(0);
+            if (settings.frameConstRotation.enabled)
+            {
+                // Geom::tPoint radi = pPhy - settings.frameConstRotation.center;
+                // Geom::tPoint radiR = radi - settings.frameConstRotation.axis * (settings.frameConstRotation.axis.dot(radi));
+                // ret(Seq123) += radiR * sqr(settings.frameConstRotation.Omega()) * UMeanXy(0);
+                // ret(Seq123) += -2.0 * vOmega().cross(UMeanXy(Seq123)); // ! note cross has no diag derivatives
+            }
+            // ret(I4) += ret(Seq123).dot(UMeanXy(Seq123)) / UMeanXy(0);
             if constexpr (model == NS || model == NS_2D || model == NS_3D)
             {
             }
@@ -677,7 +680,6 @@ namespace DNDS::Euler
                 }
                 // if (passiveDiscardSource)
                 //     ret(Eigen::seq(5, Eigen::last)).setZero();
-                return ret;
             }
             else if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
@@ -696,17 +698,12 @@ namespace DNDS::Euler
                 real mufPhy, muf;
                 mufPhy = muf = muEff(UMeanXy, T);
                 RANS::GetSourceJacobianDiag_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, ret);
-                return ret;
             }
             else
             {
                 DNDS_assert(false);
             }
-
-            TU Ret;
-            Ret.resizeLike(UMeanXy);
-            Ret.setZero();
-            return Ret;
+            return ret;
         }
 
         /**
@@ -868,13 +865,21 @@ namespace DNDS::Euler
             return dF;
         }
 
+        void TransformURotatingFrame(TU& U, const Geom::tPoint& pPhysics, int direction)
+        {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+            U(I4) -= U(Seq123).squaredNorm() / (2 * U(0));
+            U(Seq123) += direction * settings.frameConstRotation.vOmega().cross(pPhysics - settings.frameConstRotation.center)(Seq012) * U(0);
+            U(I4) += U(Seq123).squaredNorm() / (2 * U(0));
+        }
+
         TU generateBoundaryValue(
             TU &ULxy, //! warning, possible that UL is also modified
             const TU &ULMeanXy,
             index iCell, index iFace,
             const TVec &uNorm,
             const TMat &normBase,
-            const TVec &pPhysics,
+            const Geom::tPoint &pPhysics,
             real t,
             Geom::t_index btype,
             bool fixUL = false)
@@ -901,36 +906,40 @@ namespace DNDS::Euler
                     // fmt::print("far id: {}\n", btype);
                     // std::cout << far.transpose() << std::endl;
 
-                    real un = ULxy(Seq123).dot(uNorm) / ULxy(0);
-                    real vsqr = (ULxy(Seq123) / ULxy(0)).squaredNorm();
+                    TU ULxyStatic = ULxy;
+                    if (settings.frameConstRotation.enabled) // to static frame velocity
+                        TransformURotatingFrame(ULxyStatic, pPhysics, 1);
+
+                    real un = ULxyStatic(Seq123).dot(uNorm) / ULxyStatic(0);
+                    real vsqr = (ULxyStatic(Seq123) / ULxyStatic(0)).squaredNorm();
                     real gamma = settings.idealGasProperty.gamma;
                     real asqr, H, p;
-                    Gas::IdealGasThermal(ULxy(I4), ULxy(0), vsqr, gamma, p, asqr, H);
+                    Gas::IdealGasThermal(ULxyStatic(I4), ULxyStatic(0), vsqr, gamma, p, asqr, H);
 
                     DNDS_assert(asqr >= 0);
                     real a = std::sqrt(asqr);
 
                     if (un - a > 0) // full outflow
                     {
-                        URxy = ULxy;
+                        URxy = ULxyStatic;
                     }
                     else if (un > 0) //  1 sonic outflow, 1 sonic inflow, other outflow (subsonic out)
                     {
                         TU farPrimitive, ULxyPrimitive;
-                        farPrimitive.resizeLike(ULxy);
+                        farPrimitive.resizeLike(ULxyStatic);
                         ULxyPrimitive.resizeLike(URxy);
                         Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
-                        Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
                         ULxyPrimitive(I4) = farPrimitive(I4); // using far pressure
                         Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma);
                     }
                     else if (un + a > 0) //  1 sonic outflow, 1 sonic inflow, other inflow (subsonic in)
                     {
                         TU farPrimitive, ULxyPrimitive;
-                        farPrimitive.resizeLike(ULxy);
+                        farPrimitive.resizeLike(ULxyStatic);
                         ULxyPrimitive.resizeLike(URxy);
                         Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
-                        Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
                         // farPrimitive(0) = ULxyPrimitive(0); // using inner density
                         farPrimitive(I4) = ULxyPrimitive(I4); // using inner pressure
                         Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
@@ -940,8 +949,10 @@ namespace DNDS::Euler
                         URxy = far;
                     }
                     // URxy = far; //! override
+                    if (settings.frameConstRotation.enabled) // to rotating frame velocity
+                        TransformURotatingFrame(URxy, pPhysics, -1);
                 }
-                else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_DMR_FAR)
+                else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_DMR_FAR) // (no rotating)
                 {
                     DNDS_assert(dim > 1);
                     URxy = settings.farFieldStaticValue;
@@ -963,7 +974,7 @@ namespace DNDS::Euler
                             URxy({0, 1, 2, 3}) = Eigen::Vector<real, 4>{8, 57.157676649772960, -33, 5.635e2};
                     }
                 }
-                else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_RT_FAR)
+                else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_RT_FAR) // (no rotating)
                 {
                     DNDS_assert(dim > 1);
                     Eigen::VectorXd far = settings.farFieldStaticValue;
@@ -1028,7 +1039,7 @@ namespace DNDS::Euler
                     }
                     // URxy = far; //! override
                 }
-                else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_IV_FAR)
+                else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_IV_FAR) // (no rotating)
                 {
                     real chi = 5;
                     real gamma = settings.idealGasProperty.gamma;
@@ -1054,7 +1065,7 @@ namespace DNDS::Euler
                     URxy(2) = rho * uy;
                     URxy(dim + 1) = E;
                 }
-                else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_2DRiemann_FAR)
+                else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_2DRiemann_FAR) // (no rotating)
                 {
                     real gamma = settings.idealGasProperty.gamma;
                     real bdL = 0.0; // left
@@ -1177,7 +1188,7 @@ namespace DNDS::Euler
                     DNDS_assert(false);
             }
             else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
-                     pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
+                     pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym) // (no rotating)
             {
                 URxy = ULxy;
                 URxy(Seq123) -= 2 * ULxy(Seq123).dot(uNorm) * uNorm; // mirrored!
@@ -1186,6 +1197,8 @@ namespace DNDS::Euler
             {
                 URxy = ULxy;
                 URxy(Seq123) *= -1;
+                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
+                    URxy(Seq123) -= 2 * settings.frameConstRotation.vOmega().cross(pPhysics - settings.frameConstRotation.center)(Seq012) * ULxy(0);
                 if (model == NS_SA || model == NS_SA_3D)
                 {
                     URxy(I4 + 1) *= -1;
@@ -1228,6 +1241,37 @@ namespace DNDS::Euler
             else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCIn)
             {
                 URxy = pBCHandler->GetValueFromID(btype);
+                if (settings.frameConstRotation.enabled)
+                    TransformURotatingFrame(URxy, pPhysics, -1);
+            }
+            else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCInPsTs)
+            {
+                real rvNorm = ULxy(Seq123).dot(uNorm(Seq012));
+                // if (rvNorm > 0) // reversed, out flow
+                // {
+                //     URxy = ULxy;
+                // }
+                // else
+                {
+                    TU ULxyStatic = ULxy;
+                    if (settings.frameConstRotation.enabled)
+                        TransformURotatingFrame(ULxyStatic, pPhysics, 1);
+                    TU farPrimitive = pBCHandler->GetValueFromID(btype); // passive scalar components like rhoNu
+                    TVec v = ULxyStatic(Seq123).array() / ULxyStatic(0);
+                    real vSqr = v.squaredNorm();
+                    real pStag = pBCHandler->GetValueFromID(btype)(0);
+                    real tStag = pBCHandler->GetValueFromID(btype)(1);
+                    real tStatic = tStag - 0.5 * vSqr / (settings.idealGasProperty.CpGas);
+                    real gamma = settings.idealGasProperty.gamma;
+                    real pStatic = pStag * std::pow(tStatic / tStag, gamma / (gamma - 1));
+                    real rStatic = pStatic / (settings.idealGasProperty.Rgas * tStatic);
+                    farPrimitive(0) = rStatic;
+                    farPrimitive(Seq123) = -uNorm * std::sqrt(vSqr);
+                    farPrimitive(I4) = pStatic;
+                    Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
+                    if (settings.frameConstRotation.enabled)
+                        TransformURotatingFrame(URxy, pPhysics, -1);
+                }
             }
             else
             {

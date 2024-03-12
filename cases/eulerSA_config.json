@@ -44,7 +44,7 @@
         "meshElevationMaxIncludedAngle": 10,
         "meshElevationRBFKernel": "CPC0",
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2_testCurve/lifted",
+        "outPltName": "../data/out/NACA0012_H2_testCurve/test_wallDist",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -56,7 +56,8 @@
         "outCellScalarNames": [
             "minJacobiDetRel",
             "cellVolume",
-            "ACond"
+            "ACond",
+            "dWall"
         ],
         "_tail": 0
     },
@@ -95,8 +96,8 @@
         },
         "functionalSettings": {
             // "scaleType": "MeanAACBB",
-            // "dirWeightScheme": "HQM_OPT",
-            "dirWeightScheme": "TEST_OPT",
+            "dirWeightScheme": "HQM_OPT",
+            // "dirWeightScheme": "TEST_OPT",
             // "dirWeightScheme": "ManualDirWeight",
             // "manualDirWeights": [
             //     1.0,
@@ -104,8 +105,8 @@
             //     0,
             //     0
             // ],
-            // "geomWeightScheme": "HQM_SD",
-            "geomWeightScheme": "GWNone",
+            "geomWeightScheme": "HQM_SD",
+            // "geomWeightScheme": "GWNone",
             // "geomWeightPower": 0.5,
             // "geomWeightScheme": "SD_Power",
             // "geomWeightPower1": -0.5,
@@ -139,7 +140,8 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "HLLC",
+        "riemannSolverType": "Roe",
+        "minWallDist": 5e-6,
         "constMassForce": [
             0.0,
             0.0,

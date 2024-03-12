@@ -15,7 +15,9 @@ namespace DNDS::Euler
         BCWall,
         BCWallInvis,
         BCOut,
+        // BCOutP,
         BCIn,
+        BCInPsTs,
         BCSym,
         BCSpecial,
     };
@@ -28,7 +30,9 @@ namespace DNDS::Euler
             {BCWall, "BCWall"},
             {BCWallInvis, "BCWallInvis"},
             {BCOut, "BCOut"},
+            // {BCOutP, "BCOutP"},
             {BCIn, "BCIn"},
+            {BCInPsTs, "BCInPsTs"},
             {BCSym, "BCSym"},
             {BCSpecial, "BCSpecial"},
         });
@@ -95,7 +99,9 @@ namespace DNDS::Euler
                 {
                 case EulerBCType::BCFar:
                 case EulerBCType::BCOut:
+                // case EulerBCType::BCOutP:
                 case EulerBCType::BCIn:
+                case EulerBCType::BCInPsTs:
                 {
                     Eigen::VectorXd bcValue = item["value"];
                     DNDS_assert_info(bcValue.size() == bc.nVars, "bc value dim not right");
@@ -107,12 +113,20 @@ namespace DNDS::Euler
                 case EulerBCType::BCWall:
                 case EulerBCType::BCWallInvis:
                 {
+                    uint32_t frameOption = 0;
+                    if (item.count("frameOption"))
+                        frameOption = item["frameOption"];
+                    bc.BCValues.push_back(TU::Zero(bc.nVars));
+                    bc.BCFlags.emplace_back(TFlags{});
+                    bc.BCFlags.back()["frameOpt"] = frameOption;
                 }
                 break;
 
                 case EulerBCType::BCSym:
                 {
-                    uint32_t rectifyOption = item["rectifyOption"];
+                    uint32_t rectifyOption = 0;
+                    if (item.count("rectifyOption"))
+                        rectifyOption = item["rectifyOption"];
                     bc.BCValues.push_back(TU::Zero(bc.nVars));
                     bc.BCFlags.emplace_back(TFlags{});
                     bc.BCFlags.back()["rectifyOpt"] = rectifyOption;
@@ -157,6 +171,7 @@ namespace DNDS::Euler
                 case EulerBCType::BCWall:
                 case EulerBCType::BCWallInvis:
                 {
+                    item["frameOption"] = bc.BCFlags.at(i).at("frameOpt");
                 }
                 break;
 

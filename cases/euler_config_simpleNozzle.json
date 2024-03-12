@@ -1,9 +1,9 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-1,
-        "nTimeStep": 100,
-        "steadyQuit": false,
-        "odeCode": 1,
+        "dtImplicit": 1e100,
+        "nTimeStep": 1,
+        "steadyQuit": true,
+        "odeCode": 103,
         "tEnd": 3e+200,
         "odeSetting1": 0.5,
         "odeSetting2": 0,
@@ -18,7 +18,7 @@
         "consoleOutputMode": 0,
         "consoleOutputEveryFix": 0,
         "nDataOutC": 1,
-        "nDataOut": 1,
+        "nDataOut": 10,
         "nDataOutCInternal": 100,
         "nDataOutInternal": 1000000000,
         "tDataOut": 3e+200
@@ -32,35 +32,22 @@
         "useLocalDt": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 1000,
-        "rhsThresholdInternal": 1e-4,
+        "nTimeStepInternal": 10000,
+        "rhsThresholdInternal": 1e-8,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/UniformRot030.cgns",
-        "outPltName": "../data/outUnsteady/UniformRot030-O2",
+        "meshFile": "../data/mesh/ChamberNozzle2D.cgns",
+        "outPltName": "../data/outUnsteady/ChamberNozzle2D",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": true,
         "outAtPointData": true,
         "outAtCellData": true
-    },
-    "boundaryDefinition": {
-        "PeriodicTranslation1": [
-            0,
-            0,
-            0
-        ],
-        "PeriodicRotationEulerAngles1": [
-            0.0,
-            0.0,
-            30
-        ],
-        "periodicTolerance": 1e-2
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
@@ -126,7 +113,7 @@
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
         "riemannSolverType": "Roe",
-        "specialBuiltinInitializer": 201,
+        // "specialBuiltinInitializer": 201,
         "nCentralSmoothStep": 0,
         "constMassForce": [
             0.0,
@@ -136,34 +123,45 @@
         "farFieldStaticValue": [
             1,
             1,
-            1,
             0,
-            3.5
-        ],
-        "boxInitializers": [
-            {
-                "x0": 1,
-                "x1": 2,
-                "y0": -0.1,
-                "y1": 0.1,
-                "z0": -100,
-                "z1": 100,
-                "v": [
-                    1,
-                    0,
-                    0,
-                    0,
-                    2.5
-                ]
-            }
+            0,
+            3
         ],
         "idealGasProperty": {
             "gamma": 1.4,
-            "Rgas": 289,
+            "Rgas": 1,
             "muGas": 1e-200,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4
         }
-    }
+    },
+    "bcSettings": [
+        {
+            "type": "BCFar",
+            "name": "Out",
+            "value": [
+                1,
+                1,
+                0,
+                0,
+                2
+            ]
+        },
+        {
+            "type": "BCSym",
+            "name": "Sym"
+        },
+        {
+            "type": "BCInPsTs",
+            "name": "In",
+            "value": [
+                2, //Ps
+                2, //Ts
+                1e100,
+                1e100,
+                1e100
+            ]
+        }
+    ]
 }

@@ -1,17 +1,19 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 2e30,
+        "dtImplicit": 1e100,
         "nTimeStep": 1,
         "steadyQuit": true,
         "useRestart": false,
-        "odeCode": 1, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
+        "rhsFPPMode": 1,
+        "rhsFPPScale": 1,
+        "odeCode": 103, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
         "tEnd": 3e+200,
         "partitonMeshOnly": false,
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 20000,
-        "rhsThresholdInternal": 1e-60,
+        "nTimeStepInternal": 10000,
+        "rhsThresholdInternal": 1e-8,
         "res_base": 0.0,
         "useVolWiseResidual": false
     },
@@ -19,9 +21,9 @@
         "nConsoleCheck": 1,
         "nConsoleCheckInternal": 1,
         "consoleOutputMode": 1,
-        "nDataOutC": 20,
+        "nDataOutC": 1,
         "nDataOut": 100,
-        "nDataOutCInternal": 100,
+        "nDataOutCInternal": 20,
         "nDataOutInternal": 1000000000,
         "nRestartOutC": 10,
         "nRestartOut": 100,
@@ -30,7 +32,7 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 50,
+        "CFL": 10,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 2147483647,
         "nCFLRampLength": 2147483647,
@@ -40,6 +42,7 @@
     },
     "dataIOControl": {
         "uniqueStamps": false,
+        "meshScale": 0.003333333333333,
         "meshElevation": 0,
         "meshElevationInternalSmoother": 0,
         "meshElevationIter": 20,
@@ -47,10 +50,10 @@
         "meshElevationRBFRadius": 5,
         "meshElevationRBFKernel": "CPC0",
         "meshElevationMaxIncludedAngle": 20,
-        "meshFile": "../data/mesh/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse.cgns",
-        "outPltName": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_TestLaminar/out0_nolift",
+        "meshFile": "../data/mesh/row_1_test3.cgns",
+        "outPltName": "../data/out/row_1_test3-InvisTest",
         "outPltMode": 0,
-        "readMeshMode": 1,
+        "readMeshMode": 0,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": true,
         "outAtPointData": true,
@@ -62,6 +65,19 @@
             "dWall"
         ],
         "_tail": 0
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation1": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "PeriodicRotationEulerAngles1": [
+            0.0,
+            0.0,
+            18.947368421052630//360 /19
+        ],
+        "periodicTolerance": 1e-8
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
@@ -80,10 +96,10 @@
         "nPartialLimiterStartLocal": 10
     },
     "vfvSettings": {
-        "maxOrder": 3,
-        "intOrder": 5,
+        "maxOrder": 2,
+        "intOrder": 3,
         "cacheDiffBase": true,
-        "jacobiRelax": 1.0,
+        "jacobiRelax": 1,
         "SORInstead": false,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
@@ -126,7 +142,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "minWallDist": 5e-8,
+        "minWallDist": 1e-8,
         "riemannSolverType": "Roe_M2",
         "rsMeanValueEig": 0,
         "constMassForce": [
@@ -134,26 +150,85 @@
             0.0,
             0.0
         ],
+        "frameConstRotation": {
+            "enabled": true,
+            "axis": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "rpm": 9.9
+        },
         "farFieldStaticValue": [
             1,
-            1,
             0,
             0,
-            3.674603174603174 //M 0.75
+            0.5,
+            1.417397773437500
         ],
         "idealGasProperty": {
             "gamma": 1.4,
-            "Rgas": 0.003486659170349,
-            "muGas": 4.706666666666667e-08,
+            "Rgas": 0.001892583230368,
+            "muGas": 1e-200,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4
         }
     },
-    "restartState": {
-        "iStep": 1,
-        "iStepInternal": 4800,
-        "odeCodePrev": -1,
-        "lastRestartFile": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_RE_O2Starter1_C_p480_restart.dir"
-    }
+    "bcSettings": [
+        {
+            "type": "BCFar",
+            "name": "RS_1_to_2",
+            "value": [
+                1,
+                0,
+                0,
+                0.5,
+                1.417397773437500
+                // 3.186193837897855
+            ]
+        },
+        {
+            // "type": "BCFar",
+            "type": "BCInPsTs",
+            "name": "INLET_1",
+            // "value": [
+            //     1,
+            //     0,
+            //     0,
+            //     0.5,
+            //     1.292397773437500
+            // ]
+            "value": [
+                0.516959109375000, //Ps
+                288.15, //Ts
+                1e100,
+                1e100,
+                1e100
+            ]
+        },
+        {
+            "type": "BCWallInvis",
+            "name": "WALL_ROT_1"
+        },
+        {
+            "type": "BCWallInvis",
+            "name": "WALL_HUB_1"
+        },
+        {
+            "type": "BCWallInvis",
+            "name": "WALL_HUB_IN",
+            "frameOption": 1
+        },
+        {
+            "type": "BCWallInvis",
+            "name": "WALL_SH",
+            "frameOption": 1
+        }
+    ]
 }

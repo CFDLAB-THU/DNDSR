@@ -11,12 +11,11 @@ namespace DNDS::Geom
 {
 
     void UnstructuredMeshSerialRW::
-        Deduplicate1to1Periodic() // currently does not handle parallel input mode
+        Deduplicate1to1Periodic(real search_eps) // currently does not handle parallel input mode
     {
         DNDS_assert(this->dataIsSerialIn);
         // TODO: build periodic donor oct-trees
         // TODO: search in donors if periodic main and connect cell2cell
-        real search_eps = 1e-8;
 
         PointCloudKDTree periodicDonorCenter1;
         PointCloudKDTree periodicDonorCenter2;
@@ -93,22 +92,26 @@ namespace DNDS::Geom
             if (FaceIDIsPeriodicMain(faceID))
             {
                 tPoint faceCentTrans = mesh->periodicInfo.TransCoord(faceCent, faceID);
-                std::vector<index> outIndices(1);
+                std::vector<index> outIndices(2);
                 Eigen::Vector<real, Eigen::Dynamic> outDistancesSqr;
-                outDistancesSqr.resize(1);
+                outDistancesSqr.resize(2);
                 size_t nResults{0};
                 if (faceID == BC_ID_PERIODIC_1)
-                    nResults = periodicDonorTree1.knnSearch(faceCentTrans.data(), 1, outIndices.data(), outDistancesSqr.data());
+                    nResults = periodicDonorTree1.knnSearch(faceCentTrans.data(), 2, outIndices.data(), outDistancesSqr.data());
                 if (faceID == BC_ID_PERIODIC_2)
-                    nResults = periodicDonorTree2.knnSearch(faceCentTrans.data(), 1, outIndices.data(), outDistancesSqr.data());
+                    nResults = periodicDonorTree2.knnSearch(faceCentTrans.data(), 2, outIndices.data(), outDistancesSqr.data());
                 if (faceID == BC_ID_PERIODIC_3)
-                    nResults = periodicDonorTree3.knnSearch(faceCentTrans.data(), 1, outIndices.data(), outDistancesSqr.data());
-                DNDS_assert_info(nResults == 1, "Tree Search of periodic result number not 1");
+                    nResults = periodicDonorTree3.knnSearch(faceCentTrans.data(), 2, outIndices.data(), outDistancesSqr.data());
+                DNDS_assert_info(nResults >= 1, "Tree Search of periodic result number not enough");
 
                 // std::cout << outDistancesSqr[0] << std::endl;
-                DNDS_assert_info(outDistancesSqr[0] < sqr(search_eps),
+                DNDS_assert_info(outDistancesSqr[0] <= sqr(search_eps),
                                  fmt::format("nearest neighbour dist{} not matching under the threshold",
                                              outDistancesSqr[0]));
+                if (nResults > 1)
+                    DNDS_assert_info(outDistancesSqr[1] > sqr(search_eps),
+                                     fmt::format("second nearest neighbour dist{} not matching over the threshold",
+                                                 outDistancesSqr[1]));
                 index donorIBnd{-1};
                 if (faceID == BC_ID_PERIODIC_1)
                     donorIBnd = periodicDonorIBnd1.at(outIndices[0]), periodicMainToDonor1[iBnd] = donorIBnd;

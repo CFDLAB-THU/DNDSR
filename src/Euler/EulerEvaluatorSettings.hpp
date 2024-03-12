@@ -4,6 +4,7 @@
 #include "Euler.hpp"
 #include "Gas.hpp"
 #include "DNDS/JsonUtil.hpp"
+#include <unordered_set>
 
 namespace DNDS::Euler
 {
@@ -14,7 +15,7 @@ namespace DNDS::Euler
         static const int dim = getDim_Fixed(model);
         static const int gDim = getGeomDim_Fixed(model);
         static const auto I4 = dim + 1;
-        
+
         nlohmann::ordered_json jsonSettings;
 
         Gas::RiemannSolverType rsType = Gas::Roe;
@@ -103,6 +104,27 @@ namespace DNDS::Euler
         real uRecAlphaCompressPower = 2;
 
         Eigen::Vector<real, 3> constMassForce = Eigen::Vector<real, 3>{0, 0, 0};
+        struct FrameConstRotation
+        {
+            bool enabled = false;
+            Geom::tPoint axis = Geom::tPoint{0, 0, 1};
+            Geom::tPoint center = Geom::tPoint{0, 0, 0};
+            real rpm = 0;
+            real Omega()
+            {
+                return rpm * (2 * pi / 60.);
+            }
+            Geom::tPoint vOmega()
+            {
+                return axis * Omega();
+            }
+            DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
+                FrameConstRotation,
+                enabled,
+                axis,
+                center,
+                rpm)
+        } frameConstRotation;
 
         bool ignoreSourceTerm = false;
         bool useScalarJacobian = false;
@@ -136,6 +158,7 @@ namespace DNDS::Euler
             __DNDS__json_to_config(wallDistScheme);
             __DNDS__json_to_config(nCentralSmoothStep);
             __DNDS__json_to_config(constMassForce);
+            __DNDS__json_to_config(frameConstRotation);
             if (read)
                 DNDS_assert(constMassForce.size() == 3);
             __DNDS__json_to_config(farFieldStaticValue);
@@ -154,6 +177,11 @@ namespace DNDS::Euler
                     box.ReadWriteJSON(boxJson, nVars, read);
                     boxInitializers.push_back(box);
                 }
+                if (constMassForce.norm() || frameConstRotation.enabled ||
+                    std::unordered_set<EulerModel>{NS_SA, NS_SA_3D, NS_2EQ, NS_2EQ_3D}.count(model))
+                    DNDS_assert_info(!ignoreSourceTerm, "you have set source term, do not use ignoreSourceTerm! ");
+                if (frameConstRotation.enabled)
+                    frameConstRotation.axis.normalize();
             }
             else
             {
