@@ -591,7 +591,7 @@ namespace DNDS::Euler
                 nLimBeta = 0;
                 minBeta = 1;
                 if (!config.limiterControl.useLimiter)
-                    uRecNew = uRec;
+                    uRecNew = uRecC;
                 eval.EvaluateURecBeta(cx, uRecNew, betaPPC, nLimBeta, minBeta, 1); //*cx instead of u!
                 if (nLimBeta)
                     if (mpi.rank == 0 &&
