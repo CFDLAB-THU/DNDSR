@@ -135,4 +135,25 @@ namespace DNDS::Geom
             {0, 1, 0},
             {-sin(theta), 0, cos(theta)}};
     }
+
+    inline tGPoint RotateAxis(const tPoint &axis)
+    {
+        real theta = axis.norm();
+        if(theta < smallReal)
+            return tGPoint::Identity();
+        tPoint axn = axis / theta;
+        tGPoint Omega{{0, -axn(2), axn(1)},
+                      {axn(2), 0, -axn(0)},
+                      {-axn(1), axn(0), 0}};
+        return axn * axn.transpose() + std::sin(theta) * Omega - std::cos(theta) * (Omega * Omega);
+    }
+
+    template <int dim>
+    tPoint ToThreeDim(const Eigen::Vector<real, dim> &v)
+    {
+        tPoint r;
+        r.setZero();
+        r(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>)) = v;
+        return r;
+    }
 }

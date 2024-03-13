@@ -1,0 +1,164 @@
+{
+    "timeMarchControl": {
+        "dtImplicit": 1e-1,
+        "nTimeStep": 50,
+        "steadyQuit": false,
+        "odeCode": 1,
+        "tEnd": 3e+200,
+        "odeSetting1": 0.5,
+        "odeSetting2": 0,
+        "odeSetting3": 0.75,
+        // "rhsFPPMode": 1,
+        // "rhsFPPScale": 0.01
+        "_tail": 0
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 0,
+        "consoleOutputEveryFix": 0,
+        "nDataOutC": 1,
+        "nDataOut": 50,
+        "nDataOutCInternal": 100,
+        "nDataOutInternal": 1000000000,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 100.0,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 2147483647,
+        "nCFLRampLength": 2147483647,
+        "CFLRampEnd": 0.0,
+        "useLocalDt": true
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 100,
+        "rhsThresholdInternal": 1e-3,
+        "res_base": 0.0,
+        "useVolWiseResidual": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshRotZ": 0.0,
+        "meshFile": "../data/mesh/IV30_100.cgns",
+        "outPltName": "../data/outUnsteady/IV30_100",
+        "outLogName": "../data/outUnsteady/IV30_100",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": false,
+        "outAtPointData": true,
+        "outAtCellData": true
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 10,
+        "recThreshold": 1e-010,
+        "nRecConsolCheck": 10,
+        "nRecMultiplyForZeroedGrad": 1000,
+        "storeRecInc": true,
+        "dampRecIncDTau": false
+    },
+    "limiterControl": {
+        "useLimiter": false,
+        "usePPRecLimiter": true,
+        "smoothIndicatorProcedure": 0,
+        "limiterProcedure": 1, //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 5,
+        "cacheDiffBase": false,
+        "jacobiRelax": 1,
+        "SORInstead": true,
+        "smoothThreshold": 1e-3,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false,
+        "subs2ndOrder": 0,
+        "baseSettings": {
+            "localOrientation": false,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "scaleType": "BaryDiff",
+            // "dirWeightScheme": "HQM_OPT"
+            // "useAnisotropicFunctional": true,
+            // "scaleMultiplier": 3.464101615137754,
+            "greenGauss1Weight": 1,
+            "_tail": 0
+        }
+    },
+    "linearSolverControl": {
+        "jacobiCode": 0,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
+        "nSgsConsoleCheck": 100,
+        "gmresCode": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        "initWithLastURecInc": false
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": true,
+        "riemannSolverType": "Roe",
+        // "specialBuiltinInitializer": 202,
+        "nCentralSmoothStep": 0,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "frameConstRotation": {
+            "enabled": true,
+            "axis": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "center": [
+                -10.0,
+                -10.0,
+                0.0
+            ],
+            "rpm": 0.6
+        },
+        "farFieldStaticValue": [
+            1,
+            1,
+            1,
+            0,
+            3.5
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 289,
+            "muGas": 1e-200,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        }
+    },
+    "bcSettings": [
+        {
+            "type": "BCFar",
+            "name": "bnds",
+            "value": [
+                1,
+                1,
+                1,
+                0,
+                3.5
+            ],
+            "frameOption": 1
+        }
+    ]
+}

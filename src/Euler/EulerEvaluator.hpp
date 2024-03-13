@@ -865,7 +865,7 @@ namespace DNDS::Euler
             return dF;
         }
 
-        void TransformURotatingFrame(TU& U, const Geom::tPoint& pPhysics, int direction)
+        void TransformURotatingFrame(TU &U, const Geom::tPoint &pPhysics, int direction)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             U(I4) -= U(Seq123).squaredNorm() / (2 * U(0));
@@ -900,9 +900,16 @@ namespace DNDS::Euler
                 if (btype == Geom::BC_ID_DEFAULT_FAR ||
                     pBCHandler->GetTypeFromID(btype) == EulerBCType::BCFar)
                 {
-                    const TU &far = btype >= Geom::BC_ID_DEFAULT_MAX
-                                        ? pBCHandler->GetValueFromID(btype)
-                                        : TU(settings.farFieldStaticValue);
+                    TU far = btype >= Geom::BC_ID_DEFAULT_MAX
+                                 ? pBCHandler->GetValueFromID(btype)
+                                 : TU(settings.farFieldStaticValue);
+                    if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCFar)
+                    {
+                        if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
+                            far(Seq123) = (Geom::RotateAxis(-settings.frameConstRotation.vOmega() * t) * Geom::ToThreeDim<dim>(far(Seq123)))(Seq012);
+                        // std::cout << Geom::RotateAxis(settings.frameConstRotation.vOmega() * t) * Geom::RotateAxis(settings.frameConstRotation.vOmega() * t).transpose() << std::endl;
+                        // DNDS_assert(false);
+                    }
                     // fmt::print("far id: {}\n", btype);
                     // std::cout << far.transpose() << std::endl;
 
@@ -910,11 +917,10 @@ namespace DNDS::Euler
                     if (settings.frameConstRotation.enabled) // to static frame velocity
                         TransformURotatingFrame(ULxyStatic, pPhysics, 1);
 
-                    real un = ULxyStatic(Seq123).dot(uNorm) / ULxyStatic(0);
-                    real vsqr = (ULxyStatic(Seq123) / ULxyStatic(0)).squaredNorm();
+                    real un = ULxy(Seq123).dot(uNorm) / ULxy(0); // using relative velo for in/out judgement
                     real gamma = settings.idealGasProperty.gamma;
                     real asqr, H, p;
-                    Gas::IdealGasThermal(ULxyStatic(I4), ULxyStatic(0), vsqr, gamma, p, asqr, H);
+                    Gas::IdealGasThermal(ULxyStatic(I4), ULxyStatic(0), (ULxyStatic(Seq123) / ULxyStatic(0)).squaredNorm(), gamma, p, asqr, H);
 
                     DNDS_assert(asqr >= 0);
                     real a = std::sqrt(asqr);
@@ -948,7 +954,6 @@ namespace DNDS::Euler
                     {
                         URxy = far;
                     }
-                    // URxy = far; //! override
                     if (settings.frameConstRotation.enabled) // to rotating frame velocity
                         TransformURotatingFrame(URxy, pPhysics, -1);
                 }
@@ -1241,6 +1246,11 @@ namespace DNDS::Euler
             else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCIn)
             {
                 URxy = pBCHandler->GetValueFromID(btype);
+                if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCFar)
+                {
+                    if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
+                        URxy(Seq123) = (Geom::RotateAxis(-settings.frameConstRotation.vOmega() * t) * Geom::ToThreeDim<dim>(URxy(Seq123)))(Seq012);
+                }
                 if (settings.frameConstRotation.enabled)
                     TransformURotatingFrame(URxy, pPhysics, -1);
             }
@@ -1256,7 +1266,7 @@ namespace DNDS::Euler
                     TU ULxyStatic = ULxy;
                     if (settings.frameConstRotation.enabled)
                         TransformURotatingFrame(ULxyStatic, pPhysics, 1);
-                    TU farPrimitive = pBCHandler->GetValueFromID(btype); // passive scalar components like rhoNu
+                    TU farPrimitive = pBCHandler->GetValueFromID(btype); // primitive passive scalar components like Nu
                     TVec v = ULxyStatic(Seq123).array() / ULxyStatic(0);
                     real vSqr = v.squaredNorm();
                     real pStag = pBCHandler->GetValueFromID(btype)(0);

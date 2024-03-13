@@ -170,7 +170,7 @@ namespace DNDS::Euler
                             ULxy, ULMeanXy, f2c[0], iFace,
                             unitNorm,
                             normBase,
-                            vfv->GetFaceQuadraturePPhys(iFace, -1),
+                            vfv->GetFaceQuadraturePPhys(iFace, iG),
                             t,
                             mesh->GetFaceZone(iFace), true);
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
@@ -180,7 +180,7 @@ namespace DNDS::Euler
                             ULMeanXy, ULMeanXy, f2c[0], iFace,
                             unitNorm,
                             normBase,
-                            vfv->GetFaceQuadraturePPhys(iFace, -1),
+                            vfv->GetFaceQuadraturePPhys(iFace, iG),
                             t,
                             mesh->GetFaceZone(iFace), false);
                     }

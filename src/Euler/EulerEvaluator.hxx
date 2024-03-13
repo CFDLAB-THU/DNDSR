@@ -622,7 +622,6 @@ namespace DNDS::Euler
                 }
             }
         }
-        
 
         switch (settings.specialBuiltinInitializer)
         {
@@ -663,6 +662,7 @@ namespace DNDS::Euler
                 }
             break;
         case 2: // for IV10 problem
+        case 202:
             DNDS_assert(model == NS || model == NS_2D);
             if constexpr (model == NS || model == NS_2D)
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
@@ -678,7 +678,12 @@ namespace DNDS::Euler
                         [&](TU &inc, int ig)
                         {
                             Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
-                            inc = SpecialFields::IsentropicVortex10(*this, pPhysics, 0, nVars);
+                            if (settings.specialBuiltinInitializer == 2)
+                                inc = SpecialFields::IsentropicVortex10(*this, pPhysics, 0, nVars);
+                            else if (settings.specialBuiltinInitializer == 202)
+                                inc = SpecialFields::IsentropicVortex30(*this, pPhysics, 0, nVars);
+                            else
+                                DNDS_assert(false);
                             inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
                         });
                     u[iCell] = um / vfv->GetCellVol(iCell); // mean value
@@ -1059,7 +1064,7 @@ namespace DNDS::Euler
             else
                 for (int iG = 0; iG < rhoS.size(); iG++)
                 {
-                    if (eInternalS(iG) < 2 * pEps)
+                    if (eInternalS(iG) < 2 * pEps / (gamma - 1))
                     {
                         real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
                             recBase(iG, Eigen::all).transpose(), recInc(iG, Eigen::all).transpose(),
@@ -1084,7 +1089,8 @@ namespace DNDS::Euler
                 std::cout << fmt::format("theta1 {}, thetaP {}", theta1, thetaP) << std::endl;
                 DNDS_assert(false);
             }
-            uRec[iCell] = (uRec[iCell] - uRecBase) * uRecBeta[iCell](0) + uRecBase;
+            if (uRecBeta[iCell](0) < 1)
+                uRec[iCell] = (uRec[iCell] - uRecBase) * uRecBeta[iCell](0) + uRecBase;
 
             // validation:
             recInc = quadBase * uRec[iCell];

@@ -14,11 +14,12 @@ int main(int argc, char *argv[])
     // return 0;
     std::string defaultConfJson = "../cases/euler_default_config.json";
     std::string confJson = "../cases/euler_config.json";
-    if(argc > 1 && std::stoi(argv[1]) == 1)
+    if (argc > 1 && std::stoi(argv[1]) == 1)
     {
         defaultConfJson = "./euler_default_config.json";
         confJson = "./euler_config.json";
     }
+    try
     {
         DNDS::MPIInfo mpi;
         mpi.setWorld();
@@ -28,6 +29,14 @@ int main(int argc, char *argv[])
         solver.ConfigureFromJson(defaultConfJson, true, confJson);
         solver.ReadMeshAndInitialize();
         solver.RunImplicitEuler();
+    }
+    catch (std::exception &e)
+    {
+        std::cerr << "DNDS top-level exception: " << e.what() << std::endl;
+    }
+    catch (...)
+    {
+        std::cerr << "Unknown exception" << std::endl;
     }
     MPI_Finalize();
 }

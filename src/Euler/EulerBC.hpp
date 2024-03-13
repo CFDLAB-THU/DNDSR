@@ -103,10 +103,14 @@ namespace DNDS::Euler
                 case EulerBCType::BCIn:
                 case EulerBCType::BCInPsTs:
                 {
+                    uint32_t frameOption = 0;
+                    if (item.count("frameOption"))
+                        frameOption = item["frameOption"];
                     Eigen::VectorXd bcValue = item["value"];
                     DNDS_assert_info(bcValue.size() == bc.nVars, "bc value dim not right");
                     bc.BCValues.push_back(bcValue);
                     bc.BCFlags.emplace_back(TFlags{});
+                    bc.BCFlags.back()["frameOpt"] = frameOption;
                 }
                 break;
 
@@ -166,6 +170,7 @@ namespace DNDS::Euler
                 case EulerBCType::BCInPsTs:
                 {
                     item["value"] = static_cast<TU_R>(bc.BCValues.at(i)); // force begin() and end() to be exposed
+                    item["frameOption"] = bc.BCFlags.at(i).at("frameOpt");
                 }
                 break;
 
