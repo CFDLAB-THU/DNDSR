@@ -487,6 +487,9 @@ namespace DNDS::Euler
                     gSetting.merge_patch(gSettingAdd);
                 }
                 config.ReadWriteJson(gSetting, nVars, read);
+                DNDS_MAKE_SSP(pBCHandler, nVars);
+                from_json(config.bcSettings, *pBCHandler);
+                gSetting["bcSettings"] = *pBCHandler;
                 PrintConfig(true);
                 if (mpi.rank == 0)
                     log() << "JSON: read value:" << std::endl
@@ -495,10 +498,9 @@ namespace DNDS::Euler
             else
             {
                 gSetting = nlohmann::ordered_json::object();
-                BoundaryHandler<model> BCHandler(nVars);
-                from_json(config.bcSettings, BCHandler);
                 config.ReadWriteJson(gSetting, nVars, read);
-                gSetting["bcSettings"] = BCHandler;
+                if (pBCHandler) // todo: add example pBCHandler
+                    gSetting["bcSettings"] = *pBCHandler;
                 if (mpi.rank == 0) // single call for output
                 {
                     std::filesystem::path outFile{jsonName};
@@ -527,11 +529,7 @@ namespace DNDS::Euler
 
             int gDimLocal = gDim; //! or else the linker breaks down here (with clang++ or g++, -g -O0,2; c++ non-optimizer bug?)
 
-            DNDS_MAKE_SSP(pBCHandler, nVars);
             auto &BCHandler = *pBCHandler;
-            // using tBC = typename BoundaryHandler<model>;
-            // BCHandler = config.bcSettings; // using from_json()
-            from_json(config.bcSettings, BCHandler);
 
             DNDS_MAKE_SSP(mesh, mpi, gDimLocal);
             DNDS_MAKE_SSP(meshBnd, mpi, gDimLocal - 1);

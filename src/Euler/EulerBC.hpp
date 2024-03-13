@@ -163,6 +163,7 @@ namespace DNDS::Euler
                 case EulerBCType::BCFar:
                 case EulerBCType::BCOut:
                 case EulerBCType::BCIn:
+                case EulerBCType::BCInPsTs:
                 {
                     item["value"] = static_cast<TU_R>(bc.BCValues.at(i)); // force begin() and end() to be exposed
                 }
