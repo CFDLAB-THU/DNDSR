@@ -1411,9 +1411,8 @@ namespace DNDS::Geom
             DNDS_MAKE_SSP(bMesh.cell2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
             DNDS_MAKE_SSP(bMesh.cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
         }
-
-        bMesh.cellElemInfo.father = bndElemInfo.father;
-        bMesh.cellElemInfo.son = bndElemInfo.son; //! TODO: make this a safe copy!!
+        DNDS_MAKE_SSP(bMesh.cellElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        DNDS_MAKE_SSP(bMesh.cellElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
 
         node2bndNode.resize(this->NumNodeProc(), -1);
         index bndNodeCount{0};
@@ -1431,33 +1430,45 @@ namespace DNDS::Geom
         {
             bMesh.coords[iBNode] = coords[bMesh.node2parentNode[iBNode]];
         }
-        bMesh.cell2node.father->Resize(this->NumBnd());
+        index nBndCellUse{0};
+        for (index iB = 0; iB < this->NumBnd(); iB++)
+            if (!FaceIDIsPeriodic(this->bndElemInfo(iB, 0).zone))
+                nBndCellUse++;
+        bMesh.cell2node.father->Resize(nBndCellUse);
         if (isPeriodic)
-            bMesh.cell2nodePbi.father->Resize(this->NumBnd());
+            bMesh.cell2nodePbi.father->Resize(nBndCellUse);
+        bMesh.cellElemInfo.father->Resize(nBndCellUse);
+        bMesh.cell2parentCell.resize(nBndCellUse, -1);
+        nBndCellUse = 0;
         for (index iB = 0; iB < this->NumBnd(); iB++)
         {
-            bMesh.cell2node.ResizeRow(iB, bnd2node.RowSize(iB));
+            if (FaceIDIsPeriodic(this->bndElemInfo(iB, 0).zone))
+                continue;
+            bMesh.cell2parentCell.at(nBndCellUse) = iB;
+            bMesh.cell2node.ResizeRow(nBndCellUse, bnd2node.RowSize(iB));
             if (isPeriodic)
-                bMesh.cell2nodePbi.ResizeRow(iB, bnd2node.RowSize(iB));
+                bMesh.cell2nodePbi.ResizeRow(nBndCellUse, bnd2node.RowSize(iB));
+            bMesh.cellElemInfo(nBndCellUse, 0) = bndElemInfo(iB, 0);
 
             for (rowsize ib2n = 0; ib2n < bnd2node.RowSize(iB); ib2n++)
             {
                 if (bnd2face.at(iB) < 0) // where bnd has not a face!
-                    bMesh.cell2node[iB][ib2n] = node2bndNode.at(bnd2node[iB][ib2n]);
+                    bMesh.cell2node[nBndCellUse][ib2n] = node2bndNode.at(bnd2node[iB][ib2n]);
                 else
-                    bMesh.cell2node[iB][ib2n] = node2bndNode.at(face2node[bnd2face.at(iB)][ib2n]); //* respect the face ordering if possible
+                    bMesh.cell2node[nBndCellUse][ib2n] = node2bndNode.at(face2node[bnd2face.at(iB)][ib2n]); //* respect the face ordering if possible
                 DNDS_assert(node2bndNode.at(bnd2node[iB][ib2n]) >= 0);
 
                 if (isPeriodic)
                 {
-                    if (bnd2face.at(iB) < 0)                                     // where bnd has not a face!
-                        bMesh.cell2nodePbi[iB][ib2n] = Geom::NodePeriodicBits{}; // a invalid value
+                    if (bnd2face.at(iB) < 0)                                              // where bnd has not a face!
+                        bMesh.cell2nodePbi[nBndCellUse][ib2n] = Geom::NodePeriodicBits{}; // a invalid value
                     else
                     {
-                        bMesh.cell2nodePbi[iB][ib2n] = face2nodePbi[bnd2face.at(iB)][ib2n];
+                        bMesh.cell2nodePbi[nBndCellUse][ib2n] = face2nodePbi[bnd2face.at(iB)][ib2n];
                     }
                 }
             }
+            nBndCellUse++;
         }
 
         bMesh.cell2node.father->Compress();
@@ -1471,6 +1482,8 @@ namespace DNDS::Geom
         bMesh.cell2node.trans.createGhostMapping(std::vector<int>{});
 
         bMesh.adjPrimaryState = Adj_PointToLocal;
+        if (mpi.rank == mRank)
+            log() << "UnstructuredMesh === ConstructBndMesh Done" << std::endl;
     }
 
     void UnstructuredMesh::ObtainSymmetricSymbolicFactorization(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control)

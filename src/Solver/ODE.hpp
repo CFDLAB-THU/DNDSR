@@ -840,7 +840,7 @@ namespace DNDS::ODE
         Eigen::Vector<real, 3> wInteg;
         int curSolveMethod = 0;
         int nStartIter = 0;
-            real thetaM1 = 0.9146;
+        real thetaM1 = 0.9146;
         real alphaHM3 = 0.5;
 
         /**
@@ -850,7 +850,7 @@ namespace DNDS::ODE
         template <class Finit, class FinitDtau>
         ImplicitHermite3SimpleJacobianDualStep(
             index NDOF, Finit &&finit = [](TDATA &) {}, FinitDtau &&finitDtau = [](TDTAU &) {},
-            real alpha = 0.55, int nCurSolveMethod = 0,  int nnStartIter = 0, real thetaM1n = 0.9146, int mask = 0)
+            real alpha = 0.55, int nCurSolveMethod = 0, int nnStartIter = 0, real thetaM1n = 0.9146, int mask = 0)
             : DOF(NDOF),
               cnPrev(0),
               curSolveMethod(nCurSolveMethod),

@@ -855,7 +855,7 @@ namespace DNDS::Euler
             DNDS_assert(config.dataIOControl.outAtCellData || config.dataIOControl.outAtPointData);
             DNDS_assert(config.dataIOControl.outPltVTKFormat || config.dataIOControl.outPltTecplotFormat);
             DNDS_MAKE_SSP(outDistBnd, mpi);
-            outDistBnd->Resize(mesh->NumBnd(), nOUTSBnd);
+            outDistBnd->Resize(meshBnd->NumCell(), nOUTSBnd);
 
             if (config.dataIOControl.outAtCellData)
             {

@@ -1589,7 +1589,7 @@ namespace DNDS::Geom
             {
                 for (index in2n = 0; in2n < MatC[iN].size(); in2n++)
                 {
-                    MatC[iN][in2n].first;
+                    // MatC[iN][in2n].first;
                     auto [search_good, rank, val] = boundInterpCoef.trans.pLGhostMapping->search_indexAppend(MatC[iN][in2n].first);
                     DNDS_assert(search_good);
                     DNDS_assert(val < boundInterpCoef.Size());

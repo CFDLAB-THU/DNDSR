@@ -325,19 +325,20 @@ namespace DNDS::Euler
         if (config.dataIOControl.outBndData)
         {
             DNDS_MPI_InsertCheck(mpi, "EulerSolver<model>::PrintData === bnd enter");
-            for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
+            for (index iB = 0; iB < meshBnd->NumCell(); iB++)
             {
                 // TU recu =
                 //     vfv->GetIntPointDiffBaseValue(iCell, -1, -1, -1, std::array<int, 1>{0}, 1) *
                 //     uRec[iCell];
                 // recu += uOut[iCell];
                 // recu = EulerEvaluator::CompressRecPart(uOut[iCell], recu);
+                index iBnd = meshBnd->cell2parentCell.at(iB);
                 index iCell = mesh->bnd2cell[iBnd][0];
                 index iFace = mesh->bnd2face.at(iBnd);
                 if (iFace == -1)
                 {
                     DNDS_assert(mesh->isPeriodic);                                  // only internal bnd is valid, periodic bnd should be omitted
-                    (*outDistBnd)[iBnd](nOUTSBnd - 4) = meshBnd->GetCellZone(iBnd); // add this to enable blanking
+                    (*outDistBnd)[iB](nOUTSBnd - 4) = meshBnd->GetCellZone(iB);     // add this to enable blanking
                     continue;
                 }
 
@@ -350,15 +351,15 @@ namespace DNDS::Euler
                 real M = std::sqrt(std::abs(vsqr / asqr));
                 real T = p / recu(0) / eval.settings.idealGasProperty.Rgas;
 
-                (*outDistBnd)[iBnd][0] = recu(0);
+                (*outDistBnd)[iB][0] = recu(0);
                 for (int i = 0; i < dim; i++)
-                    (*outDistBnd)[iBnd][i + 1] = velo(i);
-                (*outDistBnd)[iBnd][I4 + 0] = p;
-                (*outDistBnd)[iBnd][I4 + 1] = T;
-                (*outDistBnd)[iBnd][I4 + 2] = M;
+                    (*outDistBnd)[iB][i + 1] = velo(i);
+                (*outDistBnd)[iB][I4 + 0] = p;
+                (*outDistBnd)[iB][I4 + 1] = T;
+                (*outDistBnd)[iB][I4 + 2] = M;
                 for (int i = I4 + 1; i < nVars; i++)
                 {
-                    (*outDistBnd)[iBnd][2 + i] = recu(i) / recu(0); // 4 is additional amount offset, not Index of last flow variable (I4)
+                    (*outDistBnd)[iB][2 + i] = recu(i) / recu(0); // 4 is additional amount offset, not Index of last flow variable (I4)
                 }
                 // if(iFace < 0)
                 // {
@@ -366,10 +367,10 @@ namespace DNDS::Euler
                 //     std::abort();
                 // }
 
-                (*outDistBnd)[iBnd](Eigen::seq(nVars + 2, nOUTSBnd - 5)) = eval.fluxBnd.at(iBnd);
-                // (*outDistBnd)[iBnd](nOUTSBnd - 4) = mesh->GetFaceZone(iFace);
-                (*outDistBnd)[iBnd](nOUTSBnd - 4) = meshBnd->GetCellZone(iBnd);
-                (*outDistBnd)[iBnd](Eigen::seq(nOUTSBnd - 3, nOUTSBnd - 1)) = vfv->GetFaceNorm(iFace, 0) * vfv->GetFaceArea(iFace);
+                (*outDistBnd)[iB](Eigen::seq(nVars + 2, nOUTSBnd - 5)) = eval.fluxBnd.at(iBnd);
+                // (*outDistBnd)[iB](nOUTSBnd - 4) = mesh->GetFaceZone(iFace);
+                (*outDistBnd)[iB](nOUTSBnd - 4) = meshBnd->GetCellZone(iB);
+                (*outDistBnd)[iB](Eigen::seq(nOUTSBnd - 3, nOUTSBnd - 1)) = vfv->GetFaceNorm(iFace, 0) * vfv->GetFaceArea(iFace);
 
                 // (*outDist)[iCell][8] = (*vfv->SOR_iCell2iScan)[iCell];//!using SOR rb seq instead
             }

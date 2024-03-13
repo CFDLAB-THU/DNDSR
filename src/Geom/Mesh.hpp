@@ -108,6 +108,7 @@ namespace DNDS::Geom
         /// parent built
         std::vector<index> node2parentNode;
         std::vector<index> node2bndNode;
+        std::vector<index> cell2parentCell;
 
         /// only elevation
         tCoordPair coordsElevDisp;
