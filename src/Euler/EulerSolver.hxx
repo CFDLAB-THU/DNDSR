@@ -673,7 +673,7 @@ namespace DNDS::Euler
             auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
             bool inputIsZero{true}, hasLUDone{false};
 
-            if (config.timeMarchControl.rhsFPPMode == 1)
+            if (config.timeMarchControl.rhsFPPMode == 1 || config.timeMarchControl.rhsFPPMode == 11)
             {
                 // ! experimental: bad now ?
                 rhsTemp = crhs;
@@ -681,7 +681,8 @@ namespace DNDS::Euler
                 rhsTemp *= config.timeMarchControl.rhsFPPScale;
                 index nLimFRes = 0;
                 real alphaMinFRes = 1;
-                eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, 0.9, 1);
+                eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, 0.9,
+                                          config.timeMarchControl.rhsFPPMode == 1 ? 1 : 0);
                 if (nLimFRes)
                     if (mpi.rank == 0)
                     {
