@@ -810,8 +810,11 @@ namespace DNDS::CFV
                 matrixAHalf_GG[iCell] = AHalf_GG;
             }
             decltype(A) AInv;
-            real aCond = HardEigen::EigenLeastSquareInverse_Filtered(A, AInv, settings.svdTolerance, 1);
-            // real aCond = HardEigen::EigenLeastSquareInverse(A, AInv, settings.svdTolerance);
+            real aCond{0};
+            if (settings.svdTolerance)
+                aCond = HardEigen::EigenLeastSquareInverse_Filtered(A, AInv, settings.svdTolerance, 1);
+            else
+                aCond = HardEigen::EigenLeastSquareInverse(A, AInv, settings.svdTolerance);
             matrixAB(iCell, 0) = A;
             matrixAAInvB(iCell, 0) = AInv;
 
