@@ -102,6 +102,8 @@ namespace DNDS::Euler
 
                         TU vRec = (DiBj(Eigen::all, Eigen::seq(1, Eigen::last)) * (config.limiterControl.useLimiter ? uRecNew[iCell] : uRec[iCell])).transpose() +
                                   uOut[iCell];
+                        if(mesh->isPeriodic) // transform velocity to node reference frame 
+                            vRec(Seq123) = mesh->periodicInfo.GetVectorBackByBits<dim, 1>(vRec(Seq123), mesh->cell2nodePbi(iCell, ic2n));
                         if (mode == PrintDataTimeAverage)
                             vRec = uOut[iCell];
                         if (iNode < mesh->NumNode())
