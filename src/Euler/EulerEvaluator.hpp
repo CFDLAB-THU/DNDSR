@@ -888,22 +888,23 @@ namespace DNDS::Euler
 
             TU URxy;
             URxy.resizeLike(ULxy);
+            auto bTypeEuler = pBCHandler->GetTypeFromID(btype);
 
             if (btype == Geom::BC_ID_DEFAULT_FAR ||
                 btype == Geom::BC_ID_DEFAULT_SPECIAL_DMR_FAR ||
                 btype == Geom::BC_ID_DEFAULT_SPECIAL_RT_FAR ||
                 btype == Geom::BC_ID_DEFAULT_SPECIAL_IV_FAR ||
                 btype == Geom::BC_ID_DEFAULT_SPECIAL_2DRiemann_FAR ||
-                pBCHandler->GetTypeFromID(btype) == EulerBCType::BCFar)
+                bTypeEuler == EulerBCType::BCFar)
             {
                 DNDS_assert(ULxy(0) > 0);
                 if (btype == Geom::BC_ID_DEFAULT_FAR ||
-                    pBCHandler->GetTypeFromID(btype) == EulerBCType::BCFar)
+                    bTypeEuler == EulerBCType::BCFar)
                 {
                     TU far = btype >= Geom::BC_ID_DEFAULT_MAX
                                  ? pBCHandler->GetValueFromID(btype)
                                  : TU(settings.farFieldStaticValue);
-                    if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCFar)
+                    if (bTypeEuler == EulerBCType::BCFar)
                     {
                         if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
                             far(Seq123) = (Geom::RotateAxis(-settings.frameConstRotation.vOmega() * t) * Geom::ToThreeDim<dim>(far(Seq123)))(Seq012);
@@ -1192,13 +1193,13 @@ namespace DNDS::Euler
                 else
                     DNDS_assert(false);
             }
-            else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
-                     pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym) // (no rotating)
+            else if (bTypeEuler == EulerBCType::BCWallInvis ||
+                     bTypeEuler == EulerBCType::BCSym) // (no rotating)
             {
                 URxy = ULxy;
                 URxy(Seq123) -= 2 * ULxy(Seq123).dot(uNorm) * uNorm; // mirrored!
             }
-            else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall)
+            else if (bTypeEuler == EulerBCType::BCWall)
             {
                 URxy = ULxy;
                 URxy(Seq123) *= -1;
@@ -1239,14 +1240,14 @@ namespace DNDS::Euler
                     // std::cout << "d1" <<d1 << std::endl;
                 }
             }
-            else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCOut)
+            else if (bTypeEuler == EulerBCType::BCOut)
             {
                 URxy = ULxy;
             }
-            else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCIn)
+            else if (bTypeEuler == EulerBCType::BCIn)
             {
                 URxy = pBCHandler->GetValueFromID(btype);
-                if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCFar)
+                if (bTypeEuler == EulerBCType::BCFar)
                 {
                     if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
                         URxy(Seq123) = (Geom::RotateAxis(-settings.frameConstRotation.vOmega() * t) * Geom::ToThreeDim<dim>(URxy(Seq123)))(Seq012);
@@ -1254,34 +1255,65 @@ namespace DNDS::Euler
                 if (settings.frameConstRotation.enabled)
                     TransformURotatingFrame(URxy, pPhysics, -1);
             }
-            else if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCInPsTs)
+            else if (bTypeEuler == EulerBCType::BCInPsTs ||
+                     bTypeEuler == EulerBCType::BCOutPs)
             {
                 real rvNorm = ULxy(Seq123).dot(uNorm(Seq012));
-                // if (rvNorm > 0) // reversed, out flow
-                // {
-                //     URxy = ULxy;
-                // }
-                // else
+                TU ULxyStatic = ULxy;
+                if (settings.frameConstRotation.enabled)
+                    TransformURotatingFrame(ULxyStatic, pPhysics, 1);
+                TU ULxyPrimitive;
+                ULxyPrimitive.resizeLike(ULxy);
+                real gamma = settings.idealGasProperty.gamma;
+                Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
+                TVec v = ULxyStatic(Seq123).array() / ULxyStatic(0);
+                real vSqr = v.squaredNorm();
+                if (rvNorm >= 0 && bTypeEuler == EulerBCType::BCOutPs) // out flow
                 {
-                    TU ULxyStatic = ULxy;
-                    if (settings.frameConstRotation.enabled)
-                        TransformURotatingFrame(ULxyStatic, pPhysics, 1);
+                    real pStag = pBCHandler->GetValueFromID(btype)(0);
+
+                    auto fRes = [&](real pdpS)
+                    {
+                        return 1 - 0.5 * ULxyPrimitive(0) * vSqr / pStag * (gamma - 1) / (gamma)*std::pow(pdpS, -1. / gamma) - std::pow(pdpS, (gamma - 1) / gamma);
+                    };
+
+                    auto fDRes = [&](real pdpS)
+                    {
+                        return -0.5 * ULxyPrimitive(0) * vSqr / pStag * (gamma - 1) / (gamma)*std::pow(pdpS, -1. / gamma - 1) * (-1. / gamma) - std::pow(pdpS, (-1.) / gamma) * ((gamma - 1) / gamma);
+                    };
+
+                    real pdpS = pStag;
+                    for (int i = 0; i < 5; i++)
+                    {
+                        real fD = fDRes(pdpS);
+                        pdpS += -fRes(pdpS) / (fD + signP(fD) * smallReal);
+                        pdpS = std::min(pdpS, 1.);
+                        pdpS = std::max(0.05, pdpS);
+                    }
+                    real pStatic = pStag * pdpS;
+                    TU farPrimitive = ULxyPrimitive;
+                    farPrimitive(I4) = pStatic;
+                    Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
+                }
+                else
+                {
                     TU farPrimitive = pBCHandler->GetValueFromID(btype); // primitive passive scalar components like Nu
-                    TVec v = ULxyStatic(Seq123).array() / ULxyStatic(0);
-                    real vSqr = v.squaredNorm();
+
                     real pStag = pBCHandler->GetValueFromID(btype)(0);
                     real tStag = pBCHandler->GetValueFromID(btype)(1);
+                    vSqr = std::min(vSqr, tStag * 2 * settings.idealGasProperty.CpGas * 0.95); // incase kinetic energy exceeds internal
                     real tStatic = tStag - 0.5 * vSqr / (settings.idealGasProperty.CpGas);
                     real gamma = settings.idealGasProperty.gamma;
                     real pStatic = pStag * std::pow(tStatic / tStag, gamma / (gamma - 1));
                     real rStatic = pStatic / (settings.idealGasProperty.Rgas * tStatic);
                     farPrimitive(0) = rStatic;
-                    farPrimitive(Seq123) = -uNorm * std::sqrt(vSqr);
+                    // farPrimitive(Seq123) = -uNorm * std::sqrt(vSqr);
+                    farPrimitive(Seq123) = pBCHandler->GetValueFromID(btype)(Seq123).normalized() * std::sqrt(vSqr);
                     farPrimitive(I4) = pStatic;
                     Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
-                    if (settings.frameConstRotation.enabled)
-                        TransformURotatingFrame(URxy, pPhysics, -1);
                 }
+                if (settings.frameConstRotation.enabled)
+                    TransformURotatingFrame(URxy, pPhysics, -1);
             }
             else
             {

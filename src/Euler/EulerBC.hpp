@@ -15,7 +15,7 @@ namespace DNDS::Euler
         BCWall,
         BCWallInvis,
         BCOut,
-        // BCOutP,
+        BCOutPs,
         BCIn,
         BCInPsTs,
         BCSym,
@@ -30,7 +30,7 @@ namespace DNDS::Euler
             {BCWall, "BCWall"},
             {BCWallInvis, "BCWallInvis"},
             {BCOut, "BCOut"},
-            // {BCOutP, "BCOutP"},
+            {BCOutPs, "BCOutPs"},
             {BCIn, "BCIn"},
             {BCInPsTs, "BCInPsTs"},
             {BCSym, "BCSym"},
@@ -99,7 +99,7 @@ namespace DNDS::Euler
                 {
                 case EulerBCType::BCFar:
                 case EulerBCType::BCOut:
-                // case EulerBCType::BCOutP:
+                case EulerBCType::BCOutPs:
                 case EulerBCType::BCIn:
                 case EulerBCType::BCInPsTs:
                 {
@@ -166,6 +166,7 @@ namespace DNDS::Euler
                 {
                 case EulerBCType::BCFar:
                 case EulerBCType::BCOut:
+                case EulerBCType::BCOutPs:
                 case EulerBCType::BCIn:
                 case EulerBCType::BCInPsTs:
                 {
