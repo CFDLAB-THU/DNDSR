@@ -441,7 +441,7 @@ namespace DNDS::Euler::Gas
         real SS = 0;
         real div = (UL(0) * (SL - veloL(0) + vg(0)) - UR(0) * (SR - veloR(0) + vg(0)));
         if (std::abs(div) > verySmallReal)
-            SS = (pR - pL + UL(1) * (SL - veloL(0) + vg(0)) - UR(1) * (SR - veloR(0) + vg(0))) / div;
+            SS = (pR - pL + (UL(1) - vg(0) * UL(0)) * (SL - veloL(0) + vg(0)) - (UR(1) - vg(0) * UR(0)) * (SR - veloR(0) + vg(0))) / div;
         //! is this right for moving mesh?
         Eigen::Vector<real, dim + 2> DS;
         DS.setZero();

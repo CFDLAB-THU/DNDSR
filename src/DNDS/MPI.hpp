@@ -4,7 +4,11 @@
 #include <fstream>
 
 #include "Defines.hpp"
+DISABLE_WARNING_PUSH
+// disable mpicxx 's many warnings in intel oneAPI mpi's header
+DISABLE_WARNING_UNUSED_VALUE
 #include "mpi.h"
+DISABLE_WARNING_POP
 
 #ifdef NDEBUG
 #define NDEBUG_DISABLED

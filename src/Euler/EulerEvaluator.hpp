@@ -888,7 +888,8 @@ namespace DNDS::Euler
             TVec ret;
             ret.setZero();
 #ifdef USE_ABS_VELO_IN_ROTATION
-            ret += settings.frameConstRotation.vOmega().cross(vfv->GetFaceQuadraturePPhys(iFace, iG) - settings.frameConstRotation.center)(Seq012);
+            if (settings.frameConstRotation.enabled)
+                ret += settings.frameConstRotation.vOmega().cross(vfv->GetFaceQuadraturePPhys(iFace, iG) - settings.frameConstRotation.center)(Seq012);
 #endif
             return ret;
         }
@@ -1293,11 +1294,13 @@ namespace DNDS::Euler
             {
                 URxy = ULxy;
 #ifdef USE_ABS_VELO_IN_ROTATION
-                this->TransformVelocityRotatingFrame(URxy, pPhysics, -1);
+                if (settings.frameConstRotation.enabled)
+                    this->TransformVelocityRotatingFrame(URxy, pPhysics, -1);
 #endif
                 URxy(Seq123) -= 2 * ULxy(Seq123).dot(uNorm) * uNorm; // mirrored!
 #ifdef USE_ABS_VELO_IN_ROTATION
-                this->TransformVelocityRotatingFrame(URxy, pPhysics, 1);
+                if (settings.frameConstRotation.enabled)
+                    this->TransformVelocityRotatingFrame(URxy, pPhysics, 1);
 #endif
             }
             else if (bTypeEuler == EulerBCType::BCWall)
