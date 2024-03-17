@@ -6,8 +6,8 @@
         template void EulerEvaluator<model>::GetWallDist(); \
         template void EulerEvaluator<model>::EvaluateDt(    \
             ArrayDOFV<1> &dt,                               \
-            ArrayDOFV<nVarsFixed> &u,                      \
-            ArrayRECV<nVarsFixed> &uRec,                   \
+            ArrayDOFV<nVarsFixed> &u,                       \
+            ArrayRECV<nVarsFixed> &uRec,                    \
             real CFL, real &dtMinall, real MaxDt,           \
             bool UseLocaldt);                               \
         template                                            \
@@ -19,6 +19,7 @@
                 const TU &URMeanXy,                         \
                 const TDiffU &DiffUxy,                      \
                 const TVec &unitNorm,                       \
+                const TVec &vg,                             \
                 const TMat &normBase,                       \
                 TU &FLfix,                                  \
                 TU &FRfix,                                  \

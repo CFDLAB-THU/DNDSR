@@ -7,6 +7,7 @@ namespace DNDS::Euler
 #define DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS                              \
     static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);   \
     static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);       \
+    static const auto Seq234 = Eigen::seq(Eigen::fix<2>, Eigen::fix<dim + 1>);   \
     static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>); \
     static const auto I4 = dim + 1;
 

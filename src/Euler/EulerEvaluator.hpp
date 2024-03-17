@@ -83,10 +83,13 @@ namespace DNDS::Euler
 
         std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall;
 
+        std::unordered_map<Geom::t_index, AnchorPointRecorder<nVarsFixed>> anchorRecorders;
+
         // ArrayVDOF<25> dRdUrec;
         // ArrayVDOF<25> dRdb;
 
-        Eigen::Vector<real, -1> fluxWallSum;
+        Eigen::Vector<real, -1>
+            fluxWallSum;
         std::vector<Eigen::Vector<real, nVarsFixed>> fluxBnd;
         index nFaceReducedOrder = 0;
 
@@ -392,6 +395,7 @@ namespace DNDS::Euler
             const TU &URMeanXy,
             const TDiffU &DiffUxy,
             const TVec &unitNorm,
+            const TVec &vg,
             const TMat &normBase,
             TU &FLfix,
             TU &FRfix,
@@ -413,6 +417,15 @@ namespace DNDS::Euler
             return ret;
 #endif
             ret(Seq123) = settings.constMassForce(Seq012) * UMeanXy(0);
+#ifdef USE_ABS_VELO_IN_ROTATION
+            if (settings.frameConstRotation.enabled)
+            {
+                Geom::tPoint rV;
+                rV.setZero();
+                rV(Seq012) = UMeanXy(Seq123);
+                ret(Seq123) += -settings.frameConstRotation.vOmega().cross(rV)(Seq012);
+            }
+#else
             if (settings.frameConstRotation.enabled)
             {
                 Geom::tPoint radi = pPhy - settings.frameConstRotation.center;
@@ -424,6 +437,7 @@ namespace DNDS::Euler
                 ret(Seq123) += -2.0 * settings.frameConstRotation.vOmega().cross(rV)(Seq012);
             }
             ret(I4) += ret(Seq123).dot(UMeanXy(Seq123)) / UMeanXy(0); // work of volume force!
+#endif
             if constexpr (model == NS || model == NS_2D || model == NS_3D)
             {
             }
@@ -784,6 +798,7 @@ namespace DNDS::Euler
         TU fluxJacobian0_Right_Times_du(
             const TU &U,
             const TVec &n,
+            const TVec &vg,
             Geom::t_index btype,
             const TU &dU, real lambdaMain, real lambdaC)
         {
@@ -799,7 +814,7 @@ namespace DNDS::Euler
             Gas::GasInviscidFluxFacialIncrement<dim>(
                 U, dU,
                 n,
-                velo, dVelo,
+                velo, dVelo, vg,
                 dp, p,
                 dF);
             dF(Seq01234) -= lambdaMain * dU(Seq01234);
@@ -821,6 +836,7 @@ namespace DNDS::Euler
         TJacobianU fluxJacobian0_Right_Times_du_AsMatrix(
             const TU &U,
             const TVec &n,
+            const TVec &vg,
             Geom::t_index btype,
             real lambdaMain, real lambdaC)
         { // TODO: optimize this
@@ -828,13 +844,14 @@ namespace DNDS::Euler
             J.resize(nVars, nVars);
             J.setIdentity();
             for (int i = 0; i < nVars; i++)
-                J(Eigen::all, i) = fluxJacobian0_Right_Times_du(U, n, btype, J(Eigen::all, i), lambdaMain, lambdaC);
+                J(Eigen::all, i) = fluxJacobian0_Right_Times_du(U, n, vg, btype, J(Eigen::all, i), lambdaMain, lambdaC);
             return J;
         }
 
         TU fluxJacobianC_Right_Times_du(
             const TU &U,
             const TVec &n,
+            const TVec &vg,
             Geom::t_index btype,
             const TU &dU)
         {
@@ -850,7 +867,7 @@ namespace DNDS::Euler
             Gas::GasInviscidFluxFacialIncrement<dim>(
                 U, dU,
                 n,
-                velo, dVelo,
+                velo, dVelo, vg,
                 dp, p,
                 dF);
             if constexpr (model == NS_SA || model == NS_SA_3D)
@@ -865,18 +882,84 @@ namespace DNDS::Euler
             return dF;
         }
 
+        TVec GetFaceVGrid(index iFace, index iG)
+        {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+            TVec ret;
+            ret.setZero();
+#ifdef USE_ABS_VELO_IN_ROTATION
+            ret += settings.frameConstRotation.vOmega().cross(vfv->GetFaceQuadraturePPhys(iFace, iG) - settings.frameConstRotation.center)(Seq012);
+#endif
+            return ret;
+        }
+
+        void TransformVelocityRotatingFrame(TU &U, const Geom::tPoint &pPhysics, int direction)
+        {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+            U(Seq123) += direction * settings.frameConstRotation.vOmega().cross(pPhysics - settings.frameConstRotation.center)(Seq012) * U(0);
+        }
+
         void TransformURotatingFrame(TU &U, const Geom::tPoint &pPhysics, int direction)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+#ifndef USE_ABS_VELO_IN_ROTATION
             U(I4) -= U(Seq123).squaredNorm() / (2 * U(0));
             U(Seq123) += direction * settings.frameConstRotation.vOmega().cross(pPhysics - settings.frameConstRotation.center)(Seq012) * U(0);
             U(I4) += U(Seq123).squaredNorm() / (2 * U(0));
+#endif
+        }
+
+        void updateBCAnchors(ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
+        {
+            for (auto &v : anchorRecorders)
+                v.second.Reset();
+            for (Geom::t_index i = Geom::BC_ID_DEFAULT_MAX; i < pBCHandler->size(); i++) // init code, consider adding to ctor
+            {
+                if (pBCHandler->GetFlagFromIDSoft(i, "anchorOpt") == 0)
+                    continue;
+                if (!anchorRecorders.count(i))
+                    anchorRecorders.emplace(std::make_pair(i, AnchorPointRecorder<nVarsFixed>(mesh->getMPI())));
+            }
+            for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
+            {
+                index iFace = mesh->bnd2face.at(iBnd);
+                if (iFace < 0) // remember that some iBnd do not have iFace (for periodic case)
+                    continue;
+                auto f2c = mesh->face2cell[iFace];
+                auto gFace = vfv->GetFaceQuad(iFace);
+
+                Geom::Elem::SummationNoOp noOp;
+                auto faceBndID = mesh->GetFaceZone(iFace);
+                auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+
+                if (pBCHandler->GetFlagFromIDSoft(faceBndID, "anchorOpt") == 0)
+                    continue;
+                gFace.IntegrationSimple(
+                    noOp,
+                    [&](auto finc, int iG)
+                    {
+                        TU ULxy = u[f2c[0]];
+                        ULxy += (vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iG, std::array<int, 1>{0}, 1) *
+                                 uRec[f2c[0]])
+                                    .transpose();
+                        this->UFromCell2Face(ULxy, iFace, f2c[0], 0);
+                        real dist = vfv->GetFaceQuadraturePPhys(iFace, iG).norm();
+                        if (pBCHandler->GetValueExtraFromID(faceBndID).size() >= 3)
+                        {
+                            Geom::tPoint vOrig = pBCHandler->GetValueExtraFromID(faceBndID)({0, 1, 2});
+                            dist = (vfv->GetFaceQuadraturePPhys(iFace, iG) - vOrig).norm();
+                        }
+                        anchorRecorders.at(faceBndID).AddAnchor(ULxy, dist);
+                    });
+            }
+            for (auto &v : anchorRecorders)
+                v.second.ObtainAnchorMPI();
         }
 
         TU generateBoundaryValue(
             TU &ULxy, //! warning, possible that UL is also modified
             const TU &ULMeanXy,
-            index iCell, index iFace,
+            index iCell, index iFace, int iG,
             const TVec &uNorm,
             const TMat &normBase,
             const Geom::tPoint &pPhysics,
@@ -895,11 +978,13 @@ namespace DNDS::Euler
                 btype == Geom::BC_ID_DEFAULT_SPECIAL_RT_FAR ||
                 btype == Geom::BC_ID_DEFAULT_SPECIAL_IV_FAR ||
                 btype == Geom::BC_ID_DEFAULT_SPECIAL_2DRiemann_FAR ||
-                bTypeEuler == EulerBCType::BCFar)
+                bTypeEuler == EulerBCType::BCFar ||
+                bTypeEuler == EulerBCType::BCOutP)
             {
                 DNDS_assert(ULxy(0) > 0);
                 if (btype == Geom::BC_ID_DEFAULT_FAR ||
-                    bTypeEuler == EulerBCType::BCFar)
+                    bTypeEuler == EulerBCType::BCFar ||
+                    bTypeEuler == EulerBCType::BCOutP)
                 {
                     TU far = btype >= Geom::BC_ID_DEFAULT_MAX
                                  ? pBCHandler->GetValueFromID(btype)
@@ -937,6 +1022,16 @@ namespace DNDS::Euler
                         ULxyPrimitive.resizeLike(URxy);
                         Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
                         Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
+                        if (bTypeEuler == EulerBCType::BCOutP && pBCHandler->GetFlagFromID(btype, "anchorOpt") == 1)
+                        {
+                            TU anchorPointRel = ULxy;
+                            if (anchorRecorders.count(btype)) // if doesn't have anchor value yet, use UL as anchor
+                                anchorPointRel = anchorRecorders.at(btype).val;
+                            TU anchorPointRelPrimitive = anchorPointRel;
+                            Gas::IdealGasThermalConservative2Primitive<dim>(anchorPointRel, anchorPointRelPrimitive, gamma);
+                            // rel has correct static pressure
+                            farPrimitive(I4) += std::max(ULxyPrimitive(I4) - anchorPointRelPrimitive(I4), -0.95 * farPrimitive(I4));
+                        }
                         ULxyPrimitive(I4) = farPrimitive(I4); // using far pressure
                         Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma);
                     }
@@ -1197,14 +1292,25 @@ namespace DNDS::Euler
                      bTypeEuler == EulerBCType::BCSym) // (no rotating)
             {
                 URxy = ULxy;
+#ifdef USE_ABS_VELO_IN_ROTATION
+                this->TransformVelocityRotatingFrame(URxy, pPhysics, -1);
+#endif
                 URxy(Seq123) -= 2 * ULxy(Seq123).dot(uNorm) * uNorm; // mirrored!
+#ifdef USE_ABS_VELO_IN_ROTATION
+                this->TransformVelocityRotatingFrame(URxy, pPhysics, 1);
+#endif
             }
             else if (bTypeEuler == EulerBCType::BCWall)
             {
                 URxy = ULxy;
                 URxy(Seq123) *= -1;
+#ifdef USE_ABS_VELO_IN_ROTATION
+                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
+                    this->TransformVelocityRotatingFrame(URxy, pPhysics, 2);
+#else
                 if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
-                    URxy(Seq123) -= 2 * settings.frameConstRotation.vOmega().cross(pPhysics - settings.frameConstRotation.center)(Seq012) * ULxy(0);
+                    this->TransformVelocityRotatingFrame(URxy, pPhysics, -2);
+#endif
                 if (model == NS_SA || model == NS_SA_3D)
                 {
                     URxy(I4 + 1) *= -1;
@@ -1255,8 +1361,7 @@ namespace DNDS::Euler
                 if (settings.frameConstRotation.enabled)
                     TransformURotatingFrame(URxy, pPhysics, -1);
             }
-            else if (bTypeEuler == EulerBCType::BCInPsTs ||
-                     bTypeEuler == EulerBCType::BCOutPs)
+            else if (bTypeEuler == EulerBCType::BCInPsTs)
             {
                 real rvNorm = ULxy(Seq123).dot(uNorm(Seq012));
                 TU ULxyStatic = ULxy;
@@ -1268,34 +1373,6 @@ namespace DNDS::Euler
                 Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
                 TVec v = ULxyStatic(Seq123).array() / ULxyStatic(0);
                 real vSqr = v.squaredNorm();
-                if (rvNorm >= 0 && bTypeEuler == EulerBCType::BCOutPs) // out flow
-                {
-                    real pStag = pBCHandler->GetValueFromID(btype)(0);
-
-                    auto fRes = [&](real pdpS)
-                    {
-                        return 1 - 0.5 * ULxyPrimitive(0) * vSqr / pStag * (gamma - 1) / (gamma)*std::pow(pdpS, -1. / gamma) - std::pow(pdpS, (gamma - 1) / gamma);
-                    };
-
-                    auto fDRes = [&](real pdpS)
-                    {
-                        return -0.5 * ULxyPrimitive(0) * vSqr / pStag * (gamma - 1) / (gamma)*std::pow(pdpS, -1. / gamma - 1) * (-1. / gamma) - std::pow(pdpS, (-1.) / gamma) * ((gamma - 1) / gamma);
-                    };
-
-                    real pdpS = pStag;
-                    for (int i = 0; i < 5; i++)
-                    {
-                        real fD = fDRes(pdpS);
-                        pdpS += -fRes(pdpS) / (fD + signP(fD) * smallReal);
-                        pdpS = std::min(pdpS, 1.);
-                        pdpS = std::max(0.05, pdpS);
-                    }
-                    real pStatic = pStag * pdpS;
-                    TU farPrimitive = ULxyPrimitive;
-                    farPrimitive(I4) = pStatic;
-                    Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
-                }
-                else
                 {
                     TU farPrimitive = pBCHandler->GetValueFromID(btype); // primitive passive scalar components like Nu
 
@@ -1308,7 +1385,7 @@ namespace DNDS::Euler
                     real rStatic = pStatic / (settings.idealGasProperty.Rgas * tStatic);
                     farPrimitive(0) = rStatic;
                     // farPrimitive(Seq123) = -uNorm * std::sqrt(vSqr);
-                    farPrimitive(Seq123) = pBCHandler->GetValueFromID(btype)(Seq123).normalized() * std::sqrt(vSqr);
+                    farPrimitive(Seq123) = pBCHandler->GetValueFromID(btype)(Seq234).normalized() * std::sqrt(vSqr);
                     farPrimitive(I4) = pStatic;
                     Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
                 }

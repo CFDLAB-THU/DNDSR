@@ -106,7 +106,7 @@ namespace DNDS::Euler
                             //        uInc[iCellOther]; //! always inner here
                             fInc = fluxJacobian0_Right_Times_du(
                                 uj,
-                                unitNorm,
+                                unitNorm, GetFaceVGrid(iFace, -1),
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
 
@@ -178,7 +178,7 @@ namespace DNDS::Euler
                                         (iCellAtFace ? -1 : 1);        // faces out
                         jacIJ = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
                             uj,
-                            unitNorm,
+                            unitNorm, GetFaceVGrid(iFace, -1),
                             Geom::BC_ID_INTERNAL, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                     }
                     auto faceID = mesh->GetFaceZone(iFace);
@@ -252,7 +252,7 @@ namespace DNDS::Euler
 
                             fInc = fluxJacobian0_Right_Times_du(
                                 uj,
-                                unitNorm,
+                                unitNorm, GetFaceVGrid(iFace, -1),
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
 
@@ -331,7 +331,7 @@ namespace DNDS::Euler
 
                             fInc = fluxJacobian0_Right_Times_du(
                                 uj,
-                                unitNorm,
+                                unitNorm, GetFaceVGrid(iFace, -1),
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
 
@@ -395,7 +395,7 @@ namespace DNDS::Euler
 
                             fInc = fluxJacobian0_Right_Times_du(
                                 uj,
-                                unitNorm,
+                                unitNorm, GetFaceVGrid(iFace, -1),
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
 
@@ -481,7 +481,7 @@ namespace DNDS::Euler
                         {
                             fInc = fluxJacobian0_Right_Times_du(
                                 u[iCellOther], //! TODO periodic here
-                                unitNorm,
+                                unitNorm, GetFaceVGrid(iFace, -1),
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
                         {
@@ -493,8 +493,8 @@ namespace DNDS::Euler
                                 (vfv->GetIntPointDiffBaseValue(iCellOther, iFace, 1 - iCellAtFace, -1, std::array<int, 1>{0}, 1) *
                                  uRecInc[iCellOther]) //! TODO periodic here
                                     .transpose();
-                            TU fIncSL = fluxJacobianC_Right_Times_du(u[iCell], unitNorm, Geom::BC_ID_INTERNAL, uRecSLInc);
-                            TU fIncSR = fluxJacobianC_Right_Times_du(u[iCellOther], unitNorm, Geom::BC_ID_INTERNAL, uRecSRInc);
+                            TU fIncSL = fluxJacobianC_Right_Times_du(u[iCell], unitNorm, GetFaceVGrid(iFace, -1), Geom::BC_ID_INTERNAL, uRecSLInc);
+                            TU fIncSR = fluxJacobianC_Right_Times_du(u[iCellOther], unitNorm, GetFaceVGrid(iFace, -1), Geom::BC_ID_INTERNAL, uRecSRInc);
                             fIncS = fIncSL + fIncSR + lambdaFaceC[iFace] * (uRecSLInc - uRecSRInc);
                         }
 
@@ -578,7 +578,7 @@ namespace DNDS::Euler
 
                         fInc = fluxJacobian0_Right_Times_du(
                             uj,
-                            unitNorm,
+                            unitNorm, GetFaceVGrid(iFace, -1),
                             Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                     }
 

@@ -71,7 +71,7 @@ namespace DNDS
                             Eigen::Vector<real, nVarsFixed> uBV =
                                 FBoundary(
                                     uBL,
-                                    u[iCell], iCell, iFace,
+                                    u[iCell], iCell, iFace, -1,
                                     this->GetFaceNorm(iFace, -1),
                                     this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1), faceID);
                             grad += (uBV - u[iCell]) * 0.5 *
@@ -148,7 +148,7 @@ namespace DNDS
                             Eigen::Vector<real, nVarsFixed> uBV =
                                 FBoundary(
                                     uBL,
-                                    u[iCell], iCell, iFace,
+                                    u[iCell], iCell, iFace, -1,
                                     this->GetFaceNorm(iFace, -1),
                                     this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1), faceID);
                             dus(ic2f, Eigen::all) = (uBV - u[iCell]).transpose();
@@ -287,7 +287,7 @@ namespace DNDS
                                 Eigen::Vector<real, nVarsFixed> uBV =
                                     FBoundary(
                                         uBL,
-                                        u[iCell], iCell, iFace,
+                                        u[iCell], iCell, iFace, iG,
                                         this->GetFaceNorm(iFace, iG),
                                         this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
                                 Eigen::RowVector<real, nVarsFixed> uIncBV = (uBV - u[iCell]).transpose();
@@ -410,7 +410,7 @@ namespace DNDS
                                         FBoundaryDiff(
                                             uBL,
                                             uBLDiff,
-                                            u[iCell], iCell, iFace,
+                                            u[iCell], iCell, iFace, iG,
                                             this->GetFaceNorm(iFace, iG),
                                             this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
                                 Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();
@@ -511,7 +511,7 @@ namespace DNDS
                                         FBoundaryDiff(
                                             uBL,
                                             uBLDiff,
-                                            u[iCell], iCell, iFace,
+                                            u[iCell], iCell, iFace, iG,
                                             this->GetFaceNorm(iFace, iG),
                                             this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
                                 Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();

@@ -138,12 +138,13 @@ namespace DNDS::Euler::Gas
      * @brief calculates Inviscid Flux for x direction
      *
      */
-    template <int dim = 3, typename TU, typename TF, class TVec>
-    inline void GasInviscidFlux(const TU &U, const TVec &velo, real p, TF &F)
+    template <int dim = 3, typename TU, typename TF, class TVec, class TVecVG>
+    inline void GasInviscidFlux(const TU &U, const TVec &velo, const TVecVG &vg, real p, TF &F)
     {
-        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = U(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) * velo(0); // note that additional flux are unattended!
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = U(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) * (velo(0) - vg(0)); // note that additional flux are unattended!
         F(1) += p;
         F(dim + 1) += velo(0) * p;
+        // original form: F(dim + 1) += (velo(0) - vg(0)) * p + vg(0) * p;
     }
 
     template <int dim = 3, typename TU, class TVec>
@@ -157,20 +158,20 @@ namespace DNDS::Euler::Gas
                                    U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).dot(dVelo)));
     } // For Lax-Flux jacobian
 
-    template <int dim = 3, typename TU, typename TF, class TVec>
+    template <int dim = 3, typename TU, typename TF, class TVec, class TVecVG>
     inline void GasInviscidFluxFacialIncrement(const TU &U, const TU &dU,
                                                const TVec &unitNorm,
-                                               const TVec &velo, const TVec &dVelo,
+                                               const TVecVG &velo, const TVec &dVelo, const TVec &vg,
                                                real dp, real p,
                                                TF &F)
     {
-        real vn = velo.dot(unitNorm);
+        real vn = (velo - vg).dot(unitNorm);
         real dvn = dVelo.dot(unitNorm);
         F(0) = dU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).dot(unitNorm);
         F(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) =
             dU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) * vn +
             U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) * dvn + unitNorm * dp;
-        F(dim + 1) = (dU(dim + 1) + dp) * vn + (U(dim + 1) + p) * dvn;
+        F(dim + 1) = (dU(dim + 1) + dp) * vn + (U(dim + 1) + p) * dvn + vg.dot(unitNorm) * dp;
     }
 
     template <int dim = 3, typename TU>
@@ -204,8 +205,13 @@ namespace DNDS::Euler::Gas
     }
 
     // #define DNDS_GAS_HLLEP_USE_V1
-    template <int dim = 3, int type = 0, typename TUL, typename TUR, typename TULm, typename TURm, typename TF, typename TFdumpInfo>
-    void HLLEPFlux_IdealGas(const TUL &UL, const TUR &UR, const TULm &ULm, const TURm &URm, real gamma, TF &F, real dLambda,
+    template <int dim = 3, int type = 0,
+              typename TUL, typename TUR,
+              typename TULm, typename TURm, typename TVecVG,
+              typename TF, typename TFdumpInfo>
+    void HLLEPFlux_IdealGas(const TUL &UL, const TUR &UR, const TULm &ULm, const TURm &URm,
+                            const TVecVG &vg,
+                            real gamma, TF &F, real dLambda,
                             const TFdumpInfo &dumpInfo)
     {
         static real scaleHartenYee = 0.05;
@@ -248,9 +254,9 @@ namespace DNDS::Euler::Gas
         DNDS_assert((asqrRoe > 0 && asqrL > 0 && asqrR > 0));
         real aRoe = std::sqrt(asqrRoe);
 
-        real lam0 = veloRoe(0) - aRoe;
+        real lam0 = veloRoe(0) - vg(0) - aRoe;
         real lam123 = veloRoe(0);
-        real lam4 = veloRoe(0) + aRoe;
+        real lam4 = veloRoe(0) - vg(0) + aRoe;
         Eigen::Vector<real, dim + 2> lam;
         lam(0) = lam0;
         lam(dim + 1) = lam4;
@@ -298,15 +304,15 @@ namespace DNDS::Euler::Gas
         // std::cout << alpha.transpose() << std::endl;
         // std::cout << std::endl;
 
-        real SL = std::min(lam0, veloL(0) - std::sqrt(asqrL));
-        real SR = std::max(lam4, veloR(0) + std::sqrt(asqrR));
-        real UU = std::abs(veloRoe(0));
+        real SL = std::min(lam0, veloL(0) - vg(0) - std::sqrt(asqrL));
+        real SR = std::max(lam4, veloR(0) - vg(0) + std::sqrt(asqrR));
+        real UU = std::abs(veloRoe(0) - vg(0));
 
         real dfix = aRoe / (aRoe + UU);
 
         Eigen::Vector<real, dim + 2> FL, FR;
-        GasInviscidFlux<dim>(UL, veloL, pL, FL);
-        GasInviscidFlux<dim>(UR, veloR, pR, FR);
+        GasInviscidFlux<dim>(UL, veloL, vg, pL, FL);
+        GasInviscidFlux<dim>(UR, veloR, vg, pR, FR);
         real SP = std::max(SR, 0.0);
         real SM = std::min(SL, 0.0);
 
@@ -327,17 +333,18 @@ namespace DNDS::Euler::Gas
         {
             // ? HLLEP V1
             real aSound = aRoe;
-            real un_abs = aRoe;
+            // real un_abs = aRoe;
+            real un = veloRoe(0);
+            real un_rel_abs = std::abs(un - vg(0));
             real Sp = SP;
             real Sn = SM;
-            real delta1 = aSound / (un_abs + aSound + verySmallReal);
+            real delta1 = aSound / (un_rel_abs + aSound + verySmallReal);
             real delta2 = 0.0;
             real delta3 = 0.0;
-            real un = veloRoe(0);
 
-            real eV1 = ((Sp + Sn) * un - 2.0 * (1.0 - delta1) * (Sp * Sn)) / (Sp - Sn);
-            real eV2 = ((Sp + Sn) * (un + aSound) - 2.0 * (1.0 - delta2) * (Sp * Sn)) / (Sp - Sn);
-            real eV3 = ((Sp + Sn) * (un - aSound) - 2.0 * (1.0 - delta3) * (Sp * Sn)) / (Sp - Sn);
+            real eV1 = ((Sp + Sn) * (un - vg(0)) - 2.0 * (1.0 - delta1) * (Sp * Sn)) / (Sp - Sn);
+            real eV2 = ((Sp + Sn) * (un - vg(0) + aSound) - 2.0 * (1.0 - delta2) * (Sp * Sn)) / (Sp - Sn);
+            real eV3 = ((Sp + Sn) * (un - vg(0) - aSound) - 2.0 * (1.0 - delta3) * (Sp * Sn)) / (Sp - Sn);
 
             lam(0) = eV3;
             lam(dim + 1) = eV2;
@@ -349,8 +356,9 @@ namespace DNDS::Euler::Gas
         }
     }
 
-    template <int dim = 3, typename TUL, typename TUR, typename TF, typename TFdumpInfo>
-    void HLLCFlux_IdealGas_HartenYee(const TUL &UL, const TUR &UR, real gamma, TF &F, real dLambda,
+    template <int dim = 3, typename TUL, typename TUR, typename TVecVG, typename TF, typename TFdumpInfo>
+    void HLLCFlux_IdealGas_HartenYee(const TUL &UL, const TUR &UR, const TVecVG &vg,
+                                     real gamma, TF &F, real dLambda,
                                      const TFdumpInfo &dumpInfo)
     {
         static real scaleHartenYee = 0.05;
@@ -406,8 +414,8 @@ namespace DNDS::Euler::Gas
         };
         real pS = 0.5 * (pL + pR) - 0.5 * (veloR(0) - veloL(0)) * rhoRoe * aRoe;
         pS = std::max(0.0, pS);
-        real SL = veloRoe(0) - std::sqrt(asqrL) * HLLCq(pL, pS);
-        real SR = veloRoe(0) + std::sqrt(asqrR) * HLLCq(pR, pS);
+        real SL = veloRoe(0) - vg(0) - std::sqrt(asqrL) * HLLCq(pL, pS);
+        real SR = veloRoe(0) - vg(0) + std::sqrt(asqrR) * HLLCq(pR, pS);
 
         dLambda += verySmallReal;
         dLambda *= 2.0;
@@ -417,8 +425,8 @@ namespace DNDS::Euler::Gas
         // SR += sign(SR) * std::exp(-std::abs(SR) / dLambda) * dLambda;
 
         Eigen::Vector<real, dim + 2> FL, FR;
-        GasInviscidFlux<dim>(UL, veloL, pL, FL);
-        GasInviscidFlux<dim>(UR, veloR, pR, FR);
+        GasInviscidFlux<dim>(UL, veloL, vg, pL, FL);
+        GasInviscidFlux<dim>(UR, veloR, vg, pR, FR);
 
         if (0 <= SL)
         {
@@ -431,9 +439,10 @@ namespace DNDS::Euler::Gas
             return;
         }
         real SS = 0;
-        real div = (UL(0) * (SL - veloL(0)) - UR(0) * (SR - veloR(0)));
+        real div = (UL(0) * (SL - veloL(0) + vg(0)) - UR(0) * (SR - veloR(0) + vg(0)));
         if (std::abs(div) > verySmallReal)
-            SS = (pR - pL + UL(1) * (SL - veloL(0)) - UR(1) * (SR - veloR(0))) / div;
+            SS = (pR - pL + UL(1) * (SL - veloL(0) + vg(0)) - UR(1) * (SR - veloR(0) + vg(0))) / div;
+        //! is this right for moving mesh?
         Eigen::Vector<real, dim + 2> DS;
         DS.setZero();
         DS(1) = 1;
@@ -447,7 +456,7 @@ namespace DNDS::Euler::Gas
             else
                 F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) =
                     ((UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) * SL - FL) * SS +
-                     DS * ((pL + UL(0) * (SL - veloL(0)) * (SS - veloL(0))) * SL)) /
+                     DS * ((pL + UL(0) * (SL - veloL(0) + vg(0)) * (SS - veloL(0) + vg(0))) * SL)) /
                     div;
         }
         else
@@ -458,7 +467,7 @@ namespace DNDS::Euler::Gas
             else
                 F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) =
                     ((UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) * SR - FR) * SS +
-                     DS * ((pR + UR(0) * (SR - veloR(0)) * (SS - veloR(0))) * SR)) /
+                     DS * ((pR + UR(0) * (SR - veloR(0) + vg(0)) * (SS - veloR(0) + vg(0))) * SR)) /
                     div;
         }
     }
@@ -467,9 +476,11 @@ namespace DNDS::Euler::Gas
     template <int dim = 3, int eigScheme = 0,
               typename TUL, typename TUR,
               typename TULm, typename TURm,
+              typename TVecVG,
               typename TF, typename TFdumpInfo>
     void RoeFlux_IdealGas_HartenYee(const TUL &UL, const TUR &UR,
                                     const TULm &ULm, const TURm &URm,
+                                    const TVecVG &vg,
                                     real gamma, TF &F, real dLambda,
                                     const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
@@ -508,8 +519,8 @@ namespace DNDS::Euler::Gas
         real rhoRoe = sqrtRhoLm * sqrtRhoRm;
 
         Eigen::Vector<real, dim + 2> FL, FR;
-        GasInviscidFlux<dim>(UL, veloL, pL, FL);
-        GasInviscidFlux<dim>(UR, veloR, pR, FR);
+        GasInviscidFlux<dim>(UL, veloL, vg, pL, FL);
+        GasInviscidFlux<dim>(UR, veloR, vg, pR, FR);
 
         if (!(asqrRoe > 0))
         {
@@ -518,9 +529,9 @@ namespace DNDS::Euler::Gas
         DNDS_assert(asqrRoe > 0);
         real aRoe = std::sqrt(asqrRoe);
 
-        lam0 = std::abs(veloRoe(0) - aRoe);
+        lam0 = std::abs(veloRoe(0) - vg(0) - aRoe);
         lam123 = std::abs(veloRoe(0));
-        lam4 = std::abs(veloRoe(0) + aRoe);
+        lam4 = std::abs(veloRoe(0) - vg(0) + aRoe);
 
         if constexpr (eigScheme == 0)
         {
@@ -539,18 +550,18 @@ namespace DNDS::Euler::Gas
             /**
              * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
              */
-            real aLm = std::min(std::sqrt(asqrLm), std::abs(veloLm(0)) / scaleLD);
-            real aRm = std::min(std::sqrt(asqrRm), std::abs(veloRm(0)) / scaleLD);
-            lam0 = std::max(std::abs(veloLm(0) - aLm), std::abs(veloRm(0) - aRm));
-            lam123 = std::max(std::abs(veloLm(0)), std::abs(veloRm(0)));
-            lam4 = std::max(std::abs(veloLm(0) + aLm), std::abs(veloRm(0) + aRm));
+            real aLm = std::min(std::sqrt(asqrLm), std::abs(veloLm(0) - vg(0)) / scaleLD);
+            real aRm = std::min(std::sqrt(asqrRm), std::abs(veloRm(0) - vg(0)) / scaleLD);
+            lam0 = std::max(std::abs(veloLm(0) - vg(0) - aLm), std::abs(veloRm(0) - vg(0) - aRm));
+            lam123 = std::max(std::abs(veloLm(0) - vg(0)), std::abs(veloRm(0) - vg(0)));
+            lam4 = std::max(std::abs(veloLm(0) - vg(0) + aLm), std::abs(veloRm(0) - vg(0) + aRm));
             //*LD, cLLF_M
         }
         else if constexpr (eigScheme == 2)
         {
             // *vanilla Lax
             // lam0 = lam123 = lam4 = std::max({lam0, lam123, lam4});
-            lam0 = lam123 = lam4 = std::max(std::abs(veloLm(0)) + std::sqrt(asqrLm), std::abs(veloRm(0)) + std::sqrt(asqrRm));
+            lam0 = lam123 = lam4 = std::max(std::abs(veloLm(0) - vg(0)) + std::sqrt(asqrLm), std::abs(veloRm(0) - vg(0)) + std::sqrt(asqrRm));
             F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) =
                 (FL + FR) * 0.5 -
                 0.5 * lam0 * (UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) - UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)));
@@ -562,10 +573,10 @@ namespace DNDS::Euler::Gas
             /**
              * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
              */
-            real LDthreshold = std::abs(veloRoe(0)) / scaleLD;
+            real LDthreshold = std::abs(veloRoe(0) - vg(0)) / scaleLD;
             real aRoeStar = std::min(LDthreshold, aRoe);
-            lam0 = std::abs(veloRoe(0) - aRoeStar);
-            lam4 = std::abs(veloRoe(0) + aRoeStar);
+            lam0 = std::abs(veloRoe(0) - vg(0) - aRoeStar);
+            lam4 = std::abs(veloRoe(0) - vg(0) + aRoeStar);
         }
         else if constexpr (eigScheme == 4)
         {
@@ -574,9 +585,9 @@ namespace DNDS::Euler::Gas
              * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
              */
 #ifdef USE_SIGN_MINUS_AT_ROE_M4_FLUX
-            real uStar = signM(veloRoe(0)) * std::max(aRoe * scaleLD, std::abs(veloRoe(0)));
+            real uStar = signM(veloRoe(0) - vg(0)) * std::max(aRoe * scaleLD, std::abs(veloRoe(0) - vg(0)));
 #else
-            real uStar = signTol(veloRoe(0), aRoe * smallReal) * std::max(aRoe * scaleLD, std::abs(veloRoe(0))); //! why signM here?
+            real uStar = signTol(veloRoe(0) - vg(0), aRoe * smallReal) * std::max(aRoe * scaleLD, std::abs(veloRoe(0) - vg(0))); //! why signM here?
 #endif
             lam0 = std::abs(uStar - aRoe);
             lam123 = std::abs(uStar);

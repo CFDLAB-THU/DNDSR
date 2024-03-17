@@ -167,7 +167,7 @@ namespace DNDS::Euler
                     else if (true)
                     {
                         URxy = generateBoundaryValue(
-                            ULxy, ULMeanXy, f2c[0], iFace,
+                            ULxy, ULMeanXy, f2c[0], iFace, iG,
                             unitNorm,
                             normBase,
                             vfv->GetFaceQuadraturePPhys(iFace, iG),
@@ -177,7 +177,7 @@ namespace DNDS::Euler
                         GradURxy = GradULxy; //! generated boundary value couldn't use any periodic conversion?
 #endif
                         URMeanXy = generateBoundaryValue(
-                            ULMeanXy, ULMeanXy, f2c[0], iFace,
+                            ULMeanXy, ULMeanXy, f2c[0], iFace, iG,
                             unitNorm,
                             normBase,
                             vfv->GetFaceQuadraturePPhys(iFace, iG),
@@ -244,6 +244,7 @@ namespace DNDS::Euler
                         URMeanXy,
                         GradUMeanXy,
                         unitNorm,
+                        GetFaceVGrid(iFace, iG),
                         normBase,
                         FLFix, FRFix,
                         mesh->GetFaceZone(iFace),

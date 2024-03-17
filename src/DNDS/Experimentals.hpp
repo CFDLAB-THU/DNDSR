@@ -35,6 +35,8 @@
 
 // #define USE_NS_SA_ALLOW_NEGATIVE_MEAN
 
+#define USE_ABS_VELO_IN_ROTATION
+
 /*-------------------------------------------------------------------------------------------------*/
 /*-------------------------------------------------------------------------------------------------*/
 /*-------------------------------------------------------------------------------------------------*/
@@ -93,5 +95,8 @@ static const std::string DNDS_Experimentals_State = std::string("DNDS_Experiment
 #endif
 #ifdef USE_ISOTROPIC_OPTHQM
                                                     + " USE_ISOTROPIC_OPTHQM "
+#endif
+#ifdef USE_ABS_VELO_IN_ROTATION
+                                                    + " USE_ABS_VELO_IN_ROTATION "
 #endif
     ;

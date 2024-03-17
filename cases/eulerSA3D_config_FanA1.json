@@ -42,7 +42,7 @@
     },
     "dataIOControl": {
         "uniqueStamps": false,
-        "meshScale": 4,
+        "meshScale": 0.003333333333333,
         "meshElevation": 0,
         "meshElevationInternalSmoother": 0,
         "meshElevationIter": 20,
@@ -51,8 +51,8 @@
         "meshElevationRBFKernel": "CPC0",
         "meshElevationMaxIncludedAngle": 20,
         // "meshFile": "../data/mesh/row_1_test3.cgns",
-        "meshFile": "../data/mesh/Rotor37_test1.cgns",
-        "outPltName": "../data/out/Rotor37_test1/out3",
+        "meshFile": "../data/mesh/row_1_test4-Cylinderout.cgns",
+        "outPltName": "../data/out/row_1_test4/out-Cylinderout-RealRE-IncreasedPout4",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -76,7 +76,7 @@
         "PeriodicRotationEulerAngles1": [
             0.0,
             0.0,
-            -10 //360 /36
+            18.947368421052630 //360 /19
         ],
         "periodicTolerance": 1e-8
     },
@@ -165,38 +165,24 @@
                 0.0,
                 0.0
             ],
-            "rpm": -9.548888888888890
+            "rpm": 9.9
         },
-        "boxInitializers": [
-            // {
-            //     "x0": -1e100,
-            //     "x1": 1e100,
-            //     "y0": -1e100,
-            //     "y1": 1e100,
-            //     "z0": 0.08,
-            //     "z1": 1e100,
-            //     "v": [
-            //         1,
-            //         0,
-            //         0,
-            //         0.8,
-            //         1.450331068500028,
-            //         1.3
-            //     ]
-            // }
-        ],
         "farFieldStaticValue": [
             1,
             0,
             0,
-            0.8,
-            0.891422324913029,
+            0.5,
+            // 1.127540981911547,
+            // 1.528047175703185, // 110000 Pa static pressure
+            // 1.655596918948928, // 120000
+            1.783146662194671, //130000
+            // 2.038246148686159, // 150000
             1.3
         ],
         "idealGasProperty": {
             "gamma": 1.4,
-            "Rgas": 0.001417530864198,
-            "muGas": 1.254590612320092e-07,
+            "Rgas": 0.001892583230368,
+            "muGas": 1.176178699050087e-07,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4
@@ -204,32 +190,20 @@
     },
     "bcSettings": [
         {
-            "type": "BCOutP",
+            "type": "BCFar",
             "name": "RS_1_to_2",
             "value": [
                 1,
                 0,
                 0,
-                0.8,
-                1.443269175925927,
+                0.5,
+                // 1.127540981911547,
+                // 1.528047175703185, // 110000 Pa static pressure
+                // 1.655596918948928, // 120000
+                1.783146662194671, //130000
+                // 2.038246148686159, // 150000
                 1.3
-            ],
-            "valueExtra": [ // used as anchorpoint
-                0.77494716078399994,
-                0.063617319557049995,
-                0.52456303392299997
-            ],
-            "anchorOption": 1
-            // "type": "BCFar",
-            // "name": "RS_1_to_2",
-            // "value": [
-            //     1,
-            //     0,
-            //     0,
-            //     0.8,
-            //     1.450475726455272,
-            //     1.3
-            // ]
+            ]
         },
         {
             // "type": "BCFar",
@@ -243,11 +217,11 @@
             //     1.292397773437500
             // ]
             "value": [
-                0.408461518518519, //Ps
+                0.516959109375000, //Ps
                 288.15, //Ts
-                0,
-                0,
-                1, // Seq234: prescribed inflow direction
+                1e100,
+                1e100,
+                1e100,
                 1.3
             ]
         },

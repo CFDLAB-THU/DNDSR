@@ -15,7 +15,7 @@ namespace DNDS::Euler
         BCWall,
         BCWallInvis,
         BCOut,
-        BCOutPs,
+        BCOutP,
         BCIn,
         BCInPsTs,
         BCSym,
@@ -30,7 +30,7 @@ namespace DNDS::Euler
             {BCWall, "BCWall"},
             {BCWallInvis, "BCWallInvis"},
             {BCOut, "BCOut"},
-            {BCOutPs, "BCOutPs"},
+            {BCOutP, "BCOutP"},
             {BCIn, "BCIn"},
             {BCInPsTs, "BCInPsTs"},
             {BCSym, "BCSym"},
@@ -52,6 +52,7 @@ namespace DNDS::Euler
         std::vector<TU> BCValues;
         std::vector<EulerBCType> BCTypes;
         std::vector<TFlags> BCFlags;
+        std::vector<Eigen::Vector<real, Eigen::Dynamic>> BCValuesExtra;
         std::unordered_map<std::string, Geom::t_index> name2ID;
         std::unordered_map<Geom::t_index, std::string> ID2name;
 
@@ -60,6 +61,9 @@ namespace DNDS::Euler
         {
             BCValues.resize(Geom::BC_ID_DEFAULT_MAX);
             for (auto &v : BCValues)
+                v.setConstant(UnInitReal);
+            BCValuesExtra.resize(Geom::BC_ID_DEFAULT_MAX);
+            for (auto &v : BCValuesExtra)
                 v.setConstant(UnInitReal);
             BCFlags.resize(Geom::BC_ID_DEFAULT_MAX);
             name2ID = Geom::GetFaceName2IDDefault();
@@ -73,6 +77,11 @@ namespace DNDS::Euler
             BCTypes[Geom::BC_ID_DEFAULT_WALL_INVIS] = BCWallInvis;
             BCTypes[Geom::BC_ID_NULL] = BCUnknown;
             RenewID2name();
+        }
+
+        Geom::t_index size()
+        {
+            return BCTypes.size();
         }
 
         void RenewID2name()
@@ -99,18 +108,26 @@ namespace DNDS::Euler
                 {
                 case EulerBCType::BCFar:
                 case EulerBCType::BCOut:
-                case EulerBCType::BCOutPs:
+                case EulerBCType::BCOutP:
                 case EulerBCType::BCIn:
                 case EulerBCType::BCInPsTs:
                 {
                     uint32_t frameOption = 0;
+                    uint32_t anchorOption = 0;
+                    Eigen::VectorXd bcValueExtra;
                     if (item.count("frameOption"))
                         frameOption = item["frameOption"];
+                    if (item.count("anchorOption"))
+                        anchorOption = item["anchorOption"];
+                    if (item.count("valueExtra"))
+                        bcValueExtra = item["valueExtra"];
                     Eigen::VectorXd bcValue = item["value"];
                     DNDS_assert_info(bcValue.size() == bc.nVars, "bc value dim not right");
                     bc.BCValues.push_back(bcValue);
                     bc.BCFlags.emplace_back(TFlags{});
                     bc.BCFlags.back()["frameOpt"] = frameOption;
+                    bc.BCFlags.back()["anchorOpt"] = anchorOption;
+                    bc.BCValuesExtra.push_back(bcValueExtra);
                 }
                 break;
 
@@ -118,22 +135,30 @@ namespace DNDS::Euler
                 case EulerBCType::BCWallInvis:
                 {
                     uint32_t frameOption = 0;
+                    Eigen::VectorXd bcValueExtra;
                     if (item.count("frameOption"))
                         frameOption = item["frameOption"];
+                    if (item.count("valueExtra"))
+                        bcValueExtra = item["valueExtra"];
                     bc.BCValues.push_back(TU::Zero(bc.nVars));
                     bc.BCFlags.emplace_back(TFlags{});
                     bc.BCFlags.back()["frameOpt"] = frameOption;
+                    bc.BCValuesExtra.push_back(bcValueExtra);
                 }
                 break;
 
                 case EulerBCType::BCSym:
                 {
                     uint32_t rectifyOption = 0;
+                    Eigen::VectorXd bcValueExtra;
                     if (item.count("rectifyOption"))
                         rectifyOption = item["rectifyOption"];
+                    if (item.count("valueExtra"))
+                        bcValueExtra = item["valueExtra"];
                     bc.BCValues.push_back(TU::Zero(bc.nVars));
                     bc.BCFlags.emplace_back(TFlags{});
                     bc.BCFlags.back()["rectifyOpt"] = rectifyOption;
+                    bc.BCValuesExtra.push_back(bcValueExtra);
                 }
                 break;
 
@@ -148,7 +173,8 @@ namespace DNDS::Euler
 
                 DNDS_assert(
                     bc.BCFlags.size() == bc.BCTypes.size() &&
-                    bc.BCValues.size() == bc.BCTypes.size());
+                    bc.BCValues.size() == bc.BCTypes.size() && 
+                    bc.BCValuesExtra.size() == bc.BCTypes.size());
             }
             bc.RenewID2name();
         }
@@ -166,12 +192,14 @@ namespace DNDS::Euler
                 {
                 case EulerBCType::BCFar:
                 case EulerBCType::BCOut:
-                case EulerBCType::BCOutPs:
+                case EulerBCType::BCOutP:
                 case EulerBCType::BCIn:
                 case EulerBCType::BCInPsTs:
                 {
                     item["value"] = static_cast<TU_R>(bc.BCValues.at(i)); // force begin() and end() to be exposed
                     item["frameOption"] = bc.BCFlags.at(i).at("frameOpt");
+                    item["anchorOption"] = bc.BCFlags.at(i).at("anchorOpt");
+                    item["valueExtra"] = bc.BCValuesExtra.at(i);
                 }
                 break;
 
@@ -179,12 +207,14 @@ namespace DNDS::Euler
                 case EulerBCType::BCWallInvis:
                 {
                     item["frameOption"] = bc.BCFlags.at(i).at("frameOpt");
+                    item["valueExtra"] = bc.BCValuesExtra.at(i);
                 }
                 break;
 
                 case EulerBCType::BCSym:
                 {
                     item["rectifyOption"] = bc.BCFlags.at(i).at("rectifyOpt");
+                    item["valueExtra"] = bc.BCValuesExtra.at(i);
                 }
                 break;
 
@@ -222,11 +252,63 @@ namespace DNDS::Euler
             return BCValues.at(id);
         }
 
+        Eigen::Vector<real, Eigen::Dynamic> GetValueExtraFromID(Geom::t_index id)
+        {
+            if (!Geom::FaceIDIsExternalBC(id))
+                return BCValuesExtra.at(0);
+            return BCValuesExtra.at(id);
+        }
+
         uint32_t GetFlagFromID(Geom::t_index id, const std::string &key)
         {
             if (!Geom::FaceIDIsExternalBC(id))
                 return 0;
             return BCFlags.at(id).at(key);
+        }
+
+        uint32_t GetFlagFromIDSoft(Geom::t_index id, const std::string &key)
+        {
+            if (!Geom::FaceIDIsExternalBC(id) || !BCFlags.at(id).count(key))
+                return 0;
+            return BCFlags.at(id).at(key);
+        }
+    };
+
+    template <int nVarsFixed>
+    struct AnchorPointRecorder
+    {
+        using TU = Eigen::Vector<real, nVarsFixed>;
+        MPIInfo mpi;
+        TU val;
+        real dist{veryLargeReal};
+        AnchorPointRecorder(const MPIInfo &_mpi) : mpi(_mpi) {}
+
+        void Reset() { dist=  veryLargeReal;}
+
+        void AddAnchor(const TU& vin, real nDist)
+        {
+            if(nDist < dist)
+                dist = nDist, val = vin;
+        }
+
+        void ObtainAnchorMPI()
+        {
+            struct DI
+            {
+                double d;
+                MPI_int i;
+            };
+            union Doubleint
+            {
+                uint8_t pad[16];
+                DI dint;
+            };
+            Doubleint minDist, minDistall;
+            minDist.dint.d = dist;
+            minDist.dint.i = mpi.rank;
+            MPI::Allreduce(&minDist, &minDistall, 1, MPI_DOUBLE_INT, MPI_MINLOC, mpi.comm);
+            // std::cout << minDistall.dint.d << std::endl;
+            MPI::Bcast(val.data(), val.size(), DNDS_MPI_REAL, minDistall.dint.i, mpi.comm);
         }
     };
 

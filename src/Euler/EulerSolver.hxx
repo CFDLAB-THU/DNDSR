@@ -294,6 +294,7 @@ namespace DNDS::Euler
             //     std::cout << uRecC.father.get() << std::endl;
 
             eval.FixUMaxFilter(cx);
+            eval.updateBCAnchors(cx, uRecC);
             // cx.trans.startPersistentPull();
             // cx.trans.waitPersistentPull();
 
@@ -319,7 +320,7 @@ namespace DNDS::Euler
             real recIncBase = 0;
             double tstartA = MPI_Wtime();
             typename TVFV::template TFBoundary<nVarsFixed>
-                FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace,
+                FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace, int ig,
                                 const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType) -> TU
             {
                 TVec normOutV = normOut(Seq012);
@@ -329,10 +330,10 @@ namespace DNDS::Euler
                     UMean,
                     UL - UMean,
                     compressed);
-                return eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true);
+                return eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true);
             };
             typename TVFV::template TFBoundaryDiff<nVarsFixed>
-                FBoundaryDiff = [&](const TU &UL, const TU &dU, const TU &UMean, index iCell, index iFace,
+                FBoundaryDiff = [&](const TU &UL, const TU &dU, const TU &UMean, index iCell, index iFace, int ig,
                                     const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType) -> TU
             {
                 TVec normOutV = normOut(Seq012);
@@ -346,8 +347,8 @@ namespace DNDS::Euler
                     UMean,
                     UL - UMean + dU,
                     compressed);
-                return eval.generateBoundaryValue(ULfixedPlus, UMean, iCell, iFace, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true) -
-                       eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true);
+                return eval.generateBoundaryValue(ULfixedPlus, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true) -
+                       eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true);
             };
             if (config.implicitReconstructionControl.storeRecInc)
                 uRecOld = uRecC;
@@ -712,7 +713,7 @@ namespace DNDS::Euler
             auto &dTauC = config.timeMarchControl.rhsFPPMode == 2 ? dTauTmp : dTau;
 
             typename TVFV::template TFBoundary<nVarsFixed>
-                FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace,
+                FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace, int iG,
                                 const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType) -> TU
             {
                 TU UR = UL;

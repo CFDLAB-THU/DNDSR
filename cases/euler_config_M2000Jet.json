@@ -3,18 +3,19 @@
         "dtImplicit": 1e-6,
         "nTimeStep": 100000,
         "steadyQuit": false,
-        "useImplicitPP": true,
+        "useImplicitPP": false,
         "rhsFPPMode": 1,
         "rhsFPPScale": 1,
-        "odeCode": 102,
+        "odeCode": 0,
         "tEnd": 1e-3,
         "odeSetting1": 0.5,
         "odeSetting2": 1,
+        "useDtPPLimit": true,
         "dtIncreaseLimit": 2.0,
         "dtIncreaseAfterCount": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 100,
+        "nTimeStepInternal": 50,
         "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -28,13 +29,13 @@
         "nDataOut": 100,
         "nDataOutCInternal": 100,
         "nDataOutInternal": 1000000000,
-        "tDataOut": 1e-3
+        "tDataOut": 1e+100
     },
     "implicitCFLControl": {
-        "CFL": 0.01,
+        "CFL": 0.1,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 0,
-        "nCFLRampLength": 20,
+        "nCFLRampLength": 10,
         "CFLRampEnd": 2.0,
         "useLocalDt": true,
         "nSmoothDTau": 0
@@ -42,13 +43,12 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/Unifrom_Ma2000JetUGS800.cgns",
-        "outPltName": "../data/outUnsteady/Unifrom_Ma2000JetUGS800_VBDF_TB1_REInf_IncreaseV0",
-        "outLogName": "../data/outUnsteady/Unifrom_Ma2000JetUGS800_VBDF_TB1_REInf_IncreaseV0",
+        "meshFile": "../data/mesh/Unifrom_Ma2000Jet800.cgns",
+        "outPltName": "../data/outUnsteady/Unifrom_Ma2000Je800_REInf",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
-        "outPltVTKFormat": false,
+        "outPltVTKFormat": true,
         "outAtPointData": true,
         "outAtCellData": true,
         "outCellScalarNames": [
@@ -86,9 +86,9 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": true,
-        "jacobiRelax": 0.5,
+        "jacobiRelax": 1,
         "SORInstead": false,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
@@ -109,14 +109,18 @@
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 0,
-        "sgsIter": 2,
+        "jacobiCode": 2,
+        "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
         "nGmresSpace": 5,
         "nGmresIter": 1,
-        "initWithLastURecInc": false
+        "initWithLastURecInc": false,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 3
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
