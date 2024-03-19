@@ -248,7 +248,7 @@ namespace DNDS::Geom
             if (mpi.rank == mRank)
                 log() << "UnstructuredMesh::ObtainLocalFactFillOrdering(): boost done" << std::endl;
         }
-        else if (control.getOrderingCode() == 3)
+        else if (control.getOrderingCode() == 3) // RCM
         {
             using namespace boost;
             typedef adjacency_list<vecS, vecS, undirectedS, property<vertex_color_t, default_color_type, property<vertex_degree_t, int>>> Graph;

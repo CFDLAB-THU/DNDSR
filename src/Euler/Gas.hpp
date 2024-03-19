@@ -530,7 +530,7 @@ namespace DNDS::Euler::Gas
         real aRoe = std::sqrt(asqrRoe);
 
         lam0 = std::abs(veloRoe(0) - vg(0) - aRoe);
-        lam123 = std::abs(veloRoe(0));
+        lam123 = std::abs(veloRoe(0) - vg(0));
         lam4 = std::abs(veloRoe(0) - vg(0) + aRoe);
 
         if constexpr (eigScheme == 0)

@@ -256,6 +256,7 @@ namespace DNDS::Euler
             real veloNMean = 0.5 * (vL + vR).dot(unitNorm); // paper
             real veloNL = vL.dot(unitNorm);
             real veloNR = vR.dot(unitNorm);
+            real vgN = this->GetFaceVGrid(iFace, -1).dot(unitNorm);
 
             // real ekFixRatio = 0.001;
             // Eigen::Vector3d velo = uMean({1, 2, 3}) / uMean(0);
@@ -279,8 +280,8 @@ namespace DNDS::Euler
 
             // DNDS_assert(asqrMean >= 0);
             // real aMean = std::sqrt(asqrMean); // original
-            real lambdaConvection = std::abs(veloNMean) + aMean;
-            lambdaConvection = std::max(std::sqrt(asqrL) + std::abs(veloNL), std::sqrt(asqrR) + std::abs(veloNR));
+            real lambdaConvection = std::abs(veloNMean - vgN) + aMean;
+            lambdaConvection = std::max(std::sqrt(asqrL) + std::abs(veloNL - vgN), std::sqrt(asqrR) + std::abs(veloNR - vgN));
             DNDS_assert_info(
                 asqrL >= 0 && asqrR >= 0,
                 fmt::format(" mean value violates PP! asqr: [{} {}]", asqrL, asqrR));
@@ -322,7 +323,7 @@ namespace DNDS::Euler
                 volR = vfv->GetCellVol(f2c[1]);
 
             lambdaFace[iFace] = lambdaConvection + lamVis * area * (1. / vfv->GetCellVol(iCellL) + 1. / volR);
-            lambdaFaceC[iFace] = std::abs(veloNMean) + lamVis * area * (1. / vfv->GetCellVol(iCellL) + 1. / volR); // passive part
+            lambdaFaceC[iFace] = std::abs(veloNMean - vgN) + lamVis * area * (1. / vfv->GetCellVol(iCellL) + 1. / volR); // passive part
             lambdaFaceVis[iFace] = lamVis * area * (1. / vfv->GetCellVol(iCellL) + 1. / volR);
 
             // if (f2c[0] == 10756)
@@ -525,8 +526,8 @@ namespace DNDS::Euler
             }
             FLfix(Seq123) = normBase * FLfix(Seq123);
             FRfix(Seq123) = normBase * FRfix(Seq123);
-            // FLfix *= 0;
-            // FRfix *= 0;
+            FLfix *= 0;
+            FRfix *= 0; // currently disabled all flux balancingf
         }
 
         auto exitFun = [&]()
@@ -537,7 +538,7 @@ namespace DNDS::Euler
         };
 
         real lam0{0}, lam123{0}, lam4{0};
-        lam123 = std::abs(UL(1) / UL(0) + UR(1) / UR(0)) * 0.5;
+        lam123 = std::abs(UL(1) / UL(0) + UR(1) / UR(0)) * 0.5 - vg(0);
 
         if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall)
         {

@@ -11,7 +11,7 @@
 
 // #define USE_ISOTROPIC_OPTHQM
 
-#define USE_FLUX_BALANCE_TERM
+// #define USE_FLUX_BALANCE_TERM // TODO: decide how to flux balance for moving mesh
 
 #define USE_ENTROPY_FIXED_LAMBDA_IN_SA
 

@@ -820,14 +820,14 @@ namespace DNDS::Euler
             dF(Seq01234) -= lambdaMain * dU(Seq01234);
             if constexpr (model == NS_SA || model == NS_SA_3D)
             {
-                dF(I4 + 1) = dU(I4 + 1) * n.dot(velo) + U(I4 + 1) * n.dot(dVelo);
+                dF(I4 + 1) = dU(I4 + 1) * n.dot(velo - vg) + U(I4 + 1) * n.dot(dVelo);
                 dF(I4 + 1) -= dU(I4 + 1) * lambdaMain;
             }
             if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
-                dF(I4 + 1) = dU(I4 + 1) * n.dot(velo) + U(I4 + 1) * n.dot(dVelo);
+                dF(I4 + 1) = dU(I4 + 1) * n.dot(velo - vg) + U(I4 + 1) * n.dot(dVelo);
                 dF(I4 + 1) -= dU(I4 + 1) * lambdaMain;
-                dF(I4 + 2) = dU(I4 + 2) * n.dot(velo) + U(I4 + 2) * n.dot(dVelo);
+                dF(I4 + 2) = dU(I4 + 2) * n.dot(velo - vg) + U(I4 + 2) * n.dot(dVelo);
                 dF(I4 + 2) -= dU(I4 + 2) * lambdaMain;
             }
             return dF;
@@ -872,12 +872,12 @@ namespace DNDS::Euler
                 dF);
             if constexpr (model == NS_SA || model == NS_SA_3D)
             {
-                dF(I4 + 1) = dU(I4 + 1) * n.dot(velo) + U(I4 + 1) * n.dot(dVelo);
+                dF(I4 + 1) = dU(I4 + 1) * n.dot(velo - vg) + U(I4 + 1) * n.dot(dVelo);
             }
             if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
-                dF(I4 + 1) = dU(I4 + 1) * n.dot(velo) + U(I4 + 1) * n.dot(dVelo);
-                dF(I4 + 2) = dU(I4 + 2) * n.dot(velo) + U(I4 + 2) * n.dot(dVelo);
+                dF(I4 + 1) = dU(I4 + 1) * n.dot(velo - vg) + U(I4 + 1) * n.dot(dVelo);
+                dF(I4 + 2) = dU(I4 + 2) * n.dot(velo - vg) + U(I4 + 2) * n.dot(dVelo);
             }
             return dF;
         }
@@ -904,6 +904,16 @@ namespace DNDS::Euler
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
 #ifndef USE_ABS_VELO_IN_ROTATION
+            U(I4) -= U(Seq123).squaredNorm() / (2 * U(0));
+            U(Seq123) += direction * settings.frameConstRotation.vOmega().cross(pPhysics - settings.frameConstRotation.center)(Seq012) * U(0);
+            U(I4) += U(Seq123).squaredNorm() / (2 * U(0));
+#endif
+        }
+
+        void TransformURotatingFrame_ABS_VELO(TU &U, const Geom::tPoint &pPhysics, int direction)
+        {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+#ifdef USE_ABS_VELO_IN_ROTATION
             U(I4) -= U(Seq123).squaredNorm() / (2 * U(0));
             U(Seq123) += direction * settings.frameConstRotation.vOmega().cross(pPhysics - settings.frameConstRotation.center)(Seq012) * U(0);
             U(I4) += U(Seq123).squaredNorm() / (2 * U(0));
@@ -1012,11 +1022,14 @@ namespace DNDS::Euler
                     DNDS_assert(asqr >= 0);
                     real a = std::sqrt(asqr);
 
-                    if (un - a > 0) // full outflow
+                    auto vg = this->GetFaceVGrid(iFace, iG);
+                    real vgN = vg.dot(uNorm);
+
+                    if (un - vgN - a > 0) // full outflow
                     {
                         URxy = ULxyStatic;
                     }
-                    else if (un > 0) //  1 sonic outflow, 1 sonic inflow, other outflow (subsonic out)
+                    else if (un - vgN > 0) //  1 sonic outflow, 1 sonic inflow, other outflow (subsonic out)
                     {
                         TU farPrimitive, ULxyPrimitive;
                         farPrimitive.resizeLike(ULxyStatic);
@@ -1036,7 +1049,7 @@ namespace DNDS::Euler
                         ULxyPrimitive(I4) = farPrimitive(I4); // using far pressure
                         Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma);
                     }
-                    else if (un + a > 0) //  1 sonic outflow, 1 sonic inflow, other inflow (subsonic in)
+                    else if (un - vgN + a > 0) //  1 sonic outflow, 1 sonic inflow, other inflow (subsonic in)
                     {
                         TU farPrimitive, ULxyPrimitive;
                         farPrimitive.resizeLike(ULxyStatic);
@@ -1293,27 +1306,31 @@ namespace DNDS::Euler
                      bTypeEuler == EulerBCType::BCSym) // (no rotating)
             {
                 URxy = ULxy;
-#ifdef USE_ABS_VELO_IN_ROTATION
                 if (settings.frameConstRotation.enabled)
-                    this->TransformVelocityRotatingFrame(URxy, pPhysics, -1);
-#endif
+                    this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
                 URxy(Seq123) -= 2 * ULxy(Seq123).dot(uNorm) * uNorm; // mirrored!
-#ifdef USE_ABS_VELO_IN_ROTATION
                 if (settings.frameConstRotation.enabled)
-                    this->TransformVelocityRotatingFrame(URxy, pPhysics, 1);
-#endif
+                    this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
             }
             else if (bTypeEuler == EulerBCType::BCWall)
             {
                 URxy = ULxy;
-                URxy(Seq123) *= -1;
-#ifdef USE_ABS_VELO_IN_ROTATION
                 if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
-                    this->TransformVelocityRotatingFrame(URxy, pPhysics, 2);
-#else
+                    this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
+                if(settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
+                    this->TransformURotatingFrame(URxy, pPhysics, 1);
+                URxy(Seq123) *= -1;
+                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
+                    this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
                 if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
-                    this->TransformVelocityRotatingFrame(URxy, pPhysics, -2);
-#endif
+                    this->TransformURotatingFrame(URxy, pPhysics, -1);
+                // #ifdef USE_ABS_VELO_IN_ROTATION
+                //                 if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
+                //                     this->TransformVelocityRotatingFrame(URxy, pPhysics, 2);
+                // #else
+                //                 if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
+                //                     this->TransformVelocityRotatingFrame(URxy, pPhysics, -2);
+                // #endif
                 if (model == NS_SA || model == NS_SA_3D)
                 {
                     URxy(I4 + 1) *= -1;
