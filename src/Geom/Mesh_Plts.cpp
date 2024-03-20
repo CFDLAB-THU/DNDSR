@@ -4,6 +4,9 @@
 #include "base64_rfc4648.hpp"
 #include <zlib.h>
 
+#include <nanoflann.hpp>
+#include "PointCloud.hpp"
+
 namespace DNDS::Geom
 {
 
@@ -59,6 +62,52 @@ namespace DNDS::Geom
             nNode = coordOut.Size();             //! need all the nodes with ghost
         }
         /*************************************************/
+    }
+
+    static void GetViolentNodeDeduplication(
+        index nNode, const std::vector<tPoint> &nodesExtra, tCoordPair &coordOut,
+        std::vector<index> &nodeDedu2Old, std::vector<index> &nodeOld2Dedu)
+    {
+        PointCloudFunctional nodesCloud(
+            [&](size_t idx) -> tPoint
+            {
+                if (idx < nNode)
+                    return coordOut[idx];
+                else
+                    return nodesExtra.at(idx - nNode);
+            },
+            nNode + nodesExtra.size());
+        using kdtree_t = nanoflann::KDTreeSingleIndexAdaptor<
+            nanoflann::L2_Simple_Adaptor<real, PointCloudFunctional>,
+            PointCloudFunctional,
+            3,
+            index>;
+        kdtree_t kdTree(3, nodesCloud);
+        nodeOld2Dedu.resize(nodesCloud.size(), -1);
+        index iNodeDeduTop{0};
+        for (index i = 0; i < nodesCloud.size(); i++)
+        {
+            if (nodeOld2Dedu[i] != -1)
+                continue;
+            tPoint cn = nodesCloud[i];
+
+            std::vector<std::pair<DNDS::index, DNDS::real>> IndicesDists;
+            IndicesDists.reserve(5);
+            nanoflann::SearchParams params{}; // default params
+            index nFound = kdTree.radiusSearch(cn.data(), 1e-20, IndicesDists, params);
+            int nSelf{0};
+            for (auto &v : IndicesDists)
+            {
+                if (v.first == i)
+                    nSelf++;
+                nodeOld2Dedu.at(v.first) = iNodeDeduTop;
+            }
+            iNodeDeduTop++;
+            DNDS_assert(nSelf == 1);
+        }
+        nodeDedu2Old.resize(iNodeDeduTop, -1);
+        for (index i = 0; i < nodeOld2Dedu.size(); i++)
+            nodeDedu2Old.at(nodeOld2Dedu.at(i)) = i;
     }
 
     void UnstructuredMeshSerialRW::
@@ -202,10 +251,13 @@ namespace DNDS::Geom
         //     MPISerialDo(mpi, printSize);
         // else
         //     printSize();
+        std::vector<index> nodeDedu2Old;
+        std::vector<index> nodeOld2Dedu;
+        GetViolentNodeDeduplication(nNode, nodesExtra, coordOut, nodeDedu2Old, nodeOld2Dedu);
         /*******************************************************/
 
-        writeInt(nNode + nodesExtra.size()); // node number
-        writeInt(nCell);                     // cell number
+        writeInt(nodeDedu2Old.size()); // node number
+        writeInt(nCell);               // cell number
 
         writeInt(0); // I dim
         writeInt(0); // J dim
@@ -237,22 +289,18 @@ namespace DNDS::Geom
         std::vector<double_t> minValPoint(arraySizPoint, DNDS::veryLargeReal);
         std::vector<double_t> maxValPoint(arraySizPoint, -DNDS::veryLargeReal); //! Tecplot is sensitive to the correctness of min/max val
         for (int idim = 0; idim < 3; idim++)
-            for (DNDS::index i = 0; i < nNode; i++)
+            for (DNDS::index i = 0; i < nodeDedu2Old.size(); i++)
             {
-                if (i < nNode)
+                index iN = nodeDedu2Old.at(i);
+                if (iN < nNode)
                 {
-                    minVal[idim] = std::min(coordOut[i](idim), minVal[idim]);
-                    maxVal[idim] = std::max(coordOut[i](idim), maxVal[idim]);
+                    minVal[idim] = std::min(coordOut[iN](idim), minVal[idim]);
+                    maxVal[idim] = std::max(coordOut[iN](idim), maxVal[idim]);
                 }
-            }
-
-        for (int idim = 0; idim < 3; idim++)
-            for (DNDS::index i = 0; i < nodesExtra.size(); i++)
-            {
-                if (i < nNode)
+                else
                 {
-                    minVal[idim] = std::min(nodesExtra[i](idim), minVal[idim]);
-                    maxVal[idim] = std::max(nodesExtra[i](idim), maxVal[idim]);
+                    minVal[idim] = std::min(nodesExtra.at(iN - nNode)(idim), minVal[idim]);
+                    maxVal[idim] = std::max(nodesExtra.at(iN - nNode)(idim), maxVal[idim]);
                 }
             }
 
@@ -290,32 +338,26 @@ namespace DNDS::Geom
 
         for (int idim = 0; idim < 3; idim++)
         {
-            for (DNDS::index i = 0; i < nNode; i++)
+            for (DNDS::index i = 0; i < nodeDedu2Old.size(); i++)
             {
-                writeDouble(coordOut[i](idim));
-                // std::cout << (*coordSerial)[i](idim) << std::endl;
-            }
-            for (DNDS::index i = 0; i < nodesExtra.size(); i++)
-            {
-                writeDouble(nodesExtra[i](idim));
-                // std::cout << (*coordSerial)[i](idim) << std::endl;
+                DNDS::index iN = nodeDedu2Old.at(i);
+                if (iN < nNode)
+                    writeDouble(coordOut[iN](idim));
+                else
+                    writeDouble(nodesExtra.at(iN - nNode)(idim));
             }
         }
 
         for (int idata = 0; idata < arraySizPoint; idata++)
         {
-            for (DNDS::index in = 0; in < nNode; in++)
+            for (DNDS::index i = 0; i < nodeDedu2Old.size(); i++)
             {
-                writeDouble(dataPoint(idata, in));
+                DNDS::index iN = nodeDedu2Old.at(i);
+                if (iN < nNode)
+                    writeDouble(dataPoint(idata, iN));
+                else
+                    writeDouble(dataPoint(idata, nodesExtraAtOriginal.at(iN - nNode)));
             }
-            index nExtra{0};
-            // if (mesh->isPeriodic)
-            //     for (DNDS::index iv = 0; iv < nCell; iv++)
-            //         for (rowsize ic2n = 0; ic2n < cell2nodeOut.RowSize(iv); ic2n++)
-            //             if (cell2nodePbiOut[iv][ic2n])
-            //                 writeDouble(dataPoint(idata, cell2nodeOut(iv, ic2n)));
-            for (auto i : nodesExtraAtOriginal)
-                writeDouble(dataPoint(idata, i));
         }
 
         for (int idata = 0; idata < arraySiz; idata++)
@@ -347,6 +389,9 @@ namespace DNDS::Geom
                     if (cell2nodePbiOut[iv][ic2n])
                         c2n[ic2n] = (nExtra++) + nNode;
                 }
+
+            for (auto &v : c2n)
+                v = nodeOld2Dedu.at(v);
             switch (elem.GetParamSpace())
             {
             case Elem::ParamSpace::LineSpace:
@@ -538,6 +583,9 @@ namespace DNDS::Geom
         //     MPISerialDo(mpi, printSize);
         // else
         //     printSize();
+        std::vector<index> nodeDedu2Old;
+        std::vector<index> nodeOld2Dedu;
+        GetViolentNodeDeduplication(nNode, nodesExtra, coordOut, nodeDedu2Old, nodeOld2Dedu);
         /*******************************************************/
 
         std::string indentV = "  ";
@@ -593,39 +641,47 @@ namespace DNDS::Geom
                             {
                                 /************************/
                                 // base64 inline
-                                uint64_t binSize = ((nNode + nodesExtra.size()) * 3) * sizeof(double);
+                                uint64_t binSize = (nodeDedu2Old.size() * 3) * sizeof(double);
                                 std::vector<uint8_t> dataOutBytes;
                                 dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                 size_t top{0};
                                 *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
-                                for (index i = 0; i < nNode; i++)
+                                for (index i = 0; i < nodeDedu2Old.size(); i++)
                                 {
-                                    *(double *)(dataOutBytes.data() + top) = double(coordOut[i](0)), top += sizeof(double);
-                                    *(double *)(dataOutBytes.data() + top) = double(coordOut[i](1)), top += sizeof(double);
-                                    *(double *)(dataOutBytes.data() + top) = double(coordOut[i](2)), top += sizeof(double);
-                                }
-                                for (index i = 0; i < nodesExtra.size(); i++)
-                                {
-                                    *(double *)(dataOutBytes.data() + top) = double(nodesExtra[i](0)), top += sizeof(double);
-                                    *(double *)(dataOutBytes.data() + top) = double(nodesExtra[i](1)), top += sizeof(double);
-                                    *(double *)(dataOutBytes.data() + top) = double(nodesExtra[i](2)), top += sizeof(double);
+                                    index iN = nodeDedu2Old.at(i);
+                                    if (iN < nNode)
+                                    {
+                                        *(double *)(dataOutBytes.data() + top) = double(coordOut[iN](0)), top += sizeof(double);
+                                        *(double *)(dataOutBytes.data() + top) = double(coordOut[iN](1)), top += sizeof(double);
+                                        *(double *)(dataOutBytes.data() + top) = double(coordOut[iN](2)), top += sizeof(double);
+                                    }
+                                    else
+                                    {
+                                        *(double *)(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(0)), top += sizeof(double);
+                                        *(double *)(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(1)), top += sizeof(double);
+                                        *(double *)(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(2)), top += sizeof(double);
+                                    }
                                 }
                                 out << cppcodec::base64_rfc4648::encode(dataOutBytes);
                             }
                             else if (vtuFloatEncodeMode == "ascii")
                             {
-                                std::vector<double> coordsOutData((nNode + nodesExtra.size()) * 3);
-                                for (index i = 0; i < nNode; i++)
+                                std::vector<double> coordsOutData(nodeDedu2Old.size() * 3);
+                                for (index i = 0; i < nodeDedu2Old.size(); i++)
                                 {
-                                    coordsOutData[i * 3 + 0ll] = coordOut[i](0);
-                                    coordsOutData[i * 3 + 1ll] = coordOut[i](1);
-                                    coordsOutData[i * 3 + 2ll] = coordOut[i](2);
-                                }
-                                for (index i = 0; i < nodesExtra.size(); i++)
-                                {
-                                    coordsOutData[(i + nNode) * 3 + 0ll] = nodesExtra[i](0);
-                                    coordsOutData[(i + nNode) * 3 + 1ll] = nodesExtra[i](1);
-                                    coordsOutData[(i + nNode) * 3 + 2ll] = nodesExtra[i](2);
+                                    index iN = nodeDedu2Old.at(i);
+                                    if (iN < nNode)
+                                    {
+                                        coordsOutData[i * 3 + 0ll] = coordOut[iN](0);
+                                        coordsOutData[i * 3 + 1ll] = coordOut[iN](1);
+                                        coordsOutData[i * 3 + 2ll] = coordOut[iN](2);
+                                    }
+                                    else
+                                    {
+                                        coordsOutData[(i + nNode) * 3 + 0ll] = nodesExtra.at(iN - nNode)(0);
+                                        coordsOutData[(i + nNode) * 3 + 1ll] = nodesExtra.at(iN - nNode)(1);
+                                        coordsOutData[(i + nNode) * 3 + 2ll] = nodesExtra.at(iN - nNode)(2);
+                                    }
                                 }
                                 // out << cppcodec::base64_rfc4648::encode(
                                 //     (uint8_t *)coordsOutData.data(),
@@ -641,7 +697,7 @@ namespace DNDS::Geom
         };
 
         std::vector<int64_t> cell2nodeOutData;
-        cell2nodeOutData.reserve(cell2nodeOut.father->DataSize());
+        cell2nodeOutData.reserve(cell2nodeOut.father->DataSize() * 2);
         std::vector<int64_t> cell2nodeOffsetData(nCell);
         std::vector<uint8_t> cellTypeData(nCell);
         index cellEnd = 0;
@@ -654,6 +710,8 @@ namespace DNDS::Geom
                 for (rowsize ic2n = 0; ic2n < c2n.size(); ic2n++)
                     if (cell2nodePbiOut(iCell, ic2n))
                         c2n[ic2n] = (nNodeExtra++) + nNode;
+            for (auto &v : c2n)
+                v = nodeOld2Dedu.at(v);
             auto vtkCell = Elem::ToVTKVertsAndData(elem, c2n);
             cellTypeData[iCell] = vtkCell.first;
             for (auto in : vtkCell.second)
@@ -872,16 +930,19 @@ namespace DNDS::Geom
                                 {
                                     /************************/
                                     // base64 inline
-                                    uint64_t binSize = (nNode + nodesExtraAtOriginal.size()) * sizeof(double);
+                                    uint64_t binSize = (nodeDedu2Old.size()) * sizeof(double);
                                     std::vector<uint8_t> dataOutBytes;
                                     dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                     size_t top{0};
                                     *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
-                                    for (index ii = 0; ii < nNode; ii++)
-                                        *(double *)(dataOutBytes.data() + top) = dataPoint(i, ii), top += sizeof(double);
-                                    for (auto ii : nodesExtraAtOriginal)
-                                        *(double *)(dataOutBytes.data() + top) = dataPoint(i, ii), top += sizeof(double);
-
+                                    for (index ii = 0; ii < nodeDedu2Old.size(); ii++)
+                                    {
+                                        index iN = nodeDedu2Old.at(ii);
+                                        if (iN < nNode)
+                                            *(double *)(dataOutBytes.data() + top) = dataPoint(i, iN), top += sizeof(double);
+                                        else
+                                            *(double *)(dataOutBytes.data() + top) = dataPoint(i, nodesExtraAtOriginal.at(iN - nNode)), top += sizeof(double);
+                                    }
                                     out << cppcodec::base64_rfc4648::encode(dataOutBytes);
                                 }
                                 else if (vtuFloatEncodeMode == "ascii")
@@ -889,15 +950,14 @@ namespace DNDS::Geom
                                     /************************/
                                     // ascii
                                     out << std::setprecision(ascii_precision);
-                                    for (index ii = 0; ii < nNode; ii++)
-                                        out << dataPoint(i, ii) << " ";
-                                    // if (mesh->isPeriodic)
-                                    //     for (index iCell = 0; iCell < nCell; iCell++)
-                                    //         for (rowsize ic2n = 0; ic2n < cell2nodeOut.RowSize(iCell); ic2n++)
-                                    //             if (cell2nodePbiOut(iCell, ic2n))
-                                    //                 out << std::setprecision(ascii_precision) << dataPoint(i, cell2nodeOut(iCell, ic2n)) << " ";
-                                    for (auto ii : nodesExtraAtOriginal)
-                                        out << dataPoint(i, ii) << " ";
+                                    for (index ii = 0; ii < nodeDedu2Old.size(); ii++)
+                                    {
+                                        index iN = nodeDedu2Old.at(ii);
+                                        if (iN < nNode)
+                                            out << dataPoint(i, iN) << " ";
+                                        else
+                                            out << dataPoint(i, nodesExtraAtOriginal.at(iN - nNode)) << " ";
+                                    }
                                 }
                                 else
                                     DNDS_assert(false);
@@ -918,22 +978,26 @@ namespace DNDS::Geom
                                 {
                                     /************************/
                                     // base64 inline
-                                    uint64_t binSize = (nNode + nodesExtraAtOriginal.size()) * 3 * sizeof(double);
+                                    uint64_t binSize = (nodeDedu2Old.size()) * 3 * sizeof(double);
                                     std::vector<uint8_t> dataOutBytes;
                                     dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                     size_t top{0};
                                     *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
-                                    for (index ii = 0; ii < nNode; ii++)
+                                    for (index ii = 0; ii < nodeDedu2Old.size(); ii++)
                                     {
-                                        *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, ii, 0), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, ii, 1), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, ii, 2), top += sizeof(double);
-                                    }
-                                    for (auto ii : nodesExtraAtOriginal)
-                                    {
-                                        *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, ii, 0), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, ii, 1), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, ii, 2), top += sizeof(double);
+                                        index iN = nodeDedu2Old.at(ii);
+                                        if (iN < nNode)
+                                        {
+                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 0), top += sizeof(double);
+                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 1), top += sizeof(double);
+                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 2), top += sizeof(double);
+                                        }
+                                        else
+                                        {
+                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 0), top += sizeof(double);
+                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 1), top += sizeof(double);
+                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 2), top += sizeof(double);
+                                        }
                                     }
                                     out << cppcodec::base64_rfc4648::encode(dataOutBytes);
                                 }
@@ -942,27 +1006,21 @@ namespace DNDS::Geom
                                     /****************************/
                                     // ascii
                                     out << std::setprecision(ascii_precision);
-                                    for (index ii = 0; ii < nNode; ii++)
+                                    for (index ii = 0; ii < nodeDedu2Old.size(); ii++)
                                     {
-                                        out << vectorDataPoint(i, ii, 0) << " ";
-                                        out << vectorDataPoint(i, ii, 1) << " ";
-                                        out << vectorDataPoint(i, ii, 2) << " ";
-                                    }
-                                    // std::cout << "print vec" << std::endl;
-                                    // if (mesh->isPeriodic)
-                                    //     for (index iCell = 0; iCell < nCell; iCell++)
-                                    //         for (rowsize ic2n = 0; ic2n < cell2nodeOut.RowSize(iCell); ic2n++)
-                                    //             if (cell2nodePbiOut(iCell, ic2n))
-                                    //             {
-                                    //                 out << std::setprecision(ascii_precision) << vectorDataPoint(i, cell2nodeOut(iCell, ic2n), 0) << " ";
-                                    //                 out << std::setprecision(ascii_precision) << vectorDataPoint(i, cell2nodeOut(iCell, ic2n), 1) << " ";
-                                    //                 out << std::setprecision(ascii_precision) << vectorDataPoint(i, cell2nodeOut(iCell, ic2n), 2) << " ";
-                                    //             }
-                                    for (auto ii : nodesExtraAtOriginal)
-                                    {
-                                        out << vectorDataPoint(i, ii, 0) << " ";
-                                        out << vectorDataPoint(i, ii, 1) << " ";
-                                        out << vectorDataPoint(i, ii, 2) << " ";
+                                        index iN = nodeDedu2Old.at(ii);
+                                        if (iN < nNode)
+                                        {
+                                            out << vectorDataPoint(i, iN, 0) << " ";
+                                            out << vectorDataPoint(i, iN, 1) << " ";
+                                            out << vectorDataPoint(i, iN, 2) << " ";
+                                        }
+                                        else
+                                        {
+                                            out << vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 0) << " ";
+                                            out << vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 1) << " ";
+                                            out << vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 2) << " ";
+                                        }
                                     }
                                 }
                                 else
@@ -1013,7 +1071,7 @@ namespace DNDS::Geom
                             });
                         writeXMLEntity(
                             out, level, "Piece",
-                            {{"NumberOfPoints", std::to_string(nNode + nodesExtra.size())},
+                            {{"NumberOfPoints", std::to_string(nodeDedu2Old.size())},
                              {"NumberOfCells", std::to_string(nCell)}},
                             [&](auto &out, int level)
                             {
