@@ -118,6 +118,10 @@ namespace DNDS::Euler
             {
                 return axis * Omega();
             }
+            Geom::tPoint rVec(const Geom::tPoint &r)
+            {
+                return r - r.dot(axis) * axis;
+            }
             DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                 FrameConstRotation,
                 enabled,

@@ -294,7 +294,9 @@ namespace DNDS::Euler
             //     std::cout << uRecC.father.get() << std::endl;
 
             eval.FixUMaxFilter(cx);
-            eval.updateBCAnchors(cx, uRecC);
+            if ((iter > config.convergenceControl.nAnchorUpdateStart &&
+                 (iter - config.convergenceControl.nAnchorUpdateStart - 1) % config.convergenceControl.nAnchorUpdate == 0))
+                eval.updateBCAnchors(cx, uRecC);
             // cx.trans.startPersistentPull();
             // cx.trans.waitPersistentPull();
 
