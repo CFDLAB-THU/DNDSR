@@ -508,6 +508,7 @@ namespace DNDS::Euler
         }
 #endif
 
+#ifdef USE_FLUX_BALANCE_TERM
         {
             TU wLMean, wRMean;
             Gas::IdealGasThermalConservative2Primitive<dim>(ULMean, wLMean, gamma);
@@ -526,9 +527,10 @@ namespace DNDS::Euler
             }
             FLfix(Seq123) = normBase * FLfix(Seq123);
             FRfix(Seq123) = normBase * FRfix(Seq123);
-            FLfix *= 0;
-            FRfix *= 0; // currently disabled all flux balancingf
+            // FLfix *= 0;
+            // FRfix *= 0; // currently disabled all flux balancingf
         }
+#endif
 
         auto exitFun = [&]()
         {

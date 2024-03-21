@@ -420,10 +420,7 @@ namespace DNDS::Euler
 #ifdef USE_ABS_VELO_IN_ROTATION
             if (settings.frameConstRotation.enabled)
             {
-                Geom::tPoint rV;
-                rV.setZero();
-                rV(Seq012) = UMeanXy(Seq123);
-                ret(Seq123) += -settings.frameConstRotation.vOmega().cross(rV)(Seq012);
+                ret(Seq123) += -settings.frameConstRotation.vOmega().cross(Geom::ToThreeDim<dim>(UMeanXy(Seq123)))(Seq012);
             }
 #else
             if (settings.frameConstRotation.enabled)
@@ -431,10 +428,7 @@ namespace DNDS::Euler
                 Geom::tPoint radi = pPhy - settings.frameConstRotation.center;
                 Geom::tPoint radiR = radi - settings.frameConstRotation.axis * (settings.frameConstRotation.axis.dot(radi));
                 ret(Seq123) += (radiR * sqr(settings.frameConstRotation.Omega()) * UMeanXy(0))(Seq012);
-                Geom::tPoint rV;
-                rV.setZero();
-                rV(Seq012) = UMeanXy(Seq123);
-                ret(Seq123) += -2.0 * settings.frameConstRotation.vOmega().cross(rV)(Seq012);
+                ret(Seq123) += -2.0 * settings.frameConstRotation.vOmega().cross(Geom::ToThreeDim<dim>(UMeanXy(Seq123)))(Seq012);
             }
             ret(I4) += ret(Seq123).dot(UMeanXy(Seq123)) / UMeanXy(0); // work of volume force!
 #endif
@@ -1317,7 +1311,7 @@ namespace DNDS::Euler
                 URxy = ULxy;
                 if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
                     this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
-                if(settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
+                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
                     this->TransformURotatingFrame(URxy, pPhysics, 1);
                 URxy(Seq123) *= -1;
                 if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
