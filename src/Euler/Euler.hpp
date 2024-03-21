@@ -1,6 +1,7 @@
 #pragma once
 #include "DNDS/Defines.hpp"
 #include "DNDS/EigenUtil.hpp"
+#include "CFV/VRDefines.hpp"
 
 namespace DNDS::Euler
 {

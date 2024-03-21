@@ -84,6 +84,7 @@ namespace DNDS::Euler
         std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall;
 
         std::unordered_map<Geom::t_index, AnchorPointRecorder<nVarsFixed>> anchorRecorders;
+        std::unordered_map<Geom::t_index, OneDimProfile<nVarsFixed>> profileRecorders;
 
         // ArrayVDOF<25> dRdUrec;
         // ArrayVDOF<25> dRdb;
@@ -426,13 +427,17 @@ namespace DNDS::Euler
                 ret(Seq123) += settings.constMassForce(Seq012) * UMeanXy(0);
                 ret(I4) += settings.constMassForce(Seq012).dot(UMeanXy(Seq123));
             }
+            if (Mode == 2)
+            {
+                jacobian(I4, Seq123) -= settings.constMassForce(Seq012);
+            }
 #ifdef USE_ABS_VELO_IN_ROTATION
             if (settings.frameConstRotation.enabled)
             {
                 if (Mode == 0 || Mode == 2)
                     ret(Seq123) += -settings.frameConstRotation.vOmega().cross(Geom::ToThreeDim<dim>(UMeanXy(Seq123)))(Seq012);
                 if (Mode == 2)
-                    jacobian(Seq123, Seq123) += Geom::CrossVecToMat(-settings.frameConstRotation.vOmega())(Seq012, Seq012);
+                    jacobian(Seq123, Seq123) -= Geom::CrossVecToMat(-settings.frameConstRotation.vOmega())(Seq012, Seq012);
             }
 #else
             if (settings.frameConstRotation.enabled)
@@ -449,9 +454,9 @@ namespace DNDS::Euler
                 if (Mode == 2)
                 {
                     TMat dmvolForceDrhov = Geom::CrossVecToMat(-2 * settings.frameConstRotation.vOmega())(Seq012, Seq012);
-                    jacobian(Seq123, Seq123) += dmvolForceDrhov;
-                    jacobian(I4, Seq123) = mvolForce + dmvolForceDrhov.transpose() * UMeanXy(Seq123) / UMeanXy(0);
-                    jacobian(I4, 0) = -mvolForce.dot(UMeanXy(Seq123)) / sqr(UMeanXy(0));
+                    jacobian(Seq123, Seq123) -= dmvolForceDrhov;
+                    jacobian(I4, Seq123) -= mvolForce + dmvolForceDrhov.transpose() * UMeanXy(Seq123) / UMeanXy(0);
+                    jacobian(I4, 0) -= -mvolForce.dot(UMeanXy(Seq123)) / sqr(UMeanXy(0));
                 }
             }
 #endif
@@ -807,8 +812,7 @@ namespace DNDS::Euler
 
         void updateBCAnchors(ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
         {
-            for (auto &v : anchorRecorders)
-                v.second.Reset();
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             for (Geom::t_index i = Geom::BC_ID_DEFAULT_MAX; i < pBCHandler->size(); i++) // init code, consider adding to ctor
             {
                 if (pBCHandler->GetFlagFromIDSoft(i, "anchorOpt") == 0)
@@ -816,6 +820,8 @@ namespace DNDS::Euler
                 if (!anchorRecorders.count(i))
                     anchorRecorders.emplace(std::make_pair(i, AnchorPointRecorder<nVarsFixed>(mesh->getMPI())));
             }
+            for (auto &v : anchorRecorders)
+                v.second.Reset();
             for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
             {
                 index iFace = mesh->bnd2face.at(iBnd);
@@ -851,6 +857,9 @@ namespace DNDS::Euler
             for (auto &v : anchorRecorders)
                 v.second.ObtainAnchorMPI();
         }
+
+        void updateBCProfiles(ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec);
+        
 
         TU generateBoundaryValue(
             TU &ULxy, //! warning, possible that UL is also modified
@@ -945,6 +954,13 @@ namespace DNDS::Euler
                             //     }
                             //     farPrimitive(I4) += pInc;
                             // }
+                        }
+                        if (bTypeEuler == EulerBCType::BCOutP && pBCHandler->GetFlagFromID(btype, "anchorOpt") == 2)
+                        {
+                            real pInc = 0;
+                            if (profileRecorders.count(btype))
+                                pInc = profileRecorders.at(btype).GetPlain(settings.frameConstRotation.rVec(pPhysics).norm())(I4);
+                            farPrimitive(I4) += std::max(pInc, -0.95 * farPrimitive(I4));
                         }
                         ULxyPrimitive(I4) = farPrimitive(I4); // using far pressure
                         Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma);

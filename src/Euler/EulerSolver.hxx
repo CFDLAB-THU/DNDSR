@@ -296,7 +296,10 @@ namespace DNDS::Euler
             eval.FixUMaxFilter(cx);
             if ((iter > config.convergenceControl.nAnchorUpdateStart &&
                  (iter - config.convergenceControl.nAnchorUpdateStart - 1) % config.convergenceControl.nAnchorUpdate == 0))
+            {
                 eval.updateBCAnchors(cx, uRecC);
+                eval.updateBCProfiles(cx, uRecC);
+            }
             // cx.trans.startPersistentPull();
             // cx.trans.waitPersistentPull();
 
