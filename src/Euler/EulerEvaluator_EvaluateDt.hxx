@@ -704,11 +704,12 @@ namespace DNDS::Euler
                     TU &ULmN2 = settings.rsMeanValueEig == 1 ? ULMeanN2 : ULN2;
                     TU &URmN2 = settings.rsMeanValueEig == 1 ? URMeanN2 : URN2;
 
-                    RSWrapper(rsType,
-                              ULN2, URN2, ULmN2, URmN2, settings.idealGasProperty.gamma, fincN2, deltaLambdaFace[iFace]);
                     Gas::RiemannSolverType rsTypeAux = settings.rsTypeAux;
                     RSWrapper(rsTypeAux ? rsTypeAux : Gas::RiemannSolverType::Roe_M2,
                               ULN1, URN1, ULmN1, URmN1, settings.idealGasProperty.gamma, fincN1, deltaLambdaFace[iFace]);
+                    RSWrapper(rsType,
+                              ULN2, URN2, ULmN2, URmN2, settings.idealGasProperty.gamma, fincN2, deltaLambdaFace[iFace]);
+                    // original rs executes last, making lam123 values record the last ones;
 
                     fincN1(Seq123) = normBaseN1 * fincN1(Seq123);
                     fincN2(Seq123) = normBaseN2 * fincN2(Seq123);
