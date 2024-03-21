@@ -214,12 +214,15 @@ namespace DNDS::Euler
             {
                 int nTimeStepInternal = 20;
                 int nTimeStepInternalMin = 5;
+                int nAnchorUpdate = 1;
+                int nAnchorUpdateStart = 100;
                 real rhsThresholdInternal = 1e-10;
                 real res_base = 0;
                 bool useVolWiseResidual = false;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     ConvergenceControl,
                     nTimeStepInternal, nTimeStepInternalMin,
+                    nAnchorUpdate, nAnchorUpdateStart,
                     rhsThresholdInternal,
                     res_base,
                     useVolWiseResidual)
@@ -351,8 +354,8 @@ namespace DNDS::Euler
                 bool usePPRecLimiter = true;
                 int smoothIndicatorProcedure = 0;
                 int limiterProcedure = 0; // 0 for V2==3WBAP, 1 for V3==CWBAP
-                int nPartialLimiterStart = 0;
-                int nPartialLimiterStartLocal = 0;
+                int nPartialLimiterStart = INT_MAX;
+                int nPartialLimiterStartLocal = INT_MAX;
                 bool preserveLimited = false;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     LimiterControl,

@@ -779,6 +779,7 @@ namespace DNDS::Euler
             std::cout << T << std::endl;
             std::cout << muf << std::endl;
             std::cout << pMean << std::endl;
+            std::cout << btype << std::endl;
             DNDS_assert(false);
         }
 

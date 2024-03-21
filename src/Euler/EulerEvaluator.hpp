@@ -1032,13 +1032,28 @@ namespace DNDS::Euler
                         Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
                         if (bTypeEuler == EulerBCType::BCOutP && pBCHandler->GetFlagFromID(btype, "anchorOpt") == 1)
                         {
-                            TU anchorPointRel = ULxy;
-                            if (anchorRecorders.count(btype)) // if doesn't have anchor value yet, use UL as anchor
-                                anchorPointRel = anchorRecorders.at(btype).val;
-                            TU anchorPointRelPrimitive = anchorPointRel;
-                            Gas::IdealGasThermalConservative2Primitive<dim>(anchorPointRel, anchorPointRelPrimitive, gamma);
-                            // rel has correct static pressure
-                            farPrimitive(I4) += std::max(ULxyPrimitive(I4) - anchorPointRelPrimitive(I4), -0.95 * farPrimitive(I4));
+                            {
+                                TU anchorPointRel = ULxy;
+                                if (anchorRecorders.count(btype)) // if doesn't have anchor value yet, use UL as anchor
+                                    anchorPointRel = anchorRecorders.at(btype).val;
+                                TU anchorPointRelPrimitive = anchorPointRel;
+                                Gas::IdealGasThermalConservative2Primitive<dim>(anchorPointRel, anchorPointRelPrimitive, gamma);
+                                // rel has correct static pressure
+                                // std::cout << "init Pressure " << farPrimitive(I4) << fmt::format("  UL {}, aP {}", ULxyPrimitive(I4), anchorPointRelPrimitive(I4)) << std::endl;
+                                farPrimitive(I4) += std::max(ULxyPrimitive(I4) - anchorPointRelPrimitive(I4), -0.95 * farPrimitive(I4));
+                                // std::cout << "anchored Pressure " << farPrimitive(I4) << std::endl;
+                            }
+                            // {
+                            //     real pInc = 0;
+                            //     if (settings.frameConstRotation.enabled && pBCHandler->GetValueExtraFromID(btype).size() >= 3)
+                            //     {
+                            //         real rRefSqr = settings.frameConstRotation.rVec(pBCHandler->GetValueExtraFromID(btype)({0, 1, 2})).squaredNorm();
+                            //         real rCurSqr = settings.frameConstRotation.rVec(pPhysics).squaredNorm();
+                            //         pInc = (rCurSqr - rRefSqr) * 0.5 * farPrimitive(0) * sqr(settings.frameConstRotation.Omega());
+                            //         pInc = std::max(pInc, -0.95 * farPrimitive(I4));
+                            //     }
+                            //     farPrimitive(I4) += pInc;
+                            // }
                         }
                         ULxyPrimitive(I4) = farPrimitive(I4); // using far pressure
                         Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma);
@@ -1302,7 +1317,7 @@ namespace DNDS::Euler
                 URxy = ULxy;
                 if (settings.frameConstRotation.enabled)
                     this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
-                URxy(Seq123) -= 2 * ULxy(Seq123).dot(uNorm) * uNorm; // mirrored!
+                URxy(Seq123) -= 2 * URxy(Seq123).dot(uNorm) * uNorm; // mirrored!
                 if (settings.frameConstRotation.enabled)
                     this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
             }

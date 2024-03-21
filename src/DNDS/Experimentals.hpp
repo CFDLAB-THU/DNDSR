@@ -29,13 +29,13 @@
 
 #define USE_FIRST_ORDER_WALL_DIST
 
-#define USE_NS_SA_NEGATIVE_MODEL
+// #define USE_NS_SA_NEGATIVE_MODEL
 
 // #define USE_NS_SA_NUT_REDUCED_ORDER
 
 // #define USE_NS_SA_ALLOW_NEGATIVE_MEAN
 
-#define USE_ABS_VELO_IN_ROTATION
+// #define USE_ABS_VELO_IN_ROTATION
 
 /*-------------------------------------------------------------------------------------------------*/
 /*-------------------------------------------------------------------------------------------------*/
