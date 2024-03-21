@@ -12,8 +12,8 @@ namespace DNDS::Euler
 
     template <EulerModel model>
     void EulerEvaluator<model>::LUSGSMatrixInit(
-        ArrayDOFV<nVarsFixed> &JDiag,
-        ArrayDOFV<nVarsFixed> &JSource,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JSource,
         ArrayDOFV<1> &dTau, real dt, real alphaDiag,
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,
@@ -21,7 +21,9 @@ namespace DNDS::Euler
         real t)
     {
         // TODO: for code0: flux jacobian with lambdaFace, and source jacobian with integration, only diagpart dealt with
+        DNDS_assert(JDiag.isBlock() == JSource.isBlock());
         DNDS_assert(jacobianCode == 0);
+        JDiag.clearValues();
         int cnvars = nVars;
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -34,14 +36,22 @@ namespace DNDS::Euler
                 index iFace = c2f[ic2f];
                 fpDivisor += (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) * lambdaFace[iFace] / vfv->GetCellVol(iCell);
             }
-            JDiag[iCell].setConstant(fpDivisor);
+            if (JDiag.isBlock())
+                JDiag.getBlock(iCell).diagonal().setConstant(fpDivisor);
+            else
+                JDiag.getDiag(iCell).setConstant(fpDivisor);
 
             // std::cout << fpDivisor << std::endl;
 
             // jacobian diag
 
             if (!settings.ignoreSourceTerm)
-                JDiag[iCell] += alphaDiag * JSource[iCell];
+            {
+                if (JDiag.isBlock())
+                    JDiag.getBlock(iCell) += JSource.getBlock(iCell);
+                else
+                    JDiag.getDiag(iCell) += JSource.getDiag(iCell);
+            }
 
             // jacobianCellInv[iCell] = jacobianCell[iCell].partialPivLu().inverse();
 
@@ -57,7 +67,7 @@ namespace DNDS::Euler
         real alphaDiag,
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         ArrayDOFV<nVarsFixed> &AuInc)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -125,14 +135,14 @@ namespace DNDS::Euler
             // uIncNewBuf /= fpDivisor;
             // uIncNew[iCell] = uIncNewBuf;
             auto AuIncI = AuInc[iCell];
-            AuIncI = JDiag[iCell].array() * uInc[iCell].array() - uIncNewBuf.array();
+            AuIncI = JDiag.MatVecLeft(iCell, uInc[iCell]) - uIncNewBuf;
 
             if (AuIncI.hasNaN())
             {
                 std::cout << AuIncI.transpose() << std::endl
                           << uINCi.transpose() << std::endl
                           << u[iCell].transpose() << std::endl
-                          << JDiag[iCell] << std::endl
+                          << JDiag.getValue(iCell) << std::endl
                           << iCell << std::endl;
                 DNDS_assert(!AuInc[iCell].hasNaN());
             }
@@ -145,7 +155,7 @@ namespace DNDS::Euler
     void EulerEvaluator<model>::LUSGSMatrixToJacobianLU(
         real alphaDiag,
         ArrayDOFV<nVarsFixed> &u,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         JacobianLocalLU<nVarsFixed> &jacLU)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -198,7 +208,7 @@ namespace DNDS::Euler
                         (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacIJ;
                 }
             }
-            jacLU.GetDiag(iCell) = JDiag[iCell].asDiagonal();
+            jacLU.GetDiag(iCell) = JDiag.getValue(iCell);
         }
         jacLU.InPlaceDecompose();
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixToJacobianLU -1");
@@ -210,12 +220,13 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &rhs,
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         ArrayDOFV<nVarsFixed> &uIncNew)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateLUSGSForward 1");
         int cnvars = nVars;
+        JDiag.GetInvert();
         index nCellDist = mesh->NumCell();
         for (index iScan = 0; iScan < nCellDist; iScan++)
         {
@@ -270,13 +281,13 @@ namespace DNDS::Euler
                 }
             }
             auto uIncNewI = uIncNew[iCell];
-            uIncNewI.array() = JDiag[iCell].array().inverse() * uIncNewBuf.array();
+            uIncNewI = JDiag.MatVecLeftInvert(iCell, uIncNewBuf);
 
             if (uIncNewI.hasNaN())
             {
                 std::cout << uIncNewI.transpose() << std::endl
                           << uIncNewBuf.transpose() << std::endl
-                          << JDiag[iCell] << std::endl
+                          << JDiag.getValue(iCell) << std::endl
                           << iCell << std::endl;
                 DNDS_assert(!uIncNew[iCell].hasNaN());
             }
@@ -291,12 +302,13 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &rhs,
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         ArrayDOFV<nVarsFixed> &uIncNew)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateLUSGSBackward 1");
         int cnvars = nVars;
+        JDiag.GetInvert();
         index nCellDist = mesh->NumCell();
         for (index iScan = nCellDist - 1; iScan >= 0; iScan--)
         {
@@ -341,7 +353,7 @@ namespace DNDS::Euler
                 }
             }
             auto uIncNewI = uIncNew[iCell];
-            uIncNewI.array() += JDiag[iCell].array().inverse() * uIncNewBuf.array();
+            uIncNewI += JDiag.MatVecLeftInvert(iCell, uIncNewBuf);
         }
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateLUSGSBackward -1");
     }
@@ -353,12 +365,13 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
         ArrayDOFV<nVarsFixed> &uIncNew,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         bool forward, TU &sumInc)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateSGS 1");
         int cnvars = nVars;
+        JDiag.GetInvert();
         index nCellDist = mesh->NumCell();
         sumInc.setZero(cnvars);
         for (index iScan = 0; iScan < nCellDist; iScan++)
@@ -415,14 +428,14 @@ namespace DNDS::Euler
             auto uIncNewI = uIncNew[iCell];
             TU uIncOld = uIncNewI;
 
-            uIncNewI.array() = JDiag[iCell].array().inverse() * uIncNewBuf.array();
+            uIncNewI = JDiag.MatVecLeftInvert(iCell, uIncNewBuf);
             sumInc.array() += (uIncNewI - uIncOld).array().abs();
 
             if (uIncNewI.hasNaN())
             {
                 std::cout << uIncNewI.transpose() << std::endl
                           << uIncNewBuf.transpose() << std::endl
-                          << JDiag[iCell] << std::endl
+                          << JDiag.getValue(iCell) << std::endl
                           << iCell << std::endl;
                 DNDS_assert(!uInc[iCell].hasNaN());
             }
@@ -444,12 +457,13 @@ namespace DNDS::Euler
         ArrayRECV<nVarsFixed> &uRec,
         ArrayDOFV<nVarsFixed> &uInc,
         ArrayRECV<nVarsFixed> &uRecInc,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         bool forward, TU &sumInc)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateSGS 1");
         int cnvars = nVars;
+        JDiag.GetInvert();
         index nCellDist = mesh->NumCell();
         sumInc.setZero(cnvars);
         for (index iScan = 0; iScan < nCellDist; iScan++)
@@ -516,14 +530,14 @@ namespace DNDS::Euler
             auto uIncNewI = uInc[iCell];
             TU uIncOld = uIncNewI;
 
-            uIncNewI.array() = JDiag[iCell].array().inverse() * uIncNewBuf.array();
+            uIncNewI = JDiag.MatVecLeftInvert(iCell, uIncNewBuf);
             sumInc.array() += (uIncNewI - uIncOld).array().abs();
 
             if (uIncNewI.hasNaN())
             {
                 std::cout << uIncNewI.transpose() << std::endl
                           << uIncNewBuf.transpose() << std::endl
-                          << JDiag[iCell] << std::endl
+                          << JDiag.getValue(iCell) << std::endl
                           << iCell << std::endl;
                 DNDS_assert(!uInc[iCell].hasNaN());
             }
@@ -543,7 +557,7 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &uInc,
         ArrayDOFV<nVarsFixed> &uIncNew,
         ArrayDOFV<nVarsFixed> &bBuf,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         JacobianLocalLU<nVarsFixed> &jacLU,
         TU &sumInc)
     {

@@ -139,13 +139,20 @@ namespace DNDS::Geom
     inline tGPoint RotateAxis(const tPoint &axis)
     {
         real theta = axis.norm();
-        if(theta < smallReal)
+        if (theta < smallReal)
             return tGPoint::Identity();
         tPoint axn = axis / theta;
         tGPoint Omega{{0, -axn(2), axn(1)},
                       {axn(2), 0, -axn(0)},
                       {-axn(1), axn(0), 0}};
         return axn * axn.transpose() + std::sin(theta) * Omega - std::cos(theta) * (Omega * Omega);
+    }
+
+    inline tGPoint CrossVecToMat(const tPoint &axn)
+    {
+        return tGPoint{{0, -axn(2), axn(1)},
+                       {axn(2), 0, -axn(0)},
+                       {-axn(1), axn(0), 0}};
     }
 
     template <int dim>

@@ -136,7 +136,7 @@ namespace DNDS::Euler
          */
         void EvaluateRHS(
             ArrayDOFV<nVarsFixed> &rhs,
-            ArrayDOFV<nVarsFixed> &JSource,
+            JacobianDiagBlock<nVarsFixed> &JSource,
             ArrayDOFV<nVarsFixed> &u,
             ArrayRECV<nVarsFixed> &uRec,
             ArrayDOFV<1> &uRecBeta,
@@ -145,8 +145,8 @@ namespace DNDS::Euler
             real t);
 
         void LUSGSMatrixInit(
-            ArrayDOFV<nVarsFixed> &JDiag,
-            ArrayDOFV<nVarsFixed> &JSource,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JSource,
             ArrayDOFV<1> &dTau, real dt, real alphaDiag,
             ArrayDOFV<nVarsFixed> &u,
             ArrayRECV<nVarsFixed> &uRec,
@@ -157,13 +157,13 @@ namespace DNDS::Euler
             real alphaDiag,
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             ArrayDOFV<nVarsFixed> &AuInc);
 
         void LUSGSMatrixToJacobianLU(
             real alphaDiag,
             ArrayDOFV<nVarsFixed> &u,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             JacobianLocalLU<nVarsFixed> &jacLU);
 
         /**
@@ -179,7 +179,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &rhs,
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             ArrayDOFV<nVarsFixed> &uIncNew);
 
         /**
@@ -192,7 +192,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &rhs,
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             ArrayDOFV<nVarsFixed> &uIncNew);
 
         void UpdateSGS(
@@ -201,7 +201,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
             ArrayDOFV<nVarsFixed> &uIncNew,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             bool forward, TU &sumInc);
 
         void LUSGSMatrixSolveJacobianLU(
@@ -211,7 +211,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &uInc,
             ArrayDOFV<nVarsFixed> &uIncNew,
             ArrayDOFV<nVarsFixed> &bBuf,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             JacobianLocalLU<nVarsFixed> &jacLU,
             TU &sumInc);
 
@@ -222,7 +222,7 @@ namespace DNDS::Euler
             ArrayRECV<nVarsFixed> &uRec,
             ArrayDOFV<nVarsFixed> &uInc,
             ArrayRECV<nVarsFixed> &uRecInc,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             bool forward, TU &sumInc);
 
         // void UpdateLUSGSForwardWithRec(
@@ -407,36 +407,53 @@ namespace DNDS::Euler
             const TU &UMeanXy,
             const TDiffU &DiffUxy,
             const Geom::tPoint &pPhy,
-            index iCell, index ig)
+            TJacobianU &jacobian,
+            index iCell,
+            index ig,
+            int Mode) // mode =0: source; mode = 1, diagJacobi; mode = 2,
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             TU ret;
             ret.resizeLike(UMeanXy);
             ret.setZero();
+            if (Mode == 2)
+                jacobian.setZero(UMeanXy.size(), UMeanXy.size());
 #ifdef DNDS_FV_EULEREVALUATOR_SOURCE_TERM_ZERO
             return ret;
 #endif
-            ret(Seq123) = settings.constMassForce(Seq012) * UMeanXy(0);
+            if (Mode == 0)
+            {
+                ret(Seq123) += settings.constMassForce(Seq012) * UMeanXy(0);
+                ret(I4) += settings.constMassForce(Seq012).dot(UMeanXy(Seq123));
+            }
 #ifdef USE_ABS_VELO_IN_ROTATION
             if (settings.frameConstRotation.enabled)
             {
-                Geom::tPoint rV;
-                rV.setZero();
-                rV(Seq012) = UMeanXy(Seq123);
-                ret(Seq123) += -settings.frameConstRotation.vOmega().cross(rV)(Seq012);
+                if (Mode == 0 || Mode == 2)
+                    ret(Seq123) += -settings.frameConstRotation.vOmega().cross(Geom::ToThreeDim<dim>(UMeanXy(Seq123)))(Seq012);
+                if (Mode == 2)
+                    jacobian(Seq123, Seq123) += Geom::CrossVecToMat(-settings.frameConstRotation.vOmega())(Seq012, Seq012);
             }
 #else
             if (settings.frameConstRotation.enabled)
             {
                 Geom::tPoint radi = pPhy - settings.frameConstRotation.center;
                 Geom::tPoint radiR = radi - settings.frameConstRotation.axis * (settings.frameConstRotation.axis.dot(radi));
-                ret(Seq123) += (radiR * sqr(settings.frameConstRotation.Omega()) * UMeanXy(0))(Seq012);
-                Geom::tPoint rV;
-                rV.setZero();
-                rV(Seq012) = UMeanXy(Seq123);
-                ret(Seq123) += -2.0 * settings.frameConstRotation.vOmega().cross(rV)(Seq012);
+                TVec mvolForce = (radiR * sqr(settings.frameConstRotation.Omega()) * UMeanXy(0))(Seq012);
+                mvolForce += -2.0 * settings.frameConstRotation.vOmega().cross(Geom::ToThreeDim<dim>(UMeanXy(Seq123)))(Seq012);
+                if (Mode == 0)
+                {
+                    ret(Seq123) += mvolForce;
+                    ret(I4) += mvolForce.dot(UMeanXy(Seq123)) / UMeanXy(0);
+                }
+                if (Mode == 2)
+                {
+                    TMat dmvolForceDrhov = Geom::CrossVecToMat(-2 * settings.frameConstRotation.vOmega())(Seq012, Seq012);
+                    jacobian(Seq123, Seq123) += dmvolForceDrhov;
+                    jacobian(I4, Seq123) = mvolForce + dmvolForceDrhov.transpose() * UMeanXy(Seq123) / UMeanXy(0);
+                    jacobian(I4, 0) = -mvolForce.dot(UMeanXy(Seq123)) / sqr(UMeanXy(0));
+                }
             }
-            ret(I4) += ret(Seq123).dot(UMeanXy(Seq123)) / UMeanXy(0); // work of volume force!
 #endif
             if constexpr (model == NS || model == NS_2D || model == NS_3D)
             {
@@ -518,13 +535,23 @@ namespace DNDS::Euler
                     D = -cw1 * sqr(nuh / d);
                 }
 #endif
+                TU retInc;
+                retInc.setZero(UMeanXy.size());
 
                 if (passiveDiscardSource)
                     P = D = 0;
-                ret(I4 + 1) = UMeanXy(0) * (P - D + diffNu.squaredNorm() * cb2 / sigma) / muRef -
-                              (UMeanXy(I4 + 1) * fn * muRef + mufPhy) / (UMeanXy(0) * sigma) * diffRho.dot(diffNu) / muRef;
+                if (Mode == 0)
+                    retInc(I4 + 1) = UMeanXy(0) * (P - D + diffNu.squaredNorm() * cb2 / sigma) / muRef -
+                                     (UMeanXy(I4 + 1) * fn * muRef + mufPhy) / (UMeanXy(0) * sigma) * diffRho.dot(diffNu) / muRef;
+                if (Mode == 1 || Mode == 2)
+                    retInc(I4 + 1) = -std::min(UMeanXy(0) * (P * 0 - D * 2) / muRef / (UMeanXy(I4 + 1) + verySmallReal), -verySmallReal);
+                if (Mode == 2)
+                    jacobian += retInc.asDiagonal(); //! TODO: make really block jacobian
+
+                ret += retInc;
+
                 // std::cout << "P, D " << P / muRef << " " << D / muRef << " " << diffNu.squaredNorm() << std::endl;
-                if (ret.hasNaN())
+                if (retInc.hasNaN())
                 {
                     std::cout << P << std::endl;
                     std::cout << D << std::endl;
@@ -554,169 +581,27 @@ namespace DNDS::Euler
 
                 real mufPhy, muf;
                 mufPhy = muf = muEff(UMeanXy, T);
-                RANS::GetSource_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, ret);
+
+                TU retInc;
+                retInc.setZero(UMeanXy.size());
+
+                if (Mode == 0)
+                    RANS::GetSource_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, retInc);
+                else if (Mode == 1)
+                    RANS::GetSourceJacobianDiag_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, retInc);
+                else if (Mode == 2)
+                {
+                    RANS::GetSourceJacobianDiag_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, retInc);
+                    jacobian += retInc.asDiagonal(); //! TODO: make really block jacobian
+                }
+                ret += retInc;
             }
             else
             {
                 DNDS_assert(false);
             }
-            return ret;
-        }
-
-        // zeroth means needs not derivative
-        TU sourceJacobianDiag(
-            const TU &UMeanXy,
-            const TDiffU &DiffUxy,
-            const Geom::tPoint &pPhy,
-            index iCell, index ig)
-        {
-            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            TU ret;
-            ret.resizeLike(UMeanXy);
-            ret.setZero();
-#ifdef DNDS_FV_EULEREVALUATOR_SOURCE_TERM_ZERO
-            return ret;
-#endif
-            // ret(Seq123) = settings.constMassForce * UMeanXy(0);
-            if (settings.frameConstRotation.enabled)
-            {
-                // Geom::tPoint radi = pPhy - settings.frameConstRotation.center;
-                // Geom::tPoint radiR = radi - settings.frameConstRotation.axis * (settings.frameConstRotation.axis.dot(radi));
-                // ret(Seq123) += radiR * sqr(settings.frameConstRotation.Omega()) * UMeanXy(0);
-                // ret(Seq123) += -2.0 * vOmega().cross(UMeanXy(Seq123)); // ! note cross has no diag derivatives
-            }
-            // ret(I4) += ret(Seq123).dot(UMeanXy(Seq123)) / UMeanXy(0);
-            if constexpr (model == NS || model == NS_2D || model == NS_3D)
-            {
-            }
-            else if constexpr (model == NS_SA || model == NS_SA_3D)
-            {
-                real d = std::min(dWall[iCell][ig], std::pow(veryLargeReal, 1. / 6.));
-                real cb1 = 0.1355;
-                real cb2 = 0.622;
-                real sigma = 2. / 3.;
-                real cnu1 = 7.1;
-                real cnu2 = 0.7;
-                real cnu3 = 0.9;
-                real cw2 = 0.3;
-                real cw3 = 2;
-                real kappa = 0.41;
-                real rlim = 10;
-                real cw1 = cb1 / sqr(kappa) + (1 + cb2) / sigma;
-
-                real ct3 = 1.2;
-                real ct4 = 0.5;
-
-                real pMean, asqrMean, Hmean;
-                real gamma = settings.idealGasProperty.gamma;
-                Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0), (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
-                                     gamma, pMean, asqrMean, Hmean);
-                // ! refvalue:
-                real muRef = settings.idealGasProperty.muGas;
-
-                real nuh = UMeanXy(I4 + 1) * muRef / UMeanXy(0);
-
-                real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXy(0));
-                real mufPhy, muf;
-                mufPhy = muf = muEff(UMeanXy, T);
-
-                real Chi = (UMeanXy(I4 + 1) * muRef / mufPhy);
-                real fnu1 = std::pow(Chi, 3) / (std::pow(Chi, 3) + std::pow(cnu1, 3));
-                real fnu2 = 1 - Chi / (1 + Chi * fnu1);
-
-                Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
-                Eigen::Matrix<real, dim, 1> diffRhoNu = DiffUxy(Seq012, {I4 + 1}) * muRef;
-                Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
-                Eigen::Matrix<real, dim, 1> diffNu = (diffRhoNu - nuh * diffRho) / UMeanXy(0);
-                Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
-                Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
-
-                Eigen::Matrix<real, dim, dim> Omega = 0.5 * (diffU.transpose() - diffU);
-                real S = Omega.norm() * std::sqrt(2);
-                real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;
-
-                real Sh;
-#ifdef USE_NS_SA_NEGATIVE_MODEL
-                if (Sbar < -cnu2 * S)
-                    Sh = S + S * (sqr(cnu2) * S + cnu3 * Sbar) / ((cnu3 - 2 * cnu2) * S - Sbar);
-                else
-#endif
-                    Sh = S + Sbar;
-
-                real r = std::min(nuh / (Sh * sqr(kappa * d) + verySmallReal), rlim);
-                real g = r + cw2 * (std::pow(r, 6) - r);
-                real fw = g * std::pow((1 + std::pow(cw3, 6)) / (std::pow(g, 6) + std::pow(cw3, 6)), 1. / 6.);
-
-                real ft2 = ct3 * std::exp(-ct4 * sqr(Chi));
-                real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / d); //! modified >>
-                real P = cb1 * (1 - ft2) * Sh * nuh;                         //! modified >>
-                // real D = cw1 * fw * sqr(nuh / d);
-                // real P = cb1 * Sh * nuh;
-                real fn = 1;
-#ifdef USE_NS_SA_NEGATIVE_MODEL
-                if (UMeanXy(I4 + 1) < 0)
-                {
-                    real cn1 = 16;
-                    real Chi = UMeanXy(I4 + 1) * muRef / mufPhy;
-                    fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
-                    P = cb1 * (1 - ct3) * S * nuh;
-                    D = -cw1 * sqr(nuh / d);
-                }
-#endif
-
-                TU ret;
-                ret.resizeLike(UMeanXy);
-                ret.setZero();
-
-                if (passiveDiscardSource)
-                    P = D = 0;
-                ret(I4 + 1) = -std::min(UMeanXy(0) * (P * 0 - D * 2) / muRef / (UMeanXy(I4 + 1) + verySmallReal), -verySmallReal);
-                // std::cout << ret(I4+1) << std::endl;
-
-                if (ret.hasNaN())
-                {
-                    std::cout << P << std::endl;
-                    std::cout << D << std::endl;
-                    std::cout << UMeanXy(0) << std::endl;
-                    std::cout << Sh << std::endl;
-                    std::cout << nuh << std::endl;
-                    std::cout << g << std::endl;
-                    std::cout << r << std::endl;
-                    std::cout << S << std::endl;
-                    std::cout << d << std::endl;
-                    std::cout << fnu2 << std::endl;
-                    std::cout << mufPhy << std::endl;
-                    std::cout << UMeanXy.transpose() << std::endl;
-                    std::cout << pMean << std::endl;
-                    std::cout << ret.transpose() << std::endl;
-
-                    DNDS_assert(false);
-                }
-                // if (passiveDiscardSource)
-                //     ret(Eigen::seq(5, Eigen::last)).setZero();
-            }
-            else if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
-            {
-                TU ret;
-                ret.resizeLike(UMeanXy);
-                ret.setZero();
-
-                real pMean, asqrMean, Hmean;
-                real gamma = settings.idealGasProperty.gamma;
-                Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0), (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
-                                     gamma, pMean, asqrMean, Hmean);
-                // ! refvalue:
-                real muRef = settings.idealGasProperty.muGas;
-                real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXy(0));
-
-                real mufPhy, muf;
-                mufPhy = muf = muEff(UMeanXy, T);
-                RANS::GetSourceJacobianDiag_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, ret);
-            }
-            else
-            {
-                DNDS_assert(false);
-            }
+            // if (Mode == 1)
+            //     std::cout << ret.transpose() << std::endl;
             return ret;
         }
 

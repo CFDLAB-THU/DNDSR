@@ -4,8 +4,8 @@
     namespace DNDS::Euler                                                                     \
     {                                                                                         \
         template void EulerEvaluator<model>::LUSGSMatrixInit(                                 \
-            ArrayDOFV<nVarsFixed> &JDiag,                                                     \
-            ArrayDOFV<nVarsFixed> &JSource,                                                   \
+            JacobianDiagBlock<nVarsFixed> &JDiag,                                             \
+            JacobianDiagBlock<nVarsFixed> &JSource,                                           \
             ArrayDOFV<1> &dTau, real dt, real alphaDiag,                                      \
             ArrayDOFV<nVarsFixed> &u,                                                         \
             ArrayRECV<nVarsFixed> &uRec,                                                      \
@@ -16,13 +16,13 @@
             real alphaDiag,                                                                   \
             ArrayDOFV<nVarsFixed> &u,                                                         \
             ArrayDOFV<nVarsFixed> &uInc,                                                      \
-            ArrayDOFV<nVarsFixed> &JDiag,                                                     \
+            JacobianDiagBlock<nVarsFixed> &JDiag,                                             \
             ArrayDOFV<nVarsFixed> &AuInc);                                                    \
                                                                                               \
         template void EulerEvaluator<model>::LUSGSMatrixToJacobianLU(                         \
             real alphaDiag,                                                                   \
             ArrayDOFV<nVarsFixed> &u,                                                         \
-            ArrayDOFV<nVarsFixed> &JDiag,                                                     \
+            JacobianDiagBlock<nVarsFixed> &JDiag,                                             \
             JacobianLocalLU<nVarsFixed> &jacLU);                                              \
                                                                                               \
         template void EulerEvaluator<model>::UpdateLUSGSForward(                              \
@@ -30,7 +30,7 @@
             ArrayDOFV<nVarsFixed> &rhs,                                                       \
             ArrayDOFV<nVarsFixed> &u,                                                         \
             ArrayDOFV<nVarsFixed> &uInc,                                                      \
-            ArrayDOFV<nVarsFixed> &JDiag,                                                     \
+            JacobianDiagBlock<nVarsFixed> &JDiag,                                             \
             ArrayDOFV<nVarsFixed> &uIncNew);                                                  \
                                                                                               \
         template void EulerEvaluator<model>::UpdateLUSGSBackward(                             \
@@ -38,7 +38,7 @@
             ArrayDOFV<nVarsFixed> &rhs,                                                       \
             ArrayDOFV<nVarsFixed> &u,                                                         \
             ArrayDOFV<nVarsFixed> &uInc,                                                      \
-            ArrayDOFV<nVarsFixed> &JDiag,                                                     \
+            JacobianDiagBlock<nVarsFixed> &JDiag,                                             \
             ArrayDOFV<nVarsFixed> &uIncNew);                                                  \
                                                                                               \
         template void EulerEvaluator<model>::UpdateSGS(                                       \
@@ -47,7 +47,7 @@
             ArrayDOFV<nVarsFixed> &u,                                                         \
             ArrayDOFV<nVarsFixed> &uInc,                                                      \
             ArrayDOFV<nVarsFixed> &uIncNew,                                                   \
-            ArrayDOFV<nVarsFixed> &JDiag,                                                     \
+            JacobianDiagBlock<nVarsFixed> &JDiag,                                             \
             bool forward, TU &sumInc);                                                        \
         template void EulerEvaluator<model>::UpdateSGSWithRec(                                \
             real alphaDiag,                                                                   \
@@ -56,7 +56,7 @@
             ArrayRECV<nVarsFixed> &uRec,                                                      \
             ArrayDOFV<nVarsFixed> &uInc,                                                      \
             ArrayRECV<nVarsFixed> &uRecInc,                                                   \
-            ArrayDOFV<nVarsFixed> &JDiag,                                                     \
+            JacobianDiagBlock<nVarsFixed> &JDiag,                                             \
             bool forward, TU &sumInc);                                                        \
                                                                                               \
         template void EulerEvaluator<model>::LUSGSMatrixSolveJacobianLU(                      \
@@ -66,7 +66,7 @@
             ArrayDOFV<nVarsFixed> &uInc,                                                      \
             ArrayDOFV<nVarsFixed> &uIncNew,                                                   \
             ArrayDOFV<nVarsFixed> &bBuf,                                                      \
-            ArrayDOFV<nVarsFixed> &JDiag,                                                     \
+            JacobianDiagBlock<nVarsFixed> &JDiag,                                             \
             JacobianLocalLU<nVarsFixed> &jacLU,                                               \
             TU &sumInc);                                                                      \
                                                                                               \

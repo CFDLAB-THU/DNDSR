@@ -9,6 +9,134 @@ namespace DNDS::Euler
 {
     // static const int nVarsFixed = 5;
 
+    template <int nVarsFixed>
+    class JacobianDiagBlock
+    {
+    public:
+        using TU = Eigen::Vector<real, nVarsFixed>;
+        using tComponent = Eigen::Matrix<real, nVarsFixed, nVarsFixed>;
+        using tComponentDiag = Eigen::Vector<real, nVarsFixed>;
+
+    private:
+        ArrayDOFV<nVarsFixed> _dataDiag, _dataDiagInvert;
+        DNDS::ArrayPair<DNDS::ArrayEigenMatrix<nVarsFixed, nVarsFixed>> _data, _dataInvert;
+        bool hasInvert{false};
+        int _mode{0};
+
+    public:
+        JacobianDiagBlock() {}
+
+        void SetModeAndInit(int mode, int nVarsC, ArrayDOFV<nVarsFixed> &mock)
+        {
+            _mode = mode;
+            if (isBlock())
+            {
+                DNDS_MAKE_SSP(_data.father, mock.father->getMPI());
+                DNDS_MAKE_SSP(_data.son, mock.father->getMPI());
+                _data.father->Resize(mock.father->Size(), nVarsC, nVarsC);
+                _data.son->Resize(mock.son->Size() * 0, nVarsC, nVarsC);
+                DNDS_MAKE_SSP(_dataInvert.father, mock.father->getMPI());
+                DNDS_MAKE_SSP(_dataInvert.son, mock.father->getMPI());
+                _dataInvert.father->Resize(mock.father->Size(), nVarsC, nVarsC);
+                _dataInvert.son->Resize(mock.son->Size() * 0, nVarsC, nVarsC); // ! warning, sons are set to zero sizes
+            }
+            else
+            {
+                DNDS_MAKE_SSP(_dataDiag.father, mock.father->getMPI());
+                DNDS_MAKE_SSP(_dataDiag.son, mock.father->getMPI());
+                _dataDiag.father->Resize(mock.father->Size(), nVarsC, 1);
+                _dataDiag.son->Resize(mock.son->Size() * 0, nVarsC, 1);
+                DNDS_MAKE_SSP(_dataDiagInvert.father, mock.father->getMPI());
+                DNDS_MAKE_SSP(_dataDiagInvert.son, mock.father->getMPI());
+                _dataDiagInvert.father->Resize(mock.father->Size(), nVarsC, 1);
+                _dataDiagInvert.son->Resize(mock.son->Size() * 0, nVarsC, 1);
+            }
+        }
+
+        bool isBlock() const { return _mode; }
+
+        auto getBlock(index iCell)
+        {
+            DNDS_assert(isBlock());
+            return _data[iCell];
+        }
+
+        auto getDiag(index iCell)
+        {
+            DNDS_assert(!isBlock());
+            return _dataDiag[iCell];
+        }
+
+        tComponent getValue(index iCell) const
+        {
+            if (isBlock())
+                return _data[iCell];
+            else
+                return _dataDiag[iCell].asDiagonal();
+        }
+
+        index Size()
+        {
+            if (isBlock())
+                return _data.Size();
+            else
+                return _dataDiag.Size();
+        }
+
+        void GetInvert()
+        {
+            if (!hasInvert)
+            {
+                for (index iCell = 0; iCell < Size(); iCell++)
+                    if (isBlock())
+                    {
+                        auto luDiag = _data[iCell].fullPivLu();
+                        DNDS_assert(luDiag.isInvertible());
+                        _dataInvert[iCell] = luDiag.inverse();
+                    }
+                    else
+                    {
+                        DNDS_assert(_dataDiag[iCell].array().abs().minCoeff() != 0);
+                        _dataDiagInvert[iCell] = _dataDiag[iCell].array().inverse();
+                    }
+                hasInvert = true;
+            }
+        }
+
+        template <class TV>
+        TU MatVecLeft(index iCell, TV v)
+        {
+            if (isBlock())
+                return _data[iCell] * v;
+            else
+                return _dataDiag[iCell].asDiagonal() * v;
+        }
+
+        template <class TV>
+        TU MatVecLeftInvert(index iCell, TV v)
+        {
+            if (isBlock())
+                return _dataInvert[iCell] * v;
+            else
+                return _dataDiagInvert[iCell].asDiagonal() * v;
+        }
+
+        void clearValues()
+        {
+            if (isBlock())
+            {
+                for (index i = 0; i < _data.Size(); i++)
+                    _data[i].setZero();
+            }
+            else
+            {
+                for (index i = 0; i < _dataDiag.Size(); i++)
+                    _dataDiag[i].setZero();
+            }
+            hasInvert = false;
+        }
+    };
+
     // DNDS_SWITCH_INTELLISENSE(
     //     template <int nVarsFixed = 5>,
     //     template <int nVarsFixed_masked>
@@ -86,7 +214,7 @@ namespace DNDS::Euler
             }
         }
 
-        tComponent InvertDiag(const tComponent& v)
+        tComponent InvertDiag(const tComponent &v)
         {
             tComponent AI;
             {
