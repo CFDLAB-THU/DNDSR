@@ -353,7 +353,7 @@ namespace DNDS::Euler
         Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> v;
         Eigen::RowVector<real, Eigen::Dynamic> div;
 
-        OneDimProfile(const MPIInfo &_mpi): mpi(_mpi) {}
+        OneDimProfile(const MPIInfo &_mpi) : mpi(_mpi) {}
 
         void SortNodes()
         {
@@ -408,24 +408,33 @@ namespace DNDS::Euler
 
         void Reduce()
         {
-            //TODO: assure the consistency on different procs?
+            // TODO: assure the consistency on different procs?
             Eigen::RowVector<real, Eigen::Dynamic> div0 = div;
             Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> v0 = v;
             MPI::Allreduce(div0.data(), div.data(), div.size(), DNDS_MPI_REAL, MPI_SUM, mpi.comm);
             MPI::Allreduce(v0.data(), v.data(), v.size(), DNDS_MPI_REAL, MPI_SUM, mpi.comm);
         }
 
-        Eigen::Vector<real, nVarsFixed> Get(index i)const
+        Eigen::Vector<real, nVarsFixed> Get(index i) const
         {
             DNDS_assert(i < Size());
             return v(Eigen::all, i) / (div(i) + verySmallReal);
         }
 
-        Eigen::Vector<real, nVarsFixed> GetPlain(real v)const
+        Eigen::Vector<real, nVarsFixed> GetPlain(real v) const
         {
             index iCL = (std::lower_bound(nodes.begin(), nodes.end(), v) - nodes.begin()) - index(1);
             iCL = std::min(Size() - 1, std::max(index(0), iCL));
-            return Get(iCL);
+            real vL = nodes[iCL];
+            real vR = nodes[iCL + 1];
+            real vRel = (v - vL) / (vR - vL);
+            vRel = std::min(vRel, 1.);
+            vRel = std::max(vRel, 0.);
+            Eigen::Vector<real, nVarsFixed> valL = Get(std::max(iCL - 1, index(0)));
+            Eigen::Vector<real, nVarsFixed> valR = Get(std::min(iCL + 1, Size() - 1));
+            valL = 0.5 * (valL + Get(iCL));
+            valR = 0.5 * (valR + Get(iCL));
+            return vRel * valR + (1 - vRel) * valL;
         }
     };
 
