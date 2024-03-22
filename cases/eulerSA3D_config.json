@@ -51,7 +51,7 @@
         "meshElevationMaxIncludedAngle": 20,
         // "meshFile": "../data/mesh/row_1_test3.cgns",
         "meshFile": "../data/mesh/Rotor37_test1.cgns",
-        "outPltName": "../data/out/Rotor37_test1/out3-rel-Roe-GMRES-O3-1dint",
+        "outPltName": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O3-Roe",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -146,7 +146,7 @@
         "useScalarJacobian": true,
         "minWallDist": 1e-10,
         "wallDistScheme": 1,
-        "riemannSolverType": "HLLEP",
+        "riemannSolverType": "Roe_M1",
         // "rsRotateScheme": 1,
         "rsMeanValueEig": 1,
         "constMassForce": [
@@ -215,8 +215,8 @@
                 0.8,
                 // 1.136923037037038, // 0.8
                 // 1.341153796296297, // 1.0 p0in
-                1.443269175925927, //1.1 p0in
-                // 1.545384555555557, //1.2 p0in
+                // 1.443269175925927, //1.1 p0in
+                1.545384555555557, //1.2 p0in
                 3
             ],
             "valueExtra": [

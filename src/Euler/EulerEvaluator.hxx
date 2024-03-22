@@ -1489,7 +1489,7 @@ namespace DNDS::Euler
                     auto vExtra = pBCHandler->GetValueExtraFromID(v.first);
                     int showMethod = vExtra.size() >= 3 ? vExtra(2) : 0;
                     if (showMethod)
-                        log() << fmt::format("EulerEvaluator<model>::updateBCProfiles: got radial equilibrium pressure rise: [{}]", v.second.v(I4, Eigen::last))
+                        log() << fmt::format("EulerEvaluator<model>::updateBCProfiles: got radial equilibrium pressure rise: [{:.3e}]", v.second.v(I4, Eigen::last))
                               << std::endl;
                 }
             }
