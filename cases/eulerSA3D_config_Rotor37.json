@@ -1,0 +1,284 @@
+{
+    "timeMarchControl": {
+        "dtImplicit": 1e100,
+        "nTimeStep": 1,
+        "steadyQuit": true,
+        "useRestart": false,
+        "rhsFPPMode": 1,
+        "rhsFPPScale": 1,
+        "odeCode": 103, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
+        "tEnd": 3e+200,
+        "partitonMeshOnly": false,
+        "_tail": 0
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 20000,
+        "rhsThresholdInternal": 1e-8,
+        "nAnchorUpdateStart": 0
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 1,
+        "nDataOutC": 1,
+        "nDataOut": 20,
+        "nDataOutCInternal": 100,
+        // "nDataOutInternal": 1000,
+        "nRestartOutC": 10,
+        "nRestartOut": 100,
+        "nRestartOutCInternal": 1000,
+        "nRestartOutInternal": 1000000000,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 10,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 2147483647,
+        "nCFLRampLength": 2147483647,
+        "CFLRampEnd": 0.0,
+        "nSmoothDTau": 0,
+        "useLocalDt": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshScale": 4,
+        "meshElevation": 0,
+        "meshElevationInternalSmoother": 0,
+        "meshElevationIter": 20,
+        "meshElevationNSearch": 100,
+        "meshElevationRBFRadius": 5,
+        "meshElevationRBFKernel": "CPC0",
+        "meshElevationMaxIncludedAngle": 20,
+        // "meshFile": "../data/mesh/row_1_test3.cgns",
+        "meshFile": "../data/mesh/Rotor37_test1.cgns",
+        "outPltName": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O3-Roe-largeNu",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": true,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outBndData": true,
+        "outCellScalarNames": [
+            // "minJacobiDetRel",
+            // "cellVolume",
+            "dWall"
+        ],
+        "_tail": 0
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation1": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "PeriodicRotationEulerAngles1": [
+            0.0,
+            0.0,
+            -10 //360 /36
+        ],
+        "periodicTolerance": 1e-8
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0, // 0 for original SOR, 1 for GMRES
+        "nGmresSpace": 4,
+        "nGmresIter": 2,
+        "recThreshold": 1e-03,
+        "nRecConsolCheck": 1,
+        "zeroRecForStepsInternal": 40
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "smoothIndicatorProcedure": 0,
+        "limiterProcedure": 0, //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000
+    },
+    "vfvSettings": {
+        "maxOrder": 2,
+        "intOrder": 3,
+        "cacheDiffBase": true,
+        "jacobiRelax": 1,
+        "SORInstead": false,
+        "smoothThreshold": 5e-3,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        // "bcWeight": 2,
+        "limiterBiwayAlter": 1,
+        "baseSettings": {
+            "localOrientation": true,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "dirWeightScheme": "HQM_OPT",
+            "geomWeightScheme": "HQM_SD",
+            // "geomWeightScheme": "SD_Power",
+            // "geomWeightPower1": 0.125,
+            // "geomWeightPower2": -0.5,
+            // "useAnisotropicFunctional": true,
+            // "anisotropicType": "InertiaCoord",
+            "_tail": 0
+        },
+        "ignoreMeshGeometryDeficiency": false,
+        "_tail": 0
+    },
+    "linearSolverControl": {
+        "jacobiCode": 2,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
+        "gmresCode": 1,
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 0,
+            "orderingCode": 3
+        }
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": true,
+        "minWallDist": 1e-10,
+        "wallDistScheme": 1,
+        "riemannSolverType": "Roe_M1",
+        // "rsRotateScheme": 1,
+        "rsMeanValueEig": 1,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "frameConstRotation": {
+            "enabled": true,
+            "axis": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "rpm": -9.548888888888890
+        },
+        "boxInitializers": [
+            // {
+            //     "x0": -1e100,
+            //     "x1": 1e100,
+            //     "y0": -1e100,
+            //     "y1": 1e100,
+            //     "z0": 0.08,
+            //     "z1": 1e100,
+            //     "v": [
+            //         1,
+            //         0,
+            //         0,
+            //         0.8,
+            //         1.450331068500028,
+            //         1.3
+            //     ]
+            // }
+        ],
+        "farFieldStaticValue": [
+            1,
+            0,
+            0,
+            0.8,
+            0.891422324913029,
+            10
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 0.001417530864198,
+            "muGas": 1.254590612320092e-07,
+            // "muGas": 5.018362449280368e-07,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        }
+    },
+    "bcSettings": [
+        {
+            "type": "BCOutP",
+            "name": "RS_1_to_2",
+            "value": [
+                1,
+                0,
+                0,
+                0.8,
+                // 1.136923037037038, // 0.8
+                // 1.341153796296297, // 1.0 p0in
+                // 1.443269175925927, //1.1 p0in
+                1.545384555555557, //1.2 p0in
+                10
+            ],
+            "valueExtra": [
+                10, // profile divisions
+                0,
+                1 // print info
+            ],
+            "anchorOption": 2
+            // "valueExtra": [ // used as anchorpoint
+            //     0.77494716078399994,
+            //     0.063617319557049995,
+            //     0.52456303392299997
+            // ],
+            // "anchorOption": 1
+            // "type": "BCFar",
+            // "name": "RS_1_to_2",
+            // "value": [
+            //     1,
+            //     0,
+            //     0,
+            //     0.8,
+            //     1.450475726455272,
+            //     1.3
+            // ]
+        },
+        {
+            // "type": "BCFar",
+            "type": "BCInPsTs",
+            "name": "INLET_1",
+            // "value": [
+            //     1,
+            //     0,
+            //     0,
+            //     0.5,
+            //     1.292397773437500
+            // ]
+            "value": [
+                0.408461518518519, //Ps
+                288.15, //Ts
+                0,
+                0,
+                1, // Seq234: prescribed inflow direction
+                10
+            ]
+        },
+        {
+            "type": "BCWall",
+            "name": "WALL_ROT_1"
+        },
+        {
+            "type": "BCWall",
+            "name": "WALL_HUB_1"
+        },
+        {
+            "type": "BCWall",
+            "name": "WALL_HUB_IN",
+            "frameOption": 0
+        },
+        {
+            "type": "BCWall",
+            "name": "WALL_SH",
+            "frameOption": 1
+        }
+    ]
+}

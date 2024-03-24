@@ -427,7 +427,7 @@ namespace DNDS::Euler
             iCL = std::min(Size() - 1, std::max(index(0), iCL));
             real vL = nodes[iCL];
             real vR = nodes[iCL + 1];
-            real vRel = (v - vL) / (vR - vL);
+            real vRel = (v - vL) / (vR - vL + verySmallReal);
             vRel = std::min(vRel, 1.);
             vRel = std::max(vRel, 0.);
             Eigen::Vector<real, nVarsFixed> valL = Get(std::max(iCL - 1, index(0)));
