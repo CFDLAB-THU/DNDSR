@@ -283,8 +283,8 @@ namespace DNDS::Euler::RANS
         real sigK = sigK1 * F1 + sigK2 * (1 - F1);
         real sigO = sigO1 * F1 + sigO2 * (1 - F1);
 
-        vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mut / sigK);
-        vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mut / sigO);
+        vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mut * sigK);
+        vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mut * sigO);
     }
 
     template <int dim, class TU, class TDiffU, class TSource>
@@ -346,6 +346,121 @@ namespace DNDS::Euler::RANS
         else
         {
             source(I4 + 1) = betaStar * omegaaa;
+            source(I4 + 2) = 2 * beta * omegaaa;
+        }
+    }
+
+    template <int dim, class TU, class TDiffU>
+    real GetMut_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d)
+    {
+        static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+        static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
+        static const auto I4 = dim + 1;
+        static const auto verySmallReal_3 = std::pow(verySmallReal, 1. / 3);
+        static const auto verySmallReal_4 = std::pow(verySmallReal, 1. / 4);
+
+        real alpha = 5. / 9.;
+        real beta = 3. / 40.;
+        real betaS = 0.09;
+        real sigK = 0.5;
+        real sigO = 0.5;
+        real Prt = 0.9;
+        Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
+        Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
+        Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
+        Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
+        Eigen::Matrix<real, dim, dim> SS = diffU + diffU.transpose() - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity();
+        Eigen::Matrix<real, dim, 2> diffRhoKO = DiffUxy(Seq012, {I4 + 1, I4 + 2});
+        Eigen::Matrix<real, dim, 2> diffKO = (diffRhoKO - 1. / UMeanXy(0) * diffRho * UMeanXy({I4 + 1, I4 + 2}).transpose()) / UMeanXy(0);
+        real rho = UMeanXy(0);
+        real k = UMeanXy(I4 + 1) / rho + verySmallReal_4;
+        real omegaaa = UMeanXy(I4 + 2) / rho + verySmallReal_4;
+        real mut = k / omegaaa * rho;
+
+        if (std::isnan(mut) || !std::isfinite(mut))
+        {
+            std::cerr << k << " " << omegaaa << " " << mut << "\n";
+            std::cerr << SS << std::endl;
+            DNDS_assert(false);
+        }
+        return mut;
+    }
+
+    template <int dim, class TU, class TDiffU, class TVFlux>
+    void GetVisFlux_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxy, real mutIn, real d, real muf, TVFlux &vFlux)
+    {
+        static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+        static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
+        static const auto I4 = dim + 1;
+        static const auto verySmallReal_3 = std::pow(verySmallReal, 1. / 3);
+        static const auto verySmallReal_4 = std::pow(verySmallReal, 1. / 4);
+
+        real alpha = 5. / 9.;
+        real beta = 3. / 40.;
+        real betaS = 0.09;
+        real sigK = 0.5;
+        real sigO = 0.5;
+        real Prt = 0.9;
+        Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
+        Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
+        Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
+        Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
+        Eigen::Matrix<real, dim, dim> SS = diffU + diffU.transpose() - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity();
+        Eigen::Matrix<real, dim, 2> diffRhoKO = DiffUxy(Seq012, {I4 + 1, I4 + 2});
+        Eigen::Matrix<real, dim, 2> diffKO = (diffRhoKO - 1. / UMeanXy(0) * diffRho * UMeanXy({I4 + 1, I4 + 2}).transpose()) / UMeanXy(0);
+        real rho = UMeanXy(0);
+        real k = UMeanXy(I4 + 1) / rho + verySmallReal_4;
+        real omegaaa = UMeanXy(I4 + 2) / rho + verySmallReal_4;
+        real mut = k / omegaaa * rho;
+        
+
+        vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mutIn * sigK);
+        vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mutIn * sigO);
+    }
+
+    template <int dim, class TU, class TDiffU, class TSource>
+    void GetSource_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, TSource &source, int mode)
+    {
+        static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+        static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
+        static const auto I4 = dim + 1;
+        static const auto verySmallReal_3 = std::pow(verySmallReal, 1. / 3);
+        static const auto verySmallReal_4 = std::pow(verySmallReal, 1. / 4);
+
+        real alpha = 5./9.;
+        real beta = 3./40.;
+        real betaS = 0.09;
+        real sigK = 0.5;
+        real sigO = 0.5;
+        real Prt = 0.9;
+        Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
+        Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
+        Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
+        Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
+        Eigen::Matrix<real, dim, dim> SS = diffU + diffU.transpose() - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity();
+        Eigen::Matrix<real, dim, 2> diffRhoKO = DiffUxy(Seq012, {I4 + 1, I4 + 2});
+        Eigen::Matrix<real, dim, 2> diffKO = (diffRhoKO - 1. / UMeanXy(0) * diffRho * UMeanXy({I4 + 1, I4 + 2}).transpose()) / UMeanXy(0);
+        real rho = UMeanXy(0);
+        real k = UMeanXy(I4 + 1) / rho + verySmallReal_4;
+        real omegaaa = UMeanXy(I4 + 2) / rho + verySmallReal_4;
+        real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
+        real nuPhy = muf / rho;
+
+        real mut = k / omegaaa * rho;
+        real nutHat = std::max(mut / rho, 1e-8);
+
+        Eigen::Matrix<real, dim, dim> rhoMuiuj = Eigen::Matrix<real, dim, dim>::Identity() * UMeanXy(I4 + 1) * (2. / 3.) - mut * SS;
+        real Pk = -(rhoMuiuj.array() * SS.array()).sum() * 0.5;
+
+
+        if (mode == 0)
+        {
+            source(I4 + 1) = Pk - betaS * rho * k * omegaaa;
+            source(I4 + 2) = alpha * omegaaa / k * Pk - beta * rho * sqr(omegaaa);
+        }
+        else
+        {
+            source(I4 + 1) = betaS * omegaaa;
             source(I4 + 2) = 2 * beta * omegaaa;
         }
     }
