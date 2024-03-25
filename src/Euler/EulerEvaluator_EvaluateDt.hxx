@@ -176,6 +176,16 @@ namespace DNDS::Euler
         else if (settings.wallDistScheme == 2)
         {
         }
+
+        dWallFace.resize(mesh->NumFaceProc());
+        for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
+        {
+            auto f2c = mesh->face2cell[iFace];
+            real facialDist = dWall.at(f2c[0]).mean();
+            if (f2c[1] != UnInitIndex)
+                facialDist = 0.5 * (facialDist + dWall.at(f2c[1]).mean());
+            dWallFace[iFace] = facialDist;
+        }
     }
 
     // Eigen::Vector<real, -1> EulerEvaluator::CompressRecPart(
@@ -306,7 +316,8 @@ namespace DNDS::Euler
             }
             if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
-                real mut = RANS::GetMut_RealizableKe<dim>(uMean, GradUMeanXY, muf);
+                // real mut = RANS::GetMut_RealizableKe<dim>(uMean, GradUMeanXY, muf);
+                real mut = RANS::GetMut_SST<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
                 muf = muf + mut;
             }
             real lamVis = muf / uMean(0) *
@@ -439,7 +450,8 @@ namespace DNDS::Euler
         }
         if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
         {
-            real mut = RANS::GetMut_RealizableKe<dim>(UMeanXy, DiffUxy, muf);
+            // real mut = RANS::GetMut_RealizableKe<dim>(UMeanXy, DiffUxy, muf);
+            real mut = RANS::GetMut_SST<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
             muf = muf + mut;
         }
 
@@ -504,7 +516,8 @@ namespace DNDS::Euler
         }
         if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
         {
-            RANS::GetVisFlux_RealizableKe<dim>(UMeanXy, DiffUxy, muf - mufPhy, mufPhy, VisFlux);
+            // RANS::GetVisFlux_RealizableKe<dim>(UMeanXy, DiffUxy, muf - mufPhy, mufPhy, VisFlux);
+            RANS::GetVisFlux_SST<dim>(UMeanXy, DiffUxy, muf - mufPhy, dWallFace[iFace],  mufPhy, VisFlux);
         }
 #endif
 
@@ -891,12 +904,31 @@ namespace DNDS::Euler
             Eigen::Matrix<real, dim, dim> Omega = 0.5 * (diffU.transpose() - diffU);
 #ifndef USE_ABS_VELO_IN_ROTATION
             if (settings.frameConstRotation.enabled)
-                Omega += Geom::CrossVecToMat(settings.frameConstRotation.vOmega()); // to static frame rotation
+                Omega += Geom::CrossVecToMat(settings.frameConstRotation.vOmega())(Seq012, Seq012); // to static frame rotation
 #endif
             real S = Omega.norm() * std::sqrt(2); // is omega's magnitude
             real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;
 
             real Sh;
+
+            { // Lee, K., Wilson, M., and Vahdati, M. (April 16, 2018). "Validation of a Numerical Model for Predicting Stalled Flows in a Low-Speed Fan—Part I: Modification of Spalart–Allmaras Turbulence Model." ASME. J. Turbomach. May 2018; 140(5): 051008.
+                real betaSCor = 1;
+                real ch1 = 0.5;
+                real ch2 = 0.7;
+                real a1 = 3; //! is this good?
+                real a2 = 3;
+                Eigen::Vector<real, dim> diffP = (DiffUxy(Seq012, I4) - diffRhoU * velo - UMeanXy(0) * diffU * velo) * (gamma - 1);
+                real veloN = velo.norm();
+                Eigen::Vector<real, dim> uN = velo / (veloN + verySmallReal);
+                real pStar = diffP.dot(uN) / (sqr(UMeanXy(0)) * sqr(veloN) * veloN) * mufPhy;
+                Geom::tPoint omegaV = Geom::CrossMatToVec(Omega);
+                real HStar = omegaV.dot(velo) / (veloN * omegaV.norm() + verySmallReal);
+                real Cs = ch1 * std::tanh(a1 * sqr(pStar)) / std::tanh(1.0) + 1;
+                real Cvh = ch2 * std::tanh(a2 * sqr(HStar)) / std::tanh(1.0) + 1;
+                betaSCor = Cs * Cvh;
+
+                S *= betaSCor;
+            }
 #ifdef USE_NS_SA_NEGATIVE_MODEL
             if (Sbar < -cnu2 * S)
                 Sh = S + S * (sqr(cnu2) * S + cnu3 * Sbar) / ((cnu3 - 2 * cnu2) * S - Sbar);
@@ -986,12 +1018,15 @@ namespace DNDS::Euler
             retInc.setZero(UMeanXy.size());
 
             if (Mode == 0)
-                RANS::GetSource_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, retInc);
+                // RANS::GetSource_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, retInc);
+                RANS::GetSource_SST<dim>(UMeanXy, DiffUxy, mufPhy, dWall[iCell][ig], retInc, 0);
             else if (Mode == 1)
-                RANS::GetSourceJacobianDiag_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, retInc);
+                // RANS::GetSourceJacobianDiag_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, retInc);
+                RANS::GetSource_SST<dim>(UMeanXy, DiffUxy, mufPhy, dWall[iCell][ig], retInc, 1);
             else if (Mode == 2)
             {
-                RANS::GetSourceJacobianDiag_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, retInc);
+                // RANS::GetSourceJacobianDiag_RealizableKe<dim>(UMeanXy, DiffUxy, mufPhy, retInc);
+                RANS::GetSource_SST<dim>(UMeanXy, DiffUxy, mufPhy, dWall[iCell][ig], retInc, 1);
                 jacobian += retInc.asDiagonal(); //! TODO: make really block jacobian
             }
             ret += retInc;

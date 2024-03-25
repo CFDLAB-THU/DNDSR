@@ -82,6 +82,7 @@ namespace DNDS::Euler
         std::vector<real> deltaLambdaFace;
 
         std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall;
+        std::vector<real> dWallFace;
 
         std::unordered_map<Geom::t_index, AnchorPointRecorder<nVarsFixed>> anchorRecorders;
         std::unordered_map<Geom::t_index, OneDimProfile<nVarsFixed>> profileRecorders;
@@ -101,6 +102,7 @@ namespace DNDS::Euler
         EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler, const decltype(settings.jsonSettings) &nJsonSettings)
             : mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->settings.maxOrder + 1)
         {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             nVars = getNVars(model); //! // TODO: dynamic setting it
 
             this->settings.jsonSettings = nJsonSettings;
@@ -117,6 +119,19 @@ namespace DNDS::Euler
                 v.resize(nVars);
 
             this->GetWallDist();
+
+            if (model == NS_2EQ || model == NS_2EQ_3D)
+            {
+                TU farPrim = settings.farFieldStaticValue;
+                real gamma = settings.idealGasProperty.gamma;
+                Gas::IdealGasThermalConservative2Primitive(settings.farFieldStaticValue, farPrim, gamma);
+                real T = farPrim(I4) / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * farPrim(0));
+                // auto [rhs0, rhs] = RANS::SolveZeroGradEquilibrium<dim>(settings.farFieldStaticValue, this->muEff(settings.farFieldStaticValue, T));
+                // if(mesh->getMPI().rank == 0)
+                //     log() 
+                //     << "EulerEvaluator===EulerEvaluator: got 2EQ init for farFieldStaticValue: " << settings.farFieldStaticValue.transpose() << "\n"
+                //     << fmt::format(" [{:.3e} -> {:.3e}] ", rhs0, rhs) << std::endl;
+            }
 
             DNDS_MAKE_SSP(symLU, mesh->getMPI(), mesh->NumCell());
         }
@@ -1065,24 +1080,41 @@ namespace DNDS::Euler
                     if (fixUL)
                         ULxy({I4 + 1, I4 + 2}).setZero(), URxy({I4 + 1, I4 + 2}).setZero(); //! modifing UL
 #endif
-                    TVec v = (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellBary(iCell))(Seq012);
-                    real d1 = std::abs(v.dot(uNorm)); //! warning! first wall could be bad
-                    real k1 = ULMeanXy(I4 + 1) / ULMeanXy(0);
+                    { // BC for RealizableKe
+                        // TVec v = (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellBary(iCell))(Seq012);
+                        // real d1 = std::abs(v.dot(uNorm)); //! warning! first wall could be bad
+                        // real k1 = ULMeanXy(I4 + 1) / ULMeanXy(0);
 
-                    real pMean, asqrMean, Hmean;
-                    real gamma = settings.idealGasProperty.gamma;
-                    Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
-                                         gamma, pMean, asqrMean, Hmean);
-                    // ! refvalue:
-                    real muRef = settings.idealGasProperty.muGas;
-                    real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
-                    real mufPhy1;
-                    mufPhy1 = muEff(ULMeanXy, T);
-                    real epsWall = 2 * mufPhy1 / ULMeanXy(0) * k1 / sqr(d1);
-                    URxy(I4 + 2) = 2 * epsWall * ULxy(0) - ULxy(I4 + 2);
-                    if (fixUL)
-                        ULxy(I4 + 2) = URxy(I4 + 2) = epsWall * ULxy(0);
-                    // std::cout << "d1" <<d1 << std::endl;
+                        // real pMean, asqrMean, Hmean;
+                        // real gamma = settings.idealGasProperty.gamma;
+                        // Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
+                        //                      gamma, pMean, asqrMean, Hmean);
+                        // // ! refvalue:
+                        // real muRef = settings.idealGasProperty.muGas;
+                        // real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
+                        // real mufPhy1;
+                        // mufPhy1 = muEff(ULMeanXy, T);
+                        // real epsWall = 2 * mufPhy1 / ULMeanXy(0) * k1 / sqr(d1);
+                        // URxy(I4 + 2) = 2 * epsWall * ULxy(0) - ULxy(I4 + 2);
+                        // if (fixUL)
+                        // ULxy(I4 + 2) = URxy(I4 + 2) = epsWall * ULxy(0);
+                    }
+                    { // BC for SST
+                        real d1 = dWall[iCell].mean();
+                        real pMean, asqrMean, Hmean;
+                        real gamma = settings.idealGasProperty.gamma;
+                        Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
+                                             gamma, pMean, asqrMean, Hmean);
+                        // ! refvalue:
+                        real muRef = settings.idealGasProperty.muGas;
+                        real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
+                        real mufPhy1 = muEff(ULMeanXy, T);
+
+                        real rhoOmegaaaWall = mufPhy1 / sqr(d1) * 800;
+                        URxy(I4 + 2) = 2 * rhoOmegaaaWall - ULxy(I4 + 2);
+                        if (fixUL)
+                            ULxy(I4 + 2) = URxy(I4 + 2) = rhoOmegaaaWall;
+                    }   
                 }
             }
             else if (bTypeEuler == EulerBCType::BCOut)

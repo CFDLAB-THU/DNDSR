@@ -800,6 +800,12 @@ namespace DNDS::Euler
                               << " [" << sgsRes.transpose() << "] " << std::endl;
                 }
             }
+            Eigen::VectorXd meanScale;
+            meanScale.setConstant(nVars, 1);
+            // eval.EvaluateNorm(meanScale, cx, 1, true);
+            // meanScale(Seq123).setConstant(meanScale(Seq123).norm());
+            TU meanScaleInv = (meanScale.array() + verySmallReal).inverse();
+
 
             if (config.linearSolverControl.gmresCode != 0)
             {
@@ -821,6 +827,7 @@ namespace DNDS::Euler
                         {
                             doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
                         }
+                        MLx *= meanScaleInv;
                     },
                     crhs, cxInc, config.linearSolverControl.nGmresIter,
                     [&](uint32_t i, real res, real resB) -> bool

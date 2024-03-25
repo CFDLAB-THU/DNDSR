@@ -155,6 +155,11 @@ namespace DNDS::Geom
                        {-axn(1), axn(0), 0}};
     }
 
+    inline tPoint CrossMatToVec(const tGPoint &axnM)
+    {
+        return tPoint{axnM(2,1), axnM(0,2), axnM(1,0)};
+    }
+
     template <int dim>
     tPoint ToThreeDim(const Eigen::Vector<real, dim> &v)
     {
