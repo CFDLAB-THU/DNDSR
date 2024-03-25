@@ -1,0 +1,3 @@
+#include "EulerEvaluator_EvaluateRHS_insTmp.hpp"
+
+DNDS_EulerEvaluator_EvaluateRHS_INS(NS_2EQ_3D)

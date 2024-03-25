@@ -521,6 +521,7 @@ euler3D
 eulerSA
 eulerSA3D
 euler2EQ
+euler2EQ3D
 jacobiLUTest
 oneDimProfileTest
 )
