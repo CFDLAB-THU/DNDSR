@@ -13,7 +13,6 @@
 #include "EulerBC.hpp"
 #include "EulerJacobian.hpp"
 #include "EulerEvaluatorSettings.hpp"
-#include "RANS_ke.hpp"
 #include "DNDS/SerializerBase.hpp"
 
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
@@ -819,7 +818,7 @@ namespace DNDS::Euler
                         if (((pPhysics(0) - uShock / std::sin(pi / 3) * t - 1. / 6.) -
                              pPhysics(1) / std::tan(pi / 3)) > 0)
                             URxy({0, 1, 2, 3}) = Eigen::Vector<real, 4>{1.4, 0, 0, 2.5};
-                        else
+                        else 
                             URxy({0, 1, 2, 3}) = Eigen::Vector<real, 4>{8, 57.157676649772960, -33, 5.635e2};
                     }
                 }
