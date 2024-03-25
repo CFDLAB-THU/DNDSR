@@ -103,6 +103,8 @@ namespace DNDS::Euler
         real uRecBetaCompressPower = 11;
         real uRecAlphaCompressPower = 2;
 
+        real RANSBottomLimit = 0.1;
+
         Eigen::Vector<real, 3> constMassForce = Eigen::Vector<real, 3>{0, 0, 0};
         struct FrameConstRotation
         {
@@ -145,6 +147,7 @@ namespace DNDS::Euler
         Eigen::Vector<real, -1> refU;
         Eigen::Vector<real, -1> refUPrim;
 
+
         /***************************************************************************************************/
         /***************************************************************************************************/
 
@@ -158,6 +161,7 @@ namespace DNDS::Euler
             __DNDS__json_to_config(specialBuiltinInitializer);
             __DNDS__json_to_config(uRecAlphaCompressPower);
             __DNDS__json_to_config(uRecBetaCompressPower);
+            __DNDS__json_to_config(RANSBottomLimit);
             Gas::RiemannSolverType riemannSolverType = rsType;
             __DNDS__json_to_config(riemannSolverType);
             rsType = riemannSolverType;

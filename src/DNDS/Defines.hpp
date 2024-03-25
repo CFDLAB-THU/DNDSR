@@ -244,6 +244,13 @@ namespace DNDS
         return a * a;
     }
 
+    template <typename T>
+    inline constexpr T cube(const T &a)
+    {
+        static_assert(std::is_arithmetic_v<T>, "need arithmetic");
+        return a * a * a;
+    }
+
     inline constexpr real sign(real a)
     {
         return a > 0 ? 1 : (a < 0 ? -1 : 0);
@@ -422,7 +429,33 @@ namespace DNDS
 
 namespace DNDS
 {
+    inline std::vector<std::string> splitSString(const std::string &str, char delim) // TODO: make more C++
+    {
+        std::vector<std::string> ret;
+        size_t top = 0;
+        size_t bot = 0;
+        while (top < str.size() + 1)
+        {
+            if (str[top] != delim && top != str.size())
+            {
+                top++;
+                continue;
+            }
+            ret.push_back(str.substr(bot, top - bot));
+            bot = ++top;
+        }
+        return ret;
+    }
 
+    inline std::vector<std::string> splitSStringClean(const std::string &str, char delim)
+    {
+        std::vector<std::string> ret0 = splitSString(str, delim);
+        std::vector<std::string> ret;
+        for(auto & v: ret0)
+            if(v.size())
+                ret.push_back(v);
+        return ret;
+    }
 }
 template <typename T>
 struct std::hash<std::vector<T>>

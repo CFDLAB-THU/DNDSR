@@ -199,6 +199,7 @@ namespace DNDS::Euler
                 real CFLRampEnd = 0;
                 bool useLocalDt = true;
                 int nSmoothDTau = 0;
+                real RANSRelax = 0.1;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     ImplicitCFLControl,
                     CFL,
@@ -207,7 +208,8 @@ namespace DNDS::Euler
                     nCFLRampLength,
                     CFLRampEnd,
                     useLocalDt,
-                    nSmoothDTau)
+                    nSmoothDTau,
+                    RANSRelax)
             } implicitCFLControl;
 
             struct ConvergenceControl
@@ -393,10 +395,19 @@ namespace DNDS::Euler
                 int iStepInternal = -1;
                 int odeCodePrev = -1;
                 std::string lastRestartFile = "";
+                std::string otherRestartFile = "";
+                std::vector<int> otherRestartStoreDim;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     RestartState,
                     iStep, iStepInternal, odeCodePrev,
-                    lastRestartFile)
+                    lastRestartFile,
+                    otherRestartFile, otherRestartStoreDim)
+                RestartState()
+                {
+                    otherRestartStoreDim.resize(1);
+                    for (int i = 0; i < otherRestartStoreDim.size(); i++)
+                        otherRestartStoreDim[i] = i;
+                }
             } restartState;
 
             struct TimeAverageControl
@@ -971,6 +982,45 @@ namespace DNDS::Euler
             serializer->CloseFile();
             // config.restartState.lastRestartFile = outPath;
             // PrintConfig();
+            if (mpi.rank == 0)
+                log() << fmt::format("=== Read Restart") << std::endl;
+        }
+
+        void ReadRestartOtherSolver(std::string fname, const std::vector<int> &dimStore)
+        {
+            ArrayDOFV<Eigen::Dynamic> readBuf;
+            DNDS_MAKE_SSP(readBuf.father, mpi);
+            DNDS_MAKE_SSP(readBuf.son, mpi);
+
+            if (mpi.rank == 0)
+                log() << fmt::format("=== Reading Restart From [{}]", fname) << std::endl;
+            std::filesystem::path outPath;
+            // outPath = {fname + "_p" + std::to_string(mpi.size) + "_restart.dir"};
+            outPath = fname;
+            // std::filesystem::create_directories(outPath);
+            char BUF[512];
+            std::sprintf(BUF, "%04d", mpi.rank);
+            fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
+            fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
+
+            SerializerJSON serializerJSON;
+            serializerJSON.SetUseCodecOnUint8(true);
+            SerializerBase *serializer = &serializerJSON;
+            serializer->OpenFile(fname, true);
+            readBuf.ReadSerialize(serializer, "u");
+            serializer->CloseFile();
+            DNDS_assert_info(readBuf.father->Size() == u.father->Size(), fmt::format("{}, {}", readBuf.father->Size(), u.father->Size()));
+            DNDS_assert_info(readBuf.son->Size() == u.son->Size(), fmt::format("{}, {}", readBuf.son->Size(), u.son->Size()));
+            int iMax = std::min(u.RowSize(), readBuf.RowSize()) - 1; // could use this
+            for (auto item : dimStore)
+                DNDS_assert(item <= iMax);
+            for (index iCell = 0; iCell < u.Size(); iCell++)
+            {
+                // std::cout << iCell << ": " << readBuf[iCell].transpose() << std::endl;
+
+                u[iCell](dimStore) = readBuf[iCell](dimStore);
+            }
+
             if (mpi.rank == 0)
                 log() << fmt::format("=== Read Restart") << std::endl;
         }

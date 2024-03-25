@@ -174,59 +174,17 @@ namespace DNDS::Euler
             wAveraged.setConstant(0.0);
         if (config.timeMarchControl.useRestart)
         {
-            DNDS_assert(config.restartState.iStep >= 1);
-            ReadRestart(config.restartState.lastRestartFile);
+
+            if (!config.restartState.lastRestartFile.empty())
+            {
+                DNDS_assert(config.restartState.iStep >= 1);
+                ReadRestart(config.restartState.lastRestartFile);
+            }
+            if (!config.restartState.otherRestartFile.empty())
+                ReadRestartOtherSolver(config.restartState.otherRestartFile, config.restartState.otherRestartStoreDim);
         }
         OutputPicker outputPicker;
-        {
-            OutputPicker::tMap outMap;
-            // outMap["R"] = [&](index iCell)
-            // { return u[iCell](0); };
-            outMap["RU"] = [&](index iCell)
-            { return u[iCell](1); };
-            outMap["RV"] = [&](index iCell)
-            { return u[iCell](2); };
-            outMap["RV"] = [&](index iCell)
-            { return u[iCell](I4 - 1); };
-            outMap["RE"] = [&](index iCell)
-            { return u[iCell](I4); };
-            outMap["R_REC_1"] = [&](index iCell)
-            { return uRec[iCell](0, 0); };
-            outMap["RU_REC_1"] = [&](index iCell)
-            { return uRec[iCell](1, 0); }; // TODO: to be continued to...
-
-            // pps:
-            outMap["betaPP"] = [&](index iCell)
-            { return betaPP[iCell](0); };
-            outMap["alphaPP"] = [&](index iCell)
-            { return alphaPP[iCell](0); };
-            outMap["ACond"] = [&](index iCell)
-            {
-                auto A = vfv->GetCellRecMatA(iCell);
-                Eigen::MatrixXd AInv = A;
-                real aCond = HardEigen::EigenLeastSquareInverse(A, AInv);
-                return aCond;
-            };
-            outMap["dWall"] = [&](index iCell)
-            {
-                return eval.dWall.at(iCell).mean();
-            };
-            outMap["minJacobiDetRel"] = [&](index iCell)
-            {
-                auto eCell = mesh->GetCellElement(iCell);
-                auto qCell = vfv->GetCellQuad(iCell);
-                real minDetJac = veryLargeReal;
-                for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
-                    minDetJac = std::min(vfv->GetCellJacobiDet(iCell, iG), minDetJac);
-                return minDetJac * Geom::Elem::ParamSpaceVol(eCell.GetParamSpace()) / vfv->GetCellVol(iCell);
-            };
-            outMap["cellVolume"] = [&](index iCell)
-            {
-                return vfv->GetCellVol(iCell);
-            };
-
-            outputPicker.setMap(outMap);
-        }
+        eval.InitializeOutputPicker(outputPicker, {u, uRec, betaPP, alphaPP});
         tAdditionalCellScalarList addOutList = outputPicker.getSubsetList(config.dataIOControl.outCellScalarNames);
 
         /*******************************************************/
@@ -806,7 +764,6 @@ namespace DNDS::Euler
             // meanScale(Seq123).setConstant(meanScale(Seq123).norm());
             TU meanScaleInv = (meanScale.array() + verySmallReal).inverse();
 
-
             if (config.linearSolverControl.gmresCode != 0)
             {
                 // !  GMRES
@@ -1071,6 +1028,11 @@ namespace DNDS::Euler
             //*directadd
             // cx += uTemp;
             //*fixing add
+            if (model == NS_2EQ || model == NS_2EQ_3D)
+            {
+                for (index i = 0; i < uTemp.Size(); i++)
+                    uTemp[i]({I4, I4 + 1}) *= config.implicitCFLControl.RANSRelax;
+            }
             eval.AddFixedIncrement(cx, uTemp, alpha);
             eval.AssertMeanValuePP(cx, true);
 

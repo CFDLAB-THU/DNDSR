@@ -28,7 +28,7 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 0.1,
+        "CFL": 100,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 2147483647,
         "nCFLRampLength": 2147483647,
@@ -40,8 +40,6 @@
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
         "outPltName": "../data/out/NACA0012_H2_KE",
-        "outLogName": "../data/out/NACA0012_H2_KE",
-        "outRestartName": "../data/out/NACA0012_H2_KE",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -69,15 +67,15 @@
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 3,
-        "intOrder": 3,
+        "maxOrder": 1,
+        "intOrder": 1,
         "cacheDiffBase": true,
         "jacobiRelax": 1.0,
         "SORInstead": true,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
-        "subs2ndOrder": 0,
+        "subs2ndOrder": 1,
         "baseSettings": {
             "localOrientation": true,
             "anisotropicLengths": false
@@ -93,7 +91,7 @@
             //     0
             // ],
             "geomWeightScheme": "HQM_SD",
-            "geomWeightPower": -0.5,
+            // "geomWeightPower": -0.5,
             // "geomWeightScheme": "SD_Power",
             // "geomWeightPower1": -0.5,
             // "geomWeightPower2": 0.5,
@@ -105,11 +103,18 @@
         }
     },
     "linearSolverControl": {
+        "jacobiCode": 2,
+        "sgsIter": 0,
+        "nSgsConsoleCheck": 100,
         "gmresCode": 0,
-        "nGmresSpace": 10,
-        "nGmresIter": 5,
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
         "sgsWithRec": 0,
-        "initWithLastURecInc": false
+        "initWithLastURecInc": false,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
@@ -117,7 +122,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe",
+        "riemannSolverType": "Roe_M4",
         "constMassForce": [
             0.0,
             0.0,
@@ -125,12 +130,12 @@
         ],
         "farFieldStaticValue": [
             1,
-            0.965925826289068,
-            0.258819045102521,
+            1,
+            0,
             0,
             79.8650793650794,
             6.0000e-06,
-            6.7574e-07
+            1
         ],
         "Comment": {
             "M0.15": [

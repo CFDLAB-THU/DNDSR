@@ -7,23 +7,6 @@
 
 namespace DNDS
 {
-    std::vector<std::string> splitSString(const std::string &str, char delim) // TODO: make more C++
-    {
-        std::vector<std::string> ret;
-        size_t top = 0;
-        size_t bot = 0;
-        while (top < str.size() + 1)
-        {
-            if (str[top] != delim && top != str.size())
-            {
-                top++;
-                continue;
-            }
-            ret.push_back(str.substr(bot, top - bot));
-            bot = ++top;
-        }
-        return ret;
-    }
 
     /**
      * @brief returns good path and if the path is absolute

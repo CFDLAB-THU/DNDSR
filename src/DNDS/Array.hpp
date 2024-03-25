@@ -57,11 +57,11 @@ namespace DNDS
      * @brief 2D var-len data container template
      * @details
      * ## Array's types
-     * |                         | _row_size>=0       | _row_size==DynamicSize | _row_size==NonUniformSize |
-     * | ---                     |          ---       |                    --- |                       --- |
-     * |_row_max>=0              |  TABLE_StaticFixed |  TABLE_Fixed           |   TABLE_StaticMax         |
-     * |_row_max==DynamicSize    |  TABLE_StaticFixed |  TABLE_Fixed           |   TABLE_Max               |
-     * |_row_max==NonUniformSize |  TABLE_StaticFixed |  TABLE_Fixed           |   CSR                     |
+     * |                         | _row_size>=0                         | _row_size==DynamicSize              | _row_size==NonUniformSize |
+     * | ---                     |          ---                         |                    ---              |                       --- |
+     * |_row_max>=0              |  TABLE_StaticFixed                   |  TABLE_Fixed                        |   TABLE_StaticMax         |
+     * |_row_max==DynamicSize    |  TABLE_StaticFixed _row_max ignored  |  TABLE_Fixed  _row_max ignored      |   TABLE_Max               |
+     * |_row_max==NonUniformSize |  TABLE_StaticFixed _row_max ignored  |  TABLE_Fixed  _row_max ignored      |   CSR                     |
      *
      * @todo //TODO implement align feature
      *
@@ -605,6 +605,44 @@ namespace DNDS
                    "_" + std::to_string(_align);
         }
 
+        static std::string GetArraySignatureRelaxed()
+        {
+            std::string Layout;
+            if constexpr (_dataLayout == CSR)
+                Layout = "CSR";
+            if constexpr (_dataLayout == TABLE_StaticFixed)
+                Layout = "TABLE_StaticFixed";
+            if constexpr (_dataLayout == TABLE_Fixed)
+                Layout = "TABLE_Fixed";
+            if constexpr (_dataLayout == TABLE_StaticMax)
+                Layout = "TABLE_StaticMax";
+            if constexpr (_dataLayout == TABLE_Max)
+                Layout = "TABLE_Max";
+            return Layout + "__" + std::to_string(sizeof_T) + "_" + std::to_string(-1) +
+                   "_" + std::to_string(-1) +
+                   "_" + std::to_string(_align);
+        }
+
+        std::tuple<int, int, int, int> ParseArraySignatureTuple(const std::string &v)
+        {
+            auto strings = splitSStringClean(v, '_');
+            DNDS_assert(strings.size() == 5 || strings.size() == 6);
+            auto sz = strings.size();
+            return std::make_tuple(std::stoi(strings[sz - 4]), std::stoi(strings[sz - 3]), std::stoi(strings[sz - 2]), std::stoi(strings[sz - 1]));
+        }
+
+        bool ArraySignatureIsCompatible(const std::string &v)
+        {
+            auto [sz, rs, rm, align] = ParseArraySignatureTuple(v);
+            if (sz != sizeof_T)
+                return false;
+            if (rs >= 0 && _row_size >= 0 && rs != _row_size)
+                return false;
+            if (rm >= 0 && _row_max >= 0 && rm != _row_max)
+                return false;
+            return true;
+        }
+
         void __WriteSerializerData(SerializerBase *serializer)
         {
             serializer->WriteUint8Array("data", (uint8_t *)_data.data(), _data.size() * sizeof_T);
@@ -658,9 +696,23 @@ namespace DNDS
 
             std::string array_sigRead;
             serializer->ReadString("array_sig", array_sigRead);
-            DNDS_assert(array_sigRead == this->GetArraySignature());
+            //! TODO: parse the sizes and correctly handle dynamic reading
+            DNDS_assert_info(array_sigRead == this->GetArraySignature() || ArraySignatureIsCompatible(array_sigRead),
+                             array_sigRead + ", i am : " + this->GetArraySignature());
+            auto [sz, rs, rm, align] = ParseArraySignatureTuple(array_sigRead);
+            if (_row_size != rs)
+            {
+                if (_row_size == NonUniformSize || rs == NonUniformSize)
+                    DNDS_assert_info(false, "can't handle here");
+            }
             serializer->ReadIndex("size", _size);
             serializer->ReadInt("row_size_dynamic", _row_size_dynamic);
+            if (_row_size >= 0)
+                DNDS_assert(_row_size_dynamic == _row_size), _row_size_dynamic = 0;
+            if (_row_size == DynamicSize && rs >= 0)
+                _row_size_dynamic = rs;
+            if (_row_max == DynamicSize && rm >= 0)
+                _row_size_dynamic = rm; // TODO: fix this! need a _row_max_dynamic ?
             if (_size == 0)
                 return;
             if constexpr (_dataLayout == CSR)

@@ -378,7 +378,7 @@ namespace DNDS::Euler
 
                         finc.resizeLike(sourceV);
                         TJacobianU jac;
-                        finc(Eigen::all,0) =
+                        finc(Eigen::all, 0) =
                             source(
                                 ULxy,
                                 GradU,

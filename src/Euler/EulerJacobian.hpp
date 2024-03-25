@@ -90,9 +90,21 @@ namespace DNDS::Euler
                 for (index iCell = 0; iCell < Size(); iCell++)
                     if (isBlock())
                     {
-                        auto luDiag = _data[iCell].fullPivLu();
+                        DNDS_assert(_data[iCell].diagonal().array().abs().minCoeff() != 0);
+                        tComponent preCon = _data[iCell].diagonal().array().inverse().matrix().asDiagonal() * _data[iCell];
+                        auto luDiag = preCon.fullPivLu();
                         DNDS_assert(luDiag.isInvertible());
-                        _dataInvert[iCell] = luDiag.inverse();
+                        _dataInvert[iCell] = luDiag.inverse() * _data[iCell].diagonal().array().inverse().matrix().asDiagonal();
+                        if (!_dataInvert[iCell].allFinite() || _dataInvert[iCell].hasNaN())
+                        {
+                            std::cout << "xxxx"
+                                      << "\n";
+                            std::cout << _data[iCell] << "\n";
+                            std::cout << preCon << "\n";
+                            std::cout << luDiag.inverse() << "\n";
+                            std::cout << std::endl;
+                            DNDS_assert(false);
+                        }
                     }
                     else
                     {
@@ -218,9 +230,11 @@ namespace DNDS::Euler
         {
             tComponent AI;
             {
-                auto luDiag = v.fullPivLu();
+                DNDS_assert(v.diagonal().array().abs().minCoeff() != 0);
+                tComponent preCon = v.diagonal().array().inverse().matrix().asDiagonal() * v;
+                auto luDiag = preCon.fullPivLu();
                 DNDS_assert(luDiag.isInvertible());
-                AI = luDiag.inverse();
+                AI = luDiag.inverse() * v.diagonal().array().inverse().matrix().asDiagonal();
             }
             {
                 // Eigen::MatrixXd A = v;
@@ -304,9 +318,11 @@ namespace DNDS::Euler
         {
             tComponent AI;
             {
-                auto luDiag = v.fullPivLu();
+                DNDS_assert(v.diagonal().array().abs().minCoeff() != 0);
+                tComponent preCon = v.diagonal().array().inverse().matrix().asDiagonal() * v;
+                auto luDiag = preCon.fullPivLu();
                 DNDS_assert(luDiag.isInvertible());
-                AI = luDiag.inverse();
+                AI = luDiag.inverse() * v.diagonal().array().inverse().matrix().asDiagonal();
             }
             {
                 // Eigen::MatrixXd A = v;

@@ -3,6 +3,7 @@
         "dtImplicit": 1e100,
         "nTimeStep": 1,
         "steadyQuit": true,
+        "useRestart": true,
         "odeCode": 0,
         "tEnd": 3e+200
     },
@@ -14,7 +15,7 @@
     },
     "outputControl": {
         "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 1,
+        "nConsoleCheckInternal": 10,
         "consoleOutputMode": 1,
         "nDataOutC": 100,
         "nDataOut": 10,
@@ -23,19 +24,18 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 100.0,
+        "CFL": 100,
         "nForceLocalStartStep": 2147483647,
-        "nCFLRampStart": 2147483647,
-        "nCFLRampLength": 2147483647,
-        "CFLRampEnd": 0.0,
+        "nCFLRampStart": 100,
+        "nCFLRampLength": 1000,
+        "CFLRampEnd": 100,
         "useLocalDt": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/BL_1EM5.cgns",
-        "outPltName": "../data/outUnsteady/BL_1EM5",
-        "outLogName": "../data/outUnsteady/BL_1EM5",
+        "meshFile": "../data/mesh/BL_1EM6_V1.cgns",
+        "outPltName": "../data/out/Test2EQ/t1",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -76,9 +76,18 @@
         }
     },
     "linearSolverControl": {
+        "jacobiCode": 2,
+        "sgsIter": 0,
+        "nSgsConsoleCheck": 100,
         "gmresCode": 0,
-        "nGmresSpace": 10,
-        "nGmresIter": 5
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
+        "sgsWithRec": 0,
+        "initWithLastURecInc": false,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
@@ -86,7 +95,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe_M2",
+        "riemannSolverType": "Roe_M4",
         "constMassForce": [
             0.0,
             0.0,
@@ -98,41 +107,46 @@
             0,
             0,
             79.8650793650794,
-            6.0000e-06,
-            6.7574e-07
+            6e-5,
+            10
         ],
-        "Comment": {
-            "M0.15": [
-                1,
-                1,
-                0,
-                0,
-                79.8650793650794,
-                1.3,
-                {
-                    "Rgas": 0.116221972344982
-                }
-            ],
-            "M0.8": [
-                1,
-                1,
-                0,
-                0,
-                2.971576866040534,
-                6.0000e-06,
-                6.7574e-07,
-                {
-                    "Rgas": 0.003338277043445
-                }
-            ]
-        },
         "idealGasProperty": {
             "gamma": 1.4,
             "Rgas": 0.116221972344982,
             "muGas": 1e-6,
             "prGas": 0.72,
             "TRef": 273.15,
-            "CSutherland": 110.4
+            "CSutherland": 110.4,
+            "muModel": 0
         }
+    },
+    "bcSettings": [
+        {
+            "type": "BCOut",
+            "name": "Rout",
+            "value": [
+                1,
+                1,
+                0,
+                0,
+                79.8650793650794,
+                6e-5,
+                10
+            ]
+        }
+    ],
+    "restartState": {
+        // "iStep": 1,
+        // "iStepInternal": 15000,
+        // "odeCodePrev": -1,
+        // "lastRestartFile": "../data/out/NACA0012_H2__C_p16_restart_test1.dir".
+        "otherRestartFile": "../data/out/Test2EQ/t1_SA__C_p12_restartT1.dir",
+        "otherRestartStoreDim": [
+            0,
+            1,
+            2,
+            3,
+            4
+        ]
     }
 }

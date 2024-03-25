@@ -222,14 +222,17 @@ namespace DNDS::Euler::RANS
         Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
         Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
         Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
-        Eigen::Matrix<real, dim, dim> SS = diffU + diffU.transpose() - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity();
+        Eigen::Matrix<real, dim, dim> SR2 = diffU + diffU.transpose();                                                  // 2 times strain rate
+        Eigen::Matrix<real, dim, dim> SS = SR2 - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity(); // 2 times shear strain rate
+        Eigen::Matrix<real, dim, dim> OmegaM = (diffU.transpose() - diffU) * 0.5;
+        real OmegaMag = OmegaM.norm() * std::sqrt(2);
         real rho = UMeanXy(0);
-        real k = UMeanXy(I4 + 1) / rho + verySmallReal_4;
-        real omegaaa = UMeanXy(I4 + 2) / rho + verySmallReal_4;
+        real k = std::max(UMeanXy(I4 + 1) / rho, verySmallReal_4);
+        real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
         real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
         real nuPhy = muf / rho;
         real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
-        real mut = a1 * k / std::max(S * F2, a1 * omegaaa) * rho;
+        real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho;
 
         if (std::isnan(mut) || !std::isfinite(mut))
         {
@@ -264,12 +267,15 @@ namespace DNDS::Euler::RANS
         Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
         Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
         Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
-        Eigen::Matrix<real, dim, dim> SS = diffU + diffU.transpose() - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity();
+        Eigen::Matrix<real, dim, dim> SR2 = diffU + diffU.transpose();                                                  // 2 times strain rate
+        Eigen::Matrix<real, dim, dim> SS = SR2 - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity(); // 2 times shear strain rate
         Eigen::Matrix<real, dim, 2> diffRhoKO = DiffUxy(Seq012, {I4 + 1, I4 + 2});
         Eigen::Matrix<real, dim, 2> diffKO = (diffRhoKO - 1. / UMeanXy(0) * diffRho * UMeanXy({I4 + 1, I4 + 2}).transpose()) / UMeanXy(0);
+        Eigen::Matrix<real, dim, dim> OmegaM = (diffU.transpose() - diffU) * 0.5;
+        real OmegaMag = OmegaM.norm() * std::sqrt(2);
         real rho = UMeanXy(0);
-        real k = UMeanXy(I4 + 1) / rho + verySmallReal_4;
-        real omegaaa = UMeanXy(I4 + 2) / rho + verySmallReal_4;
+        real k = std::max(UMeanXy(I4 + 1) / rho, verySmallReal_4);
+        real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
         real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
         real nuPhy = muf / rho;
         real CDKW = std::max(2 * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1)), 1e-10);
@@ -278,7 +284,7 @@ namespace DNDS::Euler::RANS
                      4 * rho * sigO2 * k / (CDKW * sqr(d))),
             4));
         real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
-        // real mut = a1 * k / std::max(S * F2, a1 * omegaaa) * rho;
+        // real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho;
 
         real sigK = sigK1 * F1 + sigK2 * (1 - F1);
         real sigO = sigO1 * F1 + sigO2 * (1 - F1);
@@ -311,12 +317,15 @@ namespace DNDS::Euler::RANS
         Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
         Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
         Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
-        Eigen::Matrix<real, dim, dim> SS = diffU + diffU.transpose() - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity();
+        Eigen::Matrix<real, dim, dim> SR2 = diffU + diffU.transpose();                                                  // 2 times strain rate
+        Eigen::Matrix<real, dim, dim> SS = SR2 - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity(); // 2 times shear strain rate
         Eigen::Matrix<real, dim, 2> diffRhoKO = DiffUxy(Seq012, {I4 + 1, I4 + 2});
         Eigen::Matrix<real, dim, 2> diffKO = (diffRhoKO - 1. / UMeanXy(0) * diffRho * UMeanXy({I4 + 1, I4 + 2}).transpose()) / UMeanXy(0);
+        Eigen::Matrix<real, dim, dim> OmegaM = (diffU.transpose() - diffU) * 0.5;
+        real OmegaMag = OmegaM.norm() * std::sqrt(2);
         real rho = UMeanXy(0);
-        real k = UMeanXy(I4 + 1) / rho + verySmallReal_4;
-        real omegaaa = UMeanXy(I4 + 2) / rho + verySmallReal_4;
+        real k = std::max(UMeanXy(I4 + 1) / rho, verySmallReal_4);
+        real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
         real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
         real nuPhy = muf / rho;
         real CDKW = std::max(2 * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1)), 1e-10);
@@ -325,7 +334,7 @@ namespace DNDS::Euler::RANS
                      4 * rho * sigO2 * k / (CDKW * sqr(d))),
             4));
         real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
-        real mut = a1 * k / std::max(S * F2, a1 * omegaaa) * rho;
+        real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho; // use S/OmegaMag for SST: S: CFD++, OmegaMag: Turbulence Modeling Validation, Testing, and Developmen
         real nutHat = std::max(mut / rho, 1e-8);
 
         Eigen::Matrix<real, dim, dim> rhoMuiuj = Eigen::Matrix<real, dim, dim>::Identity() * UMeanXy(I4 + 1) * (2. / 3.) - mut * SS;
@@ -336,12 +345,17 @@ namespace DNDS::Euler::RANS
         real sigK = sigK1 * F1 + sigK2 * (1 - F1);
         real sigO = sigO1 * F1 + sigO2 * (1 - F1);
         real beta = beta1 * F1 + beta2 * (1 - F1);
+        real POmega =
+            0.5 * gammaC * rho *
+            ((SR2 - omegaaa * SR2.trace() / 3. * Eigen::Matrix<real, dim, dim>::Identity()).array() * SR2.array()).sum();
 
         if (mode == 0)
         {
             source(I4 + 1) = PkTilde - betaStar * rho * k * omegaaa;
             source(I4 + 2) = gammaC / nutHat * Pk - beta * rho * sqr(omegaaa) +
                              2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));
+            // source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
+            //                  2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));
         }
         else
         {
@@ -359,28 +373,22 @@ namespace DNDS::Euler::RANS
         static const auto verySmallReal_3 = std::pow(verySmallReal, 1. / 3);
         static const auto verySmallReal_4 = std::pow(verySmallReal, 1. / 4);
 
-        real alpha = 5. / 9.;
-        real beta = 3. / 40.;
+        real CLim = 7. / 8.;
         real betaS = 0.09;
-        real sigK = 0.5;
-        real sigO = 0.5;
-        real Prt = 0.9;
         Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
         Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
         Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
         Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
-        Eigen::Matrix<real, dim, dim> SS = diffU + diffU.transpose() - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity();
-        Eigen::Matrix<real, dim, 2> diffRhoKO = DiffUxy(Seq012, {I4 + 1, I4 + 2});
-        Eigen::Matrix<real, dim, 2> diffKO = (diffRhoKO - 1. / UMeanXy(0) * diffRho * UMeanXy({I4 + 1, I4 + 2}).transpose()) / UMeanXy(0);
+        Eigen::Matrix<real, dim, dim> SR2 = diffU + diffU.transpose();
         real rho = UMeanXy(0);
-        real k = UMeanXy(I4 + 1) / rho + verySmallReal_4;
-        real omegaaa = UMeanXy(I4 + 2) / rho + verySmallReal_4;
-        real mut = k / omegaaa * rho;
+        real k = std::max(UMeanXy(I4 + 1) / rho, sqr(verySmallReal_4));
+        real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
+        real omegaaaTut = std::max(omegaaa, CLim * std::sqrt(0.5 * SR2.squaredNorm() / betaS));
+        real mut = k / omegaaaTut * rho;
 
         if (std::isnan(mut) || !std::isfinite(mut))
         {
             std::cerr << k << " " << omegaaa << " " << mut << "\n";
-            std::cerr << SS << std::endl;
             DNDS_assert(false);
         }
         return mut;
@@ -395,27 +403,28 @@ namespace DNDS::Euler::RANS
         static const auto verySmallReal_3 = std::pow(verySmallReal, 1. / 3);
         static const auto verySmallReal_4 = std::pow(verySmallReal, 1. / 4);
 
-        real alpha = 5. / 9.;
-        real beta = 3. / 40.;
+        real alpha = 13. / 25.;
         real betaS = 0.09;
         real sigK = 0.5;
         real sigO = 0.5;
         real Prt = 0.9;
+        real CLim = 7. / 8.;
         Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
         Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
         Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
         Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
-        Eigen::Matrix<real, dim, dim> SS = diffU + diffU.transpose() - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity();
+        Eigen::Matrix<real, dim, dim> SR2 = diffU + diffU.transpose();                                                  // 2 times strain rate
+        Eigen::Matrix<real, dim, dim> SS = SR2 - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity(); // 2 times shear strain rate
         Eigen::Matrix<real, dim, 2> diffRhoKO = DiffUxy(Seq012, {I4 + 1, I4 + 2});
         Eigen::Matrix<real, dim, 2> diffKO = (diffRhoKO - 1. / UMeanXy(0) * diffRho * UMeanXy({I4 + 1, I4 + 2}).transpose()) / UMeanXy(0);
         real rho = UMeanXy(0);
-        real k = UMeanXy(I4 + 1) / rho + verySmallReal_4;
-        real omegaaa = UMeanXy(I4 + 2) / rho + verySmallReal_4;
-        real mut = k / omegaaa * rho;
-        
+        real k = std::max(UMeanXy(I4 + 1) / rho, sqr(verySmallReal_4));
+        real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
+        real omegaaaTut = std::max(omegaaa, CLim * std::sqrt(0.5 * SR2.squaredNorm() / betaS));
+        real mut = k / omegaaaTut * rho;
 
-        vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mutIn * sigK);
-        vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mutIn * sigO);
+        vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mut * sigK);
+        vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mut * sigO);
     }
 
     template <int dim, class TU, class TDiffU, class TSource>
@@ -427,36 +436,42 @@ namespace DNDS::Euler::RANS
         static const auto verySmallReal_3 = std::pow(verySmallReal, 1. / 3);
         static const auto verySmallReal_4 = std::pow(verySmallReal, 1. / 4);
 
-        real alpha = 5./9.;
-        real beta = 3./40.;
+        real alpha = 13. / 25.;
         real betaS = 0.09;
         real sigK = 0.5;
         real sigO = 0.5;
         real Prt = 0.9;
+        real CLim = 7. / 8.;
+        real betaO = 0.0708;
+
         Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
         Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
         Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
         Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
-        Eigen::Matrix<real, dim, dim> SS = diffU + diffU.transpose() - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity();
+        Eigen::Matrix<real, dim, dim> SR2 = diffU + diffU.transpose();                                                  // 2 times strain rate
+        Eigen::Matrix<real, dim, dim> OmegaM2 = diffU.transpose() - diffU;                                              // 2 times rotation
+        Eigen::Matrix<real, dim, dim> SS = SR2 - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity(); // 2 times shear strain rate
         Eigen::Matrix<real, dim, 2> diffRhoKO = DiffUxy(Seq012, {I4 + 1, I4 + 2});
         Eigen::Matrix<real, dim, 2> diffKO = (diffRhoKO - 1. / UMeanXy(0) * diffRho * UMeanXy({I4 + 1, I4 + 2}).transpose()) / UMeanXy(0);
         real rho = UMeanXy(0);
-        real k = UMeanXy(I4 + 1) / rho + verySmallReal_4;
-        real omegaaa = UMeanXy(I4 + 2) / rho + verySmallReal_4;
-        real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
-        real nuPhy = muf / rho;
+        real k = std::max(UMeanXy(I4 + 1) / rho, sqr(verySmallReal_4)); // make nu -> 0 when k,O->0
+        real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
+        real omegaaaTut = std::max(omegaaa, CLim * std::sqrt(0.5 * SR2.squaredNorm() / betaS));
+        real mut = k / omegaaaTut * rho;
 
-        real mut = k / omegaaa * rho;
-        real nutHat = std::max(mut / rho, 1e-8);
+        real ChiOmega = std::abs(((OmegaM2 * OmegaM2).array() * SR2.array()).sum() * 0.125 / cube(betaS * omegaaa));
+        real fBeta = (1 + 85 * ChiOmega) / (1 + 100 * ChiOmega);
+        real beta = fBeta * betaO;
+        real crossDiff = diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));
+        real SigD = crossDiff > 0 ? 0.125 : 0;
 
         Eigen::Matrix<real, dim, dim> rhoMuiuj = Eigen::Matrix<real, dim, dim>::Identity() * UMeanXy(I4 + 1) * (2. / 3.) - mut * SS;
-        real Pk = -(rhoMuiuj.array() * SS.array()).sum() * 0.5;
-
+        real Pk = -(rhoMuiuj.array() * diffU.array()).sum();
 
         if (mode == 0)
         {
             source(I4 + 1) = Pk - betaS * rho * k * omegaaa;
-            source(I4 + 2) = alpha * omegaaa / k * Pk - beta * rho * sqr(omegaaa);
+            source(I4 + 2) = alpha * omegaaa / k * Pk - beta * rho * sqr(omegaaa) + SigD / omegaaa * crossDiff;
         }
         else
         {

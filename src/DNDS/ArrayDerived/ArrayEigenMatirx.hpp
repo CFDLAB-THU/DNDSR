@@ -98,16 +98,40 @@ namespace DNDS
                 c_nRow = _mat_nRow_dynamic;
             else
                 c_nRow = _mat_ni;
+            // std::cout << c_nRow << "  " << t_base::RowSize(i) << std::endl;
 
             return t_EigenMap(t_base::operator[](i), c_nRow, t_base::RowSize(i) / c_nRow); // need static dispatch?
         }
 
         static std::string GetDerivedArraySignature()
         {
-            return "ArrayEigenMatrix__" + std::to_string(_mat_ni) +
-                   "_" + std::to_string(_mat_nj) +
-                   "_" + std::to_string(_mat_ni_max) +
-                   "_" + std::to_string(_mat_nj_max);
+            char buf[1024];
+            std::sprintf(buf, "ArrayEigenMatrix__%d_%d_%d_%d", _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max);
+            return buf;
+        }
+
+        static std::tuple<int, int, int, int> GetDerivedArraySignatureInts(const std::string &v)
+        { // TODO: check here!
+            auto strings = splitSStringClean(v, '_');
+            DNDS_assert(strings.size() == 5 || strings.size() == 6);
+            auto sz = strings.size();
+            return std::make_tuple(std::stoi(strings[sz - 4]), std::stoi(strings[sz - 3]), std::stoi(strings[sz - 2]), std::stoi(strings[sz - 1]));
+        }
+
+        bool SignatureIsCompatible(const std::string &v)
+        { // TODO: check here!
+            auto [v_mat_ni, v_mat_nj, v_mat_ni_max, v_mat_nj_max] = GetDerivedArraySignatureInts(v);
+            // std::cout << fmt::format(" {} {} {} {}", v_mat_ni, v_mat_nj, v_mat_ni_max, v_mat_nj_max) << std::endl;
+            // std::cout << fmt::format(" {} {} {} {}", _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max) << std::endl;
+            if (v_mat_ni >= 0 && _mat_ni >= 0 && v_mat_ni != _mat_ni)
+                return false;
+            if (v_mat_nj >= 0 && _mat_nj >= 0 && v_mat_nj != _mat_nj)
+                return false;
+            if (v_mat_ni_max >= 0 && _mat_ni_max >= 0 && v_mat_ni_max != _mat_ni_max)
+                return false;
+            if (v_mat_nj_max >= 0 && _mat_nj_max >= 0 && v_mat_nj_max != _mat_nj_max)
+                return false;
+            return true;
         }
 
         void WriteSerializer(SerializerBase *serializer, const std::string &name)
@@ -116,11 +140,11 @@ namespace DNDS
             serializer->CreatePath(name);
             serializer->GoToPath(name);
 
+            this->t_base::WriteSerializer(serializer, "array");
             serializer->WriteString("DerivedType", this->GetDerivedArraySignature());
             serializer->WriteInt("mat_nRow_dynamic", _mat_nRow_dynamic);
             if constexpr (_mat_ni == NonUniformSize)
                 serializer->WriteSharedRowsizeVector("mat_nRows", _mat_nRows);
-            this->t_base::WriteSerializer(serializer, "array");
 
             serializer->GoToPath(cwd);
         }
@@ -131,16 +155,37 @@ namespace DNDS
             // serializer->CreatePath(name); //!remember no create path
             serializer->GoToPath(name);
 
+            this->t_base::ReadSerializer(serializer, "array");
+
             std::string readDerivedType;
             serializer->ReadString("DerivedType", readDerivedType);
-            DNDS_assert(readDerivedType == this->GetDerivedArraySignature());
+            auto [v_mat_ni, v_mat_nj, v_mat_ni_max, v_mat_nj_max] = GetDerivedArraySignatureInts(readDerivedType);
+            DNDS_assert_info(readDerivedType == this->GetDerivedArraySignature() || SignatureIsCompatible(readDerivedType),
+                             readDerivedType + ", i am: " + this->GetDerivedArraySignature() + fmt::format(" {} {} {} {}", v_mat_ni, v_mat_nj, v_mat_ni_max, v_mat_nj_max));
             serializer->ReadInt("mat_nRow_dynamic", _mat_nRow_dynamic);
-            if constexpr (_mat_ni == NonUniformSize)
-                serializer->ReadSharedRowsizeVector("mat_nRows", _mat_nRows);
-            this->t_base::ReadSerializer(serializer, "array");
+            if (_mat_ni == DynamicSize && v_mat_ni >= 0)
+                _mat_nRow_dynamic = v_mat_ni;
+            if (v_mat_ni == NonUniformSize) // TODO: complete here!
+            {
+                if constexpr (_mat_ni == NonUniformSize)
+                    serializer->ReadSharedRowsizeVector("mat_nRows", _mat_nRows);
+                else
+                {
+                    t_pRowSizes v_mat_nRows;
+                    serializer->ReadSharedRowsizeVector("mat_nRows", v_mat_nRows);
+                    int c_mat_nRow_dynamic = v_mat_nRows->size() ? 0 : v_mat_nRows->at(0);
+                    for (auto i = 0; i < v_mat_nRows->size(); ++i)
+                        DNDS_assert(v_mat_nRows->operator[](i) == c_mat_nRow_dynamic);
+                    _mat_nRow_dynamic = c_mat_nRow_dynamic;
+                }
+            }
+            else // TODO: complete here!
+            {
+                if constexpr (_mat_ni == NonUniformSize)
+                    DNDS_MAKE_SSP(_mat_nRows, this->Size(), v_mat_ni >= 0 ? v_mat_ni : _mat_nRow_dynamic);
+            }
 
             serializer->GoToPath(cwd);
         }
     };
 }
-
