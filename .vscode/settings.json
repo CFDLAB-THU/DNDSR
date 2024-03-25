@@ -190,5 +190,6 @@
         "latex",
         "plaintext"
     ],
+    "editor.bracketPairColorization.enabled": true,
     // "C_Cpp.intelliSenseEngine": "Tag Parser"
 }

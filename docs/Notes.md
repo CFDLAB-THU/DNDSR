@@ -132,4 +132,19 @@ using a v110 api to enable the use by cgns 4.3.0 ? not working?
 ## On DLR and curve mesh:
 
 - current results show: curved O2 meshes exhibit severe BC drift: velo and rho_nu_tilde
+- solved: need better quadrature order
 
+## On oneAPI on windows
+
+using oneAPI's mpi on windows: use in powershell:
+
+``` powershell
+cmd.exe "/K" '"C:\Program Files (x86)\Intel\oneAPI\setvars.bat" && powershell'
+cmake .. -DCMAKE_CXX_COMPILER=clang++ -G"MinGW Makefiles"
+```
+
+<!-- using oneAPI's icpx on windows: use in powershell:
+``` powershell
+cmd.exe "/K" '"C:\Program Files (x86)\Intel\oneAPI\setvars.bat" && powershell'
+cmake .. -DCMAKE_CXX_COMPILER=icx-cl -G"Unix Makefiles"
+``` -->
