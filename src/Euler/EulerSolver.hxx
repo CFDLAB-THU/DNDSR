@@ -296,7 +296,10 @@ namespace DNDS::Euler
             eval.FixUMaxFilter(cx);
             if ((iter > config.convergenceControl.nAnchorUpdateStart &&
                  (iter - config.convergenceControl.nAnchorUpdateStart - 1) % config.convergenceControl.nAnchorUpdate == 0))
+            {
                 eval.updateBCAnchors(cx, uRecC);
+                eval.updateBCProfiles(cx, uRecC);
+            }
             // cx.trans.startPersistentPull();
             // cx.trans.waitPersistentPull();
 
@@ -797,6 +800,12 @@ namespace DNDS::Euler
                               << " [" << sgsRes.transpose() << "] " << std::endl;
                 }
             }
+            Eigen::VectorXd meanScale;
+            meanScale.setConstant(nVars, 1);
+            // eval.EvaluateNorm(meanScale, cx, 1, true);
+            // meanScale(Seq123).setConstant(meanScale(Seq123).norm());
+            TU meanScaleInv = (meanScale.array() + verySmallReal).inverse();
+
 
             if (config.linearSolverControl.gmresCode != 0)
             {
@@ -818,6 +827,7 @@ namespace DNDS::Euler
                         {
                             doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
                         }
+                        MLx *= meanScaleInv;
                     },
                     crhs, cxInc, config.linearSolverControl.nGmresIter,
                     [&](uint32_t i, real res, real resB) -> bool
@@ -1547,7 +1557,7 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
-    void EulerSolver<model>::doPrecondition(real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp, TDof &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone)
+    void EulerSolver<model>::doPrecondition(real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp, JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone)
     {
         DNDS_assert(pEval);
         auto &eval = *pEval;

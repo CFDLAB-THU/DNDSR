@@ -12,10 +12,17 @@ namespace DNDS::Euler
      *      geoms: dbv_l, dbv_r, detJacobian_f, uNorm_f,
      */
 #define IF_NOT_NOREC (1)
-    template <EulerModel model>
+    DNDS_SWITCH_INTELLISENSE(
+        // the real definition
+        template <EulerModel model>
+        ,
+        // the intellisense friendly definition
+        static const auto model = NS_SA;
+        template <>
+    )
     void EulerEvaluator<model>::EvaluateRHS(
         ArrayDOFV<nVarsFixed> &rhs,
-        ArrayDOFV<nVarsFixed> &JSource,
+        JacobianDiagBlock<nVarsFixed> &JSource,
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,
         ArrayDOFV<1> &uRecBeta,
@@ -317,8 +324,8 @@ namespace DNDS::Euler
 
         if (!settings.ignoreSourceTerm)
         {
-            for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // force zero source jacobian
-                JSource[iCell].setZero();
+
+            JSource.clearValues();
 
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -329,8 +336,8 @@ namespace DNDS::Euler
                 }
                 auto gCell = vfv->GetCellQuad(iCell);
 
-                Eigen::Vector<real, nvarsFixedMultiply<nVarsFixed, 2>()> sourceV(cnvars * 2); // now includes sourcejacobian diag
-                sourceV.setZero();
+                Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> sourceV; // now includes sourcejacobian diag
+                sourceV.setZero(cnvars, JSource.isBlock() ? cnvars + 1 : 2);
 
                 Geom::Elem::SummationNoOp noOp;
                 bool cellOrderReduced = false;
@@ -370,39 +377,23 @@ namespace DNDS::Euler
                         // ULxy = CompressRecPart(u[iCell], ULxy, compressed); //! do not forget the mean value
 
                         finc.resizeLike(sourceV);
-                        if constexpr (nVarsFixed > 0)
-                        {
-                            TU s =
-                                source(
-                                    ULxy,
-                                    GradU,
-                                    vfv->GetCellQuadraturePPhys(iCell, iG),
-                                    iCell,
-                                    iG);
-                            finc(Eigen::seq(Eigen::fix<0>, Eigen::fix<nVarsFixed - 1>)) = s;
-                            TU sjd =
-                                sourceJacobianDiag(
-                                    ULxy,
-                                    GradU,
-                                    vfv->GetCellQuadraturePPhys(iCell, iG),
-                                    iCell, iG);
-                            finc(Eigen::seq(Eigen::fix<nVarsFixed>, Eigen::fix<2 * nVarsFixed - 1>)) = sjd;
-                        }
+                        TJacobianU jac;
+                        finc(Eigen::all,0) =
+                            source(
+                                ULxy,
+                                GradU,
+                                vfv->GetCellQuadraturePPhys(iCell, iG), jac,
+                                iCell, iG, 0);
+                        TU sourceJDiag =
+                            source(
+                                ULxy,
+                                GradU,
+                                vfv->GetCellQuadraturePPhys(iCell, iG), jac,
+                                iCell, iG, JSource.isBlock() ? 2 : 1);
+                        if (JSource.isBlock())
+                            finc(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last)) = jac;
                         else
-                        {
-                            finc(Eigen::seq(0, cnvars - 1)) =
-                                source(
-                                    ULxy,
-                                    GradU,
-                                    vfv->GetCellQuadraturePPhys(iCell, iG),
-                                    iCell, iG);
-                            finc(Eigen::seq(cnvars, 2 * cnvars - 1)) =
-                                sourceJacobianDiag(
-                                    ULxy,
-                                    GradU,
-                                    vfv->GetCellQuadraturePPhys(iCell, iG),
-                                    iCell, iG);
-                        }
+                            finc(Eigen::all, 1) = sourceJDiag;
 
                         finc *= vfv->GetCellJacobiDet(iCell, iG); // don't forget this
                         if (finc.hasNaN() || (!finc.allFinite()))
@@ -413,17 +404,13 @@ namespace DNDS::Euler
                             DNDS_assert(false);
                         }
                     });
-                sourceV *= cellRHSAlpha[iCell](0);
-                if constexpr (nVarsFixed > 0)
-                {
-                    rhs[iCell] += sourceV(Eigen::seq(Eigen::fix<0>, Eigen::fix<nVarsFixed - 1>)) / vfv->GetCellVol(iCell);
-                    JSource[iCell] = sourceV(Eigen::seq(Eigen::fix<nVarsFixed>, Eigen::fix<2 * nVarsFixed - 1>)) / vfv->GetCellVol(iCell);
-                }
+                sourceV *= cellRHSAlpha[iCell](0) / vfv->GetCellVol(iCell); // becomes mean value
+                rhs[iCell] += sourceV(Eigen::all, 0);
+                if (JSource.isBlock())
+                    JSource.getBlock(iCell) = sourceV(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
                 else
-                {
-                    rhs[iCell] += sourceV(Eigen::seq(0, cnvars - 1)) / vfv->GetCellVol(iCell);
-                    JSource[iCell] = sourceV(Eigen::seq(cnvars, 2 * cnvars - 1)) / vfv->GetCellVol(iCell);
-                }
+                    JSource.getDiag(iCell) = sourceV(Eigen::all, 1);
+
                 // if (iCell == 18195)
                 // {
                 //     std::cout << rhs[iCell].transpose() << std::endl;

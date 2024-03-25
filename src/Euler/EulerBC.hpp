@@ -173,7 +173,7 @@ namespace DNDS::Euler
 
                 DNDS_assert(
                     bc.BCFlags.size() == bc.BCTypes.size() &&
-                    bc.BCValues.size() == bc.BCTypes.size() && 
+                    bc.BCValues.size() == bc.BCTypes.size() &&
                     bc.BCValuesExtra.size() == bc.BCTypes.size());
             }
             bc.RenewID2name();
@@ -283,11 +283,11 @@ namespace DNDS::Euler
         real dist{veryLargeReal};
         AnchorPointRecorder(const MPIInfo &_mpi) : mpi(_mpi) {}
 
-        void Reset() { dist=  veryLargeReal;}
+        void Reset() { dist = veryLargeReal; }
 
-        void AddAnchor(const TU& vin, real nDist)
+        void AddAnchor(const TU &vin, real nDist)
         {
-            if(nDist < dist)
+            if (nDist < dist)
                 dist = nDist, val = vin;
         }
 
@@ -342,6 +342,99 @@ namespace DNDS::Euler
                     cellOutRegMap[name]));
             }
             return ret;
+        }
+    };
+
+    template <int nVarsFixed>
+    struct OneDimProfile
+    {
+        MPIInfo mpi;
+        std::vector<real> nodes;
+        Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> v;
+        Eigen::RowVector<real, Eigen::Dynamic> div;
+
+        OneDimProfile(const MPIInfo &_mpi) : mpi(_mpi) {}
+
+        void SortNodes()
+        {
+            std::sort(nodes.begin(), nodes.end());
+        }
+
+        index Size() const
+        {
+            return nodes.size() - 1;
+        }
+
+        real Len(index i)
+        {
+            return nodes[i + 1] - nodes[i];
+        }
+
+        void GenerateUniform(index size, int nvars, real minV, real maxV)
+        {
+            nodes.resize(size + 1);
+            nodes[0] = minV;
+            for (index i = 0; i < size; i++)
+                nodes[i + 1] = real(i + 1) / real(size) * maxV + (1 - real(i + 1) / real(size)) * minV;
+            v.resize(nvars, size);
+            div.resize(size);
+        }
+
+        void SetZero()
+        {
+            v.setZero();
+            div.setZero();
+        }
+
+        template <class TU>
+        void AddSimpleInterval(TU vmean, real divV, real lV, real rV)
+        {
+            index iCL = (std::lower_bound(nodes.begin(), nodes.end(), lV) - nodes.begin()) - index(1);
+            iCL = std::min(Size() - 1, std::max(index(0), iCL));
+            index iCR = std::upper_bound(nodes.begin(), nodes.end(), rV) - nodes.begin(); // max is Size() + 1
+            iCR = std::min(Size(), iCR);
+            // std::cout << iCL << " " << iCR << " " << lV << " " << rV << std::endl;
+            for (index i = iCL; i < iCR; i++)
+            {
+                real cL = nodes[i];
+                real cR = nodes[i + 1];
+                real cinIntervalL = std::max(lV, cL);
+                real cinInvervalR = std::min(rV, cR);
+                real cinInvervalLenRel = std::max(cinInvervalR - cinIntervalL, 0.0) / (rV - lV);
+                div[i] += divV * cinInvervalLenRel;
+                v(Eigen::all, i) += vmean * divV * cinInvervalLenRel;
+            }
+        }
+
+        void Reduce()
+        {
+            // TODO: assure the consistency on different procs?
+            Eigen::RowVector<real, Eigen::Dynamic> div0 = div;
+            Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> v0 = v;
+            MPI::Allreduce(div0.data(), div.data(), div.size(), DNDS_MPI_REAL, MPI_SUM, mpi.comm);
+            MPI::Allreduce(v0.data(), v.data(), v.size(), DNDS_MPI_REAL, MPI_SUM, mpi.comm);
+        }
+
+        Eigen::Vector<real, nVarsFixed> Get(index i) const
+        {
+            DNDS_assert(i < Size());
+            return v(Eigen::all, i) / (div(i) + verySmallReal);
+        }
+
+        Eigen::Vector<real, nVarsFixed> GetPlain(real v) const
+        {
+            index iCL = (std::lower_bound(nodes.begin(), nodes.end(), v) - nodes.begin()) - index(1);
+            iCL = std::min(Size() - 1, std::max(index(0), iCL));
+            real vL = nodes[iCL];
+            real vR = nodes[iCL + 1];
+            real vRel = (v - vL) / (vR - vL + verySmallReal);
+            vRel = std::min(vRel, 1.);
+            vRel = std::max(vRel, 0.);
+            Eigen::Vector<real, nVarsFixed> valL = Get(std::max(iCL - 1, index(0)));
+            Eigen::Vector<real, nVarsFixed> valR = Get(std::min(iCL + 1, Size() - 1));
+            valL = 0.5 * (valL + Get(iCL));
+            valR = 0.5 * (valR + Get(iCL));
+            return vRel * valR + (1 - vRel) * valL;
         }
     };
 

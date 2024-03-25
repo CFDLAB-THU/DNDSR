@@ -12,8 +12,8 @@ namespace DNDS::Euler
 
     template <EulerModel model>
     void EulerEvaluator<model>::LUSGSMatrixInit(
-        ArrayDOFV<nVarsFixed> &JDiag,
-        ArrayDOFV<nVarsFixed> &JSource,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JSource,
         ArrayDOFV<1> &dTau, real dt, real alphaDiag,
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,
@@ -21,7 +21,9 @@ namespace DNDS::Euler
         real t)
     {
         // TODO: for code0: flux jacobian with lambdaFace, and source jacobian with integration, only diagpart dealt with
+        DNDS_assert(JDiag.isBlock() == JSource.isBlock());
         DNDS_assert(jacobianCode == 0);
+        JDiag.clearValues();
         int cnvars = nVars;
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -34,14 +36,22 @@ namespace DNDS::Euler
                 index iFace = c2f[ic2f];
                 fpDivisor += (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) * lambdaFace[iFace] / vfv->GetCellVol(iCell);
             }
-            JDiag[iCell].setConstant(fpDivisor);
+            if (JDiag.isBlock())
+                JDiag.getBlock(iCell).diagonal().setConstant(fpDivisor);
+            else
+                JDiag.getDiag(iCell).setConstant(fpDivisor);
 
             // std::cout << fpDivisor << std::endl;
 
             // jacobian diag
 
             if (!settings.ignoreSourceTerm)
-                JDiag[iCell] += alphaDiag * JSource[iCell];
+            {
+                if (JDiag.isBlock())
+                    JDiag.getBlock(iCell) += alphaDiag * JSource.getBlock(iCell);
+                else
+                    JDiag.getDiag(iCell) += alphaDiag * JSource.getDiag(iCell);
+            }
 
             // jacobianCellInv[iCell] = jacobianCell[iCell].partialPivLu().inverse();
 
@@ -57,7 +67,7 @@ namespace DNDS::Euler
         real alphaDiag,
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         ArrayDOFV<nVarsFixed> &AuInc)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -125,14 +135,14 @@ namespace DNDS::Euler
             // uIncNewBuf /= fpDivisor;
             // uIncNew[iCell] = uIncNewBuf;
             auto AuIncI = AuInc[iCell];
-            AuIncI = JDiag[iCell].array() * uInc[iCell].array() - uIncNewBuf.array();
+            AuIncI = JDiag.MatVecLeft(iCell, uInc[iCell]) - uIncNewBuf;
 
             if (AuIncI.hasNaN())
             {
                 std::cout << AuIncI.transpose() << std::endl
                           << uINCi.transpose() << std::endl
                           << u[iCell].transpose() << std::endl
-                          << JDiag[iCell] << std::endl
+                          << JDiag.getValue(iCell) << std::endl
                           << iCell << std::endl;
                 DNDS_assert(!AuInc[iCell].hasNaN());
             }
@@ -145,7 +155,7 @@ namespace DNDS::Euler
     void EulerEvaluator<model>::LUSGSMatrixToJacobianLU(
         real alphaDiag,
         ArrayDOFV<nVarsFixed> &u,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         JacobianLocalLU<nVarsFixed> &jacLU)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -198,7 +208,7 @@ namespace DNDS::Euler
                         (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacIJ;
                 }
             }
-            jacLU.GetDiag(iCell) = JDiag[iCell].asDiagonal();
+            jacLU.GetDiag(iCell) = JDiag.getValue(iCell);
         }
         jacLU.InPlaceDecompose();
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixToJacobianLU -1");
@@ -210,12 +220,13 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &rhs,
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         ArrayDOFV<nVarsFixed> &uIncNew)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateLUSGSForward 1");
         int cnvars = nVars;
+        JDiag.GetInvert();
         index nCellDist = mesh->NumCell();
         for (index iScan = 0; iScan < nCellDist; iScan++)
         {
@@ -270,13 +281,13 @@ namespace DNDS::Euler
                 }
             }
             auto uIncNewI = uIncNew[iCell];
-            uIncNewI.array() = JDiag[iCell].array().inverse() * uIncNewBuf.array();
+            uIncNewI = JDiag.MatVecLeftInvert(iCell, uIncNewBuf);
 
             if (uIncNewI.hasNaN())
             {
                 std::cout << uIncNewI.transpose() << std::endl
                           << uIncNewBuf.transpose() << std::endl
-                          << JDiag[iCell] << std::endl
+                          << JDiag.getValue(iCell) << std::endl
                           << iCell << std::endl;
                 DNDS_assert(!uIncNew[iCell].hasNaN());
             }
@@ -291,12 +302,13 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &rhs,
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         ArrayDOFV<nVarsFixed> &uIncNew)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateLUSGSBackward 1");
         int cnvars = nVars;
+        JDiag.GetInvert();
         index nCellDist = mesh->NumCell();
         for (index iScan = nCellDist - 1; iScan >= 0; iScan--)
         {
@@ -341,7 +353,7 @@ namespace DNDS::Euler
                 }
             }
             auto uIncNewI = uIncNew[iCell];
-            uIncNewI.array() += JDiag[iCell].array().inverse() * uIncNewBuf.array();
+            uIncNewI += JDiag.MatVecLeftInvert(iCell, uIncNewBuf);
         }
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateLUSGSBackward -1");
     }
@@ -353,12 +365,13 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
         ArrayDOFV<nVarsFixed> &uIncNew,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         bool forward, TU &sumInc)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateSGS 1");
         int cnvars = nVars;
+        JDiag.GetInvert();
         index nCellDist = mesh->NumCell();
         sumInc.setZero(cnvars);
         for (index iScan = 0; iScan < nCellDist; iScan++)
@@ -415,14 +428,14 @@ namespace DNDS::Euler
             auto uIncNewI = uIncNew[iCell];
             TU uIncOld = uIncNewI;
 
-            uIncNewI.array() = JDiag[iCell].array().inverse() * uIncNewBuf.array();
+            uIncNewI = JDiag.MatVecLeftInvert(iCell, uIncNewBuf);
             sumInc.array() += (uIncNewI - uIncOld).array().abs();
 
             if (uIncNewI.hasNaN())
             {
                 std::cout << uIncNewI.transpose() << std::endl
                           << uIncNewBuf.transpose() << std::endl
-                          << JDiag[iCell] << std::endl
+                          << JDiag.getValue(iCell) << std::endl
                           << iCell << std::endl;
                 DNDS_assert(!uInc[iCell].hasNaN());
             }
@@ -444,12 +457,13 @@ namespace DNDS::Euler
         ArrayRECV<nVarsFixed> &uRec,
         ArrayDOFV<nVarsFixed> &uInc,
         ArrayRECV<nVarsFixed> &uRecInc,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         bool forward, TU &sumInc)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateSGS 1");
         int cnvars = nVars;
+        JDiag.GetInvert();
         index nCellDist = mesh->NumCell();
         sumInc.setZero(cnvars);
         for (index iScan = 0; iScan < nCellDist; iScan++)
@@ -516,14 +530,14 @@ namespace DNDS::Euler
             auto uIncNewI = uInc[iCell];
             TU uIncOld = uIncNewI;
 
-            uIncNewI.array() = JDiag[iCell].array().inverse() * uIncNewBuf.array();
+            uIncNewI = JDiag.MatVecLeftInvert(iCell, uIncNewBuf);
             sumInc.array() += (uIncNewI - uIncOld).array().abs();
 
             if (uIncNewI.hasNaN())
             {
                 std::cout << uIncNewI.transpose() << std::endl
                           << uIncNewBuf.transpose() << std::endl
-                          << JDiag[iCell] << std::endl
+                          << JDiag.getValue(iCell) << std::endl
                           << iCell << std::endl;
                 DNDS_assert(!uInc[iCell].hasNaN());
             }
@@ -543,7 +557,7 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &uInc,
         ArrayDOFV<nVarsFixed> &uIncNew,
         ArrayDOFV<nVarsFixed> &bBuf,
-        ArrayDOFV<nVarsFixed> &JDiag,
+        JacobianDiagBlock<nVarsFixed> &JDiag,
         JacobianLocalLU<nVarsFixed> &jacLU,
         TU &sumInc)
     {
@@ -1361,6 +1375,124 @@ namespace DNDS::Euler
             dTMean += nAdj * smootherCentWeight * dTau[iCell](0);
             dTMean /= nAdj * (1 + smootherCentWeight);
             dTauNew[iCell](0) = std::min(dTau[iCell](0), dTMean);
+        }
+    }
+
+    template <EulerModel model>
+    void EulerEvaluator<model>::updateBCProfiles(ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        for (Geom::t_index i = Geom::BC_ID_DEFAULT_MAX; i < pBCHandler->size(); i++) // init code, consider adding to ctor
+        {
+            if (pBCHandler->GetFlagFromIDSoft(i, "anchorOpt") != 2)
+                continue;
+            if (!profileRecorders.count(i))
+            {
+                real RMin = veryLargeReal;
+                real RMax = -veryLargeReal;
+                profileRecorders.emplace(std::make_pair(i, OneDimProfile<nVarsFixed>(mesh->getMPI())));
+                for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
+                {
+                    index iFace = mesh->bnd2face.at(iBnd);
+                    if (iFace < 0) // remember that some iBnd do not have iFace (for periodic case)
+                        continue;
+                    auto f2c = mesh->face2cell[iFace];
+                    auto gFace = vfv->GetFaceQuad(iFace);
+
+                    Geom::Elem::SummationNoOp noOp;
+                    auto faceBndID = mesh->GetFaceZone(iFace);
+                    auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+                    if (faceBndID == i)
+                    {
+                        Geom::tSmallCoords coo;
+                        mesh->GetCoordsOnFace(iFace, coo);
+                        for (int ic = 0; ic < coo.cols(); ic++)
+                        {
+                            real r = settings.frameConstRotation.rVec(coo(Eigen::all, ic)).norm();
+                            RMin = std::min(r, RMin);
+                            RMax = std::max(r, RMax);
+                        }
+                    }
+                }
+                MPI::AllreduceOneReal(RMin, MPI_MIN, mesh->getMPI());
+                MPI::AllreduceOneReal(RMax, MPI_MAX, mesh->getMPI());
+                auto vExtra = pBCHandler->GetValueExtraFromID(i);
+                index nDiv = vExtra.size() >= 1 ? vExtra(0) : 10;
+                index divMethod = vExtra.size() >= 2 ? vExtra(1) : 0; // TODO: implement other distributions
+
+                profileRecorders.at(i).GenerateUniform(std::max(nDiv, index(10)), nVars, RMin, RMax);
+            }
+        }
+        for (auto &v : profileRecorders)
+            v.second.SetZero();
+        for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
+        {
+            index iFace = mesh->bnd2face.at(iBnd);
+            if (iFace < 0) // remember that some iBnd do not have iFace (for periodic case)
+                continue;
+            auto f2c = mesh->face2cell[iFace];
+            auto gFace = vfv->GetFaceQuad(iFace);
+
+            Geom::Elem::SummationNoOp noOp;
+            auto faceBndID = mesh->GetFaceZone(iFace);
+            auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+
+            if (pBCHandler->GetFlagFromIDSoft(faceBndID, "anchorOpt") != 2)
+                continue;
+
+            real RMin = veryLargeReal;
+            real RMax = -veryLargeReal;
+
+            Geom::tSmallCoords coo;
+            mesh->GetCoordsOnFace(iFace, coo);
+            for (int ic = 0; ic < coo.cols(); ic++)
+            {
+                real r = settings.frameConstRotation.rVec(coo(Eigen::all, ic)).norm();
+                RMin = std::min(r, RMin);
+                RMax = std::max(r, RMax);
+            }
+            TU valIn = u[f2c[0]];
+            valIn(Seq123) = settings.frameConstRotation.rtzFrame(vfv->GetFaceQuadraturePPhys(iFace, -1)).transpose()(Seq012, Seq012) * valIn(Seq123); // to rtz frame
+#ifndef USE_ABS_VELO_IN_ROTATION
+            valIn(2) += valIn(0) * settings.frameConstRotation.Omega() * settings.frameConstRotation.rVec(vfv->GetFaceQuadraturePPhys(iFace, -1)).norm(); // to static value
+#endif
+            // std::cout << valIn.transpose() << std::endl;
+            // std::cout << RMin << " " << RMax << " " << vfv->GetFaceArea(iFace) << std::endl;
+            profileRecorders.at(faceBndID).AddSimpleInterval(valIn, vfv->GetFaceArea(iFace), RMin, RMax);
+        }
+        for (auto &v : profileRecorders)
+        {
+            v.second.Reduce();
+            if (pBCHandler->GetFlagFromIDSoft(v.first, "anchorOpt") == 2)
+            {
+                v.second.v.array().rowwise() /= (v.second.div.array() + verySmallReal);
+                v.second.div.setConstant(1.);
+                v.second.v(I4, 0) = 0;
+                for (index i = 1; i < v.second.Size(); i++)
+                {
+                    real vt0 = v.second.v(2, i - 1) / v.second.v(0, i - 1);
+                    real vt1 = v.second.v(2, i) / v.second.v(0, i);
+                    real l0 = v.second.Len(i - 1);
+                    real l1 = v.second.Len(i);
+                    real ldist = 0.5 * (l0 + l1);
+                    real vtm = (vt0 * l0 + vt1 * l1) / (l0 + l1);
+                    real rhom = (v.second.v(0, i - 1) * l0 + v.second.v(0, i) * l1) / (l0 + l1);
+                    real rc = v.second.nodes[i];
+                    v.second.v(I4, i) = v.second.v(I4, i - 1) + rhom * sqr(vtm) / rc * ldist;
+                }
+                if (mesh->getMPI().rank == 0)
+                {
+                    // std::cout << "nodes";
+                    // for (auto vv : v.second.nodes)
+                    //     std::cout << vv << " ";
+                    // std::cout << "\n";
+                    auto vExtra = pBCHandler->GetValueExtraFromID(v.first);
+                    int showMethod = vExtra.size() >= 3 ? vExtra(2) : 0;
+                    if (showMethod)
+                        log() << fmt::format("EulerEvaluator<model>::updateBCProfiles: got radial equilibrium pressure rise: [{:.3e}]", v.second.v(I4, Eigen::last))
+                              << std::endl;
+                }
+            }
         }
     }
 }

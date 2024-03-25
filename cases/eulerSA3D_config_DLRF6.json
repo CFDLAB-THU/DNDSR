@@ -6,7 +6,7 @@
         "useRestart": false,
         "odeCode": 1, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
         "tEnd": 3e+200,
-        "partitonMeshOnly": true,
+        "partitonMeshOnly": false,
         "_tail": 0
     },
     "convergenceControl": {
@@ -50,9 +50,9 @@
         "rectifyNearPlane": 2,
         "rectifyNearPlaneThres": 1e-4,
         "meshFile": "../data/mesh/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse.cgns",
-        "outPltName": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_TestC/out3",
+        "outPltName": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_TestC/out4",
         "outPltMode": 0,
-        "readMeshMode": 0,
+        "readMeshMode": 1,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": true,
         "outAtPointData": true,
@@ -130,7 +130,7 @@
         "useScalarJacobian": false,
         "minWallDist": 1e-9,
         "wallDistScheme": 1,
-        "riemannSolverType": "Roe",
+        "riemannSolverType": "Roe_M1",
         "rsMeanValueEig": 0,
         "constMassForce": [
             0.0,

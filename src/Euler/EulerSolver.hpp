@@ -61,7 +61,7 @@ namespace DNDS::Euler
 
         ArrayDOFV<nVarsFixed> u, uInc, uIncRHS, uTemp, rhsTemp, wAveraged, uAveraged;
         ArrayRECV<nVarsFixed> uRec, uRecNew, uRecNew1, uRecOld, uRec1, uRecInc, uRecInc1;
-        ArrayDOFV<nVarsFixed> JD, JD1, JSource, JSource1;
+        JacobianDiagBlock<nVarsFixed> JD, JD1, JSource, JSource1;
         ssp<JacobianLocalLU<nVarsFixed>> JLocalLU;
         ArrayDOFV<1> alphaPP, alphaPP1, betaPP, betaPP1, alphaPP_tmp, dTauTmp;
 
@@ -836,16 +836,19 @@ namespace DNDS::Euler
                     vfv->BuildURec(uRecInc1, nVars);
             }
 
-            vfv->BuildUDof(JD, nVars);
-            vfv->BuildUDof(JSource, nVars);
-            if (config.timeMarchControl.odeCode == 401)
-                vfv->BuildUDof(JD1, nVars), vfv->BuildUDof(JSource1, nVars);
-
             DNDS_MPI_InsertCheck(mpi, "ReadMeshAndInitialize 2 nvars " + std::to_string(nVars));
             /*******************************/
             // initialize pEval
             DNDS_MAKE_SSP(pEval, mesh, vfv, pBCHandler, config.eulerSettings);
             EulerEvaluator<model> &eval = *pEval;
+
+            JD.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
+            JSource.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
+            if (config.timeMarchControl.odeCode == 401)
+            {
+                JD1.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
+                JSource1.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
+            }
             /*******************************/
             // ** initialize output Array
 
@@ -1028,6 +1031,6 @@ namespace DNDS::Euler
         }
 
         void RunImplicitEuler();
-        void doPrecondition(real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp, TDof &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone);
+        void doPrecondition(real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp, JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone);
     };
 }

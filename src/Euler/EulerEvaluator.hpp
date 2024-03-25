@@ -82,8 +82,10 @@ namespace DNDS::Euler
         std::vector<real> deltaLambdaFace;
 
         std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall;
+        std::vector<real> dWallFace;
 
         std::unordered_map<Geom::t_index, AnchorPointRecorder<nVarsFixed>> anchorRecorders;
+        std::unordered_map<Geom::t_index, OneDimProfile<nVarsFixed>> profileRecorders;
 
         // ArrayVDOF<25> dRdUrec;
         // ArrayVDOF<25> dRdb;
@@ -100,6 +102,7 @@ namespace DNDS::Euler
         EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler, const decltype(settings.jsonSettings) &nJsonSettings)
             : mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->settings.maxOrder + 1)
         {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             nVars = getNVars(model); //! // TODO: dynamic setting it
 
             this->settings.jsonSettings = nJsonSettings;
@@ -116,6 +119,19 @@ namespace DNDS::Euler
                 v.resize(nVars);
 
             this->GetWallDist();
+
+            if (model == NS_2EQ || model == NS_2EQ_3D)
+            {
+                TU farPrim = settings.farFieldStaticValue;
+                real gamma = settings.idealGasProperty.gamma;
+                Gas::IdealGasThermalConservative2Primitive(settings.farFieldStaticValue, farPrim, gamma);
+                real T = farPrim(I4) / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * farPrim(0));
+                // auto [rhs0, rhs] = RANS::SolveZeroGradEquilibrium<dim>(settings.farFieldStaticValue, this->muEff(settings.farFieldStaticValue, T));
+                // if(mesh->getMPI().rank == 0)
+                //     log() 
+                //     << "EulerEvaluator===EulerEvaluator: got 2EQ init for farFieldStaticValue: " << settings.farFieldStaticValue.transpose() << "\n"
+                //     << fmt::format(" [{:.3e} -> {:.3e}] ", rhs0, rhs) << std::endl;
+            }
 
             DNDS_MAKE_SSP(symLU, mesh->getMPI(), mesh->NumCell());
         }
@@ -136,7 +152,7 @@ namespace DNDS::Euler
          */
         void EvaluateRHS(
             ArrayDOFV<nVarsFixed> &rhs,
-            ArrayDOFV<nVarsFixed> &JSource,
+            JacobianDiagBlock<nVarsFixed> &JSource,
             ArrayDOFV<nVarsFixed> &u,
             ArrayRECV<nVarsFixed> &uRec,
             ArrayDOFV<1> &uRecBeta,
@@ -145,8 +161,8 @@ namespace DNDS::Euler
             real t);
 
         void LUSGSMatrixInit(
-            ArrayDOFV<nVarsFixed> &JDiag,
-            ArrayDOFV<nVarsFixed> &JSource,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JSource,
             ArrayDOFV<1> &dTau, real dt, real alphaDiag,
             ArrayDOFV<nVarsFixed> &u,
             ArrayRECV<nVarsFixed> &uRec,
@@ -157,13 +173,13 @@ namespace DNDS::Euler
             real alphaDiag,
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             ArrayDOFV<nVarsFixed> &AuInc);
 
         void LUSGSMatrixToJacobianLU(
             real alphaDiag,
             ArrayDOFV<nVarsFixed> &u,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             JacobianLocalLU<nVarsFixed> &jacLU);
 
         /**
@@ -179,7 +195,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &rhs,
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             ArrayDOFV<nVarsFixed> &uIncNew);
 
         /**
@@ -192,7 +208,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &rhs,
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             ArrayDOFV<nVarsFixed> &uIncNew);
 
         void UpdateSGS(
@@ -201,7 +217,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
             ArrayDOFV<nVarsFixed> &uIncNew,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             bool forward, TU &sumInc);
 
         void LUSGSMatrixSolveJacobianLU(
@@ -211,7 +227,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &uInc,
             ArrayDOFV<nVarsFixed> &uIncNew,
             ArrayDOFV<nVarsFixed> &bBuf,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             JacobianLocalLU<nVarsFixed> &jacLU,
             TU &sumInc);
 
@@ -222,7 +238,7 @@ namespace DNDS::Euler
             ArrayRECV<nVarsFixed> &uRec,
             ArrayDOFV<nVarsFixed> &uInc,
             ArrayRECV<nVarsFixed> &uRecInc,
-            ArrayDOFV<nVarsFixed> &JDiag,
+            JacobianDiagBlock<nVarsFixed> &JDiag,
             bool forward, TU &sumInc);
 
         // void UpdateLUSGSForwardWithRec(
@@ -407,6 +423,7 @@ namespace DNDS::Euler
             const TU &UMeanXy,
             const TDiffU &DiffUxy,
             const Geom::tPoint &pPhy,
+<<<<<<< HEAD
             index iCell, index ig)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -713,6 +730,13 @@ namespace DNDS::Euler
             }
             return ret;
         }
+=======
+            TJacobianU &jacobian,
+            index iCell,
+            index ig,
+            int Mode) // mode =0: source; mode = 1, diagJacobi; mode = 2,
+            ;
+>>>>>>> 3c98578fba3bec0419bc861320b1adb7d8dc82ef
 
         /**
          * @brief inviscid flux approx jacobian (flux term not reconstructed / no riemann)
@@ -916,8 +940,7 @@ namespace DNDS::Euler
 
         void updateBCAnchors(ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
         {
-            for (auto &v : anchorRecorders)
-                v.second.Reset();
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             for (Geom::t_index i = Geom::BC_ID_DEFAULT_MAX; i < pBCHandler->size(); i++) // init code, consider adding to ctor
             {
                 if (pBCHandler->GetFlagFromIDSoft(i, "anchorOpt") == 0)
@@ -925,6 +948,8 @@ namespace DNDS::Euler
                 if (!anchorRecorders.count(i))
                     anchorRecorders.emplace(std::make_pair(i, AnchorPointRecorder<nVarsFixed>(mesh->getMPI())));
             }
+            for (auto &v : anchorRecorders)
+                v.second.Reset();
             for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
             {
                 index iFace = mesh->bnd2face.at(iBnd);
@@ -960,6 +985,8 @@ namespace DNDS::Euler
             for (auto &v : anchorRecorders)
                 v.second.ObtainAnchorMPI();
         }
+
+        void updateBCProfiles(ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec);
 
         TU generateBoundaryValue(
             TU &ULxy, //! warning, possible that UL is also modified
@@ -1054,6 +1081,13 @@ namespace DNDS::Euler
                             //     }
                             //     farPrimitive(I4) += pInc;
                             // }
+                        }
+                        if (bTypeEuler == EulerBCType::BCOutP && pBCHandler->GetFlagFromID(btype, "anchorOpt") == 2)
+                        {
+                            real pInc = 0;
+                            if (profileRecorders.count(btype))
+                                pInc = profileRecorders.at(btype).GetPlain(settings.frameConstRotation.rVec(pPhysics).norm())(I4);
+                            farPrimitive(I4) += std::max(pInc, -0.95 * farPrimitive(I4));
                         }
                         ULxyPrimitive(I4) = farPrimitive(I4); // using far pressure
                         Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma);
@@ -1355,24 +1389,41 @@ namespace DNDS::Euler
                     if (fixUL)
                         ULxy({I4 + 1, I4 + 2}).setZero(), URxy({I4 + 1, I4 + 2}).setZero(); //! modifing UL
 #endif
-                    TVec v = (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellBary(iCell))(Seq012);
-                    real d1 = std::abs(v.dot(uNorm)); //! warning! first wall could be bad
-                    real k1 = ULMeanXy(I4 + 1) / ULMeanXy(0);
+                    { // BC for RealizableKe
+                        // TVec v = (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellBary(iCell))(Seq012);
+                        // real d1 = std::abs(v.dot(uNorm)); //! warning! first wall could be bad
+                        // real k1 = ULMeanXy(I4 + 1) / ULMeanXy(0);
 
-                    real pMean, asqrMean, Hmean;
-                    real gamma = settings.idealGasProperty.gamma;
-                    Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
-                                         gamma, pMean, asqrMean, Hmean);
-                    // ! refvalue:
-                    real muRef = settings.idealGasProperty.muGas;
-                    real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
-                    real mufPhy1;
-                    mufPhy1 = muEff(ULMeanXy, T);
-                    real epsWall = 2 * mufPhy1 / ULMeanXy(0) * k1 / sqr(d1);
-                    URxy(I4 + 2) = 2 * epsWall * ULxy(0) - ULxy(I4 + 2);
-                    if (fixUL)
-                        ULxy(I4 + 2) = URxy(I4 + 2) = epsWall * ULxy(0);
-                    // std::cout << "d1" <<d1 << std::endl;
+                        // real pMean, asqrMean, Hmean;
+                        // real gamma = settings.idealGasProperty.gamma;
+                        // Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
+                        //                      gamma, pMean, asqrMean, Hmean);
+                        // // ! refvalue:
+                        // real muRef = settings.idealGasProperty.muGas;
+                        // real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
+                        // real mufPhy1;
+                        // mufPhy1 = muEff(ULMeanXy, T);
+                        // real epsWall = 2 * mufPhy1 / ULMeanXy(0) * k1 / sqr(d1);
+                        // URxy(I4 + 2) = 2 * epsWall * ULxy(0) - ULxy(I4 + 2);
+                        // if (fixUL)
+                        // ULxy(I4 + 2) = URxy(I4 + 2) = epsWall * ULxy(0);
+                    }
+                    { // BC for SST
+                        real d1 = dWall[iCell].mean();
+                        real pMean, asqrMean, Hmean;
+                        real gamma = settings.idealGasProperty.gamma;
+                        Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
+                                             gamma, pMean, asqrMean, Hmean);
+                        // ! refvalue:
+                        real muRef = settings.idealGasProperty.muGas;
+                        real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
+                        real mufPhy1 = muEff(ULMeanXy, T);
+
+                        real rhoOmegaaaWall = mufPhy1 / sqr(d1) * 800;
+                        URxy(I4 + 2) = 2 * rhoOmegaaaWall - ULxy(I4 + 2);
+                        if (fixUL)
+                            ULxy(I4 + 2) = URxy(I4 + 2) = rhoOmegaaaWall;
+                    }   
                 }
             }
             else if (bTypeEuler == EulerBCType::BCOut)

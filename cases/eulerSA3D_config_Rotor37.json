@@ -51,7 +51,7 @@
         "meshElevationMaxIncludedAngle": 20,
         // "meshFile": "../data/mesh/row_1_test3.cgns",
         "meshFile": "../data/mesh/Rotor37_test1.cgns",
-        "outPltName": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O3-Roe",
+        "outPltName": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O3-Roe-largeNu",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -192,7 +192,7 @@
             0,
             0.8,
             0.891422324913029,
-            3
+            10
         ],
         "idealGasProperty": {
             "gamma": 1.4,
@@ -217,13 +217,12 @@
                 // 1.341153796296297, // 1.0 p0in
                 // 1.443269175925927, //1.1 p0in
                 1.545384555555557, //1.2 p0in
-                3
+                10
             ],
             "valueExtra": [
                 10, // profile divisions
                 0,
                 1 // print info
-
             ],
             "anchorOption": 2
             // "valueExtra": [ // used as anchorpoint
@@ -260,7 +259,7 @@
                 0,
                 0,
                 1, // Seq234: prescribed inflow direction
-                3
+                10
             ]
         },
         {

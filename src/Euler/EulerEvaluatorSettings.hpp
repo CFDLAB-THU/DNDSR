@@ -122,6 +122,15 @@ namespace DNDS::Euler
             {
                 return r - r.dot(axis) * axis;
             }
+            Geom::tGPoint rtzFrame(const Geom::tPoint &r)
+            {
+                Geom::tPoint rn = rVec(r).normalized();
+                Geom::tGPoint ret;
+                ret(Eigen::all, 0) = rn;
+                ret(Eigen::all, 2) = axis;
+                ret(Eigen::all, 1) = axis.cross(rn);
+                return ret;
+            }
             DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                 FrameConstRotation,
                 enabled,

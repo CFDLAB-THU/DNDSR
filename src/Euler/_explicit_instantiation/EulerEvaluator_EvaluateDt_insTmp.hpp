@@ -26,4 +26,14 @@
                 Geom::t_index btype,                        \
                 typename Gas::RiemannSolverType rsType,     \
                 index iFace, int ig);                       \
+        template                                            \
+            typename EulerEvaluator<model>::TU              \
+            EulerEvaluator<model>::source(                  \
+                const TU &UMeanXy,                          \
+                const TDiffU &DiffUxy,                      \
+                const Geom::tPoint &pPhy,                   \
+                TJacobianU &jacobian,                       \
+                index iCell,                                \
+                index ig,                                   \
+                int Mode);                                  \
     }
