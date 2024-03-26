@@ -7,7 +7,8 @@
             tURec<nVarsFixed> & uRec,                                                       \
             tUDof<nVarsFixed> &u,                                                           \
             const TFBoundary<nVarsFixed> &FBoundary,                                        \
-            int method);                                                                    \
+            int method,                                                                     \
+            const std::vector<int> &mask);                                                  \
                                                                                             \
         template void VariationalReconstruction<dim>::DoReconstructionIter<nVarsFixed>(     \
             tURec<nVarsFixed> & uRec,                                                       \

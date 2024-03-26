@@ -13,7 +13,8 @@ namespace DNDS
             tURec<nVarsFixed> &uRec,
             tUDof<nVarsFixed> &u,
             const TFBoundary<nVarsFixed> &FBoundary,
-            int method)
+            int method,
+            const std::vector<int> &mask)
         {
             using namespace Geom;
             using namespace Geom::Elem;
@@ -87,19 +88,26 @@ namespace DNDS
                     // DNDS_assert(vvv(0) < 1e-10);
 
                     Eigen::Matrix<real, dim, dim> d1bv;
-                    if constexpr (dim == 2)
-                        d1bv =
-                            this->GetIntPointDiffBaseValue(
-                                iCell, -1, -1, -1, std::array<int, 2>{1, 2}, 3);
-                    if constexpr (dim == 3)
-                        d1bv =
-                            this->GetIntPointDiffBaseValue(
-                                iCell, -1, -1, -1, std::array<int, 3>{1, 2, 3}, 4);
+                    static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
+                    static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+                    d1bv =
+                        this->GetIntPointDiffBaseValue(
+                            iCell, -1, -1, -1, Seq123, dim + 1)(Eigen::all, Seq012);
                     Eigen::Matrix3d m;
                     auto lud1bv = d1bv.partialPivLu();
                     if (lud1bv.rcond() > 1e9)
                         std::cout << "Large Cond " << lud1bv.rcond() << std::endl;
-                    uRec[iCell] = lud1bv.solve(grad.transpose());
+                    if (mask.size() == 0)
+                    {
+                        uRec[iCell].setZero();
+                        uRec[iCell](Seq012, Eigen::all) = lud1bv.solve(grad.transpose());
+                    }
+                    else
+                    {
+                        uRec[iCell](Eigen::all, mask).setZero();
+                        uRec[iCell](Seq012, mask) = lud1bv.solve(grad.transpose())(Eigen::all, mask);
+                    }
+
                     // std::cout << " g " << std::endl;
                     // std::cout << grad << std::endl;
                     // std::cout << uRec[iCell] << std::endl;
@@ -205,11 +213,11 @@ namespace DNDS
             if (settings.maxOrder == 1 && settings.subs2ndOrder != 0)
             {
                 if (recordInc)
-                    this->DoReconstruction2nd<nVarsFixed>(uRecNew, u, (FBoundary), settings.subs2ndOrder);
+                    this->DoReconstruction2nd<nVarsFixed>(uRecNew, u, (FBoundary), settings.subs2ndOrder, std::vector<int>());
                 else if (putIntoNew)
-                    this->DoReconstruction2nd<nVarsFixed>(uRecNew, u, (FBoundary), settings.subs2ndOrder);
+                    this->DoReconstruction2nd<nVarsFixed>(uRecNew, u, (FBoundary), settings.subs2ndOrder, std::vector<int>());
                 else
-                    this->DoReconstruction2nd<nVarsFixed>(uRec, u, (FBoundary), settings.subs2ndOrder);
+                    this->DoReconstruction2nd<nVarsFixed>(uRec, u, (FBoundary), settings.subs2ndOrder, std::vector<int>());
                 return;
             }
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)

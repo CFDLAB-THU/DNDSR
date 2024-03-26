@@ -913,7 +913,8 @@ namespace DNDS::CFV
             tURec<nVarsFixed> &uRec,
             tUDof<nVarsFixed> &u,
             const TFBoundary<nVarsFixed> &FBoundary,
-            int method);
+            int method,
+            const std::vector<int> &mask);
 
         /**
          * \brief iterative variational reconstruction method
