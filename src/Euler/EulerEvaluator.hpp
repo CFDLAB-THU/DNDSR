@@ -965,7 +965,7 @@ namespace DNDS::Euler
                             }
                 if (model == NS_2EQ || model == NS_2EQ_3D)
                 { // for SST or KOWilcox
-                    cx[iCell](I4 + 2) = std::max(cx[iCell](I4 + 2), settings.RANSBottomLimit * settings.farFieldStaticValue(I4 + 2));
+                    // cx[iCell](I4 + 2) = std::max(cx[iCell](I4 + 2), settings.RANSBottomLimit * settings.farFieldStaticValue(I4 + 2));
                 }
             }
             real alpha_fix_min_c = alpha_fix_min;

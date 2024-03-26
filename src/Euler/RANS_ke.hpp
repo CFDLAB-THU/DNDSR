@@ -5,7 +5,7 @@
 namespace DNDS::Euler::RANS
 {
     template <int dim, class TU, class TDiffU>
-    real GetMut_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real muf)
+    real GetMut_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -38,7 +38,7 @@ namespace DNDS::Euler::RANS
     }
 
     template <int dim, class TU, class TDiffU, class TVFlux>
-    void GetVisFlux_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real mut, real muPhy, TVFlux &vFlux)
+    void GetVisFlux_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real mut, real d, real muPhy, TVFlux &vFlux)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -53,11 +53,13 @@ namespace DNDS::Euler::RANS
     }
 
     template <int dim, class TU, class TDiffU, class TSource>
-    void GetSource_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, TSource &source)
+    void GetSource_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, TSource &source, int mode)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
         static const auto I4 = dim + 1;
+        static const auto verySmallReal_3 = std::pow(verySmallReal, 1. / 3);
+        static const auto verySmallReal_4 = std::pow(verySmallReal, 1. / 4);
 
         real cmu = 0.09;
         real phi = 2. / 3.;
@@ -71,11 +73,11 @@ namespace DNDS::Euler::RANS
         Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
         Eigen::Matrix<real, dim, dim> SS = diffU + diffU.transpose() - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity();
         real rho = UMeanXy(0);
-        real k = UMeanXy(I4 + 1) / rho + verySmallReal;
-        real epsilon = UMeanXy(I4 + 2) / rho + verySmallReal;
-        real Ret = rho * sqr(k) / (muf * epsilon) + verySmallReal;
-        real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal;
-        real fmu = (1 - std::exp(-0.01 * Ret)) / (1 - exp(-std::sqrt(Ret))) * std::max(1., std::sqrt(2 / Ret));
+        real k = std::max(UMeanXy(I4 + 1) / rho, verySmallReal_4);
+        real epsilon = std::max(UMeanXy(I4 + 1) / rho, verySmallReal_4);
+        real Ret = rho * sqr(k) / (muf * epsilon) + verySmallReal_4;
+        real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
+        real fmu = (1 - std::exp(-0.01 * Ret)) / std::max(1 - exp(-std::sqrt(Ret)), verySmallReal_4) * std::max(1., std::sqrt(2 / Ret));
         real mut = cmu * fmu * rho * sqr(k) / epsilon;
         mut = std::min(mut, phi * rho * k / S);
 
@@ -91,8 +93,28 @@ namespace DNDS::Euler::RANS
         real Psi = std::max(0., diffKe(Seq012, 0).dot(diffTau));
         real E = AE * rho * std::sqrt(epsilon * Tt) * Psi * std::max(std::sqrt(k), std::pow(muf * epsilon / rho, 0.25));
 
-        source(I4 + 1) = Pk - UMeanXy(I4 + 2);
-        source(I4 + 2) = (ce1 * Pk - ce2 * UMeanXy(I4 + 2) + E) / Tt;
+        if (mode == 0)
+        {
+            source(I4 + 1) = Pk - UMeanXy(I4 + 2);
+            source(I4 + 2) = (ce1 * Pk - ce2 * UMeanXy(I4 + 2) + E) / Tt;
+        }
+        else
+        {
+            source(I4 + 1) = 0;
+            source(I4 + 2) = (ce2) / Tt;
+        }
+        if (!source.allFinite() || source.hasNaN())
+        {
+            std::cerr << source.transpose() << "\n";
+            std::cerr << UMeanXy.transpose() << "\n";
+            std::cerr << DiffUxy << "\n";
+            std::cerr << S << "\n";
+            std::cerr << mut << "\n";
+
+            std::cout << std::endl;
+
+            DNDS_assert(false);
+        }
     }
 
     template <int dim, class TU>
@@ -385,6 +407,7 @@ namespace DNDS::Euler::RANS
         real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
         real omegaaaTut = std::max(omegaaa, CLim * std::sqrt(0.5 * SR2.squaredNorm() / betaS));
         real mut = k / omegaaaTut * rho;
+        mut = std::min(mut, 1e5 * muf); // CFL3D
 
         if (std::isnan(mut) || !std::isfinite(mut))
         {
@@ -422,6 +445,7 @@ namespace DNDS::Euler::RANS
         real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
         real omegaaaTut = std::max(omegaaa, CLim * std::sqrt(0.5 * SR2.squaredNorm() / betaS));
         real mut = k / omegaaaTut * rho;
+        mut = std::min(mut, 1e5 * muf); // CFL3D
 
         vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mut * sigK);
         vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mut * sigO);
@@ -458,6 +482,7 @@ namespace DNDS::Euler::RANS
         real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
         real omegaaaTut = std::max(omegaaa, CLim * std::sqrt(0.5 * SR2.squaredNorm() / betaS));
         real mut = k / omegaaaTut * rho;
+        mut = std::min(mut, 1e5 * muf); // CFL3D
 
         real ChiOmega = std::abs(((OmegaM2 * OmegaM2).array() * SR2.array()).sum() * 0.125 / cube(betaS * omegaaa));
         real fBeta = (1 + 85 * ChiOmega) / (1 + 100 * ChiOmega);
@@ -467,11 +492,17 @@ namespace DNDS::Euler::RANS
 
         Eigen::Matrix<real, dim, dim> rhoMuiuj = Eigen::Matrix<real, dim, dim>::Identity() * UMeanXy(I4 + 1) * (2. / 3.) - mut * SS;
         real Pk = -(rhoMuiuj.array() * diffU.array()).sum();
+        Pk = std::min(Pk, OmegaM2.squaredNorm() * 0.5 * mut); // compare with CFL3D approx
+        Pk = std::max(Pk, verySmallReal);
+        real POmega = alpha * omegaaa / k * Pk;
+
+        Pk = std::min(Pk, betaS * rho * k * omegaaa * 20);         // CFL3D
+        // POmega = std::min(POmega, beta * rho * sqr(omegaaa) * 20); // CFL3D
 
         if (mode == 0)
         {
             source(I4 + 1) = Pk - betaS * rho * k * omegaaa;
-            source(I4 + 2) = alpha * omegaaa / k * Pk - beta * rho * sqr(omegaaa) + SigD / omegaaa * crossDiff;
+            source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) + SigD / omegaaa * crossDiff;   
         }
         else
         {
