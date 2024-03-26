@@ -1,5 +1,6 @@
 #pragma once
 #include "EulerEvaluator.hpp"
+#include <fmt/core.h>
 
 namespace DNDS::Euler
 {
@@ -42,6 +43,19 @@ namespace DNDS::Euler
         fluxWallSumLocal.setZero(cnvars);
         fluxWallSum.setZero(cnvars);
         nFaceReducedOrder = 0;
+
+        for (Geom::t_index i = Geom::BC_ID_DEFAULT_MAX; i < pBCHandler->size(); i++) // init code, consider adding to ctor
+        {
+            if (pBCHandler->GetFlagFromIDSoft(i, "integrationOpt") == 0)
+                continue;
+            if (!bndIntegrations.count(i))
+            {
+                auto intOpt = pBCHandler->GetFlagFromIDSoft(i, "integrationOpt");
+                bndIntegrations.emplace(std::make_pair(i, IntegrationRecorder(mesh->getMPI(), intOpt == 1 ? nVars : nVars + 2)));
+            }
+        }
+        for (auto &v : bndIntegrations)
+            v.second.Reset();
 
         auto cellIsHalfAlpha = [&](index iCell) -> bool // iCell should be internal
         {
@@ -318,6 +332,31 @@ namespace DNDS::Euler
                 DNDS_assert(mesh->face2bnd.find(iFace) != mesh->face2bnd.end());
                 fluxBnd.at(mesh->face2bnd[iFace]) = fluxEs(Eigen::all, 0) / vfv->GetFaceArea(iFace);
             }
+
+            // integrations
+            if (pBCHandler->GetFlagFromIDSoft(mesh->GetFaceZone(iFace), "integrationOpt") == 1)
+            {
+                bndIntegrations.at(mesh->GetFaceZone(iFace)).Add(fluxEs(Eigen::all, 0), vfv->GetFaceArea(iFace));
+            }
+            if (pBCHandler->GetFlagFromIDSoft(mesh->GetFaceZone(iFace), "integrationOpt") == 2)
+            {
+                TU uL = u[f2c[0]];
+#ifndef USE_ABS_VELO_IN_ROTATION
+                if (settings.frameConstRotation.enabled)
+                    this->TransformURotatingFrame(uL, vfv->GetFaceQuadraturePPhys(iFace, -1), 1);
+#endif
+                TU uLPrim = uL;
+                auto gamma = settings.idealGasProperty.gamma;
+                Gas::IdealGasThermalConservative2Primitive(uL, uLPrim, gamma);
+                Eigen::Vector<real, Eigen::Dynamic> vInt;
+                vInt.resize(nVars + 2);
+                vInt(Eigen::seq(0, nVars - 1)) = uL;
+
+                auto [p0, T0] = Gas::IdealGasThermalPrimitiveGetP0T0<dim>(uLPrim, gamma, settings.idealGasProperty.Rgas);
+                vInt(nVars) = p0, vInt(nVars + 1) = T0;
+                vInt(0) = 1;
+                bndIntegrations.at(mesh->GetFaceZone(iFace)).Add(vInt * fluxEs(0, 0), fluxEs(0, 0));
+            }
         }
 
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS After Flux");
@@ -419,6 +458,21 @@ namespace DNDS::Euler
         }
         // quick aux: reduce the wall flux sum
         MPI::Allreduce(fluxWallSumLocal.data(), fluxWallSum.data(), fluxWallSum.size(), DNDS_MPI_REAL, MPI_SUM, u.father->getMPI().comm);
+        for (auto &i : bndIntegrations)
+        {
+            auto intOpt = pBCHandler->GetFlagFromIDSoft(i.first, "integrationOpt");
+            i.second.Reduce();
+            if (mesh->getMPI().rank == 0)
+            {
+                Eigen::VectorFMTSafe<real, Eigen::Dynamic> vPrint = i.second.v;
+                if (intOpt == 2)
+                    vPrint(Eigen::seq(nVars, nVars + 1)) /= i.second.div;
+                log() << fmt::format("Bnd [{}] integarted values option [{}] : {:.3e}",
+                                     pBCHandler->GetNameFormID(i.first),
+                                     intOpt, vPrint.transpose())
+                      << std::endl;
+            }
+        }
 
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS -1");
     }

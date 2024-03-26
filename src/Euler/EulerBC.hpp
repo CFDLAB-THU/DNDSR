@@ -104,6 +104,7 @@ namespace DNDS::Euler
             {
                 EulerBCType bcType = item["type"].get<EulerBCType>();
                 std::string bcName = item["name"];
+                bc.BCFlags.emplace_back(TFlags{});
                 switch (bcType)
                 {
                 case EulerBCType::BCFar:
@@ -114,19 +115,22 @@ namespace DNDS::Euler
                 {
                     uint32_t frameOption = 0;
                     uint32_t anchorOption = 0;
+                    uint32_t integrationOption = 0;
                     Eigen::VectorXd bcValueExtra;
                     if (item.count("frameOption"))
                         frameOption = item["frameOption"];
                     if (item.count("anchorOption"))
                         anchorOption = item["anchorOption"];
+                    if (item.count("integrationOption"))
+                        integrationOption = item["integrationOption"];
                     if (item.count("valueExtra"))
                         bcValueExtra = item["valueExtra"];
                     Eigen::VectorXd bcValue = item["value"];
                     DNDS_assert_info(bcValue.size() == bc.nVars, "bc value dim not right");
                     bc.BCValues.push_back(bcValue);
-                    bc.BCFlags.emplace_back(TFlags{});
                     bc.BCFlags.back()["frameOpt"] = frameOption;
                     bc.BCFlags.back()["anchorOpt"] = anchorOption;
+                    bc.BCFlags.back()["integrationOpt"] = integrationOption;
                     bc.BCValuesExtra.push_back(bcValueExtra);
                 }
                 break;
@@ -135,14 +139,17 @@ namespace DNDS::Euler
                 case EulerBCType::BCWallInvis:
                 {
                     uint32_t frameOption = 0;
+                    uint32_t integrationOption = 0;
                     Eigen::VectorXd bcValueExtra;
                     if (item.count("frameOption"))
                         frameOption = item["frameOption"];
+                    if (item.count("integrationOption"))
+                        integrationOption = item["integrationOption"];
                     if (item.count("valueExtra"))
                         bcValueExtra = item["valueExtra"];
                     bc.BCValues.push_back(TU::Zero(bc.nVars));
-                    bc.BCFlags.emplace_back(TFlags{});
                     bc.BCFlags.back()["frameOpt"] = frameOption;
+                    bc.BCFlags.back()["integrationOpt"] = integrationOption;
                     bc.BCValuesExtra.push_back(bcValueExtra);
                 }
                 break;
@@ -150,14 +157,17 @@ namespace DNDS::Euler
                 case EulerBCType::BCSym:
                 {
                     uint32_t rectifyOption = 0;
+                    uint32_t integrationOption = 0;
                     Eigen::VectorXd bcValueExtra;
                     if (item.count("rectifyOption"))
                         rectifyOption = item["rectifyOption"];
+                    if (item.count("integrationOption"))
+                        integrationOption = item["integrationOption"];
                     if (item.count("valueExtra"))
                         bcValueExtra = item["valueExtra"];
                     bc.BCValues.push_back(TU::Zero(bc.nVars));
-                    bc.BCFlags.emplace_back(TFlags{});
                     bc.BCFlags.back()["rectifyOpt"] = rectifyOption;
+                    bc.BCFlags.back()["integrationOpt"] = integrationOption;
                     bc.BCValuesExtra.push_back(bcValueExtra);
                 }
                 break;
@@ -237,6 +247,13 @@ namespace DNDS::Euler
                 return Geom::BC_ID_NULL;
         }
 
+        auto GetNameFormID(Geom::t_index id)
+        {
+            if(!ID2name.count(id))
+                return std::string("UnNamedBC");
+            return ID2name.at(id);
+        }
+
         EulerBCType GetTypeFromID(Geom::t_index id)
         {
             // std::cout << "id " << std::endl;
@@ -271,6 +288,41 @@ namespace DNDS::Euler
             if (!Geom::FaceIDIsExternalBC(id) || !BCFlags.at(id).count(key))
                 return 0;
             return BCFlags.at(id).at(key);
+        }
+    };
+
+    struct IntegrationRecorder
+    {
+        Eigen::Vector<real, Eigen::Dynamic> v;
+        real div;
+        MPIInfo mpi;
+
+        IntegrationRecorder(const MPIInfo &_nmpi, int siz) : mpi(_nmpi)
+        {
+            v.resize(siz);
+            v.setZero();
+            div = verySmallReal;
+        }
+
+        void Reset()
+        {
+            v.setZero();
+            div = verySmallReal;
+        }
+
+        template <class TU>
+        void Add(TU &&add, real dAdd)
+        {
+            v += add;
+            div += dAdd;
+        }
+
+        void Reduce()
+        {
+            // TODO: assure the consistency on different procs?
+            Eigen::Vector<real, Eigen::Dynamic> v0 = v;
+            MPI::Allreduce(v0.data(), v.data(), v.size(), DNDS_MPI_REAL, MPI_SUM, mpi.comm);
+            MPI::AllreduceOneReal(div, MPI_SUM, mpi);
         }
     };
 
