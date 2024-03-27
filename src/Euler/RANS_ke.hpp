@@ -2,6 +2,9 @@
 
 #include "Euler.hpp"
 
+#define KW_WILCOX_VER 0
+#define KW_WILCOX_PROD_LIMITS 0
+
 namespace DNDS::Euler::RANS
 {
     template <int dim, class TU, class TDiffU>
@@ -313,6 +316,17 @@ namespace DNDS::Euler::RANS
 
         vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mut * sigK);
         vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mut * sigO);
+
+        if (!vFlux.allFinite() || vFlux.hasNaN())
+        {
+            std::cerr << vFlux << "\n";
+            std::cerr << sigK << " " << sigO << "\n";
+            std::cerr << F1 << " " << F2 << "\n";
+            std::cerr << CDKW << "\n";
+            std::cerr << k << " " << omegaaa << "\n";
+            std::cerr << muf << " " << mut << "\n";
+            std::cerr << std::endl;
+        }
     }
 
     template <int dim, class TU, class TDiffU, class TSource>
@@ -405,9 +419,13 @@ namespace DNDS::Euler::RANS
         real rho = UMeanXy(0);
         real k = std::max(UMeanXy(I4 + 1) / rho, sqr(verySmallReal_4));
         real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
+#if KW_WILCOX_VER == 0
+        real omegaaaTut = omegaaa;
+#else
         real omegaaaTut = std::max(omegaaa, CLim * std::sqrt(0.5 * SR2.squaredNorm() / betaS));
+#endif
         real mut = k / omegaaaTut * rho;
-        mut = std::min(mut, 1e5 * muf); // CFL3D
+        // mut = std::min(mut, 1e5 * muf); // CFL3D
 
         if (std::isnan(mut) || !std::isfinite(mut))
         {
@@ -443,9 +461,13 @@ namespace DNDS::Euler::RANS
         real rho = UMeanXy(0);
         real k = std::max(UMeanXy(I4 + 1) / rho, sqr(verySmallReal_4));
         real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
+#if KW_WILCOX_VER == 0
+        real omegaaaTut = omegaaa;
+#else
         real omegaaaTut = std::max(omegaaa, CLim * std::sqrt(0.5 * SR2.squaredNorm() / betaS));
+#endif
         real mut = k / omegaaaTut * rho;
-        mut = std::min(mut, 1e5 * muf); // CFL3D
+        // mut = std::min(mut, 1e5 * muf); // CFL3D
 
         vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mut * sigK);
         vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mut * sigO);
@@ -459,8 +481,11 @@ namespace DNDS::Euler::RANS
         static const auto I4 = dim + 1;
         static const auto verySmallReal_3 = std::pow(verySmallReal, 1. / 3);
         static const auto verySmallReal_4 = std::pow(verySmallReal, 1. / 4);
-
+#if KW_WILCOX_VER == 0
+        real alpha = 5. / 9.;
+#else
         real alpha = 13. / 25.;
+#endif
         real betaS = 0.09;
         real sigK = 0.5;
         real sigO = 0.5;
@@ -480,29 +505,43 @@ namespace DNDS::Euler::RANS
         real rho = UMeanXy(0);
         real k = std::max(UMeanXy(I4 + 1) / rho, sqr(verySmallReal_4)); // make nu -> 0 when k,O->0
         real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
+#if KW_WILCOX_VER == 0
+        real omegaaaTut = omegaaa;
+#else
         real omegaaaTut = std::max(omegaaa, CLim * std::sqrt(0.5 * SR2.squaredNorm() / betaS));
+#endif
         real mut = k / omegaaaTut * rho;
-        mut = std::min(mut, 1e5 * muf); // CFL3D
+        // mut = std::min(mut, 1e5 * muf); // CFL3D
 
         real ChiOmega = std::abs(((OmegaM2 * OmegaM2).array() * SR2.array()).sum() * 0.125 / cube(betaS * omegaaa));
         real fBeta = (1 + 85 * ChiOmega) / (1 + 100 * ChiOmega);
+#if KW_WILCOX_VER == 0
+        real beta = 3. / 40.;
+#else
         real beta = fBeta * betaO;
+#endif
         real crossDiff = diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));
+#if KW_WILCOX_VER == 0
+        real SigD = 0;
+#else
         real SigD = crossDiff > 0 ? 0.125 : 0;
+#endif
 
         Eigen::Matrix<real, dim, dim> rhoMuiuj = Eigen::Matrix<real, dim, dim>::Identity() * UMeanXy(I4 + 1) * (2. / 3.) - mut * SS;
         real Pk = -(rhoMuiuj.array() * diffU.array()).sum();
+#if KW_WILCOX_PROD_LIMITS == 1
         Pk = std::min(Pk, OmegaM2.squaredNorm() * 0.5 * mut); // compare with CFL3D approx
         Pk = std::max(Pk, verySmallReal);
+        Pk = std::min(Pk, betaS * rho * k * omegaaa * 20); // CFL3D
+#endif
         real POmega = alpha * omegaaa / k * Pk;
 
-        Pk = std::min(Pk, betaS * rho * k * omegaaa * 20);         // CFL3D
         // POmega = std::min(POmega, beta * rho * sqr(omegaaa) * 20); // CFL3D
 
         if (mode == 0)
         {
             source(I4 + 1) = Pk - betaS * rho * k * omegaaa;
-            source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) + SigD / omegaaa * crossDiff;   
+            source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) + SigD / omegaaa * crossDiff;
         }
         else
         {

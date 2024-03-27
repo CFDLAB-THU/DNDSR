@@ -199,7 +199,7 @@ namespace DNDS::Euler
                 real CFLRampEnd = 0;
                 bool useLocalDt = true;
                 int nSmoothDTau = 0;
-                real RANSRelax = 0.1;
+                real RANSRelax = 1;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     ImplicitCFLControl,
                     CFL,

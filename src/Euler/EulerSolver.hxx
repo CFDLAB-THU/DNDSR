@@ -404,13 +404,13 @@ namespace DNDS::Euler
             }
             else
                 DNDS_assert_info(false, "no such recLinearScheme");
-            if(model == NS_2EQ || model == NS_2EQ_3D)
+            if (model == NS_2EQ || model == NS_2EQ_3D)
             {
-                std::vector<int> mask;
-                mask.resize(2);
-                mask[0] = 5;
-                mask[1] = 6;
-                vfv->DoReconstruction2nd(uRec, u, FBoundary, 1, mask);
+                // std::vector<int> mask;
+                // mask.resize(2);
+                // mask[0] = 5;
+                // mask[1] = 6;
+                // vfv->DoReconstruction2nd(uRec, u, FBoundary, 1, mask);
             }
             trec += MPI_Wtime() - tstartA;
             if (gradIsZero)
@@ -1038,8 +1038,9 @@ namespace DNDS::Euler
             //*fixing add
             if (model == NS_2EQ || model == NS_2EQ_3D)
             {
-                for (index i = 0; i < uTemp.Size(); i++)
-                    uTemp[i]({I4, I4 + 1}) *= config.implicitCFLControl.RANSRelax;
+                if (config.implicitCFLControl.RANSRelax != 1)
+                    for (index i = 0; i < uTemp.Size(); i++)
+                        uTemp[i]({I4, I4 + 1}) *= config.implicitCFLControl.RANSRelax;
             }
             eval.AddFixedIncrement(cx, uTemp, alpha);
             eval.AssertMeanValuePP(cx, true);

@@ -944,8 +944,8 @@ namespace DNDS::Euler
                             { // for SST or KOWilcox
                                 TVec uNorm = vfv->GetFaceNorm(f, -1)(Seq012);
                                 real vt = (cx[iCell](Seq123) - cx[iCell](Seq123).dot(uNorm) * uNorm).norm() / cx[iCell](0);
-                                // cx[iCell](I4 + 1) = sqr(vt) * cx[iCell](0) * 0; // k = v_tang ^2 in sublayer, Wilcox book
-                                cx[iCell](I4 + 1) *= 0;
+                                // cx[iCell](I4 + 1) = sqr(vt) * cx[iCell](0) * 1; // k = v_tang ^2 in sublayer, Wilcox book
+                                // cx[iCell](I4 + 1) *= 0;
 
                                 real d1 = dWall[iCell].mean();
                                 // cx[iCell](I4 + 1) = 0.; // superfix, actually works
@@ -965,7 +965,7 @@ namespace DNDS::Euler
                             }
                 if (model == NS_2EQ || model == NS_2EQ_3D)
                 { // for SST or KOWilcox
-                    // cx[iCell](I4 + 2) = std::max(cx[iCell](I4 + 2), settings.RANSBottomLimit * settings.farFieldStaticValue(I4 + 2));
+                    cx[iCell](I4 + 2) = std::max(cx[iCell](I4 + 2), settings.RANSBottomLimit * settings.farFieldStaticValue(I4 + 2));
                 }
             }
             real alpha_fix_min_c = alpha_fix_min;

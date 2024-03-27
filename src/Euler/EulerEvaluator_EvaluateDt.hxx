@@ -1449,8 +1449,8 @@ namespace DNDS::Euler
             {
                 URxy({I4 + 1, I4 + 2}) *= -1;
 #ifdef USE_FIX_ZERO_SA_NUT_AT_WALL
-                if (fixUL)
-                    ULxy({I4 + 1, I4 + 2}).setZero(), URxy({I4 + 1, I4 + 2}).setZero(); //! modifing UL
+                // if (fixUL)
+                //     ULxy({I4 + 1, I4 + 2}).setZero(), URxy({I4 + 1, I4 + 2}).setZero(); //! modifing UL
 #endif
                 // { // BC for RealizableKe
                 //     TVec v = (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellBary(iCell))(Seq012);
@@ -1485,8 +1485,8 @@ namespace DNDS::Euler
 
                     real rhoOmegaaaWall = mufPhy1 / sqr(d1) * 800;
                     URxy(I4 + 2) = 2 * rhoOmegaaaWall - ULxy(I4 + 2);
-                    if (fixUL)
-                        ULxy(I4 + 2) = URxy(I4 + 2) = rhoOmegaaaWall;
+                    // if (fixUL)
+                    //     ULxy(I4 + 2) = URxy(I4 + 2) = rhoOmegaaaWall;
                 }
             }
         }

@@ -103,7 +103,7 @@ namespace DNDS::Euler
         real uRecBetaCompressPower = 11;
         real uRecAlphaCompressPower = 2;
 
-        real RANSBottomLimit = 0.1;
+        real RANSBottomLimit = 0.01;
 
         Eigen::Vector<real, 3> constMassForce = Eigen::Vector<real, 3>{0, 0, 0};
         struct FrameConstRotation

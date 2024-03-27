@@ -643,19 +643,23 @@ namespace DNDS::Euler
                 auto c2f = mesh->cell2face[iCell];
                 real d = dWall.at(iCell).mean();
                 // for SST or KOWilcox
-                // for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
-                //     if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(c2f[ic2f])) == EulerBCType::BCWall)
-                //     {
-                //         real pMean, asqrMean, Hmean;
-                //         real gamma = settings.idealGasProperty.gamma;
-                //         Gas::IdealGasThermal(u[iCell](I4), u[iCell](0), (u[iCell](Seq123) / u[iCell](0)).squaredNorm(),
-                //                              gamma, pMean, asqrMean, Hmean);
-                //         real muRef = settings.idealGasProperty.muGas;
-                //         real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * u[iCell](0));
-                //         real mufPhy1 = muEff(u[iCell], T);
-                //         real rhoOmegaaaWall = mufPhy1 / sqr(d) * 800 * 0.5;
-                //         u[iCell](I4 + 2) = std::max(rhoOmegaaaWall, u[iCell](I4 + 2));
-                //     }
+                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+                // if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(c2f[ic2f])) == EulerBCType::BCWall)
+                {
+                    real pMean, asqrMean, Hmean;
+                    real gamma = settings.idealGasProperty.gamma;
+                    Gas::IdealGasThermal(u[iCell](I4), u[iCell](0), (u[iCell](Seq123) / u[iCell](0)).squaredNorm(),
+                                         gamma, pMean, asqrMean, Hmean);
+                    real muRef = settings.idealGasProperty.muGas;
+                    real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * u[iCell](0));
+                    real mufPhy1 = muEff(u[iCell], T);
+                    real rhoOmegaaaWall = mufPhy1 / sqr(d) * 800 * 0.1;
+
+                    real rhoOmegaaaNew = std::max(rhoOmegaaaWall, u[iCell](I4 + 2));
+                    real rhoOmegaaaOld = u[iCell](I4 + 2);
+                    // u[iCell](I4 + 2) = rhoOmegaaaNew;
+                    // u[iCell](I4 + 1) = rhoOmegaaaNew / rhoOmegaaaOld * u[iCell](I4 + 1);
+                }
             }
         }
 
@@ -1031,7 +1035,7 @@ namespace DNDS::Euler
             if (checkRecBaseGood())
             {
                 uRecBeta[iCell](0) = 1;
-                continue; // early exit, reconstruction is good it self
+                continue; //! early exit, reconstruction is good it self
             }
             if (flag == 1)
                 curOrder = 1;
@@ -1070,7 +1074,7 @@ namespace DNDS::Euler
 #endif
             if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
-
+                real thetaC = 1;
                 static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
                 static real v2Eps = smallReal * settings.refUPrim(I4 + 2);
                 Eigen::Vector<real, Eigen::Dynamic> v1S = recInc(Eigen::all, I4 + 1) + recBase(Eigen::all, I4 + 1);
@@ -1080,11 +1084,16 @@ namespace DNDS::Euler
                 if (v1Min < v1Eps)
                     for (int iG = 0; iG < rhoS.size(); iG++)
                         if (recInc(iG, I4 + 1) < 0) // negative increment
-                            theta1 = std::min(theta1, (recBase(iG, I4 + 1) - v1Eps) / (-recInc(iG, I4 + 1) + verySmallReal));
+                            thetaC = std::min(thetaC, (recBase(iG, I4 + 1) - v1Eps) / (-recInc(iG, I4 + 1) + verySmallReal));
                 if (v2Min < v2Eps)
                     for (int iG = 0; iG < rhoS.size(); iG++)
                         if (recInc(iG, I4 + 2) < 0) // negative increment
-                            theta1 = std::min(theta1, (recBase(iG, I4 + 2) - v2Eps) / (-recInc(iG, I4 + 2) + verySmallReal));
+                            thetaC = std::min(thetaC, (recBase(iG, I4 + 2) - v2Eps) / (-recInc(iG, I4 + 2) + verySmallReal));
+                // theta1 = std::min(theta1, thetaC);
+                if (thetaC < 1) // 2eq's pp not disturbing main flow
+                {
+                    uRec[iCell](Eigen::all, {I4 + 1, I4 + 2}) *= thetaC * 0.9;
+                }
             }
 
             recInc *= theta1;
@@ -1239,14 +1248,14 @@ namespace DNDS::Euler
             }
             if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
-                static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
-                static real v2Eps = smallReal * settings.refUPrim(I4 + 2);
-                if (inc(I4 + 1) < 0)
-                    alphaRho = std::min(alphaRho,
-                                        (u[iCell](I4 + 1) - v1Eps) / (-inc(I4 + 1) - smallReal * inc(I4 + 1)));
-                if (inc(I4 + 2) < 0)
-                    alphaRho = std::min(alphaRho,
-                                        (u[iCell](I4 + 2) - v2Eps) / (-inc(I4 + 2) - smallReal * inc(I4 + 2)));
+                // static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
+                // static real v2Eps = smallReal * settings.refUPrim(I4 + 2);
+                // if (inc(I4 + 1) < 0)
+                //     alphaRho = std::min(alphaRho,
+                //                         (u[iCell](I4 + 1) - v1Eps) / (-inc(I4 + 1) - smallReal * inc(I4 + 1)));
+                // if (inc(I4 + 2) < 0)
+                //     alphaRho = std::min(alphaRho,
+                //                         (u[iCell](I4 + 2) - v2Eps) / (-inc(I4 + 2) - smallReal * inc(I4 + 2)));
             }
 
             inc *= alphaRho;
@@ -1363,12 +1372,12 @@ namespace DNDS::Euler
             }
             if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
-                static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
-                static real v2Eps = smallReal * settings.refUPrim(I4 + 2);
-                if (uNew(I4 + 1) < v1Eps)
-                    cellRHSAlpha[iCell](0) = alphaMin;
-                if (uNew(I4 + 2) < v2Eps)
-                    cellRHSAlpha[iCell](0) = alphaMin;
+                // static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
+                // static real v2Eps = smallReal * settings.refUPrim(I4 + 2);
+                // if (uNew(I4 + 1) < v1Eps)
+                //     cellRHSAlpha[iCell](0) = alphaMin;
+                // if (uNew(I4 + 2) < v2Eps)
+                //     cellRHSAlpha[iCell](0) = alphaMin;
             }
         }
         MPI::Allreduce(&nLimLocal, &nLimAdd, 1, DNDS_MPI_INDEX, MPI_SUM, u.father->getMPI().comm);
