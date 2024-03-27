@@ -707,8 +707,13 @@ namespace DNDS
             }
             serializer->ReadIndex("size", _size);
             serializer->ReadInt("row_size_dynamic", _row_size_dynamic);
-            if (_row_size >= 0)
-                DNDS_assert(_row_size_dynamic == _row_size), _row_size_dynamic = 0;
+            if (_row_size >= 0) // TODO: fix this! need full conversion check (maybe just a casting)
+            {
+                if (rs == DynamicSize)
+                    DNDS_assert(_row_size_dynamic == _row_size), _row_size_dynamic = 0;
+                else if (rs >= 0)
+                    DNDS_assert(rs == _row_size), _row_size_dynamic = 0;
+            }
             if (_row_size == DynamicSize && rs >= 0)
                 _row_size_dynamic = rs;
             if (_row_max == DynamicSize && rm >= 0)

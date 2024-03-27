@@ -85,12 +85,12 @@ namespace DNDS::Euler
 
         std::unordered_map<Geom::t_index, AnchorPointRecorder<nVarsFixed>> anchorRecorders;
         std::unordered_map<Geom::t_index, OneDimProfile<nVarsFixed>> profileRecorders;
+        std::unordered_map<Geom::t_index, IntegrationRecorder> bndIntegrations;
 
         // ArrayVDOF<25> dRdUrec;
         // ArrayVDOF<25> dRdb;
 
-        Eigen::Vector<real, -1>
-            fluxWallSum;
+        Eigen::Vector<real, -1> fluxWallSum;
         std::vector<Eigen::Vector<real, nVarsFixed>> fluxBnd;
         index nFaceReducedOrder = 0;
 

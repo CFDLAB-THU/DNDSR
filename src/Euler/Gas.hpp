@@ -134,6 +134,21 @@ namespace DNDS::Euler::Gas
         DNDS_assert(rho > 0);
     }
 
+    template <int dim = 3, class TPrim>
+    std::tuple<real, real> IdealGasThermalPrimitiveGetP0T0(
+        const TPrim &prim, real gamma, real rg)
+    {
+        static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+        static const auto I4 = dim + 1;
+        real T = prim(I4) / (prim(0) * rg + verySmallReal);
+        real vsqr = prim(Seq123).squaredNorm();
+        real asqr = gamma * prim(I4) / prim(0);
+        real Msqr = vsqr / (asqr + verySmallReal);
+        real p0 = std::pow(1 + (gamma - 1) * 0.5 * Msqr, gamma / (gamma - 1)) * prim(I4);
+        real T0 = (1 + (gamma - 1) * 0.5 * Msqr) * T;
+        return std::make_tuple(p0, T0);
+    }
+
     /**
      * @brief calculates Inviscid Flux for x direction
      *

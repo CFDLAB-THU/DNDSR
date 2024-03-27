@@ -51,7 +51,7 @@
         "meshElevationMaxIncludedAngle": 20,
         // "meshFile": "../data/mesh/row_1_test3.cgns",
         "meshFile": "../data/mesh/Rotor37_test1.cgns",
-        "outPltName": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O3-Roe",
+        "outPltName": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O4-Roe",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -87,7 +87,7 @@
         "nGmresIter": 2,
         "recThreshold": 1e-03,
         "nRecConsolCheck": 1,
-        "zeroRecForStepsInternal": 40
+        "zeroRecForStepsInternal": 0
     },
     "limiterControl": {
         "useLimiter": true,
@@ -97,8 +97,8 @@
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 2,
-        "intOrder": 3,
+        "maxOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": true,
         "jacobiRelax": 1,
         "SORInstead": false,
@@ -220,12 +220,12 @@
                 3
             ],
             "valueExtra": [
-                10, // profile divisions
+                128, // profile divisions
                 0,
                 1 // print info
-
             ],
-            "anchorOption": 2
+            "anchorOption": 2,
+            "integrationOption": 2
             // "valueExtra": [ // used as anchorpoint
             //     0.77494716078399994,
             //     0.063617319557049995,
@@ -281,5 +281,11 @@
             "name": "WALL_SH",
             "frameOption": 1
         }
-    ]
+    ],
+    "restartState": {
+        "iStep": 1,
+        "iStepInternal": 20000,
+        "odeCodePrev": -1,
+        "lastRestartFile": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O3-Roe__C_p640_restart.dir"
+    }
 }
