@@ -1,0 +1,366 @@
+{
+    "timeMarchControl": {
+        "dtImplicit": 1e+100, // max Time Step Size setting for unsteady simulation; for steady use 1e100
+        "nTimeStep": 1000000, //  max Time Step Number setting for unsteady simulation; for steady use 1
+        "steadyQuit": false, //  true for steady simulation
+        "useRestart": false, // true for restarted simulation
+        "useImplicitPP": false, // true for implicit positive preserving (PP)
+        "rhsFPPMode": 0, // residual forced PP mode, 0: deactivated, 1: activated
+        "rhsFPPScale": 1.0,
+        "odeCode": 0,
+        // 0: BDF2, 
+        // 1: ESDIRK4,
+        // 2: SSPRK4,
+        // 103: Backward Euler,
+        // 101: SSP-SDIRK4,
+        // 401: HM3
+        "tEnd": 3e+200, // maximum simulation time
+        "odeSetting1": 0.0, // leave unchanged if not HM3
+        "odeSetting2": 0.0,
+        "odeSetting3": 0.0,
+        "odeSetting4": 0.0,
+        "partitionMeshOnly": false, // true if this is a mesh-pre-partitioning run
+        "dtIncreaseLimit": 2.0, // max Time Step Size increase ratio for unsteady simulation
+        "dtIncreaseAfterCount": 0, // currently only for implicit PP
+        "dtCFLLimitScale": 1e+100, // CFL limited Time Step scale, use 1e100 for fixed time step, or 1 for CFL=1 time step
+        "useDtPPLimit": false, // true if use PP in unsteady time step size control
+        "dtPPLimitScale": 1.0
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1, // number of reconstruction iterations, 1 for default coupled implicit time stepping
+        "zeroGrads": false, // zero grad after each external time step
+        "recLinearScheme": 0, // 0 to use GS/Jacobi iteration
+        "nGmresSpace": 5,
+        "nGmresIter": 10,
+        "recThreshold": 1e-05, // threshold of reconstruction residual for exiting
+        "nRecConsolCheck": 1, // controls console output frequency for reconstruction iterations
+        "nRecMultiplyForZeroedGrad": 1, // multiplier for zeroed grads; recommended to be set to 1000 if using a ESDIRK to get precise dudt(0)
+        "storeRecInc": false,
+        "dampRecIncDTau": false,
+        "zeroRecForSteps": 0, // number of steps to force zero reconstruction
+        "zeroRecForStepsInternal": 0 // number of internal iterations to force zero reconstruction
+    },
+    "outputControl": {
+        "nConsoleCheck": 1, // controls console output frequency for time step information
+        "nConsoleCheckInternal": 1, // controls console output frequency for time step information
+        "consoleOutputMode": 0, // 1: append wall flux in console output
+        "consoleOutputEveryFix": 0, // 1: output when every PP fix happens
+        "nDataOut": 10000, // controls output frequency in time steps for data ("plt", visualization) files appended with step number
+        "nDataOutC": 50, // controls output frequency in time steps for data ("plt", visualization) files with a same name
+        "nDataOutInternal": 10000, // controls output frequency in iterations for data ("plt", visualization) files appended with iteration number
+        "nDataOutCInternal": 1, // controls output frequency in iterations for data ("plt", visualization) files with a same name
+        "nRestartOut": 2147483647, // similar with nDataOut but it's restart files
+        "nRestartOutC": 2147483647,
+        "nRestartOutInternal": 2147483647,
+        "nRestartOutCInternal": 2147483647,
+        "nTimeAverageOut": 2147483647, // similar with nDataOut but it's time averaged files
+        "nTimeAverageOutC": 2147483647,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 10.0, // CFL used in implicit local time step size control
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 2147483647,
+        "nCFLRampLength": 2147483647,
+        "CFLRampEnd": 0.0,
+        "useLocalDt": true, // false to use uniform dTau
+        "nSmoothDTau": 0, // number of smoothing steps for dTau
+        "RANSRelax": 0.1
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 20, // max number of internal iterations 
+        "nTimeStepInternalMin": 5, // min number of internal iterations 
+        "nAnchorUpdate": 1,
+        "nAnchorUpdateStart": 100,
+        "rhsThresholdInternal": 1e-10, // exit internal iteration when residual fall is below this threshold
+        "res_base": 0.0,
+        "useVolWiseResidual": false // true to use volume-wise instead of cell-wise norm
+    },
+    "dataIOControl": {
+        "uniqueStamps": true, // true to append unique stamps to output file names
+        "meshRotZ": 0.0, //rotate mesh around Z axis in degrees
+        "meshScale": 1.0, //scale mesh to a proportion
+        "meshElevation": 0, // elevate to 2nd order mesh
+        "meshElevationInternalSmoother": 0,
+        "meshElevationIter": 1000,
+        "meshElevationRBFRadius": 1.0,
+        "meshElevationRBFPower": 1.0,
+        "meshElevationRBFKernel": "InversedDistanceA1",
+        "meshElevationMaxIncludedAngle": 15.0,
+        "meshElevationNSearch": 30,
+        "meshElevationRefDWall": 0.001,
+        "meshElevationBoundaryMode": 0,
+        "meshFile": "data/mesh/NACA0012_WIDE_H3.cgns", // path to mesh file
+        "outPltName": "data/out/debugData_", // output prefix for "plt"/visualization files
+        "outLogName": "", // prefix to residual / scalar data logging file, default to outPltName
+        "outRestartName": "", // prefix to restart files, default to outPltName
+        "outPltMode": 0, // 0 for serial single file output, 1 for parallel multiple file output
+        "readMeshMode": 0, // 0 for reading mesh from "meshFile" (serially), 1 for reading pre-partitioned mesh
+        "outPltTecplotFormat": true, // write "plt"/visualization files in Tecplot format
+        "outPltVTKFormat": true, // write "plt"/visualization files in VTK format
+        "outAtPointData": true, // write "plt"/visualization files with point data (only R U V W P M now)
+        "outAtCellData": true, // write "plt"/visualization files at cell data
+        "nASCIIPrecision": 5, // precision of ASCII output
+        "vtuFloatEncodeMode": "binary", // "binary" or "ascii", for vtu output
+        "outVolumeData": true, // write volume field files
+        "outBndData": false, // write boundary field files
+        "outCellScalarNames": [], // list of cell scalar field names to write, see EulerEvaluator<model>::InitializeOutputPicker for options
+        "serializerSaveURec": false,
+        "rectifyNearPlane": 0,
+        "rectifyNearPlaneThres": 1e-10
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation1": [
+            1.0,
+            0.0,
+            0.0
+        ],
+        "PeriodicTranslation2": [
+            0.0,
+            1.0,
+            0.0
+        ],
+        "PeriodicTranslation3": [
+            0.0,
+            0.0,
+            1.0
+        ],
+        "PeriodicRotationCent1": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "PeriodicRotationCent2": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "PeriodicRotationCent3": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "PeriodicRotationEulerAngles1": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "PeriodicRotationEulerAngles2": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "PeriodicRotationEulerAngles3": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "periodicTolerance": 1e-08
+    },
+    "limiterControl": {
+        "useLimiter": true, // false to disable limiter
+        "usePPRecLimiter": true, // use PP limiting on reconstruction
+        "smoothIndicatorProcedure": 0, // 0: normal, 1: only P
+        "limiterProcedure": 0, // 0: WBAP, 1: CWBAP
+        "nPartialLimiterStart": 2147483647, // start partial limiter (with smooth indicators) at this step
+        "nPartialLimiterStartLocal": 2147483647, // start partial limiter (with smooth indicators) at this iteration
+        "preserveLimited": false // true to use limited values as the initial guess for next reconstruction iteration
+    },
+    "linearSolverControl": {
+        "jacobiCode": 1, // 1: LUSGS, 0: Jacobi, 2: ILU(K)/LU (need useDirectPrec to be true)
+        "sgsIter": 0, // additional sgs/jacobi/ILU iteration, 0 means only one LUSGS or so
+        "sgsWithRec": 0,
+        "gmresCode": 0, // 1: use gmres; 0: use preconditioning only
+        "nGmresSpace": 10,
+        "nGmresIter": 2,
+        "nSgsConsoleCheck": 100, // output frequency in sgs 
+        "nGmresConsoleCheck": 100, // output frequency in gmres
+        "initWithLastURecInc": false,
+        "directPrecControl": {
+            "useDirectPrec": false, // must be true if jacobiCode == 2
+            "iluCode": 0, // iluCode >= 0: ILU(iluCode); iluCode == -1: lu decomposition
+            "orderingCode": -2147483648 // leave default for auto choosing 
+        }
+    },
+    "timeAverageControl": {
+        "enabled": false
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "restartState": {
+        "iStep": -1,
+        "iStepInternal": -1,
+        "odeCodePrev": -1,
+        "lastRestartFile": "",
+        "otherRestartFile": "",
+        "otherRestartStoreDim": [
+            0
+        ]
+    },
+    "eulerSettings": {
+        "useScalarJacobian": false, // true to use block matrices to record diagonal blocks; false to use diagonal values in diagonal blocks
+        "ignoreSourceTerm": false, // not using any source 
+        "specialBuiltinInitializer": 0, // 1: RT, 2: isentropic vortex, 3: Taylor-Green vortex
+        "uRecAlphaCompressPower": 2.0,
+        "uRecBetaCompressPower": 11.0,
+        "RANSBottomLimit": 0.1,
+        "riemannSolverType": "Roe", //"Roe_M5": Roe, "Roe": Harten-Yee Roe, "Roe_M1": cLLF-m, "Roe_M2": LLF, "Roe_M4": HQM's Roe, "HLLEP": HLLE+, "HLLC": HLLC 
+        "riemannSolverTypeAux": "UnknownRS",
+        "rsMeanValueEig": 0, // use mean value for eigenvalues/eigenvectors in riemann solvers
+        "rsRotateScheme": 0,
+        "minWallDist": 1e-12, // this is in unit of final computing mesh's unit
+        "wallDistScheme": 0, // 1 is more precise
+        "nCentralSmoothStep": 0,
+        "constMassForce": [ // a uniform acceleration of frame
+            0.0,
+            0.0,
+            0.0
+        ],
+        "frameConstRotation": {
+            "enabled": false,
+            "axis": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "rpm": 0.0
+        },
+        "farFieldStaticValue": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            2.5 //! important: used as first field initialization and far-field value for <FAR> boundaries
+            // ! this is conserved variable vector! 
+        ],
+        "boxInitializers": [
+            { // if cell is in the box, the cell is set to v at initialization
+                "x0": 0.25,
+                "x1": 0.75,
+                "y0": 0.25,
+                "y1": 0.75,
+                "z0": -0.25,
+                "z1": 0.75,
+                "v": [
+                    0.5,
+                    1,
+                    0,
+                    0,
+                    4
+                    // ! this is conserved variable vector! 
+                ]
+            }
+        ],
+        "planeInitializers": [
+            { // if ax + by + cz + h > 0, the cell is set to v at initialization
+                "a": -1,
+                "b": 0.577350269189626,
+                "c": 0,
+                "h": 0.166666666666667,
+                "v": [
+                    8,
+                    57.157676649772960,
+                    -33,
+                    0,
+                    5.635e2
+                    // ! this is conserved variable vector! 
+                ]
+            }
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 1.0, // p = rho * Rgas * T, recommended to be set so that T_infinity is the dimensional value.
+            "muGas": 1.0, // mu of gas at 273.15K in sutherland law
+            "prGas": 0.72, // laminar Pr 
+            "TRef": 273.15, // temperature used for 273.15K in sutherland law
+            "CSutherland": 110.4,
+            "muModel": 1 // 1 for sutherland law, 0 for constant mu
+        }
+    },
+    "vfvSettings": {
+        "maxOrder": 3, // reconstruction poly degree
+        "intOrder": 5, // integration poly degree
+        "cacheDiffBase": false, // save the diffBaseValue-s in memory at initialization 
+        "cacheDiffBaseSize": 3, // leave default to cache 1st and 0th derivatives
+        "jacobiRelax": 1.0, //relaxation for GS or Jacobi in VR
+        "SORInstead": true, // false to use Jacobi iteration
+        "smoothThreshold": 0.01, // smooth indicator's threshold, lower to detect more discontinuities
+        "WBAP_nStd": 10.0, // n used in WBAP 
+        "normWBAP": false,
+        "limiterBiwayAlter": 0,
+        "subs2ndOrder": 0, // 1 to use Gauss-Green instead of VR in 2nd order reconstruction (maxOrder == 1) 
+        "ignoreMeshGeometryDeficiency": false,
+        "svdTolerance": 0.0,
+        "baseSettings": {
+            "localOrientation": false, // use false to use xy basis, true to use linear-uv basis 
+            "anisotropicLengths": false // use false to use uniform lengths for all directions
+        },
+        "functionalSettings": {
+            "scaleType": "BaryDiff", // scale length for functional cross a face, "BaryDiff" to use barycentric distance
+            "scaleMultiplier": 1.0, // scale length for functional cross a face is multiplied by this
+            "dirWeightScheme": "Factorial",
+            // "Factorial": 1,1,0.5,0.167...; 
+            // "HQM_OPT": ..., 
+            // "ManualDirWeight": use values in manualDirWeights
+            "dirWeightCombPowV": 1,
+            "manualDirWeights": [
+                1.0,
+                1.0,
+                0.5,
+                0.16666666666666666,
+                0.041666666666666664
+            ],
+            "geomWeightScheme": "GWNone",
+            // "GWNone": all 1,
+            // "HQM_SD": ((S^(1/(dim-1))/D)^(geomWeightPower*0.5) + geomWeightBias)^2, 
+            // "SD_Power":  (S^(geomWeightPower1*0.5) * D^(geomWeightPower2*0.5)  + geomWeightBias)^2, 
+            "geomWeightPower": 0.5,
+            "geomWeightPower1": 0.0,
+            "geomWeightPower2": 0.0,
+            "useAnisotropicFunctional": false,
+            "anisotropicType": "InertiaCoord",
+            "inertiaWeightPower": 1.0,
+            "geomWeightBias": 0.0,
+            "greenGauss1Weight": 0.0,
+            "greenGauss1Bias": 0.5,
+            "greenGauss1Penalty": 0.0,
+            "greenGaussSpacial": 0
+        },
+        "bcWeight": 1.0 // all bc Dirichlet conditions in VR use functional multiplied by this weight * dirWeight[0]
+    },
+    "bcSettings": [
+        // all the bcsnames are acquired from CGNS's boco info, using PointRange, Face/EdgeCentered data
+        // you can set them in pointwise
+        // default used BC names:
+        //  FAR, WALL, WALL_INVIS, PERIODIC_{K}, PERIODIC_{K}_DONOR where K=1,2,3, 
+        // special interal implemented BCs' name:
+        //  bc-DMRFar bc-IVFar bc-RTFar bc-2DRiemannFar
+        // other than those above, use this json list to specify bcs 
+        {
+            "type": "BCOut",
+            // "BCOut"": supersonic out
+            // "BCIn"": supersonic in
+            // "BCWall": no slip adiabatic wall
+            // "BCWallInvis": inviscid wall
+            // "BCFar": far field
+            // "BCSym": mirroring plane
+            "name": "Rout",
+            // same as those in Pointwise/CGNS BC names
+            "value": [
+                1,
+                1,
+                0,
+                0,
+                79.8650793650794,
+                1.3
+                // ! this is conserved variable vector if not otherwise specified! 
+            ]
+        }
+    ]
+}
