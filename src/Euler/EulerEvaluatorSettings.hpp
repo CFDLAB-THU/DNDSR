@@ -173,6 +173,7 @@ namespace DNDS::Euler
             __DNDS__json_to_config(rsRotateScheme);
             __DNDS__json_to_config(minWallDist);
             __DNDS__json_to_config(wallDistScheme);
+            __DNDS__json_to_config(SADESScale);
             __DNDS__json_to_config(nCentralSmoothStep);
             __DNDS__json_to_config(constMassForce);
             __DNDS__json_to_config(frameConstRotation);
