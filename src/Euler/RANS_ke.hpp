@@ -3,7 +3,8 @@
 #include "Euler.hpp"
 
 #define KW_WILCOX_VER 0
-#define KW_WILCOX_PROD_LIMITS 0
+#define KW_WILCOX_PROD_LIMITS 1
+#define KW_WILCOX_LIMIT_MUT 1
 
 namespace DNDS::Euler::RANS
 {
@@ -425,7 +426,9 @@ namespace DNDS::Euler::RANS
         real omegaaaTut = std::max(omegaaa, CLim * std::sqrt(0.5 * SR2.squaredNorm() / betaS));
 #endif
         real mut = k / omegaaaTut * rho;
-        // mut = std::min(mut, 1e5 * muf); // CFL3D
+#if KW_WILCOX_LIMIT_MUT == 1
+        mut = std::min(mut, 1e5 * muf); // CFL3D
+#endif
 
         if (std::isnan(mut) || !std::isfinite(mut))
         {
@@ -467,7 +470,9 @@ namespace DNDS::Euler::RANS
         real omegaaaTut = std::max(omegaaa, CLim * std::sqrt(0.5 * SR2.squaredNorm() / betaS));
 #endif
         real mut = k / omegaaaTut * rho;
-        // mut = std::min(mut, 1e5 * muf); // CFL3D
+#if KW_WILCOX_LIMIT_MUT == 1
+        mut = std::min(mut, 1e5 * muf); // CFL3D
+#endif
 
         vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mut * sigK);
         vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mut * sigO);
@@ -492,6 +497,7 @@ namespace DNDS::Euler::RANS
         real Prt = 0.9;
         real CLim = 7. / 8.;
         real betaO = 0.0708;
+        real kappa = 0.41;
 
         Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
         Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
@@ -505,23 +511,27 @@ namespace DNDS::Euler::RANS
         real rho = UMeanXy(0);
         real k = std::max(UMeanXy(I4 + 1) / rho, sqr(verySmallReal_4)); // make nu -> 0 when k,O->0
         real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
-#if KW_WILCOX_VER == 0
+#if KW_WILCOX_VER == 0 || KW_WILCOX_VER == 2
         real omegaaaTut = omegaaa;
 #else
         real omegaaaTut = std::max(omegaaa, CLim * std::sqrt(0.5 * SR2.squaredNorm() / betaS));
 #endif
         real mut = k / omegaaaTut * rho;
-        // mut = std::min(mut, 1e5 * muf); // CFL3D
+#if KW_WILCOX_LIMIT_MUT == 1
+        mut = std::min(mut, 1e5 * muf); // CFL3D
+#endif
 
         real ChiOmega = std::abs(((OmegaM2 * OmegaM2).array() * SR2.array()).sum() * 0.125 / cube(betaS * omegaaa));
         real fBeta = (1 + 85 * ChiOmega) / (1 + 100 * ChiOmega);
 #if KW_WILCOX_VER == 0
         real beta = 3. / 40.;
-#else
+#elif KW_WILCOX_VER == 1
         real beta = fBeta * betaO;
+#else
+        real beta = 0.075;
 #endif
         real crossDiff = diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));
-#if KW_WILCOX_VER == 0
+#if KW_WILCOX_VER == 0 || KW_WILCOX_VER == 2
         real SigD = 0;
 #else
         real SigD = crossDiff > 0 ? 0.125 : 0;
@@ -529,12 +539,20 @@ namespace DNDS::Euler::RANS
 
         Eigen::Matrix<real, dim, dim> rhoMuiuj = Eigen::Matrix<real, dim, dim>::Identity() * UMeanXy(I4 + 1) * (2. / 3.) - mut * SS;
         real Pk = -(rhoMuiuj.array() * diffU.array()).sum();
+        real POmega = alpha * omegaaa / k * Pk;
+
+#if KW_WILCOX_VER == 2
+        Pk = OmegaM2.squaredNorm() * 0.5 * mut;
+        real gam = beta / betaS - sqr(kappa) / (sigO * std::sqrt(betaS));
+        POmega = gam * rho * OmegaM2.squaredNorm() * 0.5; // CFL3D ???
+#endif
+
 #if KW_WILCOX_PROD_LIMITS == 1
-        Pk = std::min(Pk, OmegaM2.squaredNorm() * 0.5 * mut); // compare with CFL3D approx
+        // Pk = std::min(Pk, OmegaM2.squaredNorm() * 0.5 * mut); // compare with CFL3D approx
+
         Pk = std::max(Pk, verySmallReal);
         Pk = std::min(Pk, betaS * rho * k * omegaaa * 20); // CFL3D
 #endif
-        real POmega = alpha * omegaaa / k * Pk;
 
         // POmega = std::min(POmega, beta * rho * sqr(omegaaa) * 20); // CFL3D
 
