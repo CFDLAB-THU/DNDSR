@@ -25,6 +25,7 @@ namespace DNDS::Euler
         int rsRotateScheme = 0;
         real minWallDist = 1e-12;
         int wallDistScheme = 0;
+        real SADESScale = veryLargeReal;
 
         struct IdealGasProperty
         {
@@ -146,7 +147,6 @@ namespace DNDS::Euler
 
         Eigen::Vector<real, -1> refU;
         Eigen::Vector<real, -1> refUPrim;
-
 
         /***************************************************************************************************/
         /***************************************************************************************************/

@@ -864,6 +864,7 @@ namespace DNDS::Euler
         else if constexpr (model == NS_SA || model == NS_SA_3D)
         {
             real d = std::min(dWall[iCell][ig], std::pow(veryLargeReal, 1. / 6.));
+            d = std::min(d, vfv->GetCellMaxLenScale(iCell) * settings.SADESScale);
             real cb1 = 0.1355;
             real cb2 = 0.622;
             real sigma = 2. / 3.;

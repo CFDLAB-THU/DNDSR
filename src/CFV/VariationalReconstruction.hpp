@@ -288,6 +288,8 @@ namespace DNDS::CFV
         real GetCellJacobiDet(index iCell, rowsize iG) { return cellIntJacobiDet(iCell, iG); }
         real GetFaceJacobiDet(index iFace, rowsize iG) { return faceIntJacobiDet(iFace, iG); }
 
+        real GetCellMaxLenScale(index iCell) { return cellMajorHBox[iCell].maxCoeff() * 2; }
+
         auto GetCellRecMatA(index iCell)
         {
             return matrixAB(iCell, 0);
