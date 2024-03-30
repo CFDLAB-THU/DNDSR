@@ -31,11 +31,11 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 10,
+        "CFL": 1,
         "nForceLocalStartStep": 2147483647,
-        "nCFLRampStart": 2147483647,
-        "nCFLRampLength": 2147483647,
-        "CFLRampEnd": 0.0,
+        "nCFLRampStart": 100,
+        "nCFLRampLength": 1000,
+        "CFLRampEnd": 10,
         "nSmoothDTau": 0,
         "useLocalDt": true
     },
@@ -51,7 +51,7 @@
         "meshElevationMaxIncludedAngle": 20,
         // "meshFile": "../data/mesh/row_1_test3.cgns",
         "meshFile": "../data/mesh/Rotor37_test1.cgns",
-        "outPltName": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O3-Roe-2EQ",
+        "outPltName": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O4-Roe-2EQ",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -62,7 +62,8 @@
         "outCellScalarNames": [
             // "minJacobiDetRel",
             // "cellVolume",
-            "dWall"
+            "dWall",
+            "mut"
         ],
         "_tail": 0
     },
@@ -97,8 +98,8 @@
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 2,
-        "intOrder": 3,
+        "maxOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": true,
         "jacobiRelax": 1,
         "SORInstead": false,
@@ -134,8 +135,8 @@
         "nGmresIter": 2,
         "directPrecControl": {
             "useDirectPrec": true,
-            "iluCode": 0,
-            "orderingCode": 3
+            "iluCode": 2
+            // "orderingCode": 0
         }
     },
     "others": {
@@ -149,6 +150,7 @@
         "riemannSolverType": "Roe_M1",
         // "rsRotateScheme": 1,
         "rsMeanValueEig": 1,
+        "RANSBottomLimit": 1e-5,
         "constMassForce": [
             0.0,
             0.0,
@@ -226,7 +228,8 @@
                 0,
                 1 // print info
             ],
-            "anchorOption": 2
+            "anchorOption": 2,
+            "integrationOption": 2
             // "valueExtra": [ // used as anchorpoint
             //     0.77494716078399994,
             //     0.063617319557049995,
@@ -288,6 +291,13 @@
         "iStep": 1,
         "iStepInternal": 20000,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O3-Roe__C_p640_restart.dir"
+        "otherRestartFile": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O3-Roe__C_p640_restart.dir",
+        "otherRestartStoreDim": [
+            0,
+            1,
+            2,
+            3,
+            4
+        ]
     }
 }
