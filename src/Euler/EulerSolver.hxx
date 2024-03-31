@@ -293,7 +293,7 @@ namespace DNDS::Euler
                     UMean,
                     UL - UMean,
                     compressed);
-                return eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true);
+                return eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true, 1);
             };
             typename TVFV::template TFBoundaryDiff<nVarsFixed>
                 FBoundaryDiff = [&](const TU &UL, const TU &dU, const TU &UMean, index iCell, index iFace, int ig,
@@ -310,8 +310,8 @@ namespace DNDS::Euler
                     UMean,
                     UL - UMean + dU,
                     compressed);
-                return eval.generateBoundaryValue(ULfixedPlus, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true) -
-                       eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true);
+                return eval.generateBoundaryValue(ULfixedPlus, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true, 1) -
+                       eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true, 1);
             };
             if (config.implicitReconstructionControl.storeRecInc)
                 uRecOld = uRecC;
@@ -653,7 +653,7 @@ namespace DNDS::Euler
                 rhsTemp *= config.timeMarchControl.rhsFPPScale;
                 index nLimFRes = 0;
                 real alphaMinFRes = 1;
-                eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, 0.9,
+                eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, config.timeMarchControl.rhsFPPRelax,
                                           config.timeMarchControl.rhsFPPMode == 1 ? 1 : 0);
                 if (nLimFRes)
                     if (mpi.rank == 0)
@@ -671,7 +671,7 @@ namespace DNDS::Euler
                 rhsTemp *= config.timeMarchControl.rhsFPPScale;
                 index nLimFRes = 0;
                 real alphaMinFRes = 1;
-                eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, 0.9, 1);
+                eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, config.timeMarchControl.rhsFPPRelax, 1);
                 if (nLimFRes)
                     if (mpi.rank == 0)
                     {
@@ -1020,7 +1020,7 @@ namespace DNDS::Euler
             auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
             nLimInc = 0;
             alphaMinInc = 1;
-            eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, cxInc, alphaPP_tmp, nLimInc, alphaMinInc, 0.9, 0);
+            eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, cxInc, alphaPP_tmp, nLimInc, alphaMinInc, config.timeMarchControl.incrementPPRelax, 0);
             if (nLimInc)
                 if (mpi.rank == 0 &&
                     (config.outputControl.consoleOutputEveryFix == 1 || config.outputControl.consoleOutputEveryFix == 2))

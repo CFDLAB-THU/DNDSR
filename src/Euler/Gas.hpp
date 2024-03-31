@@ -180,13 +180,14 @@ namespace DNDS::Euler::Gas
                                                real dp, real p,
                                                TF &F)
     {
-        real vn = (velo - vg).dot(unitNorm);
+        real vn = velo.dot(unitNorm);
         real dvn = dVelo.dot(unitNorm);
         F(0) = dU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).dot(unitNorm);
         F(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) =
             dU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) * vn +
             U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) * dvn + unitNorm * dp;
-        F(dim + 1) = (dU(dim + 1) + dp) * vn + (U(dim + 1) + p) * dvn + vg.dot(unitNorm) * dp;
+        F(dim + 1) = (dU(dim + 1) + dp) * vn + (U(dim + 1) + p) * dvn;
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) -= dU(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) * vg.dot(unitNorm);
     }
 
     template <int dim = 3, typename TU>

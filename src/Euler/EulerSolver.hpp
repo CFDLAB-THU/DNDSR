@@ -106,6 +106,8 @@ namespace DNDS::Euler
                 bool useImplicitPP = false;
                 int rhsFPPMode = 0;
                 real rhsFPPScale = 1.0;
+                real rhsFPPRelax = 0.9;
+                real incrementPPRelax = 0.9;
                 int odeCode = 0;
                 real tEnd = veryLargeReal;
                 real odeSetting1 = 0;
@@ -122,7 +124,7 @@ namespace DNDS::Euler
                     TimeMarchControl,
                     dtImplicit, nTimeStep,
                     steadyQuit, useRestart,
-                    useImplicitPP, rhsFPPMode, rhsFPPScale,
+                    useImplicitPP, rhsFPPMode, rhsFPPScale, rhsFPPRelax, incrementPPRelax,
                     odeCode, tEnd, odeSetting1, odeSetting2, odeSetting3, odeSetting4,
                     partitionMeshOnly,
                     dtIncreaseLimit, dtIncreaseAfterCount,

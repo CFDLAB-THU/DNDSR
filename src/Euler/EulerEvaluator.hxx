@@ -95,6 +95,8 @@ namespace DNDS::Euler
                 auto f2c = mesh->face2cell[iFace];
                 index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
                 index iCellAtFace = f2c[0] == iCell ? 0 : 1;
+                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
+                                (iCellAtFace ? -1 : 1); // faces out
                 if (iCellOther != UnInitIndex)
                 {
 
@@ -106,8 +108,6 @@ namespace DNDS::Euler
                         this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
                         TU fInc;
                         {
-                            TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
-                                            (iCellAtFace ? -1 : 1); // faces out
 
                             // fInc = fluxJacobian0_Right(
                             //            u[iCellOther],
@@ -116,7 +116,7 @@ namespace DNDS::Euler
                             //        uInc[iCellOther]; //! always inner here
                             fInc = fluxJacobian0_Right_Times_du(
                                 uj,
-                                unitNorm, GetFaceVGrid(iFace, -1),
+                                unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
 
@@ -173,6 +173,8 @@ namespace DNDS::Euler
                 auto f2c = mesh->face2cell[iFace];
                 index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
                 rowsize iCellAtFace = f2c[0] == iCell ? 0 : 1;
+                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
+                                (iCellAtFace ? -1 : 1);        // faces out
                 if (iCellOther != UnInitIndex && iCellOther != iCell && iCellOther < mesh->NumCell())
                 {
                     TU uj = u[iCellOther];
@@ -184,11 +186,9 @@ namespace DNDS::Euler
                     DNDS_assert(iC2CInLocal != -1);
                     TJacobianU jacIJ;
                     {
-                        TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
-                                        (iCellAtFace ? -1 : 1);        // faces out
                         jacIJ = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
                             uj,
-                            unitNorm, GetFaceVGrid(iFace, -1),
+                            unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
                             Geom::BC_ID_INTERNAL, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                     }
                     auto faceID = mesh->GetFaceZone(iFace);
@@ -245,6 +245,8 @@ namespace DNDS::Euler
                 auto f2c = mesh->face2cell[iFace];
                 index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
                 index iCellAtFace = f2c[0] == iCell ? 0 : 1;
+                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
+                                (iCellAtFace ? -1 : 1); // faces out
                 if (iCellOther != UnInitIndex)
                 {
 
@@ -258,12 +260,9 @@ namespace DNDS::Euler
                         this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
 
                         {
-                            TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
-                                            (iCellAtFace ? -1 : 1); // faces out
-
                             fInc = fluxJacobian0_Right_Times_du(
                                 uj,
-                                unitNorm, GetFaceVGrid(iFace, -1),
+                                unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
 
@@ -326,6 +325,8 @@ namespace DNDS::Euler
                 auto f2c = mesh->face2cell[iFace];
                 index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
                 index iCellAtFace = f2c[0] == iCell ? 0 : 1;
+                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
+                                (iCellAtFace ? -1 : 1); // faces out
                 if (iCellOther != UnInitIndex)
                 {
                     index iScanOther = iCellOther;
@@ -338,12 +339,10 @@ namespace DNDS::Euler
                         this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
 
                         {
-                            TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
-                                            (iCellAtFace ? -1 : 1); // faces out
 
                             fInc = fluxJacobian0_Right_Times_du(
                                 uj,
-                                unitNorm, GetFaceVGrid(iFace, -1),
+                                unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
 
@@ -388,9 +387,12 @@ namespace DNDS::Euler
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 index iFace = c2f[ic2f];
+                auto btype = mesh->GetFaceZone(iFace);
                 auto f2c = mesh->face2cell[iFace];
                 index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
                 index iCellAtFace = f2c[0] == iCell ? 0 : 1;
+                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
+                                (iCellAtFace ? -1 : 1); // faces out
                 if (iCellOther != UnInitIndex)
                 {
                     index iScanOther = forward ? iCellOther : nCellDist - 1 - iCellOther; // TODO: add rb-sor
@@ -403,12 +405,9 @@ namespace DNDS::Euler
                         this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
 
                         {
-                            TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
-                                            (iCellAtFace ? -1 : 1); // faces out
-
                             fInc = fluxJacobian0_Right_Times_du(
                                 uj,
-                                unitNorm, GetFaceVGrid(iFace, -1),
+                                unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
 
@@ -424,6 +423,28 @@ namespace DNDS::Euler
                         }
                     }
                 }
+                // else if (pBCHandler->GetTypeFromID(btype) == BCWall)
+                // {
+                //     TMat normBase = Geom::NormBuildLocalBaseV<dim>(unitNorm);
+                //     Geom::tPoint pPhysics = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, iCellAtFace, -1);
+                //     TU uThis = u[iCell];
+                //     TU uINCj = uInc[iCell];
+                //     //! using t = 0 in generateBoudnaryValue!
+                //     TU uj = generateBoundaryValue(uThis, uThis, iCell, iFace, -1, unitNorm, normBase, pPhysics, 0, btype, false, 0);
+                //     uINCj(Seq123) *= -1;
+
+                //     if (model == NS_SA || model == NS_SA_3D)
+                //         uINCj(I4 + 1) = 0;
+                //     if (model == NS_2EQ || model == NS_2EQ_3D)
+                //         uINCj({I4 + 1, I4 + 2}).setZero();
+                //     TU fInc = fluxJacobian0_Right_Times_du(
+                //         uj,
+                //         unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                //         Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! treat as inner here
+
+                //     uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
+                //                   (fInc);
+                // }
             }
             auto uIncNewI = uIncNew[iCell];
             TU uIncOld = uIncNewI;
@@ -483,6 +504,8 @@ namespace DNDS::Euler
                 auto f2c = mesh->face2cell[iFace];
                 index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
                 index iCellAtFace = f2c[0] == iCell ? 0 : 1;
+                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
+                                (iCellAtFace ? -1 : 1); // faces out
                 if (iCellOther != UnInitIndex)
                 {
                     index iScanOther = forward ? iCellOther : nCellDist - 1 - iCellOther; // TODO: add rb-sor
@@ -490,12 +513,10 @@ namespace DNDS::Euler
                     {
                         TU fInc, fIncS;
                         auto uINCj = uInc[iCellOther];
-                        TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
-                                        (iCellAtFace ? -1 : 1); // faces out
                         {
                             fInc = fluxJacobian0_Right_Times_du(
                                 u[iCellOther], //! TODO periodic here
-                                unitNorm, GetFaceVGrid(iFace, -1),
+                                unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
                                 Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                         }
                         {
@@ -507,8 +528,8 @@ namespace DNDS::Euler
                                 (vfv->GetIntPointDiffBaseValue(iCellOther, iFace, 1 - iCellAtFace, -1, std::array<int, 1>{0}, 1) *
                                  uRecInc[iCellOther]) //! TODO periodic here
                                     .transpose();
-                            TU fIncSL = fluxJacobianC_Right_Times_du(u[iCell], unitNorm, GetFaceVGrid(iFace, -1), Geom::BC_ID_INTERNAL, uRecSLInc);
-                            TU fIncSR = fluxJacobianC_Right_Times_du(u[iCellOther], unitNorm, GetFaceVGrid(iFace, -1), Geom::BC_ID_INTERNAL, uRecSRInc);
+                            TU fIncSL = fluxJacobianC_Right_Times_du(u[iCell], unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1), Geom::BC_ID_INTERNAL, uRecSLInc);
+                            TU fIncSR = fluxJacobianC_Right_Times_du(u[iCellOther], unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1), Geom::BC_ID_INTERNAL, uRecSRInc);
                             fIncS = fIncSL + fIncSR + lambdaFaceC[iFace] * (uRecSLInc - uRecSRInc);
                         }
 
@@ -577,6 +598,8 @@ namespace DNDS::Euler
                 auto f2c = mesh->face2cell[iFace];
                 index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
                 index iCellAtFace = f2c[0] == iCell ? 0 : 1;
+                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
+                                (iCellAtFace ? -1 : 1); // faces out
                 if (iCellOther != UnInitIndex && iCell != iCellOther
                     // if is a ghost neighbour
                     && iCellOther >= mesh->NumCell())
@@ -587,12 +610,10 @@ namespace DNDS::Euler
                     this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
                     this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
                     {
-                        TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCellOther, iCellAtFace, -1)(Seq012) *
-                                        (iCellAtFace ? -1 : 1); // faces out
 
                         fInc = fluxJacobian0_Right_Times_du(
                             uj,
-                            unitNorm, GetFaceVGrid(iFace, -1),
+                            unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
                             Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
                     }
 

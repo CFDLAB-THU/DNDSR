@@ -602,6 +602,18 @@ namespace DNDS::Euler
             return ret;
         }
 
+        TVec GetFaceVGridFromCell(index iFace, index iCell, int if2c, index iG)
+        {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+            TVec ret;
+            ret.setZero();
+#ifdef USE_ABS_VELO_IN_ROTATION
+            if (settings.frameConstRotation.enabled)
+                ret += settings.frameConstRotation.vOmega().cross(vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, iG) - settings.frameConstRotation.center)(Seq012);
+#endif
+            return ret;
+        }
+
         void TransformVelocityRotatingFrame(TU &U, const Geom::tPoint &pPhysics, int direction)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -687,7 +699,8 @@ namespace DNDS::Euler
             const Geom::tPoint &pPhysics,
             real t,
             Geom::t_index btype,
-            bool fixUL = false);
+            bool fixUL = false, 
+            int geomMode = 0);
 
         inline TU CompressRecPart(
             const TU &umean,
