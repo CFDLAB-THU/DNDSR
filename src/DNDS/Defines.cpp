@@ -4,6 +4,8 @@
 // #define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 // #endif
 #include <codecvt>
+#include <boost/stacktrace.hpp>
+// #include <cpptrace.hpp>
 
 namespace DNDS
 {
@@ -26,4 +28,15 @@ namespace DNDS
         return converter.to_bytes(v); // TODO: on windows use WideCharToMultiByte()
         DISABLE_WARNING_POP
     }
+}
+
+
+/********************************/
+// workaround for cpp trace
+std::string __DNDS_getTraceString()
+{
+    std::stringstream ss;
+    ss << boost::stacktrace::stacktrace();
+    return ss.str();
+    // return cpptrace::generate_trace().to_string();
 }

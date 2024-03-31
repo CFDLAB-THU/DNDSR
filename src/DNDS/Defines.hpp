@@ -63,16 +63,24 @@ static const std::string DNDS_Defines_state =
 
 #define DNDS_FMT_ARG(V) fmt::arg(#V, V)
 
+
+
+
+
 /***************/ // DNDS_assertS
+
+std::string __DNDS_getTraceString();
 
 inline void __DNDS_assert_false(const char *expr, const char *file, int line)
 {
+    std::cerr << __DNDS_getTraceString() << "\n";
     std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]" << std::endl;
     std::abort();
 }
 
 inline void __DNDS_assert_false_info(const char *expr, const char *file, int line, const std::string &info)
 {
+    std::cerr << __DNDS_getTraceString() << "\n";
     std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n"
               << info << std::endl;
     std::abort();
@@ -451,8 +459,8 @@ namespace DNDS
     {
         std::vector<std::string> ret0 = splitSString(str, delim);
         std::vector<std::string> ret;
-        for(auto & v: ret0)
-            if(v.size())
+        for (auto &v : ret0)
+            if (v.size())
                 ret.push_back(v);
         return ret;
     }
@@ -496,13 +504,10 @@ namespace DNDS::TermColor
     constexpr std::string_view White = "\033[97m";
     constexpr std::string_view Reset = "\033[0m";
     constexpr std::string_view Bold = "\033[1m";
-    constexpr std::string_view Underline = "\033[4m"; 
-    constexpr std::string_view Blink = "\033[5m"; 
+    constexpr std::string_view Underline = "\033[4m";
+    constexpr std::string_view Blink = "\033[5m";
     constexpr std::string_view Reverse = "\033[7m";
     constexpr std::string_view Hidden = "\033[8m";
-
-
-
 
 }
 
@@ -517,4 +522,3 @@ namespace DNDS::TermColor
 
 
 */
-

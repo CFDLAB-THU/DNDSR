@@ -174,6 +174,9 @@ find_path(EXTERNAL_INCLUDE_JSON json.hpp PATHS
 find_path(EXTERNAL_INCLUDE_ARGPARSE argparse.hpp PATHS 
     "${PROJECT_SOURCE_DIR}/external/argparse-3.0/include/argparse" 
     NO_DEFAULT_PATH REQUIRED)
+# find_path(EXTERNAL_INCLUDE_CPPTRACE cpptrace.hpp PATHS 
+#     "${PROJECT_SOURCE_DIR}/external/cpptrace-0.5.1/include/cpptrace" 
+#     NO_DEFAULT_PATH REQUIRED)
 find_path(EXTERNAL_INCLUDE_CPPCODEC base32_hex.hpp PATHS
     "${PROJECT_SOURCE_DIR}/external/cppcodec" 
     NO_DEFAULT_PATH REQUIRED)
@@ -204,6 +207,7 @@ find_path(EXTERNAL_DOXYGEN_AWESOME doxygen-awesome.css PATHS
 
 add_subdirectory("${EXTERNAL_INCLUDE_PYBIND11}/..")
 add_subdirectory("${EXTERNAL_INCLUDE_FMT}/..")
+# add_subdirectory("${EXTERNAL_INCLUDE_CPPTRACE}/../..")
 
 if(EXTERNAL_INCLUDE_SUPERLU)
     set(USE_XSDK_DEFAULTS ON CACHE BOOL "Init by DNDS") # for superlu
@@ -237,6 +241,7 @@ endif()
 
 set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
     fmt::fmt
+    # cpptrace::cpptrace
     CACHE INTERNAL
     "Project Public External Lib Dependencies"
     )
@@ -286,6 +291,7 @@ set(EXTERNAL_INCLUDES
     ${EXTERNAL_INCLUDE_EIGEN}
     ${EXTERNAL_INCLUDE_JSON}
     ${EXTERNAL_INCLUDE_ARGPARSE}
+    # ${EXTERNAL_INCLUDE_CPPTRACE}
     # ${EXTERNAL_INCLUDE_RAPIDJSON}
     ${EXTERNAL_INCLUDE_CPPCODEC}
     ${EXTERNAL_INCLUDE_NANOFLANN}
