@@ -516,6 +516,7 @@ stdPowerTest
 set(APPS_Geom
 elements_Test
 meshSerial_Test
+ofReader_Test
 partitionMeshSerial
 )
 
