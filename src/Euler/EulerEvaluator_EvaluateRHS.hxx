@@ -193,7 +193,7 @@ namespace DNDS::Euler
                             normBase,
                             vfv->GetFaceQuadraturePPhys(iFace, iG),
                             t,
-                            mesh->GetFaceZone(iFace), true);
+                            mesh->GetFaceZone(iFace), true, 0);
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
                         GradURxy = GradULxy; //! generated boundary value couldn't use any periodic conversion?
 #endif
@@ -203,7 +203,7 @@ namespace DNDS::Euler
                             normBase,
                             vfv->GetFaceQuadraturePPhys(iFace, iG),
                             t,
-                            mesh->GetFaceZone(iFace), false);
+                            mesh->GetFaceZone(iFace), false, 0);
                     }
                     PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
                     // UR = URxy;
@@ -341,10 +341,8 @@ namespace DNDS::Euler
             if (pBCHandler->GetFlagFromIDSoft(mesh->GetFaceZone(iFace), "integrationOpt") == 2)
             {
                 TU uL = u[f2c[0]];
-#ifndef USE_ABS_VELO_IN_ROTATION
                 if (settings.frameConstRotation.enabled)
                     this->TransformURotatingFrame(uL, vfv->GetFaceQuadraturePPhys(iFace, -1), 1);
-#endif
                 TU uLPrim = uL;
                 auto gamma = settings.idealGasProperty.gamma;
                 Gas::IdealGasThermalConservative2Primitive(uL, uLPrim, gamma);

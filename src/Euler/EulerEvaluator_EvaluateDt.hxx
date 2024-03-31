@@ -1061,7 +1061,8 @@ namespace DNDS::Euler
         const Geom::tPoint &pPhysics,
         real t,
         Geom::t_index btype,
-        bool fixUL)
+        bool fixUL,
+        int geomMode)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
 
@@ -1422,22 +1423,29 @@ namespace DNDS::Euler
         else if (bTypeEuler == EulerBCType::BCWall)
         {
             URxy = ULxy;
-            if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
-                this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
-            if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
-                this->TransformURotatingFrame(URxy, pPhysics, 1);
-            URxy(Seq123) *= -1;
-            if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
-                this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
-            if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
-                this->TransformURotatingFrame(URxy, pPhysics, -1);
-            // #ifdef USE_ABS_VELO_IN_ROTATION
-            //                 if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
-            //                     this->TransformVelocityRotatingFrame(URxy, pPhysics, 2);
-            // #else
-            //                 if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
-            //                     this->TransformVelocityRotatingFrame(URxy, pPhysics, -2);
-            // #endif
+            if (geomMode == 0 || true) // now using only the physical mode
+            {
+                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
+                    this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
+                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
+                    this->TransformURotatingFrame(URxy, pPhysics, 1);
+                URxy(Seq123) *= -1;
+                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
+                    this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
+                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
+                    this->TransformURotatingFrame(URxy, pPhysics, -1);
+            }
+            else
+            {
+                URxy(Seq123) *= -1;
+#ifdef USE_ABS_VELO_IN_ROTATION
+                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
+                    this->TransformVelocityRotatingFrame(URxy, pPhysics, 2);
+#else
+                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
+                    this->TransformVelocityRotatingFrame(URxy, pPhysics, -2);
+#endif
+            }
             if (model == NS_SA || model == NS_SA_3D)
             {
                 URxy(I4 + 1) *= -1;

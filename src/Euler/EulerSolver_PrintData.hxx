@@ -28,7 +28,9 @@ namespace DNDS::Euler
                     // recu += uOut[iCell];
                     // recu = EulerEvaluator::CompressRecPart(uOut[iCell], recu);
                     TU recu = uOut[iCell];
-                    TVec velo = (recu(Seq123).array() / recu(0)).matrix();
+                    if (eval.settings.frameConstRotation.enabled)
+                        eval.TransformURotatingFrame_ABS_VELO(recu, vfv->GetCellQuadraturePPhys(iCell, -1), -1);
+                    TVec velo = (recu(Seq123).array() / recu(0)).matrix(); 
                     real vsqr = velo.squaredNorm();
                     real asqr, p, H;
                     Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.settings.idealGasProperty.gamma, p, asqr, H);
@@ -102,10 +104,12 @@ namespace DNDS::Euler
 
                         TU vRec = (DiBj(Eigen::all, Eigen::seq(1, Eigen::last)) * (config.limiterControl.useLimiter ? uRecNew[iCell] : uRec[iCell])).transpose() +
                                   uOut[iCell];
-                        if(mesh->isPeriodic) // transform velocity to node reference frame 
+                        if (mesh->isPeriodic) // transform velocity to node reference frame
                             vRec(Seq123) = mesh->periodicInfo.GetVectorBackByBits<dim, 1>(vRec(Seq123), mesh->cell2nodePbi(iCell, ic2n));
                         if (mode == PrintDataTimeAverage)
                             vRec = uOut[iCell];
+                        if (eval.settings.frameConstRotation.enabled)
+                            eval.TransformURotatingFrame_ABS_VELO(vRec, pPhy, -1);
                         if (iNode < mesh->NumNode())
                             outDistPointPair[iNode](Eigen::seq(0, nVars - 1)) += vRec;
                     }
@@ -339,12 +343,13 @@ namespace DNDS::Euler
                 index iFace = mesh->bnd2face.at(iBnd);
                 if (iFace == -1)
                 {
-                    DNDS_assert(mesh->isPeriodic);                                  // only internal bnd is valid, periodic bnd should be omitted
-                    (*outDistBnd)[iB](nOUTSBnd - 4) = meshBnd->GetCellZone(iB);     // add this to enable blanking
+                    DNDS_assert(mesh->isPeriodic);                              // only internal bnd is valid, periodic bnd should be omitted
+                    (*outDistBnd)[iB](nOUTSBnd - 4) = meshBnd->GetCellZone(iB); // add this to enable blanking
                     continue;
                 }
-
                 TU recu = uOut[iCell];
+                if (eval.settings.frameConstRotation.enabled)
+                    eval.TransformURotatingFrame_ABS_VELO(recu, vfv->GetCellQuadraturePPhys(iCell, -1), -1);
                 TVec velo = (recu(Seq123).array() / recu(0)).matrix();
                 real vsqr = velo.squaredNorm();
                 real asqr, p, H;

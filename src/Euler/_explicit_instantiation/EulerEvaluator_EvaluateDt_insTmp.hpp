@@ -47,6 +47,7 @@
                 const Geom::tPoint &pPhysics,                                                                          \
                 real t,                                                                                                \
                 Geom::t_index btype,                                                                                   \
-                bool fixUL);                                                                                           \
+                bool fixUL,                                                                                            \
+                int geomMode);                                                                                         \
         template void EulerEvaluator<model>::InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs); \
     }
