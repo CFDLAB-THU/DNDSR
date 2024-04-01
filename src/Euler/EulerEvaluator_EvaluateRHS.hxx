@@ -465,7 +465,7 @@ namespace DNDS::Euler
                 Eigen::VectorFMTSafe<real, Eigen::Dynamic> vPrint = i.second.v;
                 if (intOpt == 2)
                     vPrint(Eigen::seq(nVars, nVars + 1)) /= i.second.div;
-                log() << fmt::format("Bnd [{}] integarted values option [{}] : {:.3e}",
+                log() << fmt::format("Bnd [{}] integarted values option [{}] : {:.5e}",
                                      pBCHandler->GetNameFormID(i.first),
                                      intOpt, vPrint.transpose())
                       << std::endl;

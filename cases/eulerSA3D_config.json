@@ -3,7 +3,7 @@
         "dtImplicit": 1e100,
         "nTimeStep": 1,
         "steadyQuit": true,
-        "useRestart": false,
+        "useRestart": true,
         "rhsFPPMode": 1,
         "rhsFPPScale": 1,
         "odeCode": 103, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
@@ -12,7 +12,7 @@
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 20000,
+        "nTimeStepInternal": 3000,
         "rhsThresholdInternal": 1e-8,
         "nAnchorUpdateStart": 0
     },
@@ -23,7 +23,7 @@
         "nDataOutC": 1,
         "nDataOut": 20,
         "nDataOutCInternal": 100,
-        // "nDataOutInternal": 1000,
+        "nDataOutInternal": 100000,
         "nRestartOutC": 10,
         "nRestartOut": 100,
         "nRestartOutCInternal": 1000,
@@ -31,7 +31,7 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 10,
+        "CFL": 20,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 2147483647,
         "nCFLRampLength": 2147483647,
@@ -51,11 +51,12 @@
         "meshElevationMaxIncludedAngle": 20,
         // "meshFile": "../data/mesh/row_1_test3.cgns",
         "meshFile": "../data/mesh/Rotor37_test1.cgns",
-        "outPltName": "../data/out/Rotor37_test1/out2-abs-Roe-GMRES-O4-Roe",
+        "outPltName": "../data/out/Rotor37_test1-Run1/out-abs-Roe-O4-Seq1-115",
+        "outRestartName": "../data/out/Rotor37_test1-Run1/out-abs-Roe-O4-Seq1-115",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
-        "outPltVTKFormat": true,
+        "outPltVTKFormat": false,
         "outAtPointData": true,
         "outAtCellData": true,
         "outBndData": true,
@@ -86,7 +87,8 @@
         "nGmresSpace": 4,
         "nGmresIter": 2,
         "recThreshold": 1e-03,
-        "nRecConsolCheck": 1,
+        "nRecConsolCheck": 10,
+        "nRecMultiplyForZeroedGrad": 1000,
         "zeroRecForStepsInternal": 0
     },
     "limiterControl": {
@@ -216,9 +218,17 @@
                 0,
                 0.8,
                 // 1.136923037037038, // 0.8
+                // 1.239038416666668, // 0.9
+                // 1.300307644444446, // 0.96
+                // 1.320730720370371, // 0.98
                 // 1.341153796296297, // 1.0 p0in
-                // 1.443269175925927, //1.1 p0in
-                1.545384555555557, //1.2 p0in
+                // 1.361576872222224, // 1.02 p0in
+                // 1.392211486111112, // 1.05
+                // 1.443269175925927, // 1.1 p0in
+                1.494326865740742, //1.15
+                // 1.545384555555557, // 1.2 p0in
+                // 1.596442245370372, //1.25
+                // 1.647499935185187, //1.3
                 3
             ],
             "valueExtra": [
@@ -228,22 +238,6 @@
             ],
             "anchorOption": 2,
             "integrationOption": 2
-            // "valueExtra": [ // used as anchorpoint
-            //     0.77494716078399994,
-            //     0.063617319557049995,
-            //     0.52456303392299997
-            // ],
-            // "anchorOption": 1
-            // "type": "BCFar",
-            // "name": "RS_1_to_2",
-            // "value": [
-            //     1,
-            //     0,
-            //     0,
-            //     0.8,
-            //     1.450475726455272,
-            //     1.3
-            // ]
         },
         {
             // "type": "BCFar",
@@ -286,8 +280,8 @@
     ],
     "restartState": {
         "iStep": 1,
-        "iStepInternal": 20000,
+        "iStepInternal": 10000,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O3-Roe__C_p640_restart.dir"
+        "lastRestartFile": "../data/out/Rotor37_test1-Run1/out-abs-Roe-O4-Seq1__C_p640_restart.dir"
     }
 }

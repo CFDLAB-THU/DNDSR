@@ -769,14 +769,14 @@ namespace DNDS::Euler::Gas
 
         Eigen::Vector<real, dim> velo = U(Seq123) / U(0);
         static const real lambda = -2. / 3.;
-        Eigen::Matrix<real, dim, dim> strainRate = (1.0 / sqr(U(0))) *
-                                                   (U(0) * GradU(Seq012, Seq123) -
-                                                    GradU(Seq012, 0) * Eigen::RowVector<real, dim>(U(Seq123))); // dU_j/dx_i
+        Eigen::Matrix<real, dim, dim> diffVelo = (1.0 / sqr(U(0))) *
+                                                 (U(0) * GradU(Seq012, Seq123) -
+                                                  GradU(Seq012, 0) * Eigen::RowVector<real, dim>(U(Seq123))); // dU_j/dx_i
         Eigen::Vector<real, dim> GradP = (gamma - 1) *
                                          (GradU(Seq012, dim + 1) -
                                           0.5 *
                                               (GradU(Seq012, Seq123) * velo +
-                                               strainRate * Eigen::Vector<real, dim>(U(Seq123))));
+                                               diffVelo * Eigen::Vector<real, dim>(U(Seq123))));
         real vSqr = velo.squaredNorm();
         real p = (gamma - 1) * (U(dim + 1) - U(0) * 0.5 * vSqr);
         Eigen::Vector<real, dim> GradT = (gamma / ((gamma - 1) * Cp * U(0) * U(0))) *
@@ -786,11 +786,23 @@ namespace DNDS::Euler::Gas
 
         Flux(Seq012, 0).setZero();
         Flux(Seq012, Seq123) =
-            (strainRate + strainRate.transpose()) * mu +
-            Eigen::Matrix<real, dim, dim>::Identity() * (lambda * mu * strainRate.trace());
+            (diffVelo + diffVelo.transpose()) * mu +
+            Eigen::Matrix<real, dim, dim>::Identity() * (lambda * mu * diffVelo.trace());
         // std::cout << "FUCK A.A" << std::endl;
         Flux(Seq012, dim + 1) = Flux(Seq012, Seq123) * velo + k * GradT;
         // std::cout << "FUCK A.B" << std::endl;
+    }
+
+    template <int dim, typename TU, typename TGradU>
+    auto GetGradVelo(const TU &U, const TGradU &GradU)
+    {
+        static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>);
+        static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
+        static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+        Eigen::Matrix<real, dim, dim> diffVelo = (1.0 / sqr(U(0))) *
+                                                 (U(0) * GradU(Seq012, Seq123) -
+                                                  GradU(Seq012, 0) * Eigen::RowVector<real, dim>(U(Seq123))); // dU_j/dx_i
+        return diffVelo;
     }
 
     /**

@@ -767,6 +767,9 @@ namespace DNDS::Euler
                 (((UL(1) / UL(0) - vg(0)) * UL(I4 + 1) + (UR(1) / UR(0) - vg(0)) * UR(I4 + 1)) -
                  (UR(I4 + 1) - UL(I4 + 1)) * lambdaFaceCC) *
                 0.5;
+            real tauPerssure = Gas::GetGradVelo<dim>(UMeanXy, DiffUxy).trace() * (2. / 3.) * (muf - mufPhy); //! SA's normal stress
+            finc(1) += tauPerssure;
+            finc(I4) += tauPerssure * UMeanXy(1) / UMeanXy(0);
         }
         if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
         {
