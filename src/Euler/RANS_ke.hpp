@@ -6,6 +6,9 @@
 #define KW_WILCOX_PROD_LIMITS 1
 #define KW_WILCOX_LIMIT_MUT 1
 
+#define KW_SST_LIMIT_MUT 1
+#define KW_SST_PROD_LIMITS 1
+
 namespace DNDS::Euler::RANS
 {
     template <int dim, class TU, class TDiffU>
@@ -259,6 +262,9 @@ namespace DNDS::Euler::RANS
         real nuPhy = muf / rho;
         real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
         real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho;
+#if KW_SST_LIMIT_MUT == 1
+        mut = std::min(mut, 1e5 * muf); // CFL3D
+#endif
 
         if (std::isnan(mut) || !std::isfinite(mut))
         {
@@ -270,7 +276,7 @@ namespace DNDS::Euler::RANS
     }
 
     template <int dim, class TU, class TDiffU, class TVFlux>
-    void GetVisFlux_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real mut, real d, real muf, TVFlux &vFlux)
+    void GetVisFlux_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real mutIn, real d, real muf, TVFlux &vFlux)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -310,13 +316,16 @@ namespace DNDS::Euler::RANS
                      4 * rho * sigO2 * k / (CDKW * sqr(d))),
             4));
         real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
-        // real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho;
+        real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho;
+#if KW_SST_LIMIT_MUT == 1
+        mut = std::min(mut, 1e5 * muf); // CFL3D
+#endif
 
         real sigK = sigK1 * F1 + sigK2 * (1 - F1);
         real sigO = sigO1 * F1 + sigO2 * (1 - F1);
 
-        vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mut * sigK);
-        vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mut * sigO);
+        vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mutIn * sigK);
+        vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mutIn * sigO);
 
         if (!vFlux.allFinite() || vFlux.hasNaN())
         {
@@ -372,11 +381,18 @@ namespace DNDS::Euler::RANS
             4));
         real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
         real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho; // use S/OmegaMag for SST: S: CFD++, OmegaMag: Turbulence Modeling Validation, Testing, and Developmen
+#if KW_SST_LIMIT_MUT == 1
+        mut = std::min(mut, 1e5 * muf); // CFL3D
+#endif
         real nutHat = std::max(mut / rho, 1e-8);
 
         Eigen::Matrix<real, dim, dim> rhoMuiuj = Eigen::Matrix<real, dim, dim>::Identity() * UMeanXy(I4 + 1) * (2. / 3.) - mut * SS;
         real Pk = -(rhoMuiuj.array() * diffU.array()).sum();
-        real PkTilde = std::min(Pk, 10 * betaStar * rho * k * omegaaa);
+        real PkTilde = Pk;
+#if KW_SST_PROD_LIMITS == 1
+        PkTilde = std::max(PkTilde, verySmallReal);
+        PkTilde = std::min(Pk, 10 * betaStar * rho * k * omegaaa); // CFD++'s limiting
+#endif
 
         real gammaC = gamma1 * F1 + gamma1 * (1 - F1);
         real sigK = sigK1 * F1 + sigK2 * (1 - F1);
