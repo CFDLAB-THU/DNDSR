@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Geometric.hpp"
+#include "Elements.hpp"
 #include <map>
 
 namespace DNDS::Geom::OpenFOAM
@@ -317,4 +318,66 @@ namespace DNDS::Geom::OpenFOAM
             }
         }
     };
+
+    inline std::tuple<Elem::ElemType, std::vector<index>>
+    ExtractTopologicalElementFromPolyMeshCell(const std::vector<std::vector<index>> &facesIn,
+                                              const std::vector<int> &ownIn)
+    {
+        std::vector<std::vector<index>> faces = facesIn;
+        std::vector<int> own = ownIn;
+        // std::sort(faces.begin(), faces.end(), [](auto &&l, auto &&r)
+        //           { return l.size() < r.size(); });
+        // for (auto &v : faces)
+        //     std::sort(v.begin(), v.end());
+        std::vector<index> nodes;
+        Elem::ElemType etype = Elem::ElemType::UnknownElem;
+        if (faces.size() == 6)
+        {
+            for (auto &v : faces)
+            {
+                if (v.size() != 4)
+                    return std::make_tuple(etype, nodes);
+            }
+            if (!own[0])
+                for (auto v : faces[0])
+                    nodes.push_back(v);
+            else
+                for (size_t i = faces[0].size() - 1; i >= 0; i--)
+                    nodes.push_back(faces[0][i]);
+            for(int iFoot = 0; iFoot < 4; iFoot++)
+            {
+                index foot = nodes.at(iFoot);
+                index head = -1;
+                for(int iFace = 1; iFace < faces.size(); iFace++)
+                {
+                    int iFootC = -1;
+                    index headL = -1;
+                    index headR = -1;
+                    for(int iF2N = 0; iF2N < faces[iFace].size(); iF2N ++)
+                        if(faces[iFace][iF2N] == foot)
+                            iFootC = iF2N;
+                    if(iFootC >= 0)
+                    {
+                        headL = faces[iFace][(iFootC - 1) % faces[iFace].size()];
+                        headR = faces[iFace][(iFootC + 1) % faces[iFace].size()];
+                        auto itFoundL = std::find(nodes.begin(), nodes.begin() + 4, headL);
+                        if (itFoundL == nodes.begin() + 4)
+                            head = headR;
+                        else
+                            head = headL;
+                    }
+                }
+                if(!(head >= 0))
+                    return std::make_tuple(etype, nodes);
+                nodes.push_back(head);
+            }
+            etype = Elem::ElemType::Hex8;
+            return std::make_tuple(etype, nodes);
+        }
+        else
+        {
+            DNDS_assert_info(false, fmt::format("faces size {} not supported", faces.size()));
+        }
+    }
+
 }
