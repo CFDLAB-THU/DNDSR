@@ -26,6 +26,7 @@ namespace DNDS::Euler
         real minWallDist = 1e-12;
         int wallDistScheme = 0;
         real SADESScale = veryLargeReal;
+        RANSModel ransModel = RANSModel::RANS_None;
 
         struct IdealGasProperty
         {
@@ -151,6 +152,18 @@ namespace DNDS::Euler
         /***************************************************************************************************/
         /***************************************************************************************************/
 
+        EulerEvaluatorSettings()
+        {
+            if constexpr (model == NS_SA || model == NS_SA_3D)
+            {
+                ransModel = RANSModel::RANS_SA;
+            }
+            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            {
+                ransModel = RANSModel::RANS_KOWilcox;
+            }
+        }
+
         void ReadWriteJSON(nlohmann::ordered_json &jsonObj, int nVars, bool read)
         {
 
@@ -174,6 +187,7 @@ namespace DNDS::Euler
             __DNDS__json_to_config(minWallDist);
             __DNDS__json_to_config(wallDistScheme);
             __DNDS__json_to_config(SADESScale);
+            __DNDS__json_to_config(ransModel);
             __DNDS__json_to_config(nCentralSmoothStep);
             __DNDS__json_to_config(constMassForce);
             __DNDS__json_to_config(frameConstRotation);

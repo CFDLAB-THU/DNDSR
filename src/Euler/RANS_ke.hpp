@@ -2,12 +2,13 @@
 
 #include "Euler.hpp"
 
-#define KW_WILCOX_VER 0
+#define KW_WILCOX_VER 1
 #define KW_WILCOX_PROD_LIMITS 1
 #define KW_WILCOX_LIMIT_MUT 1
 
 #define KW_SST_LIMIT_MUT 1
 #define KW_SST_PROD_LIMITS 1
+#define KW_SST_PROD_OMEGA_VERSION 1
 
 namespace DNDS::Euler::RANS
 {
@@ -261,6 +262,7 @@ namespace DNDS::Euler::RANS
         real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
         real nuPhy = muf / rho;
         real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
+        // F2 = 0;
         real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho;
 #if KW_SST_LIMIT_MUT == 1
         mut = std::min(mut, 1e5 * muf); // CFL3D
@@ -316,6 +318,7 @@ namespace DNDS::Euler::RANS
                      4 * rho * sigO2 * k / (CDKW * sqr(d))),
             4));
         real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
+        // F2 = 0;
         real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho;
 #if KW_SST_LIMIT_MUT == 1
         mut = std::min(mut, 1e5 * muf); // CFL3D
@@ -380,6 +383,7 @@ namespace DNDS::Euler::RANS
                      4 * rho * sigO2 * k / (CDKW * sqr(d))),
             4));
         real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
+        // F2 = 0;
         real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho; // use S/OmegaMag for SST: S: CFD++, OmegaMag: Turbulence Modeling Validation, Testing, and Developmen
 #if KW_SST_LIMIT_MUT == 1
         mut = std::min(mut, 1e5 * muf); // CFL3D
@@ -391,21 +395,25 @@ namespace DNDS::Euler::RANS
         real PkTilde = Pk;
 #if KW_SST_PROD_LIMITS == 1
         PkTilde = std::max(PkTilde, verySmallReal);
-        PkTilde = std::min(Pk, 10 * betaStar * rho * k * omegaaa); // CFD++'s limiting
+        PkTilde = std::min(Pk, 20 * betaStar * rho * k * omegaaa); // CFD++'s limiting: 10 times
 #endif
 
         real gammaC = gamma1 * F1 + gamma1 * (1 - F1);
         real sigK = sigK1 * F1 + sigK2 * (1 - F1);
         real sigO = sigO1 * F1 + sigO2 * (1 - F1);
         real beta = beta1 * F1 + beta2 * (1 - F1);
-        real POmega =
-            0.5 * gammaC * rho *
-            ((SR2 - omegaaa * SR2.trace() / 3. * Eigen::Matrix<real, dim, dim>::Identity()).array() * SR2.array()).sum();
-
+        real POmega = gammaC / nutHat * Pk;
+#if KW_SST_PROD_OMEGA_VERSION == 1
+        POmega =
+            0.5 * gammaC * rho * ((SR2 - SR2.trace() / 3. * Eigen::Matrix<real, dim, dim>::Identity()).array() * SR2.array()).sum();
+#elif KW_SST_PROD_OMEGA_VERSION == 2
+        POmega =
+            gammaC * rho * sqr(OmegaMag);
+#endif
         if (mode == 0)
         {
             source(I4 + 1) = PkTilde - betaStar * rho * k * omegaaa;
-            source(I4 + 2) = gammaC / nutHat * Pk - beta * rho * sqr(omegaaa) +
+            source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
                              2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));
             // source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
             //                  2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));

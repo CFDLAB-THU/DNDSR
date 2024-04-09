@@ -318,6 +318,22 @@ namespace DNDS::Euler
         NS_2EQ_3D = 6,
     };
 
+
+    enum RANSModel
+    {
+        RANS_None = 0,
+        RANS_SA,
+        RANS_KOWilcox,
+        RANS_KOSST  
+    };
+
+    NLOHMANN_JSON_SERIALIZE_ENUM(
+        RANSModel,
+        {{RANS_None, "RANS_None"},
+         {RANS_SA, "RANS_SA"},
+         {RANS_KOWilcox, "RANS_KOWilcox"},
+         {RANS_KOSST, "RANS_KOSST"}})
+
     constexpr static inline int getnVarsFixed(const EulerModel model)
     {
         if (model == NS || model == NS_3D)

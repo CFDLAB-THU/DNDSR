@@ -318,7 +318,11 @@ namespace DNDS::Euler
             }
             if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
-                real mut = RANS::GetMut_SST<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
+                real mut = 0;
+                if (settings.ransModel == RANSModel::RANS_KOSST)
+                    mut = RANS::GetMut_SST<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
+                else if (settings.ransModel == RANSModel::RANS_KOWilcox)
+                    mut = RANS::GetMut_KOWilcox<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
                 muf = muf + mut;
             }
             real lamVis = muf / uMean(0) *
@@ -451,7 +455,11 @@ namespace DNDS::Euler
         }
         if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
         {
-            real mut = RANS::GetMut_SST<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
+            real mut = 0;
+            if (settings.ransModel == RANSModel::RANS_KOSST)
+                mut = RANS::GetMut_SST<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
+            else if (settings.ransModel == RANSModel::RANS_KOWilcox)
+                mut = RANS::GetMut_KOWilcox<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
             muf = muf + mut;
         }
 
@@ -516,7 +524,10 @@ namespace DNDS::Euler
         }
         if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
         {
-            RANS::GetVisFlux_SST<dim>(UMeanXy, DiffUxy, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
+            if (settings.ransModel == RANSModel::RANS_KOSST)
+                RANS::GetVisFlux_SST<dim>(UMeanXy, DiffUxy, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
+            else if (settings.ransModel == RANSModel::RANS_KOWilcox)
+                RANS::GetVisFlux_KOWilcox<dim>(UMeanXy, DiffUxy, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
         }
 #endif
 
@@ -1034,13 +1045,25 @@ namespace DNDS::Euler
             //             UMeanXyFixed(I4 + 2) = rhoOmegaaaWall;
             //         }
 
+            auto sourceCaller = [&](int mode)
+            {
+                if (settings.ransModel == RANSModel::RANS_KOSST)
+                    RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWall[iCell][ig], retInc, mode);
+                else if (settings.ransModel == RANSModel::RANS_KOWilcox)
+                    RANS::GetSource_KOWilcox<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWall[iCell][ig], retInc, mode);
+            };
+
             if (Mode == 0)
-                RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWall[iCell][ig], retInc, 0);
+            {
+                sourceCaller(0);
+            }
             else if (Mode == 1)
-                RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWall[iCell][ig], retInc, 1);
+            {
+                sourceCaller(1);
+            }
             else if (Mode == 2)
             {
-                RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWall[iCell][ig], retInc, 1);
+                sourceCaller(1);
                 jacobian += retInc.asDiagonal(); //! TODO: make really block jacobian
             }
             ret += retInc;
@@ -1637,7 +1660,10 @@ namespace DNDS::Euler
                 real muRef = settings.idealGasProperty.muGas;
                 real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
                 real mufPhy = muEff(ULMeanXy, T);
-                mut = RANS::GetMut_SST<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean());
+                if (settings.ransModel == RANSModel::RANS_KOSST)
+                    mut = RANS::GetMut_SST<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean());
+                else if (settings.ransModel == RANSModel::RANS_KOWilcox)
+                    mut = RANS::GetMut_KOWilcox<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean());
             }
 
             return mut;
