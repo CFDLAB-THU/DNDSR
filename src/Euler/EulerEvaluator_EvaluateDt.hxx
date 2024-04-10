@@ -323,6 +323,8 @@ namespace DNDS::Euler
                     mut = RANS::GetMut_SST<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
                 else if (settings.ransModel == RANSModel::RANS_KOWilcox)
                     mut = RANS::GetMut_KOWilcox<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
+                else if (settings.ransModel == RANSModel::RANS_RKE)
+                    mut = RANS::GetMut_RealizableKe<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
                 muf = muf + mut;
             }
             real lamVis = muf / uMean(0) *
@@ -460,6 +462,8 @@ namespace DNDS::Euler
                 mut = RANS::GetMut_SST<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
             else if (settings.ransModel == RANSModel::RANS_KOWilcox)
                 mut = RANS::GetMut_KOWilcox<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
+            else if (settings.ransModel == RANSModel::RANS_RKE)
+                mut = RANS::GetMut_RealizableKe<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
             muf = muf + mut;
         }
 
@@ -528,6 +532,8 @@ namespace DNDS::Euler
                 RANS::GetVisFlux_SST<dim>(UMeanXy, DiffUxy, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
             else if (settings.ransModel == RANSModel::RANS_KOWilcox)
                 RANS::GetVisFlux_KOWilcox<dim>(UMeanXy, DiffUxy, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
+            else if (settings.ransModel == RANSModel::RANS_RKE)
+                RANS::GetVisFlux_RealizableKe<dim>(UMeanXy, DiffUxy, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
         }
 #endif
 
@@ -1051,6 +1057,8 @@ namespace DNDS::Euler
                     RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWall[iCell][ig], retInc, mode);
                 else if (settings.ransModel == RANSModel::RANS_KOWilcox)
                     RANS::GetSource_KOWilcox<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWall[iCell][ig], retInc, mode);
+                else if (settings.ransModel == RANSModel::RANS_RKE)
+                    RANS::GetSource_RealizableKe<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWall[iCell][ig], retInc, mode);
             };
 
             if (Mode == 0)
@@ -1487,25 +1495,28 @@ namespace DNDS::Euler
                 // if (fixUL)
                 //     ULxy({I4 + 1, I4 + 2}).setZero(), URxy({I4 + 1, I4 + 2}).setZero(); //! modifing UL
 #endif
-                // { // BC for RealizableKe
-                //     TVec v = (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellBary(iCell))(Seq012);
-                //     real d1 = dWall[iCell].mean();
-                //     real k1 = ULMeanXy(I4 + 1) / ULMeanXy(0);
+                if (settings.ransModel == RANSModel::RANS_RKE)
+                { // BC for RealizableKe
+                    TVec v = (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellBary(iCell))(Seq012);
+                    real d1 = dWall[iCell].mean();
+                    real k1 = ULMeanXy(I4 + 1) / ULMeanXy(0);
 
-                //     real pMean, asqrMean, Hmean;
-                //     real gamma = settings.idealGasProperty.gamma;
-                //     Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
-                //                          gamma, pMean, asqrMean, Hmean);
-                //     // ! refvalue:
-                //     real muRef = settings.idealGasProperty.muGas;
-                //     real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
-                //     real mufPhy1;
-                //     mufPhy1 = muEff(ULMeanXy, T);
-                //     real epsWall = 2 * mufPhy1 / ULMeanXy(0) * k1 / sqr(d1);
-                //     URxy(I4 + 2) = 2 * epsWall * ULxy(0) - ULxy(I4 + 2);
-                //     if (fixUL)
-                //     ULxy(I4 + 2) = URxy(I4 + 2) = epsWall * ULxy(0);
-                // }
+                    real pMean, asqrMean, Hmean;
+                    real gamma = settings.idealGasProperty.gamma;
+                    Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
+                                         gamma, pMean, asqrMean, Hmean);
+                    // ! refvalue:
+                    real muRef = settings.idealGasProperty.muGas;
+                    real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
+                    real mufPhy1;
+                    mufPhy1 = muEff(ULMeanXy, T);
+                    real epsWall = 2 * mufPhy1 / ULMeanXy(0) * k1 / sqr(d1);
+                    URxy(I4 + 2) = 2 * epsWall * ULxy(0) - ULxy(I4 + 2);
+                    // if (fixUL)
+                    //     ULxy(I4 + 2) = URxy(I4 + 2) = epsWall * ULxy(0);
+                }
+                if (settings.ransModel == RANSModel::RANS_KOSST ||
+                    settings.ransModel == RANSModel::RANS_KOWilcox)
                 { // BC for SST or KOWilcox
                     real d1 = dWall[iCell].mean();
                     // real d1 = dWall[iCell].minCoeff();
@@ -1664,6 +1675,8 @@ namespace DNDS::Euler
                     mut = RANS::GetMut_SST<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean());
                 else if (settings.ransModel == RANSModel::RANS_KOWilcox)
                     mut = RANS::GetMut_KOWilcox<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean());
+                else if (settings.ransModel == RANSModel::RANS_RKE)
+                    mut = RANS::GetMut_RealizableKe<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean());
             }
 
             return mut;

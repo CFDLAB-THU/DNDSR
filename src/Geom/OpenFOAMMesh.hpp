@@ -2,6 +2,8 @@
 
 #include "Geometric.hpp"
 #include "Elements.hpp"
+#include "Quadrature.hpp"
+#include "Mesh.hpp"
 #include <map>
 
 namespace DNDS::Geom::OpenFOAM
@@ -149,7 +151,7 @@ namespace DNDS::Geom::OpenFOAM
     struct OpenFOAMReader
     {
         std::vector<tPoint> points;
-        std::vector<std::vector<int>> faces;
+        std::vector<std::vector<index>> faces;
         std::vector<index> owner;
         std::vector<index> neighbour;
         std::map<std::string, OpenFOAMBoundaryCondition> boundaryConditions;
@@ -342,32 +344,32 @@ namespace DNDS::Geom::OpenFOAM
                 for (auto v : faces[0])
                     nodes.push_back(v);
             else
-                for (size_t i = faces[0].size() - 1; i >= 0; i--)
+                for (int i = faces[0].size() - 1; i >= 0; i--)
                     nodes.push_back(faces[0][i]);
-            for(int iFoot = 0; iFoot < 4; iFoot++)
+            for (int iFoot = 0; iFoot < 4; iFoot++)
             {
                 index foot = nodes.at(iFoot);
                 index head = -1;
-                for(int iFace = 1; iFace < faces.size(); iFace++)
+                for (int iFace = 1; iFace < faces.size(); iFace++)
                 {
                     int iFootC = -1;
                     index headL = -1;
                     index headR = -1;
-                    for(int iF2N = 0; iF2N < faces[iFace].size(); iF2N ++)
-                        if(faces[iFace][iF2N] == foot)
+                    for (int iF2N = 0; iF2N < faces[iFace].size(); iF2N++)
+                        if (faces[iFace][iF2N] == foot)
                             iFootC = iF2N;
-                    if(iFootC >= 0)
+                    if (iFootC >= 0)
                     {
                         headL = faces[iFace][(iFootC - 1) % faces[iFace].size()];
                         headR = faces[iFace][(iFootC + 1) % faces[iFace].size()];
                         auto itFoundL = std::find(nodes.begin(), nodes.begin() + 4, headL);
                         if (itFoundL == nodes.begin() + 4)
-                            head = headR;
-                        else
                             head = headL;
+                        else
+                            head = headR;
                     }
                 }
-                if(!(head >= 0))
+                if (!(head >= 0))
                     return std::make_tuple(etype, nodes);
                 nodes.push_back(head);
             }
@@ -377,7 +379,97 @@ namespace DNDS::Geom::OpenFOAM
         else
         {
             DNDS_assert_info(false, fmt::format("faces size {} not supported", faces.size()));
+            return std::make_tuple(etype, nodes);
         }
+        return std::make_tuple(etype, nodes);
     }
+
+    struct OpenFOAMConverter
+    {
+        std::vector<std::vector<index>> cell2face;
+        std::vector<std::vector<int>> cell2faceOwn;
+        std::vector<std::vector<index>> cell2node;
+        std::vector<ElemInfo> cellElemInfo;
+        // std::vector<ElemInfo> faceElemInfo;
+
+        void BuildCell2Face(OpenFOAMReader &reader)
+        {
+            index nCell = 0;
+            for (auto v : reader.neighbour)
+                nCell = std::max(nCell, v);
+            for (auto v : reader.owner)
+                nCell = std::max(nCell, v);
+            nCell++;
+            cell2face.resize(nCell);
+            cell2faceOwn.resize(nCell);
+            std::vector<int> nFaces(nCell, 0);
+            for (auto v : reader.neighbour)
+                nFaces.at(v)++;
+            for (auto v : reader.owner)
+                nFaces.at(v)++;
+            for (index iCell = 0; iCell < nCell; iCell++)
+            {
+                cell2face.at(iCell).reserve(nFaces.at(iCell));
+                cell2faceOwn.at(iCell).reserve(nFaces.at(iCell));
+            }
+            for (index iFace = 0; iFace < reader.owner.size(); iFace++)
+            {
+                index iCell = reader.owner.at(iFace);
+                cell2face.at(iCell).push_back(iFace);
+                cell2faceOwn.at(iCell).push_back(1);
+            }
+            for (index iFace = 0; iFace < reader.neighbour.size(); iFace++)
+            {
+                index iCell = reader.neighbour.at(iFace);
+                cell2face.at(iCell).push_back(iFace);
+                cell2faceOwn.at(iCell).push_back(0);
+            }
+            std::cout << "OF Converter has nCell " << nCell << std::endl;
+        }
+
+        void BuildCell2Node(OpenFOAMReader &reader)
+        {
+            cell2node.resize(cell2face.size());
+            cellElemInfo.resize(cell2face.size());
+            for (index iCell = 0; iCell < cell2node.size(); iCell++)
+            {
+                std::vector<std::vector<index>> facesIn;
+                for (auto iFace : this->cell2face[iCell])
+                {
+                    facesIn.push_back(reader.faces.at(iFace));
+                }
+                auto [etype, nodes] = ExtractTopologicalElementFromPolyMeshCell(facesIn, cell2faceOwn[iCell]);
+                DNDS_assert_info(etype != Elem::ElemType::UnknownElem,
+                                 fmt::format("elem reconstruction failed, iCell {}, nFaces {}", iCell, facesIn.size()));
+                cellElemInfo[iCell].setElemType(etype);
+                cell2node[iCell] = nodes;
+
+                /**********************************************************************/
+                // test code
+                // // std::cout << nodes.size() << std::endl;
+                // // std::cout << int(etype) << std::endl;
+                // // for (auto v : nodes)
+                // //     std::cout << v << " ";
+                // // std::cout << std::endl;
+                // Geom::tSmallCoords coords;
+                // coords.resize(3, nodes.size());
+                // for (index iNode = 0; iNode < nodes.size(); iNode++)
+                //     coords(Eigen::all, iNode) = reader.points.at(nodes[iNode]);
+                // Elem::Element elem{Elem::Hex8};
+                // Elem::Quadrature quad(elem, 2);
+                // real vol = 0;
+                // quad.Integration(
+                //     vol,
+                //     [&](real &inc, int iG, const tPoint &pParam, auto &DiNj)
+                //     {
+                //         tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
+                //         real JDet = J.determinant();
+                //         DNDS_assert(JDet > 0);
+                //         vol += JDet;
+                //     });
+                // // std::cout << vol << std::endl;
+            }
+        }
+    };
 
 }

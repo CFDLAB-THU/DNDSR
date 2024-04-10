@@ -659,29 +659,31 @@ namespace DNDS::Euler
         }
         if (model == EulerModel::NS_2EQ || model == NS_2EQ_3D)
         {
-            for (int iCell = 0; iCell < mesh->NumCell(); iCell++)
-            {
-                auto c2f = mesh->cell2face[iCell];
-                real d = dWall.at(iCell).mean();
-                // for SST or KOWilcox
-                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
-                // if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(c2f[ic2f])) == EulerBCType::BCWall)
+            if (settings.ransModel == RANSModel::RANS_KOSST ||
+                settings.ransModel == RANSModel::RANS_KOWilcox)
+                for (int iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
-                    real pMean, asqrMean, Hmean;
-                    real gamma = settings.idealGasProperty.gamma;
-                    Gas::IdealGasThermal(u[iCell](I4), u[iCell](0), (u[iCell](Seq123) / u[iCell](0)).squaredNorm(),
-                                         gamma, pMean, asqrMean, Hmean);
-                    real muRef = settings.idealGasProperty.muGas;
-                    real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * u[iCell](0));
-                    real mufPhy1 = muEff(u[iCell], T);
-                    real rhoOmegaaaWall = mufPhy1 / sqr(d) * 800 * 0.1;
+                    auto c2f = mesh->cell2face[iCell];
+                    real d = dWall.at(iCell).mean();
+                    // for SST or KOWilcox
+                    for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+                    // if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(c2f[ic2f])) == EulerBCType::BCWall)
+                    {
+                        real pMean, asqrMean, Hmean;
+                        real gamma = settings.idealGasProperty.gamma;
+                        Gas::IdealGasThermal(u[iCell](I4), u[iCell](0), (u[iCell](Seq123) / u[iCell](0)).squaredNorm(),
+                                             gamma, pMean, asqrMean, Hmean);
+                        real muRef = settings.idealGasProperty.muGas;
+                        real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * u[iCell](0));
+                        real mufPhy1 = muEff(u[iCell], T);
+                        real rhoOmegaaaWall = mufPhy1 / sqr(d) * 800 * 0.1;
 
-                    real rhoOmegaaaNew = std::max(rhoOmegaaaWall, u[iCell](I4 + 2));
-                    real rhoOmegaaaOld = u[iCell](I4 + 2);
-                    // u[iCell](I4 + 2) = rhoOmegaaaNew;
-                    // u[iCell](I4 + 1) = rhoOmegaaaNew / rhoOmegaaaOld * u[iCell](I4 + 1);
+                        real rhoOmegaaaNew = std::max(rhoOmegaaaWall, u[iCell](I4 + 2));
+                        real rhoOmegaaaOld = u[iCell](I4 + 2);
+                        // u[iCell](I4 + 2) = rhoOmegaaaNew;
+                        // u[iCell](I4 + 1) = rhoOmegaaaNew / rhoOmegaaaOld * u[iCell](I4 + 1);
+                    }
                 }
-            }
         }
 
         switch (settings.specialBuiltinInitializer)

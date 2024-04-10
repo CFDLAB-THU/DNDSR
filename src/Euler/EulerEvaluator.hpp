@@ -699,7 +699,7 @@ namespace DNDS::Euler
             const Geom::tPoint &pPhysics,
             real t,
             Geom::t_index btype,
-            bool fixUL = false, 
+            bool fixUL = false,
             int geomMode = 0);
 
         inline TU CompressRecPart(
@@ -950,35 +950,39 @@ namespace DNDS::Euler
                 //               << this->CompressInc(cx[iCell], cxInc[iCell] * alpha).transpose() << "\n"
                 //               << cxInc[iCell].transpose() * alpha << std::endl;
                 cx[iCell] += compressedInc;
-                if (model == NS_2EQ || model == NS_2EQ_3D)
-                    if (iCell < mesh->NumCell())
-                        for (auto f : mesh->cell2face[iCell])
-                            if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(f)) == BCWall)
-                            { // for SST or KOWilcox
-                                TVec uNorm = vfv->GetFaceNorm(f, -1)(Seq012);
-                                real vt = (cx[iCell](Seq123) - cx[iCell](Seq123).dot(uNorm) * uNorm).norm() / cx[iCell](0);
-                                // cx[iCell](I4 + 1) = sqr(vt) * cx[iCell](0) * 1; // k = v_tang ^2 in sublayer, Wilcox book
-                                // cx[iCell](I4 + 1) *= 0;
+                // wall fix in not needed
+                // if (model == NS_2EQ || model == NS_2EQ_3D)
+                //     if (iCell < mesh->NumCell())
+                //         for (auto f : mesh->cell2face[iCell])
+                //             if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(f)) == BCWall)
+                //             { // for SST or KOWilcox
+                //                 TVec uNorm = vfv->GetFaceNorm(f, -1)(Seq012);
+                //                 real vt = (cx[iCell](Seq123) - cx[iCell](Seq123).dot(uNorm) * uNorm).norm() / cx[iCell](0);
+                //                 // cx[iCell](I4 + 1) = sqr(vt) * cx[iCell](0) * 1; // k = v_tang ^2 in sublayer, Wilcox book
+                //                 // cx[iCell](I4 + 1) *= 0;
 
-                                real d1 = dWall[iCell].mean();
-                                // cx[iCell](I4 + 1) = 0.; // superfix, actually works
-                                // real d1 = dWall[iCell].minCoeff();
-                                real pMean, asqrMean, Hmean;
-                                real gamma = settings.idealGasProperty.gamma;
-                                auto ULMeanXy = cx[iCell];
-                                Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
-                                                     gamma, pMean, asqrMean, Hmean);
-                                // ! refvalue:
-                                real muRef = settings.idealGasProperty.muGas;
-                                real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
-                                real mufPhy1 = muEff(ULMeanXy, T);
+                //                 real d1 = dWall[iCell].mean();
+                //                 // cx[iCell](I4 + 1) = 0.; // superfix, actually works
+                //                 // real d1 = dWall[iCell].minCoeff();
+                //                 real pMean, asqrMean, Hmean;
+                //                 real gamma = settings.idealGasProperty.gamma;
+                //                 auto ULMeanXy = cx[iCell];
+                //                 Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
+                //                                      gamma, pMean, asqrMean, Hmean);
+                //                 // ! refvalue:
+                //                 real muRef = settings.idealGasProperty.muGas;
+                //                 real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
+                //                 real mufPhy1 = muEff(ULMeanXy, T);
 
-                                real rhoOmegaaaWall = mufPhy1 / sqr(d1) * 800;
-                                // cx[iCell](I4 + 2) = rhoOmegaaaWall * 0.5; // this is bad
-                            }
+                //                 real rhoOmegaaaWall = mufPhy1 / sqr(d1) * 800;
+                //                 // cx[iCell](I4 + 2) = rhoOmegaaaWall * 0.5; // this is bad
+                //             }
+
                 if (model == NS_2EQ || model == NS_2EQ_3D)
                 { // for SST or KOWilcox
-                    cx[iCell](I4 + 2) = std::max(cx[iCell](I4 + 2), settings.RANSBottomLimit * settings.farFieldStaticValue(I4 + 2));
+                    if (settings.ransModel == RANSModel::RANS_KOSST ||
+                        settings.ransModel == RANSModel::RANS_KOWilcox)
+                        cx[iCell](I4 + 2) = std::max(cx[iCell](I4 + 2), settings.RANSBottomLimit * settings.farFieldStaticValue(I4 + 2));
                 }
             }
             real alpha_fix_min_c = alpha_fix_min;

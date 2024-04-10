@@ -1,7 +1,7 @@
 #include "Geom/OpenFOAMMesh.hpp"
 #include <fstream>
 
-int main()
+void test()
 {
     using namespace DNDS::Geom::OpenFOAM;
     // OpenFOAMMesh ofMesh("points");
@@ -16,5 +16,24 @@ int main()
     ofReader.ReadNeighbour(neighbourIFS);
     std::ifstream boundaryIFS("boundary");
     ofReader.ReadBoundary(boundaryIFS);
+    OpenFOAMConverter ofConverter;
+    ofConverter.BuildCell2Face(ofReader);
+    ofConverter.BuildCell2Node(ofReader);
+}
+
+int main()
+{
+    try
+    {
+        test();
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << std::endl;
+    }
+    catch (...)
+    {
+        std::cerr << "error" << std::endl;
+    }
     return 0;
 }

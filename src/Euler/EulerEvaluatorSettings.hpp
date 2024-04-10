@@ -196,6 +196,8 @@ namespace DNDS::Euler
             __DNDS__json_to_config(farFieldStaticValue);
             if (read)
                 DNDS_assert(farFieldStaticValue.size() == nVars);
+            if (read)
+                DNDS_assert(ransModel != RANS_Unknown);
 
             //********* box entries
             if (read)

@@ -2,6 +2,8 @@
 
 #include "Euler.hpp"
 
+#define KE_LIMIT_MUT 1
+
 #define KW_WILCOX_VER 1
 #define KW_WILCOX_PROD_LIMITS 1
 #define KW_WILCOX_LIMIT_MUT 1
@@ -35,6 +37,9 @@ namespace DNDS::Euler::RANS
         real fmu = (1 - std::exp(-0.01 * Ret)) / (1 - exp(-std::sqrt(Ret))) * std::max(1., std::sqrt(2 / Ret));
         real mut = cmu * fmu * rho * sqr(k) / epsilon;
         mut = std::min(mut, phi * rho * k / S);
+#if KE_LIMIT_MUT == 1
+        mut = std::min(mut, 1e5 * muf); // CFL3D
+#endif
         if (std::isnan(mut) || !std::isfinite(mut))
         {
             std::cerr << k << " " << epsilon << " " << Ret << " " << S << "\n";
