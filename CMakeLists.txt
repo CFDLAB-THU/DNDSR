@@ -437,6 +437,9 @@ elseif(WIN32 OR MSVC)
         if(MSVC AND ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")) #! force use /openmp
             # set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} "/openmp")
             add_compile_options(-openmp)
+        elseif(WIN32 AND ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang"))#! force use -fopenmp
+            add_compile_options(-fopenmp)
+            add_link_options(-fopenmp)
         else()
             find_package(OpenMP REQUIRED)
             if(OpenMP_CXX_FLAGS)
