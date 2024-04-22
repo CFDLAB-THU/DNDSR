@@ -251,6 +251,7 @@ namespace DNDS::Euler
                 real meshElevationRefDWall = 1e-3;
                 int meshElevationBoundaryMode = 0; // 0: only wall bc; 1: wall + invis vall
 
+                int meshFormat = 0;
                 std::string meshFile = "data/mesh/NACA0012_WIDE_H3.cgns";
                 std::string outPltName = "data/out/debugData_";
                 std::string outLogName = "";
@@ -293,6 +294,7 @@ namespace DNDS::Euler
                     meshElevationRBFRadius, meshElevationRBFPower,
                     meshElevationRBFKernel, meshElevationMaxIncludedAngle, meshElevationNSearch, meshElevationRefDWall,
                     meshElevationBoundaryMode,
+                    meshFormat,
                     meshFile,
                     outPltName,
                     outLogName,
@@ -432,7 +434,8 @@ namespace DNDS::Euler
 
             nlohmann::ordered_json eulerSettings = nlohmann::ordered_json::object();
             nlohmann::ordered_json vfvSettings = nlohmann::ordered_json::object();
-            nlohmann::ordered_json bcSettings = nlohmann::ordered_json::object();
+            nlohmann::ordered_json bcSettings = nlohmann::ordered_json::array();
+            std::map<std::string, std::string> bcNameMapping;
 
             void
             ReadWriteJson(nlohmann::ordered_json &jsonObj, int nVars, bool read)
@@ -454,6 +457,7 @@ namespace DNDS::Euler
                 __DNDS__json_to_config(eulerSettings);
                 __DNDS__json_to_config(vfvSettings);
                 __DNDS__json_to_config(bcSettings);
+                __DNDS__json_to_config(bcNameMapping);
                 if (read)
                 {
                     DNDS_assert(eulerSettings.is_object());
@@ -577,9 +581,18 @@ namespace DNDS::Euler
 
             if (config.dataIOControl.readMeshMode == 0)
             {
-                reader->ReadFromCGNSSerial(config.dataIOControl.meshFile,
-                                           [&](const std::string &name) -> Geom::t_index
-                                           { return BCHandler.GetIDFromName(name); });
+                if (config.dataIOControl.meshFormat == 1)
+                    reader->ReadFromOpenFOAMAndConvertSerial(
+                        config.dataIOControl.meshFile,
+                        config.bcNameMapping,
+                        [&](const std::string &name)
+                            -> Geom::t_index
+                        { return BCHandler.GetIDFromName(name); });
+                else
+                    reader->ReadFromCGNSSerial(
+                        config.dataIOControl.meshFile,
+                        [&](const std::string &name) -> Geom::t_index
+                        { return BCHandler.GetIDFromName(name); });
                 reader->Deduplicate1to1Periodic(config.boundaryDefinition.periodicTolerance);
                 reader->BuildCell2Cell();
                 reader->MeshPartitionCell2Cell();

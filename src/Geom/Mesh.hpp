@@ -459,6 +459,8 @@ namespace DNDS::Geom
         /// @param fName file name of .cgns file
         void ReadFromCGNSSerial(const std::string &fName, const t_FBCName_2_ID &FBCName_2_ID = FBC_Name_2_ID_Default);
 
+        void ReadFromOpenFOAMAndConvertSerial(const std::string &fName, const std::map<std::string, std::string> &nameMapping, const t_FBCName_2_ID &FBCName_2_ID = FBC_Name_2_ID_Default);
+
         void Deduplicate1to1Periodic(real searchEps = 1e-8);
 
         // void InterpolateTopology();

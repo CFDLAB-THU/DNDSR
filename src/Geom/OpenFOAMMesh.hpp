@@ -390,7 +390,22 @@ namespace DNDS::Geom::OpenFOAM
         std::vector<std::vector<int>> cell2faceOwn;
         std::vector<std::vector<index>> cell2node;
         std::vector<ElemInfo> cellElemInfo;
-        // std::vector<ElemInfo> faceElemInfo;
+        std::vector<ElemInfo> faceElemInfo; // cannot decide bc zone id here
+
+        void BuildFaceElemInfo(OpenFOAMReader &reader)
+        {
+            faceElemInfo.resize(reader.faces.size());
+            for (index iF = 0; iF < reader.faces.size(); iF++)
+            {
+                faceElemInfo.at(iF).zone = BC_ID_NULL;
+                if (reader.faces.at(iF).size() == 4)
+                    faceElemInfo.at(iF).type = Elem::ElemType::Quad4;
+                else if (reader.faces.at(iF).size() == 3)
+                    faceElemInfo.at(iF).type = Elem::ElemType::Tri3;
+                else
+                    DNDS_assert_info(false, fmt::format("face {} has {} nodes, not supported", iF, reader.faces.at(iF).size()));
+            }
+        }
 
         void BuildCell2Face(OpenFOAMReader &reader)
         {

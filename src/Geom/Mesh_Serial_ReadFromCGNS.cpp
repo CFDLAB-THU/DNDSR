@@ -1,4 +1,6 @@
 #include "Mesh.hpp"
+#include "OpenFOAMMesh.hpp"
+
 #include <fmt/core.h>
 
 #include <cgnslib.h>
@@ -64,7 +66,10 @@ namespace DNDS::Geom
 
         int cgns_file = -1;
         if (cg_open(fName.c_str(), CG_MODE_READ, &cgns_file))
+        {
+            std::cerr << fmt::format("cgns file cannot open: [{}]", fName) << std::endl;
             cg_error_exit();
+        }
         int n_bases = -1;
         if (cg_nbases(cgns_file, &n_bases))
             cg_error_exit();
@@ -397,7 +402,7 @@ namespace DNDS::Geom
         std::vector<DNDS::index> NodeOld2New(ZoneNodeStarts.back(), -1);
         DNDS::index cTop = 0;
         // !using graph traversing to delete the 1-to-1 interface points, otherwise could omit duplication (say, a point being shared by 3 or more zones)
-       
+
         std::set<int> zonesLeft; //* assuming nZones < ~ 1<<20=1M  // ! a dfs:
         for (int iGZ = 0; iGZ < ZoneNodeSizes.size(); iGZ++)
             zonesLeft.insert(iGZ);
@@ -413,7 +418,7 @@ namespace DNDS::Geom
             for (int iOther = 0; iOther < ZoneConnect.at(iGZ).size(); iOther++)
             {
                 int iGZOther = ZoneConnectTargetIZone.at(iGZ).at(iOther);
-                
+
                 if (zonesLeft.count(iGZOther)) // unaccounted for, then put into stack
                 {
                     zonesFront.push_back(iGZOther);
@@ -558,5 +563,103 @@ namespace DNDS::Geom
 
         std::cout << "CGNS === Serial Read Done" << std::endl;
         // Memory with DM240-120 here: 18G ; after deconstruction done: 7.5G
+    }
+
+    void UnstructuredMeshSerialRW::
+        ReadFromOpenFOAMAndConvertSerial(const std::string &fName, const std::map<std::string, std::string> &nameMapping, const t_FBCName_2_ID &FBCName_2_ID)
+    {
+        mode = SerialReadAndDistribute;
+        this->dataIsSerialIn = true;
+
+        DNDS_MAKE_SSP(cell2nodeSerial, mesh->getMPI());
+        DNDS_MAKE_SSP(bnd2nodeSerial, mesh->getMPI());
+        DNDS_MAKE_SSP(coordSerial, mesh->getMPI());
+        DNDS_MAKE_SSP(cellElemInfoSerial, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
+        DNDS_MAKE_SSP(bndElemInfoSerial, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
+        DNDS_MAKE_SSP(bnd2cellSerial, mesh->getMPI());
+
+        if (mRank != mesh->getMPI().rank) //! parallel done!!! now serial!!!
+            return;
+
+        std::filesystem::path ofFilePath(fName);
+        std::ifstream pointsIFS(ofFilePath / "points");
+        std::ifstream facesIFS(ofFilePath / "faces");
+        std::ifstream ownerIFS(ofFilePath / "owner");
+        std::ifstream neighbourIFS(ofFilePath / "neighbour");
+        std::ifstream boundaryIFS(ofFilePath / "boundary");
+
+        DNDS_assert_info(pointsIFS.is_open(), "points file not found!");
+        DNDS_assert_info(facesIFS.is_open(), "faces file not found!");
+        DNDS_assert_info(ownerIFS.is_open(), "owner file not found!");
+        DNDS_assert_info(neighbourIFS.is_open(), "neighbour file not found!");
+        DNDS_assert_info(boundaryIFS.is_open(), "boundary file not found!");
+
+        OpenFOAM::OpenFOAMReader ofReader;
+        ofReader.ReadPoints(pointsIFS);
+        ofReader.ReadFaces(facesIFS);
+        ofReader.ReadOwner(ownerIFS);
+        ofReader.ReadNeighbour(neighbourIFS);
+        ofReader.ReadBoundary(boundaryIFS);
+
+        OpenFOAM::OpenFOAMConverter ofConverter;
+        ofConverter.BuildFaceElemInfo(ofReader);
+        ofConverter.BuildCell2Face(ofReader);
+        ofConverter.BuildCell2Node(ofReader);
+
+        coordSerial->Resize(ofReader.points.size());
+        for (index iN = 0; iN < coordSerial->Size(); iN++)
+            (*coordSerial)[iN] = ofReader.points.at(iN);
+        log() << "OpenFOAM === got num node: " << coordSerial->Size() << std::endl;
+
+        cell2nodeSerial->Resize(ofConverter.cell2node.size());
+        cellElemInfoSerial->Resize(ofConverter.cell2node.size());
+        for (index iC = 0; iC < cell2nodeSerial->Size(); iC++)
+        {
+            cell2nodeSerial->ResizeRow(iC, ofConverter.cell2node[iC].size());
+            for (index iN = 0; iN < ofConverter.cell2node[iC].size(); iN++)
+                (*cell2nodeSerial)[iC][iN] = ofConverter.cell2node[iC][iN];
+            cellElemInfoSerial->operator()(iC, 0) = ofConverter.cellElemInfo.at(iC);
+        }
+
+        log() << "OpenFOAM === got num cell: " << cell2nodeSerial->Size() << std::endl;
+
+        index nBnd = ofReader.owner.size() - ofReader.neighbour.size();
+        bnd2nodeSerial->Resize(nBnd);
+        bndElemInfoSerial->Resize(nBnd);
+        bnd2cellSerial->Resize(nBnd);
+        for (index iBnd = 0; iBnd < nBnd; iBnd++)
+        {
+            index iFaceOF = iBnd + ofReader.neighbour.size();
+            bnd2nodeSerial->ResizeRow(iBnd, ofReader.faces[iFaceOF].size());
+            for (index ib2c = 0; ib2c < ofReader.faces[iFaceOF].size(); ib2c++)
+                (*bnd2nodeSerial)[iBnd][ib2c] = ofReader.faces[iFaceOF][ib2c];
+            bnd2cellSerial->operator()(iBnd, 0) = ofReader.owner.at(iFaceOF);
+            bnd2cellSerial->operator()(iBnd, 1) = UnInitIndex;
+            bndElemInfoSerial->operator()(iBnd, 0) = ofConverter.faceElemInfo.at(iFaceOF);
+        }
+
+        log() << "nameMapping size: " << nameMapping.size() << std::endl;
+
+        for (auto &bc : ofReader.boundaryConditions)
+        {
+            auto boconame = bc.first;
+            if (nameMapping.count(boconame))
+                boconame = nameMapping.at(boconame);
+            t_index BCCode = FBCName_2_ID(std::string(boconame));
+            if (BCCode == BC_ID_NULL)
+            {
+                DNDS_assert_info(false, fmt::format("BC NAME [{}] NOT FOUND IN DATABASE", boconame));
+            }
+            for (index iBndC = 0; iBndC < bc.second.nFaces; iBndC++)
+                bndElemInfoSerial->operator()(iBndC + bc.second.startFace - ofReader.neighbour.size(), 0).zone = BCCode;
+        }
+        for (index iBnd = 0; iBnd < nBnd; iBnd++)
+        {
+            DNDS_assert(bndElemInfoSerial->operator()(iBnd, 0).zone != BC_ID_NULL);
+        }
+
+        log() << "OpenFOAM === got num bnd: " << nBnd << std::endl;
+
+        std::cout << "OpenFOAM === Serial Read Done" << std::endl;
     }
 }

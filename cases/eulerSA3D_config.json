@@ -3,7 +3,7 @@
         "dtImplicit": 1e100,
         "nTimeStep": 1,
         "steadyQuit": true,
-        "useRestart": true,
+        "useRestart": false,
         "rhsFPPMode": 1,
         "rhsFPPScale": 1,
         "odeCode": 103, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
@@ -50,9 +50,9 @@
         "meshElevationRBFKernel": "CPC0",
         "meshElevationMaxIncludedAngle": 20,
         // "meshFile": "../data/mesh/row_1_test3.cgns",
-        "meshFile": "../data/mesh/Rotor37_test1.cgns",
-        "outPltName": "../data/out/Rotor37_test1-Run1/out-abs-Roe-O4-Seq1-115",
-        "outRestartName": "../data/out/Rotor37_test1-Run1/out-abs-Roe-O4-Seq1-115",
+        "meshFormat": 1,
+        "meshFile": "../data/mesh/Rotor37_test1_Fine_OpenFOAM",
+        "outPltName": "../data/out/Rotor37_ofReadTest",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -208,6 +208,7 @@
             "CSutherland": 110.4
         }
     },
+    // For CGNS mesh:
     "bcSettings": [
         {
             "type": "BCOutP",
@@ -278,6 +279,37 @@
             "frameOption": 1
         }
     ],
+    // For OF mesh mapping:
+    "bcNameMapping": {
+        "row_1_OUTFLOW_1": "RS_1_to_2",
+        "row_1_HUB_DOWNSTREAM_1_2": "WALL_HUB_1",
+        "row_1_SHROUD_DOWNSTREAM_1_3": "WALL_SH",
+        "row_1_PER2_4": "PERIODIC_1",
+        "row_1_PER1_5": "PERIODIC_1_DONOR",
+        "row_1_HUB_6": "WALL_HUB_1",
+        "row_1_SHROUD_7": "WALL_SH",
+        "row_1_INFLOW_8": "INLET_1",
+        "row_1_HUB_UPSTREAM_1_9": "WALL_HUB_IN",
+        "row_1_SHROUD_UPSTREAM_1_10": "WALL_SH",
+        "row_1_PER2_11": "PERIODIC_1",
+        "row_1_PER1_12": "PERIODIC_1_DONOR",
+        "row_1_HUB_13": "WALL_HUB_1",
+        "row_1_SHROUD_14": "WALL_SH",
+        "row_1_HUB_15": "WALL_HUB_1",
+        "row_1_SHROUD_16": "WALL_SH",
+        "row_1_Main_Blade_17": "WALL_ROT_1",
+        "row_1_Main_Blade_18": "WALL_ROT_1",
+        "row_1_HUB_19": "WALL_HUB_1",
+        "row_1_SHROUD_20": "WALL_SH",
+        "row_1_PER2_21": "PERIODIC_1",
+        "row_1_PER1_22": "PERIODIC_1_DONOR",
+        "row_1_HUB_23": "WALL_HUB_1",
+        "row_1_SHROUD_24": "WALL_SH",
+        "row_1_Main_Blade_25": "WALL_ROT_1",
+        "row_1_SHROUD_26": "WALL_SH",
+        "row_1_Main_Blade_27": "WALL_ROT_1",
+        "row_1_SHROUD_28": "WALL_SH"
+    },
     "restartState": {
         "iStep": 1,
         "iStepInternal": 10000,
