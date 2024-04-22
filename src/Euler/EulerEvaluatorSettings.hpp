@@ -263,7 +263,9 @@ namespace DNDS::Euler
                 refU = farFieldStaticValue;
                 refUPrim = refU;
                 Gas::IdealGasThermalConservative2Primitive<dim>(refU, refUPrim, idealGasProperty.gamma);
-                refU(Seq123).setConstant(refU(Seq123).norm());
+                DNDS_assert(refUPrim(I4) > 0 && refUPrim(0) > 0);
+                real a = std::sqrt(idealGasProperty.gamma * refUPrim(I4) / (refUPrim(0) + verySmallReal));
+                refU(Seq123).setConstant(refU(Seq123).norm() + a);
                 refUPrim(Seq123).setConstant(refUPrim(Seq123).norm());
             }
         }
