@@ -166,6 +166,7 @@ namespace DNDS::Euler
                 int consoleOutputEveryFix = 0;
                 int nPrecisionConsole = 3;
                 int nPrecisionLog = 10;
+                bool dataOutAtInit = false;
                 int nDataOut = 10000;
                 int nDataOutC = 50;
                 int nDataOutInternal = 10000;
@@ -184,6 +185,7 @@ namespace DNDS::Euler
                     nConsoleCheckInternal,
                     consoleOutputMode,
                     consoleOutputEveryFix,
+                    dataOutAtInit,
                     nDataOut, nDataOutC,
                     nDataOutInternal, nDataOutCInternal,
                     nRestartOut, nRestartOutC,

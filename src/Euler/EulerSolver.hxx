@@ -230,6 +230,7 @@ namespace DNDS::Euler
         int dtIncreaseCounter = 0;
 
         DNDS_MPI_InsertCheck(mpi, "Implicit 2 nvars " + std::to_string(nVars));
+
         /*******************************************************/
         /*                   DEFINE LAMBDAS                    */
         /*******************************************************/
@@ -1393,6 +1394,15 @@ namespace DNDS::Euler
         /**********************************/
         /*           MAIN LOOP            */
         /**********************************/
+        // step 0 extra:
+        if (config.outputControl.dataOutAtInit)
+            PrintData(
+                config.dataIOControl.outPltName + "_" + output_stamp + "_" + "00000",
+                "",
+                [&](index iCell)
+                { return ode->getLatestRHS()[iCell](0); },
+                addOutList,
+                eval, tSimu);
 
         for (step = 1; step <= config.timeMarchControl.nTimeStep; step++)
         {
