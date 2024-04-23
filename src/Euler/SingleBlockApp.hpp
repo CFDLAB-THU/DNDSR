@@ -33,7 +33,7 @@ namespace DNDS::Euler
         std::string defaultConfJson = "../cases/"s + getSingleBlockAppName(model) + "_default_config.json"s;
         std::string confJson = "../cases/"s + getSingleBlockAppName(model) + "_config.json";
 
-        argparse::ArgumentParser mainParser(getSingleBlockAppName(model) + " commit "s + DNDS_MACRO_TO_STRING(DNDS_CURRENT_COMMIT_HASH));
+        argparse::ArgumentParser mainParser(getSingleBlockAppName(model), "version"s + " commit "s + DNDS_MACRO_TO_STRING(DNDS_CURRENT_COMMIT_HASH));
         std::string read_configPath;
         mainParser.add_argument("config").default_value("");
 
