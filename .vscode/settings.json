@@ -16,6 +16,8 @@
         "external/boost_1_82_0",
         "external/pybind11-2.11.1/include",
         "external/fmt-10.1.1/include",
+        "external/argparse-3.0/include/argparse",
+        "external/cpptrace-0.5.1/include/cpptrace",
         "src"
     ],
     "files.associations": {

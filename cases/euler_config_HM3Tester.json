@@ -1,13 +1,18 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 100e-1,
-        "nTimeStep": 1,
+        "dtImplicit": 0.25e-1,
+        "nTimeStep": 80,
         "steadyQuit": false,
-        "odeCode": 401,
         "tEnd": 3e+200,
-        "odeSetting1": 0.5,
+        "odeCode": 401,
+        // "odeSetting1": 0.55,
+        // "odeSetting2": 0,
+        // "odeSetting3": 1,
+        // "odeSetting4": 0,
+        "odeSetting1": 0.25,
         "odeSetting2": 0,
-        "odeSetting3": 0.75,
+        "odeSetting3": 1,
+        "odeSetting4": 1,
         // "rhsFPPMode": 1,
         // "rhsFPPScale": 0.01
         "_tail": 0
@@ -18,7 +23,7 @@
         "consoleOutputMode": 0,
         "consoleOutputEveryFix": 0,
         "nDataOutC": 1,
-        "nDataOut": 1,
+        "nDataOut": 1000,
         "nDataOutCInternal": 100,
         "nDataOutInternal": 1000000000,
         "tDataOut": 3e+200
@@ -33,16 +38,16 @@
     },
     "convergenceControl": {
         "nTimeStepInternal": 4000,
-        "rhsThresholdInternal": 1e-4,
+        "rhsThresholdInternal": 1e-6,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/IV10_40.cgns",
-        "outPltName": "../data/outUnsteady/IV10_40",
-        "outLogName": "../data/outUnsteady/IV10_40",
+        "meshFile": "../data/mesh/IV10_160.cgns",
+        "outPltName": "../data/outUnsteady/IV10_160",
+        "outLogName": "../data/outUnsteady/IV10_160",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,

@@ -4,6 +4,7 @@
         "nTimeStep": 1,
         "steadyQuit": true,
         "useRestart": false,
+        "rhsFPPMode": 0,
         "odeCode": 0,
         "tEnd": 3e+200
     },
@@ -28,11 +29,11 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 100,
+        "CFL": 1,
         "nForceLocalStartStep": 2147483647,
-        "nCFLRampStart": 2147483647,
-        "nCFLRampLength": 2147483647,
-        "CFLRampEnd": 0.0,
+        "nCFLRampStart": 100,
+        "nCFLRampLength": 1000,
+        "CFLRampEnd": 10,
         "useLocalDt": true
     },
     "dataIOControl": {
@@ -45,7 +46,10 @@
         "outPltTecplotFormat": true,
         "outPltVTKFormat": false,
         "outAtPointData": true,
-        "outAtCellData": true
+        "outAtCellData": true,
+        "outCellScalarNames": [
+            "mut"
+        ]
     },
     "boundaryDefinition": {},
     "implicitReconstructionControl": {
@@ -57,7 +61,8 @@
         "recThreshold": 1e-05,
         "nRecConsolCheck": 1,
         "storeRecInc": true,
-        "dampRecIncDTau": false
+        "dampRecIncDTau": false,
+        "zeroRecForStepsInternal": 100
     },
     "limiterControl": {
         "useLimiter": false,
@@ -106,7 +111,7 @@
         "jacobiCode": 2,
         "sgsIter": 0,
         "nSgsConsoleCheck": 100,
-        "gmresCode": 0,
+        "gmresCode": 1,
         "nGmresSpace": 5,
         "nGmresIter": 2,
         "sgsWithRec": 0,
@@ -122,7 +127,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe_M4",
+        "riemannSolverType": "Roe_M1",
         "constMassForce": [
             0.0,
             0.0,
@@ -130,8 +135,8 @@
         ],
         "farFieldStaticValue": [
             1,
-            1,
-            0,
+            0.9962,
+            0.0872,
             0,
             79.8650793650794,
             6.0000e-06,

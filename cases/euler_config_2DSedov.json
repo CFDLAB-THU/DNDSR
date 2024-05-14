@@ -1,6 +1,6 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 10e-6,
+        "dtImplicit": 1e-6,
         "nTimeStep": 1000000,
         "steadyQuit": false,
         "useImplicitPP": false,
@@ -13,6 +13,8 @@
         "dtCFLLimitScale": 100,
         "dtIncreaseLimit": 1.2,
         "useDtPPLimit": true,
+        "rhsFPPRelax": 0.9,
+        "incrementPPRelax": 0.9,
         "dtPPLimitScale": 1
     },
     "convergenceControl": {
@@ -27,7 +29,7 @@
         "consoleOutputMode": 0,
         "consoleOutputEveryFix": 1,
         "nDataOutC": 1,
-        "nDataOut": 1,
+        "nDataOut": 10,
         "nDataOutCInternal": 100,
         "nDataOutInternal": 1000000000,
         "tDataOut": 3e+200
@@ -45,7 +47,7 @@
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_C1.cgns",
         // "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_WallCent.cgns",
-        "outPltName": "../data/outUnsteady/Unifrom_2DSedov5EM3",
+        "outPltName": "../data/outUnsteady/Unifrom_2DSedov5EM3-Ref",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,

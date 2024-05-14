@@ -12,7 +12,7 @@
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 10000,
+        "nTimeStepInternal": 5000,
         "rhsThresholdInternal": 1e-8,
         "res_base": 0.0,
         "useVolWiseResidual": false
@@ -51,8 +51,8 @@
         "meshElevationRBFKernel": "CPC0",
         "meshElevationMaxIncludedAngle": 20,
         // "meshFile": "../data/mesh/row_1_test3.cgns",
-        "meshFile": "../data/mesh/row_1_test4-Cylinderout.cgns",
-        "outPltName": "../data/out/row_1_test4/out-Cylinderout-RealRE-IncreasedPout4",
+        "meshFile": "../data/mesh/row_1_test5.cgns",
+        "outPltName": "../data/out/row_1_test5/out-t1",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -88,21 +88,22 @@
         "nGmresIter": 2,
         "recThreshold": 1e-03,
         "nRecConsolCheck": 1,
+        "nRecMultiplyForZeroedGrad": 1,
         "zeroRecForStepsInternal": 40
     },
     "limiterControl": {
         "useLimiter": true,
         "smoothIndicatorProcedure": 0,
-        "limiterProcedure": 1, //1 == CWBAP
+        "limiterProcedure": 0, //1 == CWBAP
         "nPartialLimiterStart": 100000,
         "nPartialLimiterStartLocal": 50
     },
     "vfvSettings": {
-        "maxOrder": 2,
-        "intOrder": 3,
+        "maxOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": true,
         "jacobiRelax": 1,
-        "SORInstead": true,
+        "SORInstead": false,
         "smoothThreshold": 5e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
@@ -115,6 +116,7 @@
         "functionalSettings": {
             "dirWeightScheme": "HQM_OPT",
             "geomWeightScheme": "HQM_SD",
+            "geomWeightBias": 1,
             // "geomWeightScheme": "SD_Power",
             // "geomWeightPower1": 0.125,
             // "geomWeightPower2": -0.5,
@@ -134,7 +136,7 @@
         "nGmresIter": 2,
         "directPrecControl": {
             "useDirectPrec": true,
-            "iluCode": 1
+            "iluCode": 0
         }
     },
     "others": {
@@ -145,7 +147,7 @@
         "useScalarJacobian": false,
         "minWallDist": 1e-10,
         "wallDistScheme": 1,
-        "riemannSolverType": "Roe_M2",
+        "riemannSolverType": "Roe_M1",
         // "rsRotateScheme": 1,
         "rsMeanValueEig": 1,
         "constMassForce": [
@@ -190,38 +192,33 @@
     },
     "bcSettings": [
         {
-            "type": "BCFar",
+            "type": "BCOutP",
             "name": "RS_1_to_2",
             "value": [
                 1,
                 0,
                 0,
                 0.5,
-                // 1.127540981911547,
-                // 1.528047175703185, // 110000 Pa static pressure
-                // 1.655596918948928, // 120000
-                1.783146662194671, //130000
-                // 2.038246148686159, // 150000
-                1.3
-            ]
+                1.417397773437500, // 1.0 p0in
+                3
+            ],
+            "valueExtra": [
+                128, // profile divisions
+                0,
+                1 // print info
+            ],
+            "anchorOption": 2,
+            "integrationOption": 2
         },
         {
-            // "type": "BCFar",
             "type": "BCInPsTs",
             "name": "INLET_1",
-            // "value": [
-            //     1,
-            //     0,
-            //     0,
-            //     0.5,
-            //     1.292397773437500
-            // ]
             "value": [
                 0.516959109375000, //Ps
                 288.15, //Ts
-                1e100,
-                1e100,
-                1e100,
+                0,
+                0,
+                1,
                 1.3
             ]
         },

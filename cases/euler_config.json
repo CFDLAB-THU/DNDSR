@@ -1,7 +1,7 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-2,
-        "nTimeStep": 100,
+        "dtImplicit": 0.005,
+        "nTimeStep": 200,
         "steadyQuit": false,
         "odeCode": 0,
         "tEnd": 3e+200,
@@ -18,7 +18,7 @@
         "consoleOutputMode": 0,
         "consoleOutputEveryFix": 0,
         "nDataOutC": 1,
-        "nDataOut": 1,
+        "nDataOut": 50,
         "nDataOutCInternal": 100,
         "nDataOutInternal": 1000000000,
         "tDataOut": 3e+200
@@ -32,7 +32,7 @@
         "useLocalDt": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 1000,
+        "nTimeStepInternal": 100,
         "rhsThresholdInternal": 1e-4,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -40,26 +40,15 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/UniformRot120.cgns",
-        "outPltName": "../data/outUnsteady/UniformRot120Rot",
+        "meshFile": "../data/mesh/IV30_100.cgns",
+        "outPltName": "../data/outUnsteady/IV30_100",
+        "outLogName": "../data/outUnsteady/IV30_100",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
-        "outPltVTKFormat": true,
+        "outPltVTKFormat": false,
         "outAtPointData": true,
         "outAtCellData": true
-    },
-    "boundaryDefinition": {
-        "PeriodicTranslation1": [
-            0,
-            0,
-            0
-        ],
-        "PeriodicRotationEulerAngles1": [
-            0.0,
-            0.0,
-            120
-        ]
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
@@ -90,9 +79,9 @@
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
-        "subs2ndOrder": 1,
+        "subs2ndOrder": 0,
         "baseSettings": {
-            "localOrientation": true,
+            "localOrientation": false,
             "anisotropicLengths": false
         },
         "functionalSettings": {
@@ -100,24 +89,19 @@
             // "dirWeightScheme": "HQM_OPT"
             // "useAnisotropicFunctional": true,
             // "scaleMultiplier": 3.464101615137754,
-            "greenGauss1Weight": 0,
+            "greenGauss1Weight": 1,
             "_tail": 0
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 2,
+        "jacobiCode": 1,
         "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
-        "gmresCode": 1,
+        "gmresCode": 0,
         "nGmresSpace": 5,
         "nGmresIter": 1,
-        "initWithLastURecInc": false,
-        "directPrecControl":
-        {
-            "useDirectPrec": true,
-            "iluCode": 2
-        }
+        "initWithLastURecInc": false
     },
     "others": {
         "nFreezePassiveInner": 0
@@ -126,7 +110,7 @@
         "ignoreSourceTerm": false,
         "useScalarJacobian": true,
         "riemannSolverType": "Roe",
-        "specialBuiltinInitializer": 201,
+        // "specialBuiltinInitializer": 202,
         "nCentralSmoothStep": 0,
         "constMassForce": [
             0.0,
@@ -141,11 +125,11 @@
                 1.0
             ],
             "center": [
-                0.0,
-                0.0,
+                -10.0,
+                -10.0,
                 0.0
             ],
-            "rpm": -1
+            "rpm": 10
         },
         "farFieldStaticValue": [
             1,
@@ -162,5 +146,19 @@
             "TRef": 273.15,
             "CSutherland": 110.4
         }
-    }
+    },
+    "bcSettings": [
+        {
+            "type": "BCFar",
+            "name": "bnds",
+            "value": [
+                1,
+                1,
+                1,
+                0,
+                3.5
+            ],
+            "frameOption": 1
+        }
+    ]
 }

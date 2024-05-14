@@ -1,22 +1,30 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 100e-2,
-        "nTimeStep": 10000,
+        "dtImplicit": 1e-3,
+        "nTimeStep": 1000000,
         "steadyQuit": false,
         "useImplicitPP": false,
         "rhsFPPMode": 1,
         "rhsFPPScale": 1,
+        "odeCode": 401,
+        // "odeSetting1": 0.55,
+        // "odeSetting2": 0,
+        // "odeSetting3": 1,
+        "odeSetting1": 0.25,
+        "odeSetting2": 0,
+        "odeSetting3": 1,
+        "odeSetting4": 1,
+        "tEnd": 2e-1,
+        "dtCFLLimitScale": 50,
+        "dtIncreaseLimit": 1.2,
         "useDtPPLimit": true,
         "rhsFPPRelax": 0.9,
         "incrementPPRelax": 0.9,
-        "tEnd": 6,
-        "odeCode": 0,
-        "odeSetting1": 0.5,
-        "odeSetting2": 1
+        "dtPPLimitScale": 1
     },
     "convergenceControl": {
-        "nTimeStepInternal": 100,
-        "rhsThresholdInternal": 1e-4,
+        "nTimeStepInternal": 20,
+        "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
@@ -24,48 +32,43 @@
         "nConsoleCheck": 1,
         "nConsoleCheckInternal": 1,
         "consoleOutputMode": 0,
+        "consoleOutputEveryFix": 1,
         "nDataOutC": 1,
-        "nDataOut": 100,
-        "nDataOutCInternal": 1,
+        "nDataOut": 10,
+        "nDataOutCInternal": 100,
         "nDataOutInternal": 1000000000,
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 10.0,
+        "CFL": 1,
         "nForceLocalStartStep": 2147483647,
-        "nCFLRampStart": 2147483647,
-        "nCFLRampLength": 2147483647,
-        "CFLRampEnd": 0.0,
+        "nCFLRampStart": 0,
+        "nCFLRampLength": 20,
+        "CFLRampEnd": 10.0,
         "useLocalDt": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        // "meshFile": "../data/mesh/Unifrom_1D400.cgns",
-        "meshFile": "../data/mesh/Uniform_LeBlanc10_400.cgns",
-        "outPltName": "../data/outUnsteady/Uniform_LB",
+        "meshFile": "../data/mesh/Blast1.cgns",
+        // "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_WallCent.cgns",
+        "outPltName": "../data/outUnsteady/Blast1-Test-Mask1",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
-        "outPltVTKFormat": false,
+        "outPltVTKFormat": true,
         "outAtPointData": true,
-        "outAtCellData": true
+        "outAtCellData": true,
+        "outCellScalarNames": [
+            "betaPP"
+        ],
+        "_tail": 0
     },
     "boundaryDefinition": {
-        "PeriodicTranslation1": [
-            10.0,
-            0.0,
-            0.0
-        ],
         "PeriodicTranslation2": [
             0.0,
-            10.0,
+            0.01,
             0.0
-        ],
-        "PeriodicTranslation3": [
-            0.0,
-            0.0,
-            10.0
         ]
     },
     "implicitReconstructionControl": {
@@ -76,47 +79,53 @@
         "nGmresIter": 10,
         "recThreshold": 1e-010,
         "nRecConsolCheck": 10,
-        "nRecMultiplyForZeroedGrad": 1000,
+        "nRecMultiplyForZeroedGrad": 1,
         "storeRecInc": true,
         "dampRecIncDTau": false
     },
     "limiterControl": {
         "useLimiter": true,
         "smoothIndicatorProcedure": 0,
-        "limiterProcedure": 1, //1 == CWBAP
+        "limiterProcedure": 0, //1 == CWBAP
         "nPartialLimiterStart": 1000000,
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
         "maxOrder": 3,
         "intOrder": 5,
-        "cacheDiffBase": false,
+        "cacheDiffBase": true,
         "jacobiRelax": 1,
-        "SORInstead": true,
+        "SORInstead": false,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
-        "subs2ndOrder": 0,
+        "subs2ndOrder": 1,
         "baseSettings": {
-            "localOrientation": true,
+            "localOrientation": false,
             "anisotropicLengths": false
         },
         "functionalSettings": {
             "scaleType": "BaryDiff",
-            // "dirWeightScheme": "HQM_OPT"
+            "scaleMultiplier": 1,
+            "dirWeightScheme": "HQM_OPT",
             // "useAnisotropicFunctional": true,
             // "scaleMultiplier": 3.464101615137754,
             "_tail": 0
         }
     },
     "linearSolverControl": {
+        "jacobiCode": 2,
         "sgsIter": 0,
-        "sgsWithRec": 1,
+        "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
         "nGmresSpace": 5,
         "nGmresIter": 1,
-        "initWithLastURecInc": true
+        "initWithLastURecInc": false,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
@@ -125,55 +134,26 @@
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
         "riemannSolverType": "Roe_M2",
+        "rsMeanValueEig": 1,
         "nCentralSmoothStep": 0,
+        "uRecAlphaCompressPower": 1,
+        "uRecBetaCompressPower": 1,
         "constMassForce": [
             0.0,
             0.0,
             0.0
         ],
         "farFieldStaticValue": [
-            1e-3,
+            1,
+            1,
             0,
             0,
-            0,
-            0.1e-9
+            2.5
         ],
         "boxInitializers": [
-            // for double rarefaction:
-            // {
-            //     "x0": -1,
-            //     "x1": 0.5,
-            //     "y0": -100,
-            //     "y1": 100,
-            //     "z0": -100,
-            //     "z1": 100,
-            //     "v": [
-            //         1,
-            //         -2,
-            //         0,
-            //         0,
-            //         2.2500
-            //     ]
-            // },
-            // {
-            //     "x0": 0.5,
-            //     "x1": 2,
-            //     "y0": -100,
-            //     "y1": 100,
-            //     "z0": -100,
-            //     "z1": 100,
-            //     "v": [
-            //         1,
-            //         2,
-            //         0,
-            //         0,
-            //         2.2500
-            //     ]
-            // }
-            // for LeBlanc
             {
-                "x0": -1,
-                "x1": 3,
+                "x0": -5,
+                "x1": 5,
                 "y0": -100,
                 "y1": 100,
                 "z0": -100,
@@ -183,28 +163,30 @@
                     0,
                     0,
                     0,
-                    0.1
+                    2.5
                 ]
             },
             {
-                "x0": 3,
-                "x1": 10,
-                "y0": -100,
-                "y1": 100,
+                "x0": -5e-3,
+                "x1": 5e-3,
+                "y0": 45e-3,
+                "y1": 55e-3,
+                // "y0": -100,
+                // "y1": 100,
                 "z0": -100,
                 "z1": 100,
                 "v": [
-                    1e-3,
+                    1,
                     0,
                     0,
                     0,
-                    0.1e-9
+                    // 32e7
+                    32e4
                 ]
             }
         ],
         "idealGasProperty": {
-            // "gamma": 1.4,
-            "gamma": 1.666666666666667,
+            "gamma": 1.4,
             "Rgas": 289,
             "muGas": 1e-200,
             "prGas": 0.72,
@@ -214,14 +196,18 @@
     },
     "bcSettings": [
         {
+            "type": "BCSym",
+            "name": "Sym"
+        },
+        {
             "type": "BCFar",
-            "name": "FAR_R",
+            "name": "BC_FAR",
             "value": [
                 1,
-                2,
+                1,
                 0,
                 0,
-                2.2500
+                2.5
             ]
         }
     ]

@@ -3,7 +3,7 @@
         "dtImplicit": 1e100,
         "nTimeStep": 1,
         "steadyQuit": true,
-        "useRestart": true,
+        "useRestart": false,
         "odeCode": 0,
         "tEnd": 3e+200
     },
@@ -95,7 +95,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe_M4",
+        "riemannSolverType": "Roe_M1",
         "constMassForce": [
             0.0,
             0.0,

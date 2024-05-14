@@ -14,12 +14,13 @@
     },
     "outputControl": {
         "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 1,
+        "nConsoleCheckInternal": 10,
         "consoleOutputMode": 1,
         "nDataOutC": 100,
         "nDataOut": 10,
         "nDataOutCInternal": 200,
         "nDataOutInternal": 1000000000,
+        "nRestartOutCInternal": 1000,
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
@@ -33,16 +34,18 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/BL_1EM5_V1.cgns",
-        "outPltName": "../data/out/BL_1EM5_V1",
-        "outLogName": "../data/out/BL_1EM5_V1",
+        "meshFile": "../data/mesh/BL_1EM6_V1.cgns",
+        "outPltName": "../data/out/Test2EQ/t1_SA",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outBndData": true,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": false,
         "outAtPointData": true,
-        "outAtCellData": true
+        "outAtCellData": true,
+        "outCellScalarNames": [
+            "mut"
+        ]
     },
     "boundaryDefinition": {},
     "implicitReconstructionControl": {
@@ -52,7 +55,8 @@
         "nGmresSpace": 5,
         "nGmresIter": 10,
         "recThreshold": 1e-05,
-        "nRecConsolCheck": 1
+        "nRecConsolCheck": 1,
+        "zeroRecForStepsInternal": 100
     },
     "limiterControl": {
         "useLimiter": false,
@@ -82,9 +86,18 @@
         }
     },
     "linearSolverControl": {
+        "jacobiCode": 2,
+        "sgsIter": 0,
+        "nSgsConsoleCheck": 100,
         "gmresCode": 0,
-        "nGmresSpace": 10,
-        "nGmresIter": 5
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
+        "sgsWithRec": 0,
+        "initWithLastURecInc": false,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
@@ -133,7 +146,7 @@
         "idealGasProperty": {
             "gamma": 1.4,
             "Rgas": 0.116221972344982,
-            "muGas": 1e-5,
+            "muGas": 1e-6,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4
