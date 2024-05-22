@@ -1422,7 +1422,7 @@ namespace DNDS::Euler
                 rhsTemp *= curDtImplicit * config.timeMarchControl.dtPPLimitScale;
                 index nLim = 0;
                 real minLim = 1;
-                eval.EvaluateCellRHSAlpha(u, uRec, betaPP, rhsTemp, alphaPP_tmp, nLim, minLim, 0.8, 0); //* trick: use 0th order reconstruction RHS for dt PP limiting
+                eval.EvaluateCellRHSAlpha(u, uRec, betaPP, rhsTemp, alphaPP_tmp, nLim, minLim, config.timeMarchControl.dtPPLimitRelax, 0); //* trick: use 0th order reconstruction RHS for dt PP limiting
                 if (nLim)
                     curDtImplicit = std::min(curDtImplicit, minLim * curDtImplicit);
                 if (curDtImplicitHistory.size() && curDtImplicit > curDtImplicitHistory.back() * config.timeMarchControl.dtIncreaseLimit)
@@ -1432,7 +1432,7 @@ namespace DNDS::Euler
                 if (mpi.rank == 0 && nLim)
                 {
                     log() << "##################################################################" << std::endl;
-                    log() << fmt::format("At Step [{:d}] t [{:.8g}] Changing dt to {}", step, tSimu, curDtImplicit) << std::endl;
+                    log() << fmt::format("At Step [{:d}] t [{:.8g}] Changing dt to [{}], using PP", step, tSimu, curDtImplicit) << std::endl;
                     log() << "##################################################################" << std::endl;
                 }
             }

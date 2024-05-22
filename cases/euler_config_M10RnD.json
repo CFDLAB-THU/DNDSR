@@ -1,18 +1,20 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-4,
+        "dtImplicit": 5e-4,
         "nTimeStep": 25000,
         "steadyQuit": false,
-        "useImplicitPP": true, //!
-        "rhsFPPMode": 0,
+        "useImplicitPP": false, //!
+        "rhsFPPMode": 1,
         "rhsFPPScale": 1,
-        "odeCode": 102,
+        "odeCode": 0,
         "tEnd": 0.25e0,
         "odeSetting1": 0.5,
-        "odeSetting2": 1
+        "odeSetting2": 1,
+        "dtCFLLimitScale": 20,
+        "useDtPPLimit": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 1000,
+        "nTimeStepInternal": 200,
         "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -40,8 +42,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/Wedge30_200_H1.cgns",
-        "outPltName": "../data/outUnsteady/Wedge30_200_H1_Re100_HLLEP_V1_Rot0_VBDF2_CWBAP_Partial0_constMu_O",
-        "outLogName": "../data/outUnsteady/Wedge30_200_H1_Re100_HLLEP_V1_Rot0_VBDF2_CWBAP_Partial0_constMu_O",
+        "outPltName": "../data/outUnsteady/PP/Wedge30_200_H1_ReInf_5-20-RM2",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -75,15 +76,15 @@
     "limiterControl": {
         "useLimiter": true,
         "smoothIndicatorProcedure": 0, //1 = pressure only
-        "limiterProcedure": 1, //1 == CWBAP
-        "nPartialLimiterStart": 500,
+        "limiterProcedure": 0, //1 == CWBAP
+        "nPartialLimiterStart": 5000000,
         "nPartialLimiterStartLocal": 1000000,
         "preserveLimited": false,
         "_tail": 0
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": true,
         "jacobiRelax": 1,
         "SORInstead": false,
@@ -122,8 +123,8 @@
     "eulerSettings": {
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
-        "riemannSolverType": "HLLEP_V1",
-        "riemannSolverTypeAux": "Roe_M2",
+        "riemannSolverType": "Roe_M2",
+        "riemannSolverTypeAux": "Roe_M1",
         "rsMeanValueEig": 1,
         "rsRotateScheme": 0,
         "nCentralSmoothStep": 0,
@@ -159,7 +160,7 @@
         "idealGasProperty": {
             "gamma": 1.4,
             "Rgas": 0.002614994377762,
-            "muGas": 1e-2,
+            "muGas": 1e-200,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4,

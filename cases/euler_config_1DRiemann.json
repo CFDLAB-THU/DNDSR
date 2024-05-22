@@ -1,18 +1,22 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 5e-4,
-        "nTimeStep": 200,
+        "dtImplicit": 1e-2,
+        "nTimeStep": 10000,
         "steadyQuit": false,
-        "useImplicitPP": true,
+        "useImplicitPP": false,
         "rhsFPPMode": 1,
-        "odeCode": 1,
-        "tEnd": 3e+200,
+        "rhsFPPScale": 1,
+        "useDtPPLimit": true,
+        "rhsFPPRelax": 0.9,
+        "incrementPPRelax": 0.9,
+        "tEnd": 6,
+        "odeCode": 0,
         "odeSetting1": 0.5,
         "odeSetting2": 1
     },
     "convergenceControl": {
-        "nTimeStepInternal": 100,
-        "rhsThresholdInternal": 1e-4,
+        "nTimeStepInternal": 50,
+        "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
@@ -27,19 +31,19 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 10.0,
+        "CFL": 0.01,
         "nForceLocalStartStep": 2147483647,
-        "nCFLRampStart": 2147483647,
-        "nCFLRampLength": 2147483647,
-        "CFLRampEnd": 0.0,
+        "nCFLRampStart": 0,
+        "nCFLRampLength": 10,
+        "CFLRampEnd": 10.0,
         "useLocalDt": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/Unifrom_1D400.cgns",
-        "outPltName": "../data/outUnsteady/Unifrom_1D400",
-        "outLogName": "../data/outUnsteady/Unifrom_1D400",
+        // "meshFile": "../data/mesh/Unifrom_1D400.cgns",
+        "meshFile": "../data/mesh/Uniform_LeBlanc10_400.cgns",
+        "outPltName": "../data/outUnsteady/PP/Uniform_LeBlanc10_400-1EM2",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -79,13 +83,13 @@
     "limiterControl": {
         "useLimiter": true,
         "smoothIndicatorProcedure": 0,
-        "limiterProcedure": 1, //1 == CWBAP
+        "limiterProcedure": 0, //1 == CWBAP
         "nPartialLimiterStart": 1000000,
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": false,
         "jacobiRelax": 1,
         "SORInstead": true,
@@ -120,7 +124,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
-        "riemannSolverType": "HLLEP",
+        "riemannSolverType": "Roe_M2",
         "nCentralSmoothStep": 0,
         "constMassForce": [
             0.0,
@@ -128,46 +132,79 @@
             0.0
         ],
         "farFieldStaticValue": [
-            1,
-            -2,
+            1e-3,
             0,
             0,
-            2.2500
+            0,
+            0.1e-9
         ],
         "boxInitializers": [
+            // for double rarefaction:
+            // {
+            //     "x0": -1,
+            //     "x1": 0.5,
+            //     "y0": -100,
+            //     "y1": 100,
+            //     "z0": -100,
+            //     "z1": 100,
+            //     "v": [
+            //         1,
+            //         -2,
+            //         0,
+            //         0,
+            //         2.2500
+            //     ]
+            // },
+            // {
+            //     "x0": 0.5,
+            //     "x1": 2,
+            //     "y0": -100,
+            //     "y1": 100,
+            //     "z0": -100,
+            //     "z1": 100,
+            //     "v": [
+            //         1,
+            //         2,
+            //         0,
+            //         0,
+            //         2.2500
+            //     ]
+            // }
+            // for LeBlanc
             {
                 "x0": -1,
-                "x1": 0.5,
+                "x1": 3,
                 "y0": -100,
                 "y1": 100,
                 "z0": -100,
                 "z1": 100,
                 "v": [
                     1,
-                    -2,
                     0,
                     0,
-                    2.2500
+                    0,
+                    0.1
                 ]
             },
             {
-                "x0": 0.5,
-                "x1": 2,
+                "x0": 3,
+                "x1": 10,
                 "y0": -100,
                 "y1": 100,
                 "z0": -100,
                 "z1": 100,
                 "v": [
-                    1,
-                    2,
+                    1e-3,
                     0,
                     0,
-                    2.2500
+                    0,
+                    0.1e-9
                 ]
             }
         ],
         "idealGasProperty": {
-            "gamma": 1.4,
+            // "gamma": 1.4,
+            "gamma": 1.666666666666667,
             "Rgas": 289,
             "muGas": 1e-200,
             "prGas": 0.72,
