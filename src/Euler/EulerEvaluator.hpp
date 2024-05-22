@@ -1079,8 +1079,8 @@ namespace DNDS::Euler
         {
             ArrayDOFV<nVarsFixed> &u;
             ArrayRECV<nVarsFixed> &uRec;
-            ArrayDOFV<1> betaPP;
-            ArrayDOFV<1> alphaPP;
+            ArrayDOFV<1> &betaPP;
+            ArrayDOFV<1> &alphaPP;
         };
 
         void InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs);
