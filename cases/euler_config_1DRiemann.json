@@ -1,6 +1,6 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-2,
+        "dtImplicit": 1e-1,
         "nTimeStep": 10000,
         "steadyQuit": false,
         "useImplicitPP": false,
@@ -31,7 +31,7 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 0.01,
+        "CFL": 0.1,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 0,
         "nCFLRampLength": 10,
@@ -42,8 +42,8 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         // "meshFile": "../data/mesh/Unifrom_1D400.cgns",
-        "meshFile": "../data/mesh/Uniform_LeBlanc10_400.cgns",
-        "outPltName": "../data/outUnsteady/PP/Uniform_LeBlanc10_400-1EM2",
+        "meshFile": "../data/mesh/Uniform_LeBlanc9_800_P1.cgns",
+        "outPltName": "../data/outUnsteady/PP1/Uniform_LeBlanc9_800-1EM1",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -53,19 +53,9 @@
     },
     "boundaryDefinition": {
         "PeriodicTranslation1": [
-            10.0,
-            0.0,
+            0,
+            0.02,
             0.0
-        ],
-        "PeriodicTranslation2": [
-            0.0,
-            10.0,
-            0.0
-        ],
-        "PeriodicTranslation3": [
-            0.0,
-            0.0,
-            10.0
         ]
     },
     "implicitReconstructionControl": {
@@ -90,33 +80,33 @@
     "vfvSettings": {
         "maxOrder": 3,
         "intOrder": 5,
-        "cacheDiffBase": false,
+        "cacheDiffBase": true,
         "jacobiRelax": 1,
-        "SORInstead": true,
+        "SORInstead": false,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
-        "subs2ndOrder": 0,
+        "subs2ndOrder": 1,
         "baseSettings": {
-            "localOrientation": true,
+            "localOrientation": false,
             "anisotropicLengths": false
         },
         "functionalSettings": {
             "scaleType": "BaryDiff",
-            // "dirWeightScheme": "HQM_OPT"
+            "dirWeightScheme": "HQM_OPT",
             // "useAnisotropicFunctional": true,
             // "scaleMultiplier": 3.464101615137754,
             "_tail": 0
         }
     },
     "linearSolverControl": {
-        "sgsIter": 0,
-        "sgsWithRec": 1,
+        "sgsIter": 2,
+        "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
         "nGmresSpace": 5,
         "nGmresIter": 1,
-        "initWithLastURecInc": true
+        "initWithLastURecInc": false
     },
     "others": {
         "nFreezePassiveInner": 0
@@ -125,6 +115,7 @@
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
         "riemannSolverType": "Roe_M2",
+        "rsMeanValueEig": 1,
         "nCentralSmoothStep": 0,
         "constMassForce": [
             0.0,
@@ -136,7 +127,7 @@
             0,
             0,
             0,
-            0.1e-9
+            0.1e-5
         ],
         "boxInitializers": [
             // for double rarefaction:
@@ -209,7 +200,8 @@
             "muGas": 1e-200,
             "prGas": 0.72,
             "TRef": 273.15,
-            "CSutherland": 110.4
+            "CSutherland": 110.4,
+            "muModel": 0
         }
     },
     "bcSettings": [

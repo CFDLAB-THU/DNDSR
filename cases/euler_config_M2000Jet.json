@@ -1,6 +1,6 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 5e-6,
+        "dtImplicit": 1e-6,
         "nTimeStep": 100000,
         "steadyQuit": false,
         "useImplicitPP": false,
@@ -15,7 +15,7 @@
         "dtPPLimitRelax": 0.6,
         "dtIncreaseLimit": 2.0,
         "dtIncreaseAfterCount": 0,
-        "dtCFLLimitScale": 2
+        "dtCFLLimitScale": 200
     },
     "convergenceControl": {
         "nTimeStepInternal": 50,
@@ -47,7 +47,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/Unifrom_Ma2000Jet800.cgns",
-        "outPltName": "../data/outUnsteady/PP/Unifrom_Ma2000Jet800_RE1E2_5-2-RM2",
+        "outPltName": "../data/outUnsteady/PP1/Unifrom_Ma2000Jet800_REInf_1-200-RM2",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -152,7 +152,7 @@
         "idealGasProperty": {
             "gamma": 1.666666666666667,
             "Rgas": 289,
-            "muGas": 1e-2,
+            "muGas": 1e-200,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4,
