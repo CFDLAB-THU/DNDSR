@@ -103,7 +103,7 @@ namespace DNDS::Euler
         int specialBuiltinInitializer = 0;
 
         real uRecBetaCompressPower = 11;
-        real uRecAlphaCompressPower = 2;
+        real uRecAlphaCompressPower = 1;
 
         real RANSBottomLimit = 0.01;
 

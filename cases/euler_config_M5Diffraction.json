@@ -1,13 +1,13 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 2e-4,
+        "dtImplicit": 1e-3,
         "nTimeStep": 50000,
         "steadyQuit": false,
         "useImplicitPP": false, //!
         "rhsFPPMode": 1,
         "rhsFPPScale": 1,
         "odeCode": 0,
-        "tEnd": 0.25e0,
+        "tEnd": 2.3,
         "odeSetting1": 0.5,
         "odeSetting2": 1,
         "dtCFLLimitScale": 200,
@@ -30,22 +30,21 @@
         "nDataOutC": 10,
         "nDataOut": 1000,
         "nDataOutCInternal": 100,
-        "nDataOutInternal": 1000000000,
-        "tDataOut": 0.245
+        "nDataOutInternal": 1000000000
     },
     "implicitCFLControl": {
-        "CFL": 0.01,
+        "CFL": 1,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 0,
-        "nCFLRampLength": 20,
+        "nCFLRampLength": 10,
         "CFLRampEnd": 1.0,
         "useLocalDt": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/Wedge30_200_H1.cgns",
-        "outPltName": "../data/outUnsteady/PP1/Wedge30_200_H1_ReInf_2-200-1-RM2",
+        "meshFile": "../data/mesh/Corner40S.cgns",
+        "outPltName": "../data/outUnsteady/PP1/Corner40S_ReInf_2-200-1-RM2",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -137,15 +136,15 @@
             0.0
         ],
         "farFieldStaticValue": [
-            8,
-            66,
+            7.041132906907898,
+            28.713366496161203,
             0,
             0,
-            5.635e2
+            1.336944177327302e+02
         ],
         "boxInitializers": [
             {
-                "x0": 0.2,
+                "x0": 0.5,
                 "x1": 100,
                 "y0": -100,
                 "y1": 100,
@@ -173,13 +172,13 @@
     "bcSettings": [
         {
             "type": "BCFar",
-            "name": "FAR_R",
+            "name": "leftIn",
             "value": [
-                1.4,
+                7.041132906907898,
+                28.713366496161203,
                 0,
                 0,
-                0,
-                2.5
+                1.336944177327302e+02
             ]
         }
     ]

@@ -29,7 +29,8 @@ namespace DNDS::Euler
         ArrayDOFV<1> &uRecBeta,
         ArrayDOFV<1> &cellRHSAlpha,
         bool onlyOnHalfAlpha,
-        real t)
+        real t,
+        uint64_t flags)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS 1");
@@ -43,6 +44,8 @@ namespace DNDS::Euler
         fluxWallSumLocal.setZero(cnvars);
         fluxWallSum.setZero(cnvars);
         nFaceReducedOrder = 0;
+
+        bool ignoreVis = flags & RHS_Ignore_Viscosity;
 
         for (Geom::t_index i = Geom::BC_ID_DEFAULT_MAX; i < pBCHandler->size(); i++) // init code, consider adding to ctor
         {
@@ -150,6 +153,8 @@ namespace DNDS::Euler
                             vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iG, std::array<int, 3>{1, 2, 3}, 4) *
                             uRec[f2c[0]] * IF_NOT_NOREC; // 3d here
                     this->DiffUFromCell2Face(GradULxy, iFace, f2c[0], 0);
+                    if (ignoreVis)
+                        GradULxy *= 0.;
 
 #endif
                     real minVol = vfv->GetCellVol(f2c[0]);
@@ -180,7 +185,8 @@ namespace DNDS::Euler
                                 vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iG, std::array<int, 3>{1, 2, 3}, 4) *
                                 uRec[f2c[1]] * IF_NOT_NOREC; // 3d here
                         this->DiffUFromCell2Face(GradURxy, iFace, f2c[1], 1);
-
+                        if (ignoreVis)
+                            GradURxy *= 0.;
 #endif
 
                         minVol = std::min(minVol, vfv->GetCellVol(f2c[1]));
@@ -228,6 +234,8 @@ namespace DNDS::Euler
                     TDiffU GradUMeanXy = (GradURxy + GradULxy) * 0.5 +
                                          (1.0 / distGRP) *
                                              (unitNorm * (URxy - ULxy).transpose());
+                    if (ignoreVis)
+                            GradUMeanXy *= 0.;
 
 #else
                     TDiffU GradUMeanXy;

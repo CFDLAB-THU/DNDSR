@@ -119,6 +119,7 @@ namespace DNDS::Euler
                 int dtIncreaseAfterCount = 0;
                 real dtCFLLimitScale = 1e100;
                 bool useDtPPLimit = false;
+                real dtPPLimitRelax = 0.8;
                 real dtPPLimitScale = 1;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     TimeMarchControl,
@@ -128,7 +129,7 @@ namespace DNDS::Euler
                     odeCode, tEnd, odeSetting1, odeSetting2, odeSetting3, odeSetting4,
                     partitionMeshOnly,
                     dtIncreaseLimit, dtIncreaseAfterCount,
-                    dtCFLLimitScale,
+                    dtCFLLimitScale, dtPPLimitRelax,
                     useDtPPLimit, dtPPLimitScale)
             } timeMarchControl;
 
@@ -221,7 +222,7 @@ namespace DNDS::Euler
                 int nTimeStepInternal = 20;
                 int nTimeStepInternalMin = 5;
                 int nAnchorUpdate = 1;
-                int nAnchorUpdateStart = 100;
+                int nAnchorUpdateStart = 0;
                 real rhsThresholdInternal = 1e-10;
                 real res_base = 0;
                 bool useVolWiseResidual = false;

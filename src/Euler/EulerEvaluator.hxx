@@ -1233,7 +1233,8 @@ namespace DNDS::Euler
         ArrayRECV<nVarsFixed> &uRec,
         ArrayDOFV<1> &uRecBeta,
         ArrayDOFV<nVarsFixed> &res,
-        ArrayDOFV<1> &cellRHSAlpha, index &nLim, real &alphaMin, real relax,
+        ArrayDOFV<1> &cellRHSAlpha, index &nLim, real &alphaMin, 
+        real relax, int compress,
         int flag)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -1302,7 +1303,7 @@ namespace DNDS::Euler
             // cellRHSAlpha[iCell](0) = std::min(alphaRho, alphaP);
             if (cellRHSAlpha[iCell](0) < 1)
             {
-                cellRHSAlpha[iCell](0) = std::pow(cellRHSAlpha[iCell](0), static_cast<int>(std::round(settings.uRecAlphaCompressPower)));
+                cellRHSAlpha[iCell](0) = std::pow(cellRHSAlpha[iCell](0), compress * static_cast<int>(std::round(settings.uRecAlphaCompressPower)));
                 nLimLocal++,
                     cellRHSAlpha[iCell] *= (0.9),
                     alphaMinLocal = std::min(alphaMinLocal, cellRHSAlpha[iCell](0));

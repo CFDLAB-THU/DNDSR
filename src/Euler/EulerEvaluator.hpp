@@ -144,6 +144,8 @@ namespace DNDS::Euler
             ArrayRECV<nVarsFixed> &uRec,
             real CFL, real &dtMinall, real MaxDt = 1,
             bool UseLocaldt = false);
+
+        static const uint64_t RHS_Ignore_Viscosity = 0x1ull;
         /**
          * @brief
          * \param rhs overwritten;
@@ -157,7 +159,8 @@ namespace DNDS::Euler
             ArrayDOFV<1> &uRecBeta,
             ArrayDOFV<1> &cellRHSAlpha,
             bool onlyOnHalfAlpha,
-            real t);
+            real t,
+            uint64_t flags = 0);
 
         void LUSGSMatrixInit(
             JacobianDiagBlock<nVarsFixed> &JDiag,
@@ -291,7 +294,7 @@ namespace DNDS::Euler
             ArrayDOFV<1> &uRecBeta,
             ArrayDOFV<nVarsFixed> &res,
             ArrayDOFV<1> &cellRHSAlpha, index &nLim, real &alphaMin,
-            real relax,
+            real relax, int compress = 1,
             int flag = 0);
 
         /**
@@ -1079,8 +1082,8 @@ namespace DNDS::Euler
         {
             ArrayDOFV<nVarsFixed> &u;
             ArrayRECV<nVarsFixed> &uRec;
-            ArrayDOFV<1> betaPP;
-            ArrayDOFV<1> alphaPP;
+            ArrayDOFV<1> &betaPP;
+            ArrayDOFV<1> &alphaPP;
         };
 
         void InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs);

@@ -11,5 +11,6 @@
             ArrayDOFV<1> &uRecBeta,                       \
             ArrayDOFV<1> &cellRHSAlpha,                   \
             bool onlyOnHalfAlpha,                         \
-            real t);                                      \
+            real t,                                       \
+            uint64_t flags);                              \
     }

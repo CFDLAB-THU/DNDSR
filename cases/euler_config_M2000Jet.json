@@ -6,13 +6,16 @@
         "useImplicitPP": false,
         "rhsFPPMode": 1,
         "rhsFPPScale": 1,
+        "rhsFPPRelax": 0.6,
         "odeCode": 0,
         "tEnd": 1e-3,
         "odeSetting1": 0.5,
         "odeSetting2": 1,
         "useDtPPLimit": true,
+        "dtPPLimitRelax": 0.6,
         "dtIncreaseLimit": 2.0,
-        "dtIncreaseAfterCount": 0
+        "dtIncreaseAfterCount": 0,
+        "dtCFLLimitScale": 200
     },
     "convergenceControl": {
         "nTimeStepInternal": 50,
@@ -44,12 +47,12 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/Unifrom_Ma2000Jet800.cgns",
-        "outPltName": "../data/outUnsteady/Unifrom_Ma2000Je800_REInf",
+        "outPltName": "../data/outUnsteady/PP1/Unifrom_Ma2000Jet800_REInf_1-200-RM2",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": true,
-        "outAtPointData": true,
+        "outAtPointData": false,
         "outAtCellData": true,
         "outCellScalarNames": [
             "betaPP"
@@ -102,7 +105,8 @@
         "functionalSettings": {
             "scaleType": "BaryDiff",
             "scaleMultiplier": 1,
-            // "dirWeightScheme": "HQM_OPT",
+            "dirWeightScheme": "HQM_OPT",
+            "geomWeightScheme": "HQM_SD",
             // "useAnisotropicFunctional": true,
             // "scaleMultiplier": 3.464101615137754,
             "_tail": 0
@@ -129,7 +133,7 @@
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
         "riemannSolverType": "Roe_M2",
-        // "rsMeanValueEig": 1,
+        "rsMeanValueEig": 1,
         "nCentralSmoothStep": 0,
         // "uRecBetaCompressPower": 2.0,
         "constMassForce": [

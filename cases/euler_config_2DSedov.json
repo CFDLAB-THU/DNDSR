@@ -10,7 +10,7 @@
         "tEnd": 1e-3,
         "odeSetting1": 0.5,
         "odeSetting2": 1,
-        "dtCFLLimitScale": 100,
+        // "dtCFLLimitScale": 100,
         "dtIncreaseLimit": 1.2,
         "useDtPPLimit": true,
         "rhsFPPRelax": 0.9,
@@ -25,7 +25,7 @@
     },
     "outputControl": {
         "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 10,
+        "nConsoleCheckInternal": 1,
         "consoleOutputMode": 0,
         "consoleOutputEveryFix": 1,
         "nDataOutC": 1,
@@ -45,9 +45,10 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_C1.cgns",
+        "meshFile": "../data/mesh/Unifrom_2DSedov11_160_HS.cgns",
+        // "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_C1.cgns",
         // "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_WallCent.cgns",
-        "outPltName": "../data/outUnsteady/Unifrom_2DSedov5EM3-Ref",
+        "outPltName": "../data/outUnsteady/PP1/Unifrom_2DSedov11_160_HS-1",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -162,10 +163,10 @@
                 ]
             },
             {
-                "x0": -5e-3,
-                "x1": 5e-3,
-                "y0": -5e-3,
-                "y1": 5e-3,
+                "x0": -0.006875000000000,
+                "x1": 0.006875000000000,
+                "y0": -0.006875000000000,
+                "y1": 0.006875000000000,
                 // "y0": -100,
                 // "y1": 100,
                 "z0": -100,
@@ -175,7 +176,7 @@
                     0,
                     0,
                     0,
-                    320000000
+                    5.179578181818180e+09
                 ]
             }
         ],
