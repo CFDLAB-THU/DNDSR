@@ -1260,6 +1260,7 @@ namespace DNDS::Euler
                         fmt::arg("termYellow", TermColor::Yellow),
                         fmt::arg("termBold", TermColor::Bold),
                         fmt::arg("termReset", TermColor::Reset));
+                    log() << std::endl;
                     log().setf(fmt);
                     std::string delimC = " ";
                     logErr
