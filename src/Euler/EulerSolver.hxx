@@ -132,10 +132,11 @@ namespace DNDS::Euler
                 mesh->NumCell(),
                 buildDOF, buildScalar,
                 config.timeMarchControl.odeSetting1 == 0 ? 0.55 : config.timeMarchControl.odeSetting1,
-                std::round(config.timeMarchControl.odeSetting2),
-                0,
-                config.timeMarchControl.odeSetting3 == 0 ? 0.9146 : config.timeMarchControl.odeSetting3,
-                config.timeMarchControl.odeSetting4 == 0 ? 0 : 1);
+                std::round(config.timeMarchControl.odeSetting2),                                         // Backward Euler Starter
+                0,                                                                                       // method
+                config.timeMarchControl.odeSetting3 == 0 ? 0.9146 : config.timeMarchControl.odeSetting3, // thetaM1
+                std::round(config.timeMarchControl.odeSetting4)                                          // mask
+            );
             break;
         default:
             DNDS_assert_info(false, "no such ode code");
@@ -1364,25 +1365,45 @@ namespace DNDS::Euler
                 if (nextTout > config.timeMarchControl.tEnd)
                     nextTout = config.timeMarchControl.tEnd;
             }
-            if (eval.settings.specialBuiltinInitializer == 2 && (step % config.outputControl.nConsoleCheck == 0)) // IV problem special: reduction on solution
+            if ((eval.settings.specialBuiltinInitializer == 2 ||
+                 eval.settings.specialBuiltinInitializer == 203) &&
+                (step % config.outputControl.nConsoleCheck == 0)) // IV problem special: reduction on solution
             {
-                Eigen::Vector<real, -1> err;
+                auto FVal = [&](const Geom::tPoint &p, real t)
+                {
+                    switch (eval.settings.specialBuiltinInitializer)
+                    {
+                    case 203:
+                        return SpecialFields::IsentropicVortex10(eval, p, t, nVars, 10.0828);
+                    default:
+                    case 2:
+                        return SpecialFields::IsentropicVortex10(eval, p, t, nVars, 5);
+                    }
+                };
+                auto FWeight = [&](const Geom::tPoint &p, real t)
+                {
+                    real xyOrig = t;
+                    real xCC = float_mod(p(0) - xyOrig, 10);
+                    real yCC = float_mod(p(1) - xyOrig, 10);
+                    return std::abs(xCC - 5.0) <= 2 && std::abs(yCC - 5.0) <= 2 ? 1.0 : 0.0;
+                };
+                Eigen::Vector<real, -1> err1, errInf;
                 eval.EvaluateRecNorm(
-                    err, u, uRec, 1, true,
-                    [&](const Geom::tPoint &p, real t)
-                    {
-                        return SpecialFields::IsentropicVortex10(eval, p, t, nVars);
-                    },
-                    [&](const Geom::tPoint &p, real t)
-                    {
-                        return real(1.0);
-                    },
+                    err1, u, uRec, 1, true,
+                    FVal, FWeight,
                     tSimu);
+                eval.EvaluateRecNorm(
+                    errInf, u, uRec, 1000, true,
+                    FVal, FWeight,
+                    tSimu);
+
                 if (mpi.rank == 0)
                 {
                     log() << "=== Mean Error IV: [" << std::scientific
-                          << std::setprecision(config.outputControl.nPrecisionConsole + 4) << err(0) << ", "
-                          << err(0) / vfv->GetGlobalVol() << "]" << std::endl;
+                          << std::setprecision(config.outputControl.nPrecisionConsole + 4) << err1(0) << ", "
+                          << err1(0) / vfv->GetGlobalVol() << ", "
+                          << errInf(0)
+                          << "]" << std::endl;
                 }
             }
             if (config.implicitReconstructionControl.zeroGrads)

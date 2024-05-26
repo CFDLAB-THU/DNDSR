@@ -842,6 +842,11 @@ namespace DNDS::ODE
         int nStartIter = 0;
         real thetaM1 = 0.9146;
         real alphaHM3 = 0.5;
+        int maskHM3 = 0;
+
+        TDATA xPrev;
+        real dtPrev = 0;
+        int prevSize = 0;
 
         /**
          * @brief mind that NDOF is the dof of dt
@@ -856,7 +861,8 @@ namespace DNDS::ODE
               curSolveMethod(nCurSolveMethod),
               nStartIter(nnStartIter),
               thetaM1(thetaM1n),
-              alphaHM3(alpha)
+              alphaHM3(alpha),
+              maskHM3(mask)
         {
 
             rhsbuf.resize(3);
@@ -870,18 +876,22 @@ namespace DNDS::ODE
             finit(xIncPrev);
             finit(xIncDamper);
             finit(xIncDamper2);
+            finit(xPrev);
             finitDtau(dTau);
 
-            SetCoefs(alpha, mask);
+            DNDS_assert_info(mask == 0 || mask == 1 || mask == 2, "mask not supported");
+            SetCoefs(1);
         }
 
-        void SetCoefs(real alpha, int mask)
+        void SetCoefs(real hR1 = 1)
         {
+            real alpha = alphaHM3;
+            int mask = maskHM3;
             assert(alpha > 0 && alpha < 1);
             cInter.setZero();
             switch (mask)
             {
-            case 0:
+            case 0: // U2R2
             {
                 cInter[0] = (alpha * alpha) * -3.0 + (alpha * alpha * alpha) * 2.0 + 1.0;
                 cInter[1] = (alpha * alpha) * 3.0 - (alpha * alpha * alpha) * 2.0;
@@ -889,11 +899,31 @@ namespace DNDS::ODE
                 cInter[3] = -alpha * alpha + alpha * alpha * alpha;
             }
             break;
-            case 1:
+            case 1: // U2R1
             {
                 cInter[0] = alpha * -2.0 + alpha * alpha + 1.0;
                 cInter[1] = alpha * 2.0 - alpha * alpha;
+                cInter[2] = 0;
                 cInter[3] = -alpha + alpha * alpha;
+            }
+            break;
+            case 2: // U3R1
+            {
+                if (prevSize == 1 && (hR1 < 1e2 && hR1 > 1e-2))
+                {
+                    // note that the meaning of cInter[2] is changed!
+                    cInter[2] = -(alpha * pow(alpha - 1.0, 2.0) * 1.0 / pow(hR1 + 1.0, 2.0)) / hR1;
+                    cInter[0] = ((alpha + hR1) * pow(alpha - 1.0, 2.0)) / hR1;
+                    cInter[1] = alpha * 1.0 / pow(hR1 + 1.0, 2.0) * (alpha * 3.0 + hR1 * 3.0 - alpha * (hR1 * hR1) - (alpha * alpha) * hR1 - (alpha * alpha) * 2.0 + (hR1 * hR1) * 2.0);
+                    cInter[3] = (alpha * (alpha + hR1) * (alpha - 1.0)) / (hR1 + 1.0);
+                }
+                else
+                {
+                    cInter[0] = alpha * -2.0 + alpha * alpha + 1.0;
+                    cInter[1] = alpha * 2.0 - alpha * alpha;
+                    cInter[2] = 0;
+                    cInter[3] = -alpha + alpha * alpha;
+                }
             }
             break;
             default:
@@ -916,6 +946,7 @@ namespace DNDS::ODE
         virtual void Step(TDATA &x, TDATA &xinc, const Frhs &frhs, const Fdt &fdt, const Fsolve &fsolve,
                           int maxIter, const Fstop &fstop, const Fincrement &fincrement, real dt) override
         {
+            SetCoefs(dtPrev / (dt + verySmallReal));
             xLast = x;
             xMid = x;
             fdt(xLast, dTau, 1.0, 0);
@@ -949,6 +980,7 @@ namespace DNDS::ODE
 
                     if (method == 2)
                     {
+                        DNDS_assert_info(maskHM3 != 2, "U3R1 not supported here");
                         fdt(x, dTau, 1.0, 0);
                         // for (auto &v : dTau)
                         //     v = veryLargeReal;
@@ -1124,12 +1156,25 @@ namespace DNDS::ODE
                             // fsolve(xMid, rhsMid, dTau, dt, (cInter(1) * wInteg(1)), xinc, iter, 1);
                         }
                         {
-                            rhsMid.addTo(xMid, -1. / dt);
-                            rhsMid.addTo(xLast, (cInter(0) + thetaM1) / dt);
-                            rhsMid.addTo(x, (cInter(1) - thetaM1) / dt);
-                            rhsMid.addTo(rhsbuf[0], cInter(2) + thetaM1 * wInteg(0));
-                            rhsMid.addTo(rhsbuf[1], cInter(3) + thetaM1 * wInteg(2));
-                            rhsMid.addTo(rhsbuf[2], thetaM1 * wInteg(1));
+                            if (prevSize >= 1 & maskHM3 == 2) // U3R1, cInter[2] is reused for xPrev
+                            {
+                                rhsMid.addTo(xMid, -1. / dt);
+                                rhsMid.addTo(xLast, (cInter(0) + thetaM1) / dt);
+                                rhsMid.addTo(x, (cInter(1) - thetaM1) / dt);
+                                rhsMid.addTo(xPrev, cInter(2) / dt);
+                                rhsMid.addTo(rhsbuf[0], 0 + thetaM1 * wInteg(0));
+                                rhsMid.addTo(rhsbuf[1], cInter(3) + thetaM1 * wInteg(2));
+                                rhsMid.addTo(rhsbuf[2], thetaM1 * wInteg(1));
+                            }
+                            else
+                            {
+                                rhsMid.addTo(xMid, -1. / dt);
+                                rhsMid.addTo(xLast, (cInter(0) + thetaM1) / dt);
+                                rhsMid.addTo(x, (cInter(1) - thetaM1) / dt);
+                                rhsMid.addTo(rhsbuf[0], cInter(2) + thetaM1 * wInteg(0));
+                                rhsMid.addTo(rhsbuf[1], cInter(3) + thetaM1 * wInteg(2));
+                                rhsMid.addTo(rhsbuf[2], thetaM1 * wInteg(1));
+                            }
                             fdt(xMid, dTau, 1.0, 1);
                             fsolve(xMid, rhsMid, dTau, dt, std::abs(thetaM1 * wInteg(1)), xinc, iter, 1);
                         }
@@ -1163,6 +1208,7 @@ namespace DNDS::ODE
                     }
                     else if (method == 1)
                     {
+                        DNDS_assert_info(maskHM3 != 2, "U3R1 not supported here");
                         rhsMid.setConstant(0.0);
                         {
                             real cmid = -wInteg(2) / cInter(3);
@@ -1209,6 +1255,10 @@ namespace DNDS::ODE
                 fstop(iter, method == 0 ? rhsMid : rhsFull, 1);
 
             hasLastEndPointR = 1;
+
+            prevSize = 1;
+            xPrev = xLast;
+            dtPrev = dt;
         }
 
         void StepNested(TDATA &x, TDATA &xinc, const Frhs &frhs, const Fdt &fdt, const Fsolve &fsolve, const FsolveNest &fsolveN,
