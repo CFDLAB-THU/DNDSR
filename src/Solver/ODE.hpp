@@ -843,6 +843,7 @@ namespace DNDS::ODE
         real thetaM1 = 0.9146;
         real alphaHM3 = 0.5;
         int maskHM3 = 0;
+        int maskHM3Exe = 0;
 
         TDATA xPrev;
         real dtPrev = 0;
@@ -887,6 +888,7 @@ namespace DNDS::ODE
         {
             real alpha = alphaHM3;
             int mask = maskHM3;
+            maskHM3Exe = mask;
             assert(alpha > 0 && alpha < 1);
             cInter.setZero();
             switch (mask)
@@ -919,6 +921,8 @@ namespace DNDS::ODE
                 }
                 else
                 {
+                    maskHM3Exe = 1;
+                    alpha = 0.25;
                     cInter[0] = alpha * -2.0 + alpha * alpha + 1.0;
                     cInter[1] = alpha * 2.0 - alpha * alpha;
                     cInter[2] = 0;
@@ -1138,6 +1142,7 @@ namespace DNDS::ODE
                     {
 
                         rhsMid.setConstant(0.0);
+                        real thetaCur = thetaM1;
 
                         {
                             // rhsMid.addTo(xMid, -1. / dt);
@@ -1156,27 +1161,29 @@ namespace DNDS::ODE
                             // fsolve(xMid, rhsMid, dTau, dt, (cInter(1) * wInteg(1)), xinc, iter, 1);
                         }
                         {
-                            if (prevSize >= 1 & maskHM3 == 2) // U3R1, cInter[2] is reused for xPrev
+                            if (prevSize >= 1 && maskHM3 == 2) // U3R1, cInter[2] is reused for xPrev
                             {
                                 rhsMid.addTo(xMid, -1. / dt);
-                                rhsMid.addTo(xLast, (cInter(0) + thetaM1) / dt);
-                                rhsMid.addTo(x, (cInter(1) - thetaM1) / dt);
+                                rhsMid.addTo(xLast, (cInter(0) + thetaCur) / dt);
+                                rhsMid.addTo(x, (cInter(1) - thetaCur) / dt);
                                 rhsMid.addTo(xPrev, cInter(2) / dt);
-                                rhsMid.addTo(rhsbuf[0], 0 + thetaM1 * wInteg(0));
-                                rhsMid.addTo(rhsbuf[1], cInter(3) + thetaM1 * wInteg(2));
-                                rhsMid.addTo(rhsbuf[2], thetaM1 * wInteg(1));
+                                rhsMid.addTo(rhsbuf[0], 0 + thetaCur * wInteg(0));
+                                rhsMid.addTo(rhsbuf[1], cInter(3) + thetaCur * wInteg(2));
+                                rhsMid.addTo(rhsbuf[2], thetaCur * wInteg(1));
                             }
                             else
                             {
+                                if (maskHM3Exe == 1 && maskHM3 == 2)
+                                    thetaCur = 1; // for U2R1 filling
                                 rhsMid.addTo(xMid, -1. / dt);
-                                rhsMid.addTo(xLast, (cInter(0) + thetaM1) / dt);
-                                rhsMid.addTo(x, (cInter(1) - thetaM1) / dt);
-                                rhsMid.addTo(rhsbuf[0], cInter(2) + thetaM1 * wInteg(0));
-                                rhsMid.addTo(rhsbuf[1], cInter(3) + thetaM1 * wInteg(2));
-                                rhsMid.addTo(rhsbuf[2], thetaM1 * wInteg(1));
+                                rhsMid.addTo(xLast, (cInter(0) + thetaCur) / dt);
+                                rhsMid.addTo(x, (cInter(1) - thetaCur) / dt);
+                                rhsMid.addTo(rhsbuf[0], cInter(2) + thetaCur * wInteg(0));
+                                rhsMid.addTo(rhsbuf[1], cInter(3) + thetaCur * wInteg(2));
+                                rhsMid.addTo(rhsbuf[2], thetaCur * wInteg(1));
                             }
                             fdt(xMid, dTau, 1.0, 1);
-                            fsolve(xMid, rhsMid, dTau, dt, std::abs(thetaM1 * wInteg(1)), xinc, iter, 1);
+                            fsolve(xMid, rhsMid, dTau, dt, std::abs(thetaCur * wInteg(1)), xinc, iter, 1);
                         }
 
                         fincrement(xMid, xinc, 1.0, 1);

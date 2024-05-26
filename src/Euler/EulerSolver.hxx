@@ -1381,12 +1381,13 @@ namespace DNDS::Euler
                         return SpecialFields::IsentropicVortex10(eval, p, t, nVars, 5);
                     }
                 };
-                auto FWeight = [&](const Geom::tPoint &p, real t)
+                auto FWeight = [&](const Geom::tPoint &p, real t) -> real
                 {
-                    real xyOrig = t;
-                    real xCC = float_mod(p(0) - xyOrig, 10);
-                    real yCC = float_mod(p(1) - xyOrig, 10);
-                    return std::abs(xCC - 5.0) <= 2 && std::abs(yCC - 5.0) <= 2 ? 1.0 : 0.0;
+                    // real xyOrig = t;
+                    // real xCC = float_mod(p(0) - xyOrig, 10);
+                    // real yCC = float_mod(p(1) - xyOrig, 10);
+                    // return std::abs(xCC - 5.0) <= 2 && std::abs(yCC - 5.0) <= 2 ? 1.0 : 0.0;
+                    return 1.0;
                 };
                 Eigen::Vector<real, -1> err1, errInf;
                 eval.EvaluateRecNorm(
