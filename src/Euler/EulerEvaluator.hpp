@@ -294,7 +294,7 @@ namespace DNDS::Euler
             ArrayDOFV<1> &uRecBeta,
             ArrayDOFV<nVarsFixed> &res,
             ArrayDOFV<1> &cellRHSAlpha, index &nLim, real &alphaMin,
-            real relax,
+            real relax, int compress = 1,
             int flag = 0);
 
         /**

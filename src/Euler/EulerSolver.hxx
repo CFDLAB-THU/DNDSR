@@ -655,7 +655,7 @@ namespace DNDS::Euler
                 index nLimFRes = 0;
                 real alphaMinFRes = 1;
                 eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, config.timeMarchControl.rhsFPPRelax,
-                                          config.timeMarchControl.rhsFPPMode == 1 ? 1 : 0);
+                                          2, config.timeMarchControl.rhsFPPMode == 1 ? 1 : 0);
                 if (nLimFRes)
                     if (mpi.rank == 0)
                     {
@@ -672,7 +672,8 @@ namespace DNDS::Euler
                 rhsTemp *= config.timeMarchControl.rhsFPPScale;
                 index nLimFRes = 0;
                 real alphaMinFRes = 1;
-                eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, config.timeMarchControl.rhsFPPRelax, 1);
+                eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, config.timeMarchControl.rhsFPPRelax,
+                                          2, 1);
                 if (nLimFRes)
                     if (mpi.rank == 0)
                     {
@@ -963,7 +964,7 @@ namespace DNDS::Euler
             renewRhsIncPart(); // un-fixed now
             // rhsIncPart.trans.startPersistentPull();
             // rhsIncPart.trans.waitPersistentPull(); //seems not needed
-            eval.EvaluateCellRHSAlpha(xPrev, uRecC, betaPPC, rhsIncPart, alphaPP_tmp, nLimAlpha, minAlpha, 1., 0);
+            eval.EvaluateCellRHSAlpha(xPrev, uRecC, betaPPC, rhsIncPart, alphaPP_tmp, nLimAlpha, minAlpha, 1., 2, 0);
             alphaPP_tmp.trans.startPersistentPull();
             alphaPP_tmp.trans.waitPersistentPull();
             if (nLimAlpha)
@@ -1021,7 +1022,8 @@ namespace DNDS::Euler
             auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
             nLimInc = 0;
             alphaMinInc = 1;
-            eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, cxInc, alphaPP_tmp, nLimInc, alphaMinInc, config.timeMarchControl.incrementPPRelax, 0);
+            eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, cxInc, alphaPP_tmp, nLimInc, alphaMinInc, config.timeMarchControl.incrementPPRelax,
+                                      2, 0);
             if (nLimInc)
                 if (mpi.rank == 0 &&
                     (config.outputControl.consoleOutputEveryFix == 1 || config.outputControl.consoleOutputEveryFix == 2))
@@ -1417,12 +1419,13 @@ namespace DNDS::Euler
             if (config.timeMarchControl.useDtPPLimit)
             {
                 dTauTmp.setConstant(curDtImplicit * config.timeMarchControl.dtPPLimitScale); //? used as damper here, appropriate?
-                frhsOuter(rhsTemp, u, dTauTmp, 1, 0.0, 0, 0);
+                frhsOuter(rhsTemp, u, dTauTmp, 1, 0.0, 0, 0);                                //* trick: use 0th order reconstruction RHS for dt PP limiting
                 uTemp = u;
                 rhsTemp *= curDtImplicit * config.timeMarchControl.dtPPLimitScale;
                 index nLim = 0;
                 real minLim = 1;
-                eval.EvaluateCellRHSAlpha(u, uRec, betaPP, rhsTemp, alphaPP_tmp, nLim, minLim, config.timeMarchControl.dtPPLimitRelax, 0); //* trick: use 0th order reconstruction RHS for dt PP limiting
+                eval.EvaluateCellRHSAlpha(u, uRec, betaPP, rhsTemp, alphaPP_tmp, nLim, minLim, config.timeMarchControl.dtPPLimitRelax,
+                                          1, 0); // using compress = 1
                 if (nLim)
                     curDtImplicit = std::min(curDtImplicit, minLim * curDtImplicit);
                 if (curDtImplicitHistory.size() && curDtImplicit > curDtImplicitHistory.back() * config.timeMarchControl.dtIncreaseLimit)
@@ -1468,7 +1471,8 @@ namespace DNDS::Euler
                     odeVBDF->LimitDt_StepPPV2(
                         u, [&](ArrayDOFV<nVarsFixed> &u, ArrayDOFV<nVarsFixed> &uInc) -> real
                         {
-                            eval.EvaluateCellRHSAlpha(u, uRec, betaPP, uInc, alphaPP_tmp, nLimAlpha, minAlpha, 1., 0);
+                            eval.EvaluateCellRHSAlpha(u, uRec, betaPP, uInc, alphaPP_tmp, nLimAlpha, minAlpha, 1.,
+                                                    1, 0); // using compress == 1
                             return minAlpha; },
                         curDtImplicit, 2); // curDtImplicit modified
                     if (curDtImplicit > curDtImplicitOld)

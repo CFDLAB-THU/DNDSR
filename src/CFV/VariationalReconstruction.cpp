@@ -809,17 +809,7 @@ namespace DNDS::CFV
                 A += (AHalf_GG.transpose() * AHalf_GG) * this->GetGreenGauss1WeightOnCell(iCell);
                 matrixAHalf_GG[iCell] = AHalf_GG;
             }
-            decltype(A) AInv;
-            real aCond{0};
-            if (settings.svdTolerance)
-                aCond = HardEigen::EigenLeastSquareInverse_Filtered(A, AInv, settings.svdTolerance, 1);
-            else
-                aCond = HardEigen::EigenLeastSquareInverse(A, AInv, settings.svdTolerance);
-            matrixAB(iCell, 0) = A;
-            matrixAAInvB(iCell, 0) = AInv;
-
-            maxCond = std::max(aCond, maxCond);
-            matrixACholeskyL.at(iCell) = A.llt().matrixL();
+            
 
             // if (iCell == 71)
             // {
@@ -900,8 +890,9 @@ namespace DNDS::CFV
                     //           << AHalf_GG.transpose() * BHalf_GG << std::endl;
                     B += AHalf_GG.transpose() * BHalf_GG * this->GetGreenGauss1WeightOnCell(iCell);
                 }
+                if(iCellOther == iCell) //* coincide periodic
+                    A -= B, B *= 0;
                 matrixAB(iCell, 1 + ic2f) = B;
-                matrixAAInvB(iCell, 1 + ic2f) = AInv * B;
             }
 
             //*get b
@@ -942,9 +933,39 @@ namespace DNDS::CFV
                     b += AHalf_GG.transpose() * bHalf_GG * this->GetGreenGauss1WeightOnCell(iCell);
                 }
                 vectorB(iCell, ic2f) = b;
-                vectorAInvB(iCell, ic2f) = AInv * b;
             }
+
+            // * get AInv and fill A, AInv
+
+            decltype(A) AInv;
+            real aCond{0};
+            if (settings.svdTolerance)
+                aCond = HardEigen::EigenLeastSquareInverse_Filtered(A, AInv, settings.svdTolerance, 1);
+            else
+                aCond = HardEigen::EigenLeastSquareInverse(A, AInv, settings.svdTolerance);
+            matrixAB(iCell, 0) = A;
+            matrixAAInvB(iCell, 0) = AInv;
+
+            maxCond = std::max(aCond, maxCond);
+            matrixACholeskyL.at(iCell) = A.llt().matrixL();
             DNDS_assert(AInv.allFinite());
+
+            // * get AInvB and AInvb
+            for (int ic2f = 0; ic2f < mesh->cell2face.RowSize(iCell); ic2f++)
+            {
+                index iFace = mesh->cell2face(iCell, ic2f);
+                auto qFace = this->GetFaceQuad(iFace);
+                index iCellOther = CellFaceOther(iCell, iFace);
+                int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                auto faceID = mesh->GetFaceZone(iFace);
+                if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)))
+                {
+                    DNDS_assert(iCellOther == UnInitIndex);
+                    continue;
+                }
+                matrixAAInvB(iCell, 1 + ic2f) = AInv * matrixAB(iCell, 1 + ic2f);
+                vectorAInvB(iCell, ic2f) = AInv * vectorB(iCell, ic2f);
+            }
             // std::cout << "=============" << std::endl;
             // std::cout << AInv << std::endl;
             // std::abort();
