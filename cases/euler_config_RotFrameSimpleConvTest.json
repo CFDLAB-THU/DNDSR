@@ -1,7 +1,7 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-1,
-        "nTimeStep": 50,
+        "dtImplicit": 0.005,
+        "nTimeStep": 200,
         "steadyQuit": false,
         "odeCode": 1,
         "tEnd": 3e+200,
@@ -129,7 +129,7 @@
                 -10.0,
                 0.0
             ],
-            "rpm": 0.6
+            "rpm": 10
         },
         "farFieldStaticValue": [
             1,

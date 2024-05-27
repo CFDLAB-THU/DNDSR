@@ -174,7 +174,7 @@ namespace DNDS::Euler
                 index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
                 rowsize iCellAtFace = f2c[0] == iCell ? 0 : 1;
                 TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
-                                (iCellAtFace ? -1 : 1);        // faces out
+                                (iCellAtFace ? -1 : 1); // faces out
                 if (iCellOther != UnInitIndex && iCellOther != iCell && iCellOther < mesh->NumCell())
                 {
                     TU uj = u[iCellOther];
@@ -724,7 +724,8 @@ namespace DNDS::Euler
                     u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gamma - 1)};
                 }
             break;
-        case 2: // for IV10 problem
+        case 2:   // for IV10 problem
+        case 203: // for IV10 problem with PP
         case 202:
             DNDS_assert(model == NS || model == NS_2D);
             if constexpr (model == NS || model == NS_2D)
@@ -742,7 +743,9 @@ namespace DNDS::Euler
                         {
                             Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
                             if (settings.specialBuiltinInitializer == 2)
-                                inc = SpecialFields::IsentropicVortex10(*this, pPhysics, 0, nVars);
+                                inc = SpecialFields::IsentropicVortex10(*this, pPhysics, 0, nVars, 5);
+                            else if (settings.specialBuiltinInitializer == 203)
+                                inc = SpecialFields::IsentropicVortex10(*this, pPhysics, 0, nVars, 10.0828);
                             else if (settings.specialBuiltinInitializer == 202)
                                 inc = SpecialFields::IsentropicVortex30(*this, pPhysics, 0, nVars);
                             else
@@ -973,7 +976,7 @@ namespace DNDS::Euler
                         uR *= FCompareFieldWeight(pPhysics, t);
                     }
                     if (P >= 3)
-                        resc = resc.array().min(inc.array());
+                        resc = resc.array().max(uR.array().abs());
                     inc = uR.array().abs().pow(P);
                     inc *= vfv->GetCellJacobiDet(iCell, iG);
                 });
@@ -1233,7 +1236,7 @@ namespace DNDS::Euler
         ArrayRECV<nVarsFixed> &uRec,
         ArrayDOFV<1> &uRecBeta,
         ArrayDOFV<nVarsFixed> &res,
-        ArrayDOFV<1> &cellRHSAlpha, index &nLim, real &alphaMin, 
+        ArrayDOFV<1> &cellRHSAlpha, index &nLim, real &alphaMin,
         real relax, int compress,
         int flag)
     {
