@@ -233,7 +233,10 @@ namespace DNDS::Euler
                 DNDS_assert(v.diagonal().array().abs().minCoeff() != 0);
                 tComponent preCon = v.diagonal().array().inverse().matrix().asDiagonal() * v;
                 auto luDiag = preCon.fullPivLu();
-                DNDS_assert(luDiag.isInvertible());
+                DNDS_assert_info(luDiag.isInvertible(), [&]()
+                                 {
+                    std::cerr << v << "\n\n" << preCon << "\n\n";
+                    return "=== error info ==="; }());
                 AI = luDiag.inverse() * v.diagonal().array().inverse().matrix().asDiagonal();
             }
             {

@@ -681,6 +681,7 @@ namespace DNDS::Euler
                         log() << std::scientific << std::setw(3) << TermColor::Red;
                         log() << "PPFResLimiter: nLimFRes[" << nLimFRes << "] minAlpha [" << alphaMinFRes << "]" << TermColor::Reset << std::endl;
                     }
+                alphaPP_tmp.setMaxWith(smallReal); // dTau cannot be zero 
                 dTauTmp = dTau;
                 dTauTmp *= alphaPP_tmp;
             }
