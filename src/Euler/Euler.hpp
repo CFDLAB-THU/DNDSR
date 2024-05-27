@@ -121,6 +121,20 @@ namespace DNDS::Euler
                 this->operator[](i).array() = this->operator[](i).array().abs();
         }
 
+        template<class TR>
+        void setMaxWith(TR R)
+        {
+            for (index i = 0; i < this->Size(); i++)
+                this->operator[](i).array() = this->operator[](i).array().max(R);
+        }
+
+        template <class TR>
+        void setMinWith(TR R)
+        {
+            for (index i = 0; i < this->Size(); i++)
+                this->operator[](i).array() = this->operator[](i).array().min(R);
+        }
+
         Eigen::Vector<real, nVarsFixed> normInc()
         {
             Eigen::Vector<real, nVarsFixed> ret, retAll;
