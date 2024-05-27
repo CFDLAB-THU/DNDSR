@@ -38,13 +38,13 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshElevation": 1,
+        "meshElevation": 0,
         "meshElevationIter": 10,
         "meshElevationRBFRadius": 1,
         "meshElevationMaxIncludedAngle": 10,
         "meshElevationRBFKernel": "CPC0",
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2_testCurve/test_wallDist",
+        "outPltName": "../data/out/BL_1EM5/0012_SA",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -140,7 +140,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe",
+        "riemannSolverType": "Roe_M1",
         "minWallDist": 5e-6,
         "constMassForce": [
             0.0,
@@ -149,8 +149,8 @@
         ],
         "farFieldStaticValue": [
             1,
-            0.965925826289068,
-            0.258819045102521,
+            1,
+            0,
             0,
             79.8650793650794,
             1.3
