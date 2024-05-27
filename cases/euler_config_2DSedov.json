@@ -1,11 +1,12 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-6,
+        "dtImplicit": 10e-6,
         "nTimeStep": 1000000,
         "steadyQuit": false,
         "useImplicitPP": false,
-        "rhsFPPMode": 1,
+        "rhsFPPMode": 2,
         "rhsFPPScale": 1,
+        "rhsFPPRelax": 0.5,
         "odeCode": 0,
         "tEnd": 1e-3,
         "odeSetting1": 0.5,
@@ -13,7 +14,6 @@
         // "dtCFLLimitScale": 100,
         "dtIncreaseLimit": 1.2,
         "useDtPPLimit": true,
-        "rhsFPPRelax": 0.9,
         "incrementPPRelax": 0.9,
         "dtPPLimitScale": 1
     },
@@ -48,7 +48,7 @@
         "meshFile": "../data/mesh/Unifrom_2DSedov11_160_HS.cgns",
         // "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_C1.cgns",
         // "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_WallCent.cgns",
-        "outPltName": "../data/outUnsteady/PP1/Unifrom_2DSedov11_160_HS-1",
+        "outPltName": "../data/outUnsteady/PP2/Sedov/Unifrom_2DSedov11_160_HS-10",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -103,14 +103,14 @@
         "functionalSettings": {
             "scaleType": "BaryDiff",
             "scaleMultiplier": 1,
-            "dirWeightScheme": "HQM_OPT",
+            "dirWeightScheme": "Factorial",
             // "useAnisotropicFunctional": true,
             // "scaleMultiplier": 3.464101615137754,
             "_tail": 0
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 2,
+        "jacobiCode": 0,
         "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,

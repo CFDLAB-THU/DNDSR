@@ -4,8 +4,9 @@
         "nTimeStep": 50000,
         "steadyQuit": false,
         "useImplicitPP": false, //!
-        "rhsFPPMode": 1,
+        "rhsFPPMode": 2,
         "rhsFPPScale": 1,
+        "rhsFPPRelax": 0.5,
         "odeCode": 0,
         "tEnd": 0.25e0,
         "odeSetting1": 0.5,
@@ -18,7 +19,7 @@
     },
     "convergenceControl": {
         "nTimeStepInternal": 200,
-        "rhsThresholdInternal": 1e-3,
+        "rhsThresholdInternal": 1e-4,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
@@ -45,7 +46,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/Wedge30_200_H1.cgns",
-        "outPltName": "../data/outUnsteady/PP1/Wedge30_200_H1_ReInf_2-200-1-RM2",
+        "outPltName": "../data/outUnsteady/PP2/Wedge/Wedge30_200_H1_ReInf_2-200-1-RM2",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -102,8 +103,8 @@
         "functionalSettings": {
             "scaleType": "BaryDiff",
             // "scaleMultiplier": 0.5,
-            // "dirWeightScheme": "Factorial",
-            "dirWeightScheme": "HQM_OPT",
+            "dirWeightScheme": "Factorial",
+            // "dirWeightScheme": "HQM_OPT",
             "geomWeightScheme": "HQM_SD",
             // "useAnisotropicFunctional": true,
             // "scaleMultiplier": 3.464101615137754,

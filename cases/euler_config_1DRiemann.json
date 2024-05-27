@@ -1,15 +1,15 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-1,
+        "dtImplicit": 0.5e-3,
         "nTimeStep": 10000,
         "steadyQuit": false,
         "useImplicitPP": false,
-        "rhsFPPMode": 1,
+        "rhsFPPMode": 2,
         "rhsFPPScale": 1,
         "useDtPPLimit": true,
-        "rhsFPPRelax": 0.9,
+        "rhsFPPRelax": 0.5,
         "incrementPPRelax": 0.9,
-        "tEnd": 6,
+        "tEnd": 0.1,
         "odeCode": 0,
         "odeSetting1": 0.5,
         "odeSetting2": 1
@@ -42,8 +42,8 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         // "meshFile": "../data/mesh/Unifrom_1D400.cgns",
-        "meshFile": "../data/mesh/Uniform_LeBlanc9_800_P1.cgns",
-        "outPltName": "../data/outUnsteady/PP1/Uniform_LeBlanc9_800-1EM1",
+        "meshFile": "../data/mesh/Uniform_01_400.cgns",
+        "outPltName": "../data/outUnsteady/PP2/LeBlanc/Uniform_01_400_DoubleRarefraction",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -54,7 +54,7 @@
     "boundaryDefinition": {
         "PeriodicTranslation1": [
             0,
-            0.02,
+            2.5e-3,
             0.0
         ]
     },
@@ -93,14 +93,15 @@
         },
         "functionalSettings": {
             "scaleType": "BaryDiff",
-            "dirWeightScheme": "HQM_OPT",
+            "dirWeightScheme": "Factorial",
             // "useAnisotropicFunctional": true,
             // "scaleMultiplier": 3.464101615137754,
             "_tail": 0
         }
     },
     "linearSolverControl": {
-        "sgsIter": 2,
+        "jacobiCode": 0,
+        "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
@@ -131,67 +132,67 @@
         ],
         "boxInitializers": [
             // for double rarefaction:
-            // {
-            //     "x0": -1,
-            //     "x1": 0.5,
-            //     "y0": -100,
-            //     "y1": 100,
-            //     "z0": -100,
-            //     "z1": 100,
-            //     "v": [
-            //         1,
-            //         -2,
-            //         0,
-            //         0,
-            //         2.2500
-            //     ]
-            // },
-            // {
-            //     "x0": 0.5,
-            //     "x1": 2,
-            //     "y0": -100,
-            //     "y1": 100,
-            //     "z0": -100,
-            //     "z1": 100,
-            //     "v": [
-            //         1,
-            //         2,
-            //         0,
-            //         0,
-            //         2.2500
-            //     ]
-            // }
-            // for LeBlanc
             {
                 "x0": -1,
-                "x1": 3,
+                "x1": 0.5,
                 "y0": -100,
                 "y1": 100,
                 "z0": -100,
                 "z1": 100,
                 "v": [
                     1,
+                    -2,
                     0,
                     0,
-                    0,
-                    0.1
+                    2.2500
                 ]
             },
             {
-                "x0": 3,
-                "x1": 10,
+                "x0": 0.5,
+                "x1": 2,
                 "y0": -100,
                 "y1": 100,
                 "z0": -100,
                 "z1": 100,
                 "v": [
-                    1e-3,
+                    1,
+                    2,
                     0,
                     0,
-                    0,
-                    0.1e-9
+                    2.2500
                 ]
             }
+            // for LeBlanc
+            // {
+            //     "x0": -1,
+            //     "x1": 3,
+            //     "y0": -100,
+            //     "y1": 100,
+            //     "z0": -100,
+            //     "z1": 100,
+            //     "v": [
+            //         1,
+            //         0,
+            //         0,
+            //         0,
+            //         0.1
+            //     ]
+            // },
+            // {
+            //     "x0": 3,
+            //     "x1": 10,
+            //     "y0": -100,
+            //     "y1": 100,
+            //     "z0": -100,
+            //     "z1": 100,
+            //     "v": [
+            //         1e-3,
+            //         0,
+            //         0,
+            //         0,
+            //         0.1e-9
+            //     ]
+            // }
         ],
         "idealGasProperty": {
             // "gamma": 1.4,
@@ -211,6 +212,17 @@
             "value": [
                 1,
                 2,
+                0,
+                0,
+                2.2500
+            ]
+        },
+        {
+            "type": "BCFar",
+            "name": "FAR_L",
+            "value": [
+                1,
+                -2,
                 0,
                 0,
                 2.2500

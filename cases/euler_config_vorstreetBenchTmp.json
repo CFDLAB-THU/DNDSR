@@ -17,7 +17,7 @@
     "convergenceControl": {
         "nTimeStepInternal": 2000,
         "nTimeStepInternalMin": 11,
-        "rhsThresholdInternal": 1e-6,
+        "rhsThresholdInternal": 1e-7,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
@@ -74,7 +74,7 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
+        "intOrder": 5,
         "jacobiRelax": 1,
         "SORInstead": false,
         "smoothThreshold": 1e-3,
@@ -95,11 +95,17 @@
     },
     "linearSolverControl": {
         "sgsIter": 4,
+        "jacobiCode": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
         "nGmresSpace": 5,
-        "nGmresIter": 2
+        "nGmresIter": 2,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 3,
+            "orderingCode": 3
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
@@ -158,6 +164,6 @@
         "iStep": 80000,
         "iStepInternal": -1,
         "odeCodePrev": -1,
-        "lastRestartFile": "../CylinderB1_RE1200_M01_Starter/out__C_p320_restart.dir"
+        "lastRestartFile": "../CylinderB1_RE1200_M01_StarterR/out__C_p320_restart.dir"
     }
 }

@@ -5,20 +5,21 @@ import copy
 import re
 
 directExecute = True
-forceWrite = False
+forceWrite = True
 ignoreExist = True
 waitOnExe = True #!!
 
 baseConfName = "./euler_config_vorstreetBenchTmp.json"
 exePath = "../build/app/euler.exe"
-outPath = "../data/outUnsteady1"
+outPath = "../data/outCylinder1"
 
 dtBase = 0.125e-1
 stepBase = 800
 zeroRecForStepsBase = 0
-casePrefix = "GEN3_CylinderB1_RE1200_M01_TF"
+casePrefix = "GEN01_CylinderB1_RE1200_M01_C"
 orthConfigName = "euler_config.json"
 orthRunScriptName = "srunEuler.sh"
+
 orthRunScript = r"""#!/bin/bash
 #SBATCH --partition=amd_256
 #SBATCH --nodes=5
@@ -31,7 +32,7 @@ echo "UCX_TLS=${UCX_TLS}"
 which mpirun
 cp ../../../build/app/euler.exe .
 ls -la euler.exe
-mpirun euler.exe 1
+mpirun euler.exe ./euler_config.json
 rm euler.exe
 """
 
@@ -60,10 +61,12 @@ mults = [0.5,1,2,2.52,3.17,4,5.04,6.35,8]
 # ODEs = [("SDIRK", 101)]
 # ODEs = [("ESDIRK", 0, (0.55, 0, 1.333,0))]
 ODEs = []
-# ODEs.append(("HM3",    401,(0.55, 0, 1.333,0)))
 # ODEs.append(("BDF2",   1,(0.55, 0, 1.333,0)))
 # ODEs.append(("ESDIRK", 0,(0.55, 0, 1.333,0)))
-ODEs.append(("HM3LOB", 401,(0.50, 0, 1, 0)))
+# ODEs.append(("HM3",    401,(0.55, 0, 1.333,0)))
+# ODEs.append(("HM3LOB", 401,(0.50, 0, 1, 0)))
+# ODEs.append(("HM3U3R1", 401,(0.50, 0, 1.333, 2)))
+ODEs.append(("HM3U2R1", 401,(0.25, 0, 1, 1)))
 
 writtens = []
 for iT in range(1,len(mults) + 1):

@@ -1,15 +1,15 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 0.0125e-1,
-        "nTimeStep": 10000,
+        "dtImplicit": 0.0025,
+        "nTimeStep": 80000,
         "steadyQuit": false,
-        "odeCode": 0,
+        "odeCode": 401,
         "tEnd": 3e+200,
         "odeSetting1": 0.55,
         "odeSetting2": 0,
         "odeSetting3": 1.333,
         "rhsFPPMode": 0,
-        "useRestart": true,
+        "useRestart": false,
         "rhsFPPScale": 1,
         "_tail": 0
     },
@@ -44,7 +44,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/CylinderB1.cgns",
-        "outPltName": "../data/outCylinder1/CylinderB1_RE1200_M01_BaseCTR1C/out",
+        "outPltName": "../data/outCylinder1/CylinderB1_RE1200_M01_StarterR/out",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -93,8 +93,8 @@
         }
     },
     "linearSolverControl": {
-        "sgsIter": 4,
-        "jacobiCode": 0,
+        "jacobiCode": 2,
+        "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
@@ -163,6 +163,6 @@
         "iStep": 80000,
         "iStepInternal": -1,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/outCylinder1/CylinderB1_RE1200_M01_StarterR/out__C_p320_restart.dir"
+        "lastRestartFile": "../data/outCylinder1/CylinderB1_RE1200_M01_Starter/out__C_p320_restart.dir"
     }
 }
