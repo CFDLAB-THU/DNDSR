@@ -480,18 +480,20 @@ namespace DNDS::Euler
                     vfv->template DoCalculateSmoothIndicatorV1<nVarsFixed>(
                         ifUseLimiter, (uRecC), (u),
                         TU::Ones(nVars),
-                        (
-                            [&](Eigen::Matrix<real, 1, nVarsFixed> &v)
-                            {
+                        [&](Eigen::Matrix<real, 1, nVarsFixed> &v)
+                        {
                             TU prim;
                             TU cons;
                             cons = v.transpose();
                             if (cons(0) < verySmallReal)
                             {
                                 v.setConstant(-veryLargeReal * v(I4));
+                                return;
                             }
                             Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, eval.settings.idealGasProperty.gamma);
-                            v.setConstant(prim(I4)); }));
+                            v.setConstant(prim(I4));
+                            return;
+                        });
 
                 else
                 {
@@ -681,7 +683,7 @@ namespace DNDS::Euler
                         log() << std::scientific << std::setw(3) << TermColor::Red;
                         log() << "PPFResLimiter: nLimFRes[" << nLimFRes << "] minAlpha [" << alphaMinFRes << "]" << TermColor::Reset << std::endl;
                     }
-                alphaPP_tmp.setMaxWith(smallReal); // dTau cannot be zero 
+                alphaPP_tmp.setMaxWith(smallReal); // dTau cannot be zero
                 dTauTmp = dTau;
                 dTauTmp *= alphaPP_tmp;
             }
