@@ -1364,7 +1364,7 @@ namespace DNDS::Euler
                     addOutList,
                     eval, tSimu);
                 nextTout += config.outputControl.tDataOut;
-                if (nextTout > config.timeMarchControl.tEnd)
+                if (nextTout >= config.timeMarchControl.tEnd)
                     nextTout = config.timeMarchControl.tEnd;
             }
             if ((eval.settings.specialBuiltinInitializer == 2 ||
@@ -1464,10 +1464,11 @@ namespace DNDS::Euler
                 }
             }
 
-            if (tSimu + curDtImplicit > nextTout + nextTout * smallReal) // limits dt by output nodes
+            DNDS_assert(curDtImplicit > 0);
+            if (tSimu + curDtImplicit >= nextTout - curDtImplicit * smallReal) // limits dt by output nodes
             {
                 ifOutT = true;
-                curDtImplicit = (nextTout - tSimu);
+                curDtImplicit = std::max(0.0, nextTout - tSimu);
             }
 
             if (config.timeMarchControl.useImplicitPP)
