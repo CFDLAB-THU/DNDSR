@@ -111,6 +111,8 @@ set(CMAKE_USE_RELATIVE_PATHS ON)
 
 
 # ##########################################
+find_library(EXTERNAL_LIB_BACKTRACE NAMES backtrace)
+
 find_library(EXTERNAL_LIB_ZLIB NAMES z z_D  zlib libzlibstatic.a REQUIRED)
 find_library(EXTERNAL_LIB_HDF5 NAMES libhdf5.a hdf5 PATHS 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
@@ -252,6 +254,15 @@ set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
     CACHE INTERNAL
     "Project Public External Lib Dependencies"
     )
+endif()
+
+if(EXTERNAL_LIB_BACKTRACE)
+set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
+    ${EXTERNAL_LIB_BACKTRACE}
+    CACHE INTERNAL
+    "Project Public External Lib Dependencies"
+    )
+add_compile_definitions(BOOST_STACKTRACE_USE_BACKTRACE)
 endif()
 
 # set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
