@@ -43,7 +43,7 @@ set(DNDS_UNSAFE_MATH_OPT OFF CACHE BOOL "use -funsafe-math-optimizations")
 set(DNDS_NATIVE_ARCH     OFF CACHE BOOL "use -march=native")
 set(DNDS_LTO OFF CACHE BOOL "use -flto")
 set(DNDS_USE_FULL_TEMPLATE_TRACE OFF CACHE BOOL "use -ftemplate-backtrace-limit=0")
-set(DNDS_USE_RDYNAMIC ON CACHE BOOL "use -rdynamic")
+set(DNDS_USE_RDYNAMIC ON CACHE BOOL "use -rdynamic on posix")
 
 
 set(DNDS_EIGEN_USE_BLAS OFF CACHE BOOL "use blas in eigen")
@@ -85,9 +85,12 @@ if(DNDS_USE_FULL_TEMPLATE_TRACE)
     add_compile_options(-ftemplate-backtrace-limit=0)
 endif()
 
-if(DNDS_USE_RDYNAMIC)
-    add_compile_options(-rdynamic)
-    add_link_options(-rdynamic)
+
+if(UNIX)
+    if(DNDS_USE_RDYNAMIC)
+        add_compile_options(-rdynamic)
+        add_link_options(-rdynamic)
+    endif()
 endif()
 
 
