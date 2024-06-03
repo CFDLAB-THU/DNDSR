@@ -130,10 +130,14 @@ namespace DNDS::Geom
                 for (rowsize ib2n = 0; ib2n < coordBnd.cols(); ib2n++)
                 {
                     bool found = false;
+                    real minDist = veryLargeReal;
                     for (rowsize jb2n = 0; jb2n < coordBnd.cols(); jb2n++)
-                        if ((coordBndOther(Eigen::all, jb2n) -
+                    {
+                        real dist = (coordBndOther(Eigen::all, jb2n) -
                              mesh->periodicInfo.TransCoord(coordBnd(Eigen::all, ib2n), faceID))
-                                .squaredNorm() < sqr(search_eps))
+                                .squaredNorm();
+                        minDist = std::min(dist, minDist);
+                        if (dist < sqr(search_eps))
                         {
                             found = true;
                             if (faceID == BC_ID_PERIODIC_1)
@@ -143,7 +147,8 @@ namespace DNDS::Geom
                             if (faceID == BC_ID_PERIODIC_3)
                                 iNodeDonorToMain3[(*bnd2nodeSerial)(donorIBnd, jb2n)] = (*bnd2nodeSerial)(iBnd, ib2n);
                         }
-                    DNDS_assert(found);
+                    }
+                    DNDS_assert_info(found, fmt::format("min dist was: [{}]", minDist));
                 }
             }
             if (FaceIDIsPeriodicDonor(faceID))

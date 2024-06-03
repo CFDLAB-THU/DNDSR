@@ -3,12 +3,25 @@
         "dtImplicit": 2e-4,
         "nTimeStep": 1250,
         "steadyQuit": false,
-        "odeCode": 401,
+        "odeCode": 1,
         "tEnd": 3e+200,
+        // "odeSetting1": 0.5,
+        // "odeSetting2": 0,
+        // "odeSetting3": 1,
+        // "odeSetting4": 0,
+        // "odeSetting1": 0.55,
+        // "odeSetting2": 0,
+        // "odeSetting3": 1.333,
+        // "odeSetting4": 0,
+        // "odeSetting1": 0.25,
+        // "odeSetting2": 0,
+        // "odeSetting3": 1,
+        // "odeSetting4": 1,
         "odeSetting1": 0.5,
         "odeSetting2": 0,
-        "odeSetting3": 1,
-        // "rhsFPPMode": 1,
+        "odeSetting3": 1.333,
+        "odeSetting4": 2,
+        "rhsFPPMode": 1,
         // "rhsFPPScale": 0.01
         "_tail": 0
     },
@@ -24,7 +37,7 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 20.0,
+        "CFL": 10.0,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 2147483647,
         "nCFLRampLength": 2147483647,
@@ -32,7 +45,7 @@
         "useLocalDt": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 100,
+        "nTimeStepInternal": 200,
         "rhsThresholdInternal": 1e-4,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -41,7 +54,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/UniformDM480.cgns",
-        "outPltName": "../data/outUnsteady/DM480/UniformDM480_T5_TS3_RM2_HM3LBTT2",
+        "outPltName": "../data/outUnsteady/DM480-1/UniformDM480_T5_TS3_RM2-BDF2-V2T2",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -69,14 +82,14 @@
     },
     "limiterControl": {
         "useLimiter": true,
-        "smoothIndicatorProcedure": 1, //0 = normal, 1 = p only
+        "smoothIndicatorProcedure": 0, //0 = normal, 1 = p only
         "limiterProcedure": 0, //1 == CWBAP
         "nPartialLimiterStart": 1000000,
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
+        "intOrder": 5,
         "jacobiRelax": 1.0,
         "SORInstead": false,
         "smoothThreshold": 1e-2,
@@ -105,7 +118,7 @@
         "useScalarJacobian": true,
         "riemannSolverType": "Roe_M2",
         "riemannSolverTypeAux": "Roe_M2",
-        "rsMeanValueEig": 0,
+        "rsMeanValueEig": 1,
         "rsRotateScheme": 0,
         "constMassForce": [
             0.0,

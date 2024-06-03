@@ -8,7 +8,7 @@
         "rhsFPPScale": 1,
         "odeCode": 103, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
         "tEnd": 3e+200,
-        "partitonMeshOnly": false,
+        "partitionMeshOnly": false,
         "_tail": 0
     },
     "convergenceControl": {

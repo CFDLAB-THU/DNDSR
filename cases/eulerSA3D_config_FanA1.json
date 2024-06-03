@@ -8,7 +8,7 @@
         "rhsFPPScale": 1,
         "odeCode": 103, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
         "tEnd": 3e+200,
-        "partitonMeshOnly": false,
+        "partitionMeshOnly": true,
         "_tail": 0
     },
     "convergenceControl": {
@@ -51,8 +51,8 @@
         "meshElevationRBFKernel": "CPC0",
         "meshElevationMaxIncludedAngle": 20,
         // "meshFile": "../data/mesh/row_1_test3.cgns",
-        "meshFile": "../data/mesh/row_1_test5-b1.cgns",
-        "outPltName": "../data/out/row_1_test5/out-t1-105-b1",
+        "meshFile": "../data/mesh/FanRow1SW1PW1-T3-1B-R1.cgns",
+        "outPltName": "../data/out/FanRow1SW1PW1-T3-1B-R1/out-t1-105-b1",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -78,7 +78,7 @@
             0.0,
             18.947368421052630 //360 /19
         ],
-        "periodicTolerance": 1e-8
+        "periodicTolerance": 1e-4
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
