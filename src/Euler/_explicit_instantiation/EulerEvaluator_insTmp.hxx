@@ -121,4 +121,5 @@
         template void EulerEvaluator<model>::MinSmoothDTau(                                                           \
             ArrayDOFV<1> &dTau, ArrayDOFV<1> &dTauNew);                                                               \
         template void EulerEvaluator<model>::updateBCProfiles(ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec); \
+        template void EulerEvaluator<model>::updateBCProfilesPressureRadialEq();                                      \
     }

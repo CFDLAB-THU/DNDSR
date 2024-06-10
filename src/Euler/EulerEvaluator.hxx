@@ -1475,10 +1475,18 @@ namespace DNDS::Euler
                 MPI::AllreduceOneReal(RMin, MPI_MIN, mesh->getMPI());
                 MPI::AllreduceOneReal(RMax, MPI_MAX, mesh->getMPI());
                 auto vExtra = pBCHandler->GetValueExtraFromID(i);
+                // * valueExtra[0] == nDiv
+                // * valueExtra[1] == divMethod
+                // * valueExtra[2] == d0
+                // * valueExtra[3] == printInfo
                 index nDiv = vExtra.size() >= 1 ? vExtra(0) : 10;
                 index divMethod = vExtra.size() >= 2 ? vExtra(1) : 0; // TODO: implement other distributions
+                real divd0 = vExtra.size() >= 3 ? vExtra(2) : veryLargeReal;
 
-                profileRecorders.at(i).GenerateUniform(std::max(nDiv, index(10)), nVars, RMin, RMax);
+                if (divMethod == 0)
+                    profileRecorders.at(i).GenerateUniform(std::max(nDiv, index(10)), nVars, RMin, RMax);
+                else
+                    profileRecorders.at(i).GenerateTanh(std::max(nDiv, index(10)), nVars, RMin, RMax, divd0);
             }
         }
         for (auto &v : profileRecorders)
@@ -1519,8 +1527,14 @@ namespace DNDS::Euler
             profileRecorders.at(faceBndID).AddSimpleInterval(valIn, vfv->GetFaceArea(iFace), RMin, RMax);
         }
         for (auto &v : profileRecorders)
-        {
             v.second.Reduce();
+    }
+
+    template <EulerModel model>
+    void EulerEvaluator<model>::updateBCProfilesPressureRadialEq()
+    {
+        for (auto &v : profileRecorders)
+        {
             if (pBCHandler->GetFlagFromIDSoft(v.first, "anchorOpt") == 2)
             {
                 v.second.v.array().rowwise() /= (v.second.div.array() + verySmallReal);
@@ -1545,9 +1559,9 @@ namespace DNDS::Euler
                     //     std::cout << vv << " ";
                     // std::cout << "\n";
                     auto vExtra = pBCHandler->GetValueExtraFromID(v.first);
-                    int showMethod = vExtra.size() >= 3 ? vExtra(2) : 0;
+                    int showMethod = vExtra.size() >= 4 ? vExtra(3) : 0;
                     if (showMethod)
-                        log() << fmt::format("EulerEvaluator<model>::updateBCProfiles: got radial equilibrium pressure rise: [{:.3e}]", v.second.v(I4, Eigen::last))
+                        log() << fmt::format("EulerEvaluator<model>::updateBCProfilesPressureRadialEq: p rise: [{:.3e}]", v.second.v(I4, Eigen::last))
                               << std::endl;
                 }
             }

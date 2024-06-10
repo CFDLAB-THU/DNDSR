@@ -83,9 +83,9 @@ namespace DNDS::Euler
         std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall;
         std::vector<real> dWallFace;
 
-        std::unordered_map<Geom::t_index, AnchorPointRecorder<nVarsFixed>> anchorRecorders;
-        std::unordered_map<Geom::t_index, OneDimProfile<nVarsFixed>> profileRecorders;
-        std::unordered_map<Geom::t_index, IntegrationRecorder> bndIntegrations;
+        std::map<Geom::t_index, AnchorPointRecorder<nVarsFixed>> anchorRecorders;
+        std::map<Geom::t_index, OneDimProfile<nVarsFixed>> profileRecorders;
+        std::map<Geom::t_index, IntegrationRecorder> bndIntegrations;
 
         // ArrayVDOF<25> dRdUrec;
         // ArrayVDOF<25> dRdb;
@@ -693,6 +693,8 @@ namespace DNDS::Euler
 
         void updateBCProfiles(ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec);
 
+        void updateBCProfilesPressureRadialEq();
+
         TU generateBoundaryValue(
             TU &ULxy, //! warning, possible that UL is also modified
             const TU &ULMeanXy,
@@ -704,6 +706,22 @@ namespace DNDS::Euler
             Geom::t_index btype,
             bool fixUL = false,
             int geomMode = 0);
+
+        void PrintBCProfiles(const std::string &name, ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
+        {
+            this->updateBCProfiles(u, uRec);
+            if(mesh->getMPI().rank != 0)
+                return; //!only 0 needs to write
+            for (auto &[id, bcProfile] : profileRecorders)
+            {
+                std::string fname = name + "_bc[" + pBCHandler->GetNameFormID(id) + "]_profile.csv";
+                std::filesystem::path outFile{fname};
+                std::filesystem::create_directories(outFile.parent_path() / ".");
+                std::ofstream fout(fname);
+                DNDS_assert_info(fout, fmt::format("failed to open [{}]", fname));
+                bcProfile.OutProfileCSV(fout);
+            }
+        }
 
         inline TU CompressRecPart(
             const TU &umean,

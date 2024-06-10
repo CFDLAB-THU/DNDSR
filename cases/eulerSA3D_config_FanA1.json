@@ -6,9 +6,9 @@
         "useRestart": false,
         "rhsFPPMode": 1,
         "rhsFPPScale": 1,
-        "odeCode": 103, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
+        "odeCode": 103,
         "tEnd": 3e+200,
-        "partitionMeshOnly": true,
+        "partitionMeshOnly": false,
         "_tail": 0
     },
     "convergenceControl": {
@@ -27,7 +27,7 @@
         "nDataOutInternal": 1000000000,
         "nRestartOutC": 10,
         "nRestartOut": 100,
-        "nRestartOutCInternal": 1000,
+        "nRestartOutCInternal": 10000,
         "nRestartOutInternal": 1000000000,
         "tDataOut": 3e+200
     },
@@ -50,9 +50,10 @@
         "meshElevationRBFRadius": 5,
         "meshElevationRBFKernel": "CPC0",
         "meshElevationMaxIncludedAngle": 20,
-        // "meshFile": "../data/mesh/row_1_test3.cgns",
-        "meshFile": "../data/mesh/FanRow1SW1PW1-T3-1B-R1.cgns",
-        "outPltName": "../data/out/FanRow1SW1PW1-T3-1B-R1/out-t1-105-b1",
+        "meshFile": "../data/mesh/row_1_test5-b1-Cylinderout.cgns",
+        "outPltName": "../data/out/row_1_test5-b1-Cylinderout/out-t1-105-b1",
+        // "meshFile": "../data/mesh/FanRow1SW1PW1-T3-1B-R1.cgns",
+        // "outPltName": "../data/out/FanRow1SW1PW1-T3-1B-R1/out-t1-105-b1",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -76,14 +77,15 @@
         "PeriodicRotationEulerAngles1": [
             0.0,
             0.0,
-            18.947368421052630 //360 /19
+            18.947368421052630
+            //360 /19
         ],
         "periodicTolerance": 1e-4
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
         "zeroGrads": false,
-        "recLinearScheme": 0, // 0 for original SOR, 1 for GMRES
+        "recLinearScheme": 0,
         "nGmresSpace": 4,
         "nGmresIter": 2,
         "recThreshold": 1e-03,
@@ -94,7 +96,7 @@
     "limiterControl": {
         "useLimiter": true,
         "smoothIndicatorProcedure": 0,
-        "limiterProcedure": 0, //1 == CWBAP
+        "limiterProcedure": 0,
         "nPartialLimiterStart": 100000,
         "nPartialLimiterStartLocal": 50
     },
@@ -174,10 +176,11 @@
             0,
             0,
             0.5,
+            1.417397773437500,
             // 1.127540981911547,
             // 1.528047175703185, // 110000 Pa static pressure
             // 1.655596918948928, // 120000
-            1.783146662194671, //130000
+            // 1.783146662194671, //130000
             // 2.038246148686159, // 150000
             3
         ],
@@ -201,7 +204,8 @@
                 0.5,
                 // 1.127540981911547, // 78600 pa
                 // 1.417397773437500, // 1.0 p0in
-                1.482017662109375, // 1.05
+                1.482017662109375,
+                // 1.05
                 // 1.546637550781250, // 1.1
                 // 1.572485506250000, // 1.12
                 // 1.611257439453125, //1.15
@@ -210,9 +214,13 @@
                 3
             ],
             "valueExtra": [
-                128, // profile divisions
-                0,
-                1 // print info
+                128,
+                // profile divisions
+                1,
+                // tanh
+                1e-6,
+                1
+                // print info
             ],
             "anchorOption": 2,
             "integrationOption": 2
@@ -221,8 +229,10 @@
             "type": "BCInPsTs",
             "name": "INLET_1",
             "value": [
-                0.516959109375000, //Ps
-                288.15, //Ts
+                0.516959109375000,
+                //Ps
+                288.15,
+                //Ts
                 0,
                 0,
                 1,

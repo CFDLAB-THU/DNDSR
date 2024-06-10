@@ -259,6 +259,7 @@ namespace DNDS::Euler
             {
                 eval.updateBCAnchors(cx, uRecC);
                 eval.updateBCProfiles(cx, uRecC);
+                eval.updateBCProfilesPressureRadialEq();
             }
             // cx.trans.startPersistentPull();
             // cx.trans.waitPersistentPull();
@@ -1157,6 +1158,8 @@ namespace DNDS::Euler
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
                     eval, tSimu);
+                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
+                                     u, uRec);
             }
             if (iter % config.outputControl.nDataOutCInternal == 0)
             {
@@ -1168,6 +1171,8 @@ namespace DNDS::Euler
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
                     eval, tSimu);
+                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                                     u, uRec);
             }
             if (iter % config.outputControl.nRestartOutInternal == 0)
             {
@@ -1298,6 +1303,8 @@ namespace DNDS::Euler
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
                     eval, tSimu);
+                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
+                                     u, uRec);
                 nextStepOut += config.outputControl.nDataOut;
             }
             if (step == nextStepOutC)
@@ -1310,6 +1317,8 @@ namespace DNDS::Euler
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
                     eval, tSimu);
+                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                                     u, uRec);
                 nextStepOutC += config.outputControl.nDataOutC;
             }
             if (step == nextStepOutAverage)
@@ -1366,6 +1375,8 @@ namespace DNDS::Euler
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
                     eval, tSimu);
+                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
+                                     u, uRec);
                 nextTout += config.outputControl.tDataOut;
                 if (nextTout >= config.timeMarchControl.tEnd)
                     nextTout = config.timeMarchControl.tEnd;
@@ -1425,6 +1436,7 @@ namespace DNDS::Euler
         /**********************************/
         // step 0 extra:
         if (config.outputControl.dataOutAtInit)
+        {
             PrintData(
                 config.dataIOControl.outPltName + "_" + output_stamp + "_" + "00000",
                 "",
@@ -1432,6 +1444,9 @@ namespace DNDS::Euler
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
                 eval, tSimu);
+            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "00000",
+                                 u, uRec);
+        }
 
         for (step = 1; step <= config.timeMarchControl.nTimeStep; step++)
         {

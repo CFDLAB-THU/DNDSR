@@ -1,6 +1,7 @@
 #pragma once
 #include "Euler.hpp"
 #include "Geom/BoundaryCondition.hpp"
+#include "Geom/Grid.hpp"
 
 #include <unordered_map>
 
@@ -249,7 +250,7 @@ namespace DNDS::Euler
 
         auto GetNameFormID(Geom::t_index id)
         {
-            if(!ID2name.count(id))
+            if (!ID2name.count(id))
                 return std::string("UnNamedBC");
             return ID2name.at(id);
         }
@@ -401,7 +402,7 @@ namespace DNDS::Euler
     struct OneDimProfile
     {
         MPIInfo mpi;
-        std::vector<real> nodes;
+        Eigen::Vector<real, Eigen::Dynamic> nodes;
         Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> v;
         Eigen::RowVector<real, Eigen::Dynamic> div;
 
@@ -424,10 +425,16 @@ namespace DNDS::Euler
 
         void GenerateUniform(index size, int nvars, real minV, real maxV)
         {
-            nodes.resize(size + 1);
-            nodes[0] = minV;
-            for (index i = 0; i < size; i++)
-                nodes[i + 1] = real(i + 1) / real(size) * maxV + (1 - real(i + 1) / real(size)) * minV;
+            nodes.setLinSpaced(size + 1, minV, maxV);
+            v.resize(nvars, size);
+            div.resize(size);
+        }
+
+        void GenerateTanh(index size, int nvars, real minV, real maxV, real d0)
+        {
+            Geom::GetTanhDistributionBilateral(minV, maxV, size, d0, nodes);
+            // if (MPIWorldRank() == 0)
+            //     std::cout << std::setprecision(12) << nodes.transpose() << std::endl;
             v.resize(nvars, size);
             div.resize(size);
         }
@@ -487,6 +494,30 @@ namespace DNDS::Euler
             valL = 0.5 * (valL + Get(iCL));
             valR = 0.5 * (valR + Get(iCL));
             return vRel * valR + (1 - vRel) * valL;
+        }
+
+        /**
+         * \brief after valid reduction
+         * called on one proc
+         */
+        void OutProfileCSV(std::ostream &o, bool title = true, int precision = 16)
+        {
+            if (title)
+            {
+                o << "X";
+                for (index i = 0; i < v.rows(); i++)
+                    o << ", U" << std::to_string(i);
+                o << "\n";
+            }
+            o << std::scientific << std::setprecision(precision);
+            for (index iN = 0; iN < v.cols(); iN++)
+            {
+                o << nodes[iN];
+                auto val = GetPlain(nodes[iN]);
+                for (index i = 0; i < val.size(); i++)
+                    o << ", " << val[i];
+                o << "\n";
+            }
         }
     };
 

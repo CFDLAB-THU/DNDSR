@@ -133,6 +133,13 @@ namespace DNDS
         return ret;
     }
 
+    inline MPI_int MPIWorldRank()
+    {
+        MPI_int ret{0};
+        MPI_Comm_rank(MPI_COMM_WORLD, &ret);
+        return ret;
+    }
+
     std::string getTimeStamp(const MPIInfo &mpi);
 
     inline void InsertCheck(const MPIInfo &mpi, const std::string &info = "",

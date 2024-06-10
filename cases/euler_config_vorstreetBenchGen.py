@@ -27,7 +27,7 @@ orthRunScript = r"""#!/bin/bash
 export UCX_TLS=sm,self,ud_verbs
 export DNDS_ARRAY_STRATEGY_USE_IN_SITU=0
 export DNDS_USE_STRONG_SYNC_WAIT=0
-export DNDS_USE_ASYNC_ONE_BY_ONE=1
+export DNDS_USE_ASYNC_ONE_BY_ONE=0
 echo "UCX_TLS=${UCX_TLS}"
 which mpirun
 cp ../../../build/app/euler.exe .

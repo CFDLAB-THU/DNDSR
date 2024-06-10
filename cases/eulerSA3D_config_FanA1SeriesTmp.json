@@ -6,17 +6,16 @@
         "useRestart": false,
         "rhsFPPMode": 1,
         "rhsFPPScale": 1,
-        "rhsFPPRelax": 0.6,
-        "incrementPPRelax": 0.6,
-        "odeCode": 103, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
+        "odeCode": 103,
         "tEnd": 3e+200,
-        "partitionMeshOnly": false,
+        "partitionMeshOnly": true,
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 4000,
+        "nTimeStepInternal": 5000,
         "rhsThresholdInternal": 1e-8,
-        "nAnchorUpdateStart": 0
+        "res_base": 0.0,
+        "useVolWiseResidual": false
     },
     "outputControl": {
         "nConsoleCheck": 1,
@@ -25,7 +24,7 @@
         "nDataOutC": 1,
         "nDataOut": 20,
         "nDataOutCInternal": 100,
-        // "nDataOutInternal": 1000,
+        "nDataOutInternal": 1000000000,
         "nRestartOutC": 10,
         "nRestartOut": 100,
         "nRestartOutCInternal": 1000,
@@ -33,17 +32,17 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 20,
+        "CFL": 10,
         "nForceLocalStartStep": 2147483647,
-        "nCFLRampStart": 100,
-        "nCFLRampLength": 1000,
-        "CFLRampEnd": 10,
-        "nSmoothDTau": 0,
+        "nCFLRampStart": 2147483647,
+        "nCFLRampLength": 2147483647,
+        "CFLRampEnd": 0.0,
+        "nSmoothDTau": 2,
         "useLocalDt": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
-        "meshScale": 4,
+        "meshScale": 0.003333333333333,
         "meshElevation": 0,
         "meshElevationInternalSmoother": 0,
         "meshElevationIter": 20,
@@ -51,11 +50,10 @@
         "meshElevationRBFRadius": 5,
         "meshElevationRBFKernel": "CPC0",
         "meshElevationMaxIncludedAngle": 20,
-        // "meshFile": "../data/mesh/row_1_test3.cgns",
-        "meshFile": "../data/mesh/Rotor37_test1.cgns",
-        "outPltName": "../data/out/Rotor37_test1-Run1-2EQ-SST/out-abs-Roe-O4-starter08",
+        "meshFile": "../../../data/mesh/row_1_test3-Cylinderout.cgns",
+        "outPltName": "out",
         "outPltMode": 0,
-        "readMeshMode": 0,
+        "readMeshMode": 1,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": true,
         "outAtPointData": true,
@@ -64,8 +62,7 @@
         "outCellScalarNames": [
             // "minJacobiDetRel",
             // "cellVolume",
-            "dWall",
-            "mut"
+            "dWall"
         ],
         "_tail": 0
     },
@@ -78,26 +75,28 @@
         "PeriodicRotationEulerAngles1": [
             0.0,
             0.0,
-            -10 //360 /36
+            18.947368421052630
+            //360 /19
         ],
-        "periodicTolerance": 1e-8
+        "periodicTolerance": 1e-4
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
         "zeroGrads": false,
-        "recLinearScheme": 0, // 0 for original SOR, 1 for GMRES
+        "recLinearScheme": 0,
         "nGmresSpace": 4,
         "nGmresIter": 2,
         "recThreshold": 1e-03,
         "nRecConsolCheck": 1,
-        "zeroRecForStepsInternal": 0
+        "nRecMultiplyForZeroedGrad": 1,
+        "zeroRecForStepsInternal": 40
     },
     "limiterControl": {
         "useLimiter": true,
         "smoothIndicatorProcedure": 0,
-        "limiterProcedure": 0, //1 == CWBAP
-        "nPartialLimiterStart": 1000000,
-        "nPartialLimiterStartLocal": 1000000
+        "limiterProcedure": 0,
+        "nPartialLimiterStart": 100000,
+        "nPartialLimiterStartLocal": 50
     },
     "vfvSettings": {
         "maxOrder": 3,
@@ -110,7 +109,6 @@
         "normWBAP": false,
         "subs2ndOrder": 1,
         // "bcWeight": 2,
-        "limiterBiwayAlter": 1,
         "baseSettings": {
             "localOrientation": true,
             "anisotropicLengths": false
@@ -118,6 +116,7 @@
         "functionalSettings": {
             "dirWeightScheme": "HQM_OPT",
             "geomWeightScheme": "HQM_SD",
+            "geomWeightBias": 1,
             // "geomWeightScheme": "SD_Power",
             // "geomWeightPower1": 0.125,
             // "geomWeightPower2": -0.5,
@@ -137,8 +136,7 @@
         "nGmresIter": 2,
         "directPrecControl": {
             "useDirectPrec": true,
-            "iluCode": 2
-            // "orderingCode": 0
+            "iluCode": 0
         }
     },
     "others": {
@@ -146,13 +144,12 @@
     },
     "eulerSettings": {
         "ignoreSourceTerm": false,
-        "useScalarJacobian": true,
+        "useScalarJacobian": false,
         "minWallDist": 1e-10,
         "wallDistScheme": 1,
         "riemannSolverType": "Roe_M1",
         // "rsRotateScheme": 1,
         "rsMeanValueEig": 1,
-        "RANSBottomLimit": 1e-5,
         "constMassForce": [
             0.0,
             0.0,
@@ -170,24 +167,24 @@
                 0.0,
                 0.0
             ],
-            "rpm": -9.548888888888890
+            "rpm": 9.9
         },
-        "boxInitializers": [
-        ],
         "farFieldStaticValue": [
             1,
             0,
             0,
-            0.8,
-            0.891422324913029,
-            1.0000e-05,
-            10
+            0.5,
+            // 1.127540981911547,
+            // 1.528047175703185, // 110000 Pa static pressure
+            // 1.655596918948928, // 120000
+            1.783146662194671, //130000
+            // 2.038246148686159, // 150000
+            3
         ],
         "idealGasProperty": {
             "gamma": 1.4,
-            "Rgas": 0.001417530864198,
-            "muGas": 1.254590612320092e-07,
-            // "muGas": 5.018362449280368e-07,
+            "Rgas": 0.001892583230368,
+            "muGas": 1.176178699050087e-07,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4
@@ -201,40 +198,41 @@
                 1,
                 0,
                 0,
-                0.8,
-                1.136923037037038, // 0.8
-                // 1.239038416666668, // 0.9
-                // 1.300307644444446, // 0.96
-                // 1.341153796296297, // 1.0 p0in
-                // 1.392211486111112, // 1.05
-                // 1.443269175925927, // 1.1 p0in
-                // 1.494326865740742, //1.15
-                // 1.545384555555557, // 1.2 p0in
-                // 1.596442245370372, //1.25
-                1.0000e-05,
-                10
+                0.5,
+                // 1.127540981911547, // 78600 pa
+                // 1.417397773437500, // 1.0 p0in
+                1.482017662109375,
+                // 1.05
+                // 1.546637550781250, // 1.1
+                // 1.572485506250000, // 1.12
+                // 1.611257439453125, //1.15
+                // 1.637105394921875, // 1.17
+                // 1.675877328125000, //1.2
+                3
             ],
             "valueExtra": [
-                128, // profile divisions
+                128,
+                // profile divisions
                 0,
                 1,
-                1 // print info
+                1
+                // print info
             ],
             "anchorOption": 2,
             "integrationOption": 2
         },
         {
-            // "type": "BCFar",
             "type": "BCInPsTs",
             "name": "INLET_1",
             "value": [
-                0.408461518518519, //Ps
-                288.15, //Ts
+                0.516959109375000,
+                //Ps
+                288.15,
+                //Ts
                 0,
                 0,
-                1, // Seq234: prescribed inflow direction
-                1.0000e-05,
-                10
+                1,
+                3
             ]
         },
         {
@@ -248,22 +246,12 @@
         {
             "type": "BCWall",
             "name": "WALL_HUB_IN",
-            "frameOption": 0
+            "frameOption": 1
         },
         {
             "type": "BCWall",
             "name": "WALL_SH",
             "frameOption": 1
         }
-    ],
-    "restartState": {
-        "iStep": 1,
-        "iStepInternal": 3000,
-        "odeCodePrev": -1,
-        "lastRestartFile": "../data/out/Rotor37_test1-Run1-2EQ/out-abs-Roe-O4-starter08__3000_p640_restart.dir",
-        "otherRestartFile": "",
-        "otherRestartStoreDim": [
-            0
-        ]
-    }
+    ]
 }

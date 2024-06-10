@@ -222,6 +222,7 @@
             "valueExtra": [
                 10, // profile divisions
                 0,
+                1,
                 1 // print info
             ],
             "anchorOption": 2
