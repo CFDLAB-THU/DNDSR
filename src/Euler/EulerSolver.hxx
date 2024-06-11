@@ -1142,6 +1142,12 @@ namespace DNDS::Euler
                         << (nLimBeta) << delimC << (minBeta) << delimC
                         << (nLimAlpha) << delimC << (minAlpha) << delimC
                         << std::endl;
+
+                    eval.ConsoleOutputBndIntegrations();
+                    eval.BndIntegrationLogWriteLine(
+                        config.dataIOControl.getOutLogName() + "_" + output_stamp,
+                        step, iStep, iter
+                    );
                 }
                 tstart = MPI_Wtime();
                 trec = tcomm = trhs = tLim = 0.;
@@ -1288,6 +1294,10 @@ namespace DNDS::Euler
                         << (nLimBeta) << delimC << (minBeta) << delimC
                         << (nLimAlpha) << delimC << (minAlpha) << delimC
                         << std::endl;
+                    eval.ConsoleOutputBndIntegrations();
+                    eval.BndIntegrationLogWriteLine(
+                        config.dataIOControl.getOutLogName() + "_" + output_stamp,
+                        step, -1, -1);
                 }
                 tstart = MPI_Wtime();
                 trec = tcomm = trhs = tLim = 0.;

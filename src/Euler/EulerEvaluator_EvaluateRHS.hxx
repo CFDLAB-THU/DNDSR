@@ -466,18 +466,9 @@ namespace DNDS::Euler
         MPI::Allreduce(fluxWallSumLocal.data(), fluxWallSum.data(), fluxWallSum.size(), DNDS_MPI_REAL, MPI_SUM, u.father->getMPI().comm);
         for (auto &i : bndIntegrations)
         {
-            auto intOpt = pBCHandler->GetFlagFromIDSoft(i.first, "integrationOpt");
+            
             i.second.Reduce();
-            if (mesh->getMPI().rank == 0)
-            {
-                Eigen::VectorFMTSafe<real, Eigen::Dynamic> vPrint = i.second.v;
-                if (intOpt == 2)
-                    vPrint(Eigen::seq(nVars, nVars + 1)) /= i.second.div;
-                log() << fmt::format("Bnd [{}] integarted values option [{}] : {:.5e}",
-                                     pBCHandler->GetNameFormID(i.first),
-                                     intOpt, vPrint.transpose())
-                      << std::endl;
-            }
+            
         }
 
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS -1");

@@ -83,9 +83,11 @@ namespace DNDS::Euler
         std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall;
         std::vector<real> dWallFace;
 
+        // maps from bc id to various objects
         std::map<Geom::t_index, AnchorPointRecorder<nVarsFixed>> anchorRecorders;
         std::map<Geom::t_index, OneDimProfile<nVarsFixed>> profileRecorders;
         std::map<Geom::t_index, IntegrationRecorder> bndIntegrations;
+        std::map<Geom::t_index, std::ofstream> bndIntegrationLogs;
 
         // ArrayVDOF<25> dRdUrec;
         // ArrayVDOF<25> dRdb;
@@ -710,8 +712,8 @@ namespace DNDS::Euler
         void PrintBCProfiles(const std::string &name, ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
         {
             this->updateBCProfiles(u, uRec);
-            if(mesh->getMPI().rank != 0)
-                return; //!only 0 needs to write
+            if (mesh->getMPI().rank != 0)
+                return; //! only 0 needs to write
             for (auto &[id, bcProfile] : profileRecorders)
             {
                 std::string fname = name + "_bc[" + pBCHandler->GetNameFormID(id) + "]_profile.csv";
@@ -720,6 +722,51 @@ namespace DNDS::Euler
                 std::ofstream fout(fname);
                 DNDS_assert_info(fout, fmt::format("failed to open [{}]", fname));
                 bcProfile.OutProfileCSV(fout);
+            }
+        }
+
+        void ConsoleOutputBndIntegrations()
+        {
+            for (auto &i : bndIntegrations)
+            {
+                auto intOpt = pBCHandler->GetFlagFromIDSoft(i.first, "integrationOpt");
+                if (mesh->getMPI().rank == 0)
+                {
+                    Eigen::VectorFMTSafe<real, Eigen::Dynamic> vPrint = i.second.v;
+                    if (intOpt == 2)
+                        vPrint(Eigen::seq(nVars, nVars + 1)) /= i.second.div;
+                    log() << fmt::format("Bnd [{}] integarted values option [{}] : {:.5e}",
+                                         pBCHandler->GetNameFormID(i.first),
+                                         intOpt, vPrint.transpose())
+                          << std::endl;
+                }
+            }
+        }
+
+        void BndIntegrationLogWriteLine(const std::string &name, index step, index stage, index iter)
+        {
+            if (mesh->getMPI().rank != 0)
+                return; //! only 0 needs to write
+            for (auto &[id, bndInt] : bndIntegrations)
+            {
+                auto intOpt = pBCHandler->GetFlagFromIDSoft(id, "integrationOpt");
+                if (!bndIntegrationLogs.count(id))
+                {
+                    std::string fname = name + "_bc[" + pBCHandler->GetNameFormID(id) + "]_integrationLog.csv";
+                    bndIntegrationLogs.emplace(std::make_pair(id, std::ofstream(fname)));
+                    DNDS_assert_info(bndIntegrationLogs.at(id), fmt::format("failed to open [{}]", fname));
+                    bndIntegrationLogs.at(id) << "step, stage, iter";
+                    for (int i = 0; i < bndInt.v.size(); i++)
+                        bndIntegrationLogs.at(id) << ", F" << std::to_string(i);
+                    bndIntegrationLogs.at(id) << "\n";
+                }
+                Eigen::Vector<real, Eigen::Dynamic> vPrint = bndInt.v;
+                if (intOpt == 2)
+                    vPrint(Eigen::seq(nVars, nVars + 1)) /= bndInt.div;
+                bndIntegrationLogs.at(id) << step << ", " << stage << ", " << iter << std::setprecision(16) << std::scientific;
+                for (auto &val : vPrint)
+                    bndIntegrationLogs.at(id) << ", " << val;
+                bndIntegrationLogs.at(id) << std::endl;
             }
         }
 
