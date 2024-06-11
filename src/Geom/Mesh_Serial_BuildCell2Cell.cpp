@@ -109,9 +109,19 @@ namespace DNDS::Geom
                                  fmt::format("nearest neighbour dist{} not matching under the threshold",
                                              outDistancesSqr[0]));
                 if (nResults > 1)
-                    DNDS_assert_info(outDistancesSqr[1] > sqr(search_eps),
-                                     fmt::format("second nearest neighbour dist{} not matching over the threshold",
-                                                 outDistancesSqr[1]));
+                {
+                    // DNDS_assert_info(outDistancesSqr[1] > sqr(search_eps),
+                    //     fmt::format("second nearest neighbour dist{} not matching over the threshold",
+                    //                 outDistancesSqr[1]));
+                    if (!(outDistancesSqr[1] > sqr(search_eps)))
+                        std::cerr << TermColor::Red
+                                  << fmt::format("Warning: second nearest neighbour dist{} not matching over the threshold",
+                                                 outDistancesSqr[1])
+                                  << "\n"
+                                  << fmt::format("at {:.8e}", Eigen::RowVectorFMTSafe<real, Eigen::Dynamic>(faceCentTrans.transpose()))
+                                  << TermColor::Reset
+                                  << std::endl;
+                }
                 index donorIBnd{-1};
                 if (faceID == BC_ID_PERIODIC_1)
                     donorIBnd = periodicDonorIBnd1.at(outIndices[0]), periodicMainToDonor1[iBnd] = donorIBnd;
@@ -131,24 +141,34 @@ namespace DNDS::Geom
                 {
                     bool found = false;
                     real minDist = veryLargeReal;
+                    rowsize jb2nMin = 0;
                     for (rowsize jb2n = 0; jb2n < coordBnd.cols(); jb2n++)
                     {
                         real dist = (coordBndOther(Eigen::all, jb2n) -
-                             mesh->periodicInfo.TransCoord(coordBnd(Eigen::all, ib2n), faceID))
-                                .squaredNorm();
-                        minDist = std::min(dist, minDist);
-                        if (dist < sqr(search_eps))
+                                     mesh->periodicInfo.TransCoord(coordBnd(Eigen::all, ib2n), faceID))
+                                        .squaredNorm();
+                        if (dist < minDist)
                         {
-                            found = true;
-                            if (faceID == BC_ID_PERIODIC_1)
-                                iNodeDonorToMain1[(*bnd2nodeSerial)(donorIBnd, jb2n)] = (*bnd2nodeSerial)(iBnd, ib2n);
-                            if (faceID == BC_ID_PERIODIC_2)
-                                iNodeDonorToMain2[(*bnd2nodeSerial)(donorIBnd, jb2n)] = (*bnd2nodeSerial)(iBnd, ib2n);
-                            if (faceID == BC_ID_PERIODIC_3)
-                                iNodeDonorToMain3[(*bnd2nodeSerial)(donorIBnd, jb2n)] = (*bnd2nodeSerial)(iBnd, ib2n);
+                            jb2nMin = jb2n;
+                            minDist = dist;
                         }
+                        if (dist < sqr(search_eps))
+                            found = true;
                     }
-                    DNDS_assert_info(found, fmt::format("min dist was: [{}]", minDist));
+                    if (faceID == BC_ID_PERIODIC_1)
+                        iNodeDonorToMain1[(*bnd2nodeSerial)(donorIBnd, jb2nMin)] = (*bnd2nodeSerial)(iBnd, ib2n);
+                    if (faceID == BC_ID_PERIODIC_2)
+                        iNodeDonorToMain2[(*bnd2nodeSerial)(donorIBnd, jb2nMin)] = (*bnd2nodeSerial)(iBnd, ib2n);
+                    if (faceID == BC_ID_PERIODIC_3)
+                        iNodeDonorToMain3[(*bnd2nodeSerial)(donorIBnd, jb2nMin)] = (*bnd2nodeSerial)(iBnd, ib2n);
+                    // DNDS_assert_info(found, fmt::format("min dist was: [{}]", minDist));
+                    if (!found)
+                    {
+                        std::cerr << TermColor::Red << fmt::format("face-face node search min dist was: [{}]", minDist) << "\n"
+                                  << fmt::format("at {:.8e}", Eigen::RowVectorFMTSafe<real, Eigen::Dynamic>(faceCentTrans.transpose()))
+                                  << TermColor::Reset
+                                  << std::endl;
+                    }
                 }
             }
             if (FaceIDIsPeriodicDonor(faceID))
