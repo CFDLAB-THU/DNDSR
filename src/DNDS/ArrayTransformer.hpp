@@ -498,8 +498,10 @@ namespace DNDS
                     auto dtypeInfo = (*pPullTypeVec)[ip];
                     MPI_int rankOther = dtypeInfo.first;
                     MPI_int tag = rankOther + mpi.rank;
+                    
 #ifndef ARRAY_COMM_USE_BUFFERED_SEND
-                    MPI_Ssend_init
+                    // MPI_Ssend_init
+                    MPI_Send_init
 #else
                     MPI_Bsend_init
 #endif
@@ -567,7 +569,8 @@ namespace DNDS
                     MPI_int tag = rankOther + mpi.rank;
                     // std::cout << mpi.rank << " Send " << rankOther << std::endl;
 #ifndef ARRAY_COMM_USE_BUFFERED_SEND
-                    MPI_Ssend_init
+                    // MPI_Ssend_init
+                    MPI_Send_init
 #else
                     MPI_Bsend_init
 #endif
