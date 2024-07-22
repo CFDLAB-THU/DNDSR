@@ -271,7 +271,7 @@ namespace DNDS::Euler
                 betaPPC.setConstant(1.0);
                 alphaPP_tmp.setConstant(1.0);
                 uRecNew.setConstant(0.0);
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit, TEval::RHS_Ignore_Viscosity);
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit, TEval::RHS_Ignore_Viscosity);
                 return;
             }
 
@@ -585,10 +585,10 @@ namespace DNDS::Euler
                 betaPPC.trans.waitPersistentPull();
             }
 
-            if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter)
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
+            if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter) // todo: opt to using limited for uRecUnlim
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
             else
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
 
             crhs.trans.startPersistentPull();
             crhs.trans.waitPersistentPull();
@@ -983,9 +983,9 @@ namespace DNDS::Euler
                 }
             alphaPPC = alphaPP_tmp;
             if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter)
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecNew, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
             else
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
             // rhs now last-fixed
             crhs.trans.startPersistentPull();
             crhs.trans.waitPersistentPull();
@@ -1009,9 +1009,9 @@ namespace DNDS::Euler
                     }
                 alphaPPC = alphaPP_tmp;
                 if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter)
-                    eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                    eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecNew, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
                 else
-                    eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                    eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
                 crhs.trans.startPersistentPull();
                 crhs.trans.waitPersistentPull();
             }

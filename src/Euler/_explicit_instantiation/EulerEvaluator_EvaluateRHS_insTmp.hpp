@@ -7,6 +7,7 @@
             ArrayDOFV<nVarsFixed> &rhs,                   \
             JacobianDiagBlock<nVarsFixed> &JSource,       \
             ArrayDOFV<nVarsFixed> &u,                     \
+            ArrayRECV<nVarsFixed> &uRecUnlim,             \
             ArrayRECV<nVarsFixed> &uRec,                  \
             ArrayDOFV<1> &uRecBeta,                       \
             ArrayDOFV<1> &cellRHSAlpha,                   \
