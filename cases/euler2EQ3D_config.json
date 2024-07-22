@@ -153,6 +153,7 @@
         // "rsRotateScheme": 1,
         "rsMeanValueEig": 1,
         "RANSBottomLimit": 1e-5,
+        "ransModel": "RANS_KOWilcox",
         "constMassForce": [
             0.0,
             0.0,

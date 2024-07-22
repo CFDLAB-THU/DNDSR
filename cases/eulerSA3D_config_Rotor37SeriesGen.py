@@ -9,14 +9,12 @@ forceWrite = True
 ignoreExist = True
 waitOnExe = True #!!
 
-baseConfName = "./eulerSA3D_config_FanA1.json"
+baseConfName = "./eulerSA3D_config_Rotor37.json"
 exePath = "../build/app/eulerSA3D.exe"
-outPath = "../data/outFanTest1"
+outPath = "../data/outRotor37Test1"
 
-dtBase = 0.125e-1
-stepBase = 800
-zeroRecForStepsBase = 0
-casePrefix = "GEN00-FanRow1SW1PW1-T3-1B-R1-Less1-Cylinderout"
+
+casePrefix = "GEN00-Rotor37_test1-O2"
 orthConfigName = "eulerSA3D_config.json"
 orthRunScriptName = "srunEuler.sh"
 
@@ -53,9 +51,9 @@ baseConf["dataIOControl"]["outPltName"] = "out"
 print(json.dumps(baseConf, indent=4))
 
 
-psIn = 0.516959109375000
-mults = [0.78, 1 , 1.05    , 1.1, 1.12,  1.15,1.17,  1.2]
-
+psIn = 0.408461518518519
+mults =  [0.8, 0.9, 1 , 1.05,1.1, 1.15, 1.2, 1.25]
+vIn = 0.8
 
 
 
@@ -64,7 +62,7 @@ for mult in mults:
     caseName = casePrefix + "%g" % (mult)
     confCur = copy.deepcopy(baseConf)
     
-    confCur["bcSettings"][0]["value"][4] = 0.5 * 1 * 0.5**2 + psIn * mult / 0.4
+    confCur["bcSettings"][0]["value"][4] = 0.5 * 1 * vIn**2 + psIn * mult / 0.4
     
     outDir = os.path.join(outPath, caseName)
     if not forceWrite:

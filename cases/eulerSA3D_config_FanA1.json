@@ -12,7 +12,7 @@
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 5000,
+        "nTimeStepInternal": 8000,
         "rhsThresholdInternal": 1e-8,
         "res_base": 0.0,
         "useVolWiseResidual": false
@@ -49,11 +49,13 @@
         "meshElevationNSearch": 100,
         "meshElevationRBFRadius": 5,
         "meshElevationRBFKernel": "CPC0",
-        "meshElevationMaxIncludedAngle": 20,
-        "meshFile": "../data/mesh/row_1_test5-b1-Cylinderout.cgns",
-        "outPltName": "../data/out/row_1_test5-b1-Cylinderout/out-t1-105-b1",
+        // "meshElevationMaxIncludedAngle": 20,
+        // "meshFile": "../data/mesh/row_1_test5-b1-Cylinderout.cgns",
+        // "outPltName": "../data/out/row_1_test5-b1-Cylinderout/out-t1-105-b1",
         // "meshFile": "../data/mesh/FanRow1SW1PW1-T3-1B-R1.cgns",
         // "outPltName": "../data/out/FanRow1SW1PW1-T3-1B-R1/out-t1-105-b1",
+        "meshFile": "../data/mesh/FanRow1SW1PW1-T3-1B-R1-Less1-Cylinderout-merge.cgns",
+        "outPltName": "../data/out/FanRow1SW1PW1-T3-1B-R1-Less1-Cylinderout/out-t1-105-b1",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,

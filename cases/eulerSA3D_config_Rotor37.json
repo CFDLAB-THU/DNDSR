@@ -6,13 +6,13 @@
         "useRestart": false,
         "rhsFPPMode": 1,
         "rhsFPPScale": 1,
-        "odeCode": 103, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
+        "odeCode": 103,
         "tEnd": 3e+200,
         "partitionMeshOnly": false,
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 20000,
+        "nTimeStepInternal": 5000,
         "rhsThresholdInternal": 1e-8,
         "nAnchorUpdateStart": 0
     },
@@ -51,7 +51,7 @@
         "meshElevationMaxIncludedAngle": 20,
         // "meshFile": "../data/mesh/row_1_test3.cgns",
         "meshFile": "../data/mesh/Rotor37_test1.cgns",
-        "outPltName": "../data/out/Rotor37_test1/out2-rel-Roe-GMRES-O3-Roe-largeNu",
+        "outPltName": "../data/out/Rotor37_test1-1/out1-abs-Roe-O2-Roe",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -75,14 +75,15 @@
         "PeriodicRotationEulerAngles1": [
             0.0,
             0.0,
-            -10 //360 /36
+            -10
+             //360 /36
         ],
         "periodicTolerance": 1e-8
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
         "zeroGrads": false,
-        "recLinearScheme": 0, // 0 for original SOR, 1 for GMRES
+        "recLinearScheme": 0,
         "nGmresSpace": 4,
         "nGmresIter": 2,
         "recThreshold": 1e-03,
@@ -92,13 +93,13 @@
     "limiterControl": {
         "useLimiter": true,
         "smoothIndicatorProcedure": 0,
-        "limiterProcedure": 0, //1 == CWBAP
+        "limiterProcedure": 0,
         "nPartialLimiterStart": 1000000,
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 2,
-        "intOrder": 3,
+        "maxOrder": 1,
+        "intOrder": 1,
         "cacheDiffBase": true,
         "jacobiRelax": 1,
         "SORInstead": false,
@@ -216,32 +217,20 @@
                 // 1.136923037037038, // 0.8
                 // 1.341153796296297, // 1.0 p0in
                 // 1.443269175925927, //1.1 p0in
-                1.545384555555557, //1.2 p0in
+                1.545384555555557, 
+                //1.2 p0in
                 10
             ],
             "valueExtra": [
-                10, // profile divisions
-                0,
+                128, 
+                // profile divisions
                 1,
-                1 // print info
+                1e-6,
+                1 
+                // print info
             ],
-            "anchorOption": 2
-            // "valueExtra": [ // used as anchorpoint
-            //     0.77494716078399994,
-            //     0.063617319557049995,
-            //     0.52456303392299997
-            // ],
-            // "anchorOption": 1
-            // "type": "BCFar",
-            // "name": "RS_1_to_2",
-            // "value": [
-            //     1,
-            //     0,
-            //     0,
-            //     0.8,
-            //     1.450475726455272,
-            //     1.3
-            // ]
+            "anchorOption": 2,
+            "integrationOption": 2
         },
         {
             // "type": "BCFar",
@@ -255,11 +244,14 @@
             //     1.292397773437500
             // ]
             "value": [
-                0.408461518518519, //Ps
-                288.15, //Ts
+                0.408461518518519, 
+                //Ps
+                288.15, 
+                //Ts
                 0,
                 0,
-                1, // Seq234: prescribed inflow direction
+                1, 
+                // Seq234: prescribed inflow direction
                 10
             ]
         },
