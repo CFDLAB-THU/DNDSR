@@ -391,6 +391,7 @@ namespace DNDS::Euler
         const TU &ULMeanXy,
         const TU &URMeanXy,
         const TDiffU &DiffUxy,
+        const TDiffU &DiffUxyPrim,
         const TVec &unitNorm,
         const TVec &vgXY,
         const TMat &normBase,
@@ -472,8 +473,12 @@ namespace DNDS::Euler
         TDiffU VisFlux;
         VisFlux.resizeLike(DiffUxy);
         VisFlux.setZero();
+        bool primGrad = settings.usePrimGradInVisFlux;
+        TDiffU DiffUxyPrimP = DiffUxyPrim;
+        if (!primGrad)
+            Gas::GradientCons2Prim_IdealGas(UMeanXy, DiffUxy, DiffUxyPrimP, gamma);
         Gas::ViscousFlux_IdealGas<dim>(
-            UMeanXy, DiffUxy, unitNorm, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
+            UMeanXy, DiffUxyPrimP, unitNorm, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
             settings.idealGasProperty.gamma,
             muf,
             k,
@@ -511,10 +516,6 @@ namespace DNDS::Euler
         if constexpr (model == NS_SA || model == NS_SA_3D)
         {
             real sigma = 2. / 3.;
-            Eigen::Matrix<real, dim, 1> diffRhoNu = DiffUxy(Seq012, {I4 + 1}) * muRef;
-            Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
-            Eigen::Matrix<real, dim, 1> diffNu = (diffRhoNu - UMeanXy(I4 + 1) * muRef / UMeanXy(0) * diffRho) / UMeanXy(0);
-
             real cn1 = 16;
             real fn = 1;
 #ifdef USE_NS_SA_NEGATIVE_MODEL
@@ -524,16 +525,16 @@ namespace DNDS::Euler
                 fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
             }
 #endif
-            VisFlux(Seq012, {I4 + 1}) = diffNu * (mufPhy + UMeanXy(I4 + 1) * muRef * fn) / sigma / muRef;
+            VisFlux(Seq012, {I4 + 1}) = DiffUxyPrimP(Seq012, {I4 + 1}) * (mufPhy + UMeanXy(I4 + 1) * muRef * fn) / sigma;
         }
         if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
         {
             if (settings.ransModel == RANSModel::RANS_KOSST)
-                RANS::GetVisFlux_SST<dim>(UMeanXy, DiffUxy, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
+                RANS::GetVisFlux_SST<dim>(UMeanXy, DiffUxyPrimP, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
             else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                RANS::GetVisFlux_KOWilcox<dim>(UMeanXy, DiffUxy, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
+                RANS::GetVisFlux_KOWilcox<dim>(UMeanXy, DiffUxyPrimP, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
             else if (settings.ransModel == RANSModel::RANS_RKE)
-                RANS::GetVisFlux_RealizableKe<dim>(UMeanXy, DiffUxy, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
+                RANS::GetVisFlux_RealizableKe<dim>(UMeanXy, DiffUxyPrimP, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
         }
 #endif
 

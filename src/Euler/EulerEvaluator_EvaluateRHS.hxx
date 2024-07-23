@@ -148,11 +148,11 @@ namespace DNDS::Euler
                     if constexpr (gDim == 2)
                         GradULxy({0, 1}, Eigen::all) =
                             vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iG, std::array<int, 2>{1, 2}, 3) *
-                            uRec[f2c[0]] * IF_NOT_NOREC; // 2d here
+                            uRecUnlim[f2c[0]] * IF_NOT_NOREC; // 2d here
                     else
                         GradULxy({0, 1, 2}, Eigen::all) =
                             vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iG, std::array<int, 3>{1, 2, 3}, 4) *
-                            uRec[f2c[0]] * IF_NOT_NOREC; // 3d here
+                            uRecUnlim[f2c[0]] * IF_NOT_NOREC; // 3d here
                     this->DiffUFromCell2Face(GradULxy, iFace, f2c[0], 0);
                     if (ignoreVis)
                         GradULxy *= 0.;
@@ -180,11 +180,11 @@ namespace DNDS::Euler
                         if constexpr (gDim == 2)
                             GradURxy({0, 1}, Eigen::all) =
                                 vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iG, std::array<int, 2>{1, 2}, 3) *
-                                uRec[f2c[1]] * IF_NOT_NOREC; // 2d here
+                                uRecUnlim[f2c[1]] * IF_NOT_NOREC; // 2d here
                         else
                             GradURxy({0, 1, 2}, Eigen::all) =
                                 vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iG, std::array<int, 3>{1, 2, 3}, 4) *
-                                uRec[f2c[1]] * IF_NOT_NOREC; // 3d here
+                                uRecUnlim[f2c[1]] * IF_NOT_NOREC; // 3d here
                         this->DiffUFromCell2Face(GradURxy, iFace, f2c[1], 1);
                         if (ignoreVis)
                             GradURxy *= 0.;
@@ -232,11 +232,25 @@ namespace DNDS::Euler
                     TU UMeanXy = 0.5 * (ULxy + URxy);
 
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
+                    auto gamma = settings.idealGasProperty.gamma;
+
+                    TDiffU GradULxyPrim, GradURxyPrim;
+                    GradULxyPrim.resizeLike(GradURxy), GradURxyPrim.resizeLike(GradURxy);
+                    Gas::GradientCons2Prim_IdealGas<dim>(ULxy, GradULxy, GradULxyPrim, gamma);
+                    Gas::GradientCons2Prim_IdealGas<dim>(URxy, GradURxy, GradURxyPrim, gamma);
+                    TU URxyPrim(cnvars), ULxyPrim(cnvars);
+                    Gas::IdealGasThermalConservative2Primitive(ULxy, ULxyPrim, gamma);
+                    Gas::IdealGasThermalConservative2Primitive(URxy, URxyPrim, gamma);
+
+                    TDiffU GradUMeanXyPrim = (GradURxyPrim + GradULxyPrim) * 0.5 +
+                                             (1.0 / distGRP) *
+                                                 (unitNorm * (URxyPrim - ULxyPrim).transpose());
+
                     TDiffU GradUMeanXy = (GradURxy + GradULxy) * 0.5 +
                                          (1.0 / distGRP) *
                                              (unitNorm * (URxy - ULxy).transpose());
                     if (ignoreVis)
-                            GradUMeanXy *= 0.;
+                        GradUMeanXy *= 0.;
 
 #else
                     TDiffU GradUMeanXy;
@@ -273,6 +287,7 @@ namespace DNDS::Euler
                         ULMeanXy,
                         URMeanXy,
                         GradUMeanXy,
+                        GradUMeanXyPrim,
                         unitNorm,
                         GetFaceVGrid(iFace, iG),
                         normBase,
@@ -467,9 +482,8 @@ namespace DNDS::Euler
         MPI::Allreduce(fluxWallSumLocal.data(), fluxWallSum.data(), fluxWallSum.size(), DNDS_MPI_REAL, MPI_SUM, u.father->getMPI().comm);
         for (auto &i : bndIntegrations)
         {
-            
+
             i.second.Reduce();
-            
         }
 
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS -1");

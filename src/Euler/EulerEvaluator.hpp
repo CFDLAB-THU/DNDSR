@@ -415,6 +415,7 @@ namespace DNDS::Euler
             const TU &ULMeanXy,
             const TU &URMeanXy,
             const TDiffU &DiffUxy,
+            const TDiffU &DiffUxyPrim,
             const TVec &unitNorm,
             const TVec &vg,
             const TMat &normBase,
