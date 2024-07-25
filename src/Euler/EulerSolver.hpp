@@ -12,13 +12,8 @@
 #include "Gas.hpp"
 #include "Geom/Mesh.hpp"
 #include "CFV/VariationalReconstruction.hpp"
-#include "CFV/VariationalReconstruction_Reconstruction.hxx"
-#include "CFV/VariationalReconstruction_LimiterProcedure.hxx"
 #include "Solver/Linear.hpp"
 #include "EulerEvaluator.hpp"
-#include "EulerEvaluator.hxx"
-#include "EulerEvaluator_EvaluateDt.hxx"
-#include "EulerEvaluator_EvaluateRHS.hxx"
 #include "DNDS/JsonUtil.hpp"
 #include "EulerBC.hpp"
 #include "DNDS/SerializerJSON.hpp"
@@ -1109,3 +1104,39 @@ namespace DNDS::Euler
         void doPrecondition(real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp, JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone);
     };
 }
+
+#define DNDS_EULERSOLVER_INS_EXTERN(model, ext)                   \
+    namespace DNDS::Euler                                         \
+    {                                                             \
+        ext template void EulerSolver<model>::RunImplicitEuler(); \
+    }
+
+DNDS_EULERSOLVER_INS_EXTERN(NS, extern);
+DNDS_EULERSOLVER_INS_EXTERN(NS_2D, extern);
+DNDS_EULERSOLVER_INS_EXTERN(NS_SA, extern);
+DNDS_EULERSOLVER_INS_EXTERN(NS_2EQ, extern);
+DNDS_EULERSOLVER_INS_EXTERN(NS_3D, extern);
+DNDS_EULERSOLVER_INS_EXTERN(NS_SA_3D, extern);
+DNDS_EULERSOLVER_INS_EXTERN(NS_2EQ_3D, extern);
+
+
+
+
+#define DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(model, ext)             \
+    namespace DNDS::Euler                                             \
+    {                                                                 \
+        ext template void EulerSolver<model>::PrintData(              \
+            const std::string &fname, const std::string &fnameSeries, \
+            const tCellScalarFGet &odeResidualF,                      \
+            tAdditionalCellScalarList &additionalCellScalars,         \
+            TEval &eval, real tSimu,                                  \
+            PrintDataMode mode);                                      \
+    }
+
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS, extern);
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_2D, extern);
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_SA, extern);
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_2EQ, extern);
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_3D, extern);
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_SA_3D, extern);
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_2EQ_3D, extern);

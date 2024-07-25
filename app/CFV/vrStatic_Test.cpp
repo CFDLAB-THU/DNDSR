@@ -253,7 +253,7 @@ void staticReconstruction()
         tScalarPair si;
         vr.BuildScalar(si);
         using tLimitBatch = decltype(vr)::template tLimitBatch<1>;
-        vr.DoCalculateSmoothIndicator<1, 2>(si, *uRec, u, std::array<int, 2>{0, 0}); 
+        vr.DoCalculateSmoothIndicator<1, 1>(si, *uRec, u, std::array<int, 1>{0}); 
         // todo: make explicit ins lazy
 
         vr.DoLimiterWBAP_C<1>(

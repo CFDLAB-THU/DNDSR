@@ -559,22 +559,3 @@ namespace DNDS::Euler
         }
     }
 }
-
-#define DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(model, ext)             \
-    namespace DNDS::Euler                                             \
-    {                                                                 \
-        ext template void EulerSolver<model>::PrintData(              \
-            const std::string &fname, const std::string &fnameSeries, \
-            const tCellScalarFGet &odeResidualF,                      \
-            tAdditionalCellScalarList &additionalCellScalars,         \
-            TEval &eval, real tSimu,                                  \
-            PrintDataMode mode);                                      \
-    }
-
-DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS, extern);
-DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_2D, extern);
-DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_SA, extern);
-DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_2EQ, extern);
-DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_3D, extern);
-DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_SA_3D, extern);
-DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_2EQ_3D, extern);
