@@ -120,9 +120,9 @@ namespace DNDS::Euler
                     TMat normBase = Geom::NormBuildLocalBaseV<dim>(unitNorm);
                     PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
 
-                    TU ULxy = u[f2c[0]];
                     bool pointOrderReducedL = false;
                     bool pointOrderReducedR = false;
+                    TU ULxy = u[f2c[0]];
                     if (!faceOrderReducedL)
                     {
 
@@ -133,12 +133,27 @@ namespace DNDS::Euler
                             IF_NOT_NOREC;
                     }
                     this->UFromCell2Face(ULxy, iFace, f2c[0], 0);
+                    TU ULxyUnlim;
+                    if (&uRecUnlim != &uRec)
+                    {
+                        ULxyUnlim = u[f2c[0]];
+                        if (!faceOrderReducedL)
+                        {
+                            ULxyUnlim += (vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iG, std::array<int, 1>{0}, 1) *
+                                          uRecUnlim[f2c[0]])
+                                             .transpose() *
+                                         IF_NOT_NOREC;
+                        }
+                        this->UFromCell2Face(ULxyUnlim, iFace, f2c[0], 0);
+                    }
+                    else
+                        ULxyUnlim = ULxy;
 
                     TU ULMeanXy = u[f2c[0]];
                     this->UFromCell2Face(ULMeanXy, iFace, f2c[0], 0);
                     TU URMeanXy;
 
-                    TU URxy;
+                    TU URxy, URxyUnlim;
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
                     TDiffU GradULxy, GradURxy;
                     GradULxy.resize(Eigen::NoChange, cnvars);
@@ -173,6 +188,21 @@ namespace DNDS::Euler
                                 IF_NOT_NOREC;
                         }
                         this->UFromCell2Face(URxy, iFace, f2c[1], 1);
+                        if (&uRecUnlim != &uRec)
+                        {
+                            URxyUnlim = u[f2c[1]];
+                            if (!faceOrderReducedR)
+                            {
+                                URxyUnlim +=
+                                    (vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iG, std::array<int, 1>{0}, 1) *
+                                     uRecUnlim[f2c[1]])
+                                        .transpose() *
+                                    IF_NOT_NOREC;
+                            }
+                            this->UFromCell2Face(URxyUnlim, iFace, f2c[1], 1);
+                        }
+                        else
+                            URxyUnlim = URxy;
 
                         URMeanXy = u[f2c[1]];
                         this->UFromCell2Face(URMeanXy, iFace, f2c[1], 1);
@@ -201,6 +231,16 @@ namespace DNDS::Euler
                             vfv->GetFaceQuadraturePPhys(iFace, iG),
                             t,
                             mesh->GetFaceZone(iFace), true, 0);
+                        if (&uRecUnlim != &uRec && false) //! disabled now, as ULxyUnlim may have negative pressure
+                            URxyUnlim = generateBoundaryValue(
+                                ULxyUnlim, ULMeanXy, f2c[0], iFace, iG,
+                                unitNorm,
+                                normBase,
+                                vfv->GetFaceQuadraturePPhys(iFace, iG),
+                                t,
+                                mesh->GetFaceZone(iFace), true, 0);
+                        else
+                            URxyUnlim = URxy;
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
                         GradURxy = GradULxy; //! generated boundary value couldn't use any periodic conversion?
 #endif
@@ -248,7 +288,7 @@ namespace DNDS::Euler
 
                     TDiffU GradUMeanXy = (GradURxy + GradULxy) * 0.5 +
                                          (1.0 / distGRP) *
-                                             (unitNorm * (URxy - ULxy).transpose());
+                                             (unitNorm * (URxyUnlim - ULxyUnlim).transpose());
                     if (ignoreVis)
                         GradUMeanXy *= 0.;
 
