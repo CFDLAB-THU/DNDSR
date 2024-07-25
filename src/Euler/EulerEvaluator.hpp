@@ -8,6 +8,8 @@
 #include "Gas.hpp"
 #include "Geom/Mesh.hpp"
 #include "CFV/VariationalReconstruction.hpp"
+#include "CFV/VariationalReconstruction_Reconstruction.hxx"
+#include "CFV/VariationalReconstruction_LimiterProcedure.hxx"
 #include "DNDS/JsonUtil.hpp"
 #include "Euler.hpp"
 #include "EulerBC.hpp"

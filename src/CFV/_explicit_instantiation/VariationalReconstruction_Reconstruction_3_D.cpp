@@ -1,3 +1,3 @@
-#include "VariationalReconstruction_Reconstruction_insTmp.hpp"
+#include "../VariationalReconstruction_Reconstruction.hxx"
 
-DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS(3, Eigen::Dynamic)
+DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, Eigen::Dynamic, )

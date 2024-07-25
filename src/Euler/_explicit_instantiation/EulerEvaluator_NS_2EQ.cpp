@@ -1,5 +1,3 @@
 #include "../EulerEvaluator.hxx"
 
-#include "EulerEvaluator_insTmp.hxx"
-
-DNDS_EulerEvaluator_INS(NS_2EQ)
+DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ, )
