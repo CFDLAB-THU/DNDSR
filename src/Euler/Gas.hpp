@@ -812,8 +812,8 @@ namespace DNDS::Euler::Gas
                                  0.5 *
                                      (GradU(Seq012, Seq123) * velo +
                                       GradUPrim(Seq012, Seq123) * Eigen::Vector<real, dim>(U(Seq123))));
-        GradUPrim(Seq012, Eigen::seq(I4, Eigen::last)) -= GradU(Seq012, 0) * U(Eigen::seq(I4, Eigen::last)).transpose() / U(0);
-        GradUPrim(Seq012, Eigen::seq(I4, Eigen::last)) /= U(0);
+        GradUPrim(Seq012, Eigen::seq(Eigen::fix<I4 + 1>, Eigen::last)) -= GradU(Seq012, 0) * U(Eigen::seq(Eigen::fix<I4 + 1>, Eigen::last)).transpose() / U(0);
+        GradUPrim(Seq012, Eigen::seq(Eigen::fix<I4 + 1>, Eigen::last)) /= U(0);
     }
 
     template <int dim, typename TU, typename TGradU>
