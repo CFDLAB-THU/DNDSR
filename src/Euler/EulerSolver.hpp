@@ -381,6 +381,7 @@ namespace DNDS::Euler
                 int sgsIter = 0;
                 int sgsWithRec = 0;
                 int gmresCode = 0; // 0 for lusgs, 1 for gmres, 2 for lusgs started gmres
+                int gmresScale = 0; // 0 for no scaling, 1 use refU, 2 use mean value
                 int nGmresSpace = 10;
                 int nGmresIter = 2;
                 int nSgsConsoleCheck = 100;
@@ -390,7 +391,7 @@ namespace DNDS::Euler
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     LinearSolverControl,
                     jacobiCode,
-                    sgsIter, sgsWithRec, gmresCode,
+                    sgsIter, sgsWithRec, gmresCode, gmresScale,
                     nGmresSpace, nGmresIter,
                     nSgsConsoleCheck, nGmresConsoleCheck,
                     initWithLastURecInc,

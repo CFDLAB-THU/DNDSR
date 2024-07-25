@@ -83,7 +83,7 @@
             ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &u);                                                      \
                                                                                                                       \
         template void EulerEvaluator<model>::EvaluateNorm(                                                            \
-            Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P, bool volWise);                         \
+            Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P, bool volWise, bool average);           \
                                                                                                                       \
         template void EulerEvaluator<model>::EvaluateRecNorm(                                                         \
             Eigen::Vector<real, -1> &res,                                                                             \
