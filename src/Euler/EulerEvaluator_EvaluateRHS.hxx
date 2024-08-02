@@ -1,7 +1,5 @@
 #pragma once
 #include "EulerEvaluator.hpp"
-#include "EulerEvaluator.hxx"
-#include "EulerEvaluator_EvaluateDt.hxx"
 #include <fmt/core.h>
 
 namespace DNDS::Euler
