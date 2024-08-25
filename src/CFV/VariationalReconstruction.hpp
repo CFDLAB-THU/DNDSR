@@ -252,6 +252,26 @@ namespace DNDS::CFV
             return GetCellBary(iCellOther);
         }
 
+        Geom::tPoint GetOtherCellPointFromCell(
+            index iCell, index iCellOther,
+            index iFace, const Geom::tPoint& pnt)
+        {
+            if (!mesh->isPeriodic)
+                return pnt;
+
+            auto faceID = mesh->faceElemInfo[iFace]->zone;
+            if (!Geom::FaceIDIsPeriodic(faceID))
+                return pnt;
+            rowsize if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
+                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
+                return mesh->periodicInfo.TransCoord(pnt, faceID);
+            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
+                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
+                return mesh->periodicInfo.TransCoordBack(pnt, faceID);
+            return pnt;
+        }
+
         Geom::tGPoint GetOtherCellInertiaFromCell(
             index iCell, index iCellOther,
             index iFace)
