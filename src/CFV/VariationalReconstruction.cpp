@@ -1,6 +1,4 @@
 
-#include <set>
-
 #include "VariationalReconstruction.hpp"
 #include "omp.h"
 #include "DNDS/HardEigen.hpp"
@@ -669,58 +667,6 @@ namespace DNDS::CFV
                 DNDS_assert(false);
                 break;
             }
-            // **** OPT weight Geom Interface
-            {
-                real s = this->GetFaceArea(iFace); // face area
-                real d = faceBaryDiffV.norm();     // dist of barycenter
-                auto faceSpan = Geom::Elem::GetElemNodeMajorSpan(coords);
-                real a = faceSpan(0); // long edge
-                real b = faceSpan(1); // short edge, 0 if 2d
-                tSmallCoords tetPoints; // coords for tet-tet interface loaded below
-                // if tetPoints.size() != 0, then
-                // tetPoints(Eigen::all, 0) is left,  tetPoints(Eigen::all, 4) is right, tetPoints(Eigen::all, [1,2,3]) on faces
-
-                if (mesh->face2cell(iFace, 1) != UnInitIndex)
-                {
-                    index iCellL = mesh->face2cell(iFace, 0);
-                    index iCellR = mesh->face2cell(iFace, 1);
-                    if ((mesh->cellElemInfo(iCellL, 0).getElemType() == Elem::ElemType::Tet4 &&
-                         mesh->cellElemInfo(iCellR, 0).getElemType() == Elem::ElemType::Tet4) ||
-                        (mesh->cellElemInfo(iCellL, 0).getElemType() == Elem::ElemType::Tet10 &&
-                         mesh->cellElemInfo(iCellR, 0).getElemType() == Elem::ElemType::Tet10))
-                    {
-                        std::set<index> faceNodes;
-                        for (int i = 0; i < 3; i++)
-                            faceNodes.insert(mesh->face2node(iFace, i));
-                        index cellNodeL{UnInitIndex}, cellNodeR{UnInitIndex};
-                        for (int i = 0; i < 4; i++)
-                            if (!faceNodes.count(mesh->cell2node(iCellL, i)))
-                                cellNodeL = i;
-                        for (int i = 0; i < 4; i++)
-                            if (!faceNodes.count(mesh->cell2node(iCellR, i)))
-                                cellNodeR = i;
-                        DNDS_assert(cellNodeL != UnInitIndex && cellNodeR != UnInitIndex);
-                        tetPoints.resize(Eigen::NoChange, 5);
-
-                        tetPoints(Eigen::all, 1) = mesh->GetCoordNodeOnFace(iFace, 0);
-                        tetPoints(Eigen::all, 2) = mesh->GetCoordNodeOnFace(iFace, 1);
-                        tetPoints(Eigen::all, 3) = mesh->GetCoordNodeOnFace(iFace, 2);
-
-                        tetPoints(Eigen::all, 0) = mesh->GetCoordNodeOnCell(iCellL, cellNodeL);
-                        tetPoints(Eigen::all, 4) =
-                            this->GetOtherCellPointFromCell(iCellL, iCellR, iFace,
-                                                            mesh->GetCoordNodeOnCell(iCellR, cellNodeR));
-                        // std::cout << fmt::format("{} {} {} {}\n{}\n",
-                        //                          s, d, a, b, Eigen::MatrixFMTSafe<real, 3, 5>(tetPoints))
-                        //           << std::endl;
-                    }
-                }
-                wd[0] = 1;
-                wd[1] = .5295;
-                wd[2] = .2117;
-                wd[3] = .2117; // please modify wg[0~3] here
-                wg = 1; // force no wg
-            }
 
             if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)) || FaceIDIsPeriodic(mesh->GetFaceZone(iFace)))
             // if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)))
@@ -863,6 +809,7 @@ namespace DNDS::CFV
                 A += (AHalf_GG.transpose() * AHalf_GG) * this->GetGreenGauss1WeightOnCell(iCell);
                 matrixAHalf_GG[iCell] = AHalf_GG;
             }
+            
 
             // if (iCell == 71)
             // {
@@ -943,7 +890,7 @@ namespace DNDS::CFV
                     //           << AHalf_GG.transpose() * BHalf_GG << std::endl;
                     B += AHalf_GG.transpose() * BHalf_GG * this->GetGreenGauss1WeightOnCell(iCell);
                 }
-                if (iCellOther == iCell) //* coincide periodic
+                if(iCellOther == iCell) //* coincide periodic
                     A -= B, B *= 0;
                 matrixAB(iCell, 1 + ic2f) = B;
             }
