@@ -5,7 +5,6 @@
 // #define __DNDS_REALLY_COMPILING__HEADER_ON__
 // #endif
 #include "EulerSolver.hpp"
-#include "EulerSolver_PrintData.hxx"
 #include "DNDS/EigenUtil.hpp"
 #include "Solver/ODE.hpp"
 #include "SpecialFields.hpp"
@@ -1670,17 +1669,3 @@ namespace DNDS::Euler
         }
     }
 }
-
-#define DNDS_EULERSOLVER_INS_EXTERN(model, ext)                   \
-    namespace DNDS::Euler                                         \
-    {                                                             \
-        ext template void EulerSolver<model>::RunImplicitEuler(); \
-    }
-
-DNDS_EULERSOLVER_INS_EXTERN(NS, extern);
-DNDS_EULERSOLVER_INS_EXTERN(NS_2D, extern);
-DNDS_EULERSOLVER_INS_EXTERN(NS_SA, extern);
-DNDS_EULERSOLVER_INS_EXTERN(NS_2EQ, extern);
-DNDS_EULERSOLVER_INS_EXTERN(NS_3D, extern);
-DNDS_EULERSOLVER_INS_EXTERN(NS_SA_3D, extern);
-DNDS_EULERSOLVER_INS_EXTERN(NS_2EQ_3D, extern);

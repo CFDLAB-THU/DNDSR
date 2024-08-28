@@ -3,12 +3,9 @@
 #include <argparse.hpp>
 
 #include "EulerSolver.hpp"
-#include "EulerSolver.hxx"
-#include "EulerSolver_PrintData.hxx"
 
 namespace DNDS::Euler
 {
-
     constexpr static inline const char *getSingleBlockAppName(const EulerModel model)
     {
         if (model == NS)
