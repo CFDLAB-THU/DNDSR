@@ -1,4 +1,6 @@
 #include "CFV/VariationalReconstruction.hpp"
+#include "CFV/VariationalReconstruction_Reconstruction.hxx"
+#include "CFV/VariationalReconstruction_LimiterProcedure.hxx"
 #include "Solver/Linear.hpp"
 #include "Euler/Euler.hpp"
 

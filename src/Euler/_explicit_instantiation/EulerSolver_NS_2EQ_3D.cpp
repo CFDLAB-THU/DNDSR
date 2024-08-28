@@ -1,3 +1,3 @@
-#include "EulerSolver_insTmp.hxx"
+#include "../EulerSolver.hxx"
 
-DNDS_EULERSOLVER_INS(NS_2EQ_3D)
+DNDS_EULERSOLVER_INS_EXTERN(NS_2EQ_3D, )

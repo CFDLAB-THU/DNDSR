@@ -3,6 +3,8 @@
 #include <argparse.hpp>
 
 #include "EulerSolver.hpp"
+#include "EulerSolver.hxx"
+#include "EulerSolver_PrintData.hxx"
 
 namespace DNDS::Euler
 {

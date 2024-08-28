@@ -1,3 +1,3 @@
-#include "VariationalReconstruction_LimiterProcedure_insTmp.hpp"
+#include "../VariationalReconstruction_LimiterProcedure.hxx"
 
-DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS(2, 7)
+DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(2, 7, )

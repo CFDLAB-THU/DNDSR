@@ -1,3 +1,3 @@
-#include "EulerSolver_PrintData_insTmp.hxx"
+#include "../EulerSolver_PrintData.hxx"
 
-DNDS_EULERSOLVER_PRINTDATA_INS(NS_2D)
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_2D, )

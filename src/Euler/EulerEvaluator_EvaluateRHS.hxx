@@ -1,5 +1,7 @@
 #pragma once
 #include "EulerEvaluator.hpp"
+#include "EulerEvaluator.hxx"
+#include "EulerEvaluator_EvaluateDt.hxx"
 #include <fmt/core.h>
 
 namespace DNDS::Euler
@@ -475,3 +477,28 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS -1");
     }
 }
+
+#define DNDS_EulerEvaluator_EvaluateRHS_INS_EXTERN(model, ext)        \
+    namespace DNDS::Euler                                 \
+    {                                                     \
+        ext template void EulerEvaluator<model>::EvaluateRHS( \
+            ArrayDOFV<nVarsFixed> &rhs,                   \
+            JacobianDiagBlock<nVarsFixed> &JSource,       \
+            ArrayDOFV<nVarsFixed> &u,                     \
+            ArrayRECV<nVarsFixed> &uRecUnlim,             \
+            ArrayRECV<nVarsFixed> &uRec,                  \
+            ArrayDOFV<1> &uRecBeta,                       \
+            ArrayDOFV<1> &cellRHSAlpha,                   \
+            bool onlyOnHalfAlpha,                         \
+            real t,                                       \
+            uint64_t flags);                              \
+    }
+
+
+DNDS_EulerEvaluator_EvaluateRHS_INS_EXTERN(NS, extern);
+DNDS_EulerEvaluator_EvaluateRHS_INS_EXTERN(NS_2D, extern);
+DNDS_EulerEvaluator_EvaluateRHS_INS_EXTERN(NS_SA, extern);
+DNDS_EulerEvaluator_EvaluateRHS_INS_EXTERN(NS_2EQ, extern);
+DNDS_EulerEvaluator_EvaluateRHS_INS_EXTERN(NS_3D, extern);
+DNDS_EulerEvaluator_EvaluateRHS_INS_EXTERN(NS_SA_3D, extern);
+DNDS_EulerEvaluator_EvaluateRHS_INS_EXTERN(NS_2EQ_3D, extern);

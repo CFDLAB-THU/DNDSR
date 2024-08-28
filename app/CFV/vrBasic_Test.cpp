@@ -1,4 +1,6 @@
 #include "CFV/VariationalReconstruction.hpp"
+#include "CFV/VariationalReconstruction_Reconstruction.hxx"
+#include "CFV/VariationalReconstruction_LimiterProcedure.hxx"
 
 #include <cstdlib>
 #include <omp.h>

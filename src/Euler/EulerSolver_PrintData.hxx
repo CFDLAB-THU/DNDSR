@@ -1,3 +1,5 @@
+#pragma once
+
 #include "EulerSolver.hpp"
 
 namespace DNDS::Euler
@@ -30,7 +32,7 @@ namespace DNDS::Euler
                     TU recu = uOut[iCell];
                     if (eval.settings.frameConstRotation.enabled)
                         eval.TransformURotatingFrame_ABS_VELO(recu, vfv->GetCellQuadraturePPhys(iCell, -1), -1);
-                    TVec velo = (recu(Seq123).array() / recu(0)).matrix(); 
+                    TVec velo = (recu(Seq123).array() / recu(0)).matrix();
                     real vsqr = velo.squaredNorm();
                     real asqr, p, H;
                     Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.settings.idealGasProperty.gamma, p, asqr, H);
@@ -557,3 +559,22 @@ namespace DNDS::Euler
         }
     }
 }
+
+#define DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(model, ext)             \
+    namespace DNDS::Euler                                             \
+    {                                                                 \
+        ext template void EulerSolver<model>::PrintData(              \
+            const std::string &fname, const std::string &fnameSeries, \
+            const tCellScalarFGet &odeResidualF,                      \
+            tAdditionalCellScalarList &additionalCellScalars,         \
+            TEval &eval, real tSimu,                                  \
+            PrintDataMode mode);                                      \
+    }
+
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS, extern);
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_2D, extern);
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_SA, extern);
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_2EQ, extern);
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_3D, extern);
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_SA_3D, extern);
+DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_2EQ_3D, extern);
