@@ -1,6 +1,5 @@
 #pragma once
 #include "EulerEvaluator.hpp"
-#include "EulerEvaluator.hxx"
 #include "RANS_ke.hpp"
 
 #include <CGAL/Simple_cartesian.h>
