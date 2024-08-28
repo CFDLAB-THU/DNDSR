@@ -910,13 +910,14 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
-    void EulerEvaluator<model>::EvaluateNorm(Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P, bool volWise)
+    void EulerEvaluator<model>::EvaluateNorm(Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P, bool volWise, bool average)
     {
         res.resize(nVars);
         if (P < 3)
         {
             TU resc;
             resc.setZero(nVars);
+            real rescBase{0};
 
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -926,12 +927,16 @@ namespace DNDS::Euler
                     DNDS_assert(false);
                 }
                 if (volWise)
-                    resc += rhs[iCell].array().abs().pow(P).matrix() * vfv->GetCellVol(iCell);
+                    resc += rhs[iCell].array().abs().pow(P).matrix() * vfv->GetCellVol(iCell), rescBase += vfv->GetCellVol(iCell);
                 else
-                    resc += rhs[iCell].array().abs().pow(P).matrix();
+                    resc += rhs[iCell].array().abs().pow(P).matrix(), rescBase += 1;
             }
             MPI::Allreduce(resc.data(), res.data(), res.size(), DNDS_MPI_REAL, MPI_SUM, rhs.father->getMPI().comm);
+            if (average)
+                MPI::AllreduceOneReal(rescBase, MPI_SUM, rhs.father->getMPI());
             res = res.array().pow(1.0 / P).matrix();
+            if (average)
+                res *= 1. / (rescBase + verySmallReal);
             // std::cout << res << std::endl;
         }
         else

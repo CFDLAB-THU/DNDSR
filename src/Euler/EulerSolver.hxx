@@ -382,6 +382,10 @@ namespace DNDS::Euler
                                 // MLx no need to comm
                                 vfv->DoReconstructionIterSOR(uRecC, x, MLx, cx, FBoundaryDiff, false);
                             },
+                            [&](ArrayRECV<nVarsFixed> &a, ArrayRECV<nVarsFixed> &b) -> real
+                            {
+                                return a.dot(b); //! need dim balancing here
+                            },
                             uRecNew, uRecNew1, config.implicitReconstructionControl.nGmresIter,
                             [&](uint32_t i, real res, real resB) -> bool
                             {
@@ -775,9 +779,24 @@ namespace DNDS::Euler
                 }
             }
             Eigen::VectorXd meanScale;
-            meanScale.setConstant(nVars, 1);
-            // eval.EvaluateNorm(meanScale, cx, 1, true);
-            // meanScale(Seq123).setConstant(meanScale(Seq123).norm());
+            if (config.linearSolverControl.gmresScale == 1)
+            {
+                meanScale = eval.settings.refU;
+                meanScale(Seq123).setConstant(std::sqrt(meanScale(0) * meanScale(I4))); //! using consistent rho U scale
+                // meanScale(I4) = sqr(meanScale(1)) / (meanScale(0) + verySmallReal);
+                // meanScale(0) = 0.01;
+                // meanScale(Seq123).setConstant(0.1);
+                // meanScale(I4) = 1;
+            }
+            else if (config.linearSolverControl.gmresScale == 2)
+            {
+                eval.EvaluateNorm(meanScale, cx, 1, true, true);
+                meanScale(Seq123).setConstant(meanScale(Seq123).norm());
+                meanScale(I4) = sqr(meanScale(1)) / (meanScale(0) + verySmallReal);
+            }
+            else
+                meanScale.setOnes(nVars);
+            // meanScale(0) = 10;
             TU meanScaleInv = (meanScale.array() + verySmallReal).inverse();
 
             if (config.linearSolverControl.gmresCode != 0)
@@ -800,7 +819,10 @@ namespace DNDS::Euler
                         {
                             doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
                         }
-                        MLx *= meanScaleInv;
+                    },
+                    [&](decltype(u) &a, decltype(u) &b) -> real
+                    {
+                        return a.dot(b, meanScaleInv.array(), meanScaleInv.array());
                     },
                     crhs, cxInc, config.linearSolverControl.nGmresIter,
                     [&](uint32_t i, real res, real resB) -> bool
@@ -919,6 +941,10 @@ namespace DNDS::Euler
                         MLx.trans.startPersistentPull();
                         MLx.trans.waitPersistentPull();
                         MLx *= 1. / (dt * Coefs[1]);
+                    },
+                    [&](decltype(u) &a, decltype(u) &b) -> real
+                    {
+                        return a.dot(b); //! need dim balancing here
                     },
                     crhs, cxInc, config.linearSolverControl.nGmresIter,
                     [&](uint32_t i, real res, real resB) -> bool

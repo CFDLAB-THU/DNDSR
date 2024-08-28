@@ -304,14 +304,14 @@ namespace DNDS::MPI
                       
     MPI_int Barrier(MPI_Comm comm);
 
-    inline void AllreduceOneReal(real & v, MPI_Op op, MPIInfo & mpi)
+    inline void AllreduceOneReal(real & v, MPI_Op op, const MPIInfo & mpi)
     {
         real vR{0};
         Allreduce(&v, &vR, 1, DNDS_MPI_REAL, op, mpi.comm);
         v = vR;
     }
 
-    inline void AllreduceOneIndex(index & v, MPI_Op op, MPIInfo & mpi)
+    inline void AllreduceOneIndex(index & v, MPI_Op op, const MPIInfo & mpi)
     {
         index vR{0};
         Allreduce(&v, &vR, 1, DNDS_MPI_REAL, op, mpi.comm);

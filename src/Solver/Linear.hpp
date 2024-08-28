@@ -41,11 +41,11 @@ namespace DNDS::Linear
          * @param nRestart
          * @param FStop bool FStop(iRestart, res, resB)
          */
-        template <class TFA, class TFML, class TFstop>
-        bool solve(TFA &&FA, TFML &&FML, TDATA &b, TDATA &x, uint32_t nRestart, TFstop &&FStop)
+        template <class TFA, class TFML, class TFDot, class TFstop>
+        bool solve(TFA &&FA, TFML &&FML, TFDot &&fDot, TDATA &b, TDATA &x, uint32_t nRestart, TFstop &&FStop)
         {
             FML(b, MLb); // MLb = ML * b
-            real scale_MLb = MLb.norm2();
+            real scale_MLb = std::sqrt(fDot(MLb, MLb));
             Eigen::MatrixXd h;
             h.setZero(kSubspace + 1, kSubspace);
             uint32_t iRestart;
@@ -54,7 +54,7 @@ namespace DNDS::Linear
                 FA(x, V_temp);                        // V_temp = A * x
                 FML(V_temp, Vs[0]);                   // Vs[0] = ML * A * x
                 Vs[0].addTo(MLb, -1.0);               // Vs[0] = ML * A * x - ML * b = -r
-                real beta = Vs[0].norm2();            // beta = norm2(r)
+                real beta = std::sqrt(fDot(Vs[0], Vs[0]));        // beta = norm2(r)
                 if (FStop(iRestart, beta, scale_MLb)) // see if converge
                     break;
                 if (std::abs(beta) < verySmallReal || // beta is floating-point negligible
@@ -70,14 +70,14 @@ namespace DNDS::Linear
                     for (uint32_t i = 0; i <= j; i++)
                     {
                         // Gram-Schmidt, calculate projected lengths
-                        h(i, j) = Vs[j + 1].dot(Vs[i]); // h(i, j) = dot(ML * A * Vs[j],Vs[i])
+                        h(i, j) = fDot(Vs[j + 1], (Vs[i])); // h(i, j) = dot(ML * A * Vs[j],Vs[i])
                     }
                     for (uint32_t i = 0; i <= j; i++)
                     {
                         // Gram-Schmidt, subtract projections
                         Vs[j + 1].addTo(Vs[i], -h(i, j)); // Vs[j + 1] = ML * A * Vs[j] - sum_{i=0,1,...j}(h(i,j) *  Vs[i])
                     }
-                    h(j + 1, j) = Vs[j + 1].norm2(); //
+                    h(j + 1, j) = std::sqrt(fDot(Vs[j + 1],Vs[j + 1])); //
                     if (h(j + 1, j) < scale_MLb * 1e-32)
                     {
                         std::cout << "early stop" << std::endl;
@@ -91,7 +91,7 @@ namespace DNDS::Linear
                 eBeta.resize(j + 1);
                 eBeta.setZero();
                 eBeta(0) = beta; // eBeta = e_1 * beta
-                if(j < 1)
+                if (j < 1)
                     break;
 
                 { // the QR method
@@ -119,7 +119,7 @@ namespace DNDS::Linear
                 }
                 if (rank < h.cols())
                 {
-                   
+
                     break; // do not restart
                 }
             }

@@ -143,16 +143,26 @@ void staticReconstruction()
         int method = 1;
         std::cout << std::setprecision(16) << std::endl;
 
+        DNDS::CFV::VariationalReconstruction<dim>::TFBoundary<1> FBoundary =
+            [&](const auto &UL, const auto &UMean, DNDS::index iCell, DNDS::index iFace, int ig,
+                const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType)
+        {
+            return Eigen::Vector<real, 1>::Ones() * 0;
+        };
+
+        DNDS::CFV::VariationalReconstruction<dim>::TFBoundaryDiff<1> FBoundaryDiff =
+            [&](const auto &UL, const auto &dU, const auto &UMean, DNDS::index iCell, DNDS::index iFace, int ig,
+                const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType)
+        {
+            return Eigen::Vector<real, 1>::Ones() * 0;
+        };
+
         for (int iter = 1; iter <= (method == 0 ? 100 : 0); iter++)
         {
             uRecOld->CopyFather(*uRec);
             vr.DoReconstructionIter(
                 *uRec, *uRecNew, u,
-                [&](const auto &uL, const auto &uMean, const tPoint &unitNorm, const tPoint &p, t_index faceID)
-                {
-                    // std::cout << p.transpose() << " do bnd" << std::endl;
-                    return Eigen::Vector<real, 1>(fScalar(p)({0}));
-                },
+                FBoundary,
                 true);
 
             real duRecSum = 0;
@@ -189,20 +199,12 @@ void staticReconstruction()
                 vr.DoReconstructionIter(
                     *uRec, *uRecNew, u,
                     // FBoundary
-                    [&](const auto &uL, const auto &uMean, const tPoint &unitNorm, const tPoint &p, t_index faceID)
-                    {
-                        // std::cout << p.transpose() << " do bnd" << std::endl;
-                        return Eigen::Vector<real, 1>(fScalar(p)({0}));
-                    },
+                    FBoundary,
                     true, true);
                 uRecNew->trans.startPersistentPull();
                 uRecNew->trans.waitPersistentPull();
                 *uRec = *uRecNew;
-                auto FBoundaryDiff =
-                    [&](const auto &uL, const auto &duL, const auto &uMean, const tPoint &unitNorm, const tPoint &p, t_index faceID)
-                {
-                    return Eigen::Vector<real, 1>::Ones() * 0;
-                };
+                
                 gmresRec.solve(
                     [&](decltype(*uRec) &x, decltype(*uRec) &Ax)
                     {
@@ -216,6 +218,10 @@ void staticReconstruction()
                         // MLx.trans.startPersistentPull();
                         // MLx.trans.waitPersistentPull();
                         // vr.DoReconstructionIterSOR(*uRecOld, x, MLx, u, FBoundaryDiff);
+                    },
+                    [&](decltype(*uRec) &a, decltype(*uRec) &b)
+                    {
+                        return a.dot(b); //! make this dim-consistent
                     },
                     *uRecNew, *uRec, 100 / kGmres,
                     [&](uint32_t i, real res, real resB) -> bool
@@ -244,15 +250,18 @@ void staticReconstruction()
 
         tScalarPair si;
         vr.BuildScalar(si);
-        vr.DoCalculateSmoothIndicator(si, *uRec, u, std::array<int, 1>{0});
+        using tLimitBatch = decltype(vr)::template tLimitBatch<1>;
+        vr.DoCalculateSmoothIndicator<1, 2>(si, *uRec, u, std::array<int, 2>{0, 0}); 
+        // todo: make explicit ins lazy
 
-        vr.DoLimiterWBAP_C(
-            TEvalDub{},
+        vr.DoLimiterWBAP_C<1>(
             u, *uRec, *uRecNew, *uRecOld, si, false,
-            [](const auto &uL, const auto &uR, const auto &uNorm)
-            { return 1; },
-            [](const auto &uL, const auto &uR, const auto &uNorm)
-            { return 1; });
+            [](const auto &UL, const auto &UR, const Geom::tPoint &n,
+                               const Eigen::Ref<tLimitBatch> &data) -> tLimitBatch
+            { return data; },
+            [](const auto &UL, const auto &UR, const Geom::tPoint &n,
+                               const Eigen::Ref<tLimitBatch> &data) -> tLimitBatch
+            { return data; });
         printErr(*uRec);
     }
 }

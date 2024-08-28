@@ -189,6 +189,16 @@ namespace DNDS::Euler
             MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
             return sqrSumAll;
         }
+
+        template<class TMultL, class TMultR>
+        real dot(const t_self &R, TMultL&& mL, TMultR&& mR)
+        {
+            real sqrSum{0}, sqrSumAll;
+            for (index i = 0; i < this->father->Size(); i++) //*note that only father is included
+                sqrSum += (this->operator[](i).array() * mL).matrix().dot((R.operator[](i).array() * mR).matrix());
+            MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
+            return sqrSumAll;
+        }
     };
 
     ///@todo://TODO add operators

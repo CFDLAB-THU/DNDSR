@@ -3,7 +3,7 @@
         "dtImplicit": 1e100,
         "nTimeStep": 1,
         "steadyQuit": true,
-        "useRestart": true,
+        "useRestart": false,
         "odeCode": 0,
         "tEnd": 3e+200
     },
@@ -105,11 +105,18 @@
         }
     },
     "linearSolverControl": {
-        "gmresCode": 0,
-        "nGmresSpace": 10,
-        "nGmresIter": 5,
+        "jacobiCode": 2,
+        "sgsIter": 0,
         "sgsWithRec": 0,
-        "initWithLastURecInc": false
+        "gmresCode": 1,
+        "gmresScale": 2,
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 0,
+            "orderingCode": 3
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
@@ -117,19 +124,11 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe",
+        "riemannSolverType": "Roe_M1",
         "constMassForce": [
             0.0,
             0.0,
             0.0
-        ],
-        "farFieldStaticValue": [
-            1,
-            0.965925826289068,
-            0.258819045102521,
-            0,
-            79.8650793650794,
-            1.3
         ],
         "Comment": {
             "M0.15": [
@@ -155,10 +154,28 @@
                 }
             ]
         },
+        "farFieldStaticValue": [
+            1,
+            0.965925826289068,
+            0.258819045102521,
+            0,
+            79.8650793650794,
+            1.3
+        ],
+        // "farFieldStaticValue": [
+        //     10000,
+        //     96.5925826289068,
+        //     25.8819045102521,
+        //     0,
+        //     79.8650793650794,
+        //     1.3
+        // ],
         "idealGasProperty": {
             "gamma": 1.4,
             "Rgas": 0.116221972344982,
+            // "Rgas": 0.0000116221972344982,
             "muGas": 3.472222222222222e-7,
+            // "muGas": 3.472222222222222e-5,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4

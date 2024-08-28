@@ -266,7 +266,7 @@ namespace DNDS::Euler
         using tFCompareField = std::function<TU(const Geom::tPoint &, real)>;
         using tFCompareFieldWeight = std::function<real(const Geom::tPoint &, real)>;
 
-        void EvaluateNorm(Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P = 1, bool volWise = false);
+        void EvaluateNorm(Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P = 1, bool volWise = false, bool average = false);
 
         void EvaluateRecNorm(
             Eigen::Vector<real, -1> &res,

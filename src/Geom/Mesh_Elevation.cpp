@@ -1496,7 +1496,7 @@ namespace DNDS::Geom
 
         if (false)
         { // use superlu_dist to solve
-            
+
             // gridinfo_t grid;
             // superlu_gridinit(mpi.comm, 1, mpi.size, &grid);
             // DNDS_assert(grid.iam < mpi.size && grid.iam >= 0);
@@ -1665,6 +1665,10 @@ namespace DNDS::Geom
                     MLX = x;
                     MLX.trans.startPersistentPull();
                     MLX.trans.waitPersistentPull();
+                },
+                [&](CoordPairDOF &a, CoordPairDOF &b) -> real
+                {
+                    return a.dot(b);
                 },
                 boundInterpCoefRHS,
                 boundInterpCoef,
@@ -2573,6 +2577,10 @@ namespace DNDS::Geom
             [&](CoordPairDOF &x, CoordPairDOF &MLx)
             {
                 JacobiPrec(x, MLx);
+            },
+            [&](CoordPairDOF &a, CoordPairDOF &b) -> real
+            {
+                return a.dot(b);
             },
             bO2,
             dispO2,
