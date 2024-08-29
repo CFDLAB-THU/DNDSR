@@ -134,16 +134,32 @@ namespace DNDS::MPI
     /// @brief dumb wrapper
     MPI_int Bcast(void *buf, MPI_int num, MPI_Datatype type, MPI_int source_rank, MPI_Comm comm)
     {
+        int ret{0};
         __start_timer;
-
-        return MPI_Bcast(buf, num, type, source_rank, comm);
+        if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
+            ret = MPI_Bcast(buf, num, type, source_rank, comm);
+        else
+        {
+            MPI_Request req{MPI_REQUEST_NULL};
+            ret = MPI_Ibcast(buf, num, type, source_rank, comm, &req);
+            ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
+        }
         __stop_timer;
+        return ret;
     }
 
     MPI_int Alltoall(void *send, MPI_int sendNum, MPI_Datatype typeSend, void *recv, MPI_int recvNum, MPI_Datatype typeRecv, MPI_Comm comm)
     {
+        int ret{0};
         __start_timer;
-        return MPI_Alltoall(send, sendNum, typeSend, recv, recvNum, typeRecv, comm);
+        if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
+            ret = MPI_Alltoall(send, sendNum, typeSend, recv, recvNum, typeRecv, comm);
+        else
+        {
+            MPI_Request req{MPI_REQUEST_NULL};
+            ret = MPI_Ialltoall(send, sendNum, typeSend, recv, recvNum, typeRecv, comm, &req);
+            ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
+        }
         __stop_timer;
     }
 
@@ -151,10 +167,19 @@ namespace DNDS::MPI
         void *send, MPI_int *sendSizes, MPI_int *sendStarts, MPI_Datatype sendType,
         void *recv, MPI_int *recvSizes, MPI_int *recvStarts, MPI_Datatype recvType, MPI_Comm comm)
     {
+        int ret{0};
         __start_timer;
-        int ret = MPI_Alltoallv(
-            send, sendSizes, sendStarts, sendType,
-            recv, recvSizes, recvStarts, recvType, comm);
+        if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
+            ret = MPI_Alltoallv(
+                send, sendSizes, sendStarts, sendType,
+                recv, recvSizes, recvStarts, recvType, comm);
+        else
+        {
+            MPI_Request req{MPI_REQUEST_NULL};
+            ret = MPI_Ialltoallv(send, sendSizes, sendStarts, sendType,
+                                 recv, recvSizes, recvStarts, recvType, comm, &req);
+            ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
+        }
         __stop_timer;
         return ret;
     }
@@ -162,8 +187,16 @@ namespace DNDS::MPI
     MPI_int Allreduce(const void *sendbuf, void *recvbuf, MPI_int count,
                       MPI_Datatype datatype, MPI_Op op, MPI_Comm comm)
     {
+        int ret{0};
         __start_timer;
-        int ret = MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm);
+        if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
+            ret = MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm);
+        else
+        {
+            MPI_Request req{MPI_REQUEST_NULL};
+            ret = MPI_Iallreduce(sendbuf, recvbuf, count, datatype, op, comm, &req);
+            ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
+        }
         __stop_timer;
         return ret;
     }
@@ -172,8 +205,16 @@ namespace DNDS::MPI
                       void *recvbuf, MPI_int recvcount,
                       MPI_Datatype recvtype, MPI_Comm comm)
     {
+        int ret{0};
         __start_timer;
-        int ret = MPI_Allgather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm);
+        if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
+            ret = MPI_Allgather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm);
+        else
+        {
+            MPI_Request req{MPI_REQUEST_NULL};
+            ret = MPI_Iallgather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm, &req);
+            ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
+        }
         __stop_timer;
         return ret;
     }
