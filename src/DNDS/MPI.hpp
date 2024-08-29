@@ -157,17 +157,6 @@ namespace DNDS
 #define DNDS_MPI_InsertCheck(mpi, info) \
     InsertCheck(mpi, info, __FUNCTION__, __FILE__, __LINE__)
 
-    template <class F>
-    inline void MPISerialDo(const MPIInfo &mpi, F f)
-    { //! need some improvement: order could be bad?
-        for (MPI_int i = 0; i < mpi.size; i++)
-        {
-            MPI::Barrier(mpi.comm);
-            if (mpi.rank == i)
-                f();
-        }
-    }
-
     typedef std::vector<std::pair<MPI_int, MPI_Datatype>> tMPI_typePairVec;
     /**
      * \brief wrapper of tMPI_typePairVec
@@ -324,6 +313,20 @@ namespace DNDS::MPI
         v = vR;
     }
 
+}
+
+namespace DNDS
+{
+    template <class F>
+    inline void MPISerialDo(const MPIInfo &mpi, F f)
+    { //! need some improvement: order could be bad?
+        for (MPI_int i = 0; i < mpi.size; i++)
+        {
+            MPI::Barrier(mpi.comm);
+            if (mpi.rank == i)
+                f();
+        }
+    }
 }
 
 namespace DNDS::MPI

@@ -318,17 +318,17 @@ namespace DNDS::Geom
 
         {
             DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                              { std::cout << "[" << mesh->getMPI().rank << ": nCell " << mesh->cell2cell.father->Size() << "] "; });
+                              { std::cout << "[" << mesh->getMPI().rank << ": nCell " << mesh->cell2cell.father->Size() << "] " << std::flush; });
             MPI::Barrier(mesh->getMPI().comm);
             if (mesh->getMPI().rank == 0)
                 std::cout << std::endl;
             DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                              { std::cout << "[" << mesh->getMPI().rank << ": nNode " << mesh->coords.father->Size() << "] "; });
+                              { std::cout << "[" << mesh->getMPI().rank << ": nNode " << mesh->coords.father->Size() << "] " << std::flush; });
             MPI::Barrier(mesh->getMPI().comm);
             if (mesh->getMPI().rank == 0)
                 std::cout << std::endl;
             DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                              { std::cout << "[" << mesh->getMPI().rank << ": nBnd " << mesh->bnd2node.father->Size() << "] "; });
+                              { std::cout << "[" << mesh->getMPI().rank << ": nBnd " << mesh->bnd2node.father->Size() << "] " << std::flush; });
             MPI::Barrier(mesh->getMPI().comm);
             if (mesh->getMPI().rank == 0)
                 std::cout << std::endl;

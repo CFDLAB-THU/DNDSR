@@ -238,7 +238,7 @@ namespace DNDS::MPI
                 _use_lazy_wait = std::stod(ret);
                 auto mpi = MPIInfo();
                 mpi.setWorld();
-                std::cout << mpi.rank << std::endl;
+                // std::cout << mpi.rank << std::endl;
                 if (mpi.rank == 0)
                     log() << "Detected DNDS_USE_LAZY_WAIT, setting to " << _use_lazy_wait << std::endl;
                 MPI::BarrierLazy(mpi.comm, static_cast<uint64_t>(_use_lazy_wait));
