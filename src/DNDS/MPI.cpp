@@ -161,6 +161,7 @@ namespace DNDS::MPI
             ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
         }
         __stop_timer;
+        return ret;
     }
 
     MPI_int Alltoallv(
