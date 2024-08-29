@@ -92,7 +92,7 @@ namespace DNDS
         bool AssertConsistent()
         {
             DNDS_assert(mpi.comm != MPI_COMM_NULL);
-            MPI_Barrier(mpi.comm); // must be globally existent
+            MPI::Barrier(mpi.comm); // must be globally existent
             if constexpr (_dataLayout == TABLE_Max ||
                           _dataLayout == TABLE_Fixed) // must have the same dynamic size
             {
@@ -775,9 +775,9 @@ namespace DNDS
 
         void waitPersistentPush() // collective;
         {
-            PerformanceTimer::Instance().StartTimer(PerformanceTimer::TimerType::Comm);
             if (MPI::CommStrategy::Instance().GetUseStrongSyncWait())
-                MPI_Barrier(mpi.comm);
+                MPI::Barrier(mpi.comm);
+            PerformanceTimer::Instance().StartTimer(PerformanceTimer::TimerType::Comm);
             PushStatVec.resize(PushReqVec->size());
 #ifdef ARRAY_COMM_USE_BUFFERED_SEND
             MPIBufferHandler::Instance().unclaim(pushSendSize);
@@ -796,16 +796,16 @@ namespace DNDS
                             MPI_Start(&PushReqVec->operator[](iReq));
                             MPI_Wait(&PushReqVec->operator[](iReq), MPI_STATUS_IGNORE);
                         }
-                        MPI_Waitall(nRecvPushReq, PushReqVec->data(), MPI_STATUSES_IGNORE);
+                        MPI::WaitallAuto(nRecvPushReq, PushReqVec->data(), MPI_STATUSES_IGNORE);
                     }
                     else
-                        MPI_Waitall(PushReqVec->size(), PushReqVec->data(), MPI_STATUSES_IGNORE);
+                        MPI::WaitallAuto(PushReqVec->size(), PushReqVec->data(), MPI_STATUSES_IGNORE);
                 }
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
                 if (PushReqVec->size())
-                    MPI_Waitall(PushReqVec->size(), PushReqVec->data(), PushStatVec.data());
+                    MPI::WaitallAuto(PushReqVec->size(), PushReqVec->data(), PushStatVec.data());
                 auto bufferVec = inSituBuffer.begin();
                 for (MPI_int r = 0; r < mpi.size; r++)
                 {
@@ -839,9 +839,9 @@ namespace DNDS
             {
                 DNDS_assert(false);
             }
-            if (MPI::CommStrategy::Instance().GetUseStrongSyncWait())
-                MPI_Barrier(mpi.comm);
             PerformanceTimer::Instance().StopTimer(PerformanceTimer::TimerType::Comm);
+            if (MPI::CommStrategy::Instance().GetUseStrongSyncWait())
+                MPI::Barrier(mpi.comm);
         }
         void waitPersistentPull() // collective;
         {
@@ -867,18 +867,18 @@ namespace DNDS
                             // if (mpi.rank == 0)
                             //     log() << "waited a req" << std::endl;
                         }
-                        MPI_Waitall(nRecvPullReq, PullReqVec->data(), MPI_STATUSES_IGNORE);
+                        MPI::WaitallAuto(nRecvPullReq, PullReqVec->data(), MPI_STATUSES_IGNORE);
                     }
                     else
                     {
-                        MPI_Waitall(PullReqVec->size(), PullReqVec->data(), MPI_STATUSES_IGNORE);
+                        MPI::WaitallAuto(PullReqVec->size(), PullReqVec->data(), MPI_STATUSES_IGNORE);
                     }
                 }
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
                 if (PullReqVec->size())
-                    MPI_Waitall(PullReqVec->size(), PullReqVec->data(), PullStatVec.data());
+                    MPI::WaitallAuto(PullReqVec->size(), PullReqVec->data(), PullStatVec.data());
                 // std::cout << "waiting DONE" << std::endl;
                 inSituBuffer.clear();
                 PullReqVec->clear();

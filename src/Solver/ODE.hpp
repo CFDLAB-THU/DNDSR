@@ -1434,7 +1434,7 @@ namespace DNDS::ODE
 
             fdt(x, dTau, 1.0, 0); // always gets dTau for CFL evaluation
             xLast = x;
-            // MPI_Barrier(MPI_COMM_WORLD);
+            // MPI::Barrier(MPI_COMM_WORLD);
             // std::cout << "fucked" << std::endl;
 
             frhs(rhs, x, dTau, 1, 0.5, 0);

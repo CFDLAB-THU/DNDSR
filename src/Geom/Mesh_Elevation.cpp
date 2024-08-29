@@ -690,7 +690,7 @@ namespace DNDS::Geom
         nodeNormClusters.TransAttach();
         nodeNormClusters.trans.BorrowGGIndexing(coords.trans);
         nodeNormClusters.trans.createMPITypes();
-        MPI_Barrier(mpi.comm);
+        MPI::Barrier(mpi.comm);
         nodeNormClusters.trans.pullOnce();
 
         /***********************************/

@@ -3,6 +3,20 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include <iostream>
+#include <chrono>
+#include <thread>
+
+#if defined(linux) || defined(_UNIX) || defined(__linux__)
+#include <sys/ptrace.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#endif
+#if defined(_WIN32) || defined(__WINDOWS_)
+#include <Windows.h>
+#include <process.h>
+#endif
+
 #include "MPI.hpp"
 #include "Profiling.hpp"
 
@@ -14,16 +28,6 @@
 namespace DNDS
 {
 
-#include <iostream>
-#if defined(linux) || defined(_UNIX) || defined(__linux__)
-#include <sys/ptrace.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#endif
-#if defined(_WIN32) || defined(__WINDOWS_)
-#include <Windows.h>
-#include <process.h>
-#endif
     namespace Debug
     {
         bool IsDebugged()
@@ -176,10 +180,45 @@ namespace DNDS::MPI
 
     MPI_int Barrier(MPI_Comm comm)
     {
+        int ret{0};
         __start_timer;
-        int ret = MPI_Barrier(comm);
+        if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
+            ret = MPI_Barrier(comm);
+        else
+            ret = MPI::BarrierLazy(comm, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
         __stop_timer;
         return ret;
+    }
+
+    MPI_int BarrierLazy(MPI_Comm comm, uint64_t checkNanoSecs)
+    {
+        MPI_Request req{MPI_REQUEST_NULL};
+        MPI_Status stat;
+        MPI_Ibarrier(comm, &req);
+        MPI_int ret = MPI::WaitallLazy(1, &req, &stat, checkNanoSecs);
+        if (req != MPI_REQUEST_NULL)
+            MPI_Request_free(&req);
+        return ret;
+    }
+
+    MPI_int WaitallLazy(MPI_int count, MPI_Request *reqs, MPI_Status *statuses, uint64_t checkNanoSecs)
+    {
+        MPI_int flag = 0;
+        MPI_int ret;
+        while (!flag)
+        {
+            ret = MPI_Testall(count, reqs, &flag, statuses);
+            std::this_thread::sleep_for(std::chrono::nanoseconds(checkNanoSecs));
+        }
+        return ret;
+    }
+
+    MPI_int WaitallAuto(MPI_int count, MPI_Request *reqs, MPI_Status *statuses)
+    {
+        if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
+            return MPI_Waitall(count, reqs, statuses);
+        else
+            return MPI::WaitallLazy(count, reqs, statuses, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
     }
 
 #undef __start_timer
@@ -191,6 +230,24 @@ namespace DNDS::MPI
 {
     CommStrategy::CommStrategy()
     {
+        try
+        {
+            auto ret = std::getenv("DNDS_USE_LAZY_WAIT");
+            if (ret != NULL && (std::stod(ret) != 0))
+            {
+                _use_lazy_wait = std::stod(ret);
+                auto mpi = MPIInfo();
+                mpi.setWorld();
+                std::cout << mpi.rank << std::endl;
+                if (mpi.rank == 0)
+                    log() << "Detected DNDS_USE_LAZY_WAIT, setting to " << _use_lazy_wait << std::endl;
+                MPI::BarrierLazy(mpi.comm, static_cast<uint64_t>(_use_lazy_wait));
+            }
+        }
+        catch (...)
+        {
+        }
+        try
         {
             auto ret = std::getenv("DNDS_ARRAY_STRATEGY_USE_IN_SITU");
             if (ret != NULL && (std::stoi(ret) != 0))
@@ -200,10 +257,16 @@ namespace DNDS::MPI
                 mpi.setWorld();
                 if (mpi.rank == 0)
                     log() << "Detected DNDS_ARRAY_STRATEGY_USE_IN_SITU, setting" << std::endl;
-                MPI_Barrier(mpi.comm);
+                if (_use_lazy_wait)
+                    MPI::BarrierLazy(mpi.comm, static_cast<uint64_t>(_use_lazy_wait));
+                else
+                    MPI_Barrier(mpi.comm);
             }
         }
-
+        catch (...)
+        {
+        }
+        try
         {
             auto ret = std::getenv("DNDS_USE_STRONG_SYNC_WAIT");
             if (ret != NULL && (std::stoi(ret) != 0))
@@ -213,9 +276,16 @@ namespace DNDS::MPI
                 mpi.setWorld();
                 if (mpi.rank == 0)
                     log() << "Detected DNDS_USE_STRONG_SYNC_WAIT, setting" << std::endl;
-                MPI_Barrier(mpi.comm);
+                if (_use_lazy_wait)
+                    MPI::BarrierLazy(mpi.comm, static_cast<uint64_t>(_use_lazy_wait));
+                else
+                    MPI_Barrier(mpi.comm);
             }
         }
+        catch (...)
+        {
+        }
+        try
         {
             auto ret = std::getenv("DNDS_USE_ASYNC_ONE_BY_ONE");
             if (ret != NULL && (std::stoi(ret) != 0))
@@ -225,8 +295,14 @@ namespace DNDS::MPI
                 mpi.setWorld();
                 if (mpi.rank == 0)
                     log() << "Detected DNDS_USE_ASYNC_ONE_BY_ONE, setting" << std::endl;
-                MPI_Barrier(mpi.comm);
+                if (_use_lazy_wait)
+                    MPI::BarrierLazy(mpi.comm, static_cast<uint64_t>(_use_lazy_wait));
+                else
+                    MPI_Barrier(mpi.comm);
             }
+        }
+        catch (...)
+        {
         }
     }
 
@@ -254,6 +330,11 @@ namespace DNDS::MPI
     bool CommStrategy::GetUseAsyncOneByOne()
     {
         return _use_async_one_by_one;
+    }
+
+    double CommStrategy::GetUseLazyWait()
+    {
+        return _use_lazy_wait;
     }
 }
 

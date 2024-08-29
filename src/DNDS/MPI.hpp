@@ -146,11 +146,11 @@ namespace DNDS
                             const std::string &FUNCTION = "", const std::string &FILE = "", int LINE = -1)
     {
 #if !(defined(NDEBUG) || defined(NINSERT))
-        MPI_Barrier(mpi.comm);
+        MPI::Barrier(mpi.comm);
         std::cout << "=== CHECK \"" << info << "\"  RANK " << mpi.rank << " ==="
                   << " @  FName: " << FUNCTION
                   << " @  Place: " << FILE << ":" << LINE << std::endl;
-        MPI_Barrier(mpi.comm);
+        MPI::Barrier(mpi.comm);
 #endif
     }
 
@@ -162,7 +162,7 @@ namespace DNDS
     { //! need some improvement: order could be bad?
         for (MPI_int i = 0; i < mpi.size; i++)
         {
-            MPI_Barrier(mpi.comm);
+            MPI::Barrier(mpi.comm);
             if (mpi.rank == i)
                 f();
         }
@@ -301,28 +301,39 @@ namespace DNDS::MPI
     MPI_int Allgather(const void *sendbuf, MPI_int sendcount, MPI_Datatype sendtype,
                       void *recvbuf, MPI_int recvcount,
                       MPI_Datatype recvtype, MPI_Comm comm);
-                      
+
     MPI_int Barrier(MPI_Comm comm);
 
-    inline void AllreduceOneReal(real & v, MPI_Op op, const MPIInfo & mpi)
+    MPI_int BarrierLazy(MPI_Comm comm, uint64_t checkNanoSecs);
+
+    MPI_int WaitallLazy(MPI_int count, MPI_Request *reqs, MPI_Status *statuses, uint64_t checkNanoSecs = 10000000);
+
+    MPI_int WaitallAuto(MPI_int count, MPI_Request *reqs, MPI_Status *statuses);
+
+    inline void AllreduceOneReal(real &v, MPI_Op op, const MPIInfo &mpi)
     {
         real vR{0};
         Allreduce(&v, &vR, 1, DNDS_MPI_REAL, op, mpi.comm);
         v = vR;
     }
 
-    inline void AllreduceOneIndex(index & v, MPI_Op op, const MPIInfo & mpi)
+    inline void AllreduceOneIndex(index &v, MPI_Op op, const MPIInfo &mpi)
     {
         index vR{0};
         Allreduce(&v, &vR, 1, DNDS_MPI_REAL, op, mpi.comm);
         v = vR;
     }
-    
+
 }
 
 namespace DNDS::MPI
 {
-    class CommStrategy // cxx11 + thread-safe singleton
+    /**
+     * @brief // cxx11 + thread-safe singleton
+     * must be constructed in MPI_COMM_WORLD
+     *
+     */
+    class CommStrategy
     {
     public:
         enum ArrayCommType
@@ -338,6 +349,7 @@ namespace DNDS::MPI
         ArrayCommType _array_strategy = HIndexed;
         bool _use_strong_sync_wait = false;
         bool _use_async_one_by_one = false;
+        double _use_lazy_wait = 0;
 
         CommStrategy();
         CommStrategy(const CommStrategy &);
@@ -349,6 +361,7 @@ namespace DNDS::MPI
         void SetArrayStrategy(ArrayCommType t);
         bool GetUseStrongSyncWait();
         bool GetUseAsyncOneByOne();
+        double GetUseLazyWait();
     };
 }
 

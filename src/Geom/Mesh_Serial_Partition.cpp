@@ -1,16 +1,21 @@
 #include "Mesh.hpp"
-#include "boost/graph/adjacency_list.hpp"
-#include "boost/graph/graph_utility.hpp"
-#include "boost/graph/minimum_degree_ordering.hpp"
+namespace _METIS
+{
+#include <metis.h>
+#include <parmetis.h>
+}
+
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/graph_utility.hpp>
+#include <boost/graph/minimum_degree_ordering.hpp>
 #include <boost/graph/cuthill_mckee_ordering.hpp>
 #include <boost/graph/properties.hpp>
 #include <boost/graph/bandwidth.hpp>
 
+
+
 namespace _METIS
 {
-#include "metis.h"
-#include "parmetis.h"
-
     static idx_t indexToIdx(DNDS::index v)
     {
         if constexpr (sizeof(DNDS::index) <= sizeof(idx_t))

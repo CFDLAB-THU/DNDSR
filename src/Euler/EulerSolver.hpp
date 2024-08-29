@@ -533,7 +533,7 @@ namespace DNDS::Euler
                     DNDS_assert(fIn);
                     fIn << std::setw(4) << gSetting;
                 }
-                MPI_Barrier(mpi.comm); // no go until output done
+                MPI::Barrier(mpi.comm); // no go until output done
             }
 
             if (mpi.rank == 0)

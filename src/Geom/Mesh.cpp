@@ -316,12 +316,23 @@ namespace DNDS::Geom
         TransferDataSerial2Global(bnd2nodeSerial, mesh->bnd2node.father, bnd_push, bnd_pushStart, mesh->getMPI());
         TransferDataSerial2Global(bndElemInfoSerial, mesh->bndElemInfo.father, bnd_push, bnd_pushStart, mesh->getMPI());
 
-        DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                          { std::cout << "Rank " << mesh->getMPI().rank << " : nCell " << mesh->cell2cell.father->Size() << std::endl; });
-        DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                          { std::cout << " Rank " << mesh->getMPI().rank << " : nNode " << mesh->coords.father->Size() << std::endl; });
-        DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                          { std::cout << " Rank " << mesh->getMPI().rank << " : nBnd " << mesh->bnd2node.father->Size() << std::endl; });
+        {
+            DNDS::MPISerialDo(mesh->getMPI(), [&]()
+                              { std::cout << "[" << mesh->getMPI().rank << ": nCell " << mesh->cell2cell.father->Size() << "] "; });
+            MPI::Barrier(mesh->getMPI().comm);
+            if (mesh->getMPI().rank == 0)
+                std::cout << std::endl;
+            DNDS::MPISerialDo(mesh->getMPI(), [&]()
+                              { std::cout << "[" << mesh->getMPI().rank << ": nNode " << mesh->coords.father->Size() << "] "; });
+            MPI::Barrier(mesh->getMPI().comm);
+            if (mesh->getMPI().rank == 0)
+                std::cout << std::endl;
+            DNDS::MPISerialDo(mesh->getMPI(), [&]()
+                              { std::cout << "[" << mesh->getMPI().rank << ": nBnd " << mesh->bnd2node.father->Size() << "] "; });
+            MPI::Barrier(mesh->getMPI().comm);
+            if (mesh->getMPI().rank == 0)
+                std::cout << std::endl;
+        }
         mesh->adjPrimaryState = Adj_PointToGlobal;
         if (mesh->getMPI().rank == mRank)
             DNDS::log() << "UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell" << std::endl;
@@ -777,7 +788,7 @@ namespace DNDS::Geom
                     iCell = cell2node.trans.pLGhostMapping->operator()(-1, iCell);
             }
         }
-        // MPI_Barrier(mpi.comm);
+        // MPI::Barrier(mpi.comm);
         /**********************************/
         adjFacialState = Adj_PointToGlobal;
     }
@@ -810,7 +821,7 @@ namespace DNDS::Geom
                 FaceIndexLocal2Global(iFace);
             }
         }
-        // MPI_Barrier(mpi.comm);
+        // MPI::Barrier(mpi.comm);
         /**********************************/
         adjC2FState = Adj_PointToGlobal;
     }
@@ -1052,7 +1063,7 @@ namespace DNDS::Geom
             }
         }
 
-        MPI_Barrier(mpi.comm);
+        MPI::Barrier(mpi.comm);
 #ifdef DNDS_USE_OMP
 #pragma omp parallel for
 #endif
