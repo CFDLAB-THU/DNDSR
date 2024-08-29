@@ -106,11 +106,11 @@ namespace DNDS::Geom
                 if (curMinGlobiCell == iCellGlob)
                 {
                     newCoords.push_back(newNodeCoord);
-                    cellNewNodeRowV.at(iNNode) = (localNewNodeNum++); //*
+                    cellNewNodeRowV.at(iNNode) = (localNewNodeNum++); //* recorded as local idx in newCoords
                 }
                 else
                 {
-                    cellNewNodeRowV.at(iNNode) = (-1 - curMinic2c);
+                    cellNewNodeRowV.at(iNNode) = (-1 - curMinic2c); //* recorded as -1 - ic2c that points to the owner
                 }
             }
             cellNewNodes.ResizeRow(iCell, cellNewNodeRowV.size());
@@ -396,7 +396,7 @@ namespace DNDS::Geom
         }
         adjPrimaryState = Adj_PointToGlobal;
 
-        DNDS_MAKE_SSP(coords.son, mpi);
+        DNDS_MAKE_SSP(coords.son, mpi); //delete because reconstructed later
 
         // this->BuildGhostPrimary();
 
