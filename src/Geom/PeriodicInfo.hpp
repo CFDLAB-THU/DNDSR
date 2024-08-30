@@ -34,7 +34,17 @@ namespace DNDS::Geom
         }
         static MPI_Datatype CommType() { return MPI_UINT8_T; }
         static int CommMult() { return 1; }
+
+        inline friend std::ostream &operator<<(std::ostream &o, const NodePeriodicBits &b)
+        {
+            o << int(b.__v);
+            return o;
+        }
     };
+
+    static const NodePeriodicBits nodePB1{0x01u};
+    static const NodePeriodicBits nodePB2{0x02u};
+    static const NodePeriodicBits nodePB3{0x04u};
 
     inline bool isCollaborativeNodePeriodicBits(const std::vector<NodePeriodicBits> &a, const std::vector<NodePeriodicBits> &b)
     {

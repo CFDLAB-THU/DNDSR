@@ -120,6 +120,11 @@ namespace DNDS
 
     static const char *outputDelim = "\t";
 
+    
+    template <typename T>
+    using ssp = std::shared_ptr<T>;
+
+
     typedef std::vector<rowsize> t_RowsizeVec;
     typedef std::vector<index> t_IndexVec;
     typedef ssp<t_IndexVec> t_pIndexVec;
@@ -146,8 +151,7 @@ namespace DNDS
 
     typedef Eigen::Matrix<real, -1, -1, Eigen::RowMajor> tDiFj;
 
-    template <typename T>
-    using ssp = std::shared_ptr<T>;
+    
 
 
 /// TODO: change to template:

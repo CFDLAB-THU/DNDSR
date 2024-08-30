@@ -339,7 +339,10 @@ namespace DNDS::Geom
         for (index iBnd = 0; iBnd < meshO1.bnd2node.father->Size(); iBnd++)
         {
             bnd2cell(iBnd, 0) = meshO1.bnd2cell(iBnd, 0);
+            bnd2cell(iBnd, 1) = meshO1.bnd2cell(iBnd, 1);
             bnd2cell(iBnd, 0) = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, bnd2cell(iBnd, 0));
+            if (bnd2cell(iBnd, 1) != UnInitIndex)
+                bnd2cell(iBnd, 1) = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, bnd2cell(iBnd, 1));
         }
 
         DNDS_MAKE_SSP(bnd2node.father, mpi);
@@ -396,7 +399,7 @@ namespace DNDS::Geom
         }
         adjPrimaryState = Adj_PointToGlobal;
 
-        DNDS_MAKE_SSP(coords.son, mpi); //delete because reconstructed later
+        DNDS_MAKE_SSP(coords.son, mpi); // delete because reconstructed later
 
         // this->BuildGhostPrimary();
 

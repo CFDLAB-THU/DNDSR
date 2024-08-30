@@ -123,6 +123,24 @@ namespace DNDS::Geom
                id == BC_ID_PERIODIC_3_DONOR;
     }
 
+    inline bool FaceIDIsPeriodic1(t_index id)
+    {
+        return id == BC_ID_PERIODIC_1 ||
+               id == BC_ID_PERIODIC_1_DONOR;
+    }
+
+    inline bool FaceIDIsPeriodic2(t_index id)
+    {
+        return id == BC_ID_PERIODIC_2 ||
+               id == BC_ID_PERIODIC_2_DONOR;
+    }
+
+    inline bool FaceIDIsPeriodic3(t_index id)
+    {
+        return id == BC_ID_PERIODIC_3 ||
+               id == BC_ID_PERIODIC_3_DONOR;
+    }
+
     inline bool FaceIDIsPeriodicMain(t_index id)
     {
         return id == BC_ID_PERIODIC_1 ||

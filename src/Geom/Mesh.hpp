@@ -240,7 +240,32 @@ namespace DNDS::Geom
             return bnd2node.trans.pLGlobalMapping->operator()(mpi.rank, iBnd);
         }
 
+        /**
+         * \brief
+         * return normal negative:  mapping to un-found in father
+         */
+        index BndIndexGlobal2Local_NoSon(index iBnd)
+        {
+            auto [ret, rank, val] = bnd2node.trans.pLGlobalMapping->search(iBnd);
+            DNDS_assert_info(ret, "search failed");
+            if (rank == mpi.rank)
+                return val;
+            else
+                return -1 - iBnd;
+        }
+
+        /**
+         * \brief only requires father part of cell2node, bnd2node and coords
+         * generates node2cell and node2bnd (father part)
+         */
         void RecoverNode2CellAndNode2Bnd();
+
+        /**
+         * \brief needs to use RecoverNode2CellAndNode2Bnd before doing this.
+         * Requires node2cell.father and builds a version of its son.
+         */
+        void RecoverCell2CellAndBnd2Cell();
+
         /**
          * @brief building ghost (son) from primary (currently only cell2cell)
          * @details

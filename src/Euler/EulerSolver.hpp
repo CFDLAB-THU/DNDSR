@@ -600,6 +600,7 @@ namespace DNDS::Euler
                 reader->MeshPartitionCell2Cell();
                 reader->PartitionReorderToMeshCell2Cell();
                 mesh->RecoverNode2CellAndNode2Bnd();
+                mesh->RecoverCell2CellAndBnd2Cell();
                 mesh->BuildGhostPrimary();
                 mesh->AdjGlobal2LocalPrimary();
                 if (config.dataIOControl.meshElevation == 1)
