@@ -454,6 +454,34 @@ namespace DNDS::Geom
         return hasBad == 0;
     }
 
+    bool UnstructuredMesh::IsO2()
+    {
+        using namespace Elem;
+        int hasBad = 0;
+        for (index iCell = 0; iCell < cellElemInfo.Size(); iCell++)
+        {
+            auto eType = cellElemInfo(iCell, 0).getElemType();
+            if (eType == ElemType::Line3 ||
+                eType == ElemType::Tri6 ||
+                eType == ElemType::Quad9 ||
+                eType == ElemType::Tet10 ||
+                eType == ElemType::Hex27 ||
+                eType == ElemType::Prism18 ||
+                eType == ElemType::Pyramid14)
+            {
+                continue;
+            }
+            else
+            {
+                hasBad = 1;
+                break;
+            }
+        }
+        int hasBadAll;
+        MPI::Allreduce(&hasBad, &hasBadAll, 1, MPI_INT, MPI_SUM, mpi.comm);
+        return hasBad == 0;
+    }
+
     using tIndexMapFunc = std::function<index(index)>;
 
     static void GeneralCell2NodeToNode2Cell(
@@ -629,6 +657,8 @@ namespace DNDS::Geom
         bnd2node.TransAttach();
         bnd2node.trans.createFatherGlobalMapping(); // for BndIndexLocal2Global_NoSon
 
+        // std::cout << "RecoverCell2CellAndBnd2Cell here1" << std::endl;
+
         std::unordered_set<index> ghostNodesCompactSet;
         for (index i = 0; i < cell2node.father->Size(); i++)
             for (auto in : cell2node.father->operator[](i))
@@ -642,7 +672,7 @@ namespace DNDS::Geom
         ghostNodes.reserve(ghostNodesCompactSet.size());
         for (auto v : ghostNodesCompactSet)
             ghostNodes.push_back(v);
-
+        // std::cout << "RecoverCell2CellAndBnd2Cell here2" << std::endl;
         DNDS_MAKE_SSP(node2cell.son, mpi);
         node2cell.TransAttach();
         node2cell.trans.createFatherGlobalMapping();
@@ -677,12 +707,15 @@ namespace DNDS::Geom
             for (auto v : cellRec)
                 cell2cell.father->operator()(i, ic2c++) = v;
         }
+        // std::cout << "RecoverCell2CellAndBnd2Cell here2.5" << std::endl;
         DNDS_MAKE_SSP(bnd2cell.father, mpi);
         bnd2cell.father->Resize(bnd2node.father->Size());
+        // std::cout << "RecoverCell2CellAndBnd2Cell here2.6" << std::endl;
         for (index i = 0; i < bnd2node.father->Size(); i++)
         {
             std::set<index> cellRecCur;
             bool initDone{false};
+            // std::cout << "RecoverCell2CellAndBnd2Cell here L1 1" << std::endl;
             for (auto in : bnd2node.father->operator[](i))
             {
                 DNDS_assert(iNodeGlobal2LocalAppendInNode2Cell.count(in));
@@ -701,12 +734,14 @@ namespace DNDS::Geom
             // }
             index iCellFound{UnInitIndex};
             index iCellFoundR{UnInitIndex};
+            // std::cout << "RecoverCell2CellAndBnd2Cell here L1 2" << std::endl;
             if (isPeriodic && Geom::FaceIDIsPeriodic(bndElemInfo.father->operator()(i, 0).zone))
             { //! with periodic bnd, can have two cells
                 DNDS_assert(cellRecCur.size() == 2);
                 auto it = cellRecCur.begin();
-                iCellFound = *it++;
-                iCellFoundR = *it++;
+                iCellFound = *it;
+                ++it;
+                iCellFoundR = *it;
             }
             else
             {
@@ -715,8 +750,9 @@ namespace DNDS::Geom
             }
             bnd2cell.father->operator()(i, 0) = iCellFound;
             bnd2cell.father->operator()(i, 1) = iCellFoundR;
+            // std::cout << "RecoverCell2CellAndBnd2Cell here L1 3" << std::endl;
         }
-
+        // std::cout << "RecoverCell2CellAndBnd2Cell here3" << std::endl;
         /**
          * here we check if we need to swap the bnd2cell to ensure that the bnd2cell(iBnd, 0)
          * points to the original cell (not the cell neighbour of the bnd via periodic)

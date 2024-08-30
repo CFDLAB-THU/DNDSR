@@ -252,6 +252,8 @@ namespace DNDS::Euler
                 real meshElevationRefDWall = 1e-3;
                 int meshElevationBoundaryMode = 0; // 0: only wall bc; 1: wall + invis vall
 
+                int meshDirectBisect = 0;
+
                 int meshFormat = 0;
                 std::string meshFile = "data/mesh/NACA0012_WIDE_H3.cgns";
                 std::string outPltName = "data/out/debugData_";
@@ -295,6 +297,7 @@ namespace DNDS::Euler
                     meshElevationRBFRadius, meshElevationRBFPower,
                     meshElevationRBFKernel, meshElevationMaxIncludedAngle, meshElevationNSearch, meshElevationRefDWall,
                     meshElevationBoundaryMode,
+                    meshDirectBisect,
                     meshFormat,
                     meshFile,
                     outPltName,
@@ -379,7 +382,7 @@ namespace DNDS::Euler
                 int jacobiCode = 1; // 0 for jacobi, 1 for gs, 2 for ilu
                 int sgsIter = 0;
                 int sgsWithRec = 0;
-                int gmresCode = 0; // 0 for lusgs, 1 for gmres, 2 for lusgs started gmres
+                int gmresCode = 0;  // 0 for lusgs, 1 for gmres, 2 for lusgs started gmres
                 int gmresScale = 0; // 0 for no scaling, 1 use refU, 2 use mean value
                 int nGmresSpace = 10;
                 int nGmresIter = 2;
@@ -599,8 +602,7 @@ namespace DNDS::Euler
                 reader->BuildCell2Cell();
                 reader->MeshPartitionCell2Cell();
                 reader->PartitionReorderToMeshCell2Cell();
-                mesh->RecoverNode2CellAndNode2Bnd();
-                mesh->RecoverCell2CellAndBnd2Cell();
+
                 mesh->BuildGhostPrimary();
                 mesh->AdjGlobal2LocalPrimary();
                 if (config.dataIOControl.meshElevation == 1)
@@ -613,6 +615,30 @@ namespace DNDS::Euler
                     reader->mesh = mesh;
                     mesh->BuildGhostPrimary();
                     mesh->AdjGlobal2LocalPrimary();
+                }
+                DNDS_assert(config.dataIOControl.meshDirectBisect <= 4);
+                for (int iter = 1; iter <= config.dataIOControl.meshDirectBisect; iter++)
+                {
+                    DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO2;
+                    DNDS_MAKE_SSP(meshO2, mpi, gDimLocal);
+                    meshO2->BuildO2FromO1Elevation(*mesh);
+                    meshO2->BuildGhostPrimary();
+                    DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO1B;
+                    DNDS_MAKE_SSP(meshO1B, mpi, gDimLocal);
+                    meshO1B->BuildBisectO1FormO2(*meshO2);
+
+                    std::swap(meshO1B, mesh);
+                    reader->mesh = mesh;
+                    mesh->RecoverNode2CellAndNode2Bnd();
+                    mesh->RecoverCell2CellAndBnd2Cell();
+                    mesh->BuildGhostPrimary();
+                    mesh->AdjGlobal2LocalPrimary();
+                    index nCell = mesh->NumCellGlobal();
+                    index nNode = mesh->NumNodeGlobal();
+                    if (mesh->getMPI().rank == 0)
+                    {
+                        log() << fmt::format("Mesh Direct Bisect {} done, nCell [{}], nNode [{}]", iter, nCell, nNode) << std::endl;
+                    }
                 }
             }
             else
@@ -1119,9 +1145,6 @@ DNDS_EULERSOLVER_INS_EXTERN(NS_2EQ, extern);
 DNDS_EULERSOLVER_INS_EXTERN(NS_3D, extern);
 DNDS_EULERSOLVER_INS_EXTERN(NS_SA_3D, extern);
 DNDS_EULERSOLVER_INS_EXTERN(NS_2EQ_3D, extern);
-
-
-
 
 #define DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(model, ext)             \
     namespace DNDS::Euler                                             \

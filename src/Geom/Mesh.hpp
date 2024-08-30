@@ -186,7 +186,7 @@ namespace DNDS::Geom
         }
 
         /**
-         * \brief 
+         * \brief
          * return normal negative:  mapping to un-found in father-son
          */
         index CellIndexGlobal2Local(DNDS::index iCellOther)
@@ -336,7 +336,10 @@ namespace DNDS::Geom
         void ElevatedNodesSolveInternalSmoothV1();
         void ElevatedNodesSolveInternalSmoothV2();
 
+        void BuildBisectO1FormO2(UnstructuredMesh &meshO2);
+
         bool IsO1();
+        bool IsO2();
 
         /**
          * @brief directly load coords; gets faulty if isPeriodic!
@@ -346,7 +349,12 @@ namespace DNDS::Geom
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
-                cs(Eigen::all, i) = coords[c2n[i]];
+            {
+                index iNode = c2n[i];
+                if (adjPrimaryState == Adj_PointToGlobal)
+                    iNode = NodeIndexGlobal2Local(iNode), DNDS_assert_info(iNode >= 0, "iNode not found in main/ghost pair");
+                cs(Eigen::all, i) = coords[iNode];
+            }
         }
 
         /**
@@ -357,7 +365,12 @@ namespace DNDS::Geom
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
-                cs(Eigen::all, i) = coo[c2n[i]];
+            {
+                index iNode = c2n[i];
+                if (adjPrimaryState == Adj_PointToGlobal)
+                    iNode = NodeIndexGlobal2Local(iNode), DNDS_assert_info(iNode >= 0, "iNode not found in main/ghost pair");
+                cs(Eigen::all, i) = coo[iNode];
+            }
         }
 
         /**
@@ -368,7 +381,12 @@ namespace DNDS::Geom
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
-                cs(Eigen::all, i) = periodicInfo.GetCoordByBits(coords[c2n[i]], c2nPbi[i]);
+            {
+                index iNode = c2n[i];
+                if (adjPrimaryState == Adj_PointToGlobal)
+                    iNode = NodeIndexGlobal2Local(iNode), DNDS_assert_info(iNode >= 0, "iNode not found in main/ghost pair");
+                cs(Eigen::all, i) = periodicInfo.GetCoordByBits(coords[iNode], c2nPbi[i]);
+            }
         }
 
         /**
@@ -379,7 +397,12 @@ namespace DNDS::Geom
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
-                cs(Eigen::all, i) = periodicInfo.GetCoordByBits(coo[c2n[i]], c2nPbi[i]);
+            {
+                index iNode = c2n[i];
+                if (adjPrimaryState == Adj_PointToGlobal)
+                    iNode = NodeIndexGlobal2Local(iNode), DNDS_assert_info(iNode >= 0, "iNode not found in main/ghost pair");
+                cs(Eigen::all, i) = periodicInfo.GetCoordByBits(coo[iNode], c2nPbi[i]);
+            }
         }
 
         void GetCoordsOnCell(index iCell, tSmallCoords &cs)
