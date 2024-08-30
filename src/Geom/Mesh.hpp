@@ -94,6 +94,10 @@ namespace DNDS::Geom
         /// periodic only, after reader
         tPbiPair cell2nodePbi;
 
+        /// inverse relations
+        tAdjPair node2cell;
+        tAdjPair node2bnd;
+
         /// interpolated
         // *! currently assume all these are Adj_PointToLocal
         tAdjPair cell2face;
@@ -132,6 +136,111 @@ namespace DNDS::Geom
 
         UnstructuredMesh(const DNDS::MPIInfo &n_mpi, int n_dim)
             : mpi(n_mpi), dim(n_dim) {}
+
+        /**
+         * \brief
+         * return normal negative:  mapping to un-found in father-son
+         */
+        index NodeIndexGlobal2Local(DNDS::index iNodeOther)
+        {
+            if (iNodeOther == UnInitIndex)
+                return iNodeOther;
+            DNDS::MPI_int rank;
+            DNDS::index val;
+            auto result = coords.trans.pLGhostMapping->search_indexAppend(iNodeOther, rank, val);
+            if (result)
+                return val;
+            else
+                return -1 - iNodeOther; // mapping to un-found in father-son
+        }
+
+        index NodeIndexLocal2Global(DNDS::index iNodeOther)
+        {
+            if (iNodeOther == UnInitIndex)
+                return iNodeOther;
+            if (iNodeOther < 0) // mapping to un-found in father-son
+                return -1 - iNodeOther;
+            else
+                return coords.trans.pLGhostMapping->operator()(-1, iNodeOther);
+        }
+
+        index NodeIndexLocal2Global_NoSon(index iNode)
+        {
+            if (iNode < 0 || iNode >= coords.father->Size())
+                return UnInitIndex;
+            return coords.trans.pLGlobalMapping->operator()(mpi.rank, iNode);
+        }
+
+        /**
+         * \brief
+         * return normal negative:  mapping to un-found in father
+         */
+        index NodeIndexGlobal2Local_NoSon(index iNode)
+        {
+            auto [ret, rank, val] = coords.trans.pLGlobalMapping->search(iNode);
+            DNDS_assert_info(ret, "search failed");
+            if (rank == mpi.rank)
+                return val;
+            else
+                return -1 - iNode;
+        }
+
+        /**
+         * \brief 
+         * return normal negative:  mapping to un-found in father-son
+         */
+        index CellIndexGlobal2Local(DNDS::index iCellOther)
+        {
+            if (iCellOther == UnInitIndex)
+                return iCellOther;
+            DNDS::MPI_int rank;
+            DNDS::index val;
+            auto result = cellElemInfo.trans.pLGhostMapping->search_indexAppend(iCellOther, rank, val);
+            if (result)
+                return val;
+            else
+                return -1 - iCellOther; // mapping to un-found in father-son
+        }
+
+        index CellIndexLocal2Global(DNDS::index iCellOther)
+        {
+            if (iCellOther == UnInitIndex)
+                return iCellOther;
+            if (iCellOther < 0) // mapping to un-found in father-son
+                return -1 - iCellOther;
+            else
+                return cellElemInfo.trans.pLGhostMapping->operator()(-1, iCellOther);
+        }
+
+        index CellIndexLocal2Global_NoSon(index iCell)
+        {
+            if (iCell < 0 || iCell >= cell2node.father->Size())
+                return UnInitIndex;
+            return cell2node.trans.pLGlobalMapping->operator()(mpi.rank, iCell);
+        }
+
+        /**
+         * \brief
+         * return normal negative:  mapping to un-found in father
+         */
+        index CellIndexGlobal2Local_NoSon(index iCell)
+        {
+            auto [ret, rank, val] = cell2node.trans.pLGlobalMapping->search(iCell);
+            DNDS_assert_info(ret, "search failed");
+            if (rank == mpi.rank)
+                return val;
+            else
+                return -1 - iCell;
+        }
+
+        index BndIndexLocal2Global_NoSon(index iBnd)
+        {
+            if (iBnd < 0 || iBnd >= bnd2node.father->Size())
+                return UnInitIndex;
+            return bnd2node.trans.pLGlobalMapping->operator()(mpi.rank, iBnd);
+        }
+
+        void RecoverNode2CellAndNode2Bnd();
         /**
          * @brief building ghost (son) from primary (currently only cell2cell)
          * @details

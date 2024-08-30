@@ -172,7 +172,7 @@ namespace DNDS
         }
     };
 
-    typedef std::shared_ptr<MPITypePairHolder> tpMPITypePairHolder;
+    typedef ssp<MPITypePairHolder> tpMPITypePairHolder;
     /**
      * \brief wrapper of tMPI_reqVec, so that the requests are freed automatically
      */

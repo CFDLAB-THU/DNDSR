@@ -65,7 +65,7 @@ namespace DNDS::Euler
             DNDS_MAKE_SSP(JLocalLU, eval.symLU, nVars);
         }
 
-        std::shared_ptr<ODE::ImplicitDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>> ode;
+        ssp<ODE::ImplicitDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>> ode;
         auto buildDOF = [&](ArrayDOFV<nVarsFixed> &data)
         {
             vfv->BuildUDof(data, nVars);

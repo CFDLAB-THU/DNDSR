@@ -28,7 +28,7 @@ namespace DNDS::CFV
         MPI_int mRank{0};
         MPIInfo mpi;
         VRSettings settings = VRSettings{dim};
-        std::shared_ptr<Geom::UnstructuredMesh> mesh;
+        ssp<Geom::UnstructuredMesh> mesh;
         using TFTrans = std::function<void(Eigen::Ref<Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>>, Geom::t_index)>;
 
     private:
@@ -75,7 +75,7 @@ namespace DNDS::CFV
         TFTrans FTransPeriodic, FTransPeriodicBack;
 
     public:
-        VariationalReconstruction(MPIInfo nMpi, std::shared_ptr<Geom::UnstructuredMesh> nMesh)
+        VariationalReconstruction(MPIInfo nMpi, ssp<Geom::UnstructuredMesh> nMesh)
             : mpi(nMpi), mesh(nMesh)
         {
             DNDS_assert(dim == mesh->dim);

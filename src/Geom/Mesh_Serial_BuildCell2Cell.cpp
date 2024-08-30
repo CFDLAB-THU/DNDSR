@@ -293,8 +293,7 @@ namespace DNDS::Geom
         /// TODO: abstract these: invert cone (like node 2 cell -> cell 2 node) (also support operating on pair)
         /**********************************************************************************************************************/
         // getting node2cell // only primary vertices
-        std::vector<std::vector<DNDS::index>>
-            node2cell(coordSerial->Size());
+        std::vector<std::vector<DNDS::index>> node2cell(coordSerial->Size());
         // std::vector<DNDS::rowsize> node2cellSz(coordSerial->Size(), 0);
         // for (DNDS::index iCell = 0; iCell < cell2nodeSerial->Size(); iCell++)
         //     for (DNDS::rowsize iN = 0; iN < Elem::Element{(*cellElemInfoSerial)(iCell, 0).getElemType()}.GetNumVertices(); iN++)
@@ -304,6 +303,10 @@ namespace DNDS::Geom
         for (DNDS::index iCell = 0; iCell < cell2nodeSerial->Size(); iCell++)
             for (DNDS::rowsize iN = 0; iN < Elem::Element{(*cellElemInfoSerial)(iCell, 0).getElemType()}.GetNumVertices(); iN++)
                 node2cell[(*cell2nodeSerial)(iCell, iN)].push_back(iCell);
+        // if (mesh->getMPI().rank == mRank)
+        //     for (auto &row : node2cell)
+        //         if (row.size() != 3)
+        //             std::cout << "fucked not 4" << std::endl;
         // node2cellSz.clear();
         /**********************************************************************************************************************/
         if (mesh->getMPI().rank == mRank)

@@ -121,11 +121,11 @@ namespace DNDS
 
         //* non uniform data: CSR
         using t_RowStart = std::vector<index>;
-        using t_pRowStart = std::shared_ptr<t_RowStart>;
+        using t_pRowStart = ssp<t_RowStart>;
 
         //* non uniform-with max data: TABLE
         using t_RowSizes = std::vector<rowsize>;
-        using t_pRowSizes = std::shared_ptr<t_RowSizes>;
+        using t_pRowSizes = ssp<t_RowSizes>;
 
     private:
         t_pRowStart _pRowStart; // CSR   in number of T

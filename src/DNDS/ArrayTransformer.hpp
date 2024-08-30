@@ -6,15 +6,15 @@
 
 namespace DNDS
 {
-    using t_pLGlobalMapping = std::shared_ptr<GlobalOffsetsMapping>;
-    using t_pLGhostMapping = std::shared_ptr<OffsetAscendIndexMapping>; // TODO: change to unique_ptr and modify corresponding copy constructor/assigner
+    using t_pLGlobalMapping = ssp<GlobalOffsetsMapping>;
+    using t_pLGhostMapping = ssp<OffsetAscendIndexMapping>; // TODO: change to unique_ptr and modify corresponding copy constructor/assigner
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ParArray : public Array<T, _row_size, _row_max, _align>
     {
     public:
         using TArray = Array<T, _row_size, _row_max, _align>;
-        using t_pArray = std::shared_ptr<TArray>;
+        using t_pArray = ssp<TArray>;
         static const DataLayout _dataLayout = TArray::_dataLayout;
 
         using TArray::Array;
@@ -47,7 +47,12 @@ namespace DNDS
             AssertDataType();
         }
 
-        MPIInfo getMPI()
+        MPIInfo &getMPI()
+        {
+            return mpi;
+        }
+
+        const MPIInfo &getMPI() const
         {
             return mpi;
         }
@@ -149,7 +154,7 @@ namespace DNDS
         // static const rowsize _row_size = TArray::rs;
         // static const rowsize _row_max = TArray::rm;
 
-        using t_pArray = std::shared_ptr<TArray>;
+        using t_pArray = ssp<TArray>;
         static const DataLayout _dataLayout = TArray::_dataLayout;
 
         /*********************************/
@@ -163,8 +168,8 @@ namespace DNDS
 
         t_pLGlobalMapping pLGlobalMapping; // reference from father
 
-        std::shared_ptr<tMPI_typePairVec> pPushTypeVec;
-        std::shared_ptr<tMPI_typePairVec> pPullTypeVec;
+        ssp<tMPI_typePairVec> pPushTypeVec;
+        ssp<tMPI_typePairVec> pPullTypeVec;
 
         // ** comm aux info: comm running structures **
         ssp<MPIReqHolder> PushReqVec;
@@ -241,7 +246,7 @@ namespace DNDS
                 mpi);
         }
 
-        /** @brief create ghost by pushing data
+        /** @brief create ghost by pushing data, son is resized
          * @details
          * pulling data indicates the data distributed in father (received in pushing operation)
          * CSR(pushingIndexLocal,pushStarts) indicates the local indices in father, for each rank to push from or pull to
@@ -265,6 +270,7 @@ namespace DNDS
         /******************************************************************************************************************************/
         /**
          * \brief get real element byte info into account, with ghost indexer and comm types built, need two mappings
+         * son is resized
          * \pre has pLGlobalMapping pLGhostMapping, and resize the son
          * \post my indexer pPullTypeVec pPushTypeVec established
          */
@@ -498,7 +504,7 @@ namespace DNDS
                     auto dtypeInfo = (*pPullTypeVec)[ip];
                     MPI_int rankOther = dtypeInfo.first;
                     MPI_int tag = rankOther + mpi.rank;
-                    
+
 #ifndef ARRAY_COMM_USE_BUFFERED_SEND
                     // MPI_Ssend_init
                     MPI_Send_init

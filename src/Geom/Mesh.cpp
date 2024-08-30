@@ -454,6 +454,165 @@ namespace DNDS::Geom
         return hasBad == 0;
     }
 
+    using tIndexMapFunc = std::function<index(index)>;
+
+    static void GeneralCell2NodeToNode2Cell(
+        tCoordPair &coords, tAdjPair &cell2node, tAdjPair &node2cell,
+        const tIndexMapFunc &CellIndexLocal2Global_NoSon,
+        const tIndexMapFunc &NodeIndexLocal2Global_NoSon)
+    {
+        const auto &mpi = coords.father->getMPI();
+        std::unordered_set<index> ghostNodesCompactSet;
+        std::vector<index> ghostNodesCompact;
+        std::unordered_map<index, std::unordered_set<index>> node2CellLocalRecord;
+
+        for (index iCell = 0; iCell < cell2node.father->Size(); iCell++)
+            for (auto iNode : cell2node[iCell])
+            {
+                auto [ret, rank, val] = coords.trans.pLGlobalMapping->search(iNode);
+                DNDS_assert_info(ret, "search failed");
+                if (rank != mpi.rank)
+                    ghostNodesCompact.push_back(iNode), ghostNodesCompactSet.insert(iNode);
+                node2CellLocalRecord[iNode].insert(CellIndexLocal2Global_NoSon(iCell));
+            }
+
+        // MPI_Barrier(mpi.comm);
+        // std::cout << "here2 " << std::endl;
+
+        tAdj node2cellPast; // + node2cell * a triplet to deal with reverse inserting
+        DNDS_MAKE_SSP(node2cell.father, mpi);
+        DNDS_MAKE_SSP(node2cell.son, mpi);
+        DNDS_MAKE_SSP(node2cellPast, mpi);
+        //* fill into father
+        node2cell.father->Resize(coords.father->Size());
+        for (index iNode = 0; iNode < coords.father->Size(); iNode++)
+        {
+            index iNodeG = NodeIndexLocal2Global_NoSon(iNode);
+            if (node2CellLocalRecord.count(iNodeG))
+            {
+                node2cell.ResizeRow(iNode, node2CellLocalRecord[iNodeG].size());
+                rowsize in2c = 0;
+                for (auto v : node2CellLocalRecord[iNodeG])
+                    node2cell(iNode, in2c++) = v;
+            }
+        }
+        node2cell.TransAttach();
+        node2cell.trans.createFatherGlobalMapping();
+        node2cell.trans.createGhostMapping(ghostNodesCompact);
+        //* fill into son
+        node2cell.son->Resize(node2cell.trans.pLGhostMapping->ghostIndex.size());
+        // std::unordered_set<index> touched; // only used for checking
+        for (auto &[k, s] : node2CellLocalRecord)
+        {
+            MPI_int rank{-1};
+            index val{-1};
+            if (!node2cell.trans.pLGhostMapping->search(k, rank, val))
+                DNDS_assert_info(false, "search failed");
+            if (rank >= 0)
+            {
+                node2cell.son->ResizeRow(val, s.size());
+                rowsize in2c = 0;
+                for (auto v : s)
+                    node2cell.son->operator()(val, in2c++) = v;
+                // touched.insert(val);
+            }
+        }
+        // DNDS_assert(touched.size() == node2cell.son->Size());
+
+        // node2cell.trans.pLGhostMapping->pushingIndexGlobal; // where to receive in a push
+        DNDS::ArrayTransformerType<tAdj::element_type>::Type node2cellPastTrans;
+        node2cellPastTrans.setFatherSon(node2cell.son, node2cellPast);
+        node2cellPastTrans.createFatherGlobalMapping();
+        std::vector<index> pushSonSeries(node2cell.son->Size());
+        for (index i = 0; i < node2cell.son->Size(); i++)
+            pushSonSeries[i] = i;
+        node2cellPastTrans.createGhostMapping(pushSonSeries, node2cell.trans.pLGhostMapping->ghostStart);
+        node2cellPastTrans.createMPITypes();
+
+        node2cellPastTrans.pullOnce();
+        DNDS_assert(node2cell.trans.pLGhostMapping->ghostIndex.size() == node2cell.son->Size());
+        DNDS_assert(node2cell.trans.pLGhostMapping->pushingIndexGlobal.size() == node2cellPast->Size());
+        // * this state of triplet: node2cell.father - node2cell.son - node2cellPast forms a "unique pushing" for the pair node2cell
+        for (index i = 0; i < node2cellPast->Size(); i++)
+        {
+            index iNodeG = node2cell.trans.pLGhostMapping->pushingIndexGlobal[i]; //?should be right
+            for (auto iCell : (*node2cellPast)[i])
+                node2CellLocalRecord[iNodeG].insert(iCell);
+        }
+        // MPISerialDo(
+        //     mpi,
+        //     [&]()
+        //     {
+        //         for (auto &[k, s] : node2CellLocalRecord)
+        //         {
+        //             if (NodeIndexGlobal2Local_NoSon(k) >= 0 && s.size() != 4)
+        //                 std::cout << k << ", " << s.size() << "; " << std::flush;
+        //         }
+        //         std::cout << std::endl;
+        //     });
+
+        // reset pair
+        DNDS_MAKE_SSP(node2cell.father, mpi);
+        DNDS_MAKE_SSP(node2cell.son, mpi);
+        //* fill into father
+        node2cell.father->Resize(coords.father->Size());
+        for (index iNode = 0; iNode < coords.father->Size(); iNode++)
+        {
+            index iNodeG = NodeIndexLocal2Global_NoSon(iNode);
+            if (node2CellLocalRecord.count(iNodeG))
+            {
+                node2cell.ResizeRow(iNode, node2CellLocalRecord[iNodeG].size());
+                rowsize in2c = 0;
+                for (auto v : node2CellLocalRecord[iNodeG])
+                    node2cell(iNode, in2c++) = v;
+            }
+        }
+    }
+
+    void UnstructuredMesh::RecoverNode2CellAndNode2Bnd()
+    {
+        DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert(coords.father);
+        DNDS_assert(cell2node.father);
+        DNDS_assert(bnd2node.father);
+
+        /*****************************************************/
+        // * first recover node2cell
+
+        coords.TransAttach();
+        coords.trans.createFatherGlobalMapping(); // for NodeIndexLocal2Global_NoSon
+        cell2node.TransAttach();
+        cell2node.trans.createFatherGlobalMapping(); // for CellIndexLocal2Global_NoSon
+        GeneralCell2NodeToNode2Cell(
+            coords, cell2node, node2cell,
+            [this](index v)
+            { return this->CellIndexLocal2Global_NoSon(v); },
+            [this](index v)
+            { return this->NodeIndexLocal2Global_NoSon(v); });
+
+        bnd2node.TransAttach();
+        bnd2node.trans.createFatherGlobalMapping(); // for BndIndexLocal2Global_NoSon
+        GeneralCell2NodeToNode2Cell(
+            coords, bnd2node, node2bnd,
+            [this](index v)
+            { return this->BndIndexLocal2Global_NoSon(v); },
+            [this](index v)
+            { return this->NodeIndexLocal2Global_NoSon(v); });
+        // if (mpi.rank == 0)
+        // {
+        //     for (index i = 0; i < node2cell.father->Size(); i++)
+        //         std::cout << node2cell.RowSize(i) - 4 << std::endl;
+        //     for (index i = 0; i < node2bnd.father->Size(); i++)
+        //         std::cout << node2bnd.RowSize(i) + 10 << std::endl;
+        // }
+
+        // node2cell.TransAttach();
+        // node2cell.trans.createFatherGlobalMapping();
+        // node2cell.trans.createGhostMapping(ghostNodesCompact);
+        // node2cell.trans.createMPITypes();
+        // node2cell.trans.pullOnce();
+    }
+
     void UnstructuredMesh::
         BuildGhostPrimary()
     {
@@ -572,56 +731,25 @@ namespace DNDS::Geom
 
         /**********************************/
         // convert bnd2cell, bnd2node, cell2cell, cell2node ptrs global to local
-        auto CellIndexGlobal2Local = [&](DNDS::index &iCellOther)
-        {
-            if (iCellOther == UnInitIndex)
-                return;
-            DNDS::MPI_int rank;
-            DNDS::index val;
-            // if (!cell2cell.trans.pLGlobalMapping->search(iCellOther, rank, val))
-            //     DNDS_assert_info(false, "search failed");
-            // if (rank != mpi.rank)
-            //     iCellOther = -1 - iCellOther;
-            auto result = cell2cell.trans.pLGhostMapping->search_indexAppend(iCellOther, rank, val);
-            if (result)
-                iCellOther = val;
-            else
-                iCellOther = -1 - iCellOther; // mapping to un-found in father-son
-        };
-        auto NodeIndexGlobal2Local = [&](DNDS::index &iNodeOther)
-        {
-            if (iNodeOther == UnInitIndex)
-                return;
-            DNDS::MPI_int rank;
-            DNDS::index val;
-            // if (!cell2cell.trans.pLGlobalMapping->search(iCellOther, rank, val))
-            //     DNDS_assert_info(false, "search failed");
-            // if (rank != mpi.rank)
-            //     iCellOther = -1 - iCellOther;
-            auto result = coords.trans.pLGhostMapping->search_indexAppend(iNodeOther, rank, val);
-            if (result)
-                iNodeOther = val;
-            else
-                iNodeOther = -1 - iNodeOther; // mapping to un-found in father-son
-        };
-
         for (DNDS::index iCell = 0; iCell < cell2cell.Size(); iCell++)
             for (DNDS::rowsize j = 0; j < cell2cell.RowSize(iCell); j++)
-                CellIndexGlobal2Local(cell2cell(iCell, j));
+                cell2cell(iCell, j) = CellIndexGlobal2Local(cell2cell(iCell, j));
 
         for (DNDS::index iBnd = 0; iBnd < bnd2cell.Size(); iBnd++)
             for (DNDS::rowsize j = 0; j < bnd2cell.RowSize(iBnd); j++)
-                CellIndexGlobal2Local(bnd2cell(iBnd, j)), DNDS_assert(j == 0 ? bnd2cell(iBnd, j) >= 0 : true); // must be inside
+                bnd2cell(iBnd, j) = CellIndexGlobal2Local(bnd2cell(iBnd, j)),
+                               DNDS_assert(j == 0 ? bnd2cell(iBnd, j) >= 0 : true); // must be inside
 
         for (DNDS::index iCell = 0; iCell < cell2node.Size(); iCell++)
             for (DNDS::rowsize j = 0; j < cell2node.RowSize(iCell); j++)
-                NodeIndexGlobal2Local(cell2node(iCell, j)), DNDS_assert(cell2node(iCell, j) >= 0);
+                cell2node(iCell, j) = NodeIndexGlobal2Local(cell2node(iCell, j)),
+                                 DNDS_assert(cell2node(iCell, j) >= 0);
 
         for (DNDS::index iBnd = 0; iBnd < bnd2node.Size(); iBnd++)
             for (DNDS::rowsize j = 0; j < bnd2node.RowSize(iBnd); j++)
-                NodeIndexGlobal2Local(bnd2node(iBnd, j)), DNDS_assert(bnd2node(iBnd, j) >= 0);
+                bnd2node(iBnd, j) = NodeIndexGlobal2Local(bnd2node(iBnd, j)),
+                               DNDS_assert(bnd2node(iBnd, j) >= 0);
         /**********************************/
-
         adjPrimaryState = Adj_PointToLocal;
     }
 
@@ -633,41 +761,24 @@ namespace DNDS::Geom
         // convert bnd2cell, bnd2node, cell2cell, cell2node ptrs local to global
         /**********************************/
         // convert bnd2cell, bnd2node, cell2cell, cell2node ptrs global to local
-        auto CellIndexLocal2Global = [&](DNDS::index &iCellOther)
-        {
-            if (iCellOther == UnInitIndex)
-                return;
-            if (iCellOther < 0) // mapping to un-found in father-son
-                iCellOther = -1 - iCellOther;
-            else
-                iCellOther = cell2cell.trans.pLGhostMapping->operator()(-1, iCellOther);
-        };
-        auto NodeIndexLocal2Global = [&](DNDS::index &iNodeOther)
-        {
-            if (iNodeOther == UnInitIndex)
-                return;
-            if (iNodeOther < 0) // mapping to un-found in father-son
-                iNodeOther = -1 - iNodeOther;
-            else
-                iNodeOther = coords.trans.pLGhostMapping->operator()(-1, iNodeOther);
-        };
-
         for (DNDS::index iCell = 0; iCell < cell2cell.Size(); iCell++)
             for (DNDS::rowsize j = 0; j < cell2cell.RowSize(iCell); j++)
-                CellIndexLocal2Global(cell2cell(iCell, j));
+                cell2cell(iCell, j) = CellIndexLocal2Global(cell2cell(iCell, j));
 
         for (DNDS::index iBnd = 0; iBnd < bnd2cell.Size(); iBnd++)
             for (DNDS::rowsize j = 0; j < bnd2cell.RowSize(iBnd); j++)
-                CellIndexLocal2Global(bnd2cell(iBnd, j)), DNDS_assert(j == 0 ? bnd2cell(iBnd, j) >= 0 : true); // must be inside
+                bnd2cell(iBnd, j) = CellIndexLocal2Global(bnd2cell(iBnd, j)),
+                               DNDS_assert(j == 0 ? bnd2cell(iBnd, j) >= 0 : true); // must be inside
 
         for (DNDS::index iCell = 0; iCell < cell2node.Size(); iCell++)
             for (DNDS::rowsize j = 0; j < cell2node.RowSize(iCell); j++)
-                NodeIndexLocal2Global(cell2node(iCell, j)), DNDS_assert(cell2node(iCell, j) >= 0);
+                cell2node(iCell, j) = NodeIndexLocal2Global(cell2node(iCell, j)),
+                                 DNDS_assert(cell2node(iCell, j) >= 0);
 
         for (DNDS::index iBnd = 0; iBnd < bnd2node.Size(); iBnd++)
             for (DNDS::rowsize j = 0; j < bnd2node.RowSize(iBnd); j++)
-                NodeIndexLocal2Global(bnd2node(iBnd, j)), DNDS_assert(bnd2node(iBnd, j) >= 0);
-        /**********************************/
+                bnd2node(iBnd, j) = NodeIndexLocal2Global(bnd2node(iBnd, j)),
+                               DNDS_assert(bnd2node(iBnd, j) >= 0);
         /**********************************/
         adjPrimaryState = Adj_PointToGlobal;
     }
@@ -677,31 +788,13 @@ namespace DNDS::Geom
     {
         // needs results of BuildGhostPrimary()
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
-
         /**********************************/
         // convert cell2node ptrs global to local
-        auto NodeIndexGlobal2Local = [&](DNDS::index &iNodeOther)
-        {
-            if (iNodeOther == UnInitIndex)
-                return;
-            DNDS::MPI_int rank;
-            DNDS::index val;
-            // if (!cell2cell.trans.pLGlobalMapping->search(iCellOther, rank, val))
-            //     DNDS_assert_info(false, "search failed");
-            // if (rank != mpi.rank)
-            //     iCellOther = -1 - iCellOther;
-            auto result = coords.trans.pLGhostMapping->search_indexAppend(iNodeOther, rank, val);
-            if (result)
-                iNodeOther = val;
-            else
-                iNodeOther = -1 - iNodeOther; // mapping to un-found in father-son
-        };
-
         for (DNDS::index iCell = 0; iCell < cell2node.Size(); iCell++)
             for (DNDS::rowsize j = 0; j < cell2node.RowSize(iCell); j++)
-                NodeIndexGlobal2Local(cell2node(iCell, j)), DNDS_assert(cell2node(iCell, j) >= 0);
+                cell2node(iCell, j) = NodeIndexGlobal2Local(cell2node(iCell, j)),
+                                 DNDS_assert(cell2node(iCell, j) >= 0);
         /**********************************/
-
         adjPrimaryState = Adj_PointToLocal;
     }
 
@@ -711,19 +804,10 @@ namespace DNDS::Geom
         DNDS_assert(adjPrimaryState == Adj_PointToLocal);
         /**********************************/
         // convert cell2node ptrs local to global
-        auto NodeIndexLocal2Global = [&](DNDS::index &iNodeOther)
-        {
-            if (iNodeOther == UnInitIndex)
-                return;
-            if (iNodeOther < 0) // mapping to un-found in father-son
-                iNodeOther = -1 - iNodeOther;
-            else
-                iNodeOther = coords.trans.pLGhostMapping->operator()(-1, iNodeOther);
-        };
         for (DNDS::index iCell = 0; iCell < cell2node.Size(); iCell++)
             for (DNDS::rowsize j = 0; j < cell2node.RowSize(iCell); j++)
-                NodeIndexLocal2Global(cell2node(iCell, j)), DNDS_assert(cell2node(iCell, j) >= 0);
-        /**********************************/
+                cell2node(iCell, j) = NodeIndexLocal2Global(cell2node(iCell, j)),
+                                 DNDS_assert(cell2node(iCell, j) >= 0);
         /**********************************/
         adjPrimaryState = Adj_PointToGlobal;
     }

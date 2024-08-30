@@ -122,7 +122,7 @@ namespace DNDS
 
     typedef std::vector<rowsize> t_RowsizeVec;
     typedef std::vector<index> t_IndexVec;
-    typedef std::shared_ptr<t_IndexVec> t_pIndexVec;
+    typedef ssp<t_IndexVec> t_pIndexVec;
 
     typedef std::tuple<index, index> t_indexerPair;
 
@@ -148,6 +148,8 @@ namespace DNDS
 
     template <typename T>
     using ssp = std::shared_ptr<T>;
+
+
 /// TODO: change to template:
 #define DNDS_MAKE_SSP(ssp, ...) (ssp = std::make_shared<typename decltype(ssp)::element_type>(__VA_ARGS__))
 

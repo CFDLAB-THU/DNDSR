@@ -7,8 +7,8 @@ namespace DNDS
     struct ArrayPair
     {
         using t_self = ArrayPair<TArray>;
-        std::shared_ptr<TArray> father;
-        std::shared_ptr<TArray> son;
+        ssp<TArray> father;
+        ssp<TArray> son;
         using TTrans = typename ArrayTransformerType<TArray>::Type;
         TTrans trans;
 
