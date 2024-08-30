@@ -709,7 +709,9 @@ namespace DNDS::Euler
             {
                 using namespace std::literals;
                 auto meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
-                                   (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) + ".dir";
+                                   (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) +
+                                   (config.dataIOControl.meshDirectBisect > 0 ? "_bisect" + std::to_string(config.dataIOControl.meshDirectBisect) : ""s) +
+                                   ".dir";
                 std::filesystem::path meshOutDir{meshOutName};
                 std::filesystem::create_directories(meshOutDir);
                 std::string meshPartPath = DNDS::getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));

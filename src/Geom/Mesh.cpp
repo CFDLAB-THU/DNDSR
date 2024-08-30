@@ -737,7 +737,8 @@ namespace DNDS::Geom
             // std::cout << "RecoverCell2CellAndBnd2Cell here L1 2" << std::endl;
             if (isPeriodic && Geom::FaceIDIsPeriodic(bndElemInfo.father->operator()(i, 0).zone))
             { //! with periodic bnd, can have two cells
-                DNDS_assert(cellRecCur.size() == 2);
+                DNDS_assert_info(cellRecCur.size() == 2,
+                                 fmt::format("cellRecCur.size() is [{}]", cellRecCur.size()));
                 auto it = cellRecCur.begin();
                 iCellFound = *it;
                 ++it;

@@ -379,11 +379,12 @@ namespace DNDS::Geom
             for (int ic2f = 0; ic2f < eCellO2.GetNumFaces(); ic2f++)
             {
                 auto eFaceO2 = eCellO2.ObtainFace(ic2f);
-                std::vector<index> f2nO2;
+                std::vector<index> f2nO2, f2nO2Sorted;
                 f2nO2.resize(eFaceO2.GetNumNodes());
                 eCellO2.ExtractFaceNodes(ic2f, c2nO2, f2nO2);
-                std::sort(f2nO2.begin(), f2nO2.end());
-                if (std::includes(f2nO2.begin(), f2nO2.end(), b2nv.begin(), b2nv.end()))
+                f2nO2Sorted = f2nO2;
+                std::sort(f2nO2Sorted.begin(), f2nO2Sorted.end()); //! cannot use sorted
+                if (std::includes(f2nO2Sorted.begin(), f2nO2Sorted.end(), b2nv.begin(), b2nv.end()))
                 {
                     nFound++;
                     c2fFound = ic2f;
