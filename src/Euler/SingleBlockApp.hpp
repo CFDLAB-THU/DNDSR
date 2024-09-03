@@ -36,6 +36,8 @@ namespace DNDS::Euler
         std::string read_configPath;
         mainParser.add_argument("config").default_value("");
 
+        RegisterSignalHandler();
+
         try
         {
             mainParser.parse_args(argc, argv);

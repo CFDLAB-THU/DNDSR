@@ -15,6 +15,7 @@
 #include <functional>
 #include <locale>
 #include <fmt/core.h>
+#include <csignal>
 
 #ifdef DNDS_USE_OMP
 #include <omp.h>
@@ -63,10 +64,6 @@ static const std::string DNDS_Defines_state =
 
 #define DNDS_FMT_ARG(V) fmt::arg(#V, V)
 
-
-
-
-
 /***************/ // DNDS_assertS
 
 std::string __DNDS_getTraceString();
@@ -100,6 +97,16 @@ inline void __DNDS_assert_false_info(const char *expr, const char *file, int lin
          : __DNDS_assert_false_info(#expr, __FILE__, __LINE__, info))
 #endif
 
+extern "C" void DNDS_signal_handler(int signal);
+
+namespace DNDS
+{
+    inline void RegisterSignalHandler()
+    {
+        std::signal(SIGSEGV, DNDS_signal_handler);
+    }
+}
+
 /***************/
 
 static_assert(sizeof(uint8_t) == 1, "bad uint8_t");
@@ -120,10 +127,8 @@ namespace DNDS
 
     static const char *outputDelim = "\t";
 
-    
     template <typename T>
     using ssp = std::shared_ptr<T>;
-
 
     typedef std::vector<rowsize> t_RowsizeVec;
     typedef std::vector<index> t_IndexVec;
@@ -135,6 +140,7 @@ namespace DNDS
 
     const real UnInitReal = std::acos(-1) * 1e299 * std::sqrt(-1.0);
     const index UnInitIndex = INT64_MIN;
+    const rowsize UnInitRowsize = INT32_MIN;
 
     inline bool IsUnInitReal(real v)
     {
@@ -150,9 +156,6 @@ namespace DNDS
     const real pi = std::acos(-1);
 
     typedef Eigen::Matrix<real, -1, -1, Eigen::RowMajor> tDiFj;
-
-    
-
 
 /// TODO: change to template:
 #define DNDS_MAKE_SSP(ssp, ...) (ssp = std::make_shared<typename decltype(ssp)::element_type>(__VA_ARGS__))

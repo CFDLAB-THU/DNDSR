@@ -7,6 +7,11 @@
 #include <boost/stacktrace.hpp>
 // #include <cpptrace.hpp>
 
+extern "C" void DNDS_signal_handler(int signal)
+{
+    __DNDS_assert_false_info("", __FILE__, __LINE__, "Signal " + std::to_string(signal));
+}
+
 namespace DNDS
 {
     std::ostream *logStream;
@@ -29,7 +34,6 @@ namespace DNDS
         DISABLE_WARNING_POP
     }
 }
-
 
 /********************************/
 // workaround for cpp trace
