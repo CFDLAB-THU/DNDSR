@@ -287,6 +287,9 @@ namespace DNDS::MPI
     MPI_int Allreduce(const void *sendbuf, void *recvbuf, MPI_int count,
                       MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
 
+    MPI_int Scan(const void *sendbuf, void *recvbuf, MPI_int count,
+                 MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
+
     MPI_int Allgather(const void *sendbuf, MPI_int sendcount, MPI_Datatype sendtype,
                       void *recvbuf, MPI_int recvcount,
                       MPI_Datatype recvtype, MPI_Comm comm);

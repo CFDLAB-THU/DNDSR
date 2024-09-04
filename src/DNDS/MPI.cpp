@@ -202,6 +202,16 @@ namespace DNDS::MPI
         return ret;
     }
 
+    MPI_int Scan(const void *sendbuf, void *recvbuf, MPI_int count,
+                 MPI_Datatype datatype, MPI_Op op, MPI_Comm comm)
+    {
+        int ret{0}; //todo: add wait lazy?
+        __start_timer;
+        ret = MPI_Scan(sendbuf, recvbuf, count, datatype, op, comm);
+        __stop_timer;
+        return ret;
+    }
+
     MPI_int Allgather(const void *sendbuf, MPI_int sendcount, MPI_Datatype sendtype,
                       void *recvbuf, MPI_int recvcount,
                       MPI_Datatype recvtype, MPI_Comm comm)

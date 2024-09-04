@@ -9,7 +9,10 @@
 
 extern "C" void DNDS_signal_handler(int signal)
 {
-    __DNDS_assert_false_info("", __FILE__, __LINE__, "Signal " + std::to_string(signal));
+    std::cerr << __DNDS_getTraceString() << "\n";
+    std::cerr << "Signal " + std::to_string(signal) << std::endl;
+    std::signal(signal, SIG_DFL);
+    std::raise(signal);
 }
 
 namespace DNDS

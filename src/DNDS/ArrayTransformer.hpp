@@ -193,6 +193,7 @@ namespace DNDS
 
         void setFatherSon(const t_pArray &n_father, const t_pArray &n_son)
         {
+            DNDS_assert(n_father && n_son);
             father = n_father;
             son = n_son;
             mpi = father->getMPI();
@@ -211,6 +212,7 @@ namespace DNDS
         {
             // DNDS_assert(father && Rarray.father); // Rarray's father is not visible...
             // DNDS_assert(father->obtainTotalSize() == Rarray.father->obtainTotalSize());
+            DNDS_assert(RArrayTrans.father && father);
             DNDS_assert(RArrayTrans.pLGhostMapping && RArrayTrans.pLGlobalMapping);
             DNDS_assert(RArrayTrans.father->Size() == father->Size());
             pLGhostMapping = RArrayTrans.pLGhostMapping;

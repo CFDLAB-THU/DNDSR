@@ -12,7 +12,7 @@ namespace DNDS
         using TTrans = typename ArrayTransformerType<TArray>::Type;
         TTrans trans;
 
-        decltype(father->operator[](0)) operator[](index i) const
+        decltype(father->operator[](index(0))) operator[](index i) const
         {
             if (i >= 0 && i < father->Size())
                 return father->operator[](i);
@@ -20,7 +20,7 @@ namespace DNDS
                 return son->operator[](i - father->Size());
         }
 
-        decltype(father->operator()(0, 0)) operator()(index i, rowsize j)
+        decltype(father->operator()(index(0), rowsize(0))) operator()(index i, rowsize j)
         {
             if (i >= 0 && i < father->Size())
                 return father->operator()(i, j);

@@ -80,7 +80,7 @@ namespace DNDS::Geom
             numberAtLocal[r]++;
         std::vector<DNDS::index> numberTotal(nPart), numberPrev(nPart);
         MPI::Allreduce(numberAtLocal.data(), numberTotal.data(), nPart, DNDS::DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
-        MPI_Scan(numberAtLocal.data(), numberPrev.data(), nPart, DNDS::DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        MPI::Scan(numberAtLocal.data(), numberPrev.data(), nPart, DNDS::DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
         std::vector<DNDS::index> numberTotalPlc(nPart + 1);
         numberTotalPlc[0] = 0;
         for (DNDS::MPI_int r = 0; r < nPart; r++)
