@@ -1231,6 +1231,9 @@ namespace DNDS::Geom
         fname += ".vtkhdf";
         std::filesystem::path outFile{fname};
         std::filesystem::create_directories(outFile.parent_path() / ".");
+        if (mpi.rank == mRank)
+            if (seriesName.size())
+                updateVTKSeries(seriesName + ".vtu.series", getStringForcePath(outFile.filename()), t);
 
         herr_t herr{0};
         hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
@@ -1243,14 +1246,16 @@ namespace DNDS::Geom
 
         hid_t VTKHDF_group_id = H5Gcreate(file_id, "/VTKHDF", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-        hid_t scalar_space = H5Screate(H5S_SCALAR);
-        hid_t string_type = H5Tcreate(H5T_STRING, sizeof("UnstructuredGrid") - 1); // this is wierd
-        herr = H5Tset_strpad(string_type, H5T_STR_NULLPAD);
-        hid_t type_attr_id = H5Acreate(VTKHDF_group_id, "Type", string_type, scalar_space, H5P_DEFAULT, H5P_DEFAULT);
-        herr = H5Awrite(type_attr_id, string_type, "UnstructuredGrid");
-        H5Aclose(type_attr_id);
-        H5Tclose(string_type);
-        H5Sclose(scalar_space);
+        {
+            hid_t scalar_space = H5Screate(H5S_SCALAR);
+            hid_t string_type = H5Tcreate(H5T_STRING, sizeof("UnstructuredGrid") - 1); // this is wierd
+            herr = H5Tset_strpad(string_type, H5T_STR_NULLPAD);
+            hid_t type_attr_id = H5Acreate(VTKHDF_group_id, "Type", string_type, scalar_space, H5P_DEFAULT, H5P_DEFAULT);
+            herr = H5Awrite(type_attr_id, string_type, "UnstructuredGrid");
+            H5Aclose(type_attr_id);
+            H5Tclose(string_type);
+            H5Sclose(scalar_space);
+        }
 
         // H5LTset_attribute_string(file_id, "VTKHDF", "Type", "UnstructuredGrid");
         std::array<long long, 2>
@@ -1291,6 +1296,7 @@ namespace DNDS::Geom
             herr = H5Sclose(coordsMemspace);
         }
         /************************************************************/
+        DNDS_assert(vtkCell2nodeOffsets.size() == cell2node.father->Size() + 1);
         {
             std::array<hsize_t, 1> cell_offset_siz{cell2node.father->Size() + (mpi.rank == mpi.size - 1 ? 1 : 0)};
             std::array<hsize_t, 1> cell_offset_file_siz{numberOfCells + 1};
@@ -1322,24 +1328,124 @@ namespace DNDS::Geom
             herr = H5Sclose(cellsFileSpace);
             herr = H5Sclose(cellsMemspace);
         }
+        {
+            std::array<hsize_t, 1> cell2node_siz{vtkCell2node.size()};
+            std::array<hsize_t, 1> cell2node_file_siz{vtkCell2NodeGlobalSiz};
+            std::array<hsize_t, 1> cell2node_offset{vtkCell2nodeOffsets.front()};
+            hid_t cell2nodeMemspace = H5Screate_simple(1, cell2node_siz.data(), NULL);
+            hid_t cell2nodeFileSpace = H5Screate_simple(1, cell2node_file_siz.data(), NULL);
+            hid_t connectivity_dset_id = H5Dcreate(VTKHDF_group_id, "Connectivity", H5T_NATIVE_LLONG, cell2nodeFileSpace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            herr = H5Sclose(cell2nodeFileSpace);
+
+            cell2nodeFileSpace = H5Dget_space(connectivity_dset_id);
+            H5Sselect_hyperslab(cell2nodeFileSpace, H5S_SELECT_SET, cell2node_offset.data(), NULL, cell2node_siz.data(), NULL);
+            herr = H5Dwrite(connectivity_dset_id, H5T_NATIVE_LLONG, cell2nodeMemspace, cell2nodeFileSpace, plist_id, vtkCell2node.data());
+            herr = H5Dclose(connectivity_dset_id);
+            herr = H5Sclose(cell2nodeFileSpace);
+            herr = H5Sclose(cell2nodeMemspace);
+        }
+
         /************************************************************/
 
-        std::array<hsize_t, 1> cell2node_siz{vtkCell2node.size()};
-        std::array<hsize_t, 1> cell2node_file_siz{vtkCell2NodeGlobalSiz};
-        std::array<hsize_t, 1> cell2node_offset{vtkCell2nodeOffsets.front()};
-        hid_t cell2nodeMemspace = H5Screate_simple(1, cell2node_siz.data(), NULL);
-        hid_t cell2nodeFileSpace = H5Screate_simple(1, cell2node_file_siz.data(), NULL);
-        hid_t connectivity_dset_id = H5Dcreate(VTKHDF_group_id, "Connectivity", H5T_NATIVE_LLONG, cell2nodeFileSpace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        herr = H5Sclose(cell2nodeFileSpace);
+        {
+            std::vector<double> cellDataBuf(cell2node.father->Size() * 3);
+            hid_t CellData_group_id = H5Gcreate(VTKHDF_group_id, "CellData", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-        cell2nodeFileSpace = H5Dget_space(connectivity_dset_id);
-        H5Sselect_hyperslab(cell2nodeFileSpace, H5S_SELECT_SET, cell2node_offset.data(), NULL, cell2node_siz.data(), NULL);
-        herr = H5Dwrite(connectivity_dset_id, H5T_NATIVE_LLONG, cell2nodeMemspace, cell2nodeFileSpace, plist_id, vtkCell2node.data());
-        herr = H5Dclose(connectivity_dset_id);
-        herr = H5Sclose(cell2nodeFileSpace);
-        herr = H5Sclose(cell2nodeMemspace);
+            for (int iArr = 0; iArr < arraySiz; iArr++)
+            {
+                for (index iC = 0; iC < cell2node.father->Size(); iC++)
+                    cellDataBuf[iC] = data(iArr, iC);
 
-        /************************************************************/
+                auto arrName = names(iArr);
+                std::array<hsize_t, 1> cell_siz{cell2node.father->Size()};
+                std::array<hsize_t, 1> cell_file_siz{numberOfCells};
+                std::array<hsize_t, 1> cell_offset{vtkCellOffset};
+                hid_t cellsMemspace = H5Screate_simple(1, cell_siz.data(), NULL);
+                hid_t cellsFileSpace = H5Screate_simple(1, cell_file_siz.data(), NULL);
+                hid_t cellTypes_dset_id = H5Dcreate(CellData_group_id, arrName.c_str(), H5T_NATIVE_DOUBLE, cellsFileSpace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                cellsFileSpace = H5Dget_space(cellTypes_dset_id);
+                H5Sselect_hyperslab(cellsFileSpace, H5S_SELECT_SET, cell_offset.data(), NULL, cell_siz.data(), NULL);
+                herr = H5Dwrite(cellTypes_dset_id, H5T_NATIVE_DOUBLE, cellsMemspace, cellsFileSpace, plist_id, cellDataBuf.data());
+                herr = H5Dclose(cellTypes_dset_id);
+                herr = H5Sclose(cellsFileSpace);
+                herr = H5Sclose(cellsMemspace);
+            }
+            for (int iArr = 0; iArr < vecArraySiz; iArr++)
+            {
+                for (index iC = 0; iC < cell2node.father->Size(); iC++)
+                    for (int iRow = 0; iRow < 3; iRow++)
+                        cellDataBuf[iC * 3 + iRow] = vectorData(iArr, iC, iRow);
+
+                auto arrName = vectorNames(iArr);
+                std::array<hsize_t, 2> cell_siz{cell2node.father->Size(), 3};
+                std::array<hsize_t, 2> cell_file_siz{numberOfCells, 3};
+                std::array<hsize_t, 2> cell_offset{vtkCellOffset, 0};
+                hid_t cellsMemspace = H5Screate_simple(2, cell_siz.data(), NULL);
+                hid_t cellsFileSpace = H5Screate_simple(2, cell_file_siz.data(), NULL);
+                hid_t cellTypes_dset_id = H5Dcreate(CellData_group_id, arrName.c_str(), H5T_NATIVE_DOUBLE, cellsFileSpace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                cellsFileSpace = H5Dget_space(cellTypes_dset_id);
+                H5Sselect_hyperslab(cellsFileSpace, H5S_SELECT_SET, cell_offset.data(), NULL, cell_siz.data(), NULL);
+                herr = H5Dwrite(cellTypes_dset_id, H5T_NATIVE_DOUBLE, cellsMemspace, cellsFileSpace, plist_id, cellDataBuf.data());
+                herr = H5Dclose(cellTypes_dset_id);
+                herr = H5Sclose(cellsFileSpace);
+                herr = H5Sclose(cellsMemspace);
+            }
+
+            herr = H5Gclose(CellData_group_id);
+        }
+        if (isPeriodic)
+        {
+            DNDS_assert(coordsPeriodicRecreated.father && coordsPeriodicRecreated.father->Size() == nodeRecreated2nodeLocal.size());
+        }
+
+        {
+            index iNMax = coordOut->Size();
+            std::vector<double> nodeDataBuf(iNMax * 3);
+            hid_t PointData_group_id = H5Gcreate(VTKHDF_group_id, "PointData", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+            for (int iArr = 0; iArr < arraySizPoint; iArr++)
+            {
+                for (index iN = 0; iN < iNMax; iN++)
+                    nodeDataBuf[iN] = dataPoint(iArr, isPeriodic ? nodeRecreated2nodeLocal.at(iN) : iN);
+
+                auto arrName = namesPoint(iArr);
+                std::array<hsize_t, 2> coord_file_siz{numberOfNodes, 3};
+                std::array<hsize_t, 2> coord_offset{vtkNodeOffset, 0};
+                std::array<hsize_t, 2> coord_siz{coordOut->Size(), 3};
+                hid_t cellsMemspace = H5Screate_simple(1, coord_siz.data(), NULL);
+                hid_t cellsFileSpace = H5Screate_simple(1, coord_file_siz.data(), NULL);
+                hid_t cellTypes_dset_id = H5Dcreate(PointData_group_id, arrName.c_str(), H5T_NATIVE_DOUBLE, cellsFileSpace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                cellsFileSpace = H5Dget_space(cellTypes_dset_id);
+                H5Sselect_hyperslab(cellsFileSpace, H5S_SELECT_SET, coord_offset.data(), NULL, coord_siz.data(), NULL);
+                herr = H5Dwrite(cellTypes_dset_id, H5T_NATIVE_DOUBLE, cellsMemspace, cellsFileSpace, plist_id, nodeDataBuf.data()), DNDS_assert(herr >= 0);
+                herr = H5Dclose(cellTypes_dset_id), DNDS_assert(herr >= 0);
+                herr = H5Sclose(cellsFileSpace), DNDS_assert(herr >= 0);
+                herr = H5Sclose(cellsMemspace), DNDS_assert(herr >= 0);
+            }
+
+            for (int iArr = 0; iArr < vecArraySizPoint; iArr++)
+            {
+                for (index iN = 0; iN < iNMax; iN++)
+                    for (int iRow = 0; iRow < 3; iRow++)
+                        nodeDataBuf[iN * 3 + iRow] = vectorDataPoint(iArr, isPeriodic ? nodeRecreated2nodeLocal.at(iN) : iN, iRow);
+
+                auto arrName = vectorNamesPoint(iArr);
+                std::array<hsize_t, 2> coord_file_siz{numberOfNodes, 3};
+                std::array<hsize_t, 2> coord_offset{vtkNodeOffset, 0};
+                std::array<hsize_t, 2> coord_siz{coordOut->Size(), 3};
+                hid_t cellsMemspace = H5Screate_simple(2, coord_siz.data(), NULL);
+                hid_t cellsFileSpace = H5Screate_simple(2, coord_file_siz.data(), NULL);
+                hid_t cellTypes_dset_id = H5Dcreate(PointData_group_id, arrName.c_str(), H5T_NATIVE_DOUBLE, cellsFileSpace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                cellsFileSpace = H5Dget_space(cellTypes_dset_id);
+                H5Sselect_hyperslab(cellsFileSpace, H5S_SELECT_SET, coord_offset.data(), NULL, coord_siz.data(), NULL);
+                herr = H5Dwrite(cellTypes_dset_id, H5T_NATIVE_DOUBLE, cellsMemspace, cellsFileSpace, plist_id, nodeDataBuf.data());
+                herr = H5Dclose(cellTypes_dset_id);
+                herr = H5Sclose(cellsFileSpace);
+                herr = H5Sclose(cellsMemspace);
+            }
+
+            herr = H5Gclose(PointData_group_id);
+        }
 
         herr = H5Pclose(plist_id);
 

@@ -130,9 +130,10 @@ namespace DNDS::Geom
         std::vector<index> vtkCell2node;
         index vtkNodeOffset{-1};
         index vtkCellOffset{-1};
+        index vtkCell2NodeGlobalSiz{-1};
         tAdjPair cell2nodePeriodicRecreated;
         tCoordPair coordsPeriodicRecreated;
-        index vtkCell2NodeGlobalSiz{-1};
+        std::vector<index> nodeRecreated2nodeLocal;
 
         /// only elevation
         tCoordPair coordsElevDisp;

@@ -524,14 +524,19 @@ namespace DNDS::Geom
         coordsPeriodicRecreated.TransAttach();
         coordsPeriodicRecreated.father->Resize(nCreatedNodes + coords.father->Size());
         coordsPeriodicRecreated.trans.createFatherGlobalMapping();
+        nodeRecreated2nodeLocal.resize(coordsPeriodicRecreated.father->Size());
         for (index iN = 0; iN < coords.father->Size(); iN++) // fill the coords
         {
             coordsPeriodicRecreated[iN] = coords[iN];
+            nodeRecreated2nodeLocal[iN] = iN;
             for (uint8_t bitCur = 1; bitCur < 8; bitCur++)
             {
                 if (node2recreatedNodes(iN, rowsize(bitCur)) != UnInitIndex)
+                {
                     coordsPeriodicRecreated[node2recreatedNodes(iN, rowsize(bitCur))] =
                         periodicInfo.GetCoordByBits(coords[iN], NodePeriodicBits{bitCur});
+                    nodeRecreated2nodeLocal[node2recreatedNodes(iN, rowsize(bitCur))] = iN;
+                }
             }
         }
         for (index iN = 0; iN < coords.father->Size(); iN++) // convert node2recreatedNodes into global

@@ -698,25 +698,29 @@ namespace DNDS::Euler
                     DNDS_assert(false);
             }
 
+            double t0 = MPI_Wtime();
             mesh->RecreatePeriodicNodes();
             mesh->BuildVTKConnectivity();
             mesh->PrintParallelVTKHDFDataArray(
-                "./test", "./test", 0, 0, 0, 0, [](int)
-                { return ""; },
+                "./test", "", 5, 1, 5, 1, [](int i)
+                { return "c" + std::to_string(i); },
                 [](int, index)
                 { return 0.0; },
-                [](int)
-                { return ""; },
+                [](int i)
+                { return "cv" + std::to_string(i); },
                 [](int, index, rowsize)
-                { return 0.0; },
-                [](int)
-                { return ""; },
+                { return 1.0; },
+                [](int i)
+                { return "p" + std::to_string(i); },
                 [](int, index)
-                { return 0.0; },
-                [](int)
-                { return ""; },
+                { return 2.0; },
+                [](int i)
+                { return "pv" + std::to_string(i); },
                 [](int, index, rowsize)
-                { return 0.0; }, 0.0);
+                { return 3.0; }, 0.0);
+            double tC = MPI_Wtime() - t0;
+            if (mpi.rank == 0)
+                log() << "Time used for [PrintParallelVTKHDFDataArray]: " << tC << std::endl;
             if (config.dataIOControl.outPltMode == 0)
             {
                 mesh->AdjLocal2GlobalPrimary();
