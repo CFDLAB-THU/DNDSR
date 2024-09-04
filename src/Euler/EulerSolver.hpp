@@ -698,6 +698,25 @@ namespace DNDS::Euler
                     DNDS_assert(false);
             }
 
+            mesh->RecreatePeriodicNodes();
+            mesh->BuildVTKConnectivity();
+            mesh->PrintParallelVTKHDFDataArray(
+                "./test", "./test", 0, 0, 0, 0, [](int)
+                { return ""; },
+                [](int, index)
+                { return 0.0; },
+                [](int)
+                { return ""; },
+                [](int, index, rowsize)
+                { return 0.0; },
+                [](int)
+                { return ""; },
+                [](int, index)
+                { return 0.0; },
+                [](int)
+                { return ""; },
+                [](int, index, rowsize)
+                { return 0.0; }, 0.0);
             if (config.dataIOControl.outPltMode == 0)
             {
                 mesh->AdjLocal2GlobalPrimary();
