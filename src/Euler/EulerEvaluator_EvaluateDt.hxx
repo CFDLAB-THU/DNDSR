@@ -2,10 +2,12 @@
 #include "EulerEvaluator.hpp"
 #include "RANS_ke.hpp"
 
+#define CGAL_DISABLE_ROUNDING_MATH_CHECK // for valgrind
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/AABB_tree.h>
 #include <CGAL/AABB_traits.h>
 #include <CGAL/AABB_triangle_primitive.h>
+#undef CGAL_DISABLE_ROUNDING_MATH_CHECK
 
 namespace DNDS::Euler
 {
