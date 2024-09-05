@@ -681,9 +681,9 @@ namespace DNDS::Geom
                                     }
                                     else
                                     {
-                                        coordsOutData[(i + nNode) * 3 + 0ll] = nodesExtra.at(iN - nNode)(0);
-                                        coordsOutData[(i + nNode) * 3 + 1ll] = nodesExtra.at(iN - nNode)(1);
-                                        coordsOutData[(i + nNode) * 3 + 2ll] = nodesExtra.at(iN - nNode)(2);
+                                        coordsOutData[i * 3 + 0ll] = nodesExtra.at(iN - nNode)(0);
+                                        coordsOutData[i * 3 + 1ll] = nodesExtra.at(iN - nNode)(1);
+                                        coordsOutData[i * 3 + 2ll] = nodesExtra.at(iN - nNode)(2);
                                     }
                                 }
                                 // out << cppcodec::base64_rfc4648::encode(
