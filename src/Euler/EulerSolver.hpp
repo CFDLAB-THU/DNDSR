@@ -929,7 +929,7 @@ namespace DNDS::Euler
             nOUTS += config.dataIOControl.outCellScalarNames.size();
 
             DNDS_assert(config.dataIOControl.outAtCellData || config.dataIOControl.outAtPointData);
-            DNDS_assert(config.dataIOControl.outPltVTKFormat || config.dataIOControl.outPltTecplotFormat);
+            DNDS_assert(config.dataIOControl.outPltVTKFormat || config.dataIOControl.outPltTecplotFormat || config.dataIOControl.outPltVTKHDFFormat);
             DNDS_MAKE_SSP(outDistBnd, mpi);
             outDistBnd->Resize(meshBnd->NumCell(), nOUTSBnd);
 

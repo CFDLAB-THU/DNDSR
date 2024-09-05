@@ -1234,7 +1234,7 @@ namespace DNDS::Geom
             std::filesystem::create_directories(outFile.parent_path() / ".");
         if (mpi.rank == mRank)
             if (seriesName.size())
-                updateVTKSeries(seriesName + ".vtu.series", getStringForcePath(outFile.filename()), t);
+                updateVTKSeries(seriesName + ".vtkhdf.series", getStringForcePath(outFile.filename()), t);
 
         herr_t herr{0};
 #define H5SS DNDS_assert_info(herr >= 0, "H5 setting err")

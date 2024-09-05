@@ -33,13 +33,14 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshScale": 6.28318530717958647692528676,
+        "meshDirectBisect": 0,
         "meshFile": "../data/mesh/Uniform32_3D_Periodic.cgns",
-        "outPltName": "../data/outUnsteady/Uniform32_3D_Periodic_TGV",
-        "outLogName": "../data/outUnsteady/Uniform32_3D_Periodic_TGV",
-        "outPltMode": 0,
+        "outPltName": "../data/outUnsteady/TGV/Uniform32_3D_Periodic_TGV",
+        "outPltMode": 1,
         "readMeshMode": 0,
-        "outPltTecplotFormat": true,
-        "outPltVTKFormat": true,
+        "outPltTecplotFormat": false,
+        "outPltVTKFormat": false,
+        "outPltVTKHDFFormat": true,
         "outAtPointData": true,
         "outAtCellData": true
     },
@@ -47,8 +48,8 @@
         "nInternalRecStep": 1,
         "zeroGrads": false,
         "recLinearScheme": 0, // 0 for original SOR, 1 for GMRES
-        "nGmresSpace": 4,
-        "nGmresIter": 2,
+        "nGmresSpace": 5,
+        "nGmresIter": 10,
         "recThreshold": 1e-03,
         "nRecConsolCheck": 1
     },
@@ -61,13 +62,28 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
-        "cacheDiffBase": false,
+        "intOrder": 5,
+        "cacheDiffBase": true,
         "jacobiRelax": 1.0,
         "SORInstead": true,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
-        "normWBAP": false
+        "normWBAP": false,
+        "baseSettings": {
+            "localOrientation": false
+        },
+        "functionalSettings": {
+            "scaleType": "BaryDiff",
+            "dirWeightScheme": "HQM_OPT",
+            "geomWeightScheme": "HQM_SD",
+            // "useAnisotropicFunctional": true,
+            // "scaleMultiplier": 3.464101615137754,
+            "greenGauss1Weight": 0,
+            "volumeDifferenceWeight": 0,
+            "projectedVolumeDifferenceWeight": 0,
+            "facialFunctionalInternalFactor": 1,
+            "_tail": 0
+        }
     },
     "linearSolverControl": {
         "gmresCode": 0,
