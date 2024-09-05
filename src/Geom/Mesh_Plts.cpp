@@ -1282,13 +1282,14 @@ namespace DNDS::Geom
         std::array<hsize_t, 2> chunk_dims{hdf5OutSetting.chunkSize, 3};
         hid_t dcpl_id = H5Pcreate(H5P_DATASET_CREATE);
         herr = H5Pset_chunk(dcpl_id, 1, chunk_dims.data());
-        hdf5OutSetting.deflateLevel = 0;
+        hid_t dcpl_id_3arr = H5Pcreate(H5P_DATASET_CREATE);
+        herr = H5Pset_chunk(dcpl_id_3arr, 2, chunk_dims.data());
+#ifdef H5_HAVE_FILTER_DEFLATE
         if (hdf5OutSetting.deflateLevel > 0)
             herr = H5Pset_deflate(dcpl_id, hdf5OutSetting.deflateLevel);
-        hid_t dcpl_id_3arr = H5Pcreate(H5P_DATASET_CREATE);
         if (hdf5OutSetting.deflateLevel > 0)
             herr = H5Pset_deflate(dcpl_id_3arr, hdf5OutSetting.deflateLevel);
-        herr = H5Pset_chunk(dcpl_id_3arr, 2, chunk_dims.data());
+#endif
 
         auto H5_WriteDataset =
             [](hid_t loc, const char *name, index nGlobal, index nOffset, index nLocal,
@@ -1386,6 +1387,8 @@ namespace DNDS::Geom
         }
 
         herr = H5Pclose(plist_id);
+        herr = H5Pclose(dcpl_id);
+        herr = H5Pclose(dcpl_id_3arr);
 
         herr = H5Gclose(VTKHDF_group_id);
         herr = H5Fclose(file_id);
