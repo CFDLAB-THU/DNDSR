@@ -1237,31 +1237,35 @@ namespace DNDS::Geom
                 updateVTKSeries(seriesName + ".vtu.series", getStringForcePath(outFile.filename()), t);
 
         herr_t herr{0};
+#define H5SS DNDS_assert_info(herr >= 0, "H5 setting err")
+#define H5S_Close DNDS_assert_info(herr >= 0, "H5 closing err")
         hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
-        herr = H5Pset_fapl_mpio(plist_id, mpi.comm, MPI_INFO_NULL); // Set up file access property list with parallel I/O access
-        herr = H5Pset_all_coll_metadata_ops(plist_id, true);
-        herr = H5Pset_coll_metadata_write(plist_id, true);
+        herr = H5Pset_fapl_mpio(plist_id, mpi.comm, MPI_INFO_NULL), H5SS; // Set up file access property list with parallel I/O access
+        herr = H5Pset_all_coll_metadata_ops(plist_id, true), H5SS;
+        herr = H5Pset_coll_metadata_write(plist_id, true), H5SS;
         hid_t file_id = H5Fcreate(fname.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
-        herr = H5Pclose(plist_id);
+        DNDS_assert_info(H5I_INVALID_HID != file_id, "file open failed");
+        herr = H5Pclose(plist_id), H5S_Close;
         DNDS_assert(herr >= 0 && file_id);
 
         hid_t VTKHDF_group_id = H5Gcreate(file_id, "/VTKHDF", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        DNDS_assert_info(H5I_INVALID_HID != file_id, "group create failed");
 
         {
             hid_t scalar_space = H5Screate(H5S_SCALAR);
-            hid_t string_type = H5Tcreate(H5T_STRING, sizeof("UnstructuredGrid") - 1); // this is wierd
-            herr = H5Tset_strpad(string_type, H5T_STR_NULLPAD);
+            hid_t string_type = H5Tcreate(H5T_STRING, sizeof("UnstructuredGrid") - 1); // this is weird
+            herr |= H5Tset_strpad(string_type, H5T_STR_NULLPAD);
             hid_t type_attr_id = H5Acreate(VTKHDF_group_id, "Type", string_type, scalar_space, H5P_DEFAULT, H5P_DEFAULT);
-            herr = H5Awrite(type_attr_id, string_type, "UnstructuredGrid");
+            herr |= H5Awrite(type_attr_id, string_type, "UnstructuredGrid");
             H5Aclose(type_attr_id);
             H5Tclose(string_type);
             H5Sclose(scalar_space);
         }
+        DNDS_assert_info(herr >= 0, "h5 error");
 
         // H5LTset_attribute_string(file_id, "VTKHDF", "Type", "UnstructuredGrid");
-        std::array<long long, 2>
-            version{1, 0};
-        H5LTset_attribute_long_long(file_id, "VTKHDF", "Version", version.data(), 2);
+        std::array<long long, 2> version{1, 0};
+        herr |= H5LTset_attribute_long_long(file_id, "VTKHDF", "Version", version.data(), 2);
 
         if (isPeriodic)
             DNDS_assert(coordsPeriodicRecreated.father);
@@ -1273,17 +1277,19 @@ namespace DNDS::Geom
         long long numberOfCells = cell2node.father->globalSize();
         long long numberOfConnectivity = vtkCell2NodeGlobalSiz;
         std::array<hsize_t, 1> numberSiz{1};
-        H5LTmake_dataset(VTKHDF_group_id, "NumberOfCells", 1, numberSiz.data(), H5T_NATIVE_LLONG, &numberOfCells);
-        H5LTmake_dataset(VTKHDF_group_id, "NumberOfPoints", 1, numberSiz.data(), H5T_NATIVE_LLONG, &numberOfNodes);
-        H5LTmake_dataset(VTKHDF_group_id, "NumberOfConnectivityIds", 1, numberSiz.data(), H5T_NATIVE_LLONG, &numberOfConnectivity);
+        herr |= H5LTmake_dataset(VTKHDF_group_id, "NumberOfCells", 1, numberSiz.data(), H5T_NATIVE_LLONG, &numberOfCells);
+        herr |= H5LTmake_dataset(VTKHDF_group_id, "NumberOfPoints", 1, numberSiz.data(), H5T_NATIVE_LLONG, &numberOfNodes);
+        herr |= H5LTmake_dataset(VTKHDF_group_id, "NumberOfConnectivityIds", 1, numberSiz.data(), H5T_NATIVE_LLONG, &numberOfConnectivity);
+        DNDS_assert(herr >= 0);
 
         plist_id = H5Pcreate(H5P_DATASET_XFER);
-        H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+        herr |= H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
         std::array<hsize_t, 2> chunk_dims{hdf5OutSetting.chunkSize, 3};
         hid_t dcpl_id = H5Pcreate(H5P_DATASET_CREATE);
-        herr = H5Pset_chunk(dcpl_id, 1, chunk_dims.data());
+        herr |= H5Pset_chunk(dcpl_id, 1, chunk_dims.data());
         hid_t dcpl_id_3arr = H5Pcreate(H5P_DATASET_CREATE);
-        herr = H5Pset_chunk(dcpl_id_3arr, 2, chunk_dims.data());
+        herr |= H5Pset_chunk(dcpl_id_3arr, 2, chunk_dims.data());
+        DNDS_assert_info(herr >= 0, "h5 error");
 #ifdef H5_HAVE_FILTER_DEFLATE
         if (hdf5OutSetting.deflateLevel > 0)
             herr = H5Pset_deflate(dcpl_id, hdf5OutSetting.deflateLevel);
@@ -1304,13 +1310,15 @@ namespace DNDS::Geom
             hid_t memSpace = H5Screate_simple(rank, siz.data(), NULL);
             hid_t fileSpace = H5Screate_simple(rank, ranksFull.data(), NULL);
             hid_t dset_id = H5Dcreate(loc, name, file_dataType, fileSpace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+            DNDS_assert_info(H5I_INVALID_HID != dset_id, "dataset create failed");
             herr = H5Sclose(fileSpace);
             fileSpace = H5Dget_space(dset_id);
-            H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), NULL, siz.data(), NULL);
-            herr = H5Dwrite(dset_id, mem_dataType, memSpace, fileSpace, plist_id, buf);
-            herr = H5Dclose(dset_id);
-            herr = H5Sclose(fileSpace);
-            herr = H5Sclose(memSpace);
+            herr |= H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), NULL, siz.data(), NULL);
+            herr |= H5Dwrite(dset_id, mem_dataType, memSpace, fileSpace, plist_id, buf);
+            herr |= H5Dclose(dset_id);
+            herr |= H5Sclose(fileSpace);
+            herr |= H5Sclose(memSpace);
+            DNDS_assert_info(herr >= 0, "h5 error");
         };
         /************************************************************/
         H5_WriteDataset(VTKHDF_group_id, "Points", numberOfNodes, vtkNodeOffset, coordOut->Size(),
@@ -1329,6 +1337,7 @@ namespace DNDS::Geom
         {
             std::vector<double> cellDataBuf(cell2node.father->Size() * 3);
             hid_t CellData_group_id = H5Gcreate(VTKHDF_group_id, "CellData", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            DNDS_assert_info(H5I_INVALID_HID != CellData_group_id, "group create failed");
 
             for (int iArr = 0; iArr < arraySiz; iArr++)
             {
@@ -1350,7 +1359,7 @@ namespace DNDS::Geom
                                 H5T_NATIVE_DOUBLE, H5T_NATIVE_DOUBLE, plist_id, dcpl_id_3arr, cellDataBuf.data(), 3);
             }
 
-            herr = H5Gclose(CellData_group_id);
+            herr = H5Gclose(CellData_group_id), H5S_Close;
         }
         if (isPeriodic)
         {
@@ -1361,6 +1370,7 @@ namespace DNDS::Geom
             index iNMax = coordOut->Size();
             std::vector<double> nodeDataBuf(iNMax * 3);
             hid_t PointData_group_id = H5Gcreate(VTKHDF_group_id, "PointData", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            DNDS_assert_info(H5I_INVALID_HID != PointData_group_id, "group create failed");
 
             for (int iArr = 0; iArr < arraySizPoint; iArr++)
             {
@@ -1383,14 +1393,14 @@ namespace DNDS::Geom
                                 H5T_NATIVE_DOUBLE, H5T_NATIVE_DOUBLE, plist_id, dcpl_id_3arr, nodeDataBuf.data(), 3);
             }
 
-            herr = H5Gclose(PointData_group_id);
+            herr = H5Gclose(PointData_group_id), H5S_Close;
         }
 
-        herr = H5Pclose(plist_id);
-        herr = H5Pclose(dcpl_id);
-        herr = H5Pclose(dcpl_id_3arr);
+        herr = H5Pclose(plist_id), H5S_Close;
+        herr = H5Pclose(dcpl_id), H5S_Close;
+        herr = H5Pclose(dcpl_id_3arr), H5S_Close;
 
-        herr = H5Gclose(VTKHDF_group_id);
-        herr = H5Fclose(file_id);
+        herr = H5Gclose(VTKHDF_group_id), H5S_Close;
+        herr = H5Fclose(file_id), H5S_Close;
     }
 }

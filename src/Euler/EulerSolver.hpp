@@ -263,11 +263,14 @@ namespace DNDS::Euler
                 int outPltMode = 0;   // 0 = serial, 1 = dist plt
                 int readMeshMode = 0; // 0 = serial cgns, 1 = dist json
                 bool outPltTecplotFormat = true;
-                bool outPltVTKFormat = true;
+                bool outPltVTKFormat = false;
+                bool outPltVTKHDFFormat = false;
                 bool outAtPointData = true;
                 bool outAtCellData = true;
                 int nASCIIPrecision = 5;
                 std::string vtuFloatEncodeMode = "binary";
+                int hdfChunkSize = 256;
+                int hdfDeflateLevel = 0;
                 bool outVolumeData = true;
                 bool outBndData = false;
 
@@ -307,10 +310,12 @@ namespace DNDS::Euler
                     readMeshMode,
                     outPltTecplotFormat,
                     outPltVTKFormat,
+                    outPltVTKHDFFormat,
                     outAtPointData,
                     outAtCellData,
                     nASCIIPrecision,
                     vtuFloatEncodeMode,
+                    hdfChunkSize, hdfDeflateLevel,
                     outVolumeData,
                     outBndData,
                     outCellScalarNames,
@@ -698,9 +703,6 @@ namespace DNDS::Euler
                     DNDS_assert(false);
             }
 
-            double t0 = MPI_Wtime();
-            mesh->RecreatePeriodicNodes();
-            mesh->BuildVTKConnectivity();
             if (config.dataIOControl.outPltMode == 0)
             {
                 mesh->AdjLocal2GlobalPrimary();
@@ -830,63 +832,10 @@ namespace DNDS::Euler
                 reader->coordSerialOutTrans.pullOnce(),
                     readerBnd->coordSerialOutTrans.pullOnce();
 
-            {
-                MPI::Barrier(mpi.comm);
-                {
-                    if (mpi.rank == 0)
-                        log() << "start output" << std::endl;
-                    mesh->PrintParallelVTKHDFDataArray(
-                        "./test", "", 5, 1, 5, 1, [](int i)
-                        { return "c" + std::to_string(i); },
-                        [](int, index)
-                        { return 0.0; },
-                        [](int i)
-                        { return "cv" + std::to_string(i); },
-                        [](int, index, rowsize)
-                        { return 1.0; },
-                        [](int i)
-                        { return "p" + std::to_string(i); },
-                        [](int, index)
-                        { return 2.0; },
-                        [](int i)
-                        { return "pv" + std::to_string(i); },
-                        [](int, index, rowsize)
-                        { return 3.0; }, 0.0);
-                    double tC = MPI_Wtime() - t0;
-                    MPI::AllreduceOneReal(tC, MPI_SUM, mpi);
-                    tC /= mpi.size;
-                    if (mpi.rank == 0)
-                        log() << "Time used for [PrintParallelVTKHDFDataArray]: " << tC << std::endl;
-                }
-                MPI::Barrier(mpi.comm);
-                {
-                    if (mpi.rank == 0)
-                        log() << "start output" << std::endl;
-                    reader->SetVTKFloatEncodeMode("binary");
-                    reader->PrintSerialPartVTKDataArray(
-                        "./test", "", 5, 1, 5, 1, [](int i)
-                        { return "c" + std::to_string(i); },
-                        [](int, index)
-                        { return 0.0; },
-                        [](int i)
-                        { return "cv" + std::to_string(i); },
-                        [](int, index, rowsize)
-                        { return 1.0; },
-                        [](int i)
-                        { return "p" + std::to_string(i); },
-                        [](int, index)
-                        { return 2.0; },
-                        [](int i)
-                        { return "pv" + std::to_string(i); },
-                        [](int, index, rowsize)
-                        { return 3.0; }, 0.0, 1);
-                    double tC = MPI_Wtime() - t0;
-                    MPI::AllreduceOneReal(tC, MPI_SUM, mpi);
-                    tC /= mpi.size;
-                    if (mpi.rank == 0)
-                        log() << "Time used for [PrintSerialPartVTKDataArray]: " << tC << std::endl;
-                }
-            }
+            mesh->RecreatePeriodicNodes();
+            mesh->BuildVTKConnectivity();
+            meshBnd->RecreatePeriodicNodes();
+            meshBnd->BuildVTKConnectivity();
 
             DNDS_MAKE_SSP(vfv, mpi, mesh);
             vfv->SetPeriodicTransformations(

@@ -4,7 +4,7 @@
 
 namespace DNDS::Euler
 {
-    template <EulerModel model>
+    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, static const auto model = NS;)
     void EulerSolver<model>::PrintData(
         const std::string &fname,
         const std::string &fnameSeries,
@@ -15,6 +15,7 @@ namespace DNDS::Euler
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         reader->SetASCIIPrecision(config.dataIOControl.nASCIIPrecision);
         reader->SetVTKFloatEncodeMode(config.dataIOControl.vtuFloatEncodeMode);
+        mesh->SetHDF5OutSetting(config.dataIOControl.hdfChunkSize, config.dataIOControl.hdfDeflateLevel);
         const int cDim = dim;
 
         ArrayDOFV<nVarsFixed> &uOut = mode == PrintDataTimeAverage ? uAveraged : u;
@@ -328,6 +329,51 @@ namespace DNDS::Euler
                         1);
                 }
             }
+
+            if (config.dataIOControl.outPltVTKHDFFormat)
+            {
+                mesh->PrintParallelVTKHDFDataArray(
+                    fname, fnameSeries,
+                    std::max(NOUTS_C - cDim, 0), std::min(NOUTS_C, 1),
+                    std::max(NOUTSPoint_C - cDim, 0), std::min(NOUTSPoint_C, 1), //! vectors number is not cDim but 1
+                    [&](int idata)
+                    {
+                        idata = idata > 0 ? idata + cDim : 0;
+                        return names[idata]; // cellNames
+                    },
+                    [&](int idata, index iv)
+                    {
+                        idata = idata > 0 ? idata + cDim : 0;
+                        return (*outDist)[iv][idata]; // cellData
+                    },
+                    [&](int idata)
+                    {
+                        return "Velo"; // cellVecNames
+                    },
+                    [&](int idata, index iv, int idim)
+                    {
+                        return idim < cDim ? (*outDist)[iv][1 + idim] : 0.0; // cellVecData
+                    },
+                    [&](int idata)
+                    {
+                        idata = idata > 0 ? idata + cDim : 0;
+                        return namesPoint[idata]; // pointNames
+                    },
+                    [&](int idata, index iv)
+                    {
+                        idata = idata > 0 ? idata + cDim : 0;
+                        return outDistPointPair[iv][idata]; // pointData
+                    },
+                    [&](int idata)
+                    {
+                        return "Velo"; // pointVecNames
+                    },
+                    [&](int idata, index iv, int idim)
+                    {
+                        return idim < cDim ? outDistPointPair[iv][1 + idim] : 0.0; // pointVecData
+                    },
+                    tSimu);
+            }
         }
 
         if (config.dataIOControl.outBndData)
@@ -553,6 +599,53 @@ namespace DNDS::Euler
                         },
                         tSimu,
                         1);
+                }
+
+                if (config.dataIOControl.outPltVTKHDFFormat)
+                {
+                    meshBnd->PrintParallelVTKHDFDataArray(
+                        fname + "_bnd",
+                        fnameSeries + "_bnd",
+                        NOUTS_C - cDim - 3, 2,
+                        0, 0, //! vectors number is not cDim but 2
+                        [&](int idata)
+                        {
+                            idata = idata > 0 ? idata + cDim : 0;
+                            return names[idata]; // cellNames
+                        },
+                        [&](int idata, index iv)
+                        {
+                            idata = idata > 0 ? idata + cDim : 0;
+                            return (*outDistBnd)[iv][idata]; // cellData
+                        },
+                        [&](int idata)
+                        {
+                            return idata == 0 ? "Velo" : "Norm"; // cellVecNames
+                        },
+                        [&](int idata, index iv, int idim)
+                        {
+                            if (idata == 0)
+                                return idim < cDim ? (*outDistBnd)[iv][1 + idim] : 0; // cellVecData
+                            else
+                                return (*outDistBnd)[iv][nOUTSBnd - 3 + idim];
+                        },
+                        [&](int idata)
+                        {
+                            return "error"; // pointNames
+                        },
+                        [&](int idata, index iv)
+                        {
+                            return std::nan("0"); // pointData
+                        },
+                        [&](int idata)
+                        {
+                            return "error"; // pointNames
+                        },
+                        [&](int idata, index iv, int idim)
+                        {
+                            return std::nan("0"); // pointData
+                        },
+                        tSimu);
                 }
             }
             DNDS_MPI_InsertCheck(mpi, "EulerSolver<model>::PrintData === bnd output done");
