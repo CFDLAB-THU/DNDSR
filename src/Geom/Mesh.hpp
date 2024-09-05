@@ -135,6 +135,12 @@ namespace DNDS::Geom
         tCoordPair coordsPeriodicRecreated;
         std::vector<index> nodeRecreated2nodeLocal;
 
+        struct HDF5OutSetting
+        {
+            size_t chunkSize = 128;
+            int deflateLevel = 1;
+        } hdf5OutSetting;
+
         /// only elevation
         tCoordPair coordsElevDisp;
         index nTotalMoved{-1};
@@ -556,6 +562,12 @@ namespace DNDS::Geom
             const tFGetName &vectorNamesPoint,
             const tFGetVecData &vectorDataPoint,
             double t);
+
+        void SetHDF5OutSetting(size_t chunkSiz, int deflateLevel)
+        {
+            hdf5OutSetting.chunkSize = chunkSiz;
+            hdf5OutSetting.deflateLevel = deflateLevel;
+        }
     };
 
 }

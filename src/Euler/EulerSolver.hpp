@@ -831,7 +831,10 @@ namespace DNDS::Euler
                     readerBnd->coordSerialOutTrans.pullOnce();
 
             {
+                MPI::Barrier(mpi.comm);
                 {
+                    if (mpi.rank == 0)
+                        log() << "start output" << std::endl;
                     mesh->PrintParallelVTKHDFDataArray(
                         "./test", "", 5, 1, 5, 1, [](int i)
                         { return "c" + std::to_string(i); },
@@ -855,8 +858,10 @@ namespace DNDS::Euler
                     if (mpi.rank == 0)
                         log() << "Time used for [PrintParallelVTKHDFDataArray]: " << tC << std::endl;
                 }
-
+                MPI::Barrier(mpi.comm);
                 {
+                    if (mpi.rank == 0)
+                        log() << "start output" << std::endl;
                     reader->SetVTKFloatEncodeMode("binary");
                     reader->PrintSerialPartVTKDataArray(
                         "./test", "", 5, 1, 5, 1, [](int i)

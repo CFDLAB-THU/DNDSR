@@ -540,7 +540,7 @@ namespace DNDS::Geom
             }
         }
         for (index iN = 0; iN < coords.father->Size(); iN++) // convert node2recreatedNodes into global
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < node2recreatedNodes.RowSize(iN); i++)
                 if (node2recreatedNodes(iN, i) != UnInitIndex)
                     node2recreatedNodes(iN, i) = coordsPeriodicRecreated.trans.pLGlobalMapping->operator()(
                         mpi.rank, node2recreatedNodes(iN, i));
