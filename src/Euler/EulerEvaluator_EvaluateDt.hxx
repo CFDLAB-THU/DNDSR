@@ -1625,9 +1625,9 @@ namespace DNDS::Euler
         { return alphaPP[iCell](0); };
         outMap["ACond"] = [&](index iCell)
         {
-            auto A = vfv->GetCellRecMatA(iCell);
-            Eigen::MatrixXd AInv = A;
-            real aCond = HardEigen::EigenLeastSquareInverse(A, AInv);
+            auto AI = vfv->GetCellRecMatAInv(iCell);
+            Eigen::MatrixXd AIInv = AI;
+            real aCond = HardEigen::EigenLeastSquareInverse(AI, AIInv);
             return aCond;
         };
         outMap["dWall"] = [&](index iCell)

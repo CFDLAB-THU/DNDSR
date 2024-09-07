@@ -61,15 +61,18 @@ namespace DNDS::CFV
         tVMatPair cellDiffBaseCacheCent; /// @brief constructed using ConstructBaseAndWeight() //TODO *test
         tVMatPair faceDiffBaseCacheCent; /// @brief constructed using ConstructBaseAndWeight() //TODO *test
 
-        tMatsPair matrixAB;        /// @brief constructed using ConstructRecCoeff()
-        tVecsPair vectorB;         /// @brief constructed using ConstructRecCoeff()
+        tMatsPair matrixAB; /// @brief constructed using ConstructRecCoeff()
+        tVecsPair vectorB;  /// @brief constructed using ConstructRecCoeff()
+        bool needOriginalMatrix = false;
         tMatsPair matrixAAInvB;    /// @brief constructed using ConstructRecCoeff()
         tMatsPair vectorAInvB;     /// @brief constructed using ConstructRecCoeff()
         tVMatPair matrixSecondary; /// @brief constructed using ConstructRecCoeff(), secondary-rec matrices on each face
         tVMatPair matrixAHalf_GG;  /// @brief constructed using ConstructRecCoeff()
 
         std::vector<Eigen::MatrixXd> volIntCholeskyL;
+        bool needVolIntCholeskyL = false;
         std::vector<Eigen::MatrixXd> matrixACholeskyL;
+        bool needMatrixACholeskyL = false;
 
         CFVPeriodicity periodicity;
         TFTrans FTransPeriodic, FTransPeriodicBack;
@@ -254,7 +257,7 @@ namespace DNDS::CFV
 
         Geom::tPoint GetOtherCellPointFromCell(
             index iCell, index iCellOther,
-            index iFace, const Geom::tPoint& pnt)
+            index iFace, const Geom::tPoint &pnt)
         {
             if (!mesh->isPeriodic)
                 return pnt;
@@ -310,9 +313,9 @@ namespace DNDS::CFV
 
         real GetCellMaxLenScale(index iCell) { return cellMajorHBox[iCell].maxCoeff() * 2; }
 
-        auto GetCellRecMatA(index iCell)
+        auto GetCellRecMatAInv(index iCell)
         {
-            return matrixAB(iCell, 0);
+            return matrixAAInvB(iCell, 0);
         }
 
         /**
@@ -786,6 +789,10 @@ namespace DNDS::CFV
             int degree3Start = dim == 3 ? 9 : 5;
 
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> ret = uRec[iCell];
+            if (downCastMethod == 1)
+                DNDS_assert(volIntCholeskyL.size() == mesh->cell2node.father->Size());
+            if (downCastMethod == 2)
+                DNDS_assert(matrixACholeskyL.size() == mesh->cell2node.father->Size());
 
             auto toOrtho = [&]()
             {

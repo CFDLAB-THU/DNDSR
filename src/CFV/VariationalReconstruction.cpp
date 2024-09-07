@@ -299,7 +299,8 @@ namespace DNDS::CFV
                 cellDiffBaseCacheCent,
                 std::min(maxNDIFF, static_cast<int>(settings.cacheDiffBaseSize)), maxNDOF);
         }
-        volIntCholeskyL.resize(mesh->NumCellProc());
+        if (needVolIntCholeskyL)
+            volIntCholeskyL.resize(mesh->NumCellProc());
 
 #ifdef DNDS_USE_OMP
 #pragma omp parallel for
@@ -382,8 +383,9 @@ namespace DNDS::CFV
                     vInc = (D0Bj.transpose() * D0Bj);
                     vInc *= this->GetCellJacobiDet(iCell, iG);
                 });
-            volIntCholeskyL.at(iCell).resizeLike(MBiBj);
-            volIntCholeskyL.at(iCell) = MBiBj.llt().matrixL();
+            if (needVolIntCholeskyL)
+                volIntCholeskyL.at(iCell).resizeLike(MBiBj),
+                    volIntCholeskyL.at(iCell) = MBiBj.llt().matrixL();
         }
 
         /******************************/
@@ -711,23 +713,32 @@ namespace DNDS::CFV
         using namespace Geom;
         using namespace Geom::Elem;
         int maxNDOF = GetNDof<dim>(settings.maxOrder);
-        this->MakePairDefaultOnCell(matrixAB, maxNDOF - 1, maxNDOF - 1);
+        if (needOriginalMatrix)
+            this->MakePairDefaultOnCell(matrixAB, maxNDOF - 1, maxNDOF - 1);
         this->MakePairDefaultOnCell(matrixAAInvB, maxNDOF - 1, maxNDOF - 1);
-        this->MakePairDefaultOnCell(vectorB, maxNDOF - 1, 1);
+        if (needOriginalMatrix)
+            this->MakePairDefaultOnCell(vectorB, maxNDOF - 1, 1);
         this->MakePairDefaultOnCell(vectorAInvB, maxNDOF - 1, 1);
         if (settings.functionalSettings.greenGauss1Weight != 0)
             this->MakePairDefaultOnCell(matrixAHalf_GG, dim, (maxNDOF - 1));
-        matrixACholeskyL.resize(mesh->NumCellProc());
+        if (needMatrixACholeskyL)
+            matrixACholeskyL.resize(mesh->NumCellProc());
         real maxCond = 0.0;
 #ifdef DNDS_USE_OMP
 #pragma omp parallel for
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++) // only non-ghost
         {
-            matrixAB.ResizeRow(iCell, mesh->cell2face.RowSize(iCell) + 1);
+            if (needOriginalMatrix)
+                matrixAB.ResizeRow(iCell, mesh->cell2face.RowSize(iCell) + 1);
             matrixAAInvB.ResizeRow(iCell, mesh->cell2face.RowSize(iCell) + 1);
-            vectorB.ResizeRow(iCell, mesh->cell2face.RowSize(iCell));
+            if (needOriginalMatrix)
+                vectorB.ResizeRow(iCell, mesh->cell2face.RowSize(iCell));
             vectorAInvB.ResizeRow(iCell, mesh->cell2face.RowSize(iCell));
+            std::vector<Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>> local_Bs;
+            std::vector<Eigen::Vector<real, Eigen::Dynamic>> local_bs;
+            local_Bs.reserve(mesh->cell2face.RowSize(iCell));
+            local_bs.reserve(mesh->cell2face.RowSize(iCell));
 
             //*get A
             Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> A;
@@ -809,7 +820,6 @@ namespace DNDS::CFV
                 A += (AHalf_GG.transpose() * AHalf_GG) * this->GetGreenGauss1WeightOnCell(iCell);
                 matrixAHalf_GG[iCell] = AHalf_GG;
             }
-            
 
             // if (iCell == 71)
             // {
@@ -832,6 +842,7 @@ namespace DNDS::CFV
                 if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)))
                 {
                     DNDS_assert(iCellOther == UnInitIndex);
+                    local_Bs.emplace_back();
                     continue;
                     // if is periodic, then use internal //TODO!
                 }
@@ -890,9 +901,11 @@ namespace DNDS::CFV
                     //           << AHalf_GG.transpose() * BHalf_GG << std::endl;
                     B += AHalf_GG.transpose() * BHalf_GG * this->GetGreenGauss1WeightOnCell(iCell);
                 }
-                if(iCellOther == iCell) //* coincide periodic
+                if (iCellOther == iCell) //* coincide periodic
                     A -= B, B *= 0;
-                matrixAB(iCell, 1 + ic2f) = B;
+                if (needOriginalMatrix)
+                    matrixAB(iCell, 1 + ic2f) = B;
+                local_Bs.emplace_back(std::move(B));
             }
 
             //*get b
@@ -932,7 +945,9 @@ namespace DNDS::CFV
                     //           << AHalf_GG.transpose() * bHalf_GG << std::endl;
                     b += AHalf_GG.transpose() * bHalf_GG * this->GetGreenGauss1WeightOnCell(iCell);
                 }
-                vectorB(iCell, ic2f) = b;
+                if (needOriginalMatrix)
+                    vectorB(iCell, ic2f) = b;
+                local_bs.emplace_back(std::move(b));
             }
 
             // * get AInv and fill A, AInv
@@ -943,11 +958,13 @@ namespace DNDS::CFV
                 aCond = HardEigen::EigenLeastSquareInverse_Filtered(A, AInv, settings.svdTolerance, 1);
             else
                 aCond = HardEigen::EigenLeastSquareInverse(A, AInv, settings.svdTolerance);
-            matrixAB(iCell, 0) = A;
+            if (needOriginalMatrix)
+                matrixAB(iCell, 0) = A;
             matrixAAInvB(iCell, 0) = AInv;
 
             maxCond = std::max(aCond, maxCond);
-            matrixACholeskyL.at(iCell) = A.llt().matrixL();
+            if (needMatrixACholeskyL)
+                matrixACholeskyL.at(iCell) = A.llt().matrixL();
             DNDS_assert(AInv.allFinite());
 
             // * get AInvB and AInvb
@@ -963,17 +980,19 @@ namespace DNDS::CFV
                     DNDS_assert(iCellOther == UnInitIndex);
                     continue;
                 }
-                matrixAAInvB(iCell, 1 + ic2f) = AInv * matrixAB(iCell, 1 + ic2f);
-                vectorAInvB(iCell, ic2f) = AInv * vectorB(iCell, ic2f);
+                matrixAAInvB(iCell, 1 + ic2f) = AInv * local_Bs.at(ic2f);
+                vectorAInvB(iCell, ic2f) = AInv * local_bs.at(ic2f);
             }
             // std::cout << "=============" << std::endl;
             // std::cout << AInv << std::endl;
             // std::abort();
         }
-        matrixAB.CompressBoth();
+        if (needOriginalMatrix)
+            matrixAB.CompressBoth();
         matrixAAInvB.CompressBoth();
         vectorAInvB.CompressBoth();
-        vectorB.CompressBoth();
+        if (needOriginalMatrix)
+            vectorB.CompressBoth();
         matrixAHalf_GG.CompressBoth();
 
         // Get Secondary matrices
