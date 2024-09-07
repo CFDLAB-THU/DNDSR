@@ -3,6 +3,8 @@
 #include <vector>
 #include <fstream>
 
+#include <mutex>
+
 #include "Defines.hpp"
 DISABLE_WARNING_PUSH
 // disable mpicxx 's many warnings in intel oneAPI mpi's header
@@ -203,6 +205,11 @@ namespace DNDS
         bool IsDebugged();
         void MPIDebugHold(const MPIInfo &mpi);
     }
+}
+
+namespace DNDS //TODO: get a concurrency header
+{
+    extern std::mutex HDF_mutex;
 }
 
 // MPI buffer handler

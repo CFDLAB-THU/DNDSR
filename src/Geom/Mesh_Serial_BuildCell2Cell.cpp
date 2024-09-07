@@ -631,6 +631,12 @@ namespace DNDS::Geom
         index vtkCell2NodeSize = vtkCell2node.size();
         MPI::Allreduce(&vtkCell2NodeSize, &vtkCell2NodeGlobalSiz, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
 
+        index nCellsLocal = cell2node.father->Size();
+        MPI_Allreduce(&nCellsLocal, &vtkNCellGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        tCoord coordOut = isPeriodic ? coordsPeriodicRecreated.father : coords.father;
+        index nNodesLocal = coordOut->Size();
+        MPI_Allreduce(&nNodesLocal, &vtkNNodeGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+
         // std::cout << mpi.rank << " " << sumPrevVtkCellOffset << std::endl;
     }
 }

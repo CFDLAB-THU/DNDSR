@@ -390,6 +390,11 @@ namespace DNDS::MPI
     }
 }
 
+namespace DNDS // TODO: get a concurrency header
+{
+    std::mutex HDF_mutex;
+}
+
 #ifdef NDEBUG_DISABLED
 #define NDEBUG
 #undef NDEBUG_DISABLED

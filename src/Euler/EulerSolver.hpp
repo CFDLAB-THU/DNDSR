@@ -4,6 +4,8 @@
 #include <functional>
 #include <tuple>
 #include <filesystem>
+#include <mutex>
+#include <future>
 
 // #ifndef __DNDS_REALLY_COMPILING__
 // #define __DNDS_REALLY_COMPILING__
@@ -78,12 +80,17 @@ namespace DNDS::Euler
         ssp<ArrayEigenVector<Eigen::Dynamic>> outSerialPoint;
         ArrayTransformerType<ArrayEigenVector<Eigen::Dynamic>>::Type outDist2SerialTransPoint;
         ArrayPair<ArrayEigenVector<Eigen::Dynamic>> outDistPointPair;
+        static const int maxOutFutures{3};
+        std::mutex outArraysMutex;
+        std::array<std::future<void>, maxOutFutures> outFuture; // mind the order, relies on the arrays and the mutex
 
         ssp<ArrayEigenVector<Eigen::Dynamic>> outDistBnd;
         // ssp<ArrayEigenVector<Eigen::Dynamic>> outGhostBnd;
         ssp<ArrayEigenVector<Eigen::Dynamic>> outSerialBnd;
         ArrayTransformerType<ArrayEigenVector<Eigen::Dynamic>>::Type outDist2SerialTransBnd;
         // ArrayPair<ArrayEigenVector<Eigen::Dynamic>> outDistBndPair;
+        std::mutex outBndArraysMutex;
+        std::array<std::future<void>, maxOutFutures> outBndFuture; // mind the order, relies on the arrays and the mutex
 
         // std::vector<uint32_t> ifUseLimiter;
         CFV::tScalarPair ifUseLimiter;
@@ -499,6 +506,21 @@ namespace DNDS::Euler
             nOUTSBnd = nVars * 2 + 1 + 2 + 3;
 
             config = Configuration(nVars); //* important to initialize using nVars
+        }
+
+        ~EulerSolver()
+        {
+            int nBad{0};
+            do
+            {
+                nBad = 0;
+                for (auto &f : outFuture)
+                    if (f.valid() && f.wait_for(std::chrono::microseconds(10)) != std::future_status::ready)
+                        nBad++;
+                for (auto &f : outBndFuture)
+                    if (f.valid() && f.wait_for(std::chrono::microseconds(10)) != std::future_status::ready)
+                        nBad++;
+            } while (nBad);
         }
 
         /**

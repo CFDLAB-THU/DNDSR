@@ -131,6 +131,8 @@ namespace DNDS::Geom
         index vtkNodeOffset{-1};
         index vtkCellOffset{-1};
         index vtkCell2NodeGlobalSiz{-1};
+        index vtkNCellGlobal{-1};
+        index vtkNNodeGlobal{-1};
         tAdjPair cell2nodePeriodicRecreated;
         tCoordPair coordsPeriodicRecreated;
         std::vector<index> nodeRecreated2nodeLocal;

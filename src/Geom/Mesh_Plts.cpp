@@ -8,7 +8,6 @@
 #include "PointCloud.hpp"
 
 #include <hdf5.h>
-#include <hdf5_hl.h>
 
 namespace DNDS::Geom
 {
@@ -1215,6 +1214,34 @@ namespace DNDS::Geom
         }
     }
 
+    static void H5_WriteDataset(hid_t loc, const char *name, index nGlobal, index nOffset, index nLocal,
+                                hid_t file_dataType, hid_t mem_dataType, hid_t plist_id, hid_t dcpl_id, void *buf, int dim2 = -1)
+    {
+        int herr{0};
+        DNDS_assert_info(nGlobal >= 0 && nLocal >= 0 && nOffset >= 0,
+                         fmt::format("{},{},{}", nGlobal, nLocal, nOffset));
+        int rank = dim2 >= 0 ? 2 : 1;
+        std::array<hsize_t, 2> ranksFull{hsize_t(nGlobal), hsize_t(dim2)};
+        std::array<hsize_t, 2> ranksFullUnlim{H5S_UNLIMITED, hsize_t(dim2)};
+        std::array<hsize_t, 2> offset{hsize_t(nOffset), 0};
+        std::array<hsize_t, 2> siz{hsize_t(nLocal), hsize_t(dim2)};
+        hid_t memSpace = H5Screate_simple(rank, siz.data(), NULL);
+        hid_t fileSpace = H5Screate_simple(rank, ranksFull.data(), ranksFullUnlim.data());
+        hid_t dset_id = H5Dcreate(loc, name, file_dataType, fileSpace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+        DNDS_assert_info(H5I_INVALID_HID != dset_id, "dataset create failed");
+        herr = H5Sclose(fileSpace);
+        fileSpace = H5Dget_space(dset_id);
+        herr |= H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), NULL, siz.data(), NULL);
+        herr |= H5Dwrite(dset_id, mem_dataType, memSpace, fileSpace, plist_id, buf);
+        herr |= H5Dclose(dset_id);
+        herr |= H5Sclose(fileSpace);
+        herr |= H5Sclose(memSpace);
+        DNDS_assert_info(herr >= 0,
+                         "h5 error " + fmt::format(
+                                           "nGlobal {}, nOffset {}, nLocal {}",
+                                           nGlobal, nOffset, nLocal));
+    }
+
     void UnstructuredMesh::PrintParallelVTKHDFDataArray(
         std::string fname, std::string seriesName,
         int arraySiz, int vecArraySiz, int arraySizPoint, int vecArraySizPoint,
@@ -1228,6 +1255,8 @@ namespace DNDS::Geom
         const tFGetVecData &vectorDataPoint,
         double t)
     {
+        MPI_Comm commDup = MPI_COMM_NULL;
+        MPI_Comm_dup(mpi.comm, &commDup);
         fname += ".vtkhdf";
         std::filesystem::path outFile{fname};
         if (mpi.rank == mRank)
@@ -1236,11 +1265,31 @@ namespace DNDS::Geom
             if (seriesName.size())
                 updateVTKSeries(seriesName + ".vtkhdf.series", getStringForcePath(outFile.filename()), t);
 
+        if (isPeriodic)
+            DNDS_assert(coordsPeriodicRecreated.father);
+        else
+            DNDS_assert(coords.father);
+        tCoord coordOut = isPeriodic ? coordsPeriodicRecreated.father : coords.father;
+
+        // MPI::AllreduceOneIndex(nNodesLocal, MPI_SUM, mpi);
+        // long long numberOfNodes = coordOut->globalSize();
+        long long numberOfNodes = vtkNNodeGlobal;
+        DNDS_assert(cell2node.father);
+
+        // long long numberOfCells = cell2node.father->globalSize();
+        long long numberOfCells = vtkNCellGlobal;
+        long long numberOfConnectivity = vtkCell2NodeGlobalSiz;
+        // std::cout << vtkNCellGlobal << " " << vtkNNodeGlobal << " ";
+        // std::cout << numberOfCells << " " << numberOfNodes << " ";
+        // std::cout << std::endl;
+        // return;
+
         herr_t herr{0};
 #define H5SS DNDS_assert_info(herr >= 0, "H5 setting err")
 #define H5S_Close DNDS_assert_info(herr >= 0, "H5 closing err")
         hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
-        herr = H5Pset_fapl_mpio(plist_id, mpi.comm, MPI_INFO_NULL), H5SS; // Set up file access property list with parallel I/O access
+
+        herr = H5Pset_fapl_mpio(plist_id, commDup, MPI_INFO_NULL), H5SS; // Set up file access property list with parallel I/O access
         herr = H5Pset_all_coll_metadata_ops(plist_id, true), H5SS;
         herr = H5Pset_coll_metadata_write(plist_id, true), H5SS;
         hid_t file_id = H5Fcreate(fname.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
@@ -1265,21 +1314,21 @@ namespace DNDS::Geom
 
         // H5LTset_attribute_string(file_id, "VTKHDF", "Type", "UnstructuredGrid");
         std::array<long long, 2> version{1, 0};
-        herr |= H5LTset_attribute_long_long(file_id, "VTKHDF", "Version", version.data(), 2);
+        // herr |= H5LTset_attribute_long_long(file_id, "VTKHDF", "Version", version.data(), 2);
+        {
+            std::array<hsize_t, 2> dims{2, 1};
+            hid_t space = H5Screate_simple(1, dims.data(), NULL);
+            hid_t type_attr_id = H5Acreate(VTKHDF_group_id, "Version", H5T_NATIVE_LLONG, space, H5P_DEFAULT, H5P_DEFAULT);
+            herr |= H5Awrite(type_attr_id, H5T_NATIVE_LLONG, version.data());
+            H5Aclose(type_attr_id);
+            H5Sclose(space);
+        }
 
-        if (isPeriodic)
-            DNDS_assert(coordsPeriodicRecreated.father);
-        else
-            DNDS_assert(coords.father);
-        tCoord coordOut = isPeriodic ? coordsPeriodicRecreated.father : coords.father;
-        long long numberOfNodes = coordOut->globalSize();
-        DNDS_assert(cell2node.father);
-        long long numberOfCells = cell2node.father->globalSize();
-        long long numberOfConnectivity = vtkCell2NodeGlobalSiz;
         std::array<hsize_t, 1> numberSiz{1};
-        herr |= H5LTmake_dataset(VTKHDF_group_id, "NumberOfCells", 1, numberSiz.data(), H5T_NATIVE_LLONG, &numberOfCells);
-        herr |= H5LTmake_dataset(VTKHDF_group_id, "NumberOfPoints", 1, numberSiz.data(), H5T_NATIVE_LLONG, &numberOfNodes);
-        herr |= H5LTmake_dataset(VTKHDF_group_id, "NumberOfConnectivityIds", 1, numberSiz.data(), H5T_NATIVE_LLONG, &numberOfConnectivity);
+        // herr |= H5LTmake_dataset(VTKHDF_group_id, "NumberOfCells", 1, numberSiz.data(), H5T_NATIVE_LLONG, &numberOfCells);
+        // herr |= H5LTmake_dataset(VTKHDF_group_id, "NumberOfPoints", 1, numberSiz.data(), H5T_NATIVE_LLONG, &numberOfNodes);
+        // herr |= H5LTmake_dataset(VTKHDF_group_id, "NumberOfConnectivityIds", 1, numberSiz.data(), H5T_NATIVE_LLONG, &numberOfConnectivity);
+
         DNDS_assert(herr >= 0);
 
         plist_id = H5Pcreate(H5P_DATASET_XFER);
@@ -1296,31 +1345,20 @@ namespace DNDS::Geom
         if (hdf5OutSetting.deflateLevel > 0)
             herr = H5Pset_deflate(dcpl_id_3arr, hdf5OutSetting.deflateLevel);
 #endif
+        int scalarSize = mpi.rank == mRank ? 1 : 0;
+        H5_WriteDataset(VTKHDF_group_id, "NumberOfCells", 1, 0, scalarSize,
+                        H5T_NATIVE_LLONG, H5T_NATIVE_LLONG, plist_id, dcpl_id,
+                        &numberOfCells);
+        H5_WriteDataset(VTKHDF_group_id, "NumberOfPoints", 1, 0, scalarSize,
+                        H5T_NATIVE_LLONG, H5T_NATIVE_LLONG, plist_id, dcpl_id,
+                        &numberOfNodes);
+        H5_WriteDataset(VTKHDF_group_id, "NumberOfConnectivityIds", 1, 0, scalarSize,
+                        H5T_NATIVE_LLONG, H5T_NATIVE_LLONG, plist_id, dcpl_id,
+                        &numberOfConnectivity);
 
-        auto H5_WriteDataset =
-            [](hid_t loc, const char *name, index nGlobal, index nOffset, index nLocal,
-               hid_t file_dataType, hid_t mem_dataType, hid_t plist_id, hid_t dcpl_id, void *buf, int dim2 = -1)
-        {
-            int herr{0};
-            DNDS_assert(nGlobal >= 0 && nLocal >= 0 && nOffset >= 0);
-            int rank = dim2 >= 0 ? 2 : 1;
-            std::array<hsize_t, 2> ranksFull{hsize_t(nGlobal), hsize_t(dim2)};
-            std::array<hsize_t, 2> offset{hsize_t(nOffset), 0};
-            std::array<hsize_t, 2> siz{hsize_t(nLocal), hsize_t(dim2)};
-            hid_t memSpace = H5Screate_simple(rank, siz.data(), NULL);
-            hid_t fileSpace = H5Screate_simple(rank, ranksFull.data(), NULL);
-            hid_t dset_id = H5Dcreate(loc, name, file_dataType, fileSpace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
-            DNDS_assert_info(H5I_INVALID_HID != dset_id, "dataset create failed");
-            herr = H5Sclose(fileSpace);
-            fileSpace = H5Dget_space(dset_id);
-            herr |= H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), NULL, siz.data(), NULL);
-            herr |= H5Dwrite(dset_id, mem_dataType, memSpace, fileSpace, plist_id, buf);
-            herr |= H5Dclose(dset_id);
-            herr |= H5Sclose(fileSpace);
-            herr |= H5Sclose(memSpace);
-            DNDS_assert_info(herr >= 0, "h5 error");
-        };
         /************************************************************/
+        // log() << fmt::format("coordsSize {} cellSize {} ", coordOut->Size(), cell2node.father->Size());
+        // log() << fmt::format("numberOfNodes {}, numberOfCells {} numberOfCon {}", numberOfNodes, numberOfCells, numberOfConnectivity) << std::endl;
         H5_WriteDataset(VTKHDF_group_id, "Points", numberOfNodes, vtkNodeOffset, coordOut->Size(),
                         H5T_NATIVE_DOUBLE, H5T_NATIVE_DOUBLE, plist_id, dcpl_id_3arr, coordOut->data(), 3);
         /************************************************************/
@@ -1402,5 +1440,7 @@ namespace DNDS::Geom
 
         herr = H5Gclose(VTKHDF_group_id), H5S_Close;
         herr = H5Fclose(file_id), H5S_Close;
+
+        MPI_Comm_free(&commDup);
     }
 }
