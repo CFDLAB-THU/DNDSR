@@ -563,7 +563,7 @@ namespace DNDS::Geom
             const tFGetData &dataPoint,
             const tFGetName &vectorNamesPoint,
             const tFGetVecData &vectorDataPoint,
-            double t);
+            double t, MPI_Comm commDup);
 
         void SetHDF5OutSetting(size_t chunkSiz, int deflateLevel)
         {

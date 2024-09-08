@@ -1,6 +1,7 @@
 #pragma once
 
 #include <future>
+#include <hdf5.h>
 #include "EulerSolver.hpp"
 
 namespace DNDS::Euler
@@ -20,6 +21,19 @@ namespace DNDS::Euler
         const int cDim = dim;
 
         ArrayDOFV<nVarsFixed> &uOut = mode == PrintDataTimeAverage ? uAveraged : u;
+        // int nBad;
+        // do
+        // {
+        //     nBad = 0;
+        //     for (auto &f : outFuture)
+        //         if (f.valid() && f.wait_for(std::chrono::microseconds(10)) != std::future_status::ready)
+        //             nBad++;
+        //     for (auto &f : outBndFuture)
+        //         if (f.valid() && f.wait_for(std::chrono::microseconds(10)) != std::future_status::ready)
+        //             nBad++;
+        // } while (nBad);
+
+        std::vector<std::function<void()>> fOuts;
 
         if (config.dataIOControl.outVolumeData || mode == PrintDataTimeAverage)
         {
@@ -320,9 +334,10 @@ namespace DNDS::Euler
                             tSimu,
                             0);
                     };
-                    if (outFuture.at(1).valid())
-                        outFuture.at(1).wait();
-                    outFuture.at(1) = std::async(std::launch::async, outRun);
+                    // if (outFuture.at(1).valid())
+                    //     outFuture.at(1).wait();
+                    // outFuture.at(1) = std::async(std::launch::async, outRun);
+                    fOuts.push_back(outRun);
                 }
                 else if (config.dataIOControl.outPltMode == 1)
                 {
@@ -377,22 +392,26 @@ namespace DNDS::Euler
                             tSimu,
                             1);
                     };
-                    if (outFuture.at(1).valid())
-                        outFuture.at(1).wait();
-                    outFuture.at(1) = std::async(std::launch::async, outRun);
+                    // if (outFuture.at(1).valid())
+                    //     outFuture.at(1).wait();
+                    // outFuture.at(1) = std::async(std::launch::async, outRun);
+                    fOuts.push_back(outRun);
                 }
             }
 
             if (config.dataIOControl.outPltVTKHDFFormat)
             {
+                MPI_Comm commDup = MPI_COMM_NULL;
+                MPI_Comm_dup(mpi.comm, &commDup);
                 auto outRun = [mesh = mesh, reader = reader, outDist = outDist, &outDistPointPair = outDistPointPair,
                                fname, fnameSeries, NOUTS_C, NOUTSPoint_C, cDim,
                                names, namesPoint, tSimu,
-                               &outArraysMutex = outArraysMutex]()
+                               &outArraysMutex = outArraysMutex, commDup]()
                 {
-                    std::lock_guard<std::mutex> outHdfLock(HDF_mutex);
-                    std::lock_guard<std::mutex> outArraysLock(outArraysMutex);
-
+                    // std::lock_guard<std::mutex> outHdfLock(HDF_mutex);
+                    // std::lock_guard<std::mutex> outArraysLock(outArraysMutex);
+                    std::scoped_lock lock(outArraysMutex, HDF_mutex);
+                    MPI_Comm commDup1 = commDup;
                     mesh->PrintParallelVTKHDFDataArray(
                         fname, fnameSeries,
                         std::max(NOUTS_C - cDim, 0), std::min(NOUTS_C, 1),
@@ -433,14 +452,16 @@ namespace DNDS::Euler
                         {
                             return idim < cDim ? outDistPointPair[iv][1 + idim] : 0.0; // pointVecData
                         },
-                        tSimu);
+                        tSimu, commDup);
+                    MPI_Comm_free(&commDup1);
                 };
 
                 // outRun();
-                if (outFuture.at(2).valid())
-                    outFuture.at(2).wait();
-                MPI::Barrier(mpi.comm);
-                outFuture.at(2) = std::async(std::launch::async, outRun);
+                // if (outFuture.at(2).valid())
+                //     outFuture.at(2).wait();
+                // MPI::Barrier(mpi.comm);
+                // outFuture.at(2) = std::async(std::launch::async, outRun);
+                fOuts.push_back(outRun);
             }
         }
 
@@ -647,9 +668,10 @@ namespace DNDS::Euler
                             tSimu,
                             0);
                     };
-                    if (outBndFuture.at(1).valid())
-                        outBndFuture.at(1).wait();
-                    outBndFuture.at(1) = std::async(std::launch::async, outBndRun);
+                    // if (outBndFuture.at(1).valid())
+                    //     outBndFuture.at(1).wait();
+                    // outBndFuture.at(1) = std::async(std::launch::async, outBndRun);
+                    fOuts.push_back(outBndRun);
                 }
                 else if (config.dataIOControl.outPltMode == 1)
                 {
@@ -703,70 +725,101 @@ namespace DNDS::Euler
                             tSimu,
                             1);
                     };
-                    if (outBndFuture.at(1).valid())
-                        outBndFuture.at(1).wait();
-                    outBndFuture.at(1) = std::async(std::launch::async, outBndRun);
-                }
-
-                if (config.dataIOControl.outPltVTKHDFFormat)
-                {
-                    auto outBndRun = [meshBnd = meshBnd, outDistBnd = outDistBnd,
-                                      fname, fnameSeries, NOUTS_C, nOUTSBnd = nOUTSBnd, cDim, names, tSimu,
-                                      &outBndArraysMutex = outBndArraysMutex]()
-                    {
-                        std::lock_guard<std::mutex> outHdfLock(HDF_mutex);
-                        std::lock_guard<std::mutex> outBndArraysLock(outBndArraysMutex);
-                        meshBnd->PrintParallelVTKHDFDataArray(
-                            fname + "_bnd",
-                            fnameSeries + "_bnd",
-                            NOUTS_C - cDim - 3, 2,
-                            0, 0, //! vectors number is not cDim but 2
-                            [&](int idata)
-                            {
-                                idata = idata > 0 ? idata + cDim : 0;
-                                return names[idata]; // cellNames
-                            },
-                            [&](int idata, index iv)
-                            {
-                                idata = idata > 0 ? idata + cDim : 0;
-                                return (*outDistBnd)[iv][idata]; // cellData
-                            },
-                            [&](int idata)
-                            {
-                                return idata == 0 ? "Velo" : "Norm"; // cellVecNames
-                            },
-                            [&](int idata, index iv, int idim)
-                            {
-                                if (idata == 0)
-                                    return idim < cDim ? (*outDistBnd)[iv][1 + idim] : 0; // cellVecData
-                                else
-                                    return (*outDistBnd)[iv][nOUTSBnd - 3 + idim];
-                            },
-                            [](int idata)
-                            {
-                                return "error"; // pointNames
-                            },
-                            [](int idata, index iv)
-                            {
-                                return std::nan("0"); // pointData
-                            },
-                            [](int idata)
-                            {
-                                return "error"; // pointNames
-                            },
-                            [](int idata, index iv, int idim)
-                            {
-                                return std::nan("0"); // pointData
-                            },
-                            tSimu);
-                    };
-                    // if (outBndFuture.at(2).valid())
-                    //     outBndFuture.at(2).wait();
-                    // MPI::Barrier(mpi.comm);
-                    // outBndFuture.at(2) = std::async(std::launch::async, outBndRun);
-                    outBndRun();
+                    // if (outBndFuture.at(1).valid())
+                    //     outBndFuture.at(1).wait();
+                    // outBndFuture.at(1) = std::async(std::launch::async, outBndRun);
+                    fOuts.push_back(outBndRun);
                 }
             }
+
+            if (config.dataIOControl.outPltVTKHDFFormat)
+            {
+                MPI_Comm commDup = MPI_COMM_NULL;
+                MPI_Comm_dup(mpi.comm, &commDup);
+                auto outBndRun = [meshBnd = meshBnd, outDistBnd = outDistBnd,
+                                  fname, fnameSeries, NOUTS_C, nOUTSBnd = nOUTSBnd, cDim, names, tSimu,
+                                  &outBndArraysMutex = outBndArraysMutex, commDup]()
+                {
+                    // std::lock_guard<std::mutex> outHdfLock(HDF_mutex);
+                    // std::lock_guard<std::mutex> outBndArraysLock(outBndArraysMutex);
+                    // std::lock_guard<std::mutex> outBndArraysLock1(outArraysMutex);
+                    std::scoped_lock lock(outBndArraysMutex, HDF_mutex);
+                    MPI_Comm commDup1 = commDup;
+                    meshBnd->PrintParallelVTKHDFDataArray(
+                        fname + "_bnd",
+                        fnameSeries + "_bnd",
+                        NOUTS_C - cDim - 3, 2,
+                        0, 0, //! vectors number is not cDim but 2
+                        [&](int idata)
+                        {
+                            idata = idata > 0 ? idata + cDim : 0;
+                            return names[idata]; // cellNames
+                        },
+                        [&](int idata, index iv)
+                        {
+                            idata = idata > 0 ? idata + cDim : 0;
+                            return (*outDistBnd)[iv][idata]; // cellData
+                        },
+                        [&](int idata)
+                        {
+                            return idata == 0 ? "Velo" : "Norm"; // cellVecNames
+                        },
+                        [&](int idata, index iv, int idim)
+                        {
+                            if (idata == 0)
+                                return idim < cDim ? (*outDistBnd)[iv][1 + idim] : 0; // cellVecData
+                            else
+                                return (*outDistBnd)[iv][nOUTSBnd - 3 + idim];
+                        },
+                        [](int idata)
+                        {
+                            return "error"; // pointNames
+                        },
+                        [](int idata, index iv)
+                        {
+                            return std::nan("0"); // pointData
+                        },
+                        [](int idata)
+                        {
+                            return "error"; // pointNames
+                        },
+                        [](int idata, index iv, int idim)
+                        {
+                            return std::nan("0"); // pointData
+                        },
+                        tSimu, commDup);
+                    MPI_Comm_free(&commDup1);
+                };
+                // if (outBndFuture.at(2).valid())
+                //     outBndFuture.at(2).wait();
+                // MPI::Barrier(mpi.comm);
+                // outBndFuture.at(2) = std::async(std::launch::async, outBndRun);
+                fOuts.push_back(outBndRun);
+                // outBndRun();
+            }
+
+            auto runFOuts = [fOuts]()
+            {
+                for (auto &f : fOuts)
+                    f();
+            };
+
+            bool useAsyncOut = config.dataIOControl.allowAsyncPrintData;
+#ifndef H5_HAVE_THREADSAFE
+            if (config.dataIOControl.outPltVTKHDFFormat)
+                useAsyncOut = false;
+#endif
+            if (config.dataIOControl.outPltVTKHDFFormat)
+                if (MPI::GetMPIThreadLevel() < MPI_THREAD_MULTIPLE)
+                    useAsyncOut = false;
+
+            if (outSeqFuture.valid())
+                outSeqFuture.wait();
+            if (useAsyncOut)
+                outSeqFuture = std::async(std::launch::async, runFOuts);
+            else
+                runFOuts();
+
             DNDS_MPI_InsertCheck(mpi, "EulerSolver<model>::PrintData === bnd output done");
         }
     }

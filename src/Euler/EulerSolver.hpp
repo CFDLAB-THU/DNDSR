@@ -91,6 +91,7 @@ namespace DNDS::Euler
         // ArrayPair<ArrayEigenVector<Eigen::Dynamic>> outDistBndPair;
         std::mutex outBndArraysMutex;
         std::array<std::future<void>, maxOutFutures> outBndFuture; // mind the order, relies on the arrays and the mutex
+        std::future<void> outSeqFuture;
 
         // std::vector<uint32_t> ifUseLimiter;
         CFV::tScalarPair ifUseLimiter;
@@ -285,6 +286,8 @@ namespace DNDS::Euler
 
                 bool serializerSaveURec = false;
 
+                bool allowAsyncPrintData = false;
+
                 int rectifyNearPlane = 0; // 1: x 2: y 4: z
                 real rectifyNearPlaneThres = 1e-10;
 
@@ -327,6 +330,7 @@ namespace DNDS::Euler
                     outBndData,
                     outCellScalarNames,
                     serializerSaveURec,
+                    allowAsyncPrintData,
                     rectifyNearPlane, rectifyNearPlaneThres)
             } dataIOControl;
 
@@ -520,6 +524,8 @@ namespace DNDS::Euler
                 for (auto &f : outBndFuture)
                     if (f.valid() && f.wait_for(std::chrono::microseconds(10)) != std::future_status::ready)
                         nBad++;
+                if (outSeqFuture.valid() && outSeqFuture.wait_for(std::chrono::microseconds(10)) != std::future_status::ready)
+                    nBad++;
             } while (nBad);
         }
 

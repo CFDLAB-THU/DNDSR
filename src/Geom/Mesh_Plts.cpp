@@ -1,5 +1,5 @@
 #include "Mesh.hpp"
-
+#include <thread>
 #include <filesystem>
 #include "base64_rfc4648.hpp"
 #include <zlib.h>
@@ -1253,10 +1253,8 @@ namespace DNDS::Geom
         const tFGetData &dataPoint,
         const tFGetName &vectorNamesPoint,
         const tFGetVecData &vectorDataPoint,
-        double t)
+        double t, MPI_Comm commDup)
     {
-        MPI_Comm commDup = MPI_COMM_NULL;
-        MPI_Comm_dup(mpi.comm, &commDup);
         fname += ".vtkhdf";
         std::filesystem::path outFile{fname};
         if (mpi.rank == mRank)
@@ -1279,10 +1277,25 @@ namespace DNDS::Geom
         // long long numberOfCells = cell2node.father->globalSize();
         long long numberOfCells = vtkNCellGlobal;
         long long numberOfConnectivity = vtkCell2NodeGlobalSiz;
+
+        index gSize = 0;
+        index cSize = coordOut->Size();
+        MPI::Allreduce(&cSize, &gSize, 1, DNDS_MPI_INDEX, MPI_SUM, commDup);
+        long long numberOfNodes1 = gSize;
+
+        DNDS_assert(cell2node.father);
+        gSize = 0;
+        cSize = cell2node.father->Size();
+        MPI::Allreduce(&cSize, &gSize, 1, DNDS_MPI_INDEX, MPI_SUM, commDup);
+        long long numberOfCells1 = gSize;
+
+        DNDS_assert(numberOfNodes1 == numberOfNodes);
+        DNDS_assert(numberOfCells1 == numberOfCells);
         // std::cout << vtkNCellGlobal << " " << vtkNNodeGlobal << " ";
         // std::cout << numberOfCells << " " << numberOfNodes << " ";
         // std::cout << std::endl;
         // return;
+        // std::this_thread::sleep_for(std::chrono::seconds(1));
 
         herr_t herr{0};
 #define H5SS DNDS_assert_info(herr >= 0, "H5 setting err")
@@ -1440,7 +1453,5 @@ namespace DNDS::Geom
 
         herr = H5Gclose(VTKHDF_group_id), H5S_Close;
         herr = H5Fclose(file_id), H5S_Close;
-
-        MPI_Comm_free(&commDup);
     }
 }

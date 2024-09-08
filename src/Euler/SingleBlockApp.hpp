@@ -62,6 +62,8 @@ namespace DNDS::Euler
         {
             MPIInfo mpi;
             mpi.setWorld();
+            if (mpi.rank == 0)
+                log() << "Current MPI thread level: " << MPI::GetMPIThreadLevel() << std::endl;
             auto strategy = MPI::CommStrategy::Instance().GetArrayStrategy();
             Euler::EulerSolver<model> solver(mpi);
             if (mpi.rank == 0)
