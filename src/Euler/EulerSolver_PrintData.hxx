@@ -797,30 +797,29 @@ namespace DNDS::Euler
                 fOuts.push_back(outBndRun);
                 // outBndRun();
             }
-
-            auto runFOuts = [fOuts]()
-            {
-                for (auto &f : fOuts)
-                    f();
-            };
-
-            bool useAsyncOut = config.dataIOControl.allowAsyncPrintData;
-#ifndef H5_HAVE_THREADSAFE
-            if (config.dataIOControl.outPltVTKHDFFormat)
-                useAsyncOut = false;
-#endif
-            if (config.dataIOControl.outPltVTKHDFFormat)
-                if (MPI::GetMPIThreadLevel() < MPI_THREAD_MULTIPLE)
-                    useAsyncOut = false;
-
-            if (outSeqFuture.valid())
-                outSeqFuture.wait();
-            if (useAsyncOut)
-                outSeqFuture = std::async(std::launch::async, runFOuts);
-            else
-                runFOuts();
-
-            DNDS_MPI_InsertCheck(mpi, "EulerSolver<model>::PrintData === bnd output done");
         }
+        auto runFOuts = [fOuts]()
+        {
+            for (auto &f : fOuts)
+                f();
+        };
+        bool useAsyncOut = config.dataIOControl.allowAsyncPrintData;
+#ifndef H5_HAVE_THREADSAFE
+        if (config.dataIOControl.outPltVTKHDFFormat)
+            useAsyncOut = false;
+#endif
+        if (config.dataIOControl.outPltVTKHDFFormat)
+            if (MPI::GetMPIThreadLevel() < MPI_THREAD_MULTIPLE)
+                useAsyncOut = false;
+
+        // std::cout << fOuts.size() << std::endl;
+        if (outSeqFuture.valid())
+            outSeqFuture.wait();
+        if (useAsyncOut)
+            outSeqFuture = std::async(std::launch::async, runFOuts);
+        else
+            runFOuts();
+
+        DNDS_MPI_InsertCheck(mpi, "EulerSolver<model>::PrintData === bnd output done");
     }
 }
