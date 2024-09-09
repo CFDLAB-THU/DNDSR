@@ -1332,20 +1332,6 @@ namespace DNDS::Euler
                 trec = tcomm = trhs = tLim = 0.;
                 PerformanceTimer::Instance().clearAllTimer();
             }
-            if (step == nextStepOut)
-            {
-                eval.FixUMaxFilter(u);
-                PrintData(
-                    config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
-                    config.dataIOControl.outPltName + "_" + output_stamp, // physical ts series
-                    [&](index iCell)
-                    { return ode->getLatestRHS()[iCell](0); },
-                    addOutList,
-                    eval, tSimu);
-                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
-                                     u, uRec);
-                nextStepOut += config.outputControl.nDataOut;
-            }
             if (step == nextStepOutC)
             {
                 if (!(config.outputControl.lazyCoverDataOutput && (step == nextStepOut)))
@@ -1363,20 +1349,19 @@ namespace DNDS::Euler
                 }
                 nextStepOutC += config.outputControl.nDataOutC;
             }
-            if (step == nextStepOutAverage)
+            if (step == nextStepOut)
             {
-                DNDS_assert(config.timeAverageControl.enabled);
-                eval.MeanValuePrim2Cons(wAveraged, uAveraged);
-                eval.FixUMaxFilter(uAveraged);
+                eval.FixUMaxFilter(u);
                 PrintData(
-                    config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + std::to_string(step),
-                    config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp, // time average series
+                    config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
+                    config.dataIOControl.outPltName + "_" + output_stamp, // physical ts series
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
-                    eval, tSimu,
-                    PrintDataTimeAverage);
-                nextStepOutAverage += config.outputControl.nTimeAverageOut;
+                    eval, tSimu);
+                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
+                                     u, uRec);
+                nextStepOut += config.outputControl.nDataOut;
             }
             if (step == nextStepOutAverageC)
             {
@@ -1396,12 +1381,20 @@ namespace DNDS::Euler
                 }
                 nextStepOutAverageC += config.outputControl.nTimeAverageOutC;
             }
-            if (step == nextStepRestart)
+            if (step == nextStepOutAverage)
             {
-                config.restartState.iStep = step;
-                config.restartState.iStepInternal = -1;
-                PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + std::to_string(step));
-                nextStepRestart += config.outputControl.nRestartOut;
+                DNDS_assert(config.timeAverageControl.enabled);
+                eval.MeanValuePrim2Cons(wAveraged, uAveraged);
+                eval.FixUMaxFilter(uAveraged);
+                PrintData(
+                    config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + std::to_string(step),
+                    config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp, // time average series
+                    [&](index iCell)
+                    { return ode->getLatestRHS()[iCell](0); },
+                    addOutList,
+                    eval, tSimu,
+                    PrintDataTimeAverage);
+                nextStepOutAverage += config.outputControl.nTimeAverageOut;
             }
             if (step == nextStepRestartC)
             {
@@ -1412,6 +1405,13 @@ namespace DNDS::Euler
                     PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + "C");
                 }
                 nextStepRestartC += config.outputControl.nRestartOutC;
+            }
+            if (step == nextStepRestart)
+            {
+                config.restartState.iStep = step;
+                config.restartState.iStepInternal = -1;
+                PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + std::to_string(step));
+                nextStepRestart += config.outputControl.nRestartOut;
             }
             if (ifOutT)
             {
