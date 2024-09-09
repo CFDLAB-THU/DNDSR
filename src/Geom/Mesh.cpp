@@ -310,7 +310,7 @@ namespace DNDS::Geom
             TransferDataSerial2Global(cell2nodePbiSerial, mesh->cell2nodePbi.father, cell_push, cell_pushStart, mesh->getMPI());
         TransferDataSerial2Global(cellElemInfoSerial, mesh->cellElemInfo.father, cell_push, cell_pushStart, mesh->getMPI());
         if (mesh->getMPI().rank == mRank)
-            DNDS::log() << "UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Doing Trasfer Data Bnd" << std::endl;
+            DNDS::log() << "UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd" << std::endl;
         // bnds transferring
         TransferDataSerial2Global(bnd2cellSerial, mesh->bnd2cell.father, bnd_push, bnd_pushStart, mesh->getMPI());
         TransferDataSerial2Global(bnd2nodeSerial, mesh->bnd2node.father, bnd_push, bnd_pushStart, mesh->getMPI());
@@ -318,17 +318,17 @@ namespace DNDS::Geom
 
         {
             DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                              { std::cout << "[" << mesh->getMPI().rank << ": nCell " << mesh->cell2cell.father->Size() << "] " << std::flush; });
+                              { std::cout << "[" << mesh->getMPI().rank << ": nCell " << mesh->cell2cell.father->Size() << "] " << (((mesh->getMPI().rank + 1) % 10) ? "" : "\n") << std::flush; });
             MPI::Barrier(mesh->getMPI().comm);
             if (mesh->getMPI().rank == 0)
                 std::cout << std::endl;
             DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                              { std::cout << "[" << mesh->getMPI().rank << ": nNode " << mesh->coords.father->Size() << "] " << std::flush; });
+                              { std::cout << "[" << mesh->getMPI().rank << ": nNode " << mesh->coords.father->Size() << "] " << (((mesh->getMPI().rank + 1) % 10) ? "" : "\n") << std::flush; });
             MPI::Barrier(mesh->getMPI().comm);
             if (mesh->getMPI().rank == 0)
                 std::cout << std::endl;
             DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                              { std::cout << "[" << mesh->getMPI().rank << ": nBnd " << mesh->bnd2node.father->Size() << "] " << std::flush; });
+                              { std::cout << "[" << mesh->getMPI().rank << ": nBnd " << mesh->bnd2node.father->Size() << "] " << (((mesh->getMPI().rank + 1) % 10) ? "" : "\n") << std::flush; });
             MPI::Barrier(mesh->getMPI().comm);
             if (mesh->getMPI().rank == 0)
                 std::cout << std::endl;

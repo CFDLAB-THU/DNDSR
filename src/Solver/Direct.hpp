@@ -54,7 +54,7 @@ namespace DNDS::Direct
         std::vector<index> localFillOrderingOld2New;
         std::vector<index> localFillOrderingNew2Old;
 
-        SerialSymLUStructure(const MPIInfo &nMpi, index nN) : mpi(nMpi), N(nN){};
+        SerialSymLUStructure(const MPIInfo &nMpi, index nN) : mpi(nMpi), N(nN) {};
 
         index Num() const { return N; }
 
@@ -181,6 +181,7 @@ namespace DNDS::Direct
                         { log() << fmt::format("  ({}, {}/{})", mpi.rank,
                                                nnzLower + nnzUpper + this->Num(),
                                                nnzOrig)
+                                << (((mpi.rank + 1) % 10) ? "" : "\n")
                                 << std::flush; });
             MPI::Barrier(mpi.comm);
             if (mpi.rank == 0)
@@ -323,7 +324,7 @@ namespace DNDS::Direct
                     if (iPInUpperPos != -1)
                         dThis->GetDiag(i) -= dThis->GetLower(i, ikP) * dThis->GetUpper(k, iPInUpperPos);
                 }
-                
+
                 dThis->GetDiag(i) = dThis->InvertDiag(dThis->GetDiag(i)); // * note here only stores
                 /*********************/
                 // upper part
@@ -418,7 +419,7 @@ namespace DNDS::Direct
 
         void GetDiag(index i);
         void GetLower(index i, int ij);
-        void InvertDiag(const tComponent& v);
+        void InvertDiag(const tComponent &v);
 
         void InPlaceDecompose()
         {
