@@ -1,23 +1,29 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 2e-3,
-        "nTimeStep": 5000,
+        "dtImplicit": 1e-2,
+        "nTimeStep": 1000,
         "steadyQuit": false,
-        "odeCode": 0, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
+        // "odeCode": 0, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
+        "odeCode": 401,
+        "odeSetting1": 0.5,
+        "odeSetting2": 0,
+        "odeSetting3": 1.333,
+        "odeSetting4": 0,
         "tEnd": 3e+200
     },
     "outputControl": {
         "nConsoleCheck": 1,
         "nConsoleCheckInternal": 1,
         "consoleOutputMode": 0,
-        "nDataOutC": 20,
+        "nDataOutC": 50,
         "nDataOut": 100,
         "nDataOutCInternal": 200,
         "nDataOutInternal": 1000000000,
-        "tDataOut": 3e+200
+        "tDataOut": 3e+200,
+        "lazyCoverDataOutput": true
     },
     "implicitCFLControl": {
-        "CFL": 10.0,
+        "CFL": 50.0,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 2147483647,
         "nCFLRampLength": 2147483647,
@@ -25,7 +31,7 @@
         "useLocalDt": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 20,
+        "nTimeStepInternal": 40,
         "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -33,16 +39,21 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshScale": 6.28318530717958647692528676,
-        "meshDirectBisect": 0,
-        "meshFile": "../data/mesh/Uniform32_3D_Periodic.cgns",
-        "outPltName": "../data/outUnsteady/TGV/Uniform32_3D_Periodic_TGV",
+        "meshDirectBisect": 2,
+        "meshFile": "../data/mesh/Uniform64_3D_Periodic.cgns",
+        "outPltName": "../data/outUnsteady/TGV/Uniform64B2_3D_Periodic_TGV-R1-HM3-LTS-Factorial-0d5Scale/out",
         "outPltMode": 1,
         "readMeshMode": 0,
         "outPltTecplotFormat": false,
         "outPltVTKFormat": false,
         "outPltVTKHDFFormat": true,
         "outAtPointData": true,
-        "outAtCellData": true
+        "outAtCellData": true,
+        "hdfDeflateLevel": 2,
+        // "hdfChunkSize": 32768,
+        "hdfChunkSize": 131072,
+        // "hdfChunkSize": 1048576,
+        "allowAsyncPrintData": false
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
@@ -74,7 +85,8 @@
         },
         "functionalSettings": {
             "scaleType": "BaryDiff",
-            "dirWeightScheme": "HQM_OPT",
+            "scaleMultiplier": 0.5,
+            "dirWeightScheme": "Factorial",
             "geomWeightScheme": "HQM_SD",
             // "useAnisotropicFunctional": true,
             // "scaleMultiplier": 3.464101615137754,
@@ -86,9 +98,18 @@
         }
     },
     "linearSolverControl": {
+        "jacobiCode": 2,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
         "gmresCode": 0,
-        "nGmresSpace": 10,
-        "nGmresIter": 2
+        "gmresScale": 2,
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2,
+            "orderingCode": 0
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
