@@ -2,10 +2,12 @@
 #include "EulerEvaluator.hpp"
 #include "RANS_ke.hpp"
 
+#define CGAL_DISABLE_ROUNDING_MATH_CHECK // for valgrind
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/AABB_tree.h>
 #include <CGAL/AABB_traits.h>
 #include <CGAL/AABB_triangle_primitive.h>
+#undef CGAL_DISABLE_ROUNDING_MATH_CHECK
 
 namespace DNDS::Euler
 {
@@ -1623,9 +1625,9 @@ namespace DNDS::Euler
         { return alphaPP[iCell](0); };
         outMap["ACond"] = [&](index iCell)
         {
-            auto A = vfv->GetCellRecMatA(iCell);
-            Eigen::MatrixXd AInv = A;
-            real aCond = HardEigen::EigenLeastSquareInverse(A, AInv);
+            auto AI = vfv->GetCellRecMatAInv(iCell);
+            Eigen::MatrixXd AIInv = AI;
+            real aCond = HardEigen::EigenLeastSquareInverse(AI, AIInv);
             return aCond;
         };
         outMap["dWall"] = [&](index iCell)

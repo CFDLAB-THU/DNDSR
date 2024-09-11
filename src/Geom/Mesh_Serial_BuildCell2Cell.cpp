@@ -454,4 +454,189 @@ namespace DNDS::Geom
         if (mesh->getMPI().rank == mRank)
             DNDS::log() << "UnstructuredMeshSerialRW === Done  BuildCell2Cell" << std::endl;
     }
+
+    void UnstructuredMesh::RecreatePeriodicNodes()
+    {
+        DNDS_assert(adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert(cell2node.trans.pLGhostMapping);
+        DNDS_assert(coords.trans.pLGhostMapping && coords.trans.pLGlobalMapping);
+        if (!isPeriodic)
+        {
+            return;
+        }
+        tAdj1Pair nodeNeedCreate;
+        DNDS_MAKE_SSP(nodeNeedCreate.father, mpi);
+        DNDS_MAKE_SSP(nodeNeedCreate.son, mpi);
+        nodeNeedCreate.TransAttach();
+        nodeNeedCreate.father->Resize(coords.father->Size());
+        nodeNeedCreate.trans.BorrowGGIndexing(coords.trans);
+        nodeNeedCreate.trans.createMPITypes();
+        // std::cout << "here X0.5" << std::endl;
+        for (index i = 0; i < nodeNeedCreate.Size(); i++)
+            nodeNeedCreate(i, 0) = 0x01u;
+        for (index iC = 0; iC < cell2node.father->Size(); iC++)
+            for (rowsize ic2n = 0; ic2n < cell2node.RowSize(iC); ic2n++)
+                nodeNeedCreate(cell2node(iC, ic2n), 0) |= (0x01u << uint8_t(cell2nodePbi(iC, ic2n)));
+        DNDS::ArrayTransformerType<tAdj1::element_type>::Type nodeNeedCreatePastTrans;
+        tAdj1 nodeNeedCreatePast;
+        DNDS_MAKE_SSP(nodeNeedCreatePast, mpi);
+        nodeNeedCreatePastTrans.setFatherSon(nodeNeedCreate.son, nodeNeedCreatePast);
+        nodeNeedCreatePastTrans.createFatherGlobalMapping();
+        std::vector<index> pushSonSeries(nodeNeedCreate.son->Size());
+        for (index i = 0; i < pushSonSeries.size(); i++)
+            pushSonSeries[i] = i;
+        nodeNeedCreatePastTrans.createGhostMapping(pushSonSeries, nodeNeedCreate.trans.pLGhostMapping->ghostStart);
+        nodeNeedCreatePastTrans.createMPITypes();
+        nodeNeedCreatePastTrans.pullOnce();
+        for (index i = 0; i < nodeNeedCreatePast->Size(); i++)
+        {
+            index iNodeG = nodeNeedCreate.trans.pLGhostMapping->pushingIndexGlobal[i]; //?should be right
+            auto [ret, rank, iNode] = nodeNeedCreate.trans.pLGhostMapping->search_indexAppend(iNodeG);
+            DNDS_assert(rank == -1); // must be in main
+            nodeNeedCreate.father->operator()(iNode, 0) |= nodeNeedCreatePast->operator()(i, 0);
+        }
+        // std::cout << "here X1" << std::endl;
+
+        index nCreatedNodes{0};
+        tAdj8Pair node2recreatedNodes;
+        DNDS_MAKE_SSP(node2recreatedNodes.father, mpi);
+        DNDS_MAKE_SSP(node2recreatedNodes.son, mpi);
+        node2recreatedNodes.TransAttach();
+        node2recreatedNodes.father->Resize(coords.father->Size());
+        node2recreatedNodes.trans.BorrowGGIndexing(coords.trans);
+        node2recreatedNodes.trans.createMPITypes();
+        for (index i = 0; i < coords.father->Size(); i++)
+        {
+            DNDS_assert(nodeNeedCreate(i, 0) & 0x01u);
+            node2recreatedNodes(i, 0) = i;
+            for (uint8_t bitCur = 1; bitCur < 8; bitCur++)
+            {
+                if (nodeNeedCreate(i, 0) & (0x01u << bitCur))
+                    node2recreatedNodes(i, rowsize(bitCur)) = coords.father->Size() + nCreatedNodes++;
+                else
+                    node2recreatedNodes(i, rowsize(bitCur)) = UnInitIndex;
+            }
+        }
+        // node2recreatedNodes now points to local new coords
+
+        DNDS_MAKE_SSP(coordsPeriodicRecreated.father, mpi);
+        DNDS_MAKE_SSP(coordsPeriodicRecreated.son, mpi);
+        coordsPeriodicRecreated.TransAttach();
+        coordsPeriodicRecreated.father->Resize(nCreatedNodes + coords.father->Size());
+        coordsPeriodicRecreated.trans.createFatherGlobalMapping();
+        nodeRecreated2nodeLocal.resize(coordsPeriodicRecreated.father->Size());
+        for (index iN = 0; iN < coords.father->Size(); iN++) // fill the coords
+        {
+            coordsPeriodicRecreated[iN] = coords[iN];
+            nodeRecreated2nodeLocal[iN] = iN;
+            for (uint8_t bitCur = 1; bitCur < 8; bitCur++)
+            {
+                if (node2recreatedNodes(iN, rowsize(bitCur)) != UnInitIndex)
+                {
+                    coordsPeriodicRecreated[node2recreatedNodes(iN, rowsize(bitCur))] =
+                        periodicInfo.GetCoordByBits(coords[iN], NodePeriodicBits{bitCur});
+                    nodeRecreated2nodeLocal[node2recreatedNodes(iN, rowsize(bitCur))] = iN;
+                }
+            }
+        }
+        for (index iN = 0; iN < coords.father->Size(); iN++) // convert node2recreatedNodes into global
+            for (int i = 0; i < node2recreatedNodes.RowSize(iN); i++)
+                if (node2recreatedNodes(iN, i) != UnInitIndex)
+                    node2recreatedNodes(iN, i) = coordsPeriodicRecreated.trans.pLGlobalMapping->operator()(
+                        mpi.rank, node2recreatedNodes(iN, i));
+        node2recreatedNodes.trans.pullOnce(); // for cell2node query
+        // std::cout << "here X2" << std::endl;
+        DNDS_MAKE_SSP(cell2nodePeriodicRecreated.father, mpi);
+        DNDS_MAKE_SSP(cell2nodePeriodicRecreated.son, mpi);
+        cell2nodePeriodicRecreated.TransAttach();
+        cell2nodePeriodicRecreated.father->Resize(cell2node.father->Size());
+        for (index iC = 0; iC < cell2node.father->Size(); iC++)
+        {
+            cell2nodePeriodicRecreated.ResizeRow(iC, cell2node.RowSize(iC));
+            for (rowsize ic2n = 0; ic2n < cell2node.RowSize(iC); ic2n++)
+            {
+                index iNode = cell2node(iC, ic2n);
+                index iNodeNewGlobal = node2recreatedNodes(iNode, 0);
+                if (cell2nodePbi(iC, ic2n))
+                {
+                    iNodeNewGlobal = node2recreatedNodes(iNode, rowsize(uint8_t(cell2nodePbi(iC, ic2n))));
+                    DNDS_assert(iNodeNewGlobal != UnInitIndex);
+                }
+                cell2nodePeriodicRecreated(iC, ic2n) = iNodeNewGlobal;
+            }
+        }
+        // std::cout << "here X3" << std::endl;
+        // here, cell2nodePeriodicRecreated point to global coordsPeriodicRecreated
+        // coordsPeriodicRecreated has no son
+
+        index nNodeRecreatedGlobal = coordsPeriodicRecreated.father->globalSize();
+        if (mpi.rank == mRank)
+            log() << fmt::format("=== RecreatePeriodicNodes: new nNodes [{}]", nNodeRecreatedGlobal) << std::endl;
+    }
+
+    void UnstructuredMesh::BuildVTKConnectivity()
+    {
+        DNDS_assert(cell2node.father);
+        DNDS_assert(coords.trans.pLGhostMapping); // for this->NodeIndexLocal2Global()
+        DNDS_assert(adjPrimaryState == Adj_PointToLocal);
+        if (isPeriodic)
+        {
+            DNDS_assert(cell2nodePeriodicRecreated.father);
+            DNDS_assert(coordsPeriodicRecreated.father);
+        }
+        vtkCell2nodeOffsets.resize(cell2node.father->Size() + 1);
+        vtkCell2nodeOffsets[0] = 0;
+        vtkCellType.resize(cell2node.father->Size());
+        for (index iC = 0; iC < cell2node.father->Size(); iC++)
+        {
+            auto eCell = GetCellElement(iC);
+            auto [vtkType, vtkC2n] = Elem::ToVTKVertsAndData(eCell, cell2node[iC]);
+            vtkCellType[iC] = vtkType;
+            vtkCell2nodeOffsets[iC + 1] = vtkCell2nodeOffsets[iC] + vtkC2n.size();
+        }
+        vtkCell2node.reserve(vtkCell2nodeOffsets.back()); // now offsets are local
+        for (index iC = 0; iC < cell2node.father->Size(); iC++)
+        {
+            auto eCell = GetCellElement(iC);
+            if (!isPeriodic)
+            {
+                auto [vtkType, vtkC2n] = Elem::ToVTKVertsAndData(eCell, cell2node[iC]);
+                for (auto iN : vtkC2n)
+                    vtkCell2node.push_back(this->NodeIndexLocal2Global(iN));
+            }
+            else
+            { // cell2nodePeriodicRecreated points to global
+                auto [vtkType, vtkC2n] = Elem::ToVTKVertsAndData(eCell, cell2nodePeriodicRecreated[iC]);
+                for (auto iN : vtkC2n)
+                    vtkCell2node.push_back(iN);
+            }
+        }
+        index localVtkCellOffset = vtkCell2nodeOffsets.back();
+        index sumPrevVtkCellOffset{0};
+        MPI::Scan(&localVtkCellOffset, &sumPrevVtkCellOffset, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        sumPrevVtkCellOffset -= localVtkCellOffset;
+        for (auto &v : vtkCell2nodeOffsets)
+            v += sumPrevVtkCellOffset;
+
+        // get some offsets
+        index curNNode = coords.father->Size();
+        if (isPeriodic)
+            curNNode = coordsPeriodicRecreated.father->Size();
+        MPI::Scan(&curNNode, &vtkNodeOffset, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        vtkNodeOffset -= curNNode;
+        index curNCell = cell2node.father->Size();
+        MPI::Scan(&curNCell, &vtkCellOffset, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        vtkCellOffset -= curNCell;
+
+        index vtkCell2NodeSize = vtkCell2node.size();
+        MPI::Allreduce(&vtkCell2NodeSize, &vtkCell2NodeGlobalSiz, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+
+        index nCellsLocal = cell2node.father->Size();
+        MPI_Allreduce(&nCellsLocal, &vtkNCellGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        tCoord coordOut = isPeriodic ? coordsPeriodicRecreated.father : coords.father;
+        index nNodesLocal = coordOut->Size();
+        MPI_Allreduce(&nNodesLocal, &vtkNNodeGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+
+        // std::cout << mpi.rank << " " << sumPrevVtkCellOffset << std::endl;
+    }
 }

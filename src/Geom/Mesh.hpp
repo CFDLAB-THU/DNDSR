@@ -45,16 +45,26 @@ namespace DNDS::Geom
     using tAdj = decltype(tAdjPair::father);
     using tPbiPair = ArrayPair<ArrayNodePeriodicBits<DNDS::NonUniformSize>>;
     using tPbi = decltype(tPbiPair::father);
-    using tAdj2Pair = DNDS::ArrayAdjacencyPair<2>;
-    using tAdj2 = decltype(tAdj2Pair::father);
     using tAdj1Pair = DNDS::ArrayAdjacencyPair<1>;
     using tAdj1 = decltype(tAdj1Pair::father);
+    using tAdj2Pair = DNDS::ArrayAdjacencyPair<2>;
+    using tAdj2 = decltype(tAdj2Pair::father);
+    using tAdj3Pair = DNDS::ArrayAdjacencyPair<3>;
+    using tAdj3 = decltype(tAdj3Pair::father);
+    using tAdj4Pair = DNDS::ArrayAdjacencyPair<4>;
+    using tAdj4 = decltype(tAdj4Pair::father);
+    using tAdj8Pair = DNDS::ArrayAdjacencyPair<8>;
+    using tAdj8 = decltype(tAdj8Pair::father);
     using tCoordPair = DNDS::ArrayPair<DNDS::ArrayEigenVector<3>>;
     using tCoord = decltype(tCoordPair::father);
     using tElemInfoArrayPair = DNDS::ArrayPair<DNDS::ParArray<ElemInfo>>;
     using tElemInfoArray = DNDS::ssp<DNDS::ParArray<ElemInfo>>;
     using tIndPair = DNDS::ArrayPair<DNDS::ArrayIndex>;
     using tInd = decltype(tIndPair::father);
+
+    using tFGetName = std::function<std::string(int)>;
+    using tFGetData = std::function<DNDS::real(int, DNDS::index)>;
+    using tFGetVecData = std::function<DNDS::real(int, DNDS::index, DNDS::rowsize)>;
 
     enum MeshAdjState
     {
@@ -113,6 +123,25 @@ namespace DNDS::Geom
         std::vector<index> node2parentNode;
         std::vector<index> node2bndNode;
         std::vector<index> cell2parentCell;
+
+        /// for parallel out
+        std::vector<index> vtkCell2nodeOffsets;
+        std::vector<uint8_t> vtkCellType;
+        std::vector<index> vtkCell2node;
+        index vtkNodeOffset{-1};
+        index vtkCellOffset{-1};
+        index vtkCell2NodeGlobalSiz{-1};
+        index vtkNCellGlobal{-1};
+        index vtkNNodeGlobal{-1};
+        tAdjPair cell2nodePeriodicRecreated;
+        tCoordPair coordsPeriodicRecreated;
+        std::vector<index> nodeRecreated2nodeLocal;
+
+        struct HDF5OutSetting
+        {
+            size_t chunkSize = 128;
+            int deflateLevel = 1;
+        } hdf5OutSetting;
 
         /// only elevation
         tCoordPair coordsElevDisp;
@@ -518,13 +547,36 @@ namespace DNDS::Geom
             for (index iNode = 0; iNode < coords.Size(); iNode++)
                 coords[iNode] = FTrans(coords[iNode]);
         }
+
+        void RecreatePeriodicNodes();
+
+        void BuildVTKConnectivity();
+
+        void PrintParallelVTKHDFDataArray(
+            std::string fname, std::string seriesName,
+            int arraySiz, int vecArraySiz, int arraySizPoint, int vecArraySizPoint,
+            const tFGetName &names,
+            const tFGetData &data,
+            const tFGetName &vectorNames,
+            const tFGetVecData &vectorData,
+            const tFGetName &namesPoint,
+            const tFGetData &dataPoint,
+            const tFGetName &vectorNamesPoint,
+            const tFGetVecData &vectorDataPoint,
+            double t, MPI_Comm commDup);
+
+        void SetHDF5OutSetting(size_t chunkSiz, int deflateLevel)
+        {
+            hdf5OutSetting.chunkSize = chunkSiz;
+            hdf5OutSetting.deflateLevel = deflateLevel;
+        }
     };
 
 }
 namespace DNDS::Geom
 {
     using tFDataFieldName = std::function<std::string(int)>;
-    using tFDataFieldQuery = std::function<DNDS::real(int, DNDS::index)>;
+    using tFDataFieldQuery = tFGetData;
 
     enum MeshReaderMode
     {
@@ -673,10 +725,10 @@ namespace DNDS::Geom
         void PrintSerialPartPltBinaryDataArray(
             std::string fname,
             int arraySiz, int arraySizPoint,
-            const std::function<std::string(int)> &names,
-            const std::function<DNDS::real(int, DNDS::index)> &data,
-            const std::function<std::string(int)> &namesPoint,
-            const std::function<DNDS::real(int, DNDS::index)> &dataPoint,
+            const tFGetName &names,
+            const tFGetData &data,
+            const tFGetName &namesPoint,
+            const tFGetData &dataPoint,
             double t, int flag);
 
         /**
@@ -686,14 +738,14 @@ namespace DNDS::Geom
         void PrintSerialPartVTKDataArray(
             std::string fname, std::string seriesName,
             int arraySiz, int vecArraySiz, int arraySizPoint, int vecArraySizPoint,
-            const std::function<std::string(int)> &names,
-            const std::function<DNDS::real(int, DNDS::index)> &data,
-            const std::function<std::string(int)> &vectorNames,
-            const std::function<DNDS::real(int, DNDS::index, DNDS::rowsize)> &vectorData,
-            const std::function<std::string(int)> &namesPoint,
-            const std::function<DNDS::real(int, DNDS::index)> &dataPoint,
-            const std::function<std::string(int)> &vectorNamesPoint,
-            const std::function<DNDS::real(int, DNDS::index, DNDS::rowsize)> &vectorDataPoint,
+            const tFGetName &names,
+            const tFGetData &data,
+            const tFGetName &vectorNames,
+            const tFGetVecData &vectorData,
+            const tFGetName &namesPoint,
+            const tFGetData &dataPoint,
+            const tFGetName &vectorNamesPoint,
+            const tFGetVecData &vectorDataPoint,
             double t, int flag = 0);
 
         void SetASCIIPrecision(int n) { ascii_precision = n; }

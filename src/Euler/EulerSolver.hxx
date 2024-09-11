@@ -1174,8 +1174,7 @@ namespace DNDS::Euler
                     eval.ConsoleOutputBndIntegrations();
                     eval.BndIntegrationLogWriteLine(
                         config.dataIOControl.getOutLogName() + "_" + output_stamp,
-                        step, iStep, iter
-                    );
+                        step, iStep, iter);
                 }
                 tstart = MPI_Wtime();
                 trec = tcomm = trhs = tLim = 0.;
@@ -1195,7 +1194,8 @@ namespace DNDS::Euler
                 eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
                                      u, uRec);
             }
-            if (iter % config.outputControl.nDataOutCInternal == 0)
+            if ((iter % config.outputControl.nDataOutCInternal == 0) &&
+                !(config.outputControl.lazyCoverDataOutput && (iter % config.outputControl.nDataOutCInternal == 0)))
             {
                 eval.FixUMaxFilter(u);
                 PrintData(
@@ -1214,7 +1214,8 @@ namespace DNDS::Euler
                 config.restartState.iStepInternal = iter;
                 PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + std::to_string(step) + "_" + std::to_string(iter));
             }
-            if (iter % config.outputControl.nRestartOutCInternal == 0)
+            if ((iter % config.outputControl.nRestartOutCInternal == 0) &&
+                !(config.outputControl.lazyCoverDataOutput && (iter % config.outputControl.nRestartOutInternal == 0)))
             {
                 config.restartState.iStep = step;
                 config.restartState.iStepInternal = iter;
@@ -1331,6 +1332,23 @@ namespace DNDS::Euler
                 trec = tcomm = trhs = tLim = 0.;
                 PerformanceTimer::Instance().clearAllTimer();
             }
+            if (step == nextStepOutC)
+            {
+                if (!(config.outputControl.lazyCoverDataOutput && (step == nextStepOut)))
+                {
+                    eval.FixUMaxFilter(u);
+                    PrintData(
+                        config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                        "",
+                        [&](index iCell)
+                        { return ode->getLatestRHS()[iCell](0); },
+                        addOutList,
+                        eval, tSimu);
+                    eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                                         u, uRec);
+                }
+                nextStepOutC += config.outputControl.nDataOutC;
+            }
             if (step == nextStepOut)
             {
                 eval.FixUMaxFilter(u);
@@ -1345,19 +1363,23 @@ namespace DNDS::Euler
                                      u, uRec);
                 nextStepOut += config.outputControl.nDataOut;
             }
-            if (step == nextStepOutC)
+            if (step == nextStepOutAverageC)
             {
-                eval.FixUMaxFilter(u);
-                PrintData(
-                    config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
-                    "",
-                    [&](index iCell)
-                    { return ode->getLatestRHS()[iCell](0); },
-                    addOutList,
-                    eval, tSimu);
-                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
-                                     u, uRec);
-                nextStepOutC += config.outputControl.nDataOutC;
+                if (!(config.outputControl.lazyCoverDataOutput && (step == nextStepOutAverage)))
+                {
+                    DNDS_assert(config.timeAverageControl.enabled);
+                    eval.MeanValuePrim2Cons(wAveraged, uAveraged);
+                    eval.FixUMaxFilter(uAveraged);
+                    PrintData(
+                        config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + "C",
+                        "",
+                        [&](index iCell)
+                        { return ode->getLatestRHS()[iCell](0); },
+                        addOutList,
+                        eval, tSimu,
+                        PrintDataTimeAverage);
+                }
+                nextStepOutAverageC += config.outputControl.nTimeAverageOutC;
             }
             if (step == nextStepOutAverage)
             {
@@ -1374,20 +1396,15 @@ namespace DNDS::Euler
                     PrintDataTimeAverage);
                 nextStepOutAverage += config.outputControl.nTimeAverageOut;
             }
-            if (step == nextStepOutAverageC)
+            if (step == nextStepRestartC)
             {
-                DNDS_assert(config.timeAverageControl.enabled);
-                eval.MeanValuePrim2Cons(wAveraged, uAveraged);
-                eval.FixUMaxFilter(uAveraged);
-                PrintData(
-                    config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + "C",
-                    "",
-                    [&](index iCell)
-                    { return ode->getLatestRHS()[iCell](0); },
-                    addOutList,
-                    eval, tSimu,
-                    PrintDataTimeAverage);
-                nextStepOutAverageC += config.outputControl.nTimeAverageOutC;
+                if (!(config.outputControl.lazyCoverDataOutput && (step == nextStepRestart)))
+                {
+                    config.restartState.iStep = step;
+                    config.restartState.iStepInternal = -1;
+                    PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + "C");
+                }
+                nextStepRestartC += config.outputControl.nRestartOutC;
             }
             if (step == nextStepRestart)
             {
@@ -1395,13 +1412,6 @@ namespace DNDS::Euler
                 config.restartState.iStepInternal = -1;
                 PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + std::to_string(step));
                 nextStepRestart += config.outputControl.nRestartOut;
-            }
-            if (step == nextStepRestartC)
-            {
-                config.restartState.iStep = step;
-                config.restartState.iStepInternal = -1;
-                PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + "C");
-                nextStepRestartC += config.outputControl.nRestartOutC;
             }
             if (ifOutT)
             {

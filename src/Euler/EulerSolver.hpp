@@ -4,6 +4,8 @@
 #include <functional>
 #include <tuple>
 #include <filesystem>
+#include <mutex>
+#include <future>
 
 // #ifndef __DNDS_REALLY_COMPILING__
 // #define __DNDS_REALLY_COMPILING__
@@ -78,12 +80,18 @@ namespace DNDS::Euler
         ssp<ArrayEigenVector<Eigen::Dynamic>> outSerialPoint;
         ArrayTransformerType<ArrayEigenVector<Eigen::Dynamic>>::Type outDist2SerialTransPoint;
         ArrayPair<ArrayEigenVector<Eigen::Dynamic>> outDistPointPair;
+        static const int maxOutFutures{3};
+        std::mutex outArraysMutex;
+        std::array<std::future<void>, maxOutFutures> outFuture; // mind the order, relies on the arrays and the mutex
 
         ssp<ArrayEigenVector<Eigen::Dynamic>> outDistBnd;
         // ssp<ArrayEigenVector<Eigen::Dynamic>> outGhostBnd;
         ssp<ArrayEigenVector<Eigen::Dynamic>> outSerialBnd;
         ArrayTransformerType<ArrayEigenVector<Eigen::Dynamic>>::Type outDist2SerialTransBnd;
         // ArrayPair<ArrayEigenVector<Eigen::Dynamic>> outDistBndPair;
+        std::mutex outBndArraysMutex;
+        std::array<std::future<void>, maxOutFutures> outBndFuture; // mind the order, relies on the arrays and the mutex
+        std::future<void> outSeqFuture;
 
         // std::vector<uint32_t> ifUseLimiter;
         CFV::tScalarPair ifUseLimiter;
@@ -179,6 +187,7 @@ namespace DNDS::Euler
                 int nTimeAverageOut = INT_MAX;
                 int nTimeAverageOutC = INT_MAX;
                 real tDataOut = veryLargeReal;
+                bool lazyCoverDataOutput = false;
 
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     OutputControl,
@@ -192,7 +201,7 @@ namespace DNDS::Euler
                     nRestartOut, nRestartOutC,
                     nRestartOutInternal, nRestartOutCInternal,
                     nTimeAverageOut, nTimeAverageOutC,
-                    tDataOut)
+                    tDataOut, lazyCoverDataOutput)
             } outputControl;
 
             struct ImplicitCFLControl
@@ -263,17 +272,22 @@ namespace DNDS::Euler
                 int outPltMode = 0;   // 0 = serial, 1 = dist plt
                 int readMeshMode = 0; // 0 = serial cgns, 1 = dist json
                 bool outPltTecplotFormat = true;
-                bool outPltVTKFormat = true;
+                bool outPltVTKFormat = false;
+                bool outPltVTKHDFFormat = false;
                 bool outAtPointData = true;
                 bool outAtCellData = true;
                 int nASCIIPrecision = 5;
                 std::string vtuFloatEncodeMode = "binary";
+                int hdfChunkSize = 256;
+                int hdfDeflateLevel = 0;
                 bool outVolumeData = true;
                 bool outBndData = false;
 
                 std::vector<std::string> outCellScalarNames{};
 
                 bool serializerSaveURec = false;
+
+                bool allowAsyncPrintData = false;
 
                 int rectifyNearPlane = 0; // 1: x 2: y 4: z
                 real rectifyNearPlaneThres = 1e-10;
@@ -307,14 +321,17 @@ namespace DNDS::Euler
                     readMeshMode,
                     outPltTecplotFormat,
                     outPltVTKFormat,
+                    outPltVTKHDFFormat,
                     outAtPointData,
                     outAtCellData,
                     nASCIIPrecision,
                     vtuFloatEncodeMode,
+                    hdfChunkSize, hdfDeflateLevel,
                     outVolumeData,
                     outBndData,
                     outCellScalarNames,
                     serializerSaveURec,
+                    allowAsyncPrintData,
                     rectifyNearPlane, rectifyNearPlaneThres)
             } dataIOControl;
 
@@ -494,6 +511,23 @@ namespace DNDS::Euler
             nOUTSBnd = nVars * 2 + 1 + 2 + 3;
 
             config = Configuration(nVars); //* important to initialize using nVars
+        }
+
+        ~EulerSolver()
+        {
+            int nBad{0};
+            do
+            {
+                nBad = 0;
+                for (auto &f : outFuture)
+                    if (f.valid() && f.wait_for(std::chrono::microseconds(10)) != std::future_status::ready)
+                        nBad++;
+                for (auto &f : outBndFuture)
+                    if (f.valid() && f.wait_for(std::chrono::microseconds(10)) != std::future_status::ready)
+                        nBad++;
+                if (outSeqFuture.valid() && outSeqFuture.wait_for(std::chrono::microseconds(10)) != std::future_status::ready)
+                    nBad++;
+            } while (nBad);
         }
 
         /**
@@ -827,6 +861,11 @@ namespace DNDS::Euler
                 reader->coordSerialOutTrans.pullOnce(),
                     readerBnd->coordSerialOutTrans.pullOnce();
 
+            mesh->RecreatePeriodicNodes();
+            mesh->BuildVTKConnectivity();
+            meshBnd->RecreatePeriodicNodes();
+            meshBnd->BuildVTKConnectivity();
+
             DNDS_MAKE_SSP(vfv, mpi, mesh);
             vfv->SetPeriodicTransformations(
                 [&](auto u, Geom::t_index id)
@@ -919,7 +958,7 @@ namespace DNDS::Euler
             nOUTS += config.dataIOControl.outCellScalarNames.size();
 
             DNDS_assert(config.dataIOControl.outAtCellData || config.dataIOControl.outAtPointData);
-            DNDS_assert(config.dataIOControl.outPltVTKFormat || config.dataIOControl.outPltTecplotFormat);
+            DNDS_assert(config.dataIOControl.outPltVTKFormat || config.dataIOControl.outPltTecplotFormat || config.dataIOControl.outPltVTKHDFFormat);
             DNDS_MAKE_SSP(outDistBnd, mpi);
             outDistBnd->Resize(meshBnd->NumCell(), nOUTSBnd);
 

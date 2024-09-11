@@ -3,6 +3,8 @@
 #include <vector>
 #include <fstream>
 
+#include <mutex>
+
 #include "Defines.hpp"
 DISABLE_WARNING_PUSH
 // disable mpicxx 's many warnings in intel oneAPI mpi's header
@@ -202,6 +204,51 @@ namespace DNDS
     {
         bool IsDebugged();
         void MPIDebugHold(const MPIInfo &mpi);
+    }
+}
+
+namespace DNDS // TODO: get a concurrency header
+{
+    extern std::mutex HDF_mutex;
+
+    namespace MPI
+    {
+        inline MPI_int Init_thread(int *argc, char ***argv)
+        {
+            int init_flag{0};
+            MPI_Initialized(&init_flag);
+            if (init_flag)
+                return 0;
+            int provided_MPI_THREAD_LEVEL{0};
+            int needed_MPI_THREAD_LEVEL = MPI_THREAD_MULTIPLE;
+
+            auto env = std::getenv("DNDS_DISABLE_ASYNC_MPI");
+            if (env != NULL && (std::stod(env) != 0))
+            {
+                int ienv = std::stod(env);
+                if (ienv >= 1)
+                    needed_MPI_THREAD_LEVEL = MPI_THREAD_SERIALIZED;
+                if (ienv >= 2)
+                    needed_MPI_THREAD_LEVEL = MPI_THREAD_FUNNELED;
+                if (ienv >= 3)
+                    needed_MPI_THREAD_LEVEL = MPI_THREAD_SINGLE;
+            }
+            auto ret = MPI_Init_thread(argc, argv, needed_MPI_THREAD_LEVEL, &provided_MPI_THREAD_LEVEL);
+            if (provided_MPI_THREAD_LEVEL < needed_MPI_THREAD_LEVEL)
+            {
+                printf("ERROR: The MPI library does not have full thread support\n");
+                MPI_Abort(MPI_COMM_WORLD, 1);
+            }
+
+            return ret;
+        }
+
+        inline int GetMPIThreadLevel()
+        {
+            int ret;
+            int err = MPI_Query_thread(&ret);
+            return ret;
+        }
     }
 }
 
