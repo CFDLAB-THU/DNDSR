@@ -1,8 +1,16 @@
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 
-fName = "data/recv/out__1000.vtkhdf"
+parser = argparse.ArgumentParser("UniformGetSpectrum")
+parser.add_argument("inputname")
+parser.add_argument("-o", "--out", required=False)
+args = parser.parse_args()
+
+
+fName = args.inputname
+oName = args.out if args.out is not None else args.inputname + ".outspect"
 
 
 file = h5py.File(name=fName, mode="r")
@@ -55,6 +63,7 @@ EKs = np.zeros((maxKMRound + 1, 3))
 EKs_k = np.arange(0, maxKMRound + 1)
 bins = np.arange(0, maxKMRound + 2)
 
+
 (ek0, be) = np.histogram(kMRound, bins, density=False, weights=EKGM_k[:, :, :, 0])
 (ek1, be) = np.histogram(kMRound, bins, density=False, weights=EKGM_k[:, :, :, 1])
 (ek2, be) = np.histogram(kMRound, bins, density=False, weights=EKGM_k[:, :, :, 2])
@@ -73,7 +82,10 @@ EKs[:, 2] = ek2
 #             EKs[kMRound[i, j, k], :] += EKGM_k[i, j, k, :]
 #     print(f"ind i [{i}] done")
 print("Ek spectrum result: ")
-print(0.5 * np.sum(EKs, axis=1))
+EkResults = 0.5 * np.sum(EKs, axis=1)
+print(EkResults)
+np.savetxt(oName + ".txt", EkResults)
+
 
 plt.plot(EKs_k[1:], 0.5 * np.sum(EKs[1:, :], axis=1))
 plt.gca().set_yscale("log")
