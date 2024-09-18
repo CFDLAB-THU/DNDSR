@@ -1101,6 +1101,7 @@ namespace DNDS::Euler
         int geomMode)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        DNDS_assert(iG >= -2);
 
         TU URxy;
         URxy.resizeLike(ULxy);
@@ -1144,7 +1145,7 @@ namespace DNDS::Euler
                 DNDS_assert(asqr >= 0);
                 real a = std::sqrt(asqr);
 
-                auto vg = this->GetFaceVGrid(iFace, iG);
+                auto vg = this->GetFaceVGrid(iFace, iG, pPhysics);
                 real vgN = vg.dot(uNorm);
 
                 if (un - vgN - a > 0) // full outflow
@@ -1687,5 +1688,3 @@ namespace DNDS::Euler
         op.setMap(outMap);
     }
 }
-
-

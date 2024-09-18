@@ -235,6 +235,28 @@ namespace DNDS::CFV
             return GetFaceQuadraturePPhys(iFace, iG);
         }
 
+        Geom::tPoint GetFacePointFromCell(index iFace, index iCell, rowsize if2c, const Geom::tPoint &pnt)
+        {
+            if (!mesh->isPeriodic)
+                return pnt;
+            auto faceID = mesh->faceElemInfo[iFace]->zone;
+            if (!Geom::FaceIDIsPeriodic(faceID))
+                return pnt;
+            if (if2c < 0)
+                if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            if (if2c == 1 && Geom ::FaceIDIsPeriodicMain(faceID)) // I am donor
+            {
+                // std::cout << iFace <<" " << iCell << " " <<if2c << std::endl;
+                // std::cout << pnt.transpose() << std::endl;
+                // std::cout << mesh->periodicInfo.TransCoord(pnt, faceID).transpose() << std::endl;
+                // std::abort();
+                return mesh->periodicInfo.TransCoord(pnt, faceID);
+            }
+            if (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) // I am main
+                return mesh->periodicInfo.TransCoordBack(pnt, faceID);
+            return pnt;
+        }
+
         Geom::tPoint GetOtherCellBaryFromCell(
             index iCell, index iCellOther,
             index iFace)
@@ -469,7 +491,7 @@ namespace DNDS::CFV
         template <class TDiffIDerived, class TDiffJDerived>
         auto FFaceFunctional(
             const Eigen::MatrixBase<TDiffIDerived> &DiffI, const Eigen::MatrixBase<TDiffJDerived> &DiffJ,
-            index iFace, index iG, index iCellL, index iCellR)
+            index iFace, index iCellL, index iCellR)
         {
             using namespace Geom;
             Eigen::Vector<real, Eigen::Dynamic> wgd = faceWeight[iFace].array().square();

@@ -697,7 +697,7 @@ namespace DNDS::Geom::Elem
         ParamSpace ps = UnknownPSpace;
         t_index int_scheme = 0;
 
-        Quadrature(Element n_elem, int n_int_order)
+        Quadrature(Element n_elem = Element{UnknownElem}, int n_int_order = 0)
             : elem(n_elem), int_order(n_int_order), ps(elem.GetParamSpace())
         {
             int_scheme = GetQuadratureScheme(ps, int_order);

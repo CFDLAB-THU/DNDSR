@@ -608,6 +608,19 @@ namespace DNDS::Euler
             return ret;
         }
 
+        TVec GetFaceVGrid(index iFace, index iG, const Geom::tPoint &pPhy)
+        {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+            TVec ret;
+            ret.setZero();
+#ifdef USE_ABS_VELO_IN_ROTATION
+            if (settings.frameConstRotation.enabled)
+                ret += settings.frameConstRotation.vOmega().cross(
+                    (iG >= -1 ? vfv->GetFaceQuadraturePPhys(iFace, iG) : pPhy) - settings.frameConstRotation.center)(Seq012);
+#endif
+            return ret;
+        }
+
         TVec GetFaceVGridFromCell(index iFace, index iCell, int if2c, index iG)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -698,6 +711,10 @@ namespace DNDS::Euler
 
         void updateBCProfilesPressureRadialEq();
 
+        /**
+         * \brief
+         * iG < -1: anywhere
+         */
         TU generateBoundaryValue(
             TU &ULxy, //! warning, possible that UL is also modified
             const TU &ULMeanXy,

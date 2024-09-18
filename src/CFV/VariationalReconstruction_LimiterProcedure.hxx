@@ -52,8 +52,8 @@ namespace DNDS::CFV
                         }
 
                         Eigen::Matrix<real, nVarsSee, nVarsSee> IJI, ISI;
-                        IJI = FFaceFunctional(uRecValJump, uRecValJump, iFace, -1, iCell, iCellOther);
-                        ISI = FFaceFunctional(uRecVal, uRecVal, iFace, -1, iCell, iCellOther);
+                        IJI = FFaceFunctional(uRecValJump, uRecValJump, iFace, iCell, iCellOther);
+                        ISI = FFaceFunctional(uRecVal, uRecVal, iFace, iCell, iCellOther);
 
                         finc(Eigen::all, 0) = IJI.diagonal();
                         finc(Eigen::all, 1) = ISI.diagonal();
@@ -152,8 +152,8 @@ namespace DNDS::CFV
 
                         for (int i = 0; i < nVars; i++)
                         {
-                            finc(i, 0) = FFaceFunctional(uRecValJump(Eigen::all, {i}), uRecValJump(Eigen::all, {i}), iFace, -1, iCell, iCellOther)(0, 0);
-                            finc(i, 1) = FFaceFunctional(uRecVal(Eigen::all, {i}), uRecVal(Eigen::all, {i}), iFace, -1, iCell, iCellOther)(0, 0);
+                            finc(i, 0) = FFaceFunctional(uRecValJump(Eigen::all, {i}), uRecValJump(Eigen::all, {i}), iFace, iCell, iCellOther)(0, 0);
+                            finc(i, 1) = FFaceFunctional(uRecVal(Eigen::all, {i}), uRecVal(Eigen::all, {i}), iFace, iCell, iCellOther)(0, 0);
                         }
                         finc *= GetFaceArea(iFace); // don't forget this
                     });

@@ -148,3 +148,12 @@ cmake .. -DCMAKE_CXX_COMPILER=clang++ -G"MinGW Makefiles"
 cmd.exe "/K" '"C:\Program Files (x86)\Intel\oneAPI\setvars.bat" && powershell'
 cmake .. -DCMAKE_CXX_COMPILER=icx-cl -G"Unix Makefiles"
 ``` -->
+
+## intOrderVR
+
+RHS time: (intOrderVR=5, cacheDiffBase=true)
+
+|                         | intOrder=5 | intOrder=3 |
+| ----------------------- | ---------- | ---------- |
+| IV10U_10_bisect3 serial | 0.112      | 0.079      |
+| Uniform32_3D_Periodic 4 | 0.781      | 0.353      |

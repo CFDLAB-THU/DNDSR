@@ -226,7 +226,6 @@ namespace DNDS::CFV
                     tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
                     tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
                     tPoint np;
-                    real JDet;
                     if constexpr (dim == 2)
                         np = FacialJacobianToNormVec<2>(J);
                     else
@@ -747,21 +746,37 @@ namespace DNDS::CFV
             {
                 index iFace = mesh->cell2face(iCell, ic2f);
                 auto qFace = this->GetFaceQuad(iFace);
-                qFace.Integration(
+                auto qFaceVR = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                tSmallCoords coords;
+                if (!settings.intOrderVRIsSame())
+                    mesh->GetCoordsOnFace(iFace, coords);
+                qFaceVR.Integration(
                     A,
                     [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                     {
-                        decltype(A) DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, Eigen::all);
-                        vInc = this->FFaceFunctional(DiffI, DiffI, iFace, iG, iCell, iCell);
-                        vInc *= this->GetFaceJacobiDet(iFace, iG);
-                        // if (iCell == 71)
-                        // {
-                        // std::cout << "DI\n"
-                        //           << DiffI << std::endl;
-                        // }
+                        decltype(A) DiffI;
+                        real JDet{0};
+                        if (settings.intOrderVRIsSame())
+                        {
+                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, Eigen::all);
+                            JDet = this->GetFaceJacobiDet(iFace, iG);
+                        }
+                        else
+                        {
+                            tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
+                            tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
+                            if constexpr (dim == 2)
+                                JDet = J(Eigen::all, 0).stableNorm();
+                            else
+                                JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+                            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dbv;
+                            dbv.resize(faceAtr[iFace].NDIFF, cellAtr[iCell].NDOF);
+                            this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
+                            DiffI = dbv(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                        }
+                        vInc = this->FFaceFunctional(DiffI, DiffI, iFace, iCell, iCell);
+                        vInc *= JDet;
                     });
-                // std::cout << faceAlignedScales[iFace] << std::endl;
-                // std::cout << "face "<< faceWeight[iFace].transpose() << std::endl;
             }
             Eigen::Matrix<real, dim, Eigen::Dynamic> AHalf_GG;
             if (settings.functionalSettings.greenGauss1Weight != 0)
@@ -836,6 +851,10 @@ namespace DNDS::CFV
             {
                 index iFace = mesh->cell2face(iCell, ic2f);
                 auto qFace = this->GetFaceQuad(iFace);
+                auto qFaceVR = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                tSmallCoords coords;
+                if (!settings.intOrderVRIsSame())
+                    mesh->GetCoordsOnFace(iFace, coords);
                 index iCellOther = CellFaceOther(iCell, iFace);
                 int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
                 auto faceID = mesh->GetFaceZone(iFace);
@@ -848,12 +867,36 @@ namespace DNDS::CFV
                 }
                 Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> B;
                 B.setZero(cellAtr[iCell].NDOF - 1, cellAtr[iCellOther].NDOF - 1);
-                qFace.Integration(
+                qFaceVR.Integration(
                     B,
                     [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                     {
-                        decltype(B) DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, Eigen::all);
-                        decltype(B) DiffJ = this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, iG, Eigen::all);
+                        decltype(B) DiffI;
+                        decltype(B) DiffJ;
+                        real JDet{0};
+                        if (settings.intOrderVRIsSame())
+                        {
+                            JDet = this->GetFaceJacobiDet(iFace, iG);
+                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, Eigen::all);
+                            DiffJ = this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, iG, Eigen::all);
+                        }
+                        else
+                        {
+                            tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
+                            tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
+                            if constexpr (dim == 2)
+                                JDet = J(Eigen::all, 0).stableNorm();
+                            else
+                                JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+                            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dbvI, dbvJ;
+                            dbvI.resize(faceAtr[iFace].NDIFF, cellAtr[iCell].NDOF);
+                            dbvJ.resize(faceAtr[iFace].NDIFF, cellAtr[iCellOther].NDOF);
+                            this->FDiffBaseValue(dbvI, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
+                            this->FDiffBaseValue(dbvJ, this->GetFacePointFromCell(iFace, iCellOther, -1, pPhy), iCellOther, iFace, -2, 0);
+
+                            DiffI = dbvI(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                            DiffJ = dbvJ(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                        }
                         if (mesh->isPeriodic)
                         {
                             if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
@@ -868,8 +911,8 @@ namespace DNDS::CFV
                             }
                         }
 
-                        vInc = this->FFaceFunctional(DiffI, DiffJ, iFace, iG, iCell, iCellOther);
-                        vInc *= this->GetFaceJacobiDet(iFace, iG);
+                        vInc = this->FFaceFunctional(DiffI, DiffJ, iFace, iCell, iCellOther);
+                        vInc *= JDet;
                     });
                 if (settings.functionalSettings.greenGauss1Weight != 0)
                 {
@@ -914,16 +957,38 @@ namespace DNDS::CFV
                 index iFace = mesh->cell2face(iCell, ic2f);
                 int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
                 auto qFace = this->GetFaceQuad(iFace);
+                auto qFaceVR = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                tSmallCoords coords;
+                if (!settings.intOrderVRIsSame())
+                    mesh->GetCoordsOnFace(iFace, coords);
                 Eigen::Matrix<real, Eigen::Dynamic, 1> b;
                 b.setZero(cellAtr[iCell].NDOF - 1, 1);
-                qFace.Integration(
+                qFaceVR.Integration(
                     b,
                     [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                     {
-                        Eigen::RowVector<real, Eigen::Dynamic> DiffI =
-                            this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);
-                        vInc = this->FFaceFunctional(DiffI, Eigen::MatrixXd::Ones(1, 1), iFace, iG, iCell, iCell);
-                        vInc *= this->GetFaceJacobiDet(iFace, iG);
+                        Eigen::RowVector<real, Eigen::Dynamic> DiffI;
+                        real JDet{0};
+                        if (settings.intOrderVRIsSame())
+                        {
+                            JDet = this->GetFaceJacobiDet(iFace, iG);
+                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);
+                        }
+                        else
+                        {
+                            tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
+                            tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
+                            if constexpr (dim == 2)
+                                JDet = J(Eigen::all, 0).stableNorm();
+                            else
+                                JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+                            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dbv;
+                            dbv.resize(1, cellAtr[iCell].NDOF);
+                            this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
+                            DiffI = dbv(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                        }
+                        vInc = this->FFaceFunctional(DiffI, Eigen::MatrixXd::Ones(1, 1), iFace, iCell, iCell);
+                        vInc *= JDet;
                     });
                 if (settings.functionalSettings.greenGauss1Weight != 0)
                 {

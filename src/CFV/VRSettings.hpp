@@ -34,7 +34,8 @@ namespace DNDS::CFV
         using json = nlohmann::ordered_json;
 
         int maxOrder{3};            /// @brief polynomial degree of reconstruction
-        int intOrder{5};            /// @brief integration order globally set @note this is actually reduced somewhat
+        int intOrder{5};            /// @brief integration degree globally set @note this is actually reduced somewhat
+        int intOrderVR{-1};         /// @brief integration degree for VR matrices, <0 means using intOrder
         bool cacheDiffBase = false; /// @brief if cache the base function values on each of the quadrature points
         uint8_t cacheDiffBaseSize = UINT8_MAX;
 
@@ -155,6 +156,7 @@ namespace DNDS::CFV
         {
             jsonSetting["maxOrder"] = maxOrder;
             jsonSetting["intOrder"] = intOrder;
+            jsonSetting["intOrderVR"] = intOrderVR;
 
             jsonSetting["cacheDiffBase"] = cacheDiffBase;
             jsonSetting["cacheDiffBaseSize"] = cacheDiffBaseSize;
@@ -184,6 +186,7 @@ namespace DNDS::CFV
         {
             maxOrder = jsonSetting["maxOrder"]; ///@todo //TODO: update to better
             intOrder = jsonSetting["intOrder"];
+            intOrderVR = jsonSetting["intOrderVR"];
             cacheDiffBase = jsonSetting["cacheDiffBase"];
             cacheDiffBaseSize = jsonSetting["cacheDiffBaseSize"];
             jacobiRelax = jsonSetting["jacobiRelax"];
@@ -212,6 +215,9 @@ namespace DNDS::CFV
         {
             s.WriteIntoJson(j);
         }
+
+        bool intOrderVRIsSame() { return intOrderVR == intOrder || intOrderVR < 0; }
+        int intOrderVRValue() { return intOrderVR < 0 ? intOrder : intOrderVR; }
     };
 
     NLOHMANN_JSON_SERIALIZE_ENUM(
