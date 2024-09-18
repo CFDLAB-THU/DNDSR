@@ -236,7 +236,7 @@ namespace DNDS::Euler
                                          (1.0 / distGRP) *
                                              (unitNorm * (URxy - ULxy).transpose());
                     if (ignoreVis)
-                            GradUMeanXy *= 0.;
+                        GradUMeanXy *= 0.;
 
 #else
                     TDiffU GradUMeanXy;
@@ -467,12 +467,10 @@ namespace DNDS::Euler
         MPI::Allreduce(fluxWallSumLocal.data(), fluxWallSum.data(), fluxWallSum.size(), DNDS_MPI_REAL, MPI_SUM, u.father->getMPI().comm);
         for (auto &i : bndIntegrations)
         {
-            
+
             i.second.Reduce();
-            
         }
 
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS -1");
     }
 }
-

@@ -577,7 +577,7 @@ namespace DNDS::Geom::Elem
             return 2;
         if (t == Tri6 || t == Quad9)
             return 4;
-        if (t == Tet10 ||t == Hex27 || t == Prism18)
+        if (t == Tet10 || t == Hex27 || t == Prism18)
             return 8;
         if (t == Pyramid14)
             return 12;
@@ -1458,6 +1458,16 @@ namespace DNDS::Geom::Elem
     tPoint PPhysicsCoordD01Nj(const tCoordsIn &cs, Eigen::Ref<const tD01Nj> DiNj)
     {
         return cs * DiNj(0, Eigen::all).transpose();
+    }
+
+    template <int dim>
+    real JacobiDetFace(Eigen::Ref<const tJacobi> J)
+    {
+        static_assert(dim == 2 || dim == 3);
+        if constexpr (dim == 2)
+            return J(Eigen::all, 0).stableNorm();
+        else
+            return J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
     }
 
     // TODO: add a integration-based counterpart

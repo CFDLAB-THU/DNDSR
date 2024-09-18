@@ -9,6 +9,173 @@ namespace DNDS
 
         template <int dim>
         template <int nVarsFixed>
+        auto VariationalReconstruction<dim>::GetBoundaryRHS(tURec<nVarsFixed> &uRec,
+                                                            tUDof<nVarsFixed> &u,
+                                                            index iCell, index iFace,
+                                                            const TFBoundary<nVarsFixed> &FBoundary)
+        {
+            using namespace Geom;
+            using namespace Geom::Elem;
+            static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
+
+            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC;
+            BCC.setZero(uRec[iCell].rows(), uRec[iCell].cols());
+            auto faceID = mesh->GetFaceZone(iFace);
+            DNDS_assert(FaceIDIsExternalBC(faceID));
+
+            auto qFace = this->GetFaceQuad(iFace);
+            if (settings.intOrderVRIsSame() || settings.functionalSettings.greenGauss1Weight != 0)
+                qFace.IntegrationSimple(
+                    BCC,
+                    [&](auto &vInc, int iG)
+                    {
+                        Eigen::Matrix<real, 1, Eigen::Dynamic> dbv =
+                            this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);
+                        Eigen::Vector<real, nVarsFixed> uBL =
+                            (dbv *
+                             uRec[iCell])
+                                .transpose();
+                        uBL += u[iCell]; //! need fixing?
+                        Eigen::Vector<real, nVarsFixed> uBV =
+                            FBoundary(
+                                uBL,
+                                u[iCell], iCell, iFace, iG,
+                                this->GetFaceNorm(iFace, iG),
+                                this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
+                        Eigen::RowVector<real, nVarsFixed> uIncBV = (uBV - u[iCell]).transpose();
+                        if (settings.intOrderVRIsSame())
+                            vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
+                        else
+                            vInc.resizeLike(BCC), vInc.setZero();
+
+                        if (settings.functionalSettings.greenGauss1Weight != 0)
+                        {
+                            // DNDS_assert(false); // not yet implemented
+                            vInc += (settings.functionalSettings.greenGauss1Bias * this->GetGreenGauss1WeightOnCell(iCell) *
+                                     this->matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
+                                    uIncBV;
+                        }
+                        vInc *= this->GetFaceJacobiDet(iFace, iG);
+                        // std::cout << faceWeight[iFace].transpose() << std::endl;
+                    });
+            if (!settings.intOrderVRIsSame())
+            {
+                auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                tSmallCoords coords;
+                mesh->GetCoordsOnFace(iFace, coords);
+                qFace.Integration(
+                    BCC,
+                    [&](auto &vInc, int __xxx_iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
+                    { //todo: cache these for bnd: pPhy JDet norm and dbv
+                        tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
+                        tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
+                        real JDet = JacobiDetFace<dim>(J);
+                        tPoint np = FacialJacobianToNormVec<dim>(J);
+                        Eigen::Matrix<real, 1, Eigen::Dynamic> dbv, dbvD;
+                        dbvD.resize(1, cellAtr[iCell].NDOF);
+                        this->FDiffBaseValue(dbvD, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
+                        dbv = dbvD(0, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                        Eigen::Vector<real, nVarsFixed> uBL = (dbv * uRec[iCell]).transpose();
+                        uBL += u[iCell];
+                        Eigen::Vector<real, nVarsFixed> uBV =
+                            FBoundary(
+                                uBL,
+                                u[iCell], iCell, iFace, -2,
+                                np,
+                                this->GetFacePointFromCell(iFace, iCell, -1, pPhy), faceID);
+                        Eigen::RowVector<real, nVarsFixed> uIncBV = (uBV - u[iCell]).transpose();
+                        vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
+                        vInc *= JDet;
+                    });
+            }
+            return BCC;
+        }
+
+        template <int dim>
+        template <int nVarsFixed>
+        auto VariationalReconstruction<dim>::GetBoundaryRHSDiff(tURec<nVarsFixed> &uRec,
+                                                                tURec<nVarsFixed> &uRecDiff,
+                                                                tUDof<nVarsFixed> &u,
+                                                                index iCell, index iFace,
+                                                                const TFBoundaryDiff<nVarsFixed> &FBoundaryDiff)
+        {
+            using namespace Geom;
+            using namespace Geom::Elem;
+            static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
+
+            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC;
+            BCC.setZero(uRec[iCell].rows(), uRec[iCell].cols());
+            auto faceID = mesh->GetFaceZone(iFace);
+            DNDS_assert(FaceIDIsExternalBC(faceID));
+
+            auto qFace = this->GetFaceQuad(iFace);
+            if (settings.intOrderVRIsSame() || settings.functionalSettings.greenGauss1Weight != 0)
+                qFace.IntegrationSimple(
+                    BCC,
+                    [&](auto &vInc, int iG)
+                    {
+                        Eigen::Matrix<real, 1, Eigen::Dynamic> dbv =
+                            this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);
+                        Eigen::Vector<real, nVarsFixed> uBL = (dbv * uRec[iCell]).transpose();
+                        uBL += u[iCell]; //! need fixing?
+                        Eigen::Vector<real, nVarsFixed> uBLDiff = (dbv * uRecDiff[iCell]).transpose();
+                        Eigen::Vector<real, nVarsFixed>
+                            uBV = FBoundaryDiff(
+                                uBL, uBLDiff,
+                                u[iCell], iCell, iFace, iG,
+                                this->GetFaceNorm(iFace, iG),
+                                this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
+                        Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();
+                        if (settings.intOrderVRIsSame())
+                            vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
+                        else
+                            vInc.resizeLike(BCC), vInc.setZero();
+                        // std::cout << faceWeight[iFace].transpose() << std::endl;
+                        if (settings.functionalSettings.greenGauss1Weight != 0)
+                        {
+                            // DNDS_assert(false); // not yet implemented
+                            vInc += (settings.functionalSettings.greenGauss1Bias * this->GetGreenGauss1WeightOnCell(iCell) *
+                                     this->matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
+                                    uIncBV;
+                        }
+                        vInc *= this->GetFaceJacobiDet(iFace, iG);
+                    });
+            if (!settings.intOrderVRIsSame())
+            {
+                auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                tSmallCoords coords;
+                mesh->GetCoordsOnFace(iFace, coords);
+                qFace.Integration(
+                    BCC,
+                    [&](auto &vInc, int __xxx_iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
+                    {
+                        tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
+                        tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
+                        real JDet = JacobiDetFace<dim>(J);
+                        tPoint np = FacialJacobianToNormVec<dim>(J);
+                        Eigen::Matrix<real, 1, Eigen::Dynamic> dbv, dbvD;
+                        dbvD.resize(1, cellAtr[iCell].NDOF);
+                        this->FDiffBaseValue(dbvD, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
+                        dbv = dbvD(0, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                        Eigen::Vector<real, nVarsFixed> uBL = (dbv * uRec[iCell]).transpose();
+                        uBL += u[iCell];
+                        Eigen::Vector<real, nVarsFixed> uBLDiff = (dbv * uRecDiff[iCell]).transpose();
+                        Eigen::Vector<real, nVarsFixed> uBV =
+                            FBoundaryDiff(
+                                uBL, uBLDiff,
+                                u[iCell], iCell, iFace, -2,
+                                np,
+                                this->GetFacePointFromCell(iFace, iCell, -1, pPhy), faceID);
+                        Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();
+                        vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
+                        vInc *= JDet;
+                    });
+            }
+            return BCC;
+        }
+
+        template <int dim>
+        template <int nVarsFixed>
         void VariationalReconstruction<dim>::DoReconstruction2nd(
             tURec<nVarsFixed> &uRec,
             tUDof<nVarsFixed> &u,
@@ -271,86 +438,7 @@ namespace DNDS
                     }
                     else
                     {
-                        auto faceID = mesh->GetFaceZone(iFace);
-                        DNDS_assert(FaceIDIsExternalBC(faceID));
-
-                        int nVars = u[iCell].size();
-
-                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC;
-                        BCC.setZero(uRec[iCell].rows(), uRec[iCell].cols());
-
-                        auto qFace = this->GetFaceQuad(iFace);
-                        qFace.IntegrationSimple(
-                            BCC,
-                            [&](auto &vInc, int iG)
-                            {
-                                Eigen::Matrix<real, 1, Eigen::Dynamic> dbv =
-                                    this->GetIntPointDiffBaseValue(
-                                        iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);
-                                Eigen::Vector<real, nVarsFixed> uBL =
-                                    (dbv *
-                                     uRec[iCell])
-                                        .transpose();
-                                uBL += u[iCell]; //! need fixing?
-                                Eigen::Vector<real, nVarsFixed> uBV =
-                                    FBoundary(
-                                        uBL,
-                                        u[iCell], iCell, iFace, iG,
-                                        this->GetFaceNorm(iFace, iG),
-                                        this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
-                                Eigen::RowVector<real, nVarsFixed> uIncBV = (uBV - u[iCell]).transpose();
-                                if (settings.intOrderVRIsSame())
-                                    vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
-                                else
-                                    vInc.resizeLike(BCC), vInc.setZero();
-
-                                if (settings.functionalSettings.greenGauss1Weight != 0)
-                                {
-                                    // DNDS_assert(false); // not yet implemented
-                                    vInc += (settings.functionalSettings.greenGauss1Bias * this->GetGreenGauss1WeightOnCell(iCell) *
-                                             this->matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
-                                            uIncBV;
-                                }
-                                vInc *= this->GetFaceJacobiDet(iFace, iG);
-                                // std::cout << faceWeight[iFace].transpose() << std::endl;
-                            });
-                        if (!settings.intOrderVRIsSame())
-                        {
-                            auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
-                            tSmallCoords coords;
-                            mesh->GetCoordsOnFace(iFace, coords);
-                            qFace.Integration(
-                                BCC,
-                                [&](auto &vInc, int __xxx, const tPoint &pParam, const Elem::tD01Nj &DiNj)
-                                {
-                                    real JDet{0};
-                                    tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                                    tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                                    if constexpr (dim == 2)
-                                        JDet = J(Eigen::all, 0).stableNorm();
-                                    else
-                                        JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
-                                    tPoint np;
-                                    if constexpr (dim == 2)
-                                        np = FacialJacobianToNormVec<2>(J);
-                                    else
-                                        np = FacialJacobianToNormVec<3>(J);
-                                    Eigen::Matrix<real, 1, Eigen::Dynamic> dbv;
-                                    dbv.resize(1, cellAtr[iCell].NDOF);
-                                    this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
-                                    Eigen::Vector<real, nVarsFixed> uBL = (dbv * uRec[iCell]).transpose();
-                                    uBL += u[iCell];
-                                    Eigen::Vector<real, nVarsFixed> uBV =
-                                        FBoundary(
-                                            uBL,
-                                            u[iCell], iCell, iFace, -2,
-                                            np,
-                                            this->GetFacePointFromCell(iFace, iCell, -1, pPhy), faceID);
-                                    Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();
-                                    vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
-                                    vInc *= JDet;
-                                });
-                        }
+                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC = GetBoundaryRHS(uRec, u, iCell, iFace, FBoundary);
                         // BCC *= 0;
                         if (recordInc)
                             uRecNew[iCell] -=
@@ -429,92 +517,7 @@ namespace DNDS
                     }
                     else
                     {
-                        auto faceID = mesh->GetFaceZone(iFace);
-                        DNDS_assert(FaceIDIsExternalBC(faceID));
-
-                        int nVars = (int)u[iCell].size();
-
-                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC;
-                        BCC.setZero(uRec[iCell].rows(), uRec[iCell].cols());
-
-                        auto qFace = this->GetFaceQuad(iFace);
-                        qFace.IntegrationSimple(
-                            BCC,
-                            [&](auto &vInc, int iG)
-                            {
-                                Eigen::Matrix<real, 1, Eigen::Dynamic> dbv =
-                                    this->GetIntPointDiffBaseValue(
-                                        iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);
-                                Eigen::Vector<real, nVarsFixed> uBL =
-                                    (dbv *
-                                     uRec[iCell])
-                                        .transpose();
-                                uBL += u[iCell]; //! need fixing?
-                                Eigen::Vector<real, nVarsFixed> uBLDiff =
-                                    (dbv *
-                                     uRecDiff[iCell])
-                                        .transpose();
-                                Eigen::Vector<real, nVarsFixed>
-                                    uBV =
-                                        FBoundaryDiff(
-                                            uBL,
-                                            uBLDiff,
-                                            u[iCell], iCell, iFace, iG,
-                                            this->GetFaceNorm(iFace, iG),
-                                            this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
-                                Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();
-                                if (settings.intOrderVRIsSame())
-                                    vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
-                                else
-                                    vInc.resizeLike(BCC), vInc.setZero();
-                                // std::cout << faceWeight[iFace].transpose() << std::endl;
-                                if (settings.functionalSettings.greenGauss1Weight != 0)
-                                {
-                                    // DNDS_assert(false); // not yet implemented
-                                    vInc += (settings.functionalSettings.greenGauss1Bias * this->GetGreenGauss1WeightOnCell(iCell) *
-                                             this->matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
-                                            uIncBV;
-                                }
-                                vInc *= this->GetFaceJacobiDet(iFace, iG);
-                            });
-                        if (!settings.intOrderVRIsSame())
-                        {
-                            auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
-                            tSmallCoords coords;
-                            mesh->GetCoordsOnFace(iFace, coords);
-                            qFace.Integration(
-                                BCC,
-                                [&](auto &vInc, int __xxx, const tPoint &pParam, const Elem::tD01Nj &DiNj)
-                                {
-                                    real JDet{0};
-                                    tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                                    tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                                    if constexpr (dim == 2)
-                                        JDet = J(Eigen::all, 0).stableNorm();
-                                    else
-                                        JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
-                                    tPoint np;
-                                    if constexpr (dim == 2)
-                                        np = FacialJacobianToNormVec<2>(J);
-                                    else
-                                        np = FacialJacobianToNormVec<3>(J);
-                                    Eigen::Matrix<real, 1, Eigen::Dynamic> dbv;
-                                    dbv.resize(1, cellAtr[iCell].NDOF);
-                                    this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
-                                    Eigen::Vector<real, nVarsFixed> uBL = (dbv * uRec[iCell]).transpose();
-                                    uBL += u[iCell];
-                                    Eigen::Vector<real, nVarsFixed> uBLDiff = (dbv * uRecNew[iCell]).transpose();
-                                    Eigen::Vector<real, nVarsFixed> uBV =
-                                        FBoundaryDiff(
-                                            uBL, uBLDiff,
-                                            u[iCell], iCell, iFace, -2,
-                                            np,
-                                            this->GetFacePointFromCell(iFace, iCell, -1, pPhy), faceID);
-                                    Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();
-                                    vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
-                                    vInc *= JDet;
-                                });
-                        }
+                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC = GetBoundaryRHSDiff(uRec, uRecDiff, u, iCell, iFace, FBoundaryDiff);
                         // BCC *= 0;
                         uRecNew[iCell] -= matrixAAInvBRow[0] * BCC; // mind the sign
                     }
@@ -572,92 +575,7 @@ namespace DNDS
                     }
                     else
                     {
-                        auto faceID = mesh->GetFaceZone(iFace);
-                        DNDS_assert(FaceIDIsExternalBC(faceID));
-
-                        int nVars = u[iCell].size();
-
-                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC;
-                        BCC.setZero(uRec[iCell].rows(), uRec[iCell].cols());
-
-                        auto qFace = this->GetFaceQuad(iFace);
-                        qFace.IntegrationSimple(
-                            BCC,
-                            [&](auto &vInc, int iG)
-                            {
-                                Eigen::Matrix<real, 1, Eigen::Dynamic> dbv =
-                                    this->GetIntPointDiffBaseValue(
-                                        iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);
-                                Eigen::Vector<real, nVarsFixed> uBL =
-                                    (dbv *
-                                     uRec[iCell])
-                                        .transpose();
-                                uBL += u[iCell]; //! need fixing?
-                                Eigen::Vector<real, nVarsFixed> uBLDiff =
-                                    (dbv *
-                                     uRecNew[iCell])
-                                        .transpose();
-                                Eigen::Vector<real, nVarsFixed>
-                                    uBV =
-                                        FBoundaryDiff(
-                                            uBL,
-                                            uBLDiff,
-                                            u[iCell], iCell, iFace, iG,
-                                            this->GetFaceNorm(iFace, iG),
-                                            this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
-                                Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();
-                                if (settings.intOrderVRIsSame())
-                                    vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
-                                else
-                                    vInc.resizeLike(BCC), vInc.setZero();
-                                // std::cout << faceWeight[iFace].transpose() << std::endl;
-                                if (settings.functionalSettings.greenGauss1Weight != 0)
-                                {
-                                    // DNDS_assert(false); // not yet implemented
-                                    vInc += (settings.functionalSettings.greenGauss1Bias * this->GetGreenGauss1WeightOnCell(iCell) *
-                                             this->matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
-                                            uIncBV;
-                                }
-                                vInc *= this->GetFaceJacobiDet(iFace, iG);
-                            });
-                        if (!settings.intOrderVRIsSame())
-                        {
-                            auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
-                            tSmallCoords coords;
-                            mesh->GetCoordsOnFace(iFace, coords);
-                            qFace.Integration(
-                                BCC,
-                                [&](auto &vInc, int __xxx, const tPoint &pParam, const Elem::tD01Nj &DiNj)
-                                {
-                                    real JDet{0};
-                                    tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                                    tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                                    if constexpr (dim == 2)
-                                        JDet = J(Eigen::all, 0).stableNorm();
-                                    else
-                                        JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
-                                    tPoint np;
-                                    if constexpr (dim == 2)
-                                        np = FacialJacobianToNormVec<2>(J);
-                                    else
-                                        np = FacialJacobianToNormVec<3>(J);
-                                    Eigen::Matrix<real, 1, Eigen::Dynamic> dbv;
-                                    dbv.resize(1, cellAtr[iCell].NDOF);
-                                    this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
-                                    Eigen::Vector<real, nVarsFixed> uBL = (dbv * uRec[iCell]).transpose();
-                                    uBL += u[iCell];
-                                    Eigen::Vector<real, nVarsFixed> uBLDiff = (dbv * uRecNew[iCell]).transpose();
-                                    Eigen::Vector<real, nVarsFixed> uBV =
-                                        FBoundaryDiff(
-                                            uBL, uBLDiff,
-                                            u[iCell], iCell, iFace, -2,
-                                            np,
-                                            this->GetFacePointFromCell(iFace, iCell, -1, pPhy), faceID);
-                                    Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();
-                                    vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
-                                    vInc *= JDet;
-                                });
-                        }
+                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC = GetBoundaryRHSDiff(uRec, uRecNew, u, iCell, iFace, FBoundaryDiff);
                         // BCC *= 0;
                         uRecNew[iCell] += relax * matrixAAInvBRow[0] * BCC; // mind the sign
                     }
@@ -692,14 +610,13 @@ namespace DNDS
             tUDof<nVarsFixed> &u,                                                               \
             const TFBoundaryDiff<nVarsFixed> &FBoundaryDiff);                                   \
                                                                                                 \
-        ext template void VariationalReconstruction<dim>::                                      \
-            DoReconstructionIterSOR<nVarsFixed>(                                                \
-                tURec<nVarsFixed> & uRec,                                                       \
-                tURec<nVarsFixed> &uRecInc,                                                     \
-                tURec<nVarsFixed> &uRecNew,                                                     \
-                tUDof<nVarsFixed> &u,                                                           \
-                const TFBoundaryDiff<nVarsFixed> &FBoundaryDiff,                                \
-                bool reverse);                                                                  \
+        ext template void VariationalReconstruction<dim>::DoReconstructionIterSOR<nVarsFixed>(  \
+            tURec<nVarsFixed> & uRec,                                                           \
+            tURec<nVarsFixed> &uRecInc,                                                         \
+            tURec<nVarsFixed> &uRecNew,                                                         \
+            tUDof<nVarsFixed> &u,                                                               \
+            const TFBoundaryDiff<nVarsFixed> &FBoundaryDiff,                                    \
+            bool reverse);                                                                      \
     }
 
 DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(2, 4, extern)

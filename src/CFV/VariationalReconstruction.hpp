@@ -951,6 +951,22 @@ namespace DNDS::CFV
             Geom::t_index fType                      // fCode
             )>;
 
+    private: // only used in reconstruction implementation hxx
+        template <int nVarsFixed = 5>
+        auto GetBoundaryRHS(tURec<nVarsFixed> &uRec,
+                            tUDof<nVarsFixed> &u,
+                            index iCell, index iFace,
+                            const TFBoundary<nVarsFixed> &FBoundary);
+
+    private: // only used in reconstruction implementation hxx
+        template <int nVarsFixed = 5>
+        auto GetBoundaryRHSDiff(tURec<nVarsFixed> &uRec,
+                                tURec<nVarsFixed> &uRecDiff,
+                                tUDof<nVarsFixed> &u,
+                                index iCell, index iFace,
+                                const TFBoundaryDiff<nVarsFixed> &FBoundaryDiff);
+
+    public:
         /**
          * \brief fallback reconstruction method,
          * explicit 2nd order FV reconstruction

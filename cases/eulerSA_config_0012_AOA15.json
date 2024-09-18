@@ -69,8 +69,9 @@
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 1,
-        "intOrder": 1,
+        "maxOrder": 3,
+        "intOrder": 5,
+        "intOrderVR": 5,
         "cacheDiffBase": true,
         "jacobiRelax": 1.0,
         "SORInstead": true,
@@ -124,7 +125,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe_M1",
+        "riemannSolverType": "Roe",
         "constMassForce": [
             0.0,
             0.0,
