@@ -1,14 +1,14 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 0.5e-1,
-        "nTimeStep": 40,
+        "dtImplicit": 0.05e-1,
+        "nTimeStep": 80,
         "steadyQuit": false,
         "odeCode": 0,
         "tEnd": 3e+200,
         "odeSetting1": 0.5,
         "odeSetting2": 0,
         "odeSetting3": 0.75,
-        // "rhsFPPMode": 1,
+        "rhsFPPMode": 2,
         // "rhsFPPScale": 0.01
         "_tail": 0
     },
@@ -40,8 +40,9 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/IV10_80.cgns",
-        "outPltName": "../data/outUnsteady/IV10_c",
+        "meshDirectBisect": 4,
+        "meshFile": "../data/mesh/IV10_20.cgns",
+        "outPltName": "../data/outUnsteady/IV10_320",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -88,7 +89,7 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 6,
+        "intOrder": 3,
         "cacheDiffBase": false,
         "jacobiRelax": 1,
         "SORInstead": false,
@@ -132,7 +133,9 @@
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
         "riemannSolverType": "Roe",
-        "specialBuiltinInitializer": 2,
+        "uRecAlphaCompressPower": 1.0,
+        "uRecBetaCompressPower": 1.1,
+        "specialBuiltinInitializer": 203, // 2 is IV, 203 is PPIV
         "nCentralSmoothStep": 0,
         "constMassForce": [
             0.0,

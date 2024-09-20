@@ -885,8 +885,8 @@ namespace DNDS::Euler
             const TU &uInc)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            real rhoEps = smallReal * settings.refUPrim(0);
-            real pEps = smallReal * settings.refUPrim(I4);
+            real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
+            real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
 
             TU ret = uInc;
 

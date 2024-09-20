@@ -1007,8 +1007,8 @@ namespace DNDS::Euler
         int flag)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-        real rhoEps = smallReal * settings.refUPrim(0);
-        real pEps = smallReal * settings.refUPrim(I4);
+        real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
+        real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
 
         index nLimLocal = 0;
         real minBetaLocal = 1;
@@ -1036,10 +1036,10 @@ namespace DNDS::Euler
                 nPoint += gFace.GetNumPoints();
             }
             /***********/
-            DNDS_assert(u[iCell](0) >= rhoEps);
+            DNDS_assert_info(u[iCell](0) >= rhoEps, fmt::format("rhoMean {}, {}", u[iCell](0), rhoEps));
             real gamma = settings.idealGasProperty.gamma;
             real pCent = (gamma - 1) * (u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0));
-            DNDS_assert(pCent >= pEps);
+            DNDS_assert_info(pCent >= pEps, fmt::format("pMean {}, {}", pCent, pEps));
 
             // alter uRec if necessary
             int curOrder = vfv->GetCellOrder(iCell);
@@ -1196,8 +1196,8 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &u, bool panic)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-        real rhoEps = smallReal * settings.refUPrim(0);
-        real pEps = smallReal * settings.refUPrim(I4);
+        real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
+        real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
 
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -1246,8 +1246,8 @@ namespace DNDS::Euler
         int flag)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-        real rhoEps = smallReal * settings.refUPrim(0);
-        real pEps = smallReal * settings.refUPrim(I4);
+        real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
+        real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
 
         index nLimLocal = 0;
         real alphaMinLocal = 1;
@@ -1339,8 +1339,8 @@ namespace DNDS::Euler
         ArrayDOFV<1> &cellRHSAlpha, index &nLim, real alphaMin)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-        real rhoEps = smallReal * settings.refUPrim(0);
-        real pEps = smallReal * settings.refUPrim(I4);
+        real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
+        real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
 
         auto cellIsHalfAlpha = [&](index iCell) -> bool // iCell should be internal
         {
