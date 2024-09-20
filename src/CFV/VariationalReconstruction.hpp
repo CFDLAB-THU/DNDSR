@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_map>
+
 #include "VRDefines.hpp"
 #include "BaseFunction.hpp"
 #include "VRSettings.hpp"
@@ -60,6 +62,15 @@ namespace DNDS::CFV
         tMatsPair faceDiffBaseCache;     /// @brief constructed using ConstructBaseAndWeight()
         tVMatPair cellDiffBaseCacheCent; /// @brief constructed using ConstructBaseAndWeight() //TODO *test
         tVMatPair faceDiffBaseCacheCent; /// @brief constructed using ConstructBaseAndWeight() //TODO *test
+
+        struct BndVRPointCache
+        {
+            Geom::tPoint norm;
+            Geom::tPoint PPhy;
+            real JDet;
+            Eigen::Matrix<real, 1, Eigen::Dynamic> D0Bj;
+        };
+        std::unordered_map<index, std::vector<BndVRPointCache>> bndVRCaches; /// @brief constructed using ConstructBaseAndWeight()
 
         tMatsPair matrixAB; /// @brief constructed using ConstructRecCoeff()
         tVecsPair vectorB;  /// @brief constructed using ConstructRecCoeff()

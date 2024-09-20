@@ -691,6 +691,50 @@ namespace DNDS::CFV
         // faceAlignedScales.trans.pullOnce(); //!err: need adding comm preparation first
         // faceMajorCoordScale.trans.pullOnce(); //!err: need adding comm preparation first
 
+        if (!settings.intOrderVRIsSame())
+        {
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                auto c2f = mesh->cell2face[iCell];
+                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+                {
+                    index iFace = c2f[ic2f];
+                    index iCellOther = CellFaceOther(iCell, iFace);
+                    auto faceID = mesh->GetFaceZone(iFace);
+                    int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    if (iCellOther == UnInitIndex)
+                    {
+                        DNDS_assert(FaceIDIsExternalBC(faceID));
+                        DNDS_assert(bndVRCaches.count(iFace) == 0);
+                        auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                        bndVRCaches[iFace].reserve(qFace.GetNumPoints());
+                        tSmallCoords coords;
+                        mesh->GetCoordsOnFace(iFace, coords);
+                        SummationNoOp noOp;
+                        qFace.Integration(
+                            noOp,
+                            [&](auto &vInc, int __xxx_iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
+                            {
+                                tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
+                                tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
+                                real JDet = JacobiDetFace<dim>(J);
+                                tPoint np = FacialJacobianToNormVec<dim>(J);
+                                Eigen::Matrix<real, 1, Eigen::Dynamic> dbv, dbvD;
+                                dbvD.resize(1, cellAtr[iCell].NDOF);
+                                this->FDiffBaseValue(dbvD, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
+                                dbv = dbvD(0, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                                BndVRPointCache cacheEntry;
+                                cacheEntry.D0Bj = dbv;
+                                cacheEntry.JDet = JDet;
+                                cacheEntry.norm = np;
+                                cacheEntry.PPhy = pPhy;
+                                bndVRCaches.at(iFace).emplace_back(std::move(cacheEntry));
+                            });
+                    }
+                }
+            }
+        }
+
         if (mpi.rank == mRank)
             log()
                 << "VariationalReconstruction<dim>::ConstructBaseAndWeight() done" << std::endl;

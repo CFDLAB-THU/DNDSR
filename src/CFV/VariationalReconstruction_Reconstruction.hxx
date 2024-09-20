@@ -65,16 +65,13 @@ namespace DNDS
                 mesh->GetCoordsOnFace(iFace, coords);
                 qFace.Integration(
                     BCC,
-                    [&](auto &vInc, int __xxx_iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
-                    { //todo: cache these for bnd: pPhy JDet norm and dbv
-                        tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                        tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                        real JDet = JacobiDetFace<dim>(J);
-                        tPoint np = FacialJacobianToNormVec<dim>(J);
-                        Eigen::Matrix<real, 1, Eigen::Dynamic> dbv, dbvD;
-                        dbvD.resize(1, cellAtr[iCell].NDOF);
-                        this->FDiffBaseValue(dbvD, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
-                        dbv = dbvD(0, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                    [&](auto &vInc, int __xxx_iG, const tPoint &pParam, const Elem::tD01Nj &DiNj) { // todo: cache these for bnd: pPhy JDet norm and dbv
+                        BndVRPointCache &bndCacheEntry = bndVRCaches.at(iFace).at(__xxx_iG);
+                        auto &dbv = bndCacheEntry.D0Bj;
+                        auto &np = bndCacheEntry.norm;
+                        auto &JDet = bndCacheEntry.JDet;
+                        auto &pPhy = bndCacheEntry.PPhy;
+
                         Eigen::Vector<real, nVarsFixed> uBL = (dbv * uRec[iCell]).transpose();
                         uBL += u[iCell];
                         Eigen::Vector<real, nVarsFixed> uBV =
@@ -149,14 +146,11 @@ namespace DNDS
                     BCC,
                     [&](auto &vInc, int __xxx_iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                     {
-                        tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                        tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                        real JDet = JacobiDetFace<dim>(J);
-                        tPoint np = FacialJacobianToNormVec<dim>(J);
-                        Eigen::Matrix<real, 1, Eigen::Dynamic> dbv, dbvD;
-                        dbvD.resize(1, cellAtr[iCell].NDOF);
-                        this->FDiffBaseValue(dbvD, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
-                        dbv = dbvD(0, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                        BndVRPointCache &bndCacheEntry = bndVRCaches.at(iFace).at(__xxx_iG);
+                        auto &dbv = bndCacheEntry.D0Bj;
+                        auto &np = bndCacheEntry.norm;
+                        auto &JDet = bndCacheEntry.JDet;
+                        auto &pPhy = bndCacheEntry.PPhy;
                         Eigen::Vector<real, nVarsFixed> uBL = (dbv * uRec[iCell]).transpose();
                         uBL += u[iCell];
                         Eigen::Vector<real, nVarsFixed> uBLDiff = (dbv * uRecDiff[iCell]).transpose();
