@@ -812,6 +812,7 @@ namespace DNDS::Euler::Gas
     template <int dim = 3, int scheme = 0, int nVarsFixed, typename TU, typename TUInc>
     real IdealGasGetCompressionRatioPressure(const TU &u, const TUInc &uInc, real newrhoEinteralNew)
     {
+        static const real safetyRatio = 1 - 1e-5;
         static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
@@ -874,14 +875,14 @@ namespace DNDS::Euler::Gas
                 alpha = std::min((c2 > 0 ? alphaL : alphaL), 1.);
             }
             alpha = std::max(0., alpha);
-            alpha *= (1 - 1e-5);
+            alpha *= safetyRatio;
             if (alpha < smallReal)
                 alpha = 0;
         }
         else if constexpr (scheme == 1)
         {
             // has used convex
-            alpha *= (1 - 1e-5);
+            alpha *= safetyRatio;
             if (alpha < smallReal)
                 alpha = 0;
         }
