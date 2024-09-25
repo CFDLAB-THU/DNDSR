@@ -386,12 +386,14 @@ namespace DNDS::Euler
                 int nPartialLimiterStart = INT_MAX;
                 int nPartialLimiterStartLocal = INT_MAX;
                 bool preserveLimited = false;
+                bool ppRecLimiterCompressToMean = true;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     LimiterControl,
                     useLimiter, usePPRecLimiter,
                     smoothIndicatorProcedure, limiterProcedure,
                     nPartialLimiterStart, nPartialLimiterStartLocal,
-                    preserveLimited)
+                    preserveLimited, 
+                    ppRecLimiterCompressToMean)
             } limiterControl;
 
             struct LinearSolverControl

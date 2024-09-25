@@ -280,6 +280,8 @@ namespace DNDS::Euler
             { return 1.0; },
             real t = 0);
 
+        static const int EvaluateURecBeta_DEFAULT = 0x00;
+        static const int EvaluateURecBeta_COMPRESS_TO_MEAN = 0x01;
         void EvaluateURecBeta(
             ArrayDOFV<nVarsFixed> &u,
             ArrayRECV<nVarsFixed> &uRec,

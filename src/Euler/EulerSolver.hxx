@@ -576,7 +576,10 @@ namespace DNDS::Euler
                 minBeta = 1;
                 if (!config.limiterControl.useLimiter)
                     uRecNew = uRecC;
-                eval.EvaluateURecBeta(cx, uRecNew, betaPPC, nLimBeta, minBeta, 1); //*cx instead of u!
+                eval.EvaluateURecBeta(cx, uRecNew, betaPPC, nLimBeta, minBeta,
+                                      config.limiterControl.ppRecLimiterCompressToMean
+                                          ? TEval::EvaluateURecBeta_COMPRESS_TO_MEAN
+                                          : TEval::EvaluateURecBeta_DEFAULT); //*cx instead of u!
                 if (nLimBeta)
                     if (mpi.rank == 0 &&
                         (config.outputControl.consoleOutputEveryFix == 1 || config.outputControl.consoleOutputEveryFix == 3))

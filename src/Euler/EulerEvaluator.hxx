@@ -1068,7 +1068,7 @@ namespace DNDS::Euler
                 uRecBeta[iCell](0) = 1;
                 continue; //! early exit, reconstruction is good it self
             }
-            if (flag == 1)
+            if (flag & EvaluateURecBeta_COMPRESS_TO_MEAN)
                 curOrder = 1;
             while (curOrder > 0)
             {
