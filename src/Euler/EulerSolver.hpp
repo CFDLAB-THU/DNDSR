@@ -532,7 +532,8 @@ namespace DNDS::Euler
 
         /**
          */
-        void ConfigureFromJson(const std::string &jsonName, bool read = false, const std::string &jsonMergeName = "")
+        void ConfigureFromJson(const std::string &jsonName, bool read = false, const std::string &jsonMergeName = "",
+                               const std::vector<std::string> &overwriteKeys = {}, const std::vector<std::string> &overwriteValues = {})
         {
             if (read)
             {
@@ -546,6 +547,22 @@ namespace DNDS::Euler
                     DNDS_assert_info(fIn, "config file patch not existent");
                     auto gSettingAdd = nlohmann::ordered_json::parse(fIn, nullptr, true, true);
                     gSetting.merge_patch(gSettingAdd);
+                }
+                DNDS_assert(overwriteKeys.size() == overwriteValues.size());
+                for (size_t i = 0; i < overwriteKeys.size(); i++)
+                {
+
+                    auto key = nlohmann::ordered_json::json_pointer(overwriteKeys[i].c_str());
+                    std::string valString =
+                        fmt::format(R"({{
+"__val_entry": {}
+}})",
+                                    overwriteValues[i]);
+                    auto valDoc = nlohmann::ordered_json::parse(valString, nullptr, true, true);
+                    if (mpi.rank == 0)
+                        log() << "JSON: overwrite key: " << key << std::endl
+                              << "JSON: overwrite val: " << valDoc["__val_entry"] << std::endl;
+                    gSetting[key] = valDoc["__val_entry"];
                 }
                 config.ReadWriteJson(gSetting, nVars, read);
                 DNDS_MAKE_SSP(pBCHandler, nVars);
