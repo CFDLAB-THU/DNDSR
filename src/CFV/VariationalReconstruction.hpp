@@ -697,7 +697,7 @@ namespace DNDS::CFV
                     // std::cout << tw << std::endl;
 
                     coordTrans = Geom::NormBuildLocalBaseV<3>(norm).transpose() * faceL;
-                    coordTrans({1, 2}, Eigen::all) *= tw;
+                    coordTrans({1, 2}, Eigen::all) *= tw * settings.functionalSettings.tanWeightScale;
                 }
 
                 // std::cout << "face " << iFace << std::endl;

@@ -1,15 +1,17 @@
 {
     "timeMarchControl": {
         "dtImplicit": 0.05e-1,
-        "nTimeStep": 80,
+        "nTimeStep": 100000,
         "steadyQuit": false,
+        "tEnd": 2,
         "odeCode": 0,
-        "tEnd": 3e+200,
+        // "odeCode": 401,
         "odeSetting1": 0.5,
         "odeSetting2": 0,
-        "odeSetting3": 0.75,
+        "odeSetting3": 1.2,
+        "odeSetting4": 0,
         "rhsFPPMode": 2,
-        // "rhsFPPScale": 0.01
+        "rhsFPPScale": 1,
         "_tail": 0
     },
     "outputControl": {
@@ -18,7 +20,7 @@
         "consoleOutputMode": 0,
         "consoleOutputEveryFix": 0,
         "nDataOutC": 1,
-        "nDataOut": 1,
+        "nDataOut": 100,
         "nDataOutCInternal": 100,
         "nDataOutInternal": 1000000000,
         "tDataOut": 3e+200
@@ -32,8 +34,8 @@
         "useLocalDt": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 4000,
-        "rhsThresholdInternal": 1e-6,
+        "nTimeStepInternal": 400,
+        "rhsThresholdInternal": 1e-9,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
@@ -42,7 +44,7 @@
         "meshRotZ": 0.0,
         "meshDirectBisect": 4,
         "meshFile": "../data/mesh/IV10_20.cgns",
-        "outPltName": "../data/outUnsteady/IV10_320",
+        "outPltName": "../data/outUnsteady/IV10_xxx-sm",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -89,7 +91,7 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
+        "intOrder": 6,
         "cacheDiffBase": false,
         "jacobiRelax": 1,
         "SORInstead": false,
@@ -104,9 +106,10 @@
         "functionalSettings": {
             "scaleType": "BaryDiff",
             // "scaleMultiplier": 0.5,
-            // "dirWeightScheme": "Factorial",
-            "dirWeightScheme": "HQM_OPT",
+            "dirWeightScheme": "Factorial",
+            // "dirWeightScheme": "HQM_OPT",
             // "useAnisotropicFunctional": true,
+            // "tanWeightScale": 0,
             // "scaleMultiplier": 3.464101615137754,
             "greenGauss1Weight": 0,
             "_tail": 0
@@ -134,7 +137,7 @@
         "useScalarJacobian": true,
         "riemannSolverType": "Roe",
         "uRecAlphaCompressPower": 1.0,
-        "uRecBetaCompressPower": 1.1,
+        "uRecBetaCompressPower": 1.0,
         "specialBuiltinInitializer": 203, // 2 is IV, 203 is PPIV
         "nCentralSmoothStep": 0,
         "constMassForce": [

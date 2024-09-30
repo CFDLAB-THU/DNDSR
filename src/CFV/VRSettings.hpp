@@ -100,6 +100,7 @@ namespace DNDS::CFV
             real geomWeightPower2 = 0;
 
             bool useAnisotropicFunctional = false;
+            real tanWeightScale = 1.;
 
             enum AnisotropicType
             {
@@ -123,6 +124,7 @@ namespace DNDS::CFV
                 geomWeightScheme,
                 geomWeightPower, geomWeightPower1, geomWeightPower2,
                 useAnisotropicFunctional,
+                tanWeightScale,
                 anisotropicType,
                 inertiaWeightPower,
                 geomWeightBias,
