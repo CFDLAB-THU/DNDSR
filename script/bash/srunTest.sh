@@ -1,0 +1,15 @@
+#!/bin/bash
+#SBATCH --partition=v6_384
+#SBATCH --nodes=5
+#SBATCH --ntasks-per-node=96
+cd ../build
+export HWLOC_PCI_0000_40_LOCALCPUS=
+export HWLOC_PCI_0000_44_LOCALCPUS=
+export HWLOC_PCI_0000_53_LOCALCPUS=
+export HWLOC_PCI_0000_62_LOCALCPUS=
+export HWLOC_PCI_0000_71_LOCALCPUS=
+export DNDS_ARRAY_STRATEGY_USE_IN_SITU=0
+export DNDS_USE_STRONG_SYNC_WAIT=0
+export DNDS_USE_ASYNC_ONE_BY_ONE=1
+mpirun app/stdPowerTest.exe 0 2 0 2 1000 100000 10000 2
+cd ../running

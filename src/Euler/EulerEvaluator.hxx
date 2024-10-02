@@ -1010,25 +1010,27 @@ namespace DNDS::Euler
         static const real safetyRatio = 1 - 1e-5;
         real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
         real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
+        bool restrictOnVolPoints = (!settings.ignoreSourceTerm) || settings.forceVolURecBeta;
 
         index nLimLocal = 0;
         real minBetaLocal = 1;
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             auto gCell = vfv->GetCellQuad(iCell);
-            int nPoint = gCell.GetNumPoints();
+            int nPoint = restrictOnVolPoints ? gCell.GetNumPoints() : 0;
             auto c2f = mesh->cell2face[iCell];
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
-            {
-                auto gFace = vfv->GetFaceQuad(c2f[ic2f]);
-                nPoint += gFace.GetNumPoints();
-            }
+                nPoint += vfv->GetFaceQuad(c2f[ic2f]).GetNumPoints();
             /***********/
             Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> quadBase;
             quadBase.resize(nPoint, vfv->GetCellAtr(iCell).NDOF - 1);
-            for (int iG = 0; iG < gCell.GetNumPoints(); iG++)
-                quadBase(iG, Eigen::all) = vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iG, 0, 1);
-            nPoint = gCell.GetNumPoints();
+            nPoint = 0;
+            if (restrictOnVolPoints)
+            {
+                for (int iG = 0; iG < gCell.GetNumPoints(); iG++)
+                    quadBase(iG, Eigen::all) = vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iG, 0, 1);
+                nPoint += gCell.GetNumPoints();
+            }
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 auto gFace = vfv->GetFaceQuad(c2f[ic2f]);
