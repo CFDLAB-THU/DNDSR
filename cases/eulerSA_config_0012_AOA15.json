@@ -125,7 +125,8 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe",
+        "riemannSolverType": "Roe_M1",
+        "usePrimGradInVisFlux": 0,
         "constMassForce": [
             0.0,
             0.0,

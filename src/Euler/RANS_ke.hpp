@@ -51,18 +51,15 @@ namespace DNDS::Euler::RANS
     }
 
     template <int dim, class TU, class TDiffU, class TVFlux>
-    void GetVisFlux_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real mut, real d, real muPhy, TVFlux &vFlux)
+    void GetVisFlux_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxyPrim, real mut, real d, real muPhy, TVFlux &vFlux)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
         static const auto I4 = dim + 1;
         real sigK = 1.;
         real sigE = 1.3;
-        Eigen::Matrix<real, dim, 2> diffRhoKe = DiffUxy(Seq012, {I4 + 1, I4 + 2});
-        Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
-        Eigen::Matrix<real, dim, 2> diffKe = (diffRhoKe - 1. / UMeanXy(0) * diffRho * UMeanXy({I4 + 1, I4 + 2}).transpose()) / UMeanXy(0);
-        vFlux(Seq012, {I4 + 1}) = diffKe(Seq012, 0) * (muPhy + mut / sigK);
-        vFlux(Seq012, {I4 + 2}) = diffKe(Seq012, 1) * (muPhy + mut / sigE);
+        vFlux(Seq012, {I4 + 1}) = DiffUxyPrim(Seq012, {I4 + 1}) * (muPhy + mut / sigK);
+        vFlux(Seq012, {I4 + 2}) = DiffUxyPrim(Seq012, {I4 + 2}) * (muPhy + mut / sigE);
     }
 
     template <int dim, class TU, class TDiffU, class TSource>
@@ -283,7 +280,7 @@ namespace DNDS::Euler::RANS
     }
 
     template <int dim, class TU, class TDiffU, class TVFlux>
-    void GetVisFlux_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real mutIn, real d, real muf, TVFlux &vFlux)
+    void GetVisFlux_SST(TU &&UMeanXy, TDiffU &&DiffUxyPrim, real mutIn, real d, real muf, TVFlux &vFlux)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -303,13 +300,12 @@ namespace DNDS::Euler::RANS
         real gamma1 = beta1 / betaStar - sigO1 * sqr(kap) / std::sqrt(betaStar);
         real gamma2 = beta2 / betaStar - sigO2 * sqr(kap) / std::sqrt(betaStar);
         Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
-        Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
-        Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
-        Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
+        Eigen::Matrix<real, dim, 1> diffRho = DiffUxyPrim(Seq012, {0});
+        Eigen::Matrix<real, dim, dim> diffU = DiffUxyPrim(Seq012, Seq123);
         Eigen::Matrix<real, dim, dim> SR2 = diffU + diffU.transpose();                                                  // 2 times strain rate
         Eigen::Matrix<real, dim, dim> SS = SR2 - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity(); // 2 times shear strain rate
-        Eigen::Matrix<real, dim, 2> diffRhoKO = DiffUxy(Seq012, {I4 + 1, I4 + 2});
-        Eigen::Matrix<real, dim, 2> diffKO = (diffRhoKO - 1. / UMeanXy(0) * diffRho * UMeanXy({I4 + 1, I4 + 2}).transpose()) / UMeanXy(0);
+        Eigen::Matrix<real, dim, 2> diffKO = DiffUxyPrim(Seq012, {I4 + 1, I4 + 2});
+
         Eigen::Matrix<real, dim, dim> OmegaM = (diffU.transpose() - diffU) * 0.5;
         real OmegaMag = OmegaM.norm() * std::sqrt(2);
         real rho = UMeanXy(0);
@@ -468,7 +464,7 @@ namespace DNDS::Euler::RANS
     }
 
     template <int dim, class TU, class TDiffU, class TVFlux>
-    void GetVisFlux_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxy, real mutIn, real d, real muf, TVFlux &vFlux)
+    void GetVisFlux_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxyPrim, real mutIn, real d, real muf, TVFlux &vFlux)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -483,13 +479,11 @@ namespace DNDS::Euler::RANS
         real Prt = 0.9;
         real CLim = 7. / 8.;
         Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
-        Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
-        Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
-        Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
+        Eigen::Matrix<real, dim, 1> diffRho = DiffUxyPrim(Seq012, {0});
+        Eigen::Matrix<real, dim, dim> diffU = DiffUxyPrim(Seq012, Seq123);
         Eigen::Matrix<real, dim, dim> SR2 = diffU + diffU.transpose();                                                  // 2 times strain rate
         Eigen::Matrix<real, dim, dim> SS = SR2 - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity(); // 2 times shear strain rate
-        Eigen::Matrix<real, dim, 2> diffRhoKO = DiffUxy(Seq012, {I4 + 1, I4 + 2});
-        Eigen::Matrix<real, dim, 2> diffKO = (diffRhoKO - 1. / UMeanXy(0) * diffRho * UMeanXy({I4 + 1, I4 + 2}).transpose()) / UMeanXy(0);
+        Eigen::Matrix<real, dim, 2> diffKO = DiffUxyPrim(Seq012, {I4 + 1, I4 + 2});
         real rho = UMeanXy(0);
         real k = std::max(UMeanXy(I4 + 1) / rho, sqr(verySmallReal_4));
         real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
