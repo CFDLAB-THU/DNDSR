@@ -595,9 +595,11 @@ namespace DNDS::Euler
             }
 
             if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter) // todo: opt to using limited for uRecUnlim
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
+                eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecNew : uRecC, uRecNew,
+                                 betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
             else
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC,
+                                 betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
 
             crhs.trans.startPersistentPull();
             crhs.trans.waitPersistentPull();
@@ -1014,9 +1016,11 @@ namespace DNDS::Euler
                 }
             alphaPPC = alphaPP_tmp;
             if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter)
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecNew, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecNew : uRecC, uRecNew,
+                                 betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
             else
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC,
+                                 betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
             // rhs now last-fixed
             crhs.trans.startPersistentPull();
             crhs.trans.waitPersistentPull();
@@ -1040,9 +1044,11 @@ namespace DNDS::Euler
                     }
                 alphaPPC = alphaPP_tmp;
                 if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter)
-                    eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecNew, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                    eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecNew : uRecC, uRecNew,
+                                     betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
                 else
-                    eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC, betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                    eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC,
+                                     betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
                 crhs.trans.startPersistentPull();
                 crhs.trans.waitPersistentPull();
             }

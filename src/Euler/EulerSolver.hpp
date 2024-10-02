@@ -381,6 +381,7 @@ namespace DNDS::Euler
             {
                 bool useLimiter = true;
                 bool usePPRecLimiter = true;
+                bool useViscousLimited = true;
                 int smoothIndicatorProcedure = 0;
                 int limiterProcedure = 0; // 0 for V2==3WBAP, 1 for V3==CWBAP
                 int nPartialLimiterStart = INT_MAX;
@@ -389,7 +390,7 @@ namespace DNDS::Euler
                 bool ppRecLimiterCompressToMean = true;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     LimiterControl,
-                    useLimiter, usePPRecLimiter,
+                    useLimiter, usePPRecLimiter, useViscousLimited,
                     smoothIndicatorProcedure, limiterProcedure,
                     nPartialLimiterStart, nPartialLimiterStartLocal,
                     preserveLimited, 
