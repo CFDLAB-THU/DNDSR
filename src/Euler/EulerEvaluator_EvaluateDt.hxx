@@ -475,10 +475,7 @@ namespace DNDS::Euler
         TDiffU VisFlux;
         VisFlux.resizeLike(DiffUxy);
         VisFlux.setZero();
-        bool primGrad = settings.usePrimGradInVisFlux;
-        TDiffU DiffUxyPrimP = DiffUxyPrim;
-        if (!primGrad)
-            Gas::GradientCons2Prim_IdealGas(UMeanXy, DiffUxy, DiffUxyPrimP, gamma);
+        auto& DiffUxyPrimP = DiffUxyPrim;
         Gas::ViscousFlux_IdealGas<dim>(
             UMeanXy, DiffUxyPrimP, unitNorm, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
             settings.idealGasProperty.gamma,

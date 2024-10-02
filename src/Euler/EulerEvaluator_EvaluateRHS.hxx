@@ -231,7 +231,7 @@ namespace DNDS::Euler
                             vfv->GetFaceQuadraturePPhys(iFace, iG),
                             t,
                             mesh->GetFaceZone(iFace), true, 0);
-                        if (&uRecUnlim != &uRec && false) //! disabled now, as ULxyUnlim may have negative pressure
+                        if (&uRecUnlim != &uRec && false) //! disabled now, as ULxyUnlim may have negative pressure failing in generateBV
                             URxyUnlim = generateBoundaryValue(
                                 ULxyUnlim, ULMeanXy, f2c[0], iFace, iG,
                                 unitNorm,
@@ -242,7 +242,7 @@ namespace DNDS::Euler
                         else
                             URxyUnlim = URxy;
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
-                        GradURxy = GradULxy; //! generated boundary value couldn't use any periodic conversion?
+                        GradURxy = GradULxy;
 #endif
                         URMeanXy = generateBoundaryValue(
                             ULMeanXy, ULMeanXy, f2c[0], iFace, iG,
@@ -272,25 +272,30 @@ namespace DNDS::Euler
                     TU UMeanXy = 0.5 * (ULxy + URxy);
 
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
-                    auto gamma = settings.idealGasProperty.gamma;
-
-                    TDiffU GradULxyPrim, GradURxyPrim;
-                    GradULxyPrim.resizeLike(GradURxy), GradURxyPrim.resizeLike(GradURxy);
-                    Gas::GradientCons2Prim_IdealGas<dim>(ULxy, GradULxy, GradULxyPrim, gamma);
-                    Gas::GradientCons2Prim_IdealGas<dim>(URxy, GradURxy, GradURxyPrim, gamma);
-                    TU URxyPrim(cnvars), ULxyPrim(cnvars);
-                    Gas::IdealGasThermalConservative2Primitive(ULxy, ULxyPrim, gamma);
-                    Gas::IdealGasThermalConservative2Primitive(URxy, URxyPrim, gamma);
-
-                    TDiffU GradUMeanXyPrim = (GradURxyPrim + GradULxyPrim) * 0.5 +
-                                             (1.0 / distGRP) *
-                                                 (unitNorm * (URxyPrim - ULxyPrim).transpose());
-
                     TDiffU GradUMeanXy = (GradURxy + GradULxy) * 0.5 +
                                          (1.0 / distGRP) *
                                              (unitNorm * (URxyUnlim - ULxyUnlim).transpose());
                     if (ignoreVis)
                         GradUMeanXy *= 0.;
+
+                    TDiffU GradUMeanXyPrim;
+                    real gamma = settings.idealGasProperty.gamma;
+                    if (settings.usePrimGradInVisFlux)
+                    {
+                        TDiffU GradULxyPrim, GradURxyPrim;
+                        GradULxyPrim.resizeLike(GradURxy), GradURxyPrim.resizeLike(GradURxy);
+                        Gas::GradientCons2Prim_IdealGas<dim>(ULxy, GradULxy, GradULxyPrim, gamma);
+                        Gas::GradientCons2Prim_IdealGas<dim>(URxy, GradURxy, GradURxyPrim, gamma);
+                        TU URxyPrim(cnvars), ULxyPrim(cnvars);
+                        Gas::IdealGasThermalConservative2Primitive(ULxy, ULxyPrim, gamma);
+                        Gas::IdealGasThermalConservative2Primitive(URxy, URxyPrim, gamma);
+
+                        GradUMeanXyPrim = (GradURxyPrim + GradULxyPrim) * 0.5 +
+                                          (1.0 / distGRP) *
+                                              (unitNorm * (URxyPrim - ULxyPrim).transpose());
+                    }
+                    else
+                        Gas::GradientCons2Prim_IdealGas(UMeanXy, GradUMeanXy, GradUMeanXyPrim, gamma);
 
 #else
                     TDiffU GradUMeanXy;
@@ -301,7 +306,7 @@ namespace DNDS::Euler
                         faceBCType == EulerBCType::BCFar ||
                         faceBCType == EulerBCType::BCSpecial ||
                         faceBCType == EulerBCType::BCSym)
-                        GradUMeanXy *= 0; // force no viscid flux
+                        GradUMeanXy *= 0, GradUMeanXyPrim *= 0; // force no viscid flux
 
                     TU FLFix, FRFix;
                     FLFix.setZero(cnvars), FRFix.setZero(cnvars);
@@ -322,15 +327,11 @@ namespace DNDS::Euler
                         DNDS_assert(false);
                     }
                     TU fincC = fluxFace(
-                        ULxy,
-                        URxy,
-                        ULMeanXy,
-                        URMeanXy,
-                        GradUMeanXy,
-                        GradUMeanXyPrim,
+                        ULxy, URxy,
+                        ULMeanXy, URMeanXy,
+                        GradUMeanXy, GradUMeanXyPrim,
                         unitNorm,
-                        GetFaceVGrid(iFace, iG),
-                        normBase,
+                        GetFaceVGrid(iFace, iG), normBase,
                         FLFix, FRFix,
                         mesh->GetFaceZone(iFace),
                         rsType,
@@ -454,11 +455,11 @@ namespace DNDS::Euler
                         if constexpr (gDim == 2)
                             GradU({0, 1}, Eigen::all) =
                                 vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iG, std::array<int, 2>{1, 2}, 3) *
-                                uRec[iCell] * IF_NOT_NOREC; // 2d specific
+                                uRecUnlim[iCell] * IF_NOT_NOREC; // 2d specific
                         else
                             GradU({0, 1, 2}, Eigen::all) =
                                 vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iG, std::array<int, 3>{1, 2, 3}, 4) *
-                                uRec[iCell] * IF_NOT_NOREC; // 3d specific
+                                uRecUnlim[iCell] * IF_NOT_NOREC; // 3d specific
 
                         bool pointOrderReduced;
                         TU ULxy = u[iCell];
@@ -529,5 +530,3 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS -1");
     }
 }
-
-
