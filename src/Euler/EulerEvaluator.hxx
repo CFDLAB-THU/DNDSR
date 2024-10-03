@@ -1010,6 +1010,7 @@ namespace DNDS::Euler
         static const real safetyRatio = 1 - 1e-5;
         real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
         real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
+        real betaCutOff = 1e-3;
         bool restrictOnVolPoints = (!settings.ignoreSourceTerm) || settings.forceVolURecBeta;
 
         index nLimLocal = 0;
@@ -1162,6 +1163,8 @@ namespace DNDS::Euler
                 // uRecBeta[iCell](0) *= uRecBeta[iCell](0) < 0.99 ? 0. : 0.99; //! for safety
                 uRecBeta[iCell](0) *= std::pow(uRecBeta[iCell](0), static_cast<int>(std::round(settings.uRecBetaCompressPower))) * safetyRatio;
                 minBetaLocal = std::min(uRecBeta[iCell](0), minBetaLocal);
+                if (uRecBeta[iCell](0) < betaCutOff)
+                    uRecBeta[iCell](0) = 0;
             }
             if (uRecBeta[iCell](0) < 0)
             {
