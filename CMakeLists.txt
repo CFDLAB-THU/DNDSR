@@ -121,8 +121,8 @@ set(CMAKE_USE_RELATIVE_PATHS ON)
 
 # ##########################################
 find_library(EXTERNAL_LIB_BACKTRACE NAMES backtrace)
-
-find_library(EXTERNAL_LIB_ZLIB NAMES z z_D  zlib libzlibstatic.a REQUIRED)
+# need zlibstatic first to find the static version on windows
+find_library(EXTERNAL_LIB_ZLIB NAMES zlibstatic zlib z z_D libzlibstatic.a REQUIRED)
 find_library(EXTERNAL_LIB_HDF5 NAMES libhdf5.a hdf5 PATHS 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
@@ -422,6 +422,7 @@ elseif(WIN32 OR MSVC)
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
         add_compile_options(-Wall -Wno-unused-but-set-variable -Wno-unused-variable -Wno-sign-compare)
         add_compile_options(-std=c++17 )
+        add_link_options(-lshlwapi) # when hdf is compiled with msvc, needs this
         # add_compile_options(--target=x86_64-pc-windows-gnu)
         # add_link_options(--target=x86_64-pc-windows-gnu)
         add_compile_options(-D_CRT_SECURE_NO_WARNINGS -DCOMPILER_MSC)
