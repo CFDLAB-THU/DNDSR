@@ -462,11 +462,11 @@ namespace DNDS::Euler
         {
             real mut = 0;
             if (settings.ransModel == RANSModel::RANS_KOSST)
-                    mut = RANS::GetMut_SST<dim>(UMeanXYC, DiffUxyC, muf, dWallFace[iFace]);
+                    mut = RANS::GetMut_SST<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
             else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                    mut = RANS::GetMut_KOWilcox<dim>(UMeanXYC, DiffUxyC, muf, dWallFace[iFace]);
+                    mut = RANS::GetMut_KOWilcox<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
             else if (settings.ransModel == RANSModel::RANS_RKE)
-                    mut = RANS::GetMut_RealizableKe<dim>(UMeanXYC, DiffUxyC, muf, dWallFace[iFace]);
+                    mut = RANS::GetMut_RealizableKe<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
             muf = muf + mut;
         }
 
@@ -524,17 +524,17 @@ namespace DNDS::Euler
                 fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
             }
 #endif
-                VisFlux(I4 + 1) = DiffUxyPrimC(Seq012, {I4 + 1}).dot(uNormC) * (mufPhy + UMeanXy(I4 + 1) * muRef * fn) / sigma;
+                VisFlux(I4 + 1) = DiffUxyPrim(Seq012, {I4 + 1}).dot(unitNorm) * (mufPhy + UMeanXy(I4 + 1) * muRef * fn) / sigma;
 
         }
         if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
         {
             if (settings.ransModel == RANSModel::RANS_KOSST)
-                RANS::GetVisFlux_SST<dim>(UMeanXy, DiffUxyPrimP, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
+                RANS::GetVisFlux_SST<dim>(UMeanXy, DiffUxyPrimP, unitNorm, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
             else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                RANS::GetVisFlux_KOWilcox<dim>(UMeanXy, DiffUxyPrimP, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
+                RANS::GetVisFlux_KOWilcox<dim>(UMeanXy, DiffUxyPrimP, unitNorm, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
             else if (settings.ransModel == RANSModel::RANS_RKE)
-                RANS::GetVisFlux_RealizableKe<dim>(UMeanXy, DiffUxyPrimP, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
+                RANS::GetVisFlux_RealizableKe<dim>(UMeanXy, DiffUxyPrimP, unitNorm, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
         }
 #endif
 
