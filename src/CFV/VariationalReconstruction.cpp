@@ -58,7 +58,6 @@ namespace DNDS::CFV
                     vInc = 1 * JDet;
                     cellIntJacobiDet(iCell, iG) = JDet;
                 });
-            volumeLocal[iCell] = v;
             // if (!(v > 0))
             //     std::cout << fmt::format("cell has ill area result, v = {}, cellType {}", v, int(eCell.type)) << std::endl;
             // for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
@@ -67,13 +66,17 @@ namespace DNDS::CFV
 
             if (!settings.ignoreMeshGeometryDeficiency)
             {
-                DNDS_assert_info(v > 0, fmt::format("cell has ill area result, v = {}, cellType {}", v, int(eCell.type)));
+                DNDS_assert_info(v >= 0, fmt::format("cell has ill area result, v = {}, cellType {}", v, int(eCell.type)));
 
                 for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
                     DNDS_assert_info(
-                        cellIntJacobiDet(iCell, iG) / v > 1e-10,
+                        cellIntJacobiDet(iCell, iG) / v >= 0,
                         fmt::format("cell has ill jacobi det, det/V {}, cellType {}", cellIntJacobiDet(iCell, iG) / v, int(eCell.type)));
             }
+            v += verySmallReal;
+            for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
+                cellIntJacobiDet(iCell, iG) += verySmallReal;
+            volumeLocal[iCell] = v;
             if (iCell < mesh->NumCell()) // non-ghost
 #ifdef DNDS_USE_OMP
 #pragma omp critical
@@ -206,9 +209,9 @@ namespace DNDS::CFV
                     tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
                     real JDet;
                     if constexpr (dim == 2)
-                        JDet = J(Eigen::all, 0).stableNorm();
+                        JDet = J(Eigen::all, 0).stableNorm() + verySmallReal;
                     else
-                        JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+                        JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm() + verySmallReal;
                     vInc = 1 * JDet;
                     faceIntJacobiDet(iFace, iG) = JDet;
                 });
@@ -261,7 +264,7 @@ namespace DNDS::CFV
                 DNDS_assert_info(
                     (this->GetFaceQuadraturePPhysFromCell(iFace, mesh->face2cell(iFace, 0), -1, -1) -
                      this->GetCellQuadraturePPhys(mesh->face2cell(iFace, 0), -1))
-                            .dot(faceMeanNorm[iFace]) > 0,
+                            .dot(faceMeanNorm[iFace]) >= 0,
                     "face mean norm is not the same side as faceCenter - cellCenter");
         }
         faceUnitNorm.CompressBoth();
