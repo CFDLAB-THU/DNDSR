@@ -462,11 +462,11 @@ namespace DNDS::Euler
         {
             real mut = 0;
             if (settings.ransModel == RANSModel::RANS_KOSST)
-                mut = RANS::GetMut_SST<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
+                    mut = RANS::GetMut_SST<dim>(UMeanXYC, DiffUxyC, muf, dWallFace[iFace]);
             else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                mut = RANS::GetMut_KOWilcox<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
+                    mut = RANS::GetMut_KOWilcox<dim>(UMeanXYC, DiffUxyC, muf, dWallFace[iFace]);
             else if (settings.ransModel == RANSModel::RANS_RKE)
-                mut = RANS::GetMut_RealizableKe<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
+                    mut = RANS::GetMut_RealizableKe<dim>(UMeanXYC, DiffUxyC, muf, dWallFace[iFace]);
             muf = muf + mut;
         }
 
