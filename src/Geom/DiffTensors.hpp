@@ -327,6 +327,137 @@ namespace DNDS::Geom::Base
             }
     }
 
+    template <int dim, class TMat, class TDiBjB>
+    inline void ConvertDiffsFullMap(TMat &&mat, TDiBjB &&DxiDx)
+    {
+        int rows = mat.rows();
+        int nBase = mat.cols();
+
+        int cmaxDiffOrder = -1;
+        if constexpr (dim == 2)
+            switch (rows)
+            {
+            case 10:
+                cmaxDiffOrder = 3;
+                break;
+            case 6:
+                cmaxDiffOrder = 2;
+                break;
+            case 3:
+                cmaxDiffOrder = 1;
+                break;
+            case 1:
+                cmaxDiffOrder = 0;
+                break;
+            default:
+                std::cerr << mat.rows() << std::endl;
+                DNDS_assert(false);
+                break;
+            }
+        else // dim ==3
+            switch (rows)
+            {
+            case 20:
+                cmaxDiffOrder = 3;
+                break;
+            case 10:
+                cmaxDiffOrder = 2;
+                break;
+            case 4:
+                cmaxDiffOrder = 1;
+                break;
+            case 1:
+                cmaxDiffOrder = 0;
+                break;
+            default:
+                std::cerr << mat.rows() << std::endl;
+                DNDS_assert(false);
+                break;
+            }
+
+        if (cmaxDiffOrder == 0)
+            return;
+        static const auto &diffOperatorIJK2IcDim = dim == 2 ? diffOperatorIJK2I2D : diffOperatorIJK2I;
+        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> out;
+        out.resize(rows, nBase);
+
+        static const int nDiffSizC1 = dim == 2 ? ndiffSizC2D[1] : ndiffSizC[1];
+        static const auto seq0t1 = Eigen::seq(Eigen::fix<1>, Eigen::fix<nDiffSizC1 - 1>);
+        for (int iB = 0; iB < nBase; iB++)
+            for (int ii = 1; ii < nDiffSizC1; ii++)
+            {
+                int i = dim == 2 ? diffOperatorDimList2D[ii][0] : diffOperatorDimList[ii][0];
+                real &ccv = out(ii, iB);
+                ccv = 0;
+                for (int m = 0; m < dim; m++)
+                    ccv += DxiDx(std::get<1>(diffOperatorIJK2IcDim)[i], m) *
+                           mat(std::get<1>(diffOperatorIJK2IcDim)[m], iB);
+            }
+        mat(seq0t1) = out(seq0t1);
+        if (cmaxDiffOrder == 1)
+            return;
+
+        static const int nDiffSizC2 = dim == 2 ? ndiffSizC2D[2] : ndiffSizC[2];
+        static const auto seq1t2 = Eigen::seq(Eigen::fix<nDiffSizC1>, Eigen::fix<nDiffSizC2 - 1>);
+        for (int iB = 0; iB < nBase; iB++)
+            for (int ii = nDiffSizC1; ii < nDiffSizC2; ii++)
+            {
+                int i = dim == 2 ? diffOperatorDimList2D[ii][0] : diffOperatorDimList[ii][0];
+                int j = dim == 2 ? diffOperatorDimList2D[ii][1] : diffOperatorDimList[ii][1];
+                real &ccv = out(ii, iB);
+                ccv = 0;
+                for (int m = 0; m < dim; m++)
+                    ccv += DxiDx(std::get<2>(diffOperatorIJK2IcDim)[i][j], m) *
+                           mat(std::get<1>(diffOperatorIJK2IcDim)[m], iB);
+                for (int m = 0; m < dim; m++)
+                    for (int n = 0; n < dim; n++)
+                        ccv += DxiDx(std::get<1>(diffOperatorIJK2IcDim)[i], m) *
+                               DxiDx(std::get<1>(diffOperatorIJK2IcDim)[j], n) *
+                               mat(std::get<2>(diffOperatorIJK2IcDim)[m][n], iB);
+            }
+        mat(seq1t2) = out(seq1t2);
+        if (cmaxDiffOrder == 2)
+            return;
+
+        static const int nDiffSizC3 = dim == 2 ? ndiffSizC2D[3] : ndiffSizC[3];
+        static const auto seq2t3 = Eigen::seq(Eigen::fix<nDiffSizC2>, Eigen::fix<nDiffSizC3 - 1>);
+        for (int iB = 0; iB < nBase; iB++)
+            for (int ii = nDiffSizC2; ii < nDiffSizC3; ii++)
+            {
+                int i = dim == 2 ? diffOperatorDimList2D[ii][0] : diffOperatorDimList[ii][0];
+                int j = dim == 2 ? diffOperatorDimList2D[ii][1] : diffOperatorDimList[ii][1];
+                int k = dim == 2 ? diffOperatorDimList2D[ii][2] : diffOperatorDimList[ii][2];
+                real &ccv = out(ii, iB);
+                ccv = 0;
+                for (int m = 0; m < dim; m++)
+                    ccv += DxiDx(std::get<3>(diffOperatorIJK2IcDim)[i][j][k], m) *
+                           mat(std::get<1>(diffOperatorIJK2IcDim)[m], iB);
+                for (int m = 0; m < dim; m++)
+                    for (int n = 0; n < dim; n++)
+                        ccv +=
+                            DxiDx(std::get<2>(diffOperatorIJK2IcDim)[i][j], m) *
+                                DxiDx(std::get<1>(diffOperatorIJK2IcDim)[k], n) *
+                                mat(std::get<2>(diffOperatorIJK2IcDim)[m][n], iB) +
+                            DxiDx(std::get<2>(diffOperatorIJK2IcDim)[i][k], m) *
+                                DxiDx(std::get<1>(diffOperatorIJK2IcDim)[j], n) *
+                                mat(std::get<2>(diffOperatorIJK2IcDim)[m][n], iB) +
+                            DxiDx(std::get<2>(diffOperatorIJK2IcDim)[j][k], m) *
+                                DxiDx(std::get<1>(diffOperatorIJK2IcDim)[i], n) *
+                                mat(std::get<2>(diffOperatorIJK2IcDim)[m][n], iB);
+                for (int m = 0; m < dim; m++)
+                    for (int n = 0; n < dim; n++)
+                        for (int p = 0; p < dim; p++)
+                            ccv +=
+                                DxiDx(std::get<1>(diffOperatorIJK2IcDim)[i], m) *
+                                DxiDx(std::get<1>(diffOperatorIJK2IcDim)[j], n) *
+                                DxiDx(std::get<1>(diffOperatorIJK2IcDim)[k], p) *
+                                mat(std::get<3>(diffOperatorIJK2IcDim)[m][n][p], iB);
+            }
+        mat(seq2t3) = out(seq2t3);
+        if (cmaxDiffOrder == 3)
+            return;
+    }
+
     class CFVPeriodicity : public Geom::Periodicity
     {
     public:
@@ -403,7 +534,7 @@ namespace DNDS::Geom::Base
         for (int j = 0; j < dim; j++)
             // for (int i = 0; i < dim; i++)
             //     for (int k = 0; k < dim; k++)
-            for (int ii = nDiffSizC1; ii < nDiffSizC2; ii ++)
+            for (int ii = nDiffSizC1; ii < nDiffSizC2; ii++)
             {
                 int i = dim == 2 ? diffOperatorDimList2D[ii][0] : diffOperatorDimList[ii][0];
                 int k = dim == 2 ? diffOperatorDimList2D[ii][1] : diffOperatorDimList[ii][1];
@@ -414,7 +545,7 @@ namespace DNDS::Geom::Base
                         ccv -= DxDxi(std::get<2>(diffOperatorIJK2IcDim)[m][n], j) *
                                DxiDx(std::get<1>(diffOperatorIJK2IcDim)[i], m) *
                                DxiDx(std::get<1>(diffOperatorIJK2IcDim)[k], n);
-                }
+            }
         DxiDx(seq1t2, Eigen::all) = M_RHS(seq1t2, Eigen::all) /* ikj */ * Dxi_j_Dx_i;
 
         if (maxDiff == 2)
@@ -451,7 +582,7 @@ namespace DNDS::Geom::Base
                                    DxiDx(std::get<1>(diffOperatorIJK2IcDim)[i], m) *
                                    DxiDx(std::get<1>(diffOperatorIJK2IcDim)[k], n) *
                                    DxiDx(std::get<1>(diffOperatorIJK2IcDim)[l], p);
-                    }
+            }
         DxiDx(seq2t3, Eigen::all) = M_RHS(seq2t3, Eigen::all) /* ikj */ * Dxi_j_Dx_i;
         if (maxDiff == 3)
             return;
