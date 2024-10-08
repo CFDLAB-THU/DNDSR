@@ -11,7 +11,7 @@
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenMatirx.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenVector.hpp"
-#include "BaseFunction.hpp"
+#include "Geom/BaseFunction.hpp"
 #include "Limiters.hpp"
 #include "DNDS/JsonUtil.hpp"
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__

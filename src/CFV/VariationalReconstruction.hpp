@@ -3,8 +3,9 @@
 #include <unordered_map>
 
 #include "VRDefines.hpp"
-#include "BaseFunction.hpp"
 #include "VRSettings.hpp"
+#include "Geom/BaseFunction.hpp"
+#include "Geom/DiffTensors.hpp"
 
 #include "fmt/core.h"
 
@@ -85,7 +86,7 @@ namespace DNDS::CFV
         std::vector<Eigen::MatrixXd> matrixACholeskyL;
         bool needMatrixACholeskyL = false;
 
-        CFVPeriodicity periodicity;
+        Geom::Base::CFVPeriodicity periodicity;
         TFTrans FTransPeriodic, FTransPeriodicBack;
 
     public:
@@ -363,6 +364,7 @@ namespace DNDS::CFV
                             index iCell, index iFace, int iG, int flag = 0)
         {
             using namespace Geom;
+            using namespace Geom::Base;
 
             auto pCen = cellCent[iCell];
             tPoint pPhysicsC = pPhy - pCen;
@@ -505,6 +507,7 @@ namespace DNDS::CFV
             index iFace, index iCellL, index iCellR)
         {
             using namespace Geom;
+            using namespace Geom::Base;
             Eigen::Vector<real, Eigen::Dynamic> wgd = faceWeight[iFace].array().square();
             DNDS_assert(DiffI.rows() == DiffJ.rows());
             int cnDiffs = DiffI.rows();
@@ -913,6 +916,7 @@ namespace DNDS::CFV
         template <int nVarsFixed>
         void BuildURec(tURec<nVarsFixed> &u, int nVars)
         {
+            using namespace Geom::Base;
             int maxNDOF = GetNDof<dim>(settings.maxOrder);
             DNDS_MAKE_SSP(u.father, mpi);
             DNDS_MAKE_SSP(u.son, mpi);

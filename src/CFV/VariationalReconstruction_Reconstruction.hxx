@@ -367,6 +367,7 @@ namespace DNDS
         {
             using namespace Geom;
             using namespace Geom::Elem;
+            using namespace Geom::Base;
             static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
             int maxNDOF = GetNDof<dim>(settings.maxOrder);
             if (recordInc)
@@ -473,6 +474,7 @@ namespace DNDS
         {
             using namespace Geom;
             using namespace Geom::Elem;
+            using namespace Geom::Base;
             int maxNDOF = GetNDof<dim>(settings.maxOrder);
             static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
 
@@ -532,6 +534,7 @@ namespace DNDS
         {
             using namespace Geom;
             using namespace Geom::Elem;
+            using namespace Geom::Base;
             int maxNDOF = GetNDof<dim>(settings.maxOrder);
             static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
 

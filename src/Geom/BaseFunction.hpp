@@ -3,58 +3,155 @@
 #include "DNDS/Defines.hpp"
 #include "Geom/EigenTensor.hpp"
 #include "Geom/PeriodicInfo.hpp"
+#include <array>
+#include <tuple>
 
-namespace DNDS::CFV
+namespace DNDS::Geom::Base
 {
     /// including up to 3 orders or diffs
     static const int ndiff = 3;
     static const int ndiffSiz = 20;
     static const int ndiffSiz2D = 10;
-    static const int diffOperatorOrderList[ndiffSiz][3] =
-        {
-            //{diffOrderX_0, diffOrderX_1, diffOrder_X2} // indexPlace, diffSeq
-            {0, 0, 0}, // 00
-            {1, 0, 0}, // 01
-            {0, 1, 0}, // 02
-            {0, 0, 1}, // 03
-            {2, 0, 0}, // 04  00
-            {0, 2, 0}, // 05  11
-            {0, 0, 2}, // 06  22
-            {1, 1, 0}, // 07  01
-            {0, 1, 1}, // 08  12
-            {1, 0, 1}, // 09  02
-            {3, 0, 0}, // 10  000
-            {0, 3, 0}, // 11  111
-            {0, 0, 3}, // 12  222
-            {2, 1, 0}, // 13  001
-            {1, 2, 0}, // 14  011
-            {0, 2, 1}, // 15  112
-            {0, 1, 2}, // 16  122
-            {1, 0, 2}, // 17  022
-            {2, 0, 1}, // 18  002
-            {1, 1, 1}, // 19  012
-    };
+    static const std::array<int, ndiff + 1> ndiffSizC{1, 4, 10, 20};
+    static const std::array<int, ndiff + 1> ndiffSizC2D{1, 3, 6, 10};
+    static const std::array<std::array<int, 3>, ndiffSiz> diffOperatorOrderList{{
+        //{diffOrderX_0, diffOrderX_1, diffOrder_X2} // indexPlace, diffSeq
+        {{0, 0, 0}}, // 00
+        {{1, 0, 0}}, // 01
+        {{0, 1, 0}}, // 02
+        {{0, 0, 1}}, // 03
+        {{2, 0, 0}}, // 04  00
+        {{0, 2, 0}}, // 05  11
+        {{0, 0, 2}}, // 06  22
+        {{1, 1, 0}}, // 07  01
+        {{0, 1, 1}}, // 08  12
+        {{1, 0, 1}}, // 09  02
+        {{3, 0, 0}}, // 10  000
+        {{0, 3, 0}}, // 11  111
+        {{0, 0, 3}}, // 12  222
+        {{2, 1, 0}}, // 13  001
+        {{1, 2, 0}}, // 14  011
+        {{0, 2, 1}}, // 15  112
+        {{0, 1, 2}}, // 16  122
+        {{1, 0, 2}}, // 17  022
+        {{2, 0, 1}}, // 18  002
+        {{1, 1, 1}}, // 19  012
+    }};
 
-    static const int diffOperatorOrderList2D[ndiffSiz2D][3] =
+    static const std::array<std::array<int, 3>, ndiffSiz2D> diffOperatorOrderList2D =
+        {{
+            {{0, 0, 0}}, // 00 00
+            {{1, 0, 0}}, // 01 01 0
+            {{0, 1, 0}}, // 02 02 1
+            {{2, 0, 0}}, // 03 04 00
+            {{1, 1, 0}}, // 04 05 01
+            {{0, 2, 0}}, // 05 07 11
+            {{3, 0, 0}}, // 06 10 000
+            {{2, 1, 0}}, // 07 11 001
+            {{1, 2, 0}}, // 08 13 011
+            {{0, 3, 0}}, // 09 16 111
+        }};
+
+    static const std::array<std::array<int, ndiff>, ndiffSiz> diffOperatorDimList{{
+        //{diffOrderX_0, diffOrderX_1, diffOrder_X2} // indexPlace, diffSeq
+        {{}},        // 00
+        {{0}},       // 01
+        {{1}},       // 02
+        {{2}},       // 03
+        {{0, 0}},    // 04  00
+        {{1, 1}},    // 05  11
+        {{2, 2}},    // 06  22
+        {{0, 1}},    // 07  01
+        {{1, 2}},    // 08  12
+        {{0, 2}},    // 09  02
+        {{0, 0, 0}}, // 10  000
+        {{1, 1, 1}}, // 11  111
+        {{2, 2, 2}}, // 12  222
+        {{0, 0, 1}}, // 13  001
+        {{0, 1, 1}}, // 14  011
+        {{1, 1, 2}}, // 15  112
+        {{1, 2, 2}}, // 16  122
+        {{0, 2, 2}}, // 17  022
+        {{0, 0, 2}}, // 18  002
+        {{0, 1, 2}}, // 19  012
+    }};
+
+    static const std::array<std::array<int, ndiff>, ndiffSiz2D> diffOperatorDimList2D =
+        {{
+            {{}},        // 00 00
+            {{0}},       // 01 01 0
+            {{1}},       // 02 02 1
+            {{0, 0}},    // 03 04 00
+            {{0, 1}},    // 04 05 01
+            {{1, 1}},    // 05 07 11
+            {{0, 0, 0}}, // 06 10 000
+            {{0, 0, 1}}, // 07 11 001
+            {{0, 1, 1}}, // 08 13 011
+            {{1, 1, 1}}, // 09 16 111
+        }};
+
+    using t_diffOpIJK2I = std::tuple<
+        int,
+        std::array<int, 3>,
+        std::array<std::array<int, 3>, 3>,
+        std::array<std::array<std::array<int, 3>, 3>, 3>>;
+    template <int dim, int NDiffC>
+    constexpr t_diffOpIJK2I __get_diffOperatorIJK2I(const std::array<std::array<int, 3>, NDiffC> &diffOps)
+    {
+        auto ret = t_diffOpIJK2I();
+        std::get<0>(ret) = 0;
+        auto array3IsSame = [](const std::array<int, 3> &a, const std::array<int, 3> &b)
         {
-            {0, 0, 0}, // 00 00
-            {1, 0, 0}, // 01 01 0
-            {0, 1, 0}, // 02 02 1
-            {2, 0, 0}, // 03 04 00
-            {1, 1, 0}, // 04 05 01
-            {0, 2, 0}, // 05 07 11
-            {3, 0, 0}, // 06 10 000
-            {2, 1, 0}, // 07 11 001
-            {1, 2, 0}, // 08 13 011
-            {0, 3, 0}, // 09 16 111
-    };
+            return (a[0] == b[0]) && (a[1] == b[1]) && (a[2] == b[2]);
+        };
+        auto searchForArray3 = [=](const std::array<int, 3> &a)
+        {
+            int ret = -1;
+            int found = 0;
+            for (int i = 0; i < NDiffC; i++)
+                if (array3IsSame(a, diffOps[i]))
+                    ret = i, found++;
+            return ret;
+        };
+
+        for (int d0 = 0; d0 < dim; d0++)
+        {
+            std::array<int, 3> entry{0, 0, 0};
+            entry[d0]++;
+            std::get<1>(ret)[d0] = searchForArray3(entry);
+        }
+        for (int d1 = 0; d1 < dim; d1++)
+            for (int d0 = 0; d0 < dim; d0++)
+            {
+                std::array<int, 3> entry{0, 0, 0};
+                entry[d0]++;
+                entry[d1]++;
+                std::get<2>(ret)[d0][d1] = searchForArray3(entry);
+            }
+        for (int d2 = 0; d2 < dim; d2++)
+            for (int d1 = 0; d1 < dim; d1++)
+                for (int d0 = 0; d0 < dim; d0++)
+                {
+                    std::array<int, 3> entry{0, 0, 0};
+                    entry[d0]++;
+                    entry[d1]++;
+                    entry[d2]++;
+                    std::get<3>(ret)[d0][d1][d2] = searchForArray3(entry);
+                }
+        return ret;
+    }
+
+    static const t_diffOpIJK2I diffOperatorIJK2I = __get_diffOperatorIJK2I<3, ndiffSiz>(diffOperatorOrderList);
+
+    static const t_diffOpIJK2I diffOperatorIJK2I2D = __get_diffOperatorIJK2I<2, ndiffSiz2D>(diffOperatorOrderList2D);
+
     static const int dFactorials[ndiff + 1][ndiff + 1] = {
         {1, 0, 0, 0},
         {1, 1, 0, 0},
         {1, 2, 2, 0},
         {1, 3, 6, 6}};
 
-    static const int factorials[ndiff * 3 + 1] = {
+    static const std::array<int, ndiff * 3 + 1> factorials = {
         1,
         1,
         1 * 2,
@@ -66,10 +163,10 @@ namespace DNDS::CFV
         1 * 2 * 3 * 4 * 5 * 6 * 7 * 8,
         1 * 2 * 3 * 4 * 5 * 6 * 7 * 8 * 9,
     };
-    static const int diffNCombs2D[ndiffSiz2D]{
+    static const std::array<int, ndiffSiz2D> diffNCombs2D{
         1, 1, 1, 1, 2, 1, 1, 3, 3, 1};
 
-    static const int diffNCombs[ndiffSiz]{
+    static const std::array<int, ndiffSiz> diffNCombs{
         1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 3, 3, 3, 3, 3, 3, 6};
 
     inline real iPow(int p, real x)
@@ -144,6 +241,7 @@ namespace DNDS::CFV
     template <class TDIBJ>
     void FPolynomialFill2D(TDIBJ &T, real x, real y, real z, real lx, real ly, real lz, int rows, int cols)
     {
+        using namespace Geom::Base;
         T.setZero();
         if (rows == 10 && cols == 10)
         {
@@ -569,331 +667,7 @@ namespace DNDS::CFV
         }
     }
 
-    template <int dim = 3, int rank = 0, int powV = 1, class VLe, class VRi>
-    real NormSymDiffOrderTensorV(VLe &&Le, VRi &&Ri)
-    {
-        real ret = 0;
-        if constexpr (dim == 3)
-        {
-            if constexpr (powV == 1)
-            {
-                if constexpr (rank == 0)
-                {
-                    ret += Le(0, 0) * Ri(0, 0) * diffNCombs[0];
-                }
-                else if constexpr (rank == 1)
-                {
-                    ret += Le(0, 0) * Ri(0, 0) * diffNCombs[0 + 1];
-                    ret += Le(1, 0) * Ri(1, 0) * diffNCombs[1 + 1];
-                    ret += Le(2, 0) * Ri(2, 0) * diffNCombs[2 + 1];
-                }
-                else if constexpr (rank == 2)
-                {
-                    ret += Le(0, 0) * Ri(0, 0) * diffNCombs[0 + 4];
-                    ret += Le(1, 0) * Ri(1, 0) * diffNCombs[1 + 4];
-                    ret += Le(2, 0) * Ri(2, 0) * diffNCombs[2 + 4];
-                    ret += Le(3, 0) * Ri(3, 0) * diffNCombs[3 + 4];
-                    ret += Le(4, 0) * Ri(4, 0) * diffNCombs[4 + 4];
-                    ret += Le(5, 0) * Ri(5, 0) * diffNCombs[5 + 4];
-                }
-                else if constexpr (rank == 3)
-                {
-                    ret += Le(0, 0) * Ri(0, 0) * diffNCombs[0 + 10];
-                    ret += Le(1, 0) * Ri(1, 0) * diffNCombs[1 + 10];
-                    ret += Le(2, 0) * Ri(2, 0) * diffNCombs[2 + 10];
-                    ret += Le(3, 0) * Ri(3, 0) * diffNCombs[3 + 10];
-                    ret += Le(4, 0) * Ri(4, 0) * diffNCombs[4 + 10];
-                    ret += Le(5, 0) * Ri(5, 0) * diffNCombs[5 + 10];
-                    ret += Le(6, 0) * Ri(6, 0) * diffNCombs[6 + 10];
-                    ret += Le(7, 0) * Ri(7, 0) * diffNCombs[7 + 10];
-                    ret += Le(8, 0) * Ri(8, 0) * diffNCombs[8 + 10];
-                    ret += Le(9, 0) * Ri(9, 0) * diffNCombs[9 + 10];
-                }
-                else
-                {
-                    DNDS_assert(false);
-                }
-            }
-            else
-            {
-                if constexpr (rank == 0)
-                {
-                    ret += Le(0, 0) * Ri(0, 0) * std::pow(diffNCombs[0], powV);
-                }
-                else if constexpr (rank == 1)
-                {
-                    ret += Le(0, 0) * Ri(0, 0) * std::pow(diffNCombs[0 + 1], powV);
-                    ret += Le(1, 0) * Ri(1, 0) * std::pow(diffNCombs[1 + 1], powV);
-                    ret += Le(2, 0) * Ri(2, 0) * std::pow(diffNCombs[2 + 1], powV);
-                }
-                else if constexpr (rank == 2)
-                {
-                    ret += Le(0, 0) * Ri(0, 0) * std::pow(diffNCombs[0 + 4], powV);
-                    ret += Le(1, 0) * Ri(1, 0) * std::pow(diffNCombs[1 + 4], powV);
-                    ret += Le(2, 0) * Ri(2, 0) * std::pow(diffNCombs[2 + 4], powV);
-                    ret += Le(3, 0) * Ri(3, 0) * std::pow(diffNCombs[3 + 4], powV);
-                    ret += Le(4, 0) * Ri(4, 0) * std::pow(diffNCombs[4 + 4], powV);
-                    ret += Le(5, 0) * Ri(5, 0) * std::pow(diffNCombs[5 + 4], powV);
-                }
-                else if constexpr (rank == 3)
-                {
-                    ret += Le(0, 0) * Ri(0, 0) * std::pow(diffNCombs[0 + 10], powV);
-                    ret += Le(1, 0) * Ri(1, 0) * std::pow(diffNCombs[1 + 10], powV);
-                    ret += Le(2, 0) * Ri(2, 0) * std::pow(diffNCombs[2 + 10], powV);
-                    ret += Le(3, 0) * Ri(3, 0) * std::pow(diffNCombs[3 + 10], powV);
-                    ret += Le(4, 0) * Ri(4, 0) * std::pow(diffNCombs[4 + 10], powV);
-                    ret += Le(5, 0) * Ri(5, 0) * std::pow(diffNCombs[5 + 10], powV);
-                    ret += Le(6, 0) * Ri(6, 0) * std::pow(diffNCombs[6 + 10], powV);
-                    ret += Le(7, 0) * Ri(7, 0) * std::pow(diffNCombs[7 + 10], powV);
-                    ret += Le(8, 0) * Ri(8, 0) * std::pow(diffNCombs[8 + 10], powV);
-                    ret += Le(9, 0) * Ri(9, 0) * std::pow(diffNCombs[9 + 10], powV);
-                }
-                else
-                {
-                    DNDS_assert(false);
-                }
-            }
-        }
-        else
-        {
-            if constexpr (powV == 1)
-            {
-                if constexpr (rank == 0)
-                {
-                    ret += Le(0) * Ri(0) * diffNCombs2D[0];
-                }
-                else if constexpr (rank == 1)
-                {
-                    ret += Le(0) * Ri(0) * diffNCombs2D[0 + 1];
-                    ret += Le(1) * Ri(1) * diffNCombs2D[1 + 1];
-                }
-                else if constexpr (rank == 2)
-                {
-                    ret += Le(0) * Ri(0) * diffNCombs2D[0 + 3];
-                    ret += Le(1) * Ri(1) * diffNCombs2D[1 + 3];
-                    ret += Le(2) * Ri(2) * diffNCombs2D[2 + 3];
-                }
-                else if constexpr (rank == 3)
-                {
-                    ret += Le(0) * Ri(0) * diffNCombs2D[0 + 6];
-                    ret += Le(1) * Ri(1) * diffNCombs2D[1 + 6];
-                    ret += Le(2) * Ri(2) * diffNCombs2D[2 + 6];
-                    ret += Le(3) * Ri(3) * diffNCombs2D[3 + 6];
-                }
-                else
-                {
-                    DNDS_assert(false);
-                }
-            }
-            else
-            {
-                if constexpr (rank == 0)
-                {
-                    ret += Le(0) * Ri(0) * std::pow(diffNCombs2D[0], powV);
-                }
-                else if constexpr (rank == 1)
-                {
-                    ret += Le(0) * Ri(0) * std::pow(diffNCombs2D[0 + 1], powV);
-                    ret += Le(1) * Ri(1) * std::pow(diffNCombs2D[1 + 1], powV);
-                }
-                else if constexpr (rank == 2)
-                {
-                    ret += Le(0) * Ri(0) * std::pow(diffNCombs2D[0 + 3], powV);
-                    ret += Le(1) * Ri(1) * std::pow(diffNCombs2D[1 + 3], powV);
-                    ret += Le(2) * Ri(2) * std::pow(diffNCombs2D[2 + 3], powV);
-                }
-                else if constexpr (rank == 3)
-                {
-                    ret += Le(0) * Ri(0) * std::pow(diffNCombs2D[0 + 6], powV);
-                    ret += Le(1) * Ri(1) * std::pow(diffNCombs2D[1 + 6], powV);
-                    ret += Le(2) * Ri(2) * std::pow(diffNCombs2D[2 + 6], powV);
-                    ret += Le(3) * Ri(3) * std::pow(diffNCombs2D[3 + 6], powV);
-                }
-                else
-                {
-                    DNDS_assert(false);
-                }
-            }
-        }
-        return ret;
-    }
-
     // #include <unsupported/Eigen/CXX11/TensorSymmetry>
-
-    template <int dim, int rank, class VLe, class Trans>
-    void TransSymDiffOrderTensorV(VLe &&Le, Trans &&trans)
-    {
-        if constexpr (dim == 3)
-        {
-            if constexpr (rank == 0)
-            {
-            }
-            else if constexpr (rank == 1)
-            {
-                Le = trans * Le;
-            }
-            else if constexpr (rank == 2)
-            {
-                /*
-                00
-                11
-                22
-                01
-                12
-                02*/
-                Eigen::Matrix3d symTensorR2{
-                    {Le(0), Le(3), Le(5)},
-                    {Le(3), Le(1), Le(4)},
-                    {Le(5), Le(4), Le(2)}};
-                symTensorR2 = trans * symTensorR2 * trans.transpose();
-                Le(0) = symTensorR2(0, 0), Le(1) = symTensorR2(1, 1), Le(2) = symTensorR2(2, 2);
-                Le(3) = symTensorR2(0, 1), Le(4) = symTensorR2(1, 2), Le(5) = symTensorR2(0, 2);
-            }
-            else if constexpr (rank == 3)
-            {
-
-                /*
-                000
-                111
-                222
-                001
-                011
-                112
-                122
-                022
-                002
-                012*/
-                DNDS::ETensor::ETensorR3<real, 3, 3, 3> symTensorR3;
-                symTensorR3(0, 0, 0) = Le(0);
-                symTensorR3(1, 1, 1) = Le(1);
-                symTensorR3(2, 2, 2) = Le(2);
-
-                symTensorR3(0, 0, 1) = symTensorR3(0, 1, 0) = symTensorR3(1, 0, 0) = Le(3);
-                symTensorR3(0, 1, 1) = symTensorR3(1, 1, 0) = symTensorR3(1, 0, 1) = Le(4);
-                symTensorR3(1, 1, 2) = symTensorR3(1, 2, 1) = symTensorR3(2, 1, 1) = Le(5);
-                symTensorR3(1, 2, 2) = symTensorR3(2, 2, 1) = symTensorR3(2, 1, 2) = Le(6);
-                symTensorR3(0, 2, 2) = symTensorR3(2, 2, 0) = symTensorR3(2, 0, 2) = Le(7);
-                symTensorR3(0, 0, 2) = symTensorR3(0, 2, 0) = symTensorR3(2, 0, 0) = Le(8);
-
-                symTensorR3(0, 1, 2) = symTensorR3(1, 2, 0) = symTensorR3(2, 0, 1) =
-                    symTensorR3(0, 2, 1) = symTensorR3(2, 1, 0) = symTensorR3(1, 0, 2) = Le(9);
-
-                symTensorR3.MatTransform0(trans.transpose());
-                symTensorR3.MatTransform1(trans.transpose());
-                symTensorR3.MatTransform2(trans.transpose());
-                Le(0) = symTensorR3(0, 0, 0);
-                Le(1) = symTensorR3(1, 1, 1);
-                Le(2) = symTensorR3(2, 2, 2);
-                Le(3) = symTensorR3(0, 0, 1);
-                Le(4) = symTensorR3(0, 1, 1);
-                Le(5) = symTensorR3(1, 1, 2);
-                Le(6) = symTensorR3(1, 2, 2);
-                Le(7) = symTensorR3(0, 2, 2);
-                Le(8) = symTensorR3(0, 0, 2);
-                Le(9) = symTensorR3(0, 1, 2);
-            }
-            else
-            {
-                DNDS_assert(false);
-            }
-        }
-        else // 2-d tensor
-        {
-            if constexpr (rank == 0)
-            {
-            }
-            else if constexpr (rank == 1)
-            {
-                Le = trans * Le;
-            }
-            else if constexpr (rank == 2)
-            {
-                Eigen::Matrix2d symTensorR2{{Le(0), Le(1)},
-                                            {Le(1), Le(2)}};
-                symTensorR2 = trans * symTensorR2 * trans.transpose();
-                Le(0) = symTensorR2(0, 0), Le(1) = symTensorR2(0, 1), Le(2) = symTensorR2(1, 1);
-            }
-            else if constexpr (rank == 3)
-            {
-
-                DNDS::ETensor::ETensorR3<real, 2, 2, 2> symTensorR3;
-                symTensorR3(0, 0, 0) = Le(0);
-                symTensorR3(0, 0, 1) = symTensorR3(0, 1, 0) = symTensorR3(1, 0, 0) = Le(1);
-                symTensorR3(0, 1, 1) = symTensorR3(1, 0, 1) = symTensorR3(1, 1, 0) = Le(2);
-                symTensorR3(1, 1, 1) = Le(3);
-                symTensorR3.MatTransform0(trans.transpose());
-                symTensorR3.MatTransform1(trans.transpose());
-                symTensorR3.MatTransform2(trans.transpose());
-                Le(0) = symTensorR3(0, 0, 0);
-                Le(1) = symTensorR3(0, 0, 1);
-                Le(2) = symTensorR3(0, 1, 1);
-                Le(3) = symTensorR3(1, 1, 1);
-            }
-            else
-            {
-                DNDS_assert(false);
-            }
-        }
-    }
-
-    template <int dim, class TMat>
-    inline void ConvertDiffsLinMap(TMat &&mat, const Geom::tGPoint &dXijdXi)
-    {
-        int rows = mat.rows();
-        if constexpr (dim == 2)
-            switch (rows)
-            {
-            case 10:
-                for (int iB = 0; iB < mat.cols(); iB++)
-                {
-                    TransSymDiffOrderTensorV<2, 3>(
-                        mat(Eigen::seq(Eigen::fix<6>, Eigen::fix<9>), iB),
-                        dXijdXi({0, 1}, {0, 1}));
-                }
-            case 6:
-                for (int iB = 0; iB < mat.cols(); iB++)
-                    TransSymDiffOrderTensorV<2, 2>(
-                        mat(Eigen::seq(Eigen::fix<3>, Eigen::fix<5>), iB),
-                        dXijdXi({0, 1}, {0, 1}));
-
-            case 3:
-                mat({1, 2}, Eigen::all) = dXijdXi({0, 1}, {0, 1}) * mat({1, 2}, Eigen::all);
-            case 1:
-                break;
-
-            default:
-                std::cerr << mat.rows() << std::endl;
-                DNDS_assert(false);
-                break;
-            }
-        else // dim ==3
-            switch (rows)
-            {
-            case 20:
-                for (int iB = 0; iB < mat.cols(); iB++)
-                {
-                    TransSymDiffOrderTensorV<3, 3>(
-                        mat(Eigen::seq(Eigen::fix<10>, Eigen::fix<19>), iB),
-                        dXijdXi);
-                }
-            case 10:
-                for (int iB = 0; iB < mat.cols(); iB++)
-                    TransSymDiffOrderTensorV<3, 2>(
-                        mat(Eigen::seq(Eigen::fix<4>, Eigen::fix<9>), iB),
-                        dXijdXi);
-
-            case 4:
-                mat({1, 2, 3}, Eigen::all) = dXijdXi * mat({1, 2, 3}, Eigen::all);
-            case 1:
-                break;
-
-            default:
-                std::cerr << mat.rows() << std::endl;
-                DNDS_assert(false);
-                break;
-            }
-    }
-
     template <int dim>
     inline int GetNDof(int maxOrder)
     {
@@ -920,38 +694,4 @@ namespace DNDS::CFV
         return maxNDOF;
     }
 
-    class CFVPeriodicity : public Geom::Periodicity
-    {
-    public:
-        using tBase = Geom::Periodicity;
-        using tBase::tBase;
-
-        CFVPeriodicity(const tBase &vBase) : tBase(vBase) {} // copy from tBase
-
-        template <int dim, class TU>
-        void TransDiValueInplace(TU &u, Geom::t_index id)
-        {
-            using namespace Geom;
-            DNDS_assert(FaceIDIsPeriodic(id));
-            t_index i{0};
-            if (FaceIDIsPeriodicDonor(id))
-                i = -id - 3;
-            else
-                i = -id;
-            ConvertDiffsLinMap<dim>(u, rotation[i]);
-        }
-
-        template <int dim, class TU>
-        void TransDiValueBackInplace(TU &u, Geom::t_index id)
-        {
-            using namespace Geom;
-            DNDS_assert(FaceIDIsPeriodic(id));
-            t_index i{0};
-            if (FaceIDIsPeriodicDonor(id))
-                i = -id - 3;
-            else
-                i = -id;
-            ConvertDiffsLinMap<dim>(u, rotation[i].transpose());
-        }
-    };
 }

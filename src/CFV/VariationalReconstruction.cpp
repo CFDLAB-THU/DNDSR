@@ -286,6 +286,7 @@ namespace DNDS::CFV
     {
         using namespace Geom;
         using namespace Geom::Elem;
+        using namespace Geom::Base;
         int maxNDOF = GetNDof<dim>(settings.maxOrder);
         // for polynomial: ndiff = ndof
         int maxNDIFF = maxNDOF;
@@ -758,6 +759,7 @@ namespace DNDS::CFV
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         using namespace Geom;
         using namespace Geom::Elem;
+        using namespace Geom::Base;
         int maxNDOF = GetNDof<dim>(settings.maxOrder);
         if (needOriginalMatrix)
             this->MakePairDefaultOnCell(matrixAB, maxNDOF - 1, maxNDOF - 1);

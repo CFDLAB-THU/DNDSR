@@ -552,6 +552,7 @@ partitionMeshSerial
 set(APPS_CFV
 vrStatic_Test
 vrBasic_Test
+diffTensors_Test
 )
 
 set(APPS_Euler
