@@ -333,47 +333,12 @@ namespace DNDS::Geom::Base
         int rows = mat.rows();
         int nBase = mat.cols();
 
-        int cmaxDiffOrder = -1;
-        if constexpr (dim == 2)
-            switch (rows)
-            {
-            case 10:
-                cmaxDiffOrder = 3;
-                break;
-            case 6:
-                cmaxDiffOrder = 2;
-                break;
-            case 3:
-                cmaxDiffOrder = 1;
-                break;
-            case 1:
-                cmaxDiffOrder = 0;
-                break;
-            default:
-                std::cerr << mat.rows() << std::endl;
-                DNDS_assert(false);
-                break;
-            }
-        else // dim ==3
-            switch (rows)
-            {
-            case 20:
-                cmaxDiffOrder = 3;
-                break;
-            case 10:
-                cmaxDiffOrder = 2;
-                break;
-            case 4:
-                cmaxDiffOrder = 1;
-                break;
-            case 1:
-                cmaxDiffOrder = 0;
-                break;
-            default:
-                std::cerr << mat.rows() << std::endl;
-                DNDS_assert(false);
-                break;
-            }
+        int cmaxDiffOrder = ndiff2order<dim>(rows);
+        if (cmaxDiffOrder < 0)
+        {
+            std::cerr << mat.rows() << std::endl;
+            DNDS_assert(false);
+        }
 
         if (cmaxDiffOrder == 0)
             return;
@@ -393,7 +358,7 @@ namespace DNDS::Geom::Base
                     ccv += DxiDx(std::get<1>(diffOperatorIJK2IcDim)[i], m) *
                            mat(std::get<1>(diffOperatorIJK2IcDim)[m], iB);
             }
-        mat(seq0t1) = out(seq0t1);
+        mat(seq0t1, Eigen::all) = out(seq0t1, Eigen::all);
         if (cmaxDiffOrder == 1)
             return;
 
@@ -415,7 +380,7 @@ namespace DNDS::Geom::Base
                                DxiDx(std::get<1>(diffOperatorIJK2IcDim)[j], n) *
                                mat(std::get<2>(diffOperatorIJK2IcDim)[m][n], iB);
             }
-        mat(seq1t2) = out(seq1t2);
+        mat(seq1t2, Eigen::all) = out(seq1t2, Eigen::all);
         if (cmaxDiffOrder == 2)
             return;
 
@@ -453,7 +418,7 @@ namespace DNDS::Geom::Base
                                 DxiDx(std::get<1>(diffOperatorIJK2IcDim)[k], p) *
                                 mat(std::get<3>(diffOperatorIJK2IcDim)[m][n][p], iB);
             }
-        mat(seq2t3) = out(seq2t3);
+        mat(seq2t3, Eigen::all) = out(seq2t3, Eigen::all);
         if (cmaxDiffOrder == 3)
             return;
     }

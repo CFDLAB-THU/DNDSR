@@ -14,6 +14,39 @@ namespace DNDS::Geom::Base
     static const int ndiffSiz2D = 10;
     static const std::array<int, ndiff + 1> ndiffSizC{1, 4, 10, 20};
     static const std::array<int, ndiff + 1> ndiffSizC2D{1, 3, 6, 10};
+    template <int dim>
+    constexpr int ndiff2order(int rows)
+    {
+        if constexpr (dim == 2)
+            switch (rows)
+            {
+            case 10:
+                return 3;
+            case 6:
+                return 2;
+            case 3:
+                return 1;
+            case 1:
+                return 0;
+            default:
+                return -1;
+            }
+        else // dim ==3
+            switch (rows)
+            {
+            case 20:
+                return 3;
+            case 10:
+                return 2;
+            case 4:
+                return 1;
+            case 1:
+                return 0;
+            default:
+                return -1;
+            }
+        return -1;
+    }
     static const std::array<std::array<int, 3>, ndiffSiz> diffOperatorOrderList{{
         //{diffOrderX_0, diffOrderX_1, diffOrder_X2} // indexPlace, diffSeq
         {{0, 0, 0}}, // 00
