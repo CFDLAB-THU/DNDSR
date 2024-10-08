@@ -472,8 +472,8 @@ namespace DNDS::Euler
 
         real k = settings.idealGasProperty.CpGas * (muf - mufPhy) / 0.9 +
                  settings.idealGasProperty.CpGas * mufPhy / settings.idealGasProperty.prGas;
-        TDiffU VisFlux;
-        VisFlux.resizeLike(DiffUxy);
+            TU VisFlux;
+            VisFlux.resizeLike(ULMeanXy);
         VisFlux.setZero();
         auto& DiffUxyPrimP = DiffUxyPrim;
         Gas::ViscousFlux_IdealGas<dim>(
@@ -524,7 +524,8 @@ namespace DNDS::Euler
                 fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
             }
 #endif
-            VisFlux(Seq012, {I4 + 1}) = DiffUxyPrimP(Seq012, {I4 + 1}) * (mufPhy + UMeanXy(I4 + 1) * muRef * fn) / sigma;
+                VisFlux(I4 + 1) = DiffUxyPrimC(Seq012, {I4 + 1}).dot(uNormC) * (mufPhy + UMeanXy(I4 + 1) * muRef * fn) / sigma;
+
         }
         if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
         {
@@ -800,7 +801,7 @@ namespace DNDS::Euler
         }
         finc(Seq123) = normBase * finc(Seq123);
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
-        finc -= VisFlux.transpose() * unitNorm * 1;
+        finc -= VisFlux;
 #endif
 
         if (finc.hasNaN() || (!finc.allFinite()))

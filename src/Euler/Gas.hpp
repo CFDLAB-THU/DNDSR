@@ -779,13 +779,11 @@ namespace DNDS::Euler::Gas
         if (adiabatic) //! is this fix reasonable?
             GradT -= GradT.dot(norm) * norm;
 
-        Flux(Seq012, 0).setZero();
-        Flux(Seq012, Seq123) =
-            (diffVelo + diffVelo.transpose()) * mu +
-            Eigen::Matrix<real, dim, dim>::Identity() * (lambda * mu * diffVelo.trace());
-        // std::cout << "FUCK A.A" << std::endl;
-        Flux(Seq012, dim + 1) = Flux(Seq012, Seq123) * velo + k * GradT;
-        // std::cout << "FUCK A.B" << std::endl;
+        Eigen::Matrix<real, dim, dim> vStress = (diffVelo + diffVelo.transpose()) * mu +
+                                                Eigen::Matrix<real, dim, dim>::Identity() * (lambda * mu * diffVelo.trace());
+        Flux(0) = 0;
+        Flux(Seq123) = vStress * norm;
+        Flux(dim + 1) = (vStress * velo + k * GradT).dot(norm);
     }
 
     /**
@@ -805,8 +803,8 @@ namespace DNDS::Euler::Gas
         GradUPrim = GradU;
 
         GradUPrim(Seq012, Seq123) = (1.0 / sqr(U(0))) *
-                                             (U(0) * GradU(Seq012, Seq123) -
-                                              GradU(Seq012, 0) * Eigen::RowVector<real, dim>(U(Seq123))); // dU_j/dx_i
+                                    (U(0) * GradU(Seq012, Seq123) -
+                                     GradU(Seq012, 0) * Eigen::RowVector<real, dim>(U(Seq123))); // dU_j/dx_i
         GradUPrim(Seq012, I4) = (gamma - 1) *
                                 (GradU(Seq012, dim + 1) -
                                  0.5 *

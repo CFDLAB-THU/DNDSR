@@ -50,16 +50,16 @@ namespace DNDS::Euler::RANS
         return mut;
     }
 
-    template <int dim, class TU, class TDiffU, class TVFlux>
-    void GetVisFlux_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxyPrim, real mut, real d, real muPhy, TVFlux &vFlux)
+    template <int dim, class TU, class TN, class TDiffU, class TVFlux>
+    void GetVisFlux_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN&& uNorm, real mut, real d, real muPhy, TVFlux &vFlux)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
         static const auto I4 = dim + 1;
         real sigK = 1.;
         real sigE = 1.3;
-        vFlux(Seq012, {I4 + 1}) = DiffUxyPrim(Seq012, {I4 + 1}) * (muPhy + mut / sigK);
-        vFlux(Seq012, {I4 + 2}) = DiffUxyPrim(Seq012, {I4 + 2}) * (muPhy + mut / sigE);
+        vFlux(I4 + 1) = DiffUxyPrim(Seq012, {I4 + 1}).dot(uNorm) * (muPhy + mut / sigK);
+        vFlux(I4 + 2) = DiffUxyPrim(Seq012, {I4 + 2}).dot(uNorm) * (muPhy + mut / sigE);
     }
 
     template <int dim, class TU, class TDiffU, class TSource>
@@ -279,8 +279,8 @@ namespace DNDS::Euler::RANS
         return mut;
     }
 
-    template <int dim, class TU, class TDiffU, class TVFlux>
-    void GetVisFlux_SST(TU &&UMeanXy, TDiffU &&DiffUxyPrim, real mutIn, real d, real muf, TVFlux &vFlux)
+    template <int dim, class TU, class TN, class TDiffU, class TVFlux>
+    void GetVisFlux_SST(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN&& uNorm, real mutIn, real d, real muf, TVFlux &vFlux)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -328,8 +328,8 @@ namespace DNDS::Euler::RANS
         real sigK = sigK1 * F1 + sigK2 * (1 - F1);
         real sigO = sigO1 * F1 + sigO2 * (1 - F1);
 
-        vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mutIn * sigK);
-        vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mutIn * sigO);
+        vFlux(I4 + 1) = diffKO(Seq012, 0).dot(uNorm) * (muf + mutIn * sigK);
+        vFlux(I4 + 2) = diffKO(Seq012, 1).dot(uNorm) * (muf + mutIn * sigO);
 
         if (!vFlux.allFinite() || vFlux.hasNaN())
         {
@@ -463,8 +463,8 @@ namespace DNDS::Euler::RANS
         return mut;
     }
 
-    template <int dim, class TU, class TDiffU, class TVFlux>
-    void GetVisFlux_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxyPrim, real mutIn, real d, real muf, TVFlux &vFlux)
+    template <int dim, class TU, class TN, class TDiffU, class TVFlux>
+    void GetVisFlux_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN &&uNorm, real mutIn, real d, real muf, TVFlux &vFlux)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -497,8 +497,8 @@ namespace DNDS::Euler::RANS
         mut = std::min(mut, 1e5 * muf); // CFL3D
 #endif
 
-        vFlux(Seq012, {I4 + 1}) = diffKO(Seq012, 0) * (muf + mut * sigK);
-        vFlux(Seq012, {I4 + 2}) = diffKO(Seq012, 1) * (muf + mut * sigO);
+        vFlux(I4 + 1) = diffKO(Seq012, 0).dot(uNorm) * (muf + mut * sigK);
+        vFlux(I4 + 2) = diffKO(Seq012, 1).dot(uNorm) * (muf + mut * sigO);
     }
 
     template <int dim, class TU, class TDiffU, class TSource>
