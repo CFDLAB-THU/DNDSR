@@ -393,7 +393,7 @@ namespace DNDS::Euler
                     useLimiter, usePPRecLimiter, useViscousLimited,
                     smoothIndicatorProcedure, limiterProcedure,
                     nPartialLimiterStart, nPartialLimiterStartLocal,
-                    preserveLimited, 
+                    preserveLimited,
                     ppRecLimiterCompressToMean)
             } limiterControl;
 
@@ -561,11 +561,20 @@ namespace DNDS::Euler
 "__val_entry": {}
 }})",
                                     overwriteValues[i]);
-                    auto valDoc = nlohmann::ordered_json::parse(valString, nullptr, true, true);
-                    if (mpi.rank == 0)
-                        log() << "JSON: overwrite key: " << key << std::endl
-                              << "JSON: overwrite val: " << valDoc["__val_entry"] << std::endl;
-                    gSetting[key] = valDoc["__val_entry"];
+                    try
+                    {
+                        auto valDoc = nlohmann::ordered_json::parse(valString, nullptr, true, true);
+                        if (mpi.rank == 0)
+                            log() << "JSON: overwrite key: " << key << std::endl
+                                  << "JSON: overwrite val: " << valDoc["__val_entry"] << std::endl;
+                        gSetting[key] = valDoc["__val_entry"];
+                    }
+                    catch (const std::exception &e)
+                    {
+                        std::cerr << e.what() << "\n";
+                        std::cerr << overwriteValues[i] << "\n";
+                        DNDS_assert(false);
+                    }
                 }
                 config.ReadWriteJson(gSetting, nVars, read);
                 DNDS_MAKE_SSP(pBCHandler, nVars);
