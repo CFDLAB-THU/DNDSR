@@ -106,6 +106,7 @@ namespace DNDS::Euler
         real uRecBetaCompressPower = 11;
         real uRecAlphaCompressPower = 1;
         bool forceVolURecBeta = true;
+        bool ppEpsIsRelaxed = false;
 
         real RANSBottomLimit = 0.01;
 
@@ -177,6 +178,7 @@ namespace DNDS::Euler
             __DNDS__json_to_config(uRecAlphaCompressPower);
             __DNDS__json_to_config(uRecBetaCompressPower);
             __DNDS__json_to_config(forceVolURecBeta);
+            __DNDS__json_to_config(ppEpsIsRelaxed);
             __DNDS__json_to_config(RANSBottomLimit);
             Gas::RiemannSolverType riemannSolverType = rsType;
             __DNDS__json_to_config(riemannSolverType);
