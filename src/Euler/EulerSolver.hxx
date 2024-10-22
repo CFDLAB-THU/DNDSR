@@ -689,7 +689,7 @@ namespace DNDS::Euler
                 index nLimFRes = 0;
                 real alphaMinFRes = 1;
                 eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, config.timeMarchControl.rhsFPPRelax,
-                                          1, TEval::EvaluateCellRHSAlpha_DEFAULT);
+                                          2, TEval::EvaluateCellRHSAlpha_DEFAULT);
                 if (nLimFRes)
                     if (mpi.rank == 0)
                     {
@@ -1067,7 +1067,7 @@ namespace DNDS::Euler
             nLimInc = 0;
             alphaMinInc = 1;
             eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, cxInc, alphaPP_tmp, nLimInc, alphaMinInc, config.timeMarchControl.incrementPPRelax,
-                                      1, TEval::EvaluateCellRHSAlpha_DEFAULT);
+                                      2, TEval::EvaluateCellRHSAlpha_DEFAULT);
             if (nLimInc)
                 if (mpi.rank == 0 &&
                     (config.outputControl.consoleOutputEveryFix == 1 || config.outputControl.consoleOutputEveryFix == 2))
