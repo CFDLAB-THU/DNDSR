@@ -12,8 +12,6 @@ namespace _METIS
 #include <boost/graph/properties.hpp>
 #include <boost/graph/bandwidth.hpp>
 
-
-
 namespace _METIS
 {
     static idx_t indexToIdx(DNDS::index v)
@@ -79,12 +77,14 @@ namespace DNDS::Geom
             // options[METIS_OPTION_NO2HOP] = 0; // only available in metis 5.1.0
             options[_METIS::METIS_OPTION_NCUTS] = 1;
             options[_METIS::METIS_OPTION_NITER] = 10;
-            options[_METIS::METIS_OPTION_UFACTOR] = 30;
+            // options[_METIS::METIS_OPTION_UFACTOR] = 30; // load imbalance factor, fow k-way
+            options[_METIS::METIS_OPTION_UFACTOR] = 1;
             options[_METIS::METIS_OPTION_MINCONN] = 0;
             options[_METIS::METIS_OPTION_CONTIG] = 1; // ! forcing contigious partition now ? necessary?
             options[_METIS::METIS_OPTION_SEED] = 0;   // ! seeding 0 for determined result
             options[_METIS::METIS_OPTION_NUMBERING] = 0;
-            options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME | _METIS::METIS_DBG_IPART;
+            // options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME | _METIS::METIS_DBG_IPART;
+            options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME;
         }
         std::vector<_METIS::idx_t> partOut(nCell);
         if (nCell == 0)
@@ -94,7 +94,8 @@ namespace DNDS::Geom
             if (mesh->getMPI().size == 1 || (isSerial && mesh->getMPI().rank == mRank))
             {
                 _METIS::idx_t objval;
-                int ret = _METIS::METIS_PartGraphKway(
+                // int ret = _METIS::METIS_PartGraphKway(
+                int ret = _METIS::METIS_PartGraphRecursive(
                     &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
                     &nPart, NULL, NULL, options, &objval, partOut.data());
                 if (ret != _METIS::METIS_OK)
@@ -136,7 +137,15 @@ namespace DNDS::Geom
         for (DNDS::index i = 0; i < cellPartition.size(); i++)
             cellPartition[i] = partOut[i];
         if (mesh->getMPI().rank == mRank)
-            DNDS::log() << "UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell" << std::endl;
+        {
+            std::vector<index> partCellCnt(nPart, 0);
+            for (auto p : cellPartition)
+                partCellCnt.at(p)++;
+            auto [min, max] = std::minmax_element(partCellCnt.begin(), partCellCnt.end());
+            log() << "UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell "
+                  << fmt::format("ave [{}], min [{}], max [{}], ", real(cellPartition.size()) / nPart, *min, *max)
+                  << fmt::format("ratio [{:.4f}] ", real(*min) / *max) << std::endl;
+        }
     }
 
     // void UnstructuredMesh::ReorderCellLocal()
