@@ -1130,12 +1130,10 @@ namespace DNDS::Euler
                 if (mpi.rank == 0)
                 {
                     auto fmt = log().flags();
-
-                    log() << fmt::format(
-                        "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   "s +
-                            "res {termRed}{resRel:.3e}{termReset}   "s +
-                            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   "s +
-                            "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]" +
+                    std::string formatStringMain = "";
+                    for (auto &s : config.outputControl.consoleMainOutputFormatInternal)
+                        formatStringMain += s;
+                    log() << fmt::format(formatStringMain +
                             "  "s +
                             (config.outputControl.consoleOutputMode == 1
                                  ? "WallFlux {termYellow}{wallFlux:.6e}{termReset}"s
@@ -1287,12 +1285,11 @@ namespace DNDS::Euler
                 if (mpi.rank == 0)
                 {
                     auto fmt = log().flags();
-                    log() << fmt::format(
-                        "=== Step {termBold}[{step:4d}]   "s +
-                            "res {termBold}{termRed}{resRel:.3e}{termReset}   "s +
-                            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   "s +
-                            "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]" +
-                            "  "s +
+                    std::string formatStringMain = "";
+                    for (auto &s : config.outputControl.consoleMainOutputFormat)
+                        formatStringMain += s;
+                    log() << fmt::format(formatStringMain+
+                        "  "s +
                             (config.outputControl.consoleOutputMode == 1
                                  ? "WallFlux {termYellow}{wallFlux:.6e}{termReset}"s
                                  : ""s),

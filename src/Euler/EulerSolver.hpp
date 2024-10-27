@@ -174,6 +174,16 @@ namespace DNDS::Euler
                 int consoleOutputMode = 0; // 0 for basic, 1 for wall force out
                 int consoleOutputEveryFix = 0;
                 int nPrecisionConsole = 3;
+                std::vector<std::string> consoleMainOutputFormat{
+                    "=== Step {termBold}[{step:4d}]   ",
+                    "res {termBold}{termRed}{resRel:.3e}{termReset}   ",
+                    "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   ",
+                    "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"};
+                std::vector<std::string> consoleMainOutputFormatInternal{
+                    "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   ",
+                    "res {termRed}{resRel:.3e}{termReset}   ",
+                    "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
+                    "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"};
                 int nPrecisionLog = 10;
                 bool dataOutAtInit = false;
                 int nDataOut = 10000;
@@ -195,6 +205,8 @@ namespace DNDS::Euler
                     nConsoleCheckInternal,
                     consoleOutputMode,
                     consoleOutputEveryFix,
+                    consoleMainOutputFormat,
+                    consoleMainOutputFormatInternal,
                     dataOutAtInit,
                     nDataOut, nDataOutC,
                     nDataOutInternal, nDataOutCInternal,
