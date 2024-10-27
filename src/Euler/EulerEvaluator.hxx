@@ -1008,10 +1008,28 @@ namespace DNDS::Euler
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         static const real safetyRatio = 1 - 1e-5;
+        static const real minRatio = 0.5;
         real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
         real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
         real betaCutOff = 1e-3;
         bool restrictOnVolPoints = (!settings.ignoreSourceTerm) || settings.forceVolURecBeta;
+
+        if (settings.ppEpsIsRelaxed)
+        {
+            real rhoMin = veryLargeReal;
+            real pMin = veryLargeReal;
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                TU UPrim;
+                Gas::IdealGasThermalConservative2Primitive(u[iCell], UPrim, settings.idealGasProperty.gamma);
+                rhoMin = std::min(rhoMin, UPrim(0));
+                pMin = std::min(pMin, UPrim(I4));
+            }
+            MPI::AllreduceOneReal(rhoMin, MPI_MIN, mesh->getMPI());
+            MPI::AllreduceOneReal(pMin, MPI_MIN, mesh->getMPI());
+            rhoEps = std::min(rhoEps, minRatio * rhoMin);
+            pEps = std::min(pEps, minRatio  * pMin);
+        }
 
         index nLimLocal = 0;
         real minBetaLocal = 1;
@@ -1204,6 +1222,8 @@ namespace DNDS::Euler
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
         real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
+        if(settings.ppEpsIsRelaxed)
+            rhoEps *= 0, pEps *= 0;
 
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -1254,6 +1274,14 @@ namespace DNDS::Euler
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
         real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
+        static const real safetyRatio = 1 - 1e-5;
+        static const real minRatio = 0.5;
+
+        if (settings.ppEpsIsRelaxed)
+        {
+            pEps *= 0, rhoEps*=0; 
+            DNDS_assert_info(relax < 1, "Relaxed eps only for using relaxation in alpha");
+        }
 
         index nLimLocal = 0;
         real alphaMinLocal = 1;
@@ -1263,7 +1291,7 @@ namespace DNDS::Euler
             real alphaRho = 1;
             TU inc = res[iCell];
             DNDS_assert(u[iCell](0) >= rhoEps);
-            real relaxedRho = rhoEps + (u[iCell](0) - rhoEps) * (1 - relax);
+            real relaxedRho = rhoEps * relax + (u[iCell](0)) * (1 - relax);
             if (inc(0) < 0) // not < rhoEps!!!
                 alphaRho = std::min(1.0, (u[iCell](0) - relaxedRho) / (-inc(0) - smallReal * inc(0)));
             DNDS_assert(alphaRho >= 0 && alphaRho <= 1);
@@ -1319,19 +1347,19 @@ namespace DNDS::Euler
             {
                 cellRHSAlpha[iCell](0) = std::pow(cellRHSAlpha[iCell](0), compress * static_cast<int>(std::round(settings.uRecAlphaCompressPower)));
                 nLimLocal++,
-                    cellRHSAlpha[iCell] *= (0.9),
+                    cellRHSAlpha[iCell] *= safetyRatio,
                     alphaMinLocal = std::min(alphaMinLocal, cellRHSAlpha[iCell](0));
             } //! for safety
         }
         MPI::Allreduce(&nLimLocal, &nLim, 1, DNDS_MPI_INDEX, MPI_SUM, u.father->getMPI().comm);
         MPI::Allreduce(&alphaMinLocal, &alphaMin, 1, DNDS_MPI_REAL, MPI_MIN, u.father->getMPI().comm);
-        if (flag == 0)
+        if (flag & EvaluateCellRHSAlpha_MIN_IF_NOT_ONE)
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 if (cellRHSAlpha[iCell](0) < 1)
                     cellRHSAlpha[iCell](0) = alphaMin;
             }
-        if (flag == -1)
+        if (flag & EvaluateCellRHSAlpha_MIN_ALL)
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 cellRHSAlpha[iCell](0) = alphaMin;
     }

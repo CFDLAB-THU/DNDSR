@@ -1,7 +1,7 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-3,
-        "nTimeStep": 1000,
+        "dtImplicit": 0.25e-3,
+        "nTimeStep": 4000,
         "steadyQuit": false,
         "odeCode": 0,
         "tEnd": 3e+200,
@@ -53,14 +53,15 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/Uniform_VisTube_1000.cgns",
-        "outPltName": "../data/outUnsteady/VisTube/test1",
+        "meshFile": "../data/mesh/Uniform_VisTube_3000.cgns",
+        "outPltName": "../data/outUnsteady/VisTube1/test2-3000-HLLEP-nolim-prim-STS",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": false,
         "outAtPointData": true,
         "outAtCellData": true,
+        "outBndData": true,
         "outCellScalarNames": [
             "betaPP"
         ],
@@ -83,6 +84,7 @@
     "limiterControl": {
         "useLimiter": true,
         "smoothIndicatorProcedure": 0, //0 = normal, 1 = p only
+        "useViscousLimited": false,
         "limiterProcedure": 0, //1 == CWBAP
         "nPartialLimiterStart": 1000000,
         "nPartialLimiterStartLocal": 1000000
@@ -116,10 +118,11 @@
     "eulerSettings": {
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
-        "riemannSolverType": "Roe_M2",
+        "riemannSolverType": "HLLEP",
         "riemannSolverTypeAux": "Roe_M2",
         "rsMeanValueEig": 1,
         "rsRotateScheme": 0,
+        "usePrimGradInVisFlux": 1,
         "constMassForce": [
             0.0,
             0.0,

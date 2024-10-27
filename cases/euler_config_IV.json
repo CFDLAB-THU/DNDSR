@@ -3,7 +3,7 @@
         "dtImplicit": 0.05e-1,
         "nTimeStep": 100000,
         "steadyQuit": false,
-        "tEnd": 0.5,
+        "tEnd": 0.01,
         "odeCode": 0,
         // "odeCode": 401,
         "odeSetting1": 0.5,
@@ -140,6 +140,7 @@
         "riemannSolverType": "Roe",
         "uRecAlphaCompressPower": 1.0,
         "uRecBetaCompressPower": 1.0,
+        "ppEpsIsRelaxed": true,
         // "forceVolURecBeta": false,
         "specialBuiltinInitializer": 203, // 2 is IV, 203 is PPIV
         "nCentralSmoothStep": 0,
@@ -149,11 +150,11 @@
             0.0
         ],
         "farFieldStaticValue": [
-            1,
-            1,
-            1,
+            1e-10,
+            1e-10,
+            1e-10,
             0,
-            3.5
+            3.5e-10
         ],
         "idealGasProperty": {
             "gamma": 1.4,

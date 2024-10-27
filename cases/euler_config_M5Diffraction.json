@@ -34,18 +34,18 @@
         "nDataOutInternal": 1000000000
     },
     "implicitCFLControl": {
-        "CFL": 1,
+        "CFL": 0.1,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 0,
         "nCFLRampLength": 10,
-        "CFLRampEnd": 1.0,
+        "CFLRampEnd": 2.0,
         "useLocalDt": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/Corner80S.cgns",
-        "outPltName": "../data/outUnsteady/PP2/Corner/Corner80S_ReInf_1-200-1-RM2",
+        "outPltName": "../data/outUnsteady/PP5/Corner/Corner80S_ReInf_1-200-1-RM2",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -78,6 +78,7 @@
     },
     "limiterControl": {
         "useLimiter": true,
+        "useViscousLimited": false,
         "smoothIndicatorProcedure": 0, //1 = pressure only
         "limiterProcedure": 0, //1 == CWBAP
         "nPartialLimiterStart": 5000000,
@@ -126,6 +127,8 @@
     "eulerSettings": {
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
+        "uRecBetaCompressPower": 1,
+        "ppEpsIsRelaxed": true,
         "riemannSolverType": "Roe_M2",
         "riemannSolverTypeAux": "Roe_M1",
         "rsMeanValueEig": 1,
@@ -137,26 +140,26 @@
             0.0
         ],
         "farFieldStaticValue": [
-            7.041132906907898,
-            28.713366496161203,
+            1.4,
             0,
             0,
-            1.336944177327302e+02
+            0,
+            2.5
         ],
         "boxInitializers": [
             {
-                "x0": 0.5,
-                "x1": 100,
+                "x0": -100,
+                "x1": 0.5,
                 "y0": -100,
                 "y1": 100,
                 "z0": -100,
                 "z1": 100,
                 "v": [
-                    1.4,
+                    7.041132906907898,
+                    28.713366496161203,
                     0,
                     0,
-                    0,
-                    2.5
+                    1.336944177327302e+02
                 ]
             }
         ],
@@ -174,6 +177,17 @@
         {
             "type": "BCFar",
             "name": "leftIn",
+            "value": [
+                7.041132906907898,
+                28.713366496161203,
+                0,
+                0,
+                1.336944177327302e+02
+            ]
+        },
+        {
+            "type": "BCOut",
+            "name": "UpOut",
             "value": [
                 7.041132906907898,
                 28.713366496161203,

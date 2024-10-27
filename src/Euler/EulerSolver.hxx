@@ -671,7 +671,7 @@ namespace DNDS::Euler
                 index nLimFRes = 0;
                 real alphaMinFRes = 1;
                 eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, config.timeMarchControl.rhsFPPRelax,
-                                          2, config.timeMarchControl.rhsFPPMode == 1 ? 1 : 0);
+                                          2, config.timeMarchControl.rhsFPPMode == 1 ? TEval::EvaluateCellRHSAlpha_DEFAULT : TEval::EvaluateCellRHSAlpha_MIN_IF_NOT_ONE);
                 if (nLimFRes)
                     if (mpi.rank == 0)
                     {
@@ -689,7 +689,7 @@ namespace DNDS::Euler
                 index nLimFRes = 0;
                 real alphaMinFRes = 1;
                 eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, rhsTemp, alphaPP_tmp, nLimFRes, alphaMinFRes, config.timeMarchControl.rhsFPPRelax,
-                                          2, 1);
+                                          2, TEval::EvaluateCellRHSAlpha_DEFAULT);
                 if (nLimFRes)
                     if (mpi.rank == 0)
                     {
@@ -1003,7 +1003,8 @@ namespace DNDS::Euler
             renewRhsIncPart(); // un-fixed now
             // rhsIncPart.trans.startPersistentPull();
             // rhsIncPart.trans.waitPersistentPull(); //seems not needed
-            eval.EvaluateCellRHSAlpha(xPrev, uRecC, betaPPC, rhsIncPart, alphaPP_tmp, nLimAlpha, minAlpha, 1., 2, 0);
+            eval.EvaluateCellRHSAlpha(xPrev, uRecC, betaPPC, rhsIncPart, alphaPP_tmp, nLimAlpha, minAlpha, 1.,
+                                      2, TEval::EvaluateCellRHSAlpha_MIN_IF_NOT_ONE);
             alphaPP_tmp.trans.startPersistentPull();
             alphaPP_tmp.trans.waitPersistentPull();
             if (nLimAlpha)
@@ -1066,7 +1067,7 @@ namespace DNDS::Euler
             nLimInc = 0;
             alphaMinInc = 1;
             eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, cxInc, alphaPP_tmp, nLimInc, alphaMinInc, config.timeMarchControl.incrementPPRelax,
-                                      2, 0);
+                                      2, TEval::EvaluateCellRHSAlpha_DEFAULT);
             if (nLimInc)
                 if (mpi.rank == 0 &&
                     (config.outputControl.consoleOutputEveryFix == 1 || config.outputControl.consoleOutputEveryFix == 2))
@@ -1523,8 +1524,8 @@ namespace DNDS::Euler
                 rhsTemp *= curDtImplicit * config.timeMarchControl.dtPPLimitScale;
                 index nLim = 0;
                 real minLim = 1;
-                eval.EvaluateCellRHSAlpha(u, uRec, betaPP, rhsTemp, alphaPP_tmp, nLim, minLim, config.timeMarchControl.dtPPLimitRelax,
-                                          1, 0); // using compress = 1
+                eval.EvaluateCellRHSAlpha(u, uRec, alphaPP, rhsTemp, alphaPP_tmp, nLim, minLim, config.timeMarchControl.dtPPLimitRelax,
+                                          1, TEval::EvaluateCellRHSAlpha_DEFAULT); // using compress = 1, only minLim is used as output
                 if (nLim)
                     curDtImplicit = std::min(curDtImplicit, minLim * curDtImplicit);
                 if (curDtImplicitHistory.size() && curDtImplicit > curDtImplicitHistory.back() * config.timeMarchControl.dtIncreaseLimit)
@@ -1571,8 +1572,8 @@ namespace DNDS::Euler
                     odeVBDF->LimitDt_StepPPV2(
                         u, [&](ArrayDOFV<nVarsFixed> &u, ArrayDOFV<nVarsFixed> &uInc) -> real
                         {
-                            eval.EvaluateCellRHSAlpha(u, uRec, betaPP, uInc, alphaPP_tmp, nLimAlpha, minAlpha, 1.,
-                                                    1, 0); // using compress == 1
+                            eval.EvaluateCellRHSAlpha(u, uRec, alphaPP, uInc, alphaPP_tmp, nLimAlpha, minAlpha, 1.,
+                                                    1, TEval::EvaluateCellRHSAlpha_MIN_IF_NOT_ONE); // using compress == 1, only minAlpha is used
                             return minAlpha; },
                         curDtImplicit, 2); // curDtImplicit modified
                     if (curDtImplicit > curDtImplicitOld)
