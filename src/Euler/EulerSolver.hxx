@@ -573,6 +573,7 @@ namespace DNDS::Euler
             alphaPP_tmp.setConstant(1.0);  // make RHS un-disturbed
             if (config.limiterControl.usePPRecLimiter)
             {
+                PerformanceTimer::Instance().StartTimer(PerformanceTimer::Positivity);
                 nLimBeta = 0;
                 minBeta = 1;
                 if (!config.limiterControl.useLimiter)
@@ -593,6 +594,7 @@ namespace DNDS::Euler
                 betaPPC.trans.startPersistentPull();
                 uRecNew.trans.waitPersistentPull();
                 betaPPC.trans.waitPersistentPull();
+                PerformanceTimer::Instance().StopTimer(PerformanceTimer::Positivity);
             }
 
             if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter) // todo: opt to using limited for uRecUnlim
@@ -663,6 +665,7 @@ namespace DNDS::Euler
             auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
             bool inputIsZero{true}, hasLUDone{false};
 
+            PerformanceTimer::Instance().StartTimer(PerformanceTimer::Positivity);
             if (config.timeMarchControl.rhsFPPMode == 1 || config.timeMarchControl.rhsFPPMode == 11)
             {
                 // ! experimental: bad now ?
@@ -702,6 +705,7 @@ namespace DNDS::Euler
                 dTauTmp *= alphaPP_tmp;
             }
             auto &dTauC = config.timeMarchControl.rhsFPPMode == 2 ? dTauTmp : dTau;
+            PerformanceTimer::Instance().StopTimer(PerformanceTimer::Positivity);
 
             typename TVFV::template TFBoundary<nVarsFixed>
                 FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace, int iG,
@@ -997,6 +1001,7 @@ namespace DNDS::Euler
                                   real ct,
                                   int uPos)
         {
+            PerformanceTimer::Instance().StartTimer(PerformanceTimer::Positivity);
             auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
             auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
             auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
@@ -1054,6 +1059,7 @@ namespace DNDS::Euler
                 crhs.trans.startPersistentPull();
                 crhs.trans.waitPersistentPull();
             }
+            PerformanceTimer::Instance().StopTimer(PerformanceTimer::Positivity);
         };
 
         auto fincrement = [&](
@@ -1061,6 +1067,7 @@ namespace DNDS::Euler
                               ArrayDOFV<nVarsFixed> &cxInc,
                               real alpha, int uPos)
         {
+            PerformanceTimer::Instance().StartTimer(PerformanceTimer::Positivity);
             auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
             auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
             auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
@@ -1090,6 +1097,7 @@ namespace DNDS::Euler
                     for (index i = 0; i < uTemp.Size(); i++)
                         uTemp[i]({I4, I4 + 1}) *= config.implicitCFLControl.RANSRelax;
             }
+            PerformanceTimer::Instance().StopTimer(PerformanceTimer::Positivity);
             eval.AddFixedIncrement(cx, uTemp, alpha);
             eval.AssertMeanValuePP(cx, true);
 
@@ -1114,18 +1122,21 @@ namespace DNDS::Euler
             if (iter % config.outputControl.nConsoleCheckInternal == 0 || iter > config.convergenceControl.nTimeStepInternal || ifStop)
             {
                 double tWall = MPI_Wtime();
-                double telapsed = MPI_Wtime() - tstartInternal;
-                real tcomm = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Comm, mpi);
-                real tLimiterA = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::LimiterA, mpi);
-                real tLimiterB = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::LimiterB, mpi);
-                real trhs = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::RHS, mpi);
-                real trec = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Reconstruction, mpi);
-                real tLim = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Limiter, mpi);
+                real telapsed = MPI_Wtime() - tstartInternal;
+                bool useCollectiveTimer = config.outputControl.useCollectiveTimer;
+                real tcomm = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Comm, mpi, useCollectiveTimer);
+                real tLimiterA = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::LimiterA, mpi, useCollectiveTimer);
+                real tLimiterB = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::LimiterB, mpi, useCollectiveTimer);
+                real trhs = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::RHS, mpi, useCollectiveTimer);
+                real trec = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Reconstruction, mpi, useCollectiveTimer);
+                real tLim = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Limiter, mpi, useCollectiveTimer);
+                real tPP = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Positivity, mpi, useCollectiveTimer);
                 auto [telapsedM, telapsedS] = tInternalStats["t"].update(telapsed).get();
                 auto [tcommM, tcommS] = tInternalStats["c"].update(tcomm).get();
                 auto [trhsM, trhsS] = tInternalStats["r"].update(trhs).get();
                 auto [trecM, trecS] = tInternalStats["v"].update(trec).get();
                 auto [tLimM, tLimS] = tInternalStats["l"].update(tLim).get();
+                auto [tPPrM, tPPrS] = tInternalStats["p"].update(tPP).get();
 
                 if (mpi.rank == 0)
                 {
@@ -1134,40 +1145,41 @@ namespace DNDS::Euler
                     for (auto &s : config.outputControl.consoleMainOutputFormatInternal)
                         formatStringMain += s;
                     log() << fmt::format(formatStringMain +
-                            "  "s +
-                            (config.outputControl.consoleOutputMode == 1
-                                 ? "WallFlux {termYellow}{wallFlux:.6e}{termReset}"s
-                                 : ""s),
-                        DNDS_FMT_ARG(step),
-                        DNDS_FMT_ARG(iStep),
-                        DNDS_FMT_ARG(iter),
-                        fmt::arg("resRel", resRel.transpose()),
-                        fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
-                        DNDS_FMT_ARG(tSimu),
-                        DNDS_FMT_ARG(curDtImplicit),
-                        DNDS_FMT_ARG(curDtMin),
-                        DNDS_FMT_ARG(CFLNow),
-                        DNDS_FMT_ARG(nLimInc),
-                        DNDS_FMT_ARG(alphaMinInc),
-                        DNDS_FMT_ARG(nLimBeta),
-                        DNDS_FMT_ARG(minBeta),
-                        DNDS_FMT_ARG(nLimAlpha),
-                        DNDS_FMT_ARG(minAlpha),
-                        DNDS_FMT_ARG(telapsedM),
-                        DNDS_FMT_ARG(trecM),
-                        DNDS_FMT_ARG(trhsM),
-                        DNDS_FMT_ARG(tcommM),
-                        DNDS_FMT_ARG(tLimM),
-                        DNDS_FMT_ARG(tLimiterA),
-                        DNDS_FMT_ARG(tLimiterB),
-                        DNDS_FMT_ARG(tWall),
-                        fmt::arg("termRed", TermColor::Red),
-                        fmt::arg("termBlue", TermColor::Blue),
-                        fmt::arg("termGreen", TermColor::Green),
-                        fmt::arg("termCyan", TermColor::Cyan),
-                        fmt::arg("termYellow", TermColor::Yellow),
-                        fmt::arg("termBold", TermColor::Bold),
-                        fmt::arg("termReset", TermColor::Reset));
+                                             "  "s +
+                                             (config.outputControl.consoleOutputMode == 1
+                                                  ? "WallFlux {termYellow}{wallFlux:.6e}{termReset}"s
+                                                  : ""s),
+                                         DNDS_FMT_ARG(step),
+                                         DNDS_FMT_ARG(iStep),
+                                         DNDS_FMT_ARG(iter),
+                                         fmt::arg("resRel", resRel.transpose()),
+                                         fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
+                                         DNDS_FMT_ARG(tSimu),
+                                         DNDS_FMT_ARG(curDtImplicit),
+                                         DNDS_FMT_ARG(curDtMin),
+                                         DNDS_FMT_ARG(CFLNow),
+                                         DNDS_FMT_ARG(nLimInc),
+                                         DNDS_FMT_ARG(alphaMinInc),
+                                         DNDS_FMT_ARG(nLimBeta),
+                                         DNDS_FMT_ARG(minBeta),
+                                         DNDS_FMT_ARG(nLimAlpha),
+                                         DNDS_FMT_ARG(minAlpha),
+                                         DNDS_FMT_ARG(telapsedM),
+                                         DNDS_FMT_ARG(trecM),
+                                         DNDS_FMT_ARG(trhsM),
+                                         DNDS_FMT_ARG(tcommM),
+                                         DNDS_FMT_ARG(tLimM),
+                                         DNDS_FMT_ARG(tPPrM),
+                                         DNDS_FMT_ARG(tLimiterA),
+                                         DNDS_FMT_ARG(tLimiterB),
+                                         DNDS_FMT_ARG(tWall),
+                                         fmt::arg("termRed", TermColor::Red),
+                                         fmt::arg("termBlue", TermColor::Blue),
+                                         fmt::arg("termGreen", TermColor::Green),
+                                         fmt::arg("termCyan", TermColor::Cyan),
+                                         fmt::arg("termYellow", TermColor::Yellow),
+                                         fmt::arg("termBold", TermColor::Bold),
+                                         fmt::arg("termReset", TermColor::Reset));
                     log() << std::endl;
                     log().setf(fmt);
 
@@ -1275,54 +1287,55 @@ namespace DNDS::Euler
             if (step % config.outputControl.nConsoleCheck == 0)
             {
                 double tWall = MPI_Wtime();
-                double telapsed = MPI_Wtime() - tstart;
-                real tcomm = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Comm, mpi);
-                real tLimiterA = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::LimiterA, mpi);
-                real tLimiterB = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::LimiterB, mpi);
-                real trhs = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::RHS, mpi);
-                real trec = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Reconstruction, mpi);
-                real tLim = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Limiter, mpi);
+                real telapsed = MPI_Wtime() - tstart;
+                bool useCollectiveTimer = config.outputControl.useCollectiveTimer;
+                real tcomm = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Comm, mpi, useCollectiveTimer);
+                real tLimiterA = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::LimiterA, mpi, useCollectiveTimer);
+                real tLimiterB = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::LimiterB, mpi, useCollectiveTimer);
+                real trhs = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::RHS, mpi, useCollectiveTimer);
+                real trec = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Reconstruction, mpi, useCollectiveTimer);
+                real tLim = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Limiter, mpi, useCollectiveTimer);
                 if (mpi.rank == 0)
                 {
                     auto fmt = log().flags();
                     std::string formatStringMain = "";
                     for (auto &s : config.outputControl.consoleMainOutputFormat)
                         formatStringMain += s;
-                    log() << fmt::format(formatStringMain+
-                        "  "s +
-                            (config.outputControl.consoleOutputMode == 1
-                                 ? "WallFlux {termYellow}{wallFlux:.6e}{termReset}"s
-                                 : ""s),
-                        DNDS_FMT_ARG(step),
-                        // DNDS_FMT_ARG(iStep),
-                        // DNDS_FMT_ARG(iter),
-                        fmt::arg("resRel", (res.array() / (resBaseC.array() + verySmallReal)).transpose()),
-                        fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
-                        DNDS_FMT_ARG(tSimu),
-                        DNDS_FMT_ARG(curDtImplicit),
-                        DNDS_FMT_ARG(curDtMin),
-                        DNDS_FMT_ARG(CFLNow),
-                        DNDS_FMT_ARG(nLimInc),
-                        DNDS_FMT_ARG(alphaMinInc),
-                        DNDS_FMT_ARG(nLimBeta),
-                        DNDS_FMT_ARG(minBeta),
-                        DNDS_FMT_ARG(nLimAlpha),
-                        DNDS_FMT_ARG(minAlpha),
-                        DNDS_FMT_ARG(telapsed),
-                        DNDS_FMT_ARG(trec),
-                        DNDS_FMT_ARG(trhs),
-                        DNDS_FMT_ARG(tcomm),
-                        DNDS_FMT_ARG(tLim),
-                        DNDS_FMT_ARG(tLimiterA),
-                        DNDS_FMT_ARG(tLimiterB),
-                        DNDS_FMT_ARG(tWall),
-                        fmt::arg("termRed", TermColor::Red),
-                        fmt::arg("termBlue", TermColor::Blue),
-                        fmt::arg("termGreen", TermColor::Green),
-                        fmt::arg("termCyan", TermColor::Cyan),
-                        fmt::arg("termYellow", TermColor::Yellow),
-                        fmt::arg("termBold", TermColor::Bold),
-                        fmt::arg("termReset", TermColor::Reset));
+                    log() << fmt::format(formatStringMain +
+                                             "  "s +
+                                             (config.outputControl.consoleOutputMode == 1
+                                                  ? "WallFlux {termYellow}{wallFlux:.6e}{termReset}"s
+                                                  : ""s),
+                                         DNDS_FMT_ARG(step),
+                                         // DNDS_FMT_ARG(iStep),
+                                         // DNDS_FMT_ARG(iter),
+                                         fmt::arg("resRel", (res.array() / (resBaseC.array() + verySmallReal)).transpose()),
+                                         fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
+                                         DNDS_FMT_ARG(tSimu),
+                                         DNDS_FMT_ARG(curDtImplicit),
+                                         DNDS_FMT_ARG(curDtMin),
+                                         DNDS_FMT_ARG(CFLNow),
+                                         DNDS_FMT_ARG(nLimInc),
+                                         DNDS_FMT_ARG(alphaMinInc),
+                                         DNDS_FMT_ARG(nLimBeta),
+                                         DNDS_FMT_ARG(minBeta),
+                                         DNDS_FMT_ARG(nLimAlpha),
+                                         DNDS_FMT_ARG(minAlpha),
+                                         DNDS_FMT_ARG(telapsed),
+                                         DNDS_FMT_ARG(trec),
+                                         DNDS_FMT_ARG(trhs),
+                                         DNDS_FMT_ARG(tcomm),
+                                         DNDS_FMT_ARG(tLim),
+                                         DNDS_FMT_ARG(tLimiterA),
+                                         DNDS_FMT_ARG(tLimiterB),
+                                         DNDS_FMT_ARG(tWall),
+                                         fmt::arg("termRed", TermColor::Red),
+                                         fmt::arg("termBlue", TermColor::Blue),
+                                         fmt::arg("termGreen", TermColor::Green),
+                                         fmt::arg("termCyan", TermColor::Cyan),
+                                         fmt::arg("termYellow", TermColor::Yellow),
+                                         fmt::arg("termBold", TermColor::Bold),
+                                         fmt::arg("termReset", TermColor::Reset));
                     log() << std::endl;
                     log().setf(fmt);
                     std::string delimC = " ";
@@ -1528,6 +1541,7 @@ namespace DNDS::Euler
 
             if (config.timeMarchControl.useDtPPLimit)
             {
+                PerformanceTimer::Instance().StartTimer(PerformanceTimer::Positivity);
                 dTauTmp.setConstant(curDtImplicit * config.timeMarchControl.dtPPLimitScale); //? used as damper here, appropriate?
                 frhsOuter(rhsTemp, u, dTauTmp, 1, 0.0, 0, 0);                                //* trick: use 0th order reconstruction RHS for dt PP limiting
                 uTemp = u;
@@ -1548,6 +1562,7 @@ namespace DNDS::Euler
                     log() << fmt::format("At Step [{:d}] t [{:.8g}] Changing dt to [{}], using PP", step, tSimu, curDtImplicit) << std::endl;
                     log() << "##################################################################" << std::endl;
                 }
+                PerformanceTimer::Instance().StopTimer(PerformanceTimer::Positivity);
             }
 
             DNDS_assert(curDtImplicit > 0);

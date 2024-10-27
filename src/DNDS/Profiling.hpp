@@ -26,7 +26,8 @@ namespace DNDS
             LinSolve1 = 14,
             LinSolve2 = 15,
             LinSolve3 = 16,
-            __EndTimerType = 17
+            Positivity = 17,
+            __EndTimerType = 18
         };
 
         static const int Ntype = __EndTimerType;
@@ -50,6 +51,11 @@ namespace DNDS
         real getTimer(int t);
         real getTimerCollective(TimerType t, const MPIInfo &mpi);
         real getTimerCollective(int t, const MPIInfo &mpi);
+        template <typename T>
+        real getTimerColOrLoc(T t, const MPIInfo &mpi, bool col)
+        {
+            return col ? getTimerCollective(t, mpi) : getTimer(t);
+        }
         void clearTimer(TimerType t);
         void clearTimer(int t);
         void clearAllTimer();

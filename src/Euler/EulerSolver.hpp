@@ -198,6 +198,7 @@ namespace DNDS::Euler
                 int nTimeAverageOutC = INT_MAX;
                 real tDataOut = veryLargeReal;
                 bool lazyCoverDataOutput = false;
+                bool useCollectiveTimer = false;
 
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     OutputControl,
@@ -213,7 +214,8 @@ namespace DNDS::Euler
                     nRestartOut, nRestartOutC,
                     nRestartOutInternal, nRestartOutCInternal,
                     nTimeAverageOut, nTimeAverageOutC,
-                    tDataOut, lazyCoverDataOutput)
+                    tDataOut, lazyCoverDataOutput, 
+                    useCollectiveTimer)
             } outputControl;
 
             struct ImplicitCFLControl
