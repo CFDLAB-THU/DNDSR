@@ -195,7 +195,8 @@ namespace DNDS::Euler
         /*******************************************************/
 
         double tstart = MPI_Wtime();
-        double trec{0}, tcomm{0}, trhs{0}, tLim{0};
+        double tstartInternal = tstart;
+        std::map<std::string, ScalarStatistics> tInternalStats;
         int stepCount = 0;
         Eigen::VectorFMTSafe<real, -1> resBaseC;
         Eigen::VectorFMTSafe<real, -1> resBaseCInternal;
@@ -287,7 +288,7 @@ namespace DNDS::Euler
                 uRec.setConstant(0.0);
             }
             real recIncBase = 0;
-            double tstartA = MPI_Wtime();
+            PerformanceTimer::Instance().StartTimer(PerformanceTimer::Reconstruction);
             typename TVFV::template TFBoundary<nVarsFixed>
                 FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace, int ig,
                                 const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType) -> TU
@@ -422,7 +423,7 @@ namespace DNDS::Euler
                 mask[1] = 6;
                 vfv->DoReconstruction2nd(uRec, u, FBoundary, 1, mask);
             }
-            trec += MPI_Wtime() - tstartA;
+            PerformanceTimer::Instance().StopTimer(PerformanceTimer::Reconstruction);
             if (gradIsZero)
             {
                 uRec = uRecC;
@@ -430,8 +431,8 @@ namespace DNDS::Euler
                     uRec1 = uRecC;
                 gradIsZero = false;
             }
-            double tstartH = MPI_Wtime();
 
+            PerformanceTimer::Instance().StartTimer(PerformanceTimer::Limiter);
             // for (index iCell = 0; iCell < uOld.size(); iCell++)
             //     uRecC[iCell].m() -= uOld[iCell].m();
 
@@ -532,7 +533,7 @@ namespace DNDS::Euler
                 // uRecNew.trans.startPersistentPull();
                 // uRecNew.trans.waitPersistentPull();
             }
-            tLim += MPI_Wtime() - tstartH;
+            PerformanceTimer::Instance().StopTimer(PerformanceTimer::Limiter);
             if (config.implicitReconstructionControl.storeRecInc)
             {
                 uRecIncC = uRecC;
@@ -564,7 +565,7 @@ namespace DNDS::Euler
             // }
 
             DNDS_MPI_InsertCheck(mpi, " Lambda RHS: StartEval");
-            double tstartE = MPI_Wtime();
+            PerformanceTimer::Instance().StartTimer(PerformanceTimer::RHS);
             eval.setPassiveDiscardSource(iter <= 0);
 
             if (iter == 1)
@@ -610,7 +611,7 @@ namespace DNDS::Euler
                 // if (mpi.rank == 0)
                 //     std::cout << "Freezing all passive" << std::endl;
             }
-            trhs += MPI_Wtime() - tstartE;
+            PerformanceTimer::Instance().StopTimer(PerformanceTimer::RHS);
 
             DNDS_MPI_InsertCheck(mpi, " Lambda RHS: End");
         };
@@ -1113,10 +1114,19 @@ namespace DNDS::Euler
             if (iter % config.outputControl.nConsoleCheckInternal == 0 || iter > config.convergenceControl.nTimeStepInternal || ifStop)
             {
                 double tWall = MPI_Wtime();
-                double telapsed = MPI_Wtime() - tstart;
-                tcomm = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Comm, mpi);
+                double telapsed = MPI_Wtime() - tstartInternal;
+                real tcomm = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Comm, mpi);
                 real tLimiterA = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::LimiterA, mpi);
                 real tLimiterB = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::LimiterB, mpi);
+                real trhs = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::RHS, mpi);
+                real trec = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Reconstruction, mpi);
+                real tLim = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Limiter, mpi);
+                auto [telapsedM, telapsedS] = tInternalStats["t"].update(telapsed).get();
+                auto [tcommM, tcommS] = tInternalStats["c"].update(tcomm).get();
+                auto [trhsM, trhsS] = tInternalStats["r"].update(trhs).get();
+                auto [trecM, trecS] = tInternalStats["v"].update(trec).get();
+                auto [tLimM, tLimS] = tInternalStats["l"].update(tLim).get();
+
                 if (mpi.rank == 0)
                 {
                     auto fmt = log().flags();
@@ -1125,7 +1135,7 @@ namespace DNDS::Euler
                         "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   "s +
                             "res {termRed}{resRel:.3e}{termReset}   "s +
                             "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   "s +
-                            "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]" +
+                            "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]" +
                             "  "s +
                             (config.outputControl.consoleOutputMode == 1
                                  ? "WallFlux {termYellow}{wallFlux:.6e}{termReset}"s
@@ -1145,11 +1155,11 @@ namespace DNDS::Euler
                         DNDS_FMT_ARG(minBeta),
                         DNDS_FMT_ARG(nLimAlpha),
                         DNDS_FMT_ARG(minAlpha),
-                        DNDS_FMT_ARG(telapsed),
-                        DNDS_FMT_ARG(trec),
-                        DNDS_FMT_ARG(trhs),
-                        DNDS_FMT_ARG(tcomm),
-                        DNDS_FMT_ARG(tLim),
+                        DNDS_FMT_ARG(telapsedM),
+                        DNDS_FMT_ARG(trecM),
+                        DNDS_FMT_ARG(trhsM),
+                        DNDS_FMT_ARG(tcommM),
+                        DNDS_FMT_ARG(tLimM),
                         DNDS_FMT_ARG(tLimiterA),
                         DNDS_FMT_ARG(tLimiterB),
                         DNDS_FMT_ARG(tWall),
@@ -1186,8 +1196,7 @@ namespace DNDS::Euler
                         config.dataIOControl.getOutLogName() + "_" + output_stamp,
                         step, iStep, iter);
                 }
-                tstart = MPI_Wtime();
-                trec = tcomm = trhs = tLim = 0.;
+                tstartInternal = MPI_Wtime();
                 PerformanceTimer::Instance().clearAllTimer();
             }
 
@@ -1269,9 +1278,12 @@ namespace DNDS::Euler
             {
                 double tWall = MPI_Wtime();
                 double telapsed = MPI_Wtime() - tstart;
-                tcomm = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Comm, mpi);
+                real tcomm = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Comm, mpi);
                 real tLimiterA = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::LimiterA, mpi);
                 real tLimiterB = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::LimiterB, mpi);
+                real trhs = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::RHS, mpi);
+                real trec = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Reconstruction, mpi);
+                real tLim = PerformanceTimer::Instance().getTimerCollective(PerformanceTimer::Limiter, mpi);
                 if (mpi.rank == 0)
                 {
                     auto fmt = log().flags();
@@ -1339,8 +1351,9 @@ namespace DNDS::Euler
                         step, -1, -1);
                 }
                 tstart = MPI_Wtime();
-                trec = tcomm = trhs = tLim = 0.;
                 PerformanceTimer::Instance().clearAllTimer();
+                for (auto &s : tInternalStats)
+                    s.second.clear();
             }
             if (step == nextStepOutC)
             {
