@@ -9,6 +9,8 @@ namespace DNDS::Euler::Gas
     typedef Eigen::Vector3d tVec;
     typedef Eigen::Vector2d tVec2;
 
+    static const int MaxBatch = 16;
+
     enum RiemannSolverType
     {
         UnknownRS = 0,
@@ -159,6 +161,15 @@ namespace DNDS::Euler::Gas
         F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = U(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) * (velo(0) - vg(0)); // note that additional flux are unattended!
         F(1) += p;
         F(dim + 1) += velo(0) * p;
+        // original form: F(dim + 1) += (velo(0) - vg(0)) * p + vg(0) * p;
+    }
+
+    template <int dim = 3, typename TU, typename TF, class TVec, class TVecVG, class TP>
+    inline void GasInviscidFlux_Batch(const TU &U, const TVec &velo, const TVecVG &vg, TP &&p, TF &F)
+    {
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) = U(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all).array().rowwise() * (velo(0, Eigen::all) - vg(0, Eigen::all)).array(); // note that additional flux are unattended!
+        F(1, Eigen::all).array() += p.array();
+        F(dim + 1, Eigen::all).array() += velo(0, Eigen::all).array() * p.array();
         // original form: F(dim + 1) += (velo(0) - vg(0)) * p + vg(0) * p;
     }
 
@@ -753,6 +764,186 @@ namespace DNDS::Euler::Gas
         // F(1) = fluxH(1);
         // F(2) = fluxH(2);
         // F(4) = fluxH(3);
+    }
+
+    template <int dim = 3, int eigScheme = 0,
+              typename TUL, typename TUR,
+              typename TULm, typename TURm,
+              typename TVecVG, typename TVecVGm,
+              typename TF, typename TFdumpInfo>
+    void RoeFlux_IdealGas_HartenYee_Batch(const TUL &UL, const TUR &UR,
+                                          const TULm &ULm, const TURm &URm,
+                                          const TVecVG &vg, const TVecVGm &vgm,
+                                          real gamma, TF &F, real dLambda,
+                                          const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
+    {
+        static real scaleHartenYee = 0.05;
+        static real scaleLD = 0.2;
+        using TVec = Eigen::Vector<real, dim>;
+        using TVec_Batch = Eigen::Matrix<real, dim, -1, Eigen::ColMajor, dim, MaxBatch>;
+
+        int nB = UL.cols();
+        for (int iB = 0; iB < nB; iB++)
+            if (!(UL(0, iB) > 0 && UR(0, iB) > 0))
+            {
+                dumpInfo();
+                DNDS_assert(false);
+            }
+        TVec_Batch veloL = (UL(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), Eigen::all).array().rowwise() / UL(0, Eigen::all).array()).matrix();
+        TVec_Batch veloR = (UR(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), Eigen::all).array().rowwise() / UR(0, Eigen::all).array()).matrix();
+        TVec veloLm = (ULm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / ULm(0)).matrix();
+        TVec veloRm = (URm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / URm(0)).matrix();
+
+        Eigen::Matrix<real, 1, -1, Eigen::RowMajor, 1, MaxBatch> pL, pR;
+        pL.resize(nB), pR.resize(nB);
+        for (int iB = 0; iB < nB; iB++)
+        {
+            real asqrL, asqrR, HL, HR;
+            real vsqrL = veloL(Eigen::all, iB).squaredNorm();
+            real vsqrR = veloR(Eigen::all, iB).squaredNorm();
+            IdealGasThermal(UL(dim + 1), UL(0), vsqrL, gamma, pL(iB), asqrL, HL);
+            IdealGasThermal(UR(dim + 1), UR(0), vsqrR, gamma, pR(iB), asqrR, HR);
+        }
+
+        real asqrLm, asqrRm, pLm, pRm, HLm, HRm;
+        real vsqrLm = veloLm.squaredNorm();
+        real vsqrRm = veloRm.squaredNorm();
+        IdealGasThermal(ULm(dim + 1), ULm(0), vsqrLm, gamma, pLm, asqrLm, HLm);
+        IdealGasThermal(URm(dim + 1), URm(0), vsqrRm, gamma, pRm, asqrRm, HRm);
+
+        real sqrtRhoLm = std::sqrt(ULm(0));
+        real sqrtRhoRm = std::sqrt(URm(0));
+
+        TVec veloRoe = (sqrtRhoLm * veloLm + sqrtRhoRm * veloRm) / (sqrtRhoLm + sqrtRhoRm);
+        real vsqrRoe = veloRoe.squaredNorm();
+        real HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
+        real asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
+        real rhoRoe = sqrtRhoLm * sqrtRhoRm;
+
+        Eigen::Matrix<real, dim + 2, -1, Eigen::ColMajor, dim + 2, MaxBatch> FL, FR;
+        FL.resizeLike(UL);
+        FR.resizeLike(UL);
+        GasInviscidFlux_Batch<dim>(UL, veloL, vg, pL, FL);
+        GasInviscidFlux_Batch<dim>(UR, veloR, vg, pR, FR);
+
+        if (!(asqrRoe > 0))
+        {
+            dumpInfo();
+        }
+        DNDS_assert(asqrRoe > 0);
+        real aRoe = std::sqrt(asqrRoe);
+
+        lam0 = std::abs(veloRoe(0) - vgm(0) - aRoe);
+        lam123 = std::abs(veloRoe(0) - vgm(0));
+        lam4 = std::abs(veloRoe(0) - vgm(0) + aRoe);
+
+        if constexpr (eigScheme == 0)
+        {
+            //*HY
+            real thresholdHartenYee = std::max(scaleHartenYee * (std::sqrt(vsqrRoe) + aRoe), dLambda);
+            real thresholdHartenYeeS = thresholdHartenYee * thresholdHartenYee;
+            if (lam0 < thresholdHartenYee)
+                lam0 = (sqr(lam0) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            if (lam4 < thresholdHartenYee)
+                lam4 = (sqr(lam4) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            //*HY
+        }
+        else if constexpr (eigScheme == 1)
+        {
+            //*LD, cLLF_M
+            /**
+             * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
+             */
+            real aLm = std::min(std::sqrt(asqrLm), std::abs(veloLm(0) - vgm(0)) / scaleLD);
+            real aRm = std::min(std::sqrt(asqrRm), std::abs(veloRm(0) - vgm(0)) / scaleLD);
+            lam0 = std::max(std::abs(veloLm(0) - vgm(0) - aLm), std::abs(veloRm(0) - vgm(0) - aRm));
+            lam123 = std::max(std::abs(veloLm(0) - vgm(0)), std::abs(veloRm(0) - vgm(0)));
+            lam4 = std::max(std::abs(veloLm(0) - vgm(0) + aLm), std::abs(veloRm(0) - vgm(0) + aRm));
+            //*LD, cLLF_M
+        }
+        else if constexpr (eigScheme == 2)
+        {
+            // *vanilla Lax
+            // lam0 = lam123 = lam4 = std::max({lam0, lam123, lam4});
+            lam0 = lam123 = lam4 = std::max(std::abs(veloLm(0) - vgm(0)) + std::sqrt(asqrLm), std::abs(veloRm(0) - vgm(0)) + std::sqrt(asqrRm));
+            F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) =
+                (FL + FR) * 0.5 -
+                0.5 * lam0 * (UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) - UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all));
+            return; //* early exit
+        }
+        else if constexpr (eigScheme == 3)
+        {
+            //*LD, Roe_M
+            /**
+             * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
+             */
+            real LDthreshold = std::abs(veloRoe(0) - vgm(0)) / scaleLD;
+            real aRoeStar = std::min(LDthreshold, aRoe);
+            lam0 = std::abs(veloRoe(0) - vgm(0) - aRoeStar);
+            lam4 = std::abs(veloRoe(0) - vgm(0) + aRoeStar);
+        }
+        else if constexpr (eigScheme == 4)
+        {
+            //*ID, Roe_M
+            /**
+             * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
+             */
+#ifdef USE_SIGN_MINUS_AT_ROE_M4_FLUX
+            real uStar = signM(veloRoe(0) - vgm(0)) * std::max(aRoe * scaleLD, std::abs(veloRoe(0) - vgm(0)));
+#else
+            real uStar = signTol(veloRoe(0) - vgm(0), aRoe * smallReal) * std::max(aRoe * scaleLD, std::abs(veloRoe(0) - vgm(0))); //! why signM here?
+#endif
+            lam0 = std::abs(uStar - aRoe);
+            lam123 = std::abs(uStar);
+            lam4 = std::abs(uStar + aRoe);
+            // std::cout << "here" << std::endl;
+
+            // real thresholdHartenYee = std::max(scaleLD * (std::sqrt(vsqrRoe) + aRoe), 0);
+            // real thresholdHartenYeeS = thresholdHartenYee * thresholdHartenYee;
+            // if (lam0 < thresholdHartenYee)
+            //     lam0 = (sqr(lam0) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            // if (lam4 < thresholdHartenYee)
+            //     lam4 = (sqr(lam4) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            // if (lam123 < thresholdHartenYee)
+            //     lam123 = (sqr(lam123) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+        }
+        else if constexpr (eigScheme == 5)
+        {
+        }
+        else
+        {
+            DNDS_assert(false);
+        }
+        Eigen::Vector<real, dim + 2> lam;
+        lam(0) = lam0;
+        lam(dim + 1) = lam4;
+        lam(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).setConstant(lam123);
+
+        Eigen::Matrix<real, dim + 2, -1, Eigen::ColMajor, dim + 2, MaxBatch> alpha;
+        Eigen::Matrix<real, dim + 2, dim + 2> ReVRoe;
+        EulerGasRightEigenVector<dim>(veloRoe, vsqrRoe, HRoe, aRoe, ReVRoe);
+        // std::cout << UL << std::endl;
+        // std::cout << UR << std::endl;
+        // std::cout << ReVRoe << std::endl;
+
+        Eigen::Matrix<real, dim + 2, -1, Eigen::ColMajor, dim + 2, MaxBatch> incU =
+            UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) -
+            UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all); //! not using m, for this is accuracy-limited!
+        alpha.resizeLike(UL);
+        alpha(Eigen::seq(Eigen::fix<2>, Eigen::fix<dim>), Eigen::all) =
+            incU(Eigen::seq(Eigen::fix<2>, Eigen::fix<dim>), Eigen::all) -
+            veloRoe(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim - 1>)) * incU(0, Eigen::all);
+        Eigen::Matrix<real, 1, -1, Eigen::RowMajor, 1, MaxBatch> incU4b = incU(dim + 1, Eigen::all) -
+                                                                          veloRoe(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim - 1>)).transpose() * alpha(Eigen::seq(Eigen::fix<2>, Eigen::fix<dim>), Eigen::all);
+        alpha(1, Eigen::all) = (gamma - 1) / asqrRoe *
+                               (incU(0, Eigen::all) * (HRoe - veloRoe(0) * veloRoe(0)) +
+                                veloRoe(0) * incU(1, Eigen::all) - incU4b);
+        alpha(0, Eigen::all) = (incU(0, Eigen::all) * (veloRoe(0) + aRoe) - incU(1, Eigen::all) - aRoe * alpha(1, Eigen::all)) / (2 * aRoe);
+        alpha(dim + 1, Eigen::all) = incU(0, Eigen::all) - (alpha(0, Eigen::all) + alpha(1, Eigen::all)); // * HLLEP doesn't need this
+
+        Eigen::Matrix<real, dim + 2, -1, Eigen::ColMajor, dim + 2, MaxBatch> incF = ReVRoe * (alpha.array().colwise() * lam.array()).matrix();
+
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) = (FL + FR) * 0.5 - 0.5 * incF;
     }
 
     /**

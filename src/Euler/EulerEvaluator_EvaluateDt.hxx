@@ -656,10 +656,31 @@ namespace DNDS::Euler
         finc.resizeLike(ULxy);
         if (settings.rsRotateScheme == 0)
         {
-            for (int iB = 0; iB < nB; iB++)
-                RSWrapper(rsType, UL(Eigen::all, iB), UR(Eigen::all, iB), ULMean, URMean,
-                          settings.idealGasProperty.gamma, finc(Eigen::all, iB), deltaLambdaFace[iFace],
-                          lam0V(iB), lam123V(iB), lam4V(iB));
+            if (settings.rsMeanValueEig != 0 && rsType == Gas::Roe_M1)
+            {
+                real lam0{0}, lam123{0}, lam4{0};
+                Gas::RoeFlux_IdealGas_HartenYee_Batch<3, 1>(
+                    UL, UR, ULMean, URMean, vg, vgC, settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
+                    exitFun, lam0, lam123, lam4);
+                lam0V.setConstant(lam0);
+                lam123V.setConstant(lam123);
+                lam4V.setConstant(lam4);
+            }
+            else if (settings.rsMeanValueEig != 0 && rsType == Gas::Roe_M2)
+            {
+                real lam0{0}, lam123{0}, lam4{0};
+                Gas::RoeFlux_IdealGas_HartenYee_Batch<3, 2>(
+                    UL, UR, ULMean, URMean, vg, vgC, settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
+                    exitFun, lam0, lam123, lam4);
+                lam0V.setConstant(lam0);
+                lam123V.setConstant(lam123);
+                lam4V.setConstant(lam4);
+            }
+            else
+                for (int iB = 0; iB < nB; iB++)
+                    RSWrapper(rsType, UL(Eigen::all, iB), UR(Eigen::all, iB), ULMean, URMean,
+                              settings.idealGasProperty.gamma, finc(Eigen::all, iB), deltaLambdaFace[iFace],
+                              lam0V(iB), lam123V(iB), lam4V(iB));
         }
         else
             DNDS_assert(false);
