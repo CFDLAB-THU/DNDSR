@@ -386,159 +386,160 @@ namespace DNDS::Euler
         // log() << "dt: " << dtMin << std::endl;
     }
 
-    template <EulerModel model>
-    typename EulerEvaluator<model>::TU EulerEvaluator<model>::fluxFace(
-        const TU &ULxy,
-        const TU &URxy,
+    DNDS_SWITCH_INTELLISENSE(
+        // the real definition
+        template <EulerModel model>
+        ,
+        // the intellisense friendly definition
+        static const auto model = NS_SA;
+        template <>
+    )
+    typename EulerEvaluator<model>::TU_Batch EulerEvaluator<model>::fluxFace(
+        const TU_Batch &ULxy,
+        const TU_Batch &URxy,
         const TU &ULMeanXy,
         const TU &URMeanXy,
-        const TDiffU &DiffUxy,
-        const TDiffU &DiffUxyPrim,
-        const TVec &unitNorm,
-        const TVec &vgXY,
-        const TMat &normBase,
-        TU &FLfix,
-        TU &FRfix,
+        const TDiffU_Batch &DiffUxy,
+        const TDiffU_Batch &DiffUxyPrim,
+        const TVec_Batch &unitNorm,
+        const TVec_Batch &vgXY,
+        const TMat_Batch &normBase,
+        const TVec &unitNormC,
+        const TVec &vgC,
+        const TMat &normBaseC,
+        TU_Batch &FLfix,
+        TU_Batch &FRfix,
         Geom::t_index btype,
         typename Gas::RiemannSolverType rsType,
-        index iFace, int ig)
+        index iFace)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
 
-        TU UR = URxy;
-        TU UL = ULxy;
-        UR(Seq123) = normBase(Seq012, Seq012).transpose() * UR(Seq123);
-        UL(Seq123) = normBase(Seq012, Seq012).transpose() * UL(Seq123);
+        int nB = ULxy.cols();
+
+        TU_Batch UR = URxy;
+        TU_Batch UL = ULxy;
+
         TU ULMean = ULMeanXy;
         TU URMean = URMeanXy;
-        ULMean(Seq123) = normBase(Seq012, Seq012).transpose() * ULMean(Seq123);
-        URMean(Seq123) = normBase(Seq012, Seq012).transpose() * URMean(Seq123);
-        TVec vg = normBase(Seq012, Seq012).transpose() * vgXY;
-        // if (btype == BoundaryType::Wall_NoSlip)
-        //     UR(Seq123) = -UL(Seq123);
-        // if (btype == BoundaryType::Wall_Euler)
-        //     UR(1) = -UL(1);
+        ULMean(Seq123) = normBaseC(Seq012, Seq012).transpose() * ULMean(Seq123);
+        URMean(Seq123) = normBaseC(Seq012, Seq012).transpose() * URMean(Seq123);
+        TVec_Batch vg = vgXY;
+        for (int iB = 0; iB < nB; iB++)
+        {
+            TMat cNB = normBase(Seq012, Eigen::seq(iB * dim, iB * dim + dim - 1));
+            UR(Seq123, iB) = cNB.transpose() * UR(Seq123, iB);
+            UL(Seq123, iB) = cNB.transpose() * UL(Seq123, iB);
+            vg(Eigen::all, iB) = cNB.transpose() * vg(Eigen::all, iB);
+        }
 
-        TU UMeanXy = 0.5 * (ULxy + URxy);
+        TU_Batch UMeanXy = 0.5 * (ULxy + URxy);
 
-        real pMean, asqrMean, Hmean;
-        real gamma = settings.idealGasProperty.gamma;
-        Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0), (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
-                             gamma, pMean, asqrMean, Hmean);
-
-        // ! refvalue:
         // PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
         real muRef = settings.idealGasProperty.muGas;
         real TRef = settings.idealGasProperty.TRef;
 
-        real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXy(0));
-        real CSut = settings.idealGasProperty.CSutherland;
-        real mufPhy, muf;
-        // mufPhy = muf = settings.idealGasProperty.muGas *
-        //                std::pow(T / settings.idealGasProperty.TRef, 1.5) *
-        //                (settings.idealGasProperty.TRef + settings.idealGasProperty.CSutherland) /
-        //                (T + settings.idealGasProperty.CSutherland);
-        // muf = muRef * (T / TRef) * std::sqrt(T / TRef) * (TRef + CSut) / (T + CSut); // this is much faster on bssct?? at the start for vorstreet case //! ??
-        // muf = muRef * std::pow(T / TRef, 1.5) * (TRef + CSut) / (T + CSut);
-        // muf = muRef * pow(T / TRef, 1.5) * (TRef + CSut) / (T + CSut);
-        muf = muEff(UMeanXy, T);
-        mufPhy = muf;
-        // PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
+        /** viscous flux **/
+        TU_Batch visFluxV;
+        visFluxV.resizeLike(ULxy);
+        for (int iB = 0; iB < nB; iB++)
+        {
+            real pMean, asqrMean, Hmean;
+            real gamma = settings.idealGasProperty.gamma;
+            TU UMeanXYC = UMeanXy(Eigen::all, iB);
+            auto seqC = Eigen::seq(iB * dim, iB * dim + dim - 1);
+            TDiffU DiffUxyC = DiffUxy(seqC, Eigen::all);
+            TDiffU DiffUxyPrimC = DiffUxyPrim(seqC, Eigen::all);
+            TVec uNormC = unitNorm(Eigen::all, iB);
+            Gas::IdealGasThermal(UMeanXYC(I4), UMeanXYC(0), (UMeanXy(Seq123, iB) / UMeanXYC(0)).squaredNorm(),
+                                 gamma, pMean, asqrMean, Hmean);
+            real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXYC(0));
+            real CSut = settings.idealGasProperty.CSutherland;
+            real mufPhy, muf;
+            muf = muEff(UMeanXYC, T);
+            mufPhy = muf;
+            // PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
-        real fnu1 = 0.;
-        if constexpr (model == NS_SA || model == NS_SA_3D)
-        {
-            real cnu1 = 7.1;
-            real Chi = UMeanXy(I4 + 1) * muRef / mufPhy;
+            real fnu1 = 0.;
+            if constexpr (model == NS_SA || model == NS_SA_3D)
+            {
+                real cnu1 = 7.1;
+                real Chi = UMeanXYC(I4 + 1) * muRef / mufPhy;
 #ifdef USE_NS_SA_NEGATIVE_MODEL
-            if (Chi < 10) //*negative fix
-                Chi = 0.05 * std::log(1 + std::exp(20 * Chi));
+                if (Chi < 10) //*negative fix
+                    Chi = 0.05 * std::log(1 + std::exp(20 * Chi));
 #endif
-            real Chi3 = std::pow(Chi, 3);
-            fnu1 = Chi3 / (Chi3 + std::pow(cnu1, 3));
-            muf *= std::max((1 + Chi * fnu1), 1.0);
-        }
-        if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
-        {
-            real mut = 0;
-            if (settings.ransModel == RANSModel::RANS_KOSST)
-                    mut = RANS::GetMut_SST<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
-            else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                    mut = RANS::GetMut_KOWilcox<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
-            else if (settings.ransModel == RANSModel::RANS_RKE)
-                    mut = RANS::GetMut_RealizableKe<dim>(UMeanXy, DiffUxy, muf, dWallFace[iFace]);
-            muf = muf + mut;
-        }
-
-        real k = settings.idealGasProperty.CpGas * (muf - mufPhy) / 0.9 +
-                 settings.idealGasProperty.CpGas * mufPhy / settings.idealGasProperty.prGas;
+                real Chi3 = std::pow(Chi, 3);
+                fnu1 = Chi3 / (Chi3 + std::pow(cnu1, 3));
+                muf *= std::max((1 + Chi * fnu1), 1.0);
+            }
+            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            {
+                real mut = 0;
+                if (settings.ransModel == RANSModel::RANS_KOSST)
+                    mut = RANS::GetMut_SST<dim>(UMeanXYC, DiffUxyC, muf, dWallFace[iFace]);
+                else if (settings.ransModel == RANSModel::RANS_KOWilcox)
+                    mut = RANS::GetMut_KOWilcox<dim>(UMeanXYC, DiffUxyC, muf, dWallFace[iFace]);
+                else if (settings.ransModel == RANSModel::RANS_RKE)
+                    mut = RANS::GetMut_RealizableKe<dim>(UMeanXYC, DiffUxyC, muf, dWallFace[iFace]);
+                muf = muf + mut;
+            }
+            real k = settings.idealGasProperty.CpGas * (muf - mufPhy) / 0.9 +
+                     settings.idealGasProperty.CpGas * mufPhy / settings.idealGasProperty.prGas;
             TU VisFlux;
             VisFlux.resizeLike(ULMeanXy);
-        VisFlux.setZero();
-        auto& DiffUxyPrimP = DiffUxyPrim;
-        Gas::ViscousFlux_IdealGas<dim>(
-            UMeanXy, DiffUxyPrimP, unitNorm, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
-            settings.idealGasProperty.gamma,
-            muf,
-            k,
-            settings.idealGasProperty.CpGas,
-            VisFlux);
-        if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
-            pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
-        {
-            // VisFlux *= 0.0;
-        }
-
-        // if (mesh->face2cellLocal[iFace][0] == 10756)
-        // {
-        //     std::cout << "Face " << iFace << " " << mesh->face2cellLocal[iFace][1] << std::endl;
-        //     std::cout << DiffUxy << std::endl;
-        //     std::cout << VisFlux << std::endl;
-        //     std::cout << unitNorm << std::endl;
-        //     std::cout << unitNorm.transpose() * VisFlux << std::endl;
-        //     std::cout << muf << " " << k << std::endl;
-
-        // }
-        // if (iFace == 16404)
-        // {
-        //     std::cout << std::setprecision(10);
-        //     std::cout << "Face " << iFace << " " << mesh->face2cellLocal[iFace][0] << " " << mesh->face2cellLocal[iFace][1] << std::endl;
-        //     std::cout << DiffUxy << std::endl;
-        //     std::cout << VisFlux << std::endl;
-        //     std::cout << unitNorm << std::endl;
-        //     std::cout << unitNorm.transpose() * VisFlux << std::endl;
-        //     std::cout << muf << " " << k << std::endl;
-        //     std::cout << lambdaFace[iFace] << std::endl;
-        //     exit(-1);
-
-        // }
-        if constexpr (model == NS_SA || model == NS_SA_3D)
-        {
-            real sigma = 2. / 3.;
-            real cn1 = 16;
-            real fn = 1;
-#ifdef USE_NS_SA_NEGATIVE_MODEL
-            if (UMeanXy(I4 + 1) < 0)
+            VisFlux.setZero();
+            Gas::ViscousFlux_IdealGas<dim>(
+                UMeanXYC, DiffUxyPrimC, uNormC, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
+                settings.idealGasProperty.gamma,
+                muf,
+                k,
+                settings.idealGasProperty.CpGas,
+                VisFlux);
+            if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
+                pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
             {
-                real Chi = UMeanXy(I4 + 1) * muRef / mufPhy;
-                fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
+                // VisFlux *= 0.0;
             }
-#endif
-                VisFlux(I4 + 1) = DiffUxyPrim(Seq012, {I4 + 1}).dot(unitNorm) * (mufPhy + UMeanXy(I4 + 1) * muRef * fn) / sigma;
 
-        }
-        if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
-        {
-            if (settings.ransModel == RANSModel::RANS_KOSST)
-                RANS::GetVisFlux_SST<dim>(UMeanXy, DiffUxyPrimP, unitNorm, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
-            else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                RANS::GetVisFlux_KOWilcox<dim>(UMeanXy, DiffUxyPrimP, unitNorm, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
-            else if (settings.ransModel == RANSModel::RANS_RKE)
-                RANS::GetVisFlux_RealizableKe<dim>(UMeanXy, DiffUxyPrimP, unitNorm, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
-        }
+            if constexpr (model == NS_SA || model == NS_SA_3D)
+            {
+                real sigma = 2. / 3.;
+                real cn1 = 16;
+                real fn = 1;
+#ifdef USE_NS_SA_NEGATIVE_MODEL
+                if (UMeanXy(I4 + 1, iB) < 0)
+                {
+                    real Chi = UMeanXy(I4 + 1, iB) * muRef / mufPhy;
+                    fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
+                }
 #endif
+                VisFlux(I4 + 1) = DiffUxyPrimC(Seq012, {I4 + 1}).dot(uNormC) * (mufPhy + UMeanXy(I4 + 1) * muRef * fn) / sigma;
 
-#ifdef USE_FLUX_BALANCE_TERM
+                real tauPerssure = Gas::GetGradVelo<dim>(UMeanXYC, DiffUxyC).trace() * (2. / 3.) * (muf - mufPhy); //! SA's normal stress
+                VisFlux(Seq123) -= tauPerssure * uNormC;
+                VisFlux(I4) -= tauPerssure * UMeanXy(1, iB) / UMeanXy(0, iB);
+            }
+            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            {
+                if (settings.ransModel == RANSModel::RANS_KOSST)
+                    RANS::GetVisFlux_SST<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
+                else if (settings.ransModel == RANSModel::RANS_KOWilcox)
+                    RANS::GetVisFlux_KOWilcox<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
+                else if (settings.ransModel == RANSModel::RANS_RKE)
+                    RANS::GetVisFlux_RealizableKe<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
+            }
+            visFluxV(Eigen::all, iB) = VisFlux;
+#endif
+            if (!isfinite(pMean) || !isfinite(pMean) || !isfinite(pMean))
+            {
+                std::cout << T << std::endl;
+                std::cout << muf << std::endl;
+                std::cout << pMean << std::endl;
+                DNDS_assert(false);
+            }
+        }
+#ifdef USE_FLUX_BALANCE_TERM // todo: finish
         {
             TU wLMean, wRMean;
             Gas::IdealGasThermalConservative2Primitive<dim>(ULMean, wLMean, gamma);
@@ -568,9 +569,6 @@ namespace DNDS::Euler
             std::cout << "UL" << UL.transpose() << '\n';
             std::cout << "UR" << UR.transpose() << std::endl;
         };
-
-        real lam0{0}, lam123{0}, lam4{0};
-        lam123 = std::abs(UL(1) / UL(0) + UR(1) / UR(0)) * 0.5 - vg(0);
 
         if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall)
         {
@@ -602,7 +600,15 @@ namespace DNDS::Euler
             //                  }());
         }
 
-        auto RSWrapper = [&](Gas::RiemannSolverType rsType, auto &UL, auto &UR, auto &ULm, auto &URm, real gamma, auto &finc, real dLambda)
+        Eigen::RowVector<real, -1> lam0V, lam123V, lam4V;
+        lam0V.resize(nB);
+        lam123V.resize(nB);
+        lam4V.resize(nB);
+
+        auto RSWrapper =
+            [&](
+                Gas::RiemannSolverType rsType, auto &&UL, auto &&UR, auto &&ULm, auto &&URm, real gamma, auto &&finc, real dLambda,
+                real &lam0, real &lam123, real &lam4)
         {
             if (rsType == Gas::RiemannSolverType::HLLEP)
                 Gas::HLLEPFlux_IdealGas<dim, 0>(
@@ -642,132 +648,18 @@ namespace DNDS::Euler
                     exitFun, lam0, lam123, lam4);
             else
                 DNDS_assert(false);
-            // std::cout << "HERE2" << std::endl;
             // if (btype == BoundaryType::Wall_NoSlip || btype == BoundaryType::Wall_Euler)
             //     finc(0) = 0; //! enforce mass leak = 0
         };
 
-        TU finc;
+        TU_Batch finc;
         finc.resizeLike(ULxy);
-        // std::cout << "HERE" << std::endl;
         if (settings.rsRotateScheme == 0)
         {
-            TU &ULm = settings.rsMeanValueEig == 1 ? ULMean : UL;
-            TU &URm = settings.rsMeanValueEig == 1 ? URMean : UR;
-            RSWrapper(rsType, UL, UR, ULm, URm, settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace]);
-        }
-        else if (settings.rsRotateScheme)
-        {
-            TVec veloL = settings.rsRotateScheme == 1 ? UL(Seq123) / UL(0) : ULMean(Seq123) / ULMean(0);
-            TVec veloR = settings.rsRotateScheme == 1 ? UR(Seq123) / UR(0) : URMean(Seq123) / URMean(0);
-            TVec diffVelo = veloR - veloL;
-            real diffVeloN = diffVelo.norm();
-            real veloLN = veloL.norm();
-            real veloRN = veloR.norm();
-            if (diffVeloN < (smallReal * 10) * (veloLN + veloRN) || diffVeloN < std::sqrt(verySmallReal))
-            {
-                TU &ULm = settings.rsMeanValueEig == 1 ? ULMean : UL;
-                TU &URm = settings.rsMeanValueEig == 1 ? URMean : UR;
-                RSWrapper(rsType, UL, UR, ULm, URm, settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace]);
-            }
-            else // use rotate
-            {
-                TVec N1 = diffVelo / diffVeloN;
-                DNDS_assert_info(std::abs(N1.norm() - 1) < 1e-5,
-                                 fmt::format("{}", diffVeloN));
-
-                real N1Proj = N1(0);
-                TVec N2 = -N1 * N1Proj;
-                N2(0) += 1;
-                real N2Proj = N2.norm();
-                if (N2Proj < 10 * smallReal) // N is fully N1
-                {
-                    Gas::RiemannSolverType rsTypeAux = settings.rsTypeAux;
-                    TU &ULm = settings.rsMeanValueEig == 1 ? ULMean : UL;
-                    TU &URm = settings.rsMeanValueEig == 1 ? URMean : UR;
-                    RSWrapper(rsTypeAux ? rsTypeAux : Gas::RiemannSolverType::Roe_M2,
-                              UL, UR, ULm, URm, settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace]);
-                }
-                else
-                {
-                    N2 /= N2Proj;
-                    DNDS_assert_info(std::abs(N1.norm() - 1) < 1e-5 && std::abs(N2.norm() - 1) < 1e-5,
-                                     fmt::format("{},{}", N1Proj, N2Proj));
-                    auto fullN = N1 * N1Proj + N2 * N2Proj;
-                    DNDS_assert_info(std::abs(fullN(0) - 1) < 1e-5 && std::abs(fullN.norm() - 1) < 1e-5 && std::abs(N1.dot(N2)) < 1e-5,
-                                     fmt::format("{},{}", N1Proj, N2Proj));
-                    if (N2Proj < 0)
-                        N2 *= -1, N2Proj *= -1;
-                    if (N1Proj < 0)
-                        N1 *= -1, N1Proj *= -1; //! riemann solver should distinguish L & R, if n is inverted, then L-R is inconsistent
-
-                    // {std::cout << N1.transpose() << ", ";
-                    // std::cout << N2.transpose() << ", ";
-                    // std::cout << N1Proj << " " << N2Proj <<std::endl;}
-
-                    TMat normBaseN1 = Geom::NormBuildLocalBaseV<dim>(N1);
-                    TMat normBaseN2 = Geom::NormBuildLocalBaseV<dim>(N2);
-
-                    TU ULMeanN1 = ULMean;
-                    TU URMeanN1 = URMean;
-                    ULMeanN1(Seq123) = normBaseN1.transpose() * ULMeanN1(Seq123);
-                    URMeanN1(Seq123) = normBaseN1.transpose() * URMeanN1(Seq123);
-                    TU ULN1 = UL;
-                    TU URN1 = UR;
-                    ULN1(Seq123) = normBaseN1.transpose() * ULN1(Seq123);
-                    URN1(Seq123) = normBaseN1.transpose() * URN1(Seq123);
-
-                    TU ULMeanN2 = ULMean;
-                    TU URMeanN2 = URMean;
-                    ULMeanN2(Seq123) = normBaseN2.transpose() * ULMeanN2(Seq123);
-                    URMeanN2(Seq123) = normBaseN2.transpose() * URMeanN2(Seq123);
-                    TU ULN2 = UL;
-                    TU URN2 = UR;
-                    ULN2(Seq123) = normBaseN2.transpose() * ULN2(Seq123);
-                    URN2(Seq123) = normBaseN2.transpose() * URN2(Seq123);
-
-                    TU fincN1;
-                    fincN1.resizeLike(ULxy);
-                    TU fincN2;
-                    fincN2.resizeLike(ULxy);
-
-                    TU &ULmN1 = settings.rsMeanValueEig == 1 ? ULMeanN1 : ULN1;
-                    TU &URmN1 = settings.rsMeanValueEig == 1 ? URMeanN1 : URN1;
-                    TU &ULmN2 = settings.rsMeanValueEig == 1 ? ULMeanN2 : ULN2;
-                    TU &URmN2 = settings.rsMeanValueEig == 1 ? URMeanN2 : URN2;
-
-                    Gas::RiemannSolverType rsTypeAux = settings.rsTypeAux;
-                    RSWrapper(rsTypeAux ? rsTypeAux : Gas::RiemannSolverType::Roe_M2,
-                              ULN1, URN1, ULmN1, URmN1, settings.idealGasProperty.gamma, fincN1, deltaLambdaFace[iFace]);
-                    RSWrapper(rsType,
-                              ULN2, URN2, ULmN2, URmN2, settings.idealGasProperty.gamma, fincN2, deltaLambdaFace[iFace]);
-                    // original rs executes last, making lam123 values record the last ones;
-
-                    fincN1(Seq123) = normBaseN1 * fincN1(Seq123);
-                    fincN2(Seq123) = normBaseN2 * fincN2(Seq123);
-
-                    { // display rotation diff
-                      // TU &ULm = settings.rsMeanValueEig == 1 ? ULMean : UL;
-                      // TU &URm = settings.rsMeanValueEig == 1 ? URMean : UR;
-                      // RSWrapper(rsType, UL, UR, UL, UR, settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace]);
-                      // {
-                      //     std::cout << N1.transpose() << "\n" << N2.transpose() << "\n";
-                      //     std::cout << N1Proj <<" " <<N2Proj << std::endl;
-                      //     std::cout << ULN1.transpose() <<" ---- " << URN1.transpose() << std::endl;
-                      //     std::cout << fincN1.transpose() << std::endl;
-                      //     std::cout << ULN2.transpose() <<" ---- " << URN2.transpose() << std::endl;
-                      //     std::cout << fincN2.transpose() << std::endl;
-                      //     std::cout << "---\n" << normBaseN1 << "\n---\n";
-                      //     std::cout << "---\n" << normBaseN2 << "\n---\n";
-
-                        //     std::cout << (N1Proj * fincN1 + N2Proj * fincN2).transpose() << std::endl;
-                        //     std::cout << finc.transpose() << std::endl;
-                        //     std::abort();
-                        // }
-                    }
-                    finc = N1Proj * fincN1 + N2Proj * fincN2;
-                }
-            }
+            for (int iB = 0; iB < nB; iB++)
+                RSWrapper(rsType, UL(Eigen::all, iB), UR(Eigen::all, iB), ULMean, URMean,
+                          settings.idealGasProperty.gamma, finc(Eigen::all, iB), deltaLambdaFace[iFace],
+                          lam0V(iB), lam123V(iB), lam4V(iB));
         }
         else
             DNDS_assert(false);
@@ -780,28 +672,37 @@ namespace DNDS::Euler
         if constexpr (model == NS_SA || model == NS_SA_3D)
         {
             // real lambdaFaceCC = sqrt(std::abs(asqrMean)) + std::abs((UL(1) / UL(0) - vg(0)) + (UR(1) / UR(0) - vg(0))) * 0.5;
-            real lambdaFaceCC = lam123; //! using velo instead of velo + a
-            finc(I4 + 1) =
-                (((UL(1) / UL(0) - vg(0)) * UL(I4 + 1) + (UR(1) / UR(0) - vg(0)) * UR(I4 + 1)) -
-                 (UR(I4 + 1) - UL(I4 + 1)) * lambdaFaceCC) *
+            auto lambdaFaceCC = lam123V; //! using velo instead of velo + a
+            auto vnR = (UR(1, Eigen::all).array() / UR(0, Eigen::all).array() - vg(0, Eigen::all).array());
+            auto vnL = (UL(1, Eigen::all).array() / UL(0, Eigen::all).array() - vg(0, Eigen::all).array());
+            finc(I4 + 1, Eigen::all) =
+                ((vnL * UL(I4 + 1, Eigen::all).array() + vnR * UR(I4 + 1, Eigen::all).array()) -
+                 (UR(I4 + 1, Eigen::all).array() - UL(I4 + 1, Eigen::all).array()) * lambdaFaceCC.array()) *
                 0.5;
-            real tauPerssure = Gas::GetGradVelo<dim>(UMeanXy, DiffUxy).trace() * (2. / 3.) * (muf - mufPhy); //! SA's normal stress
-            finc(1) += tauPerssure;
-            finc(I4) += tauPerssure * UMeanXy(1) / UMeanXy(0);
         }
         if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
         {
-            real lambdaFaceCC = lam123; //! using velo instead of velo + a
-            finc({I4 + 1, I4 + 2}) =
-                (((UL(1) / UL(0) - vg(0)) * UL({I4 + 1, I4 + 2}) + (UR(1) / UR(0) - vg(0)) * UR({I4 + 1, I4 + 2})) -
-                 (UR({I4 + 1, I4 + 2}) - UL({I4 + 1, I4 + 2})) * lambdaFaceCC) *
+            auto lambdaFaceCC = lam123V; //! using velo instead of velo + a
+            auto vnR = (UR(1, Eigen::all).array() / UR(0, Eigen::all).array() - vg(0, Eigen::all).array());
+            auto vnL = (UL(1, Eigen::all).array() / UL(0, Eigen::all).array() - vg(0, Eigen::all).array());
+            finc(I4 + 1, Eigen::all) =
+                ((vnL * UL(I4 + 1, Eigen::all).array() + vnR * UR(I4 + 1, Eigen::all).array()) -
+                 (UR(I4 + 1, Eigen::all).array() - UL(I4 + 1, Eigen::all).array()) * lambdaFaceCC.array()) *
                 0.5;
-            finc(1) += UMeanXy(I4 + 1) * (2. / 3.); //! k's normal stress
-            finc(I4) += UMeanXy(I4 + 1) * (2. / 3.) * UMeanXy(1) / UMeanXy(0);
+            finc(I4 + 2, Eigen::all) =
+                ((vnL * UL(I4 + 2, Eigen::all).array() + vnR * UR(I4 + 2, Eigen::all).array()) -
+                 (UR(I4 + 2, Eigen::all).array() - UL(I4 + 2, Eigen::all).array()) * lambdaFaceCC.array()) *
+                0.5;
+            finc(1, Eigen::all).array() += UMeanXy(I4 + 1, Eigen::all).array() * (2. / 3.); //! k's normal stress
+            finc(I4, Eigen::all).array() += UMeanXy(I4 + 1, Eigen::all).array() * (2. / 3.) * UMeanXy(1, Eigen::all).array() / UMeanXy(0, Eigen::all).array();
         }
-        finc(Seq123) = normBase * finc(Seq123);
+        for (int iB = 0; iB < nB; iB++)
+        {
+            finc(Seq123, iB) = normBase(Seq012, Eigen::seq(iB * dim, iB * dim + dim - 1)) * finc(Seq123, iB);
+        }
+
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
-        finc -= VisFlux;
+        finc -= visFluxV;
 #endif
 
         if (finc.hasNaN() || (!finc.allFinite()))
@@ -812,9 +713,7 @@ namespace DNDS::Euler
             std::cout << DiffUxy << std::endl;
             std::cout << unitNorm << std::endl;
             std::cout << normBase << std::endl;
-            std::cout << T << std::endl;
-            std::cout << muf << std::endl;
-            std::cout << pMean << std::endl;
+
             std::cout << btype << std::endl;
             DNDS_assert(false);
         }

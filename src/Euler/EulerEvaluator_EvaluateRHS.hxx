@@ -105,53 +105,72 @@ namespace DNDS::Euler
             // mesh->LoadCoords(f2n, coords);
 
             Geom::Elem::SummationNoOp noOp;
-            bool faceOrderReducedL = false;
-            bool faceOrderReducedR = false;
             auto faceBndID = mesh->GetFaceZone(iFace);
             auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+            TU_Batch ULxyV, URxyV;
+            ULxyV.resize(u[f2c[0]].size(), gFace.GetNumPoints());
+            URxyV.resizeLike(ULxyV);
+            TDiffU_Batch DiffUxyV, DiffUxyPrimV;
+            DiffUxyV.resize(dim * gFace.GetNumPoints(), u[f2c[0]].size());
+            DiffUxyPrimV.resizeLike(DiffUxyV);
+            TVec_Batch unitNormV, vgXYV;
+            unitNormV.resize(dim, gFace.GetNumPoints()), vgXYV.resizeLike(unitNormV);
+            TMat_Batch normBaseV;
+            normBaseV.resize(dim, gFace.GetNumPoints() * dim);
+
+            TVec unitNormCent = vfv->GetFaceNorm(iFace, -1)(Seq012);
+            TMat normBaseCent = Geom::NormBuildLocalBaseV<dim>(unitNormCent);
+            TU ULMeanXy = u[f2c[0]];
+            this->UFromCell2Face(ULMeanXy, iFace, f2c[0], 0);
+            TU URMeanXy;
+            if (f2c[1] != UnInitIndex)
+            {
+                URMeanXy = u[f2c[1]];
+                this->UFromCell2Face(URMeanXy, iFace, f2c[1], 1);
+            }
+            else
+            {
+                URMeanXy = generateBoundaryValue(
+                    ULMeanXy, ULMeanXy, f2c[0], iFace, -1,
+                    unitNormCent,
+                    normBaseCent,
+                    vfv->GetFaceQuadraturePPhys(iFace, -1),
+                    t,
+                    mesh->GetFaceZone(iFace), false, 0);
+            }
+            TU_Batch FLFix, FRFix;
+#ifdef USE_FLUX_BALANCE_TERM
+            FLFix.setZero(cnvars, gFace.GetNumPoints()), FRFix.setZero(cnvars, gFace.GetNumPoints()); // todo: finish in faceFlux
+#endif
 
             gFace.IntegrationSimple(
-                fluxEs,
-                [&](decltype(fluxEs) &finc, int iG)
+                noOp,
+                [&](decltype(noOp) &finc, int iG)
                 {
-                    finc.resizeLike(fluxEs);
+                    // finc.resizeLike(fluxEs);
                     int nDiff = vfv->GetFaceAtr(iFace).NDIFF;
                     TVec unitNorm = vfv->GetFaceNorm(iFace, iG)(Seq012);
                     TMat normBase = Geom::NormBuildLocalBaseV<dim>(unitNorm);
                     PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
 
-                    bool pointOrderReducedL = false;
-                    bool pointOrderReducedR = false;
                     TU ULxy = u[f2c[0]];
-                    if (!faceOrderReducedL)
-                    {
-
-                        ULxy +=
-                            (vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iG, std::array<int, 1>{0}, 1) *
+                    ULxy += (vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iG, std::array<int, 1>{0}, 1) *
                              uRec[f2c[0]])
                                 .transpose() *
                             IF_NOT_NOREC;
-                    }
                     this->UFromCell2Face(ULxy, iFace, f2c[0], 0);
                     TU ULxyUnlim;
                     if (&uRecUnlim != &uRec)
                     {
                         ULxyUnlim = u[f2c[0]];
-                        if (!faceOrderReducedL)
-                        {
-                            ULxyUnlim += (vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iG, std::array<int, 1>{0}, 1) *
-                                          uRecUnlim[f2c[0]])
-                                             .transpose() *
-                                         IF_NOT_NOREC;
-                        }
+                        ULxyUnlim += (vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iG, std::array<int, 1>{0}, 1) *
+                                      uRecUnlim[f2c[0]])
+                                         .transpose() *
+                                     IF_NOT_NOREC;
                         this->UFromCell2Face(ULxyUnlim, iFace, f2c[0], 0);
                     }
                     else
                         ULxyUnlim = ULxy;
-
-                    TU ULMeanXy = u[f2c[0]];
-                    this->UFromCell2Face(ULMeanXy, iFace, f2c[0], 0);
-                    TU URMeanXy;
 
                     TU URxy, URxyUnlim;
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
@@ -179,33 +198,23 @@ namespace DNDS::Euler
                     if (f2c[1] != UnInitIndex)
                     {
                         URxy = u[f2c[1]];
-                        if (!faceOrderReducedR)
-                        {
-                            URxy +=
-                                (vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iG, std::array<int, 1>{0}, 1) *
+                        URxy += (vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iG, std::array<int, 1>{0}, 1) *
                                  uRec[f2c[1]])
                                     .transpose() *
                                 IF_NOT_NOREC;
-                        }
                         this->UFromCell2Face(URxy, iFace, f2c[1], 1);
                         if (&uRecUnlim != &uRec)
                         {
                             URxyUnlim = u[f2c[1]];
-                            if (!faceOrderReducedR)
-                            {
-                                URxyUnlim +=
-                                    (vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iG, std::array<int, 1>{0}, 1) *
-                                     uRecUnlim[f2c[1]])
-                                        .transpose() *
-                                    IF_NOT_NOREC;
-                            }
+                            URxyUnlim += (vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iG, std::array<int, 1>{0}, 1) *
+                                          uRecUnlim[f2c[1]])
+                                             .transpose() *
+                                         IF_NOT_NOREC;
                             this->UFromCell2Face(URxyUnlim, iFace, f2c[1], 1);
                         }
                         else
                             URxyUnlim = URxy;
 
-                        URMeanXy = u[f2c[1]];
-                        this->UFromCell2Face(URMeanXy, iFace, f2c[1], 1);
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
                         if constexpr (gDim == 2)
                             GradURxy({0, 1}, Eigen::all) =
@@ -219,7 +228,6 @@ namespace DNDS::Euler
                         if (ignoreVis)
                             GradURxy *= 0.;
 #endif
-
                         minVol = std::min(minVol, vfv->GetCellVol(f2c[1]));
                     }
                     else if (true)
@@ -244,19 +252,9 @@ namespace DNDS::Euler
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
                         GradURxy = GradULxy;
 #endif
-                        URMeanXy = generateBoundaryValue(
-                            ULMeanXy, ULMeanXy, f2c[0], iFace, iG,
-                            unitNorm,
-                            normBase,
-                            vfv->GetFaceQuadraturePPhys(iFace, iG),
-                            t,
-                            mesh->GetFaceZone(iFace), false, 0);
                     }
                     PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
-                    // UR = URxy;
-                    // UL = ULxy;
-                    // UR({1, 2, 3}) = normBase.transpose() * UR({1, 2, 3});
-                    // UL({1, 2, 3}) = normBase.transpose() * UL({1, 2, 3});
+
                     real distGRP = minVol / vfv->GetFaceArea(iFace) * 2;
 #ifdef USE_DISABLE_DIST_GRP_FIX_AT_WALL
                     distGRP += faceBCType == EulerBCType::BCWall ? veryLargeReal : 0.0;
@@ -308,8 +306,6 @@ namespace DNDS::Euler
                         faceBCType == EulerBCType::BCSym)
                         GradUMeanXy *= 0, GradUMeanXyPrim *= 0; // force no viscid flux
 
-                    TU FLFix, FRFix;
-                    FLFix.setZero(cnvars), FRFix.setZero(cnvars);
                     if (!GradUMeanXy.allFinite())
                     {
                         std::cout << GradURxy << std::endl;
@@ -326,47 +322,43 @@ namespace DNDS::Euler
                             std::cout << u[f2c[1]].transpose() << std::endl;
                         DNDS_assert(false);
                     }
-                    TU fincC = fluxFace(
-                        ULxy, URxy,
-                        ULMeanXy, URMeanXy,
-                        GradUMeanXy, GradUMeanXyPrim,
-                        unitNorm,
-                        GetFaceVGrid(iFace, iG), normBase,
-                        FLFix, FRFix,
-                        mesh->GetFaceZone(iFace),
-                        rsType,
-                        iFace, iG);
 
-                    finc(Eigen::all, 0) = fincC;
-#ifdef USE_FLUX_BALANCE_TERM
-                    finc(Eigen::all, 1) = FLFix;
-                    finc(Eigen::all, 2) = FRFix;
-#endif
-
-                    finc *= vfv->GetFaceJacobiDet(iFace, iG); // don't forget this
-
-                    if (pointOrderReducedL)
-                        nFaceReducedOrder++, faceOrderReducedL = false;
-                    if (pointOrderReducedR)
-                        nFaceReducedOrder++, faceOrderReducedR = false;
-                    if (faceOrderReducedL)
-                        nFaceReducedOrder++;
-                    if (faceOrderReducedR)
-                        nFaceReducedOrder++;
-
-                    // if (iFace == 0)
-                    // {
-                    //     std::cout << finc.transpose() << std::endl;
-                    //     DNDS_assert(false);
-                    // }
+                    auto seqC = Eigen::seq(iG * dim, iG * dim + dim - 1);
+                    ULxyV(Eigen::all, iG) = ULxy;
+                    URxyV(Eigen::all, iG) = URxy;
+                    DiffUxyV(seqC, Eigen::all) = GradUMeanXy;
+                    DiffUxyPrimV(seqC, Eigen::all) = GradUMeanXyPrim;
+                    unitNormV(Eigen::all, iG) = unitNorm;
+                    vgXYV(Eigen::all, iG) = GetFaceVGrid(iFace, iG);
+                    normBaseV(Eigen::all, seqC) = normBase;
                 });
+            TU_Batch fincC = fluxFace(
+                ULxyV, URxyV,
+                ULMeanXy, URMeanXy,
+                DiffUxyV, DiffUxyPrimV,
+                unitNormV,
+                vgXYV, normBaseV,
+                unitNormCent,
+                GetFaceVGrid(iFace, -1), normBaseCent,
+                FLFix,
+                FRFix,
+                mesh->GetFaceZone(iFace),
+                rsType,
+                iFace);
 
-            // if (f2c[0] == 10756)
-            // {
-            //     std::cout << std::setprecision(16)
-            //               << fluxEs(Eigen::all, 0).transpose() << std::endl;
-            //     // exit(-1);
-            // }
+
+            gFace.IntegrationSimple(
+                fluxEs,
+                [&](decltype(fluxEs) &finc, int iG)
+                {
+                    finc.resizeLike(fluxEs);
+                    finc(Eigen::all, 0) = fincC(Eigen::all, iG);
+#ifdef USE_FLUX_BALANCE_TERM
+                    finc(Eigen::all, 1) = fincC(Eigen::all, iG);
+                    finc(Eigen::all, 2) = fincC(Eigen::all, iG);
+#endif
+                    finc *= vfv->GetFaceJacobiDet(iFace, iG); // !don't forget this
+                });
 
             TU fluxIncL = fluxEs(Eigen::all, 0);
             TU fluxIncR = -fluxEs(Eigen::all, 0);
