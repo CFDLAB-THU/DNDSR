@@ -46,16 +46,17 @@ namespace DNDS::Euler
         static const auto I4 = dim + 1;
 
         static const int MaxBatch = 16;
+        static constexpr int MaxBatchMult(int n) { return MaxBatch > 0 ? (n * MaxBatch) : Eigen::Dynamic; }
 
         typedef Eigen::VectorFMTSafe<real, dim> TVec;
         typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatch> TVec_Batch;
         typedef Eigen::MatrixFMTSafe<real, dim, dim> TMat;
-        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, 3 * MaxBatch> TMat_Batch;
+        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatchMult(3)> TMat_Batch;
         typedef Eigen::VectorFMTSafe<real, nVarsFixed> TU;
         typedef Eigen::MatrixFMTSafe<real, nVarsFixed, Eigen::Dynamic, Eigen::ColMajor, nVarsFixed, MaxBatch> TU_Batch;
         typedef Eigen::MatrixFMTSafe<real, nVarsFixed, nVarsFixed> TJacobianU;
         typedef Eigen::MatrixFMTSafe<real, dim, nVarsFixed> TDiffU;
-        typedef Eigen::MatrixFMTSafe<real, Eigen::Dynamic, nVarsFixed, Eigen::ColMajor, 3 * MaxBatch> TDiffU_Batch;
+        typedef Eigen::MatrixFMTSafe<real, Eigen::Dynamic, nVarsFixed, Eigen::ColMajor, MaxBatchMult(3)> TDiffU_Batch;
         typedef Eigen::MatrixFMTSafe<real, nVarsFixed, dim> TDiffUTransposed;
         typedef ArrayDOFV<nVarsFixed> TDof;
         typedef ArrayRECV<nVarsFixed> TRec;
