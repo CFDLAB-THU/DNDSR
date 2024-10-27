@@ -1,6 +1,6 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 2e-4,
+        "dtImplicit": 1e-4,
         "nTimeStep": 50000,
         "steadyQuit": false,
         "useImplicitPP": false, //!
@@ -8,7 +8,7 @@
         "rhsFPPScale": 1,
         "rhsFPPRelax": 0.5,
         "tEnd": 0.25e0,
-        "odeCode": 1,
+        "odeCode": 0,
         "odeSetting1": 0.5,
         "odeSetting2": 0,
         "odeSetting3": 1,
@@ -37,18 +37,18 @@
         "tDataOut": 0.245
     },
     "implicitCFLControl": {
-        "CFL": 0.01,
+        "CFL": 0.1,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 0,
         "nCFLRampLength": 20,
-        "CFLRampEnd": 1.0,
+        "CFLRampEnd": 2.0,
         "useLocalDt": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/Wedge30_200_H1.cgns",
-        "outPltName": "../data/outUnsteady/PP2/Wedge/Wedge30_200_H1_ReInf_1-200-1-RM2-BDF2",
+        "outPltName": "../data/outUnsteady/PP5/Wedge/Re1E2_2-200-RM2",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -81,6 +81,7 @@
     },
     "limiterControl": {
         "useLimiter": true,
+        "useViscousLimited": false,
         "smoothIndicatorProcedure": 0, //1 = pressure only
         "limiterProcedure": 0, //1 == CWBAP
         "nPartialLimiterStart": 5000000,
@@ -129,6 +130,8 @@
     "eulerSettings": {
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
+        "uRecBetaCompressPower": 1,
+        "ppEpsIsRelaxed": true,
         "riemannSolverType": "Roe_M2",
         "riemannSolverTypeAux": "Roe_M1",
         "rsMeanValueEig": 1,
@@ -140,33 +143,33 @@
             0.0
         ],
         "farFieldStaticValue": [
-            8,
-            66,
+            1.4,
             0,
             0,
-            5.635e2
+            0,
+            2.5
         ],
         "boxInitializers": [
             {
-                "x0": 0.2,
-                "x1": 100,
+                "x0": -100,
+                "x1": 0.2,
                 "y0": -100,
                 "y1": 100,
                 "z0": -100,
                 "z1": 100,
                 "v": [
-                    1.4,
+                    8,
+                    66,
                     0,
                     0,
-                    0,
-                    2.5
+                    5.635e2
                 ]
             }
         ],
         "idealGasProperty": {
             "gamma": 1.4,
             "Rgas": 0.002614994377762,
-            "muGas": 1e-200,
+            "muGas": 1e-2,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4,
@@ -183,6 +186,17 @@
                 0,
                 0,
                 2.5
+            ]
+        },
+        {
+            "type": "BCFar",
+            "name": "FAR_L",
+            "value": [
+                8,
+                66,
+                0,
+                0,
+                5.635e2
             ]
         }
     ]

@@ -8,7 +8,7 @@
         "rhsFPPScale": 1,
         "useDtPPLimit": true,
         "rhsFPPRelax": 0.5,
-        "incrementPPRelax": 0.9,
+        // "incrementPPRelax": 0.9,
         "tEnd": 0.1,
         "odeCode": 0,
         "odeSetting1": 0.5,
@@ -43,7 +43,7 @@
         "meshRotZ": 0.0,
         // "meshFile": "../data/mesh/Unifrom_1D400.cgns",
         "meshFile": "../data/mesh/Uniform_01_400.cgns",
-        "outPltName": "../data/outUnsteady/PP2/LeBlanc/Uniform_01_400_DoubleRarefraction",
+        "outPltName": "../data/outUnsteady/PP5/LeBlanc/Uniform_01_400_DoubleRarefraction",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -72,6 +72,7 @@
     },
     "limiterControl": {
         "useLimiter": true,
+        "ppRecLimiterCompressToMean": false,
         "smoothIndicatorProcedure": 0,
         "limiterProcedure": 0, //1 == CWBAP
         "nPartialLimiterStart": 1000000,
@@ -117,6 +118,8 @@
         "useScalarJacobian": true,
         "riemannSolverType": "Roe_M2",
         "rsMeanValueEig": 1,
+        "uRecBetaCompressPower": 1,
+        "ppEpsIsRelaxed": true,
         "nCentralSmoothStep": 0,
         "constMassForce": [
             0.0,
@@ -124,11 +127,11 @@
             0.0
         ],
         "farFieldStaticValue": [
-            1e-3,
+            1,
+            2,
             0,
             0,
-            0,
-            0.1e-5
+            2.2500
         ],
         "boxInitializers": [
             // for double rarefaction:

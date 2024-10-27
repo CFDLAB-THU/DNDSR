@@ -8,13 +8,13 @@
         "rhsFPPScale": 1,
         "rhsFPPRelax": 0.5,
         "tEnd": 1e-3,
-        "odeCode": 401,
+        "odeCode": 0,
         "odeSetting1": 0.5,
         "odeSetting2": 0,
         "odeSetting3": 1,
         "odeSetting4": 0,
         "useDtPPLimit": true,
-        "dtPPLimitRelax": 0.6,
+        // "dtPPLimitRelax": 0.6,
         "dtIncreaseLimit": 2.0,
         "dtIncreaseAfterCount": 0,
         "dtCFLLimitScale": 200
@@ -49,7 +49,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/Unifrom_Ma2000Jet800.cgns",
-        "outPltName": "../data/outUnsteady/PP2/M2000/Unifrom_Ma2000Jet800_REInf_1-200-RM2-HM3",
+        "outPltName": "../data/outUnsteady/PP5/M2000/RE1E2_1-200-RM2",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -82,6 +82,7 @@
     },
     "limiterControl": {
         "useLimiter": true,
+        "useViscousLimited": false,
         "smoothIndicatorProcedure": 0,
         "limiterProcedure": 0, //1 == CWBAP
         "nPartialLimiterStart": 1000000,
@@ -137,8 +138,10 @@
         "useScalarJacobian": true,
         "riemannSolverType": "Roe_M2",
         "rsMeanValueEig": 1,
+        "usePrimGradInVisFlux": 0,
         "nCentralSmoothStep": 0,
-        // "uRecBetaCompressPower": 2.0,
+        "uRecBetaCompressPower": 1,
+        "ppEpsIsRelaxed": true,
         "constMassForce": [
             0.0,
             0.0,
@@ -155,7 +158,7 @@
         "idealGasProperty": {
             "gamma": 1.666666666666667,
             "Rgas": 289,
-            "muGas": 1e-200,
+            "muGas": 1e-2,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4,
