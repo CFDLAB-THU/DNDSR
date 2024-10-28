@@ -105,7 +105,7 @@ namespace DNDS
     {
         std::signal(SIGSEGV, DNDS_signal_handler);
         std::signal(SIGABRT, DNDS_signal_handler);
-        std::signal(SIGKILL, DNDS_signal_handler);
+        // std::signal(SIGKILL, DNDS_signal_handler);
     }
 }
 
