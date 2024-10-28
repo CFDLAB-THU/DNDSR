@@ -15,6 +15,11 @@ namespace DNDS::Geom::Base
     static const std::array<int, ndiff + 1> ndiffSizC{1, 4, 10, 20};
     static const std::array<int, ndiff + 1> ndiffSizC2D{1, 3, 6, 10};
     template <int dim>
+    constexpr int ndiffSizS(int i)
+    {
+        return dim == 2 ? ndiffSizC2D[i] : ndiffSizC[i];
+    }
+    template <int dim>
     constexpr int ndiff2order(int rows)
     {
         if constexpr (dim == 2)
@@ -177,6 +182,12 @@ namespace DNDS::Geom::Base
     static const t_diffOpIJK2I diffOperatorIJK2I = __get_diffOperatorIJK2I<3, ndiffSiz>(diffOperatorOrderList);
 
     static const t_diffOpIJK2I diffOperatorIJK2I2D = __get_diffOperatorIJK2I<2, ndiffSiz2D>(diffOperatorOrderList2D);
+
+    template<int dim>
+    constexpr auto& getDiffOperatorIJK2I()
+    {
+        return (dim == 2) ? diffOperatorIJK2I2D : diffOperatorIJK2I;
+    }
 
     static const int dFactorials[ndiff + 1][ndiff + 1] = {
         {1, 0, 0, 0},
