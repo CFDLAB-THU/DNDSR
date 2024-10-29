@@ -352,7 +352,7 @@ namespace DNDS::Euler::Gas
         real SP = std::max(SR, 0.0);
         real SM = std::min(SL, 0.0);
 
-        if constexpr (type != 1)
+        if constexpr (type != 1) // ? HLLEP
         {
             real div = SP - SM;
             div += signP(div) * verySmallReal;
@@ -367,7 +367,7 @@ namespace DNDS::Euler::Gas
         }
         else
         {
-            // ? HLLEP V1
+            // ? HLLEP_V1
             real aSound = aRoe;
             // real un_abs = aRoe;
             real un = veloRoe(0);
