@@ -1,6 +1,7 @@
 {
     "timeMarchControl": {
         "dtImplicit": 1e-4,
+        "dtImplicitMin": 0.2e-4,
         "nTimeStep": 50000,
         "steadyQuit": false,
         "useImplicitPP": false, //!
@@ -81,7 +82,7 @@
     },
     "limiterControl": {
         "useLimiter": true,
-        "useViscousLimited": false,
+        // "useViscousLimited": false,
         "smoothIndicatorProcedure": 0, //1 = pressure only
         "limiterProcedure": 0, //1 == CWBAP
         "nPartialLimiterStart": 5000000,

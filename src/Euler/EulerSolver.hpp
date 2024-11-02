@@ -108,6 +108,7 @@ namespace DNDS::Euler
             struct TimeMarchControl
             {
                 real dtImplicit = 1e100;
+                real dtImplicitMin = 0;
                 int nTimeStep = 1000000;
                 bool steadyQuit = false;
                 bool useRestart = false;
@@ -131,7 +132,7 @@ namespace DNDS::Euler
                 real dtPPLimitScale = 1;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     TimeMarchControl,
-                    dtImplicit, nTimeStep,
+                    dtImplicit, dtImplicitMin, nTimeStep,
                     steadyQuit, useRestart,
                     useImplicitPP, rhsFPPMode, rhsFPPScale, rhsFPPRelax, incrementPPRelax,
                     odeCode, tEnd, odeSetting1, odeSetting2, odeSetting3, odeSetting4,
