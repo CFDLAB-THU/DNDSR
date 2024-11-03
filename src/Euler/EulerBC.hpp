@@ -38,6 +38,11 @@ namespace DNDS::Euler
             {BCSpecial, "BCSpecial"},
         });
 
+    inline std::string to_string(EulerBCType type)
+    {
+        return nlohmann::json(type).get<std::string>();
+    }
+
     template <EulerModel model>
     class BoundaryHandler
     {
@@ -138,9 +143,11 @@ namespace DNDS::Euler
 
                 case EulerBCType::BCWall:
                 case EulerBCType::BCWallInvis:
+                case EulerBCType::BCSpecial:
                 {
                     uint32_t frameOption = 0;
                     uint32_t integrationOption = 0;
+                    uint32_t specialOption = 0;
                     Eigen::VectorXd bcValueExtra;
                     if (item.count("frameOption"))
                         frameOption = item["frameOption"];
@@ -148,9 +155,12 @@ namespace DNDS::Euler
                         integrationOption = item["integrationOption"];
                     if (item.count("valueExtra"))
                         bcValueExtra = item["valueExtra"];
+                    if (item.count("specialOption"))
+                        specialOption = item["specialOption"];
                     bc.BCValues.push_back(TU::Zero(bc.nVars));
                     bc.BCFlags.back()["frameOpt"] = frameOption;
                     bc.BCFlags.back()["integrationOpt"] = integrationOption;
+                    bc.BCFlags.back()["specialOpt"] = specialOption;
                     bc.BCValuesExtra.push_back(bcValueExtra);
                 }
                 break;
@@ -216,9 +226,13 @@ namespace DNDS::Euler
 
                 case EulerBCType::BCWall:
                 case EulerBCType::BCWallInvis:
+                case EulerBCType::BCSpecial:
                 {
                     item["frameOption"] = bc.BCFlags.at(i).at("frameOpt");
+                    item["integrationOption"] = bc.BCFlags.at(i).at("integrationOpt");
+                    item["specialOption"] = bc.BCFlags.at(i).at("specialOpt");
                     item["valueExtra"] = bc.BCValuesExtra.at(i);
+                    
                 }
                 break;
 

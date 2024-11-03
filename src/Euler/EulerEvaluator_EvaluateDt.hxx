@@ -475,7 +475,7 @@ namespace DNDS::Euler
         TDiffU VisFlux;
         VisFlux.resizeLike(DiffUxy);
         VisFlux.setZero();
-        auto& DiffUxyPrimP = DiffUxyPrim;
+        auto &DiffUxyPrimP = DiffUxyPrim;
         Gas::ViscousFlux_IdealGas<dim>(
             UMeanXy, DiffUxyPrimP, unitNorm, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
             settings.idealGasProperty.gamma,
@@ -1105,11 +1105,7 @@ namespace DNDS::Euler
         URxy.resizeLike(ULxy);
         auto bTypeEuler = pBCHandler->GetTypeFromID(btype);
 
-        if (btype == Geom::BC_ID_DEFAULT_FAR ||
-            btype == Geom::BC_ID_DEFAULT_SPECIAL_DMR_FAR ||
-            btype == Geom::BC_ID_DEFAULT_SPECIAL_RT_FAR ||
-            btype == Geom::BC_ID_DEFAULT_SPECIAL_IV_FAR ||
-            btype == Geom::BC_ID_DEFAULT_SPECIAL_2DRiemann_FAR ||
+        if (bTypeEuler == EulerBCType::BCSpecial ||
             bTypeEuler == EulerBCType::BCFar ||
             bTypeEuler == EulerBCType::BCOutP)
         {
@@ -1442,8 +1438,25 @@ namespace DNDS::Euler
                 farPrimitive(I4) = pre;
                 Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
             }
+            else if (pBCHandler->GetFlagFromID(btype, "specialOpt") == 3001) // (no rotating)
+            {
+                // 3001 for Noh problem
+                TU farPrimitive;
+                Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, settings.idealGasProperty.gamma);
+                real pInf = farPrimitive(I4);
+                real r = pPhysics.norm();
+                TVec velo = -pPhysics(Seq012) / (r + smallReal);
+                real rho = sqr(1. + t / (r + smallReal));
+                farPrimitive(0) = rho;
+                farPrimitive(Seq123) = velo;
+                farPrimitive(I4) = pInf; // warning: only valid for t < 0.768
+                // std::cout << pPhysics.transpose() << ", " << t << ", " << pInf << ", " << rho << ", " << velo.transpose() << std::endl;
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, settings.idealGasProperty.gamma); 
+            }
             else
-                DNDS_assert(false);
+                DNDS_assert_info(false, fmt::format(
+                                            "btype [{}] or bTypeEuler [{}] or specialOpt [{}] is not supported",
+                                            btype, to_string(bTypeEuler), pBCHandler->GetFlagFromIDSoft(btype, "specialOpt")));
         }
         else if (bTypeEuler == EulerBCType::BCWallInvis ||
                  bTypeEuler == EulerBCType::BCSym) // (no rotating)
