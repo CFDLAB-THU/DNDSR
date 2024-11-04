@@ -279,7 +279,7 @@ namespace DNDS::Euler
                 bool outAtCellData = true;
                 int nASCIIPrecision = 5;
                 std::string vtuFloatEncodeMode = "binary";
-                int hdfChunkSize = 256;
+                int hdfChunkSize = 32768;
                 int hdfDeflateLevel = 0;
                 bool outVolumeData = true;
                 bool outBndData = false;
