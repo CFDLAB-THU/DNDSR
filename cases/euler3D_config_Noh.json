@@ -1,6 +1,6 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-3,
+        "dtImplicit": 0.5e-3,
         "nTimeStep": 10000,
         "steadyQuit": false,
         "useImplicitPP": false,
@@ -20,7 +20,7 @@
         "dtCFLLimitScale": 200
     },
     "convergenceControl": {
-        "nTimeStepInternal": 26,
+        "nTimeStepInternal": 30,
         "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -47,15 +47,19 @@
     },
     "dataIOControl": {
         "uniqueStamps": false,
-        "meshDirectBisect": 1,
+        "meshDirectBisect": 2,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/Uniform_Noh_64.cgns",
-        "outPltName": "../data/outUnsteady/PP5/Noh/REInf_64-Bi1",
-        "outPltMode": 0,
+        "outPltName": "../data/outUnsteady/PP5/Noh/REInf_64-Bi2",
+        "outPltMode": 1,
         "readMeshMode": 0,
-        "outPltTecplotFormat": true,
-        "outPltVTKFormat": false,
-        "outAtPointData": false,
+        "outPltTecplotFormat": false,
+        "outPltVTKFormat": true,
+        "outPltVTKHDFFormat": true,
+        "hdfDeflateLevel": 2,
+        // "hdfChunkSize": 32768,
+        "hdfChunkSize": 131072,
+        "outAtPointData": true,
         "outAtCellData": true,
         "outCellScalarNames": [
             "betaPP"
@@ -93,7 +97,7 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 5,
+        "intOrder": 3,
         "cacheDiffBase": true,
         "jacobiRelax": 1,
         "SORInstead": false,
@@ -128,7 +132,7 @@
         "initWithLastURecInc": false,
         "directPrecControl": {
             "useDirectPrec": true,
-            "iluCode": 3
+            "iluCode": 2
         }
     },
     "others": {
