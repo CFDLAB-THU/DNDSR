@@ -403,10 +403,8 @@ namespace DNDS::Euler
         const TDiffU_Batch &DiffUxyPrim,
         const TVec_Batch &unitNorm,
         const TVec_Batch &vgXY,
-        const TMat_Batch &normBase,
         const TVec &unitNormC,
         const TVec &vgC,
-        const TMat &normBaseC,
         TU_Batch &FLfix,
         TU_Batch &FRfix,
         Geom::t_index btype,
@@ -416,22 +414,6 @@ namespace DNDS::Euler
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
 
         int nB = ULxy.cols();
-
-        TU_Batch UR = URxy;
-        TU_Batch UL = ULxy;
-
-        TU ULMean = ULMeanXy;
-        TU URMean = URMeanXy;
-        ULMean(Seq123) = normBaseC(Seq012, Seq012).transpose() * ULMean(Seq123);
-        URMean(Seq123) = normBaseC(Seq012, Seq012).transpose() * URMean(Seq123);
-        TVec_Batch vg = vgXY;
-        for (int iB = 0; iB < nB; iB++)
-        {
-            TMat cNB = normBase(Seq012, Eigen::seq(iB * dim, iB * dim + dim - 1));
-            UR(Seq123, iB) = cNB.transpose() * UR(Seq123, iB);
-            UL(Seq123, iB) = cNB.transpose() * UL(Seq123, iB);
-            vg(Eigen::all, iB) = cNB.transpose() * vg(Eigen::all, iB);
-        }
 
         TU_Batch UMeanXy = 0.5 * (ULxy + URxy);
 
@@ -539,7 +521,7 @@ namespace DNDS::Euler
                 DNDS_assert(false);
             }
         }
-#ifdef USE_FLUX_BALANCE_TERM // todo: finish
+#ifdef USE_FLUX_BALANCE_TERM // todo: finish for batch
         {
             TU wLMean, wRMean;
             Gas::IdealGasThermalConservative2Primitive<dim>(ULMean, wLMean, gamma);
@@ -566,38 +548,21 @@ namespace DNDS::Euler
         auto exitFun = [&]()
         {
             std::cout << "face at" << vfv->GetFaceQuadraturePPhys(iFace, -1) << '\n';
-            std::cout << "UL" << UL.transpose() << '\n';
-            std::cout << "UR" << UR.transpose() << std::endl;
+            std::cout << "UL" << ULxy.transpose() << '\n';
+            std::cout << "UR" << URxy.transpose() << std::endl;
         };
 
         if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall)
         {
 #ifdef USE_NO_RIEMANN_ON_WALL
-            TU UL_Prim, UR_Prim;
-            UL_Prim.resizeLike(UL);
-            UL_Prim.resizeLike(UR);
-            Gas::IdealGasThermalConservative2Primitive<dim>(UL, UL_Prim, gamma);
-            Gas::IdealGasThermalConservative2Primitive<dim>(UR, UR_Prim, gamma);
-            UL_Prim(Seq123) = vg;
-            UR_Prim(Seq123) = vg;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(UL_Prim, UL, gamma);
-            // Gas::IdealGasThermalPrimitive2Conservative<dim>(UR_Prim, UR, gamma);
-            UR = UL;
+            // todo: implement exact flux for wall BC
 #else
-
 #endif
         }
         if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
             pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
         {
-            // UR(Seq123) = UL(Seq123);
-            // UR(1) = -UL(1);
-            // DNDS_assert_info(std::abs(unitNorm(1) - 1) < 1e-10 && std::abs(unitNorm(0)) < 1e-5,
-            //                  [&]()
-            //                  {
-            //                      std::cerr << unitNorm.transpose() << std::endl;
-            //                      return "";
-            //                  }());
+            // ? normal invert here?
         }
 
         Eigen::RowVector<real, -1> lam0V, lam123V, lam4V;
@@ -605,88 +570,52 @@ namespace DNDS::Euler
         lam123V.resize(nB);
         lam4V.resize(nB);
 
-        auto RSWrapper =
-            [&](
-                Gas::RiemannSolverType rsType, auto &&UL, auto &&UR, auto &&ULm, auto &&URm, auto &&vg, real gamma, auto &&finc, real dLambda,
-                real &lam0, real &lam123, real &lam4)
-        {
-            if (rsType == Gas::RiemannSolverType::HLLEP)
-                Gas::HLLEPFlux_IdealGas<dim, 0>(
-                    UL, UR, ULm, URm, vg, gamma, finc, dLambda,
-                    exitFun);
-            else if (rsType == Gas::RiemannSolverType::HLLEP_V1)
-                Gas::HLLEPFlux_IdealGas<dim, 1>(
-                    UL, UR, ULm, URm, vg, gamma, finc, dLambda,
-                    exitFun);
-            else if (rsType == Gas::RiemannSolverType::HLLC)
-                Gas::HLLCFlux_IdealGas_HartenYee<dim>(
-                    UL, UR, vg, gamma, finc, dLambda,
-                    exitFun);
-            else if (rsType == Gas::RiemannSolverType::Roe)
-                Gas::RoeFlux_IdealGas_HartenYee<dim>(
-                    UL, UR, ULm, URm, vg, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::Roe_M1)
-                Gas::RoeFlux_IdealGas_HartenYee<dim, 1>(
-                    UL, UR, ULm, URm, vg, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::Roe_M2)
-                Gas::RoeFlux_IdealGas_HartenYee<dim, 2>(
-                    UL, UR, ULm, URm, vg, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::Roe_M3)
-                Gas::RoeFlux_IdealGas_HartenYee<dim, 3>(
-                    UL, UR, ULm, URm, vg, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::Roe_M4)
-                Gas::RoeFlux_IdealGas_HartenYee<dim, 4>(
-                    UL, UR, ULm, URm, vg, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::Roe_M5)
-                Gas::RoeFlux_IdealGas_HartenYee<dim, 5>(
-                    UL, UR, ULm, URm, vg, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else
-                DNDS_assert(false);
-            // if (btype == BoundaryType::Wall_NoSlip || btype == BoundaryType::Wall_Euler)
-            //     finc(0) = 0; //! enforce mass leak = 0
-        };
-
         auto RSWrapper_XY =
             [&](
-                Gas::RiemannSolverType rsType, auto &&UL, auto &&UR, auto &&ULm, auto &&URm, auto &&vg, auto &&n, real gamma, auto &&finc, real dLambda,
+                Gas::RiemannSolverType rsType,
+                auto &&UL, auto &&UR, auto &&ULm, auto &&URm, auto &&vg, auto &&n,
+                real gamma, auto &&finc, real dLambda,
                 real &lam0, real &lam123, real &lam4)
         {
             // std::cout << "here1" << std::endl;
-            if (rsType == Gas::RiemannSolverType::Roe)
-                Gas::RoeFlux_IdealGas_HartenYee_XY<dim>(
+            if (rsType == Gas::RiemannSolverType::HLLEP)
+                Gas::HLLEPFlux_IdealGas<dim, 0>(
+                    UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
+                    exitFun, lam0, lam123, lam4);
+            else if (rsType == Gas::RiemannSolverType::HLLEP_V1)
+                Gas::HLLEPFlux_IdealGas<dim, 1>(
+                    UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
+                    exitFun, lam0, lam123, lam4);
+            else if (rsType == Gas::RiemannSolverType::HLLC)
+                Gas::HLLCFlux_IdealGas_HartenYee<dim>(
+                    UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
+                    exitFun, lam0, lam123, lam4);
+            else if (rsType == Gas::RiemannSolverType::Roe)
+                Gas::RoeFlux_IdealGas_HartenYee<dim>(
                     UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
                     exitFun, lam0, lam123, lam4);
             else if (rsType == Gas::RiemannSolverType::Roe_M1)
-                Gas::RoeFlux_IdealGas_HartenYee_XY<dim, 1>(
+                Gas::RoeFlux_IdealGas_HartenYee<dim, 1>(
                     UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
                     exitFun, lam0, lam123, lam4);
             else if (rsType == Gas::RiemannSolverType::Roe_M2)
-                Gas::RoeFlux_IdealGas_HartenYee_XY<dim, 2>(
+                Gas::RoeFlux_IdealGas_HartenYee<dim, 2>(
                     UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
                     exitFun, lam0, lam123, lam4);
             else if (rsType == Gas::RiemannSolverType::Roe_M3)
-                Gas::RoeFlux_IdealGas_HartenYee_XY<dim, 3>(
+                Gas::RoeFlux_IdealGas_HartenYee<dim, 3>(
                     UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
                     exitFun, lam0, lam123, lam4);
             else if (rsType == Gas::RiemannSolverType::Roe_M4)
-                Gas::RoeFlux_IdealGas_HartenYee_XY<dim, 4>(
+                Gas::RoeFlux_IdealGas_HartenYee<dim, 4>(
                     UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
                     exitFun, lam0, lam123, lam4);
             else if (rsType == Gas::RiemannSolverType::Roe_M5)
-                Gas::RoeFlux_IdealGas_HartenYee_XY<dim, 5>(
+                Gas::RoeFlux_IdealGas_HartenYee<dim, 5>(
                     UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
                     exitFun, lam0, lam123, lam4);
             else
                 DNDS_assert(false);
-            // std::cout << "here2" << std::endl;
-            // if (btype == BoundaryType::Wall_NoSlip || btype == BoundaryType::Wall_Euler)
-            //     finc(0) = 0; //! enforce mass leak = 0
         };
 
         TU_Batch finc;
@@ -698,8 +627,9 @@ namespace DNDS::Euler
             if (settings.rsMeanValueEig != 0 && rsType == Gas::Roe_M1)
             {
                 real lam0{0}, lam123{0}, lam4{0};
-                Gas::RoeFlux_IdealGas_HartenYee_Batch<3, 1>(
-                    UL, UR, ULMean, URMean, vg, vgC, settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
+                Gas::RoeFlux_IdealGas_HartenYee_Batch<dim, 1>(
+                    ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
+                    settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
                     exitFun, lam0, lam123, lam4);
                 lam0V.setConstant(lam0);
                 lam123V.setConstant(lam123);
@@ -708,8 +638,9 @@ namespace DNDS::Euler
             else if (settings.rsMeanValueEig != 0 && rsType == Gas::Roe_M2)
             {
                 real lam0{0}, lam123{0}, lam4{0};
-                Gas::RoeFlux_IdealGas_HartenYee_Batch<3, 2>(
-                    UL, UR, ULMean, URMean, vg, vgC, settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
+                Gas::RoeFlux_IdealGas_HartenYee_Batch<dim, 2>(
+                    ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
+                    settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
                     exitFun, lam0, lam123, lam4);
                 lam0V.setConstant(lam0);
                 lam123V.setConstant(lam123);
@@ -718,9 +649,6 @@ namespace DNDS::Euler
             else
                 for (int iB = 0; iB < nB; iB++)
                 {
-                    // RSWrapper(rsType, UL(Eigen::all, iB), UR(Eigen::all, iB), ULMean, URMean, vg(Eigen::all, iB),
-                    //           settings.idealGasProperty.gamma, finc(Eigen::all, iB), deltaLambdaFace[iFace],
-                    //           lam0V(iB), lam123V(iB), lam4V(iB));
                     RSWrapper_XY(rsType, ULxy(Eigen::all, iB), URxy(Eigen::all, iB), ULMeanXy, URMeanXy,
                                  vgXY(Eigen::all, iB), unitNorm(Eigen::all, iB),
                                  settings.idealGasProperty.gamma, finc(Eigen::all, iB), deltaLambdaFace[iFace],
@@ -739,37 +667,29 @@ namespace DNDS::Euler
         {
             // real lambdaFaceCC = sqrt(std::abs(asqrMean)) + std::abs((UL(1) / UL(0) - vg(0)) + (UR(1) / UR(0) - vg(0))) * 0.5;
             auto lambdaFaceCC = lam123V; //! using velo instead of velo + a
-            auto vnR = (UR(1, Eigen::all).array() / UR(0, Eigen::all).array() - vg(0, Eigen::all).array());
-            auto vnL = (UL(1, Eigen::all).array() / UL(0, Eigen::all).array() - vg(0, Eigen::all).array());
+            auto vnR = ((URxy(Seq123, Eigen::all).array().rowwise() / URxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
+            auto vnL = ((ULxy(Seq123, Eigen::all).array().rowwise() / ULxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
             finc(I4 + 1, Eigen::all) =
-                ((vnL * UL(I4 + 1, Eigen::all).array() + vnR * UR(I4 + 1, Eigen::all).array()) -
-                 (UR(I4 + 1, Eigen::all).array() - UL(I4 + 1, Eigen::all).array()) * lambdaFaceCC.array()) *
+                ((vnL * ULxy(I4 + 1, Eigen::all).array() + vnR * URxy(I4 + 1, Eigen::all).array()) -
+                 (URxy(I4 + 1, Eigen::all).array() - ULxy(I4 + 1, Eigen::all).array()) * lambdaFaceCC.array()) *
                 0.5;
         }
         if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
         {
             auto lambdaFaceCC = lam123V; //! using velo instead of velo + a
-            auto vnR = (UR(1, Eigen::all).array() / UR(0, Eigen::all).array() - vg(0, Eigen::all).array());
-            auto vnL = (UL(1, Eigen::all).array() / UL(0, Eigen::all).array() - vg(0, Eigen::all).array());
+            auto vnR = ((URxy(Seq123, Eigen::all).array().rowwise() / URxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
+            auto vnL = ((ULxy(Seq123, Eigen::all).array().rowwise() / ULxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
             finc(I4 + 1, Eigen::all) =
-                ((vnL * UL(I4 + 1, Eigen::all).array() + vnR * UR(I4 + 1, Eigen::all).array()) -
-                 (UR(I4 + 1, Eigen::all).array() - UL(I4 + 1, Eigen::all).array()) * lambdaFaceCC.array()) *
+                ((vnL * ULxy(I4 + 1, Eigen::all).array() + vnR * URxy(I4 + 1, Eigen::all).array()) -
+                 (URxy(I4 + 1, Eigen::all).array() - ULxy(I4 + 1, Eigen::all).array()) * lambdaFaceCC.array()) *
                 0.5;
             finc(I4 + 2, Eigen::all) =
-                ((vnL * UL(I4 + 2, Eigen::all).array() + vnR * UR(I4 + 2, Eigen::all).array()) -
-                 (UR(I4 + 2, Eigen::all).array() - UL(I4 + 2, Eigen::all).array()) * lambdaFaceCC.array()) *
+                ((vnL * ULxy(I4 + 2, Eigen::all).array() + vnR * URxy(I4 + 2, Eigen::all).array()) -
+                 (URxy(I4 + 2, Eigen::all).array() - ULxy(I4 + 2, Eigen::all).array()) * lambdaFaceCC.array()) *
                 0.5;
             finc(1, Eigen::all).array() += UMeanXy(I4 + 1, Eigen::all).array() * (2. / 3.); //! k's normal stress
             finc(I4, Eigen::all).array() += UMeanXy(I4 + 1, Eigen::all).array() * (2. / 3.) * UMeanXy(1, Eigen::all).array() / UMeanXy(0, Eigen::all).array();
         }
-        for (int iB = 0; iB < nB; iB++)
-        { // TODO:delete
-            // finc(Seq123, iB) = normBase(Seq012, Eigen::seq(iB * dim, iB * dim + dim - 1)) * finc(Seq123, iB);
-        }
-        // std::cout << "iFace " << iFace << "\n";
-        // std::cout << finc << "\n";
-        // std::cout << finc1 << "\n";
-        // std::cout << std::endl;
 
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
         finc -= visFluxV;
@@ -782,8 +702,6 @@ namespace DNDS::Euler
             std::cout << URxy.transpose() << std::endl;
             std::cout << DiffUxy << std::endl;
             std::cout << unitNorm << std::endl;
-            std::cout << normBase << std::endl;
-
             std::cout << btype << std::endl;
             DNDS_assert(false);
         }

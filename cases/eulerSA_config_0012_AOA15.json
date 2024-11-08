@@ -19,7 +19,7 @@
         "consoleOutputMode": 1,
         "nDataOutC": 100,
         "nDataOut": 10,
-        "nDataOutCInternal": 200,
+        "nDataOutCInternal": 50,
         "nDataOutInternal": 1000000000,
         "nRestartOut": 100,
         "nRestartOutC": 10,
@@ -47,7 +47,12 @@
         "outPltTecplotFormat": true,
         "outPltVTKFormat": false,
         "outAtPointData": true,
-        "outAtCellData": true
+        "outAtCellData": true,
+        "outCellScalarNames": [
+            // "minJacobiDetRel",
+            // "cellVolume",
+            "dWall"
+        ]
     },
     "boundaryDefinition": {},
     "implicitReconstructionControl": {
@@ -115,8 +120,9 @@
         "nGmresIter": 2,
         "directPrecControl": {
             "useDirectPrec": true,
-            "iluCode": 0,
-            "orderingCode": 3
+            "iluCode": 2,
+            // "orderingCode": 3
+            "_tail": 0
         }
     },
     "others": {
@@ -126,6 +132,9 @@
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
         "riemannSolverType": "Roe_M1",
+        "wallDistScheme": 1,
+        "wallDistExection": 5,
+        "wallDistRefineMax": 0.01,
         "usePrimGradInVisFlux": 0,
         "constMassForce": [
             0.0,

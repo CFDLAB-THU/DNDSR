@@ -430,10 +430,8 @@ namespace DNDS::Euler
             const TDiffU_Batch &DiffUxyPrim,
             const TVec_Batch &unitNorm,
             const TVec_Batch &vg,
-            const TMat_Batch &normBase,
             const TVec &unitNormC,
             const TVec &vgC,
-            const TMat &normBaseC,
             TU_Batch &FLfix,
             TU_Batch &FRfix,
             Geom::t_index btype,
@@ -1346,10 +1344,8 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
                 const TDiffU_Batch &DiffUxyPrim,                                                                           \
                 const TVec_Batch &unitNorm,                                                                                \
                 const TVec_Batch &vg,                                                                                      \
-                const TMat_Batch &normBase,                                                                                \
                 const TVec &unitNormC,                                                                                     \
                 const TVec &vgC,                                                                                           \
-                const TMat &normBaseC,                                                                                     \
                 TU_Batch &FLfix,                                                                                           \
                 TU_Batch &FRfix,                                                                                           \
                 Geom::t_index btype,                                                                                       \
@@ -1365,7 +1361,7 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
                 index iCell,                                                                                               \
                 index ig,                                                                                                  \
                 int Mode);                                                                                                 \
-        ext template                                                                                                     \
+        ext template                                                                                                       \
             typename EulerEvaluator<model>::TU                                                                             \
             EulerEvaluator<model>::generateBoundaryValue(                                                                  \
                 TU &ULxy,                                                                                                  \

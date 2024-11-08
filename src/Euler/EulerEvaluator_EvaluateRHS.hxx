@@ -115,8 +115,6 @@ namespace DNDS::Euler
             DiffUxyPrimV.resizeLike(DiffUxyV);
             TVec_Batch unitNormV, vgXYV;
             unitNormV.resize(dim, gFace.GetNumPoints()), vgXYV.resizeLike(unitNormV);
-            TMat_Batch normBaseV;
-            normBaseV.resize(dim, gFace.GetNumPoints() * dim);
 
             TVec unitNormCent = vfv->GetFaceNorm(iFace, -1)(Seq012);
             TMat normBaseCent = Geom::NormBuildLocalBaseV<dim>(unitNormCent);
@@ -230,7 +228,7 @@ namespace DNDS::Euler
 #endif
                         minVol = std::min(minVol, vfv->GetCellVol(f2c[1]));
                     }
-                    else if (true)
+                    else if (true) // is bc
                     {
                         URxy = generateBoundaryValue(
                             ULxy, ULMeanXy, f2c[0], iFace, iG,
@@ -261,12 +259,6 @@ namespace DNDS::Euler
 #endif
                     distGRP += faceBCType == EulerBCType::BCWallInvis ? veryLargeReal : 0.0;
                     distGRP += faceBCType == EulerBCType::BCSym ? veryLargeReal : 0.0;
-                    // real distGRP = (vfv->cellBaries[f2c[0]] -
-                    //                 (f2c[1] != FACE_2_VOL_EMPTY
-                    //                      ? vfv->cellBaries[f2c[1]]
-                    //                      : 2 * vfv->faceCenters[iFace] - vfv->cellBaries[f2c[0]]))
-                    //                    .norm();
-                    // DNDS_MPI_InsertCheck(u.father->getMPI(), "RHS inner 1");
                     TU UMeanXy = 0.5 * (ULxy + URxy);
 
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
@@ -330,22 +322,20 @@ namespace DNDS::Euler
                     DiffUxyPrimV(seqC, Eigen::all) = GradUMeanXyPrim;
                     unitNormV(Eigen::all, iG) = unitNorm;
                     vgXYV(Eigen::all, iG) = GetFaceVGrid(iFace, iG);
-                    normBaseV(Eigen::all, seqC) = normBase;
                 });
             TU_Batch fincC = fluxFace(
                 ULxyV, URxyV,
                 ULMeanXy, URMeanXy,
                 DiffUxyV, DiffUxyPrimV,
                 unitNormV,
-                vgXYV, normBaseV,
+                vgXYV,
                 unitNormCent,
-                GetFaceVGrid(iFace, -1), normBaseCent,
+                GetFaceVGrid(iFace, -1),
                 FLFix,
                 FRFix,
                 mesh->GetFaceZone(iFace),
                 rsType,
                 iFace);
-
 
             gFace.IntegrationSimple(
                 fluxEs,
@@ -354,8 +344,8 @@ namespace DNDS::Euler
                     finc.resizeLike(fluxEs);
                     finc(Eigen::all, 0) = fincC(Eigen::all, iG);
 #ifdef USE_FLUX_BALANCE_TERM
-                    finc(Eigen::all, 1) = fincC(Eigen::all, iG);
-                    finc(Eigen::all, 2) = fincC(Eigen::all, iG);
+                    finc(Eigen::all, 1) = FLFix(Eigen::all, iG);
+                    finc(Eigen::all, 2) = FRFix(Eigen::all, iG);
 #endif
                     finc *= vfv->GetFaceJacobiDet(iFace, iG); // !don't forget this
                 });
