@@ -186,7 +186,7 @@ namespace DNDS::Direct
             MPI::Barrier(mpi.comm);
             if (mpi.rank == 0)
                 log() << std::endl;
-            DNDS_assert(nnzLower == nnzUpper);
+            DNDS_assert_info(nnzLower == nnzUpper, fmt::format("nnzLower,Upper: [{},{}]", nnzLower, nnzUpper));
 
             // pre-search
             lowerTriStructureNewInUpper.resize(lowerTriStructureNew.size());

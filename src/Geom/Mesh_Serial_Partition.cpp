@@ -282,15 +282,25 @@ namespace DNDS::Geom
             Vertex startVert = vertex(0, cell2cellG);
             cuthill_mckee_ordering(cell2cellG, startVert, localFillOrderingNew2Old.rbegin(),
                                    get(vertex_color, cell2cellG), get(vertex_degree, cell2cellG));
+            std::unordered_set<index> __checkOrder;
+            for (auto v : localFillOrderingNew2Old)
+                DNDS_assert(v < this->NumCell() && v >= 0), __checkOrder.insert(v);
+            DNDS_assert_info(__checkOrder.size() == localFillOrderingNew2Old.size(), "The output of boost::cuthill_mckee_ordering is invalid!");
+            
+
             for (index iCell = 0; iCell < this->NumCell(); iCell++)
                 localFillOrderingOld2New[localFillOrderingNew2Old[iCell]] = iCell;
+            for (auto v : localFillOrderingOld2New)
+                DNDS_assert(v < this->NumCell() && v >= 0);
             index bandWidthNew = 0;
             for (index iCell = 0; iCell < this->NumCell(); iCell++)
                 for (auto iCOther : cell2cellFaceV[iCell])
                     bandWidthNew = std::max(bandWidthNew, std::abs(localFillOrderingOld2New[iCell] - localFillOrderingOld2New[iCOther]));
             MPI::AllreduceOneIndex(bandWidthNew, MPI_MAX, this->mpi);
+
             if (mpi.rank == mRank)
-                log() << "UnstructuredMesh::ObtainLocalFactFillOrdering(): boost done, new BW: " << bandWidthNew << std::endl;
+                log()
+                    << "UnstructuredMesh::ObtainLocalFactFillOrdering(): boost done, new BW: " << bandWidthNew << std::endl;
         }
         else
         {
