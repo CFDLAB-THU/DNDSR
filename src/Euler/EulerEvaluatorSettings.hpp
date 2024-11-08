@@ -24,7 +24,10 @@ namespace DNDS::Euler
         int nCentralSmoothStep = 0;
         int rsRotateScheme = 0;
         real minWallDist = 1e-12;
+        int wallDistExection = 0; // 1 is serial
+        real wallDistRefineMax = 1;
         int wallDistScheme = 0;
+        int wallDistCellLoadSize = 1024 * 32;
         real SADESScale = veryLargeReal;
         RANSModel ransModel = RANSModel::RANS_None;
         int usePrimGradInVisFlux = 0;
@@ -190,7 +193,10 @@ namespace DNDS::Euler
             __DNDS__json_to_config(rsMeanValueEig);
             __DNDS__json_to_config(rsRotateScheme);
             __DNDS__json_to_config(minWallDist);
+            __DNDS__json_to_config(wallDistExection);
+            __DNDS__json_to_config(wallDistRefineMax);
             __DNDS__json_to_config(wallDistScheme);
+            __DNDS__json_to_config(wallDistCellLoadSize);
             __DNDS__json_to_config(SADESScale);
             __DNDS__json_to_config(ransModel);
             __DNDS__json_to_config(usePrimGradInVisFlux);

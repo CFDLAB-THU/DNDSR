@@ -12,10 +12,15 @@
 namespace DNDS::Euler
 {
 
-    template <EulerModel model>
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        static const auto model = NS_SA;
+        template <>
+    )
     void EulerEvaluator<model>::GetWallDist()
     {
-        if (settings.wallDistScheme == 0 || settings.wallDistScheme == 1)
+        if (settings.wallDistScheme == 0 || settings.wallDistScheme == 1 || settings.wallDistScheme == 20)
         {
             using TriArray = ArrayEigenMatrix<3, 3>;
             ssp<TriArray> TrianglesLocal, TrianglesFull;
@@ -29,7 +34,7 @@ namespace DNDS::Euler
                     index iFace = mesh->bnd2face[iBnd];
                     auto elem = mesh->GetFaceElement(iFace);
                     auto quad = vfv->GetFaceQuad(iFace);
-                    if (settings.wallDistScheme == 0)
+                    if (settings.wallDistScheme == 0 || settings.wallDistScheme == 20)
                     {
                         if (elem.type == Geom::Elem::ElemType::Line2 || elem.type == Geom::Elem::ElemType::Line3) //!
                         {
@@ -110,6 +115,92 @@ namespace DNDS::Euler
                 log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() with minWallDist = {:.4e}, ", settings.minWallDist)
                       << " To search in " << TrianglesFull->Size() << std::endl;
 
+            auto executeSearch = [&]()
+            {
+                log() << fmt::format("Start search rank [{}]", mesh->getMPI().rank) << std::endl;
+                typedef CGAL::Simple_cartesian<double> K;
+                typedef K::FT FT;
+                // typedef K::Ray_3 Ray;
+                // typedef K::Line_3 Line;
+                typedef K::Point_3 Point;
+                typedef K::Triangle_3 Triangle;
+                typedef std::vector<Triangle>::iterator Iterator;
+                typedef CGAL::AABB_triangle_primitive<K, Iterator> Primitive;
+                typedef CGAL::AABB_traits<K, Primitive> AABB_triangle_traits;
+                typedef CGAL::AABB_tree<AABB_triangle_traits> Tree;
+
+                std::vector<Triangle> triangles;
+                triangles.reserve(TrianglesFull->Size());
+
+                for (index i = 0; i < TrianglesFull->Size(); i++)
+                {
+                    Point p0((*TrianglesFull)[i](0, 0), (*TrianglesFull)[i](1, 0), (*TrianglesFull)[i](2, 0));
+                    Point p1((*TrianglesFull)[i](0, 1), (*TrianglesFull)[i](1, 1), (*TrianglesFull)[i](2, 1));
+                    Point p2((*TrianglesFull)[i](0, 2), (*TrianglesFull)[i](1, 2), (*TrianglesFull)[i](2, 2));
+                    triangles.push_back(Triangle(p0, p1, p2));
+                }
+                TrianglesLocal->Resize(0, 3, 3);
+                TrianglesFull->Resize(0, 3, 3);
+                double minDist = veryLargeReal;
+                this->dWall.resize(mesh->NumCellProc());
+
+                if (!triangles.empty())
+                {
+                    // std::cout << "tree building" << std::endl;
+                    Tree tree(triangles.begin(), triangles.end());
+
+                    // std::cout << "tree built" << std::endl;
+                    // search
+
+                    for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+                    {
+                        // std::cout << "iCell " << iCell << std::endl;
+                        auto quadCell = vfv->GetCellQuad(iCell);
+                        dWall[iCell].resize(quadCell.GetNumPoints());
+                        for (int ig = 0; ig < quadCell.GetNumPoints(); ig++)
+                        {
+                            // std::cout << "iG " << ig << std::endl;
+                            auto p = vfv->GetCellQuadraturePPhys(iCell, ig);
+                            Point pQ(p[0], p[1], p[2]);
+                            // std::cout << "pQ " << pQ << std::endl;
+                            // Point closest_point = tree.closest_point(pQ);
+                            FT sqd = tree.squared_distance(pQ);
+                            // std::cout << "sqd" << sqd << std::endl;
+                            dWall[iCell][ig] = std::sqrt(sqd);
+                            // dWall[iCell][ig] = p(0) < 0 ? p({0, 1}).norm() : p(1); // test for plate BL
+                            if (dWall[iCell][ig] < minDist)
+                                minDist = dWall[iCell][ig];
+                            dWall[iCell][ig] = std::max(settings.minWallDist, dWall[iCell][ig]);
+                        }
+                    }
+                }
+                else
+                {
+                    for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+                    {
+                        // std::cout << "iCell " << iCell << std::endl;
+                        auto quadCell = vfv->GetCellQuad(iCell);
+                        dWall[iCell].setConstant(quadCell.GetNumPoints(), std::pow(veryLargeReal, 1. / 4.));
+                    }
+                }
+                log() << fmt::format("[{}] MinDist: ", mesh->getMPI().rank) << minDist << std::endl;
+            };
+            if (settings.wallDistExection == 1)
+                MPISerialDo(mesh->getMPI(), [&]()
+                            { executeSearch(); });
+            else if (settings.wallDistExection > 1)
+                for (int i = 0; i < settings.wallDistExection; i++)
+                {
+                    if (mesh->getMPI().rank % settings.wallDistExection == i)
+                        executeSearch();
+                    MPI::Barrier(mesh->getMPI().comm);
+                }
+            else
+                executeSearch();
+        }
+
+        if (settings.wallDistScheme == 2 || settings.wallDistScheme == 20)
+        {
             typedef CGAL::Simple_cartesian<double> K;
             typedef K::FT FT;
             // typedef K::Ray_3 Ray;
@@ -120,65 +211,229 @@ namespace DNDS::Euler
             typedef CGAL::AABB_triangle_primitive<K, Iterator> Primitive;
             typedef CGAL::AABB_traits<K, Primitive> AABB_triangle_traits;
             typedef CGAL::AABB_tree<AABB_triangle_traits> Tree;
-
             std::vector<Triangle> triangles;
-            triangles.reserve(TrianglesFull->Size());
-
-            for (index i = 0; i < TrianglesFull->Size(); i++)
+            triangles.reserve(mesh->NumBnd() * 8 + 8);
+            for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
             {
-                Point p0((*TrianglesFull)[i](0, 0), (*TrianglesFull)[i](1, 0), (*TrianglesFull)[i](2, 0));
-                Point p1((*TrianglesFull)[i](0, 1), (*TrianglesFull)[i](1, 1), (*TrianglesFull)[i](2, 1));
-                Point p2((*TrianglesFull)[i](0, 2), (*TrianglesFull)[i](1, 2), (*TrianglesFull)[i](2, 2));
-                triangles.push_back(Triangle(p0, p1, p2));
-            }
-            TrianglesLocal->Resize(0, 3, 3);
-            TrianglesFull->Resize(0, 3, 3);
-            double minDist = veryLargeReal;
-            this->dWall.resize(mesh->NumCellProc());
-
-            if (!triangles.empty())
-            {
-                // std::cout << "tree building" << std::endl;
-                Tree tree(triangles.begin(), triangles.end());
-
-                // std::cout << "tree built" << std::endl;
-                // search
-
-                for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+                if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall)
                 {
-                    // std::cout << "iCell " << iCell << std::endl;
-                    auto quadCell = vfv->GetCellQuad(iCell);
-                    dWall[iCell].resize(quadCell.GetNumPoints());
-                    for (int ig = 0; ig < quadCell.GetNumPoints(); ig++)
+                    index iFace = mesh->bnd2face[iBnd];
+                    auto elem = mesh->GetFaceElement(iFace);
+                    auto quad = vfv->GetFaceQuad(iFace);
                     {
-                        // std::cout << "iG " << ig << std::endl;
-                        auto p = vfv->GetCellQuadraturePPhys(iCell, ig);
-                        Point pQ(p[0], p[1], p[2]);
-                        // std::cout << "pQ " << pQ << std::endl;
-                        // Point closest_point = tree.closest_point(pQ);
-                        FT sqd = tree.squared_distance(pQ);
-                        // std::cout << "sqd" << sqd << std::endl;
-                        dWall[iCell][ig] = std::sqrt(sqd);
-                        // dWall[iCell][ig] = p(0) < 0 ? p({0, 1}).norm() : p(1); // test for plate BL
-                        if (dWall[iCell][ig] < minDist)
-                            minDist = dWall[iCell][ig];
-                        dWall[iCell][ig] = std::max(settings.minWallDist, dWall[iCell][ig]);
+                        auto qPatches = Geom::Elem::GetQuadPatches(quad);
+                        for (auto &qPatch : qPatches)
+                        {
+                            Eigen::Matrix<real, 3, 3> tri;
+                            Geom::tSmallCoords coords;
+                            mesh->GetCoordsOnFace(iFace, coords);
+                            for (int iV = 0; iV < 3; iV++)
+                                if (qPatch[iV] > 0)
+                                    tri(Eigen::all, iV) = coords(Eigen::all, qPatch[iV] - 1);
+                                else if (qPatch[iV] < 0)
+                                    tri(Eigen::all, iV) = vfv->GetFaceQuadraturePPhys(iFace, -qPatch[iV] - 1);
+                                else
+                                    tri(Eigen::all, iV) = coords(Eigen::all, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
+
+                            Point p0(tri(0, 0), tri(1, 0), tri(2, 0));
+                            Point p1(tri(0, 1), tri(1, 1), tri(2, 1));
+                            Point p2(tri(0, 2), tri(1, 2), tri(2, 2));
+                            triangles.push_back(Triangle(p0, p1, p2));
+                        }
                     }
                 }
             }
-            else
+
+            if (triangles.empty())
             {
-                for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
-                {
-                    // std::cout << "iCell " << iCell << std::endl;
-                    auto quadCell = vfv->GetCellQuad(iCell);
-                    dWall[iCell].setConstant(quadCell.GetNumPoints(), std::pow(veryLargeReal, 1. / 4.));
-                }
+                triangles.push_back(Triangle(
+                    Point(veryLargeReal, veryLargeReal, veryLargeReal),
+                    Point(veryLargeReal, veryLargeReal, veryLargeReal),
+                    Point(veryLargeReal, veryLargeReal, veryLargeReal)));
             }
-            std::cout << "MinDist: " << minDist << std::endl;
-        }
-        else if (settings.wallDistScheme == 2)
-        {
+            MPISerialDo(mesh->getMPI(),
+                        [&]()
+                        {
+                            log() << fmt::format("[{},{}] ", mesh->getMPI().rank, triangles.size());
+                            if (mesh->getMPI().rank % 10 == 0)
+                                log() << "\n";
+                            log().flush();
+                        });
+            if (mesh->getMPI().rank == 0)
+                log() << std::endl;
+            Tree tree(triangles.begin(), triangles.end());
+
+            if (settings.wallDistScheme == 2)
+                dWall.resize(mesh->NumCellProc());
+            index iCellBase = 0;
+            index nProcessed = 0;
+            int cellLoadNum = std::max(1, static_cast<int>(std::ceil(settings.wallDistCellLoadSize / real(mesh->getMPI().size))));
+            if (mesh->coords.father->getMPI().rank == 0)
+                log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() using cellLoadNum = {}, ", cellLoadNum)
+                      << std::endl;
+
+            if (settings.wallDistScheme == 20)
+            {
+                index nRefine = 0;
+                for (auto &ds : dWall)
+                    for (auto d : ds)
+                        if (d <= settings.wallDistRefineMax)
+                            nRefine++;
+                MPI::AllreduceOneIndex(nRefine, MPI_SUM, mesh->getMPI());
+                if (mesh->coords.father->getMPI().rank == 0)
+                    log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() to refine {}, ", nRefine)
+                          << std::endl;
+            }
+
+            real t0 = MPI_Wtime();
+            for (index iIter = 0;; iIter++)
+            {
+                std::vector<Geom::tPoint> pnts;
+                pnts.reserve(cellLoadNum * 64);
+                for (int iCLoad = 0; iCLoad < cellLoadNum; iCLoad++)
+                {
+                    index iCell = iCellBase + iCLoad;
+                    if (iCell < mesh->NumCellProc())
+                    {
+                        auto quadCell = vfv->GetCellQuad(iCell);
+                        for (int ig = 0; ig < quadCell.GetNumPoints(); ig++)
+                        {
+                            if (settings.wallDistScheme == 20)
+                                if (dWall[iCell][ig] > settings.wallDistRefineMax)
+                                    continue;
+                            auto p = vfv->GetCellQuadraturePPhys(iCell, ig);
+                            pnts.push_back(p);
+                        }
+                    }
+                }
+
+                using PntArray = ArrayEigenMatrix<3, 1>;
+                ssp<PntArray> PntArrayLocal, PntArrayFull;
+                DNDS_MAKE_SSP(PntArrayLocal, mesh->getMPI());
+                DNDS_MAKE_SSP(PntArrayFull, mesh->getMPI());
+                PntArrayLocal->Resize(pnts.size(), 3, 1);
+                for (size_t i = 0; i < pnts.size(); i++)
+                    (*PntArrayLocal)[i] = pnts[i];
+                ArrayTransformerType<PntArray>::Type PntTransformer;
+                PntTransformer.setFatherSon(PntArrayLocal, PntArrayFull);
+                PntTransformer.createFatherGlobalMapping();
+                std::vector<index> pullingSet;
+                pullingSet.resize(PntTransformer.pLGlobalMapping->globalSize());
+                // std::cout << "Here1 " << iIter << std::endl;
+                if (!pullingSet.size())
+                    break;
+                if (mesh->getMPI().rank == 0)
+                    log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() iter [{}], nProcessed [{}], t [{:.6g}] ",
+                                         iIter, nProcessed, MPI_Wtime() - t0)
+                          << std::endl;
+                for (index i = 0; i < pullingSet.size(); i++)
+                    pullingSet[i] = i;
+                PntTransformer.createGhostMapping(pullingSet);
+                PntTransformer.createMPITypes();
+                PntTransformer.pullOnce();
+                if (mesh->getMPI().rank == 0)
+                    log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() iter [{}], pullOnce done, t [{:.6g}] ",
+                                         iIter, MPI_Wtime() - t0)
+                          << std::endl;
+
+                std::vector<real> distQueryFull(PntArrayFull->Size(), veryLargeReal);
+                for (int iQ = 0; iQ < PntArrayFull->Size(); iQ++)
+                {
+                    Point pQ((*PntArrayFull)[iQ][0], (*PntArrayFull)[iQ][1], (*PntArrayFull)[iQ][2]);
+                    FT sqd = tree.squared_distance(pQ);
+                    distQueryFull[iQ] = std::sqrt(sqd);
+                }
+                if (mesh->getMPI().rank == 0)
+                    log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() iter [{}], query done, t [{:.6g}]  ",
+                                         iIter, MPI_Wtime() - t0)
+                          << std::endl;
+
+                std::vector<real> distQueryFullReduced(PntArrayFull->Size(), veryLargeReal);
+
+                {
+                    // index reduceBatch = 1024;
+                    // MPIReqHolder reqs;
+                    // reqs.reserve(mesh->getMPI().size + PntArrayFull->Size() / reduceBatch);
+                    // for (MPI_int i = 0; i < mesh->getMPI().size; i++)
+                    // {
+                    //     index cstart = PntTransformer.pLGhostMapping->ghostStart.at(i);
+                    //     index csize = PntTransformer.pLGhostMapping->ghostSizes.at(i);
+                    //     if (csize)
+                    //     {
+                    //         for (index ic = 0; ic < csize; ic += reduceBatch)
+                    //         {
+                    //             reqs.push_back(MPI_REQUEST_NULL);
+                    //             MPI_Ireduce(distQueryFull.data() + cstart + ic,
+                    //                         distQueryFullReduced.data() + cstart + ic,
+                    //                         std::min(csize - ic, reduceBatch), DNDS_MPI_REAL, MPI_MIN,
+                    //                         i, mesh->getMPI().comm, &reqs.back());
+                    //         }
+                    //     }
+                    // }
+                    // MPI_Waitall(reqs.size(), reqs.data(), MPI_STATUSES_IGNORE);
+                }
+
+                {
+                    // std::vector<real> distQueryFullGathered(pnts.size() * mesh->getMPI().size, veryLargeReal);
+                    // MPIReqHolder reqs;
+                    // size_t iReqCurrent = -1;
+                    // for (MPI_int i = 0; i < mesh->getMPI().size; i++)
+                    // {
+                    //     index cstart = PntTransformer.pLGhostMapping->ghostStart.at(i);
+                    //     index csize = PntTransformer.pLGhostMapping->ghostSizes.at(i);
+                    //     DNDS_assert(i == mesh->getMPI().rank ? (csize == pnts.size()) : true);
+                    //     if (csize)
+                    //     {
+                    //         reqs.push_back(MPI_REQUEST_NULL);
+                    //         MPI_Igather(distQueryFull.data() + cstart, csize, DNDS_MPI_REAL,
+                    //                     distQueryFullGathered.data(), csize, DNDS_MPI_REAL,
+                    //                     i, mesh->getMPI().comm, &reqs.back());
+                    //         if (i == mesh->getMPI().rank)
+                    //             iReqCurrent = reqs.size() - 1;
+                    //     }
+                    // }
+                    // MPI_Wait(&reqs[iReqCurrent], MPI_STATUS_IGNORE);
+                    // index curStart = PntTransformer.pLGhostMapping->ghostStart.at(mesh->getMPI().rank);
+                    // for (index iR = 0; iR < mesh->getMPI().size; iR++)
+                    //     for (index i = 0; i < pnts.size(); ++i)
+                    //         distQueryFullReduced[curStart + i] =
+                    //             std::min(distQueryFullReduced[curStart + i],
+                    //                      distQueryFullGathered[i + iR * pnts.size()]);
+                    // MPI_Waitall(reqs.size(), reqs.data(), MPI_STATUSES_IGNORE);
+                }
+
+                MPI::Allreduce(distQueryFull.data(), distQueryFullReduced.data(), distQueryFull.size(), DNDS_MPI_REAL, MPI_MIN, mesh->getMPI().comm);
+
+                if (mesh->getMPI().rank == 0)
+                    log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() iter [{}], reduce done, t [{:.6g}] ",
+                                         iIter, MPI_Wtime() - t0)
+                          << std::endl;
+                index iQLoad = 0;
+                for (int iCLoad = 0; iCLoad < cellLoadNum; iCLoad++)
+                {
+                    index iCell = iCellBase + iCLoad;
+                    if (iCell < mesh->NumCellProc())
+                    {
+                        auto quadCell = vfv->GetCellQuad(iCell);
+                        if (settings.wallDistScheme == 2)
+                            dWall[iCell].resize(quadCell.GetNumPoints());
+                        for (int ig = 0; ig < quadCell.GetNumPoints(); ig++)
+                        {
+
+                            if (settings.wallDistScheme == 20)
+                                if (dWall[iCell][ig] > settings.wallDistRefineMax)
+                                    continue;
+                            dWall[iCell][ig] = distQueryFullReduced.at(
+                                PntTransformer.pLGhostMapping->ghostStart.at(mesh->getMPI().rank) +
+                                iQLoad);
+                            iQLoad++;
+                        }
+                    }
+                }
+
+                iCellBase += cellLoadNum;
+                nProcessed += pullingSet.size();
+            }
         }
 
         dWallFace.resize(mesh->NumFaceProc());
@@ -475,7 +730,7 @@ namespace DNDS::Euler
             TU VisFlux;
             VisFlux.resizeLike(ULMeanXy);
         VisFlux.setZero();
-        auto& DiffUxyPrimP = DiffUxyPrim;
+        auto &DiffUxyPrimP = DiffUxyPrim;
         Gas::ViscousFlux_IdealGas<dim>(
             UMeanXy, DiffUxyPrimP, unitNorm, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
             settings.idealGasProperty.gamma,
@@ -781,6 +1036,7 @@ namespace DNDS::Euler
         {
             // real lambdaFaceCC = sqrt(std::abs(asqrMean)) + std::abs((UL(1) / UL(0) - vg(0)) + (UR(1) / UR(0) - vg(0))) * 0.5;
             real lambdaFaceCC = lam123; //! using velo instead of velo + a
+            // real lambdaFaceCC = std::max(std::abs(ULMean(1) / ULMean(0) - vg(0)), std::abs(URMean(1) / URMean(0) - vg(0)));
             finc(I4 + 1) =
                 (((UL(1) / UL(0) - vg(0)) * UL(I4 + 1) + (UR(1) / UR(0) - vg(0)) * UR(I4 + 1)) -
                  (UR(I4 + 1) - UL(I4 + 1)) * lambdaFaceCC) *
@@ -1106,11 +1362,7 @@ namespace DNDS::Euler
         URxy.resizeLike(ULxy);
         auto bTypeEuler = pBCHandler->GetTypeFromID(btype);
 
-        if (btype == Geom::BC_ID_DEFAULT_FAR ||
-            btype == Geom::BC_ID_DEFAULT_SPECIAL_DMR_FAR ||
-            btype == Geom::BC_ID_DEFAULT_SPECIAL_RT_FAR ||
-            btype == Geom::BC_ID_DEFAULT_SPECIAL_IV_FAR ||
-            btype == Geom::BC_ID_DEFAULT_SPECIAL_2DRiemann_FAR ||
+        if (bTypeEuler == EulerBCType::BCSpecial ||
             bTypeEuler == EulerBCType::BCFar ||
             bTypeEuler == EulerBCType::BCOutP)
         {
@@ -1443,8 +1695,25 @@ namespace DNDS::Euler
                 farPrimitive(I4) = pre;
                 Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
             }
+            else if (pBCHandler->GetFlagFromID(btype, "specialOpt") == 3001) // (no rotating)
+            {
+                // 3001 for Noh problem
+                TU farPrimitive;
+                Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, settings.idealGasProperty.gamma);
+                real pInf = farPrimitive(I4);
+                real r = pPhysics.norm();
+                TVec velo = -pPhysics(Seq012) / (r + smallReal);
+                real rho = sqr(1. + t / (r + smallReal));
+                farPrimitive(0) = rho;
+                farPrimitive(Seq123) = velo;
+                farPrimitive(I4) = pInf; // warning: only valid for t < 0.768
+                // std::cout << pPhysics.transpose() << ", " << t << ", " << pInf << ", " << rho << ", " << velo.transpose() << std::endl;
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, settings.idealGasProperty.gamma);
+            }
             else
-                DNDS_assert(false);
+                DNDS_assert_info(false, fmt::format(
+                                            "btype [{}] or bTypeEuler [{}] or specialOpt [{}] is not supported",
+                                            btype, to_string(bTypeEuler), pBCHandler->GetFlagFromIDSoft(btype, "specialOpt")));
         }
         else if (bTypeEuler == EulerBCType::BCWallInvis ||
                  bTypeEuler == EulerBCType::BCSym) // (no rotating)

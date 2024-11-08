@@ -1,0 +1,227 @@
+{
+    "timeMarchControl": {
+        "dtImplicit": 2e30,
+        "nTimeStep": 1,
+        "steadyQuit": true,
+        "useRestart": false,
+        "odeCode": 1, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
+        "tEnd": 3e+200,
+        "partitionMeshOnly": false,
+        "_tail": 0
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 20000,
+        "rhsThresholdInternal": 1e-60,
+        "res_base": 0.0,
+        "useVolWiseResidual": false
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 1,
+        "nDataOutC": 20,
+        "nDataOut": 100,
+        "nDataOutCInternal": 100,
+        "nDataOutInternal": 1000000000,
+        "nRestartOutC": 10,
+        "nRestartOut": 100,
+        "nRestartOutCInternal": 10000,
+        "nRestartOutInternal": 1000000000,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 20,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 2147483647,
+        "nCFLRampLength": 2147483647,
+        "CFLRampEnd": 0.0,
+        "nSmoothDTau": 2,
+        "useLocalDt": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshElevation": 0,
+        "meshElevationInternalSmoother": 0,
+        "meshElevationIter": 20,
+        "meshElevationNSearch": 100,
+        "meshElevationRBFRadius": 5,
+        "meshElevationRBFKernel": "CPC0",
+        "meshElevationMaxIncludedAngle": 20,
+        "rectifyNearPlane": 2,
+        "rectifyNearPlaneThres": 1e-4,
+        "meshFile": "../data/mesh/HLPW-4_CRM-HL_40-37_Nominal_v1a_Unstr-Hex-Prism-Pyr-Tet_Level-A_PW_V2.cgns",
+        "outPltName": "../data/out/CRM/HLPW-4_CRM-HL_40-37_Nominal_v1a_Unstr-Hex-Prism-Pyr-Tet_Level-A_PW_V2/test0-dWall2-1",
+        "outPltMode": 1,
+        "readMeshMode": 1,
+        "outPltTecplotFormat": false,
+        "outPltVTKFormat": false,
+        "outPltVTKHDFFormat": true,
+        "hdfDeflateLevel": 2,
+        // "hdfChunkSize": 32768,
+        "hdfChunkSize": 131072,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outBndData": true,
+        "outCellScalarNames": [
+            // "minJacobiDetRel",
+            // "cellVolume",
+            "dWall"
+        ],
+        "_tail": 0
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0, // 0 for original SOR, 1 for GMRES
+        "nGmresSpace": 4,
+        "nGmresIter": 2,
+        "recThreshold": 1e-03,
+        "nRecConsolCheck": 1
+    },
+    "limiterControl": {
+        "useLimiter": false,
+        "smoothIndicatorProcedure": 0,
+        "limiterProcedure": 1, //1 == CWBAP
+        "nPartialLimiterStart": 10,
+        "nPartialLimiterStartLocal": 10
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 5,
+        "cacheDiffBase": true,
+        "jacobiRelax": 1.0,
+        "SORInstead": false,
+        "smoothThreshold": 1e-3,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        // "bcWeight": 2,
+        "svdTolerance": 1e-3,
+        "baseSettings": {
+            "localOrientation": true,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "dirWeightScheme": "HQM_OPT",
+            "geomWeightScheme": "HQM_SD",
+            "geomWeightBias": 1,
+            // "geomWeightScheme": "SD_Power",
+            // "geomWeightPower1": 0.125,
+            // "geomWeightPower2": -0.5,
+            // "useAnisotropicFunctional": true,
+            // "anisotropicType": "InertiaCoord",
+            "_tail": 0
+        },
+        "ignoreMeshGeometryDeficiency": false,
+        "_tail": 0
+    },
+    "linearSolverControl": {
+        "jacobiCode": 2,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
+        "gmresCode": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 3
+        }
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": false,
+        "minWallDist": 1e-9,
+        "wallDistScheme": 1,
+        "wallDistExection": 4,
+        "wallDistCellLoadSize": 2560,
+        "wallDistRefineMax": 1, // inches
+        "riemannSolverType": "Roe_M2",
+        "rsMeanValueEig": 0,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "farFieldStaticValue": [
+            1,
+            0.9924394226563017,
+            0,
+            0.12273545680701484,
+            45.14285714285715, //M 0.75
+            5
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 0.065374859444052,
+            "muGas": 5.02367941712204e-05,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        }
+    },
+    "bcSettings": [
+        {
+            "name": "Symmetry",
+            "type": "BCSym",
+            // "rectifyOption": 2,
+            "_tail": 0
+        },
+        {
+            "name": "Fuselage",
+            "type": "BCWall"
+        },
+        {
+            "name": "Wing",
+            "type": "BCWall"
+        },
+        {
+            "name": "Inboard Slat",
+            "type": "BCWall"
+        },
+        {
+            "name": "Inboard Flap",
+            "type": "BCWall"
+        },
+        {
+            "name": "Outboard Slat",
+            "type": "BCWall"
+        },
+        {
+            "name": "Outboard Flap",
+            "type": "BCWall"
+        },
+        {
+            "name": "Nacelle",
+            "type": "BCWall"
+        },
+        {
+            "name": "Fairings",
+            "type": "BCWall"
+        },
+        {
+            "name": "Pylon",
+            "type": "BCWall"
+        },
+        {
+            "name": "Farfield",
+            "type": "BCFar",
+            "value": [
+                1,
+                0.9924394226563017,
+                0,
+                0.12273545680701484,
+                45.14285714285715, //M 0.75
+                1.3
+            ]
+        }
+    ],
+    "restartState": {
+        // "iStep": 1,
+        // "iStepInternal": 4800,
+        // "odeCodePrev": -1,
+        // "lastRestartFile": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_RE_O2Starter1_C_p480_restart.dir"
+    }
+}

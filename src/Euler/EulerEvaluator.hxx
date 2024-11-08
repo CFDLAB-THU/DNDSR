@@ -820,6 +820,42 @@ namespace DNDS::Euler
                 }
             }
             break;
+        case 3001: // for nol problem
+            DNDS_assert(model == NS_3D);
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                Geom::tPoint pos = vfv->GetCellBary(iCell);
+                real M0 = 0.1;
+                real gamma = settings.idealGasProperty.gamma;
+                auto c2n = mesh->cell2node[iCell];
+                auto gCell = vfv->GetCellQuad(iCell);
+                TU um;
+                um.resizeLike(u[iCell]);
+                um.setZero();
+                // Eigen::MatrixXd coords;
+                // mesh->GetCoords(c2n, coords);
+                gCell.IntegrationSimple(
+                    um,
+                    [&](TU &inc, int ig)
+                    {
+                        // std::cout << coords<< std::endl << std::endl;
+                        // std::cout << DiNj << std::endl;
+                        Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
+                        TU farPrimitive;
+                        Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, settings.idealGasProperty.gamma);
+                        real pInf = farPrimitive(I4);
+                        real r = pPhysics.norm();
+                        TVec velo = -pPhysics(Seq012) / (r + smallReal);
+                        farPrimitive(I4) = pInf;
+                        farPrimitive(0) = 1;
+                        farPrimitive(Seq123) = velo;
+
+                        Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, inc, settings.idealGasProperty.gamma);
+                        inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
+                    });
+                u[iCell] = um / vfv->GetCellVol(iCell); // mean value
+            }
+            break;
         case 0:
             break;
         default:
@@ -1028,7 +1064,7 @@ namespace DNDS::Euler
             MPI::AllreduceOneReal(rhoMin, MPI_MIN, mesh->getMPI());
             MPI::AllreduceOneReal(pMin, MPI_MIN, mesh->getMPI());
             rhoEps = std::min(rhoEps, minRatio * rhoMin);
-            pEps = std::min(pEps, minRatio  * pMin);
+            pEps = std::min(pEps, minRatio * pMin);
         }
 
         index nLimLocal = 0;
@@ -1222,7 +1258,7 @@ namespace DNDS::Euler
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
         real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
-        if(settings.ppEpsIsRelaxed)
+        if (settings.ppEpsIsRelaxed)
             rhoEps *= 0, pEps *= 0;
 
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
@@ -1279,7 +1315,7 @@ namespace DNDS::Euler
 
         if (settings.ppEpsIsRelaxed)
         {
-            pEps *= 0, rhoEps*=0; 
+            pEps *= 0, rhoEps *= 0;
             DNDS_assert_info(relax < 1, "Relaxed eps only for using relaxation in alpha");
         }
 

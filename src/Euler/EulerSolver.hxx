@@ -254,40 +254,6 @@ namespace DNDS::Euler
             auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
             // if (mpi.rank == 0)
             //     std::cout << uRecC.father.get() << std::endl;
-
-            eval.FixUMaxFilter(cx);
-            if ((iter > config.convergenceControl.nAnchorUpdateStart &&
-                 (iter - config.convergenceControl.nAnchorUpdateStart - 1) % config.convergenceControl.nAnchorUpdate == 0))
-            {
-                eval.updateBCAnchors(cx, uRecC);
-                eval.updateBCProfiles(cx, uRecC);
-                eval.updateBCProfilesPressureRadialEq();
-            }
-            // cx.trans.startPersistentPull();
-            // cx.trans.waitPersistentPull();
-
-            // for (index iCell = 0; iCell < uOld.size(); iCell++)
-            //     uOld[iCell].m() = uRec[iCell].m();
-            if (!reconstructionFlag)
-            {
-                betaPPC.setConstant(1.0);
-                alphaPP_tmp.setConstant(1.0);
-                uRecNew.setConstant(0.0);
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit, TEval::RHS_Ignore_Viscosity);
-                return;
-            }
-
-            DNDS_MPI_InsertCheck(mpi, " Lambda RHS: StartRec");
-            int nRec = (gradIsZero ? config.implicitReconstructionControl.nRecMultiplyForZeroedGrad : 1) *
-                       config.implicitReconstructionControl.nInternalRecStep;
-            if (step <= config.implicitReconstructionControl.zeroRecForSteps ||
-                iter <= config.implicitReconstructionControl.zeroRecForStepsInternal)
-            {
-                nRec = 0;
-                uRec.setConstant(0.0);
-            }
-            real recIncBase = 0;
-            double tstartA = MPI_Wtime();
             typename TVFV::template TFBoundary<nVarsFixed>
                 FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace, int ig,
                                 const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType) -> TU
@@ -319,6 +285,44 @@ namespace DNDS::Euler
                 return eval.generateBoundaryValue(ULfixedPlus, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true, 1) -
                        eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true, 1);
             };
+
+            eval.FixUMaxFilter(cx);
+            if ((iter > config.convergenceControl.nAnchorUpdateStart &&
+                 (iter - config.convergenceControl.nAnchorUpdateStart - 1) % config.convergenceControl.nAnchorUpdate == 0))
+            {
+                eval.updateBCAnchors(cx, uRecC);
+                eval.updateBCProfiles(cx, uRecC);
+                eval.updateBCProfilesPressureRadialEq();
+            }
+            // cx.trans.startPersistentPull();
+            // cx.trans.waitPersistentPull();
+
+            // for (index iCell = 0; iCell < uOld.size(); iCell++)
+            //     uOld[iCell].m() = uRec[iCell].m();
+            if (!reconstructionFlag)
+            {
+                betaPPC.setConstant(1.0);
+                alphaPP_tmp.setConstant(1.0);
+                uRecNew.setConstant(0.0);
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit, TEval::RHS_Ignore_Viscosity);
+                // vfv->DoReconstruction2nd(uRecOld, cx, FBoundary, 1, std::vector<int>());
+                // eval.EvaluateRHS(crhs, JSourceC, cx, uRecOld, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
+                //                  0); // TEval::RHS_Ignore_Viscosity
+                return;
+            }
+
+            DNDS_MPI_InsertCheck(mpi, " Lambda RHS: StartRec");
+            int nRec = (gradIsZero ? config.implicitReconstructionControl.nRecMultiplyForZeroedGrad : 1) *
+                       config.implicitReconstructionControl.nInternalRecStep;
+            if (step <= config.implicitReconstructionControl.zeroRecForSteps ||
+                iter <= config.implicitReconstructionControl.zeroRecForStepsInternal)
+            {
+                nRec = 0;
+                uRec.setConstant(0.0);
+            }
+            real recIncBase = 0;
+            double tstartA = MPI_Wtime();
+
             if (config.implicitReconstructionControl.storeRecInc)
                 uRecOld = uRecC;
             if (config.implicitReconstructionControl.recLinearScheme == 0)
@@ -1539,6 +1543,7 @@ namespace DNDS::Euler
                     log() << "##################################################################" << std::endl;
                 }
             }
+            curDtImplicit = std::max(curDtImplicit, config.timeMarchControl.dtImplicitMin);
 
             DNDS_assert(curDtImplicit > 0);
             if (tSimu + curDtImplicit >= nextTout - curDtImplicit * smallReal) // limits dt by output nodes
