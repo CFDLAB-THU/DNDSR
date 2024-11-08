@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #endif
 #if defined(_WIN32) || defined(__WINDOWS_)
+#define NOMINMAX
 #include <Windows.h>
 #include <process.h>
 #endif
