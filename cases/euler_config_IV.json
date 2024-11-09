@@ -44,8 +44,8 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshDirectBisect": 4,
-        "meshFile": "../data/mesh/IV10_20.cgns",
+        "meshDirectBisect": 2,
+        "meshFile": "../data/mesh/IV10U_10.cgns",
         "outPltName": "../data/outUnsteady/IV10_xxx-sm",
         "outPltMode": 0,
         "readMeshMode": 0,
@@ -137,7 +137,8 @@
     "eulerSettings": {
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
-        "riemannSolverType": "Roe",
+        "riemannSolverType": "HLLEP_V1",
+        "rsMeanValueEig": 1,
         "uRecAlphaCompressPower": 1.0,
         "uRecBetaCompressPower": 1.0,
         "ppEpsIsRelaxed": true,

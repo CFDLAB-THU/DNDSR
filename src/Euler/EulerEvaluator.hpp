@@ -45,11 +45,18 @@ namespace DNDS::Euler
         static const int gDim = getGeomDim_Fixed(model);
         static const auto I4 = dim + 1;
 
+        static const int MaxBatch = 16;
+        static constexpr int MaxBatchMult(int n) { return MaxBatch > 0 ? (n * MaxBatch) : Eigen::Dynamic; }
+
         typedef Eigen::VectorFMTSafe<real, dim> TVec;
+        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatch> TVec_Batch;
         typedef Eigen::MatrixFMTSafe<real, dim, dim> TMat;
+        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatchMult(3)> TMat_Batch;
         typedef Eigen::VectorFMTSafe<real, nVarsFixed> TU;
+        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, Eigen::Dynamic, Eigen::ColMajor, nVarsFixed, MaxBatch> TU_Batch;
         typedef Eigen::MatrixFMTSafe<real, nVarsFixed, nVarsFixed> TJacobianU;
         typedef Eigen::MatrixFMTSafe<real, dim, nVarsFixed> TDiffU;
+        typedef Eigen::MatrixFMTSafe<real, Eigen::Dynamic, nVarsFixed, Eigen::ColMajor, MaxBatchMult(3)> TDiffU_Batch;
         typedef Eigen::MatrixFMTSafe<real, nVarsFixed, dim> TDiffUTransposed;
         typedef ArrayDOFV<nVarsFixed> TDof;
         typedef ArrayRECV<nVarsFixed> TRec;
@@ -414,21 +421,22 @@ namespace DNDS::Euler
             }
         }
 
-        TU fluxFace(
-            const TU &ULxy,
-            const TU &URxy,
+        TU_Batch fluxFace(
+            const TU_Batch &ULxy,
+            const TU_Batch &URxy,
             const TU &ULMeanXy,
             const TU &URMeanXy,
-            const TDiffU &DiffUxy,
-            const TDiffU &DiffUxyPrim,
-            const TVec &unitNorm,
-            const TVec &vg,
-            const TMat &normBase,
-            TU &FLfix,
-            TU &FRfix,
+            const TDiffU_Batch &DiffUxy,
+            const TDiffU_Batch &DiffUxyPrim,
+            const TVec_Batch &unitNorm,
+            const TVec_Batch &vg,
+            const TVec &unitNormC,
+            const TVec &vgC,
+            TU_Batch &FLfix,
+            TU_Batch &FRfix,
             Geom::t_index btype,
             typename Gas::RiemannSolverType rsType,
-            index iFace, int ig);
+            index iFace);
 
         TU source(
             const TU &UMeanXy,
@@ -1284,7 +1292,7 @@ namespace DNDS::Euler
             ArrayDOFV<1> &uRecBeta, index &nLim, real &betaMin, int flag);                                                \
                                                                                                                           \
         ext template bool EulerEvaluator<model>::AssertMeanValuePP(                                                       \
-            ArrayDOFV<nVarsFixed> &u, bool panic);                                                     \
+            ArrayDOFV<nVarsFixed> &u, bool panic);                                                                        \
                                                                                                                           \
         ext template void EulerEvaluator<model>::EvaluateCellRHSAlpha(                                                    \
             ArrayDOFV<nVarsFixed> &u,                                                                                     \
@@ -1326,22 +1334,23 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
             real CFL, real &dtMinall, real MaxDt,                                                                          \
             bool UseLocaldt);                                                                                              \
         ext template                                                                                                       \
-            typename EulerEvaluator<model>::TU                                                                             \
+            typename EulerEvaluator<model>::TU_Batch                                                                       \
             EulerEvaluator<model>::fluxFace(                                                                               \
-                const TU &ULxy,                                                                                            \
-                const TU &URxy,                                                                                            \
+                const TU_Batch &ULxy,                                                                                      \
+                const TU_Batch &URxy,                                                                                      \
                 const TU &ULMeanXy,                                                                                        \
                 const TU &URMeanXy,                                                                                        \
-                const TDiffU &DiffUxy,                                                                                     \
-                const TDiffU &DiffUxyPrim,                                                                                 \
-                const TVec &unitNorm,                                                                                      \
-                const TVec &vg,                                                                                            \
-                const TMat &normBase,                                                                                      \
-                TU &FLfix,                                                                                                 \
-                TU &FRfix,                                                                                                 \
+                const TDiffU_Batch &DiffUxy,                                                                               \
+                const TDiffU_Batch &DiffUxyPrim,                                                                           \
+                const TVec_Batch &unitNorm,                                                                                \
+                const TVec_Batch &vg,                                                                                      \
+                const TVec &unitNormC,                                                                                     \
+                const TVec &vgC,                                                                                           \
+                TU_Batch &FLfix,                                                                                           \
+                TU_Batch &FRfix,                                                                                           \
                 Geom::t_index btype,                                                                                       \
                 typename Gas::RiemannSolverType rsType,                                                                    \
-                index iFace, int ig);                                                                                      \
+                index iFace);                                                                                              \
         ext template                                                                                                       \
             typename EulerEvaluator<model>::TU                                                                             \
             EulerEvaluator<model>::source(                                                                                 \

@@ -219,8 +219,7 @@ namespace DNDS
                 DNDS_assert_info(false, "invalid call");
         }
 
-        bool
-        IfCompressed() const
+        bool IfCompressed() const
         {
 
             if constexpr (_dataLayout == CSR)
@@ -238,8 +237,7 @@ namespace DNDS
             }
         }
 
-        void
-        CSRDecompress()
+        void CSRDecompress()
         {
             if (!IfCompressed())
                 return;
@@ -255,8 +253,7 @@ namespace DNDS
             _pRowStart.reset();
         }
 
-        void
-        CSRCompress()
+        void CSRCompress()
         {
             if (IfCompressed())
                 return;
@@ -316,8 +313,7 @@ namespace DNDS
          * _dataLayout == TABLE_StaticMax,
          * void>
          */
-        void
-        Resize(index nSize, rowsize nRow_size_dynamic)
+        void Resize(index nSize, rowsize nRow_size_dynamic)
         {
             if constexpr (_dataLayout == CSR) // to un compressed
             {
@@ -347,8 +343,7 @@ namespace DNDS
             }
         }
 
-        void
-        Resize(index nSize)
+        void Resize(index nSize)
         {
             if constexpr (_dataLayout == CSR)
             {
@@ -378,8 +373,7 @@ namespace DNDS
         }
 
         template <class TFRowSize>
-        void
-        Resize(index nSize, TFRowSize &&FRowSize)
+        void Resize(index nSize, TFRowSize &&FRowSize)
         {
             if constexpr (_dataLayout == CSR)
             {
@@ -402,8 +396,7 @@ namespace DNDS
          * @param iRow
          * @param nRowSize
          */
-        void
-        ResizeRow(index iRow, rowsize nRowSize)
+        void ResizeRow(index iRow, rowsize nRowSize)
         {
             if constexpr (_dataLayout == CSR)
             {
@@ -421,6 +414,20 @@ namespace DNDS
                     _pRowSizes = std::make_shared<
                         typename decltype(_pRowSizes)::element_type>(*_pRowSizes); // copy the row sizes
                 _pRowSizes->at(iRow) = nRowSize;                                   // change
+            }
+            else
+            {
+                DNDS_assert_info(false, "invalid call");
+            }
+        }
+
+        void ReserveRow(index iRow, rowsize nRowSize)
+        {
+            if constexpr (_dataLayout == CSR)
+            {
+                DNDS_assert_info(!IfCompressed(), "Need to decompress before auto resizing row");
+                DNDS_assert_info(iRow < _size && iRow >= 0, "query position out of range");
+                _dataUncompressed.at(iRow).reserve(nRowSize);
             }
             else
             {

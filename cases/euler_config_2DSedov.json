@@ -25,13 +25,20 @@
     "outputControl": {
         "nConsoleCheck": 1,
         "nConsoleCheckInternal": 1,
+        "consoleMainOutputFormatInternal": [
+            "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   ",
+            "res {termRed}{resRel:.15e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
+            "Time[{telapsedM:.4f}] recTime[{trecM:.4f}] rhsTime[{trhsM:.4f}] commTime[{tcommM:.4f}] limTime[{tLimM:.3f}] PP[{tPPrM:.4f}]"
+        ],
         "consoleOutputMode": 0,
         "consoleOutputEveryFix": 1,
         "nDataOutC": 1,
         "nDataOut": 10,
         "nDataOutCInternal": 100,
         "nDataOutInternal": 1000000000,
-        "tDataOut": 3e+200
+        "tDataOut": 3e+200,
+        "useCollectiveTimer": true
     },
     "implicitCFLControl": {
         "CFL": 1,

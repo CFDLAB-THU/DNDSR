@@ -6,6 +6,7 @@
 
 #include "PointCloud.hpp"
 #include <unordered_map>
+#include <omp.h>
 
 namespace DNDS::Geom
 {
@@ -285,8 +286,11 @@ namespace DNDS::Geom
         BuildCell2Cell() // currently does not handle parallel input mode
     {
         DNDS_assert(this->dataIsSerialIn);
+        real t0 = MPI_Wtime();
         if (mesh->getMPI().rank == mRank)
-            DNDS::log() << "UnstructuredMeshSerialRW === Doing  BuildCell2Cell" << std::endl;
+            DNDS::log() << "UnstructuredMeshSerialRW === Doing  BuildCell2Cell "
+                        << fmt::format("Using OMP [{}]", omp_get_max_threads())
+                        << std::endl;
         DNDS_MAKE_SSP(cell2cellSerial, mesh->getMPI());
         // if (mRank != mesh->getMPI().rank)
         //     return;
@@ -311,7 +315,7 @@ namespace DNDS::Geom
         /**********************************************************************************************************************/
         if (mesh->getMPI().rank == mRank)
             DNDS::log() << "UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1" << std::endl;
-        cell2cellSerial->Resize(cell2nodeSerial->Size());
+        cell2cellSerial->Resize(cell2nodeSerial->Size(), 32); // 32 is a guess for the number of nodal neighbors
 
         index nCells = cell2nodeSerial->Size();
         index nCellsDone = 0;
@@ -326,10 +330,15 @@ namespace DNDS::Geom
                 (*cell2nodeSerial)[iCell].begin() + CellElem.GetNumVertices()};
             std::sort(cell2nodeRow.begin(), cell2nodeRow.end());
             // only primary vertices
-            std::set<DNDS::index> c_neighbors; // could optimize?
-                                               // std::vector<DNDS::index> c_neighbors;
-                                               // c_neighbors.reserve(30);
-                                               /****/
+            std::unordered_set<DNDS::index> c_neighbors_hash;
+            c_neighbors_hash.reserve(64);
+            std::vector<DNDS::index>
+                c_neighbors;
+            c_neighbors.reserve(64);
+            // std::set<DNDS::index> c_neighbors; // could optimize?
+            //                                    // std::vector<DNDS::index> c_neighbors;
+            //                                    // c_neighbors.reserve(30);
+            //                                    /****/
 #ifdef DNDS_USE_OMP
             // #pragma omp single
 #pragma omp critical
@@ -353,10 +362,11 @@ namespace DNDS::Geom
             for (auto iNode : cell2nodeRow)
                 for (auto iCellOther : node2cell[iNode])
                 {
-                    if (iCellOther == iCell || c_neighbors.count(iCellOther) == 1)
+                    if (iCellOther == iCell || c_neighbors_hash.count(iCellOther) == 1)
                         continue;
                     //! ** override: point-complete cell2cell info!
-                    c_neighbors.insert(iCellOther);
+                    c_neighbors.push_back(iCellOther);
+                    c_neighbors_hash.insert(iCellOther);
                     continue;
                     //! ** override: point-complete cell2cell info!
 
@@ -371,14 +381,16 @@ namespace DNDS::Geom
                                           std::back_inserter(interSect));
                     if ((iCellOther != iCell) && interSect.size() > (mesh->dim - 1)) //! mesh->dim - 1 is a simple method
 
-                        // (false ||
-                        //  Elem::cellsAreFaceConnected(
-                        //      cell2nodeSerial->operator[](iCell),
-                        //      cell2nodeSerial->operator[](iCellOther),
-                        //      CellElem,
-                        //      Elem::Element{(*cellElemInfoSerial)[iCellOther]->getElemType()}))
-                        c_neighbors.insert(iCellOther);
-                    // c_neighbors.push_back(iCellOther);
+                    // (false ||
+                    //  Elem::cellsAreFaceConnected(
+                    //      cell2nodeSerial->operator[](iCell),
+                    //      cell2nodeSerial->operator[](iCellOther),
+                    //      CellElem,
+                    //      Elem::Element{(*cellElemInfoSerial)[iCellOther]->getElemType()}))
+                    {
+                        c_neighbors_hash.insert(iCellOther);
+                        c_neighbors.push_back(iCellOther);
+                    }
                 }
             // if (!c_neighbors.erase(iCell))
             //     DNDS_assert_info(false, "neighbors should include myself now");
@@ -386,6 +398,7 @@ namespace DNDS::Geom
             // auto last = std::unique(c_neighbors.begin(), c_neighbors.end());
             // c_neighbors.erase(last, c_neighbors.end());
 
+            std::sort(c_neighbors.begin(), c_neighbors.end());
             cell2cellSerial->ResizeRow(iCell, c_neighbors.size());
             DNDS::rowsize ic2c = 0;
             for (auto iCellOther : c_neighbors)
@@ -395,12 +408,13 @@ namespace DNDS::Geom
 #endif
             nCellsDone++;
         }
+        (*cell2cellSerial).Compress();
 
         /*************************************************************************************************/
         DNDS_MAKE_SSP(cell2cellSerialFacial, mesh->getMPI());
         if (mesh->getMPI().rank == mRank)
             DNDS::log() << "UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2" << std::endl;
-        cell2cellSerialFacial->Resize(cell2cellSerial->Size());
+        cell2cellSerialFacial->Resize(cell2cellSerial->Size(), 6);
         nCellsDone = 0;
 #ifdef DNDS_USE_OMP
 #pragma omp parallel for
@@ -452,7 +466,8 @@ namespace DNDS::Geom
         /*************************************************************************************************/
 
         if (mesh->getMPI().rank == mRank)
-            DNDS::log() << "UnstructuredMeshSerialRW === Done  BuildCell2Cell" << std::endl;
+            DNDS::log() << "UnstructuredMeshSerialRW === Done  BuildCell2Cell"
+                        << fmt::format(" time [{:.4g}]", MPI_Wtime() - t0) << std::endl;
     }
 
     void UnstructuredMesh::RecreatePeriodicNodes()

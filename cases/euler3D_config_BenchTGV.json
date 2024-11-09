@@ -1,10 +1,10 @@
 {
     "timeMarchControl": {
         "dtImplicit": 1e-2,
-        "nTimeStep": 1000,
+        "nTimeStep": 1,
         "steadyQuit": false,
         // "odeCode": 0, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
-        "odeCode": 401,
+        "odeCode": 1,
         "odeSetting1": 0.5,
         "odeSetting2": 0,
         "odeSetting3": 1.333,
@@ -15,6 +15,12 @@
         "nConsoleCheck": 1,
         "nConsoleCheckInternal": 1,
         "consoleOutputMode": 0,
+        "consoleMainOutputFormatInternal": [
+            "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   ",
+            "res {termRed}{resRel:.15e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
+            "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"
+        ],
         "nDataOutC": 50,
         "nDataOut": 100,
         "nDataOutCInternal": 200,
@@ -31,8 +37,8 @@
         "useLocalDt": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 40,
-        "rhsThresholdInternal": 1e-3,
+        "nTimeStepInternal": 100,
+        "rhsThresholdInternal": 1e-30,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
@@ -117,7 +123,8 @@
     "eulerSettings": {
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
-        "riemannSolverType": "HLLC",
+        "riemannSolverType": "Roe_M1",
+        "rsMeanValueEig": 0,
         "constMassForce": [
             0.0,
             0.0,

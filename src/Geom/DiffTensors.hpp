@@ -342,11 +342,11 @@ namespace DNDS::Geom::Base
 
         if (cmaxDiffOrder == 0)
             return;
-        static const auto &diffOperatorIJK2IcDim = dim == 2 ? diffOperatorIJK2I2D : diffOperatorIJK2I;
+        static const auto &diffOperatorIJK2IcDim = getDiffOperatorIJK2I<dim>();
         Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> out;
         out.resize(rows, nBase);
 
-        static const int nDiffSizC1 = dim == 2 ? ndiffSizC2D[1] : ndiffSizC[1];
+        static const int nDiffSizC1 = ndiffSizS<dim>(1);
         static const auto seq0t1 = Eigen::seq(Eigen::fix<1>, Eigen::fix<nDiffSizC1 - 1>);
         for (int iB = 0; iB < nBase; iB++)
             for (int ii = 1; ii < nDiffSizC1; ii++)
@@ -362,7 +362,7 @@ namespace DNDS::Geom::Base
         if (cmaxDiffOrder == 1)
             return;
 
-        static const int nDiffSizC2 = dim == 2 ? ndiffSizC2D[2] : ndiffSizC[2];
+        static const int nDiffSizC2 = ndiffSizS<dim>(2);
         static const auto seq1t2 = Eigen::seq(Eigen::fix<nDiffSizC1>, Eigen::fix<nDiffSizC2 - 1>);
         for (int iB = 0; iB < nBase; iB++)
             for (int ii = nDiffSizC1; ii < nDiffSizC2; ii++)
@@ -384,7 +384,7 @@ namespace DNDS::Geom::Base
         if (cmaxDiffOrder == 2)
             return;
 
-        static const int nDiffSizC3 = dim == 2 ? ndiffSizC2D[3] : ndiffSizC[3];
+        static const int nDiffSizC3 = ndiffSizS<dim>(3);
         static const auto seq2t3 = Eigen::seq(Eigen::fix<nDiffSizC2>, Eigen::fix<nDiffSizC3 - 1>);
         for (int iB = 0; iB < nBase; iB++)
             for (int ii = nDiffSizC2; ii < nDiffSizC3; ii++)
@@ -467,10 +467,10 @@ namespace DNDS::Geom::Base
     template <int dim, int maxDiff, class TDiBjA, class TDiBjB>
     void DxDxi2DxiDx(TDiBjA &&DxDxi, TDiBjB &&DxiDx)
     {
-        static const int nDiffSizCC = dim == 2 ? ndiffSizC2D[maxDiff] : ndiffSizC[maxDiff];
+        static const int nDiffSizCC = ndiffSizS<dim>(maxDiff);
         if (maxDiff <= 0) // diff 0 not altered, DxDxi(0, :) are x values and DxiDx(0, :) are xi values (supposedly)
             return;
-        static const int nDiffSizC1 = dim == 2 ? ndiffSizC2D[1] : ndiffSizC[1];
+        static const int nDiffSizC1 = ndiffSizS<dim>(1);
         Eigen::Matrix<real, 3, 3> Dx_j_Dxi_i;
         if constexpr (dim == 2)
         {
@@ -490,9 +490,9 @@ namespace DNDS::Geom::Base
 
         if (maxDiff == 1)
             return;
-        static const auto &diffOperatorIJK2IcDim = dim == 2 ? diffOperatorIJK2I2D : diffOperatorIJK2I;
+        static const auto &diffOperatorIJK2IcDim = getDiffOperatorIJK2I<dim>();
 
-        static const int nDiffSizC2 = dim == 2 ? ndiffSizC2D[2] : ndiffSizC[2];
+        static const int nDiffSizC2 = ndiffSizS<dim>(2);
         static const auto seq1t2 = Eigen::seq(Eigen::fix<nDiffSizC1>, Eigen::fix<nDiffSizC2 - 1>); // 2D: 3 4 5
         Eigen::Matrix<real, nDiffSizCC, 3> M_RHS;
         M_RHS(seq1t2, Eigen::all).setZero();
@@ -515,7 +515,7 @@ namespace DNDS::Geom::Base
 
         if (maxDiff == 2)
             return;
-        static const int nDiffSizC3 = dim == 2 ? ndiffSizC2D[3] : ndiffSizC[3];
+        static const int nDiffSizC3 = ndiffSizS<dim>(3);
         static const auto seq2t3 = Eigen::seq(Eigen::fix<nDiffSizC2>, Eigen::fix<nDiffSizC3 - 1>); // 2D: 6 7 8 9
         M_RHS(seq2t3, Eigen::all).setZero();
         for (int j = 0; j < dim; j++)
