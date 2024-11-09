@@ -12,6 +12,8 @@ namespace _METIS
 #include <boost/graph/properties.hpp>
 #include <boost/graph/bandwidth.hpp>
 
+#include "CorrectRCM.hpp"
+
 namespace _METIS
 {
     static idx_t indexToIdx(DNDS::index v)
@@ -286,7 +288,6 @@ namespace DNDS::Geom
             for (auto v : localFillOrderingNew2Old)
                 DNDS_assert(v < this->NumCell() && v >= 0), __checkOrder.insert(v);
             DNDS_assert_info(__checkOrder.size() == localFillOrderingNew2Old.size(), "The output of boost::cuthill_mckee_ordering is invalid!");
-            
 
             for (index iCell = 0; iCell < this->NumCell(); iCell++)
                 localFillOrderingOld2New[localFillOrderingNew2Old[iCell]] = iCell;
@@ -301,6 +302,68 @@ namespace DNDS::Geom
             if (mpi.rank == mRank)
                 log()
                     << "UnstructuredMesh::ObtainLocalFactFillOrdering(): boost done, new BW: " << bandWidthNew << std::endl;
+            // for (auto v : localFillOrderingOld2New)
+            //     std::cout << v << ", ";
+            // std::cout << std::endl;
+        }
+        else if (control.getOrderingCode() == 4) // CorrectRCM
+        {
+            index bandWidthOld = 0;
+            // for (index iCell = 0; iCell < this->NumCell(); ++iCell)
+            // {
+            //     cell2cellFaceVLocal[iCell].resize(4);
+            //     int x = iCell % 20, y = iCell / 20;
+            //     cell2cellFaceVLocal[iCell][0] = mod(x - 1, 20) + y * 20;
+            //     cell2cellFaceVLocal[iCell][1] = mod(x + 1, 20) + y * 20;
+            //     cell2cellFaceVLocal[iCell][2] = x + mod(y - 1, 20) * 20;
+            //     cell2cellFaceVLocal[iCell][3] = x + mod(y + 1, 20) * 20;
+            // }
+
+            std::vector<std::vector<index>> &cell2cellFaceV = cell2cellFaceVLocal;
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+                for (auto iCOther : cell2cellFaceV[iCell])
+                    bandWidthOld = std::max(bandWidthOld, std::abs(iCell - iCOther));
+            MPI::AllreduceOneIndex(bandWidthOld, MPI_MAX, this->mpi);
+            if (mpi.rank == mRank)
+                log() << "UnstructuredMesh::ObtainLocalFactFillOrdering(): start calling CorrectRCM::CuthillMcKeeOrdering, BW: " << bandWidthOld << std::endl;
+            localFillOrderingNew2Old.resize(this->NumCell(), 0);
+            localFillOrderingOld2New.resize(this->NumCell(), 0);
+            auto graphFunctor = [&](index i) -> t_IndexVec &
+            { return cell2cellFaceV.at(i); }; // todo: need improvement in CorrectRCM: can pass a temporary functor and store
+            auto graph = CorrectRCM::UndirectedGraphProxy(graphFunctor, this->NumCell());
+            graph.CheckAdj();
+            CorrectRCM::CuthillMcKeeOrdering(
+                graph,
+                [&](index i) -> index &
+                {
+                    return localFillOrderingOld2New.at(i);
+                },
+                0);
+            for (auto &v : localFillOrderingOld2New)
+                v = localFillOrderingOld2New.size() - 1 - v;
+
+            std::unordered_set<index>
+                __checkOrder;
+            for (auto v : localFillOrderingOld2New)
+                DNDS_assert(v < this->NumCell() && v >= 0), __checkOrder.insert(v);
+            DNDS_assert_info(__checkOrder.size() == localFillOrderingOld2New.size(), "The output of CorrectRCM::CuthillMcKeeOrdering is invalid!");
+
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+                localFillOrderingNew2Old[localFillOrderingOld2New[iCell]] = iCell;
+            for (auto v : localFillOrderingNew2Old)
+                DNDS_assert(v < this->NumCell() && v >= 0);
+            index bandWidthNew = 0;
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+                for (auto iCOther : cell2cellFaceV[iCell])
+                    bandWidthNew = std::max(bandWidthNew, std::abs(localFillOrderingOld2New[iCell] - localFillOrderingOld2New[iCOther]));
+            MPI::AllreduceOneIndex(bandWidthNew, MPI_MAX, this->mpi);
+
+            if (mpi.rank == mRank)
+                log()
+                    << "UnstructuredMesh::ObtainLocalFactFillOrdering(): CorrectRCM::CuthillMcKeeOrdering done, new BW: " << bandWidthNew << std::endl;
+            // for (auto v : localFillOrderingOld2New)
+            //     std::cout << v << ", ";
+            // std::cout << std::endl;
         }
         else
         {

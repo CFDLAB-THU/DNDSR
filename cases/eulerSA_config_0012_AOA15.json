@@ -100,6 +100,7 @@
             // ],
             "geomWeightScheme": "HQM_SD",
             "geomWeightPower": 0.5,
+            "geomWeightBias": 1,
             // "geomWeightScheme": "SD_Power",
             // "geomWeightPower1": -0.5,
             // "geomWeightPower2": 0.5,
@@ -121,7 +122,7 @@
         "directPrecControl": {
             "useDirectPrec": true,
             "iluCode": 2,
-            // "orderingCode": 3
+            "orderingCode": 4,
             "_tail": 0
         }
     },
@@ -131,7 +132,8 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe_M1",
+        "riemannSolverType": "Roe_M2",
+        "uRecBetaCompressPower": 1,
         "wallDistScheme": 1,
         "wallDistExection": 5,
         "wallDistRefineMax": 0.01,
