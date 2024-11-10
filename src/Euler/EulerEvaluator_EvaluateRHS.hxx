@@ -378,6 +378,19 @@ namespace DNDS::Euler
             {
                 DNDS_assert(mesh->face2bnd.find(iFace) != mesh->face2bnd.end());
                 fluxBnd.at(mesh->face2bnd[iFace]) = fluxEs(Eigen::all, 0) / vfv->GetFaceArea(iFace);
+                TVec fluxBndForceTInt;
+                fluxBndForceTInt.setZero();
+                gFace.IntegrationSimple(
+                    fluxBndForceTInt,
+                    [&](decltype(fluxBndForceTInt) &finc, int iG)
+                    {
+                        TU fcur = fincC(Eigen::all, iG);
+                        TVec ncur = unitNormV(Eigen::all, iG);
+                        finc = fcur(Seq123);
+                        finc -= ncur * (ncur.dot(finc));
+                        finc *= vfv->GetFaceJacobiDet(iFace, iG); // !don't forget this
+                    });
+                fluxBndForceT.at(mesh->face2bnd[iFace]) = fluxBndForceTInt / vfv->GetFaceArea(iFace);
             }
 
             // integrations

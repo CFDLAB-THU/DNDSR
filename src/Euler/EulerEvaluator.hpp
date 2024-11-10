@@ -100,7 +100,8 @@ namespace DNDS::Euler
         // ArrayVDOF<25> dRdb;
 
         Eigen::Vector<real, -1> fluxWallSum;
-        std::vector<Eigen::Vector<real, nVarsFixed>> fluxBnd;
+        std::vector<TU> fluxBnd;
+        std::vector<TVec> fluxBndForceT;
         index nFaceReducedOrder = 0;
 
         ssp<Direct::SerialSymLUStructure> symLU;
@@ -125,6 +126,7 @@ namespace DNDS::Euler
             fluxBnd.resize(mesh->NumBnd());
             for (auto &v : fluxBnd)
                 v.resize(nVars);
+            fluxBndForceT.resize(mesh->NumBnd());
 
             this->GetWallDist();
 

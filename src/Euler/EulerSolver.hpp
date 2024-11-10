@@ -215,7 +215,7 @@ namespace DNDS::Euler
                     nRestartOut, nRestartOutC,
                     nRestartOutInternal, nRestartOutCInternal,
                     nTimeAverageOut, nTimeAverageOutC,
-                    tDataOut, lazyCoverDataOutput, 
+                    tDataOut, lazyCoverDataOutput,
                     useCollectiveTimer)
             } outputControl;
 
@@ -526,7 +526,7 @@ namespace DNDS::Euler
         {
             nOUTS = nVars + 4;
             nOUTSPoint = nVars + 2;
-            nOUTSBnd = nVars * 2 + 1 + 2 + 3;
+            nOUTSBnd = nVars + 2 + nVars + 3 + 1 + 3; // Uprim + (T,M) + F + Ft + faceZone + Norm
 
             config = Configuration(nVars); //* important to initialize using nVars
         }

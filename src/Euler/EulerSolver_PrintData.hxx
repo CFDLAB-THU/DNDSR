@@ -513,7 +513,11 @@ namespace DNDS::Euler
                     //     std::abort();
                     // }
 
-                    (*outDistBnd)[iB](Eigen::seq(nVars + 2, nOUTSBnd - 5)) = eval.fluxBnd.at(iBnd);
+                    (*outDistBnd)[iB](Eigen::seq(nVars + 2, nVars + 2 + nVars - 1)) = eval.fluxBnd.at(iBnd);
+                    Geom::tPoint fluxT;
+                    fluxT.setZero();
+                    fluxT(Seq012) = eval.fluxBndForceT.at(iBnd);
+                    (*outDistBnd)[iB](Eigen::seq(nVars + 2 + nVars, nVars + 2 + nVars + 3 - 1)) = fluxT;
                     // (*outDistBnd)[iB](nOUTSBnd - 4) = mesh->GetFaceZone(iFace);
                     (*outDistBnd)[iB](nOUTSBnd - 4) = meshBnd->GetCellZone(iB);
                     (*outDistBnd)[iB](Eigen::seq(nOUTSBnd - 3, nOUTSBnd - 1)) = vfv->GetFaceNorm(iFace, 0) * vfv->GetFaceArea(iFace);
@@ -532,24 +536,46 @@ namespace DNDS::Euler
             DNDS_MPI_InsertCheck(mpi, "EulerSolver<model>::PrintData === bnd transfer done");
 
             std::vector<std::string> names;
+            std::vector<std::string> namesScalar;
+            std::vector<std::string> namesVector;
+            std::vector<int> offsetsScalar;
+            std::vector<int> offsetsVector;
             if constexpr (dim == 2)
                 names = {
                     "R", "U", "V", "P", "T", "M"};
             else
                 names = {
                     "R", "U", "V", "W", "P", "T", "M"};
+            namesScalar = {"R", "P", "T", "M"};
+            offsetsScalar = {0, dim + 1, dim + 2, dim + 3};
+            namesVector = {"Velo"};
+            offsetsVector = {1};
+            int currentTop = dim + 4;
             for (int i = I4 + 1; i < nVars; i++)
             {
                 names.push_back("V" + std::to_string(i - I4));
+                namesScalar.push_back("V" + std::to_string(i - I4));
+                offsetsScalar.push_back(currentTop++);
             }
             for (int i = 0; i < nVars; i++)
             {
                 names.push_back("F" + std::to_string(i));
+                namesScalar.push_back("F" + std::to_string(i));
+                offsetsScalar.push_back(currentTop++);
             }
+            names.push_back("FT1");
+            names.push_back("FT2");
+            names.push_back("FT3");
+            namesVector.push_back("FT");
+            offsetsVector.push_back(currentTop), currentTop += 3;
             names.push_back("FaceZone");
+            namesScalar.push_back("FaceZone");
+            offsetsScalar.push_back(currentTop++);
             names.push_back("N0");
             names.push_back("N1");
             names.push_back("N2");
+            namesVector.push_back("Norm");
+            offsetsVector.push_back(currentTop), currentTop += 3;
 
             if (config.dataIOControl.outPltTecplotFormat)
             {
@@ -565,7 +591,7 @@ namespace DNDS::Euler
                             fname + "_bnd",
                             NOUTS_C, 0,
                             [&](int idata)
-                            { return names[idata]; }, // cellNames
+                            { return names.at(idata); }, // cellNames
                             [&](int idata, index iv)
                             {
                                 return (*outSerialBnd)[iv][idata]; // cellData
@@ -593,7 +619,7 @@ namespace DNDS::Euler
                             fname + "_bnd",
                             NOUTS_C, 0,
                             [&](int idata)
-                            { return names[idata]; }, // cellNames
+                            { return names.at(idata); }, // cellNames
                             [&](int idata, index iv)
                             {
                                 return (*outDistBnd)[iv][idata]; // cellData
@@ -619,35 +645,31 @@ namespace DNDS::Euler
                 if (config.dataIOControl.outPltMode == 0)
                 {
                     auto outBndRun = [meshBnd = meshBnd, readerBnd = readerBnd, outDistBnd = outDistBnd, outSerialBnd = outSerialBnd,
-                                      fname, fnameSeries, NOUTS_C, nOUTSBnd = nOUTSBnd, cDim, names, tSimu,
+                                      fname, fnameSeries, NOUTS_C, nOUTSBnd = nOUTSBnd, nVars = nVars, cDim,
+                                      namesScalar, namesVector, offsetsScalar, offsetsVector, tSimu,
                                       &outBndArraysMutex = outBndArraysMutex]()
                     {
                         std::lock_guard<std::mutex> outBndArraysLock(outBndArraysMutex);
                         readerBnd->PrintSerialPartVTKDataArray(
                             fname + "_bnd",
                             fnameSeries + "_bnd",
-                            NOUTS_C - cDim - 3, 2,
-                            0, 0, //! vectors number is not cDim but 2
+                            namesScalar.size(), namesVector.size(),
+                            0, 0, //! vectors number is not cDim but 3
                             [&](int idata)
                             {
-                                idata = idata > 0 ? idata + cDim : 0;
-                                return names[idata]; // cellNames
+                                return namesScalar.at(idata); // cellNames
                             },
                             [&](int idata, index iv)
                             {
-                                idata = idata > 0 ? idata + cDim : 0;
-                                return (*outSerialBnd)[iv][idata]; // cellData
+                                return (*outSerialBnd)[iv][offsetsScalar.at(idata)]; // cellData
                             },
                             [&](int idata)
                             {
-                                return idata == 0 ? "Velo" : "Norm"; // cellVecNames
+                                return namesVector.at(idata);
                             },
                             [&](int idata, index iv, int idim)
                             {
-                                if (idata == 0)
-                                    return idim < cDim ? (*outSerialBnd)[iv][1 + idim] : 0; // cellVecData
-                                else
-                                    return (*outSerialBnd)[iv][nOUTSBnd - 3 + idim];
+                                return (*outSerialBnd)[iv][offsetsVector.at(idata) + idim];
                             },
                             [&](int idata)
                             {
@@ -676,35 +698,31 @@ namespace DNDS::Euler
                 else if (config.dataIOControl.outPltMode == 1)
                 {
                     auto outBndRun = [meshBnd = meshBnd, readerBnd = readerBnd, outDistBnd = outDistBnd, outSerialBnd = outSerialBnd,
-                                      fname, fnameSeries, NOUTS_C, nOUTSBnd = nOUTSBnd, cDim, names, tSimu,
+                                      fname, fnameSeries, NOUTS_C, nOUTSBnd = nOUTSBnd, cDim,
+                                      namesScalar, namesVector, offsetsScalar, offsetsVector, tSimu,
                                       &outBndArraysMutex = outBndArraysMutex]()
                     {
                         std::lock_guard<std::mutex> outBndArraysLock(outBndArraysMutex);
                         readerBnd->PrintSerialPartVTKDataArray(
                             fname + "_bnd",
                             fnameSeries + "_bnd",
-                            NOUTS_C - cDim - 3, 2,
+                            namesScalar.size(), namesVector.size(),
                             0, 0, //! vectors number is not cDim but 2
                             [&](int idata)
                             {
-                                idata = idata > 0 ? idata + cDim : 0;
-                                return names[idata]; // cellNames
+                                return namesScalar.at(idata); // cellNames
                             },
                             [&](int idata, index iv)
                             {
-                                idata = idata > 0 ? idata + cDim : 0;
-                                return (*outDistBnd)[iv][idata]; // cellData
+                                return (*outDistBnd)[iv][offsetsScalar.at(idata)]; // cellData
                             },
                             [&](int idata)
                             {
-                                return idata == 0 ? "Velo" : "Norm"; // cellVecNames
+                                return namesVector.at(idata);
                             },
                             [&](int idata, index iv, int idim)
                             {
-                                if (idata == 0)
-                                    return idim < cDim ? (*outDistBnd)[iv][1 + idim] : 0; // cellVecData
-                                else
-                                    return (*outDistBnd)[iv][nOUTSBnd - 3 + idim];
+                                return (*outDistBnd)[iv][offsetsVector.at(idata) + idim];
                             },
                             [&](int idata)
                             {
@@ -737,7 +755,8 @@ namespace DNDS::Euler
                 MPI_Comm commDup = MPI_COMM_NULL;
                 MPI_Comm_dup(mpi.comm, &commDup);
                 auto outBndRun = [meshBnd = meshBnd, outDistBnd = outDistBnd,
-                                  fname, fnameSeries, NOUTS_C, nOUTSBnd = nOUTSBnd, cDim, names, tSimu,
+                                  fname, fnameSeries, NOUTS_C, nOUTSBnd = nOUTSBnd, cDim,
+                                  namesScalar, namesVector, offsetsScalar, offsetsVector, tSimu,
                                   &outBndArraysMutex = outBndArraysMutex, commDup]()
                 {
                     // std::lock_guard<std::mutex> outHdfLock(HDF_mutex);
@@ -748,28 +767,23 @@ namespace DNDS::Euler
                     meshBnd->PrintParallelVTKHDFDataArray(
                         fname + "_bnd",
                         fnameSeries + "_bnd",
-                        NOUTS_C - cDim - 3, 2,
+                        namesScalar.size(), namesVector.size(),
                         0, 0, //! vectors number is not cDim but 2
                         [&](int idata)
                         {
-                            idata = idata > 0 ? idata + cDim : 0;
-                            return names[idata]; // cellNames
+                            return namesScalar.at(idata); // cellNames
                         },
                         [&](int idata, index iv)
                         {
-                            idata = idata > 0 ? idata + cDim : 0;
-                            return (*outDistBnd)[iv][idata]; // cellData
+                            return (*outDistBnd)[iv][offsetsScalar.at(idata)]; // cellData
                         },
                         [&](int idata)
                         {
-                            return idata == 0 ? "Velo" : "Norm"; // cellVecNames
+                            return namesVector.at(idata);
                         },
                         [&](int idata, index iv, int idim)
                         {
-                            if (idata == 0)
-                                return idim < cDim ? (*outDistBnd)[iv][1 + idim] : 0; // cellVecData
-                            else
-                                return (*outDistBnd)[iv][nOUTSBnd - 3 + idim];
+                            return (*outDistBnd)[iv][offsetsVector.at(idata) + idim];
                         },
                         [](int idata)
                         {
