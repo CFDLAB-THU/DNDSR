@@ -1227,7 +1227,7 @@ namespace DNDS::Euler
                                      u, uRec);
             }
             if ((iter % config.outputControl.nDataOutCInternal == 0) &&
-                !(config.outputControl.lazyCoverDataOutput && (iter % config.outputControl.nDataOutCInternal == 0)))
+                !(config.outputControl.lazyCoverDataOutput && (iter % config.outputControl.nDataOutInternal == 0)))
             {
                 eval.FixUMaxFilter(u);
                 PrintData(
