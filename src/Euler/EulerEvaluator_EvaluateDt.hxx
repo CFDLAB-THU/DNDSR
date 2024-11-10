@@ -826,51 +826,12 @@ namespace DNDS::Euler
         lam4V.resize(nB);
 
         auto RSWrapper_XY =
-            [&](
-                Gas::RiemannSolverType rsType,
+            [&](Gas::RiemannSolverType rsType,
                 auto &&UL, auto &&UR, auto &&ULm, auto &&URm, auto &&vg, auto &&n,
                 real gamma, auto &&finc, real dLambda,
                 real &lam0, real &lam123, real &lam4)
         {
-            // std::cout << "here1" << std::endl;
-            if (rsType == Gas::RiemannSolverType::HLLEP)
-                Gas::HLLEPFlux_IdealGas<dim, 0>(
-                    UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::HLLEP_V1)
-                Gas::HLLEPFlux_IdealGas<dim, 1>(
-                    UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::HLLC)
-                Gas::HLLCFlux_IdealGas_HartenYee<dim>(
-                    UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::Roe)
-                Gas::RoeFlux_IdealGas_HartenYee<dim>(
-                    UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::Roe_M1)
-                Gas::RoeFlux_IdealGas_HartenYee<dim, 1>(
-                    UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::Roe_M2)
-                Gas::RoeFlux_IdealGas_HartenYee<dim, 2>(
-                    UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::Roe_M3)
-                Gas::RoeFlux_IdealGas_HartenYee<dim, 3>(
-                    UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::Roe_M4)
-                Gas::RoeFlux_IdealGas_HartenYee<dim, 4>(
-                    UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else if (rsType == Gas::RiemannSolverType::Roe_M5)
-                Gas::RoeFlux_IdealGas_HartenYee<dim, 5>(
-                    UL, UR, ULm, URm, vg, n, gamma, finc, dLambda,
-                    exitFun, lam0, lam123, lam4);
-            else
-                DNDS_assert(false);
+            Gas::InviscidFlux_IdealGas_Dispatcher<dim>(rsType, UL, UR, ULm, URm, vg, n, gamma, finc, dLambda, exitFun, lam0, lam123, lam4);
         };
 
         TU_Batch finc;
@@ -879,21 +840,12 @@ namespace DNDS::Euler
         // finc1.resizeLike(ULxy);
         if (settings.rsRotateScheme == 0)
         {
-            if (settings.rsMeanValueEig != 0 && rsType == Gas::Roe_M1)
+            if (settings.rsMeanValueEig != 0 &&
+                (rsType >= Gas::Roe_M1 && rsType <= Gas::Roe_M5))
             {
                 real lam0{0}, lam123{0}, lam4{0};
-                Gas::RoeFlux_IdealGas_HartenYee_Batch<dim, 1>(
-                    ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
-                    settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
-                    exitFun, lam0, lam123, lam4);
-                lam0V.setConstant(lam0);
-                lam123V.setConstant(lam123);
-                lam4V.setConstant(lam4);
-            }
-            else if (settings.rsMeanValueEig != 0 && rsType == Gas::Roe_M2)
-            {
-                real lam0{0}, lam123{0}, lam4{0};
-                Gas::RoeFlux_IdealGas_HartenYee_Batch<dim, 2>(
+                Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
+                    rsType,
                     ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
                     settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
                     exitFun, lam0, lam123, lam4);

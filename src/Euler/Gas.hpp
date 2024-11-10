@@ -707,6 +707,8 @@ namespace DNDS::Euler::Gas
         static real scaleLD = 0.2;
         using TVec = Eigen::Vector<real, dim>;
         using TVec_Batch = Eigen::Matrix<real, dim, -1, Eigen::ColMajor, dim, MaxBatch>;
+        using TReal_Batch = Eigen::Matrix<real, 1, -1, Eigen::RowMajor, 1, MaxBatch>;
+        using TU5_Batch = Eigen::Matrix<real, dim + 2, -1, Eigen::ColMajor, dim + 2, MaxBatch>;
 
         int nB = UL.cols();
         for (int iB = 0; iB < nB; iB++)
@@ -720,7 +722,7 @@ namespace DNDS::Euler::Gas
         TVec veloLm = (ULm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / ULm(0)).matrix();
         TVec veloRm = (URm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / URm(0)).matrix();
 
-        Eigen::Matrix<real, 1, -1, Eigen::RowMajor, 1, MaxBatch> pL, pR;
+        TReal_Batch pL, pR;
         pL.resize(nB), pR.resize(nB);
         for (int iB = 0; iB < nB; iB++)
         {
@@ -751,7 +753,7 @@ namespace DNDS::Euler::Gas
         real veloLm0 = (veloLm - vgm).dot(nm);
         real veloRm0 = (veloRm - vgm).dot(nm);
 
-        Eigen::Matrix<real, dim + 2, -1, Eigen::ColMajor, dim + 2, MaxBatch> FL, FR;
+        TU5_Batch FL, FR;
         FL.resize(Eigen::NoChange, UL.cols());
         FR.resize(Eigen::NoChange, UL.cols());
         GasInviscidFlux_XY_Batch<dim>(UL, veloL, vg, n, pL, FL);
@@ -842,23 +844,23 @@ namespace DNDS::Euler::Gas
             DNDS_assert(false);
         }
 
-        Eigen::Matrix<real, dim + 2, -1, Eigen::ColMajor, dim + 2, MaxBatch> incU =
+        TU5_Batch incU =
             UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) -
             UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all); //! not using m, for this is accuracy-limited!
-        Eigen::Matrix<real, 1, -1, Eigen::RowMajor, 1, MaxBatch> incU123N =
+        TReal_Batch incU123N =
             (incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), Eigen::all).array() * n.array()).colwise().sum();
         TVec_Batch alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), Eigen::all) - veloRoe * incU(0, Eigen::all);
         TVec_Batch alpha23VT = alpha23V.array() - n.array().rowwise() * (alpha23V.array() * n.array()).colwise().sum();
-        Eigen::Matrix<real, 1, -1, Eigen::RowMajor, 1, MaxBatch> incU4b =
+        TReal_Batch incU4b =
             incU(dim + 1, Eigen::all) -
             veloRoe.transpose() * alpha23VT;
-        Eigen::Matrix<real, 1, -1, Eigen::RowMajor, 1, MaxBatch> alpha1 =
+        TReal_Batch alpha1 =
             (gamma - 1) / asqrRoe *
             (incU(0, Eigen::all) * (HRoe - veloRoeN * veloRoeN) +
              veloRoeN * incU123N - incU4b);
-        Eigen::Matrix<real, 1, -1, Eigen::RowMajor, 1, MaxBatch> alpha0 =
+        TReal_Batch alpha0 =
             (incU(0, Eigen::all) * (veloRoeN + aRoe) - incU123N - aRoe * alpha1) / (2 * aRoe);
-        Eigen::Matrix<real, 1, -1, Eigen::RowMajor, 1, MaxBatch> alpha4 =
+        TReal_Batch alpha4 =
             incU(0, Eigen::all) - (alpha0 + alpha1);
 
         alpha0 *= lam0;
@@ -866,7 +868,7 @@ namespace DNDS::Euler::Gas
         alpha23VT *= lam123;
         alpha4 *= lam4; // here becomes alpha_i * lam_i
 
-        Eigen::Matrix<real, dim + 2, -1, Eigen::ColMajor, dim + 2, MaxBatch> incF;
+        TU5_Batch incF;
         incF.resize(Eigen::NoChange, UL.cols());
         incF(0, Eigen::all) = alpha0 + alpha1 + alpha4;
         incF(dim + 1, Eigen::all) = (HRoe - veloRoeN * aRoe) * alpha0 + 0.5 * vsqrRoe * alpha1 +
@@ -880,6 +882,101 @@ namespace DNDS::Euler::Gas
         //     (veloRoe.array() - (aRoe * n).array().colwise()) * alpha0 * (veloRoe.array() + (aRoe * n).array().colwise()) * alpha4;
 
         F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) = (FL + FR) * 0.5 - 0.5 * incF;
+    }
+
+    template <int dim = 3,
+              typename TUL, typename TUR,
+              typename TULm, typename TURm,
+              typename TVecVG, typename TVecN,
+              typename TF, typename TFdumpInfo>
+    void InviscidFlux_IdealGas_Dispatcher(
+        RiemannSolverType type,
+        TUL &&UL, TUR &&UR, TULm &&ULm, TURm &&URm,
+        TVecVG &&vg, TVecN &&n, real gamma, TF &&F,
+        real dLambda,
+        TFdumpInfo &&dumpInfo, real &lam0, real &lam123, real &lam4)
+    {
+        if (type == Roe)
+            RoeFlux_IdealGas_HartenYee<dim>(
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == Roe_M1)
+            RoeFlux_IdealGas_HartenYee<dim, 1>(
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == Roe_M2)
+            RoeFlux_IdealGas_HartenYee<dim, 2>(
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == Roe_M3)
+            RoeFlux_IdealGas_HartenYee<dim, 3>(
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == Roe_M4)
+            RoeFlux_IdealGas_HartenYee<dim, 4>(
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == Roe_M5)
+            RoeFlux_IdealGas_HartenYee<dim, 5>(
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == HLLEP)
+            HLLEPFlux_IdealGas<dim, 0>(
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == HLLEP_V1)
+            HLLEPFlux_IdealGas<dim, 1>(
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == HLLC)
+            HLLCFlux_IdealGas_HartenYee<dim>(
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else
+            DNDS_assert_info(false, "the rs type is invalid");
+    }
+
+    template <int dim = 3,
+              typename TUL, typename TUR,
+              typename TULm, typename TURm,
+              typename TVecVG, typename TVecVGm,
+              typename TVecN, typename TVecNm,
+              typename TF, typename TFdumpInfo>
+    void InviscidFlux_IdealGas_Batch_Dispatcher(
+        RiemannSolverType type,
+        TUL &&UL, TUR &&UR,
+        TULm &&ULm, TURm &&URm,
+        TVecVG &&vg, TVecVGm &&vgm,
+        TVecN &&n, TVecNm &&nm,
+        real gamma, TF &&F, real dLambda,
+        TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
+    {
+        if (type == Roe)
+            RoeFlux_IdealGas_HartenYee_Batch<dim>(
+                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == Roe_M1)
+            RoeFlux_IdealGas_HartenYee_Batch<dim, 1>(
+                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == Roe_M2)
+            RoeFlux_IdealGas_HartenYee_Batch<dim, 2>(
+                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == Roe_M3)
+            RoeFlux_IdealGas_HartenYee_Batch<dim, 3>(
+                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == Roe_M4)
+            RoeFlux_IdealGas_HartenYee_Batch<dim, 4>(
+                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else if (type == Roe_M5)
+            RoeFlux_IdealGas_HartenYee_Batch<dim, 5>(
+                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda,
+                dumpInfo, lam0, lam123, lam4);
+        else
+            DNDS_assert_info(false, "the rs type is invalid (for batch version)");
     }
 
     /**
