@@ -30,6 +30,7 @@ namespace DNDS::Euler
         int wallDistCellLoadSize = 1024 * 32;
         real SADESScale = veryLargeReal;
         RANSModel ransModel = RANSModel::RANS_None;
+        int ransEigScheme = 0;
         int usePrimGradInVisFlux = 0;
 
         struct IdealGasProperty
@@ -199,6 +200,7 @@ namespace DNDS::Euler
             __DNDS__json_to_config(wallDistCellLoadSize);
             __DNDS__json_to_config(SADESScale);
             __DNDS__json_to_config(ransModel);
+            __DNDS__json_to_config(ransEigScheme);
             __DNDS__json_to_config(usePrimGradInVisFlux);
             __DNDS__json_to_config(nCentralSmoothStep);
             __DNDS__json_to_config(constMassForce);

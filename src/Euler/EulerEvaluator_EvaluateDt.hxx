@@ -873,7 +873,9 @@ namespace DNDS::Euler
         if constexpr (model == NS_SA || model == NS_SA_3D)
         {
             // real lambdaFaceCC = sqrt(std::abs(asqrMean)) + std::abs((UL(1) / UL(0) - vg(0)) + (UR(1) / UR(0) - vg(0))) * 0.5;
-            auto lambdaFaceCC = lam123V; //! using velo instead of velo + a
+            Eigen::RowVector<real, -1> lambdaFaceCC = lam123V; //! using velo instead of velo + a
+            if (settings.ransEigScheme == 1)
+                lambdaFaceCC = lambdaFaceCC.array().max(lam0V.array()).max(lam4V.array());
             auto vnR = ((URxy(Seq123, Eigen::all).array().rowwise() / URxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
             auto vnL = ((ULxy(Seq123, Eigen::all).array().rowwise() / ULxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
             finc(I4 + 1, Eigen::all) =
@@ -883,7 +885,9 @@ namespace DNDS::Euler
         }
         if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
         {
-            auto lambdaFaceCC = lam123V; //! using velo instead of velo + a
+            Eigen::RowVector<real, -1> lambdaFaceCC = lam123V; //! using velo instead of velo + a
+            if (settings.ransEigScheme == 1)
+                lambdaFaceCC = lambdaFaceCC.array().max(lam0V.array()).max(lam4V.array());
             auto vnR = ((URxy(Seq123, Eigen::all).array().rowwise() / URxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
             auto vnL = ((ULxy(Seq123, Eigen::all).array().rowwise() / ULxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
             finc(I4 + 1, Eigen::all) =
