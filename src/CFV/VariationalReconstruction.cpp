@@ -769,6 +769,7 @@ namespace DNDS::CFV
         this->MakePairDefaultOnCell(vectorAInvB, maxNDOF - 1, 1);
         if (settings.functionalSettings.greenGauss1Weight != 0)
             this->MakePairDefaultOnCell(matrixAHalf_GG, dim, (maxNDOF - 1));
+        this->MakePairDefaultOnCell(matrixA, (maxNDOF - 1), (maxNDOF - 1));
         if (needMatrixACholeskyL)
             matrixACholeskyL.resize(mesh->NumCellProc());
         real maxCond = 0.0;
@@ -1075,6 +1076,7 @@ namespace DNDS::CFV
             if (needOriginalMatrix)
                 matrixAB(iCell, 0) = A;
             matrixAAInvB(iCell, 0) = AInv;
+            matrixA[iCell] = A;
 
             maxCond = std::max(aCond, maxCond);
             if (needMatrixACholeskyL)
@@ -1108,6 +1110,12 @@ namespace DNDS::CFV
         if (needOriginalMatrix)
             vectorB.CompressBoth();
         matrixAHalf_GG.CompressBoth();
+
+        // standard comm for matrixA
+        matrixA.TransAttach();
+        matrixA.trans.BorrowGGIndexing(mesh->cell2cell.trans);
+        matrixA.trans.createMPITypes();
+        matrixA.trans.pullOnce();
 
         // Get Secondary matrices
         this->MakePairDefaultOnFace(matrixSecondary, maxNDOF - 1, (maxNDOF - 1) * 2);

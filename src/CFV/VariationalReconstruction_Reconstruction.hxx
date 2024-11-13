@@ -363,7 +363,8 @@ namespace DNDS
             tUDof<nVarsFixed> &u,
             const TFBoundary<nVarsFixed> &FBoundary,
             bool putIntoNew,
-            bool recordInc)
+            bool recordInc,
+            bool uRecIsZero)
         {
             using namespace Geom;
             using namespace Geom::Elem;
@@ -387,7 +388,12 @@ namespace DNDS
                 real relax = cellAtr[iCell].relax;
 
                 if (recordInc)
-                    uRecNew[iCell] = uRec[iCell];
+                {
+                    if (uRecIsZero)
+                        uRecNew[iCell].setZero();
+                    else
+                        uRecNew[iCell] = uRec[iCell];
+                }
                 else if (settings.SORInstead)
                     uRec[iCell] = uRec[iCell] * ((recordInc ? 0 : 1) - relax);
                 else
@@ -417,9 +423,15 @@ namespace DNDS
                                 FTransPeriodicBack(uOther, faceID), FTransPeriodicBack(uRecOther, faceID);
                         }
                         if (recordInc)
-                            uRecNew[iCell] -=
-                                (matrixAAInvBRow[ic2f + 1] * uRecOther +
-                                 vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
+                        {
+                            if (uRecIsZero)
+                                uRecNew[iCell] -=
+                                    (vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
+                            else
+                                uRecNew[iCell] -=
+                                    (matrixAAInvBRow[ic2f + 1] * uRecOther +
+                                     vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
+                        }
                         else if (settings.SORInstead)
                             uRec[iCell] +=
                                 relax *
@@ -436,8 +448,13 @@ namespace DNDS
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC = GetBoundaryRHS(uRec, u, iCell, iFace, FBoundary);
                         // BCC *= 0;
                         if (recordInc)
-                            uRecNew[iCell] -=
-                                matrixAAInvBRow[0] * BCC;
+                        {
+                            if (uRecIsZero)
+                                ;
+                            else
+                                uRecNew[iCell] -=
+                                    matrixAAInvBRow[0] * BCC;
+                        }
                         else if (settings.SORInstead && !recordInc)
                             uRec[iCell] +=
                                 relax * matrixAAInvBRow[0] * BCC;
@@ -598,7 +615,8 @@ namespace DNDS
             tUDof<nVarsFixed> &u,                                                               \
             const TFBoundary<nVarsFixed> &FBoundary,                                            \
             bool putIntoNew,                                                                    \
-            bool recordInc);                                                                    \
+            bool recordInc,                                                                     \
+            bool uRecIsZero);                                                                   \
                                                                                                 \
         ext template void VariationalReconstruction<dim>::DoReconstructionIterDiff<nVarsFixed>( \
             tURec<nVarsFixed> & uRec,                                                           \

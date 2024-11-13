@@ -7,6 +7,7 @@
 #include "EulerSolver.hpp"
 #include "DNDS/EigenUtil.hpp"
 #include "Solver/ODE.hpp"
+#include "Solver/Linear.hpp"
 #include "SpecialFields.hpp"
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
 // #undef __DNDS_REALLY_COMPILING__
@@ -150,8 +151,10 @@ namespace DNDS::Euler
 
         using tGMRES_u = Linear::GMRES_LeftPreconditioned<decltype(u)>;
         using tGMRES_uRec = Linear::GMRES_LeftPreconditioned<decltype(uRec)>;
+        using tPCG_uRec = Linear::PCG_PreconditionedRes<decltype(uRec), Eigen::Array<real, 1, Eigen::Dynamic>>;
         std::unique_ptr<tGMRES_u> gmres;
         std::unique_ptr<tGMRES_uRec> gmresRec;
+        std::unique_ptr<tPCG_uRec> pcgRec;
 
         if (config.linearSolverControl.gmresCode == 1 ||
             config.linearSolverControl.gmresCode == 2)
@@ -165,6 +168,13 @@ namespace DNDS::Euler
         if (config.implicitReconstructionControl.recLinearScheme == 1)
             gmresRec = std::make_unique<tGMRES_uRec>(
                 config.implicitReconstructionControl.nGmresSpace,
+                [&](decltype(uRec) &data)
+                {
+                    vfv->BuildURec(data, nVars);
+                });
+
+        if (config.implicitReconstructionControl.recLinearScheme == 2)
+            pcgRec = std::make_unique<tPCG_uRec>(
                 [&](decltype(uRec) &data)
                 {
                     vfv->BuildURec(data, nVars);
@@ -411,6 +421,91 @@ namespace DNDS::Euler
                             });
                     uRecC.addTo(uRecNew1, -1);
                     if (gmresConverge)
+                        break;
+                }
+                uRecC.trans.startPersistentPull();
+                uRecC.trans.waitPersistentPull();
+            }
+            else if (config.implicitReconstructionControl.recLinearScheme == 2)
+            {
+                Eigen::Array<real, 1, Eigen::Dynamic> resB;
+                int nPCGIterAll{0};
+                if (iter == 1)       //! consecutive pcg is bad in 0012, using separate pcg
+                    pcgRec->reset(); // ! todo: account for inter-solve (need two pcgs!)
+                uRecNew = uRecB1;
+                vfv->DoReconstructionIter(
+                    uRecC, uRecB1, cx,
+                    FBoundary, true, true, true);
+                if (iter > 1)
+                {
+                    if (config.implicitReconstructionControl.fpcgResetScheme == 0)
+                    {
+                        Eigen::RowVectorXd bPrevSqr = uRecNew.dotV(uRecNew);
+                        uRecNew.addTo(uRecB1, -1.0);
+                        Eigen::RowVectorXd bIncSqr = uRecNew.dotV(uRecNew);
+                        real maxPortion = (bIncSqr.array() / (bPrevSqr.array() + smallReal)).sqrt().maxCoeff();
+                        if (maxPortion >= config.implicitReconstructionControl.fpcgResetThres)
+                        {
+                            if (mpi.rank == 0 && config.implicitReconstructionControl.fpcgResetReport > 0)
+                                log() << "FPCG force reset at portion " << fmt::format("{:.4g}", maxPortion) << std::endl;
+                            pcgRec->reset();
+                        }
+                    }
+                    else if (config.implicitReconstructionControl.fpcgResetScheme == 1)
+                        pcgRec->reset();
+                    else if (config.implicitReconstructionControl.fpcgResetScheme == 2)
+                        ;
+                    else
+                        DNDS_assert_info(false, "invalid fpcgResetScheme");
+                }
+                // pcgRec->reset(); // using separate pcg
+                for (int iRec = 1; iRec <= nRec; iRec++)
+                {
+                    bool pcgConverged = pcgRec->solve(
+                        [&](ArrayRECV<nVarsFixed> &x, ArrayRECV<nVarsFixed> &Ax)
+                        {
+                            vfv->DoReconstructionIterDiff(uRec, x, Ax, cx, FBoundaryDiff);
+                            Ax.trans.startPersistentPull();
+                            Ax.trans.waitPersistentPull();
+                            vfv->MatrixAMult(Ax, Ax);
+                        },
+                        [&](ArrayRECV<nVarsFixed> &x, ArrayRECV<nVarsFixed> &Mx)
+                        {
+                            vfv->MatrixAMult(x, Mx);
+                        },
+                        [&](ArrayRECV<nVarsFixed> &x, ArrayRECV<nVarsFixed> &res)
+                        {
+                            vfv->DoReconstructionIter(
+                                x, res, cx,
+                                FBoundary, true, true);
+                            res.trans.startPersistentPull();
+                            res.trans.waitPersistentPull();
+                            res *= -1;
+                        },
+                        [&](ArrayRECV<nVarsFixed> &a, ArrayRECV<nVarsFixed> &b)
+                        {
+                            return (a.dotV(b)).array();
+                        },
+                        uRecC, config.implicitReconstructionControl.nGmresIter,
+                        [&](uint32_t i, const Eigen::Array<real, 1, Eigen::Dynamic> &res, const Eigen::Array<real, 1, Eigen::Dynamic> &res1) -> bool
+                        {
+                            if (i == 1 && iRec == 1)
+                                resB = res1;
+                            if (i > 0)
+                            {
+                                nPCGIterAll++;
+                                if (mpi.rank == 0 &&
+                                    (nPCGIterAll % config.implicitReconstructionControl.nRecConsolCheck == 0))
+                                {
+                                    auto fmt = log().flags();
+                                    log() << std::scientific << std::setprecision(3);
+                                    log() << "PCG for Rec: " << iRec << " Restart " << i << " [" << resB << "] -> [" << res1 << "]" << std::endl;
+                                    log().setf(fmt);
+                                }
+                            }
+                            return (res1 / resB).maxCoeff() < config.implicitReconstructionControl.recThreshold;
+                        });
+                    if (pcgConverged)
                         break;
                 }
                 uRecC.trans.startPersistentPull();

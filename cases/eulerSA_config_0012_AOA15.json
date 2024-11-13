@@ -8,7 +8,7 @@
         "tEnd": 3e+200
     },
     "convergenceControl": {
-        "nTimeStepInternal": 100000,
+        "nTimeStepInternal": 10000,
         "rhsThresholdInternal": 1e-30,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -39,9 +39,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2",
-        "outLogName": "../data/out/NACA0012_H2",
-        "outRestartName": "../data/out/NACA0012_H2",
+        "outPltName": "../data/out/NACA0012_H2-CG1",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -58,11 +56,13 @@
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
         "zeroGrads": false,
-        "recLinearScheme": 0,
+        "recLinearScheme": 2, // 2 is fpcg, 1 is gmres
         "nGmresSpace": 5,
-        "nGmresIter": 10,
+        "nGmresIter": 1,
+        "fpcgResetScheme": 0,
+        "fpcgResetReport": 1,
         "recThreshold": 1e-05,
-        "nRecConsolCheck": 1,
+        "nRecConsolCheck": 10,
         "storeRecInc": true,
         "dampRecIncDTau": false
     },

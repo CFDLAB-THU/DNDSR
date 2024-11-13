@@ -561,6 +561,10 @@ vrBasic_Test
 diffTensors_Test
 )
 
+set(APPS_Solver
+krylovTest
+)
+
 set(APPS_Euler
 gasTest
 euler
@@ -616,6 +620,7 @@ ADD_EXE_APP("${APPS_DNDS}" "app/DNDS")
 ADD_EXE_APP("${APPS_Geom}" "app/Geom")
 ADD_EXE_APP("${APPS_CFV}" "app/CFV")
 ADD_EXE_APP("${APPS_Euler}" "app/Euler")
+ADD_EXE_APP("${APPS_Solver}" "app/Solver")
 
 
 

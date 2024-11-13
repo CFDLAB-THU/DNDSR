@@ -63,11 +63,31 @@ namespace DNDS
                 DNDS_assert(nSizeColDynamic <= _mat_nj_max);
 
             if constexpr (_mat_ni == NonUniformSize)
-                DNDS_MAKE_SSP(_mat_nRows, nSize);
+                DNDS_MAKE_SSP(_mat_nRows, nSize, nSizeRowDynamic);
             else if constexpr (_mat_ni == DynamicSize)
                 _mat_nRow_dynamic = nSizeRowDynamic;
 
             this->t_base::Resize(nSize, nSizeRowDynamic * nSizeColDynamic);
+        }
+
+        rowsize MatRowSize(index iMat = 0)
+        {
+            if constexpr (_mat_ni >= 0)
+                return _mat_ni;
+            if constexpr (_mat_ni == NonUniformSize)
+                return _mat_nRows->at(iMat);
+            if constexpr (_mat_ni == DynamicSize)
+                return _mat_nRow_dynamic;
+        }
+
+        rowsize MatColSize(index iMat = 0)
+        {
+            if constexpr (_mat_nj >= 0)
+                return _mat_nj;
+            if constexpr (_mat_nj == NonUniformSize)
+                return this->t_base::RowSize(iMat) / this->MatRowSize(iMat);
+            if constexpr (_mat_ni == DynamicSize)
+                return this->t_base::RowSize(iMat) / this->MatRowSize(iMat);
         }
 
         void ResizeMat(index iMat, rowsize nSizeRow, rowsize nSizeCol)

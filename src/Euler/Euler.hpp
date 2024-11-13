@@ -121,7 +121,7 @@ namespace DNDS::Euler
                 this->operator[](i).array() = this->operator[](i).array().abs();
         }
 
-        template<class TR>
+        template <class TR>
         void setMaxWith(TR R)
         {
             for (index i = 0; i < this->Size(); i++)
@@ -190,8 +190,8 @@ namespace DNDS::Euler
             return sqrSumAll;
         }
 
-        template<class TMultL, class TMultR>
-        real dot(const t_self &R, TMultL&& mL, TMultR&& mR)
+        template <class TMultL, class TMultR>
+        real dot(const t_self &R, TMultL &&mL, TMultR &&mR)
         {
             real sqrSum{0}, sqrSumAll;
             for (index i = 0; i < this->father->Size(); i++) //*note that only father is included
@@ -244,6 +244,11 @@ namespace DNDS::Euler
             for (index i = 0; i < this->Size(); i++)
                 this->operator[](i) *= R[i](0);
         }
+        void operator*=(const Eigen::Array<real, 1, nVarsFixed> &R)
+        {
+            for (index i = 0; i < this->Size(); i++)
+                this->operator[](i).array().rowwise() *= R;
+        }
         void operator=(t_self &R)
         {
             // for (index i = 0; i < this->Size(); i++)
@@ -252,6 +257,12 @@ namespace DNDS::Euler
             std::copy(R.father->RawDataVector().begin(), R.father->RawDataVector().end(), this->father->RawDataVector().begin());
             DNDS_assert(R.son->RawDataVector().size() == this->son->RawDataVector().size());
             std::copy(R.son->RawDataVector().begin(), R.son->RawDataVector().end(), this->son->RawDataVector().begin());
+        }
+
+        void addTo(t_self &R, const Eigen::Array<real, 1, nVarsFixed> &r)
+        {
+            for (index i = 0; i < this->Size(); i++)
+                this->operator[](i).array() += R.operator[](i).array().rowwise() * r;
         }
 
         void addTo(t_self &R, real r)
@@ -286,6 +297,18 @@ namespace DNDS::Euler
             for (index i = 0; i < this->father->Size(); i++) //*note that only father is included
                 sqrSum += (this->operator[](i).array() * R.operator[](i).array()).sum();
             MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
+            return sqrSumAll;
+        }
+
+        auto dotV(const t_self &R)
+        {
+            Eigen::RowVector<real, nVarsFixed> sqrSum, sqrSumAll;
+            sqrSum.resize(this->father->MatColSize());
+            sqrSumAll.resizeLike(sqrSum);
+            sqrSum.setZero();
+            for (index i = 0; i < this->father->Size(); i++) //*note that only father is included
+                sqrSum += (this->operator[](i).array() * R.operator[](i).array()).colwise().sum().matrix();
+            MPI::Allreduce(sqrSum.data(), sqrSumAll.data(), sqrSum.size(), DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
             return sqrSumAll;
         }
     };

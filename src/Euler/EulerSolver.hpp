@@ -14,7 +14,6 @@
 #include "Gas.hpp"
 #include "Geom/Mesh.hpp"
 #include "CFV/VariationalReconstruction.hpp"
-#include "Solver/Linear.hpp"
 #include "EulerEvaluator.hpp"
 #include "DNDS/JsonUtil.hpp"
 #include "EulerBC.hpp"
@@ -62,7 +61,7 @@ namespace DNDS::Euler
         ssp<EulerEvaluator<model>> pEval;
 
         ArrayDOFV<nVarsFixed> u, uInc, uIncRHS, uTemp, rhsTemp, wAveraged, uAveraged;
-        ArrayRECV<nVarsFixed> uRec, uRecNew, uRecNew1, uRecOld, uRec1, uRecInc, uRecInc1;
+        ArrayRECV<nVarsFixed> uRec, uRecNew, uRecNew1, uRecOld, uRec1, uRecInc, uRecInc1, uRecB, uRecB1;
         JacobianDiagBlock<nVarsFixed> JD, JD1, JSource, JSource1;
         ssp<JacobianLocalLU<nVarsFixed>> JLocalLU;
         ArrayDOFV<1> alphaPP, alphaPP1, betaPP, betaPP1, alphaPP_tmp, dTauTmp;
@@ -150,6 +149,9 @@ namespace DNDS::Euler
                 int recLinearScheme = 0; // 0 for original SOR, 1 for GMRES
                 int nGmresSpace = 5;
                 int nGmresIter = 10;
+                int fpcgResetScheme = 0;
+                real fpcgResetThres = 0.6;
+                int fpcgResetReport = 0;
                 real recThreshold = 1e-5;
                 int nRecConsolCheck = 1;
                 int nRecMultiplyForZeroedGrad = 1;
@@ -161,6 +163,7 @@ namespace DNDS::Euler
                     ImplicitReconstructionControl,
                     nInternalRecStep, zeroGrads,
                     recLinearScheme, nGmresSpace, nGmresIter,
+                    fpcgResetScheme, fpcgResetThres, fpcgResetReport,
                     recThreshold, nRecConsolCheck,
                     nRecMultiplyForZeroedGrad,
                     storeRecInc, dampRecIncDTau,
@@ -957,6 +960,8 @@ namespace DNDS::Euler
                 vfv->BuildURec(uRec1, nVars);
             vfv->BuildURec(uRecNew, nVars);
             vfv->BuildURec(uRecNew1, nVars);
+            vfv->BuildURec(uRecB, nVars);
+            vfv->BuildURec(uRecB1, nVars);
             vfv->BuildURec(uRecOld, nVars);
             vfv->BuildScalar(ifUseLimiter);
             vfv->BuildUDof(betaPP, 1);

@@ -81,6 +81,8 @@ namespace DNDS::CFV
         tVMatPair matrixSecondary; /// @brief constructed using ConstructRecCoeff(), secondary-rec matrices on each face
         tVMatPair matrixAHalf_GG;  /// @brief constructed using ConstructRecCoeff()
 
+        tVMatPair matrixA;
+
         std::vector<Eigen::MatrixXd> volIntCholeskyL;
         bool needVolIntCholeskyL = false;
         std::vector<Eigen::MatrixXd> matrixACholeskyL;
@@ -815,6 +817,14 @@ namespace DNDS::CFV
         }
 
         template <int nVarsFixed = 1>
+        void MatrixAMult(tURec<nVarsFixed> &uRec, tURec<nVarsFixed> &uRec1)
+        {
+            DNDS_assert(matrixA.Size() == mesh->NumCellProc());
+            for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+                uRec1[iCell] = matrixA[iCell] * uRec[iCell];
+        }
+
+        template <int nVarsFixed = 1>
         auto DownCastURecOrder(
             int curOrder,
             index iCell,
@@ -1028,7 +1038,8 @@ namespace DNDS::CFV
             tUDof<nVarsFixed> &u,
             const TFBoundary<nVarsFixed> &FBoundary,
             bool putIntoNew = false,
-            bool recordInc = false);
+            bool recordInc = false,
+            bool uRecIsZero = false);
         /***********************************************************/
 
         /**

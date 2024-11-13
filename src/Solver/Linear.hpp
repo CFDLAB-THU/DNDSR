@@ -51,11 +51,11 @@ namespace DNDS::Linear
             uint32_t iRestart;
             for (iRestart = 0; iRestart <= nRestart; iRestart++)
             {
-                FA(x, V_temp);                        // V_temp = A * x
-                FML(V_temp, Vs[0]);                   // Vs[0] = ML * A * x
-                Vs[0].addTo(MLb, -1.0);               // Vs[0] = ML * A * x - ML * b = -r
-                real beta = std::sqrt(fDot(Vs[0], Vs[0]));        // beta = norm2(r)
-                if (FStop(iRestart, beta, scale_MLb)) // see if converge
+                FA(x, V_temp);                             // V_temp = A * x
+                FML(V_temp, Vs[0]);                        // Vs[0] = ML * A * x
+                Vs[0].addTo(MLb, -1.0);                    // Vs[0] = ML * A * x - ML * b = -r
+                real beta = std::sqrt(fDot(Vs[0], Vs[0])); // beta = norm2(r)
+                if (FStop(iRestart, beta, scale_MLb))      // see if converge
                     break;
                 if (std::abs(beta) < verySmallReal || // beta is floating-point negligible
                     (iRestart == nRestart))
@@ -77,7 +77,7 @@ namespace DNDS::Linear
                         // Gram-Schmidt, subtract projections
                         Vs[j + 1].addTo(Vs[i], -h(i, j)); // Vs[j + 1] = ML * A * Vs[j] - sum_{i=0,1,...j}(h(i,j) *  Vs[i])
                     }
-                    h(j + 1, j) = std::sqrt(fDot(Vs[j + 1],Vs[j + 1])); //
+                    h(j + 1, j) = std::sqrt(fDot(Vs[j + 1], Vs[j + 1])); //
                     if (h(j + 1, j) < scale_MLb * 1e-32)
                     {
                         std::cout << "early stop" << std::endl;
@@ -124,6 +124,69 @@ namespace DNDS::Linear
                 }
             }
             return iRestart < nRestart;
+        }
+    };
+
+    template <class TDATA, class TScalar>
+    class PCG_PreconditionedRes
+    {
+        bool initialized = false;
+        TDATA r, z, p, Ap;
+        TDATA V_temp;
+
+        TScalar zrDot;
+
+    public:
+        template <class Finit>
+        PCG_PreconditionedRes(
+            Finit &&finit = [](TDATA &) {})
+        {
+            finit(r);
+            finit(z);
+            finit(p);
+            finit(Ap);
+            finit(V_temp);
+        }
+
+        void reset() { initialized = false; }
+
+        template <class TFA, class TFM, class TFResPrec, class TFDot, class TFstop>
+        bool solve(TFA &&FA, TFM &&FM, TFResPrec &&FResPrec, TFDot &&fDot, TDATA &x, uint32_t niter, TFstop &&FStop)
+        {
+            if (!initialized)
+            {
+                FResPrec(x, z);
+                FM(z, r);
+                p = z;
+                FA(p, Ap);
+            }
+            for (int iter = 1; iter <= niter; iter++)
+            {
+                if (initialized)
+                {
+                    FResPrec(x, z);
+                    FM(z, r);
+                }
+                TScalar zrDotNew = fDot(z, r);
+                TScalar zDotz = fDot(z, z);
+                if (FStop(iter, zrDotNew, zDotz))
+                    return true;
+
+                if (initialized)
+                {
+                    TScalar beta = zrDotNew / (zrDot + verySmallReal);
+                    p *= beta;
+                    p += z;
+                    FA(p, Ap);
+                }
+
+                TScalar alpha = zrDotNew / (fDot(p, Ap) + verySmallReal);
+                x.addTo(p, alpha);
+
+                zrDot = zrDotNew;
+                initialized = true;
+            }
+            return false;
         }
     };
 }
