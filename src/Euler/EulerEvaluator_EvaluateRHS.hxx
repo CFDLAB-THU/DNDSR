@@ -254,9 +254,9 @@ namespace DNDS::Euler
                     PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
 
                     real distGRP = minVol / vfv->GetFaceArea(iFace) * 2;
-#ifdef USE_DISABLE_DIST_GRP_FIX_AT_WALL
-                    distGRP += faceBCType == EulerBCType::BCWall ? veryLargeReal : 0.0;
-#endif
+                    if (settings.noGRPOnWall)
+                        distGRP += faceBCType == EulerBCType::BCWall ? veryLargeReal : 0.0;
+
                     distGRP += faceBCType == EulerBCType::BCWallInvis ? veryLargeReal : 0.0;
                     distGRP += faceBCType == EulerBCType::BCSym ? veryLargeReal : 0.0;
                     TU UMeanXy = 0.5 * (ULxy + URxy);
@@ -313,6 +313,17 @@ namespace DNDS::Euler
                         if (f2c[1] != UnInitIndex)
                             std::cout << u[f2c[1]].transpose() << std::endl;
                         DNDS_assert(false);
+                    }
+
+                    if (faceBCType == EulerBCType::BCWall && settings.noRsOnWall)
+                    {
+                        TU ULc = ULxy;
+                        TU ULcPrim;
+                        Gas::IdealGasThermalConservative2Primitive(ULc, ULcPrim, settings.idealGasProperty.gamma);
+                        ULcPrim(Seq123).setZero();
+                        Gas::IdealGasThermalPrimitive2Conservative(ULcPrim, ULc, settings.idealGasProperty.gamma);
+                        ULxy = ULc;
+                        URxy = ULc;
                     }
 
                     auto seqC = Eigen::seq(iG * dim, iG * dim + dim - 1);

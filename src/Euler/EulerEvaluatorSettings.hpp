@@ -155,6 +155,9 @@ namespace DNDS::Euler
         bool useScalarJacobian = false;
         bool useRoeJacobian = false;
 
+        bool noRsOnWall = false;
+        bool noGRPOnWall = false;
+
         Eigen::Vector<real, -1> refU;
         Eigen::Vector<real, -1> refUPrim;
 
@@ -184,6 +187,8 @@ namespace DNDS::Euler
             {
                 DNDS_assert(!(useScalarJacobian && useRoeJacobian));
             }
+            __DNDS__json_to_config(noRsOnWall);
+            __DNDS__json_to_config(noGRPOnWall);
             __DNDS__json_to_config(ignoreSourceTerm);
             __DNDS__json_to_config(specialBuiltinInitializer);
             __DNDS__json_to_config(uRecAlphaCompressPower);

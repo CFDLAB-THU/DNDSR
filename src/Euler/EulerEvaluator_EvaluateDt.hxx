@@ -809,13 +809,6 @@ namespace DNDS::Euler
             std::cout << "UR" << URxy.transpose() << std::endl;
         };
 
-        if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall)
-        {
-#ifdef USE_NO_RIEMANN_ON_WALL
-            // todo: implement exact flux for wall BC
-#else
-#endif
-        }
         if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
             pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
         {
@@ -844,7 +837,7 @@ namespace DNDS::Euler
             rsType = settings.rsTypeWall;
         }
 
-        if (settings.rsRotateScheme == 0)
+        auto runRsOnNorm = [&]()
         {
             if (settings.rsMeanValueEig != 0 &&
                 (rsType >= Gas::Roe_M1 && rsType <= Gas::Roe_M5))
@@ -867,9 +860,107 @@ namespace DNDS::Euler
                                  settings.idealGasProperty.gamma, finc(Eigen::all, iB), deltaLambdaFace[iFace],
                                  lam0V(iB), lam123V(iB), lam4V(iB));
                 }
+        };
+
+        if (settings.rsRotateScheme == 0)
+        {
+            runRsOnNorm();
         }
         else
-            DNDS_assert(false);
+        {
+            TVec veloL = ULMeanXy(Seq123) / ULMeanXy(0);
+            TVec veloR = URMeanXy(Seq123) / URMeanXy(0);
+            TVec diffVelo = veloR - veloL;
+            real diffVeloN = diffVelo.norm();
+            real veloLN = veloL.norm();
+            real veloRN = veloR.norm();
+            if (diffVeloN < (smallReal * 10) * (veloLN + veloRN) || diffVeloN < std::sqrt(verySmallReal))
+                runRsOnNorm();
+            else
+            {
+                TVec N1 = diffVelo / diffVeloN;
+                DNDS_assert_info(std::abs(N1.norm() - 1) < 1e-5, fmt::format("{}", diffVeloN));
+                TReal_Batch N1Proj = N1.transpose() * unitNorm;
+
+                TVec_Batch N2 = unitNorm - N1 * N1Proj;
+                TReal_Batch N2Proj = N2.colwise().norm().array().max(smallReal * 10);
+                N2.array().rowwise() /= N2Proj.array();
+
+                real N1ProjC = N1.dot(unitNormC);
+                TVec N2C = unitNormC - N1 * N1ProjC;
+                real N2CProj = std::max(N2C.norm(), smallReal * 10);
+                N2C /= N2CProj;
+
+                TVec_Batch N1B;
+                N1B.resizeLike(N2);
+                N1B.colwise() = N1;
+
+                TReal_Batch lam4V1, lam0V1, lam123V1;
+                lam0V1.resizeLike(lam0V);
+                lam4V1.resizeLike(lam0V);
+                lam123V1.resizeLike(lam0V);
+
+                TU_Batch F1;
+                F1.resizeLike(finc);
+
+                auto rsTypeAux = settings.rsTypeAux == Gas::UnknownRS ? rsType : settings.rsTypeAux;
+
+                if (settings.rsMeanValueEig != 0 &&
+                    (rsTypeAux >= Gas::Roe_M1 && rsTypeAux <= Gas::Roe_M5))
+                {
+                    real lam0{0}, lam123{0}, lam4{0};
+                    Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
+                        rsTypeAux,
+                        ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N1B, N1,
+                        settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
+                        exitFun, lam0, lam123, lam4);
+                    lam0V1.setConstant(lam0);
+                    lam123V1.setConstant(lam123);
+                    lam4V1.setConstant(lam4);
+                }
+                else
+                    for (int iB = 0; iB < nB; iB++)
+                    {
+                        RSWrapper_XY(rsTypeAux, ULxy(Eigen::all, iB), URxy(Eigen::all, iB), ULMeanXy, URMeanXy,
+                                     vgXY(Eigen::all, iB), N1,
+                                     settings.idealGasProperty.gamma, F1(Eigen::all, iB), deltaLambdaFace[iFace],
+                                     lam0V1(iB), lam123V1(iB), lam4V1(iB));
+                    }
+
+                if (settings.rsMeanValueEig != 0 &&
+                    (rsType >= Gas::Roe_M1 && rsType <= Gas::Roe_M5))
+                {
+                    real lam0{0}, lam123{0}, lam4{0};
+                    Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
+                        rsType,
+                        ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N2, N2C,
+                        settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
+                        exitFun, lam0, lam123, lam4);
+                    lam0V.setConstant(lam0);
+                    lam123V.setConstant(lam123);
+                    lam4V.setConstant(lam4);
+                }
+                else
+                    for (int iB = 0; iB < nB; iB++)
+                    {
+                        RSWrapper_XY(rsType, ULxy(Eigen::all, iB), URxy(Eigen::all, iB), ULMeanXy, URMeanXy,
+                                     vgXY(Eigen::all, iB), N2(Eigen::all, iB),
+                                     settings.idealGasProperty.gamma, finc(Eigen::all, iB), deltaLambdaFace[iFace],
+                                     lam0V(iB), lam123V(iB), lam4V(iB));
+                    }
+
+                finc.array().rowwise() *= N2Proj.array();
+                finc.array() += F1.array().rowwise() * N1Proj.array();
+
+                TReal_Batch N12ProjSum = N1Proj.array() + N2Proj.array();
+                lam0V.array() *= N2Proj.array() / N12ProjSum.array();
+                lam4V.array() *= N2Proj.array() / N12ProjSum.array();
+                lam123V.array() *= N2Proj.array() / N12ProjSum.array();
+                lam0V.array() += N1Proj.array() * lam0V1.array() / N12ProjSum.array();
+                lam4V.array() += N1Proj.array() * lam4V1.array() / N12ProjSum.array();
+                lam123V.array() += N1Proj.array() * lam123V1.array() / N12ProjSum.array();
+            }
+        }
 
 #ifndef USE_ENTROPY_FIXED_LAMBDA_IN_SA
         lam123 = (std::abs(UL(1) / UL(0) - vg(0)) + std::abs(UR(1) / UR(0) - vg(0))) * 0.5; //! high fix

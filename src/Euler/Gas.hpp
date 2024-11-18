@@ -453,8 +453,8 @@ namespace DNDS::Euler::Gas
         };
         real pS = 0.5 * (pLm + pRm) - 0.5 * (veloLm0 - veloRm0) * rhoRoe * aRoe;
         pS = std::max(0.0, pS);
-        real SL = veloRoe0 - std::sqrt(asqrLm) * HLLCq(pLm, pS);
-        real SR = veloRoe0 + std::sqrt(asqrRm) * HLLCq(pRm, pS);
+        real SL = veloLm0 - std::sqrt(asqrLm) * HLLCq(pLm, pS);
+        real SR = veloRm0 + std::sqrt(asqrRm) * HLLCq(pRm, pS);
 
         dLambda += verySmallReal;
         dLambda *= 2.0;
