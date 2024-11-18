@@ -20,6 +20,7 @@ namespace DNDS::Euler
 
         Gas::RiemannSolverType rsType = Gas::Roe;
         Gas::RiemannSolverType rsTypeAux = Gas::UnknownRS;
+        Gas::RiemannSolverType rsTypeWall = Gas::UnknownRS;
         int rsMeanValueEig = 0;
         int nCentralSmoothStep = 0;
         int rsRotateScheme = 0;
@@ -152,6 +153,7 @@ namespace DNDS::Euler
 
         bool ignoreSourceTerm = false;
         bool useScalarJacobian = false;
+        bool useRoeJacobian = false;
 
         Eigen::Vector<real, -1> refU;
         Eigen::Vector<real, -1> refUPrim;
@@ -177,6 +179,11 @@ namespace DNDS::Euler
             //********* root entries
 
             __DNDS__json_to_config(useScalarJacobian);
+            __DNDS__json_to_config(useRoeJacobian);
+            if (read)
+            {
+                DNDS_assert(!(useScalarJacobian && useRoeJacobian));
+            }
             __DNDS__json_to_config(ignoreSourceTerm);
             __DNDS__json_to_config(specialBuiltinInitializer);
             __DNDS__json_to_config(uRecAlphaCompressPower);
@@ -190,6 +197,9 @@ namespace DNDS::Euler
             Gas::RiemannSolverType riemannSolverTypeAux = rsTypeAux;
             __DNDS__json_to_config(riemannSolverTypeAux);
             rsTypeAux = riemannSolverTypeAux;
+            Gas::RiemannSolverType riemannSolverTypeWall = rsTypeWall;
+            __DNDS__json_to_config(riemannSolverTypeWall);
+            rsTypeWall = riemannSolverTypeWall;
             // std::cout << rsType << std::endl;
             __DNDS__json_to_config(rsMeanValueEig);
             __DNDS__json_to_config(rsRotateScheme);

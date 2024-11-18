@@ -10,7 +10,8 @@ namespace DNDS::Euler
 
     static const auto model = NS_SA; // to be hidden by template params
 
-    template <EulerModel model>
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, )
     void EulerEvaluator<model>::LUSGSMatrixInit(
         JacobianDiagBlock<nVarsFixed> &JDiag,
         JacobianDiagBlock<nVarsFixed> &JSource,
@@ -20,9 +21,12 @@ namespace DNDS::Euler
         int jacobianCode,
         real t)
     {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         // TODO: for code0: flux jacobian with lambdaFace, and source jacobian with integration, only diagpart dealt with
         DNDS_assert(JDiag.isBlock() == JSource.isBlock());
         DNDS_assert(jacobianCode == 0);
+        if (settings.useRoeJacobian)
+            DNDS_assert(JDiag.isBlock());
         JDiag.clearValues();
         int cnvars = nVars;
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
@@ -35,11 +39,41 @@ namespace DNDS::Euler
             {
                 index iFace = c2f[ic2f];
                 fpDivisor += (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) * lambdaFace[iFace] / vfv->GetCellVol(iCell);
+                if (!settings.useRoeJacobian)
+                    continue;
+                // roe term jacobi
+                auto f2c = mesh->face2cell[iFace];
+                index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
+                rowsize iCellAtFace = f2c[0] == iCell ? 0 : 1;
+                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
+                                (iCellAtFace ? -1 : 1); // faces out
+                if (iCellOther == UnInitIndex)
+                    iCellOther = iCell; //! todo: deal with bcs
+                TU uj = u[iCellOther];
+                if (iCellOther != UnInitIndex)
+                    this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
+                TJacobianU jacII = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
+                    u[iCell], uj,
+                    unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                    Geom::BC_ID_INTERNAL,
+                    lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                    iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                    // swap lambda0 and lambda4 if iCellAtFace==1
+                    true, +1, 1); // for this is diff(uthis) not diff(uthat)
+                JDiag.getBlock(iCell) += (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacII;
+                // std::cout << "JacII\n";
+                // std::cout << jacII << "\n";
+                // std::cout << lambdaFace[iFace] << std::endl;
             }
-            if (JDiag.isBlock())
-                JDiag.getBlock(iCell).diagonal().setConstant(fpDivisor);
+            if (settings.useRoeJacobian)
+                JDiag.getBlock(iCell).diagonal().array() += 1.0 / dTau[iCell](0) + 1.0 / dt; // time term!!
             else
-                JDiag.getDiag(iCell).setConstant(fpDivisor);
+            {
+                if (JDiag.isBlock())
+                    JDiag.getBlock(iCell).diagonal().setConstant(fpDivisor);
+                else
+                    JDiag.getDiag(iCell).setConstant(fpDivisor);
+            }
 
             // std::cout << fpDivisor << std::endl;
 
@@ -115,9 +149,13 @@ namespace DNDS::Euler
                             //            BoundaryType::Inner) *
                             //        uInc[iCellOther]; //! always inner here
                             fInc = fluxJacobian0_Right_Times_du(
-                                uj,
+                                uj, u[iCell],
                                 unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                                Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
+                                Geom::BC_ID_INTERNAL, uINCj,
+                                lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                                iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                // swap lambda0 and lambda4 if iCellAtFace==1
+                                settings.useRoeJacobian); //! always inner here
                         }
 
                         uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
@@ -187,9 +225,13 @@ namespace DNDS::Euler
                     TJacobianU jacIJ;
                     {
                         jacIJ = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
-                            uj,
+                            uj, u[iCell],
                             unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                            Geom::BC_ID_INTERNAL, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
+                            Geom::BC_ID_INTERNAL,
+                            lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                            iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                            // swap lambda0 and lambda4 if iCellAtFace==1
+                            settings.useRoeJacobian); //! always inner here
                     }
                     auto faceID = mesh->GetFaceZone(iFace);
                     mesh->CellOtherCellPeriodicHandle(
@@ -261,9 +303,13 @@ namespace DNDS::Euler
 
                         {
                             fInc = fluxJacobian0_Right_Times_du(
-                                uj,
+                                uj, u[iCell],
                                 unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                                Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
+                                Geom::BC_ID_INTERNAL, uINCj,
+                                lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                                iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                // swap lambda0 and lambda4 if iCellAtFace==1
+                                settings.useRoeJacobian); //! always inner here
                         }
 
                         uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
@@ -341,9 +387,13 @@ namespace DNDS::Euler
                         {
 
                             fInc = fluxJacobian0_Right_Times_du(
-                                uj,
+                                uj, u[iCell],
                                 unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                                Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
+                                Geom::BC_ID_INTERNAL, uINCj,
+                                lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                                iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                // swap lambda0 and lambda4 if iCellAtFace==1
+                                settings.useRoeJacobian); //! always inner here
                         }
 
                         uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
@@ -406,9 +456,13 @@ namespace DNDS::Euler
 
                         {
                             fInc = fluxJacobian0_Right_Times_du(
-                                uj,
+                                uj, u[iCell],
                                 unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                                Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
+                                Geom::BC_ID_INTERNAL, uINCj,
+                                lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                                iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                // swap lambda0 and lambda4 if iCellAtFace==1
+                                settings.useRoeJacobian); //! always inner here
                         }
 
                         uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
@@ -438,9 +492,13 @@ namespace DNDS::Euler
                 //     if (model == NS_2EQ || model == NS_2EQ_3D)
                 //         uINCj({I4 + 1, I4 + 2}).setZero();
                 //     TU fInc = fluxJacobian0_Right_Times_du(
-                //         uj,
+                //         uj, u[iCell],
                 //         unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                //         Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! treat as inner here
+                //         Geom::BC_ID_INTERNAL, uINCj,
+                //         lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                //         iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                //                // swap lambda0 and lambda4 if iCellAtFace==1
+                //         settings.useRoeJacobian); //! treat as inner here
 
                 //     uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
                 //                   (fInc);
@@ -515,9 +573,13 @@ namespace DNDS::Euler
                         auto uINCj = uInc[iCellOther];
                         {
                             fInc = fluxJacobian0_Right_Times_du(
-                                u[iCellOther], //! TODO periodic here
+                                u[iCellOther], u[iCell], //! TODO periodic here
                                 unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                                Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
+                                Geom::BC_ID_INTERNAL, uINCj,
+                                lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                                iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                // swap lambda0 and lambda4 if iCellAtFace==1
+                                settings.useRoeJacobian); //! always inner here
                         }
                         {
                             TU uRecSLInc =
@@ -612,9 +674,13 @@ namespace DNDS::Euler
                     {
 
                         fInc = fluxJacobian0_Right_Times_du(
-                            uj,
+                            uj, u[iCell],
                             unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                            Geom::BC_ID_INTERNAL, uINCj, lambdaFace[iFace], lambdaFaceC[iFace]); //! always inner here
+                            Geom::BC_ID_INTERNAL, uINCj,
+                            lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                            iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                            // swap lambda0 and lambda4 if iCellAtFace==1
+                            settings.useRoeJacobian); //! always inner here
                     }
 
                     bBuf[iCell] -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *

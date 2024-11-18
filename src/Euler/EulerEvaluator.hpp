@@ -54,6 +54,7 @@ namespace DNDS::Euler
         typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatchMult(3)> TMat_Batch;
         typedef Eigen::VectorFMTSafe<real, nVarsFixed> TU;
         typedef Eigen::MatrixFMTSafe<real, nVarsFixed, Eigen::Dynamic, Eigen::ColMajor, nVarsFixed, MaxBatch> TU_Batch;
+        typedef Eigen::MatrixFMTSafe<real, 1, Eigen::Dynamic, Eigen::RowMajor, 1, MaxBatch> TReal_Batch;
         typedef Eigen::MatrixFMTSafe<real, nVarsFixed, nVarsFixed> TJacobianU;
         typedef Eigen::MatrixFMTSafe<real, dim, nVarsFixed> TDiffU;
         typedef Eigen::MatrixFMTSafe<real, Eigen::Dynamic, nVarsFixed, Eigen::ColMajor, MaxBatchMult(3)> TDiffU_Batch;
@@ -85,6 +86,9 @@ namespace DNDS::Euler
         std::vector<real> lambdaFace;
         std::vector<real> lambdaFaceC;
         std::vector<real> lambdaFaceVis;
+        std::vector<real> lambdaFace0;
+        std::vector<real> lambdaFace123;
+        std::vector<real> lambdaFace4;
         std::vector<real> deltaLambdaFace;
 
         std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall;
@@ -121,6 +125,10 @@ namespace DNDS::Euler
             lambdaFace.resize(mesh->NumFaceProc());
             lambdaFaceC.resize(mesh->NumFaceProc());
             lambdaFaceVis.resize(lambdaFace.size());
+            lambdaFace0.resize(mesh->NumFaceProc(), 0.);
+            lambdaFace123.resize(mesh->NumFaceProc(), 0.);
+            lambdaFace4.resize(mesh->NumFaceProc(), 0.);
+
             deltaLambdaFace.resize(lambdaFace.size());
 
             fluxBnd.resize(mesh->NumBnd());
@@ -436,6 +444,7 @@ namespace DNDS::Euler
             const TVec &vgC,
             TU_Batch &FLfix,
             TU_Batch &FRfix,
+            TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,
             Geom::t_index btype,
             typename Gas::RiemannSolverType rsType,
             index iFace);
@@ -523,14 +532,19 @@ namespace DNDS::Euler
 
         /**
          * @brief inviscid flux approx jacobian (flux term not reconstructed / no riemann)
+         * if lambdaMain == veryLargeReal, then use lambda0~4 for roe-flux type jacobian
          *
          */
         TU fluxJacobian0_Right_Times_du(
             const TU &U,
+            const TU &UOther,
             const TVec &n,
             const TVec &vg,
             Geom::t_index btype,
-            const TU &dU, real lambdaMain, real lambdaC)
+            const TU &dU,
+            real lambdaMain, real lambdaC, real lambdaVis,
+            real lambda0, real lambda123, real lambda4,
+            int useRoeTerm, int incFsign = -1, int omitF = 0)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             real gamma = settings.idealGasProperty.gamma;
@@ -541,40 +555,64 @@ namespace DNDS::Euler
             real dp;
             Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp);
             TU dF(U.size());
-            Gas::GasInviscidFluxFacialIncrement<dim>(
-                U, dU,
-                n,
-                velo, dVelo, vg,
-                dp, p,
-                dF);
-            dF(Seq01234) -= lambdaMain * dU(Seq01234);
+            if (omitF == 0)
+                Gas::GasInviscidFluxFacialIncrement<dim>(
+                    U, dU,
+                    n,
+                    velo, dVelo, vg,
+                    dp, p,
+                    dF);
+            else
+                dF.setZero();
+            if (useRoeTerm == 0)
+                dF(Seq01234) += incFsign * lambdaMain * dU(Seq01234);
+            else
+            {
+                TVec veloRoe;
+                real vsqrRoe{0}, aRoe{0}, asqrRoe{0}, HRoe{0};
+                Gas::GetRoeAverage<dim>(U, UOther, gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe);
+                Gas::RoeFluxIncFDiff<dim>(dU, n, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe,
+                                          incFsign * lambda0, incFsign * lambda123, incFsign * lambda4, gamma,
+                                          dF);
+                dF(Seq01234) += incFsign * lambdaVis * dU(Seq01234);
+            }
+
             if constexpr (model == NS_SA || model == NS_SA_3D)
             {
-                dF(I4 + 1) = dU(I4 + 1) * n.dot(velo - vg) + U(I4 + 1) * n.dot(dVelo);
-                dF(I4 + 1) -= dU(I4 + 1) * lambdaMain;
+                if (omitF == 0)
+                    dF(I4 + 1) = dU(I4 + 1) * n.dot(velo - vg) + U(I4 + 1) * n.dot(dVelo);
+                dF(I4 + 1) += incFsign * dU(I4 + 1) * lambdaMain;
             }
             if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
-                dF(I4 + 1) = dU(I4 + 1) * n.dot(velo - vg) + U(I4 + 1) * n.dot(dVelo);
-                dF(I4 + 1) -= dU(I4 + 1) * lambdaMain;
-                dF(I4 + 2) = dU(I4 + 2) * n.dot(velo - vg) + U(I4 + 2) * n.dot(dVelo);
-                dF(I4 + 2) -= dU(I4 + 2) * lambdaMain;
+                if (omitF == 0)
+                    dF(I4 + 1) = dU(I4 + 1) * n.dot(velo - vg) + U(I4 + 1) * n.dot(dVelo);
+                dF(I4 + 1) += incFsign * dU(I4 + 1) * lambdaMain;
+                if (omitF == 0)
+                    dF(I4 + 2) = dU(I4 + 2) * n.dot(velo - vg) + U(I4 + 2) * n.dot(dVelo);
+                dF(I4 + 2) += incFsign * dU(I4 + 2) * lambdaMain;
             }
             return dF;
         }
 
         TJacobianU fluxJacobian0_Right_Times_du_AsMatrix(
             const TU &U,
+            const TU &UOther,
             const TVec &n,
             const TVec &vg,
             Geom::t_index btype,
-            real lambdaMain, real lambdaC)
+            real lambdaMain, real lambdaC, real lambdaVis,
+            real lambda0, real lambda123, real lambda4,
+            int useRoeTerm, int incFsign = -1, int omitF = 0)
         { // TODO: optimize this
             TJacobianU J;
             J.resize(nVars, nVars);
             J.setIdentity();
             for (int i = 0; i < nVars; i++)
-                J(Eigen::all, i) = fluxJacobian0_Right_Times_du(U, n, vg, btype, J(Eigen::all, i), lambdaMain, lambdaC);
+                J(Eigen::all, i) = fluxJacobian0_Right_Times_du(
+                    U, UOther, n, vg, btype, J(Eigen::all, i),
+                    lambdaMain, lambdaC, lambdaVis, lambda0, lambda123, lambda4,
+                    useRoeTerm, incFsign, omitF);
             return J;
         }
 
@@ -1350,6 +1388,7 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
                 const TVec &vgC,                                                                                           \
                 TU_Batch &FLfix,                                                                                           \
                 TU_Batch &FRfix,                                                                                           \
+                TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,                                              \
                 Geom::t_index btype,                                                                                       \
                 typename Gas::RiemannSolverType rsType,                                                                    \
                 index iFace);                                                                                              \

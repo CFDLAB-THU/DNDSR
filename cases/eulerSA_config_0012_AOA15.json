@@ -56,7 +56,7 @@
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
         "zeroGrads": false,
-        "recLinearScheme": 2, // 2 is fpcg, 1 is gmres
+        "recLinearScheme": 0, // 2 is fpcg, 1 is gmres
         "nGmresSpace": 5,
         "nGmresIter": 1,
         "fpcgResetScheme": 0,
@@ -132,7 +132,8 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe_M2",
+        "useRoeJacobian": false,
+        "riemannSolverType": "Roe_M1",
         "uRecBetaCompressPower": 1,
         "wallDistScheme": 1,
         "wallDistExection": 5,

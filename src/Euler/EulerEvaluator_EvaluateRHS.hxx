@@ -323,6 +323,7 @@ namespace DNDS::Euler
                     unitNormV(Eigen::all, iG) = unitNorm;
                     vgXYV(Eigen::all, iG) = GetFaceVGrid(iFace, iG);
                 });
+            TReal_Batch lam0V, lam123V, lam4V;
             TU_Batch fincC = fluxFace(
                 ULxyV, URxyV,
                 ULMeanXy, URMeanXy,
@@ -333,6 +334,7 @@ namespace DNDS::Euler
                 GetFaceVGrid(iFace, -1),
                 FLFix,
                 FRFix,
+                lam0V, lam123V, lam4V,
                 mesh->GetFaceZone(iFace),
                 rsType,
                 iFace);
@@ -349,6 +351,25 @@ namespace DNDS::Euler
 #endif
                     finc *= vfv->GetFaceJacobiDet(iFace, iG); // !don't forget this
                 });
+
+            if (settings.useRoeJacobian)
+            {
+                Eigen::Vector<real, 3> lamEs;
+                lamEs.setZero();
+                gFace.IntegrationSimple(
+                    lamEs,
+                    [&](decltype(lamEs) &finc, int iG)
+                    {
+                        finc(0) = lam0V(iG);
+                        finc(1) = lam123V(iG);
+                        finc(2) = lam4V(iG);
+                        finc *= vfv->GetFaceJacobiDet(iFace, iG); // !don't forget this
+                    });
+                lamEs /= vfv->GetFaceArea(iFace);
+                lambdaFace0[iFace] = lamEs(0);
+                lambdaFace123[iFace] = lamEs(1);
+                lambdaFace4[iFace] = lamEs(2);
+            }
 
             TU fluxIncL = fluxEs(Eigen::all, 0);
             TU fluxIncR = -fluxEs(Eigen::all, 0);

@@ -690,6 +690,63 @@ namespace DNDS::Euler::Gas
         F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = (FL + FR) * 0.5 - 0.5 * incF;
     }
 
+    template <int dim = 3, typename TUL, typename TUR, typename TVecV>
+    void GetRoeAverage(const TUL &UL, const TUR &UR, real gamma,
+                       TVecV &veloRoe, real &vsqrRoe, real &aRoe, real &asqrRoe, real &HRoe)
+    {
+        using TVec = Eigen::Vector<real, dim>;
+        TVec veloLm = (UL(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / UL(0)).matrix();
+        TVec veloRm = (UR(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / UR(0)).matrix();
+        real asqrLm, asqrRm, pLm, pRm, HLm, HRm;
+        real vsqrLm = veloLm.squaredNorm();
+        real vsqrRm = veloRm.squaredNorm();
+        IdealGasThermal(UL(dim + 1), UL(0), vsqrLm, gamma, pLm, asqrLm, HLm);
+        IdealGasThermal(UR(dim + 1), UR(0), vsqrRm, gamma, pRm, asqrRm, HRm);
+        DNDS_assert(UL(0) >= 0 && UR(0) >= 0);
+        real sqrtRhoLm = std::sqrt(UL(0));
+        real sqrtRhoRm = std::sqrt(UR(0));
+
+        veloRoe = (sqrtRhoLm * veloLm + sqrtRhoRm * veloRm) / (sqrtRhoLm + sqrtRhoRm);
+        vsqrRoe = veloRoe.squaredNorm();
+        HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
+        asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
+        DNDS_assert(asqrRoe >= 0);
+        aRoe = std::sqrt(asqrRoe);
+    }
+
+    template <int dim = 3, typename TDU, typename TDF, typename TVecV, typename TVecN>
+    void RoeFluxIncFDiff(const TDU &incU, const TVecN &n, const TVecV &veloRoe,
+                         real vsqrRoe, real aRoe, real asqrRoe, real HRoe,
+                         real lam0, real lam123, real lam4, real gamma,
+                         TDF &incF)
+    {
+        using TVec = Eigen::Vector<real, dim>;
+        real veloRoeN = veloRoe.dot(n);
+
+        real incU123N = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).dot(n);
+
+        TVec alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) - incU(0) * veloRoe;
+        TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
+        real incU4b = incU(dim + 1) - alpha23VT.dot(veloRoe);
+        real alpha1 = (gamma - 1) / asqrRoe *
+                      (incU(0) * (HRoe - veloRoeN * veloRoeN) +
+                       veloRoeN * incU123N - incU4b);
+        real alpha0 = (incU(0) * (veloRoeN + aRoe) - incU123N - aRoe * alpha1) / (2 * aRoe);
+        real alpha4 = incU(0) - (alpha0 + alpha1);
+
+        alpha0 *= lam0;
+        alpha1 *= lam123;
+        alpha23VT *= lam123;
+        alpha4 *= lam4; // here becomes alpha_i * lam_i
+
+        incF(0) += alpha0 + alpha1 + alpha4;
+        incF(dim + 1) += (HRoe - veloRoeN * aRoe) * alpha0 + 0.5 * vsqrRoe * alpha1 +
+                         (HRoe + veloRoeN * aRoe) * alpha4 + alpha23VT.dot(veloRoe);
+        incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) +=
+            (veloRoe - aRoe * n) * alpha0 + (veloRoe + aRoe * n) * alpha4 +
+            veloRoe * alpha1 + alpha23VT;
+    }
+
     template <int dim = 3, int eigScheme = 0,
               typename TUL, typename TUR,
               typename TULm, typename TURm,

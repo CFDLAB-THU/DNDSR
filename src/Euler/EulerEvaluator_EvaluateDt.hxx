@@ -600,6 +600,7 @@ namespace DNDS::Euler
             lambdaFace[iFace] = lambdaConvection + lamVis * area * (1. / vfv->GetCellVol(iCellL) + 1. / volR);
             lambdaFaceC[iFace] = std::abs(veloNMean - vgN) + lamVis * area * (1. / vfv->GetCellVol(iCellL) + 1. / volR); // passive part
             lambdaFaceVis[iFace] = lamVis * area * (1. / vfv->GetCellVol(iCellL) + 1. / volR);
+            lambdaFace0[iFace] = lambdaFace123[iFace] = lambdaFace4[iFace] = lambdaConvection;
 
             // if (f2c[0] == 10756)
             // {
@@ -662,6 +663,7 @@ namespace DNDS::Euler
         const TVec &vgC,
         TU_Batch &FLfix,
         TU_Batch &FRfix,
+        TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,
         Geom::t_index btype,
         typename Gas::RiemannSolverType rsType,
         index iFace)
@@ -820,7 +822,6 @@ namespace DNDS::Euler
             // ? normal invert here?
         }
 
-        Eigen::RowVector<real, -1> lam0V, lam123V, lam4V;
         lam0V.resize(nB);
         lam123V.resize(nB);
         lam4V.resize(nB);
@@ -838,6 +839,11 @@ namespace DNDS::Euler
         finc.resizeLike(ULxy);
         // TU_Batch finc1;
         // finc1.resizeLike(ULxy);
+        if (settings.rsTypeWall != Gas::UnknownRS && pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall)
+        {
+            rsType = settings.rsTypeWall;
+        }
+
         if (settings.rsRotateScheme == 0)
         {
             if (settings.rsMeanValueEig != 0 &&
