@@ -54,6 +54,7 @@ namespace DNDS::CFV
         t3VecPair cellMajorHBox;       /// @brief constructed using ConstructMetrics()
         t3MatPair cellMajorCoord;      /// @brief constructed using ConstructMetrics()
         t3MatPair cellInertia;         /// @brief constructed using ConstructMetrics()
+        tScalarPair cellSmoothScale;   /// @brief constructed using ConstructMetrics()
 
         t3VecPair faceAlignedScales;     /// @brief constructed using ConstructBaseAndWeight()
         t3MatPair faceMajorCoordScale;   /// @brief constructed using ConstructBaseAndWeight() //TODO
@@ -183,7 +184,7 @@ namespace DNDS::CFV
             return mesh->CellFaceOther(iCell, iFace);
         }
 
-        Geom::tPoint GetFaceNorm(index iFace, int iG)
+        Geom::tPoint GetFaceNorm(index iFace, int iG) const
         {
             if (iG >= 0)
                 return faceUnitNorm(iFace, iG);
@@ -191,17 +192,22 @@ namespace DNDS::CFV
                 return faceMeanNorm[iFace];
         }
 
-        auto GetFaceAtr(index iFace)
+        auto GetFaceAtr(index iFace) const
         {
             return faceAtr.at(iFace);
         }
 
-        auto GetCellAtr(index iCell)
+        auto GetCellAtr(index iCell) const
         {
             return cellAtr.at(iCell);
         }
 
-        real GetGlobalVol() { return volGlobal; }
+        real GetCellSmoothScaleRatio(index iCell) const
+        {
+            return cellSmoothScale(iCell, 0);
+        }
+
+        real GetGlobalVol() const { return volGlobal; }
 
         Geom::tPoint GetFaceNormFromCell(index iFace, index iCell, rowsize if2c, int iG)
         {

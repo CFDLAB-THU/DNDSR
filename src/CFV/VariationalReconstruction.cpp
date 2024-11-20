@@ -270,6 +270,59 @@ namespace DNDS::CFV
         faceUnitNorm.CompressBoth();
         faceIntPPhysics.CompressBoth();
         faceIntJacobiDet.CompressBoth();
+
+        this->MakePairDefaultOnCell(cellSmoothScale);
+        cellSmoothScale.TransAttach();
+        cellSmoothScale.trans.BorrowGGIndexing(mesh->cell2cell.trans);
+        cellSmoothScale.trans.createMPITypes();
+        cellSmoothScale.trans.initPersistentPull();
+        std::vector<real> cellScale(mesh->NumCellProc());
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        {
+            real faceSum{0};
+            for (auto iFace : mesh->cell2face[iCell])
+                faceSum += this->GetFaceArea(iFace);
+            cellScale[iCell] = this->GetCellVol(iCell) / (faceSum + verySmallReal);
+            cellSmoothScale(iCell, 0) = cellScale[iCell];
+        }
+        std::vector<real> cellScaleNew = cellScale;
+        for (int iter = 1; iter <= settings.nIterCellSmoothScale; iter++)
+        {
+            cellSmoothScale.trans.startPersistentPull();
+            cellSmoothScale.trans.waitPersistentPull();
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                real nAdj{0}, sum{0};
+                for (index iFace : mesh->cell2face[iCell])
+                {
+                    index iCellOther = this->CellFaceOther(iCell, iFace);
+                    if (iCellOther != UnInitIndex)
+                    {
+                        nAdj += 1.;
+                        sum += cellSmoothScale(iCellOther, 0);
+                    }
+                }
+                real smootherCentWeight = 1;
+                sum += nAdj * smootherCentWeight * cellSmoothScale(iCell, 0);
+                sum /= nAdj * (1 + smootherCentWeight);
+                cellScaleNew[iCell] = std::min(cellSmoothScale(iCell, 0), sum);
+            }
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                cellSmoothScale(iCell, 0) = cellScaleNew[iCell];
+        }
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            cellSmoothScale(iCell, 0) /= cellScale[iCell];
+        cellSmoothScale.trans.startPersistentPull();
+        cellSmoothScale.trans.waitPersistentPull();
+
+        real minCellSmoothScale{veryLargeReal};
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            minCellSmoothScale = std::min(cellSmoothScale(iCell, 0), minCellSmoothScale);
+        MPI::AllreduceOneReal(minCellSmoothScale, MPI_MIN, mpi);
+
+        if (mpi.rank == mRank)
+            log() << fmt::format("=== cellSmoothScale min [{:.5g}]", minCellSmoothScale)
+                  << std::endl;
     }
 
     template void

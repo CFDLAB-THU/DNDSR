@@ -50,6 +50,7 @@ namespace DNDS::CFV
         real svdTolerance = 0;       /// @brief tolerance used in svd
 
         bool ignoreMeshGeometryDeficiency = false;
+        int nIterCellSmoothScale = 15;
         real bcWeight = 1;
 
         struct BaseSettings
@@ -171,6 +172,7 @@ namespace DNDS::CFV
             jsonSetting["limiterBiwayAlter"] = limiterBiwayAlter;
             jsonSetting["subs2ndOrder"] = subs2ndOrder;
             jsonSetting["ignoreMeshGeometryDeficiency"] = ignoreMeshGeometryDeficiency;
+            jsonSetting["nIterCellSmoothScale"] = nIterCellSmoothScale;
 
             jsonSetting["svdTolerance"] = svdTolerance;
 
@@ -200,6 +202,7 @@ namespace DNDS::CFV
             limiterBiwayAlter = jsonSetting["limiterBiwayAlter"];
             subs2ndOrder = jsonSetting["subs2ndOrder"];
             ignoreMeshGeometryDeficiency = jsonSetting["ignoreMeshGeometryDeficiency"];
+            nIterCellSmoothScale = jsonSetting["nIterCellSmoothScale"];
 
             svdTolerance = jsonSetting["svdTolerance"];
 

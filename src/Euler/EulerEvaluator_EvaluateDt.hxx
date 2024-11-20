@@ -12,10 +12,10 @@
 namespace DNDS::Euler
 {
 
+    static const auto model = NS_SA;
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        static const auto model = NS_SA;
         template <>
     )
     void EulerEvaluator<model>::GetWallDist()
@@ -452,7 +452,11 @@ namespace DNDS::Euler
     //     const Eigen::Vector<real, -1> &uRecInc)1
 
     //! evaluates dt and facial spectral radius
-    template <EulerModel model>
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>
+    )
     void EulerEvaluator<model>::EvaluateDt(
         ArrayDOFV<1> &dt,
         ArrayDOFV<nVarsFixed> &u,
@@ -622,7 +626,7 @@ namespace DNDS::Euler
         {
             // std::cout << fv->GetCellVol(iCell) << " " << (lambdaCell[iCell]) << " " << CFL << std::endl;
             // exit(0);
-            dt[iCell](0) = std::min(CFL * vfv->GetCellVol(iCell) / (lambdaCell[iCell] + 1e-100), MaxDt);
+            dt[iCell](0) = std::min(CFL * vfv->GetCellVol(iCell) * vfv->GetCellSmoothScaleRatio(iCell) / (lambdaCell[iCell] + 1e-100), MaxDt);
             dtMin = std::min(dtMin, dt[iCell](0));
             // if (iCell == 10756)
             // {

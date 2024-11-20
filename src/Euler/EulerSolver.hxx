@@ -513,6 +513,13 @@ namespace DNDS::Euler
             }
             else
                 DNDS_assert_info(false, "no such recLinearScheme");
+            if ((model == NS_SA || model == NS_SA_3D) && eval.settings.ransForce2nd)
+            {
+                std::vector<int> mask;
+                mask.resize(1);
+                mask[0] = 5;
+                vfv->DoReconstruction2nd(uRec, u, FBoundary, 1, mask);
+            }
             if (model == NS_2EQ || model == NS_2EQ_3D)
             {
                 std::vector<int> mask;
