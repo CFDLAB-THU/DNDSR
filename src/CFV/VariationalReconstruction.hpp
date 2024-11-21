@@ -90,6 +90,7 @@ namespace DNDS::CFV
         bool needMatrixACholeskyL = false;
 
         Geom::Base::CFVPeriodicity periodicity;
+        // for periodic transformation inside scalars, eg. velocity components
         TFTrans FTransPeriodic, FTransPeriodicBack;
 
     public:

@@ -724,7 +724,7 @@ namespace DNDS::Geom::Elem
          * @param f  f(TAcc& inc, int iG)
          */
         template <class TAcc, class TFunc>
-        void IntegrationSimple(TAcc &buf, TFunc &&f)
+        std::enable_if_t<std::is_invocable_v<TFunc, TAcc &, int>> IntegrationSimple(TAcc &buf, TFunc &&f)
         {
             for (t_index iG = 0; iG < int_scheme; iG++)
             {
@@ -733,6 +733,23 @@ namespace DNDS::Geom::Elem
                 GetQuadraturePoint(ps, int_scheme, iG, pParam, w);
                 TAcc acc;
                 f(acc, iG);
+                buf += acc * w;
+            }
+        }
+
+        /**
+         * @param f  f(TAcc& inc, int iG, real w)
+         */
+        template <class TAcc, class TFunc>
+        std::enable_if_t<std::is_invocable_v<TFunc, TAcc &, int, real>> IntegrationSimple(TAcc &buf, TFunc &&f)
+        {
+            for (t_index iG = 0; iG < int_scheme; iG++)
+            {
+                tPoint pParam{0, 0, 0};
+                t_real w;
+                GetQuadraturePoint(ps, int_scheme, iG, pParam, w);
+                TAcc acc;
+                f(acc, iG, w);
                 buf += acc * w;
             }
         }

@@ -91,6 +91,10 @@ namespace DNDS::Euler
         std::vector<real> lambdaFace4;
         std::vector<real> deltaLambdaFace;
 
+        // grad fix
+        std::vector<TDiffU> gradUFix;
+
+        // wall distance
         std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall;
         std::vector<real> dWallFace;
 
@@ -130,6 +134,13 @@ namespace DNDS::Euler
             lambdaFace4.resize(mesh->NumFaceProc(), 0.);
 
             deltaLambdaFace.resize(lambdaFace.size());
+
+            if (settings.useSourceGradFixGG)
+            {
+                gradUFix.resize(mesh->NumCell());
+                for (auto &v : gradUFix)
+                    v.resize(Eigen::NoChange, nVars);
+            }
 
             fluxBnd.resize(mesh->NumBnd());
             for (auto &v : fluxBnd)
@@ -401,6 +412,8 @@ namespace DNDS::Euler
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             auto faceID = mesh->GetFaceZone(iFace);
+            if (if2c < 0)
+                if2c = vfv->CellIsFaceBack(iCell, iFace) ? 0 : 1;
             mesh->CellOtherCellPeriodicHandle(
                 iFace, if2c,
                 [&]()
@@ -409,7 +422,7 @@ namespace DNDS::Euler
                 { u(Seq123) = mesh->periodicInfo.TransVectorBack(Eigen::Vector<real, dim>{u(Seq123)}, faceID); });
         }
 
-        void DiffUFromCell2Face(TDiffU &u, index iFace, index iCell, rowsize if2c)
+        void DiffUFromCell2Face(TDiffU &u, index iFace, index iCell, rowsize if2c, bool reverse = false)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             if (!mesh->isPeriodic)
@@ -419,12 +432,14 @@ namespace DNDS::Euler
                 return;
             if (if2c < 0)
                 if2c = vfv->CellIsFaceBack(iCell, iFace) ? 0 : 1;
-            if (if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID))
+            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID) && !reverse) ||
+                (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID) && reverse))
             {
                 u(Seq012, Eigen::all) = mesh->periodicInfo.TransVectorBack<dim, nVarsFixed>(u(Seq012, Eigen::all), faceID);
                 u(Eigen::all, Seq123) = mesh->periodicInfo.TransVectorBack<dim, dim>(u(Eigen::all, Seq123).transpose(), faceID).transpose();
             }
-            if (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID))
+            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID) && !reverse) ||
+                (if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID) && reverse))
             {
                 u(Seq012, Eigen::all) = mesh->periodicInfo.TransVector<dim, nVarsFixed>(u(Seq012, Eigen::all), faceID);
                 u(Eigen::all, Seq123) = mesh->periodicInfo.TransVector<dim, dim>(u(Eigen::all, Seq123).transpose(), faceID).transpose();

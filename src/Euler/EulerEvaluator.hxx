@@ -1251,7 +1251,10 @@ namespace DNDS::Euler
                 }
             }
 
-            recInc *= theta1;
+            if constexpr (model == NS_SA or model == NS_SA_3D or model == NS_2EQ or model == NS_2EQ_3D)
+                recInc(Eigen::all, Seq01234) *= theta1; // to leave SA unchanged
+            else
+                recInc *= theta1;
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed>
                 recVRhoG = recInc + recBase;
 
