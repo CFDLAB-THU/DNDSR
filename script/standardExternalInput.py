@@ -5,17 +5,22 @@ Re = float(input("Re Number = "))
 alpha = float(input("AoA in degrees = "))
 LRef = float(input("length ref = "))
 wingDir = str(input("Wing Direction, z or y: "))
+TInf = float(input("temperature inf = "))
 
 gamma = 1.4
 vInf = 1
 rInf = 1
-TInf = 273.15
+# TInf = 273.15
 
 a = vInf / Ma
 p = a**2 / gamma / rInf
 E = p / (gamma - 1) + 0.5 * rInf * vInf**2
 rg = p / rInf / TInf
-muGas = rInf * vInf * LRef / Re
+muGasInf = rInf * vInf * LRef / Re
+def Rsuther(T,TRef, SSut):
+    return (T/TRef)**(1.5) * (TRef + SSut) / (T + SSut)
+rsutherInf = Rsuther(TInf, 273.15, 110.4)
+muGas = muGasInf / rsutherInf
 
 vX = vInf * math.cos(alpha / 180 * math.pi)
 vY = vInf * math.sin(alpha / 180 * math.pi)
