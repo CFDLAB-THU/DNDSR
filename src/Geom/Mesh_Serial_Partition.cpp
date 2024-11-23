@@ -28,7 +28,7 @@ namespace _METIS
 namespace DNDS::Geom
 {
     void UnstructuredMeshSerialRW::
-        MeshPartitionCell2Cell()
+        MeshPartitionCell2Cell(const PartitionOptions &c_options)
     {
         if (mesh->getMPI().rank == mRank)
             DNDS::log() << "UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell" << std::endl;
@@ -59,12 +59,56 @@ namespace DNDS::Geom
         for (DNDS::index iCell = 0; iCell < xadj.size(); iCell++)
             xadj[iCell] = _METIS::indexToIdx(cell2cellSerialFacial->rowPtr(iCell) - cell2cellSerialFacial->rowPtr(0));
         std::vector<_METIS::idx_t> adjncy(xadj.back());
+        std::vector<_METIS::idx_t> adjncyWeights;
         DNDS_assert(cell2cellSerialFacial->DataSize() == xadj.back());
 #ifdef DNDS_USE_OMP
 #pragma omp parallel for
 #endif
         for (DNDS::index iAdj = 0; iAdj < xadj.back(); iAdj++)
             adjncy[iAdj] = _METIS::indexToIdx(cell2cellSerialFacial->data()[iAdj]);
+        if (c_options.edgeWeightMethod == 1)
+        {
+            adjncyWeights.reserve(xadj.back());
+            std::vector<real> adjncyWeightsR;
+            adjncyWeightsR.reserve(xadj.back());
+
+            real maxDistMax{0};
+            for (index iCell = 0; iCell < cell2cellSerialFacial->Size(); iCell++)
+            {
+                tSmallCoords coordsC;
+                GetCoordsOnCellSerial(iCell, coordsC, coordSerial);
+                std::vector<index> cell2nodeCV = cell2nodeSerial->operator[](iCell);
+                std::sort(cell2nodeCV.begin(), cell2nodeCV.end());
+                for (auto iCellOther : cell2cellSerialFacial->operator[](iCell))
+                {
+                    std::vector<index> cell2nodeCVOther = cell2nodeSerial->operator[](iCellOther);
+                    std::sort(cell2nodeCVOther.begin(), cell2nodeCVOther.end());
+                    std::vector<index> faceFound;
+                    faceFound.reserve(9);
+                    std::set_intersection(cell2nodeCV.begin(), cell2nodeCV.end(), cell2nodeCVOther.begin(), cell2nodeCVOther.end(), std::back_inserter(faceFound));
+                    DNDS_assert(faceFound.size() >= 2);
+                    std::vector<int> faceFoundC2F;
+                    faceFoundC2F.reserve(faceFound.size());
+                    for (auto iN : faceFound)
+                        for (int i = 0; i < cell2nodeSerial->operator[](iCell).size(); i++)
+                            if (cell2nodeSerial->operator[](iCell)[i] == iN)
+                                faceFoundC2F.push_back(i);
+                    DNDS_assert(faceFoundC2F.size() == faceFound.size());
+                    tSmallCoords coordsF = coordsC(Eigen::all, faceFoundC2F);
+                    real maxDist{0};
+                    for (int i = 0; i < coordsF.cols(); i++)
+                        for (int j = 0; j < coordsF.cols(); j++)
+                            if (i != j)
+                                maxDist = std::max(maxDist, (coordsF(Eigen::all, i) - coordsF(Eigen::all, j)).norm());
+                    adjncyWeightsR.push_back(maxDist);
+                    maxDistMax = std::max(maxDist, maxDistMax);
+                }
+            }
+            auto weightMapping = [](real x) -> real
+            { return std::pow(x, 1); };
+            for (auto d : adjncyWeightsR)
+                adjncyWeights.push_back(weightMapping(d / maxDistMax) * (INT_MAX - 1) + 1);
+        }
         if (adjncy.size() == 0)
             adjncy.resize(1, -1); //*coping with zero sized data
 
@@ -73,17 +117,17 @@ namespace DNDS::Geom
         _METIS::METIS_SetDefaultOptions(options);
         {
             options[_METIS::METIS_OPTION_OBJTYPE] = _METIS::METIS_OBJTYPE_CUT;
-            options[_METIS::METIS_OPTION_CTYPE] = _METIS::METIS_CTYPE_RM; //? could try shem?
+            options[_METIS::METIS_OPTION_CTYPE] = _METIS::METIS_CTYPE_SHEM; //? could try shem?
             options[_METIS::METIS_OPTION_IPTYPE] = _METIS::METIS_IPTYPE_GROW;
             options[_METIS::METIS_OPTION_RTYPE] = _METIS::METIS_RTYPE_FM;
             // options[METIS_OPTION_NO2HOP] = 0; // only available in metis 5.1.0
-            options[_METIS::METIS_OPTION_NCUTS] = 1;
+            options[_METIS::METIS_OPTION_NCUTS] = std::max(c_options.metisNcuts, 1);
             options[_METIS::METIS_OPTION_NITER] = 10;
             // options[_METIS::METIS_OPTION_UFACTOR] = 30; // load imbalance factor, fow k-way
-            options[_METIS::METIS_OPTION_UFACTOR] = 1;
-            options[_METIS::METIS_OPTION_MINCONN] = 0;
-            options[_METIS::METIS_OPTION_CONTIG] = 1; // ! forcing contigious partition now ? necessary?
-            options[_METIS::METIS_OPTION_SEED] = 0;   // ! seeding 0 for determined result
+            options[_METIS::METIS_OPTION_UFACTOR] = c_options.metisUfactor;
+            options[_METIS::METIS_OPTION_MINCONN] = 1;
+            options[_METIS::METIS_OPTION_CONTIG] = 1;                 // ! forcing contigious partition now ? necessary?
+            options[_METIS::METIS_OPTION_SEED] = c_options.metisSeed; // ! seeding 0 for determined result
             options[_METIS::METIS_OPTION_NUMBERING] = 0;
             // options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME | _METIS::METIS_DBG_IPART;
             options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME;
@@ -96,10 +140,14 @@ namespace DNDS::Geom
             if (mesh->getMPI().size == 1 || (isSerial && mesh->getMPI().rank == mRank))
             {
                 _METIS::idx_t objval;
-                // int ret = _METIS::METIS_PartGraphKway(
-                int ret = _METIS::METIS_PartGraphRecursive(
-                    &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
-                    &nPart, NULL, NULL, options, &objval, partOut.data());
+                DNDS_assert_info(c_options.metisType == std::string("KWAY") or c_options.metisType == std::string("RB"), "metisType must be KWAY or RB!");
+                int ret = c_options.metisType == std::string("KWAY")
+                              ? _METIS::METIS_PartGraphKway(
+                                    &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, c_options.edgeWeightMethod ? adjncyWeights.data() : NULL,
+                                    &nPart, NULL, NULL, options, &objval, partOut.data())
+                              : _METIS::METIS_PartGraphRecursive(
+                                    &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, c_options.edgeWeightMethod ? adjncyWeights.data() : NULL,
+                                    &nPart, NULL, NULL, options, &objval, partOut.data());
                 if (ret != _METIS::METIS_OK)
                 {
                     DNDS::log() << "METIS returned not OK: [" << ret << "]" << std::endl;
@@ -195,7 +243,7 @@ namespace DNDS::Geom
             _METIS::idx_t nCon{1}, options[METIS_NOPTIONS];
             _METIS::METIS_SetDefaultOptions(options);
             {
-                options[_METIS::METIS_OPTION_CTYPE] = _METIS::METIS_CTYPE_RM;
+                options[_METIS::METIS_OPTION_CTYPE] = _METIS::METIS_CTYPE_SHEM;
                 options[_METIS::METIS_OPTION_RTYPE] = _METIS::METIS_RTYPE_FM;
                 options[_METIS::METIS_OPTION_IPTYPE] = _METIS::METIS_IPTYPE_EDGE;
                 options[_METIS::METIS_OPTION_RTYPE] = _METIS::METIS_RTYPE_SEP1SIDED;

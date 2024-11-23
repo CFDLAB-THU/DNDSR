@@ -43,7 +43,7 @@ void doPartitioning(const std::string &meshName, int dim)
     //     // sleep(5);
     // }
 
-    reader.MeshPartitionCell2Cell();
+    reader.MeshPartitionCell2Cell(DNDS::Geom::UnstructuredMeshSerialRW::PartitionOptions{});
     reader.PartitionReorderToMeshCell2Cell();
     mesh->BuildGhostPrimary();
     mesh->AdjGlobal2LocalPrimary();

@@ -282,6 +282,7 @@ namespace DNDS::Euler
                 int meshDirectBisect = 0;
 
                 int meshFormat = 0;
+                Geom::UnstructuredMeshSerialRW::PartitionOptions meshPartitionOptions;
                 std::string meshFile = "data/mesh/NACA0012_WIDE_H3.cgns";
                 std::string outPltName = "data/out/debugData_";
                 std::string outLogName = "";
@@ -331,6 +332,7 @@ namespace DNDS::Euler
                     meshElevationBoundaryMode,
                     meshDirectBisect,
                     meshFormat,
+                    meshPartitionOptions,
                     meshFile,
                     outPltName,
                     outLogName,
@@ -681,7 +683,7 @@ namespace DNDS::Euler
                         { return BCHandler.GetIDFromName(name); });
                 reader->Deduplicate1to1Periodic(config.boundaryDefinition.periodicTolerance);
                 reader->BuildCell2Cell();
-                reader->MeshPartitionCell2Cell();
+                reader->MeshPartitionCell2Cell(config.dataIOControl.meshPartitionOptions);
                 reader->PartitionReorderToMeshCell2Cell();
 
                 mesh->BuildGhostPrimary();

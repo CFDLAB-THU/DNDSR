@@ -28,7 +28,7 @@ void testCGNS()
     reader.ReadFromCGNSSerial("../data/mesh/Uniform32_Periodic.cgns");
     reader.Deduplicate1to1Periodic();
     reader.BuildCell2Cell();
-    reader.MeshPartitionCell2Cell();
+    reader.MeshPartitionCell2Cell(DNDS::Geom::UnstructuredMeshSerialRW::PartitionOptions{});
     reader.PartitionReorderToMeshCell2Cell();
     reader.BuildSerialOut();
     mesh->BuildGhostPrimary();

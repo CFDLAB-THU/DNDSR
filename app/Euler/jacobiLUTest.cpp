@@ -25,7 +25,7 @@ namespace DNDS::Euler
         reader.ReadFromCGNSSerial("../data/mesh/IV10_10.cgns");
         reader.Deduplicate1to1Periodic();
         reader.BuildCell2Cell();
-        reader.MeshPartitionCell2Cell();
+        reader.MeshPartitionCell2Cell(DNDS::Geom::UnstructuredMeshSerialRW::PartitionOptions{});
         reader.PartitionReorderToMeshCell2Cell();
         reader.BuildSerialOut();
         mesh->BuildGhostPrimary();

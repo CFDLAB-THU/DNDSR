@@ -652,6 +652,44 @@ namespace DNDS::Geom
 
         DNDS::MPI_int mRank{0}, cnPart{0};
 
+        /**
+         * @brief directly load coords; gets faulty if isPeriodic!, analog of mesh's method
+         */
+        template <class tC2n, class tCoordExt>
+        void __GetCoordsSerial(const tC2n &c2n, tSmallCoords &cs, tCoordExt &coo)
+        {
+            cs.resize(Eigen::NoChange, c2n.size());
+            for (rowsize i = 0; i < c2n.size(); i++)
+            {
+                index iNode = c2n[i];
+                cs(Eigen::all, i) = coo->operator[](iNode);
+            }
+        }
+
+        /**
+         * @brief specially for periodicity, analog of mesh's method
+         */
+        template <class tC2n, class tC2nPbi, class tCoordExt>
+        void __GetCoordsOnElemSerial(const tC2n &c2n, const tC2nPbi &c2nPbi, tSmallCoords &cs, tCoordExt &coo)
+        {
+            cs.resize(Eigen::NoChange, c2n.size());
+            for (rowsize i = 0; i < c2n.size(); i++)
+            {
+                index iNode = c2n[i];
+                cs(Eigen::all, i) = mesh->periodicInfo.GetCoordByBits(coo->operator[](iNode), c2nPbi[i]);
+            }
+        }
+        /**
+         * @brief analog of mesh's method
+         */
+        void GetCoordsOnCellSerial(index iCell, tSmallCoords &cs, tCoord &coo)
+        {
+            if (!mesh->isPeriodic)
+                __GetCoordsSerial((*cell2nodeSerial)[iCell], cs, coo);
+            else
+                __GetCoordsOnElemSerial((*cell2nodeSerial)[iCell], (*cell2nodePbiSerial)[iCell], cs, coo);
+        }
+
         UnstructuredMeshSerialRW(const decltype(mesh) &n_mesh, DNDS::MPI_int n_mRank)
             : mesh(n_mesh), mRank(n_mRank) {}
 
@@ -682,7 +720,23 @@ namespace DNDS::Geom
 
         void BuildNode2Node(); // For node based purpose //!not yet implemented
 
-        void MeshPartitionCell2Cell();
+        struct PartitionOptions
+        {
+            std::string metisType = "KWAY";
+            int metisUfactor = 20;
+            int metisSeed = 0;
+            int edgeWeightMethod = 0; // 0:no weight 1: faceSize weight
+            int metisNcuts = 3;
+            DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
+                PartitionOptions,
+                metisType,
+                metisUfactor,
+                metisSeed,
+                edgeWeightMethod,
+                metisNcuts)
+        };
+
+        void MeshPartitionCell2Cell(const PartitionOptions &options);
 
         void PartitionReorderToMeshCell2Cell();
 
