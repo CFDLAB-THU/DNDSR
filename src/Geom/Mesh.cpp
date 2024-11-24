@@ -561,6 +561,7 @@ namespace DNDS::Geom
         DNDS_assert(node2cell.trans.pLGhostMapping->ghostIndex.size() == node2cell.son->Size());
         DNDS_assert(node2cell.trans.pLGhostMapping->pushingIndexGlobal.size() == node2cellPast->Size());
         // * this state of triplet: node2cell.father - node2cell.son - node2cellPast forms a "unique pushing" for the pair node2cell
+        // * should be made into some standard
         for (index i = 0; i < node2cellPast->Size(); i++)
         {
             index iNodeG = node2cell.trans.pLGhostMapping->pushingIndexGlobal[i]; //?should be right
@@ -1763,22 +1764,90 @@ namespace DNDS::Geom
         DNDS_MAKE_SSP(bMesh.cellElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
         DNDS_MAKE_SSP(bMesh.cellElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
 
+        tIndPair node2bndNodeGlobal;
+        DNDS_MAKE_SSP(node2bndNodeGlobal.father, mpi);
+        DNDS_MAKE_SSP(node2bndNodeGlobal.son, mpi);
+
+        node2bndNodeGlobal.father->Resize(this->NumNode());
+        node2bndNodeGlobal.TransAttach();
+        node2bndNodeGlobal.trans.BorrowGGIndexing(coords.trans);
+        node2bndNodeGlobal.trans.createMPITypes();
+        index bndNodeCount{0}, bndNodeStart{0};
+        {
+            for (index i = 0; i < node2bndNodeGlobal.Size(); i++)
+                node2bndNodeGlobal[i] = 0;
+            for (index iBnd = 0; iBnd < this->NumBnd(); iBnd++)
+                for (auto iNode : bnd2node.father->operator[](iBnd))
+                    node2bndNodeGlobal[iNode]++; // now stores num-reference
+
+            {
+                tInd node2bndNodeGlobalPast;
+                DNDS_MAKE_SSP(node2bndNodeGlobalPast, mpi);
+                DNDS::ArrayTransformerType<tInd::element_type>::Type node2bndNodeGlobalPastTrans;
+                node2bndNodeGlobalPastTrans.setFatherSon(node2bndNodeGlobal.son, node2bndNodeGlobalPast);
+                node2bndNodeGlobalPastTrans.createFatherGlobalMapping();
+                std::vector<index> pushSonSeries(node2bndNodeGlobal.son->Size());
+                for (index i = 0; i < pushSonSeries.size(); i++)
+                    pushSonSeries[i] = i;
+                node2bndNodeGlobalPastTrans.createGhostMapping(pushSonSeries, node2bndNodeGlobal.trans.pLGhostMapping->ghostStart);
+                node2bndNodeGlobalPastTrans.createMPITypes();
+                node2bndNodeGlobalPastTrans.pullOnce();
+                DNDS_assert(node2bndNodeGlobal.trans.pLGhostMapping->ghostIndex.size() == node2bndNodeGlobal.son->Size());
+                DNDS_assert(node2bndNodeGlobal.trans.pLGhostMapping->pushingIndexGlobal.size() == node2bndNodeGlobalPast->Size());
+                for (index i = 0; i < node2bndNodeGlobalPast->Size(); i++)
+                {
+                    index iNodeG = node2bndNodeGlobal.trans.pLGhostMapping->pushingIndexGlobal[i]; //?should be right
+                    auto [ret, rank, iNodeL] = node2bndNodeGlobal.trans.pLGlobalMapping->search(iNodeG);
+                    DNDS_assert(ret && rank == node2bndNodeGlobal.father->getMPI().rank); // has to be local main
+                    node2bndNodeGlobal[iNodeL] += (*node2bndNodeGlobalPast)[i];
+                }
+            }
+            {
+                for (index i = 0; i < node2bndNodeGlobal.father->Size(); i++)
+                    if (node2bndNodeGlobal[i] == 0)
+                        node2bndNodeGlobal[i] = UnInitIndex;
+                    else
+                        node2bndNodeGlobal[i] = bndNodeCount++;
+            }
+            MPI::Scan(&bndNodeCount, &bndNodeStart, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+            bndNodeStart -= bndNodeCount;
+            DNDS_assert(bndNodeStart >= 0 && bndNodeCount >= 0);
+            for (index i = 0; i < node2bndNodeGlobal.Size(); i++)
+                if (node2bndNodeGlobal[i] >= 0)
+                    node2bndNodeGlobal[i] += bndNodeStart;
+        }
+        node2bndNodeGlobal.trans.pullOnce();
+        bMesh.coords.father->Resize(bndNodeCount);
+        bMesh.coords.TransAttach();
+        bMesh.coords.trans.createFatherGlobalMapping();
+        std::vector<index> bndNodePullingSet;
+        for (index iNode = 0; iNode < this->NumNodeProc(); iNode++)
+        {
+            if (node2bndNodeGlobal[iNode] < 0)
+                continue;
+            // then node2bndNodeGlobal[iNode] >= 0, which covers all bnd2node entries
+            auto [ret, rank, iNodeL_in_bnd] = bMesh.coords.trans.pLGlobalMapping->search(node2bndNodeGlobal[iNode]);
+            DNDS_assert(ret);
+            if (rank != node2bndNodeGlobal.father->getMPI().rank)
+                bndNodePullingSet.push_back(node2bndNodeGlobal[iNode]); // bndNodePullingSet now also covers bnd2node needs
+        }
+        bMesh.coords.trans.createGhostMapping(bndNodePullingSet);
+        bMesh.coords.trans.createMPITypes();
+        // std::cout << mpi.rank << ", " << bndNodePullingSet.size() << ", " << bndNodeCount << std::endl;
         node2bndNode.resize(this->NumNodeProc(), -1);
-        index bndNodeCount{0};
-        for (index iBnd = 0; iBnd < this->NumBnd(); iBnd++) //! bnd has no ghost!
-            for (auto iNode : bnd2node.father->operator[](iBnd))
-                if (node2bndNode.at(iNode) == -1)
-                    node2bndNode.at(iNode) = bndNodeCount++;
-        bMesh.node2parentNode.resize(bndNodeCount);
+        bMesh.node2parentNode.resize(bMesh.coords.Size());
+        for (index iN = 0; iN < node2bndNodeGlobal.Size(); iN++)
+            node2bndNode.at(iN) = bMesh.NodeIndexGlobal2Local(node2bndNodeGlobal[iN]),
+            DNDS_assert(node2bndNodeGlobal[iN] != UnInitIndex ? (node2bndNode.at(iN) >= 0) : true);
         for (index iNode = 0; iNode < node2bndNode.size(); iNode++)
             if (node2bndNode[iNode] >= 0)
                 bMesh.node2parentNode.at(node2bndNode[iNode]) = iNode;
-        bMesh.coords.father->Resize(bndNodeCount);
-        // std::cout << bndNodeCount << std::endl;
-        for (index iBNode = 0; iBNode < bndNodeCount; iBNode++)
-        {
+
+        // std::cout << mpi.rank << ", " << bndNodeCount << std::endl;
+        for (index iBNode = 0; iBNode < bMesh.coords.Size(); iBNode++)
             bMesh.coords[iBNode] = coords[bMesh.node2parentNode[iBNode]];
-        }
+        bMesh.coords.trans.pullOnce(); // excessive, should be identical
+
         index nBndCellUse{0};
         for (index iB = 0; iB < this->NumBnd(); iB++)
             if (!FaceIDIsPeriodic(this->bndElemInfo(iB, 0).zone))
@@ -1804,9 +1873,8 @@ namespace DNDS::Geom
                 if (bnd2face.at(iB) < 0) // where bnd has not a face!
                     bMesh.cell2node[nBndCellUse][ib2n] = node2bndNode.at(bnd2node[iB][ib2n]);
                 else
-                    bMesh.cell2node[nBndCellUse][ib2n] = node2bndNode.at(face2node[bnd2face.at(iB)][ib2n]); //* respect the face ordering if possible
+                    bMesh.cell2node[nBndCellUse][ib2n] = node2bndNode.at(face2node[bnd2face.at(iB)][ib2n]); //* respect the face ordering if possible // this can be omitted if all bnds used are not periodic
                 DNDS_assert(node2bndNode.at(bnd2node[iB][ib2n]) >= 0);
-
                 if (isPeriodic)
                 {
                     if (bnd2face.at(iB) < 0)                                              // where bnd has not a face!
@@ -1821,14 +1889,9 @@ namespace DNDS::Geom
         }
 
         bMesh.cell2node.father->Compress();
-
-        bMesh.coords.father->createGlobalMapping();
         bMesh.cell2node.father->createGlobalMapping();
-
-        bMesh.coords.TransAttach();
         bMesh.cell2node.TransAttach();
-        bMesh.coords.trans.createGhostMapping(std::vector<int>{});
-        bMesh.cell2node.trans.createGhostMapping(std::vector<int>{});
+        bMesh.cell2node.trans.createGhostMapping(std::vector<int>{}); // now bnd mesh has no valid cell2cell and ghost cells
 
         bMesh.adjPrimaryState = Adj_PointToLocal;
         if (mpi.rank == mRank)

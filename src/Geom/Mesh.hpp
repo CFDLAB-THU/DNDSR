@@ -120,8 +120,8 @@ namespace DNDS::Geom
         tPbiPair face2nodePbi;
 
         /// parent built
-        std::vector<index> node2parentNode;
-        std::vector<index> node2bndNode;
+        std::vector<index> node2parentNode; // from local-appended iNode to local-appended iNode in parent
+        std::vector<index> node2bndNode;// from local-appended iNode to local-appended iNode in bnd
         std::vector<index> cell2parentCell;
 
         /// for parallel out

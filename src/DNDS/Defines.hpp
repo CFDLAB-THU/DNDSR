@@ -142,7 +142,9 @@ namespace DNDS
 
     const real UnInitReal = std::acos(-1) * 1e299 * std::sqrt(-1.0);
     const index UnInitIndex = INT64_MIN;
+    static_assert(UnInitIndex < 0);
     const rowsize UnInitRowsize = INT32_MIN;
+    static_assert(UnInitRowsize < 0);
 
     inline bool IsUnInitReal(real v)
     {

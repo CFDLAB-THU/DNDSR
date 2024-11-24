@@ -318,7 +318,7 @@ namespace DNDS
                 rank = -1;
                 return true;
             }
-            // warning! linear on num of ranks here
+            //! warning! linear on num of ranks here
             for (rank = 0; rank < (ghostStart.size() - 1); rank++)
                 if (searchInGhost(globalQuery, rank, val))
                 {
@@ -344,7 +344,7 @@ namespace DNDS
                 rank = -1;
                 return true;
             }
-            // warning! linear on num of ranks here
+            //! warning! linear on num of ranks here
             for (rank = 0; rank < (ghostStart.size() - 1); rank++)
                 if (searchInGhost(globalQuery, rank, val))
                 {
@@ -371,7 +371,7 @@ namespace DNDS
                 rank = -1;
                 return true;
             }
-            // warning! linear on num of ranks here
+            //! warning! linear on num of ranks here
             for (rank = 0; rank < (ghostStart.size() - 1); rank++)
                 if (searchInGhost(globalQuery, rank, val))
                 {
