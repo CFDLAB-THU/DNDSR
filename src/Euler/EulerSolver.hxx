@@ -430,13 +430,13 @@ namespace DNDS::Euler
             {
                 Eigen::Array<real, 1, Eigen::Dynamic> resB;
                 int nPCGIterAll{0};
-                if (iter == 1)       //! consecutive pcg is bad in 0012, using separate pcg
+                if (iter <= 2)                                                //! consecutive pcg is bad in 0012, using separate pcg
                     pcgRec->reset(); // ! todo: account for inter-solve (need two pcgs!)
                 uRecNew = uRecB1;
                 vfv->DoReconstructionIter(
                     uRecC, uRecB1, cx,
                     FBoundary, true, true, true);
-                if (iter > 1)
+                if (iter > 2)
                 {
                     if (config.implicitReconstructionControl.fpcgResetScheme == 0)
                     {
