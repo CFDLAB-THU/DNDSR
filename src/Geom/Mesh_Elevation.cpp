@@ -12,7 +12,7 @@
 #include "PointCloud.hpp"
 #include <nanoflann.hpp>
 
-#include <Eigen/Sparse>
+#include "DNDS/EigenPCH.hpp"
 #ifdef DNDS_USE_SUPERLU
 #include <superlu_ddefs.h>
 #endif

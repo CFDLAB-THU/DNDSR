@@ -18,6 +18,7 @@
         "external/fmt-10.1.1/include",
         "external/argparse-3.0/include/argparse",
         "external/cpptrace-0.5.1/include/cpptrace",
+        "external/exprtk",
         "src"
     ],
     "files.associations": {
@@ -177,6 +178,7 @@
     "cSpell.words": [
         "Bary",
         "DNDS",
+        "exprtk",
         "RANS",
         "rowsize",
         "SDIRK",

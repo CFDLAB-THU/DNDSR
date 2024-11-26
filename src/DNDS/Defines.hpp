@@ -1,6 +1,7 @@
 #pragma once
 
 // #define NDEBUG
+#include "EigenPCH.hpp"
 #include <cassert>
 #include <cstdint>
 #include <vector>
@@ -14,8 +15,9 @@
 #include <filesystem>
 #include <functional>
 #include <locale>
-#include <fmt/core.h>
 #include <csignal>
+
+#include <fmt/core.h>
 
 #ifdef DNDS_USE_OMP
 #include <omp.h>
@@ -29,11 +31,6 @@
 #include "Macros.hpp"
 #include "Experimentals.hpp"
 #include "Warnings.hpp"
-DISABLE_WARNING_PUSH
-DISABLE_WARNING_MAYBE_UNINITIALIZED
-#include "Eigen/Core"
-#include "Eigen/Dense" //?It seems Mat.determinant() would be undefined rather than undeclared...
-DISABLE_WARNING_POP
 
 static const std::string DNDS_Defines_state =
     std::string("DNDS_Defines ") + DNDS_Macros_State + DNDS_Experimentals_State

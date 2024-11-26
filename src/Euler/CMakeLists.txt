@@ -11,7 +11,7 @@ set(LINKS
 # cfv
 # geom
 # dnds
-# ${EXTERNAL_LIBS}
+# ${DNDS_EXTERNAL_LIBS}
 )
 
 set(CPPS_FAST
@@ -55,5 +55,5 @@ _explicit_instantiation/EulerSolver_NS_2EQ.cpp
 _explicit_instantiation/EulerSolver_NS_2EQ_3D.cpp
 )
 
-dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}")
-dnds_add_lib_fast(${LIBNAME}_fast "${CPPS_FAST}" "${LINKS}")
+dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS}")
+dnds_add_lib_fast(${LIBNAME}_fast "${CPPS_FAST}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}")

@@ -9,7 +9,7 @@
 #include <omp.h>
 #include <filesystem>
 #include <fmt/core.h>
-#include <Eigen/Sparse>
+#include "DNDS/EigenPCH.hpp"
 
 namespace DNDS::Geom
 {

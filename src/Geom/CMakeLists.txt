@@ -9,8 +9,10 @@ set(LIBNAME geom)
 
 set(LINKS
 # dnds
-# ${EXTERNAL_LIBS}
+# ${DNDS_EXTERNAL_LIBS}
 )
+
+message(STATUS "DNDS_PCH_TARGETS: ${DNDS_PCH_TARGETS}")
 
 set(CPPS
 Elements.cpp
@@ -23,5 +25,5 @@ Mesh_Elevation.cpp
 Mesh_Elevation_SmoothSolver.cpp
 )
 
-dnds_add_lib_fast(${LIBNAME} "${CPPS}" "${LINKS}")
+dnds_add_lib_fast(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS}")
 

@@ -1,9 +1,9 @@
 #pragma once
+#include "EigenPCH.hpp"
 
 #include "Defines.hpp"
 
 #include <fmt/core.h>
-#include <Eigen/Core>
 #include <fmt/ostream.h>
 #include <fmt/format.h>
 

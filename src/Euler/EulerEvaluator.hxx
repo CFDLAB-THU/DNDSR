@@ -4,6 +4,7 @@
 #include "EulerEvaluator.hpp"
 #include "DNDS/HardEigen.hpp"
 #include "SpecialFields.hpp"
+#include "DNDS/ExprtkWrapper.hpp"
 
 namespace DNDS::Euler
 {
@@ -704,7 +705,8 @@ namespace DNDS::Euler
         // exit(-1);
     }
 
-    template <EulerModel model>
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, )
     void EulerEvaluator<model>::InitializeUDOF(ArrayDOFV<nVarsFixed> &u)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -967,6 +969,62 @@ namespace DNDS::Euler
                     // DNDS_assert(false);
                     u[iCell] = i.v;
                 }
+            }
+        }
+
+        for (auto &i : settings.exprtkInitializers)
+        {
+            auto exprStr = i.GetExpr();
+            ExprtkWrapperEvaluator exprtkEval;
+            exprtkEval.AddScalar("inRegion");
+            exprtkEval.AddScalar("iCell");
+            exprtkEval.AddVector("x", dim);
+            exprtkEval.AddVector("UPrim", nVars);
+            exprtkEval.Compile(exprStr);
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                Geom::tPoint pos = vfv->GetCellBary(iCell);
+                auto c2n = mesh->cell2node[iCell];
+                auto gCell = vfv->GetCellQuad(iCell);
+                TU um;
+                um.resizeLike(u[iCell]);
+                um.setZero();
+                bool allIn = true;
+                bool someIn = false;
+                gCell.IntegrationSimple(
+                    um,
+                    [&](TU &inc, int ig)
+                    {
+                        Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
+
+                        exprtkEval.Var("inRegion") = 0;
+                        exprtkEval.Var("iCell") = real(iCell);
+                        exprtkEval.VarVec("x", 0) = pPhysics(0);
+                        exprtkEval.VarVec("x", 1) = pPhysics(1);
+                        if constexpr (dim == 3)
+                            exprtkEval.VarVec("x", 2) = pPhysics(2);
+
+                        TU uPrimitive;
+                        Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], uPrimitive, settings.idealGasProperty.gamma);
+                        for (int i = 0; i < nVars; i++)
+                            exprtkEval.VarVec("UPrim", i) = uPrimitive(i);
+
+                        real ret = exprtkEval.Evaluate();
+
+                        DNDS_assert_info(ret == 0.0, "return of \n" + exprStr + "\nis non-zero");
+                        allIn = allIn && exprtkEval.Var("inRegion");
+                        someIn = someIn || exprtkEval.Var("inRegion");
+
+                        if (exprtkEval.Var("inRegion"))
+                            for (int i = 0; i < nVars; i++)
+                                uPrimitive(i) = exprtkEval.VarVec("UPrim", i);
+                        Gas::IdealGasThermalPrimitive2Conservative<dim>(uPrimitive, inc, settings.idealGasProperty.gamma);
+
+                        inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
+                    });
+                // if (allIn)
+                if (someIn)
+                    u[iCell] = um / vfv->GetCellVol(iCell); // mean value
             }
         }
     }

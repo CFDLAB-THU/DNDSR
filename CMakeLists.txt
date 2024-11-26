@@ -45,7 +45,7 @@ set(DNDS_LTO OFF CACHE BOOL "use -flto")
 set(DNDS_LTO_THIN OFF CACHE BOOL "use -flto=thin")
 set(DNDS_USE_FULL_TEMPLATE_TRACE OFF CACHE BOOL "use -ftemplate-backtrace-limit=0")
 set(DNDS_USE_RDYNAMIC ON CACHE BOOL "use -rdynamic on posix")
-
+set(DNDS_USE_PRECOMPILED_HEADER OFF CACHE BOOL "use precompiled header")
 
 set(DNDS_EIGEN_USE_BLAS OFF CACHE BOOL "use blas in eigen")
 set(DNDS_EIGEN_USE_LAPACK OFF CACHE BOOL "use lapack in eigen")
@@ -194,6 +194,9 @@ find_path(EXTERNAL_INCLUDE_JSON json.hpp PATHS
 find_path(EXTERNAL_INCLUDE_ARGPARSE argparse.hpp PATHS 
     "${PROJECT_SOURCE_DIR}/external/argparse-3.0/include/argparse" 
     NO_DEFAULT_PATH REQUIRED)
+find_path(EXTERNAL_INCLUDE_EXPRTK exprtk.hpp PATHS 
+    "${PROJECT_SOURCE_DIR}/external/exprtk"
+    NO_DEFAULT_PATH REQUIRED)
 # find_path(EXTERNAL_INCLUDE_CPPTRACE cpptrace.hpp PATHS 
 #     "${PROJECT_SOURCE_DIR}/external/cpptrace-0.5.1/include/cpptrace" 
 #     NO_DEFAULT_PATH REQUIRED)
@@ -252,14 +255,14 @@ if(EXTERNAL_INCLUDE_SUPERLU)
 endif()
 
 
-set (EXTERNAL_LIBS "")
+set (DNDS_EXTERNAL_LIBS "")
 
 if (MPI_CXX_FOUND)
-    set(EXTERNAL_LIBS ${MPI_CXX_LIBRARIES})
+    set(DNDS_EXTERNAL_LIBS ${MPI_CXX_LIBRARIES})
     message(STATUS "MPI_CXX_LIBRARIES ${MPI_CXX_LIBRARIES}")
 endif()
 
-set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
+set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
     fmt::fmt
     # cpptrace::cpptrace
     CACHE INTERNAL
@@ -267,7 +270,7 @@ set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
     )
 
 if(EXTERNAL_INCLUDE_SUPERLU)
-set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
+set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
     superlu_dist
     CACHE INTERNAL
     "Project Public External Lib Dependencies"
@@ -275,7 +278,7 @@ set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
 endif()
 
 if(EXTERNAL_LIB_BACKTRACE)
-set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
+set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
     ${EXTERNAL_LIB_BACKTRACE}
     CACHE INTERNAL
     "Project Public External Lib Dependencies"
@@ -283,13 +286,13 @@ set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
 add_compile_definitions(BOOST_STACKTRACE_USE_BACKTRACE)
 endif()
 
-# set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
+# set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
 #     fmt::fmt
 #     CACHE INTERNAL
 #     "Project Public External Lib Dependencies"
 #     )
 
-set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
+set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
     ${EXTERNAL_LIB_CGNS}
     # ${EXTERNAL_LIB_HDF5_HL} # HDF5_HL relies on HDF5
     ${EXTERNAL_LIB_HDF5}
@@ -301,17 +304,17 @@ set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
     "Project Public External Lib Dependencies"
     )
 if (DNDS_EIGEN_USE_BLAS)
-    set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
+    set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
     ${EXTERNAL_LIB_BLAS})
 endif()
 if (DNDS_EIGEN_USE_LAPACK)
-    set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
+    set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
     ${EXTERNAL_LIB_LAPACK}
     ${EXTERNAL_LIB_LAPACKE})
 endif()
-message("EXTERNAL_LIBS  " ${EXTERNAL_LIBS})
+message("DNDS_EXTERNAL_LIBS  " ${DNDS_EXTERNAL_LIBS})
 
-set(EXTERNAL_INCLUDES 
+set(DNDS_EXTERNAL_INCLUDES 
     ${EXTERNAL_INCLUDE_ZLIB}
     ${EXTERNAL_INCLUDE_HDF5}
     ${EXTERNAL_INCLUDE_CGNS}
@@ -321,6 +324,7 @@ set(EXTERNAL_INCLUDES
     ${EXTERNAL_INCLUDE_EIGEN}
     ${EXTERNAL_INCLUDE_JSON}
     ${EXTERNAL_INCLUDE_ARGPARSE}
+    ${EXTERNAL_INCLUDE_EXPRTK}
     # ${EXTERNAL_INCLUDE_CPPTRACE}
     # ${EXTERNAL_INCLUDE_RAPIDJSON}
     ${EXTERNAL_INCLUDE_CPPCODEC}
@@ -332,10 +336,13 @@ set(EXTERNAL_INCLUDES
     CACHE INTERNAL "Project External Includes")
 
 if(EXTERNAL_INCLUDE_SUPERLU)
-set(EXTERNAL_INCLUDES ${EXTERNAL_INCLUDES}
+set(DNDS_EXTERNAL_INCLUDES ${DNDS_EXTERNAL_INCLUDES}
     ${EXTERNAL_INCLUDE_SUPERLU}/SRC
     CACHE INTERNAL "Project External Includes")
 endif()
+
+set(DNDS_PCH_TARGETS "sss")
+set(DNDS_PCH_TARGETS_FAST "sss")
 
 add_compile_definitions(__DNDS_REALLY_COMPILING__)
 
@@ -348,10 +355,10 @@ if(DNDS_EIGEN_USE_LAPACK)
 endif()
 
 if(UNIX OR MINGW)
-    set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
+    set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
     stdc++fs)
     if(UNIX)
-        set(EXTERNAL_LIBS ${EXTERNAL_LIBS}
+        set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
         dl) # add dl
     endif()
     if(MINGW)
@@ -443,7 +450,7 @@ elseif(WIN32 OR MSVC)
         message(STATUS "MSVC ${MSVC}")
         message(STATUS "MSVC_VERSION ${MSVC_VERSION}")
     endif()
-    set(EXTERNAL_LIBS ${EXTERNAL_LIBS} # no dl
+    set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS} # no dl
     )
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
         # add_compile_options(-Wall)
@@ -459,7 +466,7 @@ elseif(WIN32 OR MSVC)
         add_compile_options(-Wno-undef -Wno-implicit-fallthrough -Wno-redundant-parens)
         # add_compile_options(-Wextra-semi-stmt  -Wshorten-64-to-32 -Wnewline-eof)
     endif()
-    set(EXTERNAL_LIBS ${EXTERNAL_LIBS} # no dl
+    set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS} # no dl
     )
     message(${CMAKE_CXX_COMPILER_ID})
     
@@ -493,10 +500,10 @@ endif()
 
 
 if (MPI_CXX_FOUND)
-    set(EXTERNAL_INCLUDES ${MPI_CXX_INCLUDE_DIRS} ${EXTERNAL_INCLUDES})
+    set(DNDS_EXTERNAL_INCLUDES ${MPI_CXX_INCLUDE_DIRS} ${DNDS_EXTERNAL_INCLUDES})
 endif()
 
-set(DNDS_INCLUDES ${PROJECT_SOURCE_DIR}/src)
+set(DNDS_INCLUDES ${PROJECT_SOURCE_DIR}/src  CACHE INTERNAL "Project Public Includes")
 
 if (UNIX)
 add_compile_options(-Wall -Wno-unused-but-set-variable -Wno-unused-variable -Wno-sign-compare)
@@ -521,11 +528,9 @@ endif()
 #     add_compile_definitions(PARALLEL)
 # endif()
 
-message(STATUS "EXTERNAL_LIBS ${EXTERNAL_LIBS}")
-message(STATUS "EXTERNAL_INCLUDES ${EXTERNAL_INCLUDES}")
+message(STATUS "DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}")
+message(STATUS "DNDS_EXTERNAL_INCLUDES ${DNDS_EXTERNAL_INCLUDES}")
 
-set(INCLUDES \\
-${DNDS_INCLUDES} CACHE INTERNAL "Project Public Includes")
 
 
 
@@ -583,7 +588,7 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/src/Geom)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/CFV)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/Euler)
 
-set(LIBS
+set(DNDS_LIBS
 euler_library
 euler_library_fast
 cfv
@@ -605,9 +610,9 @@ macro(ADD_EXE_APP EXES MAIN_DIR)
     foreach(EXE ${EXES})
         # add_executable(${EXE} app/external/${EXE}.cpp $<TARGET_OBJECTS:${OBJS}>)
         add_executable(${EXE} ${MAIN_DIR}/${EXE}.cpp)
-        target_link_libraries(${EXE} PUBLIC ${LIBS})
-        target_link_libraries(${EXE} PUBLIC ${EXTERNAL_LIBS})
-        target_include_directories(${EXE} PUBLIC ${EXTERNAL_INCLUDES} PUBLIC ${INCLUDES})
+        target_link_libraries(${EXE} PUBLIC ${DNDS_LIBS})
+        target_link_libraries(${EXE} PUBLIC ${DNDS_EXTERNAL_LIBS})
+        target_include_directories(${EXE} PUBLIC ${DNDS_EXTERNAL_INCLUDES} PUBLIC ${DNDS_INCLUDES})
         set_target_properties(${EXE} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/app RUNTIME_OUTPUT_NAME "${EXE}${EXE_SUFFIX}")
         if(DNDS_RECORD_COMMIT)
             target_compile_definitions(${EXE} PUBLIC DNDS_CURRENT_COMMIT_HASH=${DNDS_RECORDED_COMMIT_HASH})
@@ -635,9 +640,9 @@ endfunction(add_python_ext)
 function(ADD_EXT_APP PYEXTS PREFIX)
     foreach(PYEXT ${PYEXTS})
         add_python_ext(${PYEXT} "${PREFIX}/${PYEXT}.cpp")
-        target_link_libraries(${PYEXT} PUBLIC ${LIBS})
-        target_link_libraries(${PYEXT} PUBLIC ${EXTERNAL_LIBS})
-        target_include_directories(${PYEXT} PUBLIC ${EXTERNAL_INCLUDES} PUBLIC ${INCLUDES})
+        target_link_libraries(${PYEXT} PUBLIC ${DNDS_LIBS})
+        target_link_libraries(${PYEXT} PUBLIC ${DNDS_EXTERNAL_LIBS})
+        target_include_directories(${PYEXT} PUBLIC ${DNDS_EXTERNAL_INCLUDES} PUBLIC ${DNDS_INCLUDES})
     endforeach(PYEXT)
 endfunction(ADD_EXT_APP)
 

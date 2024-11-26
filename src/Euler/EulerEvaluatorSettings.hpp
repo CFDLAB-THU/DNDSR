@@ -109,6 +109,24 @@ namespace DNDS::Euler
 
         std::vector<PlaneInitializer> planeInitializers;
 
+        struct ExprtkInitializer
+        {
+            std::vector<std::string> exprs;
+            DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
+                ExprtkInitializer,
+                exprs)
+            std::string GetExpr() const
+            {
+                std::string ret;
+                for (auto &line : exprs)
+                    ret += line + "\n";
+                return ret;
+            }
+        };
+
+        std::vector<ExprtkInitializer> exprtkInitializers;
+
+
         int specialBuiltinInitializer = 0;
 
         real uRecBetaCompressPower = 11;
@@ -286,6 +304,8 @@ namespace DNDS::Euler
                     jsonObj["planeInitializers"].push_back(j);
                 }
             }
+
+            __DNDS__json_to_config(exprtkInitializers);
 
             //********* idealGasProperty
             if (read)
