@@ -310,6 +310,25 @@ namespace DNDS
             return false;
         }
 
+        // returns rank & place, place relative to ghostStart[0] (==0)
+        bool searchInAllGhost(index globalQuery, MPI_int &rank, index &val) const
+        {
+            auto start = ghostIndex.begin();
+            auto end = ghostIndex.end();
+            auto place = std::lower_bound(start, end, globalQuery);
+            if (place != end && *place == globalQuery) // dereferencing end could result in seg error
+            {
+                val = place - start;
+                auto s_start = ghostStart.begin();
+                auto s_end = ghostStart.end();
+                auto s_place = std::lower_bound(s_start, s_end, val, std::less_equal<rowsize>());
+                DNDS_assert(s_place != s_end && s_place > s_start);
+                rank = static_cast<MPI_int>(s_place - s_start - 1);
+                return true;
+            }
+            return false;
+        }
+
         /// \brief returns rank and place in ghost array, rank==-1 means main data
         bool search(index globalQuery, MPI_int &rank, index &val) const
         {
@@ -318,13 +337,10 @@ namespace DNDS
                 rank = -1;
                 return true;
             }
-            //! warning! linear on num of ranks here
-            for (rank = 0; rank < (ghostStart.size() - 1); rank++)
-                if (searchInGhost(globalQuery, rank, val))
-                {
-                    val += ghostStart[rank];
-                    return true;
-                }
+            if (searchInAllGhost(globalQuery, rank, val))
+            {
+                return true;
+            }
             return false;
         }
         std::tuple<bool, MPI_int, index> search(index globalQuery)
@@ -344,14 +360,12 @@ namespace DNDS
                 rank = -1;
                 return true;
             }
-            //! warning! linear on num of ranks here
-            for (rank = 0; rank < (ghostStart.size() - 1); rank++)
-                if (searchInGhost(globalQuery, rank, val))
-                {
-                    // std::cout << mainSize << std::endl;
-                    val += ghostStart[rank] + mainSize;
-                    return true;
-                }
+            if (searchInAllGhost(globalQuery, rank, val))
+            {
+                // std::cout << mainSize << std::endl;
+                val += mainSize;
+                return true;
+            }
             return false;
         }
         std::tuple<bool, MPI_int, index> search_indexAppend(index globalQuery)
@@ -371,12 +385,11 @@ namespace DNDS
                 rank = -1;
                 return true;
             }
-            //! warning! linear on num of ranks here
-            for (rank = 0; rank < (ghostStart.size() - 1); rank++)
-                if (searchInGhost(globalQuery, rank, val))
-                {
-                    return true;
-                }
+            if (searchInAllGhost(globalQuery, rank, val))
+            {
+                val -= ghostStart[rank];
+                return true;
+            }
             return false;
         }
 
