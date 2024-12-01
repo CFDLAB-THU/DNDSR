@@ -7,6 +7,15 @@
 #include <boost/stacktrace.hpp>
 // #include <cpptrace.hpp>
 
+#if defined(linux) || defined(_UNIX) || defined(__linux__)
+#include <unistd.h>
+#define _isatty isatty
+#endif
+#if defined(_WIN32) || defined(__WINDOWS_)
+#define NOMINMAX
+#include <io.h>
+#endif
+
 extern "C" void DNDS_signal_handler(int signal)
 {
     std::cerr << __DNDS_getTraceString() << "\n";
@@ -17,11 +26,22 @@ extern "C" void DNDS_signal_handler(int signal)
 
 namespace DNDS
 {
+    static bool ostreamIsTTY(std::ostream &ostream)
+    {
+        if (&ostream == &std::cout)
+            return _isatty(fileno(stdout));
+        if (&ostream == &std::cerr)
+            return _isatty(fileno(stderr));
+        return false;
+    }
+
     std::ostream *logStream;
 
     bool useCout = true;
 
     std::ostream &log() { return useCout ? std::cout : *logStream; }
+
+    bool logIsTTY() { return ostreamIsTTY(*logStream); }
 
     void setLogStream(std::ostream *nstream) { useCout = false, logStream = nstream; }
 

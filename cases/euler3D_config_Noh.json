@@ -1,6 +1,6 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 0.5e-3,
+        "dtImplicit": 1e-3,
         "nTimeStep": 10000,
         "steadyQuit": false,
         "useImplicitPP": false,
@@ -34,7 +34,8 @@
         "nDataOut": 100,
         "nDataOutCInternal": 100,
         "nDataOutInternal": 1000000000,
-        "tDataOut": 1e+100
+        "tDataOut": 1e+100,
+        "dataOutAtInit": true
     },
     "implicitCFLControl": {
         "CFL": 0.1,
@@ -47,10 +48,10 @@
     },
     "dataIOControl": {
         "uniqueStamps": false,
-        "meshDirectBisect": 2,
+        "meshDirectBisect": 1,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/Uniform_Noh_64.cgns",
-        "outPltName": "../data/outUnsteady/PP5/Noh/REInf_64-Bi2",
+        "outPltName": "../data/outUnsteady/PP5/Noh/REInf_64-Bi1-disturb1",
         "outPltMode": 1,
         "readMeshMode": 0,
         "outPltTecplotFormat": false,
@@ -162,6 +163,33 @@
             1.5e-6
         ],
         "boxInitializers": [],
+        "exprtkInitializers": [
+            {
+                "exprs": [
+                    "var r := sqrt(sum(x*x)); ",
+                    "var ax[3] := {1,1,1}; ",
+                    "ax /= sqrt(3); ",
+                    "var bx[3] := {sqrt(2)/2,-sqrt(2)/2,0}; ",
+                    "var cx[3] := {0.408248290463863,0.408248290463863,-0.816496580927726}; ",
+                    "var xx[3] := x / (r + 1e-9); ",
+                    "var aa := sum(xx*ax); ",
+                    "var bb := sum(xx*bx); ",
+                    "var cc := sum(xx*cx); ",
+                    "var bbccr := sqrt(bb^2 + cc^2) + 1e-9;",
+                    "bb /= bbccr; cc /= bbccr;",
+                    "var phi := acos(aa); ",
+                    "var theta := acos(bb); ",
+                    "if (cc < 0) ",
+                    "   theta *= -1; ",
+                    "var rmax := 0.15; ",
+                    "rmax += sin(12*phi) * sin(8 * theta) * 0.01; ",
+                    "if(r <= rmax) ",
+                    "   inRegion := 1; ",
+                    "UPrim[0] -= 0.5; ",
+                    "0"
+                ]
+            }
+        ],
         "idealGasProperty": {
             "gamma": 1.666666666666667,
             "Rgas": 289,

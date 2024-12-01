@@ -183,6 +183,8 @@ namespace DNDS
 
     std::ostream &log();
 
+    bool logIsTTY();
+
     void setLogStream(std::ostream *nstream);
 }
 

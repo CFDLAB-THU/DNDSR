@@ -3,9 +3,9 @@
         "dtImplicit": 1e100,
         "nTimeStep": 1,
         "steadyQuit": true,
-        "useRestart": false,
+        "useRestart": true,
         "rhsFPPMode": 1,
-        "rhsFPPScale": 1,
+        "rhsFPPScale": 0.1,
         "odeCode": 103,
         "tEnd": 3e+200,
         "partitionMeshOnly": false,
@@ -51,7 +51,7 @@
         "meshElevationMaxIncludedAngle": 20,
         // "meshFile": "../data/mesh/row_1_test3.cgns",
         "meshFile": "../data/mesh/Rotor37_test1.cgns",
-        "outPltName": "../data/out/Rotor37_test1-1/out1-abs-Roe-O2-Roe",
+        "outPltName": "../data/out/Rotor37_test2/O2-starter",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -76,7 +76,7 @@
             0.0,
             0.0,
             -10
-             //360 /36
+            //360 /36
         ],
         "periodicTolerance": 1e-8
     },
@@ -98,8 +98,8 @@
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 1,
-        "intOrder": 1,
+        "maxOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": true,
         "jacobiRelax": 1,
         "SORInstead": false,
@@ -127,7 +127,7 @@
         "_tail": 0
     },
     "linearSolverControl": {
-        "jacobiCode": 2,
+        "jacobiCode": 0,
         "sgsIter": 0,
         "sgsWithRec": 0,
         "gmresCode": 1,
@@ -135,8 +135,8 @@
         "nGmresIter": 2,
         "directPrecControl": {
             "useDirectPrec": true,
-            "iluCode": 0,
-            "orderingCode": 3
+            "iluCode": 2,
+            "orderingCode": 4
         }
     },
     "others": {
@@ -144,12 +144,15 @@
     },
     "eulerSettings": {
         "ignoreSourceTerm": false,
-        "useScalarJacobian": true,
+        "useScalarJacobian": false,
         "minWallDist": 1e-10,
         "wallDistScheme": 1,
         "riemannSolverType": "Roe_M1",
         // "rsRotateScheme": 1,
         "rsMeanValueEig": 1,
+        "noGRPOnWall": false,
+        "noRsOnWall": false,
+        "ransForce2nd": true,
         "constMassForce": [
             0.0,
             0.0,
@@ -214,19 +217,20 @@
                 0,
                 0,
                 0.8,
-                // 1.136923037037038, // 0.8
+                1.136923037037038,
+                // 0.8 p0in
                 // 1.341153796296297, // 1.0 p0in
                 // 1.443269175925927, //1.1 p0in
-                1.545384555555557, 
+                // 1.545384555555557, 
                 //1.2 p0in
                 10
             ],
             "valueExtra": [
-                128, 
+                128,
                 // profile divisions
                 1,
                 1e-6,
-                1 
+                1
                 // print info
             ],
             "anchorOption": 2,
@@ -244,13 +248,13 @@
             //     1.292397773437500
             // ]
             "value": [
-                0.408461518518519, 
+                0.408461518518519,
                 //Ps
-                288.15, 
+                288.15,
                 //Ts
                 0,
                 0,
-                1, 
+                1,
                 // Seq234: prescribed inflow direction
                 10
             ]
@@ -273,5 +277,15 @@
             "name": "WALL_SH",
             "frameOption": 1
         }
-    ]
+    ],
+    "restartState": {
+        "iStep": 1,
+        "iStepInternal": 5000,
+        "odeCodePrev": -1,
+        "lastRestartFile": "/public4/home/sc56867/zhy/DNDSR/data/out/Rotor37_test2/O2-starter__C_p640_restart.dir",
+        "otherRestartFile": "",
+        "otherRestartStoreDim": [
+            0
+        ]
+    }
 }

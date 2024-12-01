@@ -209,6 +209,7 @@ namespace DNDS::Euler
                 EulerBCType bcType = bc.BCTypes[i];
                 item["type"] = bcType;
                 item["name"] = bc.ID2name.at(i);
+                item["__bcId"] = i; //! TODO: make bcId arbitrary not sequential?
                 switch (bcType)
                 {
                 case EulerBCType::BCFar:
@@ -232,8 +233,7 @@ namespace DNDS::Euler
                     item["integrationOption"] = bc.BCFlags.at(i).at("integrationOpt");
                     item["specialOption"] = bc.BCFlags.at(i).at("specialOpt");
                     item["valueExtra"] = bc.BCValuesExtra.at(i);
-                    
-                }
+                                }
                 break;
 
                 case EulerBCType::BCSym:

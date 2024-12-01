@@ -14,7 +14,7 @@ exePath = "../build/app/eulerSA3D.exe"
 outPath = "../data/outRotor37Test1"
 
 
-casePrefix = "GEN00-Rotor37_test1-O2"
+casePrefix = "GEN00-Rotor37_test2-GWRW-Rest-O4"
 orthConfigName = "eulerSA3D_config.json"
 orthRunScriptName = "srunEuler.sh"
 
@@ -25,7 +25,7 @@ orthRunScript = r"""#!/bin/bash
 export UCX_TLS=sm,self,ud_verbs
 export DNDS_ARRAY_STRATEGY_USE_IN_SITU=0
 export DNDS_USE_STRONG_SYNC_WAIT=0
-export DNDS_USE_ASYNC_ONE_BY_ONE=1
+export DNDS_USE_ASYNC_ONE_BY_ONE=0
 echo "UCX_TLS=${UCX_TLS}"
 which mpirun
 cp ../../../build/app/eulerSA3D.exe .
@@ -52,7 +52,8 @@ print(json.dumps(baseConf, indent=4))
 
 
 psIn = 0.408461518518519
-mults =  [0.8, 0.9, 1 , 1.05,1.1, 1.15, 1.2, 1.25]
+# mults =  [0.8, 0.9, 1 , 1.05,1.1, 1.15, 1.2, 1.25]
+mults =  [0.8]
 vIn = 0.8
 
 
