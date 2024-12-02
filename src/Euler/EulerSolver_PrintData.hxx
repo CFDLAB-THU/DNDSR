@@ -652,7 +652,7 @@ namespace DNDS::Euler
                         std::lock_guard<std::mutex> outBndArraysLock(outBndArraysMutex);
                         readerBnd->PrintSerialPartVTKDataArray(
                             fname + "_bnd",
-                            fnameSeries + "_bnd",
+                            fnameSeries.size() ? fnameSeries + "_bnd" : "",
                             namesScalar.size(), namesVector.size(),
                             0, 0, //! vectors number is not cDim but 3
                             [&](int idata)
@@ -705,7 +705,7 @@ namespace DNDS::Euler
                         std::lock_guard<std::mutex> outBndArraysLock(outBndArraysMutex);
                         readerBnd->PrintSerialPartVTKDataArray(
                             fname + "_bnd",
-                            fnameSeries + "_bnd",
+                            fnameSeries.size() ? fnameSeries + "_bnd" : "",
                             namesScalar.size(), namesVector.size(),
                             0, 0, //! vectors number is not cDim but 2
                             [&](int idata)
@@ -766,7 +766,7 @@ namespace DNDS::Euler
                     MPI_Comm commDup1 = commDup;
                     meshBnd->PrintParallelVTKHDFDataArray(
                         fname + "_bnd",
-                        fnameSeries + "_bnd",
+                        fnameSeries.size() ? fnameSeries + "_bnd" : "",
                         namesScalar.size(), namesVector.size(),
                         0, 0, //! vectors number is not cDim but 2
                         [&](int idata)
