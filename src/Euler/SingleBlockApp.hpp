@@ -68,7 +68,7 @@ namespace DNDS::Euler
         {
             std::cerr << err.what() << std::endl;
             std::cerr << mainParser;
-            return 1;
+            std::abort();
         }
 
         try
@@ -92,12 +92,12 @@ namespace DNDS::Euler
         catch (const std::exception &e)
         {
             std::cerr << "DNDS top-level exception: " << e.what() << std::endl;
-            return 1;
+            std::abort();
         }
         catch (...)
         {
             std::cerr << "Unknown exception" << std::endl;
-            return 1;
+            std::abort();
         }
         return 0;
     }
