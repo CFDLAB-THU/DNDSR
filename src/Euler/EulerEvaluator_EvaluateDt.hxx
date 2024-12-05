@@ -436,6 +436,154 @@ namespace DNDS::Euler
             }
         }
 
+        if (settings.wallDistScheme == 3)
+        {
+            int nSweep = 5;
+            int nIter = settings.wallDistIter;
+            int nIterSee = 10;
+
+            ArrayDOFV<1> phi, rPhi, dPhi, dPhiNew;
+            vfv->BuildUDof(phi, 1);
+            vfv->BuildUDof(rPhi, 1);
+            vfv->BuildUDof(dPhi, 1);
+            vfv->BuildUDof(dPhiNew, 1);
+            phi.setConstant(0.0);
+
+            std::vector<std::vector<real>> coefs;
+            coefs.resize(mesh->NumCell());
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                coefs.at(iCell).resize(mesh->cell2face[iCell].size() + 1);
+
+            auto rhsPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<1> &rhs, std::vector<std::vector<real>> &coefs)
+            {
+                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                {
+                    rhs[iCell](0) = 1.;
+                    Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
+                    coefs.at(iCell).at(0) = 0.;
+                    for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+                    {
+                        index iFace = mesh->cell2face[iCell][ic2f];
+                        index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                        auto faceBndID = mesh->GetFaceZone(iFace);
+                        auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+                        real phiOther = phi[iCell](0);
+                        Geom::tPoint baryOther = bary;
+                        if (iCellOther != UnInitIndex)
+                        {
+                            phiOther = phi[iCellOther](0);
+                            baryOther = vfv->GetOtherCellPointFromCell(
+                                iCell, iCellOther, iFace,
+                                vfv->GetCellQuadraturePPhys(iCellOther, -1));
+                        }
+                        else
+                        {
+                            DNDS_assert(faceBCType != BCUnknown);
+                            DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
+                            if (faceBCType == BCWall)
+                                phiOther = -phi[iCell](0);
+                            Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
+                            baryOther = bFace * 2 - bary;
+                        }
+                        // real dist = (baryOther - bary).norm();
+                        real dist = std::abs(
+                            (baryOther - bary).dot(vfv->GetFaceNormFromCell(iFace, iCell, -1, -1)));
+
+                        rhs[iCell](0) += (phiOther - phi[iCell](0)) * 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
+                        coefs.at(iCell).at(0) -= 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
+                        coefs.at(iCell).at(1 + ic2f) = 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
+                    }
+                }
+            };
+
+            auto solveDphi = [&](ArrayDOFV<1> &rhsPhi, ArrayDOFV<1> &dphi, ArrayDOFV<1> &dphiNew, std::vector<std::vector<real>> &coefs)
+            {
+                dphi.setConstant(0.0);
+                for (int iSweep = 1; iSweep <= nSweep; iSweep++)
+                {
+                    for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                    {
+                        dphiNew[iCell] = rhsPhi[iCell];
+                        for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+                        {
+                            index iFace = mesh->cell2face[iCell][ic2f];
+                            index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                            if (iCellOther != UnInitIndex)
+                                dphiNew[iCell] += coefs[iCell][ic2f + 1] * dphi[iCellOther];
+                        }
+                        dphiNew[iCell] /= -coefs[iCell][0];
+                    }
+                    dphiNew.trans.startPersistentPull();
+                    dphiNew.trans.waitPersistentPull();
+                    dphi = dphiNew;
+                }
+            };
+
+            real incNormBase{0};
+            for (int iIter = 1; iIter <= nIter; iIter++)
+            {
+                rhsPhi(phi, rPhi, coefs);
+                solveDphi(rPhi, dPhi, dPhiNew, coefs);
+                real incNorm = dPhi.norm2();
+                phi += dPhi;
+                phi.trans.startPersistentPull();
+                phi.trans.waitPersistentPull();
+                if (iIter == 1)
+                    incNormBase = incNorm;
+                if (iIter % nIterSee == 0 || iIter == nIter)
+                    if (phi.father->getMPI().rank == 0)
+                        log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson inc: [{}] [{:.4e}] -> [{:.4e}]", iIter, incNormBase, incNorm) << std::endl;
+            }
+
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                Geom::tPoint gradPhi;
+                gradPhi.setZero();
+                for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+                {
+                    index iFace = mesh->cell2face[iCell][ic2f];
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                    auto faceBndID = mesh->GetFaceZone(iFace);
+                    auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+                    real phiOther = phi[iCell](0);
+                    if (iCellOther != UnInitIndex)
+                    {
+                        phiOther = phi[iCellOther](0);
+                    }
+                    else
+                    {
+                        DNDS_assert(faceBCType != BCUnknown);
+                        DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
+                        if (faceBCType == BCWall)
+                            phiOther = -phi[iCell](0);
+                    }
+                    int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    Geom::tPoint normOut = vfv->GetFaceNormFromCell(iFace, iCell, -1, -1) * (if2c ? -1 : 1);
+                    gradPhi += normOut * vfv->GetFaceArea(iFace) * (phiOther - phi[iCell](0)) * 0.5;
+                }
+                gradPhi /= vfv->GetCellVol(iCell);
+                real gradPhiNorm = gradPhi.norm();
+                real dEst = std::pow(2 * phi[iCell](0) + std::pow(gradPhiNorm, 2.0), 0.5) - std::pow(gradPhiNorm, 1.0);
+                // dPhi[iCell](0) = phi[iCell](0);
+                dPhi[iCell](0) = dEst;
+            }
+            dPhi.trans.startPersistentPull();
+            dPhi.trans.waitPersistentPull();
+            auto minval = dPhi.min();
+
+            dWall.resize(mesh->NumCellProc());
+            for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+            {
+                auto quadCell = vfv->GetCellQuad(iCell);
+                dWall[iCell].resize(quadCell.GetNumPoints());
+            }
+
+            for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+                dWall.at(iCell).setConstant(std::max(dPhi[iCell](0), settings.minWallDist));
+            if (phi.father->getMPI().rank == 0)
+                log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson min dist [{}]", minval(0)) << std::endl;
+        }
+
         dWallFace.resize(mesh->NumFaceProc());
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {

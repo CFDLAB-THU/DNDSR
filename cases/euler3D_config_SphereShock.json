@@ -1,0 +1,223 @@
+{
+    "timeMarchControl": {
+        "dtImplicit": 2e-3,
+        "nTimeStep": 10000,
+        "steadyQuit": false,
+        "useImplicitPP": false,
+        "rhsFPPMode": 2,
+        "rhsFPPScale": 1,
+        "rhsFPPRelax": 0.5,
+        "tEnd": 1,
+        "odeCode": 401,
+        "odeSetting1": 0.5,
+        "odeSetting2": 0,
+        "odeSetting3": 1.2,
+        "odeSetting4": 0,
+        "useDtPPLimit": true,
+        // "dtPPLimitRelax": 0.6,
+        "dtIncreaseLimit": 2.0,
+        "dtIncreaseAfterCount": 0,
+        "dtCFLLimitScale": 200
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 30,
+        "rhsThresholdInternal": 1e-3,
+        "res_base": 0.0,
+        "useVolWiseResidual": true
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 0,
+        "consoleOutputEveryFix": 1,
+        "nDataOutC": 10,
+        "nDataOut": 10,
+        "nDataOutCInternal": 100,
+        "nDataOutInternal": 1000000000,
+        "tDataOut": 1e+100,
+        "dataOutAtInit": true
+    },
+    "implicitCFLControl": {
+        "CFL": 0.1,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 0,
+        "nCFLRampLength": 10,
+        "CFLRampEnd": 2.0,
+        "useLocalDt": true,
+        "nSmoothDTau": 0
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshDirectBisect": 0,
+        "meshRotZ": 0.0,
+        "meshFile": "../data/mesh/UniBuf3D_32.cgns",
+        "outPltName": "../data/outUnsteady/SphereShock/test0",
+        "outPltMode": 1,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": false,
+        "outPltVTKFormat": true,
+        "outPltVTKHDFFormat": true,
+        "hdfDeflateLevel": 2,
+        // "hdfChunkSize": 32768,
+        "hdfChunkSize": 131072,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outCellScalarNames": [
+            "betaPP"
+        ],
+        "_tail": 0
+    },
+    "boundaryDefinition": {
+        // "PeriodicTranslation2": [
+        //     0.0,
+        //     0.01,
+        //     0.0
+        // ]
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 10,
+        "recThreshold": 1e-010,
+        "nRecConsolCheck": 10,
+        "nRecMultiplyForZeroedGrad": 1,
+        "storeRecInc": true,
+        "dampRecIncDTau": false
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "useViscousLimited": false,
+        "smoothIndicatorProcedure": 0,
+        "limiterProcedure": 0, //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000,
+        "preserveLimited": false,
+        "_tail": 0
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 3,
+        "cacheDiffBase": true,
+        "jacobiRelax": 1,
+        "SORInstead": false,
+        "smoothThreshold": 1e-3,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false,
+        "limiterBiwayAlter": 0, // 1=MM, 2=PN, 3=MEMM, 4=WBAP_L2_cut
+        "subs2ndOrder": 1,
+        "baseSettings": {
+            "localOrientation": false,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "scaleType": "BaryDiff",
+            "scaleMultiplier": 1,
+            // "dirWeightScheme": "HQM_OPT",
+            "dirWeightScheme": "Factorial",
+            "geomWeightScheme": "HQM_SD",
+            // "useAnisotropicFunctional": true,
+            // "scaleMultiplier": 3.464101615137754,
+            "_tail": 0
+        }
+    },
+    "linearSolverControl": {
+        "jacobiCode": 0,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
+        "nSgsConsoleCheck": 100,
+        "gmresCode": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        "initWithLastURecInc": false,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2
+        }
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": true,
+        "useScalarJacobian": true,
+        "riemannSolverType": "Roe_M2",
+        "rsMeanValueEig": 1,
+        "usePrimGradInVisFlux": 0,
+        "nCentralSmoothStep": 0,
+        "uRecBetaCompressPower": 1,
+        "ppEpsIsRelaxed": true,
+        // for Noh
+        // "specialBuiltinInitializer": 3001,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "farFieldStaticValue": [
+            3.0284,
+            0,
+            0,
+            0,
+            12.1421
+        ],
+        "boxInitializers": [],
+        "exprtkInitializers": [
+            {
+                "exprs": [
+                    "var r := sqrt(sum(x*x)); ",
+                    "var rmax := 1; ",
+                    "if(r <= rmax) ",
+                    "   inRegion := 1; ",
+                    "UPrim[0] := 1; ",
+                    "UPrim[1] := 0; ",
+                    "UPrim[2] := 0; ",
+                    "UPrim[3] := 0; ",
+                    "UPrim[4] := 1; ",
+                    "0"
+                ]
+            },
+            {
+                "exprs": [
+                    "var r := sqrt(sum(x*x)); ",
+                    "var ax[3] := {1,1,1}; ",
+                    "ax /= sqrt(3); ",
+                    "var bx[3] := {sqrt(2)/2,-sqrt(2)/2,0}; ",
+                    "var cx[3] := {0.408248290463863,0.408248290463863,-0.816496580927726}; ",
+                    "var xx[3] := x / (r + 1e-9); ",
+                    // "var aa := sum(xx*ax); ",
+                    // "var bb := sum(xx*bx); ",
+                    // "var cc := sum(xx*cx); ",
+                    "var aa := xx[2]; ",
+                    "var bb := xx[0]; ",
+                    "var cc := xx[1]; ",
+                    "var bbccr := sqrt(bb^2 + cc^2) + 1e-9;",
+                    "bb /= bbccr; cc /= bbccr;",
+                    "var phi := acos(aa); ",
+                    "var theta := acos(bb); ",
+                    "if (cc < 0) ",
+                    "   theta *= -1; ",
+                    "var rmax := 0.8; ",
+                    // "rmax += sin(12*phi) * sin(8 * theta) * 0.05; ",
+                    "rmax += cos(8*theta) * cos(8*sin(theta)*phi) * 0.05; ",
+                    "if(r <= rmax) ",
+                    "   inRegion := 1; ",
+                    "UPrim[0] := 20; ",
+                    "0"
+                ]
+            }
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 289,
+            "muGas": 1e-200,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4,
+            "muModel": 0
+        }
+    },
+    "bcSettings": [
+    ]
+}
