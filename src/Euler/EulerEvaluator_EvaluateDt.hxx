@@ -539,6 +539,7 @@ namespace DNDS::Euler
             {
                 Geom::tPoint gradPhi;
                 gradPhi.setZero();
+                real iDistSum{0};
                 for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                 {
                     index iFace = mesh->cell2face[iCell][ic2f];
@@ -559,9 +560,13 @@ namespace DNDS::Euler
                     }
                     int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
                     Geom::tPoint normOut = vfv->GetFaceNormFromCell(iFace, iCell, -1, -1) * (if2c ? -1 : 1);
-                    gradPhi += normOut * vfv->GetFaceArea(iFace) * (phiOther - phi[iCell](0)) * 0.5;
+                    // gradPhi += normOut * vfv->GetFaceArea(iFace) * (phiOther - phi[iCell](0)) * 0.5;
+                    real iDist = coefs.at(iCell).at(1 + ic2f) / vfv->GetFaceArea(iFace) * vfv->GetCellVol(iCell);
+                    iDistSum += iDist;
+                    gradPhi += normOut * coefs.at(iCell).at(1 + ic2f) * (phiOther - phi[iCell](0));
                 }
-                gradPhi /= vfv->GetCellVol(iCell);
+                // gradPhi /= vfv->GetCellVol(iCell);
+                gradPhi /= iDistSum;
                 real gradPhiNorm = gradPhi.norm();
                 real dEst = std::pow(2 * phi[iCell](0) + std::pow(gradPhiNorm, 2.0), 0.5) - std::pow(gradPhiNorm, 1.0);
                 // dPhi[iCell](0) = phi[iCell](0);
