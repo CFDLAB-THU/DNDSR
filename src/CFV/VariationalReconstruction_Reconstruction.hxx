@@ -7,8 +7,16 @@ namespace DNDS
     namespace CFV
     {
 
-        template <int dim>
-        template <int nVarsFixed>
+        static const int dim = 3;
+        static const int nVarsFixed = 6;
+
+        DNDS_SWITCH_INTELLISENSE(
+            template <int dim>
+            template <int nVarsFixed>
+            ,
+            template <>
+            template <>
+        )
         auto VariationalReconstruction<dim>::GetBoundaryRHS(tURec<nVarsFixed> &uRec,
                                                             tUDof<nVarsFixed> &u,
                                                             index iCell, index iFace,
@@ -168,8 +176,13 @@ namespace DNDS
             return BCC;
         }
 
-        template <int dim>
-        template <int nVarsFixed>
+        DNDS_SWITCH_INTELLISENSE(
+            template <int dim>
+            template <int nVarsFixed>
+            ,
+            template <>
+            template <>
+        )
         void VariationalReconstruction<dim>::DoReconstruction2nd(
             tURec<nVarsFixed> &uRec,
             tUDof<nVarsFixed> &u,
@@ -180,7 +193,10 @@ namespace DNDS
             using namespace Geom;
             using namespace Geom::Elem;
 
-            if (method == 1)
+            static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>); // note this is gDim!
+            static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+
+            if (method == 1 || method == 11)
             {
                 // simple gauss rule
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
@@ -189,6 +205,15 @@ namespace DNDS
                     auto c2f = mesh->cell2face[iCell];
                     Eigen::Matrix<real, nVarsFixed, dim> grad;
                     grad.setZero(nVars, dim);
+                    Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> mGG;
+                    Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> bGG;
+                    if (method == 11)
+                    {
+                        mGG.setZero(dim + c2f.size(), dim + c2f.size());
+                        bGG.setZero(dim + c2f.size(), u[0].rows());
+                        mGG(Seq012, Seq012).setIdentity();
+                        mGG(Seq012, Seq012) *= this->GetCellVol(iCell);
+                    }
 
                     for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                     {
@@ -210,12 +235,19 @@ namespace DNDS
                                     (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
                                     FTransPeriodicBack(uOther, faceID);
                             }
-                            Eigen::Matrix<real, nVarsFixed, dim> gradInc =
-                                (uOther.transpose() - u[iCell]) * 0.5 *
-                                this->GetFaceNormFromCell(iFace, iCell, -1, -1)(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>)).transpose() *
-                                this->GetFaceArea(iFace) * (CellIsFaceBack(iCell, iFace) ? 1. : -1.);
-
+                            Eigen::Vector<real, dim> uNorm = this->GetFaceNormFromCell(iFace, iCell, -1, -1)(Seq012) * (CellIsFaceBack(iCell, iFace) ? 1. : -1.);
+                            Eigen::Matrix<real, nVarsFixed, dim> gradInc = (uOther.transpose() - u[iCell]) * 0.5 * this->GetFaceArea(iFace) * uNorm.transpose();
                             grad += gradInc;
+                            if (method == 11)
+                            {
+                                mGG(Seq012, dim + ic2f) = -this->GetFaceArea(iFace) * uNorm;
+                                mGG(dim + ic2f, Seq012) =
+                                    (this->GetCellBary(iCell)(Seq012) + this->GetOtherCellBaryFromCell(iCell, iCellOther, iFace)(Seq012) -
+                                     2 * this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012))
+                                        .transpose();
+                                mGG(dim + ic2f, dim + ic2f) = 2;
+                                bGG(dim + ic2f, Eigen::all) = uOther + u[iCell].transpose();
+                            }
                         }
                         else
                         {
@@ -236,25 +268,43 @@ namespace DNDS
                                     u[iCell], iCell, iFace, -1,
                                     this->GetFaceNorm(iFace, -1),
                                     this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1), faceID);
-                            grad += (uBV - u[iCell]) * 0.5 *
-                                    this->GetFaceNorm(iFace, -1)(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>)).transpose() *
-                                    this->GetFaceArea(iFace);
+                            Eigen::Vector<real, dim> uNorm = this->GetFaceNorm(iFace, -1)(Seq012);
+                            grad += (uBV - u[iCell]) * 0.5 * this->GetFaceArea(iFace) * uNorm.transpose();
+                            if (method == 11)
+                            {
+                                mGG(Seq012, dim + ic2f) = -this->GetFaceArea(iFace) * uNorm;
+                                Eigen::Vector<real, dim> BaryOther = this->GetCellBary(iCell)(Seq012) +
+                                                                     2 * uNorm * uNorm.dot(this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012) - this->GetCellBary(iCell)(Seq012));
+                                mGG(dim + ic2f, Seq012) = (this->GetCellBary(iCell)(Seq012) + BaryOther -
+                                                           2 * this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012))
+                                                              .transpose();
+                                mGG(dim + ic2f, dim + ic2f) = 2;
+                                bGG(dim + ic2f, Eigen::all) = (uBV + u[iCell]).transpose();
+                            }
                         }
                     }
 
                     grad /= GetCellVol(iCell);
+
+                    if (method == 11)
+                    {
+                        // std::cout << mGG << std::endl;
+                        // std::cout << bGG << std::endl;
+                        // DNDS_assert(false);
+                        auto mGGLU = mGG.colPivHouseholderQr();
+                        DNDS_assert(mGGLU.isInvertible());
+                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> xGG = mGGLU.solve(bGG);
+                        grad = xGG(Seq012, Eigen::all).transpose();
+                    }
+
                     // tPoint cellBary = GetCellBary(iCell);
                     // Eigen::MatrixXd vvv = (grad * (Geom::RotZ(90) * cellBary)(Eigen::seq(0, dim - 1))).transpose();
                     // std::cout << cellBary.transpose() << " ---- " << vvv << std::endl;
                     // DNDS_assert(vvv(0) < 1e-10);
 
                     Eigen::Matrix<real, dim, dim> d1bv;
-                    static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
-                    static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
-                    d1bv =
-                        this->GetIntPointDiffBaseValue(
-                            iCell, -1, -1, -1, Seq123, dim + 1)(Eigen::all, Seq012);
-                    Eigen::Matrix3d m;
+                    d1bv = this->GetIntPointDiffBaseValue(
+                        iCell, -1, -1, -1, Seq123, dim + 1)(Eigen::all, Seq012);
                     auto lud1bv = d1bv.partialPivLu();
                     if (lud1bv.rcond() > 1e9)
                         std::cout << "Large Cond " << lud1bv.rcond() << std::endl;
