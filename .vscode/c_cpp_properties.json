@@ -62,8 +62,6 @@
             "name": "BSSC-A",
             "includePath": [
                 "${default}",
-                // "/public1/soft/oneAPI/2022.1/mpi/latest/include",
-                // "/public1/soft/hdf5/1.10.6-openmpi-gcc9.3.0/include",
                 "~/tools/cfd_externals/install/x86_64-linux-gnu-BSSCA-GaominsOpenMPI-4.1HDF5-1.12-gcc-9.1/include",
                 "~/gaomin/package/hdf5/1.12.0/include/",
                 "/public4/home/sc56867/gaomin/package/openmpi/4.1.0/include"
@@ -87,7 +85,7 @@
                 "_UNICODE"
             ],
             "windowsSdkVersion": "10.0.22000.0",
-            "compilerPath": "clang.exe",
+            "compilerPath": null,
             "cStandard": "c17",
             "intelliSenseMode": "windows-clang-x64",
             "cppStandard": "c++17"
