@@ -223,7 +223,7 @@ namespace DNDS::Euler
         int nextStepRestartC = config.outputControl.nRestartOutC;
         int nextStepOutAverage = config.outputControl.nTimeAverageOut;
         int nextStepOutAverageC = config.outputControl.nTimeAverageOutC;
-        PerformanceTimer::Instance().clearAllTimer();
+        Timer().clearAllTimer();
 
         // *** Loop variables
         real CFLNow = config.implicitCFLControl.CFL;
@@ -332,7 +332,7 @@ namespace DNDS::Euler
                 uRec.setConstant(0.0);
             }
             real recIncBase = 0;
-            PerformanceTimer::Instance().StartTimer(PerformanceTimer::Reconstruction);
+            Timer().StartTimer(PerformanceTimer::Reconstruction);
             if (config.implicitReconstructionControl.storeRecInc)
                 uRecOld = uRecC;
             if (config.implicitReconstructionControl.recLinearScheme == 0)
@@ -430,7 +430,7 @@ namespace DNDS::Euler
             {
                 Eigen::Array<real, 1, Eigen::Dynamic> resB;
                 int nPCGIterAll{0};
-                if (iter <= 2)                                                //! consecutive pcg is bad in 0012, using separate pcg
+                if (iter <= 2)       //! consecutive pcg is bad in 0012, using separate pcg
                     pcgRec->reset(); // ! todo: account for inter-solve (need two pcgs!)
                 uRecNew = uRecB1;
                 vfv->DoReconstructionIter(
@@ -528,7 +528,7 @@ namespace DNDS::Euler
                 mask[1] = 6;
                 vfv->DoReconstruction2nd(uRec, u, FBoundary, 1, mask);
             }
-            PerformanceTimer::Instance().StopTimer(PerformanceTimer::Reconstruction);
+            Timer().StopTimer(PerformanceTimer::Reconstruction);
             if (gradIsZero)
             {
                 uRec = uRecC;
@@ -537,7 +537,7 @@ namespace DNDS::Euler
                 gradIsZero = false;
             }
 
-            PerformanceTimer::Instance().StartTimer(PerformanceTimer::Limiter);
+            Timer().StartTimer(PerformanceTimer::Limiter);
             // for (index iCell = 0; iCell < uOld.size(); iCell++)
             //     uRecC[iCell].m() -= uOld[iCell].m();
 
@@ -552,7 +552,7 @@ namespace DNDS::Euler
                 auto fML = [&](const TU &UL, const TU &UR, const Geom::tPoint &n,
                                const Eigen::Ref<tLimitBatch> &data) -> tLimitBatch
                 {
-                    PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterA);
+                    Timer().StartTimer(PerformanceTimer::LimiterA);
                     Eigen::Vector<real, I4 + 1> UC = (UL + UR)(Seq01234) * 0.5;
                     Eigen::Matrix<real, dim, dim> normBase = Geom::NormBuildLocalBaseV<dim>(n(Seq012));
                     UC(Seq123) = normBase.transpose() * UC(Seq123);
@@ -563,14 +563,14 @@ namespace DNDS::Euler
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
                     ret.setIdentity();
                     ret(Seq01234, Seq01234) = M;
-                    PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterA);
+                    Timer().StopTimer(PerformanceTimer::LimiterA);
                     return (ret * data.transpose()).transpose();
                     // return real(1);
                 };
                 auto fMR = [&](const TU &UL, const TU &UR, const Geom::tPoint &n,
                                const Eigen::Ref<tLimitBatch> &data) -> tLimitBatch
                 {
-                    PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterA);
+                    Timer().StartTimer(PerformanceTimer::LimiterA);
                     Eigen::Vector<real, I4 + 1> UC = (UL + UR)(Seq01234) * 0.5;
                     Eigen::Matrix<real, dim, dim> normBase = Geom::NormBuildLocalBaseV<dim>(n(Seq012));
                     UC(Seq123) = normBase.transpose() * UC(Seq123);
@@ -582,7 +582,7 @@ namespace DNDS::Euler
                     ret.setIdentity();
                     ret(Seq01234, Seq01234) = M;
 
-                    PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterA);
+                    Timer().StopTimer(PerformanceTimer::LimiterA);
                     return (ret * data.transpose()).transpose();
                     // return real(1);
                 };
@@ -638,7 +638,7 @@ namespace DNDS::Euler
                 // uRecNew.trans.startPersistentPull();
                 // uRecNew.trans.waitPersistentPull();
             }
-            PerformanceTimer::Instance().StopTimer(PerformanceTimer::Limiter);
+            Timer().StopTimer(PerformanceTimer::Limiter);
             if (config.implicitReconstructionControl.storeRecInc)
             {
                 uRecIncC = uRecC;
@@ -670,7 +670,6 @@ namespace DNDS::Euler
             // }
 
             DNDS_MPI_InsertCheck(mpi, " Lambda RHS: StartEval");
-            PerformanceTimer::Instance().StartTimer(PerformanceTimer::RHS);
             eval.setPassiveDiscardSource(iter <= 0);
 
             if (iter == 1)
@@ -678,7 +677,7 @@ namespace DNDS::Euler
             alphaPP_tmp.setConstant(1.0);  // make RHS un-disturbed
             if (config.limiterControl.usePPRecLimiter)
             {
-                PerformanceTimer::Instance().StartTimer(PerformanceTimer::Positivity);
+                Timer().StartTimer(PerformanceTimer::Positivity);
                 nLimBeta = 0;
                 minBeta = 1;
                 if (!config.limiterControl.useLimiter)
@@ -699,9 +698,10 @@ namespace DNDS::Euler
                 betaPPC.trans.startPersistentPull();
                 uRecNew.trans.waitPersistentPull();
                 betaPPC.trans.waitPersistentPull();
-                PerformanceTimer::Instance().StopTimer(PerformanceTimer::Positivity);
+                Timer().StopTimer(PerformanceTimer::Positivity);
             }
 
+            Timer().StartTimer(PerformanceTimer::RHS);
             if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter) // todo: opt to using limited for uRecUnlim
                 eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecNew : uRecC, uRecNew,
                                  betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
@@ -718,7 +718,7 @@ namespace DNDS::Euler
                 // if (mpi.rank == 0)
                 //     std::cout << "Freezing all passive" << std::endl;
             }
-            PerformanceTimer::Instance().StopTimer(PerformanceTimer::RHS);
+            Timer().StopTimer(PerformanceTimer::RHS);
 
             DNDS_MPI_InsertCheck(mpi, " Lambda RHS: End");
         };
@@ -770,7 +770,7 @@ namespace DNDS::Euler
             auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
             bool inputIsZero{true}, hasLUDone{false};
 
-            PerformanceTimer::Instance().StartTimer(PerformanceTimer::Positivity);
+            Timer().StartTimer(PerformanceTimer::Positivity);
             if (config.timeMarchControl.rhsFPPMode == 1 || config.timeMarchControl.rhsFPPMode == 11)
             {
                 // ! experimental: bad now ?
@@ -810,7 +810,7 @@ namespace DNDS::Euler
                 dTauTmp *= alphaPP_tmp;
             }
             auto &dTauC = config.timeMarchControl.rhsFPPMode == 2 ? dTauTmp : dTau;
-            PerformanceTimer::Instance().StopTimer(PerformanceTimer::Positivity);
+            Timer().StopTimer(PerformanceTimer::Positivity);
 
             typename TVFV::template TFBoundary<nVarsFixed>
                 FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace, int iG,
@@ -1106,7 +1106,7 @@ namespace DNDS::Euler
                                   real ct,
                                   int uPos)
         {
-            PerformanceTimer::Instance().StartTimer(PerformanceTimer::Positivity);
+            Timer().StartTimer(PerformanceTimer::Positivity);
             auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
             auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
             auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
@@ -1164,7 +1164,7 @@ namespace DNDS::Euler
                 crhs.trans.startPersistentPull();
                 crhs.trans.waitPersistentPull();
             }
-            PerformanceTimer::Instance().StopTimer(PerformanceTimer::Positivity);
+            Timer().StopTimer(PerformanceTimer::Positivity);
         };
 
         auto fincrement = [&](
@@ -1172,7 +1172,7 @@ namespace DNDS::Euler
                               ArrayDOFV<nVarsFixed> &cxInc,
                               real alpha, int uPos)
         {
-            PerformanceTimer::Instance().StartTimer(PerformanceTimer::Positivity);
+            Timer().StartTimer(PerformanceTimer::Positivity);
             auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
             auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
             auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
@@ -1202,7 +1202,7 @@ namespace DNDS::Euler
                     for (index i = 0; i < uTemp.Size(); i++)
                         uTemp[i]({I4, I4 + 1}) *= config.implicitCFLControl.RANSRelax;
             }
-            PerformanceTimer::Instance().StopTimer(PerformanceTimer::Positivity);
+            Timer().StopTimer(PerformanceTimer::Positivity);
             eval.AddFixedIncrement(cx, uTemp, alpha);
             eval.AssertMeanValuePP(cx, true);
 
@@ -1229,13 +1229,13 @@ namespace DNDS::Euler
                 double tWall = MPI_Wtime();
                 real telapsed = MPI_Wtime() - tstartInternal;
                 bool useCollectiveTimer = config.outputControl.useCollectiveTimer;
-                real tcomm = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Comm, mpi, useCollectiveTimer);
-                real tLimiterA = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::LimiterA, mpi, useCollectiveTimer);
-                real tLimiterB = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::LimiterB, mpi, useCollectiveTimer);
-                real trhs = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::RHS, mpi, useCollectiveTimer);
-                real trec = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Reconstruction, mpi, useCollectiveTimer);
-                real tLim = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Limiter, mpi, useCollectiveTimer);
-                real tPP = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Positivity, mpi, useCollectiveTimer);
+                real tcomm = Timer().getTimerColOrLoc(PerformanceTimer::Comm, mpi, useCollectiveTimer);
+                real tLimiterA = Timer().getTimerColOrLoc(PerformanceTimer::LimiterA, mpi, useCollectiveTimer);
+                real tLimiterB = Timer().getTimerColOrLoc(PerformanceTimer::LimiterB, mpi, useCollectiveTimer);
+                real trhs = Timer().getTimerColOrLoc(PerformanceTimer::RHS, mpi, useCollectiveTimer);
+                real trec = Timer().getTimerColOrLoc(PerformanceTimer::Reconstruction, mpi, useCollectiveTimer);
+                real tLim = Timer().getTimerColOrLoc(PerformanceTimer::Limiter, mpi, useCollectiveTimer);
+                real tPP = Timer().getTimerColOrLoc(PerformanceTimer::Positivity, mpi, useCollectiveTimer);
                 auto [telapsedM, telapsedS] = tInternalStats["t"].update(telapsed).get();
                 auto [tcommM, tcommS] = tInternalStats["c"].update(tcomm).get();
                 auto [trhsM, trhsS] = tInternalStats["r"].update(trhs).get();
@@ -1269,12 +1269,12 @@ namespace DNDS::Euler
                                          DNDS_FMT_ARG(minBeta),
                                          DNDS_FMT_ARG(nLimAlpha),
                                          DNDS_FMT_ARG(minAlpha),
-                                         DNDS_FMT_ARG(telapsedM),
-                                         DNDS_FMT_ARG(trecM),
-                                         DNDS_FMT_ARG(trhsM),
-                                         DNDS_FMT_ARG(tcommM),
-                                         DNDS_FMT_ARG(tLimM),
-                                         DNDS_FMT_ARG(tPPrM),
+                                         DNDS_FMT_ARG(telapsed), DNDS_FMT_ARG(telapsedM),
+                                         DNDS_FMT_ARG(trec), DNDS_FMT_ARG(trecM),
+                                         DNDS_FMT_ARG(trhs), DNDS_FMT_ARG(trhsM),
+                                         DNDS_FMT_ARG(tcomm), DNDS_FMT_ARG(tcommM),
+                                         DNDS_FMT_ARG(tLim), DNDS_FMT_ARG(tLimM),
+                                         DNDS_FMT_ARG(tPP), DNDS_FMT_ARG(tPPrM),
                                          DNDS_FMT_ARG(tLimiterA),
                                          DNDS_FMT_ARG(tLimiterB),
                                          DNDS_FMT_ARG(tWall),
@@ -1312,7 +1312,7 @@ namespace DNDS::Euler
                         step, iStep, iter);
                 }
                 tstartInternal = MPI_Wtime();
-                PerformanceTimer::Instance().clearAllTimer();
+                Timer().clearAllTimer();
             }
 
             if (iter % config.outputControl.nDataOutInternal == 0)
@@ -1394,12 +1394,18 @@ namespace DNDS::Euler
                 double tWall = MPI_Wtime();
                 real telapsed = MPI_Wtime() - tstart;
                 bool useCollectiveTimer = config.outputControl.useCollectiveTimer;
-                real tcomm = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Comm, mpi, useCollectiveTimer);
-                real tLimiterA = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::LimiterA, mpi, useCollectiveTimer);
-                real tLimiterB = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::LimiterB, mpi, useCollectiveTimer);
-                real trhs = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::RHS, mpi, useCollectiveTimer);
-                real trec = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Reconstruction, mpi, useCollectiveTimer);
-                real tLim = PerformanceTimer::Instance().getTimerColOrLoc(PerformanceTimer::Limiter, mpi, useCollectiveTimer);
+                real tcomm = Timer().getTimerColOrLoc(PerformanceTimer::Comm, mpi, useCollectiveTimer);
+                real tLimiterA = Timer().getTimerColOrLoc(PerformanceTimer::LimiterA, mpi, useCollectiveTimer);
+                real tLimiterB = Timer().getTimerColOrLoc(PerformanceTimer::LimiterB, mpi, useCollectiveTimer);
+                real trhs = Timer().getTimerColOrLoc(PerformanceTimer::RHS, mpi, useCollectiveTimer);
+                real trec = Timer().getTimerColOrLoc(PerformanceTimer::Reconstruction, mpi, useCollectiveTimer);
+                real tLim = Timer().getTimerColOrLoc(PerformanceTimer::Limiter, mpi, useCollectiveTimer);
+
+                tcomm = tInternalStats["c"].update(tcomm).getSum();
+                trhs = tInternalStats["r"].update(trhs).getSum();
+                trec = tInternalStats["v"].update(trec).getSum();
+                tLim = tInternalStats["l"].update(tLim).getSum();
+                auto tPPr = tInternalStats["p"].getSum() + Timer().getTimerColOrLoc(PerformanceTimer::PositivityOuter, mpi, useCollectiveTimer);
                 if (mpi.rank == 0)
                 {
                     auto fmt = log().flags();
@@ -1431,6 +1437,7 @@ namespace DNDS::Euler
                                          DNDS_FMT_ARG(trhs),
                                          DNDS_FMT_ARG(tcomm),
                                          DNDS_FMT_ARG(tLim),
+                                         DNDS_FMT_ARG(tPPr),
                                          DNDS_FMT_ARG(tLimiterA),
                                          DNDS_FMT_ARG(tLimiterB),
                                          DNDS_FMT_ARG(tWall),
@@ -1466,7 +1473,7 @@ namespace DNDS::Euler
                         step, -1, -1);
                 }
                 tstart = MPI_Wtime();
-                PerformanceTimer::Instance().clearAllTimer();
+                Timer().clearAllTimer();
                 for (auto &s : tInternalStats)
                     s.second.clear();
             }
@@ -1646,7 +1653,7 @@ namespace DNDS::Euler
 
             if (config.timeMarchControl.useDtPPLimit)
             {
-                PerformanceTimer::Instance().StartTimer(PerformanceTimer::Positivity);
+                Timer().StartTimer(PerformanceTimer::PositivityOuter);
                 dTauTmp.setConstant(curDtImplicit * config.timeMarchControl.dtPPLimitScale); //? used as damper here, appropriate?
                 frhsOuter(rhsTemp, u, dTauTmp, 1, 0.0, 0, 0);                                //* trick: use 0th order reconstruction RHS for dt PP limiting
                 uTemp = u;
@@ -1667,7 +1674,7 @@ namespace DNDS::Euler
                     log() << fmt::format("At Step [{:d}] t [{:.8g}] Changing dt to [{}], using PP", step, tSimu, curDtImplicit) << std::endl;
                     log() << "##################################################################" << std::endl;
                 }
-                PerformanceTimer::Instance().StopTimer(PerformanceTimer::Positivity);
+                Timer().StopTimer(PerformanceTimer::PositivityOuter);
             }
             curDtImplicit = std::max(curDtImplicit, config.timeMarchControl.dtImplicitMin);
 
@@ -1764,13 +1771,10 @@ namespace DNDS::Euler
                         config.convergenceControl.nTimeStepInternal,
                         fstop, fincrement,
                         curDtImplicit + verySmallReal);
+            curDtImplicitHistory.push_back(curDtImplicit);
             if (fmainloop())
                 break;
-            curDtImplicitHistory.push_back(curDtImplicit);
         }
-
-        // u.trans.waitPersistentPull();
-        logErr.close();
     }
 
     template <EulerModel model>

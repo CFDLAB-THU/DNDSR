@@ -27,7 +27,8 @@ namespace DNDS
             LinSolve2 = 15,
             LinSolve3 = 16,
             Positivity = 17,
-            __EndTimerType = 18
+            PositivityOuter = 18,
+            __EndTimerType = 64
         };
 
         static const int Ntype = __EndTimerType;
@@ -87,6 +88,16 @@ namespace DNDS
         {
             return std::make_tuple(average, std::sqrt(std::max(0., sigmaS)));
         }
+
+        real getSum()
+        {
+            return average * count;
+        }
     };
+
+    inline PerformanceTimer &Timer()
+    {
+        return PerformanceTimer::Instance();
+    }
 
 }

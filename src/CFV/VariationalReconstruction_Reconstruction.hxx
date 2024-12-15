@@ -258,9 +258,7 @@ namespace DNDS
                                 this->GetIntPointDiffBaseValue(
                                     iCell, iFace, -1, -1, std::array<int, 1>{0}, 1);
                             Eigen::Vector<real, nVarsFixed> uBL =
-                                (dbv *
-                                 uRec[iCell])
-                                    .transpose();
+                                (dbv * uRec[iCell]).transpose() * 0.0; //0.0: uRec should be invalid!!
                             uBL += u[iCell]; //! need fixing?
                             Eigen::Vector<real, nVarsFixed> uBV =
                                 FBoundary(
@@ -273,8 +271,9 @@ namespace DNDS
                             if (method == 11)
                             {
                                 mGG(Seq012, dim + ic2f) = -this->GetFaceArea(iFace) * uNorm;
-                                Eigen::Vector<real, dim> BaryOther = this->GetCellBary(iCell)(Seq012) +
-                                                                     2 * uNorm * uNorm.dot(this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012) - this->GetCellBary(iCell)(Seq012));
+                                // Eigen::Vector<real, dim> BaryOther = this->GetCellBary(iCell)(Seq012) +
+                                //                                      2 * uNorm * uNorm.dot(this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012) - this->GetCellBary(iCell)(Seq012));
+                                Eigen::Vector<real, dim> BaryOther = 2 * this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012) - this->GetCellBary(iCell)(Seq012);
                                 mGG(dim + ic2f, Seq012) = (this->GetCellBary(iCell)(Seq012) + BaryOther -
                                                            2 * this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012))
                                                               .transpose();

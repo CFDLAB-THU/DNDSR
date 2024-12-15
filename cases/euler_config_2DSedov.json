@@ -25,6 +25,12 @@
     "outputControl": {
         "nConsoleCheck": 1,
         "nConsoleCheckInternal": 1,
+        "consoleMainOutputFormat": [
+            "=== Step {termBold}[{step:4d}]   ",
+            "res {termBold}{termRed}{resRel:.3e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   ",
+            "Time[{telapsed:.3f}] recTime[{trec:.4f}] rhsTime[{trhs:.4f}] commTime[{tcomm:.4f}] limTime[{tLim:.4f}] PP[{tPPr:.4f}]"
+        ],
         "consoleMainOutputFormatInternal": [
             "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   ",
             "res {termRed}{resRel:.15e}{termReset}   ",
