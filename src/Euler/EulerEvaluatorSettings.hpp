@@ -30,6 +30,7 @@ namespace DNDS::Euler
         int wallDistScheme = 0;
         int wallDistCellLoadSize = 1024 * 32;
         int wallDistIter = 1000;
+        real wallDistResTol = 1e-4;
         real SADESScale = veryLargeReal;
         RANSModel ransModel = RANSModel::RANS_None;
         int ransEigScheme = 0;
@@ -235,6 +236,7 @@ namespace DNDS::Euler
             __DNDS__json_to_config(wallDistScheme);
             __DNDS__json_to_config(wallDistCellLoadSize);
             __DNDS__json_to_config(wallDistIter);
+            __DNDS__json_to_config(wallDistResTol);
             __DNDS__json_to_config(SADESScale);
             __DNDS__json_to_config(ransModel);
             __DNDS__json_to_config(ransEigScheme);

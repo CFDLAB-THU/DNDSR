@@ -9,7 +9,7 @@
     },
     "convergenceControl": {
         "nTimeStepInternal": 10000,
-        "rhsThresholdInternal": 1e-30,
+        "rhsThresholdInternal": 1e-8,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
@@ -25,7 +25,8 @@
         "nRestartOutC": 10,
         "nRestartOutCInternal": 200,
         "nRestartOutInternal": 1000000000,
-        "tDataOut": 3e+200
+        "tDataOut": 3e+200,
+        "dataOutAtInit": true
     },
     "implicitCFLControl": {
         "CFL": 50,
@@ -46,6 +47,7 @@
         "outPltVTKFormat": false,
         "outAtPointData": true,
         "outAtCellData": true,
+        "outBndData": true,
         "outCellScalarNames": [
             // "minJacobiDetRel",
             // "cellVolume",
@@ -83,7 +85,7 @@
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
-        "subs2ndOrder": 1,
+        "subs2ndOrder": 11,
         "baseSettings": {
             "localOrientation": true,
             "anisotropicLengths": false
@@ -135,10 +137,11 @@
         "useRoeJacobian": false,
         "riemannSolverType": "Roe_M1",
         "uRecBetaCompressPower": 1,
-        "wallDistScheme": 1,
+        "wallDistScheme": 3,
         "wallDistExection": 5,
         "wallDistRefineMax": 0.01,
         "usePrimGradInVisFlux": 0,
+        // "ransForce2nd": 1,
         "constMassForce": [
             0.0,
             0.0,

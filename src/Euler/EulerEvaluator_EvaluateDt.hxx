@@ -1,6 +1,7 @@
 #pragma once
 #include "EulerEvaluator.hpp"
 #include "RANS_ke.hpp"
+#include "Solver/Linear.hpp"
 
 #define CGAL_DISABLE_ROUNDING_MATH_CHECK // for valgrind
 #include <CGAL/Simple_cartesian.h>
@@ -438,15 +439,25 @@ namespace DNDS::Euler
 
         if (settings.wallDistScheme == 3)
         {
-            int nSweep = 5;
+            int nSweep = 10;
             int nIter = settings.wallDistIter;
             int nIterSee = 10;
+            real smoothBias = 0.0;
+            int nGmresSubspace = 10;
+            int nGmresRestart = 1;
+            real resTh = settings.wallDistResTol;
 
-            ArrayDOFV<1> phi, rPhi, dPhi, dPhiNew;
+            int nPPoissonStartIter = 5;
+            int nPPoisson = 2;
+
+            ArrayDOFV<1> phi, rPhi, dPhi, dPhiNew, phiTmp;
+            ArrayDOFV<3> diffPhi;
             vfv->BuildUDof(phi, 1);
             vfv->BuildUDof(rPhi, 1);
             vfv->BuildUDof(dPhi, 1);
             vfv->BuildUDof(dPhiNew, 1);
+            vfv->BuildUDof(phiTmp, 1);
+            vfv->BuildUDof(diffPhi, 3);
             phi.setConstant(0.0);
 
             std::vector<std::vector<real>> coefs;
@@ -454,21 +465,67 @@ namespace DNDS::Euler
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 coefs.at(iCell).resize(mesh->cell2face[iCell].size() + 1);
 
-            auto rhsPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<1> &rhs, std::vector<std::vector<real>> &coefs)
+            std::vector<Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>> mGGs;
+            mGGs.resize(mesh->NumCell());
+
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
+                auto &mGG = mGGs.at(iCell);
+                mGG.setZero(3 + mesh->cell2face[iCell].size(), 3 + mesh->cell2face[iCell].size());
+                mGG({0, 1, 2}, {0, 1, 2}) = Eigen::Matrix3d::Identity() * vfv->GetCellVol(iCell);
+                for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+                {
+                    index iFace = mesh->cell2face[iCell][ic2f];
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                    int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
+                    auto faceBndID = mesh->GetFaceZone(iFace);
+                    auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+                    Geom::tPoint baryOther = bary;
+                    Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
+                    if (iCellOther != UnInitIndex)
+                    {
+                        baryOther = vfv->GetOtherCellPointFromCell(
+                            iCell, iCellOther, iFace,
+                            vfv->GetCellQuadraturePPhys(iCellOther, -1));
+                    }
+                    else
+                    {
+                        DNDS_assert(faceBCType != BCUnknown);
+                        DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
+                        baryOther = bFace * 2 - bary;
+                    }
+                    mGG({0, 1, 2}, 3 + ic2f) = -uNormOut * vfv->GetFaceArea(iFace);
+                    mGG(3 + ic2f, {0, 1, 2}) = (baryOther + bary - 2 * bFace).transpose();
+                    mGG(3 + ic2f, 3 + ic2f) = 2;
+                }
+                diffPhi[iCell] /= vfv->GetCellVol(iCell);
+                auto mGGLU = mGG.fullPivLu();
+                DNDS_assert(mGGLU.isInvertible());
+                Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> mGGInv = mGGLU.inverse();
+                mGG = mGGInv;
+            }
+
+            auto getDiffPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<3> &diffPhi)
             {
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
-                    rhs[iCell](0) = 1.;
                     Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
-                    coefs.at(iCell).at(0) = 0.;
+                    diffPhi[iCell].setZero();
+                    Eigen::Vector<real, Eigen::Dynamic> bGG;
+                    bGG.setZero(3 + mesh->cell2face[iCell].size());
                     for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                     {
                         index iFace = mesh->cell2face[iCell][ic2f];
                         index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                        int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                        Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
                         auto faceBndID = mesh->GetFaceZone(iFace);
                         auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
                         real phiOther = phi[iCell](0);
                         Geom::tPoint baryOther = bary;
+                        Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
                         if (iCellOther != UnInitIndex)
                         {
                             phiOther = phi[iCellOther](0);
@@ -482,16 +539,74 @@ namespace DNDS::Euler
                             DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
                             if (faceBCType == BCWall)
                                 phiOther = -phi[iCell](0);
-                            Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
+                            baryOther = bFace * 2 - bary;
+                        }
+                        real distThis = (bFace - bary).norm();
+                        real distOther = (bFace - baryOther).norm();
+                        real phiFace = (distOther * phi[iCell](0) + distThis * phiOther) / (distOther + distThis) - phi[iCell](0);
+                        diffPhi[iCell] += uNormOut * vfv->GetFaceArea(iFace) * phiFace;
+                        bGG(3 + ic2f) = phiOther + phi[iCell](0);
+                    }
+                    diffPhi[iCell] /= vfv->GetCellVol(iCell);
+                    diffPhi[iCell] = (mGGs.at(iCell) * bGG)({0, 1, 2}); // comment to use traditional GG
+                }
+            };
+
+            int pPoissonCur = 2;
+
+            auto rhsPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<3> &diffPhi, ArrayDOFV<1> &rhs, std::vector<std::vector<real>> &coefs)
+            {
+                getDiffPhi(phi, diffPhi);
+                diffPhi.trans.startPersistentPull();
+                diffPhi.trans.waitPersistentPull();
+                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                {
+                    rhs[iCell](0) = 1.;
+                    Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
+                    coefs.at(iCell).at(0) = 0.;
+                    for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+                    {
+                        index iFace = mesh->cell2face[iCell][ic2f];
+                        index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                        int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                        Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
+                        auto faceBndID = mesh->GetFaceZone(iFace);
+                        auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+                        real phiOther = phi[iCell](0);
+                        Geom::tPoint baryOther = bary;
+                        Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
+                        real phiThisFace = phi[iCell](0) + (bFace - bary).dot(diffPhi[iCell]);
+                        real phiOtherFace = phiThisFace;
+                        real diffPhiNormThis = diffPhi[iCell].dot(uNormOut);
+                        real diffPhiNormOther = diffPhiNormThis;
+                        if (iCellOther != UnInitIndex)
+                        {
+                            phiOther = phi[iCellOther](0);
+                            baryOther = vfv->GetOtherCellPointFromCell(
+                                iCell, iCellOther, iFace,
+                                vfv->GetCellQuadraturePPhys(iCellOther, -1));
+                            phiOtherFace = phiOther + (bFace - baryOther).dot(diffPhi[iCellOther]);
+                            diffPhiNormOther = diffPhi[iCellOther].dot(uNormOut);
+                        }
+                        else
+                        {
+                            DNDS_assert(faceBCType != BCUnknown);
+                            DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
+                            if (faceBCType == BCWall)
+                                phiOther = -phi[iCell](0), phiOtherFace = -phiThisFace;
+                            else
+                                diffPhiNormOther = -diffPhiNormThis;
                             baryOther = bFace * 2 - bary;
                         }
                         // real dist = (baryOther - bary).norm();
-                        real dist = std::abs(
-                            (baryOther - bary).dot(vfv->GetFaceNormFromCell(iFace, iCell, -1, -1)));
+                        real dist = std::abs((baryOther - bary).dot(uNormOut));
 
-                        rhs[iCell](0) += (phiOther - phi[iCell](0)) * 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
-                        coefs.at(iCell).at(0) -= 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
-                        coefs.at(iCell).at(1 + ic2f) = 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
+                        real diffPhiNorm = ((phiOtherFace - phiThisFace) * 1.0 / dist + 0.5 * (diffPhiNormOther + diffPhiNormThis));
+
+                        // rhs[iCell](0) += (phiOther - phi[iCell](0)) * 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
+                        rhs[iCell](0) += std::pow(std::abs(diffPhiNorm), pPoissonCur - 2) * diffPhiNorm * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
+                        coefs.at(iCell).at(0) -= 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * std::pow(std::abs(diffPhiNorm), pPoissonCur - 2) * (pPoissonCur - 1);
+                        coefs.at(iCell).at(1 + ic2f) = 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * std::pow(std::abs(diffPhiNorm), pPoissonCur - 2) * (pPoissonCur - 1);
                     }
                 }
             };
@@ -519,56 +634,115 @@ namespace DNDS::Euler
                 }
             };
 
+            Linear::GMRES_LeftPreconditioned<ArrayDOFV<1>> gmres(
+                nGmresSubspace,
+                [&](ArrayDOFV<1> &v)
+                {
+                    vfv->BuildUDof(v, 1);
+                });
+
             real incNormBase{0};
+            real resNormBase{0};
             for (int iIter = 1; iIter <= nIter; iIter++)
             {
-                rhsPhi(phi, rPhi, coefs);
-                solveDphi(rPhi, dPhi, dPhiNew, coefs);
+                if (iIter > nPPoissonStartIter)
+                    pPoissonCur = nPPoisson;
+                rhsPhi(phi, diffPhi, rPhi, coefs);
+                real normR = rPhi.norm2();
+                dPhi.setConstant(0.0);
+                gmres.solve(
+                    [&](ArrayDOFV<1> &x, ArrayDOFV<1> &Ax)
+                    {
+                        real normX = x.norm2();
+                        real ratio = normR * 1e-3 / (normX + normR * 1e-7 + verySmallReal);
+                        dPhiNew = phi;
+                        rhsPhi(dPhiNew, diffPhi, phiTmp, coefs);
+                        dPhiNew.addTo(x, ratio);
+                        rhsPhi(dPhiNew, diffPhi, Ax, coefs);
+                        Ax.addTo(phiTmp, -1.0);
+                        Ax *= -1. / ratio;
+                        Ax.trans.startPersistentPull();
+                        Ax.trans.waitPersistentPull();
+
+                        // for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                        // {
+                        //     Ax[iCell] = -coefs[iCell][0] * x[iCell];
+                        //     for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+                        //     {
+                        //         index iFace = mesh->cell2face[iCell][ic2f];
+                        //         index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                        //         if (iCellOther != UnInitIndex)
+                        //             Ax[iCell] += -coefs[iCell][ic2f + 1] * x[iCellOther];
+                        //     }
+                        // }
+                        // Ax.trans.startPersistentPull();
+                        // Ax.trans.waitPersistentPull();
+                    },
+                    [&](ArrayDOFV<1> &x, ArrayDOFV<1> &Mx)
+                    {
+                        Mx.setConstant(0.0);
+                        solveDphi(x, Mx, dPhiNew, coefs);
+                        // Mx.trans.startPersistentPull();
+                        // Mx.trans.waitPersistentPull();
+                    },
+                    [&](ArrayDOFV<1> &a, ArrayDOFV<1> &b) -> real
+                    {
+                        return a.dot(b);
+                    },
+                    rPhi,
+                    dPhi,
+                    nGmresRestart,
+                    [&](int iRestart, real res, real resB)
+                    {
+                        // if (res < resB * 1e-6)
+                        //     return true;
+                        return false;
+                    });
+
+                // solveDphi(rPhi, dPhi, dPhiNew, coefs);
+
                 real incNorm = dPhi.norm2();
                 phi += dPhi;
                 phi.trans.startPersistentPull();
                 phi.trans.waitPersistentPull();
                 if (iIter == 1)
                     incNormBase = incNorm;
-                if (iIter % nIterSee == 0 || iIter == nIter)
+                resNormBase = std::max(resNormBase, normR);
+                bool nowExit = false;
+                if (normR < resNormBase * resTh && iIter > nPPoissonStartIter)
+                    nowExit = true;
+                if (iIter % nIterSee == 0 || iIter == nIter || nowExit)
                     if (phi.father->getMPI().rank == 0)
-                        log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson inc: [{}] [{:.4e}] -> [{:.4e}]", iIter, incNormBase, incNorm) << std::endl;
+                        log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson [{}] inc:  [{:.4e}] -> [{:.4e}],  res: [{:.4e}] -> [{:.4e}]",
+                                             iIter, incNormBase, incNorm, resNormBase, normR)
+                              << std::endl;
+                if (nowExit)
+                    break;
             }
 
+            getDiffPhi(phi, diffPhi);
+            diffPhi.trans.startPersistentPull();
+            diffPhi.trans.waitPersistentPull();
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 Geom::tPoint gradPhi;
                 gradPhi.setZero();
-                real iDistSum{0};
+                gradPhi = diffPhi[iCell];
+                real nD = 1;
                 for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                 {
                     index iFace = mesh->cell2face[iCell][ic2f];
                     index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                    auto faceBndID = mesh->GetFaceZone(iFace);
-                    auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
-                    real phiOther = phi[iCell](0);
                     if (iCellOther != UnInitIndex)
                     {
-                        phiOther = phi[iCellOther](0);
+                        gradPhi += diffPhi[iCell];
+                        gradPhi += diffPhi[iCellOther] * smoothBias;
+                        nD += 1. + smoothBias;
                     }
-                    else
-                    {
-                        DNDS_assert(faceBCType != BCUnknown);
-                        DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
-                        if (faceBCType == BCWall)
-                            phiOther = -phi[iCell](0);
-                    }
-                    int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
-                    Geom::tPoint normOut = vfv->GetFaceNormFromCell(iFace, iCell, -1, -1) * (if2c ? -1 : 1);
-                    // gradPhi += normOut * vfv->GetFaceArea(iFace) * (phiOther - phi[iCell](0)) * 0.5;
-                    real iDist = coefs.at(iCell).at(1 + ic2f) / vfv->GetFaceArea(iFace) * vfv->GetCellVol(iCell);
-                    iDistSum += iDist;
-                    gradPhi += normOut * coefs.at(iCell).at(1 + ic2f) * (phiOther - phi[iCell](0));
                 }
-                // gradPhi /= vfv->GetCellVol(iCell);
-                gradPhi /= iDistSum;
+                gradPhi /= nD;
                 real gradPhiNorm = gradPhi.norm();
-                real dEst = std::pow(2 * phi[iCell](0) + std::pow(gradPhiNorm, 2.0), 0.5) - std::pow(gradPhiNorm, 1.0);
+                real dEst = std::pow(pPoissonCur / real(pPoissonCur - 1) * phi[iCell](0) + std::pow(gradPhiNorm, pPoissonCur), real(pPoissonCur - 1) / pPoissonCur) - std::pow(gradPhiNorm, pPoissonCur - 1);
                 // dPhi[iCell](0) = phi[iCell](0);
                 dPhi[iCell](0) = dEst;
             }
