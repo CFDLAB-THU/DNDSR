@@ -32,7 +32,7 @@ namespace DNDS::CFV
         MPIInfo mpi;
         VRSettings settings = VRSettings{dim};
         ssp<Geom::UnstructuredMesh> mesh;
-        using TFTrans = std::function<void(Eigen::Ref<Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>>, Geom::t_index)>;
+        using TFTrans = std::function<void(Eigen::Ref<MatrixXR>, Geom::t_index)>;
 
     private:
         real sumVolume{0}, minVolume{veryLargeReal}, maxVolume{0};
@@ -70,7 +70,7 @@ namespace DNDS::CFV
             Geom::tPoint norm;
             Geom::tPoint PPhy;
             real JDet;
-            Eigen::Matrix<real, 1, Eigen::Dynamic> D0Bj;
+            RowVectorXR D0Bj;
         };
         std::unordered_map<index, std::vector<BndVRPointCache>> bndVRCaches; /// @brief constructed using ConstructBaseAndWeight()
 
@@ -430,7 +430,7 @@ namespace DNDS::CFV
          * @todo:  //TODO add support for rotational periodic boundary!
          */
         template <class TList>
-        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>
+        MatrixXR
         GetIntPointDiffBaseValue(
             index iCell, index iFace, rowsize if2c, int iG,
             TList &&diffList = Eigen::all,
@@ -463,7 +463,7 @@ namespace DNDS::CFV
                 {
                     // Actual computing:
                     ///@todo //!!!!TODO: take care of periodic case
-                    Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dbv;
+                    MatrixXR dbv;
                     dbv.resize(maxDiff, cellAtr[iCell].NDOF);
                     FDiffBaseValue(dbv, GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, iG), iCell, iFace, iG, 0);
                     return dbv(std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, Eigen::last));
@@ -487,7 +487,7 @@ namespace DNDS::CFV
                 }
                 else
                 {
-                    Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dbv;
+                    MatrixXR dbv;
                     dbv.resize(maxDiff, cellAtr[iCell].NDOF);
                     FDiffBaseValue(dbv, GetCellQuadraturePPhys(iCell, iG), iCell, -1, iG, 0);
                     return dbv(std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, Eigen::last));
@@ -521,7 +521,7 @@ namespace DNDS::CFV
             DNDS_assert(DiffI.rows() == DiffJ.rows());
             int cnDiffs = DiffI.rows();
 
-            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> Conj;
+            MatrixXR Conj;
             Conj.resize(DiffI.cols(), DiffJ.cols());
             Conj.setZero();
 

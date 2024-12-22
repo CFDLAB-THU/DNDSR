@@ -40,7 +40,7 @@ namespace DNDS::Geom::RBF
     inline real
     GetMaxRij(const tSmallCoords &cent, const tSmallCoords &xs)
     {
-        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> RiXj;
+        MatrixXR RiXj;
         RiXj.resize(cent.cols(), xs.cols());
         for (int iC = 0; iC < cent.cols(); iC++)
         {
@@ -50,11 +50,11 @@ namespace DNDS::Geom::RBF
     }
 
     template <class TIn>
-    inline Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>
+    inline MatrixXR
     FRBFBasis(TIn RiXj, RBFKernelType kernel)
     {
         using real = DNDS::real;
-        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> NiXj;
+        MatrixXR NiXj;
         switch (kernel)
         {
         /*****/ // using (modified) distance Kernel
@@ -92,48 +92,48 @@ namespace DNDS::Geom::RBF
     }
 
     template <class Tcent, class Tx>
-    inline Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> // redurn Ni at Xj
+    inline MatrixXR // redurn Ni at Xj
     RBFCPC2(Tcent cent, Tx xs, real R, RBFKernelType kernel = Gaussian)
     {
-        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> RiXj;
+        MatrixXR RiXj;
         RiXj.resize(cent.cols(), xs.cols());
         for (int iC = 0; iC < cent.cols(); iC++)
         {
             RiXj(iC, Eigen::all) = (xs.colwise() - cent(Eigen::all, iC)).colwise().norm() * (1. / R);
         }
-        // Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> NiXj = (1 + RiXj.array().square()).inverse();
+        // MatrixXR NiXj = (1 + RiXj.array().square()).inverse();
         return FRBFBasis(RiXj, kernel);
     }
 
     template <class TF>
-    inline Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>
+    inline MatrixXR
     RBFInterpolateSolveCoefs(const tSmallCoords &xs, const TF fs, real R, RBFKernelType kernel = Gaussian)
     {
-        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> PT;
+        MatrixXR PT;
         PT.resize(4, xs.cols());
         PT(0, Eigen::all).setConstant(1);
         PT({1, 2, 3}, Eigen::all) = xs;
-        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> M = RBFCPC2(xs, xs, R, kernel);
-        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> A;
+        MatrixXR M = RBFCPC2(xs, xs, R, kernel);
+        MatrixXR A;
         A.setZero(xs.cols() + 4, xs.cols() + 4);
         A.topLeftCorner(xs.cols(), xs.cols()) = M;
         A.bottomLeftCorner(4, xs.cols()) = PT;
         A.topRightCorner(xs.cols(), 4) = PT.transpose();
-        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> RHS;
+        MatrixXR RHS;
         RHS.setZero(xs.cols() + 4, fs.cols());
         DNDS_assert(fs.rows() == xs.cols());
         RHS.topRows(xs.cols()) = fs;
         auto LDLT = A.ldlt();
-        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> ret = LDLT.solve(RHS);
+        MatrixXR ret = LDLT.solve(RHS);
         return ret;
     }
 
     template <class TF>
-    inline Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>
+    inline MatrixXR
     RBFInterpolateSolveCoefsNoPoly(const tSmallCoords &xs, const TF fs, real R, RBFKernelType kernel = Gaussian)
     {
-        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> M = RBFCPC2(xs, xs, R, kernel);
-        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> ret;
+        MatrixXR M = RBFCPC2(xs, xs, R, kernel);
+        MatrixXR ret;
         ret.setZero(xs.cols() + 4, fs.cols());
         auto LDLTm = M.ldlt();
         ret.topRows(xs.cols()) = LDLTm.solve(fs);

@@ -158,6 +158,10 @@ namespace DNDS
 
     typedef Eigen::Matrix<real, -1, -1, Eigen::RowMajor> tDiFj;
 
+    using MatrixXR = Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorXR = Eigen::Vector<real, Eigen::Dynamic>;
+    using RowVectorXR = Eigen::RowVector<real, Eigen::Dynamic>;
+
 /// TODO: change to template:
 #define DNDS_MAKE_SSP(ssp, ...) (ssp = std::make_shared<typename decltype(ssp)::element_type>(__VA_ARGS__))
 

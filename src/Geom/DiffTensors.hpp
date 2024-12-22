@@ -343,7 +343,7 @@ namespace DNDS::Geom::Base
         if (cmaxDiffOrder == 0)
             return;
         static const auto &diffOperatorIJK2IcDim = getDiffOperatorIJK2I<dim>();
-        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> out;
+        MatrixXR out;
         out.resize(rows, nBase);
 
         static const int nDiffSizC1 = ndiffSizS<dim>(1);

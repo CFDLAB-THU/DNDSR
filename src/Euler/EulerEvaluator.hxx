@@ -1201,7 +1201,7 @@ namespace DNDS::Euler
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 nPoint += vfv->GetFaceQuad(c2f[ic2f]).GetNumPoints();
             /***********/
-            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> quadBase;
+            MatrixXR quadBase;
             quadBase.resize(nPoint, vfv->GetCellAtr(iCell).NDOF - 1);
             nPoint = 0;
             if (restrictOnVolPoints)

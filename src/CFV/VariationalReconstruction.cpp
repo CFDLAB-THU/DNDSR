@@ -404,7 +404,7 @@ namespace DNDS::CFV
                 {
                     if (settings.cacheDiffBase)
                     {
-                        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dbv;
+                        MatrixXR dbv;
                         dbv.resize(
                             std::min(cellAtr[iCell].NDIFF, settings.cacheDiffBaseSize),
                             cellAtr[iCell].NDOF);
@@ -418,7 +418,7 @@ namespace DNDS::CFV
                 {
                     if (settings.cacheDiffBase)
                     {
-                        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dbv;
+                        MatrixXR dbv;
                         dbv.resize(
                             std::min(cellAtr[iCell].NDIFF, settings.cacheDiffBaseSize),
                             cellAtr[iCell].NDOF);
@@ -428,13 +428,13 @@ namespace DNDS::CFV
                 });
 
             //****** Get Orthogonization Coefs
-            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> MBiBj;
+            MatrixXR MBiBj;
             MBiBj.setZero(cellAtr[iCell].NDOF - 1, cellAtr[iCell].NDOF - 1);
             qCell.Integration(
                 MBiBj,
                 [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                 {
-                    Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> D0Bj =
+                    MatrixXR D0Bj =
                         this->GetIntPointDiffBaseValue(iCell, -1, -1, iG, std::array<int, 1>{0}, 1);
                     vInc = (D0Bj.transpose() * D0Bj);
                     vInc *= this->GetCellJacobiDet(iCell, iG);
@@ -495,7 +495,7 @@ namespace DNDS::CFV
                     {
                         if (settings.cacheDiffBase)
                         {
-                            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dbv;
+                            MatrixXR dbv;
                             dbv.resize(
                                 std::min(faceAtr[iFace].NDIFF, settings.cacheDiffBaseSize),
                                 cellAtr[iCell].NDOF);
@@ -509,7 +509,7 @@ namespace DNDS::CFV
                     {
                         if (settings.cacheDiffBase)
                         {
-                            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dbv;
+                            MatrixXR dbv;
                             dbv.resize(
                                 std::min(faceAtr[iFace].NDIFF, settings.cacheDiffBaseSize),
                                 cellAtr[iCell].NDOF);
@@ -776,7 +776,7 @@ namespace DNDS::CFV
                                 tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
                                 real JDet = JacobiDetFace<dim>(J);
                                 tPoint np = FacialJacobianToNormVec<dim>(J);
-                                Eigen::Matrix<real, 1, Eigen::Dynamic> dbv, dbvD;
+                                RowVectorXR dbv, dbvD;
                                 dbvD.resize(1, cellAtr[iCell].NDOF);
                                 this->FDiffBaseValue(dbvD, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
                                 dbv = dbvD(0, Eigen::seq(Eigen::fix<1>, Eigen::last));
@@ -837,13 +837,13 @@ namespace DNDS::CFV
             if (needOriginalMatrix)
                 vectorB.ResizeRow(iCell, mesh->cell2face.RowSize(iCell));
             vectorAInvB.ResizeRow(iCell, mesh->cell2face.RowSize(iCell));
-            std::vector<Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>> local_Bs;
+            std::vector<MatrixXR> local_Bs;
             std::vector<Eigen::Vector<real, Eigen::Dynamic>> local_bs;
             local_Bs.reserve(mesh->cell2face.RowSize(iCell));
             local_bs.reserve(mesh->cell2face.RowSize(iCell));
 
             //*get A
-            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> A;
+            MatrixXR A;
             A.setZero(cellAtr[iCell].NDOF - 1, cellAtr[iCell].NDOF - 1);
             for (int ic2f = 0; ic2f < mesh->cell2face.RowSize(iCell); ic2f++)
             {
@@ -872,7 +872,7 @@ namespace DNDS::CFV
                                 JDet = J(Eigen::all, 0).stableNorm();
                             else
                                 JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
-                            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dbv;
+                            MatrixXR dbv;
                             dbv.resize(faceAtr[iFace].NDIFF, cellAtr[iCell].NDOF);
                             this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
                             DiffI = dbv(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
@@ -968,7 +968,7 @@ namespace DNDS::CFV
                     continue;
                     // if is periodic, then use internal //TODO!
                 }
-                Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> B;
+                MatrixXR B;
                 B.setZero(cellAtr[iCell].NDOF - 1, cellAtr[iCellOther].NDOF - 1);
                 qFaceVR.Integration(
                     B,
@@ -991,7 +991,7 @@ namespace DNDS::CFV
                                 JDet = J(Eigen::all, 0).stableNorm();
                             else
                                 JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
-                            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dbvI, dbvJ;
+                            MatrixXR dbvI, dbvJ;
                             dbvI.resize(faceAtr[iFace].NDIFF, cellAtr[iCell].NDOF);
                             dbvJ.resize(faceAtr[iFace].NDIFF, cellAtr[iCellOther].NDOF);
                             this->FDiffBaseValue(dbvI, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
@@ -1064,7 +1064,7 @@ namespace DNDS::CFV
                 tSmallCoords coords;
                 if (!settings.intOrderVRIsSame())
                     mesh->GetCoordsOnFace(iFace, coords);
-                Eigen::Matrix<real, Eigen::Dynamic, 1> b;
+                VectorXR b;
                 b.setZero(cellAtr[iCell].NDOF - 1, 1);
                 qFaceVR.Integration(
                     b,
@@ -1085,7 +1085,7 @@ namespace DNDS::CFV
                                 JDet = J(Eigen::all, 0).stableNorm();
                             else
                                 JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
-                            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dbv;
+                            MatrixXR dbv;
                             dbv.resize(1, cellAtr[iCell].NDOF);
                             this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
                             DiffI = dbv(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
@@ -1179,9 +1179,9 @@ namespace DNDS::CFV
             if (iCellR == UnInitIndex) // only for faces with two
                 continue;
             // get dbv from 1st derivative to last
-            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> DiffI = this->GetIntPointDiffBaseValue(iCellL, iFace, 0, -1, Eigen::seq(1, Eigen::last));
-            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> DiffJ = this->GetIntPointDiffBaseValue(iCellR, iFace, 1, -1, Eigen::seq(1, Eigen::last));
-            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> M2_L2R, M2_R2L;
+            MatrixXR DiffI = this->GetIntPointDiffBaseValue(iCellL, iFace, 0, -1, Eigen::seq(1, Eigen::last));
+            MatrixXR DiffJ = this->GetIntPointDiffBaseValue(iCellR, iFace, 1, -1, Eigen::seq(1, Eigen::last));
+            MatrixXR M2_L2R, M2_R2L;
             HardEigen::EigenLeastSquareSolve(DiffI, DiffJ, M2_R2L);
             HardEigen::EigenLeastSquareSolve(DiffJ, DiffI, M2_L2R);
             // TODO: cleanse M2s' lower triangle

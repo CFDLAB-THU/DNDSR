@@ -202,7 +202,7 @@ namespace DNDS::Geom
             {
                 tPoint coordBndC = coordBnd.rowwise().mean();
                 tSmallCoords coordBndRel = coordBnd.colwise() - coordBndC;
-                Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>
+                MatrixXR
                     coefs = RBF::RBFInterpolateSolveCoefsNoPoly(coordBndRel, dispBnd.transpose(), elevationInfo.RBFRadius, elevationInfo.kernel);
                 tSmallCoords qs;
                 qs.resize(3, 1);
@@ -327,7 +327,7 @@ namespace DNDS::Geom
 
             Eigen::SparseMatrix<real> M(boundInterpGlobSize, boundInterpGlobSize);
             M.reserve(Eigen::Vector<index, Eigen::Dynamic>::Constant(boundInterpGlobSize, elevationInfo.nSearch));
-            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> f;
+            MatrixXR f;
             f.resize(boundInterpGlobSize, 3);
             for (index iN = 0; iN < boundInterpGlobSize; iN++)
             {
@@ -358,7 +358,7 @@ namespace DNDS::Geom
             }
 
             log() << "RBF assembled: " << boundInterpCoo.son->Size() << std::endl;
-            Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> coefs;
+            MatrixXR coefs;
             M.makeCompressed();
             Eigen::SparseLU<Eigen::SparseMatrix<real>, Eigen::COLAMDOrdering<int>> LUSolver;
             LUSolver.analyzePattern(M);
@@ -1067,7 +1067,7 @@ namespace DNDS::Geom
                         wDist = std::sqrt(sqrDists[0]);
                     }
 
-                    Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> ALoc, mLoc;
+                    MatrixXR ALoc, mLoc;
                     ALoc.setZero(3 * nnLoc, 3 * nnLoc + 1);
                     mLoc.resize(6, 3 * nnLoc);
                     auto eCell = GetCellElement(iCell);
@@ -1244,7 +1244,7 @@ namespace DNDS::Geom
                         wDist = std::sqrt(sqrDists[0]);
                     }
 
-                    Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> ALoc;
+                    MatrixXR ALoc;
                     ALoc.setZero(3 * nnLoc, 3 * nnLoc + 1);
                     auto localNodeIdx = Eigen::ArrayXi::LinSpaced(c2n.size(), 0, c2n.size() - 1);
 
@@ -1264,7 +1264,7 @@ namespace DNDS::Geom
                         eCell.ExtractO2BisectElemNodes(iBi, iBiVariant, coordsCu, coordsCuSub);
                         auto qCellSub = Elem::Quadrature{eCellSub, 6}; // for O1 FEM
                         rowsize nnLocSub = rowsize(c2nSubLocal.size());
-                        Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> ALocSub, mLoc;
+                        MatrixXR ALocSub, mLoc;
                         ALocSub.setZero(3 * nnLocSub, 3 * nnLocSub + 1);
                         mLoc.resize(6, 3 * nnLocSub);
                         Eigen::ArrayXi c2nSubLocal3;

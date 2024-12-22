@@ -105,7 +105,8 @@ namespace DNDS::Linear
                 // auto sol = h(Eigen::seq(0, j + 1 - 1), Eigen::seq(0, j - 1)).bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
                 // Eigen::VectorXd y = sol.solve(eBeta); //! warning: this gmres is dumb and do not lucky stop
                 Eigen::MatrixXd y;
-                auto rank = HardEigen::EigenLeastSquareSolve(h(Eigen::seq(0, j + 1 - 1), Eigen::seq(0, j - 1)), eBeta, y);
+                Eigen::MatrixXd hPart = h(Eigen::seq(0, j + 1 - 1), Eigen::seq(0, j - 1));
+                auto rank = HardEigen::EigenLeastSquareSolve(hPart, eBeta, y);
 
                 // int rank;
                 // MPI_Comm_rank(MPI_COMM_WORLD, &rank);

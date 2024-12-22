@@ -32,7 +32,7 @@ namespace DNDS
         };
         static_assert(sizeof(UInt32PairIn64) == 8 && sizeof(UInt16QuadIn64) == 8);
 
-        using t_matrix = Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>;
+        using t_matrix = MatrixXR;
         using t_map = Eigen::Map<t_matrix>;
 
         static rowsize getBufSize(const std::vector<t_matrix> &matrices)

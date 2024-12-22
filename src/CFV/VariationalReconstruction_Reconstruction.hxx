@@ -37,7 +37,7 @@ namespace DNDS
                     BCC,
                     [&](auto &vInc, int iG)
                     {
-                        Eigen::Matrix<real, 1, Eigen::Dynamic> dbv =
+                        RowVectorXR dbv =
                             this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);
                         Eigen::Vector<real, nVarsFixed> uBL =
                             (dbv *
@@ -119,7 +119,7 @@ namespace DNDS
                     BCC,
                     [&](auto &vInc, int iG)
                     {
-                        Eigen::Matrix<real, 1, Eigen::Dynamic> dbv =
+                        RowVectorXR dbv =
                             this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);
                         Eigen::Vector<real, nVarsFixed> uBL = (dbv * uRec[iCell]).transpose();
                         uBL += u[iCell]; //! need fixing?
@@ -205,7 +205,7 @@ namespace DNDS
                     auto c2f = mesh->cell2face[iCell];
                     Eigen::Matrix<real, nVarsFixed, dim> grad;
                     grad.setZero(nVars, dim);
-                    Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> mGG;
+                    MatrixXR mGG;
                     Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> bGG;
                     if (method == 11)
                     {
@@ -254,7 +254,7 @@ namespace DNDS
                             auto faceID = mesh->GetFaceZone(iFace);
                             DNDS_assert(FaceIDIsExternalBC(faceID));
 
-                            Eigen::Matrix<real, 1, Eigen::Dynamic> dbv =
+                            RowVectorXR dbv =
                                 this->GetIntPointDiffBaseValue(
                                     iCell, iFace, -1, -1, std::array<int, 1>{0}, 1);
                             Eigen::Vector<real, nVarsFixed> uBL =
@@ -355,7 +355,7 @@ namespace DNDS
                             auto faceID = mesh->GetFaceZone(iFace);
                             DNDS_assert(FaceIDIsExternalBC(faceID));
 
-                            Eigen::Matrix<real, 1, Eigen::Dynamic> dbv =
+                            RowVectorXR dbv =
                                 this->GetIntPointDiffBaseValue(
                                     iCell, iFace, -1, -1, std::array<int, 1>{0}, 1);
                             Eigen::Vector<real, nVarsFixed> uBL =

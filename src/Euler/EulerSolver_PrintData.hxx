@@ -117,7 +117,7 @@ namespace DNDS::Euler
                             nN2C.at(iNode)++;
                             auto pPhy = mesh->GetCoordNodeOnCell(iCell, ic2n);
 
-                            Eigen::Matrix<real, 1, Eigen::Dynamic> DiBj;
+                            RowVectorXR DiBj;
                             DiBj.resize(1, uRecNew[iCell].rows() + 1);
                             // std::cout << uRecNew[iCell].rows() << std::endl;
                             vfv->FDiffBaseValue(DiBj, pPhy, iCell, -2, -2);
