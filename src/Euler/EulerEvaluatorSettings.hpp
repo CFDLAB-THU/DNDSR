@@ -34,6 +34,8 @@ namespace DNDS::Euler
         real wallDistResTol = 1e-4;
         int wallDistIterStart = 100;
         int wallDistPoissonP = 2;
+        real wallDistDTauScale = 100.;
+        int wallDistNJacobiSweep = 10;
         real SADESScale = veryLargeReal;
         RANSModel ransModel = RANSModel::RANS_None;
         int ransEigScheme = 0;
@@ -243,6 +245,8 @@ namespace DNDS::Euler
             __DNDS__json_to_config(wallDistResTol);
             __DNDS__json_to_config(wallDistIterStart);
             __DNDS__json_to_config(wallDistPoissonP);
+            __DNDS__json_to_config(wallDistDTauScale);
+            __DNDS__json_to_config(wallDistNJacobiSweep);
             __DNDS__json_to_config(SADESScale);
             __DNDS__json_to_config(ransModel);
             __DNDS__json_to_config(ransEigScheme);

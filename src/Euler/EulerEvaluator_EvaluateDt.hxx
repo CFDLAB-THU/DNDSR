@@ -439,7 +439,7 @@ namespace DNDS::Euler
 
         if (settings.wallDistScheme == 3)
         {
-            int nSweep = 10;
+            int nSweep = settings.wallDistNJacobiSweep;
             int nIter = settings.wallDistIter;
             int nIterSee = 10;
             real smoothBias = 0.0;
@@ -451,7 +451,7 @@ namespace DNDS::Euler
             int nPPoissonStartIter = settings.wallDistIterStart;
             int nPPoisson = settings.wallDistPoissonP;
 
-            real dTauScale = 1e5;
+            real dTauScale = settings.wallDistDTauScale;
 
             ArrayDOFV<1> phi, rPhi, dPhi, dPhiNew, phiTmp, dTauInv;
             ArrayDOFV<3> diffPhi;
@@ -735,6 +735,7 @@ namespace DNDS::Euler
                     }
 
                     real incNorm = dPhi.norm2();
+                    DNDS_assert(std::isfinite(incNorm));
                     phi += dPhi;
                     phi.trans.startPersistentPull();
                     phi.trans.waitPersistentPull();
