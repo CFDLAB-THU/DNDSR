@@ -140,6 +140,10 @@
         "wallDistScheme": 3,
         "wallDistExection": 5,
         "wallDistRefineMax": 0.01,
+        "wallDistIter": 1000,
+        "wallDistLinSolver": 0,
+        "wallDistResTol": 1e-4,
+        "wallDistPoissonP": 10,
         "usePrimGradInVisFlux": 0,
         // "ransForce2nd": 1,
         "constMassForce": [

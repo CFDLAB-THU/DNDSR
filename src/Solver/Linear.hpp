@@ -46,7 +46,7 @@ namespace DNDS::Linear
         {
             FML(b, MLb); // MLb = ML * b
             real scale_MLb = std::sqrt(fDot(MLb, MLb));
-            Eigen::MatrixXd h;
+            MatrixXR h;
             h.setZero(kSubspace + 1, kSubspace);
             uint32_t iRestart;
             for (iRestart = 0; iRestart <= nRestart; iRestart++)
@@ -87,7 +87,7 @@ namespace DNDS::Linear
                 }
                 // std::cout << beta << std::endl;
 
-                Eigen::VectorXd eBeta;
+                VectorXR eBeta;
                 eBeta.resize(j + 1);
                 eBeta.setZero();
                 eBeta(0) = beta; // eBeta = e_1 * beta
@@ -104,8 +104,9 @@ namespace DNDS::Linear
 
                 // auto sol = h(Eigen::seq(0, j + 1 - 1), Eigen::seq(0, j - 1)).bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
                 // Eigen::VectorXd y = sol.solve(eBeta); //! warning: this gmres is dumb and do not lucky stop
-                Eigen::MatrixXd y;
-                Eigen::MatrixXd hPart = h(Eigen::seq(0, j + 1 - 1), Eigen::seq(0, j - 1));
+                MatrixXR y;
+                MatrixXR hPart = h(Eigen::seq(0, j + 1 - 1), Eigen::seq(0, j - 1));
+                DNDS_assert_info(hPart.allFinite(), "GMRES_LeftPreconditioned acquired inf or nan coefficient");
                 auto rank = HardEigen::EigenLeastSquareSolve(hPart, eBeta, y);
 
                 // int rank;
