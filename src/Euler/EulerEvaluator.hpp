@@ -14,6 +14,7 @@
 #include "EulerJacobian.hpp"
 #include "EulerEvaluatorSettings.hpp"
 #include "DNDS/SerializerBase.hpp"
+#include "RANS_ke.hpp"
 
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
 // #undef __DNDS_REALLY_COMPILING__
@@ -374,6 +375,70 @@ namespace DNDS::Euler
                 DNDS_assert_info(false, "No such muModel");
             }
             return std::nan("0");
+        }
+
+        real getMuTur(const TU &uMean, const TDiffU &GradUMeanXY, real muRef, real muf, index iFace)
+        {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+            real muTur = 0;
+            if constexpr (model == NS_SA || model == NS_SA_3D)
+            {
+                real cnu1 = 7.1;
+                real Chi = uMean(I4 + 1) * muRef / muf;
+#ifdef USE_NS_SA_NEGATIVE_MODEL
+                if (Chi < 10)
+                    Chi = 0.05 * std::log(1 + std::exp(20 * Chi));
+#endif
+                real Chi3 = std::pow(Chi, 3);
+                real fnu1 = Chi3 / (Chi3 + std::pow(cnu1, 3));
+                muTur = muf * std::max((Chi * fnu1), 0.0);
+            }
+            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            {
+                real mut = 0;
+                if (settings.ransModel == RANSModel::RANS_KOSST)
+                    mut = RANS::GetMut_SST<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
+                else if (settings.ransModel == RANSModel::RANS_KOWilcox)
+                    mut = RANS::GetMut_KOWilcox<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
+                else if (settings.ransModel == RANSModel::RANS_RKE)
+                    mut = RANS::GetMut_RealizableKe<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
+                muTur = mut;
+            }
+            return muTur;
+        }
+
+        void visFluxTurVariable(const TU &UMeanXYC, const TDiffU &DiffUxyPrimC,
+                                real muRef, real mufPhy, real muTur, const TVec &uNormC, index iFace, TU &VisFlux)
+        {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+            if constexpr (model == NS_SA || model == NS_SA_3D)
+            {
+                real sigma = 2. / 3.;
+                real cn1 = 16;
+                real fn = 1;
+#ifdef USE_NS_SA_NEGATIVE_MODEL
+                if (UMeanXYC(I4 + 1) < 0)
+                {
+                    real Chi = UMeanXYC(I4 + 1) * muRef / mufPhy;
+                    fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
+                }
+#endif
+                VisFlux(I4 + 1) = DiffUxyPrimC(Seq012, {I4 + 1}).dot(uNormC) * (mufPhy + UMeanXYC(I4 + 1) * muRef * fn) / sigma;
+
+                real tauPressure = DiffUxyPrimC(Seq012, Seq123).trace() * (2. / 3.) * (muTur); //! SA's normal stress
+                tauPressure *= 0;                                                              // !not standard SA, abandoning
+                VisFlux(Seq123) -= tauPressure * uNormC;
+                VisFlux(I4) -= tauPressure * UMeanXYC(Seq123).dot(uNormC) / UMeanXYC(0);
+            }
+            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            {
+                if (settings.ransModel == RANSModel::RANS_KOSST)
+                    RANS::GetVisFlux_SST<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muTur, dWallFace[iFace], mufPhy, VisFlux);
+                else if (settings.ransModel == RANSModel::RANS_KOWilcox)
+                    RANS::GetVisFlux_KOWilcox<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muTur, dWallFace[iFace], mufPhy, VisFlux);
+                else if (settings.ransModel == RANSModel::RANS_RKE)
+                    RANS::GetVisFlux_RealizableKe<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muTur, dWallFace[iFace], mufPhy, VisFlux);
+            }
         }
 
         void UFromCell2Face(TU &u, index iFace, index iCell, rowsize if2c)

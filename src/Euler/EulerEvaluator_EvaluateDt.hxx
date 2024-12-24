@@ -479,7 +479,7 @@ namespace DNDS::Euler
                 Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
                 auto &mGG = mGGs.at(iCell);
                 mGG.setZero(3 + mesh->cell2face[iCell].size(), 3 + mesh->cell2face[iCell].size());
-                mGG({0, 1, 2}, {0, 1, 2}) = Eigen::Matrix3d::Identity() * vfv->GetCellVol(iCell);
+                mGG({0, 1, 2}, {0, 1, 2}) = Eigen::Matrix3d::Identity();
                 real sumFaceArea = 0.;
                 for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                 {
@@ -503,14 +503,14 @@ namespace DNDS::Euler
                         DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
                         baryOther = bFace * 2 - bary;
                     }
-                    mGG({0, 1, 2}, 3 + ic2f) = -uNormOut * vfv->GetFaceArea(iFace);
+                    mGG({0, 1, 2}, 3 + ic2f) = -uNormOut * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
                     mGG(3 + ic2f, {0, 1, 2}) = (baryOther + bary - 2 * bFace).transpose();
                     mGG(3 + ic2f, 3 + ic2f) = 2;
                     sumFaceArea += vfv->GetFaceArea(iFace);
                 }
                 diffPhi[iCell] /= vfv->GetCellVol(iCell);
                 auto mGGLU = mGG.fullPivLu();
-                DNDS_assert(mGGLU.isInvertible());
+                DNDS_assert_info(mGGLU.isInvertible(), fmt::format("[[{}]]\n", Eigen::MatrixFMTSafe<real, -1, -1>(mGG)));
                 MatrixXR mGGInv = mGGLU.inverse();
                 mGG = mGGInv;
 
@@ -928,29 +928,10 @@ namespace DNDS::Euler
             real gamma = settings.idealGasProperty.gamma;
             real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * uMean(0));
             real muf = muEff(uMean, T);
-            if constexpr (model == NS_SA || model == NS_SA_3D)
-            {
-                real cnu1 = 7.1;
-                real Chi = uMean(I4 + 1) * muRef / muf;
-#ifdef USE_NS_SA_NEGATIVE_MODEL
-                if (Chi < 10)
-                    Chi = 0.05 * std::log(1 + std::exp(20 * Chi));
-#endif
-                real Chi3 = std::pow(Chi, 3);
-                real fnu1 = Chi3 / (Chi3 + std::pow(cnu1, 3));
-                muf *= std::max((1 + Chi * fnu1), 1.0);
-            }
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
-            {
-                real mut = 0;
-                if (settings.ransModel == RANSModel::RANS_KOSST)
-                    mut = RANS::GetMut_SST<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
-                else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                    mut = RANS::GetMut_KOWilcox<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
-                else if (settings.ransModel == RANSModel::RANS_RKE)
-                    mut = RANS::GetMut_RealizableKe<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
-                muf = muf + mut;
-            }
+            real muPhy = muf;
+            real muTurb = this->getMuTur(uMean, GradUMeanXY, muRef, muf, iFace);
+            muf += muTurb;
+
             real lamVis = muf / uMean(0) *
                           std::max(4. / 3., gamma / settings.idealGasProperty.prGas);
 
@@ -1014,7 +995,6 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        static const auto model = NS_SA;
         template <>
     )
     typename EulerEvaluator<model>::TU_Batch EulerEvaluator<model>::fluxFace(
@@ -1066,31 +1046,10 @@ namespace DNDS::Euler
             mufPhy = muf;
             // PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
-            real fnu1 = 0.;
-            if constexpr (model == NS_SA || model == NS_SA_3D)
-            {
-                real cnu1 = 7.1;
-                real Chi = UMeanXYC(I4 + 1) * muRef / mufPhy;
-#ifdef USE_NS_SA_NEGATIVE_MODEL
-                if (Chi < 10) //*negative fix
-                    Chi = 0.05 * std::log(1 + std::exp(20 * Chi));
-#endif
-                real Chi3 = std::pow(Chi, 3);
-                fnu1 = Chi3 / (Chi3 + std::pow(cnu1, 3));
-                muf *= std::max((1 + Chi * fnu1), 1.0);
-            }
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
-            {
-                real mut = 0;
-                if (settings.ransModel == RANSModel::RANS_KOSST)
-                    mut = RANS::GetMut_SST<dim>(UMeanXYC, DiffUxyC, muf, dWallFace[iFace]);
-                else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                    mut = RANS::GetMut_KOWilcox<dim>(UMeanXYC, DiffUxyC, muf, dWallFace[iFace]);
-                else if (settings.ransModel == RANSModel::RANS_RKE)
-                    mut = RANS::GetMut_RealizableKe<dim>(UMeanXYC, DiffUxyC, muf, dWallFace[iFace]);
-                muf = muf + mut;
-            }
-            real k = settings.idealGasProperty.CpGas * (muf - mufPhy) / 0.9 +
+            real muTurb = this->getMuTur(UMeanXYC, DiffUxyC, muRef, muf, iFace);
+            muf += muTurb;
+
+            real k = settings.idealGasProperty.CpGas * muTurb / 0.9 +
                      settings.idealGasProperty.CpGas * mufPhy / settings.idealGasProperty.prGas;
             TU VisFlux;
             VisFlux.resizeLike(ULMeanXy);
@@ -1098,43 +1057,17 @@ namespace DNDS::Euler
             Gas::ViscousFlux_IdealGas<dim>(
                 UMeanXYC, DiffUxyPrimC, uNormC, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
                 settings.idealGasProperty.gamma,
-                muf,
+                muf, muTurb / (muf + verySmallReal), settings.ransUseQCR,
                 k,
                 settings.idealGasProperty.CpGas,
                 VisFlux);
+
             if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
                 pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
             {
                 // VisFlux *= 0.0;
             }
-
-            if constexpr (model == NS_SA || model == NS_SA_3D)
-            {
-                real sigma = 2. / 3.;
-                real cn1 = 16;
-                real fn = 1;
-#ifdef USE_NS_SA_NEGATIVE_MODEL
-                if (UMeanXy(I4 + 1, iB) < 0)
-                {
-                    real Chi = UMeanXy(I4 + 1, iB) * muRef / mufPhy;
-                    fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
-                }
-#endif
-                VisFlux(I4 + 1) = DiffUxyPrimC(Seq012, {I4 + 1}).dot(uNormC) * (mufPhy + UMeanXy(I4 + 1) * muRef * fn) / sigma;
-
-                real tauPerssure = Gas::GetGradVelo<dim>(UMeanXYC, DiffUxyC).trace() * (2. / 3.) * (muf - mufPhy); //! SA's normal stress
-                VisFlux(Seq123) -= tauPerssure * uNormC;
-                VisFlux(I4) -= tauPerssure * UMeanXy(1, iB) / UMeanXy(0, iB);
-            }
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
-            {
-                if (settings.ransModel == RANSModel::RANS_KOSST)
-                    RANS::GetVisFlux_SST<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
-                else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                    RANS::GetVisFlux_KOWilcox<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
-                else if (settings.ransModel == RANSModel::RANS_RKE)
-                    RANS::GetVisFlux_RealizableKe<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muf - mufPhy, dWallFace[iFace], mufPhy, VisFlux);
-            }
+            this->visFluxTurVariable(UMeanXYC, DiffUxyPrimC, muRef, mufPhy, muTurb, uNormC, iFace, VisFlux);
             visFluxV(Eigen::all, iB) = VisFlux;
 #endif
             if (!isfinite(pMean) || !isfinite(pMean) || !isfinite(pMean))
@@ -1446,22 +1379,6 @@ namespace DNDS::Euler
         }
         else if constexpr (model == NS_SA || model == NS_SA_3D)
         {
-            real d = std::min(dWall[iCell][ig], std::pow(veryLargeReal, 1. / 6.));
-            d = std::min(d, vfv->GetCellMaxLenScale(iCell) * settings.SADESScale);
-            real cb1 = 0.1355;
-            real cb2 = 0.622;
-            real sigma = 2. / 3.;
-            real cnu1 = 7.1;
-            real cnu2 = 0.7;
-            real cnu3 = 0.9;
-            real cw2 = 0.3;
-            real cw3 = 2;
-            real kappa = 0.41;
-            real rlim = 10;
-            real cw1 = cb1 / sqr(kappa) + (1 + cb2) / sigma;
-
-            real ct3 = 1.2;
-            real ct4 = 0.5;
 
             real pMean, asqrMean, Hmean;
             real gamma = settings.idealGasProperty.gamma;
@@ -1469,123 +1386,35 @@ namespace DNDS::Euler
                                  gamma, pMean, asqrMean, Hmean);
             // ! refvalue:
             real muRef = settings.idealGasProperty.muGas;
-
-            real nuh = UMeanXy(I4 + 1) * muRef / UMeanXy(0);
-
             real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXy(0));
+
             real mufPhy, muf;
             mufPhy = muf = muEff(UMeanXy, T);
 
-            real Chi = (UMeanXy(I4 + 1) * muRef / mufPhy);
-            real fnu1 = std::pow(Chi, 3) / (std::pow(Chi, 3) + std::pow(cnu1, 3));
-            real fnu2 = 1 - Chi / (1 + Chi * fnu1);
-
-            Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
-            Eigen::Matrix<real, dim, 1> diffRhoNu = DiffUxy(Seq012, {I4 + 1}) * muRef;
-            Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
-            Eigen::Matrix<real, dim, 1> diffNu = (diffRhoNu - nuh * diffRho) / UMeanXy(0);
-            Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
-            Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
-
-            Eigen::Matrix<real, dim, dim> Omega = 0.5 * (diffU.transpose() - diffU);
-#ifndef USE_ABS_VELO_IN_ROTATION
-            if (settings.frameConstRotation.enabled)
-                Omega += Geom::CrossVecToMat(settings.frameConstRotation.vOmega())(Seq012, Seq012); // to static frame rotation
-#endif
-            real S = Omega.norm() * std::sqrt(2); // is omega's magnitude
-            real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;
-
-            real Sh;
-
-            { // Lee, K., Wilson, M., and Vahdati, M. (April 16, 2018). "Validation of a Numerical Model for Predicting Stalled Flows in a Low-Speed Fan—Part I: Modification of Spalart–Allmaras Turbulence Model." ASME. J. Turbomach. May 2018; 140(5): 051008.
-                real betaSCor = 1;
-                real ch1 = 0.5;
-                real ch2 = 0.7;
-                real a1 = 3; //! is this good?
-                real a2 = 3;
-                Eigen::Vector<real, dim> diffP = (DiffUxy(Seq012, I4) - diffRhoU * velo - UMeanXy(0) * diffU * velo) * (gamma - 1);
-                real veloN = velo.norm();
-                Eigen::Vector<real, dim> uN = velo / (veloN + verySmallReal);
-                real pStar = diffP.dot(uN) / (sqr(UMeanXy(0)) * sqr(veloN) * veloN) * mufPhy;
-                Geom::tPoint omegaV = Geom::CrossMatToVec(Omega);
-                real HStar = omegaV.dot(velo) / (veloN * omegaV.norm() + verySmallReal);
-                real Cs = ch1 * std::tanh(a1 * sqr(pStar)) / std::tanh(1.0) + 1;
-                real Cvh = ch2 * std::tanh(a2 * sqr(HStar)) / std::tanh(1.0) + 1;
-                betaSCor = Cs * Cvh;
-
-                S *= betaSCor;
-            }
-#ifdef USE_NS_SA_NEGATIVE_MODEL
-            if (Sbar < -cnu2 * S)
-                Sh = S + S * (sqr(cnu2) * S + cnu3 * Sbar) / ((cnu3 - 2 * cnu2) * S - Sbar);
-            else //*negative fix
-#endif
-                Sh = S + Sbar;
-
-            real r = std::min(nuh / (Sh * sqr(kappa * d) + verySmallReal), rlim);
-            real g = r + cw2 * (std::pow(r, 6) - r);
-            real fw = g * std::pow((1 + std::pow(cw3, 6)) / (std::pow(g, 6) + std::pow(cw3, 6)), 1. / 6.);
-
-            real ft2 = ct3 * std::exp(-ct4 * sqr(Chi));
-            // {
-            //     Eigen::Matrix<real, dim, dim> sHat = 0.5 * (diffU.transpose() + diffU);
-            //     real sHatSqr = 2 * sHat.squaredNorm();
-            //     real rStar = std::sqrt(sHatSqr) / S;
-            //     real DD = 0.5 * (sHatSqr + sqr(S));
-            // !    // need second derivatives for rotation term !(CFD++ user manual)
-            // }
-
-#ifdef USE_NS_SA_NEGATIVE_MODEL
-            real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / d); //! modified >>
-            real P = cb1 * (1 - ft2) * Sh * nuh;                         //! modified >>
-#else
-            real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / d);
-            real P = cb1 * (1 - ft2) * Sh * nuh;
-#endif
-            real fn = 1;
-#ifdef USE_NS_SA_NEGATIVE_MODEL
-            if (UMeanXy(I4 + 1) < 0)
-            {
-                real cn1 = 16;
-                real Chi = UMeanXy(I4 + 1) * muRef / mufPhy;
-                fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
-                P = cb1 * (1 - ct3) * S * nuh;
-                D = -cw1 * sqr(nuh / d);
-            }
-#endif
+            real d = std::min(dWall[iCell][ig], std::pow(veryLargeReal, 1. / 6.));
             TU retInc;
             retInc.setZero(UMeanXy.size());
-
-            if (passiveDiscardSource)
-                P = D = 0;
-            if (Mode == 0)
-                retInc(I4 + 1) = UMeanXy(0) * (P - D + diffNu.squaredNorm() * cb2 / sigma) / muRef -
-                                 (UMeanXy(I4 + 1) * fn * muRef + mufPhy) / (UMeanXy(0) * sigma) * diffRho.dot(diffNu) / muRef;
-            if (Mode == 1 || Mode == 2)
-                retInc(I4 + 1) = -std::min(UMeanXy(0) * (P * 0 - D * 2) / muRef / (UMeanXy(I4 + 1) + verySmallReal), -verySmallReal);
-            if (Mode == 2)
-                jacobian += retInc.asDiagonal(); //! TODO: make really block jacobian
-
-            ret += retInc;
-
-            // std::cout << "P, D " << P / muRef << " " << D / muRef << " " << diffNu.squaredNorm() << std::endl;
-            if (retInc.hasNaN())
+            auto sourceCaller = [&](int mode)
             {
-                std::cout << P << std::endl;
-                std::cout << D << std::endl;
-                std::cout << UMeanXy(0) << std::endl;
-                std::cout << Sh << std::endl;
-                std::cout << nuh << std::endl;
-                std::cout << g << std::endl;
-                std::cout << r << std::endl;
-                std::cout << S << std::endl;
-                std::cout << d << std::endl;
-                std::cout << fnu2 << std::endl;
-                std::cout << mufPhy << std::endl;
-                DNDS_assert(false);
+                RANS::GetSource_SA<dim>(UMeanXy, DiffUxy, settings.idealGasProperty.muGas, muf,
+                                        gamma, std::min(d, vfv->GetCellMaxLenScale(iCell) * settings.SADESScale), retInc,
+                                        settings.ransSARotCorrection, mode);
+            };
+
+            if (Mode == 0)
+            {
+                sourceCaller(0);
             }
-            // if (passiveDiscardSource)
-            //     ret(Eigen::seq(5, Eigen::last)).setZero();
+            else if (Mode == 1)
+            {
+                sourceCaller(1);
+            }
+            else if (Mode == 2)
+            {
+                sourceCaller(1);
+                jacobian += retInc.asDiagonal(); //! TODO: make really block jacobian
+            }
+            ret += retInc;
         }
         else if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
         {

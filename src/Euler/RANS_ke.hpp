@@ -51,7 +51,7 @@ namespace DNDS::Euler::RANS
     }
 
     template <int dim, class TU, class TN, class TDiffU, class TVFlux>
-    void GetVisFlux_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN&& uNorm, real mut, real d, real muPhy, TVFlux &vFlux)
+    void GetVisFlux_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN &&uNorm, real mut, real d, real muPhy, TVFlux &vFlux)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -280,7 +280,7 @@ namespace DNDS::Euler::RANS
     }
 
     template <int dim, class TU, class TN, class TDiffU, class TVFlux>
-    void GetVisFlux_SST(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN&& uNorm, real mutIn, real d, real muf, TVFlux &vFlux)
+    void GetVisFlux_SST(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN &&uNorm, real mutIn, real d, real muf, TVFlux &vFlux)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -588,6 +588,141 @@ namespace DNDS::Euler::RANS
         {
             source(I4 + 1) = betaS * omegaaa;
             source(I4 + 2) = 2 * beta * omegaaa;
+        }
+    }
+
+    template <int dim, class TU, class TDiffU, class TSource>
+    void GetSource_SA(TU &&UMeanXy, TDiffU &&DiffUxy, real muRef, real mufPhy, real gamma, real d, TSource &source, int rotCor, int mode)
+    {
+        static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+        static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
+        static const auto I4 = dim + 1;
+
+        real cb1 = 0.1355;
+        real cb2 = 0.622;
+        real sigma = 2. / 3.;
+        real cnu1 = 7.1;
+        real cnu2 = 0.7;
+        real cnu3 = 0.9;
+        real cw2 = 0.3;
+        real cw3 = 2;
+        real kappa = 0.41;
+        real rlim = 10;
+        real cw1 = cb1 / sqr(kappa) + (1 + cb2) / sigma;
+
+        real ct3 = 1.2;
+        real ct4 = 0.5;
+
+        real nuh = UMeanXy(I4 + 1) * muRef / UMeanXy(0);
+
+        real Chi = (UMeanXy(I4 + 1) * muRef / mufPhy);
+        real fnu1 = std::pow(Chi, 3) / (std::pow(Chi, 3) + std::pow(cnu1, 3));
+        real fnu2 = 1 - Chi / (1 + Chi * fnu1);
+
+        // 2 is recommended but we use 1 to avoid negative production, see Diskin, Boris, Yi Liu, and Marshall C. Galbraith. "High-Fidelity CFD Verification Workshop 2024: Spalart-Allmaras QCR2000-R Turbulence Model." AIAA Scitech 2023 Forum. 2023.
+        real cRot = 1.0;
+
+        Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
+        Eigen::Matrix<real, dim, 1> diffRhoNu = DiffUxy(Seq012, {I4 + 1}) * muRef;
+        Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
+        Eigen::Matrix<real, dim, 1> diffNu = (diffRhoNu - nuh * diffRho) / UMeanXy(0);
+        Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
+        Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
+
+        Eigen::Matrix<real, dim, dim> Omega = 0.5 * (diffU.transpose() - diffU);
+#ifndef USE_ABS_VELO_IN_ROTATION
+        if (settings.frameConstRotation.enabled)
+            Omega += Geom::CrossVecToMat(settings.frameConstRotation.vOmega())(Seq012, Seq012); // to static frame rotation
+#endif
+        real S = Omega.norm() * std::sqrt(2);         // is omega's magnitude
+        real SS = (diffU + diffU.transpose()).norm(); // is sqrt(2) * strainrate's norm
+        real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;
+
+        real Sh;
+
+        { // Lee, K., Wilson, M., and Vahdati, M. (April 16, 2018). "Validation of a Numerical Model for Predicting Stalled Flows in a Low-Speed Fan—Part I: Modification of Spalart–Allmaras Turbulence Model." ASME. J. Turbomach. May 2018; 140(5): 051008.
+          // real betaSCor = 1;
+          // real ch1 = 0.5;
+          // real ch2 = 0.7;
+          // real a1 = 3; //! is this good?
+          // real a2 = 3;
+          // Eigen::Vector<real, dim> diffP = (DiffUxy(Seq012, I4) - diffRhoU * velo - UMeanXy(0) * diffU * velo) * (gamma - 1);
+          // real veloN = velo.norm();
+          // Eigen::Vector<real, dim> uN = velo / (veloN + verySmallReal);
+          // real pStar = diffP.dot(uN) / (sqr(UMeanXy(0)) * sqr(veloN) * veloN) * mufPhy;
+          // Geom::tPoint omegaV = Geom::CrossMatToVec(Omega);
+          // real HStar = omegaV.dot(velo) / (veloN * omegaV.norm() + verySmallReal);
+          // real Cs = ch1 * std::tanh(a1 * sqr(pStar)) / std::tanh(1.0) + 1;
+          // real Cvh = ch2 * std::tanh(a2 * sqr(HStar)) / std::tanh(1.0) + 1;
+          // betaSCor = Cs * Cvh;
+
+            // S *= betaSCor;
+        }
+#ifdef USE_NS_SA_NEGATIVE_MODEL
+        if (Sbar < -cnu2 * S)
+            Sh = S + S * (sqr(cnu2) * S + cnu3 * Sbar) / ((cnu3 - 2 * cnu2) * S - Sbar);
+        else //*negative fix
+#endif
+            Sh = S + Sbar;
+
+        real r = std::min(nuh / (Sh * sqr(kappa * d) + verySmallReal), rlim);
+        real g = r + cw2 * (std::pow(r, 6) - r);
+        real fw = g * std::pow((1 + std::pow(cw3, 6)) / (std::pow(g, 6) + std::pow(cw3, 6)), 1. / 6.);
+
+        real ft2 = ct3 * std::exp(-ct4 * sqr(Chi));
+        // {
+        //     Eigen::Matrix<real, dim, dim> sHat = 0.5 * (diffU.transpose() + diffU);
+        //     real sHatSqr = 2 * sHat.squaredNorm();
+        //     real rStar = std::sqrt(sHatSqr) / S;
+        //     real DD = 0.5 * (sHatSqr + sqr(S));
+        // !    // need second derivatives for rotation term !(CFD++ user manual)
+        // }
+
+#ifdef USE_NS_SA_NEGATIVE_MODEL
+        real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / d); //! modified >>
+        real P = cb1 * (1 - ft2) * Sh * nuh;                         //! modified >>
+        if (rotCor)
+            P = cb1 * (1 - ft2) * (Sh + cRot * std::min(0., SS - S)) * nuh;
+#else
+        real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / d);
+        real P = cb1 * (1 - ft2) * Sh * nuh;
+        if (rotCor)
+            P = cb1 * (1 - ft2) * (Sh + cRot * std::min(0., SS - S)) * nuh;
+#endif
+        real fn = 1;
+#ifdef USE_NS_SA_NEGATIVE_MODEL
+        if (UMeanXy(I4 + 1) < 0)
+        {
+            real cn1 = 16;
+            real Chi = UMeanXy(I4 + 1) * muRef / mufPhy;
+            fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
+            D = -cw1 * sqr(nuh / d);
+            P = cb1 * (1 - ct3) * S * nuh;
+            if (rotCor)
+                P = cb1 * (1 - ct3) * std::abs(S + cRot * std::min(0., SS - S)) * nuh;
+        }
+#endif
+
+        if (mode == 0)
+            source(I4 + 1) = UMeanXy(0) * (P - D + diffNu.squaredNorm() * cb2 / sigma) / muRef -
+                             (UMeanXy(I4 + 1) * fn * muRef + mufPhy) / (UMeanXy(0) * sigma) * diffRho.dot(diffNu) / muRef;
+        else
+            source(I4 + 1) = -std::min(UMeanXy(0) * (P * 0 - D * 2) / muRef / (UMeanXy(I4 + 1) + verySmallReal), -verySmallReal);
+
+        if (!source.allFinite())
+        {
+            std::cout << P << std::endl;
+            std::cout << D << std::endl;
+            std::cout << UMeanXy(0) << std::endl;
+            std::cout << Sh << std::endl;
+            std::cout << nuh << std::endl;
+            std::cout << g << std::endl;
+            std::cout << r << std::endl;
+            std::cout << S << std::endl;
+            std::cout << d << std::endl;
+            std::cout << fnu2 << std::endl;
+            std::cout << mufPhy << std::endl;
+            DNDS_assert(false);
         }
     }
 }

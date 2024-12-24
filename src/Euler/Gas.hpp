@@ -1042,7 +1042,8 @@ namespace DNDS::Euler::Gas
      *
      */
     template <int dim = 3, typename TU, typename TGradU, typename TFlux, typename TNorm>
-    void ViscousFlux_IdealGas(const TU &U, const TGradU &GradUPrim, TNorm norm, bool adiabatic, real gamma, real mu, real k, real Cp, TFlux &Flux)
+    void ViscousFlux_IdealGas(const TU &U, const TGradU &GradUPrim, TNorm norm, bool adiabatic, real gamma,
+                              real mu, real mutRatio, bool mutQCRFix, real k, real Cp, TFlux &Flux)
     {
         static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -1062,6 +1063,24 @@ namespace DNDS::Euler::Gas
 
         Eigen::Matrix<real, dim, dim> vStress = (diffVelo + diffVelo.transpose()) * mu +
                                                 Eigen::Matrix<real, dim, dim>::Identity() * (lambda * mu * diffVelo.trace());
+        if (mutQCRFix)
+        {
+            real b = std::sqrt((diffVelo.array() * diffVelo.array()).sum());
+            Eigen::Matrix<real, dim, dim> O = (diffVelo.transpose() - diffVelo) / (b + verySmallReal); // dU_i/dx_j-dU_j/dx_i
+            real ccr1 = 0.3;
+            Eigen::Matrix<real, dim, dim> vStressQCRFix;
+            vStressQCRFix.setZero();
+            vStressQCRFix.diagonal() = (vStress.array() * O.array()).rowwise().sum();
+            vStressQCRFix(0, 1) = O(0, 1) * (vStress(1, 1) - vStress(0, 0));
+            if (dim == 3)
+            {
+                vStressQCRFix(0, 1) += O(1, 2) * vStress(0, 2) + O(0, 2) * vStress(1, 2);
+                vStressQCRFix(0, 2) = O(0, 2) * (vStress(2, 2) - vStress(0, 0)) + O(0, 1) * vStress(2, 1) + O(2, 1) * vStress(0, 1);
+                vStressQCRFix(1, 2) = O(1, 2) * (vStress(2, 2) - vStress(1, 1)) + O(1, 0) * vStress(2, 0) + O(2, 0) * vStress(1, 0);
+            }
+            Eigen::Matrix<real, dim, dim> vStressQCRFixFull = vStressQCRFix + vStressQCRFix.transpose();
+            vStress -= ccr1 * mutRatio * vStressQCRFixFull;
+        }
         Flux(0) = 0;
         Flux(Seq123) = vStress * norm;
         Flux(dim + 1) = (vStress * velo + k * GradT).dot(norm);

@@ -38,6 +38,8 @@ namespace DNDS::Euler
         int wallDistNJacobiSweep = 10;
         real SADESScale = veryLargeReal;
         RANSModel ransModel = RANSModel::RANS_None;
+        int ransUseQCR = 0;
+        int ransSARotCorrection = 1;
         int ransEigScheme = 0;
         int ransForce2nd = 0;
         int ransSource2nd = 0;
@@ -249,6 +251,8 @@ namespace DNDS::Euler
             __DNDS__json_to_config(wallDistNJacobiSweep);
             __DNDS__json_to_config(SADESScale);
             __DNDS__json_to_config(ransModel);
+            __DNDS__json_to_config(ransUseQCR);
+            __DNDS__json_to_config(ransSARotCorrection);
             __DNDS__json_to_config(ransEigScheme);
             __DNDS__json_to_config(ransForce2nd);
             __DNDS__json_to_config(ransSource2nd);
