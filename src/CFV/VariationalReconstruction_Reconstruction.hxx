@@ -211,8 +211,8 @@ namespace DNDS
                     {
                         mGG.setZero(dim + c2f.size(), dim + c2f.size());
                         bGG.setZero(dim + c2f.size(), u[0].rows());
-                        mGG(Seq012, Seq012).setIdentity();
-                        mGG(Seq012, Seq012) *= this->GetCellVol(iCell);
+                        mGG(Seq012, Seq012).setIdentity(); // for GGMP
+                        // mGG(Seq012, Seq012) *= this->GetCellVol(iCell);
                     }
 
                     for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
@@ -240,7 +240,7 @@ namespace DNDS
                             grad += gradInc;
                             if (method == 11)
                             {
-                                mGG(Seq012, dim + ic2f) = -this->GetFaceArea(iFace) * uNorm;
+                                mGG(Seq012, dim + ic2f) = -this->GetFaceArea(iFace) / (this->GetCellVol(iCell) + verySmallReal) * uNorm;
                                 mGG(dim + ic2f, Seq012) =
                                     (this->GetCellBary(iCell)(Seq012) + this->GetOtherCellBaryFromCell(iCell, iCellOther, iFace)(Seq012) -
                                      2 * this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012))
@@ -258,8 +258,8 @@ namespace DNDS
                                 this->GetIntPointDiffBaseValue(
                                     iCell, iFace, -1, -1, std::array<int, 1>{0}, 1);
                             Eigen::Vector<real, nVarsFixed> uBL =
-                                (dbv * uRec[iCell]).transpose() * 0.0; //0.0: uRec should be invalid!!
-                            uBL += u[iCell]; //! need fixing?
+                                (dbv * uRec[iCell]).transpose() * 0.0; // 0.0: uRec should be invalid!!
+                            uBL += u[iCell];                           //! need fixing?
                             Eigen::Vector<real, nVarsFixed> uBV =
                                 FBoundary(
                                     uBL,
@@ -270,7 +270,7 @@ namespace DNDS
                             grad += (uBV - u[iCell]) * 0.5 * this->GetFaceArea(iFace) * uNorm.transpose();
                             if (method == 11)
                             {
-                                mGG(Seq012, dim + ic2f) = -this->GetFaceArea(iFace) * uNorm;
+                                mGG(Seq012, dim + ic2f) = -this->GetFaceArea(iFace) / (this->GetCellVol(iCell) + verySmallReal) * uNorm;
                                 // Eigen::Vector<real, dim> BaryOther = this->GetCellBary(iCell)(Seq012) +
                                 //                                      2 * uNorm * uNorm.dot(this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012) - this->GetCellBary(iCell)(Seq012));
                                 Eigen::Vector<real, dim> BaryOther = 2 * this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012) - this->GetCellBary(iCell)(Seq012);
@@ -290,7 +290,8 @@ namespace DNDS
                         // std::cout << mGG << std::endl;
                         // std::cout << bGG << std::endl;
                         // DNDS_assert(false);
-                        auto mGGLU = mGG.colPivHouseholderQr();
+                        // auto mGGLU = mGG.colPivHouseholderQr();
+                        auto mGGLU = mGG.fullPivLu();
                         DNDS_assert(mGGLU.isInvertible());
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> xGG = mGGLU.solve(bGG);
                         grad = xGG(Seq012, Eigen::all).transpose();

@@ -569,6 +569,7 @@ namespace DNDS::Euler
 
             auto rhsPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<3> &diffPhi, ArrayDOFV<1> &rhs, std::vector<std::vector<real>> &coefs, bool updateCoefs)
             {
+                const real supressRec = 1.0; 
                 getDiffPhi(phi, diffPhi);
                 diffPhi.trans.startPersistentPull();
                 diffPhi.trans.waitPersistentPull();
@@ -589,20 +590,20 @@ namespace DNDS::Euler
                         real phiOther = phi[iCell](0);
                         Geom::tPoint baryOther = bary;
                         Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
-                        real phiThisFace = phi[iCell](0) + (bFace - bary).dot(diffPhi[iCell]);
+                        real phiThisFace = phi[iCell](0) + (bFace - bary).dot(diffPhi[iCell]) * supressRec;
                         real phiOtherFace = phiThisFace;
-                        real diffPhiNormThis = diffPhi[iCell].dot(uNormOut);
+                        real diffPhiNormThis = diffPhi[iCell].dot(uNormOut) * supressRec;
                         real diffPhiNormOther = diffPhiNormThis;
-                        Geom::tPoint diffPhiFace = diffPhi[iCell];
+                        Geom::tPoint diffPhiFace = diffPhi[iCell] * supressRec;
                         if (iCellOther != UnInitIndex)
                         {
                             phiOther = phi[iCellOther](0);
                             baryOther = vfv->GetOtherCellPointFromCell(
                                 iCell, iCellOther, iFace,
                                 vfv->GetCellQuadraturePPhys(iCellOther, -1));
-                            phiOtherFace = phiOther + (bFace - baryOther).dot(diffPhi[iCellOther]);
-                            diffPhiNormOther = diffPhi[iCellOther].dot(uNormOut); //! todo: periodic!!
-                            diffPhiFace = 0.5 * (diffPhiFace + diffPhi[iCellOther]);
+                            phiOtherFace = phiOther + (bFace - baryOther).dot(diffPhi[iCellOther]) * supressRec; 
+                            diffPhiNormOther = diffPhi[iCellOther].dot(uNormOut) * supressRec; //! todo: periodic!!
+                            diffPhiFace = 0.5 * (diffPhiFace + diffPhi[iCellOther] * supressRec);
                         }
                         else
                         {
