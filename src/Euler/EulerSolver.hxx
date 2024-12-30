@@ -315,7 +315,7 @@ namespace DNDS::Euler
                 betaPPC.setConstant(1.0);
                 alphaPP_tmp.setConstant(1.0);
                 uRecNew.setConstant(0.0);
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit, TEval::RHS_Ignore_Viscosity);
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit, TEval::RHS_Ignore_Viscosity); // TODO: test with viscosity
                 // vfv->DoReconstruction2nd(uRecOld, cx, FBoundary, 1, std::vector<int>());
                 // eval.EvaluateRHS(crhs, JSourceC, cx, uRecOld, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
                 //                  0); // TEval::RHS_Ignore_Viscosity
@@ -369,6 +369,17 @@ namespace DNDS::Euler
             }
             else if (config.implicitReconstructionControl.recLinearScheme == 1)
             {
+                Eigen::VectorXd meanScale;
+                if (config.implicitReconstructionControl.gmresRecScale == 1)
+                {
+                    meanScale = eval.settings.refU;
+                    meanScale(Seq123).setConstant(std::sqrt(meanScale(0) * meanScale(I4))); //! using consistent rho U scale
+                }
+                else
+                    meanScale.setConstant(nVars, 1.0);
+                // meanScale(0) = 10;
+                TU meanScaleInv = (meanScale.array() + verySmallReal).inverse();
+
                 int nGMRESrestartAll{0};
                 real gmresResidualB = 0;
                 for (int iRec = 1; iRec <= nRec; iRec++)
@@ -396,11 +407,11 @@ namespace DNDS::Euler
                             {
                                 MLx = x; // initial value; for the input is mostly a good estimation
                                 // MLx no need to comm
-                                vfv->DoReconstructionIterSOR(uRecC, x, MLx, cx, FBoundaryDiff, false);
+                                // vfv->DoReconstructionIterSOR(uRecC, x, MLx, cx, FBoundaryDiff, false); //! causes loss of accuracy; why?????
                             },
                             [&](ArrayRECV<nVarsFixed> &a, ArrayRECV<nVarsFixed> &b) -> real
                             {
-                                return a.dot(b); //! need dim balancing here
+                                return (a.dotV(b).array() * meanScaleInv.transpose().array().square()).sum(); //! dim balancing here
                             },
                             uRecNew, uRecNew1, config.implicitReconstructionControl.nGmresIter,
                             [&](uint32_t i, real res, real resB) -> bool
@@ -430,7 +441,8 @@ namespace DNDS::Euler
             {
                 Eigen::Array<real, 1, Eigen::Dynamic> resB;
                 int nPCGIterAll{0};
-                if (iter <= 2)       //! consecutive pcg is bad in 0012, using separate pcg
+                if (iter <= 2 //! consecutive pcg is bad in 0012, using separate pcg
+                    || pcgRec->getPHistorySize() >= config.implicitReconstructionControl.fpcgMaxPHistory)
                     pcgRec->reset(); // ! todo: account for inter-solve (need two pcgs!)
                 uRecNew = uRecB1;
                 vfv->DoReconstructionIter(
@@ -1624,9 +1636,14 @@ namespace DNDS::Euler
             return tSimu >= config.timeMarchControl.tEnd;
         };
 
-        /**********************************/
-        /*           MAIN LOOP            */
-        /**********************************/
+        /***************************************************************************************************************************************
+                                  .___  ___.      ___       __  .__   __.     __        ______     ______   .______
+                                  |   \/   |     /   \     |  | |  \ |  |    |  |      /  __  \   /  __  \  |   _  \
+                                  |  \  /  |    /  ^  \    |  | |   \|  |    |  |     |  |  |  | |  |  |  | |  |_)  |
+                                  |  |\/|  |   /  /_\  \   |  | |  . `  |    |  |     |  |  |  | |  |  |  | |   ___/
+                                  |  |  |  |  /  _____  \  |  | |  |\   |    |  `----.|  `--'  | |  `--'  | |  |
+                                  |__|  |__| /__/     \__\ |__| |__| \__|    |_______| \______/   \______/  | _|
+        ***************************************************************************************************************************************/
         // step 0 extra:
         if (config.outputControl.dataOutAtInit)
         {

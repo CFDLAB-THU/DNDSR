@@ -138,6 +138,8 @@ namespace DNDS::Linear
 
         TScalar zrDot;
 
+        index pHistorySize{0};
+
     public:
         template <class Finit>
         PCG_PreconditionedRes(
@@ -150,7 +152,9 @@ namespace DNDS::Linear
             finit(V_temp);
         }
 
-        void reset() { initialized = false; }
+        void reset() { initialized = false, pHistorySize = 0; }
+
+        index getPHistorySize() const { return pHistorySize; }
 
         template <class TFA, class TFM, class TFResPrec, class TFDot, class TFstop>
         bool solve(TFA &&FA, TFM &&FM, TFResPrec &&FResPrec, TFDot &&fDot, TDATA &x, uint32_t niter, TFstop &&FStop)
@@ -160,6 +164,7 @@ namespace DNDS::Linear
                 FResPrec(x, z);
                 FM(z, r);
                 p = z;
+                pHistorySize++;
                 FA(p, Ap);
             }
             for (int iter = 1; iter <= niter; iter++)
@@ -179,6 +184,7 @@ namespace DNDS::Linear
                     TScalar beta = zrDotNew / (zrDot + verySmallReal);
                     p *= beta;
                     p += z;
+                    pHistorySize++;
                     FA(p, Ap);
                 }
 

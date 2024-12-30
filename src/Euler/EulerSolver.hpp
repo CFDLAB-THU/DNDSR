@@ -149,9 +149,11 @@ namespace DNDS::Euler
                 int recLinearScheme = 0; // 0 for original SOR, 1 for GMRES
                 int nGmresSpace = 5;
                 int nGmresIter = 10;
+                int gmresRecScale = 1;
                 int fpcgResetScheme = 0;
                 real fpcgResetThres = 0.6;
                 int fpcgResetReport = 0;
+                int fpcgMaxPHistory = 20;
                 real recThreshold = 1e-5;
                 int nRecConsolCheck = 1;
                 int nRecMultiplyForZeroedGrad = 1;
@@ -162,8 +164,8 @@ namespace DNDS::Euler
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     ImplicitReconstructionControl,
                     nInternalRecStep, zeroGrads,
-                    recLinearScheme, nGmresSpace, nGmresIter,
-                    fpcgResetScheme, fpcgResetThres, fpcgResetReport,
+                    recLinearScheme, nGmresSpace, nGmresIter, gmresRecScale,
+                    fpcgResetScheme, fpcgResetThres, fpcgResetReport, fpcgMaxPHistory,
                     recThreshold, nRecConsolCheck,
                     nRecMultiplyForZeroedGrad,
                     storeRecInc, dampRecIncDTau,
