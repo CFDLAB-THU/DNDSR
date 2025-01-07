@@ -19,7 +19,7 @@ namespace DNDS::Euler
         real refArea = 1.0;
         real refDynamicPressure = 0.5;
         real targetCL = 0.0;
-        real CLIntrementRelax = 0.9;
+        real CLIncrementRelax = 0.9;
 
         index nIterStartDrive = INT32_MAX;
         index nIterConvergeMin = 50;
@@ -31,7 +31,7 @@ namespace DNDS::Euler
             AOAInit,
             AOAAxis, CL0Axis, CD0Axis,
             refArea, refDynamicPressure, targetCL,
-            CLIntrementRelax,
+            CLIncrementRelax,
             nIterStartDrive, nIterConvergeMin, CLconvergeThreshold, CLconvergeWindow)
     };
 
@@ -103,7 +103,7 @@ namespace DNDS::Euler
                     if (CLSlope < 0)
                         CLSlope = CLSlopeStandard; //! warning, assuming positive CLSlope now
 
-                    real AOANew = AOA + (settings.targetCL - CL) / CLSlope * settings.CLIntrementRelax;
+                    real AOANew = AOA + (settings.targetCL - CL) / CLSlope * settings.CLIncrementRelax;
 
                     lastAOA = AOA;
                     lastCL = curCL;
