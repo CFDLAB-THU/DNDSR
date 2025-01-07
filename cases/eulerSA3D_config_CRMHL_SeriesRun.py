@@ -4,13 +4,13 @@ import copy
 
 NNode = 20
 
-JName = "test0-O2-RW"
+JName = "test0-O2-NRW"
 
 
 slurmJNamePre = "CRMHL_"
 
-alphas = [2.78, 7.05, 11.29, 17.05, 19.57, 20.55, 21.47]
-# alphas = [ 21.47]
+# alphas = [2.78, 7.05, 11.29, 17.05, 19.57, 20.55, 21.47]
+alphas = [ 11.29]
 
 exeSolver = "../build/app/eulerSA3D.exe"
 caseConf = "../cases/eulerSA3D_config_CRMHL.json"
@@ -22,6 +22,9 @@ kvs = {
     "/restartState/lastRestartFile": 
      "\\\"../data/out/CRM/HLPW-4_CRM-HL_40-37_Nominal_v1a_Unstr-Hex-Prism-Pyr-Tet_Level-A_PW_V2_Q1/test0-O2-Starter__C_p1280_restart.3000.dir\\\""
 }
+
+kvs["/vfvSettings/maxOrder"] = "1"
+kvs["/vfvSettings/intOrder"] = "1"
 
 cmds = []
 for alpha in alphas:

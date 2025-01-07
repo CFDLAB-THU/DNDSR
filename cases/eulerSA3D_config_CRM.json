@@ -3,7 +3,7 @@
         "dtImplicit": 2e30,
         "nTimeStep": 1,
         "steadyQuit": true,
-        "useRestart": false,
+        "useRestart": true,
         "odeCode": 1, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
         "tEnd": 3e+200,
         "partitionMeshOnly": false,
@@ -13,7 +13,7 @@
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 15000,
+        "nTimeStepInternal": 5000,
         "rhsThresholdInternal": 1e-8,
         "res_base": 0.0,
         "useVolWiseResidual": false
@@ -30,6 +30,7 @@
         "nRestartOut": 100,
         "nRestartOutCInternal": 5000,
         "nRestartOutInternal": 1000000000,
+        "dataOutAtInit": true,
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
@@ -52,8 +53,8 @@
         "meshElevationMaxIncludedAngle": 20,
         // "rectifyNearPlane": 2,
         // "rectifyNearPlaneThres": 1e-4,
-        "meshFile": "../data/mesh/HLPW-4_CRM-HL_40-37_Nominal_v1a_Unstr-Hex-Prism-Pyr-Tet_Level-A_PW_V2_Q1.cgns",
-        "outPltName": "../data/out/CRM/HLPW-4_CRM-HL_40-37_Nominal_v1a_Unstr-Hex-Prism-Pyr-Tet_Level-A_PW_V2_Q1/test0-O2-",
+        "meshFile": "../data/mesh/CARDC.ZhangYB.WB.ae2.75deg.Unstructured.C_DNDSR.cgns",
+        "outPltName": "../data/out/CRM_1/DPW6_CARDC.ZhangYB.WB.ae2.75deg.Unstructured.C_DNDSR/O2_t0-SANRQ-GGMP",
         "outPltMode": 1,
         "readMeshMode": 1,
         "outPltTecplotFormat": false,
@@ -99,7 +100,7 @@
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
-        "subs2ndOrder": 1,
+        "subs2ndOrder": 11,
         // "bcWeight": 2,
         "svdTolerance": 1e-9,
         "baseSettings": {
@@ -148,20 +149,27 @@
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
         "useRoeJacobian": false,
-        "noRsOnWall": true,
+        "noRsOnWall": false,
         "noGRPOnWall": true,
         "minWallDist": 1e-9,
-        "wallDistScheme": 1,
-        "wallDistExection": 3,
+        "wallDistScheme": 0,
+        // "wallDistExection": 3,
         "wallDistCellLoadSize": 2560,
         "wallDistRefineMax": 1, // inches
-        "riemannSolverType": "Roe_M1",
-        "riemannSolverTypeWall": "Roe_M1",
+        "wallDistIter": 1000,
+        "wallDistLinSolver": 0,
+        "wallDistResTol": 1e-4,
+        "wallDistPoissonP": 6,
+        "wallDistDTauScale": 0.1,
+        "wallDistNJacobiSweep": 100,
+        // "riemannSolverTypeWall": "Roe_M1",
         "rsMeanValueEig": 1,
         // "ransEigScheme": 1,
         "ransForce2nd": 1,
         // "useSourceGradFixGG": 1,
         // "ransSource2nd": 1,
+        "ransUseQCR": 1,
+        "ransSARotCorrection": 1,
         // "uRecBetaCompressPower": 2,
         "constMassForce": [
             0.0,
@@ -170,82 +178,28 @@
         ],
         "farFieldStaticValue": [
             1,
-            0.9924394226563017,
+            0.9988483864849507,
             0,
-            0.12273545680701484,
-            45.14285714285715,
-            5
+            0.04797812852134394,
+            2.971576866040535,
+            1.3
         ],
         "idealGasProperty": {
             "gamma": 1.4,
-            "Rgas": 0.065374859444052,
-            "muGas": 5.02367941712204e-05,
+            "Rgas": 0.00317887699812287362,
+            "muGas": 4.9883627259420996e-05,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4
         }
     },
     "bcSettings": [
-        {
-            "name": "Farfield",
-            "type": "BCFar",
-            "value": [
-                1,
-                0.9924394226563017,
-                0,
-                0.12273545680701484,
-                45.14285714285715, //M 0.75
-                1.3
-            ]
-        },
-        {
-            "name": "Symmetry",
-            "type": "BCSym",
-            // "rectifyOption": 2,
-            "_tail": 0
-        },
-        {
-            "name": "Fuselage",
-            "type": "BCWall"
-        },
-        {
-            "name": "Wing",
-            "type": "BCWall"
-        },
-        {
-            "name": "Inboard Slat",
-            "type": "BCWall"
-        },
-        {
-            "name": "Inboard Flap",
-            "type": "BCWall"
-        },
-        {
-            "name": "Outboard Slat",
-            "type": "BCWall"
-        },
-        {
-            "name": "Outboard Flap",
-            "type": "BCWall"
-        },
-        {
-            "name": "Nacelle",
-            "type": "BCWall"
-        },
-        {
-            "name": "Fairings",
-            "type": "BCWall"
-        },
-        {
-            "name": "Pylon",
-            "type": "BCWall"
-        }
     ],
     "restartState": {
         "iStep": 1,
-        "iStepInternal": 3000,
+        "iStepInternal": 10000,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/out/CRM/HLPW-4_CRM-HL_40-37_Nominal_v1a_Unstr-Hex-Prism-Pyr-Tet_Level-A_PW_V2_Q1/test0-O2-Starter__C_p1280_restart.dir",
+        "lastRestartFile": "../data/out/CRM_1/DPW6_CARDC.ZhangYB.WB.ae2.75deg.Unstructured.C_DNDSR/O2_starter__C_p1280_restart.dir",
         "otherRestartFile": "",
         "otherRestartStoreDim": [
             0
