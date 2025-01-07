@@ -449,7 +449,7 @@ namespace DNDS::Euler
             // integrations
             if (pBCHandler->GetFlagFromIDSoft(mesh->GetFaceZone(iFace), "integrationOpt") == 1)
             {
-                bndIntegrations.at(mesh->GetFaceZone(iFace)).Add(fluxEs(Eigen::all, 0), vfv->GetFaceArea(iFace));
+                bndIntegrations.at(mesh->GetFaceZone(iFace)).Add(-fluxEs(Eigen::all, 0), vfv->GetFaceArea(iFace));
             }
             if (pBCHandler->GetFlagFromIDSoft(mesh->GetFaceZone(iFace), "integrationOpt") == 2)
             {

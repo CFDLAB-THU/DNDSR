@@ -569,7 +569,7 @@ namespace DNDS::Euler
 
             auto rhsPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<3> &diffPhi, ArrayDOFV<1> &rhs, std::vector<std::vector<real>> &coefs, bool updateCoefs)
             {
-                const real supressRec = 1.0; 
+                const real supressRec = 1.0;
                 getDiffPhi(phi, diffPhi);
                 diffPhi.trans.startPersistentPull();
                 diffPhi.trans.waitPersistentPull();
@@ -601,7 +601,7 @@ namespace DNDS::Euler
                             baryOther = vfv->GetOtherCellPointFromCell(
                                 iCell, iCellOther, iFace,
                                 vfv->GetCellQuadraturePPhys(iCellOther, -1));
-                            phiOtherFace = phiOther + (bFace - baryOther).dot(diffPhi[iCellOther]) * supressRec; 
+                            phiOtherFace = phiOther + (bFace - baryOther).dot(diffPhi[iCellOther]) * supressRec;
                             diffPhiNormOther = diffPhi[iCellOther].dot(uNormOut) * supressRec; //! todo: periodic!!
                             diffPhiFace = 0.5 * (diffPhiFace + diffPhi[iCellOther] * supressRec);
                         }
@@ -1510,6 +1510,9 @@ namespace DNDS::Euler
                 TU far = btype >= Geom::BC_ID_DEFAULT_MAX
                              ? pBCHandler->GetValueFromID(btype)
                              : TU(settings.farFieldStaticValue);
+                if (pCLDriver)
+                    far(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * far(Seq123);
+
                 if (bTypeEuler == EulerBCType::BCFar)
                 {
                     if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
@@ -1950,6 +1953,8 @@ namespace DNDS::Euler
         else if (bTypeEuler == EulerBCType::BCIn)
         {
             URxy = pBCHandler->GetValueFromID(btype);
+            if (pCLDriver)
+                URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);
             if (bTypeEuler == EulerBCType::BCFar)
             {
                 if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
@@ -1986,6 +1991,8 @@ namespace DNDS::Euler
                 farPrimitive(I4) = pStatic;
                 Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
             }
+            if (pCLDriver)
+                URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);
             if (settings.frameConstRotation.enabled)
                 TransformURotatingFrame(URxy, pPhysics, -1);
         }

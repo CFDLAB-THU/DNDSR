@@ -4,6 +4,7 @@
 #include "Euler.hpp"
 #include "Gas.hpp"
 #include "DNDS/JsonUtil.hpp"
+#include "CLDriver.hpp"
 #include <unordered_set>
 
 namespace DNDS::Euler
@@ -180,6 +181,9 @@ namespace DNDS::Euler
                 rpm)
         } frameConstRotation;
 
+        CLDriverSettings cLDriverSettings;
+        std::vector<std::string> cLDriverBCNames;
+
         bool ignoreSourceTerm = false;
         bool useScalarJacobian = false;
         bool useRoeJacobian = false;
@@ -187,11 +191,12 @@ namespace DNDS::Euler
         bool noRsOnWall = false;
         bool noGRPOnWall = false;
 
+        /***************************************************************************************************/
+        // end of setting entries
+        /***************************************************************************************************/
+
         Eigen::Vector<real, -1> refU;
         Eigen::Vector<real, -1> refUPrim;
-
-        /***************************************************************************************************/
-        /***************************************************************************************************/
 
         EulerEvaluatorSettings()
         {
@@ -261,6 +266,8 @@ namespace DNDS::Euler
             __DNDS__json_to_config(nCentralSmoothStep);
             __DNDS__json_to_config(constMassForce);
             __DNDS__json_to_config(frameConstRotation);
+            __DNDS__json_to_config(cLDriverSettings);
+            __DNDS__json_to_config(cLDriverBCNames);
             if (read)
                 DNDS_assert(constMassForce.size() == 3);
             __DNDS__json_to_config(farFieldStaticValue);

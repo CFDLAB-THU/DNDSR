@@ -105,6 +105,9 @@ namespace DNDS::Euler
         std::map<Geom::t_index, IntegrationRecorder> bndIntegrations;
         std::map<Geom::t_index, std::ofstream> bndIntegrationLogs;
 
+        std::set<Geom::t_index> cLDriverBndIDs;
+        std::unique_ptr<CLDriver> pCLDriver;
+
         // ArrayVDOF<25> dRdUrec;
         // ArrayVDOF<25> dRdb;
 
@@ -164,6 +167,20 @@ namespace DNDS::Euler
             }
 
             DNDS_MAKE_SSP(symLU, mesh->getMPI(), mesh->NumCell());
+
+            for (auto &name : settings.cLDriverBCNames)
+            {
+                auto bcID = pBCHandler->GetIDFromName(name);
+                cLDriverBndIDs.insert(bcID);
+                if (bcID >= Geom::BC_ID_DEFAULT_MAX)
+                    DNDS_assert_info(pBCHandler->GetFlagFromIDSoft(bcID, "integrationOpt") == 1,
+                                     "you have to set integrationOption == 1 to make this bc available by CLDriver");
+                else
+                    DNDS_assert_info(bcID == Geom::BC_ID_DEFAULT_WALL || bcID == Geom::BC_ID_DEFAULT_WALL_INVIS,
+                                     "default bc must be WALL or WALL_INVIS for CLDriver");
+            }
+            if (cLDriverBndIDs.size())
+                pCLDriver = std::make_unique<CLDriver>(settings.cLDriverSettings);
         }
 
         void GetWallDist();
@@ -920,6 +937,33 @@ namespace DNDS::Euler
                     bndIntegrationLogs.at(id) << ", " << val;
                 bndIntegrationLogs.at(id) << std::endl;
             }
+        }
+
+        std::tuple<real, real, real> CLDriverGetIntegrationUpdate(index iter)
+        {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+            if (!pCLDriver)
+                return {0.0, 0.0, 0.0};
+            TU fluxBndCur;
+            fluxBndCur.setZero(nVars);
+            for (auto bcID : cLDriverBndIDs)
+            {
+                if (bcID >= Geom::BC_ID_DEFAULT_MAX)
+                {
+                    fluxBndCur += bndIntegrations.at(bcID).v;
+                }
+                else
+                    fluxBndCur += this->fluxWallSum;
+            }
+            Geom::tPoint fluxFaceForce;
+            fluxFaceForce.setZero();
+            fluxFaceForce(Seq012) = fluxBndCur(Seq123);
+            fluxFaceForce = pCLDriver->GetAOARotation().transpose() * fluxFaceForce;
+            real CLCur = fluxFaceForce.dot(pCLDriver->GetCL0Direction()) * pCLDriver->GetForce2CoeffRatio();
+            real CDCur = fluxFaceForce.dot(pCLDriver->GetCD0Direction()) * pCLDriver->GetForce2CoeffRatio();
+            pCLDriver->Update(iter, CLCur, mesh->getMPI());
+            real AOACur = pCLDriver->GetAOA();
+            return {CLCur, CDCur, AOACur};
         }
 
         inline TU CompressRecPart(

@@ -1236,6 +1236,7 @@ namespace DNDS::Euler
             bool ifStop = resRel(0) < config.convergenceControl.rhsThresholdInternal; // ! using only rho's residual
             if (iter < config.convergenceControl.nTimeStepInternalMin)
                 ifStop = false;
+            auto [CLCur, CDCur, AOACur] = eval.CLDriverGetIntegrationUpdate(iter);
             if (iter % config.outputControl.nConsoleCheckInternal == 0 || iter > config.convergenceControl.nTimeStepInternal || ifStop)
             {
                 double tWall = MPI_Wtime();
@@ -1264,7 +1265,7 @@ namespace DNDS::Euler
                     log() << fmt::format(formatStringMain +
                                              "  "s +
                                              (config.outputControl.consoleOutputMode == 1
-                                                  ? "WallFlux {termYellow}{wallFlux:.6e}{termReset}"s
+                                                  ? "WallFlux {termYellow}{wallFlux:.6e}{termReset} CL,CD,AoA [{CLCur:.6e},{CDCur:.6e},{AOACur:.2e}]"s
                                                   : ""s),
                                          DNDS_FMT_ARG(step),
                                          DNDS_FMT_ARG(iStep),
@@ -1290,6 +1291,9 @@ namespace DNDS::Euler
                                          DNDS_FMT_ARG(tLimiterA),
                                          DNDS_FMT_ARG(tLimiterB),
                                          DNDS_FMT_ARG(tWall),
+                                         DNDS_FMT_ARG(CLCur),
+                                         DNDS_FMT_ARG(CDCur),
+                                         DNDS_FMT_ARG(AOACur),
                                          fmt::arg("termRed", TermColor::Red),
                                          fmt::arg("termBlue", TermColor::Blue),
                                          fmt::arg("termGreen", TermColor::Green),
