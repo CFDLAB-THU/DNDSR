@@ -221,9 +221,16 @@ namespace DNDS
                         index iCellOther = CellFaceOther(iCell, iFace);
                         auto faceID = mesh->GetFaceZone(iFace);
                         int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
-
+                        auto faceCent = this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1);
+                        real lThis = (faceCent - this->GetCellBary(iCell)).norm();
+                        if (settings.subs2ndOrderGGScheme == 0)
+                            lThis = 1;
+                        real lThat = lThis;
                         if (iCellOther != UnInitIndex)
                         {
+                            lThat = (this->GetOtherCellBaryFromCell(iCell, iCellOther, iFace) - faceCent).norm();
+                            if (settings.subs2ndOrderGGScheme == 0)
+                                lThat = 1;
                             Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther].transpose();
                             if (mesh->isPeriodic)
                             {
@@ -236,14 +243,16 @@ namespace DNDS
                                     FTransPeriodicBack(uOther, faceID);
                             }
                             Eigen::Vector<real, dim> uNorm = this->GetFaceNormFromCell(iFace, iCell, -1, -1)(Seq012) * (CellIsFaceBack(iCell, iFace) ? 1. : -1.);
-                            Eigen::Matrix<real, nVarsFixed, dim> gradInc = (uOther.transpose() - u[iCell]) * 0.5 * this->GetFaceArea(iFace) * uNorm.transpose();
+                            Eigen::Matrix<real, nVarsFixed, dim> gradInc =
+                                (uOther.transpose() - u[iCell]) *
+                                lThis / (lThis + lThat + verySmallReal) * this->GetFaceArea(iFace) * uNorm.transpose();
                             grad += gradInc;
                             if (method == 11)
                             {
                                 mGG(Seq012, dim + ic2f) = -this->GetFaceArea(iFace) / (this->GetCellVol(iCell) + verySmallReal) * uNorm;
                                 mGG(dim + ic2f, Seq012) =
                                     (this->GetCellBary(iCell)(Seq012) + this->GetOtherCellBaryFromCell(iCell, iCellOther, iFace)(Seq012) -
-                                     2 * this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012))
+                                     2 * faceCent(Seq012))
                                         .transpose();
                                 mGG(dim + ic2f, dim + ic2f) = 2;
                                 bGG(dim + ic2f, Eigen::all) = uOther + u[iCell].transpose();
@@ -265,17 +274,17 @@ namespace DNDS
                                     uBL,
                                     u[iCell], iCell, iFace, -1,
                                     this->GetFaceNorm(iFace, -1),
-                                    this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1), faceID);
+                                    faceCent, faceID);
                             Eigen::Vector<real, dim> uNorm = this->GetFaceNorm(iFace, -1)(Seq012);
                             grad += (uBV - u[iCell]) * 0.5 * this->GetFaceArea(iFace) * uNorm.transpose();
                             if (method == 11)
                             {
                                 mGG(Seq012, dim + ic2f) = -this->GetFaceArea(iFace) / (this->GetCellVol(iCell) + verySmallReal) * uNorm;
                                 // Eigen::Vector<real, dim> BaryOther = this->GetCellBary(iCell)(Seq012) +
-                                //                                      2 * uNorm * uNorm.dot(this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012) - this->GetCellBary(iCell)(Seq012));
-                                Eigen::Vector<real, dim> BaryOther = 2 * this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012) - this->GetCellBary(iCell)(Seq012);
+                                //                                      2 * uNorm * uNorm.dot(faceCent(Seq012) - this->GetCellBary(iCell)(Seq012));
+                                Eigen::Vector<real, dim> BaryOther = 2 * faceCent(Seq012) - this->GetCellBary(iCell)(Seq012);
                                 mGG(dim + ic2f, Seq012) = (this->GetCellBary(iCell)(Seq012) + BaryOther -
-                                                           2 * this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1)(Seq012))
+                                                           2 * faceCent(Seq012))
                                                               .transpose();
                                 mGG(dim + ic2f, dim + ic2f) = 2;
                                 bGG(dim + ic2f, Eigen::all) = (uBV + u[iCell]).transpose();
