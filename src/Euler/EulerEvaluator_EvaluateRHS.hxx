@@ -89,7 +89,7 @@ namespace DNDS::Euler
             return ret;
         };
 
-
+        // direct2ndRec = true;
         if (direct2ndRec)
         {
             typename TVFV::template TFBoundary<nVarsFixed>

@@ -21,12 +21,12 @@ namespace DNDS::Euler
     // template <>
     // void EulerSolver<model>::RunImplicitEuler()
     // /***************/ // IDE mode;
+    static const auto model = NS_SA;
     DNDS_SWITCH_INTELLISENSE(
         // the real definition
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        static const auto model = NS_SA;
         template <>
     )
     void EulerSolver<model>::RunImplicitEuler()
@@ -149,9 +149,6 @@ namespace DNDS::Euler
             DNDS_assert(config.timeMarchControl.odeCode == 1 || config.timeMarchControl.odeCode == 102);
         }
 
-        using tGMRES_u = Linear::GMRES_LeftPreconditioned<decltype(u)>;
-        using tGMRES_uRec = Linear::GMRES_LeftPreconditioned<decltype(uRec)>;
-        using tPCG_uRec = Linear::PCG_PreconditionedRes<decltype(uRec), Eigen::Array<real, 1, Eigen::Dynamic>>;
         std::unique_ptr<tGMRES_u> gmres;
         std::unique_ptr<tGMRES_uRec> gmresRec;
         std::unique_ptr<tPCG_uRec> pcgRec;
@@ -767,11 +764,11 @@ namespace DNDS::Euler
             dTau *= 1. / alphaDiag;
         };
 
-        auto fsolve = [&](ArrayDOFV<nVarsFixed> &cx, ArrayDOFV<nVarsFixed> &crhs, ArrayDOFV<1> &dTau,
+        auto fsolve = [&](ArrayDOFV<nVarsFixed> &cx, ArrayDOFV<nVarsFixed> &cres, ArrayDOFV<nVarsFixed> &resOther, ArrayDOFV<1> &dTau,
                           real dt, real alphaDiag, ArrayDOFV<nVarsFixed> &cxInc, int iter, int uPos)
         {
-            rhsTemp = crhs;
-            eval.CentralSmoothResidual(rhsTemp, crhs, uTemp);
+            rhsTemp = cres;
+            eval.CentralSmoothResidual(rhsTemp, cres, uTemp);
 
             cxInc.setConstant(0.0);
             auto &JDC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JD1 : JD;
@@ -780,13 +777,12 @@ namespace DNDS::Euler
             auto &uRecIncC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRecInc1 : uRecInc;
             auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
             auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
-            bool inputIsZero{true}, hasLUDone{false};
 
             Timer().StartTimer(PerformanceTimer::Positivity);
             if (config.timeMarchControl.rhsFPPMode == 1 || config.timeMarchControl.rhsFPPMode == 11)
             {
                 // ! experimental: bad now ?
-                rhsTemp = crhs;
+                rhsTemp = cres;
                 rhsTemp *= dTau;
                 rhsTemp *= config.timeMarchControl.rhsFPPScale;
                 index nLimFRes = 0;
@@ -800,11 +796,11 @@ namespace DNDS::Euler
                         log() << "PPFResLimiter: nLimFRes[" << nLimFRes << "] minAlpha [" << alphaMinFRes << "]" << TermColor::Reset << std::endl;
                     }
 
-                crhs *= alphaPP_tmp;
+                cres *= alphaPP_tmp;
             }
             else if (config.timeMarchControl.rhsFPPMode == 2)
             {
-                rhsTemp = crhs;
+                rhsTemp = cres;
                 rhsTemp *= dTau;
                 rhsTemp *= config.timeMarchControl.rhsFPPScale;
                 index nLimFRes = 0;
@@ -824,15 +820,6 @@ namespace DNDS::Euler
             auto &dTauC = config.timeMarchControl.rhsFPPMode == 2 ? dTauTmp : dTau;
             Timer().StopTimer(PerformanceTimer::Positivity);
 
-            typename TVFV::template TFBoundary<nVarsFixed>
-                FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace, int iG,
-                                const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType) -> TU
-            {
-                TU UR = UL;
-                UR.setZero();
-                return UR;
-            };
-
             if (config.limiterControl.useLimiter) // uses urec value
                 eval.LUSGSMatrixInit(JDC, JSourceC,
                                      dTauC, dt, alphaDiag,
@@ -848,130 +835,15 @@ namespace DNDS::Euler
 
             // for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             // {
-            //     crhs[iCell] = eval.CompressInc(cx[iCell], crhs[iCell] * dTau[iCell]) / dTau[iCell];
+            //     cres[iCell] = eval.CompressInc(cx[iCell], cres[iCell] * dTau[iCell]) / dTau[iCell];
             // }
-
-            TU sgsRes(nVars), sgsRes0(nVars);
-
-            if (config.linearSolverControl.gmresCode == 0 || config.linearSolverControl.gmresCode == 2)
-            {
-                // //! LUSGS
-
-                if (config.linearSolverControl.initWithLastURecInc)
-                {
-                    DNDS_assert(config.implicitReconstructionControl.storeRecInc);
-                    eval.UpdateSGSWithRec(alphaDiag, crhs, cx, uRecC, cxInc, uRecIncC, JDC, true, sgsRes);
-                    // for (index iCell = 0; iCell < uRecIncC.Size(); iCell++)
-                    //     std::cout << "-------\n"
-                    //               << uRecIncC[iCell] << std::endl;
-                    cxInc.trans.startPersistentPull();
-                    cxInc.trans.waitPersistentPull();
-                    eval.UpdateSGSWithRec(alphaDiag, crhs, cx, uRecC, cxInc, uRecIncC, JDC, false, sgsRes);
-                    cxInc.trans.startPersistentPull();
-                    cxInc.trans.waitPersistentPull();
-                }
-                else
-                {
-                    doPrecondition(alphaDiag, crhs, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
-                }
-
-                if (config.linearSolverControl.sgsWithRec != 0)
-                    uRecNew.setConstant(0.0);
-                for (int iterSGS = 1; iterSGS <= config.linearSolverControl.sgsIter; iterSGS++)
-                {
-                    if (config.linearSolverControl.sgsWithRec != 0)
-                    {
-                        vfv->DoReconstructionIter(
-                            uRecNew, uRecNew1, cxInc,
-                            FBoundary,
-                            false);
-                        uRecNew.trans.startPersistentPull();
-                        uRecNew.trans.waitPersistentPull();
-                        eval.UpdateSGSWithRec(alphaDiag, crhs, cx, uRecC, cxInc, uRecNew, JDC, true, sgsRes);
-                        cxInc.trans.startPersistentPull();
-                        cxInc.trans.waitPersistentPull();
-                        eval.UpdateSGSWithRec(alphaDiag, crhs, cx, uRecC, cxInc, uRecNew, JDC, false, sgsRes);
-                        cxInc.trans.startPersistentPull();
-                        cxInc.trans.waitPersistentPull();
-                    }
-                    else
-                    {
-                        doPrecondition(alphaDiag, crhs, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
-                    }
-                    if (iterSGS == 1)
-                        sgsRes0 = sgsRes;
-
-                    if (mpi.rank == 0 && iterSGS % config.linearSolverControl.nSgsConsoleCheck == 0)
-                        log() << std::scientific << "SGS1 " << std::to_string(iterSGS)
-                              << " [" << sgsRes0.transpose() << "] ->"
-                              << " [" << sgsRes.transpose() << "] " << std::endl;
-                }
-            }
-            Eigen::VectorXd meanScale;
-            if (config.linearSolverControl.gmresScale == 1)
-            {
-                meanScale = eval.settings.refU;
-                meanScale(Seq123).setConstant(std::sqrt(meanScale(0) * meanScale(I4))); //! using consistent rho U scale
-                // meanScale(I4) = sqr(meanScale(1)) / (meanScale(0) + verySmallReal);
-                // meanScale(0) = 0.01;
-                // meanScale(Seq123).setConstant(0.1);
-                // meanScale(I4) = 1;
-            }
-            else if (config.linearSolverControl.gmresScale == 2)
-            {
-                eval.EvaluateNorm(meanScale, cx, 1, true, true);
-                meanScale(Seq123).setConstant(meanScale(Seq123).norm());
-                meanScale(I4) = sqr(meanScale(1)) / (meanScale(0) + verySmallReal);
-            }
-            else
-                meanScale.setOnes(nVars);
-            // meanScale(0) = 10;
-            TU meanScaleInv = (meanScale.array() + verySmallReal).inverse();
-
-            if (config.linearSolverControl.gmresCode != 0)
-            {
-                // !  GMRES
-                // !  for gmres solver: A * uinc = rhsinc, rhsinc is average value insdead of cumulated on vol
-                gmres->solve(
-                    [&](decltype(u) &x, decltype(u) &Ax)
-                    {
-                        eval.LUSGSMatrixVec(alphaDiag, cx, x, JDC, Ax);
-                        Ax.trans.startPersistentPull();
-                        Ax.trans.waitPersistentPull();
-                    },
-                    [&](decltype(u) &x, decltype(u) &MLx)
-                    {
-                        // x as rhs, and MLx as uinc
-                        MLx.setConstant(0.0), inputIsZero = true; //! start as zero
-                        doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
-                        for (int i = 0; i < config.linearSolverControl.sgsIter; i++)
-                        {
-                            doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
-                        }
-                    },
-                    [&](decltype(u) &a, decltype(u) &b) -> real
-                    {
-                        return a.dot(b, meanScaleInv.array(), meanScaleInv.array());
-                    },
-                    crhs, cxInc, config.linearSolverControl.nGmresIter,
-                    [&](uint32_t i, real res, real resB) -> bool
-                    {
-                        if (i > 0 && i % config.linearSolverControl.nGmresConsoleCheck == 0)
-                        {
-                            if (mpi.rank == 0)
-                            {
-                                log() << std::scientific;
-                                log() << "GMRES: " << i << " " << resB << " -> " << res << std::endl;
-                            }
-                        }
-                        return false;
-                    });
-            }
+            this->solveLinear(alphaDiag, cres, cx, cxInc, uRecC, uRecIncC,
+                              JDC, *gmres);
             // eval.FixIncrement(cx, cxInc);
             // !freeze something
             if (getNVars(model) > I4 + 1 && iter <= config.others.nFreezePassiveInner)
             {
-                for (int i = 0; i < crhs.Size(); i++)
+                for (int i = 0; i < cres.Size(); i++)
                     cxInc[i](Eigen::seq(I4 + 1, Eigen::last)).setZero();
                 // if (mpi.rank == 0)
                 //     std::cout << "Freezing all passive" << std::endl;
@@ -1221,12 +1093,12 @@ namespace DNDS::Euler
             // eval.AddFixedIncrement(cx, cxInc, alpha);
         };
 
-        auto fstop = [&](int iter, ArrayDOFV<nVarsFixed> &cxinc, int iStep) -> bool
+        auto fstop = [&](int iter, ArrayDOFV<nVarsFixed> &cres, int iStep) -> bool
         {
             // auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
 
             Eigen::VectorFMTSafe<real, -1> res(nVars);
-            eval.EvaluateNorm(res, cxinc, 1, config.convergenceControl.useVolWiseResidual);
+            eval.EvaluateNorm(res, cres, 1, config.convergenceControl.useVolWiseResidual);
             // if (iter == 1 && iStep == 1) // * using 1st rk step for reference
             if (iter == 1)
                 resBaseCInternal = res;
@@ -1798,8 +1670,157 @@ namespace DNDS::Euler
         }
     }
 
-    template <EulerModel model>
-    void EulerSolver<model>::doPrecondition(real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp, JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone)
+    DNDS_SWITCH_INTELLISENSE(
+        // the real definition
+        template <EulerModel model>
+        ,
+        // the intellisense friendly definition
+        template <>
+    )
+    void EulerSolver<model>::solveLinear(
+        real alphaDiag,
+        TDof &cres, TDof &cx, TDof &cxInc, TRec &uRecC, TRec uRecIncC,
+        JacobianDiagBlock<nVarsFixed> &JDC, tGMRES_u &gmres)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        auto &eval = *pEval;
+
+        TU sgsRes(nVars), sgsRes0(nVars);
+        bool inputIsZero{true}, hasLUDone{false};
+
+        typename TVFV::template TFBoundary<nVarsFixed>
+            FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace, int iG,
+                            const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType) -> TU
+        {
+            TU UR = UL;
+            UR.setZero();
+            return UR;
+        };
+
+        if (config.linearSolverControl.gmresCode == 0 || config.linearSolverControl.gmresCode == 2)
+        {
+            // //! LUSGS
+
+            if (config.linearSolverControl.initWithLastURecInc)
+            {
+                DNDS_assert(config.implicitReconstructionControl.storeRecInc);
+                eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecIncC, JDC, true, sgsRes);
+                // for (index iCell = 0; iCell < uRecIncC.Size(); iCell++)
+                //     std::cout << "-------\n"
+                //               << uRecIncC[iCell] << std::endl;
+                cxInc.trans.startPersistentPull();
+                cxInc.trans.waitPersistentPull();
+                eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecIncC, JDC, false, sgsRes);
+                cxInc.trans.startPersistentPull();
+                cxInc.trans.waitPersistentPull();
+            }
+            else
+            {
+                doPrecondition(alphaDiag, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
+            }
+
+            if (config.linearSolverControl.sgsWithRec != 0)
+                uRecNew.setConstant(0.0);
+            for (int iterSGS = 1; iterSGS <= config.linearSolverControl.sgsIter; iterSGS++)
+            {
+                if (config.linearSolverControl.sgsWithRec != 0)
+                {
+                    vfv->DoReconstructionIter(
+                        uRecNew, uRecNew1, cxInc,
+                        FBoundary,
+                        false);
+                    uRecNew.trans.startPersistentPull();
+                    uRecNew.trans.waitPersistentPull();
+                    eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecNew, JDC, true, sgsRes);
+                    cxInc.trans.startPersistentPull();
+                    cxInc.trans.waitPersistentPull();
+                    eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecNew, JDC, false, sgsRes);
+                    cxInc.trans.startPersistentPull();
+                    cxInc.trans.waitPersistentPull();
+                }
+                else
+                {
+                    doPrecondition(alphaDiag, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
+                }
+                if (iterSGS == 1)
+                    sgsRes0 = sgsRes;
+
+                if (mpi.rank == 0 && iterSGS % config.linearSolverControl.nSgsConsoleCheck == 0)
+                    log() << std::scientific << "SGS1 " << std::to_string(iterSGS)
+                          << " [" << sgsRes0.transpose() << "] ->"
+                          << " [" << sgsRes.transpose() << "] " << std::endl;
+            }
+        }
+        Eigen::VectorXd meanScale;
+        if (config.linearSolverControl.gmresScale == 1)
+        {
+            meanScale = eval.settings.refU;
+            meanScale(Seq123).setConstant(std::sqrt(meanScale(0) * meanScale(I4))); //! using consistent rho U scale
+            // meanScale(I4) = sqr(meanScale(1)) / (meanScale(0) + verySmallReal);
+            // meanScale(0) = 0.01;
+            // meanScale(Seq123).setConstant(0.1);
+            // meanScale(I4) = 1;
+        }
+        else if (config.linearSolverControl.gmresScale == 2)
+        {
+            eval.EvaluateNorm(meanScale, cx, 1, true, true);
+            meanScale(Seq123).setConstant(meanScale(Seq123).norm());
+            meanScale(I4) = sqr(meanScale(1)) / (meanScale(0) + verySmallReal);
+        }
+        else
+            meanScale.setOnes(nVars);
+        // meanScale(0) = 10;
+        TU meanScaleInv = (meanScale.array() + verySmallReal).inverse();
+
+        if (config.linearSolverControl.gmresCode != 0)
+        {
+            // !  GMRES
+            // !  for gmres solver: A * uinc = rhsinc, rhsinc is average value insdead of cumulated on vol
+            gmres.solve(
+                [&](TDof &x, TDof &Ax)
+                {
+                    eval.LUSGSMatrixVec(alphaDiag, cx, x, JDC, Ax);
+                    Ax.trans.startPersistentPull();
+                    Ax.trans.waitPersistentPull();
+                },
+                [&](TDof &x, TDof &MLx)
+                {
+                    // x as rhs, and MLx as uinc
+                    MLx.setConstant(0.0), inputIsZero = true; //! start as zero
+                    doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
+                    for (int i = 0; i < config.linearSolverControl.sgsIter; i++)
+                    {
+                        doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
+                    }
+                },
+                [&](TDof &a, TDof &b) -> real
+                {
+                    return a.dot(b, meanScaleInv.array(), meanScaleInv.array());
+                },
+                cres, cxInc, config.linearSolverControl.nGmresIter,
+                [&](uint32_t i, real res, real resB) -> bool
+                {
+                    if (i > 0 && i % config.linearSolverControl.nGmresConsoleCheck == 0)
+                    {
+                        if (mpi.rank == 0)
+                        {
+                            log() << std::scientific;
+                            log() << "GMRES: " << i << " " << resB << " -> " << res << std::endl;
+                        }
+                    }
+                    return false;
+                });
+        }
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        // the real definition
+        template <EulerModel model>
+        ,
+        // the intellisense friendly definition
+        template <>
+    )
+    void EulerSolver<model>::doPrecondition(real alphaDiag, TDof &cres, TDof &cx, TDof &cxInc, TDof &uTemp, JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone)
     {
         DNDS_assert(pEval);
         auto &eval = *pEval;
@@ -1810,20 +1831,20 @@ namespace DNDS::Euler
         if (config.linearSolverControl.jacobiCode <= 1)
         {
             bool useJacobi = config.linearSolverControl.jacobiCode == 0;
-            eval.UpdateSGS(alphaDiag, crhs, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, true, sgsRes);
+            eval.UpdateSGS(alphaDiag, cres, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, true, sgsRes);
             if (useJacobi)
                 cxInc = uTemp;
             cxInc.trans.startPersistentPull();
             cxInc.trans.waitPersistentPull();
-            eval.UpdateSGS(alphaDiag, crhs, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, false, sgsRes);
+            eval.UpdateSGS(alphaDiag, cres, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, false, sgsRes);
             if (useJacobi)
                 cxInc = uTemp;
             cxInc.trans.startPersistentPull();
             cxInc.trans.waitPersistentPull();
-            // eval.UpdateLUSGSForward(alphaDiag, crhs, cx, cxInc, JDC, cxInc);
+            // eval.UpdateLUSGSForward(alphaDiag, cres, cx, cxInc, JDC, cxInc);
             // cxInc.trans.startPersistentPull();
             // cxInc.trans.waitPersistentPull();
-            // eval.UpdateLUSGSBackward(alphaDiag, crhs, cx, cxInc, JDC, cxInc);
+            // eval.UpdateLUSGSBackward(alphaDiag, cres, cx, cxInc, JDC, cxInc);
             // cxInc.trans.startPersistentPull();
             // cxInc.trans.waitPersistentPull();
             inputIsZero = false;
@@ -1835,7 +1856,7 @@ namespace DNDS::Euler
                 eval.LUSGSMatrixToJacobianLU(alphaDiag, cx, JDC, *JLocalLU), hasLUDone = true;
             for (int iii = 0; iii < 2; iii++)
             {
-                eval.LUSGSMatrixSolveJacobianLU(alphaDiag, crhs, cx, cxInc, uTemp, rhsTemp, JDC, *JLocalLU, sgsRes);
+                eval.LUSGSMatrixSolveJacobianLU(alphaDiag, cres, cx, cxInc, uTemp, rhsTemp, JDC, *JLocalLU, sgsRes);
                 uTemp.SwapDataFatherSon(cxInc);
                 // cxInc = uTemp;
                 cxInc.trans.startPersistentPull();

@@ -18,6 +18,7 @@
 #include "DNDS/JsonUtil.hpp"
 #include "EulerBC.hpp"
 #include "DNDS/SerializerJSON.hpp"
+#include "Solver/Linear.hpp"
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
 // #undef __DNDS_REALLY_COMPILING__
 // #endif
@@ -52,6 +53,10 @@ namespace DNDS::Euler
         typedef typename TEval::TScalar TScalar;
         typedef typename TEval::TVFV TVFV;
         typedef typename TEval::TpVFV TpVFV;
+
+        using tGMRES_u = Linear::GMRES_LeftPreconditioned<TDof>;
+        using tGMRES_uRec = Linear::GMRES_LeftPreconditioned<TRec>;
+        using tPCG_uRec = Linear::PCG_PreconditionedRes<TRec, Eigen::Array<real, 1, Eigen::Dynamic>>;
 
     private:
         MPIInfo mpi;
@@ -1222,7 +1227,12 @@ namespace DNDS::Euler
         }
 
         void RunImplicitEuler();
-        void doPrecondition(real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp, JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone);
+        void solveLinear(
+            real alphaDiag,
+            TDof &cres, TDof &cx, TDof &cxInc, TRec &uRecC, TRec uRecIncC,
+            JacobianDiagBlock<nVarsFixed> &JDC, tGMRES_u &gmres);
+        void doPrecondition(real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp,
+                            JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone);
     };
 }
 
