@@ -152,6 +152,7 @@ namespace DNDS::Euler
         std::unique_ptr<tGMRES_u> gmres;
         std::unique_ptr<tGMRES_uRec> gmresRec;
         std::unique_ptr<tPCG_uRec> pcgRec;
+        std::unique_ptr<tPCG_uRec> pcgRec1;
 
         if (config.linearSolverControl.gmresCode == 1 ||
             config.linearSolverControl.gmresCode == 2)
@@ -172,6 +173,13 @@ namespace DNDS::Euler
 
         if (config.implicitReconstructionControl.recLinearScheme == 2)
             pcgRec = std::make_unique<tPCG_uRec>(
+                [&](decltype(uRec) &data)
+                {
+                    vfv->BuildURec(data, nVars);
+                });
+
+        if (config.implicitReconstructionControl.recLinearScheme == 2 || config.timeMarchControl.odeCode == 401)
+            pcgRec1 = std::make_unique<tPCG_uRec>(
                 [&](decltype(uRec) &data)
                 {
                     vfv->BuildURec(data, nVars);
@@ -438,9 +446,10 @@ namespace DNDS::Euler
             {
                 Eigen::Array<real, 1, Eigen::Dynamic> resB;
                 int nPCGIterAll{0};
+                auto& pcgRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? pcgRec1 : pcgRec;
                 if (iter <= 2 //! consecutive pcg is bad in 0012, using separate pcg
-                    || pcgRec->getPHistorySize() >= config.implicitReconstructionControl.fpcgMaxPHistory)
-                    pcgRec->reset(); // ! todo: account for inter-solve (need two pcgs!)
+                    || pcgRecC->getPHistorySize() >= config.implicitReconstructionControl.fpcgMaxPHistory)
+                    pcgRecC->reset();
                 uRecNew = uRecB1;
                 vfv->DoReconstructionIter(
                     uRecC, uRecB1, cx,
@@ -457,20 +466,20 @@ namespace DNDS::Euler
                         {
                             if (mpi.rank == 0 && config.implicitReconstructionControl.fpcgResetReport > 0)
                                 log() << "FPCG force reset at portion " << fmt::format("{:.4g}", maxPortion) << std::endl;
-                            pcgRec->reset();
+                            pcgRecC->reset();
                         }
                     }
                     else if (config.implicitReconstructionControl.fpcgResetScheme == 1)
-                        pcgRec->reset();
+                        pcgRecC->reset();
                     else if (config.implicitReconstructionControl.fpcgResetScheme == 2)
                         ;
                     else
                         DNDS_assert_info(false, "invalid fpcgResetScheme");
                 }
-                // pcgRec->reset(); // using separate pcg
+                // pcgRecC->reset(); // using separate pcg
                 for (int iRec = 1; iRec <= nRec; iRec++)
                 {
-                    bool pcgConverged = pcgRec->solve(
+                    bool pcgConverged = pcgRecC->solve(
                         [&](ArrayRECV<nVarsFixed> &x, ArrayRECV<nVarsFixed> &Ax)
                         {
                             vfv->DoReconstructionIterDiff(uRec, x, Ax, cx, FBoundaryDiff);
