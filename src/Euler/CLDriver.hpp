@@ -19,7 +19,8 @@ namespace DNDS::Euler
         real refArea = 1.0;
         real refDynamicPressure = 0.5;
         real targetCL = 0.0;
-        real CLIncrementRelax = 0.9;
+        real CLIncrementRelax = 0.25; // reduce each alpha increment
+        real thresholdTargetRatio = 0.5; // reduce CL convergence threshold when close to the target CL
 
         index nIterStartDrive = INT32_MAX;
         index nIterConvergeMin = 50;
@@ -31,7 +32,7 @@ namespace DNDS::Euler
             AOAInit,
             AOAAxis, CL0Axis, CD0Axis,
             refArea, refDynamicPressure, targetCL,
-            CLIncrementRelax,
+            CLIncrementRelax, thresholdTargetRatio,
             nIterStartDrive, nIterConvergeMin, CLconvergeThreshold, CLconvergeWindow)
     };
 
@@ -89,19 +90,24 @@ namespace DNDS::Euler
             if (CLHistorySize >= CLHistory.size() && CLHistorySize >= settings.nIterConvergeMin)
             {
                 real curCL = CLHistory.mean();
-                if ((CLHistory.maxCoeff() <= curCL + settings.CLconvergeThreshold) &&
-                    (CLHistory.minCoeff() >= curCL - settings.CLconvergeThreshold))
+                real currentCLThreshold = settings.CLconvergeThreshold;
+                currentCLThreshold = std::min(currentCLThreshold, std::abs(settings.targetCL - lastCL) * settings.thresholdTargetRatio);
+                real maxCLDeviation = std::max(CLHistory.maxCoeff() - curCL, curCL - CLHistory.minCoeff());
+                if (maxCLDeviation <= currentCLThreshold)
                 {
                     real CLSlope = (lastCL - CL) / (lastAOA - AOA);
                     real CLSlopeStandard = sqr(pi) / 90.;
                     if (lastCL == veryLargeReal || lastAOA == veryLargeReal)
                         CLSlope = CLSlopeStandard;
-                    if (std::abs(CLSlope) > 4 * CLSlopeStandard)
-                        CLSlope = CLSlopeStandard;
-                    if (std::abs(CLSlope) < 0.25 * CLSlopeStandard)
-                        CLSlope = CLSlopeStandard;
+
                     if (CLSlope < 0)
                         CLSlope = CLSlopeStandard; //! warning, assuming positive CLSlope now
+                    // if (std::abs(CLSlope) > 10 * CLSlopeStandard)
+                    //     CLSlope = CLSlopeStandard;
+                    // if (std::abs(CLSlope) < 0.9 * CLSlopeStandard)
+                    //     CLSlope = CLSlopeStandard;
+                    CLSlope = std::min(CLSlope, 10 * CLSlopeStandard);
+                    CLSlope = std::max(CLSlope, 0.9 * CLSlopeStandard);
 
                     real AOANew = AOA + (settings.targetCL - CL) / CLSlope * settings.CLIncrementRelax;
 
@@ -111,7 +117,8 @@ namespace DNDS::Euler
                     _ClearCL();
 
                     if (mpi.rank == 0)
-                        log() << fmt::format("=== CLDriver at iter [{}], CL converged = [{}], CLSlope = [{}], newAOA [{}]", iter, curCL, CLSlope, AOA)
+                        log() << fmt::format("=== CLDriver at iter [{}], CL converged = [{}+-{:.1e}], CLSlope = [{}], newAOA [{}]",
+                                             iter, curCL, maxCLDeviation, CLSlope, AOA)
                               << std::endl;
                 }
             }
