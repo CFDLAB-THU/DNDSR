@@ -78,6 +78,7 @@ namespace DNDS
                 return _mat_nRows->at(iMat);
             if constexpr (_mat_ni == DynamicSize)
                 return _mat_nRow_dynamic;
+            return UnInitRowsize; //invalid branch
         }
 
         rowsize MatColSize(index iMat = 0)
@@ -88,6 +89,7 @@ namespace DNDS
                 return this->t_base::RowSize(iMat) / this->MatRowSize(iMat);
             if constexpr (_mat_ni == DynamicSize)
                 return this->t_base::RowSize(iMat) / this->MatRowSize(iMat);
+            return UnInitRowsize; // invalid branch
         }
 
         void ResizeMat(index iMat, rowsize nSizeRow, rowsize nSizeCol)

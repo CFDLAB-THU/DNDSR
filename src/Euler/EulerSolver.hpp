@@ -50,8 +50,8 @@ namespace DNDS::Euler
         typedef typename TEval::TDof TDof;
         typedef typename TEval::TRec TRec;
         typedef typename TEval::TScalar TScalar;
-        typedef CFV::VariationalReconstruction<gDim> TVFV;
-        typedef ssp<CFV::VariationalReconstruction<gDim>> TpVFV;
+        typedef typename TEval::TVFV TVFV;
+        typedef typename TEval::TpVFV TpVFV;
 
     private:
         MPIInfo mpi;

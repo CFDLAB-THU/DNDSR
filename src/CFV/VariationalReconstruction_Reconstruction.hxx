@@ -183,12 +183,11 @@ namespace DNDS
             template <>
             template <>
         )
-        void VariationalReconstruction<dim>::DoReconstruction2nd(
-            tURec<nVarsFixed> &uRec,
+        void VariationalReconstruction<dim>::DoReconstruction2ndGrad(
+            tUGrad<nVarsFixed, dim> &uRec,
             tUDof<nVarsFixed> &u,
             const TFBoundary<nVarsFixed> &FBoundary,
-            int method,
-            const std::vector<int> &mask)
+            int method)
         {
             using namespace Geom;
             using namespace Geom::Elem;
@@ -263,12 +262,7 @@ namespace DNDS
                             auto faceID = mesh->GetFaceZone(iFace);
                             DNDS_assert(FaceIDIsExternalBC(faceID));
 
-                            RowVectorXR dbv =
-                                this->GetIntPointDiffBaseValue(
-                                    iCell, iFace, -1, -1, std::array<int, 1>{0}, 1);
-                            Eigen::Vector<real, nVarsFixed> uBL =
-                                (dbv * uRec[iCell]).transpose() * 0.0; // 0.0: uRec should be invalid!!
-                            uBL += u[iCell];                           //! need fixing?
+                            Eigen::Vector<real, nVarsFixed> uBL = u[iCell]; //! need fixing?
                             Eigen::Vector<real, nVarsFixed> uBV =
                                 FBoundary(
                                     uBL,
@@ -311,22 +305,7 @@ namespace DNDS
                     // std::cout << cellBary.transpose() << " ---- " << vvv << std::endl;
                     // DNDS_assert(vvv(0) < 1e-10);
 
-                    Eigen::Matrix<real, dim, dim> d1bv;
-                    d1bv = this->GetIntPointDiffBaseValue(
-                        iCell, -1, -1, -1, Seq123, dim + 1)(Eigen::all, Seq012);
-                    auto lud1bv = d1bv.partialPivLu();
-                    if (lud1bv.rcond() > 1e9)
-                        std::cout << "Large Cond " << lud1bv.rcond() << std::endl;
-                    if (mask.size() == 0)
-                    {
-                        uRec[iCell].setZero();
-                        uRec[iCell](Seq012, Eigen::all) = lud1bv.solve(grad.transpose());
-                    }
-                    else
-                    {
-                        uRec[iCell](Eigen::all, mask).setZero();
-                        uRec[iCell](Seq012, mask) = lud1bv.solve(grad.transpose())(Eigen::all, mask);
-                    }
+                    uRec[iCell] = grad.transpose();
 
                     // std::cout << " g " << std::endl;
                     // std::cout << grad << std::endl;
@@ -365,13 +344,8 @@ namespace DNDS
                             auto faceID = mesh->GetFaceZone(iFace);
                             DNDS_assert(FaceIDIsExternalBC(faceID));
 
-                            RowVectorXR dbv =
-                                this->GetIntPointDiffBaseValue(
-                                    iCell, iFace, -1, -1, std::array<int, 1>{0}, 1);
-                            Eigen::Vector<real, nVarsFixed> uBL =
-                                (dbv *
-                                 uRec[iCell])
-                                    .transpose();
+                            Eigen::Vector<real, nVarsFixed> uBL;
+                            uBL.setZero();
                             uBL += u[iCell]; //! need fixing?
                             Eigen::Vector<real, nVarsFixed> uBV =
                                 FBoundary(
@@ -391,26 +365,72 @@ namespace DNDS
                     // m.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve()
                     auto svd = dcs.bdcSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
                     grad = svd.solve(dus).transpose();
-
-                    Eigen::Matrix<real, dim, dim> d1bv;
-                    if constexpr (dim == 2)
-                        d1bv =
-                            this->GetIntPointDiffBaseValue(
-                                iCell, -1, -1, -1, std::array<int, 2>{1, 2}, 3);
-                    if constexpr (dim == 3)
-                        d1bv =
-                            this->GetIntPointDiffBaseValue(
-                                iCell, -1, -1, -1, std::array<int, 3>{1, 2, 3}, 4);
-                    Eigen::Matrix3d m;
-                    auto lud1bv = d1bv.partialPivLu();
-                    if (lud1bv.rcond() > 1e9)
-                        std::cout << "Large Cond " << lud1bv.rcond() << std::endl;
-                    uRec[iCell] = lud1bv.solve(grad.transpose());
+                    uRec[iCell] = grad.transpose();
                 }
             }
             else
             {
                 DNDS_assert_info(false, "NO SUCH 2nd rec METHOD");
+            }
+        }
+
+        DNDS_SWITCH_INTELLISENSE(
+            template <int dim>
+            template <int nVarsFixed>
+            ,
+            template <>
+            template <>
+        )
+        void VariationalReconstruction<dim>::DoReconstruction2nd(
+            tURec<nVarsFixed> &uRec,
+            tUDof<nVarsFixed> &u,
+            const TFBoundary<nVarsFixed> &FBoundary,
+            int method,
+            const std::vector<int> &mask)
+        {
+            using namespace Geom;
+            using namespace Geom::Elem;
+
+            static tUGrad<nVarsFixed, dim> uGrad;
+            if (!uGrad.father || uGrad.father->Size() < mesh->NumCell() || uGrad.father->MatColSize(0) != u.father->MatRowSize())
+            {
+                this->BuildUGrad(uGrad, u.father->MatRowSize(), false, false); // no son or trans makes this fully local operation
+            }
+
+            static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>); // note this is gDim!
+            static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+
+            this->DoReconstruction2ndGrad(uGrad, u, FBoundary, method);
+
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                int nVars = u[iCell].size();
+                auto c2f = mesh->cell2face[iCell];
+                Eigen::Matrix<real, nVarsFixed, dim> grad = uGrad[iCell].transpose();
+
+                Eigen::Matrix<real, dim, dim> d1bv;
+                d1bv = this->GetIntPointDiffBaseValue(
+                    iCell, -1, -1, -1, Seq123, dim + 1)(Eigen::all, Seq012);
+                auto lud1bv = d1bv.partialPivLu();
+                if (lud1bv.rcond() > 1e9)
+                    std::cout << "Large Cond " << lud1bv.rcond() << std::endl;
+                if (mask.size() == 0)
+                {
+                    uRec[iCell].setZero();
+                    uRec[iCell](Seq012, Eigen::all) = lud1bv.solve(grad.transpose());
+                }
+                else
+                {
+                    uRec[iCell](Eigen::all, mask).setZero();
+                    uRec[iCell](Seq012, mask) = lud1bv.solve(grad.transpose())(Eigen::all, mask);
+                }
+
+                // std::cout << " g " << std::endl;
+                // std::cout << grad << std::endl;
+                // std::cout << uRec[iCell] << std::endl;
+                // std::cout << d1bv << std::endl;
+                // std::cout << lud1bv.inverse() << std::endl;
+                // std::abort();
             }
         }
 
@@ -661,6 +681,12 @@ namespace DNDS
 #define DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(dim, nVarsFixed, ext)          \
     namespace DNDS::CFV                                                                         \
     {                                                                                           \
+        ext template void VariationalReconstruction<dim>::DoReconstruction2ndGrad<nVarsFixed>(  \
+            tUGrad<nVarsFixed, dim> & uRec,                                                     \
+            tUDof<nVarsFixed> &u,                                                               \
+            const TFBoundary<nVarsFixed> &FBoundary,                                            \
+            int method);                                                                        \
+                                                                                                \
         ext template void VariationalReconstruction<dim>::DoReconstruction2nd<nVarsFixed>(      \
             tURec<nVarsFixed> & uRec,                                                           \
             tUDof<nVarsFixed> &u,                                                               \

@@ -19,11 +19,27 @@ namespace DNDS::Euler
 
         nlohmann::ordered_json jsonSettings;
 
+        bool useScalarJacobian = false;
+        bool useRoeJacobian = false;
+        bool noRsOnWall = false;
+        bool noGRPOnWall = false;
+        bool ignoreSourceTerm = false;
+
+        int direct2ndRecMethod = 1;
+
+        int specialBuiltinInitializer = 0;
+
+        real uRecAlphaCompressPower = 1;
+        real uRecBetaCompressPower = 11;
+        bool forceVolURecBeta = true;
+        bool ppEpsIsRelaxed = false;
+
+        real RANSBottomLimit = 0.01;
+
         Gas::RiemannSolverType rsType = Gas::Roe;
         Gas::RiemannSolverType rsTypeAux = Gas::UnknownRS;
         Gas::RiemannSolverType rsTypeWall = Gas::UnknownRS;
         int rsMeanValueEig = 0;
-        int nCentralSmoothStep = 0;
         int rsRotateScheme = 0;
         real minWallDist = 1e-12;
         int wallDistExection = 0; // 1 is serial
@@ -46,33 +62,45 @@ namespace DNDS::Euler
         int ransSource2nd = 0;
         int usePrimGradInVisFlux = 0;
         int useSourceGradFixGG = 0;
-
-        struct IdealGasProperty
+        int nCentralSmoothStep = 0;
+        Eigen::Vector<real, 3> constMassForce = Eigen::Vector<real, 3>{0, 0, 0};
+        struct FrameConstRotation
         {
-            real gamma = 1.4;
-            real Rgas = 1;
-            real muGas = 1;
-            real prGas = 0.72;
-            real CpGas = Rgas * gamma / (gamma - 1);
-            real TRef = 273.15;
-            real CSutherland = 110.4;
-            int muModel = 1; // 0=constant, 1=sutherland, 2=constant_nu
-
-            void ReadWriteJSON(nlohmann::ordered_json &jsonObj, bool read)
+            bool enabled = false;
+            Geom::tPoint axis = Geom::tPoint{0, 0, 1};
+            Geom::tPoint center = Geom::tPoint{0, 0, 0};
+            real rpm = 0;
+            real Omega()
             {
-                __DNDS__json_to_config(gamma);
-                __DNDS__json_to_config(Rgas);
-                __DNDS__json_to_config(muGas);
-                __DNDS__json_to_config(prGas);
-                __DNDS__json_to_config(TRef);
-                __DNDS__json_to_config(CSutherland);
-                __DNDS__json_to_config(muModel);
-                CpGas = Rgas * gamma / (gamma - 1);
+                return rpm * (2 * pi / 60.);
             }
-        } idealGasProperty;
-
+            Geom::tPoint vOmega()
+            {
+                return axis * Omega();
+            }
+            Geom::tPoint rVec(const Geom::tPoint &r)
+            {
+                return r - r.dot(axis) * axis;
+            }
+            Geom::tGPoint rtzFrame(const Geom::tPoint &r)
+            {
+                Geom::tPoint rn = rVec(r).normalized();
+                Geom::tGPoint ret;
+                ret(Eigen::all, 0) = rn;
+                ret(Eigen::all, 2) = axis;
+                ret(Eigen::all, 1) = axis.cross(rn);
+                return ret;
+            }
+            DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
+                FrameConstRotation,
+                enabled,
+                axis,
+                center,
+                rpm)
+        } frameConstRotation;
+        CLDriverSettings cLDriverSettings;
+        std::vector<std::string> cLDriverBCNames;
         Eigen::Vector<real, -1> farFieldStaticValue = Eigen::Vector<real, 5>{1, 0, 0, 0, 2.5};
-
         struct BoxInitializer
         {
             real x0, x1, y0, y1, z0, z1;
@@ -116,7 +144,6 @@ namespace DNDS::Euler
                 //     jsonObj["v"] = EigenVectorGetJson(v);
             }
         };
-
         std::vector<PlaneInitializer> planeInitializers;
 
         struct ExprtkInitializer
@@ -133,63 +160,31 @@ namespace DNDS::Euler
                 return ret;
             }
         };
-
         std::vector<ExprtkInitializer> exprtkInitializers;
 
-        int specialBuiltinInitializer = 0;
-
-        real uRecBetaCompressPower = 11;
-        real uRecAlphaCompressPower = 1;
-        bool forceVolURecBeta = true;
-        bool ppEpsIsRelaxed = false;
-
-        real RANSBottomLimit = 0.01;
-
-        Eigen::Vector<real, 3> constMassForce = Eigen::Vector<real, 3>{0, 0, 0};
-        struct FrameConstRotation
+        struct IdealGasProperty
         {
-            bool enabled = false;
-            Geom::tPoint axis = Geom::tPoint{0, 0, 1};
-            Geom::tPoint center = Geom::tPoint{0, 0, 0};
-            real rpm = 0;
-            real Omega()
-            {
-                return rpm * (2 * pi / 60.);
-            }
-            Geom::tPoint vOmega()
-            {
-                return axis * Omega();
-            }
-            Geom::tPoint rVec(const Geom::tPoint &r)
-            {
-                return r - r.dot(axis) * axis;
-            }
-            Geom::tGPoint rtzFrame(const Geom::tPoint &r)
-            {
-                Geom::tPoint rn = rVec(r).normalized();
-                Geom::tGPoint ret;
-                ret(Eigen::all, 0) = rn;
-                ret(Eigen::all, 2) = axis;
-                ret(Eigen::all, 1) = axis.cross(rn);
-                return ret;
-            }
-            DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                FrameConstRotation,
-                enabled,
-                axis,
-                center,
-                rpm)
-        } frameConstRotation;
+            real gamma = 1.4;
+            real Rgas = 1;
+            real muGas = 1;
+            real prGas = 0.72;
+            real CpGas = Rgas * gamma / (gamma - 1);
+            real TRef = 273.15;
+            real CSutherland = 110.4;
+            int muModel = 1; // 0=constant, 1=sutherland, 2=constant_nu
 
-        CLDriverSettings cLDriverSettings;
-        std::vector<std::string> cLDriverBCNames;
-
-        bool ignoreSourceTerm = false;
-        bool useScalarJacobian = false;
-        bool useRoeJacobian = false;
-
-        bool noRsOnWall = false;
-        bool noGRPOnWall = false;
+            void ReadWriteJSON(nlohmann::ordered_json &jsonObj, bool read)
+            {
+                __DNDS__json_to_config(gamma);
+                __DNDS__json_to_config(Rgas);
+                __DNDS__json_to_config(muGas);
+                __DNDS__json_to_config(prGas);
+                __DNDS__json_to_config(TRef);
+                __DNDS__json_to_config(CSutherland);
+                __DNDS__json_to_config(muModel);
+                CpGas = Rgas * gamma / (gamma - 1);
+            }
+        } idealGasProperty;
 
         /***************************************************************************************************/
         // end of setting entries
@@ -224,6 +219,7 @@ namespace DNDS::Euler
             __DNDS__json_to_config(noRsOnWall);
             __DNDS__json_to_config(noGRPOnWall);
             __DNDS__json_to_config(ignoreSourceTerm);
+            __DNDS__json_to_config(direct2ndRecMethod);
             __DNDS__json_to_config(specialBuiltinInitializer);
             __DNDS__json_to_config(uRecAlphaCompressPower);
             __DNDS__json_to_config(uRecBetaCompressPower);

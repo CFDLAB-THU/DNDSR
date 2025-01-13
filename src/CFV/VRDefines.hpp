@@ -32,6 +32,8 @@ namespace DNDS::CFV
     using tURec = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<DynamicSize, nVarsFixed>>;
     template <int nVarsFixed>
     using tUDof = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<nVarsFixed, 1>>;
+    template <int nVarsFixed, int gDim>
+    using tUGrad = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<gDim, nVarsFixed>>;
 
     using tScalarPair = DNDS::ArrayPair<DNDS::ParArray<real, 1>>;
     using tScalar = decltype(tScalarPair::father);

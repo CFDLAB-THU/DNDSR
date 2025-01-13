@@ -13,6 +13,7 @@ namespace DNDS::Euler
     static const auto Seq234 = Eigen::seq(Eigen::fix<2>, Eigen::fix<dim + 1>);   \
     static const auto Seq34 = Eigen::seq(Eigen::fix<3>, Eigen::fix<dim + 1>);    \
     static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>); \
+    static const auto SeqG012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<gDim - 1>); \
     static const auto I4 = dim + 1;
 
     template <int nVarsFixed>
@@ -310,6 +311,24 @@ namespace DNDS::Euler
                 sqrSum += (this->operator[](i).array() * R.operator[](i).array()).colwise().sum().matrix();
             MPI::Allreduce(sqrSum.data(), sqrSumAll.data(), sqrSum.size(), DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
             return sqrSumAll;
+        }
+    };
+
+    template <int nVarsFixed, int gDim>
+    class ArrayGRADV : public CFV::tUGrad<nVarsFixed, gDim>
+    {
+    public:
+        using t_self = ArrayGRADV<nVarsFixed, gDim>;
+        void setConstant(real R)
+        {
+            for (index i = 0; i < this->Size(); i++)
+                this->operator[](i).setConstant(R);
+        }
+        template <class TR>
+        void setConstant(const TR &R)
+        {
+            for (index i = 0; i < this->Size(); i++)
+                this->operator[](i) = R;
         }
     };
 

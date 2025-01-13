@@ -754,6 +754,14 @@ namespace DNDS::Geom::Elem
             }
         }
 
+        auto GetQuadraturePointInfo(int iG)
+        {
+            tPoint pParam{0, 0, 0};
+            t_real w;
+            GetQuadraturePoint(ps, int_scheme, iG, pParam, w);
+            return std::make_tuple(pParam, w);
+        }
+
         t_index GetNumPoints() { return int_scheme; }
     };
 

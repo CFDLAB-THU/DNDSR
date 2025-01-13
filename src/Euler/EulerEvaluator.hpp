@@ -64,6 +64,9 @@ namespace DNDS::Euler
         typedef ArrayRECV<nVarsFixed> TRec;
         typedef ArrayRECV<1> TScalar;
 
+        typedef CFV::VariationalReconstruction<gDim> TVFV;
+        typedef ssp<CFV::VariationalReconstruction<gDim>> TpVFV;
+
     public:
         // static const int gdim = 2; //* geometry dim
 
@@ -110,6 +113,7 @@ namespace DNDS::Euler
 
         // ArrayVDOF<25> dRdUrec;
         // ArrayVDOF<25> dRdb;
+        ArrayGRADV<nVarsFixed, gDim> uGradBuf;
 
         Eigen::Vector<real, -1> fluxWallSum;
         std::vector<TU> fluxBnd;
@@ -125,6 +129,8 @@ namespace DNDS::Euler
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             nVars = getNVars(model); //! // TODO: dynamic setting it
+
+            vfv->BuildUGrad(uGradBuf, nVars);
 
             this->settings.jsonSettings = nJsonSettings;
             this->settings.ReadWriteJSON(settings.jsonSettings, nVars, true);
@@ -193,7 +199,12 @@ namespace DNDS::Euler
             real CFL, real &dtMinall, real MaxDt = 1,
             bool UseLocaldt = false);
 
-        static const uint64_t RHS_Ignore_Viscosity = 0x1ull;
+        static const uint64_t RHS_Ignore_Viscosity = 0x1ull << 0;
+        static const uint64_t RHS_Dont_Update_Integration = 0x1ull << 1;
+        static const uint64_t RHS_Dont_Record_Bud_Flux = 0x1ull << 2;
+        static const uint64_t RHS_Direct_2nd_Rec = 0x1ull << 8;
+        static const uint64_t RHS_Direct_2nd_Rec_1st_Conv = 0x1ull << 9;
+
         /**
          * @brief
          * \param rhs overwritten;

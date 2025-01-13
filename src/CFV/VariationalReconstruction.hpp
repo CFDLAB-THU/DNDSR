@@ -163,6 +163,8 @@ namespace DNDS::CFV
             return Geom::Elem::Quadrature{e, 1};
         }
 
+        real GetFaceParamArea(index iFace) { return std::get<1>(this->GetFaceQuadO1(iFace).GetQuadraturePointInfo(0)); }
+
         Geom::Elem::Quadrature GetCellQuad(index iCell) const
         {
             auto e = mesh->GetCellElement(iCell);
@@ -174,6 +176,8 @@ namespace DNDS::CFV
             auto e = mesh->GetCellElement(iCell);
             return Geom::Elem::Quadrature{e, 1};
         }
+
+        real GetCellParamVol(index iCell) { return std::get<1>(this->GetCellQuadO1(iCell).GetQuadraturePointInfo(0)); }
 
         bool CellIsFaceBack(index iCell, index iFace) const
         {
@@ -914,52 +918,93 @@ namespace DNDS::CFV
         }
 
         template <int nVarsFixed = 1>
-        void BuildUDof(tUDof<nVarsFixed> &u, int nVars)
+        void BuildUDof(tUDof<nVarsFixed> &u, int nVars, bool buildSon = true, bool buildTrans = true)
         {
             DNDS_MAKE_SSP(u.father, mpi);
             DNDS_MAKE_SSP(u.son, mpi);
             u.father->Resize(mesh->NumCell(), nVars, 1);
-            u.son->Resize(mesh->NumCellGhost(), nVars, 1);
-            u.TransAttach();
-            u.trans.BorrowGGIndexing(mesh->cell2node.trans);
-            u.trans.createMPITypes();
-            u.trans.initPersistentPull();
-            u.trans.initPersistentPush();
+            if (buildSon)
+                u.son->Resize(mesh->NumCellGhost(), nVars, 1);
+            if (buildTrans)
+            {
+                DNDS_assert(buildSon);
+                u.TransAttach();
+                u.trans.BorrowGGIndexing(mesh->cell2node.trans);
+                u.trans.createMPITypes();
+                u.trans.initPersistentPull();
+                u.trans.initPersistentPush();
+            }
 
-            for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+            for (index iCell = 0; iCell < u.Size(); iCell++)
                 u[iCell].setZero();
         }
 
         template <int nVarsFixed>
-        void BuildURec(tURec<nVarsFixed> &u, int nVars)
+        void BuildURec(tURec<nVarsFixed> &u, int nVars, bool buildSon = true, bool buildTrans = true)
         {
             using namespace Geom::Base;
             int maxNDOF = GetNDof<dim>(settings.maxOrder);
             DNDS_MAKE_SSP(u.father, mpi);
             DNDS_MAKE_SSP(u.son, mpi);
             u.father->Resize(mesh->NumCell(), maxNDOF - 1, nVars);
-            u.son->Resize(mesh->NumCellGhost(), maxNDOF - 1, nVars);
-            u.TransAttach();
-            u.trans.BorrowGGIndexing(mesh->cell2node.trans);
-            u.trans.createMPITypes();
-            u.trans.initPersistentPull();
-            u.trans.initPersistentPush();
+            if (buildSon)
+                u.son->Resize(mesh->NumCellGhost(), maxNDOF - 1, nVars);
+            if (buildTrans)
+            {
+                DNDS_assert(buildSon);
+                u.TransAttach();
+                u.trans.BorrowGGIndexing(mesh->cell2node.trans);
+                u.trans.createMPITypes();
+                u.trans.initPersistentPull();
+                u.trans.initPersistentPush();
+            }
 
-            for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+            for (index iCell = 0; iCell < u.Size(); iCell++)
                 u[iCell].setZero();
         }
 
-        void BuildScalar(tScalarPair &u)
+        template <int nVarsFixed>
+        void BuildUGrad(tUGrad<nVarsFixed, dim> &u, int nVars, bool buildSon = true, bool buildTrans = true)
+        {
+            using namespace Geom::Base;
+            DNDS_MAKE_SSP(u.father, mpi);
+            DNDS_MAKE_SSP(u.son, mpi);
+            u.father->Resize(mesh->NumCell(), dim, nVars);
+            if (buildSon)
+                u.son->Resize(mesh->NumCellGhost(), dim, nVars);
+            if (buildTrans)
+            {
+                DNDS_assert(buildSon);
+                u.TransAttach();
+                u.trans.BorrowGGIndexing(mesh->cell2node.trans);
+                u.trans.createMPITypes();
+                u.trans.initPersistentPull();
+                u.trans.initPersistentPush();
+            }
+
+            for (index iCell = 0; iCell < u.Size(); iCell++)
+                u[iCell].setZero();
+        }
+
+        void BuildScalar(tScalarPair &u, bool buildSon = true, bool buildTrans = true)
         {
             DNDS_MAKE_SSP(u.father, mpi);
             DNDS_MAKE_SSP(u.son, mpi);
             u.father->Resize(mesh->NumCell());
-            u.son->Resize(mesh->NumCellGhost());
-            u.TransAttach();
-            u.trans.BorrowGGIndexing(mesh->cell2node.trans);
-            u.trans.createMPITypes();
-            u.trans.initPersistentPull();
-            u.trans.initPersistentPush();
+            if (buildSon)
+                u.son->Resize(mesh->NumCellGhost());
+            if (buildTrans)
+            {
+                DNDS_assert(buildSon);
+                u.TransAttach();
+                u.trans.BorrowGGIndexing(mesh->cell2node.trans);
+                u.trans.createMPITypes();
+                u.trans.initPersistentPull();
+                u.trans.initPersistentPush();
+            }
+
+            for (index iCell = 0; iCell < u.Size(); iCell++)
+                u(iCell, 0) = 0;
         }
 
         template <int nVarsFixed = 5>
@@ -999,6 +1044,21 @@ namespace DNDS::CFV
                                 const TFBoundaryDiff<nVarsFixed> &FBoundaryDiff);
 
     public:
+        /**
+         * \brief fallback reconstruction method,
+         * explicit 2nd order FV reconstruction
+         * \param uRec output, reconstructed gradients
+         * \param u input, mean values
+         * \param FBoundary see TFBoundary
+         * \param method currently 1==2nd-order-GaussGreen
+         */
+        template <int nVarsFixed = 5>
+        void DoReconstruction2ndGrad(
+            tUGrad<nVarsFixed, dim> &uRec,
+            tUDof<nVarsFixed> &u,
+            const TFBoundary<nVarsFixed> &FBoundary,
+            int method);
+
         /**
          * \brief fallback reconstruction method,
          * explicit 2nd order FV reconstruction
