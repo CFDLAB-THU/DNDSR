@@ -1211,3 +1211,96 @@ namespace DNDS::CFV
             bool putIntoNew = false);
     };
 }
+
+#define DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(dim, nVarsFixed, ext)          \
+    namespace DNDS::CFV                                                                         \
+    {                                                                                           \
+        ext template void VariationalReconstruction<dim>::DoReconstruction2ndGrad<nVarsFixed>(  \
+            tUGrad<nVarsFixed, dim> & uRec,                                                     \
+            tUDof<nVarsFixed> &u,                                                               \
+            const TFBoundary<nVarsFixed> &FBoundary,                                            \
+            int method);                                                                        \
+                                                                                                \
+        ext template void VariationalReconstruction<dim>::DoReconstruction2nd<nVarsFixed>(      \
+            tURec<nVarsFixed> & uRec,                                                           \
+            tUDof<nVarsFixed> &u,                                                               \
+            const TFBoundary<nVarsFixed> &FBoundary,                                            \
+            int method,                                                                         \
+            const std::vector<int> &mask);                                                      \
+                                                                                                \
+        ext template void VariationalReconstruction<dim>::DoReconstructionIter<nVarsFixed>(     \
+            tURec<nVarsFixed> & uRec,                                                           \
+            tURec<nVarsFixed> &uRecNew,                                                         \
+            tUDof<nVarsFixed> &u,                                                               \
+            const TFBoundary<nVarsFixed> &FBoundary,                                            \
+            bool putIntoNew,                                                                    \
+            bool recordInc,                                                                     \
+            bool uRecIsZero);                                                                   \
+                                                                                                \
+        ext template void VariationalReconstruction<dim>::DoReconstructionIterDiff<nVarsFixed>( \
+            tURec<nVarsFixed> & uRec,                                                           \
+            tURec<nVarsFixed> &uRecDiff,                                                        \
+            tURec<nVarsFixed> &uRecNew,                                                         \
+            tUDof<nVarsFixed> &u,                                                               \
+            const TFBoundaryDiff<nVarsFixed> &FBoundaryDiff);                                   \
+                                                                                                \
+        ext template void VariationalReconstruction<dim>::DoReconstructionIterSOR<nVarsFixed>(  \
+            tURec<nVarsFixed> & uRec,                                                           \
+            tURec<nVarsFixed> &uRecInc,                                                         \
+            tURec<nVarsFixed> &uRecNew,                                                         \
+            tUDof<nVarsFixed> &u,                                                               \
+            const TFBoundaryDiff<nVarsFixed> &FBoundaryDiff,                                    \
+            bool reverse);                                                                      \
+    }
+
+DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(2, 4, extern)
+DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(2, 5, extern)
+DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(2, 6, extern)
+DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(2, 7, extern)
+DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(2, Eigen::Dynamic, extern)
+DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, 5, extern)
+DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, 6, extern)
+DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, 7, extern)
+DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, Eigen::Dynamic, extern)
+
+#define DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(dim, nVarsFixed, ext)             \
+    namespace DNDS::CFV                                                                              \
+    {                                                                                                \
+        ext template void VariationalReconstruction<dim>::DoCalculateSmoothIndicator<nVarsFixed, 2>( \
+            tScalarPair & si, tURec<nVarsFixed> &uRec, tUDof<nVarsFixed> &u,                         \
+            const std::array<int, 2> &varsSee);                                                      \
+                                                                                                     \
+        ext template void VariationalReconstruction<dim>::DoCalculateSmoothIndicatorV1<nVarsFixed>(  \
+            tScalarPair & si, tURec<nVarsFixed> &uRec, tUDof<nVarsFixed> &u,                         \
+            const Eigen::Vector<real, nVarsFixed> &varsSee,                                          \
+            const TFPost<nVarsFixed> &FPost);                                                        \
+                                                                                                     \
+        ext template void VariationalReconstruction<dim>::DoLimiterWBAP_C(                           \
+            tUDof<nVarsFixed> &u,                                                                    \
+            tURec<nVarsFixed> &uRec,                                                                 \
+            tURec<nVarsFixed> &uRecNew,                                                              \
+            tURec<nVarsFixed> &uRecBuf,                                                              \
+            tScalarPair &si,                                                                         \
+            bool ifAll,                                                                              \
+            const tFMEig<nVarsFixed> &FM, const tFMEig<nVarsFixed> &FMI,                             \
+            bool putIntoNew);                                                                        \
+                                                                                                     \
+        ext template void VariationalReconstruction<dim>::DoLimiterWBAP_3(                           \
+            tUDof<nVarsFixed> &u,                                                                    \
+            tURec<nVarsFixed> &uRec,                                                                 \
+            tURec<nVarsFixed> &uRecNew,                                                              \
+            tURec<nVarsFixed> &uRecBuf,                                                              \
+            tScalarPair &si,                                                                         \
+            bool ifAll,                                                                              \
+            const tFMEig<nVarsFixed> &FM, const tFMEig<nVarsFixed> &FMI,                             \
+            bool putIntoNew);                                                                        \
+    }
+DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(2, 4, extern)
+DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(2, 5, extern)
+DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(2, 6, extern)
+DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(2, 7, extern)
+DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(2, Eigen::Dynamic, extern)
+DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(3, 5, extern)
+DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(3, 6, extern)
+DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(3, 7, extern)
+DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(3, Eigen::Dynamic, extern)

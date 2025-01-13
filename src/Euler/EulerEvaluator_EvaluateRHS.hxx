@@ -105,9 +105,11 @@ namespace DNDS::Euler
                     compressed);
                 return this->generateBoundaryValue(ULfixed, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, t, bType, true, 1);
             };
-            vfv->DoReconstruction2ndGrad(uGradBuf, u, FBoundary, settings.direct2ndRecMethod);
-            // uGradBuf.setConstant(0.0);
+            vfv->DoReconstruction2ndGrad(uGradBufNoLim, u, FBoundary, settings.direct2ndRecMethod);
+            uGradBufNoLim.trans.startPersistentPull(); // this can be safely put before LimiterUGradCall
+            this->LimiterUGrad(u, uGradBufNoLim, uGradBuf);
             uGradBuf.trans.startPersistentPull();
+            uGradBufNoLim.trans.waitPersistentPull(); // todo: utilize the uGradBufNoLim to match the implicit reconstruction's "useViscousLimited": false
             uGradBuf.trans.waitPersistentPull();
         }
 

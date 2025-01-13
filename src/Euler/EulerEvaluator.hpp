@@ -113,7 +113,7 @@ namespace DNDS::Euler
 
         // ArrayVDOF<25> dRdUrec;
         // ArrayVDOF<25> dRdb;
-        ArrayGRADV<nVarsFixed, gDim> uGradBuf;
+        ArrayGRADV<nVarsFixed, gDim> uGradBuf, uGradBufNoLim;
 
         Eigen::Vector<real, -1> fluxWallSum;
         std::vector<TU> fluxBnd;
@@ -131,6 +131,7 @@ namespace DNDS::Euler
             nVars = getNVars(model); //! // TODO: dynamic setting it
 
             vfv->BuildUGrad(uGradBuf, nVars);
+            vfv->BuildUGrad(uGradBufNoLim, nVars);
 
             this->settings.jsonSettings = nJsonSettings;
             this->settings.ReadWriteJSON(settings.jsonSettings, nVars, true);
@@ -336,6 +337,8 @@ namespace DNDS::Euler
             const tFCompareFieldWeight &FCompareFieldWeight = [](const Geom::tPoint &p, real t)
             { return 1.0; },
             real t = 0);
+
+        void LimiterUGrad(ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew);
 
         static const int EvaluateURecBeta_DEFAULT = 0x00;
         static const int EvaluateURecBeta_COMPRESS_TO_MEAN = 0x01;
@@ -1460,6 +1463,9 @@ namespace DNDS::Euler
             const tFCompareField &FCompareField,                                                                          \
             const tFCompareFieldWeight &FCompareFieldWeight,                                                              \
             real t);                                                                                                      \
+                                                                                                                          \
+        ext template void EulerEvaluator<model>::LimiterUGrad(                                                            \
+            ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew);       \
                                                                                                                           \
         ext template void EulerEvaluator<model>::EvaluateURecBeta(                                                        \
             ArrayDOFV<nVarsFixed> &u,                                                                                     \

@@ -1160,6 +1160,72 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, template <>
     )
+    void EulerEvaluator<model>::LimiterUGrad(ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        static const real safetyRatio = 1 - 1e-5;
+        static const real E_lb_eps = smallReal;
+
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        {
+            uGradNew[iCell] = uGrad[iCell];
+            auto c2f = mesh->cell2face[iCell];
+
+            TU_Batch uFaceInc;
+            uFaceInc.resize(nVars, c2f.size());
+            TU uOtherMin = u[iCell];
+            TU uOtherMax = u[iCell];
+            auto fEInternal = [](const TU &u) -> real
+            { return u(I4) - 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal); };
+            real eOtherMin, eOtherMax;
+            eOtherMin = eOtherMax = fEInternal(u[iCell]);
+            for (rowsize ic2f = 0; ic2f < c2f.size(); ic2f++)
+            {
+                index iFace = c2f[ic2f];
+                uFaceInc(Eigen::all, ic2f) =
+                    uGrad[iCell].transpose() *
+                    (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellQuadraturePPhys(iCell, -1))(SeqG012);
+                index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                if (iCellOther != UnInitIndex)
+                {
+                    uOtherMin = uOtherMin.array().min(u[iCellOther].array());
+                    uOtherMax = uOtherMin.array().max(u[iCellOther].array());
+                    eOtherMin = std::min(eOtherMin, fEInternal(u[iCellOther]));
+                    eOtherMax = std::max(eOtherMax, fEInternal(u[iCellOther]));
+                }
+            }
+
+            TU uFaceIncMax = uFaceInc.array().rowwise().maxCoeff();
+            TU uFaceIncMin = uFaceInc.array().rowwise().minCoeff();
+            TU alpha0;
+            alpha0.setConstant(nVars, 1.0);
+            alpha0 = alpha0.array().min(((uOtherMax - u[iCell]).array().abs() / (uFaceIncMax.array().abs() + verySmallReal)));
+            alpha0 = alpha0.array().min(((uOtherMin - u[iCell]).array().abs() / (uFaceIncMin.array().abs() + verySmallReal)));
+
+            uGradNew[iCell].array().rowwise() *= alpha0.array().transpose();
+            uFaceInc.array().colwise() *= alpha0.array();
+
+            // start PP
+
+            TU_Batch uFaceAlpha0 = uFaceInc.colwise() + u[iCell];
+            real minEFace =
+                (uFaceAlpha0(I4, Eigen::all).array() -
+                 0.5 * uFaceAlpha0(Seq123, Eigen::all).colwise().squaredNorm().array() / (uFaceAlpha0(0, Eigen::all).array() + verySmallReal))
+                    .minCoeff();
+            real eC = fEInternal(u[iCell]);
+            real deltaEFaceMin = minEFace - eC;
+            real alphaPP_E = 1.0;
+            if (deltaEFaceMin < 0)
+                alphaPP_E = std::min(alphaPP_E, std::abs(eC * (1 - E_lb_eps)) / (verySmallReal - deltaEFaceMin));
+            if (alphaPP_E < 1.0)
+                alphaPP_E *= safetyRatio;
+            uGradNew[iCell](Eigen::all, Seq01234) *= alphaPP_E;
+        }
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, template <>
+    )
     void EulerEvaluator<model>::EvaluateURecBeta(
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,
