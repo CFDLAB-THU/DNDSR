@@ -1332,6 +1332,11 @@ namespace DNDS::Euler
         TU ret;
         ret.resizeLike(UMeanXy);
         ret.setZero();
+        real dWallC;
+        if (ig < 0)
+            dWallC = dWall[iCell].mean();
+        else
+            dWallC = dWall[iCell][ig];
         if (Mode == 2)
             jacobian.setZero(UMeanXy.size(), UMeanXy.size());
 #ifdef DNDS_FV_EULEREVALUATOR_SOURCE_TERM_ZERO
@@ -1392,7 +1397,7 @@ namespace DNDS::Euler
             real mufPhy, muf;
             mufPhy = muf = muEff(UMeanXy, T);
 
-            real d = std::min(dWall[iCell][ig], std::pow(veryLargeReal, 1. / 6.));
+            real d = std::min(dWallC, std::pow(veryLargeReal, 1. / 6.));
             TU retInc;
             retInc.setZero(UMeanXy.size());
             auto sourceCaller = [&](int mode)
@@ -1439,7 +1444,7 @@ namespace DNDS::Euler
             //     for (auto f : mesh->cell2face[iCell])
             //         if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(f)) == BCWall)
             //         {
-            //             real d1 = dWall[iCell][ig];
+            //             real d1 = dWallC;
             //             real rhoOmegaaaWall = mufPhy / sqr(d1) * 800;
             //             UMeanXyFixed(I4 + 2) = rhoOmegaaaWall;
             //         }
@@ -1447,11 +1452,11 @@ namespace DNDS::Euler
             auto sourceCaller = [&](int mode)
             {
                 if (settings.ransModel == RANSModel::RANS_KOSST)
-                    RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWall[iCell][ig], retInc, mode);
+                    RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, retInc, mode);
                 else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                    RANS::GetSource_KOWilcox<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWall[iCell][ig], retInc, mode);
+                    RANS::GetSource_KOWilcox<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, retInc, mode);
                 else if (settings.ransModel == RANSModel::RANS_RKE)
-                    RANS::GetSource_RealizableKe<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWall[iCell][ig], retInc, mode);
+                    RANS::GetSource_RealizableKe<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, retInc, mode);
             };
 
             if (Mode == 0)

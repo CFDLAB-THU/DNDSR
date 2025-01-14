@@ -611,7 +611,6 @@ namespace DNDS::ODE
                 frhs(rhsbuf[0], x, dTau, iter, 1.0, 0);
 
                 rhs.setConstant(0.0);
-                rhs.addTo(x, -1. / dt);
                 rhs.addTo(xLast, BDFCoefs(1) / dt);
                 // std::cout << "add " << BDFCoefs(1) << " " << "last" << std::endl;
                 if (prevSiz)
@@ -622,6 +621,7 @@ namespace DNDS::ODE
                     }
                 resOther = rhs;
                 rhs.addTo(rhsbuf[0], BDFCoefs(0));
+                rhs.addTo(x, -1. / dt);
                 fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(0), xinc, iter, 0);
                 //* xinc = (I/dtau-A*alphaDiag)\rhs
 

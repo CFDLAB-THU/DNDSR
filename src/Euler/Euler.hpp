@@ -330,6 +330,47 @@ namespace DNDS::Euler
             for (index i = 0; i < this->Size(); i++)
                 this->operator[](i) = R;
         }
+
+        void operator+=(t_self &R)
+        {
+            for (index i = 0; i < this->Size(); i++)
+                this->operator[](i) += R.operator[](i);
+        }
+        void operator-=(t_self &R)
+        {
+            for (index i = 0; i < this->Size(); i++)
+                this->operator[](i) -= R.operator[](i);
+        }
+        void operator*=(real R)
+        {
+            for (index i = 0; i < this->Size(); i++)
+                this->operator[](i) *= R;
+        }
+        void operator*=(std::vector<real> &R)
+        {
+            DNDS_assert(R.size() >= this->father->Size());
+            for (index i = 0; i < this->father->Size(); i++)
+                this->operator[](i) *= R[i];
+        }
+        void operator*=(ArrayDOFV<1> &R)
+        {
+            for (index i = 0; i < this->Size(); i++)
+                this->operator[](i) *= R[i](0);
+        }
+        void operator*=(const Eigen::Array<real, 1, nVarsFixed> &R)
+        {
+            for (index i = 0; i < this->Size(); i++)
+                this->operator[](i).array().rowwise() *= R;
+        }
+        void operator=(t_self &R)
+        {
+            // for (index i = 0; i < this->Size(); i++)
+            //     this->operator[](i) = R.operator[](i);
+            DNDS_assert(R.father->RawDataVector().size() == this->father->RawDataVector().size());
+            std::copy(R.father->RawDataVector().begin(), R.father->RawDataVector().end(), this->father->RawDataVector().begin());
+            DNDS_assert(R.son->RawDataVector().size() == this->son->RawDataVector().size());
+            std::copy(R.son->RawDataVector().begin(), R.son->RawDataVector().end(), this->son->RawDataVector().begin());
+        }
     };
 
     template <int nVarsFixed>

@@ -65,9 +65,9 @@ namespace DNDS::Euler
         ssp<Geom::UnstructuredMeshSerialRW> reader, readerBnd;
         ssp<EulerEvaluator<model>> pEval;
 
-        ArrayDOFV<nVarsFixed> u, uInc, uIncRHS, uTemp, rhsTemp, wAveraged, uAveraged;
-        ArrayRECV<nVarsFixed> uRec, uRecNew, uRecNew1, uRecOld, uRec1, uRecInc, uRecInc1, uRecB, uRecB1;
-        JacobianDiagBlock<nVarsFixed> JD, JD1, JSource, JSource1;
+        ArrayDOFV<nVarsFixed> u, uIncBufODE, rhsTemp1, uTemp, uMG1, uMG1Init, rhsMG1, rhsTemp, wAveraged, uAveraged;
+        ArrayRECV<nVarsFixed> uRec, uRecLimited, uRecNew, uRecNew1, uRecOld, uRec1, uRecInc, uRecInc1, uRecB, uRecB1;
+        JacobianDiagBlock<nVarsFixed> JD, JD1, JDTmp, JSource, JSource1, JSourceTmp;
         ssp<JacobianLocalLU<nVarsFixed>> JLocalLU;
         ArrayDOFV<1> alphaPP, alphaPP1, betaPP, betaPP1, alphaPP_tmp, dTauTmp;
 
@@ -436,6 +436,10 @@ namespace DNDS::Euler
                 int nSgsConsoleCheck = 100;
                 int nGmresConsoleCheck = 100;
                 bool initWithLastURecInc = false;
+                int multiGridLP = 0;
+                int multiGridLPInnerNIter = 4;
+                int multiGridLPStartIter = 0;
+                int multiGridLPInnerNSee = 10;
                 Direct::DirectPrecControl directPrecControl;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     LinearSolverControl,
@@ -444,6 +448,7 @@ namespace DNDS::Euler
                     nGmresSpace, nGmresIter,
                     nSgsConsoleCheck, nGmresConsoleCheck,
                     initWithLastURecInc,
+                    multiGridLP, multiGridLPInnerNIter, multiGridLPStartIter, multiGridLPInnerNSee,
                     directPrecControl)
             } linearSolverControl;
 
@@ -954,9 +959,12 @@ namespace DNDS::Euler
             vfv->ConstructRecCoeff();
 
             vfv->BuildUDof(u, nVars);
-            vfv->BuildUDof(uInc, nVars);
-            vfv->BuildUDof(uIncRHS, nVars);
+            vfv->BuildUDof(uIncBufODE, nVars);
+            vfv->BuildUDof(rhsTemp1, nVars);
             vfv->BuildUDof(uTemp, nVars);
+            vfv->BuildUDof(uMG1, nVars);
+            vfv->BuildUDof(uMG1Init, nVars);
+            vfv->BuildUDof(rhsMG1, nVars);
             vfv->BuildUDof(rhsTemp, nVars);
             if (config.timeAverageControl.enabled)
             {
@@ -967,6 +975,7 @@ namespace DNDS::Euler
             vfv->BuildURec(uRec, nVars);
             if (config.timeMarchControl.odeCode == 401)
                 vfv->BuildURec(uRec1, nVars);
+            vfv->BuildURec(uRecLimited, nVars);
             vfv->BuildURec(uRecNew, nVars);
             vfv->BuildURec(uRecNew1, nVars);
             vfv->BuildURec(uRecB, nVars);
@@ -1006,6 +1015,8 @@ namespace DNDS::Euler
                 JD1.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
                 JSource1.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
             }
+            JDTmp.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
+            JSourceTmp.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
             /*******************************/
             // ** initialize output Array
 

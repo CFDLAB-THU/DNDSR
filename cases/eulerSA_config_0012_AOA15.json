@@ -8,7 +8,7 @@
         "tEnd": 3e+200
     },
     "convergenceControl": {
-        "nTimeStepInternal": 10000,
+        "nTimeStepInternal": 30000,
         "rhsThresholdInternal": 1e-8,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -40,7 +40,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2-CG1",
+        "outPltName": "../data/out/NACA0012_H2-CG1-Q-RM2-walldist",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -85,7 +85,8 @@
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
-        "subs2ndOrder": 11,
+        "subs2ndOrder": 1,
+        "subs2ndOrderGGScheme": 0,
         "baseSettings": {
             "localOrientation": true,
             "anisotropicLengths": false
@@ -114,13 +115,15 @@
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 2,
+        "jacobiCode": 0,
         "sgsIter": 0,
         "sgsWithRec": 0,
         "gmresCode": 1,
         "gmresScale": 2,
         "nGmresSpace": 5,
         "nGmresIter": 2,
+        "multiGridLP": 0,
+        "multiGridLPInnerNIter": 4,
         "directPrecControl": {
             "useDirectPrec": true,
             "iluCode": 2,
@@ -137,13 +140,15 @@
         "useRoeJacobian": false,
         "riemannSolverType": "Roe_M1",
         "uRecBetaCompressPower": 1,
-        "wallDistScheme": 3,
+        "wallDistScheme": 1,
         "wallDistExection": 5,
         "wallDistRefineMax": 0.01,
         "wallDistIter": 1000,
         "wallDistLinSolver": 0,
         "wallDistResTol": 1e-4,
-        "wallDistPoissonP": 10,
+        "wallDistPoissonP": 8,
+        "ransUseQCR": 0,
+        "ransSARotCorrection": 1,
         "usePrimGradInVisFlux": 0,
         // "ransForce2nd": 1,
         "constMassForce": [
@@ -177,11 +182,11 @@
         },
         "farFieldStaticValue": [
             1,
-            0.965925826289068,
-            0.258819045102521,
+            1,
+            0,
             0,
             79.8650793650794,
-            1.3
+            3
         ],
         // "farFieldStaticValue": [
         //     10000,
@@ -200,7 +205,23 @@
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4
-        }
+        },
+        "cLDriverSettings": {
+            "AOAInit": 5.0,
+            "AOAAxis": "z",
+            "CL0Axis": "y",
+            "CD0Axis": "x",
+            "refArea": 1.0,
+            "refDynamicPressure": 0.5,
+            "targetCL": 1.0,
+            // "nIterStartDrive": 1000,
+            "nIterConvergeMin": 100,
+            "CLconvergeThreshold": 0.001,
+            "CLconvergeWindow": 10
+        },
+        "cLDriverBCNames": [
+            "WALL"
+        ]
     },
     "restartState": {
         "iStep": 1,
@@ -209,3 +230,9 @@
         "lastRestartFile": "../data/out/NACA0012_H2__C_p16_restart_test1.dir"
     }
 }
+// 0.000000e+00,-1.756971e-01, 7.114951e-01, 0.000000e+00, 1.208148e-20, 4.131280e-02: sa-neg
+// 0.000000e+00,-1.757064e-01, 7.115164e-01, 0.000000e+00, 1.055619e-20, 4.131428e-02: sa-neg-R
+// 0.000000e+00,-1.715009e-01, 6.981978e-01, 0.000000e+00, 1.434143e-20, 4.072343e-02: sa-neg-QCR-R
+// 0.000000e+00,-1.715276e-01, 6.983111e-01, 0.000000e+00, 1.084698e-20, 4.102179e-02: sa-neg-QCR-R 3far
+// 0.000000e+00,-1.833759e-01, 7.312974e-01, 0.000000e+00, 1.426846e-20, 3.244254e-02: sa-neg-R 3far RM2
+// 0.000000e+00,-1.801070e-01, 7.207952e-01, 0.000000e+00, 1.188829e-20, 3.204329e-02: sa-neg-QCR-R 3far RM2

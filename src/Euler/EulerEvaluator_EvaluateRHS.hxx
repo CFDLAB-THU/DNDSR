@@ -107,6 +107,7 @@ namespace DNDS::Euler
             };
             vfv->DoReconstruction2ndGrad(uGradBufNoLim, u, FBoundary, settings.direct2ndRecMethod);
             uGradBufNoLim.trans.startPersistentPull(); // this can be safely put before LimiterUGradCall
+            // uGradBuf = uGradBufNoLim;
             this->LimiterUGrad(u, uGradBufNoLim, uGradBuf);
             uGradBuf.trans.startPersistentPull();
             uGradBufNoLim.trans.waitPersistentPull(); // todo: utilize the uGradBufNoLim to match the implicit reconstruction's "useViscousLimited": false
@@ -593,6 +594,7 @@ namespace DNDS::Euler
                         PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
                         if (direct2ndRec)
                             GradU(SeqG012, Eigen::all) = uGradBuf[iCell];
+                        else
                         {
                             if constexpr (gDim == 2)
                                 GradU({0, 1}, Eigen::all) =

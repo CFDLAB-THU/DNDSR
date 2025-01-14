@@ -1202,8 +1202,8 @@ namespace DNDS::Euler
             alpha0 = alpha0.array().min(((uOtherMax - u[iCell]).array().abs() / (uFaceIncMax.array().abs() + verySmallReal)));
             alpha0 = alpha0.array().min(((uOtherMin - u[iCell]).array().abs() / (uFaceIncMin.array().abs() + verySmallReal)));
 
-            uGradNew[iCell].array().rowwise() *= alpha0.array().transpose();
-            uFaceInc.array().colwise() *= alpha0.array();
+            // uGradNew[iCell].array().rowwise() *= alpha0.array().transpose();
+            // uFaceInc.array().colwise() *= alpha0.array();
 
             // start PP
 

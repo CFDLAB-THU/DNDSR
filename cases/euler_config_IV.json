@@ -4,11 +4,11 @@
         "nTimeStep": 100000,
         "steadyQuit": false,
         "tEnd": 0.05,
-        "odeCode": 0,
+        "odeCode": 1,
         // "odeCode": 401,
         "odeSetting1": 0.5,
         "odeSetting2": 0,
-        "odeSetting3": 1.2,
+        "odeSetting3": 1.3,
         "odeSetting4": 0,
         "rhsFPPMode": 2,
         "rhsFPPScale": 1,
@@ -79,11 +79,12 @@
         "recLinearScheme": 2,
         "nGmresSpace": 5,
         "nGmresIter": 1,
+        // "gmresRecScale": 0,
         "fpcgResetReport": 1,
-        "fpcgResetThres": 0.6,
+        "fpcgResetThres": 0.2,
         // "fpcgResetScheme": 1,
         "recThreshold": 1e-010,
-        "nRecConsolCheck": 10,
+        "nRecConsolCheck": 1,
         "nRecMultiplyForZeroedGrad": 1000,
         "storeRecInc": true,
         "dampRecIncDTau": false
@@ -97,8 +98,8 @@
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 1,
-        "intOrder": 1,
+        "maxOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": false,
         "jacobiRelax": 1,
         "SORInstead": true,
@@ -123,18 +124,21 @@
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 0,
-        "sgsIter": 0,
+        "jacobiCode": 2,
+        "sgsIter": 5,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
-        "gmresCode": 1,
+        "gmresCode": 0,
         "nGmresSpace": 5,
         "nGmresIter": 1,
         "initWithLastURecInc": false,
+        "multiGridLP": 1,
+        "multiGridLPInnerNIter": 4,
         "directPrecControl": {
-            "useDirectPrec": false,
+            "useDirectPrec": true,
             "iluCode": 2,
-            "orderingCode": 4
+            "orderingCode": 4,
+            "_tail": 0
         }
     },
     "others": {
@@ -167,12 +171,19 @@
             0.0,
             0.0
         ],
+        // "farFieldStaticValue": [
+        //     1e-10,
+        //     1e-10,
+        //     1e-10,
+        //     0,
+        //     3.5e-10
+        // ], // ! this is for super-low ref value, bad for gmres scaling
         "farFieldStaticValue": [
-            1e-10,
-            1e-10,
-            1e-10,
+            1,
+            1,
+            1,
             0,
-            3.5e-10
+            3.5
         ],
         "idealGasProperty": {
             "gamma": 1.4,
