@@ -3,18 +3,26 @@ from dash import dcc, html, Input, Output, State, Dash
 import pandas as pd
 import plotly.express as px
 import math
+import os, argparse, re
 
 app = Dash(__name__)
 
-# Path to the file being monitored
-file_path = "../data/out/NACA0012/NACA0012-AOA15_.log"
+parser = argparse.ArgumentParser(
+    description="view residual history for a steady computation"
+)
+parser.add_argument("-p", "--prefix", default="data/out/", type=str)
 
 
-# Path to the CSV file
-csv_file_path = file_path
+args = parser.parse_args()
+print(args)
+
+
+#######
+
 
 # Initialize Dash app
 app = dash.Dash(__name__)
+
 
 # Layout
 app.layout = html.Div(
@@ -27,14 +35,59 @@ app.layout = html.Div(
         ),
         html.Div(
             [
-                html.Label("Select a column:", style={"font-weight": "bold"}),
-                dcc.Dropdown(id="column-dropdown", placeholder="Select a column", value="res0"),
+                html.Div(
+                    style={
+                        "width": "100%",
+                        "height": "10vh",
+                        "display": "block",
+                        "vertical-align": "top",
+                        "horizontal-align": "right",
+                    },
+                ),
+                html.Label(
+                    "Select a file:",
+                    style={
+                        "font-weight": "bold",
+                        "vertical-align": "bottom",
+                        "align": "center",
+                        "display": "flex",
+                        "padding-bottom": "1em",
+                        "padding-top": "1em",
+                    },
+                ),
+                dcc.Dropdown(id="file-dropdown", placeholder="Select a log file"),
+                html.Label(
+                    "Select a column:",
+                    style={
+                        "font-weight": "bold",
+                        "vertical-align": "bottom",
+                        "align": "center",
+                        "display": "flex",
+                        "padding-bottom": "1em",
+                        "padding-top": "1em",
+                    },
+                ),
+                dcc.Dropdown(
+                    id="column-dropdown", placeholder="Select a column", value="res0"
+                ),
+                dcc.Checklist(
+                    ["Log Y"],
+                    ["Log Y"],
+                    id="checklist_0",
+                    style={
+                        "display": "flex",
+                        "padding-top": "1em",
+                        "padding-bottom": "1em",
+                    },
+                ),
             ],
             style={
                 "width": "20%",
+                "height": "100%",
                 "display": "inline-block",
-                "vertical-align": "top",
+                "vertical-align": "center",
                 "margin-left": "5px",
+                "margin": "10px",
             },
         ),
         dcc.Interval(
@@ -47,12 +100,48 @@ app.layout = html.Div(
 # Callback to update dropdown options
 @app.callback(
     Output("column-dropdown", "options"),
+    [
+        Input("file-dropdown", "value"),
+        # Input("update-interval", "n_intervals"), // no need always update
+    ],
+)
+def update_dropdown_options(file_dropdown_value):
+    try:
+        df = pd.read_csv(file_dropdown_value)
+        options = [{"label": col, "value": col} for col in df.columns]
+        print(f"New Column Options:\n {df.columns}")
+        return options
+    except Exception as e:
+        return []  # Handle error, e.g., file not found or empty file
+
+
+# Callback to update dropdown options
+@app.callback(
+    Output("file-dropdown", "options"),
     Input("update-interval", "n_intervals"),
 )
-def update_dropdown_options(_):
+def update_dropdown_options(update_n_intervals):
     try:
-        df = pd.read_csv(csv_file_path)
-        options = [{"label": col, "value": col} for col in df.columns]
+        names = os.listdir(args.prefix)
+        names = filter(lambda x: re.match(r".*\.log", x), names)
+        fileDirs = {}
+
+        for name in names:
+            namefull = os.path.join(args.prefix, name)
+            stat = os.stat(namefull)
+            fileDirs[namefull] = stat.st_mtime  # sort with mtime or ctime
+            # print(stat)
+
+        fileDirsSorted = sorted(
+            fileDirs.items(), key=lambda x: x[1], reverse=True
+        )  # latest first
+        # print(fileDirsSorted)
+        # print(update_n_intervals)
+
+        options = [
+            {"label": os.path.split(fileDir[0])[1], "value": fileDir[0]}
+            for fileDir in fileDirsSorted
+        ]
         return options
     except Exception as e:
         return []  # Handle error, e.g., file not found or empty file
@@ -61,15 +150,23 @@ def update_dropdown_options(_):
 # Callback to update graph
 @app.callback(
     Output("line-plot", "figure"),
-    [Input("column-dropdown", "value"), Input("update-interval", "n_intervals")],
+    [
+        Input("file-dropdown", "value"),
+        Input("column-dropdown", "value"),
+        Input("update-interval", "n_intervals"),
+        Input("checklist_0", "value"),
+    ],
     State("line-plot", "relayoutData"),
 )
-def update_graph(selected_column, _, relayout_data):
+def update_graph(selected_file, selected_column, _, checklist_0, relayout_data):
     try:
-        df = pd.read_csv(csv_file_path)
+        df = pd.read_csv(selected_file)
         if selected_column and selected_column in df.columns:
             fig = px.line(
-                df, y=selected_column, title=f"Plot of {selected_column}", log_y=True
+                df,
+                y=selected_column,
+                title=f"Plot of {selected_column}",
+                log_y=("Log Y" in checklist_0),
             )
             if (
                 relayout_data
@@ -84,7 +181,7 @@ def update_graph(selected_column, _, relayout_data):
                     + 1e-200
                 )
             else:
-                vmax= df[selected_column].max()
+                vmax = df[selected_column].max()
                 vmin = df[selected_column].min()
                 range_value = (vmax - vmin) / abs(abs(vmax) + abs(vmin) + 1e-200)
 
