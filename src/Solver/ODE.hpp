@@ -77,9 +77,9 @@ namespace DNDS::ODE
 
                 frhs(rhsbuf[0], x, dTau, iter, 1, 0);
                 rhs = xLast;
-                rhs -= x;
                 rhs *= 1.0 / dt;
                 resOther = rhs;
+                rhs.addTo(x, -1. / dt);
                 rhs += rhsbuf[0]; // crhs = rhs + (x_i - x_j) / dt
 
                 fsolve(x, rhs, resOther, dTau, dt, 1.0, xinc, iter, 0);
@@ -227,11 +227,11 @@ namespace DNDS::ODE
 
                     // rhsbuf[0] = rhs;
                     rhs = xLast;
-                    rhs -= x;
                     rhs *= 1.0 / dt;
                     for (int jB = 0; jB < iB; jB++)
                         rhs.addTo(rhsbuf[jB], butcherA(iB, jB)); // crhs = rhs + (x_i - x_j) / dt
                     resOther = rhs;
+                    rhs.addTo(x, -1. / dt);
                     rhs.addTo(rhsbuf[iB], butcherA(iB, iB));
 
                     fsolve(x, rhs, resOther, dTau, dt, butcherA(iB, iB), xinc, iter, 0);
@@ -350,7 +350,6 @@ namespace DNDS::ODE
                 frhs(rhsbuf[0], x, dTau, iter, 1.0, 0);
 
                 rhs.setConstant(0.0);
-                rhs.addTo(x, -1. / dt);
                 rhs.addTo(xLast, BDFCoefs(kCurrent - 1, 1) / dt);
                 // std::cout << "add " << BDFCoefs(kCurrent - 1, 1) << " " << "last" << std::endl;
                 if (prevSiz)
@@ -360,6 +359,7 @@ namespace DNDS::ODE
                         rhs.addTo(xPrevs[mod(iPrev + prevStart, prevSiz)], BDFCoefs(kCurrent - 1, 2 + iPrev) / dt);
                     }
                 resOther = rhs;
+                rhs.addTo(x, -1. / dt);
                 rhs.addTo(rhsbuf[0], BDFCoefs(kCurrent - 1, 0));
                 fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(kCurrent - 1, 0), xinc, iter, 0);
                 //* xinc = (I/dtau-A*alphaDiag)\rhs
@@ -453,9 +453,9 @@ namespace DNDS::ODE
                         rhs.addTo(xPrevs[mod(iPrev + prevStart, prevSiz)], BDFCoefs(kCurrent - 1, 2 + iPrev) / dt);
                     }
                 falphaLimSource(rhs, 0); // non-rhs part of residual, fixed with alpha too
-                rhs.addTo(x, -1. / dt);
                 rhs.addTo(xLast, 1 / dt);
                 resOther = rhs;
+                rhs.addTo(x, -1. / dt);
                 rhs.addTo(rhs, BDFCoefs(kCurrent - 1, 0));
                 fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(kCurrent - 1, 0), xinc, iter, 0);
                 //* xinc = (I/dtau-A*alphaDiag)\rhs
@@ -620,8 +620,8 @@ namespace DNDS::ODE
                         rhs.addTo(xPrevs[mod(iPrev + prevStart, prevSiz)], BDFCoefs(2 + iPrev) / dt);
                     }
                 resOther = rhs;
-                rhs.addTo(rhsbuf[0], BDFCoefs(0));
                 rhs.addTo(x, -1. / dt);
+                rhs.addTo(rhsbuf[0], BDFCoefs(0));
                 fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(0), xinc, iter, 0);
                 //* xinc = (I/dtau-A*alphaDiag)\rhs
 
@@ -759,9 +759,9 @@ namespace DNDS::ODE
                     0);
 
                 rhs = xBase;
-                rhs.addTo(x, -1. / dt);
                 // rhs.addTo(xLast, 1 / dt); // 0 because xBase includes xLast/dt part
                 resOther = rhs;
+                rhs.addTo(x, -1. / dt);
                 rhs.addTo(rhsbuf[0], BDFCoefs(0));
 
                 fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(0), xinc, iter, 0);
@@ -972,9 +972,9 @@ namespace DNDS::ODE
                     fdt(x, dTau, 1.0, 0);
                     frhs(rhsbuf[1], x, dTau, iter, 1.0, 0);
                     rhsFull = xLast;
-                    rhsFull -= x;
                     rhsFull *= 1.0 / dt;
                     resOther = rhsFull;
+                    rhsFull.addTo(x, -1. / dt);
                     rhsFull += rhsbuf[1];
                     fsolve(x, rhsFull, resOther, dTau, dt, 1.0, xinc, iter, 0);
                 }
@@ -987,25 +987,25 @@ namespace DNDS::ODE
                         {
                             if (prevSize >= 1 && maskHM3 == 2) // U3R1, cInter[2] is reused for xPrev
                             {
-                                rhsMid.addTo(xMid, -1. / dt);
                                 rhsMid.addTo(xLast, (cInter(0) + thetaCur) / dt);
                                 rhsMid.addTo(x, (cInter(1) - thetaCur) / dt);
                                 rhsMid.addTo(xPrev, cInter(2) / dt);
                                 rhsMid.addTo(rhsbuf[0], 0 + thetaCur * wInteg(0));
                                 rhsMid.addTo(rhsbuf[1], cInter(3) + thetaCur * wInteg(2));
                                 resOther = rhsMid;
+                                rhsMid.addTo(xMid, -1. / dt);
                                 rhsMid.addTo(rhsbuf[2], thetaCur * wInteg(1));
                             }
                             else
                             {
                                 if (maskHM3Exe == 1 && maskHM3 == 2)
                                     thetaCur = 1; // for U2R1 filling
-                                rhsMid.addTo(xMid, -1. / dt);
                                 rhsMid.addTo(xLast, (cInter(0) + thetaCur) / dt);
                                 rhsMid.addTo(x, (cInter(1) - thetaCur) / dt);
                                 rhsMid.addTo(rhsbuf[0], cInter(2) + thetaCur * wInteg(0));
                                 rhsMid.addTo(rhsbuf[1], cInter(3) + thetaCur * wInteg(2));
                                 resOther = rhsMid;
+                                rhsMid.addTo(xMid, -1. / dt);
                                 rhsMid.addTo(rhsbuf[2], thetaCur * wInteg(1));
                             }
                             fdt(xMid, dTau, 1.0, 1);
@@ -1019,10 +1019,10 @@ namespace DNDS::ODE
                         rhsFull.setConstant(0.0);
                         {
                             rhsFull.addTo(xLast, 1. / dt);
-                            rhsFull.addTo(x, -1. / dt);
                             rhsFull.addTo(rhsbuf[0], wInteg(0));
                             rhsFull.addTo(rhsbuf[2], wInteg(1));
                             resOther = rhsFull;
+                            rhsFull.addTo(x, -1. / dt);
                             rhsFull.addTo(rhsbuf[1], wInteg(2));
                             fdt(x, dTau, 1.0, 0);
                             fsolve(x, rhsFull, resOther, dTau, dt, wInteg(2), xinc, iter, 0);
@@ -1070,9 +1070,9 @@ namespace DNDS::ODE
                     fdt(x, dTau, 1.0, 0);
                     frhs(rhsbuf[1], x, dTau, iter, 1.0, 0);
                     rhsFull = xLast;
-                    rhsFull -= x;
                     rhsFull *= 1.0 / dt;
                     resOther = rhsFull;
+                    rhsFull.addTo(x, -1. / dt);
                     rhsFull += rhsbuf[1];
                     fsolve(x, rhsFull, resOther, dTau, dt, 1.0, xinc, iter, 0);
                 }

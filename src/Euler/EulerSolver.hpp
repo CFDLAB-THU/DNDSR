@@ -19,6 +19,7 @@
 #include "EulerBC.hpp"
 #include "DNDS/SerializerJSON.hpp"
 #include "Solver/Linear.hpp"
+#include "DNDS/CsvLog.hpp"
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
 // #undef __DNDS_REALLY_COMPILING__
 // #endif
@@ -195,6 +196,14 @@ namespace DNDS::Euler
                     "res {termRed}{resRel:.3e}{termReset}   ",
                     "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
                     "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"};
+                std::vector<std::string> logfileOutputTitles{
+                    "step", "iStep", "iter", "tSimu",
+                    "res", "curDtImplicit", "curDtMin", "CFLNow",
+                    "nLimInc", "alphaMinInc",
+                    "nLimBeta", "minBeta",
+                    "nLimAlpha", "minAlpha",
+                    "tWall", "telapsed", "trec", "trhs", "tcomm", "tLim", "tLimiterA", "tLimiterB",
+                    "fluxWall", "CL", "CD", "AoA"};
                 int nPrecisionLog = 10;
                 bool dataOutAtInit = false;
                 int nDataOut = 10000;
@@ -219,6 +228,7 @@ namespace DNDS::Euler
                     consoleOutputEveryFix,
                     consoleMainOutputFormat,
                     consoleMainOutputFormatInternal,
+                    logfileOutputTitles, nPrecisionLog,
                     dataOutAtInit,
                     nDataOut, nDataOutC,
                     nDataOutInternal, nDataOutCInternal,
@@ -1235,6 +1245,56 @@ namespace DNDS::Euler
             }
             else
                 serializer->WriteInt("hasReconstructionValue", 0);
+        }
+
+        template <class TVal>
+        std::enable_if_t<std::is_arithmetic_v<std::remove_reference_t<TVal>>>
+        FillLogValue(tLogSimpleDIValueMap &v_map, const std::string &name, TVal &&val)
+        {
+            v_map[name] = val;
+        }
+
+        template <class TVal>
+        std::enable_if_t<!std::is_arithmetic_v<std::remove_reference_t<TVal>>>
+        FillLogValue(tLogSimpleDIValueMap &v_map, const std::string &name, TVal &&val)
+        {
+            // std::vector<std::string> logfileOutputTitlses{
+            //     "step", "iStep", "iter", "tSimu",
+            //     "res", "curDtImplicit", "curDtMin", "CFLNow",
+            //     "nLimInc", "alphaMinInc",
+            //     "nLimBeta", "minBeta",
+            //     "nLimAlpha", "minAlpha",
+            //     "tWall", "telapsed", "trec", "trhs", "tcomm", "tLim", "tLimiterA", "tLimiterB",
+            //     "fluxWall", "CL", "CD", "AoA"};
+            if (name == "res" || name == "fluxWall")
+                for (int i = 0; i < nVars; i++)
+                    v_map[name + std::to_string(i)] = val[i];
+            else
+                v_map[name] = 0;
+        }
+
+        std::tuple<CsvLog, tLogSimpleDIValueMap> LogErrInitialize()
+        {
+            tLogSimpleDIValueMap v_map;
+            TU initVec;
+            initVec.setZero(nVars);
+            std::vector<std::string> realNames;
+            for (auto name : config.outputControl.logfileOutputTitles)
+                if (name == "res" || name == "fluxWall")
+                {
+                    FillLogValue(v_map, name, initVec);
+                    for (int i = 0; i < nVars; i++)
+                        realNames.push_back(name + std::to_string(i));
+                }
+                else
+                    FillLogValue(v_map, name, 0.), realNames.push_back(name);
+
+            std::string logErrFileName = config.dataIOControl.getOutLogName() + "_" + output_stamp + ".log";
+            std::filesystem::path outFile{logErrFileName};
+            std::filesystem::create_directories(outFile.parent_path() / ".");
+            auto pOs = std::make_unique<std::ofstream>(logErrFileName);
+            DNDS_assert_info(*pOs, "logErr file [" + logErrFileName + "] did not open");
+            return std::make_tuple(DNDS::CsvLog(realNames, std::move(pOs)), v_map);
         }
 
         void RunImplicitEuler();

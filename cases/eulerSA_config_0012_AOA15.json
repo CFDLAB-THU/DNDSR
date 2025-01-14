@@ -8,7 +8,7 @@
         "tEnd": 3e+200
     },
     "convergenceControl": {
-        "nTimeStepInternal": 30000,
+        "nTimeStepInternal": 10000,
         "rhsThresholdInternal": 1e-8,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -236,3 +236,6 @@
 // 0.000000e+00,-1.715276e-01, 6.983111e-01, 0.000000e+00, 1.084698e-20, 4.102179e-02: sa-neg-QCR-R 3far
 // 0.000000e+00,-1.833759e-01, 7.312974e-01, 0.000000e+00, 1.426846e-20, 3.244254e-02: sa-neg-R 3far RM2
 // 0.000000e+00,-1.801070e-01, 7.207952e-01, 0.000000e+00, 1.188829e-20, 3.204329e-02: sa-neg-QCR-R 3far RM2
+
+//TEST MG: 
+// mpirun -np 24 app/eulerSA.exe ../cases/eulerSA_config_0012_AOA15.json -k /dataIOControl/outPltName -v \"../data/out/NACA0012/NACA0012-AOA15\" -k /linearSolverControl/multiGridLP -v 0 -k /linearSolverControl/jacobiCode -v 0 -k /linearSolverControl/gmresCode -v 1 -k /eulerSettings/cLDriverSettings/AOAInit -v 15

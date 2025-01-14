@@ -52,11 +52,8 @@ namespace DNDS::Euler
         }
 
         /************* Files **************/
-        std::string logErrFileName = config.dataIOControl.getOutLogName() + "_" + output_stamp + ".log";
-        std::filesystem::path outFile{logErrFileName};
-        std::filesystem::create_directories(outFile.parent_path() / ".");
-        std::ofstream logErr(logErrFileName);
-        DNDS_assert(logErr);
+        auto logErr = LogErrInitialize();
+
         /************* Files **************/
 
         mesh->ObtainLocalFactFillOrdering(*eval.symLU, config.linearSolverControl.directPrecControl);
@@ -1237,23 +1234,70 @@ namespace DNDS::Euler
                     log() << std::endl;
                     log().setf(fmt);
 
-                    std::string delimC = " ";
-                    logErr
-                        << std::left
-                        << step << delimC
-                        << std::left
-                        << iter << delimC
-                        << std::left
-                        << std::setprecision(config.outputControl.nPrecisionLog) << std::scientific
-                        << res.transpose() << delimC
-                        << tSimu << delimC
-                        << curDtMin << delimC
-                        << real(eval.nFaceReducedOrder) << delimC
-                        << eval.fluxWallSum.transpose() << delimC
-                        << (nLimInc) << delimC << (alphaMinInc) << delimC
-                        << (nLimBeta) << delimC << (minBeta) << delimC
-                        << (nLimAlpha) << delimC << (minAlpha) << delimC
-                        << std::endl;
+                    // std::string delimC = " ";
+                    // logErr
+                    //     << std::left
+                    //     << step << delimC
+                    //     << std::left
+                    //     << iter << delimC
+                    //     << std::left
+                    //     << std::setprecision(config.outputControl.nPrecisionLog) << std::scientific
+                    //     << res.transpose() << delimC
+                    //     << tSimu << delimC
+                    //     << curDtMin << delimC
+                    //     << real(eval.nFaceReducedOrder) << delimC
+                    //     << eval.fluxWallSum.transpose() << delimC
+                    //     << (nLimInc) << delimC << (alphaMinInc) << delimC
+                    //     << (nLimBeta) << delimC << (minBeta) << delimC
+                    //     << (nLimAlpha) << delimC << (minAlpha) << delimC
+                    //     << std::endl;
+
+                    // std::vector<std::string> logfileOutputTitles{
+                    //     "step", "iStep", "iter", "tSimu",
+                    //     "res", "curDtImplicit", "curDtMin", "CFLNow",
+                    //     "nLimInc", "alphaMinInc",
+                    //     "nLimBeta", "minBeta",
+                    //     "nLimAlpha", "minAlpha",
+                    //     "tWall", "telapsed", "trec", "trhs", "tcomm", "tLim", "tLimiterA", "tLimiterB",
+                    //     "fluxWall", "CL", "CD", "AoA"};
+                    auto &fluxWall = eval.fluxWallSum;
+                    auto &logErrVal = std::get<1>(logErr);
+#define DNDS_FILL_IN_LOG_ERR_VAL(v) FillLogValue(logErrVal, #v, v)
+                    DNDS_FILL_IN_LOG_ERR_VAL(step);
+                    DNDS_FILL_IN_LOG_ERR_VAL(iStep);
+                    DNDS_FILL_IN_LOG_ERR_VAL(iter);
+                    DNDS_FILL_IN_LOG_ERR_VAL(tSimu);
+                    DNDS_FILL_IN_LOG_ERR_VAL(res);
+                    DNDS_FILL_IN_LOG_ERR_VAL(curDtImplicit);
+                    DNDS_FILL_IN_LOG_ERR_VAL(curDtMin);
+                    DNDS_FILL_IN_LOG_ERR_VAL(CFLNow);
+
+                    DNDS_FILL_IN_LOG_ERR_VAL(nLimInc);
+                    DNDS_FILL_IN_LOG_ERR_VAL(alphaMinInc);
+                    DNDS_FILL_IN_LOG_ERR_VAL(nLimBeta);
+                    DNDS_FILL_IN_LOG_ERR_VAL(minBeta);
+                    DNDS_FILL_IN_LOG_ERR_VAL(nLimAlpha);
+                    DNDS_FILL_IN_LOG_ERR_VAL(minAlpha);
+
+                    DNDS_FILL_IN_LOG_ERR_VAL(tWall);
+                    DNDS_FILL_IN_LOG_ERR_VAL(telapsed);
+                    DNDS_FILL_IN_LOG_ERR_VAL(trec);
+                    DNDS_FILL_IN_LOG_ERR_VAL(trhs);
+                    DNDS_FILL_IN_LOG_ERR_VAL(tcomm);
+                    DNDS_FILL_IN_LOG_ERR_VAL(tLim);
+                    DNDS_FILL_IN_LOG_ERR_VAL(tLimiterA);
+                    DNDS_FILL_IN_LOG_ERR_VAL(tLimiterB);
+
+                    DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
+                    real CL{CLCur}, CD{CDCur}, AoA(AOACur);
+                    DNDS_FILL_IN_LOG_ERR_VAL(CL);
+                    DNDS_FILL_IN_LOG_ERR_VAL(CD);
+                    DNDS_FILL_IN_LOG_ERR_VAL(AoA);
+#undef DNDS_FILL_IN_LOG_ERR_VAL
+
+                    std::get<0>(logErr).WriteLine(std::get<1>(logErr), config.outputControl.nPrecisionLog);
+
+                    FillLogValue(logErrVal, "step", step);
 
                     eval.ConsoleOutputBndIntegrations();
                     eval.BndIntegrationLogWriteLine(
@@ -1338,6 +1382,8 @@ namespace DNDS::Euler
                 eval.TimeAverageAddition(uTemp, wAveraged, curDtImplicit, tAverage);
             }
 
+            real CLCur{0.0}, CDCur{0.0}, AOACur{0.0};
+
             if (step % config.outputControl.nConsoleCheck == 0)
             {
                 double tWall = MPI_Wtime();
@@ -1357,7 +1403,7 @@ namespace DNDS::Euler
                 auto tPPr = tInternalStats["p"].getSum() + Timer().getTimerColOrLoc(PerformanceTimer::PositivityOuter, mpi, useCollectiveTimer);
                 if (mpi.rank == 0)
                 {
-                    auto fmt = log().flags();
+                    auto format = log().flags();
                     std::string formatStringMain = "";
                     for (auto &s : config.outputControl.consoleMainOutputFormat)
                         formatStringMain += s;
@@ -1398,24 +1444,44 @@ namespace DNDS::Euler
                                          fmt::arg("termBold", TermColor::Bold),
                                          fmt::arg("termReset", TermColor::Reset));
                     log() << std::endl;
-                    log().setf(fmt);
-                    std::string delimC = " ";
-                    logErr
-                        << std::left
-                        << step << delimC
-                        << std::left
-                        << -1 << delimC
-                        << std::left
-                        << std::setprecision(config.outputControl.nPrecisionLog) << std::scientific
-                        << res.transpose() << delimC
-                        << tSimu << delimC
-                        << curDtMin << delimC
-                        << real(eval.nFaceReducedOrder) << delimC
-                        << eval.fluxWallSum.transpose() << delimC
-                        << (nLimInc) << delimC << (alphaMinInc) << delimC
-                        << (nLimBeta) << delimC << (minBeta) << delimC
-                        << (nLimAlpha) << delimC << (minAlpha) << delimC
-                        << std::endl;
+                    log().setf(format);
+                    auto &fluxWall = eval.fluxWallSum;
+                    auto &logErrVal = std::get<1>(logErr);
+                    int iStep{-1}, iter{-1};
+#define DNDS_FILL_IN_LOG_ERR_VAL(v) FillLogValue(logErrVal, #v, v)
+                    DNDS_FILL_IN_LOG_ERR_VAL(step);
+                    DNDS_FILL_IN_LOG_ERR_VAL(iStep);
+                    DNDS_FILL_IN_LOG_ERR_VAL(iter);
+                    DNDS_FILL_IN_LOG_ERR_VAL(tSimu);
+                    DNDS_FILL_IN_LOG_ERR_VAL(res);
+                    DNDS_FILL_IN_LOG_ERR_VAL(curDtImplicit);
+                    DNDS_FILL_IN_LOG_ERR_VAL(curDtMin);
+                    DNDS_FILL_IN_LOG_ERR_VAL(CFLNow);
+
+                    DNDS_FILL_IN_LOG_ERR_VAL(nLimInc);
+                    DNDS_FILL_IN_LOG_ERR_VAL(alphaMinInc);
+                    DNDS_FILL_IN_LOG_ERR_VAL(nLimBeta);
+                    DNDS_FILL_IN_LOG_ERR_VAL(minBeta);
+                    DNDS_FILL_IN_LOG_ERR_VAL(nLimAlpha);
+                    DNDS_FILL_IN_LOG_ERR_VAL(minAlpha);
+
+                    DNDS_FILL_IN_LOG_ERR_VAL(tWall);
+                    DNDS_FILL_IN_LOG_ERR_VAL(telapsed);
+                    DNDS_FILL_IN_LOG_ERR_VAL(trec);
+                    DNDS_FILL_IN_LOG_ERR_VAL(trhs);
+                    DNDS_FILL_IN_LOG_ERR_VAL(tcomm);
+                    DNDS_FILL_IN_LOG_ERR_VAL(tLim);
+                    DNDS_FILL_IN_LOG_ERR_VAL(tLimiterA);
+                    DNDS_FILL_IN_LOG_ERR_VAL(tLimiterB);
+
+                    DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
+                    real CL{CLCur}, CD{CDCur}, AoA(AOACur);
+                    DNDS_FILL_IN_LOG_ERR_VAL(CL);
+                    DNDS_FILL_IN_LOG_ERR_VAL(CD);
+                    DNDS_FILL_IN_LOG_ERR_VAL(AoA);
+#undef DNDS_FILL_IN_LOG_ERR_VAL
+                    std::get<0>(logErr).WriteLine(std::get<1>(logErr), config.outputControl.nPrecisionLog);
+
                     eval.ConsoleOutputBndIntegrations();
                     eval.BndIntegrationLogWriteLine(
                         config.dataIOControl.getOutLogName() + "_" + output_stamp,
