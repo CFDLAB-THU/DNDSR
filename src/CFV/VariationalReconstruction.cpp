@@ -53,7 +53,7 @@ namespace DNDS::CFV
                     if constexpr (dim == 2)
                         JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
                     else
-                        JDet = J.determinant();
+                        JDet = J.fullPivLu().determinant();
                     // JDet = std::abs(JDet); // use this to pass check even with bad mesh
                     vInc = 1 * JDet;
                     cellIntJacobiDet(iCell, iG) = JDet;
