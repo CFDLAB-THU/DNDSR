@@ -289,7 +289,9 @@ namespace DNDS::Geom
         real t0 = MPI_Wtime();
         if (mesh->getMPI().rank == mRank)
             DNDS::log() << "UnstructuredMeshSerialRW === Doing  BuildCell2Cell "
+#ifdef DNDS_USE_OMP
                         << fmt::format("Using OMP [{}]", omp_get_max_threads())
+#endif
                         << std::endl;
         DNDS_MAKE_SSP(cell2cellSerial, mesh->getMPI());
         // if (mRank != mesh->getMPI().rank)
