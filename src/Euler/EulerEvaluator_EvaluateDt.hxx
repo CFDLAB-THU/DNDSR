@@ -830,8 +830,6 @@ namespace DNDS::Euler
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateDt 1");
-        for (auto &i : lambdaCell)
-            i = 0.0;
 
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(runtime)
@@ -963,9 +961,10 @@ namespace DNDS::Euler
             //     std::cout << gamma << " " << pMean << " " << uMean(0) << std::endl;
             // }
 
-            lambdaCell[iCellL] += lambdaFace[iFace] * vfv->GetFaceArea(iFace);
-            if (f2c[1] != UnInitIndex) // can't be non local
-                lambdaCell[f2c[1]] += lambdaFace[iFace] * vfv->GetFaceArea(iFace);
+            // put to cell part to be OMP compliant
+            // lambdaCell[iCellL] += lambdaFace[iFace] * vfv->GetFaceArea(iFace);
+            // if (f2c[1] != UnInitIndex) // can't be non local
+            //     lambdaCell[f2c[1]] += lambdaFace[iFace] * vfv->GetFaceArea(iFace);
 
             deltaLambdaFace[iFace] = std::abs((vR - vL).dot(unitNorm)) + std::sqrt(std::abs(asqrR - asqrL)) * 0.7071;
         }
@@ -975,9 +974,12 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            // std::cout << fv->GetCellVol(iCell) << " " << (lambdaCell[iCell]) << " " << CFL << std::endl;
+            real lambdaCellC = 0; 
+            for(auto iFace: mesh->cell2face[iCell])
+                lambdaCellC += lambdaFace[iFace] * vfv->GetFaceArea(iFace);
+            // std::cout << fv->GetCellVol(iCell) << " " << (lambdaCellC) << " " << CFL << std::endl;
             // exit(0);
-            dt[iCell](0) = std::min(CFL * vfv->GetCellVol(iCell) * vfv->GetCellSmoothScaleRatio(iCell) / (lambdaCell[iCell] + 1e-100), MaxDt);
+            dt[iCell](0) = std::min(CFL * vfv->GetCellVol(iCell) * vfv->GetCellSmoothScaleRatio(iCell) / (lambdaCellC + 1e-100), MaxDt);
             dtMin = std::min(dtMin, dt[iCell](0));
             // if (iCell == 10756)
             // {

@@ -86,7 +86,7 @@ namespace DNDS::Euler
         int kAv = 0;
 
         // buffer for fdtau
-        std::vector<real> lambdaCell;
+        // std::vector<real> lambdaCell;
         std::vector<real> lambdaFace;
         std::vector<real> lambdaFaceC;
         std::vector<real> lambdaFaceVis;
@@ -136,7 +136,7 @@ namespace DNDS::Euler
             this->settings.jsonSettings = nJsonSettings;
             this->settings.ReadWriteJSON(settings.jsonSettings, nVars, true);
 
-            lambdaCell.resize(mesh->NumCellProc()); // but only dist part are used, ghost part to not judge for it in facial iter
+            // lambdaCell.resize(mesh->NumCellProc()); // but only dist part are used, ghost part to not judge for it in facial iter
             lambdaFace.resize(mesh->NumFaceProc());
             lambdaFaceC.resize(mesh->NumFaceProc());
             lambdaFaceVis.resize(lambdaFace.size());
