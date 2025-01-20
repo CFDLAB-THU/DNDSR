@@ -13,6 +13,9 @@ namespace DNDS::CFV
         using namespace Geom;
         static const int maxNDiff = dim == 2 ? 10 : 20;
 
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             // int NRecDOF = cellAtr[iCell].NDOF - 1; // ! not good ! TODO
@@ -105,6 +108,9 @@ namespace DNDS::CFV
         static const int maxNDiff = dim == 2 ? 10 : 20;
         int nVars = u.RowSize();
 
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             // int NRecDOF = cellAtr[iCell].NDOF - 1; // ! not good ! TODO
@@ -189,6 +195,9 @@ namespace DNDS::CFV
     {
         using namespace Geom;
 
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             if ((!ifAll) &&
@@ -363,6 +372,9 @@ namespace DNDS::CFV
         uRecNew.trans.waitPersistentPull();
         if (!putIntoNew)
         {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // mind the edge
                 uRec[iCell] = uRecNew[iCell];
         }
@@ -383,6 +395,9 @@ namespace DNDS::CFV
         using namespace Geom;
 
         int cPOrder = settings.maxOrder;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
         for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // mind the edge
             uRecNew[iCell] = uRec[iCell];
         for (; cPOrder >= 1; cPOrder--)
@@ -420,8 +435,14 @@ namespace DNDS::CFV
                     LimStart = -200, LimEnd = -100;
                     DNDS_assert(false);
                 }
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // mind the edge
                 uRecBuf[iCell] = uRecNew[iCell];
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 if ((!ifAll) &&
@@ -566,4 +587,3 @@ namespace DNDS::CFV
         }
     }
 }
-

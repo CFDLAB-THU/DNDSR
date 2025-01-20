@@ -87,8 +87,8 @@ namespace DNDS::Euler
         {
             if (!hasInvert)
             {
-#ifdef DNDS_USE_OMP
-#pragma omp parallel for schedule(auto)
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < Size(); iCell++)
                     if (isBlock())
@@ -140,16 +140,16 @@ namespace DNDS::Euler
         {
             if (isBlock())
             {
-#ifdef DNDS_USE_OMP
-#pragma omp parallel for schedule(auto)
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(static)
 #endif
                 for (index i = 0; i < _data.Size(); i++)
                     _data[i].setZero();
             }
             else
             {
-#ifdef DNDS_USE_OMP
-#pragma omp parallel for schedule(auto)
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(static)
 #endif
                 for (index i = 0; i < _dataDiag.Size(); i++)
                     _dataDiag[i].setZero();
@@ -204,6 +204,9 @@ namespace DNDS::Euler
         void setZero()
         {
             tBase::isDecomposed = false;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (index iCell = 0; iCell < tBase::symLU->Num(); iCell++)
                 for (auto &v : LDU[iCell])
                     v.setZero();
@@ -299,6 +302,9 @@ namespace DNDS::Euler
         void setZero()
         {
             tBase::isDecomposed = false;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(static)
+#endif
             for (index iCell = 0; iCell < tBase::symLU->Num(); iCell++)
                 for (auto &v : LDU[iCell])
                     v.setZero();

@@ -198,6 +198,9 @@ namespace DNDS
             if (method == 1 || method == 11)
             {
                 // simple gauss rule
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     int nVars = u[iCell].size();
@@ -317,6 +320,9 @@ namespace DNDS
             }
             else if (method == 2) //! warning, periodic not implemented here
             {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     int nVars = u[iCell].size();
@@ -402,6 +408,9 @@ namespace DNDS
 
             this->DoReconstruction2ndGrad(uGrad, u, FBoundary, method);
 
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 int nVars = u[iCell].size();
@@ -463,8 +472,15 @@ namespace DNDS
                 return;
             }
 
-            auto cellOp = [&](index iCell)
+            auto cellOp = [&](index iCell) {
+
+            };
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
+                cellOp(iCell);
                 real relax = cellAtr[iCell].relax;
 
                 if (recordInc)
@@ -547,21 +563,20 @@ namespace DNDS
                 {
                     DNDS_assert(false);
                 }
-            };
-#ifdef DNDS_USE_OMP
-#pragma omp parallel for schedule(runtime)
-#endif
-            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-            {
-                cellOp(iCell);
             }
 
             if (!recordInc)
             {
                 if (putIntoNew && settings.SORInstead)
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
                     for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                         uRecNew[iCell].swap(uRec[iCell]);
                 if ((!putIntoNew) && (!settings.SORInstead))
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
                     for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                         uRec[iCell].swap(uRecNew[iCell]);
             }
@@ -584,10 +599,16 @@ namespace DNDS
 
             if (settings.maxOrder == 1 && settings.subs2ndOrder != 0)
             {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                     uRecNew[iCell].setZero();
                 return;
             }
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 uRecNew[iCell] = uRecDiff[iCell];
@@ -685,5 +706,3 @@ namespace DNDS
         }
     }
 }
-
-

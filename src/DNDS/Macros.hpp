@@ -14,3 +14,17 @@ static const std::string DNDS_Macros_State = std::string("DNDS_Macros ")
                                              + " EIGEN_USE_LAPACKE_STRICT "
 #endif
     ;
+
+#if defined(__GNUC__) || defined(__clang__)
+// GCC and Clang support __builtin_expect
+#define DNDS_likely(x) (__builtin_expect((x), 1))
+#define DNDS_unlikely(x) (__builtin_expect((x), 0))
+#elif defined(_MSC_VER)
+// MSVC does not support __builtin_expect
+#define DNDS_likely(x) (x)
+#define DNDS_unlikely(x) (x)
+#else
+// For other compilers, default to no-op
+#define DNDS_likely(x) (x)
+#define DNDS_unlikely(x) (x)
+#endif

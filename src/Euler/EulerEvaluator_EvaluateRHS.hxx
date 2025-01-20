@@ -38,10 +38,7 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS 1");
         int cnvars = nVars;
         auto rsType = settings.rsType;
-        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-        {
-            rhs[iCell].setZero();
-        }
+        rhs.setConstant(0.0);
         if (settings.useSourceGradFixGG)
             for (auto &v : gradUFix)
                 v.setZero();
@@ -114,14 +111,25 @@ namespace DNDS::Euler
             uGradBuf.trans.waitPersistentPull();
         }
 
+#if defined(DNDS_DIST_MT_USE_OMP)
         static std::vector<TU> faceFluxBuf;
         if (faceFluxBuf.size() < mesh->NumFaceProc())
         {
             faceFluxBuf.resize(mesh->NumFaceProc(), TU::Zero(nVars));
         }
+#endif
 
-        auto faceOp = [&](index iFace)
+        auto faceOp = [&](index iFace) {
+
+        };
+
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
+#pragma omp parallel for schedule(runtime) reduction(TUAdd : fluxWallSumLocal)
+#endif
+        for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
+            faceOp(iFace);
             auto f2c = mesh->face2cell[iFace];
             Elem::Quadrature gFace = direct2ndRec ? vfv->GetFaceQuadO1(iFace) : vfv->GetFaceQuad(iFace);
             Eigen::Matrix<real, nVarsFixed, 1, Eigen::ColMajor> fluxEs(cnvars, 1);
@@ -336,8 +344,8 @@ namespace DNDS::Euler
                         Gas::GradientCons2Prim_IdealGas<dim>(ULxy, GradULxy, GradULxyPrim, gamma);
                         Gas::GradientCons2Prim_IdealGas<dim>(URxy, GradURxy, GradURxyPrim, gamma);
                         TU URxyPrim(cnvars), ULxyPrim(cnvars);
-                        Gas::IdealGasThermalConservative2Primitive(ULxy, ULxyPrim, gamma);
-                        Gas::IdealGasThermalConservative2Primitive(URxy, URxyPrim, gamma);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrim, gamma);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gamma);
 
                         GradUMeanXyPrim = (GradURxyPrim + GradULxyPrim) * 0.5 +
                                           (1.0 / distGRP) *
@@ -382,9 +390,9 @@ namespace DNDS::Euler
                     {
                         TU ULc = ULxy;
                         TU ULcPrim;
-                        Gas::IdealGasThermalConservative2Primitive(ULc, ULcPrim, settings.idealGasProperty.gamma);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, settings.idealGasProperty.gamma);
                         ULcPrim(Seq123).setZero();
-                        Gas::IdealGasThermalPrimitive2Conservative(ULcPrim, ULc, settings.idealGasProperty.gamma);
+                        Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, settings.idealGasProperty.gamma);
                         ULxy = ULc;
                         URxy = ULc;
                     }
@@ -448,26 +456,28 @@ namespace DNDS::Euler
                 lambdaFace4[iFace] = lamEs(2);
             }
 
-
+#if defined(DNDS_DIST_MT_USE_OMP)
+            faceFluxBuf.at(iFace) = fluxEs(Eigen::all, 0);
+#else
             // ! original code why alphaFace not used?
-            // TU fluxIncL = fluxEs(Eigen::all, 0);
-            // TU fluxIncR = -fluxEs(Eigen::all, 0);
+            TU fluxIncL = fluxEs(Eigen::all, 0);
+            TU fluxIncR = -fluxEs(Eigen::all, 0);
 
-            // this->UFromFace2Cell(fluxIncL, iFace, f2c[0], 0);
-            // if (f2c[1] != UnInitIndex)
-            //     this->UFromFace2Cell(fluxIncR, iFace, f2c[1], 1); // periodic back to cell
+            this->UFromFace2Cell(fluxIncL, iFace, f2c[0], 0);
+            if (f2c[1] != UnInitIndex)
+                this->UFromFace2Cell(fluxIncR, iFace, f2c[1], 1); // periodic back to cell
             // real alphaFace = cellRHSAlpha[f2c[0]](0);
             // if (f2c[1] != UnInitIndex)
             //     alphaFace = std::min(alphaFace, cellRHSAlpha[f2c[1]](0));
 
-            // rhs[f2c[0]] += fluxIncL / vfv->GetCellVol(f2c[0]);
-            // if (f2c[1] != UnInitIndex)
-            //     rhs[f2c[1]] += fluxIncR / vfv->GetCellVol(f2c[1]);
-
-            faceFluxBuf.at(iFace) = fluxEs(Eigen::all, 0);
+            rhs[f2c[0]] += fluxIncL / vfv->GetCellVol(f2c[0]);
+            if (f2c[1] != UnInitIndex)
+                rhs[f2c[1]] += fluxIncR / vfv->GetCellVol(f2c[1]);
+#endif
 
             if (settings.useSourceGradFixGG)
-#ifdef DNDS_USE_OMP // todo: save face value to buffer
+#if defined(DNDS_DIST_MT_USE_OMP)
+// todo: save face value to buffer
 #pragma omp critical
 #endif
             {
@@ -511,7 +521,7 @@ namespace DNDS::Euler
 
             // integrations
             if (!dontUpdateIntegration)
-#ifdef DNDS_USE_OMP // todo: use reduction
+#if defined(DNDS_DIST_MT_USE_OMP) // todo: use reduction
 #pragma omp critical
 #endif
             {
@@ -526,7 +536,7 @@ namespace DNDS::Euler
                         this->TransformURotatingFrame(uL, vfv->GetFaceQuadraturePPhys(iFace, -1), 1);
                     TU uLPrim = uL;
                     auto gamma = settings.idealGasProperty.gamma;
-                    Gas::IdealGasThermalConservative2Primitive(uL, uLPrim, gamma);
+                    Gas::IdealGasThermalConservative2Primitive<dim>(uL, uLPrim, gamma);
                     Eigen::Vector<real, Eigen::Dynamic> vInt;
                     vInt.resize(nVars + 2);
                     vInt(Eigen::seq(0, nVars - 1)) = uL;
@@ -537,20 +547,10 @@ namespace DNDS::Euler
                     bndIntegrations.at(mesh->GetFaceZone(iFace)).Add(vInt * fluxEs(0, 0), fluxEs(0, 0));
                 }
             }
-        };
-
-#ifdef DNDS_USE_OMP
-#pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
-#pragma omp parallel for schedule(runtime) reduction(TUAdd : fluxWallSumLocal)
-#endif
-        for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
-        {
-            faceOp(iFace);
         }
 
-#ifdef DNDS_USE_OMP
+#if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(runtime)
-#endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             auto f2c = mesh->cell2face[iCell];
@@ -558,155 +558,156 @@ namespace DNDS::Euler
             {
                 index iFace = f2c[ic2f];
                 int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
-                TU fluxFaceC = faceFluxBuf.at(iFace) * (if2c ? -1 : 1);
+                TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1);
                 this->UFromFace2Cell(fluxFaceC, iFace, iCell, if2c);
                 rhs[iCell] += fluxFaceC / vfv->GetCellVol(iCell);
             }
         }
+#endif
 
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS After Flux");
 
-        auto cellOp = [&](index iCell)
-        {
-            if (onlyOnHalfAlpha)
-            {
-                //     if (!cellIsHalfAlpha(iCell))
-                //         continue;
-            }
-            auto gCell = direct2ndRec ? vfv->GetCellQuadO1(iCell) : vfv->GetCellQuad(iCell);
+        auto cellOp = [&](index iCell) {
 
-            TDiffU cellGrad2nd;
-            if (settings.ransSource2nd)
-            {
-                cellGrad2nd.setZero(Eigen::NoChange, u[iCell].size());
-                TU uC = u[iCell];
-                for (index iFace : mesh->cell2face[iCell])
-                {
-                    index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                    TVec uNorm = vfv->GetFaceNormFromCell(iFace, iCell, -1, -1)(Seq012) *
-                                 (mesh->CellIsFaceBack(iCell, iFace) ? 1 : -1);
-                    TU uR;
-                    if (iCellOther != UnInitIndex)
-                        uR = u[iCellOther], this->UFromOtherCell(uR, iFace, iCell, iCellOther, -1);
-                    else
-                        uR = generateBoundaryValue(
-                            uC, uC, iCell, iFace, -1,
-                            uNorm, Geom::NormBuildLocalBaseV<dim>(uNorm),
-                            vfv->GetFaceQuadraturePPhys(iFace, -1),
-                            t, mesh->GetFaceZone(iFace), true, 0);
-                    cellGrad2nd += vfv->GetFaceArea(iFace) * uNorm * (uR - uC).transpose() * 0.5;
-                }
-                cellGrad2nd /= vfv->GetCellVol(iCell);
-            }
-
-            Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> sourceV; // now includes sourcejacobian diag
-            sourceV.setZero(cnvars, JSource.isBlock() ? cnvars + 1 : 2);
-
-            Geom::Elem::SummationNoOp noOp;
-
-            TDiffU cellGradFix;
-            if (settings.useSourceGradFixGG)
-                cellGradFix = gradUFix[iCell] / vfv->GetCellVol(iCell);
-
-            gCell.IntegrationSimple(
-                sourceV,
-                [&](decltype(sourceV) &finc, int iG)
-                {
-                    int iGQ = direct2ndRec ? -1 : iG;
-                    TDiffU GradU;
-                    GradU.resize(Eigen::NoChange, cnvars);
-                    GradU.setZero();
-                    PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
-                    if (direct2ndRec)
-                        GradU(SeqG012, Eigen::all) = uGradBuf[iCell];
-                    else
-                    {
-                        if constexpr (gDim == 2)
-                            GradU({0, 1}, Eigen::all) =
-                                vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 2>{1, 2}, 3) *
-                                uRecUnlim[iCell] * IF_NOT_NOREC; // 2d specific
-                        else
-                            GradU({0, 1, 2}, Eigen::all) =
-                                vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 3>{1, 2, 3}, 4) *
-                                uRecUnlim[iCell] * IF_NOT_NOREC; // 3d specific
-                        if (settings.useSourceGradFixGG)
-                            GradU += cellGradFix;
-                        if (settings.ransSource2nd)
-                        {
-                            if constexpr (model == NS_SA || model == NS_SA_3D)
-                                GradU(Eigen::all, I4 + 1) = cellGrad2nd(Eigen::all, I4 + 1);
-                            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
-                                GradU(Eigen::all, {I4 + 1, I4 + 2}) = cellGrad2nd(Eigen::all, {I4 + 1, I4 + 2});
-                        }
-                    }
-
-                    bool pointOrderReduced;
-                    TU ULxy = u[iCell];
-                    if (!direct2ndRec)
-                        ULxy +=
-                            (vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 1>{0}, 1) *
-                             uRec[iCell])
-                                .transpose() *
-                            IF_NOT_NOREC;
-
-                    PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
-
-                    // bool compressed = false;
-                    // ULxy = CompressRecPart(u[iCell], ULxy, compressed); //! do not forget the mean value
-
-                    finc.resizeLike(sourceV);
-                    TJacobianU jac;
-                    finc(Eigen::all, 0) =
-                        source(
-                            ULxy,
-                            GradU,
-                            vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
-                            iCell, iGQ, 0);
-                    TU sourceJDiag =
-                        source(
-                            ULxy,
-                            GradU,
-                            vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
-                            iCell, iGQ, JSource.isBlock() ? 2 : 1);
-                    if (JSource.isBlock())
-                        finc(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last)) = jac;
-                    else
-                        finc(Eigen::all, 1) = sourceJDiag;
-
-                    finc *= direct2ndRec ? vfv->GetCellVol(iCell) / vfv->GetCellParamVol(iCell) : vfv->GetCellJacobiDet(iCell, iG); //! don't forget this
-                    if (finc.hasNaN() || (!finc.allFinite()))
-                    {
-                        std::cout << finc.transpose() << std::endl;
-                        std::cout << ULxy.transpose() << std::endl;
-                        std::cout << GradU << std::endl;
-                        DNDS_assert(false);
-                    }
-                });
-            sourceV *= cellRHSAlpha[iCell](0) / vfv->GetCellVol(iCell); // becomes mean value
-            rhs[iCell] += sourceV(Eigen::all, 0);
-            if (JSource.isBlock())
-                JSource.getBlock(iCell) = sourceV(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
-            else
-                JSource.getDiag(iCell) = sourceV(Eigen::all, 1);
-
-            // if (iCell == 18195)
-            // {
-            //     std::cout << rhs[iCell].transpose() << std::endl;
-            // }
         };
 
         if (!settings.ignoreSourceTerm)
         {
-
             JSource.clearValues();
-#ifdef DNDS_USE_OMP
+#if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 cellOp(iCell);
+                if (onlyOnHalfAlpha)
+                {
+                    //     if (!cellIsHalfAlpha(iCell))
+                    //         continue;
+                }
+                auto gCell = direct2ndRec ? vfv->GetCellQuadO1(iCell) : vfv->GetCellQuad(iCell);
+
+                TDiffU cellGrad2nd;
+                if (settings.ransSource2nd)
+                {
+                    cellGrad2nd.setZero(Eigen::NoChange, u[iCell].size());
+                    TU uC = u[iCell];
+                    for (index iFace : mesh->cell2face[iCell])
+                    {
+                        index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                        TVec uNorm = vfv->GetFaceNormFromCell(iFace, iCell, -1, -1)(Seq012) *
+                                     (mesh->CellIsFaceBack(iCell, iFace) ? 1 : -1);
+                        TU uR;
+                        if (iCellOther != UnInitIndex)
+                            uR = u[iCellOther], this->UFromOtherCell(uR, iFace, iCell, iCellOther, -1);
+                        else
+                            uR = generateBoundaryValue(
+                                uC, uC, iCell, iFace, -1,
+                                uNorm, Geom::NormBuildLocalBaseV<dim>(uNorm),
+                                vfv->GetFaceQuadraturePPhys(iFace, -1),
+                                t, mesh->GetFaceZone(iFace), true, 0);
+                        cellGrad2nd += vfv->GetFaceArea(iFace) * uNorm * (uR - uC).transpose() * 0.5;
+                    }
+                    cellGrad2nd /= vfv->GetCellVol(iCell);
+                }
+
+                Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> sourceV; // now includes sourcejacobian diag
+                sourceV.setZero(cnvars, JSource.isBlock() ? cnvars + 1 : 2);
+
+                Geom::Elem::SummationNoOp noOp;
+
+                TDiffU cellGradFix;
+                if (settings.useSourceGradFixGG)
+                    cellGradFix = gradUFix[iCell] / vfv->GetCellVol(iCell);
+
+                gCell.IntegrationSimple(
+                    sourceV,
+                    [&](decltype(sourceV) &finc, int iG)
+                    {
+                        int iGQ = direct2ndRec ? -1 : iG;
+                        TDiffU GradU;
+                        GradU.resize(Eigen::NoChange, cnvars);
+                        GradU.setZero();
+                        PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
+                        if (direct2ndRec)
+                            GradU(SeqG012, Eigen::all) = uGradBuf[iCell];
+                        else
+                        {
+                            if constexpr (gDim == 2)
+                                GradU({0, 1}, Eigen::all) =
+                                    vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 2>{1, 2}, 3) *
+                                    uRecUnlim[iCell] * IF_NOT_NOREC; // 2d specific
+                            else
+                                GradU({0, 1, 2}, Eigen::all) =
+                                    vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 3>{1, 2, 3}, 4) *
+                                    uRecUnlim[iCell] * IF_NOT_NOREC; // 3d specific
+                            if (settings.useSourceGradFixGG)
+                                GradU += cellGradFix;
+                            if (settings.ransSource2nd)
+                            {
+                                if constexpr (model == NS_SA || model == NS_SA_3D)
+                                    GradU(Eigen::all, I4 + 1) = cellGrad2nd(Eigen::all, I4 + 1);
+                                if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+                                    GradU(Eigen::all, {I4 + 1, I4 + 2}) = cellGrad2nd(Eigen::all, {I4 + 1, I4 + 2});
+                            }
+                        }
+
+                        bool pointOrderReduced;
+                        TU ULxy = u[iCell];
+                        if (!direct2ndRec)
+                            ULxy +=
+                                (vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 1>{0}, 1) *
+                                 uRec[iCell])
+                                    .transpose() *
+                                IF_NOT_NOREC;
+
+                        PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
+
+                        // bool compressed = false;
+                        // ULxy = CompressRecPart(u[iCell], ULxy, compressed); //! do not forget the mean value
+
+                        finc.resizeLike(sourceV);
+                        TJacobianU jac;
+                        finc(Eigen::all, 0) =
+                            source(
+                                ULxy,
+                                GradU,
+                                vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
+                                iCell, iGQ, 0);
+                        TU sourceJDiag =
+                            source(
+                                ULxy,
+                                GradU,
+                                vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
+                                iCell, iGQ, JSource.isBlock() ? 2 : 1);
+                        if (JSource.isBlock())
+                            finc(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last)) = jac;
+                        else
+                            finc(Eigen::all, 1) = sourceJDiag;
+
+                        finc *= direct2ndRec ? vfv->GetCellVol(iCell) / vfv->GetCellParamVol(iCell) : vfv->GetCellJacobiDet(iCell, iG); //! don't forget this
+                        if (finc.hasNaN() || (!finc.allFinite()))
+                        {
+                            std::cout << finc.transpose() << std::endl;
+                            std::cout << ULxy.transpose() << std::endl;
+                            std::cout << GradU << std::endl;
+                            DNDS_assert(false);
+                        }
+                    });
+                sourceV *= cellRHSAlpha[iCell](0) / vfv->GetCellVol(iCell); // becomes mean value
+                rhs[iCell] += sourceV(Eigen::all, 0);
+                if (JSource.isBlock())
+                    JSource.getBlock(iCell) = sourceV(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                else
+                    JSource.getDiag(iCell) = sourceV(Eigen::all, 1);
+
+                // if (iCell == 18195)
+                // {
+                //     std::cout << rhs[iCell].transpose() << std::endl;
+                // }
             }
         }
+
         // quick aux: reduce the wall flux sum
         if (!dontUpdateIntegration)
             MPI::Allreduce(fluxWallSumLocal.data(), fluxWallSum.data(), fluxWallSum.size(), DNDS_MPI_REAL, MPI_SUM, u.father->getMPI().comm);

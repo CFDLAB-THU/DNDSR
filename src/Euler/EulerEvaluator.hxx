@@ -30,6 +30,9 @@ namespace DNDS::Euler
             DNDS_assert(JDiag.isBlock());
         JDiag.clearValues();
         int cnvars = nVars;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             auto c2f = mesh->cell2face[iCell];
@@ -109,8 +112,18 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixVec 1");
         int cnvars = nVars;
 
-        auto cellOp = [&](index iCell)
+        auto cellOp = [&](index iCell) __attribute__((always_inline)) {
+
+        };
+
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
+        for (index iScan = 0; iScan < mesh->NumCell(); iScan++)
         {
+            index iCell = iScan;
+            cellOp(iCell);
+            // iCell = (*vfv->SOR_iScan2iCell)[iCell];//TODO: add rb-sor
             auto c2f = mesh->cell2face[iCell];
             TU uIncNewBuf(cnvars);
             uIncNewBuf.setZero(); // norhs
@@ -183,16 +196,6 @@ namespace DNDS::Euler
                           << iCell << std::endl;
                 DNDS_assert(!AuInc[iCell].hasNaN());
             }
-        };
-
-#ifdef DNDS_USE_OMP
-#pragma omp parallel for schedule(runtime)
-#endif
-        for (index iScan = 0; iScan < mesh->NumCell(); iScan++)
-        {
-            index iCell = iScan;
-            cellOp(iCell);
-            // iCell = (*vfv->SOR_iScan2iCell)[iCell];//TODO: add rb-sor
         }
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixVec -1");
     }
@@ -209,6 +212,9 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixToJacobianLU 1");
         int cnvars = nVars;
         jacLU.setZero();
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
         for (index iScan = 0; iScan < mesh->NumCell(); iScan++)
         {
             index iCell = iScan;
@@ -261,6 +267,7 @@ namespace DNDS::Euler
             }
             jacLU.GetDiag(iCell) = JDiag.getValue(iCell);
         }
+        // TODO: make below OMP-ed
         jacLU.InPlaceDecompose();
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixToJacobianLU -1");
     }
@@ -430,113 +437,123 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateSGS 1");
         int cnvars = nVars;
         JDiag.GetInvert();
-        index nCellDist = mesh->NumCell();
+        const index nCellDist = mesh->NumCell();
         sumInc.setZero(cnvars);
 
-        auto cellOp = [&](index iCell)
+#if defined(DNDS_DIST_MT_USE_OMP)
+        auto cellOp = [&](index iScanStart, index iScanEnd)
         {
-            auto c2f = mesh->cell2face[iCell];
-            TU uIncNewBuf(nVars);
-            auto RHSI = rhs[iCell];
-            // std::cout << rhs[iCell](0) << std::endl;
-            uIncNewBuf = RHSI;
-
-            for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+#else
+        const index iScanStart{0}, iScanEnd(nCellDist);
+#endif
+            for (index iScan = iScanStart; iScan < iScanEnd; iScan++)
             {
-                index iFace = c2f[ic2f];
-                auto btype = mesh->GetFaceZone(iFace);
-                auto f2c = mesh->face2cell[iFace];
-                index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
-                index iCellAtFace = f2c[0] == iCell ? 0 : 1;
-                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
-                                (iCellAtFace ? -1 : 1); // faces out
-                if (iCellOther != UnInitIndex)
+                index iCell = iScan;
+                iCell = forward ? iScan : nCellDist - 1 - iScan; // TODO: add rb-sor
+
+                auto c2f = mesh->cell2face[iCell];
+                TU uIncNewBuf(nVars);
+                auto RHSI = rhs[iCell];
+                // std::cout << rhs[iCell](0) << std::endl;
+                uIncNewBuf = RHSI;
+
+                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
-                    index iScanOther = forward ? iCellOther : nCellDist - 1 - iCellOther; // TODO: add rb-sor
-                    if (iCell != iCellOther)
+                    index iFace = c2f[ic2f];
+                    auto btype = mesh->GetFaceZone(iFace);
+                    auto f2c = mesh->face2cell[iFace];
+                    index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
+                    index iCellAtFace = f2c[0] == iCell ? 0 : 1;
+                    TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
+                                    (iCellAtFace ? -1 : 1); // faces out
+                    if (iCellOther != UnInitIndex)
                     {
-                        TU fInc;
-                        TU uINCj = uInc[iCellOther];
-                        TU uj = u[iCellOther];
-                        this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
-                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
-
+                        index iScanOther = forward ? iCellOther : nCellDist - 1 - iCellOther; // TODO: add rb-sor
+                        if (iCell != iCellOther)
                         {
-                            fInc = fluxJacobian0_Right_Times_du(
-                                uj, u[iCell],
-                                unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                                Geom::BC_ID_INTERNAL, uINCj,
-                                lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                                iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                                // swap lambda0 and lambda4 if iCellAtFace==1
-                                settings.useRoeJacobian); //! always inner here
-                        }
+                            TU fInc;
+                            TU uINCj = uInc[iCellOther];
+                            TU uj = u[iCellOther];
+                            this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
+                            this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
 
-                        uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
-                                      (fInc);
+                            {
+                                fInc = fluxJacobian0_Right_Times_du(
+                                    uj, u[iCell],
+                                    unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                                    Geom::BC_ID_INTERNAL, uINCj,
+                                    lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                                    iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                    // swap lambda0 and lambda4 if iCellAtFace==1
+                                    settings.useRoeJacobian); //! always inner here
+                            }
 
-                        if ((!uIncNewBuf.allFinite()))
-                        {
-                            std::cout << RHSI.transpose() << std::endl
-                                      << fInc.transpose() << std::endl
-                                      << uINCj.transpose() << std::endl;
-                            DNDS_assert(false);
+                            uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
+                                          (fInc);
+
+                            if ((!uIncNewBuf.allFinite()))
+                            {
+                                std::cout << RHSI.transpose() << std::endl
+                                          << fInc.transpose() << std::endl
+                                          << uINCj.transpose() << std::endl;
+                                DNDS_assert(false);
+                            }
                         }
                     }
+                    // else if (pBCHandler->GetTypeFromID(btype) == BCWall)
+                    // {
+                    //     TMat normBase = Geom::NormBuildLocalBaseV<dim>(unitNorm);
+                    //     Geom::tPoint pPhysics = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, iCellAtFace, -1);
+                    //     TU uThis = u[iCell];
+                    //     TU uINCj = uInc[iCell];
+                    //     //! using t = 0 in generateBoudnaryValue!
+                    //     TU uj = generateBoundaryValue(uThis, uThis, iCell, iFace, -1, unitNorm, normBase, pPhysics, 0, btype, false, 0);
+                    //     uINCj(Seq123) *= -1;
+
+                    //     if (model == NS_SA || model == NS_SA_3D)
+                    //         uINCj(I4 + 1) = 0;
+                    //     if (model == NS_2EQ || model == NS_2EQ_3D)
+                    //         uINCj({I4 + 1, I4 + 2}).setZero();
+                    //     TU fInc = fluxJacobian0_Right_Times_du(
+                    //         uj, u[iCell],
+                    //         unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                    //         Geom::BC_ID_INTERNAL, uINCj,
+                    //         lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                    //         iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                    //                // swap lambda0 and lambda4 if iCellAtFace==1
+                    //         settings.useRoeJacobian); //! treat as inner here
+
+                    //     uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
+                    //                   (fInc);
+                    // }
                 }
-                // else if (pBCHandler->GetTypeFromID(btype) == BCWall)
-                // {
-                //     TMat normBase = Geom::NormBuildLocalBaseV<dim>(unitNorm);
-                //     Geom::tPoint pPhysics = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, iCellAtFace, -1);
-                //     TU uThis = u[iCell];
-                //     TU uINCj = uInc[iCell];
-                //     //! using t = 0 in generateBoudnaryValue!
-                //     TU uj = generateBoundaryValue(uThis, uThis, iCell, iFace, -1, unitNorm, normBase, pPhysics, 0, btype, false, 0);
-                //     uINCj(Seq123) *= -1;
+                auto uIncNewI = uIncNew[iCell];
+                TU uIncOld = uIncNewI;
 
-                //     if (model == NS_SA || model == NS_SA_3D)
-                //         uINCj(I4 + 1) = 0;
-                //     if (model == NS_2EQ || model == NS_2EQ_3D)
-                //         uINCj({I4 + 1, I4 + 2}).setZero();
-                //     TU fInc = fluxJacobian0_Right_Times_du(
-                //         uj, u[iCell],
-                //         unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                //         Geom::BC_ID_INTERNAL, uINCj,
-                //         lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                //         iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                //                // swap lambda0 and lambda4 if iCellAtFace==1
-                //         settings.useRoeJacobian); //! treat as inner here
+                uIncNewI = JDiag.MatVecLeftInvert(iCell, uIncNewBuf);
+                sumInc.array() += (uIncNewI - uIncOld).array().abs();
 
-                //     uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
-                //                   (fInc);
-                // }
+                if (uIncNewI.hasNaN())
+                {
+                    std::cout << uIncNewI.transpose() << std::endl
+                              << uIncNewBuf.transpose() << std::endl
+                              << JDiag.getValue(iCell) << std::endl
+                              << iCell << std::endl;
+                    DNDS_assert(!uInc[iCell].hasNaN());
+                }
+                // if (iScan == 100)
             }
-            auto uIncNewI = uIncNew[iCell];
-            TU uIncOld = uIncNewI;
-
-            uIncNewI = JDiag.MatVecLeftInvert(iCell, uIncNewBuf);
-            sumInc.array() += (uIncNewI - uIncOld).array().abs();
-
-            if (uIncNewI.hasNaN())
-            {
-                std::cout << uIncNewI.transpose() << std::endl
-                          << uIncNewBuf.transpose() << std::endl
-                          << JDiag.getValue(iCell) << std::endl
-                          << iCell << std::endl;
-                DNDS_assert(!uInc[iCell].hasNaN());
-            }
-            // if (iScan == 100)
+#if defined(DNDS_DIST_MT_USE_OMP)
         };
-
-#ifdef DNDS_USE_OMP
-#pragma omp parallel for schedule(runtime)
 #endif
-        for (index iScan = 0; iScan < nCellDist; iScan++)
-        {
-            index iCell = iScan;
-            iCell = forward ? iScan : nCellDist - 1 - iScan; // TODO: add rb-sor
-            cellOp(iCell);
-        }
+
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
+#pragma omp parallel for schedule(static) reduction(TUAdd : sumInc)
+        for (index iScanStart = 0; iScanStart < nCellDist; iScanStart += 16)
+            cellOp(iScanStart, std::min(iScanStart + 16, nCellDist));
+#endif
+
         TU sumIncAll(cnvars);
         // std::abort();
         MPI::Allreduce(sumInc.data(), sumIncAll.data(), sumInc.size(), DNDS_MPI_REAL, MPI_SUM, rhs.father->getMPI().comm);
@@ -562,6 +579,10 @@ namespace DNDS::Euler
         JDiag.GetInvert();
         index nCellDist = mesh->NumCell();
         sumInc.setZero(cnvars);
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
+#pragma omp parallel for schedule(static) reduction(TUAdd : sumInc)
+#endif
         for (index iScan = 0; iScan < nCellDist; iScan++)
         {
             index iCell = iScan;
@@ -730,6 +751,9 @@ namespace DNDS::Euler
         u.setConstant(initConstVal);
         if (model == EulerModel::NS_SA || model == NS_SA_3D)
         {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (int iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 auto c2f = mesh->cell2face[iCell];
@@ -745,6 +769,9 @@ namespace DNDS::Euler
         {
             if (settings.ransModel == RANSModel::RANS_KOSST ||
                 settings.ransModel == RANSModel::RANS_KOWilcox)
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
                 for (int iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     auto c2f = mesh->cell2face[iCell];
@@ -775,6 +802,9 @@ namespace DNDS::Euler
         case 1: // for RT problem
             DNDS_assert(model == NS || model == NS_2D || model == NS_3D);
             if constexpr (model == NS || model == NS_2D)
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
@@ -793,6 +823,9 @@ namespace DNDS::Euler
                         u[iCell] = Eigen::Vector<real, 4>{rho, 0, rho * v, 0.5 * rho * sqr(v) + p / (gamma - 1)};
                 }
             else if constexpr (model == NS_3D)
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
@@ -813,6 +846,9 @@ namespace DNDS::Euler
         case 202:
             DNDS_assert(model == NS || model == NS_2D);
             if constexpr (model == NS || model == NS_2D)
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
@@ -842,6 +878,9 @@ namespace DNDS::Euler
         case 201: // for IVCent problem
             DNDS_assert(model == NS || model == NS_2D);
             if constexpr (model == NS || model == NS_2D)
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
@@ -865,6 +904,9 @@ namespace DNDS::Euler
             DNDS_assert(model == NS_3D);
             if constexpr (model == NS_3D)
             {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
@@ -906,6 +948,9 @@ namespace DNDS::Euler
             break;
         case 3001: // for nol problem
             DNDS_assert(model == NS_3D);
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 Geom::tPoint pos = vfv->GetCellBary(iCell);
@@ -950,6 +995,9 @@ namespace DNDS::Euler
 
         if (settings.frameConstRotation.enabled)
         {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (int iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 TU ui = u[iCell];
@@ -961,6 +1009,9 @@ namespace DNDS::Euler
         // Box
         for (auto &i : settings.boxInitializers)
         {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 Geom::tPoint pos = vfv->GetCellBary(iCell);
@@ -976,6 +1027,9 @@ namespace DNDS::Euler
         // Plane
         for (auto &i : settings.planeInitializers)
         {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 Geom::tPoint pos = vfv->GetCellBary(iCell);
@@ -997,6 +1051,9 @@ namespace DNDS::Euler
             exprtkEval.AddVector("x", dim);
             exprtkEval.AddVector("UPrim", nVars);
             exprtkEval.Compile(exprStr);
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 Geom::tPoint pos = vfv->GetCellBary(iCell);
@@ -1064,11 +1121,14 @@ namespace DNDS::Euler
     template <EulerModel model>
     void EulerEvaluator<model>::MeanValueCons2Prim(ArrayDOFV<nVarsFixed> &u, ArrayDOFV<nVarsFixed> &w)
     {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(static)
+#endif
         for (index iCell = 0; iCell < u.Size(); iCell++)
         {
             real gamma = settings.idealGasProperty.gamma;
             TU out;
-            Gas::IdealGasThermalConservative2Primitive(u[iCell], out, gamma);
+            Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], out, gamma);
             w[iCell] = out;
         }
     }
@@ -1076,11 +1136,14 @@ namespace DNDS::Euler
     template <EulerModel model>
     void EulerEvaluator<model>::MeanValuePrim2Cons(ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &u)
     {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(static)
+#endif
         for (index iCell = 0; iCell < w.Size(); iCell++)
         {
             real gamma = settings.idealGasProperty.gamma;
             TU out;
-            Gas::IdealGasThermalPrimitive2Conservative(w[iCell], out, gamma);
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], out, gamma);
             u[iCell] = out;
         }
     }
@@ -1094,7 +1157,10 @@ namespace DNDS::Euler
             TU resc;
             resc.setZero(nVars);
             real rescBase{0};
-
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
+#pragma omp parallel for schedule(static) reduction(TUAdd : resc)
+#endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 if (rhs[iCell].hasNaN() || (!rhs[iCell].allFinite()))
@@ -1120,11 +1186,33 @@ namespace DNDS::Euler
             TU resc;
             resc.resizeLike(rhs[0]);
             resc.setZero();
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp declare reduction(TUAdd:TU : omp_out = omp_out.array().max(omp_in.array())) initializer(omp_priv = omp_orig)
+#pragma omp parallel for schedule(static) reduction(TUAdd : resc)
+#endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 resc = resc.array().max(rhs[iCell].array().abs()).matrix();
             MPI::Allreduce(resc.data(), res.data(), res.size(), DNDS_MPI_REAL, MPI_MAX, rhs.father->getMPI().comm);
         }
     }
+
+    template <class TU>
+    struct TU_P_Reduction
+    {
+        TU _v;
+        index P{1};
+
+        void setZero(int n)
+        {
+            _v.setZero(n);
+        }
+
+        void reduce(const TU_P_Reduction<TU> &R)
+        {
+            _v = ((P < 3) ? TU(_v + R._v) : TU((_v.array().max(R._v.array())).matrix()));
+        }
+        void setP(index nP) { P = nP; }
+    };
 
     template <EulerModel model>
     void EulerEvaluator<model>::EvaluateRecNorm(
@@ -1138,8 +1226,13 @@ namespace DNDS::Euler
         real t)
     {
         res.resize(nVars);
-        TU resc;
+        TU_P_Reduction<TU> resc;
         resc.setZero(nVars);
+        resc.setP(P);
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp declare reduction(TUAdd : TU_P_Reduction<TU> : omp_out.reduce(omp_in)) initializer(omp_priv = omp_orig)
+#pragma omp parallel for schedule(static) reduction(TUAdd : resc)
+#endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             auto qCell = vfv->GetCellQuad(iCell);
@@ -1157,18 +1250,18 @@ namespace DNDS::Euler
                         uR *= FCompareFieldWeight(pPhysics, t);
                     }
                     if (P >= 3)
-                        resc = resc.array().max(uR.array().abs());
+                        resc._v = resc._v.array().max(uR.array().abs());
                     inc = uR.array().abs().pow(P);
                     inc *= vfv->GetCellJacobiDet(iCell, iG);
                 });
             if (P < 3)
-                resc += rescCell;
+                resc._v += rescCell;
         }
         if (P > 3)
-            MPI::Allreduce(resc.data(), res.data(), res.size(), DNDS_MPI_REAL, MPI_MAX, u.father->getMPI().comm);
+            MPI::Allreduce(resc._v.data(), res.data(), res.size(), DNDS_MPI_REAL, MPI_MAX, u.father->getMPI().comm);
         else
         {
-            MPI::Allreduce(resc.data(), res.data(), res.size(), DNDS_MPI_REAL, MPI_SUM, u.father->getMPI().comm);
+            MPI::Allreduce(resc._v.data(), res.data(), res.size(), DNDS_MPI_REAL, MPI_SUM, u.father->getMPI().comm);
             res = res.array().pow(1.0 / P).matrix();
         }
     }
@@ -1181,7 +1274,9 @@ namespace DNDS::Euler
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         static const real safetyRatio = 1 - 1e-5;
         static const real E_lb_eps = smallReal;
-
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             uGradNew[iCell] = uGrad[iCell];
@@ -1260,10 +1355,13 @@ namespace DNDS::Euler
         {
             real rhoMin = veryLargeReal;
             real pMin = veryLargeReal;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime) reduction(min : rhoMin, pMin)
+#endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 TU UPrim;
-                Gas::IdealGasThermalConservative2Primitive(u[iCell], UPrim, settings.idealGasProperty.gamma);
+                Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], UPrim, settings.idealGasProperty.gamma);
                 rhoMin = std::min(rhoMin, UPrim(0));
                 pMin = std::min(pMin, UPrim(I4));
             }
@@ -1275,6 +1373,9 @@ namespace DNDS::Euler
 
         index nLimLocal = 0;
         real minBetaLocal = 1;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime) reduction(+ : nLimLocal) reduction(min : minBetaLocal)
+#endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             auto gCell = vfv->GetCellQuad(iCell);
@@ -1469,7 +1570,10 @@ namespace DNDS::Euler
         real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
         if (settings.ppEpsIsRelaxed)
             rhoEps *= 0, pEps *= 0;
-
+        bool ret{true};
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             real gamma = settings.idealGasProperty.gamma;
@@ -1485,7 +1589,10 @@ namespace DNDS::Euler
                             fmt::format(
                                 " eps={}, value={}",
                                 rhoEps, u[iCell](0)));
-                return false;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp critical
+#endif
+                ret = false;
             }
             real rhoEi = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0);
             if (rhoEi < pEps / (gamma - 1))
@@ -1499,11 +1606,14 @@ namespace DNDS::Euler
                             fmt::format(
                                 " eps={}, value={}",
                                 pEps / (gamma - 1), rhoEi));
-                return false;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp critical
+#endif
+                ret = false;
             }
         }
 
-        return true;
+        return ret;
     }
 
     template <EulerModel model>
@@ -1530,6 +1640,9 @@ namespace DNDS::Euler
 
         index nLimLocal = 0;
         real alphaMinLocal = 1;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime) reduction(+ : nLimLocal) reduction(min : alphaMinLocal)
+#endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             real gamma = settings.idealGasProperty.gamma;
@@ -1599,12 +1712,18 @@ namespace DNDS::Euler
         MPI::Allreduce(&nLimLocal, &nLim, 1, DNDS_MPI_INDEX, MPI_SUM, u.father->getMPI().comm);
         MPI::Allreduce(&alphaMinLocal, &alphaMin, 1, DNDS_MPI_REAL, MPI_MIN, u.father->getMPI().comm);
         if (flag & EvaluateCellRHSAlpha_MIN_IF_NOT_ONE)
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(static)
+#endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 if (cellRHSAlpha[iCell](0) < 1)
                     cellRHSAlpha[iCell](0) = alphaMin;
             }
         if (flag & EvaluateCellRHSAlpha_MIN_ALL)
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(static)
+#endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 cellRHSAlpha[iCell](0) = alphaMin;
     }
@@ -1700,6 +1819,9 @@ namespace DNDS::Euler
         ArrayDOFV<1> &dTau, ArrayDOFV<1> &dTauNew)
     {
         real smootherCentWeight = 1;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             auto c2f = mesh->cell2face[iCell];

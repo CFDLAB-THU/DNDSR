@@ -833,6 +833,9 @@ namespace DNDS::Euler
         for (auto &i : lambdaCell)
             i = 0.0;
 
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
             auto f2c = mesh->face2cell[iFace];
@@ -967,6 +970,9 @@ namespace DNDS::Euler
             deltaLambdaFace[iFace] = std::abs((vR - vL).dot(unitNorm)) + std::sqrt(std::abs(asqrR - asqrL)) * 0.7071;
         }
         real dtMin = veryLargeReal;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime) reduction(min: dtMin)
+#endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             // std::cout << fv->GetCellVol(iCell) << " " << (lambdaCell[iCell]) << " " << CFL << std::endl;

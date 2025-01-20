@@ -81,15 +81,15 @@ inline void __DNDS_assert_false_info(const char *expr, const char *file, int lin
 }
 
 #ifdef DNDS_NDEBUG
-#define DNDS_assert(expr)
-#define DNDS_assert_info(expr, info)
+#define DNDS_assert(expr) (void(0))
+#define DNDS_assert_info(expr, info) (void(0))
 #else
-#define DNDS_assert(expr)    \
-    (static_cast<bool>(expr) \
-         ? void(0)           \
+#define DNDS_assert(expr)      \
+    ((static_cast<bool>(expr)) \
+         ? void(0)             \
          : __DNDS_assert_false(#expr, __FILE__, __LINE__))
 #define DNDS_assert_info(expr, info) \
-    (static_cast<bool>(expr)         \
+    ((static_cast<bool>(expr))       \
          ? void(0)                   \
          : __DNDS_assert_false_info(#expr, __FILE__, __LINE__, info))
 #endif
@@ -191,7 +191,6 @@ namespace DNDS
 
     void setLogStream(std::ostream *nstream);
 }
-
 
 namespace DNDS
 {

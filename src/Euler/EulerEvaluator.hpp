@@ -164,7 +164,7 @@ namespace DNDS::Euler
             {
                 TU farPrim = settings.farFieldStaticValue;
                 real gamma = settings.idealGasProperty.gamma;
-                Gas::IdealGasThermalConservative2Primitive(settings.farFieldStaticValue, farPrim, gamma);
+                Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrim, gamma);
                 real T = farPrim(I4) / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * farPrim(0));
                 // auto [rhs0, rhs] = RANS::SolveZeroGradEquilibrium<dim>(settings.farFieldStaticValue, this->muEff(settings.farFieldStaticValue, T));
                 // if(mesh->getMPI().rank == 0)
