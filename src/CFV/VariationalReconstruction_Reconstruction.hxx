@@ -462,7 +462,8 @@ namespace DNDS
                     this->DoReconstruction2nd<nVarsFixed>(uRec, u, (FBoundary), settings.subs2ndOrder, std::vector<int>());
                 return;
             }
-            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+
+            auto cellOp = [&](index iCell)
             {
                 real relax = cellAtr[iCell].relax;
 
@@ -546,6 +547,13 @@ namespace DNDS
                 {
                     DNDS_assert(false);
                 }
+            };
+#ifdef DNDS_USE_OMP
+#pragma omp parallel for schedule(runtime)
+#endif
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                cellOp(iCell);
             }
 
             if (!recordInc)

@@ -192,6 +192,13 @@ namespace DNDS
     void setLogStream(std::ostream *nstream);
 }
 
+
+namespace DNDS
+{
+    extern int get_env_OMP_NUM_THREADS();
+    extern int get_env_DNDS_DIST_OMP_NUM_THREADS();
+}
+
 /*
 
 

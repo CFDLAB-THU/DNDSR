@@ -58,6 +58,47 @@ namespace DNDS
     }
 }
 
+namespace DNDS
+{
+    int get_env_OMP_NUM_THREADS()
+    {
+        static int ret{-1};
+        if (ret == -1)
+        {
+            const char *env = std::getenv("OMP_NUM_THREADS");
+            ret = 0;
+            if (env)
+                try
+                {
+                    ret = std::stoi(env);
+                }
+                catch (...)
+                {
+                }
+        }
+        return ret;
+    }
+
+    int get_env_DNDS_DIST_OMP_NUM_THREADS()
+    {
+        static int ret{-1};
+        if (ret == -1)
+        {
+            const char *env = std::getenv("DNDS_DIST_OMP_NUM_THREADS");
+            ret = 0;
+            if (env)
+                try
+                {
+                    ret = std::stoi(env);
+                }
+                catch (...)
+                {
+                }
+        }
+        return ret;
+    }
+}
+
 /********************************/
 // workaround for cpp trace
 std::string __DNDS_getTraceString()

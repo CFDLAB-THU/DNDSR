@@ -1079,29 +1079,6 @@ namespace DNDS::Euler
                 DNDS_assert(false);
             }
         }
-#ifdef USE_FLUX_BALANCE_TERM // todo: finish for batch
-        {
-            TU wLMean, wRMean;
-            Gas::IdealGasThermalConservative2Primitive<dim>(ULMean, wLMean, gamma);
-            Gas::IdealGasThermalConservative2Primitive<dim>(URMean, wRMean, gamma);
-            Gas::GasInviscidFlux<dim>(ULMean, wLMean(Seq123), vg, wLMean(I4), FLfix);
-            Gas::GasInviscidFlux<dim>(URMean, wRMean(Seq123), vg, wRMean(I4), FRfix);
-            if (model == NS_SA || model == NS_SA_3D)
-            {
-                FLfix(I4 + 1) = (wLMean(1) - vg(0)) * ULMean(I4 + 1);
-                FRfix(I4 + 1) = (wRMean(1) - vg(0)) * URMean(I4 + 1); // F_5 = rhoNut * un
-            }
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
-            {
-                FLfix({I4 + 1, I4 + 2}) = (wLMean(1) - vg(0)) * ULMean({I4 + 1, I4 + 2});
-                FRfix({I4 + 1, I4 + 2}) = (wRMean(1) - vg(0)) * URMean({I4 + 1, I4 + 2}); // F_5 = rhoNut * un
-            }
-            FLfix(Seq123) = normBase * FLfix(Seq123);
-            FRfix(Seq123) = normBase * FRfix(Seq123);
-            // FLfix *= 0;
-            // FRfix *= 0; // currently disabled all flux balancingf
-        }
-#endif
 
         auto exitFun = [&]()
         {

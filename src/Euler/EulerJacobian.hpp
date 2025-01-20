@@ -87,6 +87,9 @@ namespace DNDS::Euler
         {
             if (!hasInvert)
             {
+#ifdef DNDS_USE_OMP
+#pragma omp parallel for schedule(auto)
+#endif
                 for (index iCell = 0; iCell < Size(); iCell++)
                     if (isBlock())
                     {
@@ -137,11 +140,17 @@ namespace DNDS::Euler
         {
             if (isBlock())
             {
+#ifdef DNDS_USE_OMP
+#pragma omp parallel for schedule(auto)
+#endif
                 for (index i = 0; i < _data.Size(); i++)
                     _data[i].setZero();
             }
             else
             {
+#ifdef DNDS_USE_OMP
+#pragma omp parallel for schedule(auto)
+#endif
                 for (index i = 0; i < _dataDiag.Size(); i++)
                     _dataDiag[i].setZero();
             }

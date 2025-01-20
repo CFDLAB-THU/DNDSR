@@ -108,11 +108,9 @@ namespace DNDS::Euler
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixVec 1");
         int cnvars = nVars;
-        for (index iScan = 0; iScan < mesh->NumCell(); iScan++)
-        {
-            index iCell = iScan;
-            // iCell = (*vfv->SOR_iScan2iCell)[iCell];//TODO: add rb-sor
 
+        auto cellOp = [&](index iCell)
+        {
             auto c2f = mesh->cell2face[iCell];
             TU uIncNewBuf(cnvars);
             uIncNewBuf.setZero(); // norhs
@@ -173,9 +171,9 @@ namespace DNDS::Euler
             }
             // uIncNewBuf /= fpDivisor;
             // uIncNew[iCell] = uIncNewBuf;
-            auto AuIncI = AuInc[iCell];
-            AuIncI = JDiag.MatVecLeft(iCell, uInc[iCell]) - uIncNewBuf;
+            AuInc[iCell] = JDiag.MatVecLeft(iCell, uInc[iCell]) - uIncNewBuf;
 
+            auto AuIncI = AuInc[iCell];
             if (AuIncI.hasNaN())
             {
                 std::cout << AuIncI.transpose() << std::endl
@@ -185,6 +183,16 @@ namespace DNDS::Euler
                           << iCell << std::endl;
                 DNDS_assert(!AuInc[iCell].hasNaN());
             }
+        };
+
+#ifdef DNDS_USE_OMP
+#pragma omp parallel for schedule(runtime)
+#endif
+        for (index iScan = 0; iScan < mesh->NumCell(); iScan++)
+        {
+            index iCell = iScan;
+            cellOp(iCell);
+            // iCell = (*vfv->SOR_iScan2iCell)[iCell];//TODO: add rb-sor
         }
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixVec -1");
     }
@@ -424,11 +432,9 @@ namespace DNDS::Euler
         JDiag.GetInvert();
         index nCellDist = mesh->NumCell();
         sumInc.setZero(cnvars);
-        for (index iScan = 0; iScan < nCellDist; iScan++)
-        {
-            index iCell = iScan;
-            iCell = forward ? iScan : nCellDist - 1 - iScan; // TODO: add rb-sor
 
+        auto cellOp = [&](index iCell)
+        {
             auto c2f = mesh->cell2face[iCell];
             TU uIncNewBuf(nVars);
             auto RHSI = rhs[iCell];
@@ -520,6 +526,16 @@ namespace DNDS::Euler
                 DNDS_assert(!uInc[iCell].hasNaN());
             }
             // if (iScan == 100)
+        };
+
+#ifdef DNDS_USE_OMP
+#pragma omp parallel for schedule(runtime)
+#endif
+        for (index iScan = 0; iScan < nCellDist; iScan++)
+        {
+            index iCell = iScan;
+            iCell = forward ? iScan : nCellDist - 1 - iScan; // TODO: add rb-sor
+            cellOp(iCell);
         }
         TU sumIncAll(cnvars);
         // std::abort();
