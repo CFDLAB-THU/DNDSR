@@ -275,6 +275,11 @@ namespace DNDS::Direct
 
         void InPlaceDecompose()
         {
+            InPlaceDecomposeV1();
+        }
+
+        void InPlaceDecomposeV1()
+        {
             auto dThis = static_cast<Derived *>(this);
             for (index iP = 0; iP < symLU->Num(); iP++)
             {
@@ -283,16 +288,16 @@ namespace DNDS::Direct
                 auto &&lowerRow = symLU->lowerTriStructureNew[iP];
                 /*********************/
                 // lower part
-                for (int ijP = 0; ijP < lowerRow.size(); ijP++)
+                for (int ijP = 0; ijP < lowerRow.size(); ijP++) //! for(int jP = 0; jP < iP; jP++)
                 {
                     auto jP = lowerRow[ijP];
                     DNDS_assert(jP < iP);
                     auto j = symLU->FillingReorderNew2Old(jP);
                     // handle last j's job
-                    if (ijP > 0)
+                    if (ijP > 0) //! if(jP > 0)
                     {
                         auto &&lowerRowJP = symLU->lowerTriStructureNew[jP];
-                        iterateIdentical(
+                        iterateIdentical( //! for(int kP = 0; kP < jP; kP++)
                             lowerRow.begin(), lowerRow.end(), lowerRowJP.begin(), lowerRowJP.end(),
                             [&](index kP, auto pos1, auto pos2)
                             {
@@ -304,6 +309,7 @@ namespace DNDS::Direct
                                 if (jPInUpperPos != -1) // in case not symbolically symmetric
                                     dThis->GetLower(i, ijP) -=
                                         dThis->GetLower(i, pos1) * dThis->GetUpper(k, jPInUpperPos);
+                                //! LU(iP, jP) -= LU(iP, kP) * LU(kP, jP);
                                 // if (iP < 3)
                                 // log() << fmt::format("Lower Add at {},{},{} === {}", iP, jP - 1, kP, (dThis->GetLower(i, pos1) * dThis->GetUpper(k, jPInUpperPos))(0)) << std::endl;
                                 return false;
@@ -312,31 +318,33 @@ namespace DNDS::Direct
 
                     // auto luDiag = dThis->GetDiag(j).fullPivLu();
                     // tComponent Aij = luDiag.solve(dThis->GetLower(i, ijP));
-                    dThis->GetLower(i, ijP) *= dThis->GetDiag(j);
+                    dThis->GetLower(i, ijP) *= dThis->GetDiag(j); //! LU(iP, jP) *= LU(jP, jP);
                 }
                 /*********************/
                 // diag part
-                for (int ikP = 0; ikP < lowerRow.size(); ikP++)
+                for (int ikP = 0; ikP < lowerRow.size(); ikP++) //! for(int kP = 0; kP < iP; kP++)
                 {
                     auto kP = lowerRow[ikP];
                     auto k = symLU->FillingReorderNew2Old(kP);
                     int iPInUpperPos = symLU->lowerTriStructureNewInUpper[iP][ikP];
                     if (iPInUpperPos != -1)
                         dThis->GetDiag(i) -= dThis->GetLower(i, ikP) * dThis->GetUpper(k, iPInUpperPos);
+                    //! LU(iP, iP) -= LU(iP, kP) * LU(kP, iP);
                 }
 
                 dThis->GetDiag(i) = dThis->InvertDiag(dThis->GetDiag(i)); // * note here only stores
+                //! LU(iP, iP) = inv(LU(iP, iP));
                 /*********************/
                 // upper part
                 auto &&upperRow = symLU->upperTriStructureNew[iP];
-                for (int ijP = 0; ijP < upperRow.size(); ijP++)
+                for (int ijP = 0; ijP < upperRow.size(); ijP++) //! for(int jP = iP+1; jP < N; jP++)
                 {
                     auto jP = upperRow[ijP];
                     DNDS_assert(jP > iP);
                     auto j = symLU->FillingReorderNew2Old(jP);
                     auto &&lowerRowJP = symLU->lowerTriStructureNew[jP];
 
-                    iterateIdentical(
+                    iterateIdentical( //! for(int kP = 0; kP < iP; kP++)
                         lowerRow.begin(), lowerRow.end(), lowerRowJP.begin(), lowerRowJP.end(),
                         [&](index kP, auto pos1, auto pos2)
                         {
@@ -347,12 +355,76 @@ namespace DNDS::Direct
                             int jPInUpperPos = symLU->lowerTriStructureNewInUpper[jP][pos2];
                             if (jPInUpperPos != -1)
                                 dThis->GetUpper(i, ijP) -= dThis->GetLower(i, pos1) * dThis->GetUpper(k, jPInUpperPos);
+                            //! LU(iP, jP) -= LU(iP, kP) * LU(kP, jP);
                             // if (iP < 3)
                             // log() << fmt::format("Upper Add at {},{},{} === {}", iP, jP, kP,
                             //                      (this->GetLower(i, pos1) * this->GetUpper(k, jPInUpperPos))(0))
                             // << std::endl;
                             return false;
                         });
+                }
+            }
+            isDecomposed = true;
+        }
+
+        void InPlaceDecomposeV2()
+        {
+            auto dThis = static_cast<Derived *>(this);
+            for (index iP = 0; iP < symLU->Num(); iP++)
+            {
+                index i = symLU->FillingReorderNew2Old(iP);
+
+                auto &&lowerRow = symLU->lowerTriStructureNew[iP];
+
+                /*********************/
+                // diag part
+                for (int ikP = 0; ikP < lowerRow.size(); ikP++) //! for(int kP = 0; kP < iP; kP++)
+                {
+                    auto kP = lowerRow[ikP];
+                    auto k = symLU->FillingReorderNew2Old(kP);
+                    int iPInUpperPos = symLU->lowerTriStructureNewInUpper[iP][ikP];
+                    if (iPInUpperPos != -1)
+                        dThis->GetDiag(i) -= dThis->GetLower(i, ikP) * dThis->GetUpper(k, iPInUpperPos);
+                    //! LU(iP, iP) -= LU(iP, kP) * LU(kP, iP);
+                }
+
+                dThis->GetDiag(i) = dThis->InvertDiag(dThis->GetDiag(i)); // * note here only stores
+                //! LU(iP, iP) = inv(LU(iP, iP));
+                /*********************/
+                // upper and lower part
+                auto &&upperRow = symLU->upperTriStructureNew[iP];
+
+// #if defined(DNDS_DIST_MT_USE_OMP) // this OMP does not improve
+// #pragma omp parallel for schedule(static)
+// #endif
+                for (int ijP = 0; ijP < upperRow.size(); ijP++) //! for(int jP = iP+1; jP < N; jP++)
+                {
+                    auto jP = upperRow[ijP];
+                    DNDS_assert(jP > iP);
+                    auto j = symLU->FillingReorderNew2Old(jP);
+                    auto &&lowerRowJP = symLU->lowerTriStructureNew[jP];
+                    int iPInLowerPosOfJRow = symLU->upperTriStructureNewInLower[iP][ijP];
+
+                    iterateIdentical( //! for(int kP = 0; kP < iP; kP++)
+                        lowerRow.begin(), lowerRow.end(), lowerRowJP.begin(), lowerRowJP.end(),
+                        [&](index kP, auto pos1, auto pos2)
+                        {
+                            if (kP >= iP)
+                                return true;
+                            DNDS_assert(kP < symLU->Num());
+                            auto k = symLU->FillingReorderNew2Old(kP);
+                            int jPInUpperPos = symLU->lowerTriStructureNewInUpper[jP][pos2];
+                            int iPInUpperPos = symLU->lowerTriStructureNewInUpper[iP][pos1];
+                            if (jPInUpperPos != -1)
+                                dThis->GetUpper(i, ijP) -= dThis->GetLower(i, pos1) * dThis->GetUpper(k, jPInUpperPos);
+                            //! LU(iP, jP) -= LU(iP, kP) * LU(kP, jP);
+                            if (iPInUpperPos != -1)
+                                dThis->GetLower(j, iPInLowerPosOfJRow) -= dThis->GetLower(j, pos2) * dThis->GetUpper(k, iPInUpperPos);
+                            // !LU(jP, iP) -= LU(jP, kP) * LU(kP, iP);
+                            return false;
+                        });
+                    dThis->GetLower(j, iPInLowerPosOfJRow) *= dThis->GetDiag(i);
+                    // !LU(jP, iP) *= inv(LU(iP, iP));
                 }
             }
             isDecomposed = true;
