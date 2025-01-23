@@ -23,7 +23,7 @@ dnds_variable_to_parent_scope(DNDS_PCH_TARGETS_FAST)
 set(LIBNAME dnds)
 
 set(LINKS
-# ${DNDS_EXTERNAL_LIBS}
+${DNDS_EXTERNAL_LIBS}
 )
 
 set(CPPS

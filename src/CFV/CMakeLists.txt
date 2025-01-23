@@ -8,9 +8,9 @@ include("${PROJECT_SOURCE_DIR}/cmakeCommonUtils.cmake") # from father
 set(LIBNAME cfv)
 
 set(LINKS
-# geom
-# dnds
-# ${DNDS_EXTERNAL_LIBS}
+geom
+dnds
+${DNDS_EXTERNAL_LIBS}
 )
 
 set(CPPS

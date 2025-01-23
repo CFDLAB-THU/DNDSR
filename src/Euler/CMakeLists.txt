@@ -3,57 +3,29 @@ cmake_minimum_required(VERSION 3.1)
 # message("source dir is ${PROJECT_SOURCE_DIR}")
 include("${PROJECT_SOURCE_DIR}/cmakeCommonUtils.cmake") # from father
 
-# project(Euler LANGUAGES CXX)
-
 set(LIBNAME euler_library)
 
 set(LINKS
-# cfv
-# geom
-# dnds
-# ${DNDS_EXTERNAL_LIBS}
+cfv
+geom
+dnds
+${DNDS_EXTERNAL_LIBS}
 )
 
-set(CPPS_FAST
-_explicit_instantiation/EulerEvaluator_EvaluateDt_NS_2D.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateDt_NS_3D.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateDt_NS.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateDt_NS_SA.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateDt_NS_SA_3D.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateDt_NS_2EQ.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateDt_NS_2EQ_3D.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateRHS_NS_2D.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateRHS_NS_3D.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateRHS_NS.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateRHS_NS_SA.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateRHS_NS_SA_3D.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateRHS_NS_2EQ.cpp
-_explicit_instantiation/EulerEvaluator_EvaluateRHS_NS_2EQ_3D.cpp
-_explicit_instantiation/EulerEvaluator_NS_2D.cpp
-_explicit_instantiation/EulerEvaluator_NS_3D.cpp
-_explicit_instantiation/EulerEvaluator_NS.cpp
-_explicit_instantiation/EulerEvaluator_NS_SA.cpp
-_explicit_instantiation/EulerEvaluator_NS_SA_3D.cpp
-_explicit_instantiation/EulerEvaluator_NS_2EQ.cpp
-_explicit_instantiation/EulerEvaluator_NS_2EQ_3D.cpp
-_explicit_instantiation/EulerSolver_PrintData_NS_2D.cpp
-_explicit_instantiation/EulerSolver_PrintData_NS_3D.cpp
-_explicit_instantiation/EulerSolver_PrintData_NS.cpp
-_explicit_instantiation/EulerSolver_PrintData_NS_SA.cpp
-_explicit_instantiation/EulerSolver_PrintData_NS_SA_3D.cpp
-_explicit_instantiation/EulerSolver_PrintData_NS_2EQ.cpp
-_explicit_instantiation/EulerSolver_PrintData_NS_2EQ_3D.cpp
-)
-
-set(CPPS
-_explicit_instantiation/EulerSolver_NS_2D.cpp
-_explicit_instantiation/EulerSolver_NS_3D.cpp
-_explicit_instantiation/EulerSolver_NS.cpp
-_explicit_instantiation/EulerSolver_NS_SA.cpp
-_explicit_instantiation/EulerSolver_NS_SA_3D.cpp
-_explicit_instantiation/EulerSolver_NS_2EQ.cpp
-_explicit_instantiation/EulerSolver_NS_2EQ_3D.cpp
-)
-
-dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS}")
-dnds_add_lib_fast(${LIBNAME}_fast "${CPPS_FAST}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}")
+foreach(item IN LISTS DNDS_Euler_Models_List)
+    string(REPLACE "=" ";" keyval ${item})
+    list(GET keyval 0 key)
+    list(GET keyval 1 value)
+    set(CPPS_FAST
+    _explicit_instantiation/EulerEvaluator_EvaluateDt_${key}.cpp
+    _explicit_instantiation/EulerEvaluator_EvaluateRHS_${key}.cpp
+    _explicit_instantiation/EulerEvaluator_${key}.cpp
+    _explicit_instantiation/EulerSolver_PrintData_${key}.cpp
+    _explicit_instantiation/EulerSolver_Init_${key}.cpp
+    )
+    set(CPPS
+    _explicit_instantiation/EulerSolver_${key}.cpp
+    )
+    dnds_add_lib_fast(${LIBNAME}_fast_${key} "${CPPS_FAST}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}")
+    dnds_add_lib(${LIBNAME}_${key} "${CPPS}" "${LINKS};${LIBNAME}_fast_${key}" "${DNDS_PCH_TARGETS}")
+endforeach()

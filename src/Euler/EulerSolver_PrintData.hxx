@@ -6,7 +6,8 @@
 
 namespace DNDS::Euler
 {
-    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, static const auto model = NS;)
+    static const auto model = NS;
+    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
     void EulerSolver<model>::PrintData(
         const std::string &fname,
         const std::string &fnameSeries,

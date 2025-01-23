@@ -54,7 +54,7 @@ set(DNDS_EIGEN_USE_LAPACK OFF CACHE BOOL "use lapack in eigen")
 set(DNDS_SUPERLU_DIST_USE_BLAS OFF CACHE BOOL "use blas in superlu_dist")
 
 set(DNDS_RECORD_COMMIT ON CACHE BOOL "record commit id for each cmake configure")
-set(DNDS_VERBOSE_BUILDING ON CACHE BOOL "make the makefile verbose, overrides CMAKE_VERBOSE_MAKEFILE")
+set(DNDS_VERBOSE_BUILDING OFF CACHE BOOL "make the makefile verbose, overrides CMAKE_VERBOSE_MAKEFILE")
 
 if(DNDS_RECORD_COMMIT)
     execute_process(COMMAND git rev-parse HEAD OUTPUT_FILE ${CMAKE_BINARY_DIR}/commitID.txt WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} TIMEOUT 120 RESULT_VARIABLE RET)
@@ -126,102 +126,102 @@ set(CMAKE_USE_RELATIVE_PATHS ON)
 
 
 # ##########################################
-find_library(EXTERNAL_LIB_BACKTRACE NAMES backtrace)
+find_library(DNDS_EXTERNAL_LIB_BACKTRACE NAMES backtrace)
 # need zlibstatic first to find the static version on windows
-find_library(EXTERNAL_LIB_ZLIB NAMES zlibstatic zlib z z_D libzlibstatic.a REQUIRED)
-find_library(EXTERNAL_LIB_HDF5 NAMES libhdf5.a hdf5 PATHS 
+find_library(DNDS_EXTERNAL_LIB_ZLIB NAMES zlibstatic zlib z z_D libzlibstatic.a REQUIRED)
+find_library(DNDS_EXTERNAL_LIB_HDF5 NAMES libhdf5.a hdf5 PATHS 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
      REQUIRED)
-# find_library(EXTERNAL_LIB_HDF5_HL NAMES libhdf5_hl.a hdf5_hl PATHS 
+# find_library(DNDS_EXTERNAL_LIB_HDF5_HL NAMES libhdf5_hl.a hdf5_hl PATHS 
 #     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
 #     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
 #      REQUIRED)
-find_library(EXTERNAL_LIB_CGNS NAMES libcgns.a cgns PATHS 
+find_library(DNDS_EXTERNAL_LIB_CGNS NAMES libcgns.a cgns PATHS 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
      REQUIRED)
-find_library(EXTERNAL_LIB_METIS NAMES libmetis.a metis PATHS 
+find_library(DNDS_EXTERNAL_LIB_METIS NAMES libmetis.a metis PATHS 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
          REQUIRED)
-find_library(EXTERNAL_LIB_PARMETIS NAMES libparmetis.a parmetis PATHS 
+find_library(DNDS_EXTERNAL_LIB_PARMETIS NAMES libparmetis.a parmetis PATHS 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
      REQUIRED)
-# find_library(EXTERNAL_LIB_TECIO tecio PATHS 
+# find_library(DNDS_EXTERNAL_LIB_TECIO tecio PATHS 
     # "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
     # "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
     # NO_DEFAULT_PATH) #not needed for now
-find_library(EXTERNAL_LIB_BLAS NAMES openblas blas )
-find_library(EXTERNAL_LIB_LAPACK NAMES lapack )
-find_library(EXTERNAL_LIB_LAPACKE NAMES lapacke)
+find_library(DNDS_EXTERNAL_LIB_BLAS NAMES openblas blas )
+find_library(DNDS_EXTERNAL_LIB_LAPACK NAMES lapack )
+find_library(DNDS_EXTERNAL_LIB_LAPACKE NAMES lapacke)
 
-find_path(EXTERNAL_INCLUDE_ZLIB zlib.h REQUIRED)
-find_path(EXTERNAL_INCLUDE_HDF5 hdf5.h PATHS 
+find_path(DNDS_EXTERNAL_INCLUDE_ZLIB zlib.h REQUIRED)
+find_path(DNDS_EXTERNAL_INCLUDE_HDF5 hdf5.h PATHS 
     "${PROJECT_SOURCE_DIR}/external/HDF5/include"
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
     REQUIRED)
-find_path(EXTERNAL_INCLUDE_CGNS cgnslib.h PATHS 
+find_path(DNDS_EXTERNAL_INCLUDE_CGNS cgnslib.h PATHS 
     "${PROJECT_SOURCE_DIR}/external/cgns/include" 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
     REQUIRED)
-find_path(EXTERNAL_INCLUDE_METIS metis.h PATHS 
+find_path(DNDS_EXTERNAL_INCLUDE_METIS metis.h PATHS 
     "${PROJECT_SOURCE_DIR}/external/metis/include" 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
     REQUIRED)
-find_path(EXTERNAL_INCLUDE_PARMETIS parmetis.h PATHS 
+find_path(DNDS_EXTERNAL_INCLUDE_PARMETIS parmetis.h PATHS 
     "${PROJECT_SOURCE_DIR}/external/parmetis/include" 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
     REQUIRED)
-# find_path(EXTERNAL_INCLUDE_TECIO TECIO.h PATHS 
+# find_path(DNDS_EXTERNAL_INCLUDE_TECIO TECIO.h PATHS 
 #     "${PROJECT_SOURCE_DIR}/external/tecio/include" 
 #     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
 #     NO_DEFAULT_PATH) #!not needed for now
-find_path(EXTERNAL_INCLUDE_EIGEN eigen3.pc.in PATHS 
+find_path(DNDS_EXTERNAL_INCLUDE_EIGEN eigen3.pc.in PATHS 
     "${PROJECT_SOURCE_DIR}/external/eigen-3.4.0" 
     "${PROJECT_SOURCE_DIR}/external/eigen" 
     NO_DEFAULT_PATH REQUIRED)
-find_path(EXTERNAL_INCLUDE_BOOST boost PATHS 
+find_path(DNDS_EXTERNAL_INCLUDE_BOOST boost PATHS 
     "${PROJECT_SOURCE_DIR}/external/boost_1_82_0" 
     NO_DEFAULT_PATH REQUIRED)
-find_path(EXTERNAL_INCLUDE_CGAL CGAL PATHS 
+find_path(DNDS_EXTERNAL_INCLUDE_CGAL CGAL PATHS 
     "${PROJECT_SOURCE_DIR}/external/CGAL-5.6/include" 
     "${PROJECT_SOURCE_DIR}/external/CGAL-5.6" 
     NO_DEFAULT_PATH REQUIRED)
-find_path(EXTERNAL_INCLUDE_JSON json.hpp PATHS 
+find_path(DNDS_EXTERNAL_INCLUDE_JSON json.hpp PATHS 
     "${PROJECT_SOURCE_DIR}/external/nlohmann" 
     NO_DEFAULT_PATH REQUIRED)
-find_path(EXTERNAL_INCLUDE_ARGPARSE argparse.hpp PATHS 
+find_path(DNDS_EXTERNAL_INCLUDE_ARGPARSE argparse.hpp PATHS 
     "${PROJECT_SOURCE_DIR}/external/argparse-3.0/include/argparse" 
     NO_DEFAULT_PATH REQUIRED)
-find_path(EXTERNAL_INCLUDE_EXPRTK exprtk.hpp PATHS 
+find_path(DNDS_EXTERNAL_INCLUDE_EXPRTK exprtk.hpp PATHS 
     "${PROJECT_SOURCE_DIR}/external/exprtk"
     NO_DEFAULT_PATH REQUIRED)
-# find_path(EXTERNAL_INCLUDE_CPPTRACE cpptrace.hpp PATHS 
+# find_path(DNDS_EXTERNAL_INCLUDE_CPPTRACE cpptrace.hpp PATHS 
 #     "${PROJECT_SOURCE_DIR}/external/cpptrace-0.5.1/include/cpptrace" 
 #     NO_DEFAULT_PATH REQUIRED)
-find_path(EXTERNAL_INCLUDE_CPPCODEC base32_hex.hpp PATHS
+find_path(DNDS_EXTERNAL_INCLUDE_CPPCODEC base32_hex.hpp PATHS
     "${PROJECT_SOURCE_DIR}/external/cppcodec" 
     NO_DEFAULT_PATH REQUIRED)
-# find_path(EXTERNAL_INCLUDE_RAPIDJSON rapidjson 
+# find_path(DNDS_EXTERNAL_INCLUDE_RAPIDJSON rapidjson 
 #     PATHS 
 #     "${PROJECT_SOURCE_DIR}/external/rapidjson/include" 
 #     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
 #     NO_DEFAULT_PATH)
-find_path(EXTERNAL_INCLUDE_NANOFLANN nanoflann.hpp PATHS
+find_path(DNDS_EXTERNAL_INCLUDE_NANOFLANN nanoflann.hpp PATHS
     "${PROJECT_SOURCE_DIR}/external/nanoflann-1.4.3" 
     NO_DEFAULT_PATH REQUIRED)
 
-find_path(EXTERNAL_INCLUDE_PYBIND11 pybind11 PATHS
+find_path(DNDS_EXTERNAL_INCLUDE_PYBIND11 pybind11 PATHS
     "${PROJECT_SOURCE_DIR}/external/pybind11-2.11.1/include" 
     NO_DEFAULT_PATH REQUIRED)
 
-find_path(EXTERNAL_INCLUDE_FMT fmt PATHS
+find_path(DNDS_EXTERNAL_INCLUDE_FMT fmt PATHS
     "${PROJECT_SOURCE_DIR}/external/fmt-10.1.1/include" 
     NO_DEFAULT_PATH REQUIRED)
 
-find_path(EXTERNAL_INCLUDE_SUPERLU superlu_dist.pc.in PATHS
+find_path(DNDS_EXTERNAL_INCLUDE_SUPERLU superlu_dist.pc.in PATHS
     "${PROJECT_SOURCE_DIR}/external/superlu_dist-8.2.1" 
     NO_DEFAULT_PATH)
 
@@ -229,29 +229,29 @@ find_path(EXTERNAL_DOXYGEN_AWESOME doxygen-awesome.css PATHS
     "${PROJECT_SOURCE_DIR}/external/doxygen-awesome-css-2.2.1" 
     NO_DEFAULT_PATH)
 
-add_subdirectory("${EXTERNAL_INCLUDE_PYBIND11}/..")
-add_subdirectory("${EXTERNAL_INCLUDE_FMT}/..")
-# add_subdirectory("${EXTERNAL_INCLUDE_CPPTRACE}/../..")
+add_subdirectory("${DNDS_EXTERNAL_INCLUDE_PYBIND11}/..")
+add_subdirectory("${DNDS_EXTERNAL_INCLUDE_FMT}/..")
+# add_subdirectory("${DNDS_EXTERNAL_INCLUDE_CPPTRACE}/../..")
 
-if(EXTERNAL_INCLUDE_SUPERLU)
+if(DNDS_EXTERNAL_INCLUDE_SUPERLU)
     set(USE_XSDK_DEFAULTS ON CACHE BOOL "Init by DNDS") # for superlu
     if (DNDS_SUPERLU_DIST_USE_BLAS)
         message("Setting DNDS_SUPERLU_DIST_USE_BLAS")
         set(TPL_ENABLE_INTERNAL_BLASLIB OFF CACHE BOOL "Init by DNDS")
-        set(TPL_BLAS_LIBRARIES ${EXTERNAL_LIB_BLAS} CACHE FILEPATH "Init by DNDS")
+        set(TPL_BLAS_LIBRARIES ${DNDS_EXTERNAL_LIB_BLAS} CACHE FILEPATH "Init by DNDS")
     else()
         set(TPL_ENABLE_INTERNAL_BLASLIB ON CACHE BOOL "Init by DNDS")
     endif()
     set(XSDK_ENABLE_Fortran OFF CACHE BOOL "Init by DNDS")
-    set(TPL_PARMETIS_INCLUDE_DIRS ${EXTERNAL_INCLUDE_PARMETIS}  CACHE PATH "Init by DNDS")
-    set(TPL_PARMETIS_LIBRARIES ${EXTERNAL_LIB_PARMETIS}  CACHE FILEPATH "Init by DNDS")
+    set(TPL_PARMETIS_INCLUDE_DIRS ${DNDS_EXTERNAL_INCLUDE_PARMETIS}  CACHE PATH "Init by DNDS")
+    set(TPL_PARMETIS_LIBRARIES ${DNDS_EXTERNAL_LIB_PARMETIS}  CACHE FILEPATH "Init by DNDS")
     set(XSDK_INDEX_SIZE 64 CACHE STRING "Init by DNDS")
     if(WIN32 OR MSVC)
         if(MSVC_VERSION) #! is using mingw/clang+msvc toolchain, inform superlu that do not link -lm
             set(MSVC 1 CACHE INTERNAL "Init by DNDS")
         endif()
     endif()
-    add_subdirectory("${EXTERNAL_INCLUDE_SUPERLU}")
+    add_subdirectory("${DNDS_EXTERNAL_INCLUDE_SUPERLU}")
     #! for superlu, remember to comment the #include<unistd.h>, not needed
 endif()
 
@@ -270,7 +270,7 @@ set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
     "Project Public External Lib Dependencies"
     )
 
-if(EXTERNAL_INCLUDE_SUPERLU)
+if(DNDS_EXTERNAL_INCLUDE_SUPERLU)
 set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
     superlu_dist
     CACHE INTERNAL
@@ -278,9 +278,9 @@ set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
     )
 endif()
 
-if(EXTERNAL_LIB_BACKTRACE)
+if(DNDS_EXTERNAL_LIB_BACKTRACE)
 set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
-    ${EXTERNAL_LIB_BACKTRACE}
+    ${DNDS_EXTERNAL_LIB_BACKTRACE}
     CACHE INTERNAL
     "Project Public External Lib Dependencies"
     )
@@ -294,51 +294,51 @@ endif()
 #     )
 
 set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
-    ${EXTERNAL_LIB_CGNS}
-    # ${EXTERNAL_LIB_HDF5_HL} # HDF5_HL relies on HDF5
-    ${EXTERNAL_LIB_HDF5}
-    ${EXTERNAL_LIB_PARMETIS}
-    ${EXTERNAL_LIB_METIS}
-    ${EXTERNAL_LIB_ZLIB}
-    # ${EXTERNAL_LIB_TECIO}
+    ${DNDS_EXTERNAL_LIB_CGNS}
+    # ${DNDS_EXTERNAL_LIB_HDF5_HL} # HDF5_HL relies on HDF5
+    ${DNDS_EXTERNAL_LIB_HDF5}
+    ${DNDS_EXTERNAL_LIB_PARMETIS}
+    ${DNDS_EXTERNAL_LIB_METIS}
+    ${DNDS_EXTERNAL_LIB_ZLIB}
+    # ${DNDS_EXTERNAL_LIB_TECIO}
     CACHE INTERNAL
     "Project Public External Lib Dependencies"
     )
 if (DNDS_EIGEN_USE_BLAS)
     set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
-    ${EXTERNAL_LIB_BLAS})
+    ${DNDS_EXTERNAL_LIB_BLAS})
 endif()
 if (DNDS_EIGEN_USE_LAPACK)
     set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
-    ${EXTERNAL_LIB_LAPACK}
-    ${EXTERNAL_LIB_LAPACKE})
+    ${DNDS_EXTERNAL_LIB_LAPACK}
+    ${DNDS_EXTERNAL_LIB_LAPACKE})
 endif()
 message("DNDS_EXTERNAL_LIBS  " ${DNDS_EXTERNAL_LIBS})
 
 set(DNDS_EXTERNAL_INCLUDES 
-    ${EXTERNAL_INCLUDE_ZLIB}
-    ${EXTERNAL_INCLUDE_HDF5}
-    ${EXTERNAL_INCLUDE_CGNS}
-    ${EXTERNAL_INCLUDE_METIS}
-    ${EXTERNAL_INCLUDE_PARMETIS}
-    # ${EXTERNAL_INCLUDE_TECIO}
-    ${EXTERNAL_INCLUDE_EIGEN}
-    ${EXTERNAL_INCLUDE_JSON}
-    ${EXTERNAL_INCLUDE_ARGPARSE}
-    ${EXTERNAL_INCLUDE_EXPRTK}
-    # ${EXTERNAL_INCLUDE_CPPTRACE}
-    # ${EXTERNAL_INCLUDE_RAPIDJSON}
-    ${EXTERNAL_INCLUDE_CPPCODEC}
-    ${EXTERNAL_INCLUDE_NANOFLANN}
-    ${EXTERNAL_INCLUDE_BOOST}
-    ${EXTERNAL_INCLUDE_CGAL}
-    ${EXTERNAL_INCLUDE_PYBIND11}
-    ${EXTERNAL_INCLUDE_FMT}
+    ${DNDS_EXTERNAL_INCLUDE_ZLIB}
+    ${DNDS_EXTERNAL_INCLUDE_HDF5}
+    ${DNDS_EXTERNAL_INCLUDE_CGNS}
+    ${DNDS_EXTERNAL_INCLUDE_METIS}
+    ${DNDS_EXTERNAL_INCLUDE_PARMETIS}
+    # ${DNDS_EXTERNAL_INCLUDE_TECIO}
+    ${DNDS_EXTERNAL_INCLUDE_EIGEN}
+    ${DNDS_EXTERNAL_INCLUDE_JSON}
+    ${DNDS_EXTERNAL_INCLUDE_ARGPARSE}
+    ${DNDS_EXTERNAL_INCLUDE_EXPRTK}
+    # ${DNDS_EXTERNAL_INCLUDE_CPPTRACE}
+    # ${DNDS_EXTERNAL_INCLUDE_RAPIDJSON}
+    ${DNDS_EXTERNAL_INCLUDE_CPPCODEC}
+    ${DNDS_EXTERNAL_INCLUDE_NANOFLANN}
+    ${DNDS_EXTERNAL_INCLUDE_BOOST}
+    ${DNDS_EXTERNAL_INCLUDE_CGAL}
+    ${DNDS_EXTERNAL_INCLUDE_PYBIND11}
+    ${DNDS_EXTERNAL_INCLUDE_FMT}
     CACHE INTERNAL "Project External Includes")
 
-if(EXTERNAL_INCLUDE_SUPERLU)
+if(DNDS_EXTERNAL_INCLUDE_SUPERLU)
 set(DNDS_EXTERNAL_INCLUDES ${DNDS_EXTERNAL_INCLUDES}
-    ${EXTERNAL_INCLUDE_SUPERLU}/SRC
+    ${DNDS_EXTERNAL_INCLUDE_SUPERLU}/SRC
     CACHE INTERNAL "Project External Includes")
 endif()
 
@@ -544,7 +544,7 @@ message(STATUS "DNDS_EXTERNAL_INCLUDES ${DNDS_EXTERNAL_INCLUDES}")
 
 ## app exes
 
-set(APPS_EXTERNAL
+set(DNDS_APPS_EXTERNAL
 cgns_APITest
 eigen_Test
 STL_Test
@@ -553,58 +553,46 @@ cgal_AABBTest
 mpi_test
 )
 
-set(APPS_DNDS
+set(DNDS_APPS_DNDS
 array_Test
 arrayTrans_test
 arrayDerived_test
 serializerJSON_Test
 stdPowerTest
+objectPool_test
 )
 
-set(APPS_Geom
+set(DNDS_APPS_Geom
 elements_Test
 meshSerial_Test
 ofReader_Test
 partitionMeshSerial
 )
 
-set(APPS_CFV
+set(DNDS_APPS_CFV
 vrStatic_Test
 vrBasic_Test
 diffTensors_Test
 )
 
-set(APPS_Solver
+set(DNDS_APPS_Solver
 krylovTest
 )
 
-set(APPS_Euler
+
+
+set(DNDS_APPS_Euler
 gasTest
-euler
-euler3D
-eulerSA
-eulerSA3D
-euler2EQ
-euler2EQ3D
 jacobiLUTest
 oneDimProfileTest
 )
 
+# libraries
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/DNDS)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/Geom)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/CFV)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/Euler)
-
-set(DNDS_LIBS
-euler_library
-euler_library_fast
-cfv
-geom
-dnds
-CACHE INTERNAL
-"Public Project Internal Static Libs"
-)
 
 set(EXE_SUFFIX "")
 if (UNIX)
@@ -612,13 +600,12 @@ if (UNIX)
 endif()
 
 
-
-macro(ADD_EXE_APP EXES MAIN_DIR)
-    message(STATUS ${EXES})
+macro(ADD_EXE_APP EXES MAIN_DIR LIBS)
+    message(STATUS "To add exes: ${EXES} with libs: ${LIBS}")
     foreach(EXE ${EXES})
         # add_executable(${EXE} app/external/${EXE}.cpp $<TARGET_OBJECTS:${OBJS}>)
         add_executable(${EXE} ${MAIN_DIR}/${EXE}.cpp)
-        target_link_libraries(${EXE} PUBLIC ${DNDS_LIBS})
+        target_link_libraries(${EXE} PUBLIC ${LIBS})
         target_link_libraries(${EXE} PUBLIC ${DNDS_EXTERNAL_LIBS})
         target_include_directories(${EXE} PUBLIC ${DNDS_EXTERNAL_INCLUDES} PUBLIC ${DNDS_INCLUDES})
         set_target_properties(${EXE} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/app RUNTIME_OUTPUT_NAME "${EXE}${EXE_SUFFIX}")
@@ -628,13 +615,46 @@ macro(ADD_EXE_APP EXES MAIN_DIR)
     endforeach()
 endmacro(ADD_EXE_APP)
 
-ADD_EXE_APP("${APPS_EXTERNAL}" "app/external")
-ADD_EXE_APP("${APPS_DNDS}" "app/DNDS")
-ADD_EXE_APP("${APPS_Geom}" "app/Geom")
-ADD_EXE_APP("${APPS_CFV}" "app/CFV")
-ADD_EXE_APP("${APPS_Euler}" "app/Euler")
-ADD_EXE_APP("${APPS_Solver}" "app/Solver")
+# In topolocical order of the dependency graph
+# euler_library
+# euler_library_fast
+# cfv
+# geom
+# dnds
 
+## Mind That the TOPOLOGICAL ORDER should be obeyed!
+ADD_EXE_APP("${DNDS_APPS_EXTERNAL}" "app/external" ";")
+ADD_EXE_APP("${DNDS_APPS_DNDS}" "app/DNDS" "dnds;")
+ADD_EXE_APP("${DNDS_APPS_Solver}" "app/Solver" "dnds;")
+ADD_EXE_APP("${DNDS_APPS_Geom}" "app/Geom" "geom;dnds;")
+ADD_EXE_APP("${DNDS_APPS_CFV}" "app/CFV" "cfv;geom;dnds;")
+ADD_EXE_APP("${DNDS_APPS_Euler}" "app/Euler" "cfv;geom;dnds;")
+
+set(DNDS_Euler_Models_List
+NS=
+NS_2D=2D 
+NS_3D=3D
+NS_SA=SA
+NS_SA_3D=SA3D
+NS_2EQ=2EQ
+NS_2EQ_3D=2EQ3D
+CACHE INTERNAL "the Euler Model list to distinguish their explicit instantiation libraries"
+)
+
+set(DNDS_APPS_Euler_Models)
+
+foreach(item IN LISTS DNDS_Euler_Models_List)
+    string(REPLACE "=" ";" keyval ${item})
+    list(GET keyval 0 key)
+    list(GET keyval 1 value)
+    set(EXE_NAME "euler${value}")
+    list(APPEND DNDS_APPS_Euler_Models "${EXE_NAME}")
+    message(DEBUG "${keyval} --- ${value} --- ${EXE_NAME}")
+    ## Mind That the TOPOLOGICAL ORDER should be obeyed!
+    ADD_EXE_APP("${EXE_NAME}" "app/Euler" "euler_library_${key};euler_library_fast_${key};cfv;geom;dnds;")
+    ## This works because cmake detects dependency and reorders the libraries
+    # ADD_EXE_APP("${EXE_NAME}" "app/Euler" "dnds;geom;cfv;euler_library_fast_${key};euler_library_${key};")
+endforeach()
 
 
 set(PYEXTS_EXTERNAL
