@@ -11,15 +11,16 @@
 // #define __DNDS_REALLY_COMPILING__
 // #define __DNDS_REALLY_COMPILING__HEADER_ON__
 // #endif
-#include "Gas.hpp"
+#include "DNDS/JsonUtil.hpp"
+#include "DNDS/SerializerJSON.hpp"
+#include "DNDS/CsvLog.hpp"
+#include "DNDS/ObjectPool.hpp"
+#include "Solver/Linear.hpp"
 #include "Geom/Mesh.hpp"
 #include "CFV/VariationalReconstruction.hpp"
+#include "Gas.hpp"
 #include "EulerEvaluator.hpp"
-#include "DNDS/JsonUtil.hpp"
 #include "EulerBC.hpp"
-#include "DNDS/SerializerJSON.hpp"
-#include "Solver/Linear.hpp"
-#include "DNDS/CsvLog.hpp"
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
 // #undef __DNDS_REALLY_COMPILING__
 // #endif
@@ -66,7 +67,8 @@ namespace DNDS::Euler
         ssp<Geom::UnstructuredMeshSerialRW> reader, readerBnd;
         ssp<EulerEvaluator<model>> pEval;
 
-        ArrayDOFV<nVarsFixed> u, uIncBufODE, rhsTemp1, uTemp, uMG1, uMG1Init, rhsMG1, rhsTemp, wAveraged, uAveraged;
+        ArrayDOFV<nVarsFixed> u, uIncBufODE, wAveraged, uAveraged;
+        ObjectPool<ArrayDOFV<nVarsFixed>> uPool; // for temporary u entries
         ArrayRECV<nVarsFixed> uRec, uRecLimited, uRecNew, uRecNew1, uRecOld, uRec1, uRecInc, uRecInc1, uRecB, uRecB1;
         JacobianDiagBlock<nVarsFixed> JD, JD1, JDTmp, JSource, JSource1, JSourceTmp;
         ssp<JacobianLocalLU<nVarsFixed>> JLocalLU;

@@ -330,17 +330,14 @@ namespace DNDS::Euler
 
         vfv->BuildUDof(u, nVars);
         vfv->BuildUDof(uIncBufODE, nVars);
-        vfv->BuildUDof(rhsTemp1, nVars);
-        vfv->BuildUDof(uTemp, nVars);
-        vfv->BuildUDof(uMG1, nVars);
-        vfv->BuildUDof(uMG1Init, nVars);
-        vfv->BuildUDof(rhsMG1, nVars);
-        vfv->BuildUDof(rhsTemp, nVars);
         if (config.timeAverageControl.enabled)
         {
             vfv->BuildUDof(wAveraged, nVars);
             vfv->BuildUDof(uAveraged, nVars);
         }
+        uPool.resizeInit(3,
+                         [&](ArrayDOFV<nVarsFixed> &uu)
+                         { vfv->BuildUDof(uu, nVars); });
 
         vfv->BuildURec(uRec, nVars);
         if (config.timeMarchControl.odeCode == 401)

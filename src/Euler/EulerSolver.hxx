@@ -35,6 +35,9 @@ namespace DNDS::Euler
         using namespace std::literals;
 
         DNDS_MPI_InsertCheck(mpi, "Implicit 1 nvars " + std::to_string(nVars));
+        /*******************************************************/
+        /*                 CHECK MESH                          */
+        /*******************************************************/
         EulerEvaluator<model> &eval = *pEval;
         auto hashCoord = mesh->coords.hash();
         if (mpi.rank == 0)
@@ -51,10 +54,14 @@ namespace DNDS::Euler
             return;
         }
 
-        /************* Files **************/
+        /*******************************************************/
+        /*                   LOGERR STREAM                     */
+        /*******************************************************/
         auto logErr = LogErrInitialize();
 
-        /************* Files **************/
+        /*******************************************************/
+        /*              DIRECT FACTORIZATION                   */
+        /*******************************************************/
 
         mesh->ObtainLocalFactFillOrdering(*eval.symLU, config.linearSolverControl.directPrecControl);
         mesh->ObtainSymmetricSymbolicFactorization(*eval.symLU, config.linearSolverControl.directPrecControl);
@@ -62,6 +69,10 @@ namespace DNDS::Euler
         {
             DNDS_MAKE_SSP(JLocalLU, eval.symLU, nVars);
         }
+
+        /*******************************************************/
+        /*                 PICK ODE SOLVER                     */
+        /*******************************************************/
 
         ssp<ODE::ImplicitDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>> ode;
         auto buildDOF = [&](ArrayDOFV<nVarsFixed> &data)
@@ -146,6 +157,10 @@ namespace DNDS::Euler
             DNDS_assert(config.timeMarchControl.odeCode == 1 || config.timeMarchControl.odeCode == 102);
         }
 
+        /*******************************************************/
+        /*                 INIT GMRES AND PCG                  */
+        /*******************************************************/
+
         std::unique_ptr<tGMRES_u> gmres;
         std::unique_ptr<tGMRES_uRec> gmresRec;
         std::unique_ptr<tPCG_uRec> pcgRec;
@@ -184,6 +199,10 @@ namespace DNDS::Euler
 
         // fmt::print("pEval is {}", (void*)(pEval.get()));
 
+        /*******************************************************/
+        /*                 INITIALIZE U                        */
+        /*******************************************************/
+
         eval.InitializeUDOF(u);
         if (config.timeAverageControl.enabled)
             wAveraged.setConstant(0.0);
@@ -201,6 +220,19 @@ namespace DNDS::Euler
         OutputPicker outputPicker;
         eval.InitializeOutputPicker(outputPicker, {u, uRec, betaPP, alphaPP});
         tAdditionalCellScalarList addOutList = outputPicker.getSubsetList(config.dataIOControl.outCellScalarNames);
+
+        /*******************************************************/
+        /*                 TEMPORARY Us                        */
+        /*******************************************************/
+
+        auto initUDOF = [&](ArrayDOFV<nVarsFixed> &uu)
+        { vfv->BuildUDof(uu, nVars); };
+        auto initUREC = [&](ArrayRECV<nVarsFixed> &uu)
+        { vfv->BuildURec(uu, nVars); };
+
+#define DNDS_EULER_SOLVER_GET_TEMP_UDOF(name)      \
+    auto __p##name = uPool.getAllocInit(initUDOF); \
+    auto &name = *__p##name;
 
         /*******************************************************/
         /*                 SOLVER MAJOR START                  */
@@ -795,6 +827,8 @@ namespace DNDS::Euler
                           << TermColor::Reset
                           << std::endl;
                 }
+            auto pUTemp = uPool.getAllocInit(initUDOF);
+            auto &uTemp = *pUTemp;
 
             uTemp = cxInc;
             uTemp *= alphaPP_tmp;
@@ -817,8 +851,12 @@ namespace DNDS::Euler
         auto fsolve = [&](ArrayDOFV<nVarsFixed> &cx, ArrayDOFV<nVarsFixed> &cres, ArrayDOFV<nVarsFixed> &resOther, ArrayDOFV<1> &dTau,
                           real dt, real alphaDiag, ArrayDOFV<nVarsFixed> &cxInc, int iter, int uPos)
         {
-            rhsTemp = cres;
-            eval.CentralSmoothResidual(rhsTemp, cres, uTemp);
+            {
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
+                rhsTemp = cres;
+                eval.CentralSmoothResidual(rhsTemp, cres, uTemp);
+            }
 
             auto &JDC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JD1 : JD;
             auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
@@ -830,6 +868,7 @@ namespace DNDS::Euler
             Timer().StartTimer(PerformanceTimer::Positivity);
             if (config.timeMarchControl.rhsFPPMode == 1 || config.timeMarchControl.rhsFPPMode == 11)
             {
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
                 // ! experimental: bad now ?
                 rhsTemp = cres;
                 rhsTemp *= dTau;
@@ -849,6 +888,7 @@ namespace DNDS::Euler
             }
             else if (config.timeMarchControl.rhsFPPMode == 2)
             {
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
                 rhsTemp = cres;
                 rhsTemp *= dTau;
                 rhsTemp *= config.timeMarchControl.rhsFPPScale;
@@ -892,30 +932,34 @@ namespace DNDS::Euler
 
             if (config.linearSolverControl.multiGridLP == 1 && iter > config.linearSolverControl.multiGridLPStartIter)
             {
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uMG1)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uMG1Init)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsMG1)
                 uRecNew.setConstant(0.0);
                 uMG1 = cx;
                 // std::cout << "here0" << std::endl;
                 fincrement(uMG1, cxInc, 1.0, uPos);
                 frhs(cres, uMG1, dTauC, iter, 0.0 /* ! make this ct correct!*/, uPos);
-                cres *= alphaDiag;
+                cres *= alphaDiag; 
                 cres += resOther;
                 cres.addTo(uMG1, -1. / dt);
                 uMG1Init = uMG1;
                 for (int iIterMG = 1; iIterMG <= config.linearSolverControl.multiGridLPInnerNIter; iIterMG++)
                 {
-                    eval.EvaluateRHS(rhsTemp1, JSourceTmp, uMG1,
+                    DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
+                    eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
                                      config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
                                      betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu,
                                      TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
-                    rhsTemp1.trans.startPersistentPull();
-                    rhsTemp1.trans.waitPersistentPull();
+                    rhsTemp.trans.startPersistentPull();
+                    rhsTemp.trans.waitPersistentPull();
                     if (iIterMG == 1)
-                        rhsMG1 = rhsTemp1;
-                    rhsTemp1 -= rhsMG1;
-                    rhsTemp1 *= alphaDiag;
-                    rhsTemp1 += cres;
-                    rhsTemp1.addTo(uMG1Init, 1. / dt);
-                    rhsTemp1.addTo(uMG1, -1. / dt); // todo: add rhsfpphere
+                        rhsMG1 = rhsTemp;
+                    rhsTemp -= rhsMG1;
+                    rhsTemp *= alphaDiag;
+                    rhsTemp += cres;
+                    rhsTemp.addTo(uMG1Init, 1. / dt);
+                    rhsTemp.addTo(uMG1, -1. / dt); // todo: add rhsfpphere
                     fdtau(uMG1, dTauC, alphaDiag, uPos);
                     eval.LUSGSMatrixInit(JDTmp, JSourceTmp,
                                          dTauC, dt, alphaDiag,
@@ -923,12 +967,12 @@ namespace DNDS::Euler
                                          0,
                                          tSimu);
                     Eigen::VectorFMTSafe<real, -1> resNorm;
-                    eval.EvaluateNorm(resNorm, rhsTemp1);
+                    eval.EvaluateNorm(resNorm, rhsTemp);
                     if (mpi.rank == 0)
                         if (iIterMG % config.linearSolverControl.multiGridLPInnerNSee == 0)
                             log() << fmt::format("MG Level LP [{}] iter [{}] res [:.3e]", 1, iIterMG, resNorm) << std::endl;
                     cxInc.setConstant(0.0);
-                    this->solveLinear(alphaDiag, rhsTemp1, uMG1, cxInc, uRecNew, uRecNew,
+                    this->solveLinear(alphaDiag, rhsTemp, uMG1, cxInc, uRecNew, uRecNew,
                                       JDTmp, *gmres);
                     // cxInc *= -1;
                     // std::cout << "here" << std::endl;
@@ -958,10 +1002,15 @@ namespace DNDS::Euler
                               const std::vector<real> &Coefs, // coefs are dU * c[0] + dt * c[1] * (I/(dt * c[2]) - JMid) * (I/(dt * c[3]) - J)
                               real dt, real alphaDiag, ArrayDOFV<nVarsFixed> &cxInc, int iter, int uPos)
         {
-            crhs.trans.startPersistentPull();
-            crhs.trans.waitPersistentPull();
-            rhsTemp = crhs;
-            eval.CentralSmoothResidual(rhsTemp, crhs, uTemp);
+            {
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
+
+                crhs.trans.startPersistentPull();
+                crhs.trans.waitPersistentPull();
+                rhsTemp = crhs;
+                eval.CentralSmoothResidual(rhsTemp, crhs, uTemp);
+            }
 
             cxInc.setConstant(0.0);
             auto &JDC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JD1 : JD;
@@ -991,6 +1040,7 @@ namespace DNDS::Euler
             if (config.linearSolverControl.gmresCode == 0 || config.linearSolverControl.gmresCode == 2)
             {
                 // //! LUSGS
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
 
                 eval.UpdateLUSGSForward(alphaDiag, crhs, cx1, cxInc, JD1, cxInc);
                 cxInc.trans.startPersistentPull();
@@ -1010,6 +1060,7 @@ namespace DNDS::Euler
 
             if (config.linearSolverControl.gmresCode != 0)
             {
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
                 // !  GMRES
                 // !  for gmres solver: A * uinc = rhsinc, rhsinc is average value insdead of cumulated on vol
                 gmres->solve(
@@ -1378,6 +1429,7 @@ namespace DNDS::Euler
 
             if (config.timeAverageControl.enabled)
             {
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
                 eval.MeanValueCons2Prim(u, uTemp); // could use time-step-mean-u instead of latest-u
                 eval.TimeAverageAddition(uTemp, wAveraged, curDtImplicit, tAverage);
             }
@@ -1673,6 +1725,8 @@ namespace DNDS::Euler
 
             if (config.timeMarchControl.useDtPPLimit)
             {
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
                 Timer().StartTimer(PerformanceTimer::PositivityOuter);
                 dTauTmp.setConstant(curDtImplicit * config.timeMarchControl.dtPPLimitScale); //? used as damper here, appropriate?
                 frhsOuter(rhsTemp, u, dTauTmp, 1, 0.0, 0, 0);                                //* trick: use 0th order reconstruction RHS for dt PP limiting
@@ -1811,6 +1865,8 @@ namespace DNDS::Euler
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         auto &eval = *pEval;
+        auto initUDOF = [&](ArrayDOFV<nVarsFixed> &uu)
+        { vfv->BuildUDof(uu, nVars); };
 
         TU sgsRes(nVars), sgsRes0(nVars);
         bool inputIsZero{true}, hasLUDone{false};
@@ -1843,6 +1899,7 @@ namespace DNDS::Euler
             }
             else
             {
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
                 doPrecondition(alphaDiag, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
             }
 
@@ -1867,6 +1924,7 @@ namespace DNDS::Euler
                 }
                 else
                 {
+                    DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
                     doPrecondition(alphaDiag, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
                 }
                 if (iterSGS == 1)
@@ -1901,6 +1959,7 @@ namespace DNDS::Euler
 
         if (config.linearSolverControl.gmresCode != 0)
         {
+            DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
             // !  GMRES
             // !  for gmres solver: A * uinc = rhsinc, rhsinc is average value insdead of cumulated on vol
             gmres.solve(
@@ -1951,6 +2010,8 @@ namespace DNDS::Euler
     {
         DNDS_assert(pEval);
         auto &eval = *pEval;
+        auto initUDOF = [&](ArrayDOFV<nVarsFixed> &uu)
+        { vfv->BuildUDof(uu, nVars); };
         // static int nCall{0};
         // nCall++;
         // if (mpi.rank == 0)
@@ -1978,6 +2039,7 @@ namespace DNDS::Euler
         }
         else if (config.linearSolverControl.jacobiCode == 2)
         {
+            DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
             DNDS_assert_info(config.linearSolverControl.directPrecControl.useDirectPrec, "need to use config.linearSolverControl.directPrecControl.useDirectPrec first !");
             if (!hasLUDone)
                 eval.LUSGSMatrixToJacobianLU(alphaDiag, cx, JDC, *JLocalLU), hasLUDone = true;
