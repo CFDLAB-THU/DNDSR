@@ -1,6 +1,8 @@
 ## For configuration on Windows, use clang/gcc + makefile
 ## cmake .. -G "Unix Makefiles" -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
 
+## cmake -G "MinGW Makefiles" -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icx ..
+
 
 if(UNIX OR MINGW)
     cmake_minimum_required(VERSION 3.6 FATAL_ERROR)
@@ -18,6 +20,8 @@ set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
 # ##########################################
 project(DNDSR LANGUAGES CXX) #! need to be in front of find_package(MPI)
 enable_language(C) #! building C sub-projects
+
+message(STATUS "CMAKE_CXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}")
 
 message("external install hard guess at: external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
 set(HARD_GUESS_PATH external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR})
@@ -131,7 +135,7 @@ set(CMAKE_USE_RELATIVE_PATHS ON)
 find_library(DNDS_EXTERNAL_LIB_BACKTRACE NAMES backtrace)
 # need zlibstatic first to find the static version on windows
 find_library(DNDS_EXTERNAL_LIB_ZLIB NAMES zlibstatic zlib z z_D libzlibstatic.a REQUIRED)
-find_library(DNDS_EXTERNAL_LIB_HDF5 NAMES libhdf5.a hdf5 PATHS 
+find_library(DNDS_EXTERNAL_LIB_HDF5 NAMES libhdf5.a libhdf5.lib hdf5 PATHS 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
      REQUIRED)
@@ -364,7 +368,12 @@ if(DNDS_EIGEN_USE_LAPACK)
     add_compile_definitions(EIGEN_USE_LAPACKE_STRICT)
 endif()
 
+############################
+# Platform specific settings
+############################
+
 if(UNIX OR MINGW)
+    message(STATUS "UNIX OR MINGW")
     set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
     stdc++fs)
     if(UNIX)
@@ -442,6 +451,7 @@ if(UNIX OR MINGW)
     
 
 elseif(WIN32 OR MSVC)
+    message(STATUS "WIN32 OR MSVC")
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
         add_compile_options(-Wall -Wno-unused-but-set-variable -Wno-unused-variable -Wno-sign-compare)
         add_compile_options(-std=c++17 )
@@ -476,9 +486,26 @@ elseif(WIN32 OR MSVC)
         add_compile_options(-Wno-undef -Wno-implicit-fallthrough -Wno-redundant-parens)
         # add_compile_options(-Wextra-semi-stmt  -Wshorten-64-to-32 -Wnewline-eof)
     endif()
+
+    if(WIN32 AND("${CMAKE_CXX_COMPILER_ID}" STREQUAL "IntelLLVM"))
+         #! we use msvc-style abi in library (which is default in clang but not for icx)
+        string(APPEND CMAKE_CXX_FLAGS " -fms-compatibility -fms-extensions")
+        # add_compile_options(-fms-compatibility -fms-extensions)
+        # add_link_options(-fms-compatibility -fms-extensions)
+        
+        add_compile_options(-Wall -Wno-unused-but-set-variable -Wno-unused-variable -Wno-sign-compare)
+        add_compile_options(-D_CRT_SECURE_NO_WARNINGS)
+
+        if(DNDS_UNSAFE_MATH_OPT)
+            add_compile_options(-ffast-math)
+            message(WARNING "using -ffast-math")
+        endif()
+
+        link_libraries(shlwapi) # when hdf is compiled with msvc, needs this
+    endif()
+
     set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS} # no dl
     )
-    message(${CMAKE_CXX_COMPILER_ID})
     
     
     if (DNDS_USE_OMP)
@@ -489,6 +516,9 @@ elseif(WIN32 OR MSVC)
         elseif(WIN32 AND ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang"))#! force use -fopenmp
             add_compile_options(-fopenmp)
             add_link_options(-fopenmp)
+        elseif(WIN32 AND("${CMAKE_CXX_COMPILER_ID}" STREQUAL "IntelLLVM"))
+            add_compile_options(-openmp)
+            add_link_options(-openmp)
         else()
             find_package(OpenMP REQUIRED)
             if(OpenMP_CXX_FLAGS)
