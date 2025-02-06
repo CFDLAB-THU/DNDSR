@@ -26,6 +26,12 @@
         "nRestartOutCInternal": 200,
         "nRestartOutInternal": 1000000000,
         "tDataOut": 3e+200,
+        "consoleMainOutputFormatInternal": [
+            "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   ",
+            "res {termRed}{resRel:.15e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
+            "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"
+        ],
         "dataOutAtInit": true
     },
     "implicitCFLControl": {
@@ -40,7 +46,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2-CG1-Q-RM2-walldist",
+        "outPltName": "../data/out/NACA0012_H2-MGtest",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -81,7 +87,7 @@
         "intOrderVR": 5,
         "cacheDiffBase": true,
         "jacobiRelax": 1.0,
-        "SORInstead": true,
+        "SORInstead": false,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
@@ -122,7 +128,7 @@
         "gmresScale": 2,
         "nGmresSpace": 5,
         "nGmresIter": 2,
-        "multiGridLP": 0,
+        "multiGridLP": 1,
         "multiGridLPInnerNIter": 4,
         "directPrecControl": {
             "useDirectPrec": true,
@@ -230,12 +236,3 @@
         "lastRestartFile": "../data/out/NACA0012_H2__C_p16_restart_test1.dir"
     }
 }
-// 0.000000e+00,-1.756971e-01, 7.114951e-01, 0.000000e+00, 1.208148e-20, 4.131280e-02: sa-neg
-// 0.000000e+00,-1.757064e-01, 7.115164e-01, 0.000000e+00, 1.055619e-20, 4.131428e-02: sa-neg-R
-// 0.000000e+00,-1.715009e-01, 6.981978e-01, 0.000000e+00, 1.434143e-20, 4.072343e-02: sa-neg-QCR-R
-// 0.000000e+00,-1.715276e-01, 6.983111e-01, 0.000000e+00, 1.084698e-20, 4.102179e-02: sa-neg-QCR-R 3far
-// 0.000000e+00,-1.833759e-01, 7.312974e-01, 0.000000e+00, 1.426846e-20, 3.244254e-02: sa-neg-R 3far RM2
-// 0.000000e+00,-1.801070e-01, 7.207952e-01, 0.000000e+00, 1.188829e-20, 3.204329e-02: sa-neg-QCR-R 3far RM2
-
-//TEST MG: 
-// mpirun -np 24 app/eulerSA.exe ../cases/eulerSA_config_0012_AOA15.json -k /dataIOControl/outPltName -v \"../data/out/NACA0012/NACA0012-AOA15\" -k /linearSolverControl/multiGridLP -v 0 -k /linearSolverControl/jacobiCode -v 0 -k /linearSolverControl/gmresCode -v 1 -k /eulerSettings/cLDriverSettings/AOAInit -v 15

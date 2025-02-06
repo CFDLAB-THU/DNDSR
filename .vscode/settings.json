@@ -173,7 +173,8 @@
         "hashtable": "cpp",
         "sparselu": "cpp",
         "sparse": "cpp",
-        "resumable": "cpp"
+        "resumable": "cpp",
+        "cassert": "cpp"
     },
     "cSpell.words": [
         "Bary",
