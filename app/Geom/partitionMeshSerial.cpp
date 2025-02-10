@@ -49,7 +49,7 @@ void doPartitioning(const std::string &meshName, int dim)
     mesh->AdjGlobal2LocalPrimary();
 
     /**************************/
-    // about serializer:
+    // about serializerPP:
     std::filesystem::path meshPath{meshName};
     auto meshOutName = std::string(meshName) + "_part_" + std::to_string(mpi.size) + ".dir";
     std::filesystem::path meshOutDir{meshOutName};
@@ -58,11 +58,11 @@ void doPartitioning(const std::string &meshName, int dim)
 
     DNDS::SerializerJSON serializerJSON;
     serializerJSON.SetUseCodecOnUint8(true);
-    DNDS::SerializerBase *serializer = &serializerJSON;
+    DNDS::Serializer::SerializerBaseSSP serializerP = &serializerJSON;
 
-    serializer->OpenFile(meshPartPath, false);
-    mesh->WriteSerialize(serializer, "meshPart");
-    serializer->CloseFile();
+    serializerP->OpenFile(meshPartPath, false);
+    mesh->WriteSerialize(serializerP, "meshPart");
+    serializerPP->CloseFile();
 
     MPISerialDo(mpi, [&]()
                 { DNDS::log() << "    Rank: " << mpi.rank << " nCell " << mesh->NumCell() << " nCellGhost " << mesh->NumCellGhost() << std::endl; });

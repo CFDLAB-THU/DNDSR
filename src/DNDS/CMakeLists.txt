@@ -32,6 +32,7 @@ Defines.cpp
 Profiling.cpp
 HardEigen.cpp
 SerializerJSON.cpp
+SerializerH5.cpp
 ExprtkWrapper.cpp
 )
 message(STATUS "DNDS_PCH_TARGETS ${DNDS_PCH_TARGETS}")

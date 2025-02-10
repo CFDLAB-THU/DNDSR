@@ -45,17 +45,17 @@ void test_ADJ()
 
     /**************************/
     // serializing
-    SerializerJSON serializerJSON;
-    serializerJSON.SetUseCodecOnUint8(true);
-    SerializerBase *serializer = &serializerJSON;
+    DNDS::Serializer::SerializerBaseSSP serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+    std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
 
-    serializer->OpenFile("test_ArrayAdjacency.json", false);
-    A_adj.WriteSerializer(serializer, "arrayAdj");
-    serializer->CloseFile();
+    serializerP->OpenFile("test_ArrayAdjacency.json", false);
+    A_adj.WriteSerializer(serializerP, "arrayAdj", Serializer::ArrayGlobalOffset_Parts);
+    serializerP->CloseFile();
 
-    serializer->OpenFile("test_ArrayAdjacency.json", true);
-    A_adj.ReadSerializer(serializer, "arrayAdj");
-    serializer->CloseFile();
+    serializerP->OpenFile("test_ArrayAdjacency.json", true);
+    Serializer::ArrayGlobalOffset offsetV = Serializer::ArrayGlobalOffset_Unknown;
+    A_adj.ReadSerializer(serializerP, "arrayAdj", offsetV);
+    serializerP->CloseFile();
     /**************************/
 
     std::cout << A_adj << std::endl;
@@ -93,17 +93,17 @@ void test_Mat()
 
     /**************************/
     // serializing
-    SerializerJSON serializerJSON;
-    serializerJSON.SetUseCodecOnUint8(true);
-    SerializerBase *serializer = &serializerJSON;
+    DNDS::Serializer::SerializerBaseSSP serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+    std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
 
-    serializer->OpenFile("test_ArrayMatrix.json", false);
-    A_v.WriteSerializer(serializer, "arrayMat");
-    serializer->CloseFile();
+    serializerP->OpenFile("test_ArrayMatrix.json", false);
+    A_v.WriteSerializer(serializerP, "arrayMat", Serializer::ArrayGlobalOffset_Parts);
+    serializerP->CloseFile();
 
-    serializer->OpenFile("test_ArrayMatrix.json", true);
-    A_v.ReadSerializer(serializer, "arrayMat");
-    serializer->CloseFile();
+    serializerP->OpenFile("test_ArrayMatrix.json", true);
+    Serializer::ArrayGlobalOffset offsetV = Serializer::ArrayGlobalOffset_Unknown;
+    A_v.ReadSerializer(serializerP, "arrayMat", offsetV);
+    serializerP->CloseFile();
     /**************************/
 
     for (DNDS::index i = 0; i < A_v.Size(); i++)
@@ -141,17 +141,17 @@ void test_Vec()
 
     /**************************/
     // serializing
-    SerializerJSON serializerJSON;
-    serializerJSON.SetUseCodecOnUint8(true);
-    SerializerBase *serializer = &serializerJSON;
+    DNDS::Serializer::SerializerBaseSSP serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+    std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
 
-    serializer->OpenFile("test_ArrayVector.json", false);
-    A_v.WriteSerializer(serializer, "arrayVec");
-    serializer->CloseFile();
+    serializerP->OpenFile("test_ArrayVector.json", false);
+    A_v.WriteSerializer(serializerP, "arrayVec", Serializer::ArrayGlobalOffset_Parts);
+    serializerP->CloseFile();
 
-    serializer->OpenFile("test_ArrayVector.json", true);
-    A_v.ReadSerializer(serializer, "arrayVec");
-    serializer->CloseFile();
+    serializerP->OpenFile("test_ArrayVector.json", true);
+    Serializer::ArrayGlobalOffset offsetV = Serializer::ArrayGlobalOffset_Unknown;
+    A_v.ReadSerializer(serializerP, "arrayVec", offsetV);
+    serializerP->CloseFile();
     /**************************/
 
     for (DNDS::index i = 0; i < A_v.Size(); i++)
@@ -186,17 +186,17 @@ void test_UniMatBatch()
 
     /**************************/
     // serializing
-    SerializerJSON serializerJSON;
-    serializerJSON.SetUseCodecOnUint8(true);
-    SerializerBase *serializer = &serializerJSON;
+    DNDS::Serializer::SerializerBaseSSP serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+    std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
 
-    serializer->OpenFile("test_ArrayUMB.json", false);
-    A_UMB.WriteSerializer(serializer, "arrayUMB");
-    serializer->CloseFile();
+    serializerP->OpenFile("test_ArrayUMB.json", false);
+    A_UMB.WriteSerializer(serializerP, "arrayUMB", Serializer::ArrayGlobalOffset_Parts);
+    serializerP->CloseFile();
 
-    serializer->OpenFile("test_ArrayUMB.json", true);
-    A_UMB.ReadSerializer(serializer, "arrayUMB");
-    serializer->CloseFile();
+    serializerP->OpenFile("test_ArrayUMB.json", true);
+    Serializer::ArrayGlobalOffset offsetV = Serializer::ArrayGlobalOffset_Unknown;
+    A_UMB.ReadSerializer(serializerP, "arrayUMB", offsetV);
+    serializerP->CloseFile();
     /**************************/
 
     for (DNDS::index i = 0; i < A_UMB.Size(); i++)
@@ -248,17 +248,17 @@ void test_MatBatch()
 
     /**************************/
     // serializing
-    SerializerJSON serializerJSON;
-    serializerJSON.SetUseCodecOnUint8(true);
-    SerializerBase *serializer = &serializerJSON;
+    DNDS::Serializer::SerializerBaseSSP serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+    std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
 
-    serializer->OpenFile("test_ArrayMB.json", false);
-    A_MB.WriteSerializer(serializer, "arrayMB");
-    serializer->CloseFile();
+    serializerP->OpenFile("test_ArrayMB.json", false);
+    A_MB.WriteSerializer(serializerP, "arrayMB", Serializer::ArrayGlobalOffset_Parts);
+    serializerP->CloseFile();
 
-    serializer->OpenFile("test_ArrayMB.json", true);
-    A_MB.ReadSerializer(serializer, "arrayMB");
-    serializer->CloseFile();
+    serializerP->OpenFile("test_ArrayMB.json", true);
+    Serializer::ArrayGlobalOffset offsetV = Serializer::ArrayGlobalOffset_Unknown;
+    A_MB.ReadSerializer(serializerP, "arrayMB", offsetV);
+    serializerP->CloseFile();
     /**************************/
 
     for (DNDS::index i = 0; i < A_MB.Size(); i++)

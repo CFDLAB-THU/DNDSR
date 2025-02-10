@@ -5,7 +5,7 @@
 #include <zlib.h>
 #include <fmt/core.h>
 
-namespace DNDS
+namespace DNDS::Serializer
 {
 
     /**
@@ -98,17 +98,17 @@ namespace DNDS
         auto cPointer = nlohmann::json::json_pointer(cP);
         jObj[cPointer][name] = v;
     }
-    void SerializerJSON::WriteIndexVector(const std::string &name, const std::vector<index> &v)
+    void SerializerJSON::WriteIndexVector(const std::string &name, const std::vector<index> &v, ArrayGlobalOffset offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         jObj[cPointer][name] = v;
     }
-    void SerializerJSON::WriteRowsizeVector(const std::string &name, const std::vector<rowsize> &v)
+    void SerializerJSON::WriteRowsizeVector(const std::string &name, const std::vector<rowsize> &v, ArrayGlobalOffset offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         jObj[cPointer][name] = v;
     }
-    void SerializerJSON::WriteRealVector(const std::string &name, const std::vector<real> &v)
+    void SerializerJSON::WriteRealVector(const std::string &name, const std::vector<real> &v, ArrayGlobalOffset offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         jObj[cPointer][name] = v;
@@ -118,7 +118,7 @@ namespace DNDS
         auto cPointer = nlohmann::json::json_pointer(cP);
         jObj[cPointer][name] = v;
     }
-    void SerializerJSON::WriteSharedIndexVector(const std::string &name, const ssp<std::vector<index>> &v)
+    void SerializerJSON::WriteSharedIndexVector(const std::string &name, const ssp<std::vector<index>> &v, ArrayGlobalOffset offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         if (ptr_2_pth.count(v.get()))
@@ -129,7 +129,7 @@ namespace DNDS
             ptr_2_pth[v.get()] = cP + "/" + name;
         }
     }
-    void SerializerJSON::WriteSharedRowsizeVector(const std::string &name, const ssp<std::vector<rowsize>> &v)
+    void SerializerJSON::WriteSharedRowsizeVector(const std::string &name, const ssp<std::vector<rowsize>> &v, ArrayGlobalOffset offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         if (ptr_2_pth.count(v.get()))
@@ -159,23 +159,26 @@ namespace DNDS
         DNDS_assert(jObj[cPointer][name].is_number_float());
         v = jObj[cPointer][name].get<std::remove_reference_t<decltype(v)>>();
     }
-    void SerializerJSON::ReadIndexVector(const std::string &name, std::vector<index> &v)
+    void SerializerJSON::ReadIndexVector(const std::string &name, std::vector<index> &v, ArrayGlobalOffset &offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         DNDS_assert(jObj[cPointer][name].is_array());
         v = jObj[cPointer][name].get<std::remove_reference_t<decltype(v)>>();
+        offset = ArrayGlobalOffset_Unknown;
     }
-    void SerializerJSON::ReadRowsizeVector(const std::string &name, std::vector<rowsize> &v)
+    void SerializerJSON::ReadRowsizeVector(const std::string &name, std::vector<rowsize> &v, ArrayGlobalOffset &offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         DNDS_assert(jObj[cPointer][name].is_array());
         v = jObj[nlohmann::json::json_pointer(cP)][name].get<std::remove_reference_t<decltype(v)>>();
+        offset = ArrayGlobalOffset_Unknown;
     }
-    void SerializerJSON::ReadRealVector(const std::string &name, std::vector<real> &v)
+    void SerializerJSON::ReadRealVector(const std::string &name, std::vector<real> &v, ArrayGlobalOffset &offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         DNDS_assert(jObj[cPointer][name].is_array());
         v = jObj[cPointer][name].get<std::remove_reference_t<decltype(v)>>();
+        offset = ArrayGlobalOffset_Unknown;
     }
     void SerializerJSON::ReadString(const std::string &name, std::string &v)
     {
@@ -183,7 +186,7 @@ namespace DNDS
         DNDS_assert(jObj[cPointer][name].is_string());
         v = jObj[cPointer][name].get<std::remove_reference_t<decltype(v)>>();
     }
-    void SerializerJSON::ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> &v)
+    void SerializerJSON::ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> &v, ArrayGlobalOffset &offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         using tValue = std::vector<index>;
@@ -208,8 +211,9 @@ namespace DNDS
             v = std::make_shared<tValue>(jObj[nlohmann::json::json_pointer(refPath)].get<tValue>()); // vector's copy constructor
             pth_2_ssp[refPath] = &v;
         }
+        offset = ArrayGlobalOffset_Unknown;
     }
-    void SerializerJSON::ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> &v)
+    void SerializerJSON::ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> &v, ArrayGlobalOffset &offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         using tValue = std::vector<rowsize>;
@@ -234,8 +238,9 @@ namespace DNDS
             v = std::make_shared<tValue>(jObj[nlohmann::json::json_pointer(refPath)].get<tValue>()); // vector's copy constructor
             pth_2_ssp[refPath] = &v;
         }
+        offset = ArrayGlobalOffset_Unknown;
     }
-    void SerializerJSON::WriteUint8Array(const std::string &name, const uint8_t *data, index size)
+    void SerializerJSON::WriteUint8Array(const std::string &name, const uint8_t *data, index size, ArrayGlobalOffset offset)
     {
         auto zlibCompressedSize = [&](index sizeC)
         {
@@ -263,9 +268,8 @@ namespace DNDS
                 zlibCompressData(data, size));
         }
     }
-    void SerializerJSON::ReadUint8Array(const std::string &name, uint8_t *data, index &size)
+    void SerializerJSON::ReadUint8Array(const std::string &name, uint8_t *data, index &size, ArrayGlobalOffset &offset)
     {
-
         auto cPointer = nlohmann::json::json_pointer(cP);
         DNDS_assert(jObj[cPointer][name].is_object() || jObj[cPointer][name].is_array());
         if (jObj[cPointer][name].is_array())
@@ -297,5 +301,6 @@ namespace DNDS
         {
             DNDS_assert(false);
         }
+        offset = ArrayGlobalOffset_Unknown;
     }
 }

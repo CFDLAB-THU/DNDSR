@@ -113,12 +113,11 @@ namespace DNDS::Euler
             // std::filesystem::create_directories(meshOutDir); // reading not writing
             std::string meshPartPath = getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
 
-            SerializerJSON serializerJSON;
-            serializerJSON.SetUseCodecOnUint8(true);
-            SerializerBase *serializer = &serializerJSON;
-            serializer->OpenFile(meshPartPath, true);
-            mesh->ReadSerialize(serializer, "meshPart");
-            serializer->CloseFile();
+            Serializer::SerializerBaseSSP serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+            std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
+            serializerP->OpenFile(meshPartPath, true);
+            mesh->ReadSerialize(serializerP, "meshPart");
+            serializerP->CloseFile();
         }
 
         // std::cout << "here" << std::endl;
@@ -176,15 +175,15 @@ namespace DNDS::Euler
                                ".dir";
             std::filesystem::path meshOutDir{meshOutName};
             std::filesystem::create_directories(meshOutDir);
+
             std::string meshPartPath = DNDS::getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
 
-            DNDS::SerializerJSON serializerJSON;
-            serializerJSON.SetUseCodecOnUint8(true);
-            DNDS::SerializerBase *serializer = &serializerJSON;
+            Serializer::SerializerBaseSSP serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+            std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
 
-            serializer->OpenFile(meshPartPath, false);
-            mesh->WriteSerialize(serializer, "meshPart");
-            serializer->CloseFile();
+            serializerP->OpenFile(meshPartPath, false);
+            mesh->WriteSerialize(serializerP, "meshPart");
+            serializerP->CloseFile();
             return; //** mesh preprocess only (without transformation)
         }
 

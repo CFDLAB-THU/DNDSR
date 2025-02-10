@@ -87,24 +87,24 @@ int main()
 
     // TODO: more tests on different types and function overloads
 
-    // serializer test:
-    DNDS::SerializerJSON serializerJSON;
-    serializerJSON.SetUseCodecOnUint8(true);
-    DNDS::SerializerBase *serializer = &serializerJSON;
+    // serializerP test:
+    DNDS::Serializer::SerializerBaseSSP serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+    std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
 
-    serializer->OpenFile("test_arraysOut.json", false);
-    serializer->CreatePath("/main");
-    serializer->GoToPath("/main");
-    serializer->CreatePath("array1");
-    e1.WriteSerializer(serializer, "e1");
-    b1.WriteSerializer(serializer, "b1");
-    serializer->CloseFile();
+    serializerP->OpenFile("test_arraysOut.json", false);
+    serializerP->CreatePath("/main");
+    serializerP->GoToPath("/main");
+    serializerP->CreatePath("array1");
+    e1.WriteSerializer(serializerP, "e1", Serializer::ArrayGlobalOffset_Parts);
+    b1.WriteSerializer(serializerP, "b1", Serializer::ArrayGlobalOffset_Parts);
+    serializerP->CloseFile();
 
-    serializer->OpenFile("test_arraysOut1.json", true);
-    serializer->GoToPath("/main");
-    e1.ReadSerializer(serializer, "e1");
-    b1.ReadSerializer(serializer, "b1");
-    serializer->CloseFile();
+    serializerP->OpenFile("test_arraysOut1.json", true);
+    serializerP->GoToPath("/main");
+    Serializer::ArrayGlobalOffset offsetV = Serializer::ArrayGlobalOffset_Unknown;
+    e1.ReadSerializer(serializerP, "e1", offsetV);
+    b1.ReadSerializer(serializerP, "b1", offsetV);
+    serializerP->CloseFile();
 
     std::cout << "read data:" << std::endl;
     std::cout << e1 << std::endl;

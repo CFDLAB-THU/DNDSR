@@ -34,7 +34,7 @@ namespace DNDS
     private:
         int _row_dynamic = _n_row > 0 ? _n_row : 0;
         int _col_dynamic = _n_col > 0 ? _n_col : 0;
-        int _m_size = this->Rows() * this->Cols(); //!extra data!
+        int _m_size = this->Rows() * this->Cols(); //! extra data!
 
     private:
         using t_base::Resize;
@@ -136,36 +136,36 @@ namespace DNDS
                    "_" + std::to_string(_n_col);
         }
 
-        void WriteSerializer(SerializerBase *serializer, const std::string &name)
+        void WriteSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name, Serializer::ArrayGlobalOffset offset)
         {
-            auto cwd = serializer->GetCurrentPath();
-            serializer->CreatePath(name);
-            serializer->GoToPath(name);
+            auto cwd = serializerP->GetCurrentPath();
+            serializerP->CreatePath(name);
+            serializerP->GoToPath(name);
 
-            serializer->WriteString("DerivedType", this->GetDerivedArraySignature());
-            serializer->WriteInt("row_dynamic", _row_dynamic);
-            serializer->WriteInt("col_dynamic", _col_dynamic);
-            serializer->WriteInt("m_size", _m_size);
-            this->t_base::WriteSerializer(serializer, "array");
+            serializerP->WriteString("DerivedType", this->GetDerivedArraySignature());
+            serializerP->WriteInt("row_dynamic", _row_dynamic);
+            serializerP->WriteInt("col_dynamic", _col_dynamic);
+            serializerP->WriteInt("m_size", _m_size);
+            this->t_base::WriteSerializer(serializerP, "array", offset);
 
-            serializer->GoToPath(cwd);
+            serializerP->GoToPath(cwd);
         }
 
-        void ReadSerializer(SerializerBase *serializer, const std::string &name)
+        void ReadSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name, Serializer::ArrayGlobalOffset &offset)
         {
-            auto cwd = serializer->GetCurrentPath();
-            // serializer->CreatePath(name); //!remember no create path
-            serializer->GoToPath(name);
+            auto cwd = serializerP->GetCurrentPath();
+            // serializerP->CreatePath(name); //!remember no create path
+            serializerP->GoToPath(name);
 
             std::string readDerivedType;
-            serializer->ReadString("DerivedType", readDerivedType);
+            serializerP->ReadString("DerivedType", readDerivedType);
             DNDS_assert(readDerivedType == this->GetDerivedArraySignature());
-            serializer->ReadInt("row_dynamic", _row_dynamic);
-            serializer->ReadInt("col_dynamic", _col_dynamic);
-            serializer->ReadInt("m_size", _m_size);
-            this->t_base::ReadSerializer(serializer, "array");
+            serializerP->ReadInt("row_dynamic", _row_dynamic);
+            serializerP->ReadInt("col_dynamic", _col_dynamic);
+            serializerP->ReadInt("m_size", _m_size);
+            this->t_base::ReadSerializer(serializerP, "array", offset);
 
-            serializer->GoToPath(cwd);
+            serializerP->GoToPath(cwd);
         }
     };
 }

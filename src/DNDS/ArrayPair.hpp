@@ -124,57 +124,78 @@ namespace DNDS
             return std::hash<decltype(hashes)>()(hashes);
         }
 
-        void WriteSerialize(SerializerBase *serializer, const std::string &name)
+        void WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name, bool includePIG = true)
         {
-            DNDS_assert_info(trans.pLGlobalMapping && trans.pLGhostMapping, "pair's trans not having ghost info");
+            if (includePIG)
+                DNDS_assert_info(trans.pLGlobalMapping && trans.pLGhostMapping, "pair's trans not having ghost info");
 
-            auto cwd = serializer->GetCurrentPath();
-            serializer->CreatePath(name);
-            serializer->GoToPath(name);
+            auto cwd = serializerP->GetCurrentPath();
+            serializerP->CreatePath(name);
+            serializerP->GoToPath(name);
 
-            serializer->WriteIndex("MPIRank", father->getMPI().rank);
-            serializer->WriteIndex("MPISize", father->getMPI().size);
-            father->WriteSerializer(serializer, "father");
-            son->WriteSerializer(serializer, "son");
+            if (serializerP->IsPerRank())
+                serializerP->WriteIndex("MPIRank", father->getMPI().rank);
+            serializerP->WriteIndex("MPISize", father->getMPI().size);
+            // std::cout << trans.pLGlobalMapping->operator()(trans.mpi.rank, 0) << ",,," << trans.pLGlobalMapping->globalSize() << std::endl;
+            // ! this is wrong as pLGlobalMapping stores the row index, not the data index!!
+            // father->WriteSerializer(serializerP, "father",
+            //                         Serializer::ArrayGlobalOffset{
+            //                             trans.pLGlobalMapping->globalSize(),
+            //                             trans.pLGlobalMapping->operator()(trans.mpi.rank, 0),
+            //                         }); // trans.pLGlobalMapping == father->pLGlobalMapping
+            // TODO: overwrite all the Resize()/ResizeRow() for ParArray so that it handles global size and offset internally?
+
+            // now using the parts (calculate offsets)
+            father->WriteSerializer(serializerP, "father", Serializer::ArrayGlobalOffset_Parts);
+            son->WriteSerializer(serializerP, "son", Serializer::ArrayGlobalOffset_Parts);
             /***************************/
             // ghost info
             // static_assert(std::is_same_v<rowsize, MPI_int>);
             // *writing pullingIndexGlobal, trusting the GlobalMapping to remain the same
-            serializer->WriteIndexVector("pullingIndexGlobal", trans.pLGhostMapping->ghostIndex);
+            if (includePIG)
+                serializerP->WriteIndexVector("pullingIndexGlobal", trans.pLGhostMapping->ghostIndex, Serializer::ArrayGlobalOffset_Parts);
             /***************************/
 
-            serializer->GoToPath(cwd);
+            serializerP->GoToPath(cwd);
         }
 
         /**
-         * @warning need to createMPITypes after this
+         * @warning if includePIG == true, need to createMPITypes after this
          */
-        void ReadSerialize(SerializerBase *serializer, const std::string &name)
+        void ReadSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name, bool includePIG = true)
         {
             DNDS_assert(father && son);
             this->TransAttach();
 
-            auto cwd = serializer->GetCurrentPath();
-            // serializer->CreatePath(name); //!remember no create!
-            serializer->GoToPath(name);
+            auto cwd = serializerP->GetCurrentPath();
+            // serializerP->CreatePath(name); //!remember no create!
+            serializerP->GoToPath(name);
 
-            index readRank, readSize;
-            serializer->ReadIndex("MPIRank", readRank);
-            serializer->ReadIndex("MPISize", readSize);
-            DNDS_assert(readRank == father->getMPI().rank && readSize == father->getMPI().size);
-            father->ReadSerializer(serializer, "father");
-            son->ReadSerializer(serializer, "son");
+            index readRank{0}, readSize{0};
+            if (serializerP->IsPerRank())
+                serializerP->ReadIndex("MPIRank", readRank);
+            serializerP->ReadIndex("MPISize", readSize);
+            DNDS_assert((!serializerP->IsPerRank() || readRank == father->getMPI().rank) &&
+                        readSize == father->getMPI().size);
+            auto offsetV_father = Serializer::ArrayGlobalOffset_Unknown;
+            auto offsetV_son = Serializer::ArrayGlobalOffset_Unknown;
+            father->ReadSerializer(serializerP, "father", offsetV_father);
+            son->ReadSerializer(serializerP, "son", offsetV_son);
             /***************************/
             // ghost info
             // static_assert(std::is_same_v<rowsize, MPI_int>);
             // *writing pullingIndexGlobal, trusting the GlobalMapping to remain the same
-            std::vector<index> pullingIndexGlobal;
-            serializer->ReadIndexVector("pullingIndexGlobal", pullingIndexGlobal);
-            trans.createFatherGlobalMapping();
-            trans.createGhostMapping(pullingIndexGlobal);
+            if (includePIG)
+            {
+                std::vector<index> pullingIndexGlobal;
+                auto offsetV_PIG = Serializer::ArrayGlobalOffset_Unknown; // TODO: check the offsets?
+                serializerP->ReadIndexVector("pullingIndexGlobal", pullingIndexGlobal, offsetV_PIG);
+                trans.createFatherGlobalMapping();
+                trans.createGhostMapping(pullingIndexGlobal);
+            }
             /***************************/
 
-            serializer->GoToPath(cwd);
+            serializerP->GoToPath(cwd);
         }
     };
 

@@ -593,6 +593,7 @@ array_Test
 arrayTrans_test
 arrayDerived_test
 serializerJSON_Test
+serializerH5_Test
 stdPowerTest
 objectPool_test
 )

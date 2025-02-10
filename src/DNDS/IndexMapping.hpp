@@ -105,7 +105,7 @@ namespace DNDS
 
     ///\brief mapping place from local main/ghost place to globalIndex or inverse
     ///\details main data is a offset mapping while ghost indces are stored in ascending order
-    /// use 2-split search in ghost indexing, so the global indexing to local indexing must be ascending
+    /// use binary search in ghost indexing, so the global indexing to local indexing must be ascending
     /// !warning!! due to MPI restrictions data inside are 32-bit signed
     class OffsetAscendIndexMapping
     {

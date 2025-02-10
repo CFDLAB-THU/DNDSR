@@ -34,7 +34,7 @@ void testConstruct()
     // std::cout << getcwd(buf, 512) << std::endl;
     auto mesh = std::make_shared<DNDS::Geom::UnstructuredMesh>(mpi, dim);
     auto reader = DNDS::Geom::UnstructuredMeshSerialRW(mesh, 0);
-    
+
     reader.ReadFromCGNSSerial(meshName);
     reader.Deduplicate1to1Periodic();
     reader.BuildCell2Cell();
@@ -54,17 +54,16 @@ void testConstruct()
     std::filesystem::create_directories(meshOutDir);
     std::string meshPartPath = DNDS::getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
 
-    DNDS::SerializerJSON serializerJSON;
-    serializerJSON.SetUseCodecOnUint8(true);
-    DNDS::SerializerBase *serializer = &serializerJSON;
+    DNDS::Serializer::SerializerBaseSSP serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+    std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
 
-    serializer->OpenFile(meshPartPath, false);
-    mesh->WriteSerialize(serializer, "meshPart");
-    serializer->CloseFile();
+    serializerP->OpenFile(meshPartPath, false);
+    mesh->WriteSerialize(serializerP, "meshPart");
+    serializerP->CloseFile();
 
-    serializer->OpenFile(meshPartPath, true);
-    mesh->ReadSerialize(serializer, "meshPart");
-    serializer->CloseFile();
+    serializerP->OpenFile(meshPartPath, true);
+    mesh->ReadSerialize(serializerP, "meshPart");
+    serializerP->CloseFile();
 
     /**************************/
     mesh->InterpolateFace();

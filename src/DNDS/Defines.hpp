@@ -376,6 +376,9 @@ namespace DNDS
 {
     namespace Meta
     {
+        template <typename T>
+        inline constexpr bool always_false = false;
+
         template <class T>
         struct is_std_array : std::false_type
         {
@@ -485,6 +488,13 @@ namespace DNDS
             if (v.size())
                 ret.push_back(v);
         return ret;
+    }
+
+    inline bool sstringHasSuffix(const std::string &str, const std::string &suffix)
+    {
+        if (str.size() < suffix.size())
+            return false;
+        return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
     }
 }
 template <typename T>

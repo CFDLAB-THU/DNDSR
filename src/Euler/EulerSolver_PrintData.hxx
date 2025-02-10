@@ -35,6 +35,7 @@ namespace DNDS::Euler
         // } while (nBad);
 
         std::vector<std::function<void()>> fOuts;
+        // std::cout << "usize " << u.father->Size() << std::endl;
 
         if (config.dataIOControl.outVolumeData || mode == PrintDataTimeAverage)
         {

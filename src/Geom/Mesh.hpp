@@ -538,8 +538,8 @@ namespace DNDS::Geom
             return cell2cellFaceV;
         }
 
-        void WriteSerialize(SerializerBase *serializer, const std::string &name);
-        void ReadSerialize(SerializerBase *serializer, const std::string &name);
+        void WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name);
+        void ReadSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name);
 
         template <class TFTrans>
         void TransformCoords(TFTrans &&FTrans)

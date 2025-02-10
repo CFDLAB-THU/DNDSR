@@ -1,32 +1,45 @@
 #pragma once
 #include "SerializerBase.hpp"
 
-#include "json.hpp"
+#include <hdf5.h>
 #include <fstream>
 #include <map>
 
 namespace DNDS::Serializer
 {
-    class SerializerJSON : public SerializerBase
+    class SerializerH5 : public SerializerBase
     {
-        std::fstream fileStream;
-        nlohmann::json jObj;
         bool reading = true;
         std::vector<std::string> cPathSplit;
         std::string cP; // current path
         std::map<void *, std::string> ptr_2_pth;
         std::map<std::string, void *> pth_2_ssp;
 
-        bool useCodecOnUint8{false};
+        MPIInfo mpi;
+        MPI_Comm commDup{MPI_COMM_NULL};
+
+        hid_t h5file{NULL};
+
+        int64_t chunksize{4096};
+        int deflateLevel{0};
 
     public:
-        void SetUseCodecOnUint8(bool v) { useCodecOnUint8 = v; }
+        SerializerH5(const MPIInfo &_mpi) : SerializerBase(), mpi(_mpi)
+        {
+            MPI_Comm_dup(mpi.comm, &commDup);
+        }
+
+        void SetChunkAndDeflate(int64_t n_chunksize, int n_deflateLevel)
+        {
+            chunksize = n_chunksize;
+            deflateLevel = n_deflateLevel;
+        }
 
         void OpenFile(const std::string &fName, bool read) override;
         void CloseFile() override;
         void CreatePath(const std::string &p) override;
         void GoToPath(const std::string &p) override;
-        bool IsPerRank() override { return true; }
+        bool IsPerRank() override { return false; }
         std::string GetCurrentPath() override;
 
         void WriteInt(const std::string &name, int v) override;
@@ -44,7 +57,7 @@ namespace DNDS::Serializer
 
         void WriteIndexVectorPerRank(const std::string &name, const std::vector<index> &v) override
         {
-            this->WriteIndexVector(name, v, ArrayGlobalOffset_Unknown);
+            this->WriteIndexVector(name, v, ArrayGlobalOffset{index(mpi.size) * index(v.size()), index(mpi.rank) * index(v.size())});
         }
 
         void ReadInt(const std::string &name, int &v) override;
@@ -60,6 +73,10 @@ namespace DNDS::Serializer
 
         void ReadUint8Array(const std::string &name, uint8_t *data, index &size, ArrayGlobalOffset &offset) override;
 
-        ~SerializerJSON() override {}
+        ~SerializerH5() override
+        {
+            this->CloseFile();
+            MPI_Comm_free(&commDup);
+        }
     };
 }

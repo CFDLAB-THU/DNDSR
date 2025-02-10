@@ -144,40 +144,41 @@ namespace DNDS::Geom
             //         0, 0, 1;
         }
 
-        void WriteSerializer(SerializerBase *serializer, const std::string &name)
+        void WriteSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name)
         {
-            auto cwd = serializer->GetCurrentPath();
-            serializer->CreatePath(name);
-            serializer->GoToPath(name);
+            auto cwd = serializerP->GetCurrentPath();
+            serializerP->CreatePath(name);
+            serializerP->GoToPath(name);
 
             for (int i = 1; i <= 3; i++)
             {
-                serializer->WriteRealVector("rotation" + std::to_string(i), Geom::JacobiToSTDVector(rotation.at(i)));
-                serializer->WriteRealVector("rotationCenter" + std::to_string(i), Geom::VectorToSTDVector(rotationCenter.at(i)));
-                serializer->WriteRealVector("translation" + std::to_string(i), Geom::VectorToSTDVector(translation.at(i)));
+                serializerP->WriteRealVector("rotation" + std::to_string(i), Geom::JacobiToSTDVector(rotation.at(i)), Serializer::ArrayGlobalOffset_One);
+                serializerP->WriteRealVector("rotationCenter" + std::to_string(i), Geom::VectorToSTDVector(rotationCenter.at(i)), Serializer::ArrayGlobalOffset_One);
+                serializerP->WriteRealVector("translation" + std::to_string(i), Geom::VectorToSTDVector(translation.at(i)), Serializer::ArrayGlobalOffset_One);
             }
 
-            serializer->GoToPath(cwd);
+            serializerP->GoToPath(cwd);
         }
 
-        void ReadSerializer(SerializerBase *serializer, const std::string &name)
+        void ReadSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name)
         {
-            auto cwd = serializer->GetCurrentPath();
-            // serializer->CreatePath(name); // * no create
-            serializer->GoToPath(name);
+            auto cwd = serializerP->GetCurrentPath();
+            // serializerP->CreatePath(name); // * no create
+            serializerP->GoToPath(name);
 
             for (int i = 1; i <= 3; i++)
             {
                 std::vector<real> rotRead, rotCRead, transRead;
-                serializer->ReadRealVector("rotation" + std::to_string(i), rotRead);
-                serializer->ReadRealVector("rotationCenter" + std::to_string(i), rotCRead);
-                serializer->ReadRealVector("translation" + std::to_string(i), transRead);
+                Serializer::ArrayGlobalOffset offsetV = Serializer::ArrayGlobalOffset_One; // must explicitly set as One
+                serializerP->ReadRealVector("rotation" + std::to_string(i), rotRead, offsetV);
+                serializerP->ReadRealVector("rotationCenter" + std::to_string(i), rotCRead, offsetV);
+                serializerP->ReadRealVector("translation" + std::to_string(i), transRead, offsetV);
                 rotation.at(i) = Geom::STDVectorToJacobi(rotRead);
                 rotationCenter.at(i) = Geom::STDVectorToVector(rotCRead);
                 translation.at(i) = Geom::STDVectorToVector(transRead);
             }
 
-            serializer->GoToPath(cwd);
+            serializerP->GoToPath(cwd);
         }
 
         tPoint TransCoord(const tPoint &c, t_index id) const

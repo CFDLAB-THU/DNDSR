@@ -1633,55 +1633,57 @@ namespace DNDS::Geom
     }
 
     void UnstructuredMesh::
-        WriteSerialize(SerializerBase *serializer, const std::string &name)
+        WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name)
     {
         DNDS_assert(adjPrimaryState == Adj_PointToLocal);
 
-        auto cwd = serializer->GetCurrentPath();
-        serializer->CreatePath(name);
-        serializer->GoToPath(name);
+        auto cwd = serializerP->GetCurrentPath();
+        serializerP->CreatePath(name);
+        serializerP->GoToPath(name);
 
-        serializer->WriteString("mesh", "UnstructuredMesh");
-        serializer->WriteIndex("dim", dim);
-        serializer->WriteIndex("MPIRank", mpi.rank);
-        serializer->WriteIndex("MPISize", mpi.size);
-        serializer->WriteInt("isPeriodic", isPeriodic);
+        serializerP->WriteString("mesh", "UnstructuredMesh");
+        serializerP->WriteIndex("dim", dim);
+        if (serializerP->IsPerRank())
+            serializerP->WriteIndex("MPIRank", mpi.rank);
+        serializerP->WriteIndex("MPISize", mpi.size);
+        serializerP->WriteInt("isPeriodic", isPeriodic);
 
-        coords.WriteSerialize(serializer, "coords");
-        cell2node.WriteSerialize(serializer, "cell2node");
-        cell2cell.WriteSerialize(serializer, "cell2cell");
-        cellElemInfo.WriteSerialize(serializer, "cellElemInfo");
-        bnd2node.WriteSerialize(serializer, "bnd2node");
-        bnd2cell.WriteSerialize(serializer, "bnd2cell");
-        bndElemInfo.WriteSerialize(serializer, "bndElemInfo");
+        coords.WriteSerialize(serializerP, "coords");
+        cell2node.WriteSerialize(serializerP, "cell2node");
+        cell2cell.WriteSerialize(serializerP, "cell2cell");
+        cellElemInfo.WriteSerialize(serializerP, "cellElemInfo");
+        bnd2node.WriteSerialize(serializerP, "bnd2node");
+        bnd2cell.WriteSerialize(serializerP, "bnd2cell");
+        bndElemInfo.WriteSerialize(serializerP, "bndElemInfo");
         if (isPeriodic)
         {
-            cell2nodePbi.WriteSerialize(serializer, "cell2nodePbi");
-            periodicInfo.WriteSerializer(serializer, "periodicInfo");
+            cell2nodePbi.WriteSerialize(serializerP, "cell2nodePbi");
+            periodicInfo.WriteSerializer(serializerP, "periodicInfo");
         }
 
-        serializer->GoToPath(cwd);
+        serializerP->GoToPath(cwd);
     }
 
     void UnstructuredMesh::
-        ReadSerialize(SerializerBase *serializer, const std::string &name)
+        ReadSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name)
     {
-        auto cwd = serializer->GetCurrentPath();
-        // serializer->CreatePath(name);//! remember no create!
-        serializer->GoToPath(name);
+        auto cwd = serializerP->GetCurrentPath();
+        // serializerP->CreatePath(name);//! remember no create!
+        serializerP->GoToPath(name);
 
         std::string meshRead;
-        index dimRead, rankRead, sizeRead;
+        index dimRead{0}, rankRead{0}, sizeRead{0};
         int isPeriodicRead;
-        serializer->ReadString("mesh", meshRead);
-        serializer->ReadIndex("dim", dimRead);
-        serializer->ReadIndex("MPIRank", rankRead);
-        serializer->ReadIndex("MPISize", sizeRead);
-        serializer->ReadInt("isPeriodic", isPeriodicRead);
+        serializerP->ReadString("mesh", meshRead);
+        serializerP->ReadIndex("dim", dimRead);
+        if (serializerP->IsPerRank())
+            serializerP->ReadIndex("MPIRank", rankRead);
+        serializerP->ReadIndex("MPISize", sizeRead);
+        serializerP->ReadInt("isPeriodic", isPeriodicRead);
         isPeriodic = bool(isPeriodicRead);
         DNDS_assert(meshRead == "UnstructuredMesh");
         DNDS_assert(dimRead == dim);
-        DNDS_assert(rankRead == mpi.rank && sizeRead == mpi.size);
+        DNDS_assert((!serializerP->IsPerRank()||rankRead == mpi.rank) && sizeRead == mpi.size);
 
         // make the empty arrays
         auto mesh = this;
@@ -1705,17 +1707,17 @@ namespace DNDS::Geom
         DNDS_MAKE_SSP(mesh->bnd2cell.father, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->bnd2cell.son, mesh->getMPI());
 
-        coords.ReadSerialize(serializer, "coords");
-        cell2node.ReadSerialize(serializer, "cell2node");
-        cell2cell.ReadSerialize(serializer, "cell2cell");
-        cellElemInfo.ReadSerialize(serializer, "cellElemInfo");
-        bnd2node.ReadSerialize(serializer, "bnd2node");
-        bnd2cell.ReadSerialize(serializer, "bnd2cell");
-        bndElemInfo.ReadSerialize(serializer, "bndElemInfo");
+        coords.ReadSerialize(serializerP, "coords");
+        cell2node.ReadSerialize(serializerP, "cell2node");
+        cell2cell.ReadSerialize(serializerP, "cell2cell");
+        cellElemInfo.ReadSerialize(serializerP, "cellElemInfo");
+        bnd2node.ReadSerialize(serializerP, "bnd2node");
+        bnd2cell.ReadSerialize(serializerP, "bnd2cell");
+        bndElemInfo.ReadSerialize(serializerP, "bndElemInfo");
         if (isPeriodic)
         {
-            cell2nodePbi.ReadSerialize(serializer, "cell2nodePbi");
-            periodicInfo.ReadSerializer(serializer, "periodicInfo");
+            cell2nodePbi.ReadSerialize(serializerP, "cell2nodePbi");
+            periodicInfo.ReadSerializer(serializerP, "periodicInfo");
         }
 
         // after matters:
@@ -1744,7 +1746,7 @@ namespace DNDS::Geom
         MPISerialDo(mpi, [&]()
                     { log() << "    Rank: " << mpi.rank << " nNode " << this->NumNode() << " nNodeGhost " << this->NumNodeGhost() << std::endl; });
 
-        serializer->GoToPath(cwd);
+        serializerP->GoToPath(cwd);
     }
 
     void UnstructuredMesh::ConstructBndMesh(UnstructuredMesh &bMesh)

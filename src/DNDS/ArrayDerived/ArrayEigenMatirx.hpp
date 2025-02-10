@@ -78,7 +78,7 @@ namespace DNDS
                 return _mat_nRows->at(iMat);
             if constexpr (_mat_ni == DynamicSize)
                 return _mat_nRow_dynamic;
-            return UnInitRowsize; //invalid branch
+            return UnInitRowsize; // invalid branch
         }
 
         rowsize MatColSize(index iMat = 0)
@@ -156,45 +156,53 @@ namespace DNDS
             return true;
         }
 
-        void WriteSerializer(SerializerBase *serializer, const std::string &name)
+        /**
+         * @brief
+         *
+         * @param serializerP
+         * @param name
+         * @warning need to take care of createGlobalMapping if resized
+         */
+        void WriteSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name, Serializer::ArrayGlobalOffset offset)
         {
-            auto cwd = serializer->GetCurrentPath();
-            serializer->CreatePath(name);
-            serializer->GoToPath(name);
+            auto cwd = serializerP->GetCurrentPath();
+            serializerP->CreatePath(name);
+            serializerP->GoToPath(name);
 
-            this->t_base::WriteSerializer(serializer, "array");
-            serializer->WriteString("DerivedType", this->GetDerivedArraySignature());
-            serializer->WriteInt("mat_nRow_dynamic", _mat_nRow_dynamic);
+            this->t_base::WriteSerializer(serializerP, "array", offset);
+            serializerP->WriteString("DerivedType", this->GetDerivedArraySignature());
+            serializerP->WriteInt("mat_nRow_dynamic", _mat_nRow_dynamic);
             if constexpr (_mat_ni == NonUniformSize)
-                serializer->WriteSharedRowsizeVector("mat_nRows", _mat_nRows);
+                serializerP->WriteSharedRowsizeVector("mat_nRows", _mat_nRows, offset);
 
-            serializer->GoToPath(cwd);
+            serializerP->GoToPath(cwd);
         }
 
-        void ReadSerializer(SerializerBase *serializer, const std::string &name)
+        void ReadSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name, Serializer::ArrayGlobalOffset &offset)
         {
-            auto cwd = serializer->GetCurrentPath();
-            // serializer->CreatePath(name); //!remember no create path
-            serializer->GoToPath(name);
+            auto cwd = serializerP->GetCurrentPath();
+            // serializerP->CreatePath(name); //!remember no create path
+            serializerP->GoToPath(name);
 
-            this->t_base::ReadSerializer(serializer, "array");
+            this->t_base::ReadSerializer(serializerP, "array", offset);
 
             std::string readDerivedType;
-            serializer->ReadString("DerivedType", readDerivedType);
+            serializerP->ReadString("DerivedType", readDerivedType);
             auto [v_mat_ni, v_mat_nj, v_mat_ni_max, v_mat_nj_max] = GetDerivedArraySignatureInts(readDerivedType);
             DNDS_assert_info(readDerivedType == this->GetDerivedArraySignature() || SignatureIsCompatible(readDerivedType),
                              readDerivedType + ", i am: " + this->GetDerivedArraySignature() + fmt::format(" {} {} {} {}", v_mat_ni, v_mat_nj, v_mat_ni_max, v_mat_nj_max));
-            serializer->ReadInt("mat_nRow_dynamic", _mat_nRow_dynamic);
+            serializerP->ReadInt("mat_nRow_dynamic", _mat_nRow_dynamic);
             if (_mat_ni == DynamicSize && v_mat_ni >= 0)
                 _mat_nRow_dynamic = v_mat_ni;
             if (v_mat_ni == NonUniformSize) // TODO: complete here!
             {
+
                 if constexpr (_mat_ni == NonUniformSize)
-                    serializer->ReadSharedRowsizeVector("mat_nRows", _mat_nRows);
+                    serializerP->ReadSharedRowsizeVector("mat_nRows", _mat_nRows, offset); // TODO: multiple write to offset, check?
                 else
                 {
                     t_pRowSizes v_mat_nRows;
-                    serializer->ReadSharedRowsizeVector("mat_nRows", v_mat_nRows);
+                    serializerP->ReadSharedRowsizeVector("mat_nRows", v_mat_nRows, offset);
                     int c_mat_nRow_dynamic = v_mat_nRows->size() ? 0 : v_mat_nRows->at(0);
                     for (auto i = 0; i < v_mat_nRows->size(); ++i)
                         DNDS_assert(v_mat_nRows->operator[](i) == c_mat_nRow_dynamic);
@@ -207,7 +215,7 @@ namespace DNDS
                     DNDS_MAKE_SSP(_mat_nRows, this->Size(), v_mat_ni >= 0 ? v_mat_ni : _mat_nRow_dynamic);
             }
 
-            serializer->GoToPath(cwd);
+            serializerP->GoToPath(cwd);
         }
     };
 }

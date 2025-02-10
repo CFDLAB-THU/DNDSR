@@ -11,6 +11,7 @@
 
 #include "Defines.hpp"
 #include "SerializerBase.hpp"
+#include "SerializerJSON.hpp"
 
 namespace DNDS
 {
@@ -650,59 +651,95 @@ namespace DNDS
             return true;
         }
 
-        void __WriteSerializerData(SerializerBase *serializer)
+        void __WriteSerializerData(Serializer::SerializerBaseSSP serializerP, Serializer::ArrayGlobalOffset offset)
         {
-            serializer->WriteUint8Array("data", (uint8_t *)_data.data(), _data.size() * sizeof_T);
+            auto treatAsBytes = [&]()
+            { serializerP->WriteUint8Array("data", (uint8_t *)_data.data(), _data.size() * sizeof_T, offset * sizeof_T); };
+            if constexpr (std::is_same_v<T, index>)
+                serializerP->WriteIndexVector("data", _data, offset);
+            else if constexpr (std::is_same_v<T, real>)
+            {
+                if (!std::dynamic_pointer_cast<Serializer::SerializerJSON>(serializerP))
+                    serializerP->WriteRealVector("data", _data, offset);
+                else
+                    treatAsBytes();
+            }
+            else
+                treatAsBytes();
         }
 
-        void __ReadSerializerData(SerializerBase *serializer)
+        void __ReadSerializerData(Serializer::SerializerBaseSSP serializerP, Serializer::ArrayGlobalOffset &offset)
         {
-            index bufferSize;
-            serializer->ReadUint8Array("data", nullptr, bufferSize);
-            DNDS_assert(bufferSize % sizeof_T == 0);
-            _data.resize(bufferSize / sizeof_T);
-            serializer->ReadUint8Array("data", (uint8_t *)_data.data(), bufferSize);
+            auto treatAsBytes = [&]()
+            {
+                index bufferSize{0};
+                serializerP->ReadUint8Array("data", nullptr, bufferSize, offset);
+                DNDS_assert(bufferSize % sizeof_T == 0);
+                _data.resize(bufferSize / sizeof_T);
+                serializerP->ReadUint8Array("data", (uint8_t *)_data.data(), bufferSize, offset);
+                offset.CheckMultipleOf(sizeof_T);
+                offset = offset / sizeof_T;
+            };
+
+            if constexpr (std::is_same_v<T, index>)
+                serializerP->ReadIndexVector("data", _data, offset);
+            else if constexpr (std::is_same_v<T, real>)
+            {
+                if (!std::dynamic_pointer_cast<Serializer::SerializerJSON>(serializerP))
+                    serializerP->ReadRealVector("data", _data, offset);
+                else
+                    treatAsBytes();
+            }
+            else
+                treatAsBytes();
         }
 
-        void WriteSerializer(SerializerBase *serializer, const std::string &name)
+        void WriteSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name, Serializer::ArrayGlobalOffset offset)
         {
-            auto cwd = serializer->GetCurrentPath();
-            serializer->CreatePath(name);
-            serializer->GoToPath(name);
+            auto cwd = serializerP->GetCurrentPath();
+            serializerP->CreatePath(name);
+            serializerP->GoToPath(name);
 
-            serializer->WriteString("array_sig", this->GetArraySignature());
-            serializer->WriteString("array_type", typeid(self_type).name());
-            serializer->WriteIndex("size", _size);
-            serializer->WriteInt("row_size_dynamic", _row_size_dynamic);
+            serializerP->WriteString("array_sig", this->GetArraySignature());
+            serializerP->WriteString("array_type", typeid(self_type).name());
+            if (serializerP->IsPerRank())
+                serializerP->WriteIndex("size", _size);
+            else
+            {
+                std::vector<index> _size_vv;
+                _size_vv.push_back(_size);
+                serializerP->WriteIndexVectorPerRank("size", _size_vv);
+            }
+            serializerP->WriteInt("row_size_dynamic", _row_size_dynamic);
             if (_size == 0)
                 return;
             if constexpr (_dataLayout == CSR)
             {
                 if (!this->IfCompressed())
                     this->Compress();
-                serializer->WriteSharedIndexVector("pRowStart", _pRowStart);
+                serializerP->WriteSharedIndexVector("pRowStart", _pRowStart, offset);
             }
             else if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
             {
-                serializer->WriteSharedRowsizeVector("pRowSizes", _pRowSizes);
+                serializerP->WriteSharedRowsizeVector("pRowSizes", _pRowSizes, offset);
             }
             else // fixed
             {
             }
             // doing data
-            this->__WriteSerializerData(serializer);
+            this->__WriteSerializerData(serializerP, offset);
 
-            serializer->GoToPath(cwd);
+            serializerP->GoToPath(cwd);
         }
 
-        void ReadSerializer(SerializerBase *serializer, const std::string &name)
+        void ReadSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name, Serializer::ArrayGlobalOffset &offset)
         {
-            auto cwd = serializer->GetCurrentPath();
-            // serializer->CreatePath(name); //! if you create, all data will be erased
-            serializer->GoToPath(name);
+            auto cwd = serializerP->GetCurrentPath();
+            // serializerP->CreatePath(name); //! if you create, all data will be erased
+            serializerP->GoToPath(name);
 
             std::string array_sigRead;
-            serializer->ReadString("array_sig", array_sigRead);
+            serializerP->ReadString("array_sig", array_sigRead);
             //! TODO: parse the sizes and correctly handle dynamic reading
             DNDS_assert_info(array_sigRead == this->GetArraySignature() || ArraySignatureIsCompatible(array_sigRead),
                              array_sigRead + ", i am : " + this->GetArraySignature());
@@ -712,8 +749,17 @@ namespace DNDS
                 if (_row_size == NonUniformSize || rs == NonUniformSize)
                     DNDS_assert_info(false, "can't handle here");
             }
-            serializer->ReadIndex("size", _size);
-            serializer->ReadInt("row_size_dynamic", _row_size_dynamic);
+            if (serializerP->IsPerRank())
+                serializerP->ReadIndex("size", _size);
+            else
+            {
+                std::vector<index> _size_vv;
+                Serializer::ArrayGlobalOffset offsetV = Serializer::ArrayGlobalOffset_Unknown;
+                serializerP->ReadIndexVector("size", _size_vv, offsetV);
+                DNDS_assert(_size_vv.size() == 1);
+                _size = _size_vv.front();
+            }
+            serializerP->ReadInt("row_size_dynamic", _row_size_dynamic);
             if (_row_size >= 0) // TODO: fix this! need full conversion check (maybe just a casting)
             {
                 if (rs == DynamicSize)
@@ -729,20 +775,21 @@ namespace DNDS
                 return;
             if constexpr (_dataLayout == CSR)
             {
-                serializer->ReadSharedIndexVector("pRowStart", _pRowStart);
+                serializerP->ReadSharedIndexVector("pRowStart", _pRowStart, offset);
             }
             else if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
             {
-                serializer->ReadSharedRowsizeVector("pRowSizes", _pRowSizes);
+                serializerP->ReadSharedRowsizeVector("pRowSizes", _pRowSizes, offset);
             }
             else // fixed
             {
             }
             // doing data
-            this->__ReadSerializerData(serializer);
+            // todo: multiple write into offset, need checking?
+            this->__ReadSerializerData(serializerP, offset);
             // TODO: check data validity
 
-            serializer->GoToPath(cwd);
+            serializerP->GoToPath(cwd);
         }
     };
 
