@@ -9,13 +9,13 @@ namespace DNDS::Geom
 {
     struct NodePeriodicBits
     {
-        uint8_t __v{0u};
-        bool getP1() const { return __v & 0x01u; }
-        bool getP2() const { return __v & 0x02u; }
-        bool getP3() const { return __v & 0x04u; }
-        void setP1True() { __v |= 0x01u; }
-        void setP2True() { __v |= 0x02u; }
-        void setP3True() { __v |= 0x04u; }
+        uint8_t __v{0U};
+        [[nodiscard]] bool getP1() const { return __v & 0x01U; }
+        [[nodiscard]] bool getP2() const { return __v & 0x02U; }
+        [[nodiscard]] bool getP3() const { return __v & 0x04U; }
+        void setP1True() { __v |= 0x01U; }
+        void setP2True() { __v |= 0x02U; }
+        void setP3True() { __v |= 0x04U; }
         uint8_t operator^(const NodePeriodicBits &r) const
         {
             return uint8_t(__v ^ r.__v);
@@ -42,9 +42,9 @@ namespace DNDS::Geom
         }
     };
 
-    static const NodePeriodicBits nodePB1{0x01u};
-    static const NodePeriodicBits nodePB2{0x02u};
-    static const NodePeriodicBits nodePB3{0x04u};
+    static const NodePeriodicBits nodePB1{0x01U};
+    static const NodePeriodicBits nodePB2{0x02U};
+    static const NodePeriodicBits nodePB3{0x04U};
 
     inline bool isCollaborativeNodePeriodicBits(const std::vector<NodePeriodicBits> &a, const std::vector<NodePeriodicBits> &b)
     {
@@ -103,7 +103,7 @@ namespace DNDS::Geom
 
         NodePeriodicBits *begin() { return __p_indices; }
         NodePeriodicBits *end() { return __p_indices + __Row_size; } // past-end
-        rowsize size() const { return __Row_size; }
+        [[nodiscard]] rowsize size() const { return __Row_size; }
     };
 
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
@@ -181,7 +181,7 @@ namespace DNDS::Geom
             serializerP->GoToPath(cwd);
         }
 
-        tPoint TransCoord(const tPoint &c, t_index id) const
+        [[nodiscard]] tPoint TransCoord(const tPoint &c, t_index id) const
         {
             DNDS_assert(FaceIDIsPeriodic(id));
             t_index i{0};
@@ -192,7 +192,7 @@ namespace DNDS::Geom
             return rotation.at(i) * (c - rotationCenter.at(i)) + rotationCenter.at(i) + translation.at(i);
         }
 
-        tPoint TransCoordBack(const tPoint &c, t_index id) const
+        [[nodiscard]] tPoint TransCoordBack(const tPoint &c, t_index id) const
         {
             DNDS_assert(FaceIDIsPeriodic(id));
             t_index i{0};
@@ -265,7 +265,7 @@ namespace DNDS::Geom
                 return rotation.at(i)({0, 1}, {0, 1}).transpose() * m * rotation.at(i)({0, 1}, {0, 1});
         }
 
-        tPoint GetCoordByBits(const tPoint &c, const NodePeriodicBits &bits)
+        [[nodiscard]] tPoint GetCoordByBits(const tPoint &c, const NodePeriodicBits &bits) const
         {
             if (!bool(bits))
                 return c;
@@ -294,7 +294,7 @@ namespace DNDS::Geom
             return ret;
         }
 
-        tPoint GetCoordBackByBits(const tPoint &c, const NodePeriodicBits &bits)
+        [[nodiscard]] tPoint GetCoordBackByBits(const tPoint &c, const NodePeriodicBits &bits) const
         {
             if (!bool(bits))
                 return c;

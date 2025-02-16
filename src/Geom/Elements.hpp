@@ -2187,47 +2187,47 @@ namespace DNDS::Geom::Elem
     {
         ElemType type = UnknownElem;
 
-        constexpr ParamSpace GetParamSpace() const
+        [[nodiscard]] constexpr ParamSpace GetParamSpace() const
         {
             return ElemType_to_ParamSpace(type);
         }
 
-        constexpr t_index GetDim() const
+        [[nodiscard]] constexpr t_index GetDim() const
         {
             return Dim_Order_NVNNNF[type][0];
         }
 
-        constexpr t_index GetOrder() const
+        [[nodiscard]] constexpr t_index GetOrder() const
         {
             return Dim_Order_NVNNNF[type][1];
         }
 
-        constexpr t_index GetNumVertices() const
+        [[nodiscard]] constexpr t_index GetNumVertices() const
         {
             return Dim_Order_NVNNNF[type][2];
         }
 
-        constexpr t_index GetNumNodes() const
+        [[nodiscard]] constexpr t_index GetNumNodes() const
         {
             return Dim_Order_NVNNNF[type][3];
         }
 
-        constexpr t_index GetNumFaces() const
+        [[nodiscard]] constexpr t_index GetNumFaces() const
         {
             return Dim_Order_NVNNNF[type][4];
         }
 
-        constexpr t_index GetNumElev_O1O2() const
+        [[nodiscard]] constexpr t_index GetNumElev_O1O2() const
         {
             return GetElemElevation_O1O2_NumNode(type);
         }
 
-        t_index GetO2NumBisect() const
+        [[nodiscard]] t_index GetO2NumBisect() const
         {
             return GetO2ElemBisectNum(type);
         }
 
-        constexpr Element ObtainFace(t_index iFace) const
+        [[nodiscard]] constexpr Element ObtainFace(t_index iFace) const
         {
             DNDS_assert(iFace < this->GetNumFaces());
             return Element{GetFaceType(type, iFace)};
@@ -2244,23 +2244,23 @@ namespace DNDS::Geom::Elem
                 faceNodes[i] = nodes[FaceNodeList[type][iFace][i]];
         }
 
-        constexpr Element ObtainElevNodeSpan(t_index iNodeElev) const
+        [[nodiscard]] constexpr Element ObtainElevNodeSpan(t_index iNodeElev) const
         {
             DNDS_assert(iNodeElev < this->GetNumElev_O1O2());
             return Element{GetElemElevation_O1O2_NodeSpanType(type, iNodeElev)};
         }
 
-        constexpr Element ObtainElevatedElem() const
+        [[nodiscard]] constexpr Element ObtainElevatedElem() const
         {
             return Element{GetElemElevation_O1O2_ElevatedType(type)};
         }
 
-        constexpr Element ObtainO1Elem() const
+        [[nodiscard]] constexpr Element ObtainO1Elem() const
         {
             return Element{GetElemO1(GetParamSpace())};
         }
 
-        Element ObtainO2BisectElem(t_index iSubElem) const
+        [[nodiscard]] Element ObtainO2BisectElem(t_index iSubElem) const
         {
             DNDS_assert(iSubElem < this->GetO2NumBisect());
             return Element{GetO2ElemBisectElem(type, iSubElem)};
@@ -2291,7 +2291,7 @@ namespace DNDS::Geom::Elem
         /**
          * @warning Nj resized within
          */
-        void GetNj(const tPoint &pParam, tNj &Nj)
+        void GetNj(const tPoint &pParam, tNj &Nj) const
         {
             Nj.setZero(1, this->GetNumNodes());
             ShapeFunc_DiNj<0>(type, pParam, Nj);
@@ -2300,7 +2300,7 @@ namespace DNDS::Geom::Elem
         /**
          * @warning D1Nj resized within
          */
-        void GetD1Nj(const tPoint &pParam, tD1Nj &D1Nj)
+        void GetD1Nj(const tPoint &pParam, tD1Nj &D1Nj) const
         {
             D1Nj.setZero(3, this->GetNumNodes());
             ShapeFunc_DiNj<1>(type, pParam, D1Nj);
@@ -2309,7 +2309,7 @@ namespace DNDS::Geom::Elem
         /**
          * @warning DiNj resized within
          */
-        void GetD01Nj(const tPoint &pParam, tD01Nj &D01Nj)
+        void GetD01Nj(const tPoint &pParam, tD01Nj &D01Nj) const
         {
             tNj Nj;
             tD1Nj D1Nj;
@@ -2323,7 +2323,7 @@ namespace DNDS::Geom::Elem
         /**
          * @warning DiNj resized within
          */
-        void GetDiNj(const tPoint &pParam, tDiNj &DiNj, int maxOrder)
+        void GetDiNj(const tPoint &pParam, tDiNj &DiNj, int maxOrder) const
         {
             if (this->GetDim() == 2)
             {

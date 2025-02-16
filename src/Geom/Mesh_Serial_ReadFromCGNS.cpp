@@ -113,9 +113,9 @@ namespace DNDS::Geom
                 if (cg_zone_type(cgns_file, iBase, iZone, &zoneType))
                     cg_error_exit();
                 DNDS_assert(zoneType == Unstructured); //! only supports unstructured
-                Base_Zone.push_back(std::make_pair(iBase, iZone));
-                BaseNames.push_back(basename);
-                ZoneNames.push_back(zonename);
+                Base_Zone.emplace_back(std::make_pair(iBase, iZone));
+                BaseNames.emplace_back(basename);
+                ZoneNames.emplace_back(zonename);
 
                 if (cg_goto(cgns_file, iBase, "Zone_t", iZone, ""))
                     cg_error_exit();
@@ -211,7 +211,7 @@ namespace DNDS::Geom
                             cgErr |= cg_poly_elements_read(cgns_file, iBase, iZone, iSection, elemsRead.data(), elemStarts.data(), NULL);
                             for (cgsize_t i = 0; i < nElemSec; i++)
                             {
-                                ElementType_t c_etype = static_cast<ElementType_t>(elemsRead.at(elemStarts[i]));
+                                auto c_etype = static_cast<ElementType_t>(elemsRead.at(elemStarts[i]));
                                 if (__getElemTypeFromCGNSType(etype) != Elem::UnknownElem)
                                 {
                                     DNDS::log() << "Error ETYPE " << std::to_string(etype) << std::endl;

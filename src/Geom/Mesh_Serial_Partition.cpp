@@ -109,7 +109,7 @@ namespace DNDS::Geom
             for (auto d : adjncyWeightsR)
                 adjncyWeights.push_back(weightMapping(d / maxDistMax) * (INT_MAX - 1) + 1);
         }
-        if (adjncy.size() == 0)
+        if (adjncy.empty())
             adjncy.resize(1, -1); //*coping with zero sized data
 
         _METIS::idx_t nCell = _METIS::indexToIdx(cell2cellSerialFacial->Size());
@@ -289,7 +289,7 @@ namespace DNDS::Geom
         else if (control.getOrderingCode() == 2) // MMD
         {
             using namespace boost;
-            typedef adjacency_list<vecS, vecS, directedS> Graph;
+            using Graph = adjacency_list<vecS, vecS, directedS>;
             Graph cell2cellG(this->NumCell());
             std::vector<std::vector<index>> &cell2cellFaceV = cell2cellFaceVLocal;
             for (index iCell = 0; iCell < this->NumCell(); iCell++)
@@ -315,8 +315,8 @@ namespace DNDS::Geom
         else if (control.getOrderingCode() == 3) // RCM
         {
             using namespace boost;
-            typedef adjacency_list<vecS, vecS, undirectedS, property<vertex_color_t, default_color_type, property<vertex_degree_t, int>>> Graph;
-            typedef graph_traits<Graph>::vertex_descriptor Vertex;
+            using Graph = adjacency_list<vecS, vecS, undirectedS, property<vertex_color_t, default_color_type, property<vertex_degree_t, int>>>;
+            using Vertex = graph_traits<Graph>::vertex_descriptor;
             // typedef graph_traits<Graph>::vertices_size_type size_type;
             Graph cell2cellG(this->NumCell());
             std::vector<std::vector<index>> &cell2cellFaceV = cell2cellFaceVLocal;
@@ -379,7 +379,7 @@ namespace DNDS::Geom
             auto graphFunctor = [&](index i) -> t_IndexVec &
             { return cell2cellFaceV.at(i); }; // todo: need improvement in CorrectRCM: can pass a temporary functor and store
             auto graph = CorrectRCM::UndirectedGraphProxy(graphFunctor, this->NumCell());
-            graph.CheckAdj();
+            int ret = graph.CheckAdj();
             CorrectRCM::CuthillMcKeeOrdering(
                 graph,
                 [&](index i) -> index &

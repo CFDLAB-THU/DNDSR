@@ -27,13 +27,13 @@ namespace DNDS::Direct
             useDirectPrec,
             iluCode,
             orderingCode)
-        int getOrderingCode() const
+        [[nodiscard]] int getOrderingCode() const
         {
             return orderingCode == INT32_MIN
                        ? (iluCode == -1 ? 2 : 0) // auto decide
                        : orderingCode;
         }
-        int getILUCode() const { return iluCode; }
+        [[nodiscard]] int getILUCode() const { return iluCode; }
     };
 }
 
@@ -56,7 +56,7 @@ namespace DNDS::Direct
 
         SerialSymLUStructure(const MPIInfo &nMpi, index nN) : mpi(nMpi), N(nN) {};
 
-        index Num() const { return N; }
+        [[nodiscard]] index Num() const { return N; }
 
         index FillingReorderOld2New(index v)
         {
@@ -264,9 +264,7 @@ namespace DNDS::Direct
         {
         }
 
-        virtual ~LocalLUBase()
-        {
-        }
+        virtual ~LocalLUBase() = default;
 
         void GetDiag(index i);          // pure "virtual" do not implement
         void GetLower(index i, int ij); // pure "virtual" do not implement
@@ -485,9 +483,7 @@ namespace DNDS::Direct
         {
         }
 
-        virtual ~LocalLDLTBase()
-        {
-        }
+        virtual ~LocalLDLTBase() = default;
 
         void GetDiag(index i);
         void GetLower(index i, int ij);

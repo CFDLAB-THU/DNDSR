@@ -71,14 +71,14 @@ namespace DNDS::Geom
         }
 
         // Must return the number of data points
-        inline size_t
+        [[nodiscard]] inline size_t
         kdtree_get_point_count() const
         {
             DNDS_assert(ref);
             return ref->Size();
         }
 
-        inline real kdtree_get_pt(const size_t idx, const size_t dim) const
+        [[nodiscard]] inline real kdtree_get_pt(const size_t idx, const size_t dim) const
         {
             DNDS_assert(ref);
             return ref->operator[](idx)(dim);
@@ -1263,7 +1263,7 @@ namespace DNDS::Geom
                         eCell.ExtractO2BisectElemNodes(iBi, iBiVariant, coordsC, coordsCSub);
                         eCell.ExtractO2BisectElemNodes(iBi, iBiVariant, coordsCu, coordsCuSub);
                         auto qCellSub = Elem::Quadrature{eCellSub, 6}; // for O1 FEM
-                        rowsize nnLocSub = rowsize(c2nSubLocal.size());
+                        auto nnLocSub = rowsize(c2nSubLocal.size());
                         MatrixXR ALocSub, mLoc;
                         ALocSub.setZero(3 * nnLocSub, 3 * nnLocSub + 1);
                         mLoc.resize(6, 3 * nnLocSub);

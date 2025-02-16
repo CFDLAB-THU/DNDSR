@@ -154,7 +154,7 @@ namespace DNDS::Linear
 
         void reset() { initialized = false, pHistorySize = 0; }
 
-        index getPHistorySize() const { return pHistorySize; }
+        [[nodiscard]] index getPHistorySize() const { return pHistorySize; }
 
         template <class TFA, class TFM, class TFResPrec, class TFDot, class TFstop>
         bool solve(TFA &&FA, TFM &&FM, TFResPrec &&FResPrec, TFDot &&fDot, TDATA &x, uint32_t niter, TFstop &&FStop)

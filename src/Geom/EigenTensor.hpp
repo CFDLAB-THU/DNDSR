@@ -23,22 +23,20 @@ namespace DNDS::ETensor
                 data[i] = fill;
         }
 
-        ETensorR3()
-        {
-        }
+        ETensorR3() = default;
 
         T &operator()(Index i0, Index i1, Index i2)
         {
             return data[i2 + d2 * (i1 + (d1 * i0))];
         }
 
-        typedef Matrix<T, d0, d1, RowMajor> M01;
-        typedef Matrix<T, d1, d2, RowMajor> M12;
-        typedef Matrix<T, d0, d2, RowMajor> M02;
+        using M01 = Matrix<T, d0, d1, RowMajor>;
+        using M12 = Matrix<T, d1, d2, RowMajor>;
+        using M02 = Matrix<T, d0, d2, RowMajor>;
 
-        typedef Map<M01, Unaligned, Stride<stride0, stride1>> Map01;
-        typedef Map<M12, Unaligned, Stride<stride1, stride2>> Map12;
-        typedef Map<M02, Unaligned, Stride<stride0, stride2>> Map02;
+        using Map01 = Map<M01, Unaligned, Stride<stride0, stride1>>;
+        using Map12 = Map<M12, Unaligned, Stride<stride1, stride2>>;
+        using Map02 = Map<M02, Unaligned, Stride<stride0, stride2>>;
 
         Map01 GetMap01(Index i2)
         {

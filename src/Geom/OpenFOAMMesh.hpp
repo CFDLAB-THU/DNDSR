@@ -87,7 +87,7 @@ namespace DNDS::Geom::OpenFOAM
         return in.eof();
     }
 
-    inline void readOpenFOAMList(std::istream &in, const std::function<void(std::istream &)> readOneItem)
+    inline void readOpenFOAMList(std::istream &in, const std::function<void(std::istream &)> &readOneItem)
     {
         bool gotLeft = false;
         std::string buf;
@@ -108,7 +108,7 @@ namespace DNDS::Geom::OpenFOAM
         }
     }
 
-    inline void readOpenFOAMObj(std::istream &in, const std::function<void(const std::string &)> readOneItemLine)
+    inline void readOpenFOAMObj(std::istream &in, const std::function<void(const std::string &)> &readOneItemLine)
     {
         bool gotLeft = false;
         std::string buf;

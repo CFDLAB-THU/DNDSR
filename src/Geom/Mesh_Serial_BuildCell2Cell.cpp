@@ -237,7 +237,7 @@ namespace DNDS::Geom
                 if (!isDonor)
                     iNodeOld2New[iNode] = nNodeNew++;
             }
-            for (auto &p : iNodeDonorToMainI)
+            for (const auto &p : iNodeDonorToMainI)
             {
                 index iMain = p.second;
                 iNodeOld2New.at(p.first) = -1 - iMain; // minus means duplication here; leaves a self-pointing pointer in the minus region
@@ -490,10 +490,10 @@ namespace DNDS::Geom
         nodeNeedCreate.trans.createMPITypes();
         // std::cout << "here X0.5" << std::endl;
         for (index i = 0; i < nodeNeedCreate.Size(); i++)
-            nodeNeedCreate(i, 0) = 0x01u;
+            nodeNeedCreate(i, 0) = 0x01U;
         for (index iC = 0; iC < cell2node.father->Size(); iC++)
             for (rowsize ic2n = 0; ic2n < cell2node.RowSize(iC); ic2n++)
-                nodeNeedCreate(cell2node(iC, ic2n), 0) |= (0x01u << uint8_t(cell2nodePbi(iC, ic2n)));
+                nodeNeedCreate(cell2node(iC, ic2n), 0) |= (0x01U << uint8_t(cell2nodePbi(iC, ic2n)));
         DNDS::ArrayTransformerType<tAdj1::element_type>::Type nodeNeedCreatePastTrans;
         tAdj1 nodeNeedCreatePast;
         DNDS_MAKE_SSP(nodeNeedCreatePast, mpi);
@@ -524,11 +524,11 @@ namespace DNDS::Geom
         node2recreatedNodes.trans.createMPITypes();
         for (index i = 0; i < coords.father->Size(); i++)
         {
-            DNDS_assert(nodeNeedCreate(i, 0) & 0x01u);
+            DNDS_assert(nodeNeedCreate(i, 0) & 0x01U);
             node2recreatedNodes(i, 0) = i;
             for (uint8_t bitCur = 1; bitCur < 8; bitCur++)
             {
-                if (nodeNeedCreate(i, 0) & (0x01u << bitCur))
+                if (nodeNeedCreate(i, 0) & (0x01U << bitCur))
                     node2recreatedNodes(i, rowsize(bitCur)) = coords.father->Size() + nCreatedNodes++;
                 else
                     node2recreatedNodes(i, rowsize(bitCur)) = UnInitIndex;

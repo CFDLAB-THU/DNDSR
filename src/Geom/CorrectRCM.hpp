@@ -42,9 +42,9 @@ namespace CorrectRCM
         UndirectedGraphProxy(const tGraphAdjFunctor &graphAdjFunctor, index nVertices)
             : GraphAdjFunctor(graphAdjFunctor), nVertices(nVertices) {}
 
-        index GetNVertices() const { return nVertices; }
+        [[nodiscard]] index GetNVertices() const { return nVertices; }
 
-        int CheckAdj(bool checkParallel = true, bool checkSymmetry = true) const
+        [[nodiscard]] int CheckAdj(bool checkParallel = true, bool checkSymmetry = true) const
         {
             std::unordered_multiset<std::pair<index, index>, hash_pair> edges;
             std::unordered_multiset<std::pair<index, index>, hash_pair> edgesDirected;

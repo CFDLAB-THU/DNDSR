@@ -1687,7 +1687,7 @@ namespace DNDS::Geom
         DNDS_assert((!serializerP->IsPerRank() || rankRead == mpi.rank) && sizeRead == mpi.size);
 
         // make the empty arrays
-        auto mesh = this;
+        auto *mesh = this;
         DNDS_MAKE_SSP(mesh->coords.father, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->coords.son, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->cellElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
@@ -1901,7 +1901,7 @@ namespace DNDS::Geom
             log() << "UnstructuredMesh === ConstructBndMesh Done" << std::endl;
     }
 
-    void UnstructuredMesh::ObtainSymmetricSymbolicFactorization(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control)
+    void UnstructuredMesh::ObtainSymmetricSymbolicFactorization(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control) const
     {
         if (control.useDirectPrec)
             symLU.ObtainSymmetricSymbolicFactorization(

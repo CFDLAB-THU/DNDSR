@@ -1,7 +1,7 @@
 #include "DNDS/Defines.hpp"
 #include "Geometric.hpp"
 
-namespace Geom
+namespace DNDS::Geom
 {
     class Octree
     {
@@ -33,6 +33,7 @@ namespace Geom
             bool InsertIfUnique(DNDS::index ni, const tPoint &np, double tol)
             {
                 // TODO
+                return false;
             }
         } root;
 

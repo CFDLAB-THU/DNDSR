@@ -44,7 +44,7 @@ namespace DNDS::Geom
 
     inline std::vector<real> VectorToSTDVector(const Eigen::VectorXd &v)
     {
-        return std::vector<real>(v.begin(), v.end()); //  TODO this is bullshit code
+        return {v.begin(), v.end()}; //  TODO this is bullshit code
     }
 
     inline Eigen::VectorXd STDVectorToVector(const std::vector<real> &v)

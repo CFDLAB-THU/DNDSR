@@ -642,22 +642,21 @@ namespace DNDS::Geom::Elem
     public:
         void operator+=(const SummationNoOp &R)
         {
-            return;
         }
 
         SummationNoOp operator*(const SummationNoOp &R) const
         {
-            return SummationNoOp();
+            return {};
         }
 
         friend SummationNoOp operator*(t_real L, const SummationNoOp &R)
         {
-            return SummationNoOp();
+            return {};
         }
 
         friend SummationNoOp operator*(const SummationNoOp &L, t_real R)
         {
-            return SummationNoOp();
+            return {};
         }
     };
 
@@ -754,7 +753,7 @@ namespace DNDS::Geom::Elem
             }
         }
 
-        auto GetQuadraturePointInfo(int iG)
+        [[nodiscard]] auto GetQuadraturePointInfo(int iG) const
         {
             tPoint pParam{0, 0, 0};
             t_real w;
@@ -762,7 +761,7 @@ namespace DNDS::Geom::Elem
             return std::make_tuple(pParam, w);
         }
 
-        t_index GetNumPoints() { return int_scheme; }
+        [[nodiscard]] t_index GetNumPoints() const { return int_scheme; }
     };
 
     inline auto GetQuadPatches(Quadrature &q)

@@ -18,7 +18,7 @@ namespace DNDS::ODE
 
         virtual void Step(TDATA &x, TDATA &xinc, const Frhs &frhs, const Fdt &fdt, const Fsolve &fsolve,
                           int maxIter, const Fstop &fstop, const Fincrement &fincrement, real dt) = 0;
-        virtual ~ImplicitDualTimeStep() {}
+        virtual ~ImplicitDualTimeStep() = default;
 
         virtual TDATA &getLatestRHS() = 0;
     };
@@ -90,7 +90,7 @@ namespace DNDS::ODE
             }
         }
 
-        virtual ~ImplicitEulerDualTimeStep() {}
+        virtual ~ImplicitEulerDualTimeStep() = default;
 
         virtual TDATA &getLatestRHS() override
         {
@@ -268,7 +268,7 @@ namespace DNDS::ODE
             return rhsbuf[latestStage];
         }
 
-        virtual ~ImplicitSDIRK4DualTimeStep() {}
+        virtual ~ImplicitSDIRK4DualTimeStep() = default;
     };
 
     template <class TDATA, class TDTAU>
@@ -489,7 +489,7 @@ namespace DNDS::ODE
             return rhsbuf[0];
         }
 
-        virtual ~ImplicitBDFDualTimeStep() {}
+        virtual ~ImplicitBDFDualTimeStep() = default;
     };
 
     template <class TDATA, class TDTAU>
@@ -796,7 +796,7 @@ namespace DNDS::ODE
             return rhs;
         }
 
-        virtual ~ImplicitVBDFDualTimeStep() {}
+        virtual ~ImplicitVBDFDualTimeStep() = default;
     };
 
     /*******************************************************************************************/
@@ -1167,7 +1167,7 @@ namespace DNDS::ODE
             return rhsbuf[1];
         }
 
-        virtual ~ImplicitHermite3SimpleJacobianDualStep() {}
+        virtual ~ImplicitHermite3SimpleJacobianDualStep() = default;
     };
 
     /*******************************************************************************************/

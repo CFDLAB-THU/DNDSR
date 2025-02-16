@@ -18,7 +18,7 @@ namespace DNDS::Geom
         /// @brief positive for BVnum, 0 for internal Elems, Negative for ?
         t_index zone = INTERNAL_ZONE;
 
-        Elem::ElemType getElemType()
+        [[nodiscard]] Elem::ElemType getElemType() const
         {
             return static_cast<Elem::ElemType>(type);
         }
@@ -323,21 +323,21 @@ namespace DNDS::Geom
 
         // void ReorderCellLocal();
 
-        void ObtainLocalFactFillOrdering(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control);          // 1 uses metis, 2 uses MMD, //TODO 10 uses geometric based searching
-        void ObtainSymmetricSymbolicFactorization(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control); // -1 use full LU, 0-3 use ilu(code),
+        void ObtainLocalFactFillOrdering(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control);                // 1 uses metis, 2 uses MMD, //TODO 10 uses geometric based searching
+        void ObtainSymmetricSymbolicFactorization(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control) const; // -1 use full LU, 0-3 use ilu(code),
 
-        index NumNode() { return coords.father->Size(); }
-        index NumCell() { return cell2node.father->Size(); }
-        index NumFace() { return face2node.father->Size(); }
-        index NumBnd() { return bnd2node.father->Size(); }
+        index NumNode() const { return coords.father->Size(); }
+        index NumCell() const { return cell2node.father->Size(); }
+        index NumFace() const { return face2node.father->Size(); }
+        index NumBnd() const { return bnd2node.father->Size(); }
 
-        index NumNodeGhost() { return coords.son->Size(); }
-        index NumCellGhost() { return cell2node.son->Size(); }
-        index NumFaceGhost() { return face2node.son->Size(); }
+        index NumNodeGhost() const { return coords.son->Size(); }
+        index NumCellGhost() const { return cell2node.son->Size(); }
+        index NumFaceGhost() const { return face2node.son->Size(); }
 
-        index NumNodeProc() { return coords.Size(); }
-        index NumCellProc() { return cell2node.Size(); }
-        index NumFaceProc() { return face2node.Size(); }
+        index NumNodeProc() const { return coords.Size(); }
+        index NumCellProc() const { return cell2node.Size(); }
+        index NumFaceProc() const { return face2node.Size(); }
 
         /// @warning must collectively call
         index NumCellGlobal() { return cell2node.father->globalSize(); }

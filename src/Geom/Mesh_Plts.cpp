@@ -198,7 +198,7 @@ namespace DNDS::Geom
         /********************************/
         // cellZone in header
         /********************************/
-        writeFloat(299.0f); // 299.0 indicates a v112 zone header, available in v191
+        writeFloat(299.0F); // 299.0 indicates a v112 zone header, available in v191
         writeString("zone_0");
         writeInt(-1);   // ParentZone: No longer used.
         writeInt(-1);   // StrandID: static strand ID
@@ -266,9 +266,9 @@ namespace DNDS::Geom
         writeInt(0); // K dim
         writeInt(0); // No more Auxiliary name/value pairs.
 
-        writeFloat(357.0f); // end of header, EOH marker
+        writeFloat(357.0F); // end of header, EOH marker
 
-        writeFloat(299.0f); // 299.0 indicates a v112 zone header, available in v191
+        writeFloat(299.0F); // 299.0 indicates a v112 zone header, available in v191
 
         /********************************/
         // cellZone data
@@ -400,60 +400,60 @@ namespace DNDS::Geom
             switch (elem.GetParamSpace())
             {
             case Elem::ParamSpace::LineSpace:
-                writeInt(c2n[0] + 0ll);
-                writeInt(c2n[1] + 0ll);
+                writeInt(c2n[0] + 0LL);
+                writeInt(c2n[1] + 0LL);
                 break;
             case Elem::ParamSpace::TriSpace:
-                writeInt(c2n[0] + 0ll);
-                writeInt(c2n[1] + 0ll);
-                writeInt(c2n[2] + 0ll);
-                writeInt(c2n[2] + 0ll);
+                writeInt(c2n[0] + 0LL);
+                writeInt(c2n[1] + 0LL);
+                writeInt(c2n[2] + 0LL);
+                writeInt(c2n[2] + 0LL);
                 break;
             case Elem::ParamSpace::QuadSpace:
-                writeInt(c2n[0] + 0ll);
-                writeInt(c2n[1] + 0ll);
-                writeInt(c2n[2] + 0ll);
-                writeInt(c2n[3] + 0ll); // ! note that tis is zero based
+                writeInt(c2n[0] + 0LL);
+                writeInt(c2n[1] + 0LL);
+                writeInt(c2n[2] + 0LL);
+                writeInt(c2n[3] + 0LL); // ! note that tis is zero based
                 break;
             case Elem::ParamSpace::TetSpace:
-                writeInt(c2n[0] + 0ll);
-                writeInt(c2n[1] + 0ll);
-                writeInt(c2n[2] + 0ll);
-                writeInt(c2n[2] + 0ll);
-                writeInt(c2n[3] + 0ll);
-                writeInt(c2n[3] + 0ll);
-                writeInt(c2n[3] + 0ll);
-                writeInt(c2n[3] + 0ll);
+                writeInt(c2n[0] + 0LL);
+                writeInt(c2n[1] + 0LL);
+                writeInt(c2n[2] + 0LL);
+                writeInt(c2n[2] + 0LL);
+                writeInt(c2n[3] + 0LL);
+                writeInt(c2n[3] + 0LL);
+                writeInt(c2n[3] + 0LL);
+                writeInt(c2n[3] + 0LL);
                 break;
             case Elem::ParamSpace::HexSpace:
-                writeInt(c2n[0] + 0ll);
-                writeInt(c2n[1] + 0ll);
-                writeInt(c2n[2] + 0ll);
-                writeInt(c2n[3] + 0ll);
-                writeInt(c2n[4] + 0ll);
-                writeInt(c2n[5] + 0ll);
-                writeInt(c2n[6] + 0ll);
-                writeInt(c2n[7] + 0ll);
+                writeInt(c2n[0] + 0LL);
+                writeInt(c2n[1] + 0LL);
+                writeInt(c2n[2] + 0LL);
+                writeInt(c2n[3] + 0LL);
+                writeInt(c2n[4] + 0LL);
+                writeInt(c2n[5] + 0LL);
+                writeInt(c2n[6] + 0LL);
+                writeInt(c2n[7] + 0LL);
                 break;
             case Elem::ParamSpace::PrismSpace:
-                writeInt(c2n[0] + 0ll);
-                writeInt(c2n[1] + 0ll);
-                writeInt(c2n[2] + 0ll);
-                writeInt(c2n[2] + 0ll);
-                writeInt(c2n[3] + 0ll);
-                writeInt(c2n[4] + 0ll);
-                writeInt(c2n[5] + 0ll);
-                writeInt(c2n[5] + 0ll);
+                writeInt(c2n[0] + 0LL);
+                writeInt(c2n[1] + 0LL);
+                writeInt(c2n[2] + 0LL);
+                writeInt(c2n[2] + 0LL);
+                writeInt(c2n[3] + 0LL);
+                writeInt(c2n[4] + 0LL);
+                writeInt(c2n[5] + 0LL);
+                writeInt(c2n[5] + 0LL);
                 break;
             case Elem::ParamSpace::PyramidSpace:
-                writeInt(c2n[0] + 0ll);
-                writeInt(c2n[1] + 0ll);
-                writeInt(c2n[2] + 0ll);
-                writeInt(c2n[3] + 0ll);
-                writeInt(c2n[4] + 0ll);
-                writeInt(c2n[4] + 0ll);
-                writeInt(c2n[4] + 0ll);
-                writeInt(c2n[4] + 0ll);
+                writeInt(c2n[0] + 0LL);
+                writeInt(c2n[1] + 0LL);
+                writeInt(c2n[2] + 0LL);
+                writeInt(c2n[3] + 0LL);
+                writeInt(c2n[4] + 0LL);
+                writeInt(c2n[4] + 0LL);
+                writeInt(c2n[4] + 0LL);
+                writeInt(c2n[4] + 0LL);
                 break;
             default:
                 DNDS_assert(false); //! 2d or 3d elems
@@ -617,7 +617,7 @@ namespace DNDS::Geom
             for (int i = 0; i < level; i++)
                 out << indentV;
             out << "<" << name << " ";
-            for (auto &a : attr)
+            for (const auto &a : attr)
                 out << a.first << "=\"" << a.second << "\" ";
             out << ">" << newlineV;
 
@@ -677,15 +677,15 @@ namespace DNDS::Geom
                                     index iN = nodeDedu2Old.at(i);
                                     if (iN < nNode)
                                     {
-                                        coordsOutData[i * 3 + 0ll] = coordOut[iN](0);
-                                        coordsOutData[i * 3 + 1ll] = coordOut[iN](1);
-                                        coordsOutData[i * 3 + 2ll] = coordOut[iN](2);
+                                        coordsOutData[i * 3 + 0LL] = coordOut[iN](0);
+                                        coordsOutData[i * 3 + 1LL] = coordOut[iN](1);
+                                        coordsOutData[i * 3 + 2LL] = coordOut[iN](2);
                                     }
                                     else
                                     {
-                                        coordsOutData[i * 3 + 0ll] = nodesExtra.at(iN - nNode)(0);
-                                        coordsOutData[i * 3 + 1ll] = nodesExtra.at(iN - nNode)(1);
-                                        coordsOutData[i * 3 + 2ll] = nodesExtra.at(iN - nNode)(2);
+                                        coordsOutData[i * 3 + 0LL] = nodesExtra.at(iN - nNode)(0);
+                                        coordsOutData[i * 3 + 1LL] = nodesExtra.at(iN - nNode)(1);
+                                        coordsOutData[i * 3 + 2LL] = nodesExtra.at(iN - nNode)(2);
                                     }
                                 }
                                 // out << cppcodec::base64_rfc4648::encode(
@@ -892,7 +892,7 @@ namespace DNDS::Geom
                                     std::vector<double> dataOutC(nCell * 3);
                                     for (index iCell = 0; iCell < nCell; iCell++)
                                     {
-                                        dataOutC[iCell * 3 + 0ll] = vectorData(i, iCell, 0);
+                                        dataOutC[iCell * 3 + 0LL] = vectorData(i, iCell, 0);
                                         dataOutC[iCell * 3 + 1] = vectorData(i, iCell, 1);
                                         dataOutC[iCell * 3 + 2] = vectorData(i, iCell, 2);
                                     }
