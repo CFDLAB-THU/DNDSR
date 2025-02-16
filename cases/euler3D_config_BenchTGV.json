@@ -3,6 +3,7 @@
         "dtImplicit": 1e-2,
         "nTimeStep": 1,
         "steadyQuit": false,
+        // "useRestart": true,
         // "odeCode": 0, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
         "odeCode": 1,
         "odeSetting1": 0.5,
@@ -25,6 +26,7 @@
         "nDataOut": 100,
         "nDataOutCInternal": 200,
         "nDataOutInternal": 1000000000,
+        "nRestartOutCInternal": 1000,
         "tDataOut": 3e+200,
         "lazyCoverDataOutput": true
     },
@@ -46,8 +48,8 @@
         "uniqueStamps": false,
         "meshScale": 6.28318530717958647692528676,
         "meshDirectBisect": 0,
-        "meshFile": "../data/mesh/Uniform32_3D_Periodic.cgns",
-        "outPltName": "../data/outUnsteady/TGV/Uniform32B0_3D_Periodic_TGV-R1-HM3-LTS-Factorial-0d5Scale/out",
+        "meshFile": "../data/mesh/Uniform64_3D_Periodic.cgns",
+        "outPltName": "../data/outUnsteady/TGV/Uniform64B0_Test/out",
         "outPltMode": 1,
         "readMeshMode": 0,
         "outPltTecplotFormat": false,
@@ -59,7 +61,11 @@
         // "hdfChunkSize": 32768,
         "hdfChunkSize": 131072,
         // "hdfChunkSize": 1048576,
-        "allowAsyncPrintData": false
+        "allowAsyncPrintData": false,
+        "restartWriter": "H5",
+        "restartWriterH5Deflate": 7,
+        "restartWriterH5Chunk": 65536,
+        "_tail": 0
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
@@ -146,5 +152,15 @@
             "TRef": 273.15,
             "CSutherland": 110.4
         }
+    },
+    "restartState": {
+        "iStep": 1,
+        "iStepInternal": 4,
+        "odeCodePrev": -1,
+        "lastRestartFile": "../data/outUnsteady/TGV/Uniform64B2_Test/out__C_p6400.dnds.h5",
+        "otherRestartFile": "",
+        "otherRestartStoreDim": [
+            0
+        ]
     }
 }

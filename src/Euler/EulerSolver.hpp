@@ -801,7 +801,7 @@ namespace DNDS::Euler
                 serializerP = std::make_shared<DNDS::Serializer::SerializerH5>(mpi);
                 std::dynamic_pointer_cast<DNDS::Serializer::SerializerH5>(serializerP)
                     ->SetChunkAndDeflate(config.dataIOControl.restartWriterH5Chunk, config.dataIOControl.restartWriterH5Deflate);
-                fname += "_p" + std::to_string(mpi.size) + ".dnds.h5";
+                fname += "_p" + std::to_string(mpi.size) + ".restart.dnds.h5";
                 config.restartState.lastRestartFile = fname;
             }
             else
