@@ -25,7 +25,7 @@ namespace DNDS::Scalar
             else
                 v1 = vm;
         }
-        
+
         return v0;
     }
 
