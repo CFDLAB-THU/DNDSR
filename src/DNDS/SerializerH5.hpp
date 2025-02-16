@@ -47,6 +47,7 @@ namespace DNDS::Serializer
 
         void OpenFile(const std::string &fName, bool read) override;
         void CloseFile() override;
+        void CloseFileNonVirtual();
         void CreatePath(const std::string &p) override;
         void GoToPath(const std::string &p) override;
         bool IsPerRank() override { return false; }
@@ -85,7 +86,7 @@ namespace DNDS::Serializer
 
         ~SerializerH5() override
         {
-            this->CloseFile();
+            CloseFileNonVirtual();
             MPI_Comm_free(&commDup);
         }
     };

@@ -1,0 +1,50 @@
+Checks: >
+  modernize-*,
+  readability-*,
+  bugprone-*,
+  performance-*,
+  cppcoreguidelines-*
+  google-build-using-namespace,
+  mpi-*,
+  openmp-*,
+  -clang-diagnostic-unused-command-line-argument,
+  -modernize-use-trailing-return-type,
+  -readability-braces-around-statements,
+  -readability-identifier-length,
+  -readability-implicit-bool-conversion,
+  -readability-else-after-return,
+  -readability-isolate-declaration,
+  -bugprone-easily-swappable-parameters,
+
+# Warning: clang-analyzer-optin.cplusplus.VirtualCall is very important and should be addressed!
+
+WarningsAsErrors: >
+  *,
+  clang-analyzer-optin.cplusplus.VirtualCall,
+  -clang-analyzer-optin.mpi.MPI-Checker,
+  -clang-analyzer-deadcode.DeadStores,
+  -bugprone-narrowing-conversions,
+  -bugprone-reserved-identifier,
+  -modernize-use-nullptr,
+  -readability-magic-numbers,
+  -readability-redundant-access-specifiers,
+  -bugprone-branch-clone,
+  -performance-unnecessary-copy-initialization,
+  -clang-diagnostic-unneeded-internal-declaration,
+  -modernize-use-transparent-functors,
+  -readability-simplify-boolean-expr,
+  -modernize-use-nodiscard,
+  -modernize-use-equals-default,
+  -readability-make-member-function-const,
+  -readability-uppercase-literal-suffix,
+  -readability-qualified-auto,
+  -modernize-use-using,-warnings-as-errors,
+  -modernize-concat-nested-namespaces,
+
+CheckOptions:
+  - key: readability-function-cognitive-complexity.Threshold
+    value: 125
+
+
+# HeaderFilterRegex: '.*'  # Apply checks to all files, modify as needed
+FormatStyle: 'file'  # Use the format style defined in .clang-format file

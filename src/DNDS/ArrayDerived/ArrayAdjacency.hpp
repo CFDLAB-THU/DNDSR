@@ -28,7 +28,7 @@ namespace DNDS
 
         operator std::vector<index>() const // copies to a new std::vector<index>
         {
-            return std::vector<index>(__p_indices, __p_indices + __Row_size);
+            return {__p_indices, __p_indices + __Row_size};
         }
 
         void operator=(const std::vector<index> &r)
@@ -39,7 +39,7 @@ namespace DNDS
 
         index *begin() { return __p_indices; }
         index *end() { return __p_indices + __Row_size; } // past-end
-        rowsize size() const { return __Row_size; }
+        [[nodiscard]] rowsize size() const { return __Row_size; }
     };
 
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>

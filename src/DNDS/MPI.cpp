@@ -26,63 +26,59 @@
 #undef NDEBUG
 #endif
 
-namespace DNDS
+namespace DNDS::Debug
 {
-
-    namespace Debug
+    bool IsDebugged()
     {
-        bool IsDebugged()
-        {
 
 #if defined(linux) || defined(_UNIX) || defined(__linux__)
-            std::ifstream fin("/proc/self/status"); // able to detect gdb
-            std::string buf;
-            int tpid = 0;
-            while (!fin.eof())
+        std::ifstream fin("/proc/self/status"); // able to detect gdb
+        std::string buf;
+        int tpid = 0;
+        while (!fin.eof())
+        {
+            fin >> buf;
+            if (buf == "TracerPid:")
             {
-                fin >> buf;
-                if (buf == "TracerPid:")
-                {
-                    fin >> tpid;
-                    break;
-                }
+                fin >> tpid;
+                break;
             }
-            fin.close();
-            return tpid != 0;
-#endif
-#if defined(_WIN32) || defined(__WINDOWS_)
-            return IsDebuggerPresent();
-#endif
         }
-
-        void MPIDebugHold(const MPIInfo &mpi)
-        {
-#if defined(linux) || defined(_UNIX) || defined(__linux__)
-            MPISerialDo(mpi, [&]
-                        { log() << "Rank " << mpi.rank << " PID: " << getpid() << std::endl; });
+        fin.close();
+        return tpid != 0;
 #endif
 #if defined(_WIN32) || defined(__WINDOWS_)
-            MPISerialDo(mpi, [&]
-                        { log() << "Rank " << mpi.rank << " PID: " << _getpid() << std::endl; });
+        return IsDebuggerPresent();
 #endif
-            int holdFlag = 1;
-            while (holdFlag)
-            {
-                for (MPI_int ir = 0; ir < mpi.size; ir++)
-                {
-                    int newDebugFlag;
-                    if (mpi.rank == ir)
-                    {
-                        newDebugFlag = int(IsDebugged());
-                        MPI_Bcast(&newDebugFlag, 1, MPI_INT, ir, mpi.comm);
-                    }
-                    else
-                        MPI_Bcast(&newDebugFlag, 1, MPI_INT, ir, mpi.comm);
+    }
 
-                    // std::cout << "DBG " << newDebugFlag;
-                    if (newDebugFlag)
-                        holdFlag = 0;
+    void MPIDebugHold(const MPIInfo &mpi)
+    {
+#if defined(linux) || defined(_UNIX) || defined(__linux__)
+        MPISerialDo(mpi, [&]
+                    { log() << "Rank " << mpi.rank << " PID: " << getpid() << std::endl; });
+#endif
+#if defined(_WIN32) || defined(__WINDOWS_)
+        MPISerialDo(mpi, [&]
+                    { log() << "Rank " << mpi.rank << " PID: " << _getpid() << std::endl; });
+#endif
+        int holdFlag = 1;
+        while (holdFlag)
+        {
+            for (MPI_int ir = 0; ir < mpi.size; ir++)
+            {
+                int newDebugFlag;
+                if (mpi.rank == ir)
+                {
+                    newDebugFlag = int(IsDebugged());
+                    MPI_Bcast(&newDebugFlag, 1, MPI_INT, ir, mpi.comm);
                 }
+                else
+                    MPI_Bcast(&newDebugFlag, 1, MPI_INT, ir, mpi.comm);
+
+                // std::cout << "DBG " << newDebugFlag;
+                if (newDebugFlag)
+                    holdFlag = 0;
             }
         }
     }
@@ -101,9 +97,9 @@ namespace DNDS
 {
     std::string getTimeStamp(const MPIInfo &mpi)
     {
-        int64_t result = static_cast<int64_t>(std::time(nullptr));
-        char bufTime[512];
-        char buf[512 + 32];
+        auto result = static_cast<int64_t>(std::time(nullptr));
+        std::array<char, 512> bufTime;
+        std::array<char, 512 + 32> buf;
         int64_t pid = 0;
 #if defined(linux) || defined(_UNIX) || defined(__linux__)
         // pid = Debug::getpid();
@@ -116,14 +112,14 @@ namespace DNDS
         MPI_Bcast(&result, 1, MPI_INT64_T, 0, mpi.comm);
         MPI_Bcast(&pid, 1, MPI_INT64_T, 0, mpi.comm);
 
-        time_t time_result = static_cast<time_t>(result);
+        auto time_result = static_cast<time_t>(result);
 
-        std::strftime(bufTime, 512, "%F_%H-%M-%S", std::localtime(&time_result));
+        std::strftime(bufTime.data(), 512, "%F_%H-%M-%S", std::localtime(&time_result));
 
         long pidc = static_cast<long>(pid);
-        std::sprintf(buf, "%s_%ld", bufTime, pidc);
+        std::sprintf(buf.data(), "%s_%ld", bufTime.data(), pidc);
 
-        return std::string(buf);
+        return {buf.data()};
     }
 }
 
@@ -285,7 +281,7 @@ namespace DNDS::MPI
     {
         try
         {
-            auto ret = std::getenv("DNDS_USE_LAZY_WAIT");
+            auto *ret = std::getenv("DNDS_USE_LAZY_WAIT");
             if (ret != NULL && (std::stod(ret) != 0))
             {
                 _use_lazy_wait = std::stod(ret);
@@ -302,7 +298,7 @@ namespace DNDS::MPI
         }
         try
         {
-            auto ret = std::getenv("DNDS_ARRAY_STRATEGY_USE_IN_SITU");
+            auto *ret = std::getenv("DNDS_ARRAY_STRATEGY_USE_IN_SITU");
             if (ret != NULL && (std::stoi(ret) != 0))
             {
                 _array_strategy = InSituPack;
@@ -321,7 +317,7 @@ namespace DNDS::MPI
         }
         try
         {
-            auto ret = std::getenv("DNDS_USE_STRONG_SYNC_WAIT");
+            auto *ret = std::getenv("DNDS_USE_STRONG_SYNC_WAIT");
             if (ret != NULL && (std::stoi(ret) != 0))
             {
                 _use_strong_sync_wait = true;
@@ -340,7 +336,7 @@ namespace DNDS::MPI
         }
         try
         {
-            auto ret = std::getenv("DNDS_USE_ASYNC_ONE_BY_ONE");
+            auto *ret = std::getenv("DNDS_USE_ASYNC_ONE_BY_ONE");
             if (ret != NULL && (std::stoi(ret) != 0))
             {
                 _use_async_one_by_one = true;
@@ -348,7 +344,7 @@ namespace DNDS::MPI
                 mpi.setWorld();
                 if (mpi.rank == 0)
                     log() << "Detected DNDS_USE_ASYNC_ONE_BY_ONE, setting" << std::endl;
-                if (_use_lazy_wait)
+                if (bool(_use_lazy_wait))
                     MPI::BarrierLazy(mpi.comm, static_cast<uint64_t>(_use_lazy_wait));
                 else
                     MPI_Barrier(mpi.comm);
@@ -375,17 +371,17 @@ namespace DNDS::MPI
         _array_strategy = t;
     }
 
-    bool CommStrategy::GetUseStrongSyncWait()
+    bool CommStrategy::GetUseStrongSyncWait() const
     {
         return _use_strong_sync_wait;
     }
 
-    bool CommStrategy::GetUseAsyncOneByOne()
+    bool CommStrategy::GetUseAsyncOneByOne() const
     {
         return _use_async_one_by_one;
     }
 
-    double CommStrategy::GetUseLazyWait()
+    double CommStrategy::GetUseLazyWait() const
     {
         return _use_lazy_wait;
     }

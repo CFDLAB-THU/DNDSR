@@ -127,9 +127,9 @@ namespace DNDS
 
         static std::string GetDerivedArraySignature()
         {
-            char buf[1024];
-            std::sprintf(buf, "ArrayEigenMatrix__%d_%d_%d_%d", _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max);
-            return buf;
+            std::array<char, 1024> buf;
+            std::sprintf(buf.data(), "ArrayEigenMatrix__%d_%d_%d_%d", _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max);
+            return buf.data();
         }
 
         static std::tuple<int, int, int, int> GetDerivedArraySignatureInts(const std::string &v)

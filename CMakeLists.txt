@@ -61,6 +61,7 @@ set(DNDS_SUPERLU_DIST_USE_BLAS OFF CACHE BOOL "use blas in superlu_dist")
 
 set(DNDS_RECORD_COMMIT ON CACHE BOOL "record commit id for each cmake configure")
 set(DNDS_VERBOSE_BUILDING OFF CACHE BOOL "make the makefile verbose, overrides CMAKE_VERBOSE_MAKEFILE")
+set(DNDS_USE_CLANG_TIDY OFF CACHE BOOL "use clang-tidy")
 
 if(DNDS_RECORD_COMMIT)
     execute_process(COMMAND git rev-parse HEAD OUTPUT_FILE ${CMAKE_BINARY_DIR}/commitID.txt WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} TIMEOUT 120 RESULT_VARIABLE RET)
@@ -82,6 +83,12 @@ if(DNDS_VERBOSE_BUILDING)
     set(CMAKE_VERBOSE_MAKEFILE ON)
 else()
     set(CMAKE_VERBOSE_MAKEFILE OFF)
+endif()
+
+if(DNDS_USE_CLANG_TIDY)
+    set(CMAKE_CXX_CLANG_TIDY "clang-tidy;-format-style='file';")
+else()
+    set(CMAKE_CXX_CLANG_TIDY "")
 endif()
 
 if(DNDS_LTO)

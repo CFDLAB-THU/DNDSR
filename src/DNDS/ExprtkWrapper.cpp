@@ -4,15 +4,15 @@
 
 namespace DNDS
 {
-    typedef exprtk::symbol_table<real> symbol_table_t;
-    typedef exprtk::expression<real> expression_t;
-    typedef exprtk::parser<real> parser_t;
+    using symbol_table_t = exprtk::symbol_table<real>;
+    using expression_t = exprtk::expression<real>;
+    using parser_t = exprtk::parser<real>;
 
     void ExprtkWrapperEvaluator::Compile(const std::string &expr)
     {
         this->Clear();
 
-        auto pst = new symbol_table_t;
+        auto *pst = new symbol_table_t;
         symbol_table_t &st = *pst;
         _ptr_st = static_cast<void *>(pst);
 
@@ -25,13 +25,13 @@ namespace DNDS
         for (auto &[k, v] : _varVecs)
             st.add_vector(k, v.data(), v.size());
 
-        auto pexp = new expression_t;
+        auto *pexp = new expression_t;
         expression_t &exp = *pexp;
         _ptr_exp = static_cast<void *>(pexp);
 
         exp.register_symbol_table(st);
 
-        auto pparser = new parser_t;
+        auto *pparser = new parser_t;
         parser_t &parser = *pparser;
         _ptr_parser = static_cast<void *>(pparser);
 

@@ -373,7 +373,10 @@ namespace DNDS::Geom
             DNDS::MPI_int r = -1;
             DNDS::index v = -1;
             if (flag == 0)
-                cell2nodeSerialOutTrans.pLGlobalMapping->search(iv, r, v);
+            {
+                bool ret = cell2nodeSerialOutTrans.pLGlobalMapping->search(iv, r, v);
+                DNDS_assert_info(ret, "search failed");
+            }
             else if (flag == 1)
                 r = mesh->getMPI().rank;
             writeDouble(r);
@@ -842,7 +845,10 @@ namespace DNDS::Geom
                                 MPI_int r{0};
                                 index v{0};
                                 if (flag == 0)
-                                    cell2nodeSerialOutTrans.pLGlobalMapping->search(iCell, r, v);
+                                {
+                                    bool ret = cell2nodeSerialOutTrans.pLGlobalMapping->search(iCell, r, v);
+                                    DNDS_assert_info(ret, "search failed");
+                                }
                                 else if (flag == 1)
                                     r = mesh->getMPI().rank;
                                 dataOutC[iCell] = r;

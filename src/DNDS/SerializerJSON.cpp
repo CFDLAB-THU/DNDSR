@@ -13,10 +13,10 @@ namespace DNDS::Serializer
      */
     bool processPath(std::vector<std::string> &pth)
     {
-        bool ifAbs = pth.size() == 0 || pth[0].size() == 0;
+        bool ifAbs = pth.empty() || pth[0].empty();
         pth.erase(
             std::remove_if(pth.begin(), pth.end(), [](const std::string &v)
-                           { return v.size() == 0; }), // only keep non-zero sized path names
+                           { return v.empty(); }), // only keep non-zero sized path names
             pth.end());
 
         return ifAbs;
@@ -45,6 +45,10 @@ namespace DNDS::Serializer
         cP = "";
     }
     void SerializerJSON::CloseFile()
+    {
+        CloseFileNonVirtual();
+    }
+    void SerializerJSON::CloseFileNonVirtual()
     {
         DNDS_assert(fileStream.is_open());
         if (!reading)
@@ -251,8 +255,8 @@ namespace DNDS::Serializer
         {
             std::vector<uint8_t> ret(zlibCompressedSize(sizeC));
             uLongf retSize = ret.size();
-            auto v = compress2(ret.data(), &retSize, buf, sizeC, compressLevel);
-            if (v != Z_OK)
+            auto ret_v = compress2(ret.data(), &retSize, buf, sizeC, compressLevel);
+            if (ret_v != Z_OK)
                 DNDS_assert_info(false, "compression failed");
             ret.resize(retSize);
             return ret;
@@ -303,4 +307,4 @@ namespace DNDS::Serializer
         }
         offset = ArrayGlobalOffset_Unknown;
     }
-}
+} // namespace DNDS::Serializer

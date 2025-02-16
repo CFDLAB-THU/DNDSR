@@ -20,19 +20,19 @@ DISABLE_WARNING_POP
 namespace DNDS
 {
 
-    typedef int MPI_int;
-    typedef MPI_Aint MPI_index;
+    using MPI_int = int;
+    using MPI_index = MPI_Aint;
 #define MAX_MPI_int INT32_MAX
 #define MAX_MPI_Aint INT64_MAX
     static_assert(sizeof(MPI_Aint) == 8);
 
-    typedef std::vector<MPI_int> tMPI_sizeVec;
-    typedef tMPI_sizeVec tMPI_intVec;
-    typedef std::vector<MPI_index> tMPI_indexVec;
-    typedef tMPI_indexVec tMPI_AintVec;
+    using tMPI_sizeVec = std::vector<MPI_int>;
+    using tMPI_intVec = tMPI_sizeVec;
+    using tMPI_indexVec = std::vector<MPI_index>;
+    using tMPI_AintVec = tMPI_indexVec;
 
-    typedef std::vector<MPI_Status> tMPI_statVec;
-    typedef std::vector<MPI_Request> tMPI_reqVec;
+    using tMPI_statVec = std::vector<MPI_Status>;
+    using tMPI_reqVec = std::vector<MPI_Request>;
 
     /**
      * \brief maps index or other DNDS types to MPI_Datatype ids
@@ -118,8 +118,8 @@ namespace DNDS
         {
             comm = MPI_COMM_WORLD;
             int ierr;
-            ierr = MPI_Comm_rank(comm, &rank);
-            ierr = MPI_Comm_size(comm, &size);
+            ierr = MPI_Comm_rank(comm, &rank), DNDS_assert(ierr == MPI_SUCCESS);
+            ierr = MPI_Comm_size(comm, &size), DNDS_assert(ierr == MPI_SUCCESS);
         }
 
         bool operator==(const MPIInfo &r) const
@@ -159,7 +159,7 @@ namespace DNDS
 #define DNDS_MPI_InsertCheck(mpi, info) \
     InsertCheck(mpi, info, __FUNCTION__, __FILE__, __LINE__)
 
-    typedef std::vector<std::pair<MPI_int, MPI_Datatype>> tMPI_typePairVec;
+    using tMPI_typePairVec = std::vector<std::pair<MPI_int, MPI_Datatype>>;
     /**
      * \brief wrapper of tMPI_typePairVec
      */
@@ -174,7 +174,7 @@ namespace DNDS
         }
     };
 
-    typedef ssp<MPITypePairHolder> tpMPITypePairHolder;
+    using tpMPITypePairHolder = ssp<MPITypePairHolder>;
     /**
      * \brief wrapper of tMPI_reqVec, so that the requests are freed automatically
      */
@@ -198,13 +198,10 @@ namespace DNDS
 
 }
 
-namespace DNDS
+namespace DNDS::Debug
 {
-    namespace Debug
-    {
-        bool IsDebugged();
-        void MPIDebugHold(const MPIInfo &mpi);
-    }
+    bool IsDebugged();
+    void MPIDebugHold(const MPIInfo &mpi);
 }
 
 namespace DNDS // TODO: get a concurrency header
@@ -222,7 +219,7 @@ namespace DNDS // TODO: get a concurrency header
             int provided_MPI_THREAD_LEVEL{0};
             int needed_MPI_THREAD_LEVEL = MPI_THREAD_MULTIPLE;
 
-            auto env = std::getenv("DNDS_DISABLE_ASYNC_MPI");
+            auto *env = std::getenv("DNDS_DISABLE_ASYNC_MPI");
             if (env != NULL && (std::stod(env) != 0))
             {
                 int ienv = std::stod(env);
@@ -246,7 +243,8 @@ namespace DNDS // TODO: get a concurrency header
         inline int GetMPIThreadLevel()
         {
             int ret;
-            int err = MPI_Query_thread(&ret);
+            int ierr;
+            ierr = MPI_Query_thread(&ret), DNDS_assert(ierr == MPI_SUCCESS);
             return ret;
         }
     }
@@ -274,7 +272,7 @@ namespace DNDS
             int osize;
             MPI_Buffer_detach(&obuf, &osize);
 
-            buf.resize(1024 * 1024);
+            buf.resize(1024ULL * 1024ULL);
             MPI_Buffer_attach(buf.data(), int(buf.size())); //! warning, bufsize could overflow
         }
         MPIBufferHandler(const MPIBufferHandler &);
@@ -412,9 +410,9 @@ namespace DNDS::MPI
         static CommStrategy &Instance();
         ArrayCommType GetArrayStrategy();
         void SetArrayStrategy(ArrayCommType t);
-        bool GetUseStrongSyncWait();
-        bool GetUseAsyncOneByOne();
-        double GetUseLazyWait();
+        [[nodiscard]] bool GetUseStrongSyncWait() const;
+        [[nodiscard]] bool GetUseAsyncOneByOne() const;
+        [[nodiscard]] double GetUseLazyWait() const;
     };
 }
 

@@ -83,7 +83,7 @@ namespace DNDS
         static const rowsize rm = _row_max;
         static const unsigned sizeof_T = sizeof(value_type);
 
-        static_assert(sizeof_T <= (1024ull * 1024ull * 1024ull), "Row size larger than 1G");
+        static_assert(sizeof_T <= (1024ULL * 1024ULL * 1024ULL), "Row size larger than 1G");
         static_assert(array_comp_acceptable<T>(), "Do not put in a non trivially copyable type ");
 
         static_assert(al == NoAlign || al >= 1, "Align bad");
@@ -152,9 +152,9 @@ namespace DNDS
         // TODO: for intertype: CSR->Max, Max->CSR ...
 
         // read isze
-        index Size() const { return _size; }
+        [[nodiscard]] index Size() const { return _size; }
 
-        rowsize RowSize() const // iRow is actually dummy here
+        [[nodiscard]] rowsize RowSize() const // iRow is actually dummy here
         {
             if constexpr (_dataLayout == TABLE_Fixed)
                 return _row_size_dynamic;
@@ -166,7 +166,7 @@ namespace DNDS
             }
         }
 
-        rowsize RowSize(index iRow) const
+        [[nodiscard]] rowsize RowSize(index iRow) const
         {
             if constexpr (_dataLayout == TABLE_Fixed)
                 return _row_size_dynamic;
@@ -194,7 +194,7 @@ namespace DNDS
             }
         }
 
-        rowsize RowSizeMax() const
+        [[nodiscard]] rowsize RowSizeMax() const
         {
             if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
                 return _dataLayout == TABLE_Max ? _row_size_dynamic : rm;
@@ -202,7 +202,7 @@ namespace DNDS
                 DNDS_assert_info(false, "invalid call");
         }
 
-        rowsize RowSizeField() const
+        [[nodiscard]] rowsize RowSizeField() const
         {
             if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
                 return this->RowSizeMax();
@@ -220,7 +220,7 @@ namespace DNDS
                 DNDS_assert_info(false, "invalid call");
         }
 
-        bool IfCompressed() const
+        [[nodiscard]] bool IfCompressed() const
         {
 
             if constexpr (_dataLayout == CSR)
@@ -651,7 +651,7 @@ namespace DNDS
             return true;
         }
 
-        void __WriteSerializerData(Serializer::SerializerBaseSSP serializerP, Serializer::ArrayGlobalOffset offset)
+        void __WriteSerializerData(const Serializer::SerializerBaseSSP &serializerP, Serializer::ArrayGlobalOffset offset)
         {
             auto treatAsBytes = [&]()
             { serializerP->WriteUint8Array("data", (uint8_t *)_data.data(), _data.size() * sizeof_T, offset * sizeof_T); };
@@ -668,7 +668,7 @@ namespace DNDS
                 treatAsBytes();
         }
 
-        void __ReadSerializerData(Serializer::SerializerBaseSSP serializerP, Serializer::ArrayGlobalOffset &offset)
+        void __ReadSerializerData(const Serializer::SerializerBaseSSP &serializerP, Serializer::ArrayGlobalOffset &offset)
         {
             auto treatAsBytes = [&]()
             {

@@ -14,10 +14,10 @@ namespace DNDS::Serializer
      */
     static bool processPath(std::vector<std::string> &pth)
     {
-        bool ifAbs = pth.size() == 0 || pth[0].size() == 0;
+        bool ifAbs = pth.empty() || pth[0].empty();
         pth.erase(
             std::remove_if(pth.begin(), pth.end(), [](const std::string &v)
-                           { return v.size() == 0; }), // only keep non-zero sized path names
+                           { return v.empty(); }), // only keep non-zero sized path names
             pth.end());
 
         return ifAbs;
@@ -48,7 +48,7 @@ namespace DNDS::Serializer
         bool isAbs = processPath(pth);
         // std::cout << groupName << std::endl;
         DNDS_assert_info(isAbs, fmt::format("groupName: {}", groupName));
-        if (pth.size() == 0) // is root itself
+        if (pth.empty()) // is root itself
         {
             group_id = H5Gopen(file_id, "/", H5P_DEFAULT);
             DNDS_assert(group_id >= 0);
@@ -123,7 +123,10 @@ namespace DNDS::Serializer
     }
     void SerializerH5::CloseFile()
     {
-
+        CloseFileNonVirtual();
+    }
+    void SerializerH5::CloseFileNonVirtual()
+    {
         cPathSplit.clear();
         ptr_2_pth.clear();
         pth_2_ssp.clear();
@@ -255,7 +258,7 @@ namespace DNDS::Serializer
         std::array<hsize_t, 2> chunk_dims{hsize_t(chunksize > 0 ? chunksize : 0), dim2 >= 0 ? hsize_t(dim2) : 0};
         hid_t dcpl_id = H5Pcreate(H5P_DATASET_CREATE);
         if (chunk_dims[0] > 0)
-            herr |= H5Pset_chunk(dcpl_id, dim2 > 0 ? 2 : 1, chunk_dims.data());
+            herr = H5Pset_chunk(dcpl_id, dim2 > 0 ? 2 : 1, chunk_dims.data()), H5CHECK_Set;
 #ifdef H5_HAVE_FILTER_DEFLATE
         if (deflateLevel > 0)
             herr = H5Pset_deflate(dcpl_id, deflateLevel), H5CHECK_Set;
@@ -324,10 +327,10 @@ namespace DNDS::Serializer
                             T_H5TYPE, T_H5TYPE, dxpl_id, dapl_id, chunksize, deflateLevel,
                             v);
             // rank offset array
-            index offsetC[2] = {index(sizeOff), index(sizeGlobal)};
+            std::array<index, 2> offsetC = {index(sizeOff), index(sizeGlobal)};
             H5_WriteDataset(group_id, (name + "::rank_offsets").c_str(), mpi.size + 1, mpi.rank, (mpi.rank == mpi.size - 1) ? 2 : 1,
                             DNDS_H5T_INDEX(), DNDS_H5T_INDEX(), dxpl_id, dapl_id, chunksize, deflateLevel,
-                            &offsetC);
+                            offsetC.data());
         }
         else if (offset.isDist())
         {
@@ -336,10 +339,10 @@ namespace DNDS::Serializer
                             T_H5TYPE, T_H5TYPE, dxpl_id, dapl_id, chunksize, deflateLevel,
                             v);
             // rank offset array
-            index offsetC[2] = {offset.offset(), offset.size()};
+            std::array<index, 2> offsetC = {offset.offset(), offset.size()};
             H5_WriteDataset(group_id, (name + "::rank_offsets").c_str(), mpi.size + 1, mpi.rank, (mpi.rank == mpi.size - 1) ? 2 : 1,
                             DNDS_H5T_INDEX(), DNDS_H5T_INDEX(), dxpl_id, dapl_id, chunksize, deflateLevel,
-                            &offsetC);
+                            offsetC.data());
         }
         else
             DNDS_assert_info(false, "offset ill-formed");
@@ -515,8 +518,8 @@ namespace DNDS::Serializer
         DNDS_assert_info(fileSpace >= 0, fmt::format("dataset [{}] filespace open failed", name));
         int ndims = H5Sget_simple_extent_ndims(fileSpace);
         DNDS_assert_info(ndims == 1 || ndims == 2, fmt::format("dataset [{}] not having 1 or 2 dims!", name));
-        hsize_t sizes[2];
-        ndims = H5Sget_simple_extent_dims(fileSpace, sizes, nullptr);
+        std::array<hsize_t, 2> sizes;
+        ndims = H5Sget_simple_extent_dims(fileSpace, sizes.data(), nullptr);
         if (ndims == 2)
             dim2 = sizes[1];
         else
@@ -594,8 +597,8 @@ namespace DNDS::Serializer
                     DNDS_assert(dim2_offsets == -1);
                     if (nGlobal_offsets == mpi.size + 1)
                     {
-                        index offsets[2] = {-1, -1};
-                        H5_ReadDataset(group_id, (name + "::rank_offsets").c_str(), nGlobal_offsets, mpi.rank, 2, DNDS_H5T_INDEX(), dxpl_id, dapl_id, offsets, dim2_offsets);
+                        std::array<index, 2> offsets = {-1, -1};
+                        H5_ReadDataset(group_id, (name + "::rank_offsets").c_str(), nGlobal_offsets, mpi.rank, 2, DNDS_H5T_INDEX(), dxpl_id, dapl_id, offsets.data(), dim2_offsets);
                         index nGlobal{-1};
                         int dim2{-1};
                         H5_ReadDataset(group_id, name.c_str(), nGlobal, -1, -1, T_H5TYPE, dxpl_id, dapl_id, nullptr, dim2);
@@ -710,7 +713,7 @@ namespace DNDS::Serializer
         std::string refPath;
         hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
         htri_t exists_ref = H5Aexists(group_id, (name + "::ref").c_str());
-        herr = H5Gclose(group_id);
+        herr = H5Gclose(group_id), H5CHECK_Close;
         if (exists_ref > 0)
         {
             this->ReadString(name + "::ref", refPath);
@@ -743,7 +746,7 @@ namespace DNDS::Serializer
         std::string refPath;
         hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
         htri_t exists_ref = H5Aexists(group_id, (name + "::ref").c_str());
-        herr = H5Gclose(group_id);
+        herr = H5Gclose(group_id), H5CHECK_Close;
         if (exists_ref > 0)
         {
             this->ReadString(name + "::ref", refPath);

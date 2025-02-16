@@ -30,9 +30,9 @@ namespace DNDS
         t_IndexVec &RLengths() { return RankLengths; }
         t_IndexVec &ROffsets() { return RankOffsets; }
 
-        index globalSize()
+        [[nodiscard]] index globalSize() const
         {
-            if (RankOffsets.size() >= 1)
+            if (!RankOffsets.empty())
                 return RankOffsets[RankOffsets.size() - 1];
             else
                 return 0;
@@ -61,7 +61,7 @@ namespace DNDS
         }
 
         ///\brief inputs local "dist" index, outputs global
-        index operator()(MPI_int rank, index val) const
+        [[nodiscard]] index operator()(MPI_int rank, index val) const
         {
             // if (!((rank >= 0 && rank <= RankLengths.size()) &&
             //       (val >= 0 && val <= RankOffsets[rank + 1] - RankOffsets[rank])))
@@ -75,14 +75,14 @@ namespace DNDS
         }
 
         ///\brief inputs global index, outputs rank and local index, false if out of bound
-        bool search(index globalQuery, MPI_int &rank, index &val) const
+        [[nodiscard]] bool search(index globalQuery, MPI_int &rank, index &val) const
         {
             // find the first larger than query, for this is a [,) interval search, should find the ) position
             // example: RankOffsets = {0,1,3,3,4,4,5,5}
             //                 Rank = {0,1,2,3,4,5,6}
             // query 5 should be rank 7, which is out-of bound, returns false
             // query 4 should be rank 5, query 3 should be rank 3, query 2 should be rank 1
-            if (RankOffsets.size() == 0) // in case the communicator is of size 0 ??
+            if (RankOffsets.empty()) // in case the communicator is of size 0 ??
                 return false;
             auto place = std::lower_bound(RankOffsets.begin(), RankOffsets.end(), globalQuery, std::less_equal<index>());
             rank = static_cast<MPI_int>(place - 1 - RankOffsets.begin()); // ! could overflow
@@ -94,7 +94,7 @@ namespace DNDS
             return false;
         }
 
-        std::tuple<bool, MPI_int, index> search(index globalQuery)
+        [[nodiscard]] std::tuple<bool, MPI_int, index> search(index globalQuery) const
         {
             MPI_int rank{-1};
             index val{-1};
@@ -109,8 +109,8 @@ namespace DNDS
     /// !warning!! due to MPI restrictions data inside are 32-bit signed
     class OffsetAscendIndexMapping
     {
-        typedef MPI_int mapIndex;
-        typedef std::vector<mapIndex> t_MapIndexVec;
+        using mapIndex = MPI_int;
+        using t_MapIndexVec = std::vector<mapIndex>;
         static_assert(std::numeric_limits<mapIndex>::max() >= std::numeric_limits<MPI_int>::max());
         index mainOffset;
         index mainSize;
@@ -283,7 +283,7 @@ namespace DNDS
         // {
         // }
 
-        bool searchInMain(index globalQuery, index &val) const
+        [[nodiscard]] bool searchInMain(index globalQuery, index &val) const
         {
             // std::cout << mainOffset << mainSize << std::endl;
             if (globalQuery >= mainOffset && globalQuery < mainSize + mainOffset)
@@ -295,7 +295,7 @@ namespace DNDS
         }
 
         // returns place relative to ghostStart[rank]
-        bool searchInGhost(index globalQuery, MPI_int rank, index &val) const
+        [[nodiscard]] bool searchInGhost(index globalQuery, MPI_int rank, index &val) const
         {
             DNDS_assert((rank >= 0 && rank < ghostStart.size() - 1));
             if ((ghostStart[rank + 1] - ghostStart[rank]) == 0)
@@ -312,7 +312,7 @@ namespace DNDS
         }
 
         // returns rank & place, place relative to ghostStart[0] (==0)
-        bool searchInAllGhost(index globalQuery, MPI_int &rank, index &val) const
+        [[nodiscard]] bool searchInAllGhost(index globalQuery, MPI_int &rank, index &val) const
         {
             auto start = ghostIndex.begin();
             auto end = ghostIndex.end();
@@ -331,7 +331,7 @@ namespace DNDS
         }
 
         /// \brief returns rank and place in ghost array, rank==-1 means main data
-        bool search(index globalQuery, MPI_int &rank, index &val) const
+        [[nodiscard]] bool search(index globalQuery, MPI_int &rank, index &val) const
         {
             if (searchInMain(globalQuery, val))
             {
@@ -344,7 +344,7 @@ namespace DNDS
             }
             return false;
         }
-        std::tuple<bool, MPI_int, index> search(index globalQuery)
+        [[nodiscard]] std::tuple<bool, MPI_int, index> search(index globalQuery) const
         {
             MPI_int rank{-1};
             index val{-1};
@@ -354,7 +354,7 @@ namespace DNDS
 
         /// \brief returns rank and place in ghost array, rank==-1 means main data;
         /// returned val is used for pair indexing
-        bool search_indexAppend(index globalQuery, MPI_int &rank, index &val) const
+        [[nodiscard]] bool search_indexAppend(index globalQuery, MPI_int &rank, index &val) const
         {
             if (searchInMain(globalQuery, val))
             {
@@ -369,7 +369,7 @@ namespace DNDS
             }
             return false;
         }
-        std::tuple<bool, MPI_int, index> search_indexAppend(index globalQuery)
+        [[nodiscard]] std::tuple<bool, MPI_int, index> search_indexAppend(index globalQuery) const
         {
             MPI_int rank{-1};
             index val{-1};
@@ -379,7 +379,7 @@ namespace DNDS
 
         /// \brief returns rank and place in ghost of rank, rank==-1 means main data
         /// \warning search returns index that applies to local ghost array, this only goes for the ith of rank
-        bool search_indexRank(index globalQuery, MPI_int &rank, index &val) const
+        [[nodiscard]] bool search_indexRank(index globalQuery, MPI_int &rank, index &val) const
         {
             if (searchInMain(globalQuery, val))
             {
@@ -394,7 +394,7 @@ namespace DNDS
             return false;
         }
 
-        std::tuple<bool, MPI_int, index> search_indexRank(index globalQuery)
+        [[nodiscard]] std::tuple<bool, MPI_int, index> search_indexRank(index globalQuery) const
         {
             MPI_int rank{-1};
             index val{-1};
@@ -404,7 +404,7 @@ namespace DNDS
 
         /// \brief if rank == -1, return the global index of local main data,
         /// or else return the ghosted global index of local ghost data.
-        index operator()(MPI_int rank, index val)
+        [[nodiscard]] index operator()(MPI_int rank, index val) const
         {
             if (rank == -1)
             {

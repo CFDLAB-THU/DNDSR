@@ -10,25 +10,25 @@ namespace DNDS
         struct UInt32PairIn64
         {
             uint64_t data;
-            uint32_t getM() { return uint32_t(data & 0x00000000FFFFFFFFull); }
-            uint32_t getN() { return uint32_t(data >> 32); }
-            void setM(uint32_t v) { data = (data & 0xFFFFFFFF00000000ull) | uint64_t(v); }
-            void setN(uint32_t v) { data = (data & 0x00000000FFFFFFFFull) | (uint64_t(v) << 32); }
+            [[nodiscard]] uint32_t getM() const { return uint32_t(data & 0x00000000FFFFFFFFULL); }
+            [[nodiscard]] uint32_t getN() const { return uint32_t(data >> 32); }
+            void setM(uint32_t v) { data = (data & 0xFFFFFFFF00000000ULL) | uint64_t(v); }
+            void setN(uint32_t v) { data = (data & 0x00000000FFFFFFFFULL) | (uint64_t(v) << 32); }
         };
         static_assert(sizeof(UInt32PairIn64) == 8);
 
         struct UInt16QuadIn64
         {
             uint64_t data;
-            uint16_t getA() { return uint16_t((data & 0x000000000000FFFFull) >> 0); }
-            uint16_t getB() { return uint16_t((data & 0x00000000FFFF0000ull) >> 16); }
-            uint16_t getC() { return uint16_t((data & 0x0000FFFF00000000ull) >> 32); }
-            uint16_t getD() { return uint16_t((data & 0xFFFF000000000000ull) >> 48); }
+            [[nodiscard]] uint16_t getA() const { return uint16_t((data & 0x000000000000FFFFULL) >> 0); }
+            [[nodiscard]] uint16_t getB() const { return uint16_t((data & 0x00000000FFFF0000ULL) >> 16); }
+            [[nodiscard]] uint16_t getC() const { return uint16_t((data & 0x0000FFFF00000000ULL) >> 32); }
+            [[nodiscard]] uint16_t getD() const { return uint16_t((data & 0xFFFF000000000000ULL) >> 48); }
 
-            void setA(uint16_t v) { data = (data & (~0x000000000000FFFFull)) | (uint64_t(v) << 0); }
-            void setB(uint16_t v) { data = (data & (~0x00000000FFFF0000ull)) | (uint64_t(v) << 16); }
-            void setC(uint16_t v) { data = (data & (~0x0000FFFF00000000ull)) | (uint64_t(v) << 32); }
-            void setD(uint16_t v) { data = (data & (~0xFFFF000000000000ull)) | (uint64_t(v) << 48); }
+            void setA(uint16_t v) { data = (data & (~0x000000000000FFFFULL)) | (uint64_t(v) << 0); }
+            void setB(uint16_t v) { data = (data & (~0x00000000FFFF0000ULL)) | (uint64_t(v) << 16); }
+            void setC(uint16_t v) { data = (data & (~0x0000FFFF00000000ULL)) | (uint64_t(v) << 32); }
+            void setD(uint16_t v) { data = (data & (~0xFFFF000000000000ULL)) | (uint64_t(v) << 48); }
         };
         static_assert(sizeof(UInt32PairIn64) == 8 && sizeof(UInt16QuadIn64) == 8);
 
@@ -39,7 +39,7 @@ namespace DNDS
         {
             DNDS_assert(matrices.size() < DNDS_ROWSIZE_MAX);
             rowsize bufSiz = matrices.size() + 1;
-            for (auto &i : matrices)
+            for (const auto &i : matrices)
             {
                 Eigen::Index mSiz = i.rows() * i.cols();
                 DNDS_assert(mSiz + bufSiz < DNDS_ROWSIZE_MAX && i.rows() < UINT16_MAX && i.cols() < UINT16_MAX);
@@ -123,7 +123,7 @@ namespace DNDS
             auto n_row = getNRow(k);
             auto n_col = getNCol(k);
             auto offset = getOffset(k);
-            return t_map(_buf + offset, n_row, n_col);
+            return {_buf + offset, n_row, n_col};
         }
     };
 
@@ -150,7 +150,7 @@ namespace DNDS
 
         MatrixBatch operator[](index i)
         {
-            return MatrixBatch(this->t_base::operator[](i), this->RowSize(i));
+            return {this->t_base::operator[](i), this->RowSize(i)};
         }
 
         t_map operator()(index i, rowsize j)

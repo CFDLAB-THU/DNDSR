@@ -76,7 +76,7 @@ namespace DNDS
                 son->ResizeRow(i - father->Size(), aOthers...);
         }
 
-        index Size() const
+        [[nodiscard]] index Size() const
         {
             return father->Size() + son->Size();
         }

@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# if command -v clang-tidy-19 >/dev/null 2>&1; then
+#     echo "clang-tidy-19 is installed."
+# else
+#     echo "error: clang-tidy-19 is not installed."
+#     return 1
+# fi
+
 CURRENT_DIR="$(pwd)"
 
 # Get the script's directory
@@ -37,17 +44,8 @@ for DIR in "${DIRS[@]}"; do
     # Run clang-format on each found file
     for FILE in $FILES; do
       echo "Clang-tidy: $FILE"
-      # clang-tidy -p=$SCRIPT_DIR/../build  --config-file=$SCRIPT_DIR/.clang-tidy-fix --fix-errors "$FILE"
-      clang-tidy -p=$SCRIPT_DIR/../build "$FILE"
-
-      if [ $? -ne 0 ]; then
-        echo "=== === === === === === === === === === === ==="
-        echo "clang-tidy failed with a non-zero exit code."
-        echo $FILE
-        echo "=== === === === === === === === === === === ==="
-        echo "\n\n\n\n"
-        # exit 1
-      fi
+      clang-tidy -p=$SCRIPT_DIR/../build  --config-file=$SCRIPT_DIR/.clang-tidy-fix --fix-errors "$FILE"
+      # clang-tidy -p=$SCRIPT_DIR/../build "$FILE"
     done
     # echo "Clang-tidy: $FILES"
     # echo "$FILES" | xargs clang-tidy -p=$SCRIPT_DIR/../build --checks=$CHECKS

@@ -17,8 +17,8 @@ namespace DNDS::Serializer
         static_assert(UnInitIndex < 0);
         ArrayGlobalOffset(index __size, index __offset) : _size(__size), _offset(__offset) {}
 
-        index size() const { return _size; }
-        index offset() const { return _offset; }
+        [[nodiscard]] index size() const { return _size; }
+        [[nodiscard]] index offset() const { return _offset; }
 
         ArrayGlobalOffset operator*(index R) const
         {
@@ -59,7 +59,7 @@ namespace DNDS::Serializer
             return fmt::format("ArrayGlobalOffset{{size: {}, offset: {}}}", _size, _offset);
         }
 
-        bool isDist()
+        [[nodiscard]] bool isDist() const
         {
             return _offset >= 0;
         }
@@ -73,7 +73,7 @@ namespace DNDS::Serializer
     {
 
     public:
-        virtual ~SerializerBase() {}
+        virtual ~SerializerBase() = default;
         virtual void OpenFile(const std::string &fName, bool read) = 0;
         virtual void CloseFile() = 0;
         virtual void CreatePath(const std::string &p) = 0;

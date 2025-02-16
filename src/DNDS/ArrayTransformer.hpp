@@ -52,7 +52,7 @@ namespace DNDS
             return mpi;
         }
 
-        const MPIInfo &getMPI() const
+        [[nodiscard]] const MPIInfo &getMPI() const
         {
             return mpi;
         }
@@ -63,9 +63,7 @@ namespace DNDS
             typeMult = n_TypeMult;
         }
 
-        ParArray()
-        {
-        }
+        ParArray() = default;
 
         ParArray(const MPIInfo &n_mpi) : mpi(n_mpi)
         {
@@ -432,9 +430,9 @@ namespace DNDS
                     }
                     /************************************************************/
                     // pull
-                    MPI_Aint pullDisp[1];
+                    std::array<MPI_Aint, 1> pullDisp;
 
-                    MPI_int pullSizes[1]; // same as pushSizes
+                    std::array<MPI_int, 1> pullSizes; // same as pushSizes
                     auto gRPtr = son->operator[](index(pLGhostMapping->ghostStart[r + 1]));
                     auto gLPtr = son->operator[](index(pLGhostMapping->ghostStart[r]));
                     auto gStartPtr = son->operator[](index(0));
@@ -448,7 +446,7 @@ namespace DNDS
                         // std::cout << "=== PULL TYPE : " << mpi.rank << " from " << r << std::endl;
                         MPI_Datatype dtype;
 
-                        MPI_Type_create_hindexed(1, pullSizes, pullDisp, father->getDataType(), &dtype);
+                        MPI_Type_create_hindexed(1, pullSizes.data(), pullDisp.data(), father->getDataType(), &dtype);
 
                         // std::cout << mpi.rank << " pullSlice " << pullDisp[0] << outputDelim << pullBytes[0] << std::endl;
                         MPI_Type_commit(&dtype);
@@ -663,7 +661,7 @@ namespace DNDS
             {
                 // req already ready
                 DNDS_assert(nRecvPushReq <= PushReqVec->size());
-                if (PushReqVec->size())
+                if (!PushReqVec->empty())
                 {
                     if (MPI::CommStrategy::Instance().GetUseAsyncOneByOne())
                     {
@@ -757,7 +755,7 @@ namespace DNDS
             {
                 DNDS_assert(nRecvPullReq <= PullReqVec->size());
                 // req already ready
-                if (PullReqVec->size())
+                if (!PullReqVec->empty())
                 {
                     if (MPI::CommStrategy::Instance().GetUseAsyncOneByOne())
                     {
@@ -793,7 +791,7 @@ namespace DNDS
             if (commTypeCurrent == MPI::CommStrategy::HIndexed)
             {
                 // data alright
-                if (PushReqVec->size())
+                if (!PushReqVec->empty())
                 {
                     DNDS_assert(nRecvPushReq <= PushReqVec->size());
                     if (MPI::CommStrategy::Instance().GetUseAsyncOneByOne())
@@ -812,7 +810,7 @@ namespace DNDS
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
-                if (PushReqVec->size())
+                if (!PushReqVec->empty())
                     MPI::WaitallAuto(PushReqVec->size(), PushReqVec->data(), PushStatVec.data());
                 auto bufferVec = inSituBuffer.begin();
                 for (MPI_int r = 0; r < mpi.size; r++)
@@ -862,7 +860,7 @@ namespace DNDS
             if (commTypeCurrent == MPI::CommStrategy::HIndexed)
             {
                 // data alright
-                if (PullReqVec->size())
+                if (!PullReqVec->empty())
                 {
                     DNDS_assert(nRecvPullReq <= PullReqVec->size());
                     if (MPI::CommStrategy::Instance().GetUseAsyncOneByOne())
@@ -885,7 +883,7 @@ namespace DNDS
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
-                if (PullReqVec->size())
+                if (!PullReqVec->empty())
                     MPI::WaitallAuto(PullReqVec->size(), PullReqVec->data(), PullStatVec.data());
                 // std::cout << "waiting DONE" << std::endl;
                 inSituBuffer.clear();
@@ -944,13 +942,13 @@ namespace DNDS
         void reInitPersistentPullPush()
         {
             bool clearedPull{false}, clearedPush{false};
-            if (PullReqVec->size())
+            if (!PullReqVec->empty())
             {
                 clearedPull = true;
                 waitPersistentPull();
                 clearPersistentPull();
             }
-            if (PushReqVec->size())
+            if (!PushReqVec->empty())
             {
                 clearedPush = true;
                 waitPersistentPush();

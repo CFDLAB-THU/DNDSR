@@ -33,7 +33,7 @@ namespace DNDS
         real &VarVec(const std::string &name, int i) { return _varVecs.at(name)(i); }
         index VarVecSize(const std::string &name) { return _varVecs.at(name).size(); }
 
-        bool Compiled() const
+        [[nodiscard]] bool Compiled() const
         {
             return _compiled;
         }

@@ -24,6 +24,7 @@ namespace DNDS::Serializer
 
         void OpenFile(const std::string &fName, bool read) override;
         void CloseFile() override;
+        void CloseFileNonVirtual();
         void CreatePath(const std::string &p) override;
         void GoToPath(const std::string &p) override;
         bool IsPerRank() override { return true; }
@@ -60,6 +61,9 @@ namespace DNDS::Serializer
 
         void ReadUint8Array(const std::string &name, uint8_t *data, index &size, ArrayGlobalOffset &offset) override;
 
-        ~SerializerJSON() override {}
+        ~SerializerJSON() override
+        {
+            CloseFileNonVirtual();
+        }
     };
 }

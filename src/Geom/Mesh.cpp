@@ -158,7 +158,8 @@ namespace DNDS::Geom
                     break;
                 DNDS::MPI_int rank = -1;
                 DNDS::index val = -1;
-                JSG->pLGlobalMapping->search(v, rank, val);
+                bool ret = JSG->pLGlobalMapping->search(v, rank, val);
+                DNDS_assert_info(ret, "search failed");
                 if (rank != mpi.rank) //! excluding self
                     ghostJSerialQuery.push_back(v);
             }

@@ -1,0 +1,24 @@
+Checks: >
+  -*,
+  -clang-diagnostic-unused-command-line-argument,
+  modernize-use-nodiscard,
+  modernize-use-equals-default,
+  readability-make-member-function-const,
+  readability-uppercase-literal-suffix,
+  readability-qualified-auto,
+  modernize-use-using,-warnings-as-errors,
+  modernize-concat-nested-namespaces,
+  modernize-use-auto,
+
+# readability-container-size-empty,
+
+
+  
+
+CheckOptions:
+  - key: readability-function-cognitive-complexity.Threshold
+    value: 125
+
+
+# HeaderFilterRegex: '.*'  # Apply checks to all files, modify as needed
+FormatStyle: 'file'  # Use the format style defined in .clang-format file

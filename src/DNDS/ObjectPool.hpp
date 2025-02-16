@@ -47,12 +47,12 @@ namespace DNDS
                 pool = pPool;
                 _ptr = std::move(n_ptr);
             }
-            ObjectPoolAllocated(ObjectPoolAllocated &&R)
+            ObjectPoolAllocated(ObjectPoolAllocated &&R) noexcept
             {
                 _ptr = std::move(R._ptr);
                 pool = std::move(R.pool);
             }
-            void operator=(ObjectPoolAllocated &&R)
+            void operator=(ObjectPoolAllocated &&R) noexcept
             {
                 _ptr = std::move(R._ptr);
                 pool = std::move(R.pool);

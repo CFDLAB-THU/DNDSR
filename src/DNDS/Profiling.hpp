@@ -36,9 +36,9 @@ namespace DNDS
         static const int Ntype_All = Ntype + Ntype_Past;
 
     private:
-        real timer[Ntype_All] = {0};
-        real tStart[Ntype_All];
-        PerformanceTimer() {}
+        std::array<real, Ntype_All> timer = {0};
+        std::array<real, Ntype_All> tStart;
+        PerformanceTimer() = default;
         PerformanceTimer(const PerformanceTimer &);
         PerformanceTimer &operator=(const PerformanceTimer &);
 
@@ -78,20 +78,20 @@ namespace DNDS
         ScalarStatistics &update(real v)
         {
             count++;
-            real newAverage = average + (v - average) / count;
-            sigmaS += ((v - newAverage) * (v - average) - sigmaS) / count;
+            real newAverage = average + (v - average) / real(count);
+            sigmaS += ((v - newAverage) * (v - average) - sigmaS) / real(count);
             average = newAverage;
             return *this;
         }
 
-        std::tuple<real, real> get()
+        [[nodiscard]] std::tuple<real, real> get()
         {
             return std::make_tuple(average, std::sqrt(std::max(0., sigmaS)));
         }
 
-        real getSum()
+        [[nodiscard]] real getSum() const
         {
-            return average * count;
+            return average * real(count);
         }
     };
 
