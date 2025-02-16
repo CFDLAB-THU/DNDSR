@@ -121,7 +121,7 @@ namespace DNDS::Geom
 
         /// parent built
         std::vector<index> node2parentNode; // from local-appended iNode to local-appended iNode in parent
-        std::vector<index> node2bndNode;// from local-appended iNode to local-appended iNode in bnd
+        std::vector<index> node2bndNode;    // from local-appended iNode to local-appended iNode in bnd
         std::vector<index> cell2parentCell;
 
         /// for parallel out

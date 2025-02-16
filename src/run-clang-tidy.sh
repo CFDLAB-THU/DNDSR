@@ -25,6 +25,7 @@ CHECKS="*"
 
 CHECKS+=,-clang-diagnostic-unused-command-line-argument
 CHECKS+=,-google-readability-namespace-comments
+CHECKS+=,-modernize-use-trailing-return-type
 
 # Loop through each directory in the array
 for DIR in "${DIRS[@]}"; do

@@ -8,12 +8,12 @@ namespace DNDS::Euler::SpecialFields
     auto IsentropicVortex10(
         EulerEvaluator<model> &eval,
         const Geom::tPoint &x,
-        real t, int cnVars, 
+        real t, int cnVars,
         real chi)
     {
         typename EulerEvaluator<model>::TU ret;
         ret.resize(cnVars);
-        
+
         real xyc = 5;
         real gamma = eval.settings.idealGasProperty.gamma;
         Geom::tPoint pPhysics = x;

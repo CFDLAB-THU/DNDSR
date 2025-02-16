@@ -449,7 +449,7 @@ namespace DNDS::Euler
         template <class TR>
         void setConstant(const TR &R)
         {
-            #if defined(DNDS_DIST_MT_USE_OMP)
+#if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(static)
 #endif
             for (index i = 0; i < this->Size(); i++)

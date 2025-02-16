@@ -42,13 +42,13 @@ namespace DNDS::CFV
         real jacobiRelax = 1.0; /// @brief VR SOR/Jacobi iteration relaxation factor
         bool SORInstead = true; /// @brief use SOR instead of relaxed Jacobi iteration
 
-        real smoothThreshold = 0.01; /// @brief limiter's smooth indicator threshold
-        real WBAP_nStd = 10;         /// @brief n used in WBAP limiters
-        bool normWBAP = false;       /// @brief if switch to normWBAP
-        int limiterBiwayAlter = 0;   /// @brief 0=wbap-L2-biway, 1=minmod-biway
-        int subs2ndOrder = 0;        /// @brief 0: vfv; 1: gauss rule; 2: least square; 11: GGMP;
-        int subs2ndOrderGGScheme = 1;  /// @brief 1: gauss rule using distance for interpolation; 0: no interpolation
-        real svdTolerance = 0;       /// @brief tolerance used in svd
+        real smoothThreshold = 0.01;  /// @brief limiter's smooth indicator threshold
+        real WBAP_nStd = 10;          /// @brief n used in WBAP limiters
+        bool normWBAP = false;        /// @brief if switch to normWBAP
+        int limiterBiwayAlter = 0;    /// @brief 0=wbap-L2-biway, 1=minmod-biway
+        int subs2ndOrder = 0;         /// @brief 0: vfv; 1: gauss rule; 2: least square; 11: GGMP;
+        int subs2ndOrderGGScheme = 1; /// @brief 1: gauss rule using distance for interpolation; 0: no interpolation
+        real svdTolerance = 0;        /// @brief tolerance used in svd
 
         bool ignoreMeshGeometryDeficiency = false;
         int nIterCellSmoothScale = 15;

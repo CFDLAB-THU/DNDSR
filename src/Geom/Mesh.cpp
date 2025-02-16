@@ -1683,7 +1683,7 @@ namespace DNDS::Geom
         isPeriodic = bool(isPeriodicRead);
         DNDS_assert(meshRead == "UnstructuredMesh");
         DNDS_assert(dimRead == dim);
-        DNDS_assert((!serializerP->IsPerRank()||rankRead == mpi.rank) && sizeRead == mpi.size);
+        DNDS_assert((!serializerP->IsPerRank() || rankRead == mpi.rank) && sizeRead == mpi.size);
 
         // make the empty arrays
         auto mesh = this;

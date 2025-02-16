@@ -157,7 +157,7 @@ namespace DNDS::Geom
 
     inline tPoint CrossMatToVec(const tGPoint &axnM)
     {
-        return tPoint{axnM(2,1), axnM(0,2), axnM(1,0)};
+        return tPoint{axnM(2, 1), axnM(0, 2), axnM(1, 0)};
     }
 
     template <int dim>

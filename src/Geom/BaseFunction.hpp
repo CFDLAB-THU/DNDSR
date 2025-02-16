@@ -183,8 +183,8 @@ namespace DNDS::Geom::Base
 
     static const t_diffOpIJK2I diffOperatorIJK2I2D = __get_diffOperatorIJK2I<2, ndiffSiz2D>(diffOperatorOrderList2D);
 
-    template<int dim>
-    constexpr auto& getDiffOperatorIJK2I()
+    template <int dim>
+    constexpr auto &getDiffOperatorIJK2I()
     {
         return (dim == 2) ? diffOperatorIJK2I2D : diffOperatorIJK2I;
     }

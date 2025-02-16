@@ -1,5 +1,12 @@
 #!/bin/bash
 
+if command -v clang-format-19 >/dev/null 2>&1; then
+    echo "clang-format-19 is installed."
+else
+    echo "error: clang-format-19 is not installed."
+    return 1
+fi
+
 CURRENT_DIR="$(pwd)"
 
 # Get the script's directory
@@ -26,7 +33,7 @@ for DIR in "${DIRS[@]}"; do
     # Run clang-format on each found file
     for FILE in $FILES; do
       echo "Formatting: $FILE"
-      clang-format -i "$FILE" 
+      clang-format-19 -i "$FILE" 
     done
   else
     echo "Directory $SCRIPT_DIR/$DIR does not exist."

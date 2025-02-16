@@ -940,7 +940,7 @@ namespace DNDS::Euler
                 // std::cout << "here0" << std::endl;
                 fincrement(uMG1, cxInc, 1.0, uPos);
                 frhs(cres, uMG1, dTauC, iter, 0.0 /* ! make this ct correct!*/, uPos);
-                cres *= alphaDiag; 
+                cres *= alphaDiag;
                 cres += resOther;
                 cres.addTo(uMG1, -1. / dt);
                 uMG1Init = uMG1;

@@ -32,9 +32,9 @@ namespace DNDS
 
         friend std::ostream &operator<<(std::ostream &o, const LogSimpleDIValue &v)
         {
-            if(v.i == UnInitIndex)
+            if (v.i == UnInitIndex)
                 o << v.d;
-            else 
+            else
                 o << v.i;
             return o;
         }

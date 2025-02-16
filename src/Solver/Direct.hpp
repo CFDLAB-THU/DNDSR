@@ -394,9 +394,9 @@ namespace DNDS::Direct
                 // upper and lower part
                 auto &&upperRow = symLU->upperTriStructureNew[iP];
 
-// #if defined(DNDS_DIST_MT_USE_OMP) // this OMP does not improve
-// #pragma omp parallel for schedule(static)
-// #endif
+                // #if defined(DNDS_DIST_MT_USE_OMP) // this OMP does not improve
+                // #pragma omp parallel for schedule(static)
+                // #endif
                 for (int ijP = 0; ijP < upperRow.size(); ijP++) //! for(int jP = iP+1; jP < N; jP++)
                 {
                     auto jP = upperRow[ijP];

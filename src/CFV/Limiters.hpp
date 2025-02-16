@@ -469,15 +469,12 @@ namespace DNDS::CFV
 
         Tout frac = (u1 / (u2.abs() + verySmallReal_pDiP) * u2.sign());
 
-        
-
         auto theta1 = frac.cube();
         auto theta2 = frac.square() * frac.square();
 
         uOut = u1 * (n + theta1) / (n + theta2); // currently fast version
         uOut *= u2.sign().abs() * (0.5 * (u1.sign() + u2.sign()).abs());
         ///////////
-        
     }
 
     /**

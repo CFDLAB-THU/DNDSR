@@ -40,7 +40,7 @@ namespace DNDS
             compile_ok,
             "exprtk compiling of === \n" +
                 expr +
-                "\n=== failed"); 
+                "\n=== failed");
         _compiled = true;
     }
 

@@ -233,7 +233,7 @@ namespace DNDS::Euler
                     item["integrationOption"] = bc.BCFlags.at(i).at("integrationOpt");
                     item["specialOption"] = bc.BCFlags.at(i).at("specialOpt");
                     item["valueExtra"] = bc.BCValuesExtra.at(i);
-                                }
+                }
                 break;
 
                 case EulerBCType::BCSym:

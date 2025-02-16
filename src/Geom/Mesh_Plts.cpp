@@ -1131,8 +1131,7 @@ namespace DNDS::Geom
                                                 {{"type", "Float64"},
                                                  {"Name", names(i)},
                                                  {"format", "ascii"}},
-                                                [&](auto &out, int level) {
-                                                });
+                                                [&](auto &out, int level) {});
                                         }
                                         for (int i = 0; i < vecArraySiz; i++)
                                         {
@@ -1142,8 +1141,7 @@ namespace DNDS::Geom
                                                  {"Name", vectorNames(i)},
                                                  {"NumberOfComponents", "3"},
                                                  {"format", "ascii"}},
-                                                [&](auto &out, int level) {
-                                                });
+                                                [&](auto &out, int level) {});
                                         }
                                     });
                             }
@@ -1168,8 +1166,7 @@ namespace DNDS::Geom
                                                 {{"type", "Float64"},
                                                  {"Name", namesPoint(i)},
                                                  {"format", "ascii"}},
-                                                [&](auto &out, int level) {
-                                                });
+                                                [&](auto &out, int level) {});
                                         }
                                         for (int i = 0; i < vecArraySizPoint; i++)
                                         {
@@ -1179,8 +1176,7 @@ namespace DNDS::Geom
                                                  {"Name", vectorNamesPoint(i)},
                                                  {"NumberOfComponents", "3"},
                                                  {"format", "ascii"}},
-                                                [&](auto &out, int level) {
-                                                });
+                                                [&](auto &out, int level) {});
                                         }
                                     });
                             }
@@ -1193,8 +1189,7 @@ namespace DNDS::Geom
                                         out, level, "PDataArray",
                                         {{"type", "Float64"},
                                          {"NumberOfComponents", "3"}},
-                                        [&](auto &out, int level) {
-                                        });
+                                        [&](auto &out, int level) {});
                                 });
                             for (MPI_int iRank = 0; iRank < mpi.size; iRank++)
                             {

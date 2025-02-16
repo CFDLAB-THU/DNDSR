@@ -32,7 +32,7 @@ namespace Geom
 
             bool InsertIfUnique(DNDS::index ni, const tPoint &np, double tol)
             {
-                //TODO
+                // TODO
             }
         } root;
 

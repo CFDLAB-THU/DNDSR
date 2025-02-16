@@ -19,7 +19,7 @@ namespace DNDS::Euler
         real refArea = 1.0;
         real refDynamicPressure = 0.5;
         real targetCL = 0.0;
-        real CLIncrementRelax = 0.25; // reduce each alpha increment
+        real CLIncrementRelax = 0.25;    // reduce each alpha increment
         real thresholdTargetRatio = 0.5; // reduce CL convergence threshold when close to the target CL
 
         index nIterStartDrive = INT32_MAX;

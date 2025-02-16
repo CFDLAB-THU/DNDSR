@@ -206,7 +206,7 @@ namespace DNDS::MPI
     MPI_int Scan(const void *sendbuf, void *recvbuf, MPI_int count,
                  MPI_Datatype datatype, MPI_Op op, MPI_Comm comm)
     {
-        int ret{0}; //todo: add wait lazy?
+        int ret{0}; // todo: add wait lazy?
         __start_timer;
         ret = MPI_Scan(sendbuf, recvbuf, count, datatype, op, comm);
         __stop_timer;

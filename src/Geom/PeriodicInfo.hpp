@@ -323,4 +323,4 @@ namespace DNDS::Geom
             return ret;
         }
     };
-}
+} // namespace DNDS::Geom

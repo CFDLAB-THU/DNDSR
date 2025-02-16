@@ -970,12 +970,12 @@ namespace DNDS::Euler
         }
         real dtMin = veryLargeReal;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime) reduction(min: dtMin)
+#pragma omp parallel for schedule(runtime) reduction(min : dtMin)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            real lambdaCellC = 0; 
-            for(auto iFace: mesh->cell2face[iCell])
+            real lambdaCellC = 0;
+            for (auto iFace : mesh->cell2face[iCell])
                 lambdaCellC += lambdaFace[iFace] * vfv->GetFaceArea(iFace);
             // std::cout << fv->GetCellVol(iCell) << " " << (lambdaCellC) << " " << CFL << std::endl;
             // exit(0);
