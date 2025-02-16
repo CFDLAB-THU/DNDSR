@@ -39,7 +39,7 @@ namespace DNDS::Serializer
      * @param groupName
      * @return hid_t group_id, need releasing
      */
-    static hid_t GetGroupOfFileIfExist(hid_t file_id, bool read, const std::string &groupName)
+    static hid_t GetGroupOfFileIfExist(hid_t file_id, bool read, const std::string &groupName, bool coll_on_meta)
     {
         hid_t group_id{-1};
         herr_t herr{0};
@@ -59,14 +59,23 @@ namespace DNDS::Serializer
             for (int j = 0; j <= i; j++)
                 pth_parent.push_back(pth[j]);
             auto parentGroupName = constructPath(pth_parent);
-
-            htri_t group_exists = H5Lexists(file_id, parentGroupName.c_str(), H5P_DEFAULT); // todo: control lapl
+            hid_t lapl_id = H5Pcreate(H5P_LINK_ACCESS);
+            DNDS_assert(lapl_id >= 0);
+            if (coll_on_meta)
+                herr = H5Pset_all_coll_metadata_ops(lapl_id, true), H5CHECK_Set;
+            htri_t group_exists = H5Lexists(file_id, parentGroupName.c_str(), lapl_id);
+            herr = H5Pclose(lapl_id), H5CHECK_Close;
             if (group_exists > 0)
             {
                 // If the group exists, open it if it the deepest level
                 if (i == pth.size() - 1)
                 {
-                    group_id = H5Gopen(file_id, parentGroupName.c_str(), H5P_DEFAULT); // todo: control gapl
+                    hid_t gapl_id = H5Pcreate(H5P_GROUP_ACCESS);
+                    DNDS_assert(gapl_id >= 0);
+                    if (coll_on_meta)
+                        herr = H5Pset_all_coll_metadata_ops(gapl_id, true), H5CHECK_Set;
+                    group_id = H5Gopen(file_id, parentGroupName.c_str(), gapl_id);
+                    herr = H5Pclose(gapl_id), H5CHECK_Close;
                     // std::cout << parentGroupName << " exists" << std::endl;
                 }
                 else
@@ -77,8 +86,13 @@ namespace DNDS::Serializer
                 DNDS_assert_info(!read, "file is read only, cannot create new group: " + groupName);
 
                 // If the group does not exist, create it
-                group_id = H5Gcreate(file_id, parentGroupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT); // todo: control gapl
+                hid_t gapl_id = H5Pcreate(H5P_GROUP_ACCESS);
+                DNDS_assert(gapl_id >= 0);
+                if (coll_on_meta)
+                    herr = H5Pset_all_coll_metadata_ops(gapl_id, true), H5CHECK_Set;
+                group_id = H5Gcreate(file_id, parentGroupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, gapl_id);
                 DNDS_assert(group_id >= 0);
+                herr = H5Pclose(gapl_id), H5CHECK_Close;
                 // std::cout << parentGroupName << " created" << std::endl;
                 if (i < pth.size() - 1)
                 {
@@ -130,7 +144,7 @@ namespace DNDS::Serializer
             for (auto &name : pth)
                 newPath.push_back(name);
         std::string nP = constructPath(cPathSplit);
-        hid_t group_id = GetGroupOfFileIfExist(h5file, reading, nP);
+        hid_t group_id = GetGroupOfFileIfExist(h5file, reading, nP, collectiveMetadataRW);
         herr = H5Gclose(group_id), H5CHECK_Close;
     }
     void SerializerH5::GoToPath(const std::string &p)
@@ -153,7 +167,8 @@ namespace DNDS::Serializer
     template <typename T>
     // using T = int;
     void WriteAttributeScalar(const std::string &name, const T &v,
-                              hid_t h5file, bool reading, const std::string &cP)
+                              hid_t h5file, bool reading, const std::string &cP,
+                              bool coll_on_meta)
     {
         hid_t T_H5TYPE = -1;
         if constexpr (std::is_same_v<T, int>)
@@ -174,12 +189,12 @@ namespace DNDS::Serializer
         if constexpr (!std::is_same_v<T, std::string>)
         {
             herr_t herr{0};
-            hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP);
+            hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, coll_on_meta);
             hsize_t attr_size = 1;
             hid_t attr_space = H5Screate(H5S_SCALAR);
             hid_t aapl_id = H5Pcreate(H5P_ATTRIBUTE_ACCESS);
-            // herr = H5Pset_all_coll_metadata_ops(aapl_id, true), H5CHECK_Set;
-            // herr = H5Pset_coll_metadata_write(aapl_id, true), H5CHECK_Set; // setting not present in aapl
+            if (coll_on_meta)
+                herr = H5Pset_all_coll_metadata_ops(aapl_id, true), H5CHECK_Set;
             hid_t attr_id = H5Acreate(group_id, name.c_str(), T_H5TYPE, attr_space, H5P_DEFAULT, aapl_id);
             herr = H5Awrite(attr_id, T_H5TYPE, &vV), H5CHECK_Set;
             H5Aclose(attr_id);
@@ -189,13 +204,12 @@ namespace DNDS::Serializer
         }
         else
         {
-            hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP);
+            hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, coll_on_meta);
 
             herr_t herr{0};
             hid_t aapl_id = H5Pcreate(H5P_ATTRIBUTE_ACCESS);
-            // herr = H5Pset_all_coll_metadata_ops(aapl_id, true), H5CHECK_Set;
-            // herr = H5Pset_coll_metadata_write(aapl_id, true), H5CHECK_Set; // setting not present in aapl
-
+            if (coll_on_meta)
+                herr = H5Pset_all_coll_metadata_ops(aapl_id, true), H5CHECK_Set;
             hid_t scalar_space = H5Screate(H5S_SCALAR);
             hid_t string_type = H5Tcreate(H5T_STRING, v.length());
             herr = H5Tset_strpad(string_type, H5T_STR_NULLPAD), H5CHECK_Set;
@@ -213,19 +227,19 @@ namespace DNDS::Serializer
 
     void SerializerH5::WriteInt(const std::string &name, int v)
     {
-        WriteAttributeScalar<int>(name, v, h5file, reading, cP);
+        WriteAttributeScalar<int>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
     void SerializerH5::WriteIndex(const std::string &name, index v)
     {
-        WriteAttributeScalar<index>(name, v, h5file, reading, cP);
+        WriteAttributeScalar<index>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
     void SerializerH5::WriteReal(const std::string &name, real v)
     {
-        WriteAttributeScalar<real>(name, v, h5file, reading, cP);
+        WriteAttributeScalar<real>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
 
     static void H5_WriteDataset(hid_t loc, const char *name, index nGlobal, index nOffset, index nLocal,
-                                hid_t file_dataType, hid_t mem_dataType, hid_t dxpl_id, hid_t dcpl_id, hid_t dapl_id,
+                                hid_t file_dataType, hid_t mem_dataType, hid_t dxpl_id, hid_t dapl_id, int64_t chunksize, int deflateLevel,
                                 const void *buf, int dim2 = -1)
     {
         int herr{0};
@@ -233,11 +247,20 @@ namespace DNDS::Serializer
                          fmt::format("{},{},{}", nGlobal, nLocal, nOffset));
         int rank = dim2 >= 0 ? 2 : 1;
         std::array<hsize_t, 2> ranksFull{hsize_t(nGlobal), hsize_t(dim2)};
-        std::array<hsize_t, 2> ranksFullUnlim{H5S_UNLIMITED, hsize_t(dim2)};
+        std::array<hsize_t, 2> ranksFullUnlim{chunksize > 0 ? H5S_UNLIMITED : hsize_t(nGlobal), hsize_t(dim2)};
         std::array<hsize_t, 2> offset{hsize_t(nOffset), 0};
         std::array<hsize_t, 2> siz{hsize_t(nLocal), hsize_t(dim2)};
         hid_t memSpace = H5Screate_simple(rank, siz.data(), NULL);
         hid_t fileSpace = H5Screate_simple(rank, ranksFull.data(), ranksFullUnlim.data());
+        std::array<hsize_t, 2> chunk_dims{hsize_t(chunksize > 0 ? chunksize : 0), dim2 >= 0 ? hsize_t(dim2) : 0};
+        hid_t dcpl_id = H5Pcreate(H5P_DATASET_CREATE);
+        if (chunk_dims[0] > 0)
+            herr |= H5Pset_chunk(dcpl_id, dim2 > 0 ? 2 : 1, chunk_dims.data());
+#ifdef H5_HAVE_FILTER_DEFLATE
+        if (deflateLevel > 0)
+            herr = H5Pset_deflate(dcpl_id, deflateLevel), H5CHECK_Set;
+#endif
+
         hid_t dset_id = H5Dcreate(loc, name, file_dataType, fileSpace, H5P_DEFAULT, dcpl_id, dapl_id);
         DNDS_assert_info(H5I_INVALID_HID != dset_id, "dataset create failed");
         herr = H5Sclose(fileSpace);
@@ -245,6 +268,7 @@ namespace DNDS::Serializer
         herr |= H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), NULL, siz.data(), NULL);
         herr |= H5Dwrite(dset_id, mem_dataType, memSpace, fileSpace, dxpl_id, buf);
         herr |= H5Dclose(dset_id);
+        herr |= H5Pclose(dcpl_id);
         herr |= H5Sclose(fileSpace);
         herr |= H5Sclose(memSpace);
         DNDS_assert_info(herr >= 0,
@@ -256,7 +280,8 @@ namespace DNDS::Serializer
     template <typename T = index>
     // using T = index;
     static void WriteDataVector(const std::string &name, const T *v, size_t size, ArrayGlobalOffset offset, int64_t chunksize, int deflateLevel,
-                                hid_t h5file, bool reading, const std::string &cP, const MPIInfo &mpi, MPI_Comm commDup)
+                                hid_t h5file, bool reading, const std::string &cP, const MPIInfo &mpi, MPI_Comm commDup,
+                                bool coll_on_meta, bool coll_on_data)
     {
         hid_t T_H5TYPE = H5T_NATIVE_INT;
         if constexpr (std::is_same_v<T, index>)
@@ -272,34 +297,23 @@ namespace DNDS::Serializer
 
         herr_t herr{0};
         hid_t dxpl_id = H5Pcreate(H5P_DATASET_XFER);
-        if (offset.isDist() || offset == ArrayGlobalOffset_Parts) //! is this necessary?
+        if ((offset.isDist() || offset == ArrayGlobalOffset_Parts) && (coll_on_data || deflateLevel > 0)) //! is this necessary?
             herr = H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE), H5CHECK_Set;
         else
             herr = H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_INDEPENDENT), H5CHECK_Set;
-        std::array<hsize_t, 2> chunk_dims{hsize_t(chunksize), 3};
-        hid_t dcpl_id = H5Pcreate(H5P_DATASET_CREATE);
-        herr |= H5Pset_chunk(dcpl_id, 1, chunk_dims.data());
-        hid_t dcpl_id_3arr = H5Pcreate(H5P_DATASET_CREATE);
-        herr |= H5Pset_chunk(dcpl_id_3arr, 2, chunk_dims.data());
         DNDS_assert_info(herr >= 0, "h5 error");
         // if is dist array, we use coll metadata
         hid_t dapl_id = H5Pcreate(H5P_DATASET_ACCESS);
-        herr = H5Pset_all_coll_metadata_ops(dapl_id, offset.isDist()), H5CHECK_Set;
-        // herr = H5Pset_coll_metadata_write(dapl_id, offset.isDist()), H5CHECK_Set; // setting to present in dapl
+        if (coll_on_meta)
+            herr = H5Pset_all_coll_metadata_ops(dapl_id, true), H5CHECK_Set;
 
-        hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP);
+        hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, coll_on_meta);
         if (offset == ArrayGlobalOffset_One)
             H5_WriteDataset(group_id, name.c_str(), size, 0, mpi.rank == 0 ? size : 0,
-                            T_H5TYPE, T_H5TYPE, dxpl_id, dcpl_id, dapl_id,
+                            T_H5TYPE, T_H5TYPE, dxpl_id, dapl_id, chunksize, deflateLevel,
                             v);
         else if (offset == ArrayGlobalOffset_Parts) // now we force it to be
         {
-#ifdef H5_HAVE_FILTER_DEFLATE
-            if (deflateLevel > 0)
-                herr = H5Pset_deflate(dcpl_id, deflateLevel), H5CHECK_Set;
-            if (deflateLevel > 0)
-                herr = H5Pset_deflate(dcpl_id_3arr, deflateLevel), H5CHECK_Set;
-#endif
             uint64_t sizeU{size}, sizeOff{0}, sizeGlobal{0};
             MPI::Scan(&sizeU, &sizeOff, 1, MPI_UINT64_T, MPI_SUM, commDup);
             sizeGlobal = sizeOff;
@@ -307,29 +321,24 @@ namespace DNDS::Serializer
             sizeOff -= sizeU;
 
             H5_WriteDataset(group_id, name.c_str(), sizeGlobal, sizeOff, size,
-                            T_H5TYPE, T_H5TYPE, dxpl_id, dcpl_id, dapl_id,
+                            T_H5TYPE, T_H5TYPE, dxpl_id, dapl_id, chunksize, deflateLevel,
                             v);
             // rank offset array
             index offsetC[2] = {index(sizeOff), index(sizeGlobal)};
             H5_WriteDataset(group_id, (name + "::rank_offsets").c_str(), mpi.size + 1, mpi.rank, (mpi.rank == mpi.size - 1) ? 2 : 1,
-                            DNDS_H5T_INDEX(), DNDS_H5T_INDEX(), dxpl_id, dcpl_id, dapl_id,
+                            DNDS_H5T_INDEX(), DNDS_H5T_INDEX(), dxpl_id, dapl_id, chunksize, deflateLevel,
                             &offsetC);
         }
         else if (offset.isDist())
         {
-#ifdef H5_HAVE_FILTER_DEFLATE
-            if (deflateLevel > 0)
-                herr = H5Pset_deflate(dcpl_id, deflateLevel), H5CHECK_Set;
-            if (deflateLevel > 0)
-                herr = H5Pset_deflate(dcpl_id_3arr, deflateLevel), H5CHECK_Set;
-#endif
+
             H5_WriteDataset(group_id, name.c_str(), offset.size(), offset.offset(), size,
-                            T_H5TYPE, T_H5TYPE, dxpl_id, dcpl_id, dapl_id,
+                            T_H5TYPE, T_H5TYPE, dxpl_id, dapl_id, chunksize, deflateLevel,
                             v);
             // rank offset array
             index offsetC[2] = {offset.offset(), offset.size()};
             H5_WriteDataset(group_id, (name + "::rank_offsets").c_str(), mpi.size + 1, mpi.rank, (mpi.rank == mpi.size - 1) ? 2 : 1,
-                            DNDS_H5T_INDEX(), DNDS_H5T_INDEX(), dxpl_id, dcpl_id, dapl_id,
+                            DNDS_H5T_INDEX(), DNDS_H5T_INDEX(), dxpl_id, dapl_id, chunksize, deflateLevel,
                             &offsetC);
         }
         else
@@ -337,26 +346,24 @@ namespace DNDS::Serializer
 
         herr = H5Pclose(dxpl_id), H5CHECK_Close;
         herr = H5Pclose(dapl_id), H5CHECK_Close;
-        herr = H5Pclose(dcpl_id), H5CHECK_Close;
-        herr = H5Pclose(dcpl_id_3arr), H5CHECK_Close;
         herr = H5Gclose(group_id), H5CHECK_Close;
     }
 
     void SerializerH5::WriteIndexVector(const std::string &name, const std::vector<index> &v, ArrayGlobalOffset offset)
     {
-        WriteDataVector<index>(name, v.data(), v.size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup);
+        WriteDataVector<index>(name, v.data(), v.size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup, collectiveMetadataRW, collectiveDataRW);
     }
     void SerializerH5::WriteRowsizeVector(const std::string &name, const std::vector<rowsize> &v, ArrayGlobalOffset offset)
     {
-        WriteDataVector<rowsize>(name, v.data(), v.size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup);
+        WriteDataVector<rowsize>(name, v.data(), v.size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup, collectiveMetadataRW, collectiveDataRW);
     }
     void SerializerH5::WriteRealVector(const std::string &name, const std::vector<real> &v, ArrayGlobalOffset offset)
     {
-        WriteDataVector<real>(name, v.data(), v.size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup);
+        WriteDataVector<real>(name, v.data(), v.size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup, collectiveMetadataRW, collectiveDataRW);
     }
     void SerializerH5::WriteString(const std::string &name, const std::string &v)
     {
-        WriteAttributeScalar<std::string>(name, v, h5file, reading, cP);
+        WriteAttributeScalar<std::string>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
     void SerializerH5::WriteSharedIndexVector(const std::string &name, const ssp<std::vector<index>> &v, ArrayGlobalOffset offset)
     {
@@ -364,7 +371,7 @@ namespace DNDS::Serializer
             this->WriteString(name + "::ref", ptr_2_pth[v.get()]);
         else
         {
-            WriteDataVector<index>(name, v->data(), v->size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup);
+            WriteDataVector<index>(name, v->data(), v->size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup, collectiveMetadataRW, collectiveDataRW);
             ptr_2_pth[v.get()] = cP + "/" + name;
         }
     }
@@ -374,7 +381,7 @@ namespace DNDS::Serializer
             this->WriteString(name + "::ref", ptr_2_pth[v.get()]);
         else
         {
-            WriteDataVector<rowsize>(name, v->data(), v->size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup);
+            WriteDataVector<rowsize>(name, v->data(), v->size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup, collectiveMetadataRW, collectiveDataRW);
             ptr_2_pth[v.get()] = cP + "/" + name;
         }
     }
@@ -382,7 +389,8 @@ namespace DNDS::Serializer
     template <typename T>
     // using T = int;
     void ReadAttributeScalar(const std::string &name, T &v,
-                             hid_t h5file, bool reading, const std::string &cP)
+                             hid_t h5file, bool reading, const std::string &cP,
+                             bool coll_on_meta)
     {
         hid_t T_H5TYPE = -1;
         if constexpr (std::is_same_v<T, int>)
@@ -403,7 +411,7 @@ namespace DNDS::Serializer
         if constexpr (!std::is_same_v<T, std::string>)
         {
             herr_t herr{0};
-            hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP);
+            hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, coll_on_meta);
             hid_t aapl_id = H5Pcreate(H5P_ATTRIBUTE_ACCESS);
             herr = H5Pset_all_coll_metadata_ops(aapl_id, true), H5CHECK_Set;
             // herr = H5Pset_coll_metadata_write(aapl_id, true), H5CHECK_Set;  // setting to present in dapl
@@ -413,18 +421,21 @@ namespace DNDS::Serializer
             int ndims = H5Sget_simple_extent_ndims(attr_space);
             DNDS_assert_info(ndims == 0, fmt::format("attempting to read attribute [{}/{}] which is not scalar", cP, name));
             herr = H5Aread(attr_id, T_H5TYPE, &v), H5CHECK_Set;
-            H5Aclose(attr_id);
-            H5Pclose(aapl_id);
-            H5Sclose(attr_space);
-            H5Gclose(group_id);
+            herr = H5Aclose(attr_id), H5CHECK_Close;
+            herr = H5Pclose(aapl_id), H5CHECK_Close;
+            herr = H5Sclose(attr_space), H5CHECK_Close;
+            herr = H5Gclose(group_id), H5CHECK_Close;
         }
         else
         {
             herr_t herr{0};
-            hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP);
+            hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, coll_on_meta);
             hid_t aapl_id = H5Pcreate(H5P_ATTRIBUTE_ACCESS);
-            // herr = H5Pset_all_coll_metadata_ops(aapl_id, true), H5CHECK_Set;
-            // herr = H5Pset_coll_metadata_write(aapl_id, true), H5CHECK_Set; // setting to present in dapl
+            if (coll_on_meta)
+            {
+                herr = H5Pset_all_coll_metadata_ops(aapl_id, true), H5CHECK_Set;
+                // herr = H5Pset_coll_metadata_write(aapl_id, true), H5CHECK_Set; // setting not present in aapl
+            }
             hid_t attr_id = H5Aopen(group_id, name.c_str(), aapl_id);
             DNDS_assert_info(attr_id >= 0, fmt::format("attempting to open attribute [{}/{}] failed", cP, name));
             hid_t attr_space = H5Aget_space(attr_id);
@@ -462,15 +473,15 @@ namespace DNDS::Serializer
 
     void SerializerH5::ReadInt(const std::string &name, int &v)
     {
-        ReadAttributeScalar<int>(name, v, h5file, reading, cP);
+        ReadAttributeScalar<int>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
     void SerializerH5::ReadIndex(const std::string &name, index &v)
     {
-        ReadAttributeScalar<index>(name, v, h5file, reading, cP);
+        ReadAttributeScalar<index>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
     void SerializerH5::ReadReal(const std::string &name, real &v)
     {
-        ReadAttributeScalar<real>(name, v, h5file, reading, cP);
+        ReadAttributeScalar<real>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
 
     /**
@@ -530,7 +541,8 @@ namespace DNDS::Serializer
     template <typename T = index>
     // using T = index;
     static void ReadDataVector(const std::string &name, T *v, size_t &size, ArrayGlobalOffset &offset,
-                               hid_t h5file, bool reading, const std::string &cP, const MPIInfo &mpi)
+                               hid_t h5file, bool reading, const std::string &cP, const MPIInfo &mpi,
+                               bool coll_on_meta, bool coll_on_data)
     {
         hid_t T_H5TYPE = H5T_NATIVE_INT;
         if constexpr (std::is_same_v<T, index>)
@@ -546,24 +558,31 @@ namespace DNDS::Serializer
 
         herr_t herr{0};
         hid_t dxpl_id = H5Pcreate(H5P_DATASET_XFER);
-        if (offset.isDist() || offset == ArrayGlobalOffset_One) //! is this necessary?
+        if ((offset.isDist() || offset == ArrayGlobalOffset_One) && coll_on_data) //! is this necessary?
             herr = H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE), H5CHECK_Set;
         else
             herr = H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_INDEPENDENT), H5CHECK_Set;
 
         // if is dist array, we use coll metadata
         hid_t dapl_id = H5Pcreate(H5P_DATASET_ACCESS);
-        // herr = H5Pset_all_coll_metadata_ops(dapl_id, offset.isDist() || offset == ArrayGlobalOffset_One), H5CHECK_Set;
-        // herr = H5Pset_coll_metadata_write(dapl_id, offset.isDist() || offset == ArrayGlobalOffset_One), H5CHECK_Set;  // tsetting to present in dapl
-
-        hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP);
+        if (coll_on_meta)
+        {
+            herr = H5Pset_all_coll_metadata_ops(dapl_id, offset.isDist() || offset == ArrayGlobalOffset_One), H5CHECK_Set;
+            // herr = H5Pset_coll_metadata_write(dapl_id, offset.isDist() || offset == ArrayGlobalOffset_One), H5CHECK_Set;  // tsetting to present in dapl
+        }
+        hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, coll_on_meta);
 
         if (offset == ArrayGlobalOffset_Unknown) // need detection, auto ArrayGlobalOffset_Parts or distributed array
         {
             DNDS_assert(v == nullptr); // must be a size-query call
 
-            htri_t exists_single = H5Lexists(group_id, name.c_str(), H5P_DEFAULT);                            // todo: set the lapl_id and try using coll_meta
-            htri_t exists_rank_offsets = H5Lexists(group_id, (name + "::rank_offsets").c_str(), H5P_DEFAULT); // todo: set the lapl_id and try using coll_meta
+            hid_t lapl_id = H5Pcreate(H5P_LINK_ACCESS);
+            DNDS_assert(lapl_id >= 0);
+            if (coll_on_meta)
+                herr = H5Pset_all_coll_metadata_ops(lapl_id, offset.isDist() || offset == ArrayGlobalOffset_One), H5CHECK_Set;
+            htri_t exists_single = H5Lexists(group_id, name.c_str(), lapl_id);
+            htri_t exists_rank_offsets = H5Lexists(group_id, (name + "::rank_offsets").c_str(), lapl_id);
+            herr = H5Pclose(lapl_id), H5CHECK_Close;
 
             if (exists_single > 0)
             {
@@ -658,38 +677,38 @@ namespace DNDS::Serializer
     void SerializerH5::ReadIndexVector(const std::string &name, std::vector<index> &v, ArrayGlobalOffset &offset)
     {
         size_t size;
-        ReadDataVector<index>(name, nullptr, size, offset, h5file, reading, cP, mpi);
+        ReadDataVector<index>(name, nullptr, size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
         v.resize(size);
         DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
-        ReadDataVector<index>(name, v.data(), size, offset, h5file, reading, cP, mpi);
+        ReadDataVector<index>(name, v.data(), size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
     }
     void SerializerH5::ReadRowsizeVector(const std::string &name, std::vector<rowsize> &v, ArrayGlobalOffset &offset)
     {
         size_t size;
-        ReadDataVector<rowsize>(name, nullptr, size, offset, h5file, reading, cP, mpi);
+        ReadDataVector<rowsize>(name, nullptr, size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
         v.resize(size);
         DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
-        ReadDataVector<rowsize>(name, v.data(), size, offset, h5file, reading, cP, mpi);
+        ReadDataVector<rowsize>(name, v.data(), size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
     }
     void SerializerH5::ReadRealVector(const std::string &name, std::vector<real> &v, ArrayGlobalOffset &offset)
     {
         size_t size{0};
-        ReadDataVector<real>(name, nullptr, size, offset, h5file, reading, cP, mpi);
+        ReadDataVector<real>(name, nullptr, size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
         // std::cout << name << "original " << v.size() << " resized to " << size << std::endl;
         v.resize(size);
         DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
-        ReadDataVector<real>(name, v.data(), size, offset, h5file, reading, cP, mpi);
+        ReadDataVector<real>(name, v.data(), size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
     }
     void SerializerH5::ReadString(const std::string &name, std::string &v)
     {
-        ReadAttributeScalar<std::string>(name, v, h5file, reading, cP);
+        ReadAttributeScalar<std::string>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
     void SerializerH5::ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> &v, ArrayGlobalOffset &offset)
     {
         using tValue = std::vector<index>;
         herr_t herr;
         std::string refPath;
-        hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP);
+        hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
         htri_t exists_ref = H5Aexists(group_id, (name + "::ref").c_str());
         herr = H5Gclose(group_id);
         if (exists_ref > 0)
@@ -711,10 +730,10 @@ namespace DNDS::Serializer
             pth_2_ssp[refPath] = &v;
 
             size_t size;
-            ReadDataVector<index>(refPath, nullptr, size, offset, h5file, reading, "/", mpi);
+            ReadDataVector<index>(refPath, nullptr, size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
             v->resize(size);
             DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
-            ReadDataVector<index>(refPath, v->data(), size, offset, h5file, reading, "/", mpi);
+            ReadDataVector<index>(refPath, v->data(), size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
         }
     }
     void SerializerH5::ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> &v, ArrayGlobalOffset &offset)
@@ -722,7 +741,7 @@ namespace DNDS::Serializer
         using tValue = std::vector<rowsize>;
         herr_t herr;
         std::string refPath;
-        hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP);
+        hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
         htri_t exists_ref = H5Aexists(group_id, (name + "::ref").c_str());
         herr = H5Gclose(group_id);
         if (exists_ref > 0)
@@ -744,22 +763,22 @@ namespace DNDS::Serializer
             pth_2_ssp[refPath] = &v;
 
             size_t size;
-            ReadDataVector<rowsize>(refPath, nullptr, size, offset, h5file, reading, "/", mpi);
+            ReadDataVector<rowsize>(refPath, nullptr, size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
             v->resize(size);
             DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
-            ReadDataVector<rowsize>(refPath, v->data(), size, offset, h5file, reading, "/", mpi);
+            ReadDataVector<rowsize>(refPath, v->data(), size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
         }
     }
     void SerializerH5::WriteUint8Array(const std::string &name, const uint8_t *data, index size, ArrayGlobalOffset offset)
     {
-        WriteDataVector<uint8_t>(name, data, size, offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup);
+        WriteDataVector<uint8_t>(name, data, size, offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup, collectiveMetadataRW, collectiveDataRW);
     }
     void SerializerH5::ReadUint8Array(const std::string &name, uint8_t *data, index &size, ArrayGlobalOffset &offset)
     {
         size_t size_size_t{0};
         if (data == nullptr)
         {
-            ReadDataVector<uint8_t>(name, nullptr, size_size_t, offset, h5file, reading, cP, mpi);
+            ReadDataVector<uint8_t>(name, nullptr, size_size_t, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
             size = size_size_t; // todo: check overflow?
             DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
         }
@@ -767,7 +786,7 @@ namespace DNDS::Serializer
         {
             DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
             size_size_t = size;
-            ReadDataVector<uint8_t>(name, data, size_size_t, offset, h5file, reading, cP, mpi);
+            ReadDataVector<uint8_t>(name, data, size_size_t, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
         }
     }
 }

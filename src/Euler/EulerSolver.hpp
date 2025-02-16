@@ -333,7 +333,7 @@ namespace DNDS::Euler
 
                 std::string restartWriter = "JSON"; // JSON or H5
                 int restartWriterH5Deflate = 0;
-                int restartWriterH5Chunk = 4096;
+                int restartWriterH5Chunk = 0;
 
                 const std::string &getOutLogName()
                 {

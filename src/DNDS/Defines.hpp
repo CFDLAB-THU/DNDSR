@@ -212,17 +212,44 @@ namespace DNDS
 
 namespace DNDS
 {
+    // Generic function to check for overflow in signed integer addition
+    template <typename T>
+    bool signedIntWillAddOverflow(T value, T increment)
+    {
+        static_assert(std::is_signed_v<T> && std::is_integral_v<T>, "T must be a signed integral type");
+        if (increment > 0 && value > std::numeric_limits<T>::max() - increment)
+            return true; // Overflow when adding a positive increment
+        if (increment < 0 && value < std::numeric_limits<T>::min() - increment)
+            return true; // Overflow when adding a negative increment
+        return false;    // No overflow
+    }
+
+    // Generic function to safely add with overflow check
+    template <typename T>
+    T signedIntSafeAdd(T value, T increment)
+    {
+        static_assert(std::is_signed_v<T> && std::is_integral_v<T>, "T must be a signed integral type");
+        if (signedIntWillAddOverflow<T>(value, increment))
+        {
+            DNDS_assert_info(false, fmt::format("doing [{} + {}] overflow detected", value, increment));
+            return 0;
+        }
+        return value + increment;
+    }
+
     // Note that TtIndexVec being accumulated could overflow
     template <class TtRowsizeVec, class TtIndexVec>
     inline void AccumulateRowSize(const TtRowsizeVec &rowsizes, TtIndexVec &rowstarts)
     {
         static_assert(std::is_signed_v<typename TtIndexVec::value_type>, "row starts should be signed");
+        static_assert(std::numeric_limits<typename TtIndexVec::value_type>::max() >=
+                          std::numeric_limits<typename TtRowsizeVec::value_type>::max(),
+                      "row starts should have larger upper limit");
         rowstarts.resize(rowsizes.size() + 1);
         rowstarts[0] = 0;
         for (typename TtIndexVec::size_type i = 1; i < rowstarts.size(); i++)
         {
-            rowstarts[i] = rowstarts[i - 1] + rowsizes[i - 1];
-            DNDS_assert(rowstarts[i] >= 0);
+            rowstarts[i] = signedIntSafeAdd<typename TtIndexVec::value_type>(rowstarts[i - 1], rowsizes[i - 1]);
         }
     }
 

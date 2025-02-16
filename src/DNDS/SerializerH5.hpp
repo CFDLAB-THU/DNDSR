@@ -20,8 +20,10 @@ namespace DNDS::Serializer
 
         hid_t h5file{NULL};
 
-        int64_t chunksize{4096};
+        int64_t chunksize{0};
         int deflateLevel{0};
+        bool collectiveMetadataRW = true;
+        bool collectiveDataRW = false;
 
     public:
         SerializerH5(const MPIInfo &_mpi) : SerializerBase(), mpi(_mpi)
@@ -31,8 +33,16 @@ namespace DNDS::Serializer
 
         void SetChunkAndDeflate(int64_t n_chunksize, int n_deflateLevel)
         {
+            if (n_deflateLevel > 0)
+                DNDS_assert_info(n_chunksize > 0, "chunksize must be positive when using deflate!");
             chunksize = n_chunksize;
             deflateLevel = n_deflateLevel;
+        }
+
+        void SetCollectiveRW(bool metadata, bool data)
+        {
+            collectiveMetadataRW = metadata;
+            collectiveDataRW = data;
         }
 
         void OpenFile(const std::string &fName, bool read) override;

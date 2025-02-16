@@ -111,6 +111,7 @@ namespace DNDS
     {
         typedef MPI_int mapIndex;
         typedef std::vector<mapIndex> t_MapIndexVec;
+        static_assert(std::numeric_limits<mapIndex>::max() >= std::numeric_limits<MPI_int>::max());
         index mainOffset;
         index mainSize;
 
@@ -177,7 +178,7 @@ namespace DNDS
             ghostStart.resize(ghostSizes.size() + 1);
             ghostStart[0] = 0;
             for (typename decltype(ghostSizes)::size_type i = 0; i < ghostSizes.size(); i++)
-                ghostStart[i + 1] = ghostStart[i] + ghostSizes[i];
+                ghostStart[i + 1] = signedIntSafeAdd<mapIndex>(ghostStart[i], ghostSizes[i]);
             ghostIndex.reserve(ghostStart[ghostSizes.size()]);
             for (auto i : pullingIndexGlobal)
             {

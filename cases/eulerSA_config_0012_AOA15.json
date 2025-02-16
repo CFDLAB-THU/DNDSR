@@ -58,7 +58,11 @@
             // "minJacobiDetRel",
             // "cellVolume",
             "dWall"
-        ]
+        ],
+        "restartWriter": "H5",
+        "restartWriterH5Deflate": 7,
+        "restartWriterH5Chunk": 65536,
+        "_tail": 0
     },
     "boundaryDefinition": {},
     "implicitReconstructionControl": {
@@ -233,6 +237,6 @@
         "iStep": 1,
         "iStepInternal": 15000,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/out/NACA0012_H2__C_p16_restart_test1.dir"
+        "lastRestartFile": "../data/out/NACA0012_H2-MGtest__C_p24.dnds.h5"
     }
 }
