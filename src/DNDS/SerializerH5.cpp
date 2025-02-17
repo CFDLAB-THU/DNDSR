@@ -666,7 +666,7 @@ namespace DNDS::Serializer
             else if (offset.isDist())
             {
                 // TODO: add re-distribute read from from partitioned arrays
-                DNDS_assert_info(size >= 0 && (size == 0 || v != nullptr), fmt::format("{} {}", size, size_t(v)));
+                DNDS_assert_info_mpi(size >= 0 && (size == 0 || v != nullptr), mpi, fmt::format("{} {}", size, size_t(v)));
                 index nGlobal{-1};
                 int dim2{-1};
                 H5_ReadDataset(group_id, name.c_str(), nGlobal, offset.offset(), size, T_H5TYPE, dxpl_id, dapl_id, v, dim2);
@@ -683,7 +683,7 @@ namespace DNDS::Serializer
 
     void SerializerH5::ReadIndexVector(const std::string &name, std::vector<index> &v, ArrayGlobalOffset &offset)
     {
-        size_t size;
+        size_t size{0};
         ReadDataVector<index>(name, nullptr, size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
         v.resize(size);
         DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
@@ -691,7 +691,7 @@ namespace DNDS::Serializer
     }
     void SerializerH5::ReadRowsizeVector(const std::string &name, std::vector<rowsize> &v, ArrayGlobalOffset &offset)
     {
-        size_t size;
+        size_t size{0};
         ReadDataVector<rowsize>(name, nullptr, size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
         v.resize(size);
         DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));

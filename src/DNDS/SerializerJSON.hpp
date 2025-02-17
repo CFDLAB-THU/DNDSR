@@ -18,9 +18,11 @@ namespace DNDS::Serializer
         std::map<std::string, void *> pth_2_ssp;
 
         bool useCodecOnUint8{false};
+        int deflateLevel{5};
 
     public:
         void SetUseCodecOnUint8(bool v) { useCodecOnUint8 = v; }
+        void SetDeflateLevel(int v) { deflateLevel = v; }
 
         void OpenFile(const std::string &fName, bool read) override;
         void CloseFile() override;

@@ -54,7 +54,7 @@ namespace DNDS::Serializer
                 return _offset == other._offset;
         }
 
-        operator std::string()
+        operator std::string() const
         {
             return fmt::format("ArrayGlobalOffset{{size: {}, offset: {}}}", _size, _offset);
         }
@@ -62,6 +62,12 @@ namespace DNDS::Serializer
         [[nodiscard]] bool isDist() const
         {
             return _offset >= 0;
+        }
+
+        friend std::ostream &operator<<(std::ostream &o, const ArrayGlobalOffset &v)
+        {
+            o << (std::string)(v);
+            return o;
         }
     };
 

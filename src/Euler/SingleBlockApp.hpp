@@ -55,7 +55,10 @@ namespace DNDS::Euler
         {
             mainParser.parse_args(argc, argv);
             if (mainParser.get<bool>("--debug"))
+            {
+                Debug::isDebugging = true;
                 Debug::MPIDebugHold(mpi);
+            }
             read_configPath = mainParser.get("config");
             if (!read_configPath.empty())
             {

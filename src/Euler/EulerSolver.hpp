@@ -12,8 +12,7 @@
 // #define __DNDS_REALLY_COMPILING__HEADER_ON__
 // #endif
 #include "DNDS/JsonUtil.hpp"
-#include "DNDS/SerializerJSON.hpp"
-#include "DNDS/SerializerH5.hpp"
+#include "DNDS/SerializerFactory.hpp"
 #include "DNDS/CsvLog.hpp"
 #include "DNDS/ObjectPool.hpp"
 #include "Solver/Linear.hpp"
@@ -334,9 +333,9 @@ namespace DNDS::Euler
                 int rectifyNearPlane = 0; // 1: x 2: y 4: z
                 real rectifyNearPlaneThres = 1e-10;
 
-                std::string restartWriter = "JSON"; // JSON or H5
-                int restartWriterH5Deflate = 0;
-                int restartWriterH5Chunk = 0;
+                Serializer::SerializerFactory restartWriter;
+                Serializer::SerializerFactory meshPartitionedWriter;
+                std::string meshPartitionedReaderType = "JSON";
 
                 const std::string &getOutLogName()
                 {
@@ -380,7 +379,7 @@ namespace DNDS::Euler
                     serializerSaveURec,
                     allowAsyncPrintData,
                     rectifyNearPlane, rectifyNearPlaneThres,
-                    restartWriter, restartWriterH5Deflate, restartWriterH5Chunk)
+                    restartWriter, meshPartitionedWriter, meshPartitionedReaderType)
             } dataIOControl;
 
             struct BoundaryDefinition
@@ -471,11 +470,12 @@ namespace DNDS::Euler
                     int nSgsConsoleCheck = 100;
                     int nGmresConsoleCheck = 100;
                     int multiGridNIter = -1;
+                    int multiGridNIterPost = 0;
                     DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                         CoarseGridLinearSolverControl,
                         jacobiCode,
                         sgsIter, gmresCode, gmresScale, nGmresIter,
-                        nSgsConsoleCheck, nGmresConsoleCheck, multiGridNIter)
+                        nSgsConsoleCheck, nGmresConsoleCheck, multiGridNIter, multiGridNIterPost)
                 };
                 std::vector<CoarseGridLinearSolverControl> coarseGridLinearSolverControlList{2};
                 Direct::DirectPrecControl directPrecControl;
@@ -737,8 +737,6 @@ namespace DNDS::Euler
             else if (sstringHasSuffix(fname, ".dnds.h5"))
             {
                 serializerP = std::make_shared<DNDS::Serializer::SerializerH5>(mpi);
-                // std::dynamic_pointer_cast<DNDS::Serializer::SerializerH5>(serializerP)
-                //     ->SetChunkAndDeflate(config.dataIOControl.restartWriterH5Chunk, config.dataIOControl.restartWriterH5Deflate);
             }
             else
                 DNDS_assert_info(false, "restart file suffix not supported");
@@ -802,9 +800,7 @@ namespace DNDS::Euler
 
         void PrintRestart(std::string fname)
         {
-
-            Serializer::SerializerBaseSSP serializerP;
-            if (config.dataIOControl.restartWriter == "JSON")
+            if (config.dataIOControl.restartWriter.type == "JSON")
             {
                 std::filesystem::path outPath;
                 outPath = {fname + "_p" + std::to_string(mpi.size) + "_restart.dir"};
@@ -813,20 +809,18 @@ namespace DNDS::Euler
                 std::sprintf(BUF, "%04d", mpi.rank);
                 fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
                 config.restartState.lastRestartFile = getStringForcePath(outPath);
-
-                serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
-                std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
             }
-            else if (config.dataIOControl.restartWriter == "H5")
+            else if (config.dataIOControl.restartWriter.type == "H5")
             {
-                serializerP = std::make_shared<DNDS::Serializer::SerializerH5>(mpi);
-                std::dynamic_pointer_cast<DNDS::Serializer::SerializerH5>(serializerP)
-                    ->SetChunkAndDeflate(config.dataIOControl.restartWriterH5Chunk, config.dataIOControl.restartWriterH5Deflate);
                 fname += "_p" + std::to_string(mpi.size) + ".restart.dnds.h5";
+                std::filesystem::path outPath = fname;
+                std::filesystem::create_directories(outPath.parent_path() / ".");
                 config.restartState.lastRestartFile = fname;
             }
             else
                 DNDS_assert_info(false, "restartWriter is invalid");
+
+            Serializer::SerializerBaseSSP serializerP = config.dataIOControl.restartWriter.BuildSerializer(mpi);
 
             serializerP->OpenFile(fname, false);
             u.WriteSerialize(serializerP, "u");
