@@ -1939,6 +1939,7 @@ namespace DNDS::Euler
     template <EulerModel model>
     void EulerEvaluator<model>::updateBCProfilesPressureRadialEq()
     {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         for (auto &v : profileRecorders)
         {
             if (pBCHandler->GetFlagFromIDSoft(v.first, "anchorOpt") == 2)

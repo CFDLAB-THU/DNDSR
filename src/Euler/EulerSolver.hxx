@@ -1535,6 +1535,10 @@ namespace DNDS::Euler
     )
     void EulerSolver<model>::InitializeRunningEnvironment(EulerSolver<model>::RunningEnvironment &runningEnvironment)
     {
+        if (config.timeMarchControl.partitionMeshOnly)
+        {
+            return;
+        }
         // mind we need to get ptr-to-actual-eval into env.pEval,
         // before assigning the ref (ptr), or the ptr is null
         runningEnvironment.pEval = pEval;

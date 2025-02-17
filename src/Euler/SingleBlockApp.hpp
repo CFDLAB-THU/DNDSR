@@ -29,6 +29,9 @@ namespace DNDS::Euler
     int RunSingleBlockConsoleApp(int argc, char *argv[])
     {
         using namespace std::literals;
+        MPIInfo mpi;
+        mpi.setWorld();
+
         std::string defaultConfJson = "../cases/"s + getSingleBlockAppName(model) + "_default_config.json"s;
         std::string confJson = "../cases/"s + getSingleBlockAppName(model) + "_config.json";
         std::vector<std::string> overwriteKeys, overwriteValues;
@@ -44,12 +47,15 @@ namespace DNDS::Euler
             .help("values to the json entries to overwrite")
             .append()
             .default_value<std::vector<std::string>>({});
+        mainParser.add_argument("--debug").flag().default_value(false);
 
         RegisterSignalHandler();
 
         try
         {
             mainParser.parse_args(argc, argv);
+            if (mainParser.get<bool>("--debug"))
+                Debug::MPIDebugHold(mpi);
             read_configPath = mainParser.get("config");
             if (!read_configPath.empty())
             {
@@ -73,8 +79,7 @@ namespace DNDS::Euler
 
         try
         {
-            MPIInfo mpi;
-            mpi.setWorld();
+
             if (mpi.rank == 0)
                 log() << "Current MPI thread level: " << MPI::GetMPIThreadLevel() << std::endl;
             auto strategy = MPI::CommStrategy::Instance().GetArrayStrategy();

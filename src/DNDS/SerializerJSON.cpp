@@ -50,7 +50,7 @@ namespace DNDS::Serializer
     }
     void SerializerJSON::CloseFileNonVirtual()
     {
-        DNDS_assert(fileStream.is_open());
+        // DNDS_assert(fileStream.is_open());
         if (!reading)
             fileStream << jObj;
         fileStream.close();
@@ -250,7 +250,7 @@ namespace DNDS::Serializer
         {
             return sizeC + (sizeC + 999) / 1000 + 12; // form vtk
         };
-        int compressLevel = 5;
+        int compressLevel = this->deflateLevel;
         auto zlibCompressData = [&](const uint8_t *buf, index sizeC)
         {
             std::vector<uint8_t> ret(zlibCompressedSize(sizeC));
