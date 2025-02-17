@@ -30,6 +30,7 @@ namespace DNDS
 
         using t_EigenMatrix = Eigen::Matrix<real, _n_row, _n_col>;
         using t_EigenMap = Eigen::Map<t_EigenMatrix>; // default no buffer align and stride
+        using t_EigenMap_const = Eigen::Map<const t_EigenMatrix>; // default no buffer align and stride
 
     private:
         int _row_dynamic = _n_row > 0 ? _n_row : 0;
@@ -80,9 +81,9 @@ namespace DNDS
         }
 
     public:
-        int Rows() { return _n_row > 0 ? _n_row : _row_dynamic; }
-        int Cols() { return _n_col > 0 ? _n_col : _col_dynamic; }
-        int MSize()
+        int Rows() const { return _n_row > 0 ? _n_row : _row_dynamic; }
+        int Cols() const { return _n_col > 0 ? _n_col : _col_dynamic; }
+        int MSize() const
         {
             if constexpr (_n_row >= 0 && _n_col >= 0)
                 return _n_row * _n_col;
@@ -100,23 +101,30 @@ namespace DNDS
             this->t_base::ResizeRow(i, b_size * MSize());
         }
 
-        rowsize BatchSize(index i)
+        rowsize BatchSize(index i) const
         {
             return this->RowSize(i);
         }
 
-        rowsize RowSize(index i)
+        rowsize RowSize(index i) const
         {
             rowsize row_size_c = this->t_base::RowSize(i);
             DNDS_assert(row_size_c % MSize() == 0);
             return row_size_c / MSize();
         }
 
-        t_EigenMap operator()(index i, rowsize j)
+        auto operator()(index i, rowsize j)
         {
             DNDS_assert(j >= 0 && j < this->RowSize(i));
             // if constexpr (_n_row >= 0 && _n_col >= 0)
             return t_EigenMap(this->t_base::operator[](i) + MSize() * j, Rows(), Cols());
+        }
+
+        auto operator()(index i, rowsize j) const
+        {
+            DNDS_assert(j >= 0 && j < this->RowSize(i));
+            // if constexpr (_n_row >= 0 && _n_col >= 0)
+            return t_EigenMap_const(this->t_base::operator[](i) + MSize() * j, Rows(), Cols());
         }
 
         std::vector<t_EigenMap> operator[](index i)

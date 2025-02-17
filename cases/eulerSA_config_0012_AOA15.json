@@ -46,7 +46,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2-MGtest.dir/out_4[jc2]-2[jc2]-NLS",
+        "outPltName": "../data/out/NACA0012_H2-MGtest.dir/out_4[jc2]-4[jc2]-NLS",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -141,7 +141,6 @@
                 "sgsIter": 0,
                 "gmresCode": 0,
                 "gmresScale": 0,
-                "nGmresSpace": 10,
                 "nGmresIter": 2,
                 "nSgsConsoleCheck": 100,
                 "nGmresConsoleCheck": 100,
@@ -152,11 +151,10 @@
                 "sgsIter": 0,
                 "gmresCode": 0,
                 "gmresScale": 0,
-                "nGmresSpace": 10,
                 "nGmresIter": 2,
                 "nSgsConsoleCheck": 100,
                 "nGmresConsoleCheck": 100,
-                "multiGridNIter": 2
+                "multiGridNIter": 4
             }
         ],
         "directPrecControl": {

@@ -518,6 +518,11 @@ namespace DNDS
             }
         }
 
+        const T *operator[](index iRow) const
+        {
+            return static_cast<const T *>(const_cast<self_type *>(this)->operator[](iRow));
+        }
+
         T *data()
         {
             if constexpr (_dataLayout == CSR)
