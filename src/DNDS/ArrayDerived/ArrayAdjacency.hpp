@@ -46,6 +46,7 @@ namespace DNDS
     class ArrayAdjacency : public ParArray<index, _row_size, _row_max, _align>
     {
     public:
+        using t_this = ArrayAdjacency<_row_size, _row_max, _align>;
         using t_base = ParArray<index, _row_size, _row_max, _align>;
         using t_base::t_base;
 
@@ -56,6 +57,11 @@ namespace DNDS
                 fmt::format("i {}, Size {}, sig: {}",
                             i, this->Size(), this->GetArraySignature())); //! disable past-end input
             return AdjacencyRow(t_base::operator[](i), t_base::RowSize(i));
+        }
+
+        const AdjacencyRow operator[](index i) const
+        {
+            return const_cast<t_this *>(this)->operator[](i);
         }
 
         index *rowPtr(index i) { return t_base::operator[](i); }

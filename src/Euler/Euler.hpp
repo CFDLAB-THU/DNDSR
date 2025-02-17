@@ -38,7 +38,7 @@ namespace DNDS::Euler
             for (index i = 0; i < this->Size(); i++)
                 this->operator[](i) = R;
         }
-        void operator+=(t_self &R)
+        void operator+=(const t_self &R)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(static)
@@ -46,7 +46,7 @@ namespace DNDS::Euler
             for (index i = 0; i < this->Size(); i++)
                 this->operator[](i) += R.operator[](i);
         }
-        void operator-=(t_self &R)
+        void operator-=(const t_self &R)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(static)
@@ -62,7 +62,7 @@ namespace DNDS::Euler
             for (index i = 0; i < this->Size(); i++)
                 this->operator[](i) *= R;
         }
-        void operator=(t_self &R)
+        void operator=(const t_self &R)
         {
             // TODO: OMP
             // for (index i = 0; i < this->Size(); i++)
@@ -73,7 +73,7 @@ namespace DNDS::Euler
             std::copy(R.son->RawDataVector().begin(), R.son->RawDataVector().end(), this->son->RawDataVector().begin());
         }
 
-        void addTo(t_self &R, real r)
+        void addTo(const t_self &R, real r)
         {
             // for (index i = 0; i < this->Size(); i++)
             //     this->operator[](i) += R.operator[](i) * r;
@@ -95,7 +95,7 @@ namespace DNDS::Euler
                 TVS[i] += r * RVS[i];
         }
 
-        void operator*=(std::vector<real> &R)
+        void operator*=(const std::vector<real> &R)
         {
             DNDS_assert(R.size() >= this->father->Size());
 #if defined(DNDS_DIST_MT_USE_OMP)
@@ -105,7 +105,7 @@ namespace DNDS::Euler
                 this->operator[](i) *= R[i];
         }
 
-        void operator*=(std::conditional_t<nVarsFixed == 1, ArrayDOFV<2>, ArrayDOFV<1>> &R)
+        void operator*=(const std::conditional_t<nVarsFixed == 1, ArrayDOFV<2>, ArrayDOFV<1>> &R)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(static)
@@ -141,7 +141,7 @@ namespace DNDS::Euler
                 this->operator[](i).array() *= R.array();
         }
 
-        void operator*=(t_self &R)
+        void operator*=(const t_self &R)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(static)
@@ -150,7 +150,7 @@ namespace DNDS::Euler
                 this->operator[](i).array() *= R.operator[](i).array();
         }
 
-        void operator/=(t_self &R)
+        void operator/=(const t_self &R)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(static)
@@ -300,7 +300,7 @@ namespace DNDS::Euler
             for (index i = 0; i < this->Size(); i++)
                 this->operator[](i) = R;
         }
-        void operator+=(t_self &R)
+        void operator+=(const t_self &R)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(static)
@@ -308,7 +308,7 @@ namespace DNDS::Euler
             for (index i = 0; i < this->Size(); i++)
                 this->operator[](i) += R.operator[](i);
         }
-        void operator-=(t_self &R)
+        void operator-=(const t_self &R)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(static)
@@ -324,7 +324,7 @@ namespace DNDS::Euler
             for (index i = 0; i < this->Size(); i++)
                 this->operator[](i) *= R;
         }
-        void operator*=(std::vector<real> &R)
+        void operator*=(const std::vector<real> &R)
         {
             DNDS_assert(R.size() >= this->father->Size());
 #if defined(DNDS_DIST_MT_USE_OMP)
@@ -333,7 +333,7 @@ namespace DNDS::Euler
             for (index i = 0; i < this->father->Size(); i++)
                 this->operator[](i) *= R[i];
         }
-        void operator*=(ArrayDOFV<1> &R)
+        void operator*=(const ArrayDOFV<1> &R)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(static)
@@ -349,7 +349,7 @@ namespace DNDS::Euler
             for (index i = 0; i < this->Size(); i++)
                 this->operator[](i).array().rowwise() *= R;
         }
-        void operator=(t_self &R)
+        void operator=(const t_self &R)
         {
             // todo: OMP
             //  for (index i = 0; i < this->Size(); i++)
@@ -360,7 +360,7 @@ namespace DNDS::Euler
             std::copy(R.son->RawDataVector().begin(), R.son->RawDataVector().end(), this->son->RawDataVector().begin());
         }
 
-        void addTo(t_self &R, const Eigen::Array<real, 1, nVarsFixed> &r)
+        void addTo(const t_self &R, const Eigen::Array<real, 1, nVarsFixed> &r)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(static)
@@ -369,7 +369,7 @@ namespace DNDS::Euler
                 this->operator[](i).array() += R.operator[](i).array().rowwise() * r;
         }
 
-        void addTo(t_self &R, real r)
+        void addTo(const t_self &R, real r)
         {
             // for (index i = 0; i < this->Size(); i++)
             //     this->operator[](i) += R.operator[](i) * r;

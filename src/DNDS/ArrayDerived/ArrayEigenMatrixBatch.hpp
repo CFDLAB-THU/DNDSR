@@ -58,25 +58,25 @@ namespace DNDS
         {
         }
 
-        uint64_t &Size()
+        uint64_t &Size() const
         {
             DNDS_assert(_buf_size > 0);
             return *(uint64_t *)(_buf);
         }
 
-        uint16_t getNRow(rowsize k)
+        uint16_t getNRow(rowsize k) const
         {
             DNDS_assert(k < _buf_size - 1);
             return ((UInt16QuadIn64 *)(_buf + k + 1))->getA();
         }
 
-        uint16_t getNCol(rowsize k)
+        uint16_t getNCol(rowsize k) const
         {
             DNDS_assert(k < _buf_size - 1);
             return ((UInt16QuadIn64 *)(_buf + k + 1))->getB();
         }
 
-        uint32_t getOffset(rowsize k)
+        uint32_t getOffset(rowsize k) const
         {
             DNDS_assert(k < _buf_size - 1);
             return ((UInt32PairIn64 *)(_buf + k + 1))->getN();
@@ -117,7 +117,7 @@ namespace DNDS
             }
         }
 
-        t_map operator[](rowsize k)
+        t_map operator[](rowsize k) // todo: add const version
         {
             DNDS_assert(k < this->Size());
             auto n_row = getNRow(k);
@@ -148,7 +148,7 @@ namespace DNDS
             batch.CompressIn(matrices);
         }
 
-        MatrixBatch operator[](index i)
+        MatrixBatch operator[](index i) // todo: add const version
         {
             return {this->t_base::operator[](i), this->RowSize(i)};
         }

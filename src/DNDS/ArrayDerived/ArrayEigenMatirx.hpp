@@ -40,6 +40,7 @@ namespace DNDS
 
         using t_EigenMatrix = Eigen::Matrix<real, RowSize_To_EigenSize(_mat_ni), RowSize_To_EigenSize(_mat_nj)>;
         using t_EigenMap = Eigen::Map<t_EigenMatrix>; // default no buffer align and stride
+        using t_EigenMap_const = Eigen::Map<const t_EigenMatrix>; // default no buffer align and stride
 
         using t_copy = t_EigenMatrix;
 
@@ -123,6 +124,21 @@ namespace DNDS
             // std::cout << c_nRow << "  " << t_base::RowSize(i) << std::endl;
 
             return t_EigenMap(t_base::operator[](i), c_nRow, t_base::RowSize(i) / c_nRow); // need static dispatch?
+        }
+
+        t_EigenMap_const
+        operator[](index i) const   
+        {
+            rowsize c_nRow;
+            if constexpr (_mat_ni == NonUniformSize)
+                c_nRow = (*_mat_nRows)[i];
+            else if constexpr (_mat_ni == DynamicSize)
+                c_nRow = _mat_nRow_dynamic;
+            else
+                c_nRow = _mat_ni;
+            // std::cout << c_nRow << "  " << t_base::RowSize(i) << std::endl;
+
+            return t_EigenMap_const(t_base::operator[](i), c_nRow, t_base::RowSize(i) / c_nRow); // need static dispatch?
         }
 
         static std::string GetDerivedArraySignature()

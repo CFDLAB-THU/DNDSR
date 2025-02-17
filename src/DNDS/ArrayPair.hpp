@@ -20,16 +20,24 @@ namespace DNDS
                 return son->operator[](i - father->Size());
         }
 
-        decltype(father->operator()(index(0), rowsize(0))) operator()(index i, rowsize j)
+        decltype(father->operator[](index(0))) operator[](index i)
         {
             if (i >= 0 && i < father->Size())
-                return father->operator()(i, j);
+                return father->operator[](i);
             else
-                return son->operator()(i - father->Size(), j);
+                return son->operator[](i - father->Size());
         }
 
+        // decltype(father->operator()(index(0), rowsize(0))) operator()(index i, rowsize j)
+        // {
+        //     if (i >= 0 && i < father->Size())
+        //         return father->operator()(i, j);
+        //     else
+        //         return son->operator()(i - father->Size(), j);
+        // }
+
         template <class... TOthers>
-        auto operator()(index i, TOthers... aOthers)
+        decltype(auto) operator()(index i, TOthers... aOthers)
         {
             if (i >= 0 && i < father->Size())
                 return father->operator()(i, aOthers...);
@@ -38,7 +46,7 @@ namespace DNDS
         }
 
         template <class... TOthers>
-        auto operator()(index i, TOthers... aOthers) const
+        decltype(auto) operator()(index i, TOthers... aOthers) const
         {
             if (i >= 0 && i < father->Size())
                 return father->operator()(i, aOthers...);
