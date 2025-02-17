@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EulerSolver.hpp"
+#include "SpecialFields.hpp"
 
 namespace DNDS::Euler
 {
@@ -446,5 +447,506 @@ namespace DNDS::Euler
             }
         }
         DNDS_MPI_InsertCheck(mpi, "ReadMeshAndInitialize -1 nvars " + std::to_string(nVars));
+    }
+
+    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    bool EulerSolver<model>::functor_fstop(int iter, ArrayDOFV<nVarsFixed> &cres, int iStep, RunningEnvironment &runningEnvironment)
+    {
+        using namespace std::literals;
+        DNDS_EULERSOLVER_RUNNINGENV_GET_REF_LIST
+        // auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
+
+        // auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
+
+        Eigen::VectorFMTSafe<real, -1> res(nVars);
+        eval.EvaluateNorm(res, cres, 1, config.convergenceControl.useVolWiseResidual);
+        // if (iter == 1 && iStep == 1) // * using 1st rk step for reference
+        if (iter == 1)
+            resBaseCInternal = res;
+        else
+            resBaseCInternal = resBaseCInternal.array().max(res.array()); //! using max !
+        Eigen::VectorFMTSafe<real, -1> resRel = (res.array() / (resBaseCInternal.array() + verySmallReal)).matrix();
+        bool ifStop = resRel(0) < config.convergenceControl.rhsThresholdInternal; // ! using only rho's residual
+        if (iter < config.convergenceControl.nTimeStepInternalMin)
+            ifStop = false;
+        auto [CLCur, CDCur, AOACur] = eval.CLDriverGetIntegrationUpdate(iter);
+        if (iter % config.outputControl.nConsoleCheckInternal == 0 || iter > config.convergenceControl.nTimeStepInternal || ifStop)
+        {
+            double tWall = MPI_Wtime();
+            real telapsed = MPI_Wtime() - tstartInternal;
+            bool useCollectiveTimer = config.outputControl.useCollectiveTimer;
+            real tcomm = Timer().getTimerColOrLoc(PerformanceTimer::Comm, mpi, useCollectiveTimer);
+            real tLimiterA = Timer().getTimerColOrLoc(PerformanceTimer::LimiterA, mpi, useCollectiveTimer);
+            real tLimiterB = Timer().getTimerColOrLoc(PerformanceTimer::LimiterB, mpi, useCollectiveTimer);
+            real trhs = Timer().getTimerColOrLoc(PerformanceTimer::RHS, mpi, useCollectiveTimer);
+            real trec = Timer().getTimerColOrLoc(PerformanceTimer::Reconstruction, mpi, useCollectiveTimer);
+            real tLim = Timer().getTimerColOrLoc(PerformanceTimer::Limiter, mpi, useCollectiveTimer);
+            real tPP = Timer().getTimerColOrLoc(PerformanceTimer::Positivity, mpi, useCollectiveTimer);
+            auto [telapsedM, telapsedS] = tInternalStats["t"].update(telapsed).get();
+            auto [tcommM, tcommS] = tInternalStats["c"].update(tcomm).get();
+            auto [trhsM, trhsS] = tInternalStats["r"].update(trhs).get();
+            auto [trecM, trecS] = tInternalStats["v"].update(trec).get();
+            auto [tLimM, tLimS] = tInternalStats["l"].update(tLim).get();
+            auto [tPPrM, tPPrS] = tInternalStats["p"].update(tPP).get();
+
+            if (mpi.rank == 0)
+            {
+                auto fmt = log().flags();
+                std::string formatStringMain = "";
+                for (auto &s : config.outputControl.consoleMainOutputFormatInternal)
+                    formatStringMain += s;
+                log() << fmt::format(formatStringMain +
+                                         "  "s +
+                                         (config.outputControl.consoleOutputMode == 1
+                                              ? "WallFlux {termYellow}{wallFlux:.6e}{termReset} CL,CD,AoA [{CLCur:.6e},{CDCur:.6e},{AOACur:.2e}]"s
+                                              : ""s),
+                                     DNDS_FMT_ARG(step),
+                                     DNDS_FMT_ARG(iStep),
+                                     DNDS_FMT_ARG(iter),
+                                     fmt::arg("resRel", resRel.transpose()),
+                                     fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
+                                     DNDS_FMT_ARG(tSimu),
+                                     DNDS_FMT_ARG(curDtImplicit),
+                                     DNDS_FMT_ARG(curDtMin),
+                                     DNDS_FMT_ARG(CFLNow),
+                                     DNDS_FMT_ARG(nLimInc),
+                                     DNDS_FMT_ARG(alphaMinInc),
+                                     DNDS_FMT_ARG(nLimBeta),
+                                     DNDS_FMT_ARG(minBeta),
+                                     DNDS_FMT_ARG(nLimAlpha),
+                                     DNDS_FMT_ARG(minAlpha),
+                                     DNDS_FMT_ARG(telapsed), DNDS_FMT_ARG(telapsedM),
+                                     DNDS_FMT_ARG(trec), DNDS_FMT_ARG(trecM),
+                                     DNDS_FMT_ARG(trhs), DNDS_FMT_ARG(trhsM),
+                                     DNDS_FMT_ARG(tcomm), DNDS_FMT_ARG(tcommM),
+                                     DNDS_FMT_ARG(tLim), DNDS_FMT_ARG(tLimM),
+                                     DNDS_FMT_ARG(tPP), DNDS_FMT_ARG(tPPrM),
+                                     DNDS_FMT_ARG(tLimiterA),
+                                     DNDS_FMT_ARG(tLimiterB),
+                                     DNDS_FMT_ARG(tWall),
+                                     DNDS_FMT_ARG(CLCur),
+                                     DNDS_FMT_ARG(CDCur),
+                                     DNDS_FMT_ARG(AOACur),
+                                     fmt::arg("termRed", TermColor::Red),
+                                     fmt::arg("termBlue", TermColor::Blue),
+                                     fmt::arg("termGreen", TermColor::Green),
+                                     fmt::arg("termCyan", TermColor::Cyan),
+                                     fmt::arg("termYellow", TermColor::Yellow),
+                                     fmt::arg("termBold", TermColor::Bold),
+                                     fmt::arg("termReset", TermColor::Reset));
+                log() << std::endl;
+                log().setf(fmt);
+
+                // std::string delimC = " ";
+                // logErr
+                //     << std::left
+                //     << step << delimC
+                //     << std::left
+                //     << iter << delimC
+                //     << std::left
+                //     << std::setprecision(config.outputControl.nPrecisionLog) << std::scientific
+                //     << res.transpose() << delimC
+                //     << tSimu << delimC
+                //     << curDtMin << delimC
+                //     << real(eval.nFaceReducedOrder) << delimC
+                //     << eval.fluxWallSum.transpose() << delimC
+                //     << (nLimInc) << delimC << (alphaMinInc) << delimC
+                //     << (nLimBeta) << delimC << (minBeta) << delimC
+                //     << (nLimAlpha) << delimC << (minAlpha) << delimC
+                //     << std::endl;
+
+                // std::vector<std::string> logfileOutputTitles{
+                //     "step", "iStep", "iter", "tSimu",
+                //     "res", "curDtImplicit", "curDtMin", "CFLNow",
+                //     "nLimInc", "alphaMinInc",
+                //     "nLimBeta", "minBeta",
+                //     "nLimAlpha", "minAlpha",
+                //     "tWall", "telapsed", "trec", "trhs", "tcomm", "tLim", "tLimiterA", "tLimiterB",
+                //     "fluxWall", "CL", "CD", "AoA"};
+                auto &fluxWall = eval.fluxWallSum;
+                auto &logErrVal = std::get<1>(logErr);
+#define DNDS_FILL_IN_LOG_ERR_VAL(v) FillLogValue(logErrVal, #v, v)
+                DNDS_FILL_IN_LOG_ERR_VAL(step);
+                DNDS_FILL_IN_LOG_ERR_VAL(iStep);
+                DNDS_FILL_IN_LOG_ERR_VAL(iter);
+                DNDS_FILL_IN_LOG_ERR_VAL(tSimu);
+                DNDS_FILL_IN_LOG_ERR_VAL(res);
+                DNDS_FILL_IN_LOG_ERR_VAL(curDtImplicit);
+                DNDS_FILL_IN_LOG_ERR_VAL(curDtMin);
+                DNDS_FILL_IN_LOG_ERR_VAL(CFLNow);
+
+                DNDS_FILL_IN_LOG_ERR_VAL(nLimInc);
+                DNDS_FILL_IN_LOG_ERR_VAL(alphaMinInc);
+                DNDS_FILL_IN_LOG_ERR_VAL(nLimBeta);
+                DNDS_FILL_IN_LOG_ERR_VAL(minBeta);
+                DNDS_FILL_IN_LOG_ERR_VAL(nLimAlpha);
+                DNDS_FILL_IN_LOG_ERR_VAL(minAlpha);
+
+                DNDS_FILL_IN_LOG_ERR_VAL(tWall);
+                DNDS_FILL_IN_LOG_ERR_VAL(telapsed);
+                DNDS_FILL_IN_LOG_ERR_VAL(trec);
+                DNDS_FILL_IN_LOG_ERR_VAL(trhs);
+                DNDS_FILL_IN_LOG_ERR_VAL(tcomm);
+                DNDS_FILL_IN_LOG_ERR_VAL(tLim);
+                DNDS_FILL_IN_LOG_ERR_VAL(tLimiterA);
+                DNDS_FILL_IN_LOG_ERR_VAL(tLimiterB);
+
+                DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
+                real CL{CLCur}, CD{CDCur}, AoA(AOACur);
+                DNDS_FILL_IN_LOG_ERR_VAL(CL);
+                DNDS_FILL_IN_LOG_ERR_VAL(CD);
+                DNDS_FILL_IN_LOG_ERR_VAL(AoA);
+#undef DNDS_FILL_IN_LOG_ERR_VAL
+
+                std::get<0>(logErr)->WriteLine(std::get<1>(logErr), config.outputControl.nPrecisionLog);
+
+                FillLogValue(logErrVal, "step", step);
+
+                eval.ConsoleOutputBndIntegrations();
+                eval.BndIntegrationLogWriteLine(
+                    config.dataIOControl.getOutLogName() + "_" + output_stamp,
+                    step, iStep, iter);
+            }
+            tstartInternal = MPI_Wtime();
+            Timer().clearAllTimer();
+        }
+
+        if (iter % config.outputControl.nDataOutInternal == 0)
+        {
+            eval.FixUMaxFilter(u);
+            PrintData(
+                config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step) + "_" + std::to_string(iter),
+                config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step), // internal series
+                [&](index iCell)
+                { return ode->getLatestRHS()[iCell](0); },
+                addOutList,
+                eval, tSimu);
+            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
+                                 u, uRec);
+        }
+        if ((iter % config.outputControl.nDataOutCInternal == 0) &&
+            !(config.outputControl.lazyCoverDataOutput && (iter % config.outputControl.nDataOutInternal == 0)))
+        {
+            eval.FixUMaxFilter(u);
+            PrintData(
+                config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                "",
+                [&](index iCell)
+                { return ode->getLatestRHS()[iCell](0); },
+                addOutList,
+                eval, tSimu);
+            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                                 u, uRec);
+        }
+        if (iter % config.outputControl.nRestartOutInternal == 0)
+        {
+            config.restartState.iStep = step;
+            config.restartState.iStepInternal = iter;
+            PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + std::to_string(step) + "_" + std::to_string(iter));
+        }
+        if ((iter % config.outputControl.nRestartOutCInternal == 0) &&
+            !(config.outputControl.lazyCoverDataOutput && (iter % config.outputControl.nRestartOutInternal == 0)))
+        {
+            config.restartState.iStep = step;
+            config.restartState.iStepInternal = iter;
+            PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + "C");
+        }
+        if (iter >= config.implicitCFLControl.nCFLRampStart && iter <= config.implicitCFLControl.nCFLRampLength + config.implicitCFLControl.nCFLRampStart)
+        {
+            real inter = real(iter - config.implicitCFLControl.nCFLRampStart) / config.implicitCFLControl.nCFLRampLength;
+            real logCFL = std::log(config.implicitCFLControl.CFL) + (std::log(config.implicitCFLControl.CFLRampEnd / config.implicitCFLControl.CFL) * inter);
+            CFLNow = std::exp(logCFL);
+        }
+        if (ifStop || iter > config.convergenceControl.nTimeStepInternal) //! TODO: reconstruct the framework of ODE-top-level-control
+        {
+            CFLNow = config.implicitCFLControl.CFL;
+        }
+        // return resRel.maxCoeff() < config.convergenceControl.rhsThresholdInternal;
+        return ifStop;
+    }
+
+    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    bool EulerSolver<model>::functor_fmainloop(RunningEnvironment &runningEnvironment)
+    {
+        using namespace std::literals;
+        DNDS_EULERSOLVER_RUNNINGENV_GET_REF_LIST
+        auto initUDOF = [&](ArrayDOFV<nVarsFixed> &uu)
+        { vfv->BuildUDof(uu, nVars); };
+        auto initUREC = [&](ArrayRECV<nVarsFixed> &uu)
+        { vfv->BuildURec(uu, nVars); };
+#define DNDS_EULER_SOLVER_GET_TEMP_UDOF(name)      \
+    auto __p##name = uPool.getAllocInit(initUDOF); \
+    auto &name = *__p##name;
+
+        tSimu += curDtImplicit;
+        if (ifOutT)
+            tSimu = nextTout;
+        Eigen::VectorFMTSafe<real, -1> res(nVars);
+        eval.EvaluateNorm(res, ode->getLatestRHS(), 1, config.convergenceControl.useVolWiseResidual);
+        if (stepCount == 0 && resBaseC.norm() == 0)
+            resBaseC = res;
+
+        if (config.timeAverageControl.enabled)
+        {
+            DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
+            eval.MeanValueCons2Prim(u, uTemp); // could use time-step-mean-u instead of latest-u
+            eval.TimeAverageAddition(uTemp, wAveraged, curDtImplicit, tAverage);
+        }
+
+        real CLCur{0.0}, CDCur{0.0}, AOACur{0.0};
+
+        if (step % config.outputControl.nConsoleCheck == 0)
+        {
+            double tWall = MPI_Wtime();
+            real telapsed = MPI_Wtime() - tstart;
+            bool useCollectiveTimer = config.outputControl.useCollectiveTimer;
+            real tcomm = Timer().getTimerColOrLoc(PerformanceTimer::Comm, mpi, useCollectiveTimer);
+            real tLimiterA = Timer().getTimerColOrLoc(PerformanceTimer::LimiterA, mpi, useCollectiveTimer);
+            real tLimiterB = Timer().getTimerColOrLoc(PerformanceTimer::LimiterB, mpi, useCollectiveTimer);
+            real trhs = Timer().getTimerColOrLoc(PerformanceTimer::RHS, mpi, useCollectiveTimer);
+            real trec = Timer().getTimerColOrLoc(PerformanceTimer::Reconstruction, mpi, useCollectiveTimer);
+            real tLim = Timer().getTimerColOrLoc(PerformanceTimer::Limiter, mpi, useCollectiveTimer);
+
+            tcomm = tInternalStats["c"].update(tcomm).getSum();
+            trhs = tInternalStats["r"].update(trhs).getSum();
+            trec = tInternalStats["v"].update(trec).getSum();
+            tLim = tInternalStats["l"].update(tLim).getSum();
+            auto tPPr = tInternalStats["p"].getSum() + Timer().getTimerColOrLoc(PerformanceTimer::PositivityOuter, mpi, useCollectiveTimer);
+            if (mpi.rank == 0)
+            {
+                auto format = log().flags();
+                std::string formatStringMain = "";
+                for (auto &s : config.outputControl.consoleMainOutputFormat)
+                    formatStringMain += s;
+                log() << fmt::format(formatStringMain +
+                                         "  "s +
+                                         (config.outputControl.consoleOutputMode == 1
+                                              ? "WallFlux {termYellow}{wallFlux:.6e}{termReset}"s
+                                              : ""s),
+                                     DNDS_FMT_ARG(step),
+                                     // DNDS_FMT_ARG(iStep),
+                                     // DNDS_FMT_ARG(iter),
+                                     fmt::arg("resRel", (res.array() / (resBaseC.array() + verySmallReal)).transpose()),
+                                     fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
+                                     DNDS_FMT_ARG(tSimu),
+                                     DNDS_FMT_ARG(curDtImplicit),
+                                     DNDS_FMT_ARG(curDtMin),
+                                     DNDS_FMT_ARG(CFLNow),
+                                     DNDS_FMT_ARG(nLimInc),
+                                     DNDS_FMT_ARG(alphaMinInc),
+                                     DNDS_FMT_ARG(nLimBeta),
+                                     DNDS_FMT_ARG(minBeta),
+                                     DNDS_FMT_ARG(nLimAlpha),
+                                     DNDS_FMT_ARG(minAlpha),
+                                     DNDS_FMT_ARG(telapsed),
+                                     DNDS_FMT_ARG(trec),
+                                     DNDS_FMT_ARG(trhs),
+                                     DNDS_FMT_ARG(tcomm),
+                                     DNDS_FMT_ARG(tLim),
+                                     DNDS_FMT_ARG(tPPr),
+                                     DNDS_FMT_ARG(tLimiterA),
+                                     DNDS_FMT_ARG(tLimiterB),
+                                     DNDS_FMT_ARG(tWall),
+                                     fmt::arg("termRed", TermColor::Red),
+                                     fmt::arg("termBlue", TermColor::Blue),
+                                     fmt::arg("termGreen", TermColor::Green),
+                                     fmt::arg("termCyan", TermColor::Cyan),
+                                     fmt::arg("termYellow", TermColor::Yellow),
+                                     fmt::arg("termBold", TermColor::Bold),
+                                     fmt::arg("termReset", TermColor::Reset));
+                log() << std::endl;
+                log().setf(format);
+                auto &fluxWall = eval.fluxWallSum;
+                auto &logErrVal = std::get<1>(logErr);
+                int iStep{-1}, iter{-1};
+#define DNDS_FILL_IN_LOG_ERR_VAL(v) FillLogValue(logErrVal, #v, v)
+                DNDS_FILL_IN_LOG_ERR_VAL(step);
+                DNDS_FILL_IN_LOG_ERR_VAL(iStep);
+                DNDS_FILL_IN_LOG_ERR_VAL(iter);
+                DNDS_FILL_IN_LOG_ERR_VAL(tSimu);
+                DNDS_FILL_IN_LOG_ERR_VAL(res);
+                DNDS_FILL_IN_LOG_ERR_VAL(curDtImplicit);
+                DNDS_FILL_IN_LOG_ERR_VAL(curDtMin);
+                DNDS_FILL_IN_LOG_ERR_VAL(CFLNow);
+
+                DNDS_FILL_IN_LOG_ERR_VAL(nLimInc);
+                DNDS_FILL_IN_LOG_ERR_VAL(alphaMinInc);
+                DNDS_FILL_IN_LOG_ERR_VAL(nLimBeta);
+                DNDS_FILL_IN_LOG_ERR_VAL(minBeta);
+                DNDS_FILL_IN_LOG_ERR_VAL(nLimAlpha);
+                DNDS_FILL_IN_LOG_ERR_VAL(minAlpha);
+
+                DNDS_FILL_IN_LOG_ERR_VAL(tWall);
+                DNDS_FILL_IN_LOG_ERR_VAL(telapsed);
+                DNDS_FILL_IN_LOG_ERR_VAL(trec);
+                DNDS_FILL_IN_LOG_ERR_VAL(trhs);
+                DNDS_FILL_IN_LOG_ERR_VAL(tcomm);
+                DNDS_FILL_IN_LOG_ERR_VAL(tLim);
+                DNDS_FILL_IN_LOG_ERR_VAL(tLimiterA);
+                DNDS_FILL_IN_LOG_ERR_VAL(tLimiterB);
+
+                DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
+                real CL{CLCur}, CD{CDCur}, AoA(AOACur);
+                DNDS_FILL_IN_LOG_ERR_VAL(CL);
+                DNDS_FILL_IN_LOG_ERR_VAL(CD);
+                DNDS_FILL_IN_LOG_ERR_VAL(AoA);
+#undef DNDS_FILL_IN_LOG_ERR_VAL
+                std::get<0>(logErr)->WriteLine(std::get<1>(logErr), config.outputControl.nPrecisionLog);
+
+                eval.ConsoleOutputBndIntegrations();
+                eval.BndIntegrationLogWriteLine(
+                    config.dataIOControl.getOutLogName() + "_" + output_stamp,
+                    step, -1, -1);
+            }
+            tstart = MPI_Wtime();
+            Timer().clearAllTimer();
+            for (auto &s : tInternalStats)
+                s.second.clear();
+        }
+        if (step == nextStepOutC)
+        {
+            if (!(config.outputControl.lazyCoverDataOutput && (step == nextStepOut)))
+            {
+                eval.FixUMaxFilter(u);
+                PrintData(
+                    config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                    "",
+                    [&](index iCell)
+                    { return ode->getLatestRHS()[iCell](0); },
+                    addOutList,
+                    eval, tSimu);
+                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                                     u, uRec);
+            }
+            nextStepOutC += config.outputControl.nDataOutC;
+        }
+        if (step == nextStepOut)
+        {
+            eval.FixUMaxFilter(u);
+            PrintData(
+                config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
+                config.dataIOControl.outPltName + "_" + output_stamp, // physical ts series
+                [&](index iCell)
+                { return ode->getLatestRHS()[iCell](0); },
+                addOutList,
+                eval, tSimu);
+            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
+                                 u, uRec);
+            nextStepOut += config.outputControl.nDataOut;
+        }
+        if (step == nextStepOutAverageC)
+        {
+            if (!(config.outputControl.lazyCoverDataOutput && (step == nextStepOutAverage)))
+            {
+                DNDS_assert(config.timeAverageControl.enabled);
+                eval.MeanValuePrim2Cons(wAveraged, uAveraged);
+                eval.FixUMaxFilter(uAveraged);
+                PrintData(
+                    config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + "C",
+                    "",
+                    [&](index iCell)
+                    { return ode->getLatestRHS()[iCell](0); },
+                    addOutList,
+                    eval, tSimu,
+                    PrintDataTimeAverage);
+            }
+            nextStepOutAverageC += config.outputControl.nTimeAverageOutC;
+        }
+        if (step == nextStepOutAverage)
+        {
+            DNDS_assert(config.timeAverageControl.enabled);
+            eval.MeanValuePrim2Cons(wAveraged, uAveraged);
+            eval.FixUMaxFilter(uAveraged);
+            PrintData(
+                config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + std::to_string(step),
+                config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp, // time average series
+                [&](index iCell)
+                { return ode->getLatestRHS()[iCell](0); },
+                addOutList,
+                eval, tSimu,
+                PrintDataTimeAverage);
+            nextStepOutAverage += config.outputControl.nTimeAverageOut;
+        }
+        if (step == nextStepRestartC)
+        {
+            if (!(config.outputControl.lazyCoverDataOutput && (step == nextStepRestart)))
+            {
+                config.restartState.iStep = step;
+                config.restartState.iStepInternal = -1;
+                PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + "C");
+            }
+            nextStepRestartC += config.outputControl.nRestartOutC;
+        }
+        if (step == nextStepRestart)
+        {
+            config.restartState.iStep = step;
+            config.restartState.iStepInternal = -1;
+            PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + std::to_string(step));
+            nextStepRestart += config.outputControl.nRestartOut;
+        }
+        if (ifOutT)
+        {
+            eval.FixUMaxFilter(u);
+            PrintData(
+                config.dataIOControl.outPltName + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
+                config.dataIOControl.outPltName + "_" + output_stamp, // physical ts series
+                [&](index iCell)
+                { return ode->getLatestRHS()[iCell](0); },
+                addOutList,
+                eval, tSimu);
+            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
+                                 u, uRec);
+            nextTout += config.outputControl.tDataOut;
+            if (nextTout >= config.timeMarchControl.tEnd)
+                nextTout = config.timeMarchControl.tEnd;
+        }
+        if ((eval.settings.specialBuiltinInitializer == 2 ||
+             eval.settings.specialBuiltinInitializer == 203) &&
+            (step % config.outputControl.nConsoleCheck == 0)) // IV problem special: reduction on solution
+        {
+            auto FVal = [&](const Geom::tPoint &p, real t)
+            {
+                switch (eval.settings.specialBuiltinInitializer)
+                {
+                case 203:
+                    return SpecialFields::IsentropicVortex10(eval, p, t, nVars, 10.0828);
+                default:
+                case 2:
+                    return SpecialFields::IsentropicVortex10(eval, p, t, nVars, 5);
+                }
+            };
+            auto FWeight = [&](const Geom::tPoint &p, real t) -> real
+            {
+                // real xyOrig = t;
+                // real xCC = float_mod(p(0) - xyOrig, 10);
+                // real yCC = float_mod(p(1) - xyOrig, 10);
+                // return std::abs(xCC - 5.0) <= 2 && std::abs(yCC - 5.0) <= 2 ? 1.0 : 0.0;
+                return 1.0;
+            };
+            Eigen::Vector<real, -1> err1, errInf;
+            eval.EvaluateRecNorm(
+                err1, u, uRec, 1, true,
+                FVal, FWeight,
+                tSimu);
+            eval.EvaluateRecNorm(
+                errInf, u, uRec, 1000, true,
+                FVal, FWeight,
+                tSimu);
+
+            if (mpi.rank == 0)
+            {
+                log() << "=== Mean Error IV: [" << std::scientific
+                      << std::setprecision(config.outputControl.nPrecisionConsole + 4) << err1(0) << ", "
+                      << err1(0) / vfv->GetGlobalVol() << ", "
+                      << errInf(0)
+                      << "]" << std::endl;
+            }
+        }
+        if (config.implicitReconstructionControl.zeroGrads)
+            uRec.setConstant(0.0), gradIsZero = true;
+
+        stepCount++;
+
+        return tSimu >= config.timeMarchControl.tEnd;
     }
 }

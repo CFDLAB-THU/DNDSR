@@ -34,11 +34,14 @@ namespace DNDS::Euler
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         using namespace std::literals;
 
+        auto runningEnvironment = RunningEnvironment();
+        InitializeRunningEnvironment(runningEnvironment);
+        DNDS_EULERSOLVER_RUNNINGENV_GET_REF_LIST
+
         DNDS_MPI_InsertCheck(mpi, "Implicit 1 nvars " + std::to_string(nVars));
         /*******************************************************/
         /*                 CHECK MESH                          */
         /*******************************************************/
-        EulerEvaluator<model> &eval = *pEval;
         auto hashCoord = mesh->coords.hash();
         if (mpi.rank == 0)
         {
@@ -55,11 +58,6 @@ namespace DNDS::Euler
         }
 
         /*******************************************************/
-        /*                   LOGERR STREAM                     */
-        /*******************************************************/
-        auto logErr = LogErrInitialize();
-
-        /*******************************************************/
         /*              DIRECT FACTORIZATION                   */
         /*******************************************************/
 
@@ -69,133 +67,6 @@ namespace DNDS::Euler
         {
             DNDS_MAKE_SSP(JLocalLU, eval.symLU, nVars);
         }
-
-        /*******************************************************/
-        /*                 PICK ODE SOLVER                     */
-        /*******************************************************/
-
-        ssp<ODE::ImplicitDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>> ode;
-        auto buildDOF = [&](ArrayDOFV<nVarsFixed> &data)
-        {
-            vfv->BuildUDof(data, nVars);
-        };
-        auto buildScalar = [&](ArrayDOFV<1> &data)
-        {
-            vfv->BuildUDof(data, 1);
-        };
-
-        if (config.timeMarchControl.steadyQuit)
-        {
-            if (mpi.rank == 0)
-                log() << "Using steady!" << std::endl;
-            config.timeMarchControl.odeCode = 1; // To bdf;
-            config.timeMarchControl.nTimeStep = 1;
-        }
-        switch (config.timeMarchControl.odeCode)
-        {
-        case 0: // esdirk4
-            if (mpi.rank == 0)
-                log() << "=== ODE: ESDIRK4 " << std::endl;
-            ode = std::make_shared<ODE::ImplicitSDIRK4DualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
-                mesh->NumCell(),
-                buildDOF, buildScalar,
-                1); // 1 for esdirk
-            break;
-        case 101: // sdirk4
-            if (mpi.rank == 0)
-                log() << "=== ODE: SSP-SDIRK4 " << std::endl;
-            ode = std::make_shared<ODE::ImplicitSDIRK4DualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
-                mesh->NumCell(),
-                buildDOF, buildScalar,
-                0);
-            break;
-        case 1: // BDF2 // Backward Euler
-        case 103:
-            if (mpi.rank == 0 && config.timeMarchControl.odeCode == 1)
-                log() << "=== ODE: BDF2 " << std::endl;
-            if (mpi.rank == 0 && config.timeMarchControl.odeCode == 103)
-                log() << "=== ODE: Backward Euler " << std::endl;
-            ode = std::make_shared<ODE::ImplicitVBDFDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
-                mesh->NumCell(),
-                buildDOF, buildScalar,
-                config.timeMarchControl.odeCode == 1 ? 2 : 1);
-            break;
-        case 102: // VBDF2
-            if (mpi.rank == 0)
-                log() << "=== ODE: VBDF2 " << std::endl;
-            ode = std::make_shared<ODE::ImplicitVBDFDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
-                mesh->NumCell(),
-                buildDOF, buildScalar,
-                2);
-            break;
-        case 2: // SSPRK
-            if (mpi.rank == 0)
-                log() << "=== ODE: SSPRK4 " << std::endl;
-            ode = std::make_shared<ODE::ExplicitSSPRK3TimeStepAsImplicitDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
-                mesh->NumCell(),
-                buildDOF, buildScalar,
-                false); // TODO: add local stepping options
-            break;
-        case 401: // H3S
-            if (mpi.rank == 0)
-                log() << "=== ODE: Hermite3 (simple jacobian) " << std::endl;
-            ode = std::make_shared<ODE::ImplicitHermite3SimpleJacobianDualStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
-                mesh->NumCell(),
-                buildDOF, buildScalar,
-                config.timeMarchControl.odeSetting1 == 0 ? 0.55 : config.timeMarchControl.odeSetting1,
-                std::round(config.timeMarchControl.odeSetting2),                                         // Backward Euler Starter
-                0,                                                                                       // method
-                config.timeMarchControl.odeSetting3 == 0 ? 0.9146 : config.timeMarchControl.odeSetting3, // thetaM1
-                std::round(config.timeMarchControl.odeSetting4)                                          // mask
-            );
-            break;
-        default:
-            DNDS_assert_info(false, "no such ode code");
-        }
-        if (config.timeMarchControl.useImplicitPP)
-        {
-            DNDS_assert(config.timeMarchControl.odeCode == 1 || config.timeMarchControl.odeCode == 102);
-        }
-
-        /*******************************************************/
-        /*                 INIT GMRES AND PCG                  */
-        /*******************************************************/
-
-        std::unique_ptr<tGMRES_u> gmres;
-        std::unique_ptr<tGMRES_uRec> gmresRec;
-        std::unique_ptr<tPCG_uRec> pcgRec;
-        std::unique_ptr<tPCG_uRec> pcgRec1;
-
-        if (config.linearSolverControl.gmresCode == 1 ||
-            config.linearSolverControl.gmresCode == 2)
-            gmres = std::make_unique<tGMRES_u>(
-                config.linearSolverControl.nGmresSpace,
-                [&](decltype(u) &data)
-                {
-                    vfv->BuildUDof(data, nVars);
-                });
-
-        if (config.implicitReconstructionControl.recLinearScheme == 1)
-            gmresRec = std::make_unique<tGMRES_uRec>(
-                config.implicitReconstructionControl.nGmresSpace,
-                [&](decltype(uRec) &data)
-                {
-                    vfv->BuildURec(data, nVars);
-                });
-
-        if (config.implicitReconstructionControl.recLinearScheme == 2)
-            pcgRec = std::make_unique<tPCG_uRec>(
-                [&](decltype(uRec) &data)
-                {
-                    vfv->BuildURec(data, nVars);
-                });
-
-        if (config.implicitReconstructionControl.recLinearScheme == 2 || config.timeMarchControl.odeCode == 401)
-            pcgRec1 = std::make_unique<tPCG_uRec>(
-                [&](decltype(uRec) &data)
-                {
-                    vfv->BuildURec(data, nVars);
-                });
 
         // fmt::print("pEval is {}", (void*)(pEval.get()));
 
@@ -219,7 +90,7 @@ namespace DNDS::Euler
         }
         OutputPicker outputPicker;
         eval.InitializeOutputPicker(outputPicker, {u, uRec, betaPP, alphaPP});
-        tAdditionalCellScalarList addOutList = outputPicker.getSubsetList(config.dataIOControl.outCellScalarNames);
+        addOutList = outputPicker.getSubsetList(config.dataIOControl.outCellScalarNames);
 
         /*******************************************************/
         /*                 TEMPORARY Us                        */
@@ -237,45 +108,10 @@ namespace DNDS::Euler
         /*******************************************************/
         /*                 SOLVER MAJOR START                  */
         /*******************************************************/
+        tstart = MPI_Wtime();
+        tstartInternal = tstart;
 
-        double tstart = MPI_Wtime();
-        double tstartInternal = tstart;
-        std::map<std::string, ScalarStatistics> tInternalStats;
-        int stepCount = 0;
-        Eigen::VectorFMTSafe<real, -1> resBaseC;
-        Eigen::VectorFMTSafe<real, -1> resBaseCInternal;
-        resBaseC.resize(nVars);
-        resBaseCInternal.resize(nVars);
-        resBaseC.setConstant(config.convergenceControl.res_base);
-
-        real tSimu = 0.0;
-        real tAverage = 0.0;
-        real nextTout = std::min(config.outputControl.tDataOut, config.timeMarchControl.tEnd); // ensures the destination time output
-        int nextStepOut = config.outputControl.nDataOut;
-        int nextStepOutC = config.outputControl.nDataOutC;
-        int nextStepRestart = config.outputControl.nRestartOut;
-        int nextStepRestartC = config.outputControl.nRestartOutC;
-        int nextStepOutAverage = config.outputControl.nTimeAverageOut;
-        int nextStepOutAverageC = config.outputControl.nTimeAverageOutC;
         Timer().clearAllTimer();
-
-        // *** Loop variables
-        real CFLNow = config.implicitCFLControl.CFL;
-        bool ifOutT = false;
-        real curDtMin;
-        real curDtImplicit = config.timeMarchControl.dtImplicit;
-        std::vector<real> curDtImplicitHistory;
-        int step;
-        bool gradIsZero = true;
-
-        index nLimBeta = 0;
-        index nLimAlpha = 0;
-        real minAlpha = 1;
-        real minBeta = 1;
-        index nLimInc = 0;
-        real alphaMinInc = 1;
-
-        int dtIncreaseCounter = 0;
 
         DNDS_MPI_InsertCheck(mpi, "Implicit 2 nvars " + std::to_string(nVars));
 
@@ -849,7 +685,7 @@ namespace DNDS::Euler
         };
 
         auto fsolve = [&](ArrayDOFV<nVarsFixed> &cx, ArrayDOFV<nVarsFixed> &cres, ArrayDOFV<nVarsFixed> &resOther, ArrayDOFV<1> &dTau,
-                          real dt, real alphaDiag, ArrayDOFV<nVarsFixed> &cxInc, int iter, int uPos)
+                          real dt, real alphaDiag, ArrayDOFV<nVarsFixed> &cxInc, int iter, real ct, int uPos)
         {
             {
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
@@ -928,60 +764,117 @@ namespace DNDS::Euler
             // }
             cxInc.setConstant(0.0);
             this->solveLinear(alphaDiag, cres, cx, cxInc, uRecC, uRecIncC,
-                              JDC, *gmres);
-
-            if (config.linearSolverControl.multiGridLP == 1 && iter > config.linearSolverControl.multiGridLPStartIter)
+                              JDC, *gmres, 0);
+            // cxInc: in: full increment from previous level; out: full increment form current level
+            const auto solve_multigrid = [&](TDof &x_base, TDof &cxInc, TDof &resOther, int mgLevelInit, int mgLevelMax)
             {
-                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uMG1)
-                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uMG1Init)
-                DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsMG1)
                 uRecNew.setConstant(0.0);
-                uMG1 = cx;
-                // std::cout << "here0" << std::endl;
-                fincrement(uMG1, cxInc, 1.0, uPos);
-                frhs(cres, uMG1, dTauC, iter, 0.0 /* ! make this ct correct!*/, uPos);
-                cres *= alphaDiag;
-                cres += resOther;
-                cres.addTo(uMG1, -1. / dt);
-                uMG1Init = uMG1;
-                for (int iIterMG = 1; iIterMG <= config.linearSolverControl.multiGridLPInnerNIter; iIterMG++)
-                {
-                    DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
-                    eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
-                                     config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
-                                     betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu,
-                                     TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
-                    rhsTemp.trans.startPersistentPull();
-                    rhsTemp.trans.waitPersistentPull();
-                    if (iIterMG == 1)
-                        rhsMG1 = rhsTemp;
-                    rhsTemp -= rhsMG1;
-                    rhsTemp *= alphaDiag;
-                    rhsTemp += cres;
-                    rhsTemp.addTo(uMG1Init, 1. / dt);
-                    rhsTemp.addTo(uMG1, -1. / dt); // todo: add rhsfpphere
-                    fdtau(uMG1, dTauC, alphaDiag, uPos);
-                    eval.LUSGSMatrixInit(JDTmp, JSourceTmp,
-                                         dTauC, dt, alphaDiag,
-                                         uMG1, uRecNew,
-                                         0,
-                                         tSimu);
-                    Eigen::VectorFMTSafe<real, -1> resNorm;
-                    eval.EvaluateNorm(resNorm, rhsTemp);
-                    if (mpi.rank == 0)
-                        if (iIterMG % config.linearSolverControl.multiGridLPInnerNSee == 0)
-                            log() << fmt::format("MG Level LP [{}] iter [{}] res [:.3e]", 1, iIterMG, resNorm) << std::endl;
-                    cxInc.setConstant(0.0);
-                    this->solveLinear(alphaDiag, rhsTemp, uMG1, cxInc, uRecNew, uRecNew,
-                                      JDTmp, *gmres);
-                    // cxInc *= -1;
-                    // std::cout << "here" << std::endl;
-                    fincrement(uMG1, cxInc, 1.0, uPos);
-                }
-                cxInc = uMG1;
-                cxInc -= cx;
+                // templated lambda recursion:
+                // https://stackoverflow.com/questions/2067988/how-to-make-a-recursive-lambda
+                // std::function<void(TDof &, TDof &, int, int)> solve_multigrid_impl;
+                // solve_multigrid_impl = [&](TDof &x_base, TDof &cxInc, int mgLevel, int mgLevelMax)
 
-                // alphaDiag *rhsTemp(x + xinc) == alphaDiag *rhsTemp(x) - cres
+                //  [&frhs, &fincrement, &fdtau, &initUDOF,
+                //                              &eval, &config = config, &dTauC, &cres, &resOther,
+                //                              &mpi = mpi, &JSourceTmp = JSourceTmp, &JDTmp = JDTmp,
+                //                              &uPool = uPool, &uRecNew = uRecNew, &uRec = uRec, &betaPP = betaPP, &alphaPP = alphaPP,
+                //                              &gmres, tSimu, solveLinear = solveLinear,
+                //                              alphaDiag, dt,
+                //                              iter, ct, uPos]
+                auto solve_multigrid_impl = [&](TDof &x_base, TDof &cxInc, TDof &resOther, int mgLevel, int mgLevelMax, auto &solve_multigrid_impl_ref) -> void
+                {
+                    DNDS_assert(mgLevel > 0 && mgLevel <= mgLevelMax);
+                    int curMGIter = config.linearSolverControl.coarseGridLinearSolverControlList.at(mgLevel - 1).multiGridNIter;
+                    if (curMGIter < 0)
+                        curMGIter = config.linearSolverControl.multiGridLPInnerNIter;
+                    DNDS_EULER_SOLVER_GET_TEMP_UDOF(uMG1)
+                    // DNDS_EULER_SOLVER_GET_TEMP_UDOF(uMG1Init)
+                    // DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsInitCurMG1)
+                    DNDS_EULER_SOLVER_GET_TEMP_UDOF(res0CurMG)
+                    // if (mgLevel == 2)
+                    //     return;
+                    uMG1 = x_base;
+                    // std::cout << "here0" << std::endl;
+                    fincrement(uMG1, cxInc, 1.0, uPos);
+                    if (mgLevel == 1)
+                        frhs(res0CurMG, uMG1, dTauC, iter, ct, uPos);
+                    else if (mgLevel == 2)
+                        eval.EvaluateRHS(res0CurMG, JSourceTmp, uMG1,
+                                         config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
+                                         betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
+                                         TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
+                    else
+                        DNDS_assert(false);
+                    res0CurMG *= alphaDiag;
+                    res0CurMG += resOther;
+                    // res0CurMG.addTo(uMG1, -1. / dt);
+                    // uMG1Init = uMG1;
+
+                    for (int iIterMG = 1; iIterMG <= curMGIter; iIterMG++)
+                    {
+                        DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
+                        if (mgLevel == 1)
+                            eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
+                                             config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
+                                             betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
+                                             TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
+                        else if (mgLevel == 2)
+                            eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
+                                             config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
+                                             betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
+                                             (TEval::RHS_Direct_2nd_Rec_1st_Conv * 1) | TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
+                        else
+                            DNDS_assert(false);
+                        rhsTemp.trans.startPersistentPull();
+                        rhsTemp.trans.waitPersistentPull();
+                        if (iIterMG == 1)
+                        {
+                            // rhsInitCurMG1 = rhsTemp;
+                            res0CurMG.addTo(rhsTemp, -alphaDiag);
+                        }
+                        rhsTemp *= alphaDiag;
+                        rhsTemp += res0CurMG;
+                        rhsTemp.addTo(uMG1, -1. / dt);
+                        // todo: add rhsfpphere
+                        // rhsTemp === alphaDiag * rhs(cur) - alphaDiag * rhs(at_step_1) - uMG1 / dt + uMG1Init / dt
+                        fdtau(uMG1, dTauC, alphaDiag, uPos); //! warning! dTauC is overwritten
+                        eval.LUSGSMatrixInit(JDTmp, JSourceTmp,
+                                             dTauC, dt, alphaDiag,
+                                             uMG1, uRecNew,
+                                             0,
+                                             tSimu);
+
+                        if (iIterMG % config.linearSolverControl.multiGridLPInnerNSee == 0)
+                        {
+                            Eigen::VectorFMTSafe<real, -1> resNorm;
+                            eval.EvaluateNorm(resNorm, rhsTemp);
+                            if (mpi.rank == 0)
+                                log() << fmt::format("MG Level LP [{}] iter [{}] res [{:.3e}]", mgLevel, iIterMG, resNorm.transpose()) << std::endl;
+                        }
+                        cxInc.setConstant(0.0);
+                        solveLinear(alphaDiag, rhsTemp, uMG1, cxInc, uRecNew, uRecNew,
+                                    JDTmp, *gmres, 1);
+                        if (mgLevel < mgLevelMax)
+                            solve_multigrid_impl_ref(uMG1, cxInc, res0CurMG, mgLevel + 1, mgLevelMax, solve_multigrid_impl_ref);
+
+                        // solve_multigrid_impl(x_base, cxInc, mgLevel + 1, mgLevelMax);
+                        // cxInc *= -1;
+                        // std::cout << "here" << std::endl;
+                        fincrement(uMG1, cxInc, 1.0, uPos);
+                    }
+                    cxInc = uMG1;
+                    cxInc -= x_base;
+
+                    // alphaDiag *rhsTemp(x + xinc) - xinc / dt == alphaDiag *rhsTemp(x) - res_of_first
+                };
+                //! put recursion to tail or nested within each current level iter ?
+                solve_multigrid_impl(x_base, cxInc, resOther, mgLevelInit, mgLevelMax, solve_multigrid_impl);
+            };
+
+            if (config.linearSolverControl.multiGridLP >= 1 && iter > config.linearSolverControl.multiGridLPStartIter)
+            {
+                DNDS_assert(config.linearSolverControl.multiGridLP <= 2);
+                solve_multigrid(cx, cxInc, resOther, 1, config.linearSolverControl.multiGridLP);
             }
             // eval.FixIncrement(cx, cxInc);
             // !freeze something
@@ -1204,213 +1097,7 @@ namespace DNDS::Euler
 
         auto fstop = [&](int iter, ArrayDOFV<nVarsFixed> &cres, int iStep) -> bool
         {
-            // auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
-
-            Eigen::VectorFMTSafe<real, -1> res(nVars);
-            eval.EvaluateNorm(res, cres, 1, config.convergenceControl.useVolWiseResidual);
-            // if (iter == 1 && iStep == 1) // * using 1st rk step for reference
-            if (iter == 1)
-                resBaseCInternal = res;
-            else
-                resBaseCInternal = resBaseCInternal.array().max(res.array()); //! using max !
-            Eigen::VectorFMTSafe<real, -1> resRel = (res.array() / (resBaseCInternal.array() + verySmallReal)).matrix();
-            bool ifStop = resRel(0) < config.convergenceControl.rhsThresholdInternal; // ! using only rho's residual
-            if (iter < config.convergenceControl.nTimeStepInternalMin)
-                ifStop = false;
-            auto [CLCur, CDCur, AOACur] = eval.CLDriverGetIntegrationUpdate(iter);
-            if (iter % config.outputControl.nConsoleCheckInternal == 0 || iter > config.convergenceControl.nTimeStepInternal || ifStop)
-            {
-                double tWall = MPI_Wtime();
-                real telapsed = MPI_Wtime() - tstartInternal;
-                bool useCollectiveTimer = config.outputControl.useCollectiveTimer;
-                real tcomm = Timer().getTimerColOrLoc(PerformanceTimer::Comm, mpi, useCollectiveTimer);
-                real tLimiterA = Timer().getTimerColOrLoc(PerformanceTimer::LimiterA, mpi, useCollectiveTimer);
-                real tLimiterB = Timer().getTimerColOrLoc(PerformanceTimer::LimiterB, mpi, useCollectiveTimer);
-                real trhs = Timer().getTimerColOrLoc(PerformanceTimer::RHS, mpi, useCollectiveTimer);
-                real trec = Timer().getTimerColOrLoc(PerformanceTimer::Reconstruction, mpi, useCollectiveTimer);
-                real tLim = Timer().getTimerColOrLoc(PerformanceTimer::Limiter, mpi, useCollectiveTimer);
-                real tPP = Timer().getTimerColOrLoc(PerformanceTimer::Positivity, mpi, useCollectiveTimer);
-                auto [telapsedM, telapsedS] = tInternalStats["t"].update(telapsed).get();
-                auto [tcommM, tcommS] = tInternalStats["c"].update(tcomm).get();
-                auto [trhsM, trhsS] = tInternalStats["r"].update(trhs).get();
-                auto [trecM, trecS] = tInternalStats["v"].update(trec).get();
-                auto [tLimM, tLimS] = tInternalStats["l"].update(tLim).get();
-                auto [tPPrM, tPPrS] = tInternalStats["p"].update(tPP).get();
-
-                if (mpi.rank == 0)
-                {
-                    auto fmt = log().flags();
-                    std::string formatStringMain = "";
-                    for (auto &s : config.outputControl.consoleMainOutputFormatInternal)
-                        formatStringMain += s;
-                    log() << fmt::format(formatStringMain +
-                                             "  "s +
-                                             (config.outputControl.consoleOutputMode == 1
-                                                  ? "WallFlux {termYellow}{wallFlux:.6e}{termReset} CL,CD,AoA [{CLCur:.6e},{CDCur:.6e},{AOACur:.2e}]"s
-                                                  : ""s),
-                                         DNDS_FMT_ARG(step),
-                                         DNDS_FMT_ARG(iStep),
-                                         DNDS_FMT_ARG(iter),
-                                         fmt::arg("resRel", resRel.transpose()),
-                                         fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
-                                         DNDS_FMT_ARG(tSimu),
-                                         DNDS_FMT_ARG(curDtImplicit),
-                                         DNDS_FMT_ARG(curDtMin),
-                                         DNDS_FMT_ARG(CFLNow),
-                                         DNDS_FMT_ARG(nLimInc),
-                                         DNDS_FMT_ARG(alphaMinInc),
-                                         DNDS_FMT_ARG(nLimBeta),
-                                         DNDS_FMT_ARG(minBeta),
-                                         DNDS_FMT_ARG(nLimAlpha),
-                                         DNDS_FMT_ARG(minAlpha),
-                                         DNDS_FMT_ARG(telapsed), DNDS_FMT_ARG(telapsedM),
-                                         DNDS_FMT_ARG(trec), DNDS_FMT_ARG(trecM),
-                                         DNDS_FMT_ARG(trhs), DNDS_FMT_ARG(trhsM),
-                                         DNDS_FMT_ARG(tcomm), DNDS_FMT_ARG(tcommM),
-                                         DNDS_FMT_ARG(tLim), DNDS_FMT_ARG(tLimM),
-                                         DNDS_FMT_ARG(tPP), DNDS_FMT_ARG(tPPrM),
-                                         DNDS_FMT_ARG(tLimiterA),
-                                         DNDS_FMT_ARG(tLimiterB),
-                                         DNDS_FMT_ARG(tWall),
-                                         DNDS_FMT_ARG(CLCur),
-                                         DNDS_FMT_ARG(CDCur),
-                                         DNDS_FMT_ARG(AOACur),
-                                         fmt::arg("termRed", TermColor::Red),
-                                         fmt::arg("termBlue", TermColor::Blue),
-                                         fmt::arg("termGreen", TermColor::Green),
-                                         fmt::arg("termCyan", TermColor::Cyan),
-                                         fmt::arg("termYellow", TermColor::Yellow),
-                                         fmt::arg("termBold", TermColor::Bold),
-                                         fmt::arg("termReset", TermColor::Reset));
-                    log() << std::endl;
-                    log().setf(fmt);
-
-                    // std::string delimC = " ";
-                    // logErr
-                    //     << std::left
-                    //     << step << delimC
-                    //     << std::left
-                    //     << iter << delimC
-                    //     << std::left
-                    //     << std::setprecision(config.outputControl.nPrecisionLog) << std::scientific
-                    //     << res.transpose() << delimC
-                    //     << tSimu << delimC
-                    //     << curDtMin << delimC
-                    //     << real(eval.nFaceReducedOrder) << delimC
-                    //     << eval.fluxWallSum.transpose() << delimC
-                    //     << (nLimInc) << delimC << (alphaMinInc) << delimC
-                    //     << (nLimBeta) << delimC << (minBeta) << delimC
-                    //     << (nLimAlpha) << delimC << (minAlpha) << delimC
-                    //     << std::endl;
-
-                    // std::vector<std::string> logfileOutputTitles{
-                    //     "step", "iStep", "iter", "tSimu",
-                    //     "res", "curDtImplicit", "curDtMin", "CFLNow",
-                    //     "nLimInc", "alphaMinInc",
-                    //     "nLimBeta", "minBeta",
-                    //     "nLimAlpha", "minAlpha",
-                    //     "tWall", "telapsed", "trec", "trhs", "tcomm", "tLim", "tLimiterA", "tLimiterB",
-                    //     "fluxWall", "CL", "CD", "AoA"};
-                    auto &fluxWall = eval.fluxWallSum;
-                    auto &logErrVal = std::get<1>(logErr);
-#define DNDS_FILL_IN_LOG_ERR_VAL(v) FillLogValue(logErrVal, #v, v)
-                    DNDS_FILL_IN_LOG_ERR_VAL(step);
-                    DNDS_FILL_IN_LOG_ERR_VAL(iStep);
-                    DNDS_FILL_IN_LOG_ERR_VAL(iter);
-                    DNDS_FILL_IN_LOG_ERR_VAL(tSimu);
-                    DNDS_FILL_IN_LOG_ERR_VAL(res);
-                    DNDS_FILL_IN_LOG_ERR_VAL(curDtImplicit);
-                    DNDS_FILL_IN_LOG_ERR_VAL(curDtMin);
-                    DNDS_FILL_IN_LOG_ERR_VAL(CFLNow);
-
-                    DNDS_FILL_IN_LOG_ERR_VAL(nLimInc);
-                    DNDS_FILL_IN_LOG_ERR_VAL(alphaMinInc);
-                    DNDS_FILL_IN_LOG_ERR_VAL(nLimBeta);
-                    DNDS_FILL_IN_LOG_ERR_VAL(minBeta);
-                    DNDS_FILL_IN_LOG_ERR_VAL(nLimAlpha);
-                    DNDS_FILL_IN_LOG_ERR_VAL(minAlpha);
-
-                    DNDS_FILL_IN_LOG_ERR_VAL(tWall);
-                    DNDS_FILL_IN_LOG_ERR_VAL(telapsed);
-                    DNDS_FILL_IN_LOG_ERR_VAL(trec);
-                    DNDS_FILL_IN_LOG_ERR_VAL(trhs);
-                    DNDS_FILL_IN_LOG_ERR_VAL(tcomm);
-                    DNDS_FILL_IN_LOG_ERR_VAL(tLim);
-                    DNDS_FILL_IN_LOG_ERR_VAL(tLimiterA);
-                    DNDS_FILL_IN_LOG_ERR_VAL(tLimiterB);
-
-                    DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
-                    real CL{CLCur}, CD{CDCur}, AoA(AOACur);
-                    DNDS_FILL_IN_LOG_ERR_VAL(CL);
-                    DNDS_FILL_IN_LOG_ERR_VAL(CD);
-                    DNDS_FILL_IN_LOG_ERR_VAL(AoA);
-#undef DNDS_FILL_IN_LOG_ERR_VAL
-
-                    std::get<0>(logErr).WriteLine(std::get<1>(logErr), config.outputControl.nPrecisionLog);
-
-                    FillLogValue(logErrVal, "step", step);
-
-                    eval.ConsoleOutputBndIntegrations();
-                    eval.BndIntegrationLogWriteLine(
-                        config.dataIOControl.getOutLogName() + "_" + output_stamp,
-                        step, iStep, iter);
-                }
-                tstartInternal = MPI_Wtime();
-                Timer().clearAllTimer();
-            }
-
-            if (iter % config.outputControl.nDataOutInternal == 0)
-            {
-                eval.FixUMaxFilter(u);
-                PrintData(
-                    config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step) + "_" + std::to_string(iter),
-                    config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step), // internal series
-                    [&](index iCell)
-                    { return ode->getLatestRHS()[iCell](0); },
-                    addOutList,
-                    eval, tSimu);
-                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
-                                     u, uRec);
-            }
-            if ((iter % config.outputControl.nDataOutCInternal == 0) &&
-                !(config.outputControl.lazyCoverDataOutput && (iter % config.outputControl.nDataOutInternal == 0)))
-            {
-                eval.FixUMaxFilter(u);
-                PrintData(
-                    config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
-                    "",
-                    [&](index iCell)
-                    { return ode->getLatestRHS()[iCell](0); },
-                    addOutList,
-                    eval, tSimu);
-                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
-                                     u, uRec);
-            }
-            if (iter % config.outputControl.nRestartOutInternal == 0)
-            {
-                config.restartState.iStep = step;
-                config.restartState.iStepInternal = iter;
-                PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + std::to_string(step) + "_" + std::to_string(iter));
-            }
-            if ((iter % config.outputControl.nRestartOutCInternal == 0) &&
-                !(config.outputControl.lazyCoverDataOutput && (iter % config.outputControl.nRestartOutInternal == 0)))
-            {
-                config.restartState.iStep = step;
-                config.restartState.iStepInternal = iter;
-                PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + "C");
-            }
-            if (iter >= config.implicitCFLControl.nCFLRampStart && iter <= config.implicitCFLControl.nCFLRampLength + config.implicitCFLControl.nCFLRampStart)
-            {
-                real inter = real(iter - config.implicitCFLControl.nCFLRampStart) / config.implicitCFLControl.nCFLRampLength;
-                real logCFL = std::log(config.implicitCFLControl.CFL) + (std::log(config.implicitCFLControl.CFLRampEnd / config.implicitCFLControl.CFL) * inter);
-                CFLNow = std::exp(logCFL);
-            }
-            if (ifStop || iter > config.convergenceControl.nTimeStepInternal) //! TODO: reconstruct the framework of ODE-top-level-control
-            {
-                CFLNow = config.implicitCFLControl.CFL;
-            }
-            // return resRel.maxCoeff() < config.convergenceControl.rhsThresholdInternal;
-            return ifStop;
+            return functor_fstop(iter, cres, iStep, runningEnvironment);
         };
 
         // fmainloop gets the time-variant residual norm,
@@ -1419,276 +1106,7 @@ namespace DNDS::Euler
         // and finally decides if break time loop
         auto fmainloop = [&]() -> bool
         {
-            tSimu += curDtImplicit;
-            if (ifOutT)
-                tSimu = nextTout;
-            Eigen::VectorFMTSafe<real, -1> res(nVars);
-            eval.EvaluateNorm(res, ode->getLatestRHS(), 1, config.convergenceControl.useVolWiseResidual);
-            if (stepCount == 0 && resBaseC.norm() == 0)
-                resBaseC = res;
-
-            if (config.timeAverageControl.enabled)
-            {
-                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
-                eval.MeanValueCons2Prim(u, uTemp); // could use time-step-mean-u instead of latest-u
-                eval.TimeAverageAddition(uTemp, wAveraged, curDtImplicit, tAverage);
-            }
-
-            real CLCur{0.0}, CDCur{0.0}, AOACur{0.0};
-
-            if (step % config.outputControl.nConsoleCheck == 0)
-            {
-                double tWall = MPI_Wtime();
-                real telapsed = MPI_Wtime() - tstart;
-                bool useCollectiveTimer = config.outputControl.useCollectiveTimer;
-                real tcomm = Timer().getTimerColOrLoc(PerformanceTimer::Comm, mpi, useCollectiveTimer);
-                real tLimiterA = Timer().getTimerColOrLoc(PerformanceTimer::LimiterA, mpi, useCollectiveTimer);
-                real tLimiterB = Timer().getTimerColOrLoc(PerformanceTimer::LimiterB, mpi, useCollectiveTimer);
-                real trhs = Timer().getTimerColOrLoc(PerformanceTimer::RHS, mpi, useCollectiveTimer);
-                real trec = Timer().getTimerColOrLoc(PerformanceTimer::Reconstruction, mpi, useCollectiveTimer);
-                real tLim = Timer().getTimerColOrLoc(PerformanceTimer::Limiter, mpi, useCollectiveTimer);
-
-                tcomm = tInternalStats["c"].update(tcomm).getSum();
-                trhs = tInternalStats["r"].update(trhs).getSum();
-                trec = tInternalStats["v"].update(trec).getSum();
-                tLim = tInternalStats["l"].update(tLim).getSum();
-                auto tPPr = tInternalStats["p"].getSum() + Timer().getTimerColOrLoc(PerformanceTimer::PositivityOuter, mpi, useCollectiveTimer);
-                if (mpi.rank == 0)
-                {
-                    auto format = log().flags();
-                    std::string formatStringMain = "";
-                    for (auto &s : config.outputControl.consoleMainOutputFormat)
-                        formatStringMain += s;
-                    log() << fmt::format(formatStringMain +
-                                             "  "s +
-                                             (config.outputControl.consoleOutputMode == 1
-                                                  ? "WallFlux {termYellow}{wallFlux:.6e}{termReset}"s
-                                                  : ""s),
-                                         DNDS_FMT_ARG(step),
-                                         // DNDS_FMT_ARG(iStep),
-                                         // DNDS_FMT_ARG(iter),
-                                         fmt::arg("resRel", (res.array() / (resBaseC.array() + verySmallReal)).transpose()),
-                                         fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
-                                         DNDS_FMT_ARG(tSimu),
-                                         DNDS_FMT_ARG(curDtImplicit),
-                                         DNDS_FMT_ARG(curDtMin),
-                                         DNDS_FMT_ARG(CFLNow),
-                                         DNDS_FMT_ARG(nLimInc),
-                                         DNDS_FMT_ARG(alphaMinInc),
-                                         DNDS_FMT_ARG(nLimBeta),
-                                         DNDS_FMT_ARG(minBeta),
-                                         DNDS_FMT_ARG(nLimAlpha),
-                                         DNDS_FMT_ARG(minAlpha),
-                                         DNDS_FMT_ARG(telapsed),
-                                         DNDS_FMT_ARG(trec),
-                                         DNDS_FMT_ARG(trhs),
-                                         DNDS_FMT_ARG(tcomm),
-                                         DNDS_FMT_ARG(tLim),
-                                         DNDS_FMT_ARG(tPPr),
-                                         DNDS_FMT_ARG(tLimiterA),
-                                         DNDS_FMT_ARG(tLimiterB),
-                                         DNDS_FMT_ARG(tWall),
-                                         fmt::arg("termRed", TermColor::Red),
-                                         fmt::arg("termBlue", TermColor::Blue),
-                                         fmt::arg("termGreen", TermColor::Green),
-                                         fmt::arg("termCyan", TermColor::Cyan),
-                                         fmt::arg("termYellow", TermColor::Yellow),
-                                         fmt::arg("termBold", TermColor::Bold),
-                                         fmt::arg("termReset", TermColor::Reset));
-                    log() << std::endl;
-                    log().setf(format);
-                    auto &fluxWall = eval.fluxWallSum;
-                    auto &logErrVal = std::get<1>(logErr);
-                    int iStep{-1}, iter{-1};
-#define DNDS_FILL_IN_LOG_ERR_VAL(v) FillLogValue(logErrVal, #v, v)
-                    DNDS_FILL_IN_LOG_ERR_VAL(step);
-                    DNDS_FILL_IN_LOG_ERR_VAL(iStep);
-                    DNDS_FILL_IN_LOG_ERR_VAL(iter);
-                    DNDS_FILL_IN_LOG_ERR_VAL(tSimu);
-                    DNDS_FILL_IN_LOG_ERR_VAL(res);
-                    DNDS_FILL_IN_LOG_ERR_VAL(curDtImplicit);
-                    DNDS_FILL_IN_LOG_ERR_VAL(curDtMin);
-                    DNDS_FILL_IN_LOG_ERR_VAL(CFLNow);
-
-                    DNDS_FILL_IN_LOG_ERR_VAL(nLimInc);
-                    DNDS_FILL_IN_LOG_ERR_VAL(alphaMinInc);
-                    DNDS_FILL_IN_LOG_ERR_VAL(nLimBeta);
-                    DNDS_FILL_IN_LOG_ERR_VAL(minBeta);
-                    DNDS_FILL_IN_LOG_ERR_VAL(nLimAlpha);
-                    DNDS_FILL_IN_LOG_ERR_VAL(minAlpha);
-
-                    DNDS_FILL_IN_LOG_ERR_VAL(tWall);
-                    DNDS_FILL_IN_LOG_ERR_VAL(telapsed);
-                    DNDS_FILL_IN_LOG_ERR_VAL(trec);
-                    DNDS_FILL_IN_LOG_ERR_VAL(trhs);
-                    DNDS_FILL_IN_LOG_ERR_VAL(tcomm);
-                    DNDS_FILL_IN_LOG_ERR_VAL(tLim);
-                    DNDS_FILL_IN_LOG_ERR_VAL(tLimiterA);
-                    DNDS_FILL_IN_LOG_ERR_VAL(tLimiterB);
-
-                    DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
-                    real CL{CLCur}, CD{CDCur}, AoA(AOACur);
-                    DNDS_FILL_IN_LOG_ERR_VAL(CL);
-                    DNDS_FILL_IN_LOG_ERR_VAL(CD);
-                    DNDS_FILL_IN_LOG_ERR_VAL(AoA);
-#undef DNDS_FILL_IN_LOG_ERR_VAL
-                    std::get<0>(logErr).WriteLine(std::get<1>(logErr), config.outputControl.nPrecisionLog);
-
-                    eval.ConsoleOutputBndIntegrations();
-                    eval.BndIntegrationLogWriteLine(
-                        config.dataIOControl.getOutLogName() + "_" + output_stamp,
-                        step, -1, -1);
-                }
-                tstart = MPI_Wtime();
-                Timer().clearAllTimer();
-                for (auto &s : tInternalStats)
-                    s.second.clear();
-            }
-            if (step == nextStepOutC)
-            {
-                if (!(config.outputControl.lazyCoverDataOutput && (step == nextStepOut)))
-                {
-                    eval.FixUMaxFilter(u);
-                    PrintData(
-                        config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
-                        "",
-                        [&](index iCell)
-                        { return ode->getLatestRHS()[iCell](0); },
-                        addOutList,
-                        eval, tSimu);
-                    eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
-                                         u, uRec);
-                }
-                nextStepOutC += config.outputControl.nDataOutC;
-            }
-            if (step == nextStepOut)
-            {
-                eval.FixUMaxFilter(u);
-                PrintData(
-                    config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
-                    config.dataIOControl.outPltName + "_" + output_stamp, // physical ts series
-                    [&](index iCell)
-                    { return ode->getLatestRHS()[iCell](0); },
-                    addOutList,
-                    eval, tSimu);
-                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
-                                     u, uRec);
-                nextStepOut += config.outputControl.nDataOut;
-            }
-            if (step == nextStepOutAverageC)
-            {
-                if (!(config.outputControl.lazyCoverDataOutput && (step == nextStepOutAverage)))
-                {
-                    DNDS_assert(config.timeAverageControl.enabled);
-                    eval.MeanValuePrim2Cons(wAveraged, uAveraged);
-                    eval.FixUMaxFilter(uAveraged);
-                    PrintData(
-                        config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + "C",
-                        "",
-                        [&](index iCell)
-                        { return ode->getLatestRHS()[iCell](0); },
-                        addOutList,
-                        eval, tSimu,
-                        PrintDataTimeAverage);
-                }
-                nextStepOutAverageC += config.outputControl.nTimeAverageOutC;
-            }
-            if (step == nextStepOutAverage)
-            {
-                DNDS_assert(config.timeAverageControl.enabled);
-                eval.MeanValuePrim2Cons(wAveraged, uAveraged);
-                eval.FixUMaxFilter(uAveraged);
-                PrintData(
-                    config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + std::to_string(step),
-                    config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp, // time average series
-                    [&](index iCell)
-                    { return ode->getLatestRHS()[iCell](0); },
-                    addOutList,
-                    eval, tSimu,
-                    PrintDataTimeAverage);
-                nextStepOutAverage += config.outputControl.nTimeAverageOut;
-            }
-            if (step == nextStepRestartC)
-            {
-                if (!(config.outputControl.lazyCoverDataOutput && (step == nextStepRestart)))
-                {
-                    config.restartState.iStep = step;
-                    config.restartState.iStepInternal = -1;
-                    PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + "C");
-                }
-                nextStepRestartC += config.outputControl.nRestartOutC;
-            }
-            if (step == nextStepRestart)
-            {
-                config.restartState.iStep = step;
-                config.restartState.iStepInternal = -1;
-                PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + std::to_string(step));
-                nextStepRestart += config.outputControl.nRestartOut;
-            }
-            if (ifOutT)
-            {
-                eval.FixUMaxFilter(u);
-                PrintData(
-                    config.dataIOControl.outPltName + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
-                    config.dataIOControl.outPltName + "_" + output_stamp, // physical ts series
-                    [&](index iCell)
-                    { return ode->getLatestRHS()[iCell](0); },
-                    addOutList,
-                    eval, tSimu);
-                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
-                                     u, uRec);
-                nextTout += config.outputControl.tDataOut;
-                if (nextTout >= config.timeMarchControl.tEnd)
-                    nextTout = config.timeMarchControl.tEnd;
-            }
-            if ((eval.settings.specialBuiltinInitializer == 2 ||
-                 eval.settings.specialBuiltinInitializer == 203) &&
-                (step % config.outputControl.nConsoleCheck == 0)) // IV problem special: reduction on solution
-            {
-                auto FVal = [&](const Geom::tPoint &p, real t)
-                {
-                    switch (eval.settings.specialBuiltinInitializer)
-                    {
-                    case 203:
-                        return SpecialFields::IsentropicVortex10(eval, p, t, nVars, 10.0828);
-                    default:
-                    case 2:
-                        return SpecialFields::IsentropicVortex10(eval, p, t, nVars, 5);
-                    }
-                };
-                auto FWeight = [&](const Geom::tPoint &p, real t) -> real
-                {
-                    // real xyOrig = t;
-                    // real xCC = float_mod(p(0) - xyOrig, 10);
-                    // real yCC = float_mod(p(1) - xyOrig, 10);
-                    // return std::abs(xCC - 5.0) <= 2 && std::abs(yCC - 5.0) <= 2 ? 1.0 : 0.0;
-                    return 1.0;
-                };
-                Eigen::Vector<real, -1> err1, errInf;
-                eval.EvaluateRecNorm(
-                    err1, u, uRec, 1, true,
-                    FVal, FWeight,
-                    tSimu);
-                eval.EvaluateRecNorm(
-                    errInf, u, uRec, 1000, true,
-                    FVal, FWeight,
-                    tSimu);
-
-                if (mpi.rank == 0)
-                {
-                    log() << "=== Mean Error IV: [" << std::scientific
-                          << std::setprecision(config.outputControl.nPrecisionConsole + 4) << err1(0) << ", "
-                          << err1(0) / vfv->GetGlobalVol() << ", "
-                          << errInf(0)
-                          << "]" << std::endl;
-                }
-            }
-            if (config.implicitReconstructionControl.zeroGrads)
-                uRec.setConstant(0.0), gradIsZero = true;
-
-            stepCount++;
-
-            return tSimu >= config.timeMarchControl.tEnd;
+            return functor_fmainloop(runningEnvironment);
         };
 
         /***************************************************************************************************************************************
@@ -1861,7 +1279,7 @@ namespace DNDS::Euler
     void EulerSolver<model>::solveLinear(
         real alphaDiag,
         TDof &cres, TDof &cx, TDof &cxInc, TRec &uRecC, TRec uRecIncC,
-        JacobianDiagBlock<nVarsFixed> &JDC, tGMRES_u &gmres)
+        JacobianDiagBlock<nVarsFixed> &JDC, tGMRES_u &gmres, int gridLevel)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         auto &eval = *pEval;
@@ -1879,12 +1297,45 @@ namespace DNDS::Euler
             UR.setZero();
             return UR;
         };
+        DNDS_assert(gridLevel <= config.linearSolverControl.coarseGridLinearSolverControlList.size());
 
-        if (config.linearSolverControl.gmresCode == 0 || config.linearSolverControl.gmresCode == 2)
+        auto gmresCode =
+            gridLevel > 0
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).gmresCode
+                : config.linearSolverControl.gmresCode;
+        bool initWithLastURecInc =
+            gridLevel > 0
+                ? false
+                : config.linearSolverControl.initWithLastURecInc;
+        int sgsWithRec =
+            gridLevel > 0
+                ? 0
+                : config.linearSolverControl.sgsWithRec;
+        int sgsIter =
+            gridLevel > 0
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).sgsIter
+                : config.linearSolverControl.sgsIter;
+        int nSgsConsoleCheck =
+            gridLevel > 0
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).nSgsConsoleCheck
+                : config.linearSolverControl.nSgsConsoleCheck;
+        int gmresScale =
+            gridLevel > 0
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).gmresScale
+                : config.linearSolverControl.gmresScale;
+        int nGmresIter =
+            gridLevel > 0
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).nGmresIter
+                : config.linearSolverControl.nGmresIter;
+        int nGmresConsoleCheck =
+            gridLevel > 0
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).nGmresConsoleCheck
+                : config.linearSolverControl.nGmresConsoleCheck;
+        if (gmresCode == 0 || gmresCode == 2)
         {
             // //! LUSGS
 
-            if (config.linearSolverControl.initWithLastURecInc)
+            if (initWithLastURecInc)
             {
                 DNDS_assert(config.implicitReconstructionControl.storeRecInc);
                 eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecIncC, JDC, true, sgsRes);
@@ -1900,14 +1351,14 @@ namespace DNDS::Euler
             else
             {
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
-                doPrecondition(alphaDiag, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
+                doPrecondition(alphaDiag, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
             }
 
-            if (config.linearSolverControl.sgsWithRec != 0)
+            if (sgsWithRec != 0)
                 uRecNew.setConstant(0.0);
-            for (int iterSGS = 1; iterSGS <= config.linearSolverControl.sgsIter; iterSGS++)
+            for (int iterSGS = 1; iterSGS <= sgsIter; iterSGS++)
             {
-                if (config.linearSolverControl.sgsWithRec != 0)
+                if (sgsWithRec != 0)
                 {
                     vfv->DoReconstructionIter(
                         uRecNew, uRecNew1, cxInc,
@@ -1925,19 +1376,19 @@ namespace DNDS::Euler
                 else
                 {
                     DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
-                    doPrecondition(alphaDiag, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
+                    doPrecondition(alphaDiag, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
                 }
                 if (iterSGS == 1)
                     sgsRes0 = sgsRes;
 
-                if (mpi.rank == 0 && iterSGS % config.linearSolverControl.nSgsConsoleCheck == 0)
+                if (mpi.rank == 0 && iterSGS % nSgsConsoleCheck == 0)
                     log() << std::scientific << "SGS1 " << std::to_string(iterSGS)
                           << " [" << sgsRes0.transpose() << "] ->"
                           << " [" << sgsRes.transpose() << "] " << std::endl;
             }
         }
         Eigen::VectorXd meanScale;
-        if (config.linearSolverControl.gmresScale == 1)
+        if (gmresScale == 1)
         {
             meanScale = eval.settings.refU;
             meanScale(Seq123).setConstant(std::sqrt(meanScale(0) * meanScale(I4))); //! using consistent rho U scale
@@ -1946,7 +1397,7 @@ namespace DNDS::Euler
             // meanScale(Seq123).setConstant(0.1);
             // meanScale(I4) = 1;
         }
-        else if (config.linearSolverControl.gmresScale == 2)
+        else if (gmresScale == 2)
         {
             eval.EvaluateNorm(meanScale, cx, 1, true, true);
             meanScale(Seq123).setConstant(meanScale(Seq123).norm());
@@ -1957,7 +1408,7 @@ namespace DNDS::Euler
         // meanScale(0) = 10;
         TU meanScaleInv = (meanScale.array() + verySmallReal).inverse();
 
-        if (config.linearSolverControl.gmresCode != 0)
+        if (gmresCode != 0)
         {
             DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
             // !  GMRES
@@ -1973,20 +1424,20 @@ namespace DNDS::Euler
                 {
                     // x as rhs, and MLx as uinc
                     MLx.setConstant(0.0), inputIsZero = true; //! start as zero
-                    doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
-                    for (int i = 0; i < config.linearSolverControl.sgsIter; i++)
+                    doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
+                    for (int i = 0; i < sgsIter; i++)
                     {
-                        doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone);
+                        doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
                     }
                 },
                 [&](TDof &a, TDof &b) -> real
                 {
                     return a.dot(b, meanScaleInv.array(), meanScaleInv.array());
                 },
-                cres, cxInc, config.linearSolverControl.nGmresIter,
+                cres, cxInc, nGmresIter,
                 [&](uint32_t i, real res, real resB) -> bool
                 {
-                    if (i > 0 && i % config.linearSolverControl.nGmresConsoleCheck == 0)
+                    if (i > 0 && i % nGmresConsoleCheck == 0)
                     {
                         if (mpi.rank == 0)
                         {
@@ -2006,7 +1457,8 @@ namespace DNDS::Euler
         // the intellisense friendly definition
         template <>
     )
-    void EulerSolver<model>::doPrecondition(real alphaDiag, TDof &cres, TDof &cx, TDof &cxInc, TDof &uTemp, JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone)
+    void EulerSolver<model>::doPrecondition(real alphaDiag, TDof &cres, TDof &cx, TDof &cxInc, TDof &uTemp,
+                                            JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone, int gridLevel)
     {
         DNDS_assert(pEval);
         auto &eval = *pEval;
@@ -2016,9 +1468,14 @@ namespace DNDS::Euler
         // nCall++;
         // if (mpi.rank == 0)
         //     std::cout << "doPrecondition nCall " << nCall << fmt::format(" {} ", hasLUDone) << std::endl;
-        if (config.linearSolverControl.jacobiCode <= 1)
+        int jacobiCode =
+            gridLevel > 0
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).jacobiCode
+                : config.linearSolverControl.jacobiCode;
+
+        if (jacobiCode <= 1)
         {
-            bool useJacobi = config.linearSolverControl.jacobiCode == 0;
+            bool useJacobi = jacobiCode == 0;
             eval.UpdateSGS(alphaDiag, cres, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, true, sgsRes);
             if (useJacobi)
                 cxInc = uTemp;
@@ -2037,7 +1494,7 @@ namespace DNDS::Euler
             // cxInc.trans.waitPersistentPull();
             inputIsZero = false;
         }
-        else if (config.linearSolverControl.jacobiCode == 2)
+        else if (jacobiCode == 2)
         {
             DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
             DNDS_assert_info(config.linearSolverControl.directPrecControl.useDirectPrec, "need to use config.linearSolverControl.directPrecControl.useDirectPrec first !");
@@ -2053,5 +1510,176 @@ namespace DNDS::Euler
             }
             inputIsZero = false;
         }
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        // the real definition
+        template <EulerModel model>
+        ,
+        // the intellisense friendly definition
+        template <>
+    )
+    void EulerSolver<model>::InitializeRunningEnvironment(EulerSolver<model>::RunningEnvironment &runningEnvironment)
+    {
+        // mind we need to get ptr-to-actual-eval into env.pEval,
+        // before assigning the ref (ptr), or the ptr is null
+        runningEnvironment.pEval = pEval;
+        DNDS_EULERSOLVER_RUNNINGENV_GET_REF_LIST
+
+        /*******************************************************/
+        /*                   LOGERR STREAM                     */
+        /*******************************************************/
+        logErr = LogErrInitialize();
+
+        /*******************************************************/
+        /*                 PICK ODE SOLVER                     */
+        /*******************************************************/
+
+        auto buildDOF = [&](ArrayDOFV<nVarsFixed> &data)
+        {
+            vfv->BuildUDof(data, nVars);
+        };
+        auto buildScalar = [&](ArrayDOFV<1> &data)
+        {
+            vfv->BuildUDof(data, 1);
+        };
+
+        if (config.timeMarchControl.steadyQuit)
+        {
+            if (mpi.rank == 0)
+                log() << "Using steady!" << std::endl;
+            config.timeMarchControl.odeCode = 1; // To bdf;
+            config.timeMarchControl.nTimeStep = 1;
+        }
+        switch (config.timeMarchControl.odeCode)
+        {
+        case 0: // esdirk4
+            if (mpi.rank == 0)
+                log() << "=== ODE: ESDIRK4 " << std::endl;
+            ode = std::make_shared<ODE::ImplicitSDIRK4DualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
+                mesh->NumCell(),
+                buildDOF, buildScalar,
+                1); // 1 for esdirk
+            break;
+        case 101: // sdirk4
+            if (mpi.rank == 0)
+                log() << "=== ODE: SSP-SDIRK4 " << std::endl;
+            ode = std::make_shared<ODE::ImplicitSDIRK4DualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
+                mesh->NumCell(),
+                buildDOF, buildScalar,
+                0);
+            break;
+        case 1: // BDF2 // Backward Euler
+        case 103:
+            if (mpi.rank == 0 && config.timeMarchControl.odeCode == 1)
+                log() << "=== ODE: BDF2 " << std::endl;
+            if (mpi.rank == 0 && config.timeMarchControl.odeCode == 103)
+                log() << "=== ODE: Backward Euler " << std::endl;
+            ode = std::make_shared<ODE::ImplicitVBDFDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
+                mesh->NumCell(),
+                buildDOF, buildScalar,
+                config.timeMarchControl.odeCode == 1 ? 2 : 1);
+            break;
+        case 102: // VBDF2
+            if (mpi.rank == 0)
+                log() << "=== ODE: VBDF2 " << std::endl;
+            ode = std::make_shared<ODE::ImplicitVBDFDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
+                mesh->NumCell(),
+                buildDOF, buildScalar,
+                2);
+            break;
+        case 2: // SSPRK
+            if (mpi.rank == 0)
+                log() << "=== ODE: SSPRK4 " << std::endl;
+            ode = std::make_shared<ODE::ExplicitSSPRK3TimeStepAsImplicitDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
+                mesh->NumCell(),
+                buildDOF, buildScalar,
+                false); // TODO: add local stepping options
+            break;
+        case 401: // H3S
+            if (mpi.rank == 0)
+                log() << "=== ODE: Hermite3 (simple jacobian) " << std::endl;
+            ode = std::make_shared<ODE::ImplicitHermite3SimpleJacobianDualStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
+                mesh->NumCell(),
+                buildDOF, buildScalar,
+                config.timeMarchControl.odeSetting1 == 0 ? 0.55 : config.timeMarchControl.odeSetting1,
+                std::round(config.timeMarchControl.odeSetting2),                                         // Backward Euler Starter
+                0,                                                                                       // method
+                config.timeMarchControl.odeSetting3 == 0 ? 0.9146 : config.timeMarchControl.odeSetting3, // thetaM1
+                std::round(config.timeMarchControl.odeSetting4)                                          // mask
+            );
+            break;
+        default:
+            DNDS_assert_info(false, "no such ode code");
+        }
+        if (config.timeMarchControl.useImplicitPP)
+        {
+            DNDS_assert(config.timeMarchControl.odeCode == 1 || config.timeMarchControl.odeCode == 102);
+        }
+
+        /*******************************************************/
+        /*                 INIT GMRES AND PCG                  */
+        /*******************************************************/
+
+        if (config.linearSolverControl.gmresCode == 1 ||
+            config.linearSolverControl.gmresCode == 2)
+            gmres = std::make_unique<tGMRES_u>(
+                config.linearSolverControl.nGmresSpace,
+                [&](decltype(u) &data)
+                {
+                    vfv->BuildUDof(data, nVars);
+                });
+
+        if (config.implicitReconstructionControl.recLinearScheme == 1)
+            gmresRec = std::make_unique<tGMRES_uRec>(
+                config.implicitReconstructionControl.nGmresSpace,
+                [&](decltype(uRec) &data)
+                {
+                    vfv->BuildURec(data, nVars);
+                });
+
+        if (config.implicitReconstructionControl.recLinearScheme == 2)
+            pcgRec = std::make_unique<tPCG_uRec>(
+                [&](decltype(uRec) &data)
+                {
+                    vfv->BuildURec(data, nVars);
+                });
+
+        if (config.implicitReconstructionControl.recLinearScheme == 2 || config.timeMarchControl.odeCode == 401)
+            pcgRec1 = std::make_unique<tPCG_uRec>(
+                [&](decltype(uRec) &data)
+                {
+                    vfv->BuildURec(data, nVars);
+                });
+
+        /*******************************************************/
+        /*                 SOLVER MAJOR START                  */
+        /*******************************************************/
+        tstart = MPI_Wtime();
+        tstartInternal = tstart;
+        stepCount = 0;
+
+        resBaseC.resize(nVars);
+        resBaseCInternal.resize(nVars);
+        resBaseC.setConstant(config.convergenceControl.res_base);
+
+        tSimu = 0.0;
+        tAverage = 0.0;
+        nextTout = std::min(config.outputControl.tDataOut, config.timeMarchControl.tEnd); // ensures the destination time output
+        nextStepOut = config.outputControl.nDataOut;
+        nextStepOutC = config.outputControl.nDataOutC;
+        nextStepRestart = config.outputControl.nRestartOut;
+        nextStepRestartC = config.outputControl.nRestartOutC;
+        nextStepOutAverage = config.outputControl.nTimeAverageOut;
+        nextStepOutAverageC = config.outputControl.nTimeAverageOutC;
+
+        CFLNow = config.implicitCFLControl.CFL;
+        ifOutT = false;
+        curDtMin = veryLargeReal;
+        curDtImplicit = config.timeMarchControl.dtImplicit;
+        step = 0;
+        gradIsZero = true;
+
+        dtIncreaseCounter = 0;
     }
 }

@@ -11,8 +11,8 @@ namespace DNDS::ODE
     public:
         using Frhs = std::function<void(TDATA &, TDATA &, TDTAU &, int, real, int)>;
         using Fdt = std::function<void(TDATA &, TDTAU &, real, int)>;
-        // x, res, resOther(=res-alpha*rhs), dTau, dt, alpha, xinc, iter, stage
-        using Fsolve = std::function<void(TDATA &, TDATA &, TDATA &, TDTAU &, real, real, TDATA &, int, int)>;
+        // x, res, resOther(=res-alpha*rhs), dTau, dt, alpha, xinc, iter, ct, stage
+        using Fsolve = std::function<void(TDATA &, TDATA &, TDATA &, TDTAU &, real, real, TDATA &, int, real, int)>;
         using Fstop = std::function<bool(int, TDATA &, int)>;
         using Fincrement = std::function<void(TDATA &, TDATA &, real, int)>;
 
@@ -75,14 +75,14 @@ namespace DNDS::ODE
             {
                 fdt(x, dTau, 1, 0);
 
-                frhs(rhsbuf[0], x, dTau, iter, 1, 0);
+                frhs(rhsbuf[0], x, dTau, iter, 1.0, 0);
                 rhs = xLast;
                 rhs *= 1.0 / dt;
                 resOther = rhs;
                 rhs.addTo(x, -1. / dt);
                 rhs += rhsbuf[0]; // crhs = rhs + (x_i - x_j) / dt
 
-                fsolve(x, rhs, resOther, dTau, dt, 1.0, xinc, iter, 0);
+                fsolve(x, rhs, resOther, dTau, dt, 1.0, xinc, iter, 1.0, 0);
                 fincrement(x, xinc, 1.0, 0);
 
                 if (fstop(iter, rhs, 1))
@@ -234,7 +234,7 @@ namespace DNDS::ODE
                     rhs.addTo(x, -1. / dt);
                     rhs.addTo(rhsbuf[iB], butcherA(iB, iB));
 
-                    fsolve(x, rhs, resOther, dTau, dt, butcherA(iB, iB), xinc, iter, 0);
+                    fsolve(x, rhs, resOther, dTau, dt, butcherA(iB, iB), xinc, iter, butcherC(iB), 0);
                     // x += xinc;
                     fincrement(x, xinc, 1.0, 0);
                     // x.addTo(xIncPrev, -0.5);
@@ -361,7 +361,7 @@ namespace DNDS::ODE
                 resOther = rhs;
                 rhs.addTo(x, -1. / dt);
                 rhs.addTo(rhsbuf[0], BDFCoefs(kCurrent - 1, 0));
-                fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(kCurrent - 1, 0), xinc, iter, 0);
+                fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(kCurrent - 1, 0), xinc, iter, 1.0, 0);
                 //* xinc = (I/dtau-A*alphaDiag)\rhs
 
                 // std::cout << "BDF::\n";
@@ -457,7 +457,7 @@ namespace DNDS::ODE
                 resOther = rhs;
                 rhs.addTo(x, -1. / dt);
                 rhs.addTo(rhs, BDFCoefs(kCurrent - 1, 0));
-                fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(kCurrent - 1, 0), xinc, iter, 0);
+                fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(kCurrent - 1, 0), xinc, iter, 1.0, 0);
                 //* xinc = (I/dtau-A*alphaDiag)\rhs
 
                 // std::cout << "BDF::\n";
@@ -622,7 +622,7 @@ namespace DNDS::ODE
                 resOther = rhs;
                 rhs.addTo(x, -1. / dt);
                 rhs.addTo(rhsbuf[0], BDFCoefs(0));
-                fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(0), xinc, iter, 0);
+                fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(0), xinc, iter, 1.0, 0);
                 //* xinc = (I/dtau-A*alphaDiag)\rhs
 
                 // std::cout << "BDF::\n";
@@ -764,7 +764,7 @@ namespace DNDS::ODE
                 rhs.addTo(x, -1. / dt);
                 rhs.addTo(rhsbuf[0], BDFCoefs(0));
 
-                fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(0), xinc, iter, 0);
+                fsolve(x, rhs, resOther, dTau, dt, BDFCoefs(0), xinc, iter, 1.0, 0);
                 //* xinc = (I/dtau-A*alphaDiag)\rhs
 
                 // std::cout << "BDF::\n";
@@ -976,7 +976,7 @@ namespace DNDS::ODE
                     resOther = rhsFull;
                     rhsFull.addTo(x, -1. / dt);
                     rhsFull += rhsbuf[1];
-                    fsolve(x, rhsFull, resOther, dTau, dt, 1.0, xinc, iter, 0);
+                    fsolve(x, rhsFull, resOther, dTau, dt, 1.0, xinc, iter, 1.0, 0);
                 }
                 else
                 {
@@ -1009,7 +1009,7 @@ namespace DNDS::ODE
                                 rhsMid.addTo(rhsbuf[2], thetaCur * wInteg(1));
                             }
                             fdt(xMid, dTau, 1.0, 1);
-                            fsolve(xMid, rhsMid, resOther, dTau, dt, std::abs(thetaCur * wInteg(1)), xinc, iter, 1);
+                            fsolve(xMid, rhsMid, resOther, dTau, dt, std::abs(thetaCur * wInteg(1)), xinc, iter, alphaHM3, 1);
                         }
 
                         fincrement(xMid, xinc, 1.0, 1);
@@ -1025,7 +1025,7 @@ namespace DNDS::ODE
                             rhsFull.addTo(x, -1. / dt);
                             rhsFull.addTo(rhsbuf[1], wInteg(2));
                             fdt(x, dTau, 1.0, 0);
-                            fsolve(x, rhsFull, resOther, dTau, dt, wInteg(2), xinc, iter, 0);
+                            fsolve(x, rhsFull, resOther, dTau, dt, wInteg(2), xinc, iter, 1.0, 0);
                         }
 
                         fincrement(x, xinc, 1.0, 0);
@@ -1074,7 +1074,7 @@ namespace DNDS::ODE
                     resOther = rhsFull;
                     rhsFull.addTo(x, -1. / dt);
                     rhsFull += rhsbuf[1];
-                    fsolve(x, rhsFull, resOther, dTau, dt, 1.0, xinc, iter, 0);
+                    fsolve(x, rhsFull, resOther, dTau, dt, 1.0, xinc, iter, 1.0, 0);
                 }
                 else
                 {

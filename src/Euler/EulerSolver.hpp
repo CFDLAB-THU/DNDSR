@@ -29,6 +29,9 @@
 #define JSON_ASSERT DNDS_assert
 #include "json.hpp"
 
+#include "Solver/ODE.hpp"
+#include "Solver/Linear.hpp"
+
 namespace DNDS::Euler
 {
 
@@ -458,6 +461,25 @@ namespace DNDS::Euler
                 int multiGridLPInnerNIter = 4;
                 int multiGridLPStartIter = 0;
                 int multiGridLPInnerNSee = 10;
+                struct CoarseGridLinearSolverControl
+                {
+                    int jacobiCode = 0; // 0 for jacobi, 1 for gs, 2 for ilu
+                    int sgsIter = 0;
+                    int gmresCode = 0;  // 0 for lusgs, 1 for gmres, 2 for lusgs started gmres
+                    int gmresScale = 0; // 0 for no scaling, 1 use refU, 2 use mean value
+                    int nGmresSpace = 10;
+                    int nGmresIter = 2;
+                    int nSgsConsoleCheck = 100;
+                    int nGmresConsoleCheck = 100;
+                    int multiGridNIter = -1;
+                    DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
+                        CoarseGridLinearSolverControl,
+                        jacobiCode,
+                        sgsIter, gmresCode, gmresScale,
+                        nGmresSpace, nGmresIter,
+                        nSgsConsoleCheck, nGmresConsoleCheck, multiGridNIter)
+                };
+                std::vector<CoarseGridLinearSolverControl> coarseGridLinearSolverControlList{2};
                 Direct::DirectPrecControl directPrecControl;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     LinearSolverControl,
@@ -467,6 +489,7 @@ namespace DNDS::Euler
                     nSgsConsoleCheck, nGmresConsoleCheck,
                     initWithLastURecInc,
                     multiGridLP, multiGridLPInnerNIter, multiGridLPStartIter, multiGridLPInnerNSee,
+                    coarseGridLinearSolverControlList,
                     directPrecControl)
             } linearSolverControl;
 
@@ -876,7 +899,7 @@ namespace DNDS::Euler
                 v_map[name] = 0;
         }
 
-        std::tuple<CsvLog, tLogSimpleDIValueMap> LogErrInitialize()
+        std::tuple<std::unique_ptr<CsvLog>, tLogSimpleDIValueMap> LogErrInitialize()
         {
             tLogSimpleDIValueMap v_map;
             TU initVec;
@@ -897,23 +920,128 @@ namespace DNDS::Euler
             std::filesystem::create_directories(outFile.parent_path() / ".");
             auto pOs = std::make_unique<std::ofstream>(logErrFileName);
             DNDS_assert_info(*pOs, "logErr file [" + logErrFileName + "] did not open");
-            return std::make_tuple(DNDS::CsvLog(realNames, std::move(pOs)), v_map);
+            return std::make_tuple(std::make_unique<DNDS::CsvLog>(realNames, std::move(pOs)), v_map);
         }
 
         void RunImplicitEuler();
+
+        struct RunningEnvironment
+        {
+            ssp<EulerEvaluator<model>> pEval;
+            std::tuple<std::unique_ptr<CsvLog>, tLogSimpleDIValueMap> logErr;
+            ssp<ODE::ImplicitDualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>> ode;
+            std::unique_ptr<tGMRES_u> gmres;
+            std::unique_ptr<tGMRES_uRec> gmresRec;
+            std::unique_ptr<tPCG_uRec> pcgRec;
+            std::unique_ptr<tPCG_uRec> pcgRec1;
+            double tstart = 0;
+            double tstartInternal = 0;
+            std::map<std::string, ScalarStatistics> tInternalStats;
+            int stepCount = 0;
+            Eigen::VectorFMTSafe<real, -1> resBaseC;
+            Eigen::VectorFMTSafe<real, -1> resBaseCInternal;
+            real tSimu = 0;
+            real tAverage = 0;
+            real nextTout = 0;
+            int nextStepOut = -1;
+            int nextStepOutC = -1;
+            int nextStepRestart = -1;
+            int nextStepRestartC = -1;
+            int nextStepOutAverage = -1;
+            int nextStepOutAverageC = -1;
+
+            real CFLNow = 0;
+            bool ifOutT = false;
+            real curDtMin = 0;
+            real curDtImplicit = 0;
+            std::vector<real> curDtImplicitHistory;
+            int step = 0;
+            bool gradIsZero = true;
+
+            index nLimBeta = 0;
+            index nLimAlpha = 0;
+            real minAlpha = 1;
+            real minBeta = 1;
+            index nLimInc = 0;
+            real alphaMinInc = 1;
+
+            int dtIncreaseCounter = 0;
+
+            tAdditionalCellScalarList addOutList;
+
+#define DNDS_EULERSOLVER_RUNNINGENV_GET_REF(name) auto &name = runningEnvironment.name
+
+#define DNDS_EULERSOLVER_RUNNINGENV_GET_REF_LIST               \
+    auto &eval = *runningEnvironment.pEval;                    \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(logErr);               \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(ode);                  \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(gmres);                \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(gmresRec);             \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(pcgRec);               \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(pcgRec1);              \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(tstart);               \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(tstartInternal);       \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(tInternalStats);       \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(stepCount);            \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(resBaseC);             \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(resBaseCInternal);     \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(tSimu);                \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(tAverage);             \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(nextTout);             \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(nextStepOut);          \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(nextStepOutC);         \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(nextStepRestart);      \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(nextStepRestartC);     \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(nextStepOutAverage);   \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(nextStepOutAverageC);  \
+                                                               \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(CFLNow);               \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(ifOutT);               \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(curDtMin);             \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(curDtImplicit);        \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(curDtImplicitHistory); \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(step);                 \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(gradIsZero);           \
+                                                               \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(nLimBeta);             \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(nLimAlpha);            \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(minAlpha);             \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(minBeta);              \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(nLimInc);              \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(alphaMinInc);          \
+                                                               \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(dtIncreaseCounter);    \
+                                                               \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(addOutList);
+
+            RunningEnvironment() {};
+        };
+        void InitializeRunningEnvironment(RunningEnvironment &env);
+
+        /**
+         * \warning explicit inst not existent
+         */
         void solveLinear(
             real alphaDiag,
             TDof &cres, TDof &cx, TDof &cxInc, TRec &uRecC, TRec uRecIncC,
-            JacobianDiagBlock<nVarsFixed> &JDC, tGMRES_u &gmres);
+            JacobianDiagBlock<nVarsFixed> &JDC, tGMRES_u &gmres, int gridLevel);
+        /**
+         * \warning explicit inst not existent
+         */
         void doPrecondition(real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp,
-                            JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone);
+                            JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone, int gridLevel);
+
+        bool functor_fstop(int iter, ArrayDOFV<nVarsFixed> &cres, int iStep, RunningEnvironment &env);
+        bool functor_fmainloop(RunningEnvironment &env);
     };
 }
 
-#define DNDS_EULERSOLVER_INS_EXTERN(model, ext)                   \
-    namespace DNDS::Euler                                         \
-    {                                                             \
-        ext template void EulerSolver<model>::RunImplicitEuler(); \
+#define DNDS_EULERSOLVER_INS_EXTERN(model, ext)                             \
+    namespace DNDS::Euler                                                   \
+    {                                                                       \
+        ext template void EulerSolver<model>::RunImplicitEuler();           \
+        ext template void EulerSolver<model>::InitializeRunningEnvironment( \
+            EulerSolver<model>::RunningEnvironment &env);                   \
     }
 
 DNDS_EULERSOLVER_INS_EXTERN(NS, extern);
@@ -943,10 +1071,14 @@ DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_3D, extern);
 DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_SA_3D, extern);
 DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS_2EQ_3D, extern);
 
-#define DNDS_EULERSOLVER_INIT_INS_EXTERN(model, ext)                   \
-    namespace DNDS::Euler                                              \
-    {                                                                  \
-        ext template void EulerSolver<model>::ReadMeshAndInitialize(); \
+#define DNDS_EULERSOLVER_INIT_INS_EXTERN(model, ext)                                    \
+    namespace DNDS::Euler                                                               \
+    {                                                                                   \
+        ext template void EulerSolver<model>::ReadMeshAndInitialize();                  \
+        ext template bool EulerSolver<model>::functor_fstop(                            \
+            int iter, ArrayDOFV<nVarsFixed> &cres, int iStep, RunningEnvironment &env); \
+        ext template bool EulerSolver<model>::functor_fmainloop(                        \
+            RunningEnvironment &env);                                                   \
     }
 
 DNDS_EULERSOLVER_INIT_INS_EXTERN(NS, extern);

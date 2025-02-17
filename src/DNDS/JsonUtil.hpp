@@ -21,7 +21,7 @@ namespace DNDS
         }
         catch (...)
         {
-            DNDS_assert_info(false, "array parse bad");
+            DNDS_assert_info(false, "array parse bad: \n" + arr.dump());
             return Eigen::VectorXd{0};
         }
     }
@@ -44,22 +44,22 @@ namespace DNDS
         }
     }
 
-    inline nlohmann::json EigenVectorGetJson(const Eigen::VectorXd &ve)
+    inline auto EigenVectorGetJson(const Eigen::VectorXd &ve)
     {
         std::vector<real> v;
         v.resize(ve.size());
         for (size_t i = 0; i < ve.size(); i++)
             v[i] = ve[i];
-        return {v};
+        return nlohmann::json(v);
     }
 
-    inline nlohmann::json EigenVectorFMTSafeGetJson(const Eigen::VectorFMTSafe<real, -1> &ve)
+    inline auto EigenVectorFMTSafeGetJson(const Eigen::VectorFMTSafe<real, -1> &ve)
     {
         std::vector<real> v;
         v.resize(ve.size());
         for (size_t i = 0; i < ve.size(); i++)
             v[i] = ve[i];
-        return {v};
+        return nlohmann::json(v);
     }
 
 #define __DNDS__json_to_config(name)                                         \

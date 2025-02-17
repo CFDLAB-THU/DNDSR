@@ -46,7 +46,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2-MGtest",
+        "outPltName": "../data/out/NACA0012_H2-MGtest.dir/out_4[jc2]-2[jc2]-NLS",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -125,15 +125,40 @@
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 0,
+        "jacobiCode": 2,
         "sgsIter": 0,
         "sgsWithRec": 0,
         "gmresCode": 1,
         "gmresScale": 2,
         "nGmresSpace": 5,
         "nGmresIter": 2,
-        "multiGridLP": 1,
+        "multiGridLP": 2,
         "multiGridLPInnerNIter": 4,
+        "multiGridLPInnerNSee": 100,
+        "coarseGridLinearSolverControlList": [
+            {
+                "jacobiCode": 2,
+                "sgsIter": 0,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresSpace": 10,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4
+            },
+            {
+                "jacobiCode": 2,
+                "sgsIter": 0,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresSpace": 10,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 2
+            }
+        ],
         "directPrecControl": {
             "useDirectPrec": true,
             "iluCode": 2,

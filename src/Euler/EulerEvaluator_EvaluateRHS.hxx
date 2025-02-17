@@ -49,6 +49,7 @@ namespace DNDS::Euler
         bool dontUpdateBndFlux = flags & RHS_Dont_Record_Bud_Flux;
         bool direct2ndRec = flags & RHS_Direct_2nd_Rec;
         bool direct2ndRec1stConv = flags & RHS_Direct_2nd_Rec_1st_Conv;
+        DNDS_assert(direct2ndRec1stConv ? direct2ndRec : true);
 
         TU fluxWallSumLocal;
         fluxWallSumLocal.setZero(cnvars);
@@ -105,10 +106,13 @@ namespace DNDS::Euler
             vfv->DoReconstruction2ndGrad(uGradBufNoLim, u, FBoundary, settings.direct2ndRecMethod);
             uGradBufNoLim.trans.startPersistentPull(); // this can be safely put before LimiterUGradCall
             // uGradBuf = uGradBufNoLim;
-            this->LimiterUGrad(u, uGradBufNoLim, uGradBuf);
-            uGradBuf.trans.startPersistentPull();
+            if (!direct2ndRec1stConv)
+                this->LimiterUGrad(u, uGradBufNoLim, uGradBuf);
+            if (!direct2ndRec1stConv)
+                uGradBuf.trans.startPersistentPull();
             uGradBufNoLim.trans.waitPersistentPull(); // todo: utilize the uGradBufNoLim to match the implicit reconstruction's "useViscousLimited": false
-            uGradBuf.trans.waitPersistentPull();
+            if (!direct2ndRec1stConv)
+                uGradBuf.trans.waitPersistentPull();
         }
 
 #if defined(DNDS_DIST_MT_USE_OMP)
@@ -202,7 +206,7 @@ namespace DNDS::Euler
                     PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
 
                     TU ULxy = u[f2c[0]];
-                    if (direct2ndRec)
+                    if (direct2ndRec && !direct2ndRec1stConv)
                         ULxy += uGradBuf[f2c[0]].transpose() * (vfv->GetFaceQuadraturePPhysFromCell(iFace, f2c[0], 0, -1) - vfv->GetCellQuadraturePPhys(f2c[0], -1))(SeqG012);
                     else
                         ULxy += (vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iGQ, std::array<int, 1>{0}, 1) *
@@ -230,7 +234,7 @@ namespace DNDS::Euler
                     GradURxy.resize(Eigen::NoChange, cnvars);
                     GradULxy.setZero(), GradURxy.setZero();
 
-                    if (direct2ndRec)
+                    if (direct2ndRec && !direct2ndRec1stConv)
                         GradULxy(SeqG012, Eigen::all) = uGradBuf[f2c[0]];
                     else
                     {
@@ -250,11 +254,12 @@ namespace DNDS::Euler
 #endif
                     real minVol = vfv->GetCellVol(f2c[0]);
                     // DNDS_MPI_InsertCheck(u.father->getMPI(), "RHS inner 2");
+                    real distBary = veryLargeReal;
 
                     if (f2c[1] != UnInitIndex)
                     {
                         URxy = u[f2c[1]];
-                        if (direct2ndRec)
+                        if (direct2ndRec && !direct2ndRec1stConv)
                             URxy += uGradBuf[f2c[1]].transpose() * (vfv->GetFaceQuadraturePPhysFromCell(iFace, f2c[1], 1, -1) - vfv->GetCellQuadraturePPhys(f2c[1], -1))(SeqG012);
                         else
                             URxy += (vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iGQ, std::array<int, 1>{0}, 1) *
@@ -276,7 +281,7 @@ namespace DNDS::Euler
 
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
 
-                        if (direct2ndRec)
+                        if (direct2ndRec && !direct2ndRec1stConv)
                             GradURxy(SeqG012, Eigen::all) = uGradBuf[f2c[1]];
                         else
                         {
@@ -294,6 +299,7 @@ namespace DNDS::Euler
                             GradURxy *= 0.;
 #endif
                         minVol = std::min(minVol, vfv->GetCellVol(f2c[1]));
+                        distBary = (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace) - vfv->GetCellBary(f2c[0])).norm();
                     }
                     else if (true) // is bc
                     {
@@ -317,11 +323,14 @@ namespace DNDS::Euler
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
                         GradURxy = GradULxy;
 #endif
+                        distBary = (vfv->GetFaceQuadraturePPhysFromCell(iFace, f2c[0], 0, -1) - vfv->GetCellBary(f2c[0])).norm() * 2.;
                     }
                     PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
 
                     real distGRP = minVol / vfv->GetFaceArea(iFace) * 2;
-                    if (settings.noGRPOnWall)
+                    if (direct2ndRec1stConv)
+                        distGRP = distBary;
+                    if (settings.noGRPOnWall && !direct2ndRec1stConv)
                         distGRP += faceBCType == EulerBCType::BCWall ? veryLargeReal : 0.0;
 
                     distGRP += faceBCType == EulerBCType::BCWallInvis ? veryLargeReal : 0.0;
@@ -629,8 +638,8 @@ namespace DNDS::Euler
                         GradU.resize(Eigen::NoChange, cnvars);
                         GradU.setZero();
                         PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
-                        if (direct2ndRec)
-                            GradU(SeqG012, Eigen::all) = uGradBuf[iCell];
+                        if (direct2ndRec) // should use limited version here or not?
+                            GradU(SeqG012, Eigen::all) = uGradBufNoLim[iCell];
                         else
                         {
                             if constexpr (gDim == 2)
