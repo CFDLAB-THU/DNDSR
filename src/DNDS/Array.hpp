@@ -748,10 +748,10 @@ namespace DNDS
             //! TODO: parse the sizes and correctly handle dynamic reading
             DNDS_assert_info(array_sigRead == this->GetArraySignature() || ArraySignatureIsCompatible(array_sigRead),
                              array_sigRead + ", i am : " + this->GetArraySignature());
-            auto [sz, rs, rm, align] = ParseArraySignatureTuple(array_sigRead);
-            if (_row_size != rs)
+            auto [szR, rsR, rmR, align] = ParseArraySignatureTuple(array_sigRead);
+            if (_row_size != rsR)
             {
-                if (_row_size == NonUniformSize || rs == NonUniformSize)
+                if (_row_size == NonUniformSize || rsR == NonUniformSize)
                     DNDS_assert_info(false, "can't handle here");
             }
             if (serializerP->IsPerRank())
@@ -767,20 +767,21 @@ namespace DNDS
             serializerP->ReadInt("row_size_dynamic", _row_size_dynamic);
             if (_row_size >= 0) // TODO: fix this! need full conversion check (maybe just a casting)
             {
-                if (rs == DynamicSize)
+                if (rsR == DynamicSize)
                     DNDS_assert(_row_size_dynamic == _row_size), _row_size_dynamic = 0;
-                else if (rs >= 0)
-                    DNDS_assert(rs == _row_size), _row_size_dynamic = 0;
+                else if (rsR >= 0)
+                    DNDS_assert(rsR == _row_size), _row_size_dynamic = 0;
             }
-            if (_row_size == DynamicSize && rs >= 0)
-                _row_size_dynamic = rs;
-            if (_row_max == DynamicSize && rm >= 0)
-                _row_size_dynamic = rm; // TODO: fix this! need a _row_max_dynamic ?
+            if (_row_size == DynamicSize && rsR >= 0)
+                _row_size_dynamic = rsR;
+            if (_row_max == DynamicSize && rmR >= 0)
+                _row_size_dynamic = rmR; // TODO: fix this! need a _row_max_dynamic ?
             // if (_size == 0) //! cannot do this, collective calls!
             //     return;
             if constexpr (_dataLayout == CSR)
             {
                 serializerP->ReadSharedIndexVector("pRowStart", _pRowStart, offset);
+                // todo: make the data inside the file correspond to full disp? is that necessary?
             }
             else if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
             {
@@ -790,8 +791,15 @@ namespace DNDS
             {
             }
             // doing data
-            // todo: multiple write into offset, need checking?
-            this->__ReadSerializerData(serializerP, offset);
+            {
+                Serializer::ArrayGlobalOffset offsetV = Serializer::ArrayGlobalOffset_Unknown; // todo: utilize results from input offset (non CSR) or pRowStart data
+                this->__ReadSerializerData(serializerP, offsetV);
+                if constexpr (_dataLayout == TABLE_StaticFixed || _dataLayout == TABLE_Fixed)
+                {
+                    offsetV.CheckMultipleOf(this->RowSize());
+                    offset = offsetV / this->RowSize(); // to make sure offset in the output is valid (on the elements)
+                }
+            }
             // TODO: check data validity
 
             serializerP->GoToPath(cwd);

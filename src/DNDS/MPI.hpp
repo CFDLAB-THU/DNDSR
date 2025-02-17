@@ -202,7 +202,22 @@ namespace DNDS::Debug
 {
     bool IsDebugged();
     void MPIDebugHold(const MPIInfo &mpi);
+    extern bool isDebugging;
 }
+
+// DNDS_assert_info_mpi is used to help barrier the process before exiting if DNDS::Debug::isDebugging is set
+// remember to set a breakpoint here
+void __DNDS_assert_false_info_mpi(const char *expr, const char *file, int line, const std::string &info, const DNDS::MPIInfo &mpi);
+
+
+#ifdef DNDS_NDEBUG
+#define DNDS_assert_info_mpi(expr, mpi, info) (void(0))
+#else
+#define DNDS_assert_info_mpi(expr, mpi, info) \
+    ((static_cast<bool>(expr))                \
+         ? void(0)                            \
+         : __DNDS_assert_false_info_mpi(#expr, __FILE__, __LINE__, info, mpi))
+#endif
 
 namespace DNDS // TODO: get a concurrency header
 {

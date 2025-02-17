@@ -82,6 +82,18 @@ namespace DNDS::Debug
             }
         }
     }
+
+    bool isDebugging = false;
+}
+
+void __DNDS_assert_false_info_mpi(const char *expr, const char *file, int line, const std::string &info, const DNDS::MPIInfo &mpi)
+{
+    std::cerr << __DNDS_getTraceString() << "\n";
+    std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n"
+              << info << std::endl;
+    if (DNDS::Debug::isDebugging)
+        MPI_Barrier(mpi.comm);
+    std::abort();
 }
 
 namespace DNDS
