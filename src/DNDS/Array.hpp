@@ -716,8 +716,8 @@ namespace DNDS
                 serializerP->WriteIndexVectorPerRank("size", _size_vv);
             }
             serializerP->WriteInt("row_size_dynamic", _row_size_dynamic);
-            if (_size == 0)
-                return;
+            // if (_size == 0) //! cannot do this, collective calls!
+            //     return;
             if constexpr (_dataLayout == CSR)
             {
                 if (!this->IfCompressed())
@@ -776,8 +776,8 @@ namespace DNDS
                 _row_size_dynamic = rs;
             if (_row_max == DynamicSize && rm >= 0)
                 _row_size_dynamic = rm; // TODO: fix this! need a _row_max_dynamic ?
-            if (_size == 0)
-                return;
+            // if (_size == 0) //! cannot do this, collective calls!
+            //     return;
             if constexpr (_dataLayout == CSR)
             {
                 serializerP->ReadSharedIndexVector("pRowStart", _pRowStart, offset);

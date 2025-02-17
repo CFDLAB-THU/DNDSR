@@ -51,7 +51,7 @@ namespace DNDS::Serializer
     void SerializerJSON::CloseFileNonVirtual()
     {
         // DNDS_assert(fileStream.is_open());
-        if (!reading)
+        if (!reading && bool(fileStream))
             fileStream << jObj;
         fileStream.close();
         cPathSplit.clear();

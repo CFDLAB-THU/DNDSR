@@ -370,7 +370,9 @@ namespace DNDS::Serializer
     }
     void SerializerH5::WriteSharedIndexVector(const std::string &name, const ssp<std::vector<index>> &v, ArrayGlobalOffset offset)
     {
-        if (ptr_2_pth.count(v.get()))
+        index CanNotShare = ptr_2_pth.count(v.get()) ? 0 : 1;
+        MPI::AllreduceOneIndex(CanNotShare, MPI_MAX, MPIInfo{commDup, mpi.rank, mpi.size});
+        if (!CanNotShare)
             this->WriteString(name + "::ref", ptr_2_pth[v.get()]);
         else
         {
@@ -380,7 +382,9 @@ namespace DNDS::Serializer
     }
     void SerializerH5::WriteSharedRowsizeVector(const std::string &name, const ssp<std::vector<rowsize>> &v, ArrayGlobalOffset offset)
     {
-        if (ptr_2_pth.count(v.get()))
+        index CanNotShare = ptr_2_pth.count(v.get()) ? 0 : 1;
+        MPI::AllreduceOneIndex(CanNotShare, MPI_MAX, MPIInfo{commDup, mpi.rank, mpi.size});
+        if (!CanNotShare)
             this->WriteString(name + "::ref", ptr_2_pth[v.get()]);
         else
         {
