@@ -766,7 +766,7 @@ namespace DNDS::Euler
             this->solveLinear(alphaDiag, cres, cx, cxInc, uRecC, uRecIncC,
                               JDC, *gmres, 0);
             // cxInc: in: full increment from previous level; out: full increment form current level
-            const auto solve_multigrid = [&](TDof &x_base, TDof &cxInc, TDof &resOther, int mgLevelInit, int mgLevelMax)
+            const auto solve_multigrid = [&](TDof &x_upper, TDof &xIncBuf, TDof &rhsBuf, const TDof &resOther, int mgLevelInit, int mgLevelMax)
             {
                 uRecNew.setConstant(0.0);
                 // templated lambda recursion:
@@ -781,38 +781,33 @@ namespace DNDS::Euler
                 //                              &gmres, tSimu, solveLinear = solveLinear,
                 //                              alphaDiag, dt,
                 //                              iter, ct, uPos]
-                auto solve_multigrid_impl = [&](TDof &x_base, TDof &cxInc, TDof &resOther, int mgLevel, int mgLevelMax, auto &solve_multigrid_impl_ref) -> void
+                auto solve_multigrid_impl = [&](TDof &x_upper, const TDof &rhs_upper, const TDof &resOther_upper, int mgLevel, int mgLevelMax, auto &solve_multigrid_impl_ref) -> void
                 {
+                    static const int use_1st_conv = 1;
                     DNDS_assert(mgLevel > 0 && mgLevel <= mgLevelMax);
-                    int curMGIter = config.linearSolverControl.coarseGridLinearSolverControlList.at(mgLevel - 1).multiGridNIter;
+                    DNDS_assert(config.linearSolverControl.coarseGridLinearSolverControlList.at(mgLevel - 1).multiGridNIterPost >= 0);
+                    int curMGIter = config.linearSolverControl.coarseGridLinearSolverControlList.at(mgLevel - 1).multiGridNIter +
+                                    config.linearSolverControl.coarseGridLinearSolverControlList.at(mgLevel - 1).multiGridNIterPost;
                     if (curMGIter < 0)
                         curMGIter = config.linearSolverControl.multiGridLPInnerNIter;
                     DNDS_EULER_SOLVER_GET_TEMP_UDOF(uMG1)
                     // DNDS_EULER_SOLVER_GET_TEMP_UDOF(uMG1Init)
                     // DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsInitCurMG1)
-                    DNDS_EULER_SOLVER_GET_TEMP_UDOF(res0CurMG)
+                    DNDS_EULER_SOLVER_GET_TEMP_UDOF(resOtherCurMG)
+                    DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
                     // if (mgLevel == 2)
                     //     return;
-                    uMG1 = x_base;
+                    uMG1 = x_upper; // projection
                     // std::cout << "here0" << std::endl;
-                    fincrement(uMG1, cxInc, 1.0, uPos);
-                    if (mgLevel == 1)
-                        frhs(res0CurMG, uMG1, dTauC, iter, ct, uPos);
-                    else if (mgLevel == 2)
-                        eval.EvaluateRHS(res0CurMG, JSourceTmp, uMG1,
-                                         config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
-                                         betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
-                                         TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
-                    else
-                        DNDS_assert(false);
-                    res0CurMG *= alphaDiag;
-                    res0CurMG += resOther;
+                    resOtherCurMG = rhs_upper; // projection
+                    resOtherCurMG *= alphaDiag;
+                    resOtherCurMG += resOther_upper; // projection
                     // res0CurMG.addTo(uMG1, -1. / dt);
                     // uMG1Init = uMG1;
 
                     for (int iIterMG = 1; iIterMG <= curMGIter; iIterMG++)
                     {
-                        DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
+
                         if (mgLevel == 1)
                             eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
                                              config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
@@ -822,7 +817,7 @@ namespace DNDS::Euler
                             eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
                                              config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
                                              betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
-                                             (TEval::RHS_Direct_2nd_Rec_1st_Conv * 1) | TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
+                                             (TEval::RHS_Direct_2nd_Rec_1st_Conv * use_1st_conv) | TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
                         else
                             DNDS_assert(false);
                         rhsTemp.trans.startPersistentPull();
@@ -830,19 +825,17 @@ namespace DNDS::Euler
                         if (iIterMG == 1)
                         {
                             // rhsInitCurMG1 = rhsTemp;
-                            res0CurMG.addTo(rhsTemp, -alphaDiag);
+                            resOtherCurMG.addTo(rhsTemp, -alphaDiag);
                         }
+                        // if (mgLevel < mgLevelMax && iIterMG == 1) // pre smoother coarser grid call
+                        //     solve_multigrid_impl_ref(uMG1, rhsTemp, resOtherCurMG, mgLevel + 1, mgLevelMax, solve_multigrid_impl_ref);
                         rhsTemp *= alphaDiag;
-                        rhsTemp += res0CurMG;
+                        rhsTemp += resOtherCurMG;
                         rhsTemp.addTo(uMG1, -1. / dt);
                         // todo: add rhsfpphere
                         // rhsTemp === alphaDiag * rhs(cur) - alphaDiag * rhs(at_step_1) - uMG1 / dt + uMG1Init / dt
                         fdtau(uMG1, dTauC, alphaDiag, uPos); //! warning! dTauC is overwritten
-                        eval.LUSGSMatrixInit(JDTmp, JSourceTmp,
-                                             dTauC, dt, alphaDiag,
-                                             uMG1, uRecNew,
-                                             0,
-                                             tSimu);
+                        eval.LUSGSMatrixInit(JDTmp, JSourceTmp, dTauC, dt, alphaDiag, uMG1, uRecNew, 0, tSimu);
 
                         if (iIterMG % config.linearSolverControl.multiGridLPInnerNSee == 0)
                         {
@@ -851,30 +844,51 @@ namespace DNDS::Euler
                             if (mpi.rank == 0)
                                 log() << fmt::format("MG Level LP [{}] iter [{}] res [{:.3e}]", mgLevel, iIterMG, resNorm.transpose()) << std::endl;
                         }
-                        cxInc.setConstant(0.0);
-                        solveLinear(alphaDiag, rhsTemp, uMG1, cxInc, uRecNew, uRecNew,
+                        xIncBuf.setConstant(0.0);
+                        solveLinear(alphaDiag, rhsTemp, uMG1, xIncBuf, uRecNew, uRecNew,
                                     JDTmp, *gmres, 1);
-                        if (mgLevel < mgLevelMax)
-                            solve_multigrid_impl_ref(uMG1, cxInc, res0CurMG, mgLevel + 1, mgLevelMax, solve_multigrid_impl_ref);
-
+                        fincrement(uMG1, xIncBuf, 1.0, uPos);
                         // solve_multigrid_impl(x_base, cxInc, mgLevel + 1, mgLevelMax);
                         // cxInc *= -1;
                         // std::cout << "here" << std::endl;
-                        fincrement(uMG1, cxInc, 1.0, uPos);
+
+                        if (mgLevel < mgLevelMax && 
+                            iIterMG == config.linearSolverControl.coarseGridLinearSolverControlList.at(mgLevel - 1).multiGridNIter) // post smoother coarser grid call
+                        {
+                            if (mgLevel == 1)
+                                eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
+                                                 config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
+                                                 betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
+                                                 TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
+                            else if (mgLevel == 2)
+                                eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
+                                                 config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
+                                                 betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
+                                                 (TEval::RHS_Direct_2nd_Rec_1st_Conv * use_1st_conv) | TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
+                            else
+                                DNDS_assert(false);
+                            solve_multigrid_impl_ref(uMG1, rhsTemp, resOtherCurMG, mgLevel + 1, mgLevelMax, solve_multigrid_impl_ref);
+                        }
                     }
-                    cxInc = uMG1;
-                    cxInc -= x_base;
+
+                    x_upper = uMG1; // interpolate
 
                     // alphaDiag *rhsTemp(x + xinc) - xinc / dt == alphaDiag *rhsTemp(x) - res_of_first
                 };
-                //! put recursion to tail or nested within each current level iter ?
-                solve_multigrid_impl(x_base, cxInc, resOther, mgLevelInit, mgLevelMax, solve_multigrid_impl);
+
+                frhs(rhsBuf, x_upper, dTauC, iter, ct, uPos);
+                solve_multigrid_impl(x_upper, rhsBuf, resOther, mgLevelInit, mgLevelMax, solve_multigrid_impl);
             };
 
             if (config.linearSolverControl.multiGridLP >= 1 && iter > config.linearSolverControl.multiGridLPStartIter)
             {
                 DNDS_assert(config.linearSolverControl.multiGridLP <= 2);
-                solve_multigrid(cx, cxInc, resOther, 1, config.linearSolverControl.multiGridLP);
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(cxTemp)
+                cxTemp = cx;
+                fincrement(cxTemp, cxInc, 1.0, uPos);
+                solve_multigrid(cxTemp, cxInc, cres, resOther, 1, config.linearSolverControl.multiGridLP); //! overwrites cxInc and cres here
+                cxInc = cxTemp;
+                cxInc -= cx;
             }
             // eval.FixIncrement(cx, cxInc);
             // !freeze something
