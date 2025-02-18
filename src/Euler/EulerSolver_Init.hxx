@@ -139,6 +139,18 @@ namespace DNDS::Euler
         mesh->InterpolateFace();
         mesh->AssertOnFaces();
 
+        // todo: make this interpolation optional?
+        mesh->AdjLocal2GlobalPrimary();
+        mesh->RecoverNode2CellAndNode2Bnd(); // todo: don't do this if already done
+        mesh->AdjGlobal2LocalPrimary();
+        mesh->BuildGhostN2CB();
+        mesh->AdjGlobal2LocalN2CB();
+        // mesh->AdjLocal2GlobalN2CB();
+        // mesh->AdjGlobal2LocalN2CB();
+        for (index iNode = 0; iNode < mesh->NumNode(); iNode++)
+            for (index iCell : mesh->node2cell[iNode])
+                DNDS_assert(iCell >= 0);
+
         if (config.dataIOControl.meshElevation == 1 && config.dataIOControl.readMeshMode == 0)
         {
             mesh->elevationInfo.nIter = config.dataIOControl.meshElevationIter;

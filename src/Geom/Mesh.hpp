@@ -90,6 +90,7 @@ namespace DNDS::Geom
         MeshAdjState adjPrimaryState{Adj_Unknown};
         MeshAdjState adjFacialState{Adj_Unknown};
         MeshAdjState adjC2FState{Adj_Unknown};
+        MeshAdjState adjN2CBState{Adj_Unknown};
         Periodicity periodicInfo;
         index nNodeO1{-1};
         MeshElevationState elevState = Elevation_Untouched;
@@ -195,9 +196,10 @@ namespace DNDS::Geom
 
         index NodeIndexLocal2Global_NoSon(index iNode)
         {
+            DNDS_assert(coords.father->pLGlobalMapping);
             if (iNode < 0 || iNode >= coords.father->Size())
                 return UnInitIndex;
-            return coords.trans.pLGlobalMapping->operator()(mpi.rank, iNode);
+            return coords.father->pLGlobalMapping->operator()(mpi.rank, iNode);
         }
 
         /**
@@ -206,8 +208,9 @@ namespace DNDS::Geom
          */
         index NodeIndexGlobal2Local_NoSon(index iNode)
         {
-            auto [ret, rank, val] = coords.trans.pLGlobalMapping->search(iNode);
-            DNDS_assert_info(ret, "search failed");
+            DNDS_assert(coords.father->pLGlobalMapping);
+            auto [ret, rank, val] = coords.father->pLGlobalMapping->search(iNode);
+            DNDS_assert_info(ret, "search failed with input: " + std::to_string(iNode));
             if (rank == mpi.rank)
                 return val;
             else
@@ -220,6 +223,7 @@ namespace DNDS::Geom
          */
         index CellIndexGlobal2Local(DNDS::index iCellOther)
         {
+            DNDS_assert(cellElemInfo.trans.pLGhostMapping);
             if (iCellOther == UnInitIndex)
                 return iCellOther;
             DNDS::MPI_int rank;
@@ -233,6 +237,7 @@ namespace DNDS::Geom
 
         index CellIndexLocal2Global(DNDS::index iCellOther)
         {
+            DNDS_assert(cellElemInfo.trans.pLGhostMapping);
             if (iCellOther == UnInitIndex)
                 return iCellOther;
             if (iCellOther < 0) // mapping to un-found in father-son
@@ -243,9 +248,10 @@ namespace DNDS::Geom
 
         index CellIndexLocal2Global_NoSon(index iCell)
         {
+            DNDS_assert(cell2node.father->pLGlobalMapping);
             if (iCell < 0 || iCell >= cell2node.father->Size())
                 return UnInitIndex;
-            return cell2node.trans.pLGlobalMapping->operator()(mpi.rank, iCell);
+            return cell2node.father->pLGlobalMapping->operator()(mpi.rank, iCell);
         }
 
         /**
@@ -254,8 +260,9 @@ namespace DNDS::Geom
          */
         index CellIndexGlobal2Local_NoSon(index iCell)
         {
-            auto [ret, rank, val] = cell2node.trans.pLGlobalMapping->search(iCell);
-            DNDS_assert_info(ret, "search failed");
+            DNDS_assert(cell2node.father->pLGlobalMapping);
+            auto [ret, rank, val] = cell2node.father->pLGlobalMapping->search(iCell);
+            DNDS_assert_info(ret, "search failed with input: " + std::to_string(iCell));
             if (rank == mpi.rank)
                 return val;
             else
@@ -264,9 +271,10 @@ namespace DNDS::Geom
 
         index BndIndexLocal2Global_NoSon(index iBnd)
         {
+            DNDS_assert(bnd2node.father->pLGlobalMapping);
             if (iBnd < 0 || iBnd >= bnd2node.father->Size())
                 return UnInitIndex;
-            return bnd2node.trans.pLGlobalMapping->operator()(mpi.rank, iBnd);
+            return bnd2node.father->pLGlobalMapping->operator()(mpi.rank, iBnd);
         }
 
         /**
@@ -275,8 +283,9 @@ namespace DNDS::Geom
          */
         index BndIndexGlobal2Local_NoSon(index iBnd)
         {
-            auto [ret, rank, val] = bnd2node.trans.pLGlobalMapping->search(iBnd);
-            DNDS_assert_info(ret, "search failed");
+            DNDS_assert(bnd2node.father->pLGlobalMapping);
+            auto [ret, rank, val] = bnd2node.father->pLGlobalMapping->search(iBnd);
+            DNDS_assert_info(ret, "search failed with input: " + std::to_string(iBnd));
             if (rank == mpi.rank)
                 return val;
             else
@@ -308,6 +317,7 @@ namespace DNDS::Geom
         void BuildGhostPrimary();
         void AdjGlobal2LocalPrimary();
         void AdjLocal2GlobalPrimary();
+        // ForBnd: reduction of primary version, only on cell2node
         void AdjGlobal2LocalPrimaryForBnd();
         void AdjLocal2GlobalPrimaryForBnd();
 
@@ -315,6 +325,10 @@ namespace DNDS::Geom
         void AdjLocal2GlobalFacial();
         void AdjGlobal2LocalC2F();
         void AdjLocal2GlobalC2F();
+
+        void BuildGhostN2CB();
+        void AdjGlobal2LocalN2CB();
+        void AdjLocal2GlobalN2CB();
 
         void InterpolateFace();
         void AssertOnFaces();

@@ -498,7 +498,7 @@ namespace DNDS::Geom
         for (index iCell = 0; iCell < cell2node.father->Size(); iCell++)
             for (auto iNode : cell2node[iCell])
             {
-                auto [ret, rank, val] = coords.trans.pLGlobalMapping->search(iNode);
+                auto [ret, rank, val] = coords.father->pLGlobalMapping->search(iNode);
                 DNDS_assert_info(ret, "search failed");
                 if (rank != mpi.rank)
                     ghostNodesCompact.push_back(iNode), ghostNodesCompactSet.insert(iNode);
@@ -610,10 +610,11 @@ namespace DNDS::Geom
         /*****************************************************/
         // * first recover node2cell
 
-        coords.TransAttach();
-        coords.trans.createFatherGlobalMapping(); // for NodeIndexLocal2Global_NoSon
-        cell2node.TransAttach();
-        cell2node.trans.createFatherGlobalMapping(); // for CellIndexLocal2Global_NoSon
+        if (!coords.father->pLGlobalMapping)
+            coords.father->createGlobalMapping(); // for NodeIndexLocal2Global_NoSon
+        if (!cell2node.father->pLGlobalMapping)
+            cell2node.father->createGlobalMapping(); // for CellIndexLocal2Global_NoSon
+
         GeneralCell2NodeToNode2Cell(
             coords, cell2node, node2cell,
             [this](index v)
@@ -621,14 +622,17 @@ namespace DNDS::Geom
             [this](index v)
             { return this->NodeIndexLocal2Global_NoSon(v); });
 
-        bnd2node.TransAttach();
-        bnd2node.trans.createFatherGlobalMapping(); // for BndIndexLocal2Global_NoSon
+        if (!bnd2node.father->pLGlobalMapping)
+            bnd2node.father->createGlobalMapping(); // for BndIndexLocal2Global_NoSon
         GeneralCell2NodeToNode2Cell(
             coords, bnd2node, node2bnd,
             [this](index v)
             { return this->BndIndexLocal2Global_NoSon(v); },
             [this](index v)
             { return this->NodeIndexLocal2Global_NoSon(v); });
+
+        this->adjN2CBState = Adj_PointToGlobal;
+
         // if (mpi.rank == 0)
         // {
         //     for (index i = 0; i < node2cell.father->Size(); i++)
@@ -642,6 +646,11 @@ namespace DNDS::Geom
         // node2cell.trans.createGhostMapping(ghostNodesCompact);
         // node2cell.trans.createMPITypes();
         // node2cell.trans.pullOnce();
+
+        // mesh->node2cell.TransAttach();
+        // mesh->node2cell.trans.BorrowGGIndexing(mesh->coords);
+        // mesh->node2cell.trans.createMPITypes();
+        // mesh->node2cell.trans.pullOnce();
     }
 
     void UnstructuredMesh::RecoverCell2CellAndBnd2Cell()
@@ -1192,6 +1201,73 @@ namespace DNDS::Geom
         adjC2FState = Adj_PointToLocal;
     }
 
+    void UnstructuredMesh::
+        BuildGhostN2CB()
+    {
+        DNDS_assert(adjN2CBState == Adj_PointToGlobal);
+
+        DNDS_assert(coords.trans.father && coords.trans.pLGhostMapping);
+
+        node2cell.TransAttach();
+        node2cell.trans.BorrowGGIndexing(coords.trans);
+        node2cell.trans.createMPITypes();
+        node2cell.trans.pullOnce();
+
+        node2bnd.TransAttach();
+        node2bnd.trans.BorrowGGIndexing(coords.trans);
+        node2bnd.trans.createMPITypes();
+        node2bnd.trans.pullOnce();
+    }
+
+    void UnstructuredMesh::
+        AdjLocal2GlobalN2CB()
+    {
+        DNDS_assert(adjN2CBState == Adj_PointToLocal);
+        /**********************************/
+#ifdef DNDS_USE_OMP
+#pragma omp parallel for
+#endif
+        for (index iNode = 0; iNode < node2cell.Size(); iNode++)
+            for (index &iCell : node2cell[iNode])
+                iCell = CellIndexLocal2Global(iCell);
+
+#ifdef DNDS_USE_OMP
+#pragma omp parallel for
+#endif
+        for (index iNode = 0; iNode < node2bnd.Size(); iNode++)
+            for (index &iBnd : node2cell[iNode])
+                iBnd = BndIndexLocal2Global_NoSon(iBnd); // todo: make bnd have son?
+
+        // MPI::Barrier(mpi.comm);
+        /**********************************/
+        adjN2CBState = Adj_PointToGlobal;
+    }
+
+    void UnstructuredMesh::
+        AdjGlobal2LocalN2CB()
+    {
+        DNDS_assert(adjN2CBState == Adj_PointToGlobal);
+        /**********************************/
+//todo: ensure using dist omp settings not single!
+#ifdef DNDS_USE_OMP
+#pragma omp parallel for
+#endif
+        for (index iNode = 0; iNode < node2cell.Size(); iNode++)
+            for (index &iCell : node2cell[iNode])
+                iCell = CellIndexGlobal2Local(iCell);
+
+#ifdef DNDS_USE_OMP
+#pragma omp parallel for
+#endif
+        for (index iNode = 0; iNode < node2bnd.Size(); iNode++)
+            for (index &iBnd : node2bnd[iNode])
+                iBnd = BndIndexGlobal2Local_NoSon(iBnd); // todo: make bnd have son?
+
+        // MPI::Barrier(mpi.comm);
+        /**********************************/
+        adjN2CBState = Adj_PointToLocal;
+    }
+
     /// @todo //TODO: handle periodic cases
     void UnstructuredMesh::
         InterpolateFace()
@@ -1735,12 +1811,15 @@ namespace DNDS::Geom
 
         index nCellG = this->NumCellGlobal(); // collective call!
         index nNodeG = this->NumNodeGlobal(); // collective call!
+        index nNodeB = this->NumBndGlobal();   // collective call!
         if (mpi.rank == mRank)
         {
             log() << "UnstructuredMesh === ReadSerialize "
                   << "Global NumCell [ " << nCellG << " ]" << std::endl;
             log() << "UnstructuredMesh === ReadSerialize "
                   << "Global NumNode [ " << nNodeG << " ]" << std::endl;
+            log() << "UnstructuredMesh === ReadSerialize "
+                  << "Global NumBnd  [ " << nNodeB << " ]" << std::endl;
         }
         MPISerialDo(mpi, [&]()
                     { log() << "    Rank: " << mpi.rank << " nCell " << this->NumCell() << " nCellGhost " << this->NumCellGhost() << std::endl; });
