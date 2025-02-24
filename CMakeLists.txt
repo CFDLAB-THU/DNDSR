@@ -38,6 +38,7 @@ set(CMAKE_PREFIX_PATH ${HARD_GUESS_PATH})
 # find_package(MPI REQUIRED)
 
 set(DNDS_SUPRESS_INSERT_CHECK ON CACHE BOOL "close the inserted outputs")
+set(DNDS_NODEBUG_MODULES "" CACHE STRING "List of modules to exclude from debugging, semicolon-separated")
 set(DNDS_USE_DNDS_NDEBUG_MACRO OFF CACHE BOOL "use DNDS_NDEBUG macro")
 set(DNDS_USE_NDEBUG_MACRO OFF CACHE BOOL "use NDEBUG macro for eigen output and cassert etc") # performance impact is small so off by default(without -DNDEBUG)
 set(DNDS_USE_PARALLEL_MACRO OFF CACHE BOOL "for auto multi-thread?")

@@ -1,6 +1,13 @@
 
 function(add_fast_flags LIBNAME)
-    if(DNDS_FAST_BUILD_FAST)
+
+    list(FIND DNDS_NODEBUG_MODULES "${LIBNAME}" _found_index)
+    set(DO_FAST ${DNDS_FAST_BUILD_FAST})
+    if(NOT _found_index EQUAL -1)
+        message(WARNING "${LIBNAME} found in no-debug modules, forcing -g0 and optimization")
+        set(DO_FAST ON)
+    endif()
+    if(DO_FAST)
         if(LLVM OR MINGW OR UNIX)
             target_compile_options(${LIBNAME} PRIVATE -O3 -g0)
             if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND ${DNDS_USE_NO_OMIT_FRAME_POINTER})
