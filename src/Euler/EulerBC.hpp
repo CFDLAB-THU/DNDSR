@@ -85,6 +85,15 @@ namespace DNDS::Euler
             RenewID2name();
         }
 
+        std::vector<std::string> GetAllNames()
+        {
+            std::vector<std::string> ret;
+            for (Geom::t_index i = 0; i < BCTypes.size(); i++)
+                if (ID2name.count(i))
+                    ret.push_back(ID2name.at(i));
+            return ret;
+        }
+
         Geom::t_index size()
         {
             return BCTypes.size();

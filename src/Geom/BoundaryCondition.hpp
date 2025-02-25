@@ -44,6 +44,7 @@ namespace DNDS::Geom
     static const t_index BC_ID_DEFAULT_MAX = 20;
 
     using t_FBCName_2_ID = std::function<t_index(const std::string &)>;
+    using t_FBCID_2_Name = std::function<std::string(t_index)>;
 
     static const t_FBCName_2_ID FBC_Name_2_ID_Default = [](const std::string &name) -> t_index
     {
