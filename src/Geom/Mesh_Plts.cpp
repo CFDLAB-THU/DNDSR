@@ -1,13 +1,16 @@
 #include "Mesh.hpp"
+#include "CGNS.hpp"
 #include <thread>
 #include <filesystem>
-#include "base64_rfc4648.hpp"
+#include <base64_rfc4648.hpp>
 #include <zlib.h>
 
 #include <nanoflann.hpp>
 #include "PointCloud.hpp"
 
 #include <hdf5.h>
+#include <cgnslib.h>
+#include <pcgnslib.h>
 
 namespace DNDS::Geom
 {
@@ -1258,8 +1261,8 @@ namespace DNDS::Geom
     {
         fname += ".vtkhdf";
         std::filesystem::path outFile{fname};
-        if (mpi.rank == mRank)
-            std::filesystem::create_directories(outFile.parent_path() / ".");
+        // if (mpi.rank == mRank) // only mRank creates could be faulty?
+        std::filesystem::create_directories(outFile.parent_path() / ".");
         if (mpi.rank == mRank)
             if (seriesName.size())
                 updateVTKSeries(seriesName + ".vtkhdf.series", getStringForcePath(outFile.filename()), t);
@@ -1454,5 +1457,133 @@ namespace DNDS::Geom
 
         herr = H5Gclose(VTKHDF_group_id), H5S_Close;
         herr = H5Fclose(file_id), H5S_Close;
+    }
+
+    void UnstructuredMesh::PrintMeshCGNS(std::string fname, const t_FBCID_2_Name &fbcid2name, const std::vector<std::string> &allNames)
+    {
+        /*****************************/
+        /*     Data preparation:     */
+        /*****************************/
+        DNDS_assert(this->adjPrimaryState == Adj_PointToLocal);
+        this->AdjLocal2GlobalPrimary();
+
+        const index nBnd = this->NumBnd();
+        const index nBndGlobal = this->NumBndGlobal();
+        const index nCell = this->NumCell();
+        const index nCellGlobal = this->NumCellGlobal();
+        const index nBndCell = nBnd + nCell;
+        const index nNode = this->NumNode();
+        const index nNodeGlobal = this->NumNodeGlobal();
+        index nNodeProcOffset{0};
+
+        MPI::Scan(&nNode, &nNodeProcOffset, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        DNDS_assert(mpi.rank != mpi.size - 1 || nNodeProcOffset == nNodeGlobal);
+        nNodeProcOffset -= nNode;
+
+        index nBndCellProcOffset{0};
+        MPI::Scan(&nBndCell, &nBndCellProcOffset, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        nBndCellProcOffset -= nBndCell;
+
+        std::vector<cgsize_t> bndCellOffsets(nBnd + nCell + 1);
+        bndCellOffsets[0] = 0;
+        for (index iBnd = 0; iBnd < nBnd; iBnd++)
+            bndCellOffsets[iBnd + 1] = bndCellOffsets[iBnd] + bnd2node[iBnd].size() + 1;
+        for (index iCell = 0; iCell < nCell; iCell++)
+            bndCellOffsets[iCell + nBnd + 1] = bndCellOffsets[iCell + nBnd] + cell2node[iCell].size() + 1;
+        std::vector<cgsize_t> elementPolyData(bndCellOffsets.back());
+        for (index iBnd = 0; iBnd < nBnd; iBnd++)
+        {
+            elementPolyData.at(bndCellOffsets[iBnd]) = __getCGNSTypeFromElemType(this->bndElemInfo(iBnd, 0).getElemType());
+            for (rowsize ib2n = 0; ib2n < bnd2node[iBnd].size(); ib2n++)
+                elementPolyData.at(bndCellOffsets[iBnd] + 1 + ib2n) = bnd2node[iBnd][ib2n] + 1; // global node index, 1 based
+        }
+        for (index iCell = 0; iCell < nCell; iCell++)
+        {
+            elementPolyData.at(bndCellOffsets[iCell + nBnd]) = __getCGNSTypeFromElemType(this->cellElemInfo(iCell, 0).getElemType());
+            for (rowsize ic2n = 0; ic2n < cell2node[iCell].size(); ic2n++)
+                elementPolyData.at(bndCellOffsets[iCell + nBnd] + 1 + ic2n) = cell2node[iCell][ic2n] + 1; // global node index, 1 based
+        }
+        index bndCellOffsetsProcOffset{0};
+        MPI::Scan(&bndCellOffsets.back(), &bndCellOffsetsProcOffset, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        index bndCellOffsetsGlobalMax{bndCellOffsetsProcOffset};
+        MPI::Bcast(&bndCellOffsetsGlobalMax, 1, DNDS_MPI_INDEX, mpi.size - 1, mpi.comm);
+        bndCellOffsetsProcOffset -= bndCellOffsets.back();
+        for (auto &v : bndCellOffsets)
+            v += bndCellOffsetsProcOffset; // made into global offset (0-based)
+
+        std::vector<double> coordsX(nNode), coordsY(nNode), coordsZ(nNode);
+        for (index iNode = 0; iNode < nNode; iNode++)
+            coordsX[iNode] = coords[iNode](0),
+            coordsY[iNode] = coords[iNode](1),
+            coordsZ[iNode] = coords[iNode](2);
+
+        std::map<std::string, std::vector<cgsize_t>> bocoLists;
+        for (auto &name : allNames)
+            bocoLists.insert({name, std::vector<cgsize_t>()});
+        for (index iBnd = 0; iBnd < nBnd; iBnd++)
+        {
+
+            std::string bcName = fbcid2name(this->bndElemInfo(iBnd, 0).zone);
+            bocoLists[bcName].push_back(iBnd + nBndCellProcOffset + 1);
+        }
+        std::vector<index> bocoListLengths(allNames.size());
+        for (size_t i = 0; i < allNames.size(); i++)
+            bocoListLengths[i] = bocoLists[allNames[i]].size();
+        std::vector<index> bocoListLengthsGlobal{bocoListLengths};
+        MPI::Allreduce(bocoListLengths.data(), bocoListLengthsGlobal.data(), bocoListLengths.size(), DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+
+        this->AdjGlobal2LocalPrimary();
+        /*****************************/
+        /*     CGNS operations:      */
+        /*****************************/
+
+        std::filesystem::path outFile{fname};
+        std::filesystem::create_directories(outFile.parent_path() / ".");
+
+        int cgns_file{0};
+        DNDS_CGNS_CALL_EXIT(cgp_open(fname.c_str(), CG_MODE_WRITE, &cgns_file));
+
+        int iBase{0};
+        DNDS_CGNS_CALL_EXIT(cg_base_write(cgns_file, "Base_0", this->dim, 3, &iBase));
+        int iZone{0};
+        std::array<cgsize_t, 3> zone_sizes{nNodeGlobal, nCellGlobal, 0};
+        DNDS_CGNS_CALL_EXIT(cg_zone_write(cgns_file, iBase, "Zone_0", zone_sizes.data(), Unstructured, &iZone));
+        std::array<int, 3> iCoords;
+        DNDS_CGNS_CALL_EXIT(cgp_coord_write(cgns_file, iBase, iZone, RealDouble, "CoordinateX", &iCoords[0]));
+        DNDS_CGNS_CALL_EXIT(cgp_coord_write(cgns_file, iBase, iZone, RealDouble, "CoordinateY", &iCoords[1]));
+        DNDS_CGNS_CALL_EXIT(cgp_coord_write(cgns_file, iBase, iZone, RealDouble, "CoordinateZ", &iCoords[2]));
+        std::array<cgsize_t, 1> rmin{nNodeProcOffset + 1};     // note 1 based
+        std::array<cgsize_t, 1> rmax{nNodeProcOffset + nNode}; // note inclusive end
+
+        DNDS_CGNS_CALL_EXIT(cgp_coord_write_data(cgns_file, iBase, iZone, iCoords[0], rmin.data(), rmax.data(), coordsX.data()));
+        DNDS_CGNS_CALL_EXIT(cgp_coord_write_data(cgns_file, iBase, iZone, iCoords[1], rmin.data(), rmax.data(), coordsY.data()));
+        DNDS_CGNS_CALL_EXIT(cgp_coord_write_data(cgns_file, iBase, iZone, iCoords[2], rmin.data(), rmax.data(), coordsZ.data()));
+
+        int iSec{0};
+        DNDS_CGNS_CALL_EXIT(cgp_poly_section_write(cgns_file, iBase, iZone, "all_elements", ElementType_t::MIXED, 1, nCellGlobal + nBndGlobal,
+                                                   bndCellOffsetsGlobalMax, 0, &iSec));
+
+        DNDS_CGNS_CALL_EXIT(cgp_poly_elements_write_data(cgns_file, iBase, iZone, iSec,
+                                                         nBndCellProcOffset + 1, nBndCellProcOffset + nBndCell,
+                                                         elementPolyData.data(), bndCellOffsets.data()));
+
+        static_assert(CGNS_VERSION >= 4500, "Need at least CGNS 4.5.0");
+        for (size_t i = 0; i < allNames.size(); i++)
+            if (bocoListLengthsGlobal[i] > 0)
+            {
+                int iBC;
+                DNDS_CGNS_CALL_EXIT(cg_boco_write(cgns_file, iBase, iZone, allNames[i].data(), BCType_t::BCTypeNull, PointList,
+                                                  bocoListLengthsGlobal[i], NULL, &iBC)); // use NULL to postpone the data write
+                DNDS_CGNS_CALL_EXIT(cg_boco_gridlocation_write(cgns_file, iBase, iZone, iBC, this->dim == 3 ? GridLocation_t::FaceCenter : GridLocation_t::EdgeCenter));
+                DNDS_CGNS_CALL_EXIT(cg_goto(cgns_file, iBase, "Zone_t", iZone, "ZoneBC_t", 1, "BC_t", iBC, "PointList", 0, ""));
+                index nBCLocal = bocoListLengths[i];
+                index nBCLocalProcOffSet{0};
+                MPI::Scan(&nBCLocal, &nBCLocalProcOffSet, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+                nBCLocalProcOffSet -= nBCLocal;
+                DNDS_CGNS_CALL_EXIT(cgp_ptlist_write_data(cgns_file, nBCLocalProcOffSet + 1, nBCLocalProcOffSet + nBCLocal, bocoLists.at(allNames[i]).data()));
+            }
+
+        if (cgp_close(cgns_file))
+            cg_error_exit();
     }
 }
