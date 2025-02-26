@@ -196,8 +196,12 @@ namespace DNDS::Geom
         index NodeIndexLocal2Global_NoSon(index iNode)
         {
             DNDS_assert(coords.father->pLGlobalMapping);
-            if (iNode < 0 || iNode >= coords.father->Size())
+            if (iNode == UnInitIndex)
                 return UnInitIndex;
+            if (iNode < 0)
+                return -1 - iNode;
+            if (iNode >= coords.father->Size())
+                DNDS_assert_info(false, "local idx not right: " + std::to_string(iNode));
             return coords.father->pLGlobalMapping->operator()(mpi.rank, iNode);
         }
 
@@ -208,6 +212,8 @@ namespace DNDS::Geom
         index NodeIndexGlobal2Local_NoSon(index iNode)
         {
             DNDS_assert(coords.father->pLGlobalMapping);
+            if (iNode == UnInitIndex)
+                return UnInitIndex;
             auto [ret, rank, val] = coords.father->pLGlobalMapping->search(iNode);
             DNDS_assert_info(ret, "search failed with input: " + std::to_string(iNode));
             if (rank == mpi.rank)
@@ -248,8 +254,12 @@ namespace DNDS::Geom
         index CellIndexLocal2Global_NoSon(index iCell)
         {
             DNDS_assert(cell2node.father->pLGlobalMapping);
-            if (iCell < 0 || iCell >= cell2node.father->Size())
+            if (iCell == UnInitIndex)
                 return UnInitIndex;
+            if (iCell < 0)
+                return -1 - iCell;
+            if (iCell >= cell2node.father->Size())
+                DNDS_assert_info(false, "local idx not right: " + std::to_string(iCell));
             return cell2node.father->pLGlobalMapping->operator()(mpi.rank, iCell);
         }
 
@@ -260,6 +270,8 @@ namespace DNDS::Geom
         index CellIndexGlobal2Local_NoSon(index iCell)
         {
             DNDS_assert(cell2node.father->pLGlobalMapping);
+            if (iCell == UnInitIndex)
+                return UnInitIndex;
             auto [ret, rank, val] = cell2node.father->pLGlobalMapping->search(iCell);
             DNDS_assert_info(ret, "search failed with input: " + std::to_string(iCell));
             if (rank == mpi.rank)
@@ -271,8 +283,12 @@ namespace DNDS::Geom
         index BndIndexLocal2Global_NoSon(index iBnd)
         {
             DNDS_assert(bnd2node.father->pLGlobalMapping);
-            if (iBnd < 0 || iBnd >= bnd2node.father->Size())
+            if (iBnd == UnInitIndex)
                 return UnInitIndex;
+            if (iBnd < 0)
+                return -1 - iBnd;
+            if (iBnd >= bnd2node.father->Size())
+                DNDS_assert_info(false, "local idx not right: " + std::to_string(iBnd));
             return bnd2node.father->pLGlobalMapping->operator()(mpi.rank, iBnd);
         }
 
@@ -283,6 +299,8 @@ namespace DNDS::Geom
         index BndIndexGlobal2Local_NoSon(index iBnd)
         {
             DNDS_assert(bnd2node.father->pLGlobalMapping);
+            if (iBnd == UnInitIndex)
+                return UnInitIndex;
             auto [ret, rank, val] = bnd2node.father->pLGlobalMapping->search(iBnd);
             DNDS_assert_info(ret, "search failed with input: " + std::to_string(iBnd));
             if (rank == mpi.rank)

@@ -1235,7 +1235,7 @@ namespace DNDS::Geom
 #pragma omp parallel for
 #endif
         for (index iNode = 0; iNode < node2bnd.Size(); iNode++)
-            for (index &iBnd : node2cell[iNode])
+            for (index &iBnd : node2bnd[iNode])
                 iBnd = BndIndexLocal2Global_NoSon(iBnd); // todo: make bnd have son?
 
         // MPI::Barrier(mpi.comm);
