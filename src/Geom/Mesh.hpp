@@ -161,7 +161,6 @@ namespace DNDS::Geom
         // tAdj1Pair bndFaces; // no comm needed for now
 
         /// for cell local factorization
-        using tLocalMatStruct = std::vector<std::vector<index>>;
         tLocalMatStruct cell2cellFaceVLocal;
 
         UnstructuredMesh(const DNDS::MPIInfo &n_mpi, int n_dim)

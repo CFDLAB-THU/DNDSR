@@ -25,6 +25,12 @@ namespace DNDS::Geom
 
     static_assert(std::is_signed_v<t_index>);
 
+    using tLocalMatStruct = std::vector<std::vector<index>>;
+}
+
+namespace DNDS::Geom
+{
+
     inline std::vector<real> JacobiToSTDVector(const tJacobi &j)
     {
         std::vector<real> ret(9);

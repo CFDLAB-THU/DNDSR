@@ -212,7 +212,7 @@ namespace DNDS
                 DNDS_assert_info(false, "invalid call");
         }
 
-        rowsize RowSizeField(index iRow)
+        [[nodiscard]] rowsize RowSizeField(index iRow)
         {
             if constexpr (_dataLayout == CSR)
                 return this->RowSize(iRow);

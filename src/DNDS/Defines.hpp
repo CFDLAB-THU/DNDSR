@@ -237,6 +237,20 @@ namespace DNDS
         return value + increment;
     }
 
+    template <typename T>
+    T size_t_to_signed(size_t v)
+    {
+        static_assert(std::is_signed_v<T> && std::is_integral_v<T>, "T must be a signed integral type");
+        static_assert(std::is_unsigned_v<size_t>, "size_t should be unsigned");
+        if (v <= std::numeric_limits<T>::max())
+            return T(v);
+        else
+        {
+            DNDS_assert_info(false, fmt::format("[{}] from {} to size_t overflow detected", v, typeid(T).name()));
+            return v;
+        }
+    }
+
     // Note that TtIndexVec being accumulated could overflow
     template <class TtRowsizeVec, class TtIndexVec>
     inline void AccumulateRowSize(const TtRowsizeVec &rowsizes, TtIndexVec &rowstarts)
