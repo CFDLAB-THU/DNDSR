@@ -354,8 +354,22 @@ namespace DNDS::Geom
 
         // void ReorderCellLocal();
 
+        /**
+         * \return
+         * cell2cell for local mesh, which do not contain
+         * the diagonal part; should be a diag-less symmetric adjacency matrix
+         */
+        tLocalMatStruct GetCell2CellFaceVLocal();
+
         void ObtainLocalFactFillOrdering(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control);                // 1 uses metis, 2 uses MMD, //TODO 10 uses geometric based searching
         void ObtainSymmetricSymbolicFactorization(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control) const; // -1 use full LU, 0-3 use ilu(code),
+        /**
+         * \warning RecreatePeriodicNodes and BuildVTKConnectivity results are invalid after this;
+         * \warning bnd mesh's cell2parentCell is invalid after this
+         */
+        void ReorderLocalCells();
+
+        
 
         index NumNode() const { return coords.father->Size(); }
         index NumCell() const { return cell2node.father->Size(); }
@@ -546,28 +560,8 @@ namespace DNDS::Geom
                 return fB();
         }
 
-        /**
-         * \return
-         * cell2cell for local mesh, which do not contain
-         * the diagonal part; should be a diag-less symmetric adjacency matrix
-         */
-        auto GetCell2CellFaceVLocal()
-        {
-            DNDS_assert(this->adjPrimaryState == Adj_PointToLocal);
-            std::vector<std::vector<index>> cell2cellFaceV;
-            cell2cellFaceV.resize(this->NumCell());
-            for (index iCell = 0; iCell < this->NumCell(); iCell++)
-            {
-                cell2cellFaceV[iCell].reserve(cell2face.RowSize(iCell)); // do not preserve the diagonal
-                for (auto iFace : cell2face[iCell])
-                {
-                    index iCellOther = this->CellFaceOther(iCell, iFace);
-                    if (iCellOther != UnInitIndex && iCellOther < this->NumCell()) //! must be local not ghost ptrs
-                        cell2cellFaceV[iCell].push_back(iCellOther);
-                }
-            }
-            return cell2cellFaceV;
-        }
+        
+        
 
         void WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name);
         void ReadSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name);

@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fmt/core.h>
 #include "DNDS/EigenPCH.hpp"
+#include "SerialAdjReordering.hpp"
 
 namespace DNDS::Geom
 {
@@ -656,6 +657,7 @@ namespace DNDS::Geom
     void UnstructuredMesh::RecoverCell2CellAndBnd2Cell()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert(adjN2CBState == Adj_PointToGlobal);
         DNDS_assert(coords.father);
         DNDS_assert(cell2node.father);
         DNDS_assert(bnd2node.father);
@@ -1248,7 +1250,7 @@ namespace DNDS::Geom
     {
         DNDS_assert(adjN2CBState == Adj_PointToGlobal);
         /**********************************/
-//todo: ensure using dist omp settings not single!
+// todo: ensure using dist omp settings not single!
 #ifdef DNDS_USE_OMP
 #pragma omp parallel for
 #endif
@@ -1811,7 +1813,7 @@ namespace DNDS::Geom
 
         index nCellG = this->NumCellGlobal(); // collective call!
         index nNodeG = this->NumNodeGlobal(); // collective call!
-        index nNodeB = this->NumBndGlobal();   // collective call!
+        index nNodeB = this->NumBndGlobal();  // collective call!
         if (mpi.rank == mRank)
         {
             log() << "UnstructuredMesh === ReadSerialize "
@@ -1986,5 +1988,238 @@ namespace DNDS::Geom
             symLU.ObtainSymmetricSymbolicFactorization(
                 cell2cellFaceVLocal,
                 control.getILUCode());
+    }
+
+    void UnstructuredMesh::ReorderLocalCells()
+    {
+        DNDS_assert(this->adjPrimaryState == Adj_PointToLocal);
+        auto cell2cellFaceV = this->GetCell2CellFaceVLocal();
+        index bwOld{0}, bwNew{0};
+        auto [cellNew2Old, cellOld2New] = ReorderSerialAdj_CorrectRCM(cell2cellFaceV, bwOld, bwNew);
+        MPI::AllreduceOneIndex(bwOld, MPI_MAX, mpi);
+        MPI::AllreduceOneIndex(bwNew, MPI_MAX, mpi);
+        if (mpi.rank == mRank)
+            log() << fmt::format("UnstructuredMesh === ReorderLocalCells, got reordering, bw [{}] to [{}]", bwOld, bwNew) << std::endl;
+        tAdj1Pair cellOld2NewArr;
+        DNDS_MAKE_SSP(cellOld2NewArr.father, mpi);
+        DNDS_MAKE_SSP(cellOld2NewArr.son, mpi);
+        cellOld2NewArr.father->Resize(this->NumCell());
+        for (index iCell = 0; iCell < this->NumCell(); iCell++)
+            (*cellOld2NewArr.father)[iCell][0] = this->CellIndexLocal2Global_NoSon(cellOld2New.at(iCell)); // this is right but bad syntax
+        cellOld2NewArr.TransAttach();
+
+        std::set<index> cellsNonLocalFull;
+
+        auto record_iCellNonLocal = [&](index iCell)
+        {
+            if (iCell >= 0 && iCell < cell2node.father->pLGlobalMapping->globalSize())
+            {
+                if (std::get<1>(cell2node.father->pLGlobalMapping->search(iCell)) != mpi.rank)
+                    cellsNonLocalFull.insert(iCell);
+            }
+            else
+                DNDS_assert(iCell == UnInitIndex);
+        };
+
+        if (this->adjFacialState != Adj_Unknown)
+        {
+            DNDS_assert(this->adjFacialState == Adj_PointToLocal);
+            this->AdjLocal2GlobalFacial();
+            // see face2cell
+            for (index iF = 0; iF < this->NumFace(); iF++)
+                for (rowsize if2c = 0; if2c < 2; if2c++)
+                    record_iCellNonLocal(face2cell(iF, if2c));
+        }
+        if (this->adjC2FState != Adj_Unknown)
+        {
+            DNDS_assert(this->adjC2FState == Adj_PointToLocal);
+            this->AdjLocal2GlobalC2F();
+        }
+        if (this->adjN2CBState != Adj_Unknown)
+        {
+            DNDS_assert(this->adjN2CBState == Adj_PointToLocal);
+            this->AdjLocal2GlobalN2CB();
+            // see node2cell
+            for (index iN = 0; iN < this->NumNode(); iN++)
+                for (rowsize in2c = 0; in2c < node2cell[iN].size(); in2c++)
+                    record_iCellNonLocal(node2cell(iN, in2c));
+        }
+        this->AdjLocal2GlobalPrimary();
+        // see cell2cell
+        for (index iC = 0; iC < this->NumCell(); iC++)
+            for (rowsize ic2c = 0; ic2c < cell2cell[iC].size(); ic2c++)
+                record_iCellNonLocal(cell2cell(iC, ic2c));
+        // see bnd2cell
+        for (index iB = 0; iB < this->NumBnd(); iB++)
+            for (rowsize ib2c = 0; ib2c < 2; ib2c++)
+                record_iCellNonLocal(bnd2cell(iB, ib2c));
+
+        // std::cout << mpi.rank << ",-1," << cellsNonLocalFull.size() << "," << cell2node.trans.pLGhostMapping->ghostIndex.size() << std::endl;
+        for (auto iCellGhost : cell2node.trans.pLGhostMapping->ghostIndex)
+            cellsNonLocalFull.insert(iCellGhost); // ! should have no effect normally
+        // std::cout << mpi.rank << ",-1," << cellsNonLocalFull.size() << std::endl;
+        // std::cout << mpi.rank << ",-1," << cell2node.trans.pLGhostMapping->ghostIndex.size()
+        //           << ", " << cell2cell.trans.pLGhostMapping->ghostIndex.size()
+        //           << ", " << cell2face.trans.pLGhostMapping->ghostIndex.size()
+        //           << std::endl;
+
+        cellOld2NewArr.trans.createFatherGlobalMapping();
+        cellOld2NewArr.trans.createGhostMapping(std::vector<index>(cellsNonLocalFull.begin(), cellsNonLocalFull.end()));
+        cellOld2NewArr.trans.createMPITypes();
+        cellOld2NewArr.trans.pullOnce();
+
+        /************************************/
+        /*      replace RHS of xxx2cell     */
+        /************************************/
+
+        auto replaceCellIndexToNew = [&](index iCellOld) -> index
+        {
+            if (iCellOld == UnInitIndex)
+                return UnInitIndex;
+            auto [ret, rank, val] = cellOld2NewArr.trans.pLGhostMapping->search_indexAppend(iCellOld);
+            DNDS_assert(ret);
+            return cellOld2NewArr(val, 0);
+        };
+
+        if (this->adjFacialState != Adj_Unknown)
+            for (index iFace = 0; iFace < this->NumFace(); iFace++)
+                for (index &iCell : face2cell[iFace])
+                    iCell = replaceCellIndexToNew(iCell);
+        if (this->adjN2CBState != Adj_Unknown)
+            for (index iNode = 0; iNode < this->NumNode(); iNode++)
+                for (index &iCell : node2cell[iNode])
+                    iCell = replaceCellIndexToNew(iCell);
+        for (index iCell = 0; iCell < this->NumCell(); iCell++)
+            for (index &iCellOther : cell2cell[iCell])
+                iCellOther = replaceCellIndexToNew(iCellOther);
+        for (index iBnd = 0; iBnd < this->NumBnd(); iBnd++)
+            for (index &iCell : bnd2cell[iBnd])
+                iCell = replaceCellIndexToNew(iCell);
+
+        /************************************/
+        /*      ghost       of xxx2cell     */
+        /************************************/
+        if (this->adjFacialState != Adj_Unknown)
+            face2cell.trans.pullOnce();
+        if (this->adjN2CBState != Adj_Unknown)
+            node2cell.trans.pullOnce();
+        cell2cell.trans.pullOnce(); // should be unnecessary
+        bnd2cell.trans.pullOnce();
+
+        /************************************/
+        /*      reorder LHS of cell2xxx     */
+        /************************************/
+
+        { // cell2node
+            tAdj cell2nodeTmp;
+            DNDS_MAKE_SSP(cell2nodeTmp, mpi);
+            cell2nodeTmp->CopyData(*cell2node.father);
+            cell2node.father->Decompress();
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+            {
+                index iCellNew = this->CellIndexGlobal2Local_NoSon(cellOld2NewArr(iCell, 0));
+                cell2node.father->ResizeRow(iCellNew, (*cell2nodeTmp).RowSize(iCell));
+                cell2node[iCellNew] = (*cell2nodeTmp)[iCell];
+            }
+            cell2node.father->Compress();
+        }
+        { // cell2cell
+            tAdj cell2cellTmp;
+            DNDS_MAKE_SSP(cell2cellTmp, mpi);
+            cell2cellTmp->CopyData(*cell2cell.father);
+            cell2cell.father->Decompress();
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+            {
+                index iCellNew = this->CellIndexGlobal2Local_NoSon(cellOld2NewArr(iCell, 0));
+                cell2cell.father->ResizeRow(iCellNew, (*cell2cellTmp).RowSize(iCell));
+                cell2cell[iCellNew] = (*cell2cellTmp)[iCell];
+            }
+            cell2cell.father->Compress();
+        }
+        if (this->adjC2FState != Adj_Unknown)
+        { // cell2face
+            tAdj cell2faceTmp;
+            DNDS_MAKE_SSP(cell2faceTmp, mpi);
+            cell2faceTmp->CopyData(*cell2face.father);
+            cell2face.father->Decompress();
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+            {
+                index iCellNew = this->CellIndexGlobal2Local_NoSon(cellOld2NewArr(iCell, 0));
+                cell2face.father->ResizeRow(iCellNew, (*cell2faceTmp).RowSize(iCell));
+                cell2face[iCellNew] = (*cell2faceTmp)[iCell];
+            }
+            cell2face.father->Compress();
+        }
+        if (this->isPeriodic)
+        { // cell2nodePbi
+            tPbi cell2nodePbiTmp;
+            DNDS_MAKE_SSP(cell2nodePbiTmp, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
+            cell2nodePbiTmp->CopyData(*cell2nodePbi.father);
+            cell2nodePbi.father->Decompress();
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+            {
+                index iCellNew = this->CellIndexGlobal2Local_NoSon(cellOld2NewArr(iCell, 0));
+                cell2nodePbi.father->ResizeRow(iCellNew, (*cell2nodePbiTmp).RowSize(iCell));
+                cell2nodePbi[iCellNew] = (*cell2nodePbiTmp)[iCell];
+            }
+        }
+        { // cellElemInfo
+            tElemInfoArray cellElemInfoTmp;
+            DNDS_MAKE_SSP(cellElemInfoTmp, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+            cellElemInfoTmp->CopyData(*cellElemInfo.father);
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+                cellElemInfo(this->CellIndexGlobal2Local_NoSon(cellOld2NewArr(iCell, 0)), 0) = (*cellElemInfoTmp)(iCell, 0);
+        }
+
+        /************************************/
+        /*     ghost        of cell2xxx     */
+        /************************************/
+
+        { // cell2node
+            std::vector<index> ghostCellGlobalsNew = cell2node.trans.pLGhostMapping->ghostIndex;
+            for (index &iCell : ghostCellGlobalsNew)
+                iCell = replaceCellIndexToNew(iCell);
+            cell2node.trans.createGhostMapping(ghostCellGlobalsNew);
+            cell2node.trans.createMPITypes();
+            cell2node.trans.pullOnce();
+        }
+        { // cell2cell
+            cell2cell.trans.BorrowGGIndexing(cell2node.trans);
+            cell2cell.trans.createMPITypes();
+            cell2cell.trans.pullOnce();
+        }
+        if (this->adjC2FState != Adj_Unknown)
+        { // cell2face
+            cell2face.trans.BorrowGGIndexing(cell2node.trans);
+            cell2face.trans.createMPITypes();
+            cell2face.trans.pullOnce();
+        }
+        if (this->isPeriodic)
+        { // cell2nodePbi
+            cell2nodePbi.trans.BorrowGGIndexing(cell2node.trans);
+            cell2nodePbi.trans.createMPITypes();
+            cell2nodePbi.trans.pullOnce();
+        }
+        { // cellElemInfo
+            cellElemInfo.trans.BorrowGGIndexing(cell2node.trans);
+            cellElemInfo.trans.createMPITypes();
+            cellElemInfo.trans.pullOnce();
+        }
+
+        if (this->adjFacialState != Adj_Unknown)
+        {
+            this->AdjGlobal2LocalFacial();
+        }
+        if (this->adjC2FState != Adj_Unknown)
+        {
+            this->AdjGlobal2LocalC2F();
+        }
+        if (this->adjN2CBState != Adj_Unknown)
+        {
+            this->AdjGlobal2LocalN2CB();
+        }
+        this->AdjGlobal2LocalPrimary();
+        if (mpi.rank == mRank)
+            log() << fmt::format("UnstructuredMesh === ReorderLocalCells finished") << std::endl;
     }
 }

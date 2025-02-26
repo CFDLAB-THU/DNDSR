@@ -37,8 +37,16 @@ namespace DNDS
             std::copy(r.begin(), r.end(), __p_indices);
         }
 
+        void operator=(const AdjacencyRow &r)
+        {
+            DNDS_assert(__Row_size == r.size());
+            std::copy(r.cbegin(), r.cend(), __p_indices);
+        }
+
         index *begin() { return __p_indices; }
         index *end() { return __p_indices + __Row_size; } // past-end
+        index *cbegin() const { return __p_indices; }
+        index *cend() const { return __p_indices + __Row_size; } // past-end
         [[nodiscard]] rowsize size() const { return __Row_size; }
     };
 

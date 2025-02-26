@@ -269,7 +269,7 @@ namespace DNDS
         }
         /******************************************************************************************************************************/
         /**
-         * \brief get real element byte info into account, with ghost indexer and comm types built, need two mappings
+         * \brief get real element byte info into account, with ghost indexer and comm types built, need two mappings. 
          * son is resized
          * \pre has pLGlobalMapping pLGhostMapping, and resize the son
          * \post my indexer pPullTypeVec pPushTypeVec established

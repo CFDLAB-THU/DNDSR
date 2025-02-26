@@ -302,6 +302,7 @@ namespace DNDS::Euler
                 int meshElevationBoundaryMode = 0; // 0: only wall bc; 1: wall + invis vall
 
                 int meshDirectBisect = 0;
+                int meshReorderCells = 0; // 0: natural; 1: reorder
 
                 int meshFormat = 0;
                 Geom::UnstructuredMeshSerialRW::PartitionOptions meshPartitionOptions;
@@ -357,6 +358,7 @@ namespace DNDS::Euler
                     meshElevationRBFKernel, meshElevationMaxIncludedAngle, meshElevationNSearch, meshElevationRefDWall,
                     meshElevationBoundaryMode,
                     meshDirectBisect,
+                    meshReorderCells,
                     meshFormat,
                     meshPartitionOptions,
                     meshFile,

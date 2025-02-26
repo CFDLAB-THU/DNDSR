@@ -96,6 +96,7 @@ namespace DNDS::Euler
                 mesh->RecoverCell2CellAndBnd2Cell();
                 mesh->BuildGhostPrimary();
                 mesh->AdjGlobal2LocalPrimary();
+                mesh->AdjGlobal2LocalN2CB();
                 index nCell = mesh->NumCellGlobal();
                 index nNode = mesh->NumNodeGlobal();
                 if (mesh->getMPI().rank == 0)
@@ -134,7 +135,8 @@ namespace DNDS::Euler
             mesh->ReadSerialize(serializerP, "meshPart");
             serializerP->CloseFile();
         }
-
+        if (config.dataIOControl.meshReorderCells == 1)
+            mesh->ReorderLocalCells(); // do this early so that faces are natural to cell
         // std::cout << "here" << std::endl;
         mesh->InterpolateFace();
         mesh->AssertOnFaces();

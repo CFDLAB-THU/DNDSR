@@ -175,18 +175,51 @@ namespace DNDS::Geom
         }
     }
 
-    // void UnstructuredMesh::ReorderCellLocal()
-    // {
-    //     //! currently not used
 
-    //     /****************************/
-    //     // got reordering, iCellNew = iPerm[iCell], iCell = perm[iCellNew], A(perm,perm) = Anew
-
-    //     //! remember to add all cell related indices here for altering
-    //     // DNDS_assert(this->adjPrimaryState == Adj_PointToLocal);
-    //     // DNDS_assert(this->adjFacialState == Adj_PointToLocal);
-    //     // DNDS_assert(this->adjC2FState == Adj_PointToLocal);
-    // }
+    tLocalMatStruct UnstructuredMesh::GetCell2CellFaceVLocal()
+    {
+        DNDS_assert(this->adjPrimaryState == Adj_PointToLocal);
+        std::vector<std::vector<index>> cell2cellFaceV;
+        cell2cellFaceV.resize(this->NumCell());
+        if (this->adjFacialState == Adj_PointToLocal)
+        {
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+            {
+                cell2cellFaceV[iCell].reserve(cell2face.RowSize(iCell)); // do not preserve the diagonal
+                for (auto iFace : cell2face[iCell])
+                {
+                    index iCellOther = this->CellFaceOther(iCell, iFace);
+                    if (iCellOther != UnInitIndex && iCellOther < this->NumCell()) //! must be local not ghost ptrs
+                        cell2cellFaceV[iCell].push_back(iCellOther);
+                }
+            }
+        }
+        else
+        {
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+            {
+                std::vector<index> cell2cellRow;
+                auto eCell = this->GetCellElement(iCell);
+                std::vector<index> c2ni(cell2node[iCell].begin(), cell2node[iCell].begin() + eCell.GetNumVertices());
+                std::sort(c2ni.begin(), c2ni.end());
+                for (index iCellOther : cell2cell[iCell])
+                {
+                    if (iCellOther >= this->NumCell())
+                        continue;
+                    auto eCellOther = this->GetCellElement(iCellOther);
+                    std::vector<index> c2nj(cell2node[iCellOther].begin(), cell2node[iCellOther].begin() + eCellOther.GetNumVertices());
+                    std::sort(c2nj.begin(), c2nj.end());
+                    std::vector<index> intersect;
+                    intersect.reserve(9);
+                    std::set_intersection(c2ni.begin(), c2ni.end(), c2nj.begin(), c2nj.end(), std::back_inserter(intersect));
+                    if (intersect.size() >= this->dim) // for 2d, exactly 2; for 3d, 3 or 4
+                        cell2cellRow.push_back(iCellOther);
+                }
+                cell2cellFaceV[iCell] = std::move(cell2cellRow);
+            }
+        }
+        return cell2cellFaceV;
+    }
 
     void UnstructuredMesh::ObtainLocalFactFillOrdering(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control)
     {
