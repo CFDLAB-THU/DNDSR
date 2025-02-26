@@ -9,9 +9,14 @@
             "type": "cppdbg",
             "request": "attach",
             // "program": "${workspaceFolder}/build/test/meshSerial_Test.exe",
-            "program": "${workspaceFolder}/build/test/vrStatic_Test.exe",
+            "program": "${workspaceFolder}/build/app/eulerSA.exe",
             "MIMode": "gdb",
             "setupCommands": [
+                {
+                    "description": "Insert python ",
+                    "text": "python import sys;sys.path.insert(0, '/usr/share/gcc/python');from libstdcxx.v6.printers import register_libstdcxx_printers;register_libstdcxx_printers(None)",
+                    "ignoreFailures": false
+                },
                 {
                     "description": "Enable pretty-printing for gdb",
                     "text": "-enable-pretty-printing",
