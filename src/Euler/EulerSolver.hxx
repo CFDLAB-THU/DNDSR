@@ -846,13 +846,13 @@ namespace DNDS::Euler
                         }
                         xIncBuf.setConstant(0.0);
                         solveLinear(alphaDiag, rhsTemp, uMG1, xIncBuf, uRecNew, uRecNew,
-                                    JDTmp, *gmres, 1);
+                                    JDTmp, *gmres, mgLevel);
                         fincrement(uMG1, xIncBuf, 1.0, uPos);
                         // solve_multigrid_impl(x_base, cxInc, mgLevel + 1, mgLevelMax);
                         // cxInc *= -1;
                         // std::cout << "here" << std::endl;
 
-                        if (mgLevel < mgLevelMax && 
+                        if (mgLevel < mgLevelMax &&
                             iIterMG == config.linearSolverControl.coarseGridLinearSolverControlList.at(mgLevel - 1).multiGridNIter) // post smoother coarser grid call
                         {
                             if (mgLevel == 1)
