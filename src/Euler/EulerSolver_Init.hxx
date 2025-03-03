@@ -337,6 +337,10 @@ namespace DNDS::Euler
         meshBnd->RecreatePeriodicNodes();
         meshBnd->BuildVTKConnectivity();
 
+        // *demo code
+        // mesh->PrintMeshCGNS("test.cgns", [&](Geom::t_index i)
+        //                     { return BCHandler.GetNameFormID(i); }, BCHandler.GetAllNames());
+
         DNDS_MAKE_SSP(vfv, mpi, mesh);
         vfv->SetPeriodicTransformations(
             [&](auto u, Geom::t_index id)

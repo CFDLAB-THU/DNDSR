@@ -87,9 +87,13 @@ namespace DNDS::Geom
         DNDS::MPIInfo mpi;
         int dim;
         bool isPeriodic{false};
+        // state of: cell2node, cell2cell, bnd2node (only for non-bnd mesh object), bnd2cell (only for non-bnd mesh object)
         MeshAdjState adjPrimaryState{Adj_Unknown};
+        // state of: face2cell, face2node
         MeshAdjState adjFacialState{Adj_Unknown};
+        // state of: cell2face
         MeshAdjState adjC2FState{Adj_Unknown};
+        // state of: node2cell, node2bnd
         MeshAdjState adjN2CBState{Adj_Unknown};
         Periodicity periodicInfo;
         index nNodeO1{-1};
@@ -595,6 +599,8 @@ namespace DNDS::Geom
             hdf5OutSetting.chunkSize = chunkSiz;
             hdf5OutSetting.deflateLevel = deflateLevel;
         }
+
+        void PrintMeshCGNS(std::string fname, const t_FBCID_2_Name &fbcid2name, const std::vector<std::string> &allNames);
     };
 
 }
