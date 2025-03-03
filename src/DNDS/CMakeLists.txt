@@ -12,11 +12,13 @@ set(DNDS_PCH_HPPS
 EigenPCH.hpp
 ExprtkPCH.hpp)
 
-dnds_add_lib_pch(dnds_PCHs "${DNDS_PCH_CPPS}" "${DNDS_PCH_HPPS}" "")
+dnds_add_lib_pch(dnds_PCHs "${DNDS_PCH_CPPS}" "${DNDS_PCH_HPPS}" "" 
+    OFF OFF) # SHARED,FAST
 set(DNDS_PCH_TARGETS dnds_PCHs)
 dnds_variable_to_parent_scope(DNDS_PCH_TARGETS)
 
-dnds_add_lib_pch_fast(dnds_PCHs_fast "${DNDS_PCH_CPPS}" "${DNDS_PCH_HPPS}" "")
+dnds_add_lib_pch(dnds_PCHs_fast "${DNDS_PCH_CPPS}" "${DNDS_PCH_HPPS}" ""
+    OFF ON) # SHARED,FAST
 set(DNDS_PCH_TARGETS_FAST dnds_PCHs_fast)
 dnds_variable_to_parent_scope(DNDS_PCH_TARGETS_FAST)
 
@@ -39,5 +41,9 @@ message(STATUS "DNDS_PCH_TARGETS ${DNDS_PCH_TARGETS}")
 message(STATUS "DNDS_PCH_TARGETS_FAST ${DNDS_PCH_TARGETS_FAST}")
 message(STATUS "CMAKE_DISABLE_PRECOMPILE_HEADERS ${CMAKE_DISABLE_PRECOMPILE_HEADERS}")
 
-dnds_add_lib_fast(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}")
+dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
+    OFF ON)  # SHARED,FAST
+
+dnds_add_lib(${LIBNAME}_shared "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
+    ON ON)  # SHARED,FAST
 

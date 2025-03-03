@@ -26,6 +26,13 @@ foreach(item IN LISTS DNDS_Euler_Models_List)
     set(CPPS
     _explicit_instantiation/EulerSolver_${key}.cpp
     )
-    dnds_add_lib_fast(${LIBNAME}_fast_${key} "${CPPS_FAST}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}")
-    dnds_add_lib(${LIBNAME}_${key} "${CPPS}" "${LINKS};${LIBNAME}_fast_${key}" "${DNDS_PCH_TARGETS}")
+    dnds_add_lib(${LIBNAME}_fast_${key} "${CPPS_FAST}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
+        OFF ON) # SHARED,FAST
+    dnds_add_lib(${LIBNAME}_${key}      "${CPPS}" "${LINKS};${LIBNAME}_fast_${key}" "${DNDS_PCH_TARGETS}"
+        OFF OFF)  # SHARED,FAST
+
+    dnds_add_lib(${LIBNAME}_fast_${key}_shared "${CPPS_FAST}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
+        ON ON) # SHARED,FAST
+    dnds_add_lib(${LIBNAME}_${key}_shared      "${CPPS}" "${LINKS};${LIBNAME}_fast_${key}" "${DNDS_PCH_TARGETS}"
+        ON OFF)  # SHARED,FAST
 endforeach()

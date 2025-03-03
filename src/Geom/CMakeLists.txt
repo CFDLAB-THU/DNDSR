@@ -25,5 +25,9 @@ Mesh_Elevation.cpp
 Mesh_Elevation_SmoothSolver.cpp
 )
 
-dnds_add_lib_fast(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS}")
+dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS}"
+    OFF ON)  # SHARED,FAST
+
+dnds_add_lib(${LIBNAME}_shared "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS}"
+    ON ON)  # SHARED,FAST
 

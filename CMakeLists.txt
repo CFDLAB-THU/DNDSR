@@ -142,8 +142,8 @@ set(CMAKE_USE_RELATIVE_PATHS ON)
 # ##########################################
 find_library(DNDS_EXTERNAL_LIB_BACKTRACE NAMES backtrace)
 # need zlibstatic first to find the static version on windows
-find_library(DNDS_EXTERNAL_LIB_ZLIB NAMES zlibstatic zlib z z_D libzlibstatic.a REQUIRED)
-find_library(DNDS_EXTERNAL_LIB_HDF5 NAMES libhdf5.a libhdf5.lib hdf5 PATHS 
+find_library(DNDS_EXTERNAL_LIB_ZLIB NAMES libz.so zlibstatic zlib z z_D libzlibstatic.a REQUIRED)
+find_library(DNDS_EXTERNAL_LIB_HDF5 NAMES libhdf5.so libhdf5.a libhdf5.lib hdf5 PATHS 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
      REQUIRED)
@@ -151,15 +151,15 @@ find_library(DNDS_EXTERNAL_LIB_HDF5 NAMES libhdf5.a libhdf5.lib hdf5 PATHS
 #     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
 #     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
 #      REQUIRED)
-find_library(DNDS_EXTERNAL_LIB_CGNS NAMES libcgns.a cgns PATHS 
+find_library(DNDS_EXTERNAL_LIB_CGNS NAMES libcgns.so cgns PATHS 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
      REQUIRED)
-find_library(DNDS_EXTERNAL_LIB_METIS NAMES libmetis.a metis PATHS 
+find_library(DNDS_EXTERNAL_LIB_METIS NAMES libmetis.so metis PATHS 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
          REQUIRED)
-find_library(DNDS_EXTERNAL_LIB_PARMETIS NAMES libparmetis.a parmetis PATHS 
+find_library(DNDS_EXTERNAL_LIB_PARMETIS NAMES libparmetis.so parmetis PATHS 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
      REQUIRED)
@@ -243,8 +243,8 @@ find_path(EXTERNAL_DOXYGEN_AWESOME doxygen-awesome.css PATHS
     "${PROJECT_SOURCE_DIR}/external/doxygen-awesome-css-2.2.1" 
     NO_DEFAULT_PATH)
 
-add_subdirectory("${DNDS_EXTERNAL_INCLUDE_PYBIND11}/..")
-add_subdirectory("${DNDS_EXTERNAL_INCLUDE_FMT}/..")
+add_subdirectory("${DNDS_EXTERNAL_INCLUDE_PYBIND11}/.." "${CMAKE_BINARY_DIR}/pybind11")
+add_subdirectory("${DNDS_EXTERNAL_INCLUDE_FMT}/.."      "${CMAKE_BINARY_DIR}/fmt")
 # add_subdirectory("${DNDS_EXTERNAL_INCLUDE_CPPTRACE}/../..")
 
 if(DNDS_EXTERNAL_INCLUDE_SUPERLU)
