@@ -1,0 +1,19 @@
+[build-system]
+requires = ["scikit-build-core", "pybind11"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "DNDSR"
+version = "0.0.0"
+
+
+[tool.scikit-build]
+wheel.packages = ["src/DNDS"]
+cmake.minimum-version = "3.6"
+cmake.build-type = "Release"
+build.targets = ["dnds_pybind11"]
+build.verbose = true 
+build-dir = "build"
+
+
+

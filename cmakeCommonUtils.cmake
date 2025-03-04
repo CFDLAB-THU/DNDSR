@@ -68,6 +68,33 @@ function(dnds_add_lib_pch LIBNAME CPPS HPPS LINKS SHARED FAST)
     endif()
 endfunction(dnds_add_lib_pch)
 
+
+function(dnds_add_py_module LIBNAME CPPS LINKS PCH_TARGET SHARED FAST)
+    message(DEBUG "py module ${LIBNAME} CPPS is ${CPPS} LINKS is ${LINKS}")
+    if (NOT SHARED)
+        message(FATAL "you have to use SHARED=ON")
+    endif()
+        
+    pybind11_add_module(${LIBNAME} MODULE ${CPPS})
+    
+    target_include_directories(${LIBNAME} PRIVATE ${DNDS_EXTERNAL_INCLUDES})
+    target_include_directories(${LIBNAME} PRIVATE ${DNDS_INCLUDES})
+    get_target_property(INCLUDE_DIRS ${LIBNAME} INCLUDE_DIRECTORIES)
+    # message(DEBUG "Include directories for ${LIBNAME}: ${INCLUDE_DIRS}")
+    
+    target_link_libraries(${LIBNAME} PRIVATE ${LINKS})
+    # target_link_libraries(${LIBNAME} PRIVATE ${PCH_LINKS})
+    if((CMAKE_VERSION VERSION_GREATER_EQUAL "3.16") AND DNDS_USE_PRECOMPILED_HEADER)
+        target_precompile_headers(${LIBNAME} REUSE_FROM ${PCH_TARGET})
+    endif()
+    if( DNDS_USE_CCACHE )
+        set_property(TARGET ${LIBNAME} PROPERTY CXX_COMPILER_LAUNCHER ccache)
+    endif()
+    if( FAST )
+        add_fast_flags(${LIBNAME})
+    endif()
+endfunction(dnds_add_py_module)
+
 macro(dnds_variable_to_parent_scope V)
     set(${V} ${${V}} PARENT_SCOPE)
 endmacro()

@@ -10,7 +10,7 @@ else()
     cmake_minimum_required(VERSION 3.20)
 endif()
 
-set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/bin CACHE FILEPATH "install place")
+set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/install CACHE FILEPATH "install place")
 
 set(CMAKE_BUILD_TYPE Release CACHE STRING "Release or Debug")
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
@@ -63,6 +63,9 @@ set(DNDS_SUPERLU_DIST_USE_BLAS OFF CACHE BOOL "use blas in superlu_dist")
 set(DNDS_RECORD_COMMIT ON CACHE BOOL "record commit id for each cmake configure")
 set(DNDS_VERBOSE_BUILDING OFF CACHE BOOL "make the makefile verbose, overrides CMAKE_VERBOSE_MAKEFILE")
 set(DNDS_USE_CLANG_TIDY OFF CACHE BOOL "use clang-tidy")
+
+# for we need fmtlib to give a shared library
+set(BUILD_SHARED_LIBS ON CACHE BOOL "set by DNDS, keep it on!!!")
 
 if(DNDS_RECORD_COMMIT)
     execute_process(COMMAND git rev-parse HEAD OUTPUT_FILE ${CMAKE_BINARY_DIR}/commitID.txt WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} TIMEOUT 120 RESULT_VARIABLE RET)
@@ -243,7 +246,9 @@ find_path(EXTERNAL_DOXYGEN_AWESOME doxygen-awesome.css PATHS
     "${PROJECT_SOURCE_DIR}/external/doxygen-awesome-css-2.2.1" 
     NO_DEFAULT_PATH)
 
+set(PYBIND11_FINDPYTHON ON)
 add_subdirectory("${DNDS_EXTERNAL_INCLUDE_PYBIND11}/.." "${CMAKE_BINARY_DIR}/pybind11")
+set(FMT_LIB_DIR "bin")
 add_subdirectory("${DNDS_EXTERNAL_INCLUDE_FMT}/.."      "${CMAKE_BINARY_DIR}/fmt")
 # add_subdirectory("${DNDS_EXTERNAL_INCLUDE_CPPTRACE}/../..")
 
@@ -275,21 +280,6 @@ set (DNDS_EXTERNAL_LIBS "")
 if (MPI_CXX_FOUND)
     set(DNDS_EXTERNAL_LIBS ${MPI_CXX_LIBRARIES})
     message(STATUS "MPI_CXX_LIBRARIES ${MPI_CXX_LIBRARIES}")
-endif()
-
-set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
-    fmt::fmt
-    # cpptrace::cpptrace
-    CACHE INTERNAL
-    "Project Public External Lib Dependencies"
-    )
-
-if(DNDS_EXTERNAL_INCLUDE_SUPERLU)
-set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
-    superlu_dist
-    CACHE INTERNAL
-    "Project Public External Lib Dependencies"
-    )
 endif()
 
 if(DNDS_EXTERNAL_LIB_BACKTRACE)
@@ -327,7 +317,66 @@ if (DNDS_EIGEN_USE_LAPACK)
     ${DNDS_EXTERNAL_LIB_LAPACK}
     ${DNDS_EXTERNAL_LIB_LAPACKE})
 endif()
-message("DNDS_EXTERNAL_LIBS  " ${DNDS_EXTERNAL_LIBS})
+message(DEBUG "DNDS_EXTERNAL_LIBS external files:  ${DNDS_EXTERNAL_LIBS}")
+
+set(DNDS_EXTERNAL_LIBS_DIRS "" CACHE INTERNAL
+    "Project Public External Lib Dependencies' Directories")
+set(DNDS_EXTERNAL_LIBS_DIRS_REGEX "" CACHE INTERNAL
+    "Project Public External Lib Dependencies' Directories regex")
+foreach(LIB ${DNDS_EXTERNAL_LIBS})
+    get_filename_component(LIB_DIR ${LIB} DIRECTORY)
+    list(APPEND DNDS_EXTERNAL_LIBS_DIRS       ${LIB_DIR})
+    list(APPEND DNDS_EXTERNAL_LIBS_DIRS_REGEX "${LIB_DIR}.*")
+endforeach()
+
+list(REMOVE_DUPLICATES DNDS_EXTERNAL_LIBS_DIRS)
+list(REMOVE_DUPLICATES DNDS_EXTERNAL_LIBS_DIRS_REGEX)
+
+if (UNIX)
+
+    # Join the directories into a single string separated by colon (:)
+    string(REPLACE ";" ":" DNDS_EXTERNAL_LIBS_DIRS_SHELL_LIST "${DNDS_EXTERNAL_LIBS_DIRS}")
+    string(APPEND DNDS_EXTERNAL_LIBS_DIRS_SHELL_LIST ":${CMAKE_INSTALL_PREFIX}/bin")
+    # Generate the shell script
+    set(SCRIPT_NAME "${CMAKE_INSTALL_PREFIX}/set_library_path.sh")
+    file(WRITE ${SCRIPT_NAME} "#!/bin/bash\n")
+    file(APPEND ${SCRIPT_NAME} "export LD_LIBRARY_PATH=${DNDS_EXTERNAL_LIBS_DIRS_SHELL_LIST}:\$LD_LIBRARY_PATH\n")
+    message(STATUS "Generated LIBRARY script: ${SCRIPT_NAME}")
+elseif(WIN32)
+    string(REPLACE ";" ";" DNDS_EXTERNAL_LIBS_DIRS_SHELL_LIST "${DNDS_EXTERNAL_LIBS_DIRS}")
+     string(APPEND DNDS_EXTERNAL_LIBS_DIRS_SHELL_LIST ";${CMAKE_INSTALL_PREFIX}/bin")
+    # Generate the shell script
+    set(SCRIPT_NAME "${CMAKE_INSTALL_PREFIX}/set_library_path.bat")
+    file(WRITE ${SCRIPT_NAME} "@echo off\n")
+    file(APPEND ${SCRIPT_NAME} "set PATH=%PATH%;${LIBRARY_PATH}\n")
+    message(STATUS "Generated LIBRARY script: ${SCRIPT_NAME}")
+else()
+    message(WARNING "The list of libraries might need be aded to dynamic linking: \n"
+        "${DNDS_EXTERNAL_LIBS_DIRS}"
+    )
+
+endif()
+
+message(DEBUG "DNDS_EXTERNAL_LIBS_DIRS_REGEX:  ${DNDS_EXTERNAL_LIBS_DIRS_REGEX}")
+
+# add internal built libraries
+
+set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
+    fmt::fmt
+    # cpptrace::cpptrace
+    CACHE INTERNAL
+    "Project Public External Lib Dependencies"
+    )
+
+if(DNDS_EXTERNAL_INCLUDE_SUPERLU)
+set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
+    superlu_dist
+    CACHE INTERNAL
+    "Project Public External Lib Dependencies"
+    )
+endif()
+
+message(STATUS "DNDS_EXTERNAL_LIBS   ${DNDS_EXTERNAL_LIBS}")
 
 set(DNDS_EXTERNAL_INCLUDES 
     ${DNDS_EXTERNAL_INCLUDE_ZLIB}

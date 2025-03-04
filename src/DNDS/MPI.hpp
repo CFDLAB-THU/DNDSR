@@ -209,7 +209,6 @@ namespace DNDS::Debug
 // remember to set a breakpoint here
 void __DNDS_assert_false_info_mpi(const char *expr, const char *file, int line, const std::string &info, const DNDS::MPIInfo &mpi);
 
-
 #ifdef DNDS_NDEBUG
 #define DNDS_assert_info_mpi(expr, mpi, info) (void(0))
 #else

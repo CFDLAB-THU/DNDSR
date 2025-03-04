@@ -47,3 +47,31 @@ dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
 dnds_add_lib(${LIBNAME}_shared "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
     ON ON)  # SHARED,FAST
 
+install(TARGETS ${LIBNAME}_shared;${LIBNAME}
+    LIBRARY DESTINATION bin
+    ARCHIVE DESTINATION lib
+)
+
+set(CPPS_BIND
+MPI_bind.cpp
+)
+
+dnds_add_py_module(${LIBNAME}_pybind11 "${CPPS_BIND}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
+    ON ON)  # SHARED,FAST
+target_link_libraries(${LIBNAME}_pybind11 PRIVATE ${LIBNAME}_shared)
+
+install(
+  TARGETS ${LIBNAME}_shared;${LIBNAME}_pybind11
+  DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/_internal
+  RUNTIME_DEPENDENCY_SET DNDS_LIB_DEPENDENCY_XXX
+)
+
+
+# # this might not be a good idea.
+# install(
+#     RUNTIME_DEPENDENCY_SET DNDS_LIB_DEPENDENCY_XXX
+#     DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/_internal
+#     # POST_EXCLUDE_REGEXES ${DNDS_EXTERNAL_LIBS_DIRS_REGEX}
+#     )
+
+
