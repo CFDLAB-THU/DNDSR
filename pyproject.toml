@@ -1,5 +1,8 @@
+# usage:
+# CC=/usr/bin/gcc CXX=/usr/bin/g++ CMAKE_BUILD_PARALLEL_LEVEL=16 pip install . --verbose
+
 [build-system]
-requires = ["scikit-build-core", "pybind11"]
+requires = ["scikit-build-core>=0.3.3", "pybind11"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -8,12 +11,19 @@ version = "0.0.0"
 
 
 [tool.scikit-build]
-wheel.packages = ["src/DNDS"]
-cmake.minimum-version = "3.6"
+cmake.minimum-version = "3.21"
 cmake.build-type = "Release"
-build.targets = ["dnds_pybind11"]
-build.verbose = true 
-build-dir = "build"
+build.targets = ["dnds", "dnds_pybind11"]
+build.verbose = true
+build-dir = "build_py"
+cmake.args = ["-G Unix Makefiles"]
+build.tool-args = ["-j", "8"]
+sdist.include = [
+    "src/*/_internal/*.so",
+    "src/*/_internal/*.dylib",
+    "src/*/_internal/*.pyd",
+] # append to .gitignore rules
 
-
-
+[tool.scikit-build.wheel.packages]
+"DNDSR/DNDS/_internal" = "src/DNDS/_internal"
+"DNDSR/DNDS" = "src/DNDS"

@@ -2,3 +2,4 @@ numpy
 scipy
 matplotlib
 scikit-build
+auditwheel

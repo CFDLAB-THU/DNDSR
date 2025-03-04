@@ -7,6 +7,9 @@ build*
 # external
 /external*
 /cfd_externals
+!/external 
+external/*
+!external/cfd_externals
 # matlab
 *.asv
 # packages
@@ -29,7 +32,11 @@ data
 *.toc
 *.bbl
 # python
+venv*
 *.pyc
 srcOrig
 newSrc*
-src/*/_internal
+# # note that scikit-build-core uses .gitignore as include filter!
+src/*/_internal/* 
+!src/*/_internal/*.py
+!src/*/_internal/*.pyi

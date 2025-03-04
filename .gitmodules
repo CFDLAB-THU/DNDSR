@@ -1,0 +1,4 @@
+[submodule "external/cfd_externals"]
+	path = external/cfd_externals
+	url = https://github.com/harryzhou2000/cfd_externals.git
+	branch = main

@@ -5,10 +5,14 @@
 
 
 if(UNIX OR MINGW)
-    cmake_minimum_required(VERSION 3.6 FATAL_ERROR)
+    cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
 else()
-    cmake_minimum_required(VERSION 3.20)
+    cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
 endif()
+
+cmake_policy(SET CMP0082 NEW) # ensures install exec order == declare order
+
+
 
 set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/install CACHE FILEPATH "install place")
 
@@ -23,11 +27,23 @@ enable_language(C) #! building C sub-projects
 
 message(STATUS "CMAKE_CXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}")
 
-message("external install hard guess at: external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
-set(HARD_GUESS_PATH external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR})
+set(DNDS_CFD_EXTERNALS_INSTALL  ${CMAKE_SOURCE_DIR}/external/cfd_externals/install CACHE PATH "path to cfd_externals's install")
 
-# First Hard Guess
-set(CMAKE_PREFIX_PATH ${HARD_GUESS_PATH})
+set(DNDS_CFD_EXTERNALS_LIB ${DNDS_CFD_EXTERNALS_INSTALL}/lib)
+set(DNDS_CFD_EXTERNALS_INC ${DNDS_CFD_EXTERNALS_INSTALL}/include)
+
+if(EXISTS ${DNDS_CFD_EXTERNALS_INSTALL} AND EXISTS ${DNDS_CFD_EXTERNALS_LIB} AND EXISTS ${DNDS_CFD_EXTERNALS_INC})
+    set(CMAKE_PREFIX_PATH ${DNDS_CFD_EXTERNALS_INSTALL}) # to override system ones
+    message(STATUS "DNDS_CFD_EXTERNALS_INSTALL ${DNDS_CFD_EXTERNALS_INSTALL}")
+else()
+    message(FATAL_ERROR "cfd_externals install or install/lib or install/include not existent")
+endif()
+
+# message("external install hard guess at: external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+# set(HARD_GUESS_PATH external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR})
+
+# # First Hard Guess
+# set(CMAKE_PREFIX_PATH ${HARD_GUESS_PATH})
 
 # need CUDA project support ?
 # manual perferences
@@ -53,7 +69,13 @@ set(DNDS_LTO_THIN OFF CACHE BOOL "use -flto=thin")
 set(DNDS_USE_FULL_TEMPLATE_TRACE OFF CACHE BOOL "use -ftemplate-backtrace-limit=0")
 set(DNDS_USE_RDYNAMIC ON CACHE BOOL "use -rdynamic on posix")
 set(DNDS_USE_PRECOMPILED_HEADER OFF CACHE BOOL "use precompiled header")
-set(DNDS_USE_CCACHE OFF CACHE BOOL "use ccache as compiler launcher")
+
+find_program(DNDS_CCACHE_EXEC ccache)
+if(DNDS_CCACHE_EXEC)
+    set(DNDS_USE_CCACHE ON CACHE BOOL "use ccache as compiler launcher")
+else()
+    set(DNDS_USE_CCACHE OFF CACHE BOOL "use ccache as compiler launcher")
+endif()
 
 set(DNDS_EIGEN_USE_BLAS OFF CACHE BOOL "use blas in eigen")
 set(DNDS_EIGEN_USE_LAPACK OFF CACHE BOOL "use lapack in eigen")
@@ -145,27 +167,25 @@ set(CMAKE_USE_RELATIVE_PATHS ON)
 # ##########################################
 find_library(DNDS_EXTERNAL_LIB_BACKTRACE NAMES backtrace)
 # need zlibstatic first to find the static version on windows
-find_library(DNDS_EXTERNAL_LIB_ZLIB NAMES libz.so zlibstatic zlib z z_D libzlibstatic.a REQUIRED)
-find_library(DNDS_EXTERNAL_LIB_HDF5 NAMES libhdf5.so libhdf5.a libhdf5.lib hdf5 PATHS 
-    "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
-    "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
-     REQUIRED)
+find_library(DNDS_EXTERNAL_LIB_ZLIB NAMES libz.so zlibstatic zlib z z_D libzlibstatic.a
+    PATHS "${DNDS_CFD_EXTERNALS_LIB}" 
+    REQUIRED)
+find_library(DNDS_EXTERNAL_LIB_HDF5 NAMES libhdf5.so hdf5.dll hdf5 
+    PATHS "${DNDS_CFD_EXTERNALS_LIB}" 
+    REQUIRED)
 # find_library(DNDS_EXTERNAL_LIB_HDF5_HL NAMES libhdf5_hl.a hdf5_hl PATHS 
 #     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
 #     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
 #      REQUIRED)
-find_library(DNDS_EXTERNAL_LIB_CGNS NAMES libcgns.so cgns PATHS 
-    "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
-    "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
-     REQUIRED)
-find_library(DNDS_EXTERNAL_LIB_METIS NAMES libmetis.so metis PATHS 
-    "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
-    "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
-         REQUIRED)
-find_library(DNDS_EXTERNAL_LIB_PARMETIS NAMES libparmetis.so parmetis PATHS 
-    "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
-    "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
-     REQUIRED)
+find_library(DNDS_EXTERNAL_LIB_CGNS NAMES libcgns.so cgns.dll cgns 
+    PATHS "${DNDS_CFD_EXTERNALS_LIB}"
+    REQUIRED)
+find_library(DNDS_EXTERNAL_LIB_METIS NAMES libmetis.so metis.dll metis 
+    PATHS "${DNDS_CFD_EXTERNALS_LIB}"
+    REQUIRED)
+find_library(DNDS_EXTERNAL_LIB_PARMETIS NAMES libparmetis.so parmetis.dll parmetis 
+    PATHS "${DNDS_CFD_EXTERNALS_LIB}"
+    REQUIRED)
 # find_library(DNDS_EXTERNAL_LIB_TECIO tecio PATHS 
     # "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
     # "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
@@ -174,22 +194,20 @@ find_library(DNDS_EXTERNAL_LIB_BLAS NAMES openblas blas )
 find_library(DNDS_EXTERNAL_LIB_LAPACK NAMES lapack )
 find_library(DNDS_EXTERNAL_LIB_LAPACKE NAMES lapacke)
 
-find_path(DNDS_EXTERNAL_INCLUDE_ZLIB zlib.h REQUIRED)
-find_path(DNDS_EXTERNAL_INCLUDE_HDF5 hdf5.h PATHS 
-    "${PROJECT_SOURCE_DIR}/external/HDF5/include"
-    "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
+find_path(DNDS_EXTERNAL_INCLUDE_ZLIB zlib.h 
+    PATHS "${DNDS_CFD_EXTERNALS_INC}" 
     REQUIRED)
-find_path(DNDS_EXTERNAL_INCLUDE_CGNS cgnslib.h PATHS 
-    "${PROJECT_SOURCE_DIR}/external/cgns/include" 
-    "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
+find_path(DNDS_EXTERNAL_INCLUDE_HDF5 hdf5.h 
+    PATHS "${DNDS_CFD_EXTERNALS_INC}"
     REQUIRED)
-find_path(DNDS_EXTERNAL_INCLUDE_METIS metis.h PATHS 
-    "${PROJECT_SOURCE_DIR}/external/metis/include" 
-    "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
+find_path(DNDS_EXTERNAL_INCLUDE_CGNS cgnslib.h 
+    PATHS "${DNDS_CFD_EXTERNALS_INC}"
     REQUIRED)
-find_path(DNDS_EXTERNAL_INCLUDE_PARMETIS parmetis.h PATHS 
-    "${PROJECT_SOURCE_DIR}/external/parmetis/include" 
-    "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
+find_path(DNDS_EXTERNAL_INCLUDE_METIS metis.h 
+    PATHS "${DNDS_CFD_EXTERNALS_INC}"
+    REQUIRED)
+find_path(DNDS_EXTERNAL_INCLUDE_PARMETIS parmetis.h
+    PATHS "${DNDS_CFD_EXTERNALS_INC}"
     REQUIRED)
 # find_path(DNDS_EXTERNAL_INCLUDE_TECIO TECIO.h PATHS 
 #     "${PROJECT_SOURCE_DIR}/external/tecio/include" 
@@ -248,7 +266,10 @@ find_path(EXTERNAL_DOXYGEN_AWESOME doxygen-awesome.css PATHS
 
 set(PYBIND11_FINDPYTHON ON)
 add_subdirectory("${DNDS_EXTERNAL_INCLUDE_PYBIND11}/.." "${CMAKE_BINARY_DIR}/pybind11")
-set(FMT_LIB_DIR "bin")
+set(FMT_LIB_DIR "DNDSR/bin")
+set(FMT_INC_DIR "DNDSR/include")
+set(FMT_CMAKE_DIR "DNDSR/lib/cmake/fmt")
+set(FMT_PKGCONFIG_DIR "DNDSR/lib/pkgconfig")
 add_subdirectory("${DNDS_EXTERNAL_INCLUDE_FMT}/.."      "${CMAKE_BINARY_DIR}/fmt")
 # add_subdirectory("${DNDS_EXTERNAL_INCLUDE_CPPTRACE}/../..")
 
@@ -275,19 +296,16 @@ if(DNDS_EXTERNAL_INCLUDE_SUPERLU)
 endif()
 
 
-set (DNDS_EXTERNAL_LIBS "")
+set (DNDS_EXTERNAL_LIBS "" CACHE INTERNAL
+    "Project Public External Lib Dependencies")
 
 if (MPI_CXX_FOUND)
-    set(DNDS_EXTERNAL_LIBS ${MPI_CXX_LIBRARIES})
+    list(APPEND DNDS_EXTERNAL_LIBS ${MPI_CXX_LIBRARIES})
     message(STATUS "MPI_CXX_LIBRARIES ${MPI_CXX_LIBRARIES}")
 endif()
 
 if(DNDS_EXTERNAL_LIB_BACKTRACE)
-set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
-    ${DNDS_EXTERNAL_LIB_BACKTRACE}
-    CACHE INTERNAL
-    "Project Public External Lib Dependencies"
-    )
+list(APPEND DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIB_BACKTRACE})
 add_compile_definitions(BOOST_STACKTRACE_USE_BACKTRACE)
 endif()
 
@@ -305,20 +323,18 @@ set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
     ${DNDS_EXTERNAL_LIB_METIS}
     ${DNDS_EXTERNAL_LIB_ZLIB}
     # ${DNDS_EXTERNAL_LIB_TECIO}
-    CACHE INTERNAL
-    "Project Public External Lib Dependencies"
     )
 if (DNDS_EIGEN_USE_BLAS)
-    set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
-    ${DNDS_EXTERNAL_LIB_BLAS})
+    list(APPEND DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIB_BLAS})
 endif()
 if (DNDS_EIGEN_USE_LAPACK)
-    set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
-    ${DNDS_EXTERNAL_LIB_LAPACK}
-    ${DNDS_EXTERNAL_LIB_LAPACKE})
+    list(APPEND DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIB_LAPACK})
+    list(APPEND DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIB_LAPACKE})
 endif()
 message(DEBUG "DNDS_EXTERNAL_LIBS external files:  ${DNDS_EXTERNAL_LIBS}")
 
+set(DNDS_EXTERNAL_LIBS_REAL "" CACHE INTERNAL
+    "Project Public External Lib Dependencies' Directories")
 set(DNDS_EXTERNAL_LIBS_DIRS "" CACHE INTERNAL
     "Project Public External Lib Dependencies' Directories")
 set(DNDS_EXTERNAL_LIBS_DIRS_REGEX "" CACHE INTERNAL
@@ -327,26 +343,32 @@ foreach(LIB ${DNDS_EXTERNAL_LIBS})
     get_filename_component(LIB_DIR ${LIB} DIRECTORY)
     list(APPEND DNDS_EXTERNAL_LIBS_DIRS       ${LIB_DIR})
     list(APPEND DNDS_EXTERNAL_LIBS_DIRS_REGEX "${LIB_DIR}.*")
+    get_filename_component(LIB_REAL ${LIB} REALPATH)
+    list(APPEND DNDS_EXTERNAL_LIBS_REAL ${LIB_REAL})
+endforeach()
+
+# now DNDS_EXTERNAL_LIBS contains externally built libraries
+foreach(LIB ${DNDS_EXTERNAL_LIBS})
+    file(INSTALL ${LIB} DESTINATION ${CMAKE_INSTALL_PREFIX}/DNDSR/lib FOLLOW_SYMLINK_CHAIN)
 endforeach()
 
 list(REMOVE_DUPLICATES DNDS_EXTERNAL_LIBS_DIRS)
 list(REMOVE_DUPLICATES DNDS_EXTERNAL_LIBS_DIRS_REGEX)
 
 if (UNIX)
-
     # Join the directories into a single string separated by colon (:)
     string(REPLACE ";" ":" DNDS_EXTERNAL_LIBS_DIRS_SHELL_LIST "${DNDS_EXTERNAL_LIBS_DIRS}")
-    string(APPEND DNDS_EXTERNAL_LIBS_DIRS_SHELL_LIST ":${CMAKE_INSTALL_PREFIX}/bin")
+    string(APPEND DNDS_EXTERNAL_LIBS_DIRS_SHELL_LIST ":${CMAKE_INSTALL_PREFIX}/DNDSR/bin")
     # Generate the shell script
-    set(SCRIPT_NAME "${CMAKE_INSTALL_PREFIX}/set_library_path.sh")
+    set(SCRIPT_NAME "${CMAKE_INSTALL_PREFIX}/DNDSR/set_library_path.sh")
     file(WRITE ${SCRIPT_NAME} "#!/bin/bash\n")
     file(APPEND ${SCRIPT_NAME} "export LD_LIBRARY_PATH=${DNDS_EXTERNAL_LIBS_DIRS_SHELL_LIST}:\$LD_LIBRARY_PATH\n")
     message(STATUS "Generated LIBRARY script: ${SCRIPT_NAME}")
 elseif(WIN32)
     string(REPLACE ";" ";" DNDS_EXTERNAL_LIBS_DIRS_SHELL_LIST "${DNDS_EXTERNAL_LIBS_DIRS}")
-     string(APPEND DNDS_EXTERNAL_LIBS_DIRS_SHELL_LIST ";${CMAKE_INSTALL_PREFIX}/bin")
+    string(APPEND DNDS_EXTERNAL_LIBS_DIRS_SHELL_LIST ";${CMAKE_INSTALL_PREFIX}/DNDSR/bin")
     # Generate the shell script
-    set(SCRIPT_NAME "${CMAKE_INSTALL_PREFIX}/set_library_path.bat")
+    set(SCRIPT_NAME "${CMAKE_INSTALL_PREFIX}/DNDSR/set_library_path.bat")
     file(WRITE ${SCRIPT_NAME} "@echo off\n")
     file(APPEND ${SCRIPT_NAME} "set PATH=%PATH%;${LIBRARY_PATH}\n")
     message(STATUS "Generated LIBRARY script: ${SCRIPT_NAME}")
@@ -358,22 +380,13 @@ else()
 endif()
 
 message(DEBUG "DNDS_EXTERNAL_LIBS_DIRS_REGEX:  ${DNDS_EXTERNAL_LIBS_DIRS_REGEX}")
-
+message(DEBUG "DNDS_EXTERNAL_LIBS_REAL:  ${DNDS_EXTERNAL_LIBS_REAL}")
 # add internal built libraries
 
-set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
-    fmt::fmt
-    # cpptrace::cpptrace
-    CACHE INTERNAL
-    "Project Public External Lib Dependencies"
-    )
+list(APPEND DNDS_EXTERNAL_LIBS fmt::fmt)
 
 if(DNDS_EXTERNAL_INCLUDE_SUPERLU)
-set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
-    superlu_dist
-    CACHE INTERNAL
-    "Project Public External Lib Dependencies"
-    )
+    list(APPEND DNDS_EXTERNAL_LIBS superlu_dist)
 endif()
 
 message(STATUS "DNDS_EXTERNAL_LIBS   ${DNDS_EXTERNAL_LIBS}")
@@ -687,6 +700,11 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/src/Geom)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/CFV)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/Euler)
 
+
+install(CODE "file(CREATE_LINK ${CMAKE_INSTALL_PREFIX}/DNDSR/bin ${CMAKE_SOURCE_DIR}/src/bin SYMBOLIC)")
+install(CODE "file(CREATE_LINK ${CMAKE_INSTALL_PREFIX}/DNDSR/lib ${CMAKE_SOURCE_DIR}/src/lib SYMBOLIC)")
+
+
 set(EXE_SUFFIX "")
 if (UNIX)
     set(EXE_SUFFIX ".exe")
@@ -706,7 +724,7 @@ macro(ADD_EXE_APP EXES MAIN_DIR LIBS)
             target_compile_definitions(${EXE} PUBLIC DNDS_CURRENT_COMMIT_HASH=${DNDS_RECORDED_COMMIT_HASH})
         endif()
         if( DNDS_USE_CCACHE )
-            set_property(TARGET ${EXE} PROPERTY CXX_COMPILER_LAUNCHER ccache)
+            set_property(TARGET ${EXE} PROPERTY CXX_COMPILER_LAUNCHER ${DNDS_CCACHE_EXEC})
         endif()
     endforeach()
 endmacro(ADD_EXE_APP)

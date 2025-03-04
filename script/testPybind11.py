@@ -1,19 +1,16 @@
 
 
-import sys
-import pybind11_basicTest
+import DNDSR.DNDS as DNDS
 
+DNDS.Init_thread([])
 
-mpi_init_ret = pybind11_basicTest.MPI_Init(sys.argv)
-mpi = pybind11_basicTest.MPIInfo()
+mpi = DNDS.MPIInfo()
+
 mpi.setWorld()
 
-if mpi.rank == 0 :
-    print("Symbols in ext: " + str(dir(pybind11_basicTest)))
+print(f"{mpi.rank} / {mpi.size}, {mpi.comm()}")
 
-print(mpi)
-
-pybind11_basicTest.MPI_Finalize()
+DNDS.Finalize()
 
 
 
