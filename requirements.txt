@@ -3,3 +3,5 @@ scipy
 matplotlib
 scikit-build
 auditwheel
+pybind11-stubgen
+typing_extensions

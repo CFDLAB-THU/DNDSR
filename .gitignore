@@ -36,7 +36,3 @@ venv*
 *.pyc
 srcOrig
 newSrc*
-# # note that scikit-build-core uses .gitignore as include filter!
-src/*/_internal/* 
-!src/*/_internal/*.py
-!src/*/_internal/*.pyi

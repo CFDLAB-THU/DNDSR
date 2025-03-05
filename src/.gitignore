@@ -1,2 +1,9 @@
 bin
 lib
+# python
+# # note that scikit-build-core uses .gitignore as include filter!
+src/*/_internal/*.so*
+!src/*/_internal/*.py
+!src/*/_internal/*.pyi
+# now the stubs are generated
+*.pyi 
