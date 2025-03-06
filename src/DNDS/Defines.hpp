@@ -177,6 +177,20 @@ namespace DNDS
     {
         return rs >= 0 ? static_cast<int>(rs) : (rs == DynamicSize || rs == NonUniformSize ? Eigen::Dynamic : INT_MIN);
     }
+
+    inline std::string RowSize_To_PySnippet(rowsize rs)
+    {
+        if (rs >= 0)
+            return fmt::format("{}", rs);
+        else if (rs == DynamicSize)
+            return "D";
+        else if (rs == NonUniformSize)
+            return "I";
+        else
+        {
+            return "Unknown";
+        }
+    }
 }
 
 namespace DNDS

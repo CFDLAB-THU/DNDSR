@@ -113,6 +113,7 @@ namespace DNDS
         }
         static const DataLayout _dataLayout = _GetDataLayout();
         static_assert(_dataLayout != ErrorLayout, "Layout Error");
+        static const bool isCSR = _dataLayout == CSR;
 
     public:
         //* compressed data
@@ -151,7 +152,7 @@ namespace DNDS
         // TODO: for CSR: c->c, u->u
         // TODO: for intertype: CSR->Max, Max->CSR ...
 
-        // read isze
+        // read size
         [[nodiscard]] index Size() const { return _size; }
 
         [[nodiscard]] rowsize RowSize() const // iRow is actually dummy here
@@ -163,6 +164,7 @@ namespace DNDS
             else
             {
                 DNDS_assert_info(false, "invalid call");
+                return -1;
             }
         }
 

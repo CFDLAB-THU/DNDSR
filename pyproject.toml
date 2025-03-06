@@ -19,11 +19,13 @@ build-dir = "build_py"
 cmake.args = ["-G Unix Makefiles"]
 build.tool-args = ["-j", "8"]
 sdist.include = [
+    "src/*/_internal/*_pybind11/*.pyi",
     "src/*/_internal/*.so",
     "src/*/_internal/*.dylib",
     "src/*/_internal/*.pyd",
 ] # append to .gitignore rules
 
 [tool.scikit-build.wheel.packages]
-"DNDSR/DNDS/_internal" = "src/DNDS/_internal"
+"DNDSR" = "src"
 "DNDSR/DNDS" = "src/DNDS"
+"DNDSR/DNDS/_internal" = "src/DNDS/_internal"

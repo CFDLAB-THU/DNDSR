@@ -199,7 +199,7 @@
     "editor.bracketPairColorization.enabled": true,
     "C_Cpp.default.compilerPath": "/usr/bin/clang++",
     "files.watcherExclude": {
-        "**/.venv/*": true
+        "**/venv/*": true
     },
     "cmake.automaticReconfigure": false,
     "cmake.skipConfigureIfCachePresent": true,

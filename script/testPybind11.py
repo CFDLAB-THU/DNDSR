@@ -2,7 +2,8 @@
 
 import DNDSR.DNDS as DNDS
 
-DNDS.Init_thread([])
+
+DNDS.MPI.Init_thread([])
 
 mpi = DNDS.MPIInfo()
 
@@ -10,7 +11,7 @@ mpi.setWorld()
 
 print(f"{mpi.rank} / {mpi.size}, {mpi.comm()}")
 
-DNDS.Finalize()
+DNDS.MPI.Finalize()
 
 
 

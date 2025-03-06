@@ -55,3 +55,20 @@ namespace DNDS
         return mpi_op;
     }
 }
+
+namespace DNDS
+{
+    void pybind11_MPIInfo(py::module_ &m);
+}
+
+namespace DNDS::MPI
+{
+    void pybind11_Init_thread(py::module_ &m);
+
+    void pybind11_MPI_Operations(py::module_ &m);
+}
+
+namespace DNDS::Debug
+{
+    void pybind11_Debug(py::module_ &m);
+}

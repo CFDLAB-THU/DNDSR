@@ -7,22 +7,22 @@
 
 namespace DNDS
 {
-    static void pybind11_MPIInfo(py::module_ &m)
+    void pybind11_MPIInfo(py::module_ &m)
     {
         py::class_<MPIInfo>(m, "MPIInfo")
             .def(py::init<>())
             .def("setWorld", &MPIInfo::setWorld)
             .def_readonly("rank", &MPIInfo::rank)
             .def_readonly("size", &MPIInfo::size)
-            .def("comm", [](const MPIInfo &mpi)
-                 { return size_t(mpi.comm); })
+            .def("comm", [](const MPIInfo &self)
+                 { return size_t(self.comm); })
             .def("equals", &MPIInfo::operator==);
     }
 }
 
 namespace DNDS::MPI
 {
-    static void pybind11_Init_thread(py::module_ &m)
+    void pybind11_Init_thread(py::module_ &m)
     {
         auto m_MPI = m.def_submodule("MPI");
         m_MPI.def("Init_thread",
@@ -45,7 +45,7 @@ namespace DNDS::MPI
         m_MPI.def("GetMPIThreadLevel", &GetMPIThreadLevel);
     }
 
-    static void pybind11_MPI_Operations(py::module_ &m)
+    void pybind11_MPI_Operations(py::module_ &m)
     {
         auto m_MPI = m.def_submodule("MPI");
         m_MPI.def(
@@ -79,7 +79,7 @@ namespace DNDS::Debug
     // bool IsDebugged();
     // void MPIDebugHold(const MPIInfo &mpi);
 
-    static void pybind11_Debug(py::module_ &m)
+    void pybind11_Debug(py::module_ &m)
     {
         auto m_Debug = m.def_submodule("Debug");
         m_Debug.def("IsDebugged", &IsDebugged);
@@ -87,10 +87,3 @@ namespace DNDS::Debug
     }
 }
 
-PYBIND11_MODULE(dnds_pybind11, m)
-{
-    DNDS::pybind11_MPIInfo(m);
-    DNDS::MPI::pybind11_Init_thread(m);
-    DNDS::MPI::pybind11_MPI_Operations(m);
-    DNDS::Debug::pybind11_Debug(m);
-}

@@ -53,6 +53,7 @@ install(TARGETS ${LIBNAME}_shared;${LIBNAME}
 )
 
 set(CPPS_BIND
+dnds_pybind11.cpp
 MPI_bind.cpp
 )
 
