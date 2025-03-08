@@ -12,7 +12,30 @@ namespace DNDS
 {
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    std::string pybind11_array_name()
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        return fmt::format("Array_{}_{}_{}_{}",
+                           py::format_descriptor<T>().format(),
+                           RowSize_To_PySnippet(_row_size),
+                           RowSize_To_PySnippet(_row_max),
+                           RowSize_To_PySnippet(_align));
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    std::string pybind11_pararray_name()
+    {
+        return "Par" + pybind11_array_name<T, _row_size, _row_max, _align>();
+    }
+}
+
+namespace DNDS
+{
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     using tPy_Array = py::class_<Array<T, _row_size, _row_max, _align>, std::shared_ptr<Array<T, _row_size, _row_max, _align>>>;
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    using tPy_ParArray = py::class_<ParArray<T, _row_size, _row_max, _align>, std::shared_ptr<ParArray<T, _row_size, _row_max, _align>>>;
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     tPy_Array<T, _row_size, _row_max, _align>
@@ -21,18 +44,45 @@ namespace DNDS
         static_assert(std::is_arithmetic_v<T>);
         return tPy_Array<T, _row_size, _row_max, _align>(
             m,
-            fmt::format("Array_{}_{}_{}_{}",
-                        py::format_descriptor<T>().format(),
-                        RowSize_To_PySnippet(_row_size),
-                        RowSize_To_PySnippet(_row_max),
-                        RowSize_To_PySnippet(_align))
-                .c_str());
+            pybind11_array_name<T, _row_size, _row_max, _align>().c_str());
         // std::cout << py::format_descriptor<Eigen::Matrix<double, 3, 3>>().format() << std::endl;
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    tPy_Array<T, _row_size, _row_max, _align>
+    pybind11_array_get_class(py::module_ &m)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        return tPy_Array<T, _row_size, _row_max, _align>(m.attr(pybind11_array_name<T, _row_size, _row_max, _align>().c_str()));
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    tPy_Array<T, _row_size, _row_max, _align>
+    pybind11_pararray_declare(py::module_ &m)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        // std::cout << "here1 " << std::endl;
+        auto array_ = pybind11_array_get_class<T, _row_size, _row_max, _align>(m); // same module here
+        // std::cout << "here2 " << std::endl;
+        return tPy_ParArray<T, _row_size, _row_max, _align>(
+            m,
+            pybind11_pararray_name<T, _row_size, _row_max, _align>().c_str(),
+            array_);
+        // std::cout << py::format_descriptor<Eigen::Matrix<double, 3, 3>>().format() << std::endl;
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    tPy_ParArray<T, _row_size, _row_max, _align>
+    pybind11_pararray_get_class(py::module_ &m)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        return tPy_ParArray<T, _row_size, _row_max, _align>(m.attr(pybind11_pararray_name<T, _row_size, _row_max, _align>().c_str()));
     }
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     void pybind11_array_define(py::module_ &m)
     {
+
         using TArray = Array<T, _row_size, _row_max, _align>;
         auto Array_ = pybind11_array_declare<T, _row_size, _row_max, _align>(m);
         // // helper
@@ -47,14 +97,34 @@ namespace DNDS
             .def("Decompress", &TArray::Decompress)
             .def("IfCompressed", &TArray::IfCompressed);
         Array_
-            .def("getRowStart",
-                 [](TArray &self) -> py::object
-                 {
-                     if (!self.getRowStart())
-                         return py::none();
-                     auto &rs = *self.getRowStart();
-                     return py::memoryview::from_buffer<index>(rs.data(), {rs.size()}, {sizeof(index)});
-                 });
+            .def(
+                "getRowStart",
+                [](TArray &self)
+                {
+                    if (!self.getRowStart())
+                        return py::memoryview::from_buffer<index>((index *)(&self), {0}, {sizeof(index)}, true);
+                    auto &rs = *self.getRowStart();
+                    return py::memoryview::from_buffer<index>(rs.data(), {rs.size()}, {sizeof(index)}, true);
+                },
+                py::keep_alive<0, 1>() /* remember to keep alive */);
+
+        Array_
+            .def(
+                "getRowSizes",
+                [](TArray &self)
+                {
+                    if (!self.getRowSizes())
+                        return py::memoryview::from_buffer<rowsize>((rowsize *)(&self), {0}, {sizeof(rowsize)}, true);
+                    auto &rs = *self.getRowSizes();
+                    return py::memoryview::from_buffer<rowsize>(rs.data(), {rs.size()}, {sizeof(rowsize)}, true);
+                },
+                py::keep_alive<0, 1>() /* remember to keep alive */);
+
+        Array_
+            .def(
+                "data", [](TArray &self)
+                { return py::memoryview::from_buffer<T>(self.data(), {self.DataSize()}, {TArray::sizeof_T}); },
+                py::keep_alive<0, 1>() /* remember to keep alive */);
 
         Array_
             .def("Rowsize", py::overload_cast<index>(&TArray::RowSize, py::const_), py::arg("iRow"));
@@ -91,5 +161,91 @@ namespace DNDS
                  {
                      self(std::get<0>(index_), std::get<1>(index_)) = value;
                  });
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    void _pybind11_array_define_dispatch(py::module_ &m)
+    {
+        if constexpr (_row_size == UnInitRowsize)
+            return;
+        else
+            return pybind11_array_define<T, _row_size, _row_max, _align>(m);
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    void pybind11_pararray_define(py::module_ &m)
+    {
+        using TParArray = ParArray<T, _row_size, _row_max, _align>;
+        auto ParArray_ = pybind11_pararray_declare<T, _row_size, _row_max, _align>(m);
+
+        // // helper
+        // using TParArray = ParArray<real, 1, 1, -1>;
+        // auto ParArray_ = pybind11_pararray_declare<real, 1, 1, -1>(m);
+        // // helper
+
+        ParArray_ // need lambda below to avoid inheritance checking
+            .def(py::init([](const MPIInfo &n_mpi)
+                          { return std::make_shared<TParArray>(n_mpi); }),
+                 py::arg("n_mpi"))
+            .def("getMPI", [](const TParArray &self)
+                 { return self.getMPI(); })
+            .def("setMPI", [](TParArray &self, const MPIInfo &n_mpi)
+                 { self.setMPI(n_mpi); }, py::arg("n_mpi"))
+            .def("createGlobalMapping", [](TParArray &self)
+                 { self.createGlobalMapping(); })
+            .def("getLGlobalMapping", [](TParArray & self)
+                 { return self.pLGlobalMapping; });
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    void _pybind11_pararray_define_dispatch(py::module_ &m)
+    {
+        if constexpr (_row_size == UnInitRowsize)
+            return;
+        else
+            return pybind11_pararray_define<T, _row_size, _row_max, _align>(m);
+    }
+}
+
+namespace DNDS
+{
+    constexpr auto _get_pybind11_arrayRowsizeInstantiationList()
+    {
+        std::array<rowsize, 20> ret{UnInitRowsize};
+        for (auto &v : ret)
+            v = UnInitRowsize;
+        for (int i = 1; i <= 8; i++)
+            ret[i] = i;
+        return ret;
+    }
+
+    constexpr auto pybind11_arrayRowsizeInstantiationList = _get_pybind11_arrayRowsizeInstantiationList();
+
+    template <class T, size_t N, std::array<int, N> const &Arr, size_t... Is>
+    void __pybind11_callBindArrays_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
+    {
+        (_pybind11_array_define_dispatch<T, Arr[Is]>(m), ...);
+    }
+
+    template <class T>
+    void pybind11_callBindArrays_rowsizes(py::module_ &m)
+    {
+        static constexpr auto seq = pybind11_arrayRowsizeInstantiationList;
+        __pybind11_callBindArrays_rowsizes_sequence<
+            T, seq.size(), seq>(m, std::make_index_sequence<seq.size()>{});
+    }
+
+    template <class T, size_t N, std::array<int, N> const &Arr, size_t... Is>
+    void __pybind11_callBindParArrays_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
+    {
+        (_pybind11_pararray_define_dispatch<T, Arr[Is]>(m), ...);
+    }
+
+    template <class T>
+    void pybind11_callBindParArrays_rowsizes(py::module_ &m)
+    {
+        static constexpr auto seq = pybind11_arrayRowsizeInstantiationList;
+        __pybind11_callBindParArrays_rowsizes_sequence<
+            T, seq.size(), seq>(m, std::make_index_sequence<seq.size()>{});
     }
 }
