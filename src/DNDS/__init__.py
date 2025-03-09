@@ -104,15 +104,22 @@ def _get_array_name(
 
 def Array(
     type: str, row_size: int | str, row_max: int | str = None, init_args: tuple = ()
-):
+) -> Array_d_3_3_D:
     cls = globals()[_get_array_name(type, row_size, row_max, prepend="Array")]
     return cls(*init_args)
 
 
 def ParArray(
     type: str, row_size: int | str, row_max: int | str = None, init_args: tuple = ()
-):
+) -> ParArray_d_3_3_D:
     cls = globals()[_get_array_name(type, row_size, row_max, prepend="ParArray")]
+    return cls(*init_args)
+
+
+def ArrayTransformer(
+    type: str, row_size: int | str, row_max: int | str = None, init_args: tuple = ()
+) -> ArrayTransformer_d_3_3_D:
+    cls = globals()[_get_array_name(type, row_size, row_max, prepend="ArrayTransformer")]
     return cls(*init_args)
 
 

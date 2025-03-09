@@ -227,24 +227,24 @@ namespace DNDS
          */
         template <class TpushSet, class TpushStart>
         OffsetAscendIndexMapping(index nmainOffset, index nmainSize,
-                                 TpushSet &&pushingIndexes, // which stores local index
+                                 TpushSet &&pushingIndexesLocal, // which stores local index
                                  TpushStart &&pushingStarts,
                                  const GlobalOffsetsMapping &LGlobalMapping,
                                  const MPIInfo &mpi)
             : mainOffset(nmainOffset),
               mainSize(nmainSize)
         {
-            DNDS_assert(pushingStarts.size() == mpi.size + 1 && pushingIndexes.size() == pushingStarts[mpi.size]);
+            DNDS_assert(pushingStarts.size() == mpi.size + 1 && pushingIndexesLocal.size() == pushingStarts[mpi.size]);
             pushIndexSizes.resize(mpi.size);
             pushIndexStarts.resize(mpi.size + 1, 0);
             for (int i = 0; i < mpi.size; i++)
                 pushIndexSizes[i] = pushingStarts[i + 1] - pushingStarts[i],
                 pushIndexStarts[i + 1] = pushingStarts[i + 1];
-            pushingIndexGlobal.resize(pushingIndexes.size());
+            pushingIndexGlobal.resize(pushingIndexesLocal.size());
             // std::forward<TpushStart>(pushingStarts); //! might delete
             for (size_t i = 0; i < pushingIndexGlobal.size(); i++)
-                pushingIndexGlobal[i] = LGlobalMapping(mpi.rank, pushingIndexes[i]); // convert from local to global
-            // std::forward<TpushSet>(pushingIndexes);                                  //! might delete
+                pushingIndexGlobal[i] = LGlobalMapping(mpi.rank, pushingIndexesLocal[i]); // convert from local to global
+            // std::forward<TpushSet>(pushingIndexesLocal);                                  //! might delete
 
             ghostSizes.assign(mpi.size, 0);
             MPI::Alltoall(pushIndexSizes.data(), 1, MPI_INT, ghostSizes.data(), 1, MPI_INT, mpi.comm); // inverse to the normal pulling

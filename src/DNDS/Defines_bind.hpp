@@ -58,4 +58,14 @@ namespace DNDS
             DNDS_assert_info(false, "the data layout is neither C or F contigious");
         return {info.size, style};
     }
+
+    template <typename T>
+    py::memoryview py_vector_as_memory_view(std::vector<T> &vec, bool readonly)
+    {
+        return py::memoryview::from_buffer<T>(
+            vec.data(),
+            {vec.size()},
+            {sizeof(T)},
+            true);
+    }
 }

@@ -6,16 +6,16 @@
 
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
+#include <pybind11/stl.h>
 namespace py = pybind11;
 
 namespace DNDS
 {
-
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    std::string pybind11_array_name()
+    std::string pybind11_array_name_appends()
     {
         static_assert(std::is_arithmetic_v<T>);
-        return fmt::format("Array_{}_{}_{}_{}",
+        return fmt::format("_{}_{}_{}_{}",
                            py::format_descriptor<T>().format(),
                            RowSize_To_PySnippet(_row_size),
                            RowSize_To_PySnippet(_row_max),
@@ -23,9 +23,22 @@ namespace DNDS
     }
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    std::string pybind11_array_name()
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        return "Array" + pybind11_array_name_appends<T, _row_size, _row_max, _align>();
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     std::string pybind11_pararray_name()
     {
-        return "Par" + pybind11_array_name<T, _row_size, _row_max, _align>();
+        return "ParArray" + pybind11_array_name_appends<T, _row_size, _row_max, _align>();
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    std::string pybind11_arraytransformer_name()
+    {
+        return "ArrayTransformer" + pybind11_array_name_appends<T, _row_size, _row_max, _align>();
     }
 }
 
@@ -38,13 +51,16 @@ namespace DNDS
     using tPy_ParArray = py::class_<ParArray<T, _row_size, _row_max, _align>, std::shared_ptr<ParArray<T, _row_size, _row_max, _align>>>;
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    using tPy_ArrayTransformer = py::class_<ArrayTransformer<T, _row_size, _row_max, _align>>; // no shared pointer managing
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     tPy_Array<T, _row_size, _row_max, _align>
     pybind11_array_declare(py::module_ &m)
     {
         static_assert(std::is_arithmetic_v<T>);
-        return tPy_Array<T, _row_size, _row_max, _align>(
+        return {
             m,
-            pybind11_array_name<T, _row_size, _row_max, _align>().c_str());
+            pybind11_array_name<T, _row_size, _row_max, _align>().c_str()};
         // std::cout << py::format_descriptor<Eigen::Matrix<double, 3, 3>>().format() << std::endl;
     }
 
@@ -53,30 +69,7 @@ namespace DNDS
     pybind11_array_get_class(py::module_ &m)
     {
         static_assert(std::is_arithmetic_v<T>);
-        return tPy_Array<T, _row_size, _row_max, _align>(m.attr(pybind11_array_name<T, _row_size, _row_max, _align>().c_str()));
-    }
-
-    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    tPy_Array<T, _row_size, _row_max, _align>
-    pybind11_pararray_declare(py::module_ &m)
-    {
-        static_assert(std::is_arithmetic_v<T>);
-        // std::cout << "here1 " << std::endl;
-        auto array_ = pybind11_array_get_class<T, _row_size, _row_max, _align>(m); // same module here
-        // std::cout << "here2 " << std::endl;
-        return tPy_ParArray<T, _row_size, _row_max, _align>(
-            m,
-            pybind11_pararray_name<T, _row_size, _row_max, _align>().c_str(),
-            array_);
-        // std::cout << py::format_descriptor<Eigen::Matrix<double, 3, 3>>().format() << std::endl;
-    }
-
-    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    tPy_ParArray<T, _row_size, _row_max, _align>
-    pybind11_pararray_get_class(py::module_ &m)
-    {
-        static_assert(std::is_arithmetic_v<T>);
-        return tPy_ParArray<T, _row_size, _row_max, _align>(m.attr(pybind11_pararray_name<T, _row_size, _row_max, _align>().c_str()));
+        return {m.attr(pybind11_array_name<T, _row_size, _row_max, _align>().c_str())};
     }
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
@@ -173,6 +166,29 @@ namespace DNDS
     }
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    tPy_ParArray<T, _row_size, _row_max, _align>
+    pybind11_pararray_declare(py::module_ &m)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        // std::cout << "here1 " << std::endl;
+        auto array_ = pybind11_array_get_class<T, _row_size, _row_max, _align>(m); // same module here
+        // std::cout << "here2 " << std::endl;
+        return {
+            m,
+            pybind11_pararray_name<T, _row_size, _row_max, _align>().c_str(),
+            array_};
+        // std::cout << py::format_descriptor<Eigen::Matrix<double, 3, 3>>().format() << std::endl;
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    tPy_ParArray<T, _row_size, _row_max, _align>
+    pybind11_pararray_get_class(py::module_ &m)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        return {m.attr(pybind11_pararray_name<T, _row_size, _row_max, _align>().c_str())};
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     void pybind11_pararray_define(py::module_ &m)
     {
         using TParArray = ParArray<T, _row_size, _row_max, _align>;
@@ -193,7 +209,7 @@ namespace DNDS
                  { self.setMPI(n_mpi); }, py::arg("n_mpi"))
             .def("createGlobalMapping", [](TParArray &self)
                  { self.createGlobalMapping(); })
-            .def("getLGlobalMapping", [](TParArray & self)
+            .def("getLGlobalMapping", [](TParArray &self)
                  { return self.pLGlobalMapping; });
     }
 
@@ -209,6 +225,104 @@ namespace DNDS
 
 namespace DNDS
 {
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    tPy_ArrayTransformer<T, _row_size, _row_max, _align>
+    pybind11_arraytransformer_declare(py::module_ &m)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        return {
+            m,
+            pybind11_arraytransformer_name<T, _row_size, _row_max, _align>().c_str()};
+        // std::cout << py::format_descriptor<Eigen::Matrix<double, 3, 3>>().format() << std::endl;
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    tPy_ArrayTransformer<T, _row_size, _row_max, _align>
+    pybind11_arraytransformer_get_class(py::module_ &m)
+    {
+        static_assert(std::is_arithmetic_v<T>);
+        return {m.attr(pybind11_arraytransformer_name<T, _row_size, _row_max, _align>().c_str())};
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    void pybind11_arraytransformer_define(py::module_ &m)
+    {
+        using TArrayTransformer = ArrayTransformer<T, _row_size, _row_max, _align>;
+        auto ArrayTransformer_ = pybind11_arraytransformer_declare<T, _row_size, _row_max, _align>(m);
+
+        // // helper
+        // using TArrayTransformer = ArrayTransformer<real, 1>;
+        // auto ArrayTransformer_ = pybind11_arraytransformer_declare<real, 1>(m);
+        // // helper
+
+#define DNDS_pybind11_array_transformer_def_ssp_property(property_name, field_name)                             \
+    {                                                                                                           \
+        ArrayTransformer_.def_property(                                                                         \
+            #property_name,                                                                                     \
+            [](TArrayTransformer &self) { return self.field_name; },                                            \
+            [](TArrayTransformer &self, decltype(TArrayTransformer::field_name) in) { self.field_name = in; }); \
+    }
+        DNDS_pybind11_array_transformer_def_ssp_property(LGlobalMapping, pLGlobalMapping);
+        DNDS_pybind11_array_transformer_def_ssp_property(LGhostMapping, pLGhostMapping);
+        DNDS_pybind11_array_transformer_def_ssp_property(father, father);
+        DNDS_pybind11_array_transformer_def_ssp_property(son, son);
+        DNDS_pybind11_array_transformer_def_ssp_property(mpi, mpi);
+
+        ArrayTransformer_
+            .def(py::init<>())
+            .def("setFatherSon", &TArrayTransformer::setFatherSon, py::arg("father"), py::arg("son"))
+            .def("createFatherGlobalMapping", &TArrayTransformer::createFatherGlobalMapping)
+            .def("createGhostMapping", [](TArrayTransformer &self, std::vector<index> pullIndexGlobal) -> void
+                 { self.createGhostMapping(pullIndexGlobal); }, py::arg("pullIndexGlobal"))
+            .def("createGhostMapping", [](TArrayTransformer &self, std::vector<index> pushingIndexLocal, std::vector<index> pushingStarts) -> void
+                 { self.createGhostMapping(pushingIndexLocal, pushingStarts); }, py::arg("pushingIndexLocal"), py::arg("pushingStarts"));
+        ArrayTransformer_
+            .def("createMPITypes", &TArrayTransformer::createMPITypes)
+            .def("clearMPITypes", &TArrayTransformer::clearMPITypes)
+            .def(
+                "BorrowGGIndexing",
+                [](TArrayTransformer &self, py::object other)
+                {
+                    auto other_father = other.attr("father");
+                    auto other_father_size = other_father.attr("Size")().cast<index>();
+                    auto other_pLGhostMapping = other.attr("LGhostMapping").cast<ssp<OffsetAscendIndexMapping>>();
+                    auto other_pLGlobalMapping = other.attr("LGlobalMapping").cast<ssp<GlobalOffsetsMapping>>();
+
+                    DNDS_assert(self.father);
+                    DNDS_assert(other_father_size == self.father->Size());
+                    DNDS_assert(other_pLGhostMapping && other_pLGlobalMapping);
+
+                    self.pLGhostMapping = other_pLGhostMapping;
+                    self.pLGlobalMapping = other_pLGlobalMapping;
+                    self.father->pLGlobalMapping = self.pLGlobalMapping;
+                },
+                py::arg("other"));
+
+        ArrayTransformer_
+            .def("initPersistentPull", &TArrayTransformer::initPersistentPull)
+            .def("initPersistentPush", &TArrayTransformer::initPersistentPush)
+            .def("startPersistentPull", &TArrayTransformer::startPersistentPull)
+            .def("startPersistentPush", &TArrayTransformer::startPersistentPush)
+            .def("waitPersistentPull", &TArrayTransformer::waitPersistentPull)
+            .def("waitPersistentPush", &TArrayTransformer::waitPersistentPush)
+            .def("clearPersistentPull", &TArrayTransformer::clearPersistentPull)
+            .def("clearPersistentPush", &TArrayTransformer::clearPersistentPush)
+            .def("pullOnce", &TArrayTransformer::pullOnce)
+            .def("pushOnce", &TArrayTransformer::pushOnce);
+    }
+
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    void _pybind11_arraytransformer_define_dispatch(py::module_ &m)
+    {
+        if constexpr (_row_size == UnInitRowsize)
+            return;
+        else
+            return pybind11_arraytransformer_define<T, _row_size, _row_max, _align>(m);
+    }
+}
+
+namespace DNDS
+{
     constexpr auto _get_pybind11_arrayRowsizeInstantiationList()
     {
         std::array<rowsize, 20> ret{UnInitRowsize};
@@ -219,7 +333,7 @@ namespace DNDS
         return ret;
     }
 
-    constexpr auto pybind11_arrayRowsizeInstantiationList = _get_pybind11_arrayRowsizeInstantiationList();
+    static constexpr auto pybind11_arrayRowsizeInstantiationList = _get_pybind11_arrayRowsizeInstantiationList();
 
     template <class T, size_t N, std::array<int, N> const &Arr, size_t... Is>
     void __pybind11_callBindArrays_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
@@ -246,6 +360,20 @@ namespace DNDS
     {
         static constexpr auto seq = pybind11_arrayRowsizeInstantiationList;
         __pybind11_callBindParArrays_rowsizes_sequence<
+            T, seq.size(), seq>(m, std::make_index_sequence<seq.size()>{});
+    }
+
+    template <class T, size_t N, std::array<int, N> const &Arr, size_t... Is>
+    void __pybind11_callBindArrayTransformers_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
+    {
+        (_pybind11_arraytransformer_define_dispatch<T, Arr[Is]>(m), ...);
+    }
+
+    template <class T>
+    void pybind11_callBindArrayTransformers_rowsizes(py::module_ &m)
+    {
+        static constexpr auto seq = pybind11_arrayRowsizeInstantiationList;
+        __pybind11_callBindArrayTransformers_rowsizes_sequence<
             T, seq.size(), seq>(m, std::make_index_sequence<seq.size()>{});
     }
 }
