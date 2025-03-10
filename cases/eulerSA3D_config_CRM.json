@@ -13,7 +13,7 @@
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 30000,
+        "nTimeStepInternal": 10000,
         "rhsThresholdInternal": 1e-8,
         "res_base": 0.0,
         "useVolWiseResidual": false
@@ -24,11 +24,11 @@
         "consoleOutputMode": 1,
         "nDataOutC": 20,
         "nDataOut": 100,
-        "nDataOutCInternal": 100,
+        "nDataOutCInternal": 500,
         "nDataOutInternal": 1000000000,
         "nRestartOutC": 10,
         "nRestartOut": 100,
-        "nRestartOutCInternal": 5000,
+        "nRestartOutCInternal": 1000,
         "nRestartOutInternal": 1000000000,
         "dataOutAtInit": true,
         "tDataOut": 3e+200
@@ -54,7 +54,7 @@
         // "rectifyNearPlane": 2,
         // "rectifyNearPlaneThres": 1e-4,
         "meshFile": "../data/mesh/CARDC.ZhangYB.WB.ae2.75deg.Unstructured.C_DNDSR.cgns",
-        "outPltName": "../data/out/CRM_1/DPW6_CARDC.ZhangYB.WB.ae2.75deg.Unstructured.C_DNDSR/O2_t0-Drive2-NQCR",
+        "outPltName": "../data/out/CRM_0/O4_0_MG4jc2",
         "outPltMode": 1,
         "readMeshMode": 1,
         "outPltTecplotFormat": false,
@@ -71,6 +71,21 @@
             // "cellVolume",
             "dWall"
         ],
+        "restartWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 5,
+            "hdfChunkSize": 4096,
+            "hdfCollOnMeta": true,
+            "hdfCollOnData": false
+        },
+        "meshPartitionedReaderType": "H5",
+        "meshPartitionedWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 5,
+            "hdfChunkSize": 4096,
+            "hdfCollOnMeta": true,
+            "hdfCollOnData": false
+        },
         "_tail": 0
     },
     "implicitReconstructionControl": {
@@ -93,8 +108,8 @@
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 1,
-        "intOrder": 1,
+        "maxOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": true,
         "jacobiRelax": 1.0,
         "SORInstead": false,
@@ -110,6 +125,7 @@
         },
         "functionalSettings": {
             "dirWeightScheme": "HQM_OPT",
+            // "dirWeightScheme": "TEST_OPT",
             // "dirWeightScheme": "ManualDirWeight",
             // "manualDirWeights": [
             //     1.0,
@@ -140,7 +156,34 @@
         "directPrecControl": {
             "useDirectPrec": true,
             "iluCode": 2,
-            "orderingCode": 0
+            "orderingCode": 4
+        },
+        "multiGridLP": 1,
+        "multiGridLPInnerNIter": 4,
+        "multiGridLPInnerNSee": 100,
+        "coarseGridLinearSolverControlList": {
+            "1": {
+                "jacobiCode": 2,
+                "sgsIter": 0,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 2,
+                "multiGridNIterPost": 2
+            },
+            "2": {
+                "jacobiCode": 2,
+                "sgsIter": 0,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0
+            }
         }
     },
     "others": {
@@ -215,9 +258,9 @@
     "bcSettings": [],
     "restartState": {
         "iStep": 1,
-        "iStepInternal": 10000,
+        "iStepInternal": 5000,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/out/CRM_1/DPW6_CARDC.ZhangYB.WB.ae2.75deg.Unstructured.C_DNDSR/O2_starter__C_p1280_restart.dir",
+        "lastRestartFile": "../data/out/CRM_0/O2_starter__C_p2800_restart.dir",
         "otherRestartFile": "",
         "otherRestartStoreDim": [
             0
