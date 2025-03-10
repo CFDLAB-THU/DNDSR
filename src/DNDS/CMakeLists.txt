@@ -55,6 +55,8 @@ install(TARGETS ${LIBNAME}_shared;${LIBNAME}
 set(CPPS_BIND
 dnds_pybind11.cpp
 MPI_bind.cpp
+Array_bind.cpp
+ArrayDerived/ArrayAdjacency_bind.cpp
 )
 
 dnds_add_py_module(${LIBNAME}_pybind11 "${CPPS_BIND}" "${LIBNAME}_shared;${LINKS}" "${DNDS_PCH_TARGETS_FAST}"

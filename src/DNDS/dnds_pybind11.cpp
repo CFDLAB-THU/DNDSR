@@ -2,34 +2,15 @@
 #include "MPI_bind.hpp"
 #include "IndexMapping_bind.hpp"
 #include "Array_bind.hpp"
+#include "ArrayDerived/ArrayAdjacency_bind.hpp"
 
 PYBIND11_MODULE(dnds_pybind11, m)
 {
-    DNDS::pybind11_MPIInfo(m);
-    DNDS::MPI::pybind11_Init_thread(m);
-    DNDS::MPI::pybind11_MPI_Operations(m);
-    DNDS::Debug::pybind11_Debug(m);
+    DNDS::pybind11_bind_MPI_All(m);
+    
+    DNDS::pybind11_bind_IndexMapping_All(m);
 
-    DNDS::pybind11_GlobalOffsetsMapping_define(m);
-    DNDS::pybind11_OffsetAscendIndexMapping_define(m);
+    DNDS::pybind11_bind_Array_All(m);
 
-    DNDS::pybind11_callBindArrays_rowsizes<DNDS::real>(m);
-    DNDS::pybind11_array_define<DNDS::real, DNDS::DynamicSize>(m);
-    DNDS::pybind11_array_define<DNDS::real, DNDS::NonUniformSize>(m);
-
-    DNDS::pybind11_callBindArrays_rowsizes<DNDS::index>(m);
-    DNDS::pybind11_array_define<DNDS::index, DNDS::DynamicSize>(m);
-    DNDS::pybind11_array_define<DNDS::index, DNDS::NonUniformSize>(m);
-
-    DNDS::pybind11_callBindParArrays_rowsizes<DNDS::real>(m);
-    DNDS::pybind11_pararray_define<DNDS::real, DNDS::DynamicSize>(m);
-    DNDS::pybind11_pararray_define<DNDS::real, DNDS::NonUniformSize>(m);
-
-    DNDS::pybind11_callBindParArrays_rowsizes<DNDS::index>(m);
-    DNDS::pybind11_pararray_define<DNDS::index, DNDS::DynamicSize>(m);
-    DNDS::pybind11_pararray_define<DNDS::index, DNDS::NonUniformSize>(m);
-
-    DNDS::pybind11_callBindArrayTransformers_rowsizes<DNDS::real>(m);
-    DNDS::pybind11_arraytransformer_define<DNDS::index, DNDS::DynamicSize>(m);
-    DNDS::pybind11_arraytransformer_define<DNDS::index, DNDS::NonUniformSize>(m);
+    DNDS::pybind11_bind_ArrayAdjacency_All(m);
 }

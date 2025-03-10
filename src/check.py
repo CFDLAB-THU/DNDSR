@@ -59,6 +59,53 @@ def test_array_trans(mpi: DNDS.MPIInfo, mode: str = "global"):
     assert arrayR3son_1.Size() == len(pullIdx)
     assert np.all(np.array(arrayR3son_1.data()) == 1.335)
 
+
+def test_arrayRU(mpi: DNDS.MPIInfo):
+    arrayRU = DNDS.Array_d_I_I_D()
+
+    rsize = np.linspace(3, 10, 32, dtype=np.int32)
+    arrayRU.Resize(32, rsize)
+
+    print(arrayRU.Size())
+    assert not (np.diff(np.array(arrayRU.getRowStart())) - rsize).any()
+
+    for i in range(arrayRU.Size()):
+        for j in range(arrayRU.Rowsize(i)):
+            arrayRU[i, j] = i + j
+    arrayRUdata = np.array(arrayRU.data(), copy=False)
+    arrayRUdata += 1
+    if mpi.rank == 0:
+        print(arrayRUdata.shape)
+    for i in range(arrayRU.Size()):
+        for j in range(arrayRU.Rowsize(i)):
+            assert arrayRU[i, j] == i + j + 1
+
+    (arrayRU_rstart_ret, gt) = get_rstart_data()
+    assert not np.any(
+        gt - arrayRU_rstart_ret
+    )  # to see if there is memory corruption on this
+    if mpi.rank == 0:
+        print(arrayRU_rstart_ret.shape)
+    arrayRU_rstart_ret_np = np.array(arrayRU_rstart_ret, copy=False)
+    del arrayRU_rstart_ret
+    if mpi.rank == 0:
+        print(
+            f"if corrupted: { np.any(gt - arrayRU_rstart_ret_np)}"
+        )  # should be corrupted
+
+
+def test_adj(mpi: DNDS.MPIInfo):
+    adj = DNDS.ArrayAdjacency("I", init_args=(mpi,))
+    adj.Resize(100)
+    for irow in range(adj.Size()):
+        adj.ResizeRow(irow, irow % 3 + 1)
+        rowdata = np.array(adj[(irow,)], copy=False)
+        rowdata[:] = 3343
+    adj.Compress()
+    if mpi.rank == 0:
+        assert not np.any(np.array(adj.data()) - 3343)
+
+
 # print(dir(DNDS.Debug))
 DNDS.MPI.Init_thread([])
 
@@ -71,40 +118,8 @@ if mpi.rank == 0:
 test_all_reduce_scalar(mpi)
 test_array_trans(mpi)
 test_array_trans(mpi, mode="left")
-
-arrayRU = DNDS.Array_d_I_I_D()
-
-rsize = np.linspace(3, 10, 32, dtype=np.int32)
-arrayRU.Resize(32, rsize)
-
-print(arrayRU.Size())
-assert not (np.diff(np.array(arrayRU.getRowStart())) - rsize).any()
-
-for i in range(arrayRU.Size()):
-    for j in range(arrayRU.Rowsize(i)):
-        arrayRU[i, j] = i + j
-arrayRUdata = np.array(arrayRU.data(), copy=False)
-arrayRUdata += 1
-if mpi.rank == 0:
-    print(arrayRUdata.shape)
-for i in range(arrayRU.Size()):
-    for j in range(arrayRU.Rowsize(i)):
-        assert arrayRU[i, j] == i + j + 1
-
-
-arrayRU_rstart = np.array(arrayRU.getRowStart(), copy=False)
-
-(arrayRU_rstart_ret, gt) = get_rstart_data()
-assert not np.any(
-    gt - arrayRU_rstart_ret
-)  # to see if there is memory corruption on this
-if mpi.rank == 0:
-    print(arrayRU_rstart_ret.shape)
-arrayRU_rstart_ret_np = np.array(arrayRU_rstart_ret, copy=False)
-del arrayRU_rstart_ret
-if mpi.rank == 0:
-    print(f"if corrupted: { np.any(gt - arrayRU_rstart_ret_np)}")  # should be corrupted
-
+test_arrayRU(mpi)
+test_adj(mpi)
 
 print(f"{mpi.rank} / {mpi.size}, {mpi.comm():x}")
 

@@ -87,3 +87,13 @@ namespace DNDS::Debug
     }
 }
 
+namespace DNDS
+{
+    void pybind11_bind_MPI_All(py::module_ &m)
+    {
+        pybind11_MPIInfo(m);
+        MPI::pybind11_Init_thread(m);
+        MPI::pybind11_MPI_Operations(m);
+        Debug::pybind11_Debug(m);
+    }
+}

@@ -967,4 +967,7 @@ namespace DNDS
         using Type = ArrayTransformer<typename TArray::value_type, TArray::rs, TArray::rm, TArray::al>;
     };
 
+    template <class TArray>
+    using ArrayTransformerType_t = typename ArrayTransformerType<TArray>::Type;
+
 }

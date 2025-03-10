@@ -9,17 +9,17 @@ namespace py = pybind11;
 
 namespace DNDS
 {
-    auto pybind11_GlobalOffsetsMapping_declare(py::module_ m)
+    inline auto pybind11_GlobalOffsetsMapping_declare(py::module_ m)
     {
         return py::class_<GlobalOffsetsMapping, std::shared_ptr<GlobalOffsetsMapping>>(m, "GlobalOffsetsMapping");
     }
 
-    auto pybind11_GlobalOffsetsMapping_get_class(py::module_ m)
+    inline auto pybind11_GlobalOffsetsMapping_get_class(py::module_ m)
     {
         return py::class_<GlobalOffsetsMapping, std::shared_ptr<GlobalOffsetsMapping>>(m.attr("GlobalOffsetsMapping"));
     }
 
-    void pybind11_GlobalOffsetsMapping_define(py::module_ m)
+    inline void pybind11_GlobalOffsetsMapping_define(py::module_ m)
     {
         auto Py_GlobalOffsetsMapping = pybind11_GlobalOffsetsMapping_declare(m);
 
@@ -47,17 +47,17 @@ namespace DNDS
                  { return self.operator()(rank, val); });
     }
 
-    auto pybind11_OffsetAscendIndexMapping_declare(py::module_ m)
+    inline auto pybind11_OffsetAscendIndexMapping_declare(py::module_ m)
     {
         return py::class_<OffsetAscendIndexMapping, std::shared_ptr<OffsetAscendIndexMapping>>(m, "OffsetAscendIndexMapping");
     }
 
-    auto pybind11_OffsetAscendIndexMapping_get_class(py::module_ m)
+    inline auto pybind11_OffsetAscendIndexMapping_get_class(py::module_ m)
     {
         return py::class_<OffsetAscendIndexMapping, std::shared_ptr<OffsetAscendIndexMapping>>(m.attr("OffsetAscendIndexMapping"));
     }
 
-    void pybind11_OffsetAscendIndexMapping_define(py::module_ m)
+    inline void pybind11_OffsetAscendIndexMapping_define(py::module_ m)
     {
         auto Py_OffsetAscendIndexMapping = pybind11_OffsetAscendIndexMapping_declare(m);
 
@@ -141,5 +141,11 @@ namespace DNDS
             .def("__call__", [&](OffsetAscendIndexMapping &self, MPI_int rank, index val)
                  { return self.operator()(rank, val); }, py::arg("rank"), py::arg("val"));
         ;
+    }
+
+    inline void pybind11_bind_IndexMapping_All(py::module_ m)
+    {
+        pybind11_GlobalOffsetsMapping_define(m);
+        pybind11_OffsetAscendIndexMapping_define(m);
     }
 }

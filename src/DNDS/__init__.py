@@ -59,8 +59,8 @@ def _row_size_to_name(row_size: int | str) -> str:
     else:
         if str(row_size) == "D":
             return "D"
-        elif str(row_size) == "N":
-            return "N"
+        elif str(row_size) in {"N", "I"}:
+            return "I"
         else:
             raise ValueError(f"row_size {str(row_size)} is illegal")
 
@@ -119,7 +119,16 @@ def ParArray(
 def ArrayTransformer(
     type: str, row_size: int | str, row_max: int | str = None, init_args: tuple = ()
 ) -> ArrayTransformer_d_3_3_D:
-    cls = globals()[_get_array_name(type, row_size, row_max, prepend="ArrayTransformer")]
+    cls = globals()[
+        _get_array_name(type, row_size, row_max, prepend="ArrayTransformer")
+    ]
+    return cls(*init_args)
+
+
+def ArrayAdjacency(
+    row_size: int | str, row_max: int | str = None, init_args: tuple = ()
+) -> ArrayAdjacency_q_I_I_D:
+    cls = globals()[_get_array_name("q", row_size, row_max, prepend="ArrayAdjacency")]
     return cls(*init_args)
 
 

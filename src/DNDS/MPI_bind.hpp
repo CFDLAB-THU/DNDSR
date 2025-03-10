@@ -72,3 +72,8 @@ namespace DNDS::Debug
 {
     void pybind11_Debug(py::module_ &m);
 }
+
+namespace DNDS
+{
+    void pybind11_bind_MPI_All(py::module_ &m);
+}
