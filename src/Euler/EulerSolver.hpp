@@ -473,13 +473,18 @@ namespace DNDS::Euler
                     int nGmresConsoleCheck = 100;
                     int multiGridNIter = -1;
                     int multiGridNIterPost = 0;
+                    int centralSmoothInputResidual = 0;
                     DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                         CoarseGridLinearSolverControl,
                         jacobiCode,
                         sgsIter, gmresCode, gmresScale, nGmresIter,
-                        nSgsConsoleCheck, nGmresConsoleCheck, multiGridNIter, multiGridNIterPost)
+                        nSgsConsoleCheck, nGmresConsoleCheck, multiGridNIter, multiGridNIterPost,
+                        centralSmoothInputResidual)
                 };
-                std::vector<CoarseGridLinearSolverControl> coarseGridLinearSolverControlList{2};
+                std::map<std::string, CoarseGridLinearSolverControl> coarseGridLinearSolverControlList{
+                    {"1", CoarseGridLinearSolverControl{}},
+                    {"2", CoarseGridLinearSolverControl{}},
+                };
                 Direct::DirectPrecControl directPrecControl;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     LinearSolverControl,

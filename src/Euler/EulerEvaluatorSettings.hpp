@@ -63,6 +63,7 @@ namespace DNDS::Euler
         int usePrimGradInVisFlux = 0;
         int useSourceGradFixGG = 0;
         int nCentralSmoothStep = 0;
+        real centralSmoothEps = 0.5;
         Eigen::Vector<real, 3> constMassForce = Eigen::Vector<real, 3>{0, 0, 0};
         struct FrameConstRotation
         {
@@ -260,6 +261,7 @@ namespace DNDS::Euler
             __DNDS__json_to_config(usePrimGradInVisFlux);
             __DNDS__json_to_config(useSourceGradFixGG);
             __DNDS__json_to_config(nCentralSmoothStep);
+            __DNDS__json_to_config(centralSmoothEps);
             __DNDS__json_to_config(constMassForce);
             __DNDS__json_to_config(frameConstRotation);
             __DNDS__json_to_config(cLDriverSettings);

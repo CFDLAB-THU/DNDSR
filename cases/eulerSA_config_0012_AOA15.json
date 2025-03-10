@@ -4,6 +4,7 @@
         "nTimeStep": 1,
         "steadyQuit": true,
         "useRestart": false,
+        "partitionMeshOnly": false,
         "odeCode": 0,
         "tEnd": 3e+200
     },
@@ -46,9 +47,11 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2-MGtest.dir/out_4[jc2]-4[jc2]-NLS",
+        "outPltName": "../data/out/NACA0012_H2-MGtest_1_AOA15.dir/ilu2-smooth4-4ilu2-smooth4",
         "outPltMode": 0,
         "readMeshMode": 0,
+        "meshDirectBisect": 0,
+        "meshReorderCells": 0,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": false,
         "outAtPointData": true,
@@ -59,9 +62,25 @@
             // "cellVolume",
             "dWall"
         ],
-        "restartWriter": "H5",
-        "restartWriterH5Deflate": 7,
-        "restartWriterH5Chunk": 65536,
+        "restartWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 0,
+            "hdfChunkSize": 0,
+            "hdfCollOnMeta": true,
+            "hdfCollOnData": false,
+            "jsonBinaryDeflateLevel": 5,
+            "jsonUseCodecOnUInt8": true
+        },
+        "meshPartitionedReaderType": "H5",
+        "meshPartitionedWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 0,
+            "hdfChunkSize": 0,
+            "hdfCollOnMeta": true,
+            "hdfCollOnData": false,
+            "jsonBinaryDeflateLevel": 9,
+            "jsonUseCodecOnUInt8": true
+        },
         "_tail": 0
     },
     "boundaryDefinition": {},
@@ -128,15 +147,15 @@
         "jacobiCode": 2,
         "sgsIter": 0,
         "sgsWithRec": 0,
-        "gmresCode": 1,
+        "gmresCode": 0,
         "gmresScale": 2,
         "nGmresSpace": 5,
-        "nGmresIter": 2,
-        "multiGridLP": 2,
+        "nGmresIter": 1,
+        "multiGridLP": 1,
         "multiGridLPInnerNIter": 4,
         "multiGridLPInnerNSee": 100,
-        "coarseGridLinearSolverControlList": [
-            {
+        "coarseGridLinearSolverControlList": {
+            "1": {
                 "jacobiCode": 2,
                 "sgsIter": 0,
                 "gmresCode": 0,
@@ -144,9 +163,11 @@
                 "nGmresIter": 2,
                 "nSgsConsoleCheck": 100,
                 "nGmresConsoleCheck": 100,
-                "multiGridNIter": 4
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0,
+                "centralSmoothInputResidual": 4
             },
-            {
+            "2": {
                 "jacobiCode": 2,
                 "sgsIter": 0,
                 "gmresCode": 0,
@@ -154,9 +175,10 @@
                 "nGmresIter": 2,
                 "nSgsConsoleCheck": 100,
                 "nGmresConsoleCheck": 100,
-                "multiGridNIter": 4
+                "multiGridNIter": 3,
+                "multiGridNIterPost": 0
             }
-        ],
+        },
         "directPrecControl": {
             "useDirectPrec": true,
             "iluCode": 2,
@@ -184,6 +206,8 @@
         "ransSARotCorrection": 1,
         "usePrimGradInVisFlux": 0,
         // "ransForce2nd": 1,
+        "nCentralSmoothStep": 4,
+        "centralSmoothEps": 0.5,
         "constMassForce": [
             0.0,
             0.0,
@@ -240,7 +264,7 @@
             "CSutherland": 110.4
         },
         "cLDriverSettings": {
-            "AOAInit": 5.0,
+            "AOAInit": 15.0,
             "AOAAxis": "z",
             "CL0Axis": "y",
             "CD0Axis": "x",
@@ -260,6 +284,6 @@
         "iStep": 1,
         "iStepInternal": 15000,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/out/NACA0012_H2-MGtest__C_p24.dnds.h5"
+        "lastRestartFile": "../data/out/NACA0012_H2-MGtest_AOA15.dir/out-jc1gc0-4[jc1]-NLS__C_p16_restart.dir"
     }
 }

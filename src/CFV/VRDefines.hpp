@@ -18,7 +18,6 @@ namespace DNDS::CFV
     using t3MatPair = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<3, 3>>;
     using t3Mat = decltype(t3MatPair::father);
 
-    // Corresponds to mean/rec dofs
     using tVVecPair = ::DNDS::ArrayPair<DNDS::ArrayEigenVector<DynamicSize>>;
     using tVVec = decltype(tVVecPair::father);
     using tMatsPair = DNDS::ArrayPair<DNDS::ArrayEigenUniMatrixBatch<DynamicSize, DynamicSize>>;
@@ -27,7 +26,8 @@ namespace DNDS::CFV
     using tVecs = decltype(tVecsPair::father);
     using tVMatPair = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<DynamicSize, DynamicSize>>;
     using tVMat = decltype(tVMatPair::father);
-
+    
+    // Corresponds to mean/rec dofs
     template <int nVarsFixed>
     using tURec = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<DynamicSize, nVarsFixed>>;
     template <int nVarsFixed>

@@ -1327,11 +1327,14 @@ namespace DNDS::Euler
         //             std::cout << "Increment fixed number " << nFixed_c << std::endl;
         // }
 
-        void CentralSmoothResidual(ArrayDOFV<nVarsFixed> &r, ArrayDOFV<nVarsFixed> &rs, ArrayDOFV<nVarsFixed> &rtemp)
+        void CentralSmoothResidual(ArrayDOFV<nVarsFixed> &r, ArrayDOFV<nVarsFixed> &rs, ArrayDOFV<nVarsFixed> &rtemp, int nStep = 0)
         {
-            for (int iterS = 1; iterS <= settings.nCentralSmoothStep; iterS++)
+            for (int iterS = 1; iterS <= (nStep > 0 ? nStep : settings.nCentralSmoothStep); iterS++)
             {
-                real epsC = 0.5;
+                real epsC = settings.centralSmoothEps;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     real div = 1.;

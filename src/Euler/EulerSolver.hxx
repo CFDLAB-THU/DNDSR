@@ -785,9 +785,10 @@ namespace DNDS::Euler
                 {
                     static const int use_1st_conv = 1;
                     DNDS_assert(mgLevel > 0 && mgLevel <= mgLevelMax);
-                    DNDS_assert(config.linearSolverControl.coarseGridLinearSolverControlList.at(mgLevel - 1).multiGridNIterPost >= 0);
-                    int curMGIter = config.linearSolverControl.coarseGridLinearSolverControlList.at(mgLevel - 1).multiGridNIter +
-                                    config.linearSolverControl.coarseGridLinearSolverControlList.at(mgLevel - 1).multiGridNIterPost;
+                    std::string level_key = std::to_string(mgLevel);
+                    DNDS_assert(config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).multiGridNIterPost >= 0);
+                    int curMGIter = config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).multiGridNIter +
+                                    config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).multiGridNIterPost;
                     if (curMGIter < 0)
                         curMGIter = config.linearSolverControl.multiGridLPInnerNIter;
                     DNDS_EULER_SOLVER_GET_TEMP_UDOF(uMG1)
@@ -804,6 +805,16 @@ namespace DNDS::Euler
                     resOtherCurMG += resOther_upper; // projection
                     // res0CurMG.addTo(uMG1, -1. / dt);
                     // uMG1Init = uMG1;
+
+                    if (config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).centralSmoothInputResidual > 0)
+                    { // make resOtherCurMG <- proj(res of upper grid) and do smoothing
+                        resOtherCurMG.addTo(uMG1, -1. / dt);
+                        DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp1)
+                        rhsTemp = resOtherCurMG;
+                        eval.CentralSmoothResidual(resOtherCurMG, rhsTemp, rhsTemp1, config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).centralSmoothInputResidual);
+                        resOtherCurMG = rhsTemp;
+                        resOtherCurMG.addTo(uMG1, 1. / dt);
+                    }
 
                     for (int iIterMG = 1; iIterMG <= curMGIter; iIterMG++)
                     {
@@ -853,7 +864,7 @@ namespace DNDS::Euler
                         // std::cout << "here" << std::endl;
 
                         if (mgLevel < mgLevelMax &&
-                            iIterMG == config.linearSolverControl.coarseGridLinearSolverControlList.at(mgLevel - 1).multiGridNIter) // post smoother coarser grid call
+                            iIterMG == config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).multiGridNIter) // post smoother coarser grid call
                         {
                             if (mgLevel == 1)
                                 eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
@@ -1312,10 +1323,10 @@ namespace DNDS::Euler
             return UR;
         };
         DNDS_assert(gridLevel <= config.linearSolverControl.coarseGridLinearSolverControlList.size());
-
+        std::string level_key = std::to_string(gridLevel);
         auto gmresCode =
             gridLevel > 0
-                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).gmresCode
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).gmresCode
                 : config.linearSolverControl.gmresCode;
         bool initWithLastURecInc =
             gridLevel > 0
@@ -1327,23 +1338,23 @@ namespace DNDS::Euler
                 : config.linearSolverControl.sgsWithRec;
         int sgsIter =
             gridLevel > 0
-                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).sgsIter
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).sgsIter
                 : config.linearSolverControl.sgsIter;
         int nSgsConsoleCheck =
             gridLevel > 0
-                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).nSgsConsoleCheck
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).nSgsConsoleCheck
                 : config.linearSolverControl.nSgsConsoleCheck;
         int gmresScale =
             gridLevel > 0
-                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).gmresScale
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).gmresScale
                 : config.linearSolverControl.gmresScale;
         int nGmresIter =
             gridLevel > 0
-                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).nGmresIter
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).nGmresIter
                 : config.linearSolverControl.nGmresIter;
         int nGmresConsoleCheck =
             gridLevel > 0
-                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).nGmresConsoleCheck
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).nGmresConsoleCheck
                 : config.linearSolverControl.nGmresConsoleCheck;
         if (gmresCode == 0 || gmresCode == 2)
         {
@@ -1482,9 +1493,10 @@ namespace DNDS::Euler
         // nCall++;
         // if (mpi.rank == 0)
         //     std::cout << "doPrecondition nCall " << nCall << fmt::format(" {} ", hasLUDone) << std::endl;
+        std::string level_key = std::to_string(gridLevel);
         int jacobiCode =
             gridLevel > 0
-                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(gridLevel - 1).jacobiCode
+                ? config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).jacobiCode
                 : config.linearSolverControl.jacobiCode;
 
         if (jacobiCode <= 1)
