@@ -15,19 +15,51 @@ The command line solver apps include:
 
 ### On Linux
 
-- First build / get your mpi dev package, HDF5, CGNS, metis and parmetis, and make them available to cmake (like via CMAKE_PREFIX for libs and PATH for executables).
-An optional way is to use an existing SDK for these libraries. 
-For Linux with x86_64 CPU with **openmpi** dev package installed, you can get the `Linux-x86_64-GS.tar.gz` package from [here](https://cloud.tsinghua.edu.cn/d/35deb3d4f740449da29b/) and extract it inside the `external` folder, making the path look like `external/Linux-x86_64/include` ...
+- Make sure mpi and compiler environment is available:
+  - `mpicc`, `mpicxx`, `mpirun` (or srun)
+  - `mpicc --version`: check the compiler wrapped by `mpicc` wrapper
+  - `mpicc -show` (for MPICH/OpenMPI) or `mpicc --showme` (for OpenMPI) to check full wrapped compiler command
+  - Compiler should be GCC 9 / Clang 8 or newer
+    - C++17 support
+  - MPI-3 standard compatible
+  - CMake + GNU Make or Ninja
+    - CMake >= 3.21
+- First build / get your mpi dev package, zlib, HDF5, CGNS, metis and parmetis, and make them available to cmake (like via CMAKE_PREFIX for libs and PATH for executables).
+  - Recommended way: [use git submodules and build](#using-git-submodule-to-build-cfd_externals). 
+    - No need to provide extra variables to CMake or set extra environment variables if using git submodules
+  - An optional way is to use an existing SDK for these libraries.
+  - For Linux with x86_64 CPU with **libopenmpi-dev** package installed, you can get the `Linux-x86_64-GS.tar.gz` package from [here](https://cloud.tsinghua.edu.cn/d/35deb3d4f740449da29b/) and extract it inside the `external` folder, making the path look like `external/Linux-x86_64/include` ...
+
 - Then get the `external_headerOnlys` here [here](https://cloud.tsinghua.edu.cn/d/35deb3d4f740449da29b/) to directly get the sources of referenced repos. Extract it into `external` folder, making the path look like `external/eigen...` and so on.
+  
 - Cmake configure and build. From the project root:
 
 ```bash
 mkdir build && cd build
 cmake ..
-make euler -j8
+cmake --build . -t <target> -j 8
 ```
 
-Here euler could be replaced with any command line app.
+to build the target. Replace `<target>` with `euler`, `eulerSA` and so on.
+
+### Using Git Submodule to build `cfd_externals`
+
+Some external libraries are adopted in DNDSR in the form of binary libraries linkages, and they are not integrated with CMake FetchContent for now.
+
+```bash
+git submodule update --init --recursive --depth=1
+```
+
+If every clone and checkout succeeds, move into `external/cfd_externals` and run the build script:
+
+```bash
+cd external/cfd_externals
+CC=mpicc CXX=mpicxx python cfd_externals_build.py
+```
+
+After this, all libraries are installed in `external/cfd_externals/insall`.
+
+If you have trouble cloning the submodules from github, you can package the git repos on a machine with access to github, and redirect github.com to the local directory. See instructions in [cfd_externals](https://github.com/harryzhou2000/cfd_externals?tab=readme-ov-file#redirect-to-local-repos).
 
 ## Running
 
