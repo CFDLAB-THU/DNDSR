@@ -1,5 +1,7 @@
+from cProfile import label
 import dash
 from dash import dcc, html, Input, Output, State, Dash
+from matplotlib.pyplot import xlabel
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -97,6 +99,7 @@ def get_app_layout():
         ]
     )
 
+
 register_list = []
 
 
@@ -135,6 +138,7 @@ def register_update_dropdown_x_options(app: Dash, args: argparse.Namespace):
 
 register_list.append(register_update_dropdown_x_options)
 
+
 def register_update_file_dropdown_options(app: Dash, args: argparse.Namespace):
     # Callback to update dropdown options
     @app.callback(
@@ -166,6 +170,8 @@ def register_update_file_dropdown_options(app: Dash, args: argparse.Namespace):
             return options
         except Exception as e:
             return []  # Handle error, e.g., file not found or empty file
+
+
 register_list.append(register_update_file_dropdown_options)
 
 
@@ -181,6 +187,7 @@ def register_update_file_dropdown_1_options(app: Dash, args: argparse.Namespace)
 
 
 register_list.append(register_update_file_dropdown_1_options)
+
 
 def register_update_graph(app: Dash, args: argparse.Namespace):
     # Callback to update graph
@@ -207,11 +214,15 @@ def register_update_graph(app: Dash, args: argparse.Namespace):
     ):
         fig = go.Figure()
         try:
+            if not selected_file:
+                return px.line(title="Main log not selected")
             df = pd.read_csv(selected_file)
             # fig = px.line(
             #     title=f"Plot of {selected_column}",
             #     log_y=("Log Y" in checklist_0),
             # )
+            if selected_column is None:
+                selected_column = "res0"
             fig.update_layout(
                 title=f"Plot of {selected_column}",
                 margin=dict(l=50, r=100, t=50, b=50),
@@ -315,4 +326,6 @@ def register_update_graph(app: Dash, args: argparse.Namespace):
         except Exception as e:
             print(e)
             return px.line(title="Error loading data")
+
+
 register_list.append(register_update_graph)
