@@ -708,7 +708,7 @@ namespace DNDS::Euler
                 DNDS_assert(logConfig);
                 gSetting["___Compile_Time_Defines"] = DNDS_Defines_state;
                 gSetting["___Runtime_PartitionNumber"] = mpi.size;
-                gSetting["___Commit_ID"] = DNDS_MACRO_TO_STRING(DNDS_CURRENT_COMMIT_HASH);
+                gSetting["___Commit_ID"] = GetSetVersionName();
                 // if (updateCommit)
                 // {
                 //     std::ifstream commitIDFile("commitID.txt");

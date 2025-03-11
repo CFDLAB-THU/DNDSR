@@ -108,3 +108,14 @@ std::string __DNDS_getTraceString()
     return ss.str();
     // return cpptrace::generate_trace().to_string();
 }
+
+namespace DNDS
+{
+    std::string GetSetVersionName(const std::string &ver)
+    {
+        static std::string ver_name = "UNKNOWN";
+        if (ver.length())
+            ver_name = ver;
+        return ver_name;
+    }
+}

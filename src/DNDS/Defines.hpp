@@ -606,3 +606,8 @@ namespace DNDS::TermColor
 
 
 */
+
+namespace DNDS
+{
+    std::string GetSetVersionName(const std::string& ver = "");
+}

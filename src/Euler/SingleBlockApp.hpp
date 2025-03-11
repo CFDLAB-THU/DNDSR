@@ -50,6 +50,7 @@ namespace DNDS::Euler
         mainParser.add_argument("--debug").flag().default_value(false);
 
         RegisterSignalHandler();
+        GetSetVersionName(DNDS_MACRO_TO_STRING(DNDS_CURRENT_COMMIT_HASH));
 
         try
         {
