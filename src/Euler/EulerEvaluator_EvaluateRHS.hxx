@@ -37,7 +37,7 @@ namespace DNDS::Euler
         using namespace Geom;
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS 1");
         int cnvars = nVars;
-        auto rsType = settings.rsType;
+
         rhs.setConstant(0.0);
         if (settings.useSourceGradFixGG)
             for (auto &v : gradUFix)
@@ -50,6 +50,11 @@ namespace DNDS::Euler
         bool direct2ndRec = flags & RHS_Direct_2nd_Rec;
         bool direct2ndRec1stConv = flags & RHS_Direct_2nd_Rec_1st_Conv;
         DNDS_assert(direct2ndRec1stConv ? direct2ndRec : true);
+        auto rsType = settings.rsType;
+#ifdef USE_MG_O1_LLF_FLUX
+        if (direct2ndRec)
+            rsType = Gas::Roe_M2; // to LLF flux
+#endif
 
         TU fluxWallSumLocal;
         fluxWallSumLocal.setZero(cnvars);
@@ -409,8 +414,11 @@ namespace DNDS::Euler
                     auto seqC = Eigen::seq(iG * dim, iG * dim + dim - 1);
                     ULxyV(Eigen::all, iG) = ULxy;
                     URxyV(Eigen::all, iG) = URxy;
-                    DiffUxyV(seqC, Eigen::all) = GradUMeanXy;
-                    DiffUxyPrimV(seqC, Eigen::all) = GradUMeanXyPrim;
+                    if (!ignoreVis)
+                    {
+                        DiffUxyV(seqC, Eigen::all) = GradUMeanXy;
+                        DiffUxyPrimV(seqC, Eigen::all) = GradUMeanXyPrim;
+                    }
                     unitNormV(Eigen::all, iG) = unitNorm;
                     vgXYV(Eigen::all, iG) = GetFaceVGrid(iFace, iGQ);
                 });
@@ -428,7 +436,7 @@ namespace DNDS::Euler
                 lam0V, lam123V, lam4V,
                 mesh->GetFaceZone(iFace),
                 rsType,
-                iFace);
+                iFace, ignoreVis);
             if (mesh->getMPI().rank == 0)
             {
                 // std::cout << fincC << std::endl;

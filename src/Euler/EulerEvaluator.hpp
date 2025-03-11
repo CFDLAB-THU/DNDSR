@@ -558,7 +558,7 @@ namespace DNDS::Euler
             TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,
             Geom::t_index btype,
             typename Gas::RiemannSolverType rsType,
-            index iFace);
+            index iFace, bool ignoreVis);
 
         TU source(
             const TU &UMeanXy,
@@ -1535,7 +1535,7 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
                 TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,                                              \
                 Geom::t_index btype,                                                                                       \
                 typename Gas::RiemannSolverType rsType,                                                                    \
-                index iFace);                                                                                              \
+                index iFace, bool ignoreVis);                                                                                              \
         ext template                                                                                                       \
             typename EulerEvaluator<model>::TU                                                                             \
             EulerEvaluator<model>::source(                                                                                 \

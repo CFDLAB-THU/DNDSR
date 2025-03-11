@@ -784,6 +784,13 @@ namespace DNDS::Euler
                 auto solve_multigrid_impl = [&](TDof &x_upper, const TDof &rhs_upper, const TDof &resOther_upper, int mgLevel, int mgLevelMax, auto &solve_multigrid_impl_ref) -> void
                 {
                     static const int use_1st_conv = 1;
+
+                    static const int use_1st_conv_ignore_vis =
+#ifdef USE_MG_O1_NO_VISCOUS
+                        1;
+#else
+                        0;
+#endif
                     DNDS_assert(mgLevel > 0 && mgLevel <= mgLevelMax);
                     std::string level_key = std::to_string(mgLevel);
                     DNDS_assert(config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).multiGridNIterPost >= 0);
@@ -819,18 +826,28 @@ namespace DNDS::Euler
                     for (int iIterMG = 1; iIterMG <= curMGIter; iIterMG++)
                     {
 
-                        if (mgLevel == 1)
-                            eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
-                                             config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
-                                             betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
-                                             TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
-                        else if (mgLevel == 2)
-                            eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
-                                             config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
-                                             betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
-                                             (TEval::RHS_Direct_2nd_Rec_1st_Conv * use_1st_conv) | TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
-                        else
-                            DNDS_assert(false);
+                        // from uMG1 to rhsTemp - JSourceTmp
+                        auto call_evaluate_rhs = [&]()
+                        {
+                            if (mgLevel == 1)
+                                eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
+                                                 config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
+                                                 betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
+                                                 TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
+                            else if (mgLevel == 2)
+                                eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
+                                                 config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
+                                                 betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
+                                                 (TEval::RHS_Direct_2nd_Rec_1st_Conv * use_1st_conv) |
+                                                     TEval::RHS_Direct_2nd_Rec |
+                                                     TEval::RHS_Dont_Record_Bud_Flux |
+                                                     TEval::RHS_Dont_Update_Integration |
+                                                     (TEval::RHS_Ignore_Viscosity * use_1st_conv_ignore_vis));
+                            else
+                                DNDS_assert(false);
+                        };
+                        call_evaluate_rhs();
+
                         rhsTemp.trans.startPersistentPull();
                         rhsTemp.trans.waitPersistentPull();
                         if (iIterMG == 1)
@@ -866,18 +883,7 @@ namespace DNDS::Euler
                         if (mgLevel < mgLevelMax &&
                             iIterMG == config.linearSolverControl.coarseGridLinearSolverControlList.at(level_key).multiGridNIter) // post smoother coarser grid call
                         {
-                            if (mgLevel == 1)
-                                eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
-                                                 config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
-                                                 betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
-                                                 TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
-                            else if (mgLevel == 2)
-                                eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
-                                                 config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
-                                                 betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
-                                                 (TEval::RHS_Direct_2nd_Rec_1st_Conv * use_1st_conv) | TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
-                            else
-                                DNDS_assert(false);
+                            call_evaluate_rhs();
                             solve_multigrid_impl_ref(uMG1, rhsTemp, resOtherCurMG, mgLevel + 1, mgLevelMax, solve_multigrid_impl_ref);
                         }
                     }

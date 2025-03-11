@@ -1022,7 +1022,7 @@ namespace DNDS::Euler
         TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,
         Geom::t_index btype,
         typename Gas::RiemannSolverType rsType,
-        index iFace)
+        index iFace, bool ignoreVis)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
 
@@ -1055,29 +1055,32 @@ namespace DNDS::Euler
             mufPhy = muf;
             // PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
-            real muTurb = this->getMuTur(UMeanXYC, DiffUxyC, muRef, muf, iFace);
-            muf += muTurb;
-
-            real k = settings.idealGasProperty.CpGas * muTurb / 0.9 +
-                     settings.idealGasProperty.CpGas * mufPhy / settings.idealGasProperty.prGas;
-            TU VisFlux;
-            VisFlux.resizeLike(ULMeanXy);
-            VisFlux.setZero();
-            Gas::ViscousFlux_IdealGas<dim>(
-                UMeanXYC, DiffUxyPrimC, uNormC, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
-                settings.idealGasProperty.gamma,
-                muf, muTurb / (muf + verySmallReal), settings.ransUseQCR,
-                k,
-                settings.idealGasProperty.CpGas,
-                VisFlux);
-
-            if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
-                pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
+            if (!ignoreVis)
             {
-                // VisFlux *= 0.0;
+                real muTurb = this->getMuTur(UMeanXYC, DiffUxyC, muRef, muf, iFace); //TODO: make this accept primitive gradients instead
+                muf += muTurb;
+
+                real k = settings.idealGasProperty.CpGas * muTurb / 0.9 +
+                         settings.idealGasProperty.CpGas * mufPhy / settings.idealGasProperty.prGas;
+                TU VisFlux;
+                VisFlux.resizeLike(ULMeanXy);
+                VisFlux.setZero();
+                Gas::ViscousFlux_IdealGas<dim>(
+                    UMeanXYC, DiffUxyPrimC, uNormC, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
+                    settings.idealGasProperty.gamma,
+                    muf, muTurb / (muf + verySmallReal), settings.ransUseQCR,
+                    k,
+                    settings.idealGasProperty.CpGas,
+                    VisFlux);
+
+                if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
+                    pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
+                {
+                    // VisFlux *= 0.0;
+                }
+                this->visFluxTurVariable(UMeanXYC, DiffUxyPrimC, muRef, mufPhy, muTurb, uNormC, iFace, VisFlux);
+                visFluxV(Eigen::all, iB) = VisFlux;
             }
-            this->visFluxTurVariable(UMeanXYC, DiffUxyPrimC, muRef, mufPhy, muTurb, uNormC, iFace, VisFlux);
-            visFluxV(Eigen::all, iB) = VisFlux;
 #endif
             if (!isfinite(pMean) || !isfinite(pMean) || !isfinite(pMean))
             {
@@ -1286,7 +1289,8 @@ namespace DNDS::Euler
         }
 
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
-        finc -= visFluxV;
+        if (!ignoreVis)
+            finc -= visFluxV;
 #endif
 
         if (finc.hasNaN() || (!finc.allFinite()))
