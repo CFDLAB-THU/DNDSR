@@ -1007,6 +1007,28 @@ namespace DNDS::CFV
                 u(iCell, 0) = 0;
         }
 
+        template <int nVarsFixed = 1>
+        void BuildUDofNode(tUDof<nVarsFixed> &u, int nVars, bool buildSon = true, bool buildTrans = true)
+        {
+            DNDS_MAKE_SSP(u.father, mpi);
+            DNDS_MAKE_SSP(u.son, mpi);
+            u.father->Resize(mesh->NumNode(), nVars, 1);
+            if (buildSon)
+                u.son->Resize(mesh->NumNodeGhost(), nVars, 1);
+            if (buildTrans)
+            {
+                DNDS_assert(buildSon);
+                u.TransAttach();
+                u.trans.BorrowGGIndexing(mesh->coords.trans);
+                u.trans.createMPITypes();
+                u.trans.initPersistentPull();
+                u.trans.initPersistentPush();
+            }
+
+            for (index iCell = 0; iCell < u.Size(); iCell++)
+                u[iCell].setZero();
+        }
+
         template <int nVarsFixed = 5>
         using TFBoundary = std::function<Eigen::Vector<real, nVarsFixed>(
             const Eigen::Vector<real, nVarsFixed> &, // UBL
