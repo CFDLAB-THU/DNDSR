@@ -16,27 +16,34 @@ The command line solver apps include:
 ### On Linux
 
 - Make sure mpi and compiler environment is available:
-  - `mpicc`, `mpicxx`, `mpirun` (or srun)
-  - `mpicc --version`: check the compiler wrapped by `mpicc` wrapper
-  - `mpicc -show` (for MPICH/OpenMPI) or `mpicc --showme` (for OpenMPI) to check full wrapped compiler command
-  - Compiler should be GCC 9 / Clang 8 or newer
+  - Compiler
+    - Compiler should be GCC 9 / Clang 8 or newer
     - C++17 support
-  - MPI-3 standard compatible
+  - MPI
+    - `mpicc`, `mpicxx`, `mpirun` (or srun)
+    - `mpicc --version`: check the compiler wrapped by `mpicc` wrapper
+    - `mpicc -show` (for MPICH/OpenMPI) or `mpicc --showme` (for OpenMPI) to check full wrapped compiler command
+    - MPI-3 standard compatible
   - CMake + GNU Make or Ninja
     - CMake >= 3.21
+  - Python 3
+    - `python3-dev` needed if on Debian systems and using system python
+    - if use python modules, recommend using virtual environments (conda, venv ...)
+    - python >= 3.9 for python modules
 - First build / get your mpi dev package, zlib, HDF5, CGNS, metis and parmetis, and make them available to cmake (like via CMAKE_PREFIX for libs and PATH for executables).
   - Recommended way: [use git submodules and build](#using-git-submodule-to-build-cfd_externals). 
     - No need to provide extra variables to CMake or set extra environment variables if using git submodules
   - An optional way is to use an existing SDK for these libraries.
   - For Linux with x86_64 CPU with **libopenmpi-dev** package installed, you can get the `Linux-x86_64-GS.tar.gz` package from [here](https://cloud.tsinghua.edu.cn/d/35deb3d4f740449da29b/) and extract it inside the `external` folder, making the path look like `external/Linux-x86_64/include` ...
 
-- Then get the `external_headerOnlys` here [here](https://cloud.tsinghua.edu.cn/d/35deb3d4f740449da29b/) to directly get the sources of referenced repos. Extract it into `external` folder, making the path look like `external/eigen...` and so on.
+- Then get the `external_headerOnlys` [here](https://cloud.tsinghua.edu.cn/d/35deb3d4f740449da29b/) to directly get the sources of referenced repos. Extract it into `external` folder, making the path look like `external/eigen...` and so on.
   
-- Cmake configure and build. From the project root:
+- Cmake configure and build. From the project root, do:
+
 
 ```bash
 mkdir build && cd build
-cmake ..
+CC=mpicc CXX=mpicxx cmake ..
 cmake --build . -t <target> -j 8
 ```
 
