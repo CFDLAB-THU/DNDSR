@@ -20,6 +20,12 @@ def _pre_import():
         CDLL(os.path.join(DNDSR_lib_dir, "libmetis.so"))
         CDLL(os.path.join(DNDSR_lib_dir, "libparmetis.so"))
 
+        # print(f"here {DNDSR_bin_dir}")
+        # os.system(f"ls -la {DNDSR_bin_dir}")
+        # name = os.path.join(DNDSR_bin_dir, "libdnds_shared.so")
+        # os.system(f"ldd { name }")
+        # while True:
+        #     pass
         CDLL(os.path.join(DNDSR_bin_dir, "libdnds_shared.so"))
         # os.environ["LD_LIBRARY_PATH"] = (
         #     DNDSR_bin_dir + os.pathsep + os.environ.get("LD_LIBRARY_PATH", "")

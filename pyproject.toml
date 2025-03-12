@@ -2,7 +2,13 @@
 # CC=/usr/bin/gcc CXX=/usr/bin/g++ CMAKE_BUILD_PARALLEL_LEVEL=16 pip install . --verbose
 
 [build-system]
-requires = ["scikit-build-core>=0.3.3", "pybind11"]
+requires = [
+    "scikit-build-core>=0.3.3",
+    "pybind11",
+    "pybind11-stubgen",
+    "typing_extensions",
+    "numpy",
+]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -17,15 +23,14 @@ build.targets = ["dnds", "dnds_pybind11"]
 build.verbose = true
 build-dir = "build_py"
 cmake.args = ["-G Unix Makefiles"]
-build.tool-args = ["-j", "8"]
+build.tool-args = ["-j8"]
 sdist.include = [
-    "src/*/_internal/*_pybind11/*.pyi",
+    "src/*/*.pyi",
     "src/*/_internal/*.so",
     "src/*/_internal/*.dylib",
     "src/*/_internal/*.pyd",
 ] # append to .gitignore rules
 
 [tool.scikit-build.wheel.packages]
-"DNDSR" = "src"
 "DNDSR/DNDS" = "src/DNDS"
 "DNDSR/DNDS/_internal" = "src/DNDS/_internal"

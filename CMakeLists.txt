@@ -71,7 +71,7 @@ set(DNDS_USE_RDYNAMIC ON CACHE BOOL "use -rdynamic on posix")
 set(DNDS_USE_PRECOMPILED_HEADER OFF CACHE BOOL "use precompiled header")
 
 find_program(DNDS_CCACHE_EXEC ccache)
-if(DNDS_CCACHE_EXEC)
+if(DNDS_CCACHE_EXEC AND NOT SKBUILD_PROJECT_NAME) # do not use ccache for pip build
     set(DNDS_USE_CCACHE ON CACHE BOOL "use ccache as compiler launcher")
 else()
     set(DNDS_USE_CCACHE OFF CACHE BOOL "use ccache as compiler launcher")
@@ -703,7 +703,14 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/src/Euler)
 
 install(CODE "file(CREATE_LINK ${CMAKE_INSTALL_PREFIX}/DNDSR/bin ${CMAKE_SOURCE_DIR}/src/bin SYMBOLIC)")
 install(CODE "file(CREATE_LINK ${CMAKE_INSTALL_PREFIX}/DNDSR/lib ${CMAKE_SOURCE_DIR}/src/lib SYMBOLIC)")
-
+# if (SKBUILD_PROJECT_NAME)
+# # __init__.py actively linking libdnds_shared.so, 
+# # cannot link correct libstdc++.so (links to anaconda's)
+# # why?
+# message(WARNING "skipping .pyi generation")
+# else()
+install(CODE "execute_process(COMMAND bash ${CMAKE_SOURCE_DIR}/src/run-pybind11-stubgen.sh  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)")
+# endif()
 
 set(EXE_SUFFIX "")
 if (UNIX)
