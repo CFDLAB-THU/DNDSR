@@ -1,0 +1,270 @@
+{
+    "timeMarchControl": {
+        "dtImplicit": 2e30,
+        "nTimeStep": 1,
+        "steadyQuit": true,
+        "useRestart": false,
+        "odeCode": 1, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
+        "tEnd": 3e+200,
+        "partitionMeshOnly": true,
+        "rhsFPPMode": 1,
+        "rhsFPPScale": 0.05,
+        "rhsFPPRelax": 0.5,
+        "_tail": 0
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 15000,
+        "rhsThresholdInternal": 1e-7,
+        "res_base": 0.0,
+        "useVolWiseResidual": true
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 1,
+        "nDataOutC": 20,
+        "nDataOut": 100,
+        "nDataOutCInternal": 500,
+        "nDataOutInternal": 1000000000,
+        "nRestartOutC": 10,
+        "nRestartOut": 100,
+        "nRestartOutCInternal": 1000,
+        "nRestartOutInternal": 1000000000,
+        "dataOutAtInit": true,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 20,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 2147483647,
+        "nCFLRampLength": 2147483647,
+        "CFLRampEnd": 0.0,
+        "nSmoothDTau": 0,
+        "useLocalDt": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshElevation": 0,
+        "meshElevationInternalSmoother": 0,
+        "meshElevationIter": 20,
+        "meshElevationNSearch": 100,
+        "meshElevationRBFRadius": 5,
+        "meshElevationRBFKernel": "CPC0",
+        "meshElevationMaxIncludedAngle": 20,
+        // "rectifyNearPlane": 2,
+        // "rectifyNearPlaneThres": 1e-4,
+        "meshFile": "../data/mesh/Boeing.Babcock.WB.ae2.75deg.UnstrMixedElement.T.b8.ugrid.cgns",
+        "outPltName": "../data/out/CRM_2_Boeing/O2_T",
+        "outPltMode": 1,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": false,
+        "outPltVTKFormat": false,
+        "outPltVTKHDFFormat": true,
+        "hdfDeflateLevel": 4,
+        // "hdfChunkSize": 32768,
+        "hdfChunkSize": 131072,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outBndData": true,
+        "outCellScalarNames": [
+            // "minJacobiDetRel",
+            // "cellVolume",
+            "dWall"
+        ],
+        "restartWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 5,
+            "hdfChunkSize": 4096,
+            "hdfCollOnMeta": true,
+            "hdfCollOnData": false
+        },
+        "meshPartitionedReaderType": "H5",
+        "meshPartitionedWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 5,
+            "hdfChunkSize": 4096,
+            "hdfCollOnMeta": true,
+            "hdfCollOnData": false
+        },
+        "_tail": 0
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0, // 0 for original SOR, 1 for GMRES
+        "nGmresSpace": 4,
+        "nGmresIter": 1,
+        "fpcgResetScheme": 0,
+        "fpcgResetReport": 1,
+        "recThreshold": 1e-03,
+        "nRecMultiplyForZeroedGrad": 40,
+        "nRecConsolCheck": 1
+    },
+    "limiterControl": {
+        "useLimiter": false,
+        "smoothIndicatorProcedure": 0,
+        "limiterProcedure": 1, //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000
+    },
+    "vfvSettings": {
+        "maxOrder": 1,
+        "intOrder": 1,
+        "cacheDiffBase": true,
+        "jacobiRelax": 1.0,
+        "SORInstead": false,
+        "smoothThreshold": 1e-3,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        // "bcWeight": 2,
+        "svdTolerance": 1e-9,
+        "baseSettings": {
+            "localOrientation": true,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "dirWeightScheme": "HQM_OPT",
+            // "dirWeightScheme": "TEST_OPT",
+            // "dirWeightScheme": "ManualDirWeight",
+            // "manualDirWeights": [
+            //     1.0,
+            //     0.4643,
+            //     0.4643,
+            //     0.16666666666666666,
+            //     0.041666666666666664
+            // ],
+            "geomWeightScheme": "HQM_SD",
+            "geomWeightBias": 1,
+            // "geomWeightScheme": "SD_Power",
+            // "geomWeightPower1": 0.125,
+            // "geomWeightPower2": -0.5,
+            // "useAnisotropicFunctional": true,
+            // "anisotropicType": "InertiaCoord",
+            "_tail": 0
+        },
+        "ignoreMeshGeometryDeficiency": false,
+        "_tail": 0
+    },
+    "linearSolverControl": {
+        "jacobiCode": 2,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
+        "gmresCode": 1,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2,
+            "orderingCode": 4
+        },
+        "multiGridLP": 0,
+        "multiGridLPInnerNIter": 4,
+        "multiGridLPInnerNSee": 100,
+        "coarseGridLinearSolverControlList": {
+            "1": {
+                "jacobiCode": 2,
+                "sgsIter": 0,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0
+            },
+            "2": {
+                "jacobiCode": 2,
+                "sgsIter": 0,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4
+            }
+        }
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": false,
+        "useRoeJacobian": false,
+        "noRsOnWall": false,
+        "noGRPOnWall": true,
+        "minWallDist": 1e-9,
+        "wallDistScheme": 0,
+        // "wallDistExection": 3,
+        "wallDistCellLoadSize": 2560,
+        "wallDistRefineMax": 1, // inches
+        "wallDistIter": 1000,
+        "wallDistLinSolver": 0,
+        "wallDistResTol": 1e-4,
+        "wallDistPoissonP": 6,
+        "wallDistDTauScale": 0.1,
+        "wallDistNJacobiSweep": 100,
+        "riemannSolverType": "Roe_M1",
+        // "riemannSolverTypeWall": "Roe_M1",
+        "rsMeanValueEig": 1,
+        // "ransEigScheme": 1,
+        "ransForce2nd": 1,
+        // "useSourceGradFixGG": 1,
+        // "ransSource2nd": 1,
+        "ransUseQCR": 0,
+        "ransSARotCorrection": 1,
+        // "uRecBetaCompressPower": 2,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "farFieldStaticValue": [
+            1,
+            1,
+            0,
+            0,
+            2.971576866040535,
+            1.3
+        ],
+        "cLDriverSettings": {
+            // "AOAInit": 2.4532458452124803,
+            // for O4 converged
+            "AOAInit": 2.4146778875999995,
+            "AOAAxis": "y",
+            "CL0Axis": "z",
+            "CD0Axis": "x",
+            "refArea": 297360,
+            "refDynamicPressure": 0.5,
+            "targetCL": 0.5,
+            "CLIncrementRelax": 0.25,
+            "nIterStartDrive": 1000000,
+            "nIterConvergeMin": 500,
+            "CLconvergeThreshold": 0.001,
+            "CLconvergeWindow": 50
+        },
+        "cLDriverBCNames": [
+            "WALL"
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 0.00317887699812287362,
+            "muGas": 4.9883627259420996e-05,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        }
+    },
+    "bcSettings": [],
+    "restartState": {
+        "iStep": 1,
+        "iStepInternal": 5000,
+        "odeCodePrev": -1,
+        "lastRestartFile": "../data/out/CRM_0/O2_starter__C_p2800_restart.dir",
+        "otherRestartFile": "",
+        "otherRestartStoreDim": [
+            0
+        ]
+    }
+}
