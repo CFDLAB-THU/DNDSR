@@ -1270,6 +1270,52 @@ namespace DNDS::Geom
         adjN2CBState = Adj_PointToLocal;
     }
 
+    void UnstructuredMesh::AssertOnN2CB()
+    {
+        auto mesh = this;
+        for (index iNode = mesh->NumNode(); iNode < mesh->NumNodeProc(); iNode++)
+        {
+            int nCellAdjIn = 0;
+            for (auto iCell : mesh->node2cell[iNode])
+                if (iCell >= 0)
+                {
+                    DNDS_assert(iCell < mesh->NumCellProc());
+                    nCellAdjIn++;
+                    for (auto iNodeOther : mesh->cell2node[iCell])
+                    {
+                        DNDS_assert(iNodeOther < mesh->NumNodeProc() && iNodeOther >= 0);
+                    }
+                }
+            DNDS_assert(nCellAdjIn);
+        }
+
+        std::set<index> bnd_main_nodes;
+        for (index iNode = 0; iNode < mesh->NumNode(); iNode++)
+        {
+            for (auto iCell : mesh->node2cell[iNode])
+            {
+                DNDS_assert(iCell < mesh->NumCellProc() && iCell >= 0);
+                for (auto iNodeOther : mesh->cell2node[iCell])
+                {
+                    DNDS_assert(iNodeOther < mesh->NumNodeProc() && iNodeOther >= 0);
+                    if (iNodeOther >= mesh->NumNode())
+                        bnd_main_nodes.insert(iNode);
+                }
+            }
+        }
+        std::map<index, int> bnd_main_nodes_adj_ghost_num;
+        for (index iNode : bnd_main_nodes)
+            bnd_main_nodes_adj_ghost_num[iNode] = 0;
+        for (index iNode = mesh->NumNode(); iNode < mesh->NumNodeProc(); iNode++)
+            for (auto iCell : mesh->node2cell[iNode])
+                if (iCell >= 0)
+                    for (auto iNodeOther : mesh->cell2node[iCell])
+                        if (iNodeOther >= 0 && iNodeOther < mesh->NumNode())
+                            bnd_main_nodes_adj_ghost_num.at(iNodeOther)++;
+        for (auto [iNode, num_ghost_adj] : bnd_main_nodes_adj_ghost_num)
+            DNDS_assert(num_ghost_adj);
+    }
+
     /// @todo //TODO: handle periodic cases
     void UnstructuredMesh::
         InterpolateFace()

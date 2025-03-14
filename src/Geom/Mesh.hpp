@@ -351,6 +351,8 @@ namespace DNDS::Geom
         void AdjGlobal2LocalN2CB();
         void AdjLocal2GlobalN2CB();
 
+        void AssertOnN2CB();
+
         void InterpolateFace();
         void AssertOnFaces();
 
