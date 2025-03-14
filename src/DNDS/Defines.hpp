@@ -201,9 +201,15 @@ namespace DNDS
 
     std::ostream &log();
 
+    bool ostreamIsTTY(std::ostream &ostream);
+
     bool logIsTTY();
 
     void setLogStream(std::ostream *nstream);
+
+    int get_terminal_width();
+
+    void print_progress(std::ostream &os, double progress);
 }
 
 namespace DNDS
@@ -609,5 +615,5 @@ namespace DNDS::TermColor
 
 namespace DNDS
 {
-    std::string GetSetVersionName(const std::string& ver = "");
+    std::string GetSetVersionName(const std::string &ver = "");
 }

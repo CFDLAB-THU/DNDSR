@@ -147,6 +147,7 @@ namespace DNDS::Euler
         mesh->AdjGlobal2LocalPrimary();
         mesh->BuildGhostN2CB();
         mesh->AdjGlobal2LocalN2CB();
+
         // mesh->AdjLocal2GlobalN2CB();
         // mesh->AdjGlobal2LocalN2CB();
         for (index iNode = 0; iNode < mesh->NumNode(); iNode++)

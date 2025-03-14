@@ -9,11 +9,13 @@
 
 #if defined(linux) || defined(_UNIX) || defined(__linux__)
 #include <unistd.h>
+#include <sys/ioctl.h>
 #define _isatty isatty
 #endif
 #if defined(_WIN32) || defined(__WINDOWS_)
 #define NOMINMAX
 #include <io.h>
+#include <windows.h>
 #endif
 
 extern "C" void DNDS_signal_handler(int signal)
@@ -26,7 +28,7 @@ extern "C" void DNDS_signal_handler(int signal)
 
 namespace DNDS
 {
-    static bool ostreamIsTTY(std::ostream &ostream)
+    bool ostreamIsTTY(std::ostream &ostream)
     {
         if (&ostream == &std::cout)
             return _isatty(fileno(stdout));
@@ -44,6 +46,53 @@ namespace DNDS
     bool logIsTTY() { return ostreamIsTTY(*logStream); }
 
     void setLogStream(std::ostream *nstream) { useCout = false, logStream = nstream; }
+
+    int get_terminal_width()
+    {
+#ifdef _WIN32
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
+        {
+            return csbi.srWindow.Right - csbi.srWindow.Left + 1;
+        }
+#else
+        struct winsize w;
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0)
+        {
+            return w.ws_col;
+        }
+#endif
+        return 80; // Default width if detection fails
+    }
+
+    void print_progress(std::ostream &os, double progress)
+    {
+        progress = std::clamp(progress, 0.0, 1.0);
+        int term_width = ostreamIsTTY(os) ? get_terminal_width() : 80;
+        int bar_width = std::max(10, term_width - 10);
+
+        int pos = static_cast<int>(bar_width * progress);
+
+        if (ostreamIsTTY(os))
+        {
+            os << "\r[";
+            for (int i = 0; i < bar_width; ++i)
+            {
+                if (i < pos)
+                    os << "=";
+                else if (i == pos)
+                    os << ">";
+                else
+                    os << " ";
+            }
+            os << "] " << std::setw(3) << static_cast<int>(progress * 100) << "% " << std::flush;
+        }
+        else
+        {
+            os << "[" << std::string(pos, '=') << ">" << std::string(bar_width - pos, ' ')
+               << "] " << std::setw(3) << static_cast<int>(progress * 100) << "%" << std::endl;
+        }
+    }
 
     std::string getStringForceWString(const std::wstring &v)
     {

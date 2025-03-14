@@ -349,8 +349,9 @@ namespace DNDS::Geom
                 if (nCellsDone % (nCells / 1000 + 1) == 0)
                 {
                     auto fmt = DNDS::log().flags();
-                    DNDS::log() << "\r\033[K" << std::setw(5) << double(nCellsDone) / nCells * 100 << "%";
-                    DNDS::log().flush();
+                    // DNDS::log() << "\r\033[K" << std::setw(5) << double(nCellsDone) / nCells * 100 << "%";
+                    // DNDS::log().flush();
+                    print_progress(log(), double(nCellsDone) / nCells);
                     DNDS::log().setf(fmt);
                 }
 
@@ -411,6 +412,8 @@ namespace DNDS::Geom
             nCellsDone++;
         }
         (*cell2cellSerial).Compress();
+        if (mesh->getMPI().rank == mRank)
+            log() << std::endl;
 
         /*************************************************************************************************/
         DNDS_MAKE_SSP(cell2cellSerialFacial, mesh->getMPI());
@@ -430,8 +433,9 @@ namespace DNDS::Geom
                 if (nCellsDone % (nCells / 1000 + 1) == 0)
                 {
                     auto fmt = DNDS::log().flags();
-                    DNDS::log() << "\r\033[K" << std::setw(5) << double(nCellsDone) / nCells * 100 << "%";
-                    DNDS::log().flush();
+                    // DNDS::log() << "\r\033[K" << std::setw(5) << double(nCellsDone) / nCells * 100 << "%";
+                    // DNDS::log().flush();
+                    print_progress(log(), double(nCellsDone) / nCells);
                     DNDS::log().setf(fmt);
                 }
 
@@ -465,6 +469,8 @@ namespace DNDS::Geom
 #endif
             nCellsDone++;
         }
+        if (mesh->getMPI().rank == mRank)
+            log() << std::endl;
         /*************************************************************************************************/
 
         if (mesh->getMPI().rank == mRank)

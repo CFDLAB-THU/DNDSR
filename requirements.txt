@@ -1,7 +1,9 @@
 numpy
 scipy
+pandas
 matplotlib
 scikit-build
+scikit-build-core
 auditwheel
 pybind11-stubgen
 typing_extensions
