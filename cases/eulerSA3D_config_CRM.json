@@ -13,10 +13,10 @@
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 10000,
-        "rhsThresholdInternal": 1e-8,
+        "nTimeStepInternal": 15000,
+        "rhsThresholdInternal": 1e-7,
         "res_base": 0.0,
-        "useVolWiseResidual": false
+        "useVolWiseResidual": true
     },
     "outputControl": {
         "nConsoleCheck": 1,
@@ -54,7 +54,7 @@
         // "rectifyNearPlane": 2,
         // "rectifyNearPlaneThres": 1e-4,
         "meshFile": "../data/mesh/CARDC.ZhangYB.WB.ae2.75deg.Unstructured.C_DNDSR.cgns",
-        "outPltName": "../data/out/CRM_0/O4_0_MG4jc2",
+        "outPltName": "../data/out/CRM_0/O4_0_NoDriVRes",
         "outPltMode": 1,
         "readMeshMode": 1,
         "outPltTecplotFormat": false,
@@ -158,7 +158,7 @@
             "iluCode": 2,
             "orderingCode": 4
         },
-        "multiGridLP": 1,
+        "multiGridLP": 0,
         "multiGridLPInnerNIter": 4,
         "multiGridLPInnerNSee": 100,
         "coarseGridLinearSolverControlList": {
@@ -170,8 +170,8 @@
                 "nGmresIter": 2,
                 "nSgsConsoleCheck": 100,
                 "nGmresConsoleCheck": 100,
-                "multiGridNIter": 2,
-                "multiGridNIterPost": 2
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0
             },
             "2": {
                 "jacobiCode": 2,
@@ -181,8 +181,7 @@
                 "nGmresIter": 2,
                 "nSgsConsoleCheck": 100,
                 "nGmresConsoleCheck": 100,
-                "multiGridNIter": 4,
-                "multiGridNIterPost": 0
+                "multiGridNIter": 4
             }
         }
     },
@@ -230,7 +229,9 @@
             1.3
         ],
         "cLDriverSettings": {
-            "AOAInit": 2.4532458452124803,
+            // "AOAInit": 2.4532458452124803,
+            // for O4 converged
+            "AOAInit": 2.4146778875999995,
             "AOAAxis": "y",
             "CL0Axis": "z",
             "CD0Axis": "x",
@@ -238,7 +239,7 @@
             "refDynamicPressure": 0.5,
             "targetCL": 0.5,
             "CLIncrementRelax": 0.25,
-            "nIterStartDrive": 1000,
+            "nIterStartDrive": 1000000,
             "nIterConvergeMin": 500,
             "CLconvergeThreshold": 0.001,
             "CLconvergeWindow": 50
