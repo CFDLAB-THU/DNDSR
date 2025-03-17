@@ -202,7 +202,7 @@ namespace DNDS::Euler
                     "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
                     "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"};
                 std::vector<std::string> logfileOutputTitles{
-                    "step", "iStep", "iter", "tSimu",
+                    "step", "iStep", "iterAll", "iter", "tSimu",
                     "res", "curDtImplicit", "curDtMin", "CFLNow",
                     "nLimInc", "alphaMinInc",
                     "nLimBeta", "minBeta",
@@ -275,13 +275,15 @@ namespace DNDS::Euler
                 real rhsThresholdInternal = 1e-10;
                 real res_base = 0;
                 bool useVolWiseResidual = false;
+                bool useCLDriver = false;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     ConvergenceControl,
                     nTimeStepInternal, nTimeStepInternalMin,
                     nAnchorUpdate, nAnchorUpdateStart,
                     rhsThresholdInternal,
                     res_base,
-                    useVolWiseResidual)
+                    useVolWiseResidual,
+                    useCLDriver)
             } convergenceControl;
 
             struct DataIOControl
@@ -883,7 +885,7 @@ namespace DNDS::Euler
         std::enable_if_t<!std::is_arithmetic_v<std::remove_reference_t<TVal>>>
         FillLogValue(tLogSimpleDIValueMap &v_map, const std::string &name, TVal &&val)
         {
-            // std::vector<std::string> logfileOutputTitlses{
+            // std::vector<std::string> logfileOutputTitles{
             //     "step", "iStep", "iter", "tSimu",
             //     "res", "curDtImplicit", "curDtMin", "CFLNow",
             //     "nLimInc", "alphaMinInc",
@@ -955,6 +957,7 @@ namespace DNDS::Euler
             real curDtImplicit = 0;
             std::vector<real> curDtImplicitHistory;
             int step = 0;
+            int iterAll = 0;
             bool gradIsZero = true;
 
             index nLimBeta = 0;
@@ -1000,6 +1003,7 @@ namespace DNDS::Euler
     DNDS_EULERSOLVER_RUNNINGENV_GET_REF(curDtImplicit);        \
     DNDS_EULERSOLVER_RUNNINGENV_GET_REF(curDtImplicitHistory); \
     DNDS_EULERSOLVER_RUNNINGENV_GET_REF(step);                 \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(iterAll);              \
     DNDS_EULERSOLVER_RUNNINGENV_GET_REF(gradIsZero);           \
                                                                \
     DNDS_EULERSOLVER_RUNNINGENV_GET_REF(nLimBeta);             \

@@ -27,13 +27,16 @@ namespace DNDS::Euler
         real CLconvergeThreshold = 1e-3;
         index CLconvergeWindow = 10;
 
+        index CLconvergeLongWindow = 100;
+
         DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
             CLDriverSettings,
             AOAInit,
             AOAAxis, CL0Axis, CD0Axis,
             refArea, refDynamicPressure, targetCL,
             CLIncrementRelax, thresholdTargetRatio,
-            nIterStartDrive, nIterConvergeMin, CLconvergeThreshold, CLconvergeWindow)
+            nIterStartDrive, nIterConvergeMin, CLconvergeThreshold, CLconvergeWindow,
+            CLconvergeLongWindow)
     };
 
     class CLDriver
@@ -44,6 +47,7 @@ namespace DNDS::Euler
         Eigen::VectorXd CLHistory;
         index CLHistorySize = 0;
         index CLHistoryHead = 0;
+        index CLAtTargetAcc = 0;
         void _PushCL(real CL)
         {
             CLHistoryHead = mod<index>(CLHistoryHead + 1, CLHistory.size());
@@ -85,6 +89,12 @@ namespace DNDS::Euler
         void Update(index iter, real CL, const MPIInfo &mpi)
         {
             _PushCL(CL);
+            real curCLErr = std::abs(settings.targetCL - CL);
+            if (curCLErr <= settings.CLconvergeThreshold)
+                CLAtTargetAcc++;
+            else
+                CLAtTargetAcc = 0;
+
             if (iter < settings.nIterStartDrive)
                 return;
             if (CLHistorySize >= CLHistory.size() && CLHistorySize >= settings.nIterConvergeMin)
@@ -93,7 +103,7 @@ namespace DNDS::Euler
                 real currentCLThreshold = settings.CLconvergeThreshold;
                 currentCLThreshold = std::min(currentCLThreshold, std::abs(settings.targetCL - lastCL) * settings.thresholdTargetRatio);
                 real maxCLDeviation = std::max(CLHistory.maxCoeff() - curCL, curCL - CLHistory.minCoeff());
-                if (maxCLDeviation <= currentCLThreshold)
+                if (maxCLDeviation <= currentCLThreshold) // do AoA Update
                 {
                     real CLSlope = (lastCL - CL) / (lastAOA - AOA);
                     real CLSlopeStandard = sqr(pi) / 90.;
@@ -114,6 +124,7 @@ namespace DNDS::Euler
                     lastAOA = AOA;
                     lastCL = curCL;
                     AOA = AOANew;
+                    CLAtTargetAcc = 0;
                     _ClearCL();
 
                     if (mpi.rank == 0)
@@ -122,6 +133,11 @@ namespace DNDS::Euler
                               << std::endl;
                 }
             }
+        }
+
+        bool ConvergedAtTarget()
+        {
+            return CLAtTargetAcc >= settings.CLconvergeLongWindow;
         }
 
         /**

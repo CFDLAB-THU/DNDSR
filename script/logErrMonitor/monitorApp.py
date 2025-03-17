@@ -57,7 +57,7 @@ def get_app_layout():
                     dcc.Dropdown(
                         id="column-x-dropdown",
                         placeholder="Select a column",
-                        value="iter",
+                        value="iterAll",
                     ),
                     html.Label(
                         "Select a column for Y-Axis:",
@@ -229,8 +229,8 @@ def register_update_graph(app: Dash, args: argparse.Namespace):
             )
             if selected_column and selected_column in df.columns:
                 x = None
-                if "iter" in df.columns:
-                    x = "iter"
+                if "iterAll" in df.columns:
+                    x = "iterAll"
                 if selected_column_x and selected_column_x in df.columns:
                     x = selected_column_x
                 fig.add_scatter(
@@ -247,8 +247,8 @@ def register_update_graph(app: Dash, args: argparse.Namespace):
                     df1 = None
             if df1 is not None and selected_column and selected_column in df1.columns:
                 x = None
-                if "iter" in df1.columns:
-                    x = "iter"
+                if "iterAll" in df1.columns:
+                    x = "iterAll"
                 if selected_column_x and selected_column_x in df1.columns:
                     x = selected_column_x
                 fig.add_scatter(

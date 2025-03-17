@@ -499,6 +499,7 @@ namespace DNDS::Euler
     {
         using namespace std::literals;
         DNDS_EULERSOLVER_RUNNINGENV_GET_REF_LIST
+        iterAll++;
         // auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
 
         // auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
@@ -512,6 +513,8 @@ namespace DNDS::Euler
             resBaseCInternal = resBaseCInternal.array().max(res.array()); //! using max !
         Eigen::VectorFMTSafe<real, -1> resRel = (res.array() / (resBaseCInternal.array() + verySmallReal)).matrix();
         bool ifStop = resRel(0) < config.convergenceControl.rhsThresholdInternal; // ! using only rho's residual
+        if (config.convergenceControl.useCLDriver)
+            ifStop = ifStop && eval.pCLDriver->ConvergedAtTarget();
         if (iter < config.convergenceControl.nTimeStepInternalMin)
             ifStop = false;
         auto [CLCur, CDCur, AOACur] = eval.CLDriverGetIntegrationUpdate(iter);
@@ -601,7 +604,7 @@ namespace DNDS::Euler
                 //     << std::endl;
 
                 // std::vector<std::string> logfileOutputTitles{
-                //     "step", "iStep", "iter", "tSimu",
+                //     "step", "iStep", "iterAll", "iter", "tSimu",
                 //     "res", "curDtImplicit", "curDtMin", "CFLNow",
                 //     "nLimInc", "alphaMinInc",
                 //     "nLimBeta", "minBeta",
@@ -613,6 +616,7 @@ namespace DNDS::Euler
 #define DNDS_FILL_IN_LOG_ERR_VAL(v) FillLogValue(logErrVal, #v, v)
                 DNDS_FILL_IN_LOG_ERR_VAL(step);
                 DNDS_FILL_IN_LOG_ERR_VAL(iStep);
+                DNDS_FILL_IN_LOG_ERR_VAL(iterAll);
                 DNDS_FILL_IN_LOG_ERR_VAL(iter);
                 DNDS_FILL_IN_LOG_ERR_VAL(tSimu);
                 DNDS_FILL_IN_LOG_ERR_VAL(res);
