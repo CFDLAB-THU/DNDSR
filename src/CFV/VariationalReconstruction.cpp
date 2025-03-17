@@ -75,20 +75,13 @@ namespace DNDS::CFV
             }
             else
             {
-                // v = std::max(0.0, v);
-                v = std::abs(v);
-                for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
-                {
-                    // cellIntJacobiDet(iCell, iG) = std::max(0.0, cellIntJacobiDet(iCell, iG));
-                    cellIntJacobiDet(iCell, iG) = std::abs(cellIntJacobiDet(iCell, iG));
+                if (v > 0 && (cellIntJacobiDet[iCell].array() > 0.0).all())
+                    ; // good
+                else
+                { // v = std::max(0.0, v);
+                    v = std::abs(v);
+                    cellIntJacobiDet[iCell].setConstant(GetCellVol(iCell) / GetCellParamVol(iCell));
                 }
-                v = 0;
-                qCell.IntegrationSimple(
-                    v,
-                    [&](auto &vInc, int iG)
-                    {
-                        vInc = 1 * cellIntJacobiDet(iCell, iG);
-                    });
             }
             v += verySmallReal;
             for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
