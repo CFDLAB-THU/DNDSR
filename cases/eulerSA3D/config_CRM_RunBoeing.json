@@ -1,3 +1,5 @@
+// ./sb.sh 50 CRM_Boeing_O2_F_Dri ../build/app/eulerSA3D.exe ../cases/eulerSA3D/config_CRM_RunBoeing.json -k /dataIOControl/meshFile -v "\"../data/mesh/Boeing.Babcock.WB.ae2.75deg.UnstrMixedElement.F.b8.ugrid.cgns\"" -k /dataIOControl/outPltName -v "\"../data/out/CRM_2_Boeing/O2_F_Dri\"" -k /timeMarchControl/useRestart -v true -k /restartState/lastRestartFile -v "\"../data/out/CRM_2_Boeing/O2_F_Starter__C_p2800.restart.dnds.h5\"" -k /eulerSettings/cLDriverSettings/nIterStartDrive -v 1000 -k /convergenceControl/nTimeStepInternal -v 10000
+// ./sb.sh 50 CRM_Boeing_O4_F_Dri ../build/app/eulerSA3D.exe ../cases/eulerSA3D/config_CRM_RunBoeing.json -k /dataIOControl/meshFile -v "\"../data/mesh/Boeing.Babcock.WB.ae2.75deg.UnstrMixedElement.F.b8.ugrid.cgns\"" -k /dataIOControl/outPltName -v "\"../data/out/CRM_2_Boeing/O4_F_Dri\"" -k /timeMarchControl/useRestart -v true -k /restartState/lastRestartFile -v "\"../data/out/CRM_2_Boeing/O2_F_Dri__C_p2800.restart.dnds.h5\"" -k /eulerSettings/cLDriverSettings/nIterStartDrive -v 1000 -k /convergenceControl/nTimeStepInternal -v 10000 -k /vfvSettings/maxOrder -v 3 -k /vfvSettings/intOrder -v 5 -k /linearSolverControl/multiGridLP -v 1
 {
     "timeMarchControl": {
         "dtImplicit": 2e30,
@@ -6,15 +8,15 @@
         "useRestart": false,
         "odeCode": 1, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
         "tEnd": 3e+200,
-        "partitionMeshOnly": true,
+        "partitionMeshOnly": false,
         "rhsFPPMode": 1,
         "rhsFPPScale": 0.05,
         "rhsFPPRelax": 0.5,
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 15000,
-        "rhsThresholdInternal": 1e-7,
+        "nTimeStepInternal": 5000,
+        "rhsThresholdInternal": 1e-8,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
@@ -53,10 +55,10 @@
         "meshElevationMaxIncludedAngle": 20,
         // "rectifyNearPlane": 2,
         // "rectifyNearPlaneThres": 1e-4,
-        "meshFile": "../data/mesh/Boeing.Babcock.WB.ae2.75deg.UnstrMixedElement.F.b8.ugrid.cgns",
-        "outPltName": "../data/out/CRM_2_Boeing/O2_F",
+        "meshFile": "../data/mesh/Boeing.Babcock.WB.ae2.75deg.UnstrMixedElement.M.b8.ugrid.cgns",
+        "outPltName": "../data/out/CRM_2_Boeing/O2_M_Starter",
         "outPltMode": 1,
-        "readMeshMode": 0,
+        "readMeshMode": 1,
         "outPltTecplotFormat": false,
         "outPltVTKFormat": false,
         "outPltVTKHDFFormat": true,
@@ -229,9 +231,7 @@
             1.3
         ],
         "cLDriverSettings": {
-            // "AOAInit": 2.4532458452124803,
-            // for O4 converged
-            "AOAInit": 2.4146778875999995,
+            "AOAInit": 2.75,
             "AOAAxis": "y",
             "CL0Axis": "z",
             "CD0Axis": "x",
@@ -240,7 +240,7 @@
             "targetCL": 0.5,
             "CLIncrementRelax": 0.25,
             "nIterStartDrive": 1000000,
-            "nIterConvergeMin": 500,
+            "nIterConvergeMin": 200,
             "CLconvergeThreshold": 0.001,
             "CLconvergeWindow": 50
         },
@@ -303,7 +303,7 @@
         "iStep": 1,
         "iStepInternal": 5000,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/out/CRM_0/O2_starter__C_p2800_restart.dir",
+        "lastRestartFile": "../data/out/CRM_2_Boeing/O2_T_Starter__C_p2800.restart.dnds.h5",
         "otherRestartFile": "",
         "otherRestartStoreDim": [
             0
