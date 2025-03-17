@@ -70,8 +70,25 @@ namespace DNDS::CFV
 
                 for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
                     DNDS_assert_info(
-                        cellIntJacobiDet(iCell, iG) / v >= 0,
+                        cellIntJacobiDet(iCell, iG) / (v + verySmallReal) >= 0,
                         fmt::format("cell has ill jacobi det, det/V {}, cellType {}", cellIntJacobiDet(iCell, iG) / v, int(eCell.type)));
+            }
+            else
+            {
+                // v = std::max(0.0, v);
+                v = std::abs(v);
+                for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
+                {
+                    // cellIntJacobiDet(iCell, iG) = std::max(0.0, cellIntJacobiDet(iCell, iG));
+                    cellIntJacobiDet(iCell, iG) = std::abs(cellIntJacobiDet(iCell, iG));
+                }
+                v = 0;
+                qCell.IntegrationSimple(
+                    v,
+                    [&](auto &vInc, int iG)
+                    {
+                        vInc = 1 * cellIntJacobiDet(iCell, iG);
+                    });
             }
             v += verySmallReal;
             for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
