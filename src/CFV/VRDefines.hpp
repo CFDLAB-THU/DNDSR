@@ -9,7 +9,7 @@
 
 namespace DNDS::CFV
 {
-    using tCoeffPair = DNDS::ArrayPair<DNDS::ParArray<real, NonUniformSize>>;
+    using tCoeffPair = DNDS::ArrayPair<DNDS::ArrayEigenVector<NonUniformSize>>;
     using tCoeff = decltype(tCoeffPair::father);
     using t3VecsPair = DNDS::ArrayPair<DNDS::ArrayEigenUniMatrixBatch<3, 1>>;
     using t3Vecs = decltype(t3VecsPair::father);
@@ -26,7 +26,7 @@ namespace DNDS::CFV
     using tVecs = decltype(tVecsPair::father);
     using tVMatPair = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<DynamicSize, DynamicSize>>;
     using tVMat = decltype(tVMatPair::father);
-    
+
     // Corresponds to mean/rec dofs
     template <int nVarsFixed>
     using tURec = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<DynamicSize, nVarsFixed>>;
@@ -35,7 +35,7 @@ namespace DNDS::CFV
     template <int nVarsFixed, int gDim>
     using tUGrad = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<gDim, nVarsFixed>>;
 
-    using tScalarPair = DNDS::ArrayPair<DNDS::ParArray<real, 1>>;
+    using tScalarPair = DNDS::ArrayPair<DNDS::ArrayEigenVector<1>>;
     using tScalar = decltype(tScalarPair::father);
 
     struct RecAtr
