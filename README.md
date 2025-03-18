@@ -36,7 +36,7 @@ The command line solver apps include:
   - An optional way is to use an existing SDK for these libraries.
   - For Linux with x86_64 CPU with **libopenmpi-dev** package installed, you can get the `Linux-x86_64-GS.tar.gz` package from [here](https://cloud.tsinghua.edu.cn/d/35deb3d4f740449da29b/) and extract it inside the `external` folder, making the path look like `external/Linux-x86_64/include` ...
 
-- Then get the `external_headerOnlys` [here](https://cloud.tsinghua.edu.cn/d/35deb3d4f740449da29b/) to directly get the sources of referenced repos. Extract it into `external` folder, making the path look like `external/eigen...` and so on.
+- Then get the `cfd_externals_headerOnlys` tarball [here](https://github.com/harryzhou2000/cfd_externals_headeronlys/releases) to directly get the sources of referenced repos. Extract it into `external` folder, making the path look like `external/eigen...` and so on.
   
 - Cmake configure and build. From the project root, do:
 
