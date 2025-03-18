@@ -399,10 +399,18 @@ namespace DNDS::Geom
         {
 
             tPoint cooC = (*boundInterpCoo.son)[iN];
+#if NANOFLANN_VERSION < 0x150
             std::vector<std::pair<DNDS::index, DNDS::real>> IndicesDists;
+#else
+            std::vector<nanoflann::ResultItem<DNDS::index, DNDS::real>> IndicesDists;
+#endif
             IndicesDists.reserve(elevationInfo.nSearch * 5);
             real RRBF = boundInterpR.son->operator()(iN, 0);
+#if NANOFLANN_VERSION < 0x150
             nanoflann::SearchParams params{}; // default params
+#else
+            nanoflann::SearchParameters params{};
+#endif
             index nFound = nodesDstTree.radiusSearch(cooC.data(), RRBF, IndicesDists, params);
             Eigen::Vector<real, Eigen::Dynamic> outDists;
             outDists.resize(IndicesDists.size());
@@ -846,10 +854,18 @@ namespace DNDS::Geom
         {
 
             tPoint cooC = (*boundInterpCoo.son)[iN];
+#if NANOFLANN_VERSION < 0x150
             std::vector<std::pair<DNDS::index, DNDS::real>> IndicesDists;
+#else
+            std::vector<nanoflann::ResultItem<DNDS::index, DNDS::real>> IndicesDists;
+#endif
             IndicesDists.reserve(elevationInfo.nSearch * 5);
             real RRBF = boundInterpR.son->operator()(iN, 0);
+#if NANOFLANN_VERSION < 0x150
             nanoflann::SearchParams params{}; // default params
+#else
+            nanoflann::SearchParameters params{};
+#endif
             index nFound = nodesDstTree.radiusSearch(cooC.data(), RRBF, IndicesDists, params);
             Eigen::Vector<real, Eigen::Dynamic> outDists;
             outDists.resize(IndicesDists.size());

@@ -95,10 +95,17 @@ namespace DNDS::Geom
             if (nodeOld2Dedu[i] != -1)
                 continue;
             tPoint cn = nodesCloud[i];
-
+#if NANOFLANN_VERSION < 0x150
             std::vector<std::pair<DNDS::index, DNDS::real>> IndicesDists;
+#else
+            std::vector<nanoflann::ResultItem<DNDS::index, DNDS::real>> IndicesDists;
+#endif
             IndicesDists.reserve(5);
+#if NANOFLANN_VERSION < 0x150
             nanoflann::SearchParams params{}; // default params
+#else
+            nanoflann::SearchParameters params{};
+#endif
             index nFound = kdTree.radiusSearch(cn.data(), 1e-20, IndicesDists, params);
             int nSelf{0};
             for (auto &v : IndicesDists)
