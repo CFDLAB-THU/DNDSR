@@ -2,7 +2,7 @@
 
 #include "Defines.hpp"
 #define JSON_ASSERT DNDS_assert
-#include "json.hpp"
+#include <nlohmann/json.hpp>
 #include "EigenUtil.hpp"
 
 namespace DNDS

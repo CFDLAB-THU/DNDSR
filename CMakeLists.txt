@@ -214,20 +214,24 @@ find_path(DNDS_EXTERNAL_INCLUDE_PARMETIS parmetis.h
 #     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
 #     NO_DEFAULT_PATH) #!not needed for now
 find_path(DNDS_EXTERNAL_INCLUDE_EIGEN eigen3.pc.in PATHS 
-    "${PROJECT_SOURCE_DIR}/external/eigen-3.4.0" 
     "${PROJECT_SOURCE_DIR}/external/eigen" 
+    "${PROJECT_SOURCE_DIR}/external/eigen-3.4.0" 
     NO_DEFAULT_PATH REQUIRED)
 find_path(DNDS_EXTERNAL_INCLUDE_BOOST boost PATHS 
+    "${PROJECT_SOURCE_DIR}/external/boost" 
     "${PROJECT_SOURCE_DIR}/external/boost_1_82_0" 
     NO_DEFAULT_PATH REQUIRED)
 find_path(DNDS_EXTERNAL_INCLUDE_CGAL CGAL PATHS 
+    "${PROJECT_SOURCE_DIR}/external/CGAL/include"
     "${PROJECT_SOURCE_DIR}/external/CGAL-5.6/include" 
     "${PROJECT_SOURCE_DIR}/external/CGAL-5.6" 
     NO_DEFAULT_PATH REQUIRED)
-find_path(DNDS_EXTERNAL_INCLUDE_JSON json.hpp PATHS 
-    "${PROJECT_SOURCE_DIR}/external/nlohmann" 
+find_path(DNDS_EXTERNAL_INCLUDE_JSON nlohmann PATHS 
+    "${PROJECT_SOURCE_DIR}/external/nlohmann"
+    "${PROJECT_SOURCE_DIR}/external" 
     NO_DEFAULT_PATH REQUIRED)
-find_path(DNDS_EXTERNAL_INCLUDE_ARGPARSE argparse.hpp PATHS 
+find_path(DNDS_EXTERNAL_INCLUDE_ARGPARSE argparse.hpp PATHS
+    "${PROJECT_SOURCE_DIR}/external/argparse/include/argparse"
     "${PROJECT_SOURCE_DIR}/external/argparse-3.0/include/argparse" 
     NO_DEFAULT_PATH REQUIRED)
 find_path(DNDS_EXTERNAL_INCLUDE_EXPRTK exprtk.hpp PATHS 
@@ -245,14 +249,17 @@ find_path(DNDS_EXTERNAL_INCLUDE_CPPCODEC base32_hex.hpp PATHS
 #     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
 #     NO_DEFAULT_PATH)
 find_path(DNDS_EXTERNAL_INCLUDE_NANOFLANN nanoflann.hpp PATHS
+    "${PROJECT_SOURCE_DIR}/external/nanoflann"
     "${PROJECT_SOURCE_DIR}/external/nanoflann-1.4.3" 
     NO_DEFAULT_PATH REQUIRED)
 
 find_path(DNDS_EXTERNAL_INCLUDE_PYBIND11 pybind11 PATHS
+    "${PROJECT_SOURCE_DIR}/external/pybind11/include"
     "${PROJECT_SOURCE_DIR}/external/pybind11-2.11.1/include" 
     NO_DEFAULT_PATH REQUIRED)
 
 find_path(DNDS_EXTERNAL_INCLUDE_FMT fmt PATHS
+    "${PROJECT_SOURCE_DIR}/external/fmt/include"
     "${PROJECT_SOURCE_DIR}/external/fmt-10.1.1/include" 
     NO_DEFAULT_PATH REQUIRED)
 
@@ -261,6 +268,7 @@ find_path(DNDS_EXTERNAL_INCLUDE_SUPERLU superlu_dist.pc.in PATHS
     NO_DEFAULT_PATH)
 
 find_path(EXTERNAL_DOXYGEN_AWESOME doxygen-awesome.css PATHS 
+    "${PROJECT_SOURCE_DIR}/external/doxygen-awesome-css"
     "${PROJECT_SOURCE_DIR}/external/doxygen-awesome-css-2.2.1" 
     NO_DEFAULT_PATH)
 

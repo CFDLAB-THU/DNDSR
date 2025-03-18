@@ -1,7 +1,7 @@
 #pragma once
 #include "SerializerBase.hpp"
 
-#include "json.hpp"
+#include <nlohmann/json.hpp>
 #include <fstream>
 #include <map>
 

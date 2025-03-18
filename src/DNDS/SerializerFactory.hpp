@@ -4,7 +4,7 @@
 #include "SerializerJSON.hpp"
 #include "SerializerH5.hpp"
 #include "JsonUtil.hpp"
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 namespace DNDS::Serializer
 {
