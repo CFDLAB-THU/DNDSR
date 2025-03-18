@@ -28,6 +28,7 @@ namespace DNDS::Euler
         index CLconvergeWindow = 10;
 
         index CLconvergeLongWindow = 100;
+        index CLconvergeLongThreshold = 1e-4;
 
         DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
             CLDriverSettings,
@@ -36,7 +37,7 @@ namespace DNDS::Euler
             refArea, refDynamicPressure, targetCL,
             CLIncrementRelax, thresholdTargetRatio,
             nIterStartDrive, nIterConvergeMin, CLconvergeThreshold, CLconvergeWindow,
-            CLconvergeLongWindow)
+            CLconvergeLongThreshold, CLconvergeLongWindow)
     };
 
     class CLDriver
@@ -90,7 +91,7 @@ namespace DNDS::Euler
         {
             _PushCL(CL);
             real curCLErr = std::abs(settings.targetCL - CL);
-            if (curCLErr <= settings.CLconvergeThreshold)
+            if (curCLErr <= settings.CLconvergeLongThreshold)
                 CLAtTargetAcc++;
             else
                 CLAtTargetAcc = 0;
