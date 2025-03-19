@@ -33,8 +33,11 @@ The command line solver apps include:
 - First build / get your mpi dev package, zlib, HDF5, CGNS, metis and parmetis, and make them available to cmake (like via CMAKE_PREFIX for libs and PATH for executables).
   - Recommended way: [use git submodules and build](#using-git-submodule-to-build-cfd_externals). 
     - No need to provide extra variables to CMake or set extra environment variables if using git submodules
-  - An optional way is to use an existing SDK for these libraries.
-  - For Linux with x86_64 CPU with **libopenmpi-dev** package installed, you can get the `Linux-x86_64-GS.tar.gz` package from [here](https://cloud.tsinghua.edu.cn/d/35deb3d4f740449da29b/) and extract it inside the `external` folder, making the path look like `external/Linux-x86_64/include` ...
+  - No internet: use source tarball [cfd_externals_source.tar.gz](https://github.com/harryzhou2000/cfd_externals/releases) released
+    - extract inside `external` and `tar -zcvf` the tarball
+    - goto `external/cfd_externals` and execute the cfd_externals_build.py
+  - An optional way is to use existing system SDK for these libraries.
+    - Make sure MPI-HDF-CGNS and MPI-parmetis are all compatible.
 
 - Then get the `cfd_externals_headerOnlys` tarball [here](https://github.com/harryzhou2000/cfd_externals_headeronlys/releases) to directly get the sources of referenced repos. Extract it into `external` folder, making the path look like `external/eigen...` and so on.
   
