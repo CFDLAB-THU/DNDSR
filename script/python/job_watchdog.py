@@ -1,6 +1,7 @@
 import os
 import subprocess
 from time import sleep
+import datetime
 
 
 def get_squeue_jobs():
@@ -56,6 +57,9 @@ class Watcher:
         assert os.path.isdir(job_record)
         self.kill_after = kill_after
 
+    def get_ct(self):
+        return datetime.datetime.now()
+
     def watch_once(self):
         sq_jobs = get_squeue_jobs()
         for dirpath, dirnames, filenames in os.walk(self.job_record):
@@ -71,13 +75,13 @@ class Watcher:
 
         self.stall_records = {
             key: self.stall_records[key]
-            for key in set(sq_jobs.keys()).union(self.stall_records.keys())
+            for key in set(sq_jobs.keys()).intersection(self.stall_records.keys())
         }
 
     def clean_jobs(self):
         for id, n_stall in self.stall_records.items():
             if n_stall >= self.kill_after:
-                print(f"!!! cancelling {id}")
+                print(f"{self.get_ct()} !!! cancelling {id}", flush=True)
                 os.system(f"scancel {id}")
 
     def watch(self, interval: float = 300, nMax: int = 2**32):
@@ -85,9 +89,9 @@ class Watcher:
         while iW < nMax:
             iW += 1
             self.watch_once()
-            print("Watch Results:")
+            print(f"{self.get_ct()} Watch Results:")
             for id, n_stall in self.stall_records.items():
-                print(f"Watching: {id} has stalled [{n_stall}]times")
+                print(f"Watching: {id} has stalled [{n_stall}]times", flush=True)
             self.clean_jobs()
             sleep(interval)
 
