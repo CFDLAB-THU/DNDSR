@@ -107,6 +107,9 @@ function(dnds_add_py_module LIBNAME CPPS LINKS PCH_TARGET SHARED FAST USE_EXCLUD
     if( FAST )
         add_fast_flags(${LIBNAME})
     endif()
+    if (UNIX)
+        target_compile_options(${LIBNAME} PRIVATE -flto=${DNDS_LTO_N})
+    endif()
 endfunction(dnds_add_py_module)
 
 macro(dnds_variable_to_parent_scope V)

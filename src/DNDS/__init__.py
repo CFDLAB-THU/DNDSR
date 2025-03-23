@@ -18,9 +18,11 @@ def _pre_import():
         # controlled from CMake side to be compatible with them all
         # as we might be using a very new g++/clang++ with very new C++ runtime library
         # that could be incompatible with what libfmt.so finds first
-        CDLL(os.path.join(DNDSR_libext_dir, "libstdc++.so")) 
-        
-        CDLL(os.path.join(DNDSR_libext_dir, "libfmt.so"))
+        #! should do well without explicit import
+        #! as fmt is static and libdnds.so is the first to require any libstdc++.so
+        # CDLL(os.path.join(DNDSR_libext_dir, "libstdc++.so")) 
+        #! now statically linked:
+        # CDLL(os.path.join(DNDSR_libext_dir, "libfmt.so")) 
         CDLL(os.path.join(DNDSR_libext_dir, "libz.so"))
         CDLL(os.path.join(DNDSR_libext_dir, "libhdf5.so"))
         CDLL(os.path.join(DNDSR_libext_dir, "libcgns.so"))

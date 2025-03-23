@@ -26,8 +26,17 @@ project(DNDSR LANGUAGES CXX) #! need to be in front of find_package(MPI)
 enable_language(C) #! building C sub-projects
 
 message(STATUS "CMAKE_CXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}")
-
+set(DNDS_USING_CLANG_WIN OFF)
+if(WIN32)
+    if(${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang)
+        set(DNDS_USING_CLANG_WIN ON)
+    endif()
+endif()
 if(UNIX)
+#! we are packaging a most likely correct libstdc++.so 
+#! now should do well without explicit importing a libstdc++.so at runtime
+#! as fmt is static and libdnds.so is the first to require any libstdc++.so
+#! keeping this incase we really need a bundled libstdc++.so
     if(NOT DEFINED LIBSTDCXX_PATH)
         execute_process(
             COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libstdc++.so
@@ -82,6 +91,7 @@ set(DNDS_UNSAFE_MATH_OPT OFF CACHE BOOL "use -funsafe-math-optimizations")
 set(DNDS_NATIVE_ARCH     OFF CACHE BOOL "use -march=native")
 set(DNDS_LTO OFF CACHE BOOL "use -flto")
 set(DNDS_LTO_THIN OFF CACHE BOOL "use -flto=thin")
+set(DNDS_LTO_N "8" CACHE STRING "n in -flto=<n>")
 set(DNDS_USE_FULL_TEMPLATE_TRACE OFF CACHE BOOL "use -ftemplate-backtrace-limit=0")
 set(DNDS_USE_RDYNAMIC ON CACHE BOOL "use -rdynamic on posix")
 set(DNDS_USE_PRECOMPILED_HEADER OFF CACHE BOOL "use precompiled header")
@@ -137,7 +147,7 @@ if(DNDS_LTO)
     if(DNDS_LTO_THIN)
         string(APPEND CMAKE_CXX_FLAGS_RELEASE " -flto=thin")
     else()
-        string(APPEND CMAKE_CXX_FLAGS_RELEASE " -flto")
+        string(APPEND CMAKE_CXX_FLAGS_RELEASE " -flto=${DNDS_LTO_N}")
     endif()
     # ! todo: add changing to gcc-ar gcc-ranlib gcc-nm
 endif()
@@ -299,6 +309,10 @@ set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "FOR FMT")
 add_subdirectory("${DNDS_EXTERNAL_INCLUDE_FMT}/.."      "${CMAKE_BINARY_DIR}/fmt")
 # set(BUILD_SHARED_LIBS ${DNDS_TEMP_BUILD_SHARED_LIBS} CACHE BOOL "set by DNDSR") #! you cannot move this out of internal
 set_target_properties(fmt PROPERTIES EXCLUDE_FROM_ALL OFF)
+if (UNIX OR DNDS_USING_CLANG_WIN)
+    target_compile_options(fmt PRIVATE -fPIC)
+endif()
+
 # install(TARGETS fmt 
 #     LIBRARY DESTINATION "DNDSR/lib"
 #     ARCHIVE DESTINATION "DNDSR/lib"
