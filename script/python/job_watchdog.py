@@ -45,7 +45,7 @@ def getset_output_fsize(jobid: str, base_dir: str):
         with open(f_path, "w") as f:
             f.writelines(lines_o)
 
-    print(f" {l_path}: {prev_lc} -> {cur_lc}")
+    print(f"{jobid}: {l_path}: {prev_lc} -> {cur_lc}")
     return (prev_lc, cur_lc)
 
 
@@ -89,9 +89,12 @@ class Watcher:
         while iW < nMax:
             iW += 1
             self.watch_once()
-            print(f"{self.get_ct()} Watch Results:")
+            print(f"{self.get_ct()} Watch Results:", flush=True)
             for id, n_stall in self.stall_records.items():
-                print(f"Watching: {id} has stalled [{n_stall}]times", flush=True)
+                print(
+                    f"{self.get_ct()} Watching: {id} has stalled [{n_stall}]times",
+                    flush=True,
+                )
             self.clean_jobs()
             sleep(interval)
 
