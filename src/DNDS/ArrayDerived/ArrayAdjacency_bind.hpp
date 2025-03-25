@@ -6,9 +6,18 @@
 namespace DNDS
 {
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    std::string pybind11_ArrayAdjacency_name_appends()
+    {
+        return fmt::format("_{}_{}_{}",
+                           RowSize_To_PySnippet(_row_size),
+                           RowSize_To_PySnippet(_row_max),
+                           RowSize_To_PySnippet(_align));
+    }
+
+    template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     std::string pybind11_ArrayAdjacency_name()
     {
-        return "ArrayAdjacency" + pybind11_Array_name_appends<index, _row_size, _row_max, _align>();
+        return "ArrayAdjacency" + pybind11_ArrayAdjacency_name_appends<_row_size, _row_max, _align>();
     }
 
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
@@ -50,9 +59,9 @@ namespace DNDS
             .def(py::init<const MPIInfo &>(), py::arg("nmpi"))
             .def(
                 "__getitem__",
-                [](TArrayAdjacency &self, std::tuple<index> index_)
+                [](TArrayAdjacency &self, index index_)
                 {
-                    AdjacencyRow row = self[std::get<0>(index_)];
+                    AdjacencyRow row = self[index_];
                     return py::memoryview::from_buffer<index>(
                         row.begin(),
                         {row.size()},
@@ -62,14 +71,14 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
-                [](TArrayAdjacency &self, std::tuple<index> index_, py::buffer row)
+                [](TArrayAdjacency &self, index index_, py::buffer row)
                 {
                     auto row_info = row.request(false);
                     DNDS_assert(row_info.item_type_is_equivalent_to<index>());
                     auto [count, row_style] = py_buffer_get_contigious_size(row_info);
-                    DNDS_assert(self.RowSize(std::get<0>(index_)) == count);
+                    DNDS_assert(self.RowSize(index_) == count);
                     auto row_start_ptr = reinterpret_cast<index *>(row_info.ptr);
-                    std::copy(row_start_ptr, row_start_ptr + count, self.rowPtr(std::get<0>(index_)));
+                    std::copy(row_start_ptr, row_start_ptr + count, self.rowPtr(index_));
                 });
     }
 

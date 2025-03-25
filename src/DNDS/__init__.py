@@ -1,28 +1,26 @@
 from __future__ import annotations
+from multiprocessing import context
 
 
 def _pre_import():
     from ctypes import CDLL
     import os
 
-    DNDSR_bin_dir = os.path.realpath(
-        os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "bin")
-    )
+    __file_dir__ = os.path.dirname(os.path.realpath(__file__))
+    DNDSR_bin_dir = os.path.realpath(os.path.join(__file_dir__, "..", "bin"))
     DNDSR_libext_dir = os.path.realpath(
-        os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib", "dndsr_external")
+        os.path.join(__file_dir__, "..", "lib", "dndsr_external")
     )
-    DNDSR_lib_dir = os.path.realpath(
-        os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib")
-    )
+    DNDSR_lib_dir = os.path.realpath(os.path.join(__file_dir__, "..", "lib"))
     if os.name == "posix":
         # controlled from CMake side to be compatible with them all
         # as we might be using a very new g++/clang++ with very new C++ runtime library
         # that could be incompatible with what libfmt.so finds first
         #! should do well without explicit import
         #! as fmt is static and libdnds.so is the first to require any libstdc++.so
-        # CDLL(os.path.join(DNDSR_libext_dir, "libstdc++.so")) 
+        # CDLL(os.path.join(DNDSR_libext_dir, "libstdc++.so"))
         #! now statically linked:
-        # CDLL(os.path.join(DNDSR_libext_dir, "libfmt.so")) 
+        # CDLL(os.path.join(DNDSR_libext_dir, "libfmt.so"))
         CDLL(os.path.join(DNDSR_libext_dir, "libz.so"))
         CDLL(os.path.join(DNDSR_libext_dir, "libhdf5.so"))
         CDLL(os.path.join(DNDSR_libext_dir, "libcgns.so"))
@@ -65,6 +63,39 @@ else:
 #         globals()[symbol] = getattr(core, symbol)
 
 
+import contextlib
+import typing
+import atexit
+import sys
+
+
+@contextlib.contextmanager
+def MPI_Context(
+    args: list[str] = [],
+) -> typing.Generator[tuple[list[str], MPIInfo], None, None]:
+    err, argsNew = MPI.Init_thread(args)
+    if err:
+        raise RuntimeError(f"MPI.Init_thread returned error code {err}")
+    try:
+        world = MPIInfo()
+        world.setWorld()
+        yield (argsNew, world)
+    finally:
+        MPI.Finalize()
+
+
+def _init_mpi():
+    #! we are ignoring any arguments here
+    err, argsNew = MPI.Init_thread(sys.argv)
+    if err:
+        raise RuntimeError(f"MPI.Init_thread returned error code {err}")
+    sys.argv = argsNew
+    atexit.register(MPI.Finalize)
+
+
+_init_mpi()
+
+
 def _row_size_to_name(row_size: int | str) -> str:
     if isinstance(row_size, int):
         if row_size >= 0:
@@ -76,6 +107,8 @@ def _row_size_to_name(row_size: int | str) -> str:
             return "D"
         elif str(row_size) in {"N", "I"}:
             return "I"
+        elif row_size is None:
+            return "None"
         else:
             raise ValueError(f"row_size {str(row_size)} is illegal")
 
@@ -87,21 +120,44 @@ def _array_value_type_to_name(type: str) -> str:
         return "q"
     elif type is int:
         return "q"
+    elif type is None:
+        return "None"
     else:
         raise ValueError(f"unrecognized type for array {type}")
 
 
 def _get_array_name(
-    type: str, row_size: int | str, row_max: int | str = None, prepend: str = "Array"
+    type: str = None,
+    row_size: int | str | None = None,
+    row_max: int | str | None = None,
+    prepend: str = "Array",
+    row_size_n: int | str | None = None,
+    row_max_n: int | str | None = None,
 ) -> str:
-    t_name = _array_value_type_to_name(type)
-    rs_name = _row_size_to_name(row_size)
-    rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
-    align_name = "D"
 
     triedNames = []
 
-    className = f"{prepend}_{t_name}_{rs_name}_{rm_name}_{align_name}"
+    if prepend == "Array" or prepend == "ParArray" or prepend == "ArrayTransformer":
+        t_name = _array_value_type_to_name(type)
+        rs_name = _row_size_to_name(row_size)
+        rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
+        align_name = "D"
+        className = f"{prepend}_{t_name}_{rs_name}_{rm_name}_{align_name}"
+    elif prepend == "ArrayAdjacency":
+        rs_name = _row_size_to_name(row_size)
+        rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
+        align_name = "D"
+        className = f"{prepend}_{rs_name}_{rm_name}_{align_name}"
+    elif prepend == "ArrayEigenMatrix":
+        rs_name = _row_size_to_name(row_size)
+        rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
+        rs_name_n = _row_size_to_name(row_size_n)
+        rm_name_n = rs_name_n if row_max_n is None else _row_size_to_name(row_max_n)
+        align_name = "D"
+        className = (
+            f"{prepend}_{rs_name}x{rs_name_n}_{rm_name}x{rm_name_n}_{align_name}"
+        )
+
     triedNames.append(className)
 
     # TODO: this decision queue does not guarantee coherence when the instantiation expands?
@@ -142,8 +198,34 @@ def ArrayTransformer(
 
 def ArrayAdjacency(
     row_size: int | str, row_max: int | str = None, init_args: tuple = ()
-) -> ArrayAdjacency_q_I_I_D:
+) -> ArrayAdjacency_I_I_D:
     cls = globals()[_get_array_name("q", row_size, row_max, prepend="ArrayAdjacency")]
+    return cls(*init_args)
+
+
+def ArrayEigenMatrix(
+    row_size: int | str,
+    row_size_n: int | str,
+    row_max: int | str = None,
+    row_max_n: int | str = None,
+    init_args: tuple = (),
+) -> ArrayEigenMatrix_Dx1_Dx1_D:
+    cls = globals()[
+        _get_array_name(
+            row_size=row_size,
+            row_max=row_max,
+            row_size_n=row_size_n,
+            row_max_n=row_max_n,
+            prepend="ArrayEigenMatrix",
+        )
+    ]
+    return cls(*init_args)
+
+
+def ArrayTransformerFromParArray(
+    arr: ParArray_d_1_1_D, init_args: tuple = ()
+) -> ArrayTransformer_d_1_1_D:
+    cls = arr.getTrans()
     return cls(*init_args)
 
 

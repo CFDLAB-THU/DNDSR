@@ -59,12 +59,19 @@ install(TARGETS ${LIBNAME}_shared
     COMPONENT libs_shared
 )
 
+
 set(CPPS_BIND
 dnds_pybind11.cpp
 MPI_bind.cpp
 Array_bind.cpp
 ArrayDerived/ArrayAdjacency_bind.cpp
+ArrayDerived/ArrayEigenMatrix_bind.cpp
 )
+
+file(GLOB ARRAY_BIND_OFFSET_SOURCES "Array_bind_offset/*.cpp")
+list(APPEND CPPS_BIND ${ARRAY_BIND_OFFSET_SOURCES})
+file(GLOB ARRAYEIGENMATRIX_COLS_SOURCES "ArrayDerived/ArrayEigenMatrix_bind_cols/*.cpp")
+list(APPEND CPPS_BIND ${ARRAYEIGENMATRIX_COLS_SOURCES})
 
 dnds_add_py_module(${LIBNAME}_pybind11 "${CPPS_BIND}" "${LIBNAME}_shared;${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
     ON ON ON)  # SHARED,FAST, EXCLUDE

@@ -68,4 +68,15 @@ namespace DNDS
             {sizeof(T)},
             true);
     }
+
+    inline void pybind11_bind_defines(py::module_ &m)
+    {
+        m
+            .def("_get_UnInitReal", []()
+                 { return UnInitReal; })
+            .def("_get_UnInitIndex", []()
+                 { return UnInitIndex; })
+            .def("_get_UnInitRowsize", []()
+                 { return UnInitRowsize; });
+    }
 }

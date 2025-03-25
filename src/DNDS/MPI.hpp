@@ -224,12 +224,19 @@ namespace DNDS // TODO: get a concurrency header
 
     namespace MPI
     {
+        inline int GetMPIThreadLevel()
+        {
+            int ret;
+            int ierr;
+            ierr = MPI_Query_thread(&ret), DNDS_assert(ierr == MPI_SUCCESS);
+            return ret;
+        }
+
         inline MPI_int Init_thread(int *argc, char ***argv)
         {
             int init_flag{0};
             MPI_Initialized(&init_flag);
-            if (init_flag)
-                return 0;
+
             int provided_MPI_THREAD_LEVEL{0};
             int needed_MPI_THREAD_LEVEL = MPI_THREAD_MULTIPLE;
 
@@ -244,21 +251,18 @@ namespace DNDS // TODO: get a concurrency header
                 if (ienv >= 3)
                     needed_MPI_THREAD_LEVEL = MPI_THREAD_SINGLE;
             }
-            auto ret = MPI_Init_thread(argc, argv, needed_MPI_THREAD_LEVEL, &provided_MPI_THREAD_LEVEL);
+            int ret{0};
+            if (!init_flag)
+                ret = MPI_Init_thread(argc, argv, needed_MPI_THREAD_LEVEL, &provided_MPI_THREAD_LEVEL);
+            else
+                provided_MPI_THREAD_LEVEL = GetMPIThreadLevel();
+
             if (provided_MPI_THREAD_LEVEL < needed_MPI_THREAD_LEVEL)
             {
                 printf("ERROR: The MPI library does not have full thread support\n");
                 MPI_Abort(MPI_COMM_WORLD, 1);
             }
 
-            return ret;
-        }
-
-        inline int GetMPIThreadLevel()
-        {
-            int ret;
-            int ierr;
-            ierr = MPI_Query_thread(&ret), DNDS_assert(ierr == MPI_SUCCESS);
             return ret;
         }
     }

@@ -39,8 +39,8 @@ namespace DNDS
         using t_pRowSizes = typename t_base::t_pRowSizes;
 
         using t_EigenMatrix = Eigen::Matrix<real, RowSize_To_EigenSize(_mat_ni), RowSize_To_EigenSize(_mat_nj)>;
-        using t_EigenMap = Eigen::Map<t_EigenMatrix>; // default no buffer align and stride
-        using t_EigenMap_const = Eigen::Map<const t_EigenMatrix>; // default no buffer align and stride
+        using t_EigenMap = Eigen::Map<t_EigenMatrix, Eigen::Unaligned>;             // default no buffer align and stride
+        using t_EigenMap_const = Eigen::Map<const t_EigenMatrix, Eigen::Unaligned>; // default no buffer align and stride
 
         using t_copy = t_EigenMatrix;
 
@@ -71,7 +71,7 @@ namespace DNDS
             this->t_base::Resize(nSize, nSizeRowDynamic * nSizeColDynamic);
         }
 
-        rowsize MatRowSize(index iMat = 0)
+        rowsize MatRowSize(index iMat = 0) const
         {
             if constexpr (_mat_ni >= 0)
                 return _mat_ni;
@@ -82,7 +82,7 @@ namespace DNDS
             return UnInitRowsize; // invalid branch
         }
 
-        rowsize MatColSize(index iMat = 0)
+        rowsize MatColSize(index iMat = 0) const
         {
             if constexpr (_mat_nj >= 0)
                 return _mat_nj;
@@ -127,7 +127,7 @@ namespace DNDS
         }
 
         t_EigenMap_const
-        operator[](index i) const   
+        operator[](index i) const
         {
             rowsize c_nRow;
             if constexpr (_mat_ni == NonUniformSize)

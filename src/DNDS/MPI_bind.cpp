@@ -25,23 +25,69 @@ namespace DNDS::MPI
     void pybind11_Init_thread(py::module_ &m)
     {
         auto m_MPI = m.def_submodule("MPI");
-        m_MPI.def("Init_thread",
-                  [](const std::vector<std::string> &pArgv)
-                  {
-                      std::vector<const char *> argStarts;
-                      for (auto &v : pArgv)
-                          argStarts.push_back(v.c_str());
-                      int argn = argStarts.size();
-                      auto argv = argStarts.data();
-                      auto ret = Init_thread(&argn, const_cast<char ***>(&argv));
-                      //! Warning: assuming mpi won't touch anything
-                      return std::make_tuple(ret, pArgv);
-                  });
-        m_MPI.def("Finalize",
-                  []()
-                  {
-                      return MPI_Finalize();
-                  });
+        m_MPI.def(
+            "Init_thread",
+            [](const std::vector<std::string> &pArgv)
+            {
+                // std::vector<const char *> argStarts;
+                // for (auto &v : pArgv)
+                //     argStarts.push_back(v.c_str());
+                // int argn = argStarts.size();
+                // auto argv = argStarts.data();
+                // auto ret = Init_thread(&argn, const_cast<char ***>(&argv));
+                // //! Warning: assuming mpi won't touch anything
+                // return std::make_tuple(ret, pArgv);
+
+                // ! a complete version
+
+                int initial_argc = static_cast<int>(pArgv.size());
+                int initial_argc_mine = initial_argc;
+
+                // Create an array of pointers to C-style strings:
+                char **argv_array = new char *[initial_argc + 1]; // +1 for NULL terminator
+                char **argv_array_mine = argv_array;
+
+                // Allocate memory and copy each string into a modifiable buffer
+                for (int i = 0; i < initial_argc; ++i)
+                {
+                    const std::string &s = pArgv[i];
+                    size_t len = s.length();
+                    char *cstr = new char[len + 1]; // Allocate space for '\0'
+                    strcpy(cstr, s.c_str());        // Copy the string
+                    argv_array[i] = cstr;
+                }
+                argv_array[initial_argc] = nullptr; // NULL terminator
+
+                int *pargc = &initial_argc;
+                char ***pargv = &argv_array;
+
+                auto ret = Init_thread(pargc, pargv);
+
+                // Capture the modified arguments into output_args:
+                std::vector<std::string> pArgvOut;
+                for (int i = 0; i < *pargc; ++i)
+                    pArgvOut.push_back(std::string(argv_array[i]));
+
+                // Cleanup all dynamically allocated memory
+                // Note: Even if MPI changes entries in the array, our pointers still point to
+                //       our original allocations (assuming MPI doesn't reallocate the entire array)
+                for (int i = 0; i <= initial_argc_mine; ++i)
+                    delete[] argv_array_mine[i]; // Free each string buffer
+                delete[] argv_array_mine;        // Free the pointer array
+
+                return std::make_tuple(ret, pArgvOut);
+            });
+        m_MPI.def(
+            "Finalize",
+            []()
+            {
+                int finalized{0};
+                int err = MPI_Finalized(&finalized);
+                if (finalized)
+                    return err;
+                else
+                    return err | MPI_Finalize();
+            });
         m_MPI.def("GetMPIThreadLevel", &GetMPIThreadLevel);
     }
 

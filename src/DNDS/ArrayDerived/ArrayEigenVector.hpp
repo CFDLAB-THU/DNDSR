@@ -12,7 +12,7 @@ namespace DNDS
         using t_base::t_base;
 
         using t_EigenVector = Eigen::Matrix<real, RowSize_To_EigenSize(_vec_size), 1>;
-        using t_EigenMap = Eigen::Map<t_EigenVector>; // default no buffer align and stride
+        using t_EigenMap = Eigen::Map<t_EigenVector, Eigen::Unaligned>; // default no buffer align and stride
 
         using t_copy = t_EigenVector;
 

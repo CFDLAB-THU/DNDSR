@@ -1,4 +1,8 @@
-import DNDS
+# import sys
+# import os
+# sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "src"))
+# import DNDS
+import DNDSR.DNDS as DNDS
 import numpy as np
 import pytest
 

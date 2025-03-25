@@ -91,7 +91,9 @@ set(DNDS_UNSAFE_MATH_OPT OFF CACHE BOOL "use -funsafe-math-optimizations")
 set(DNDS_NATIVE_ARCH     OFF CACHE BOOL "use -march=native")
 set(DNDS_LTO OFF CACHE BOOL "use -flto")
 set(DNDS_LTO_THIN OFF CACHE BOOL "use -flto=thin")
-set(DNDS_LTO_N "8" CACHE STRING "n in -flto=<n>")
+cmake_host_system_information(RESULT NPROC
+                              QUERY NUMBER_OF_PHYSICAL_CORES)
+set(DNDS_LTO_N ${NPROC} CACHE STRING "n in -flto=<n>")
 set(DNDS_USE_FULL_TEMPLATE_TRACE OFF CACHE BOOL "use -ftemplate-backtrace-limit=0")
 set(DNDS_USE_RDYNAMIC ON CACHE BOOL "use -rdynamic on posix")
 set(DNDS_USE_PRECOMPILED_HEADER OFF CACHE BOOL "use precompiled header")
@@ -748,8 +750,10 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/src/CFV)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/Euler)
 
 
-install(CODE "file(CREATE_LINK ${CMAKE_INSTALL_PREFIX}/DNDSR/bin ${CMAKE_SOURCE_DIR}/src/bin SYMBOLIC)" COMPONENT py)
-install(CODE "file(CREATE_LINK ${CMAKE_INSTALL_PREFIX}/DNDSR/lib ${CMAKE_SOURCE_DIR}/src/lib SYMBOLIC)" COMPONENT py)
+if (NOT SKBUILD_PROJECT_NAME) # do not create links for SCIKIT-BUILD build
+    install(CODE "file(CREATE_LINK ${CMAKE_INSTALL_PREFIX}/DNDSR/bin ${CMAKE_SOURCE_DIR}/src/bin SYMBOLIC)" COMPONENT py)
+    install(CODE "file(CREATE_LINK ${CMAKE_INSTALL_PREFIX}/DNDSR/lib ${CMAKE_SOURCE_DIR}/src/lib SYMBOLIC)" COMPONENT py)
+endif()
 # if (SKBUILD_PROJECT_NAME)
 # # __init__.py actively linking libdnds_shared.so, 
 # # cannot link correct libstdc++.so (links to anaconda's)

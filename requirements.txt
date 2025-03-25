@@ -8,3 +8,6 @@ auditwheel
 pybind11-stubgen
 typing_extensions
 dash
+pytest
+pytest-mpi
+mpi4py
