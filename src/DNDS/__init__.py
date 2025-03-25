@@ -143,7 +143,7 @@ def _get_array_name(
         rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
         align_name = "D"
         className = f"{prepend}_{t_name}_{rs_name}_{rm_name}_{align_name}"
-    elif prepend == "ArrayAdjacency":
+    elif prepend == "ArrayAdjacency" or prepend == "ArrayEigenVector":
         rs_name = _row_size_to_name(row_size)
         rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
         align_name = "D"
@@ -157,6 +157,10 @@ def _get_array_name(
         className = (
             f"{prepend}_{rs_name}x{rs_name_n}_{rm_name}x{rm_name_n}_{align_name}"
         )
+    elif prepend == "ArrayEigenUniMatrixBatch":
+        rs_name = _row_size_to_name(row_size)
+        rs_name_n = _row_size_to_name(row_size_n)
+        className = f"{prepend}_{rs_name}x{rs_name_n}"
 
     triedNames.append(className)
 
@@ -199,7 +203,7 @@ def ArrayTransformer(
 def ArrayAdjacency(
     row_size: int | str, row_max: int | str = None, init_args: tuple = ()
 ) -> ArrayAdjacency_I_I_D:
-    cls = globals()[_get_array_name("q", row_size, row_max, prepend="ArrayAdjacency")]
+    cls = globals()[_get_array_name(row_size, row_max, prepend="ArrayAdjacency")]
     return cls(*init_args)
 
 
@@ -219,6 +223,28 @@ def ArrayEigenMatrix(
             prepend="ArrayEigenMatrix",
         )
     ]
+    return cls(*init_args)
+
+
+def ArrayEigenUniMatrixBatch(
+    row_size: int | str,
+    row_size_n: int | str,
+    init_args: tuple = (),
+) -> ArrayEigenUniMatrixBatch_DxD:
+    cls = globals()[
+        _get_array_name(
+            row_size=row_size,
+            row_size_n=row_size_n,
+            prepend="ArrayEigenUniMatrixBatch",
+        )
+    ]
+    return cls(*init_args)
+
+
+def ArrayEigenVector(
+    row_size: int | str, row_max: int | str = None, init_args: tuple = ()
+) -> ArrayEigenVector_D_D_D:
+    cls = globals()[_get_array_name(row_size, row_max, prepend="ArrayEigenVector")]
     return cls(*init_args)
 
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ArrayEigenMatirx.hpp"
+#include "ArrayEigenMatrix.hpp"
 #include "../Array_bind.hpp"
 
 namespace DNDS
@@ -164,6 +164,7 @@ namespace DNDS
     extern template void pybind11_callBindArrayEigenMatrixs_rowsizes<6>(py::module_ &m);
     extern template void pybind11_callBindArrayEigenMatrixs_rowsizes<7>(py::module_ &m);
     extern template void pybind11_callBindArrayEigenMatrixs_rowsizes<8>(py::module_ &m);
+    extern template void pybind11_callBindArrayEigenMatrixs_rowsizes<DynamicSize>(py::module_ &m);
 
     void pybind11_bind_ArrayEigenMatrix_All(py::module_ &m);
 }

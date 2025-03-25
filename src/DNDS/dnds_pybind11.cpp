@@ -4,6 +4,9 @@
 #include "Array_bind.hpp"
 #include "ArrayDerived/ArrayAdjacency_bind.hpp"
 #include "ArrayDerived/ArrayEigenMatrix_bind.hpp"
+#include "ArrayDerived/ArrayEigenMatrixBatch_bind.hpp"
+#include "ArrayDerived/ArrayEigenUniMatrixBatch_bind.hpp"
+#include "ArrayDerived/ArrayEigenVector_bind.hpp"
 
 PYBIND11_MODULE(dnds_pybind11, m)
 {
@@ -20,4 +23,10 @@ PYBIND11_MODULE(dnds_pybind11, m)
     DNDS::pybind11_bind_ArrayAdjacency_All(m);
 
     DNDS::pybind11_bind_ArrayEigenMatrix_All(m);
+
+    DNDS::pybind11_bind_ArrayEigenMatrixBatch_All(m);
+
+    DNDS::pybind11_bind_ArrayEigenUniMatrixBatch_All(m);
+
+    DNDS::pybind11_bind_ArrayEigenVector_All(m);
 }

@@ -29,8 +29,8 @@ namespace DNDS
         using t_base::t_base;
 
         using t_EigenMatrix = Eigen::Matrix<real, _n_row, _n_col>;
-        using t_EigenMap = Eigen::Map<t_EigenMatrix>; // default no buffer align and stride
-        using t_EigenMap_const = Eigen::Map<const t_EigenMatrix>; // default no buffer align and stride
+        using t_EigenMap = Eigen::Map<t_EigenMatrix, Eigen::Unaligned>;             // default no buffer align and stride
+        using t_EigenMap_const = Eigen::Map<const t_EigenMatrix, Eigen::Unaligned>; // default no buffer align and stride
 
     private:
         int _row_dynamic = _n_row > 0 ? _n_row : 0;
@@ -78,6 +78,14 @@ namespace DNDS
                 this->Resize(n_size, -1, -1);
             else
                 DNDS_assert_info(false, "invalid call");
+        }
+
+        template <class TFRowSize>
+        void Resize(index n_size, int r, int c, TFRowSize &&rsf)
+        {
+            this->ResizeMatrix(r, c);
+            this->t_base::Resize(n_size, [&](index i)
+                                 { return rsf(i) * this->MSize(); });
         }
 
     public:

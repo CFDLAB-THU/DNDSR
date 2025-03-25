@@ -25,7 +25,7 @@ pybind11-stubgen DNDS -o .
 # cp -v DNDS/_internal/dnds_pybind11/*.pyi DNDS/
 
 for file in DNDS/_internal/dnds_pybind11/*.pyi; do
-    cat "$file" >> "DNDS/$(basename "$file")"
+    cat "$file" > "DNDS/$(basename "$file")"
     echo "$file -> DNDS/$(basename "$file")"
 done
 

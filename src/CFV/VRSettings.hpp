@@ -9,7 +9,7 @@
 #include "Geom/Quadrature.hpp"
 #include "Geom/Mesh.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
-#include "DNDS/ArrayDerived/ArrayEigenMatirx.hpp"
+#include "DNDS/ArrayDerived/ArrayEigenMatrix.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenVector.hpp"
 #include "Geom/BaseFunction.hpp"
 #include "Limiters.hpp"

@@ -35,7 +35,8 @@ namespace DNDS
         using t_matrix = MatrixXR;
         using t_map = Eigen::Map<t_matrix, Eigen::Unaligned>;
 
-        static rowsize getBufSize(const std::vector<t_matrix> &matrices)
+        template <class t_matrices_elem>
+        static rowsize getBufSize(const std::vector<t_matrices_elem> &matrices)
         {
             DNDS_assert(matrices.size() < DNDS_ROWSIZE_MAX);
             rowsize bufSiz = matrices.size() + 1;
@@ -100,7 +101,8 @@ namespace DNDS
             return ((UInt32PairIn64 *)(_buf + k + 1))->setN(v);
         }
 
-        void CompressIn(const std::vector<t_matrix> &matrices)
+        template <class t_matrices_elem>
+        void CompressIn(const std::vector<t_matrices_elem> &matrices)
         {
             DNDS_assert(getBufSize(matrices) <= _buf_size);
             this->Size() = uint64_t(matrices.size()); // assuming could fit
@@ -108,11 +110,15 @@ namespace DNDS
             uint32_t curOffset = uint32_t(this->Size()) + 1;
             for (size_t i = 0; i < matrices.size(); i++)
             {
+                DNDS_assert(matrices[i].rows() <= Eigen::Index(UINT16_MAX));
+                DNDS_assert(matrices[i].cols() <= Eigen::Index(UINT16_MAX));
                 this->setNRow(rowsize(i), uint16_t(matrices[i].rows()));
                 this->setNCol(rowsize(i), uint16_t(matrices[i].cols()));
                 this->setOffset(rowsize(i), curOffset);
                 this->operator[](i) = matrices[i];
                 // std::cout << "SET: " << this->operator[](i) << std::endl;
+                static_assert(std::numeric_limits<Eigen::Index>::digits > std::numeric_limits<uint32_t>::digits);
+                DNDS_assert(matrices[i].size() <= Eigen::Index(UINT32_MAX - curOffset)); // overflow check
                 curOffset += matrices[i].size();
             }
         }
@@ -141,7 +147,8 @@ namespace DNDS
         using t_base::ResizeRow;
 
     public:
-        void InitializeWriteRow(index i, const std::vector<t_matrix> &matrices)
+        template <class t_matrices_elem>
+        void InitializeWriteRow(index i, const std::vector<t_matrices_elem> &matrices)
         {
             this->ResizeRow(i, MatrixBatch::getBufSize(matrices));
             MatrixBatch batch(this->t_base::operator[](i), this->RowSize(i));
