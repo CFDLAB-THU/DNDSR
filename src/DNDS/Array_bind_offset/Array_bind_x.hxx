@@ -18,6 +18,10 @@ namespace DNDS
         pybind11_callBindArrayTransformers_rowsizes<real, offset>(m);  \
                                                                        \
         pybind11_callBindArrayTransformers_rowsizes<index, offset>(m); \
+                                                                       \
+        pybind11_callBindParArrayPairs_rowsizes<real, offset>(m);      \
+                                                                       \
+        pybind11_callBindParArrayPairs_rowsizes<index, offset>(m);     \
     }
 
 }

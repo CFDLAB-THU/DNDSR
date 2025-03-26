@@ -1,10 +1,15 @@
-# import sys
-# import os
-# sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "src"))
-# import DNDS
-import DNDSR.DNDS as DNDS
+import sys, os
+
+sys.path.append(
+    os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "src")
+)
+import DNDS
+
+# import DNDSR.DNDS as DNDS
 import numpy as np
 import pytest
+from numpy.random import MT19937
+from numpy.random import RandomState, SeedSequence
 
 
 @pytest.fixture
@@ -70,6 +75,29 @@ def test_array_trans(mpi: DNDS.MPIInfo, mode: str = "global"):
 
     assert arrayR3son_1.Size() == len(pullIdx)
     assert np.all(np.array(arrayR3son_1.data()) == 1.335)
+    
+    
+def test_ParArrayPair(mpi: DNDS.MPIInfo):
+    arrayIIPair = DNDS.ParArrayPair("q", "I")
+    arrayIIPair.father = DNDS.ParArray("q", "I", init_args=(mpi,))
+    arrayIIPair.son = DNDS.ParArray("q", "I", init_args=(mpi,))
+    arrayIIPair.TransAttach()
+    arrayIIPair.father.Resize(44)
+    for iRow in range(arrayIIPair.father.Size()):
+        arrayIIPair.father.ResizeRow(iRow, iRow % 4 + 2)
+        for j in range(arrayIIPair.father.Rowsize(iRow)):
+            arrayIIPair.father[iRow, j] = 123123
+    arrayIIPair.father.Compress()
+    arrayIIPair.trans.createFatherGlobalMapping()
+    global_size = arrayIIPair.trans.LGlobalMapping.globalSize()
+    pullIdx = range(global_size)
+    arrayIIPair.trans.createGhostMapping(pullIdx)
+    arrayIIPair.trans.createMPITypes()
+    arrayIIPair.trans.pullOnce()
+    assert arrayIIPair.son.Size() == len(pullIdx)
+    assert (np.array(arrayIIPair.son.data()) == 123123).all()
+    
+    
 
 
 def test_arrayRU(mpi: DNDS.MPIInfo):
@@ -78,7 +106,7 @@ def test_arrayRU(mpi: DNDS.MPIInfo):
     rsize = np.linspace(3, 10, 32, dtype=np.int32)
     arrayRU.Resize(32, rsize)
 
-    print(arrayRU.Size())
+    # print(arrayRU.Size())
     assert not (np.diff(np.array(arrayRU.getRowStart())) - rsize).any()
 
     for i in range(arrayRU.Size()):
@@ -131,6 +159,28 @@ def test_adj(mpi: DNDS.MPIInfo):
     assert np.all(np.array(adj_son.data()) == 3343)
 
 
+def test_ArrayEigenVector(mpi: DNDS.MPIInfo):
+    arr = DNDS.ArrayEigenVector("D", init_args=(mpi,))
+    arr_son = DNDS.ArrayEigenVector("D", init_args=(mpi,))
+    arr.Resize(123, 5)
+    val0 = np.array([1, 4, 5, 1, 3.2], dtype=np.float64)
+    for irow in range(arr.Size()):
+        arr[irow] = val0
+
+    arrTrans = DNDS.ArrayTransformerFromParArray(arr)
+    arrTrans.setFatherSon(arr, arr_son)
+    arrTrans.createFatherGlobalMapping()
+    gsize = arrTrans.LGlobalMapping.globalSize()
+    pullIdx = range(gsize)
+    arrTrans.createGhostMapping(pullIdx)
+    arrTrans.createMPITypes()
+    arrTrans.pullOnce()
+
+    assert arr_son.Size() == len(pullIdx)
+    for irow in range(arr_son.Size()):
+        assert (np.array(arr_son[irow]) == val0).all()
+
+
 def test_ArrayEigenMatrix(mpi: DNDS.MPIInfo):
     arr = DNDS.ArrayEigenMatrix(3, 4, init_args=(mpi,))
     arr_son = DNDS.ArrayEigenMatrix(3, 4, init_args=(mpi,))
@@ -152,10 +202,76 @@ def test_ArrayEigenMatrix(mpi: DNDS.MPIInfo):
         assert (np.array(arr_son[irow]) == mat0).all()
 
 
+def test_ArrayEigenMatrixBatch(mpi: DNDS.MPIInfo):
+    arr = DNDS.ArrayEigenMatrixBatch(mpi)
+    arr_son = DNDS.ArrayEigenMatrixBatch(mpi)
+    arr.Resize(32)
+
+    rs = RandomState(MT19937(SeedSequence(123456789)))
+    val0 = rs.rand(4, 5)
+    val1 = rs.rand(2, 6)
+    val2 = rs.rand(65535, 1)
+    rowList = [val0, val1, val2]
+
+    for irow in range(arr.Size()):
+        rowSiz = irow % 3 + 1
+        arr.InitializeWriteRow(irow, rowList[0:rowSiz])
+    arr.Compress()
+
+    arrTrans = DNDS.ArrayTransformerFromParArray(arr)
+    arrTrans.setFatherSon(arr, arr_son)
+    arrTrans.createFatherGlobalMapping()
+    gsize = arrTrans.LGlobalMapping.globalSize()
+    pullIdx = range(gsize)
+    arrTrans.createGhostMapping(pullIdx)
+    arrTrans.createMPITypes()
+    arrTrans.pullOnce()
+
+    assert arr_son.Size() == len(pullIdx)
+    for irow in range(arr_son.Size()):
+        for iMat in range(arr_son.BatchSize(irow)):
+            assert (np.array(arr_son[irow, iMat]) == rowList[iMat]).all()
+            # print(np.array(arr_son[irow, iMat]).tolist())
+
+
+def test_ArrayEigenUniMatrixBatch(mpi: DNDS.MPIInfo):
+    arr = DNDS.ArrayEigenUniMatrixBatch("D", "D", (mpi,))
+    arr_son = DNDS.ArrayEigenUniMatrixBatch("D", "D", (mpi,))
+    arr.Resize(32, 4, 5)
+    arr_son.Resize(0, 4, 5)  #! warning: trans does not automatically do this for now!
+    rs = RandomState(MT19937(SeedSequence(123456789)))
+    val0 = rs.rand(4, 5)
+
+    for irow in range(arr.Size()):
+        arr.ResizeRow(irow, irow % 3 + 1)
+        cDat = np.concat((val0.reshape((1, 4, 5)),) * arr.BatchSize(irow), axis=0)
+        arr[irow] = cDat
+    arr.Compress()
+
+    arrTrans = DNDS.ArrayTransformerFromParArray(arr)
+    arrTrans.setFatherSon(arr, arr_son)
+    arrTrans.createFatherGlobalMapping()
+    gsize = arrTrans.LGlobalMapping.globalSize()
+    pullIdx = range(gsize)
+    arrTrans.createGhostMapping(pullIdx)
+    arrTrans.createMPITypes()
+    arrTrans.pullOnce()
+
+    assert arr_son.Size() == len(pullIdx)
+
+    # print(arr_son.data().tolist())
+    # print(arr_son.msize)
+    # print(arr_son.BatchSize(0))
+    for irow in range(arr_son.Size()):
+        for iMat in range(arr_son.BatchSize(irow)):
+            assert (np.array(arr_son[irow, iMat]) == val0).all()
+            # print(np.array(arr_son[irow, iMat]).tolist())
+
+
 if __name__ == "__main__":
     import sys
 
-    print(sys.argv)
+    # print(sys.argv)
     mpiC = DNDS.MPIInfo()
     mpiC.setWorld()
 
@@ -165,8 +281,12 @@ if __name__ == "__main__":
     test_all_reduce_scalar(mpiC)
     test_array_trans(mpiC)
     test_array_trans(mpiC, mode="left")
+    test_ParArrayPair(mpiC)
     test_arrayRU(mpiC)
     test_adj(mpiC)
+    test_ArrayEigenVector(mpiC)
     test_ArrayEigenMatrix(mpiC)
+    test_ArrayEigenMatrixBatch(mpiC)
+    test_ArrayEigenUniMatrixBatch(mpiC)
 
     print(f"{mpiC.rank} / {mpiC.size}, {mpiC.comm():x}")

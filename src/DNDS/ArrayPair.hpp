@@ -1,6 +1,9 @@
 #include "ArrayTransformer.hpp"
 #include "ArrayDerived/ArrayAdjacency.hpp"
-
+#include "ArrayDerived/ArrayEigenVector.hpp"
+#include "ArrayDerived/ArrayEigenMatrix.hpp"
+#include "ArrayDerived/ArrayEigenMatrixBatch.hpp"
+#include "ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
 namespace DNDS
 {
     template <class TArray = ParArray<real, 1>>
@@ -54,12 +57,21 @@ namespace DNDS
                 return son->operator()(i - father->Size(), aOthers...);
         }
 
-        auto RowSize()
+        template <class TF>
+        auto runFunctionAppendedIndex(index i, TF &&F)
+        {
+            if (i >= 0 && i < father->Size())
+                return F(*father, i);
+            else
+                return F(*son, i - father->Size());
+        }
+
+        auto RowSize() const
         {
             return father->RowSize();
         }
 
-        auto RowSize(index i)
+        auto RowSize(index i) const
         {
             if (i >= 0 && i < father->Size())
                 return father->RowSize(i);
@@ -209,4 +221,16 @@ namespace DNDS
 
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     using ArrayAdjacencyPair = ArrayPair<ArrayAdjacency<_row_size, _row_max, _align>>;
+
+    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
+    using ArrayEigenVectorPair = ArrayPair<ArrayEigenVector<_vec_size, _row_max, _align>>;
+
+    template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
+              rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
+    using ArrayEigenMatrixPair = ArrayPair<ArrayEigenMatrix<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>>;
+
+    using ArrayEigenMatrixBatchPair = ArrayPair<ArrayEigenMatrixBatch>;
+
+    template <int _n_row, int _n_col>
+    using ArrayEigenUniMatrixBatchPair = ArrayPair<ArrayEigenUniMatrixBatch<_n_row, _n_col>>;
 }

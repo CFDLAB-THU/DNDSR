@@ -8,6 +8,7 @@ requires = [
     "pybind11-stubgen",
     "typing_extensions",
     "numpy",
+    "ninja"
 ]
 build-backend = "scikit_build_core.build"
 
@@ -22,8 +23,8 @@ cmake.build-type = "Release"
 build.targets = ["dnds", "dnds_pybind11"]
 build.verbose = true
 build-dir = "build_py"
-cmake.args = ["-G Unix Makefiles"]
-build.tool-args = ["-j8"]
+cmake.args = ["-G Ninja"]
+build.tool-args = ["-j0"]
 sdist.include = [
     "src/*/*.pyi",
     "src/*/_internal/*.so",

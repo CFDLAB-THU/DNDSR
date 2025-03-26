@@ -137,7 +137,12 @@ def _get_array_name(
 
     triedNames = []
 
-    if prepend == "Array" or prepend == "ParArray" or prepend == "ArrayTransformer":
+    if (
+        prepend == "Array"
+        or prepend == "ParArray"
+        or prepend == "ArrayTransformer"
+        or prepend == "ParArrayPair"
+    ):
         t_name = _array_value_type_to_name(type)
         rs_name = _row_size_to_name(row_size)
         rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
@@ -179,15 +184,22 @@ def _get_array_name(
 
 def Array(
     type: str, row_size: int | str, row_max: int | str = None, init_args: tuple = ()
-) -> Array_d_3_3_D:
+) -> Array_d_I_I_D:
     cls = globals()[_get_array_name(type, row_size, row_max, prepend="Array")]
     return cls(*init_args)
 
 
 def ParArray(
     type: str, row_size: int | str, row_max: int | str = None, init_args: tuple = ()
-) -> ParArray_d_3_3_D:
+) -> ParArray_d_I_I_D:
     cls = globals()[_get_array_name(type, row_size, row_max, prepend="ParArray")]
+    return cls(*init_args)
+
+
+def ParArrayPair(
+    type: str, row_size: int | str, row_max: int | str = None, init_args: tuple = ()
+) -> ParArrayPair_d_I_I_D:
+    cls = globals()[_get_array_name(type, row_size, row_max, prepend="ParArrayPair")]
     return cls(*init_args)
 
 
@@ -203,7 +215,9 @@ def ArrayTransformer(
 def ArrayAdjacency(
     row_size: int | str, row_max: int | str = None, init_args: tuple = ()
 ) -> ArrayAdjacency_I_I_D:
-    cls = globals()[_get_array_name(row_size, row_max, prepend="ArrayAdjacency")]
+    cls = globals()[
+        _get_array_name(row_size=row_size, row_max=row_max, prepend="ArrayAdjacency")
+    ]
     return cls(*init_args)
 
 
@@ -243,8 +257,10 @@ def ArrayEigenUniMatrixBatch(
 
 def ArrayEigenVector(
     row_size: int | str, row_max: int | str = None, init_args: tuple = ()
-) -> ArrayEigenVector_D_D_D:
-    cls = globals()[_get_array_name(row_size, row_max, prepend="ArrayEigenVector")]
+) -> ArrayEigenVector_I_I_D:
+    cls = globals()[
+        _get_array_name(row_size=row_size, row_max=row_max, prepend="ArrayEigenVector")
+    ]
     return cls(*init_args)
 
 

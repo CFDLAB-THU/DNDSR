@@ -23,5 +23,15 @@ namespace DNDS
         pybind11_ArrayEigenUniMatrixBatch_define<DynamicSize, 7>(m); // D x 7
         pybind11_ArrayEigenUniMatrixBatch_define<DynamicSize, 8>(m); // D x 8
         pybind11_ArrayEigenUniMatrixBatch_define<DynamicSize, DynamicSize>(m);
+
+        pybind11_ArrayEigenUniMatrixBatchPair_define<DynamicSize, 1>(m); // D x 1
+        pybind11_ArrayEigenUniMatrixBatchPair_define<DynamicSize, 2>(m); // D x 2
+        pybind11_ArrayEigenUniMatrixBatchPair_define<DynamicSize, 3>(m); // D x 3
+        pybind11_ArrayEigenUniMatrixBatchPair_define<DynamicSize, 4>(m); // D x 4
+        pybind11_ArrayEigenUniMatrixBatchPair_define<DynamicSize, 5>(m); // D x 5
+        pybind11_ArrayEigenUniMatrixBatchPair_define<DynamicSize, 6>(m); // D x 6
+        pybind11_ArrayEigenUniMatrixBatchPair_define<DynamicSize, 7>(m); // D x 7
+        pybind11_ArrayEigenUniMatrixBatchPair_define<DynamicSize, 8>(m); // D x 8
+        pybind11_ArrayEigenUniMatrixBatchPair_define<DynamicSize, DynamicSize>(m);
     }
 }

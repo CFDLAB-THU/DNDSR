@@ -21,7 +21,42 @@ namespace DNDS
     }
 
     template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
+    std::string pybind11_ArrayEigenVectorPair_name()
+    {
+        return "ArrayEigenVectorPair" + pybind11_ArrayEigenVector_name_appends<_vec_size, _row_max, _align>();
+    }
+
+    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
     using tPy_ArrayEigenVector = py::class_<ArrayEigenVector<_vec_size, _row_max, _align>, ssp<ArrayEigenVector<_vec_size, _row_max, _align>>>;
+
+    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
+    using tPy_ArrayEigenVectorPair = py::class_<ArrayEigenVectorPair<_vec_size, _row_max, _align>, ssp<ArrayEigenVectorPair<_vec_size, _row_max, _align>>>;
+}
+
+namespace DNDS
+{
+
+    template <class TArrayEigenVector = ArrayEigenVector<1>>
+    auto pybind11_ArrayEigenVector_getitem(TArrayEigenVector &self, index index_)
+    {
+        auto row = self[index_];
+        return py::memoryview::from_buffer<real>(
+            row.data(),
+            {row.size()},
+            {sizeof(real)},
+            false);
+    }
+
+    template <class TArrayEigenVector = ArrayEigenVector<1>>
+    auto pybind11_ArrayEigenVector_setitem(TArrayEigenVector &self, index index_, py::buffer row)
+    {
+        auto row_info = row.request(false);
+        DNDS_assert(row_info.item_type_is_equivalent_to<real>());
+        auto [count, row_style] = py_buffer_get_contigious_size(row_info); // todo: upgrade to accept any 1D array
+        DNDS_assert(self.RowSize(index_) == count);
+        auto row_start_ptr = reinterpret_cast<real *>(row_info.ptr);
+        std::copy(row_start_ptr, row_start_ptr + count, self[index_].data());
+    }
 }
 
 namespace DNDS
@@ -61,24 +96,14 @@ namespace DNDS
                 "__getitem__",
                 [](TArrayEigenVector &self, index index_)
                 {
-                    auto row = self[index_];
-                    return py::memoryview::from_buffer<real>(
-                        row.data(),
-                        {row.size()},
-                        {sizeof(real)},
-                        false);
+                    return pybind11_ArrayEigenVector_getitem(self, index_);
                 },
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
                 [](TArrayEigenVector &self, index index_, py::buffer row)
                 {
-                    auto row_info = row.request(false);
-                    DNDS_assert(row_info.item_type_is_equivalent_to<real>());
-                    auto [count, row_style] = py_buffer_get_contigious_size(row_info); // todo: upgrade to accept any 1D array
-                    DNDS_assert(self.RowSize(index_) == count);
-                    auto row_start_ptr = reinterpret_cast<real *>(row_info.ptr);
-                    std::copy(row_start_ptr, row_start_ptr + count, self[index_].data());
+                    return pybind11_ArrayEigenVector_setitem(self, index_, row);
                 });
     }
 
@@ -94,10 +119,75 @@ namespace DNDS
 
 namespace DNDS
 {
+    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
+    tPy_ArrayEigenVectorPair<_vec_size, _row_max, _align>
+    pybind11_ArrayEigenVectorPair_declare(py::module_ &m)
+    {
+        return {m, pybind11_ArrayEigenVectorPair_name<_vec_size, _row_max, _align>().c_str()};
+    }
+
+    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
+    tPy_ArrayEigenVector<_vec_size, _row_max, _align>
+    pybind11_ArrayEigenVectorPair_get_class(py::module_ &m)
+    {
+        return {m.attr(pybind11_ArrayEigenVectorPair_name<_vec_size, _row_max, _align>().c_str())};
+    }
+
+    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
+    void pybind11_ArrayEigenVectorPair_define(py::module_ &m)
+    {
+
+        // using TArray = ParArray<T, _row_size, _row_max, _align>;
+        using TPair = ArrayEigenVectorPair<_vec_size, _row_max, _align>;
+        auto Pair_ = pybind11_ArrayEigenVectorPair_declare<_vec_size, _row_max, _align>(m);
+
+        // // helper
+        // using TPair = ArrayEigenVectorPair<1>;
+        // auto Pair_ = pybind11_ArrayEigenVectorPair_declare<1>(m);
+        // // helper
+
+        pybind11_ArrayPairGenericBindBasics<TPair>(Pair_);
+
+        Pair_
+            .def("RowSize", [](const TPair &self, index i)
+                 { return self.RowSize(i); }, py::arg("i"))
+            .def("RowSize", [](const TPair &self)
+                 { return self.RowSize(); });
+        Pair_
+            .def(
+                "__getitem__",
+                [](TPair &self, index index_)
+                {
+                    return self.runFunctionAppendedIndex(index_, [&](auto ar, index iC)
+                                                         { return pybind11_ArrayEigenVector_getitem(ar, iC); });
+                },
+                py::keep_alive<0, 1>())
+            .def(
+                "__setitem__",
+                [](TPair &self, index index_, py::buffer row)
+                {
+                    return self.runFunctionAppendedIndex(index_, [&](auto ar, index iC)
+                                                         { return pybind11_ArrayEigenVector_setitem(ar, iC, row); });
+                });
+    }
+
+    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
+    void _pybind11_ArrayEigenVectorPair_define_dispatch(py::module_ &m)
+    {
+        if constexpr (_vec_size == UnInitRowsize)
+            return;
+        else
+            return pybind11_ArrayEigenVectorPair_define<_vec_size, _row_max, _align>(m);
+    }
+}
+
+namespace DNDS
+{
     template <size_t N, std::array<int, N> const &Arr, size_t... Is>
     void __pybind11_callBindArrayEigenVectors_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
     {
         (_pybind11_ArrayEigenVector_define_dispatch<Arr[Is]>(m), ...);
+        (_pybind11_ArrayEigenVectorPair_define_dispatch<Arr[Is]>(m), ...);
     }
 
     inline void pybind11_callBindArrayEigenVectors_rowsizes(py::module_ &m)

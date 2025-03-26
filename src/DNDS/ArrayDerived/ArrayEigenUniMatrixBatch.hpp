@@ -117,7 +117,7 @@ namespace DNDS
         rowsize RowSize(index i) const
         {
             rowsize row_size_c = this->t_base::RowSize(i);
-            DNDS_assert(row_size_c % MSize() == 0);
+            DNDS_assert(MSize() != 0 && row_size_c % MSize() == 0);
             return row_size_c / MSize();
         }
 

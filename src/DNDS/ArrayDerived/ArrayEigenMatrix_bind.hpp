@@ -27,7 +27,60 @@ namespace DNDS
 
     template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
               rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
+    std::string pybind11_ArrayEigenMatrixPair_name()
+    {
+        return "ArrayEigenMatrixPair" + pybind11_ArrayEigenMatrix_name_appends<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>();
+    }
+
+    template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
+              rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
     using tPy_ArrayEigenMatrix = py::class_<ArrayEigenMatrix<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>, ssp<ArrayEigenMatrix<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>>>;
+
+    template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
+              rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
+    using tPy_ArrayEigenMatrixPair = py::class_<ArrayEigenMatrixPair<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>, ssp<ArrayEigenMatrixPair<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>>>;
+}
+
+namespace DNDS
+{
+    template <class TArrayEigenMatrix = ArrayEigenMatrix<3, 3>>
+    auto pybind11_ArrayEigenMatrix_getitem(TArrayEigenMatrix &self, index index_)
+    {
+        using tElem = real;
+        auto mat = self[index_];
+        return py::memoryview::from_buffer<tElem>(
+            mat.data(),
+            {mat.rows(), mat.cols()},
+            {sizeof(tElem) * mat.rowStride(), sizeof(tElem) * mat.colStride()},
+            false);
+    }
+
+    template <class TArrayEigenMatrix = ArrayEigenMatrix<3, 3>>
+    auto pybind11_ArrayEigenMatrix_setitem(TArrayEigenMatrix &self, index index_, py::buffer row)
+    {
+        using tElem = real;
+        auto row_info = row.request(false);
+        DNDS_assert(row_info.item_type_is_equivalent_to<tElem>());
+        auto iRow = index_;
+        auto mat = self[index_];
+        DNDS_assert_info(row_info.shape.size() == 2, "need to pass a 2-d array");
+        DNDS_assert_info(row_info.shape[0] == mat.rows(), "row size not matching");
+        DNDS_assert_info(row_info.shape[1] == mat.cols(), "col size not matching");
+
+        auto row_start_ptr = reinterpret_cast<tElem *>(row_info.ptr);
+
+        DNDS_assert(row_info.strides.size() == 2);
+
+        auto row_mat_map = Eigen::Map<
+            const Eigen::Matrix<tElem, Eigen::Dynamic, Eigen::Dynamic, Eigen::DontAlign | Eigen::ColMajor>,
+            Eigen::Unaligned,
+            Eigen::Stride<Eigen::Dynamic, Eigen::Dynamic>>(
+            row_start_ptr,
+            row_info.shape[0],
+            row_info.shape[1],
+            Eigen::Stride<Eigen::Dynamic, Eigen::Dynamic>(row_info.strides[1] / sizeof(tElem) /*col stride*/, row_info.strides[0] / sizeof(tElem) /*row stride*/));
+        mat = row_mat_map;
+    }
 }
 
 namespace DNDS
@@ -88,41 +141,14 @@ namespace DNDS
                 "__getitem__",
                 [](TArrayEigenMatrix &self, index index_)
                 {
-                    using tElem = real;
-                    auto mat = self[index_];
-                    return py::memoryview::from_buffer<tElem>(
-                        mat.data(),
-                        {mat.rows(), mat.cols()},
-                        {sizeof(tElem) * mat.rowStride(), sizeof(tElem) * mat.colStride()},
-                        false);
+                    return pybind11_ArrayEigenMatrix_getitem(self, index_);
                 },
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
                 [](TArrayEigenMatrix &self, index index_, py::buffer row)
                 {
-                    using tElem = real;
-                    auto row_info = row.request(false);
-                    DNDS_assert(row_info.item_type_is_equivalent_to<tElem>());
-                    auto iRow = index_;
-                    auto mat = self[index_];
-                    DNDS_assert_info(row_info.shape.size() == 2, "need to pass a 2-d array");
-                    DNDS_assert_info(row_info.shape[0] == mat.rows(), "row size not matching");
-                    DNDS_assert_info(row_info.shape[1] == mat.cols(), "col size not matching");
-
-                    auto row_start_ptr = reinterpret_cast<tElem *>(row_info.ptr);
-
-                    DNDS_assert(row_info.strides.size() == 2);
-
-                    auto row_mat_map = Eigen::Map<
-                        const Eigen::Matrix<tElem, Eigen::Dynamic, Eigen::Dynamic, Eigen::DontAlign | Eigen::ColMajor>,
-                        Eigen::Unaligned,
-                        Eigen::Stride<Eigen::Dynamic, Eigen::Dynamic>>(
-                        row_start_ptr,
-                        row_info.shape[0],
-                        row_info.shape[1],
-                        Eigen::Stride<Eigen::Dynamic, Eigen::Dynamic>(row_info.strides[1] / sizeof(tElem) /*col stride*/, row_info.strides[0] / sizeof(tElem) /*row stride*/));
-                    mat = row_mat_map;
+                    return pybind11_ArrayEigenMatrix_setitem(self, index_, row);
                 });
     }
 
@@ -140,10 +166,78 @@ namespace DNDS
 
 namespace DNDS
 {
+    template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
+              rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
+    tPy_ArrayEigenMatrixPair<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>
+    pybind11_ArrayEigenMatrixPair_declare(py::module_ &m)
+    {
+        return {m, pybind11_ArrayEigenMatrixPair_name<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>().c_str()};
+    }
+
+    template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
+              rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
+    tPy_ArrayEigenMatrixPair<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>
+    pybind11_ArrayEigenMatrixPair_get_class(py::module_ &m)
+    {
+        return {m.attr(pybind11_ArrayEigenMatrixPair_name<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>().c_str())};
+    }
+
+    template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
+              rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
+    void pybind11_ArrayEigenMatrixPair_define(py::module_ &m)
+    {
+        using TPair = ArrayEigenMatrixPair<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>;
+        auto Pair_ = pybind11_ArrayEigenMatrixPair_declare<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>(m);
+
+        // // helper
+        // using TPair = ArrayEigenMatrixPair<3, 3>;
+        // auto Pair_ = pybind11_ArrayEigenMatrixPair_declare<3, 3>(m);
+        // // helper
+
+        pybind11_ArrayPairGenericBindBasics<TPair>(Pair_);
+
+        Pair_
+            .def("RowSize", [](const TPair &self, index i)
+                 { return self.RowSize(i); }, py::arg("i"))
+            .def("RowSize", [](const TPair &self)
+                 { return self.RowSize(); }); //! maybe should not use here
+        Pair_
+            .def(
+                "__getitem__",
+                [](TPair &self, index index_)
+                {
+                    return self.runFunctionAppendedIndex(index_, [&](auto ar, index iC)
+                                                         { return pybind11_ArrayEigenMatrix_getitem(ar, iC); });
+                },
+                py::keep_alive<0, 1>())
+            .def(
+                "__setitem__",
+                [](TPair &self, index index_, py::buffer row)
+                {
+                    return self.runFunctionAppendedIndex(index_, [&](auto ar, index iC)
+                                                         { return pybind11_ArrayEigenMatrix_setitem(ar, iC, row); });
+                });
+    }
+
+    template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
+              rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
+    void _pybind11_ArrayEigenMatrixPair_define_dispatch(py::module_ &m)
+    {
+        // std::cout << fmt::format("binding ArrayEigenMatrixPair {},{}", _mat_ni, _mat_nj) << std::endl;
+        if constexpr (_mat_ni == UnInitRowsize || _mat_nj == UnInitRowsize)
+            return;
+        else
+            return pybind11_ArrayEigenMatrixPair_define<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>(m);
+    }
+}
+
+namespace DNDS
+{
     template <rowsize mat_n, size_t N, std::array<int, N> const &Arr, size_t... Is>
     void __pybind11_callBindArrayEigenMatrixs_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
     {
         (_pybind11_ArrayEigenMatrix_define_dispatch<Arr[Is], mat_n>(m), ...);
+        (_pybind11_ArrayEigenMatrixPair_define_dispatch<Arr[Is], mat_n>(m), ...);
     }
 
     template <rowsize mat_n>

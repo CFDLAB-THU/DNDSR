@@ -247,5 +247,8 @@
         }
     ],
     "python.analysis.autoImportCompletions": false,
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}.src"
+    ],
     // "C_Cpp.intelliSenseEngine": "Tag Parser"
 }

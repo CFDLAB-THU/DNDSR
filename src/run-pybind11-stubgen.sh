@@ -20,14 +20,18 @@ cd $SCRIPT_DIR
 # ldd pybind11-stubgen
 
 export PYTHONPATH=$PYTHONPATH:$(pwd)
-pybind11-stubgen DNDS -o .
+pybind11-stubgen DNDS -o pybind11-stubgen-out
 
 # cp -v DNDS/_internal/dnds_pybind11/*.pyi DNDS/
 
-for file in DNDS/_internal/dnds_pybind11/*.pyi; do
-    cat "$file" > "DNDS/$(basename "$file")"
-    echo "$file -> DNDS/$(basename "$file")"
+for file in pybind11-stubgen-out/DNDS/_internal/dnds_pybind11/*.pyi; do
+    cat "$file" >> "pybind11-stubgen-out/DNDS/$(basename "$file")"
+    echo "$file -> pybind11-stubgen-out/DNDS/$(basename "$file")"
 done
+
+cp -rv pybind11-stubgen-out/* .
+
+rm -r pybind11-stubgen-out
 
 cd $CURRENT_DIR
 

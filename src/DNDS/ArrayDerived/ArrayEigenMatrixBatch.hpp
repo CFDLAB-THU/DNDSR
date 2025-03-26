@@ -43,7 +43,8 @@ namespace DNDS
             for (const auto &i : matrices)
             {
                 Eigen::Index mSiz = i.rows() * i.cols();
-                DNDS_assert(mSiz + bufSiz < DNDS_ROWSIZE_MAX && i.rows() < UINT16_MAX && i.cols() < UINT16_MAX);
+                static_assert(std::numeric_limits<Eigen::Index>::digits > std::numeric_limits<uint32_t>::digits);
+                DNDS_assert((mSiz + bufSiz) < DNDS_ROWSIZE_MAX && i.rows() <= UINT16_MAX && i.cols() <= UINT16_MAX);
                 bufSiz += mSiz;
             }
             return bufSiz;
@@ -158,6 +159,11 @@ namespace DNDS
         MatrixBatch operator[](index i) // todo: add const version
         {
             return {this->t_base::operator[](i), this->RowSize(i)};
+        }
+
+        index BatchSize(index i)
+        {
+            return this->operator[](i).Size();
         }
 
         t_map operator()(index i, rowsize j)
