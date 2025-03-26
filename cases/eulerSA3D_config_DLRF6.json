@@ -10,7 +10,7 @@
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 20000,
+        "nTimeStepInternal": 0,
         "rhsThresholdInternal": 1e-60,
         "res_base": 0.0,
         "useVolWiseResidual": false
@@ -27,7 +27,8 @@
         "nRestartOut": 100,
         "nRestartOutCInternal": 10000,
         "nRestartOutInternal": 1000000000,
-        "tDataOut": 3e+200
+        "tDataOut": 3e+200,
+        "dataOutAtInit": true
     },
     "implicitCFLControl": {
         "CFL": 50,
@@ -40,7 +41,7 @@
     },
     "dataIOControl": {
         "uniqueStamps": false,
-        "meshElevation": 1,
+        "meshElevation": 0,
         "meshElevationInternalSmoother": 0,
         "meshElevationIter": 20,
         "meshElevationNSearch": 100,
@@ -50,7 +51,7 @@
         "rectifyNearPlane": 2,
         "rectifyNearPlaneThres": 1e-4,
         "meshFile": "../data/mesh/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse.cgns",
-        "outPltName": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_TestC/out4",
+        "outPltName": "../data/out/DPW3_hybrid_ANSYS_DLR-F6_Ver1_coarse_TestC/outTestD",
         "outPltMode": 0,
         "readMeshMode": 1,
         "outPltTecplotFormat": true,
@@ -82,8 +83,8 @@
         "nPartialLimiterStartLocal": 10
     },
     "vfvSettings": {
-        "maxOrder": 3,
-        "intOrder": 5,
+        "maxOrder": 1,
+        "intOrder": 1,
         "cacheDiffBase": true,
         "jacobiRelax": 1.0,
         "SORInstead": false,
@@ -129,7 +130,15 @@
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
         "minWallDist": 1e-9,
-        "wallDistScheme": 1,
+        "wallDistScheme": 3,
+        "wallDistExection": 5,
+        "wallDistRefineMax": 0.01,
+        "wallDistIter": 1000,
+        "wallDistLinSolver": 0,
+        "wallDistResTol": 1e-4,
+        "wallDistPoissonP": 10,
+        "wallDistDTauScale": 0.01,
+        "wallDistNJacobiSweep": 1,
         "riemannSolverType": "Roe_M1",
         "rsMeanValueEig": 0,
         "constMassForce": [

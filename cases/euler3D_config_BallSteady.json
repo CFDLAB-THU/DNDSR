@@ -14,7 +14,8 @@
         "nDataOut": 100,
         "nDataOutCInternal": 200,
         "nDataOutInternal": 1000000000,
-        "tDataOut": 3e+200
+        "tDataOut": 3e+200,
+        "dataOutAtInit": true
     },
     "implicitCFLControl": {
         "CFL": 50.0,
@@ -25,7 +26,7 @@
         "useLocalDt": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 20000,
+        "nTimeStepInternal": 0,
         "rhsThresholdInternal": 1e-60,
         "res_base": 0.0,
         "useVolWiseResidual": false
@@ -40,7 +41,12 @@
         "outPltTecplotFormat": true,
         "outPltVTKFormat": false,
         "outAtPointData": true,
-        "outAtCellData": true
+        "outAtCellData": true,
+        "outCellScalarNames": [
+            // "minJacobiDetRel",
+            // "cellVolume",
+            "dWall"
+        ]
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
@@ -80,6 +86,15 @@
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
         "riemannSolverType": "HLLC",
+        "wallDistScheme": 3,
+        "wallDistExection": 5,
+        "wallDistRefineMax": 0.01,
+        "wallDistIter": 1000,
+        "wallDistLinSolver": 0,
+        "wallDistResTol": 1e-4,
+        "wallDistPoissonP": 2,
+        "wallDistDTauScale": 100,
+        "wallDistNJacobiSweep": 40,
         "constMassForce": [
             0.0,
             0.0,

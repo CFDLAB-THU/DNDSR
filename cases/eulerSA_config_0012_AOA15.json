@@ -47,7 +47,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2-MGtest_1_AOA15.dir/ilu2-smooth4-4ilu2-smooth4",
+        "outPltName": "../data/out/NACA0012_H2-MGtest_1_AOA15.dir/test",
         "outPltMode": 0,
         "readMeshMode": 0,
         "meshDirectBisect": 0,
@@ -151,7 +151,7 @@
         "gmresScale": 2,
         "nGmresSpace": 5,
         "nGmresIter": 1,
-        "multiGridLP": 1,
+        "multiGridLP": 2,
         "multiGridLPInnerNIter": 4,
         "multiGridLPInnerNSee": 100,
         "coarseGridLinearSolverControlList": {
@@ -163,9 +163,10 @@
                 "nGmresIter": 2,
                 "nSgsConsoleCheck": 100,
                 "nGmresConsoleCheck": 100,
-                "multiGridNIter": 4,
+                "multiGridNIter": 3,
                 "multiGridNIterPost": 0,
-                "centralSmoothInputResidual": 4
+                // "centralSmoothInputResidual": 4,
+                "_tail": 0
             },
             "2": {
                 "jacobiCode": 2,
@@ -206,7 +207,7 @@
         "ransSARotCorrection": 1,
         "usePrimGradInVisFlux": 0,
         // "ransForce2nd": 1,
-        "nCentralSmoothStep": 4,
+        "nCentralSmoothStep": 0,
         "centralSmoothEps": 0.5,
         "constMassForce": [
             0.0,
