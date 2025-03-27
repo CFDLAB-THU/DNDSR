@@ -138,12 +138,12 @@ namespace DNDS
         {
             auto fatherHash = father->hash();
             auto sonHash = son->hash();
-            index localHash = std::hash<std::array<std::size_t, 2>>()({fatherHash, sonHash});
+            index localHash = array_hash<std::size_t, 2>()({fatherHash, sonHash});
             MPIInfo mpi = father->getMPI();
             std::vector<index> hashes;
             hashes.resize(mpi.size);
             MPI::Allgather(&localHash, 1, DNDS_MPI_INDEX, hashes.data(), 1, DNDS_MPI_INDEX, mpi.comm);
-            return std::hash<decltype(hashes)>()(hashes);
+            return vector_hash<index>()(hashes);
         }
 
         void WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name, bool includePIG = true)

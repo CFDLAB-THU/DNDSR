@@ -448,6 +448,16 @@ namespace DNDS::Meta
     {
     };
 
+    template <class T>
+    struct is_std_vector : std::false_type
+    {
+    };
+
+    template <class T, class Allocator>
+    struct is_std_vector<std::vector<T, Allocator>> : std::true_type
+    {
+    };
+
     template <typename _Tp>
     inline constexpr bool is_std_array_v = is_std_array<_Tp>::value;
 
@@ -516,6 +526,19 @@ namespace DNDS::Meta
 
     template <class T>
     inline constexpr bool is_real_eigen_matrix_v = is_real_eigen_matrix<T>::value;
+
+    template <typename T, typename = void>
+    struct has_std_hash : std::false_type
+    {
+    };
+
+    template <typename T>
+    struct has_std_hash<T, std::void_t<decltype(std::hash<T>{}(std::declval<T>()))>> : std::true_type
+    {
+    };
+
+    static_assert(has_std_hash<double>::value);
+    static_assert(!has_std_hash<std::vector<std::string>>::value);
 }
 
 namespace DNDS
@@ -554,34 +577,43 @@ namespace DNDS
             return false;
         return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
     }
-}
-template <typename T>
-struct std::hash<std::vector<T>>
-{
-    std::size_t operator()(const std::vector<T> &v) const noexcept
-    {
-        std::size_t r = 0;
-        for (auto i : v)
-        {
-            r = r ^ std::hash<decltype(i)>()(i);
-        }
-        return r;
-    }
-};
 
-template <typename T, std::size_t s>
-struct std::hash<std::array<T, s>>
-{
-    std::size_t operator()(const std::array<T, s> &v) const noexcept
+    template <typename T>
+    struct vector_hash
     {
-        std::size_t r = 0;
-        for (auto i : v)
+        std::size_t operator()(const std::vector<T> &v) const noexcept
         {
-            r = r ^ std::hash<decltype(i)>()(i);
+            std::size_t r = 0;
+            if constexpr (Meta::has_std_hash<T>::value)
+                for (auto &i : v)
+                    r = r ^ std::hash<T>{}(i);
+            else if constexpr (Meta::is_std_vector<T>::value)
+                for (auto &i : v)
+                    r = r ^ vector_hash<typename T::value_type>{}(i);
+            else
+            {
+                for (size_t i = 0; i < v.size() * sizeof(T); i++)
+                    r = r ^ std::hash<uint8_t>{}(((uint8_t *)(v.data()))[i]);
+            }
+            return r;
         }
-        return r;
-    }
-};
+    };
+
+    template <typename T, std::size_t s>
+    struct array_hash
+    {
+        std::size_t operator()(const std::array<T, s> &v) const noexcept
+        {
+            std::size_t r = 0;
+            for (auto i : v)
+            {
+                r = r ^ std::hash<decltype(i)>()(i);
+            }
+            return r;
+        }
+    };
+
+}
 
 namespace DNDS::TermColor
 {

@@ -81,7 +81,7 @@ namespace DNDS
         static const rowsize al = _align;
         static const rowsize rs = _row_size;
         static const rowsize rm = _row_max;
-        static const unsigned sizeof_T = sizeof(value_type);
+        static const size_t sizeof_T = sizeof(value_type);
 
         static_assert(sizeof_T <= (1024ULL * 1024ULL * 1024ULL), "Row size larger than 1G");
         static_assert(array_comp_acceptable<T>(), "Do not put in a non trivially copyable type ");
@@ -472,12 +472,12 @@ namespace DNDS
             }
         }
 
-        T &operator()(index iRow, rowsize iCol)
+        T &operator()(index iRow, rowsize iCol = 0)
         {
             return const_cast<T &>(at(iRow, iCol));
         }
 
-        const T &operator()(index iRow, rowsize iCol) const
+        const T &operator()(index iRow, rowsize iCol = 0) const
         {
             return at(iRow, iCol);
         }
@@ -547,18 +547,18 @@ namespace DNDS
             if constexpr (_dataLayout == CSR)
             {
                 if (IfCompressed())
-                    hashData = std::hash<decltype(_data)>()(_data);
+                    hashData = vector_hash<T>()(_data);
                 else
-                    hashData = std::hash<decltype(_dataUncompressed)>()(_dataUncompressed);
+                    hashData = vector_hash<std::vector<T>>()(_dataUncompressed);
             }
             else
-                hashData = std::hash<decltype(_data)>()(_data);
+                hashData = vector_hash<T>()(_data);
             std::size_t hashSize = 0;
             if (_pRowSizes)
-                hashSize = std::hash<typename decltype(_pRowSizes)::element_type>()(*_pRowSizes);
+                hashSize = vector_hash<rowsize>()(*_pRowSizes);
             if (_pRowStart)
-                hashSize = std::hash<typename decltype(_pRowStart)::element_type>()(*_pRowStart);
-            return std::hash<std::array<std::size_t, 3>>()(std::array<std::size_t, 3>{std::size_t(_size), hashSize, hashData});
+                hashSize = vector_hash<index>()(*_pRowStart);
+            return array_hash<std::size_t, 3>()(std::array<std::size_t, 3>{std::size_t(_size), hashSize, hashData});
         }
 
         friend std::ostream &operator<<(std::ostream &o, const Array<T, _row_size, _row_max, _align> &A)
