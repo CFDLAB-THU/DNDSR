@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DNDS/ArrayTransformer.hpp"
+#include "DNDS/ArrayPair.hpp"
 #include "Geometric.hpp"
 #include "BoundaryCondition.hpp"
 #include "DNDS/SerializerBase.hpp"
@@ -129,6 +130,8 @@ namespace DNDS::Geom
 
         NodePeriodicBits *rowPtr(index i) { return t_base::operator[](i); }
     };
+    template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    using ArrayNodePeriodicBitsPair = ArrayPair<ArrayNodePeriodicBits<_row_size, _row_max, _align>>;
 
     struct Periodicity
     {

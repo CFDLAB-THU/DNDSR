@@ -533,10 +533,10 @@ namespace DNDS::CFV
             tPoint faceLV;
             switch (settings.functionalSettings.scaleType)
             {
-            case VRSettings::FunctionalSettings::BaryDiff:
+            case VRSettings::FunctionalSettings::ScaleType::BaryDiff:
                 faceLV = faceAlignedScales[iFace];
                 break;
-            case VRSettings::FunctionalSettings::MeanAACBB:
+            case VRSettings::FunctionalSettings::ScaleType::MeanAACBB:
                 faceLV = faceAlignedScales[iFace];
                 break;
             default:
@@ -546,9 +546,9 @@ namespace DNDS::CFV
             // real faceL = (faceLV.array().maxCoeff());
             // * warning component_3 of the scale vector in 2D is forced to 1! not 0!
             real faceL = 0;
-            if (settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::MeanAACBB)
+            if (settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::ScaleType::MeanAACBB)
                 faceL = std::sqrt(faceLV(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>)).array().square().mean());
-            if (settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::BaryDiff)
+            if (settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::ScaleType::BaryDiff)
                 faceL = faceLV(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>)).norm();
             real faceLOrig = faceL;
             faceL *= settings.functionalSettings.scaleMultiplier;

@@ -605,7 +605,7 @@ namespace DNDS::CFV
             else
                 faceCoord({0, 1}, {0, 1}) = HardEigen::Eigen2x2RealSymEigenDecomposition(faceInertiaC({0, 1}, {0, 1}));
             faceMajorCoordScale[iFace] = faceCoord;
-            if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::InertiaCoordBB)
+            if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBB)
             {
                 Geom::tGPoint faceCoordNorm = faceCoord.colwise().normalized();
                 tSmallCoords coordsL, coordsR;
@@ -625,7 +625,7 @@ namespace DNDS::CFV
             // std::cout
             //     << faceCoord << "\n"
             //     << std::endl;
-            if (settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::BaryDiff)
+            if (settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::ScaleType::BaryDiff)
             {
                 faceAlignedScales[iFace] = faceBaryDiffV;
                 if constexpr (dim == 2)
@@ -634,10 +634,10 @@ namespace DNDS::CFV
 
             // *get geom weight ic2f
             real wg = 1;
-            if (settings.functionalSettings.geomWeightScheme == VRSettings::FunctionalSettings::HQM_SD)
+            if (settings.functionalSettings.geomWeightScheme == VRSettings::FunctionalSettings::GeomWeightScheme::HQM_SD)
                 wg = settings.functionalSettings.geomWeightBias +
                      std::pow(std::pow(this->GetFaceArea(iFace), 1. / real(dim - 1)) / faceBaryDiffV.norm(), settings.functionalSettings.geomWeightPower * 0.5);
-            if (settings.functionalSettings.geomWeightScheme == VRSettings::FunctionalSettings::SD_Power)
+            if (settings.functionalSettings.geomWeightScheme == VRSettings::FunctionalSettings::GeomWeightScheme::SD_Power)
                 wg = std::pow(this->GetFaceArea(iFace), settings.functionalSettings.geomWeightPower1 * 0.5) *
                      std::pow(faceBaryDiffV.norm(), settings.functionalSettings.geomWeightPower2 * 0.5);
 
@@ -646,11 +646,11 @@ namespace DNDS::CFV
             wd.resize(settings.maxOrder + 1);
             switch (settings.functionalSettings.dirWeightScheme)
             {
-            case VRSettings::FunctionalSettings::Factorial:
+            case VRSettings::FunctionalSettings::DirWeightScheme::Factorial:
                 for (int p = 0; p < wd.size(); p++)
                     wd[p] = 1. / factorials[p];
                 break;
-            case VRSettings::FunctionalSettings::HQM_OPT:
+            case VRSettings::FunctionalSettings::DirWeightScheme::HQM_OPT:
                 switch (settings.maxOrder)
                 {
                 case 1:
@@ -667,7 +667,7 @@ namespace DNDS::CFV
                     break;
                 }
                 break;
-            case VRSettings::FunctionalSettings::ManualDirWeight:
+            case VRSettings::FunctionalSettings::DirWeightScheme::ManualDirWeight:
                 switch (settings.maxOrder)
                 {
                 case 3:
@@ -683,7 +683,7 @@ namespace DNDS::CFV
                     break;
                 }
                 break;
-            case VRSettings::FunctionalSettings::TEST_OPT:
+            case VRSettings::FunctionalSettings::DirWeightScheme::TEST_OPT:
             {
                 if (settings.maxOrder != 3) // use manual value
                 {

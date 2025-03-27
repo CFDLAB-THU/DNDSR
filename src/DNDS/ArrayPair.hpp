@@ -1,3 +1,5 @@
+#pragma once
+
 #include "ArrayTransformer.hpp"
 #include "ArrayDerived/ArrayAdjacency.hpp"
 #include "ArrayDerived/ArrayEigenVector.hpp"

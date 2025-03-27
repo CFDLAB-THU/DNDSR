@@ -66,35 +66,35 @@ namespace DNDS::CFV
 
         struct FunctionalSettings
         {
-            enum ScaleType
+            enum class ScaleType
             {
                 UnknownScale = -1,
                 MeanAACBB = 0,
                 BaryDiff = 1,
-            } scaleType = BaryDiff;
+            } scaleType = ScaleType::BaryDiff;
 
             real scaleMultiplier = 1.0;
 
-            enum DirWeightScheme
+            enum class DirWeightScheme
             {
                 UnknownDirWeight = -1,
                 Factorial = 0,
                 HQM_OPT = 1,
                 TEST_OPT = 1000,
                 ManualDirWeight = 999,
-            } dirWeightScheme = Factorial;
+            } dirWeightScheme = DirWeightScheme::Factorial;
 
             int dirWeightCombPowV = 1;
 
             Eigen::VectorXd manualDirWeights;
 
-            enum GeomWeightScheme
+            enum class GeomWeightScheme
             {
                 UnknownGeomWeight = -1,
                 GWNone = 0,
                 HQM_SD = 1,
                 SD_Power = 2,
-            } geomWeightScheme = GWNone;
+            } geomWeightScheme = GeomWeightScheme::GWNone;
 
             real geomWeightBias = 0;
             real geomWeightPower = 0.5;
@@ -104,12 +104,12 @@ namespace DNDS::CFV
             bool useAnisotropicFunctional = false;
             real tanWeightScale = 1.;
 
-            enum AnisotropicType
+            enum class AnisotropicType
             {
                 UnknownAnisotropic = -1,
                 InertiaCoord = 0,
                 InertiaCoordBB = 1,
-            } anisotropicType = InertiaCoord;
+            } anisotropicType = AnisotropicType::InertiaCoord;
 
             real inertiaWeightPower = 1.0;
 
@@ -230,28 +230,28 @@ namespace DNDS::CFV
 
     NLOHMANN_JSON_SERIALIZE_ENUM(
         VRSettings::FunctionalSettings::ScaleType,
-        {{VRSettings::FunctionalSettings::UnknownScale, nullptr},
-         {VRSettings::FunctionalSettings::MeanAACBB, "MeanAACBB"},
-         {VRSettings::FunctionalSettings::BaryDiff, "BaryDiff"}})
+        {{VRSettings::FunctionalSettings::ScaleType::UnknownScale, nullptr},
+         {VRSettings::FunctionalSettings::ScaleType::MeanAACBB, "MeanAACBB"},
+         {VRSettings::FunctionalSettings::ScaleType::BaryDiff, "BaryDiff"}})
 
     NLOHMANN_JSON_SERIALIZE_ENUM(
         VRSettings::FunctionalSettings::DirWeightScheme,
-        {{VRSettings::FunctionalSettings::UnknownDirWeight, nullptr},
-         {VRSettings::FunctionalSettings::Factorial, "Factorial"},
-         {VRSettings::FunctionalSettings::HQM_OPT, "HQM_OPT"},
-         {VRSettings::FunctionalSettings::ManualDirWeight, "ManualDirWeight"},
-         {VRSettings::FunctionalSettings::TEST_OPT, "TEST_OPT"}})
+        {{VRSettings::FunctionalSettings::DirWeightScheme::UnknownDirWeight, nullptr},
+         {VRSettings::FunctionalSettings::DirWeightScheme::Factorial, "Factorial"},
+         {VRSettings::FunctionalSettings::DirWeightScheme::HQM_OPT, "HQM_OPT"},
+         {VRSettings::FunctionalSettings::DirWeightScheme::ManualDirWeight, "ManualDirWeight"},
+         {VRSettings::FunctionalSettings::DirWeightScheme::TEST_OPT, "TEST_OPT"}})
 
     NLOHMANN_JSON_SERIALIZE_ENUM(
         VRSettings::FunctionalSettings::GeomWeightScheme,
-        {{VRSettings::FunctionalSettings::UnknownGeomWeight, nullptr},
-         {VRSettings::FunctionalSettings::GWNone, "GWNone"},
-         {VRSettings::FunctionalSettings::HQM_SD, "HQM_SD"},
-         {VRSettings::FunctionalSettings::SD_Power, "SD_Power"}})
+        {{VRSettings::FunctionalSettings::GeomWeightScheme::UnknownGeomWeight, nullptr},
+         {VRSettings::FunctionalSettings::GeomWeightScheme::GWNone, "GWNone"},
+         {VRSettings::FunctionalSettings::GeomWeightScheme::HQM_SD, "HQM_SD"},
+         {VRSettings::FunctionalSettings::GeomWeightScheme::SD_Power, "SD_Power"}})
 
     NLOHMANN_JSON_SERIALIZE_ENUM(
         VRSettings::FunctionalSettings::AnisotropicType,
-        {{VRSettings::FunctionalSettings::UnknownAnisotropic, nullptr},
-         {VRSettings::FunctionalSettings::InertiaCoord, "InertiaCoord"},
-         {VRSettings::FunctionalSettings::InertiaCoordBB, "InertiaCoordBB"}})
+        {{VRSettings::FunctionalSettings::AnisotropicType::UnknownAnisotropic, nullptr},
+         {VRSettings::FunctionalSettings::AnisotropicType::InertiaCoord, "InertiaCoord"},
+         {VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBB, "InertiaCoordBB"}})
 }
