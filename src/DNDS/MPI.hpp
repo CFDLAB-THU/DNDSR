@@ -54,6 +54,37 @@ namespace DNDS
     const MPI_Datatype DNDS_MPI_INDEX = __DNDSToMPITypeInt<index>();
     const MPI_Datatype DNDS_MPI_REAL = __DNDSToMPITypeFloat<real>();
 
+    //! here are some reasons to upgrade to C++20...
+    // detect if have CommMult and CommType static methods
+    template <typename T, typename = void>
+    struct has_static_CommMult : std::false_type
+    {
+    };
+
+    template <typename T>
+    struct has_static_CommMult<T, std::void_t<decltype(T::CommMult())>> : std::true_type
+    {
+    };
+
+    template <typename T, typename = void>
+    struct has_static_CommType : std::false_type
+    {
+    };
+
+    template <typename T>
+    struct has_static_CommType<T, std::void_t<decltype(T::CommType())>> : std::true_type
+    {
+    };
+
+    template <class T>
+    std::pair<MPI_Datatype, MPI_int> BasicType_To_MPIIntType_Custom()
+    {
+        if constexpr (has_static_CommMult<T>::value && has_static_CommType<T>::value)
+            return std::make_pair(T::CommType(), T::CommMult());
+        else
+            return T::CommPair(); // last resort
+    }
+
     template <class T> // TODO: see if an array is bounded
     //! Warning, not const-expr since OpenMPI disallows it
     std::pair<MPI_Datatype, MPI_int> BasicType_To_MPIIntType()
@@ -86,7 +117,7 @@ namespace DNDS
             else if constexpr (sizeof(T) == 8)
                 return std::make_pair(MPI_Datatype(MPI_UINT64_T), MPI_int(1));
             else
-                return badReturn;
+                return BasicType_To_MPIIntType_Custom<T>();
         }
         else if constexpr (std::is_array_v<T>)
         {
@@ -100,12 +131,14 @@ namespace DNDS
                     BasicType_To_MPIIntType<typename T::value_type>().first,
                     BasicType_To_MPIIntType<typename T::value_type>().second * T().size());
             else
-                return badReturn;
+                return BasicType_To_MPIIntType_Custom<T>();
         }
         else if constexpr (Meta::is_fixed_data_real_eigen_matrix_v<T>)
             return std::make_pair(DNDS_MPI_REAL, MPI_int(divide_ceil(sizeof(T), sizeof(real))));
         else
-            return badReturn;
+            return BasicType_To_MPIIntType_Custom<T>();
+        // else
+        //     return badReturn;
     }
 
     struct MPIInfo
