@@ -242,7 +242,7 @@ namespace DNDS
                 "__getitem__",
                 [](TPair &self, std::tuple<index, rowsize> index_)
                 {
-                    return self.runFunctionAppendedIndex(std::get<0>(index_), [&](auto ar, index iC)
+                    return self.runFunctionAppendedIndex(std::get<0>(index_), [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenUniMatrixBatch_getitem(ar, std::make_tuple(iC, std::get<1>(index_))); });
                 },
                 py::keep_alive<0, 1>())
@@ -250,14 +250,14 @@ namespace DNDS
                 "__setitem__",
                 [](TPair &self, std::tuple<index, rowsize> index_, py::buffer row)
                 {
-                    return self.runFunctionAppendedIndex(std::get<0>(index_), [&](auto ar, index iC)
+                    return self.runFunctionAppendedIndex(std::get<0>(index_), [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenUniMatrixBatch_setitem(ar, std::make_tuple(iC, std::get<1>(index_)), row); });
                 })
             .def(
                 "__getitem__",
                 [](TPair &self, index index_)
                 {
-                    return self.runFunctionAppendedIndex(index_, [&](auto ar, index iC)
+                    return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenUniMatrixBatch_getitem_row(ar, iC); });
                 },
                 py::keep_alive<0, 1>())
@@ -265,7 +265,7 @@ namespace DNDS
                 "__setitem__",
                 [](TPair &self, index index_, py::buffer row)
                 {
-                    return self.runFunctionAppendedIndex(index_, [&](auto ar, index iC)
+                    return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenUniMatrixBatch_setitem_row(ar, iC, row); });
                 });
     }

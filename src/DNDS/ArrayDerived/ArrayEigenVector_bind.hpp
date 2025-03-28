@@ -158,7 +158,7 @@ namespace DNDS
                 "__getitem__",
                 [](TPair &self, index index_)
                 {
-                    return self.runFunctionAppendedIndex(index_, [&](auto ar, index iC)
+                    return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenVector_getitem(ar, iC); });
                 },
                 py::keep_alive<0, 1>())
@@ -166,7 +166,7 @@ namespace DNDS
                 "__setitem__",
                 [](TPair &self, index index_, py::buffer row)
                 {
-                    return self.runFunctionAppendedIndex(index_, [&](auto ar, index iC)
+                    return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenVector_setitem(ar, iC, row); });
                 });
     }
