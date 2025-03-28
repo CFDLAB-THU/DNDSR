@@ -26,11 +26,11 @@ namespace DNDS
         return "ArrayEigenVectorPair" + pybind11_ArrayEigenVector_name_appends<_vec_size, _row_max, _align>();
     }
 
-    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
+    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign> // ! shared ptr
     using tPy_ArrayEigenVector = py::class_<ArrayEigenVector<_vec_size, _row_max, _align>, ssp<ArrayEigenVector<_vec_size, _row_max, _align>>>;
 
-    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
-    using tPy_ArrayEigenVectorPair = py::class_<ArrayEigenVectorPair<_vec_size, _row_max, _align>, ssp<ArrayEigenVectorPair<_vec_size, _row_max, _align>>>;
+    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign> // ! unique ptr
+    using tPy_ArrayEigenVectorPair = py::class_<ArrayEigenVectorPair<_vec_size, _row_max, _align>>;
 }
 
 namespace DNDS

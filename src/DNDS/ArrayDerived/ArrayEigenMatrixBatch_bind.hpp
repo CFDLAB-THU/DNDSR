@@ -16,9 +16,9 @@ namespace DNDS
         return "ArrayEigenMatrixBatchPair";
     }
 
-    using tPy_ArrayEigenMatrixBatch = py::class_<ArrayEigenMatrixBatch, ssp<ArrayEigenMatrixBatch>>;
+    using tPy_ArrayEigenMatrixBatch = py::class_<ArrayEigenMatrixBatch, ssp<ArrayEigenMatrixBatch>>; // ! shared ptr
 
-    using tPy_ArrayEigenMatrixBatchPair = py::class_<ArrayEigenMatrixBatchPair, ssp<ArrayEigenMatrixBatchPair>>;
+    using tPy_ArrayEigenMatrixBatchPair = py::class_<ArrayEigenMatrixBatchPair>; // ! unique ptr
 }
 
 namespace DNDS

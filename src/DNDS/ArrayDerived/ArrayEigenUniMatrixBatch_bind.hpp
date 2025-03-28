@@ -22,11 +22,11 @@ namespace DNDS
                                                             RowSize_To_PySnippet(_n_col));
     }
 
-    template <int _n_row, int _n_col>
+    template <int _n_row, int _n_col> // ! shared ptr
     using tPy_ArrayEigenUniMatrixBatch = py::class_<ArrayEigenUniMatrixBatch<_n_row, _n_col>, ssp<ArrayEigenUniMatrixBatch<_n_row, _n_col>>>;
 
-    template <int _n_row, int _n_col>
-    using tPy_ArrayEigenUniMatrixBatchPair = py::class_<ArrayEigenUniMatrixBatchPair<_n_row, _n_col>, ssp<ArrayEigenUniMatrixBatchPair<_n_row, _n_col>>>;
+    template <int _n_row, int _n_col> // ! unique ptr
+    using tPy_ArrayEigenUniMatrixBatchPair = py::class_<ArrayEigenUniMatrixBatchPair<_n_row, _n_col>>;
 }
 
 namespace DNDS

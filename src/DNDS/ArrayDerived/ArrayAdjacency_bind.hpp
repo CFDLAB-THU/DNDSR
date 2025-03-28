@@ -26,11 +26,11 @@ namespace DNDS
         return "ArrayAdjacencyPair" + pybind11_ArrayAdjacency_name_appends<_row_size, _row_max, _align>();
     }
 
-    template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign> // ! shared ptr
     using tPy_ArrayAdjacency = py::class_<ArrayAdjacency<_row_size, _row_max, _align>, ssp<ArrayAdjacency<_row_size, _row_max, _align>>>;
 
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    using tPy_ArrayAdjacencyPair = py::class_<ArrayAdjacencyPair<_row_size, _row_max, _align>, ssp<ArrayAdjacencyPair<_row_size, _row_max, _align>>>;
+    using tPy_ArrayAdjacencyPair = py::class_<ArrayAdjacencyPair<_row_size, _row_max, _align>>; // ! unique ptr
 }
 
 namespace DNDS

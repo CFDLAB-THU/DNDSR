@@ -13,9 +13,15 @@ namespace DNDS
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     std::string pybind11_Array_name_appends()
     {
-        static_assert(std::is_arithmetic_v<T>);
+        std::string TName;
+        if constexpr (std::is_arithmetic_v<T>)
+            TName = py::format_descriptor<T>().format();
+        else
+        {
+            TName = T::pybind11_name();
+        }
         return fmt::format("_{}_{}_{}_{}",
-                           py::format_descriptor<T>().format(),
+                           TName,
                            RowSize_To_PySnippet(_row_size),
                            RowSize_To_PySnippet(_row_max),
                            RowSize_To_PySnippet(_align));
@@ -24,7 +30,6 @@ namespace DNDS
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     std::string pybind11_Array_name()
     {
-        static_assert(std::is_arithmetic_v<T>);
         return "Array" + pybind11_Array_name_appends<T, _row_size, _row_max, _align>();
     }
 
@@ -46,18 +51,17 @@ namespace DNDS
         return "ParArrayPair" + pybind11_Array_name_appends<T, _row_size, _row_max, _align>();
     }
 
-    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign> // ! shared pointer managing
     using tPy_Array = py::class_<Array<T, _row_size, _row_max, _align>, ssp<Array<T, _row_size, _row_max, _align>>>;
 
-    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign> // ! shared pointer managing
     using tPy_ParArray = py::class_<ParArray<T, _row_size, _row_max, _align>, ssp<ParArray<T, _row_size, _row_max, _align>>>;
 
     template <class TArray>
-    using tPy_ArrayTransformer = py::class_<ArrayTransformerType_t<TArray>>; // !no shared pointer managing
+    using tPy_ArrayTransformer = py::class_<ArrayTransformerType_t<TArray>>; // ! unique ptr
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    using tPy_ParArrayPair = py::class_<ArrayPair<ParArray<T, _row_size, _row_max, _align>>,
-                                        ssp<ArrayPair<ParArray<T, _row_size, _row_max, _align>>>>;
+    using tPy_ParArrayPair = py::class_<ArrayPair<ParArray<T, _row_size, _row_max, _align>>>; // ! unique ptr
 }
 
 namespace DNDS // Array
@@ -67,7 +71,6 @@ namespace DNDS // Array
     tPy_Array<T, _row_size, _row_max, _align>
     pybind11_Array_declare(py::module_ &m)
     {
-        static_assert(std::is_arithmetic_v<T>);
         return {
             m,
             pybind11_Array_name<T, _row_size, _row_max, _align>().c_str()};
@@ -78,7 +81,6 @@ namespace DNDS // Array
     tPy_Array<T, _row_size, _row_max, _align>
     pybind11_Array_get_class(py::module_ &m)
     {
-        static_assert(std::is_arithmetic_v<T>);
         return {m.attr(pybind11_Array_name<T, _row_size, _row_max, _align>().c_str())};
     }
 
@@ -125,8 +127,20 @@ namespace DNDS // Array
 
         Array_
             .def(
-                "data", [](TArray &self)
-                { return py::memoryview::from_buffer<T>(self.data(), {self.DataSize()}, {TArray::sizeof_T}); },
+                "data",
+                [](TArray &self)
+                {
+                    if constexpr (std::is_arithmetic_v<T>)
+                        return py::memoryview::from_buffer<T>(self.data(), {self.DataSize()}, {TArray::sizeof_T});
+                    else // todo: determine if have pybind11_buffer_format()
+                    {
+                        std::string buf_format;
+                        buf_format.reserve(32);
+                        for (size_t i = 0; i < TArray::sizeof_T; i++)
+                            buf_format += "c"; // now we use a untyped byte data
+                        return py::memoryview::from_buffer(self.data(), TArray::sizeof_T, buf_format.c_str(), {self.DataSize()}, {TArray::sizeof_T});
+                    }
+                },
                 py::keep_alive<0, 1>() /* remember to keep alive */);
 
         Array_
@@ -183,7 +197,6 @@ namespace DNDS // ParArray
     tPy_ParArray<T, _row_size, _row_max, _align>
     pybind11_ParArray_declare(py::module_ &m)
     {
-        static_assert(std::is_arithmetic_v<T>);
         // std::cout << "here1 " << std::endl;
         auto array_ = pybind11_Array_get_class<T, _row_size, _row_max, _align>(m); // same module here
         // std::cout << "here2 " << std::endl;
@@ -198,7 +211,6 @@ namespace DNDS // ParArray
     tPy_ParArray<T, _row_size, _row_max, _align>
     pybind11_ParArray_get_class(py::module_ &m)
     {
-        static_assert(std::is_arithmetic_v<T>);
         return {m.attr(pybind11_ParArray_name<T, _row_size, _row_max, _align>().c_str())};
     }
 
@@ -246,7 +258,6 @@ namespace DNDS // ParArrayPair
     tPy_ParArrayPair<T, _row_size, _row_max, _align>
     pybind11_ParArrayPair_declare(py::module_ &m)
     {
-        static_assert(std::is_arithmetic_v<T>);
         return {
             m,
             pybind11_ParArrayPair_name<T, _row_size, _row_max, _align>().c_str()};
@@ -257,7 +268,6 @@ namespace DNDS // ParArrayPair
     tPy_ParArrayPair<T, _row_size, _row_max, _align>
     pybind11_ParArrayPair_get_class(py::module_ &m)
     {
-        static_assert(std::is_arithmetic_v<T>);
         return {m.attr(pybind11_ParArrayPair_name<T, _row_size, _row_max, _align>().c_str())};
     }
 
@@ -266,7 +276,7 @@ namespace DNDS // ParArrayPair
     {
         Pair_
             .def(py::init([]()
-                          { return std::make_shared<TPair>(); }));
+                          { return std::make_unique<TPair>(); }));
         Pair_
             .def_readwrite("father", &TPair::father)
             .def_readwrite("son", &TPair::son);
