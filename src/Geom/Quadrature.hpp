@@ -783,7 +783,7 @@ namespace DNDS::Geom::Elem
         {
             if (q.elem.GetOrder() == 1 || q.elem.GetOrder() == 2) // omitting the middle point
             {
-                t_index nGL = std::round(std::sqrt(q.GetNumPoints()));
+                t_index nGL = static_cast<t_index>(std::round(std::sqrt(q.GetNumPoints())));
                 auto ijG = [=](int i, int j)
                 { return nGL * j + i; };
                 t_index iMax = nGL - 1;

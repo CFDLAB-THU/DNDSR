@@ -84,7 +84,7 @@ namespace DNDS::Geom
             auto weightMapping = [](real x) -> real
             { return std::pow(x, 1); };
             for (auto d : adjncyWeightsR)
-                adjncyWeights.push_back(weightMapping(d / maxDistMax) * (INT_MAX - 1) + 1);
+                adjncyWeights.push_back(weightMapping(d / maxDistMax) * (INT_MAX - 1) + 1.);
         }
         if (adjncy.empty())
             adjncy.resize(1, -1); //*coping with zero sized data
