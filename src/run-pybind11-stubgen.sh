@@ -29,6 +29,13 @@ for file in pybind11-stubgen-out/DNDS/_internal/dnds_pybind11/*.pyi; do
     echo "$file -> pybind11-stubgen-out/DNDS/$(basename "$file")"
 done
 
+pybind11-stubgen Geom -o pybind11-stubgen-out
+
+for file in pybind11-stubgen-out/Geom/_internal/geom_pybind11/*.pyi; do
+    cat "$file" >> "pybind11-stubgen-out/Geom/$(basename "$file")"
+    echo "$file -> pybind11-stubgen-out/Geom/$(basename "$file")"
+done
+
 cp -rv pybind11-stubgen-out/* .
 
 rm -r pybind11-stubgen-out

@@ -53,6 +53,7 @@ else:
     from ._internal.dnds_pybind11 import *
     from ._internal.dnds_pybind11 import MPI
     from ._internal.dnds_pybind11 import Debug
+    print(f"module load: {__file__}")
 
 # List the symbols you want to expose from core
 # __all__ = dir(code)

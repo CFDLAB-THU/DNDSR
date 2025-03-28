@@ -79,6 +79,7 @@ def test_array_trans(mpi: DNDS.MPIInfo, mode: str = "global"):
     
 def test_ParArrayPair(mpi: DNDS.MPIInfo):
     arrayIIPair = DNDS.ParArrayPair("q", "I")
+    #!todo: check null status
     arrayIIPair.father = DNDS.ParArray("q", "I", init_args=(mpi,))
     arrayIIPair.son = DNDS.ParArray("q", "I", init_args=(mpi,))
     arrayIIPair.TransAttach()

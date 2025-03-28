@@ -37,7 +37,6 @@
             "includePath": [
                 "${default}",
                 "/usr/lib/x86_64-linux-gnu/openmpi/include",
-                "${workspaceFolder}/external/Linux-x86_64/include",
                 "/usr/include/python3.10/"
             ],
             "defines": [],

@@ -39,6 +39,7 @@ namespace DNDS::Geom
 
         static MPI_Datatype CommType() { return MPI_INT32_T; }
         static int CommMult() { return 2; }
+        static std::string pybind11_name() { return "ElemInfo"; }
     };
 
     using tAdjPair = DNDS::ArrayAdjacencyPair<DNDS::NonUniformSize>;
@@ -375,8 +376,6 @@ namespace DNDS::Geom
          */
         void ReorderLocalCells();
 
-        
-
         index NumNode() const { return coords.father->Size(); }
         index NumCell() const { return cell2node.father->Size(); }
         index NumFace() const { return face2node.father->Size(); }
@@ -566,9 +565,6 @@ namespace DNDS::Geom
                 return fB();
         }
 
-        
-        
-
         void WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name);
         void ReadSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name);
 
@@ -737,7 +733,14 @@ namespace DNDS::Geom
          */
         /// @todo //TODO Add some multi thread here!
         /// @param fName file name of .cgns file
-        void ReadFromCGNSSerial(const std::string &fName, const t_FBCName_2_ID &FBCName_2_ID = FBC_Name_2_ID_Default);
+        void ReadFromCGNSSerial(const std::string &fName, const t_FBCName_2_ID &FBCName_2_ID);
+
+        auto ReadFromCGNSSerial(const std::string &fName)
+        {
+            AutoAppendName2ID appended_name2id;
+            this->ReadFromCGNSSerial(fName, appended_name2id);
+            return appended_name2id;
+        }
 
         void ReadFromOpenFOAMAndConvertSerial(const std::string &fName, const std::map<std::string, std::string> &nameMapping, const t_FBCName_2_ID &FBCName_2_ID = FBC_Name_2_ID_Default);
 
