@@ -31,7 +31,7 @@ def test_mesh0():
     fig, ax = plt.subplots(figsize=(16, 16), dpi=320)
     xymaxs = np.array([-1e100, -1e100], dtype=np.double)
     xymins = np.array([1e100, 1e100], dtype=np.double)
-    for iCell in range(mesh.cell2node.father.Size()):
+    for iCell in range(mesh.cell2node.Size()):
         c2n = mesh.cell2node[iCell].tolist()
         nodes = []
         # print(mesh.cell2node[iCell].tolist())
@@ -48,7 +48,7 @@ def test_mesh0():
             vertices,
             closed=True,
             edgecolor="black",
-            facecolor="red",
+            facecolor="blue" if iCell < mesh.cell2node.father.Size() else "red",
             lw=1,
         )
         ax.add_patch(polygon)

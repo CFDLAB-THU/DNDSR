@@ -291,3 +291,5 @@ if __name__ == "__main__":
     test_ArrayEigenUniMatrixBatch(mpiC)
 
     print(f"{mpiC.rank} / {mpiC.size}, {mpiC.comm():x}")
+
+

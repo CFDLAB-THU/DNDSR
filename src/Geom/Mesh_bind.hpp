@@ -29,30 +29,60 @@ namespace DNDS::Geom
 
     inline void pybind11_UnstructuredMesh_define(py::module_ &m)
     {
+#define DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(foo) \
+    def(#foo, &UnstructuredMesh::##foo)
+
+#define DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(m_name) \
+    def_readonly(#m_name, &UnstructuredMesh::##m_name, py::return_value_policy::reference_internal)
+
         auto UnstructuredMesh_ = tPy_UnstructuredMesh(m, "UnstructuredMesh");
         UnstructuredMesh_
             .def(py::init<>([](const MPIInfo &mpi, int n_dim)
                             { return std::make_shared<UnstructuredMesh>(mpi, n_dim); }))
-            .def_readonly("coords", &UnstructuredMesh::coords,
-                          py::return_value_policy::reference_internal)
-            .def_readonly("cell2node", &UnstructuredMesh::cell2node,
-                          py::return_value_policy::reference_internal)
-            .def_readonly("bnd2node", &UnstructuredMesh::bnd2node,
-                          py::return_value_policy::reference_internal)
-            .def_readonly("bnd2cell", &UnstructuredMesh::bnd2cell,
-                          py::return_value_policy::reference_internal)
-            .def_readonly("cell2cell", &UnstructuredMesh::cell2cell)
-            .def_readonly("cellElemInfo", &UnstructuredMesh::cellElemInfo,
-                          py::return_value_policy::reference_internal)
-            .def_readonly("bndElemInfo", &UnstructuredMesh::bndElemInfo,
-                          py::return_value_policy::reference_internal);
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(coords)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cell2node)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(bnd2node)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(bnd2cell)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cell2cell)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cellElemInfo)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(bndElemInfo);
 
         UnstructuredMesh_
-            .def("BuildGhostPrimary", &UnstructuredMesh::BuildGhostPrimary)
-            .def("AdjGlobal2LocalPrimary", &UnstructuredMesh::AdjGlobal2LocalPrimary)
-            .def("InterpolateFace", &UnstructuredMesh::InterpolateFace)
-            .def("AssertOnFaces", &UnstructuredMesh::AssertOnFaces);
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildGhostPrimary)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjGlobal2LocalPrimary)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjLocal2GlobalPrimary)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjGlobal2LocalPrimaryForBnd)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjLocal2GlobalPrimaryForBnd)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjGlobal2LocalFacial)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjLocal2GlobalFacial)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjGlobal2LocalC2F)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjLocal2GlobalC2F)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildGhostN2CB)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjGlobal2LocalN2CB)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjLocal2GlobalN2CB)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AssertOnN2CB)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(InterpolateFace)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AssertOnFaces)
+            .def("ConstructBndMesh", [](UnstructuredMesh &self, ssp<UnstructuredMesh> &pbMesh)
+                 { self.ConstructBndMesh(*pbMesh); }, py::arg("bndMesh"))
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(GetCell2CellFaceVLocal)
+            // ObtainLocalFactFillOrdering
+            // ObtainSymmetricSymbolicFactorization
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(ReorderLocalCells)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumNode)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumCell)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumFace)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumBnd)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumNodeGhost)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumCellGhost)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumFaceGhost)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumNodeProc)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumCellProc)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumFaceProc);
         //!!
+
+#undef DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER
+#undef DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC
     }
 
     using tPy_UnstructuredMeshSerialRW = py::class_<UnstructuredMeshSerialRW, ssp<UnstructuredMeshSerialRW>>;
