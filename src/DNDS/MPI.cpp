@@ -289,6 +289,33 @@ namespace DNDS::MPI
 
 namespace DNDS::MPI
 {
+    ResourceRecycler &ResourceRecycler::Instance()
+    {
+        static ResourceRecycler recycler;
+        return recycler;
+    }
+
+    void ResourceRecycler::RegisterCleaner(void *p, std::function<void()> nCleaner)
+    {
+        DNDS_assert(cleaners.count(p) == 0);
+        cleaners.emplace(std::make_pair(p, std::move(nCleaner)));
+    }
+
+    void ResourceRecycler::RemoveCleaner(void *p)
+    {
+        DNDS_assert(cleaners.count(p) == 1);
+        cleaners.erase(p);
+    }
+
+    void ResourceRecycler::clean()
+    {
+        for (auto &[k, f] : cleaners)
+            f();
+    }
+}
+
+namespace DNDS::MPI
+{
     CommStrategy::CommStrategy()
     {
         try

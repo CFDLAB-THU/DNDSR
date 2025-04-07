@@ -390,8 +390,8 @@ namespace DNDS
 
             if (commTypeCurrent == MPI::CommStrategy::HIndexed) // record types
             {
-                pPushTypeVec = std::make_shared<MPITypePairHolder>(0);
-                pPullTypeVec = std::make_shared<MPITypePairHolder>(0);
+                pPushTypeVec = MPITypePairHolder::create();
+                pPullTypeVec = MPITypePairHolder::create();
                 for (MPI_int r = 0; r < mpi.size; r++)
                 {
                     /************************************************************/
@@ -487,7 +487,7 @@ namespace DNDS
                 pushSendSize = 0;
                 auto nReqs = pPullTypeVec->size() + pPushTypeVec->size();
                 // DNDS_assert(nReqs > 0);
-                DNDS_MAKE_SSP(PushReqVec);
+                PushReqVec = MPIReqHolder::create();
                 PushReqVec->resize(nReqs, (MPI_REQUEST_NULL)), PushStatVec.resize(nReqs);
                 nRecvPushReq = 0;
                 for (auto ip = 0; ip < pPushTypeVec->size(); ip++)
@@ -529,7 +529,7 @@ namespace DNDS
             else if (commTypeCurrent == MPI::CommStrategy::CommStrategy::InSituPack)
             {
                 // could simplify some info on sparse comm?
-                DNDS_MAKE_SSP(PushReqVec);
+                PushReqVec = MPIReqHolder::create();
             }
             else
             {
@@ -554,7 +554,7 @@ namespace DNDS
                 auto nReqs = pPullTypeVec->size() + pPushTypeVec->size();
                 pullSendSize = 0;
                 // DNDS_assert(nReqs > 0);
-                DNDS_MAKE_SSP(PullReqVec);
+                PullReqVec = MPIReqHolder::create();
                 PullReqVec->resize(nReqs, (MPI_REQUEST_NULL)), PullStatVec.resize(nReqs);
                 nRecvPullReq = 0;
                 for (typename decltype(pPullTypeVec)::element_type::size_type ip = 0; ip < pPullTypeVec->size(); ip++)
@@ -598,7 +598,7 @@ namespace DNDS
             else if (commTypeCurrent == MPI::CommStrategy::CommStrategy::InSituPack)
             {
                 // could simplify some info on sparse comm?
-                DNDS_MAKE_SSP(PullReqVec);
+                PullReqVec = MPIReqHolder::create();
             }
             else
             {

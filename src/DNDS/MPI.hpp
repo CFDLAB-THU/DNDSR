@@ -147,6 +147,22 @@ namespace DNDS
         int rank = -1;
         int size = -1;
 
+        MPIInfo()
+        {
+        }
+
+        MPIInfo(MPI_Comm ncomm)
+        {
+            comm = ncomm;
+            int ierr;
+            ierr = MPI_Comm_rank(comm, &rank), DNDS_assert(ierr == MPI_SUCCESS);
+            ierr = MPI_Comm_size(comm, &size), DNDS_assert(ierr == MPI_SUCCESS);
+        }
+
+        MPIInfo(MPI_Comm nc, int r, int s) : comm(nc), rank(r), size(r)
+        {
+        }
+
         void setWorld()
         {
             comm = MPI_COMM_WORLD;
@@ -160,6 +176,33 @@ namespace DNDS
             return (comm == r.comm) && (rank == r.rank) && (size == r.size);
         }
     };
+
+    namespace MPI
+    {
+        /**
+         * @brief // cxx11 + thread-safe singleton
+         * must be constructed in MPI_COMM_WORLD
+         *
+         */
+        class ResourceRecycler
+        {
+        private:
+            std::unordered_map<void *, std::function<void()>> cleaners;
+
+            ResourceRecycler() {}; // implemented
+            ResourceRecycler(const ResourceRecycler &);
+            ResourceRecycler &operator=(const ResourceRecycler &);
+
+        public:
+            static ResourceRecycler &Instance();
+            /**
+             * ! @warning must combine with remove cleaner!!
+             */
+            void RegisterCleaner(void *p, std::function<void()> nCleaner);
+            void RemoveCleaner(void *p);
+            void clean();
+        };
+    }
 
     inline MPI_int MPIWorldSize()
     {
@@ -196,14 +239,42 @@ namespace DNDS
     /**
      * \brief wrapper of tMPI_typePairVec
      */
-    struct MPITypePairHolder : public tMPI_typePairVec
+    struct MPITypePairHolder : public tMPI_typePairVec, public std::enable_shared_from_this<MPITypePairHolder>
     {
-        using tMPI_typePairVec::tMPI_typePairVec;
+        using tSelf = MPITypePairHolder;
+        using tBase = tMPI_typePairVec;
+
+    private:
+        struct shared_ctor_guard // make_shared needs a public ctor but give a private arg
+        {
+        };
+
+    public:
+        template <typename... Args>
+        MPITypePairHolder(shared_ctor_guard g, Args &&...args) : tBase(std::forward<Args>(args)...)
+        {
+            if (!(std::shared_ptr<tSelf>(this, [](tSelf *) {}).use_count() == 1))
+                throw std::runtime_error("tSelf must be created via shared_ptr");
+            MPI::ResourceRecycler::Instance().RegisterCleaner(this, [this]()
+                                                              { this->clear(); });
+        }
+
+        template <typename... Args>
+        static ssp<MPITypePairHolder> create(Args &&...args)
+        {
+            return std::make_shared<MPITypePairHolder>(shared_ctor_guard{}, std::forward<Args>(args)...);
+        }
         ~MPITypePairHolder()
+        {
+            this->clear();
+            MPI::ResourceRecycler::Instance().RemoveCleaner(this);
+        }
+        void clear()
         {
             for (auto &i : (*this))
                 if (i.first >= 0 && i.second != 0 && i.second != MPI_DATATYPE_NULL)
                     MPI_Type_free(&i.second); //, std::cout << "Free Type" << std::endl;
+            this->tMPI_typePairVec::clear();
         }
     };
 
@@ -211,21 +282,42 @@ namespace DNDS
     /**
      * \brief wrapper of tMPI_reqVec, so that the requests are freed automatically
      */
-    struct MPIReqHolder : public tMPI_reqVec
+    struct MPIReqHolder : public tMPI_reqVec, public std::enable_shared_from_this<MPIReqHolder>
     {
-        using tMPI_reqVec::tMPI_reqVec;
+        using tSelf = MPIReqHolder;
+        using tBase = tMPI_reqVec;
+
+    private:
+        struct shared_ctor_guard // make_shared needs a public ctor but give a private arg
+        {
+        };
+
+    public:
+        template <typename... Args>
+        MPIReqHolder(shared_ctor_guard g, Args &&...args) : tBase(std::forward<Args>(args)...)
+        {
+            if (!(std::shared_ptr<tSelf>(this, [](tSelf *) {}).use_count() == 1))
+                throw std::runtime_error("tSelf must be created via shared_ptr");
+            MPI::ResourceRecycler::Instance().RegisterCleaner(this, [this]()
+                                                              { this->clear(); });
+        }
+
+        template <typename... Args>
+        static ssp<MPIReqHolder> create(Args &&...args)
+        {
+            return std::make_shared<MPIReqHolder>(shared_ctor_guard{}, std::forward<Args>(args)...);
+        }
         ~MPIReqHolder()
         {
-            for (auto &i : (*this))
-                if (i != MPI_REQUEST_NULL)
-                    MPI_Request_free(&i); //, std::cout << "Free Req" << std::endl;
+            this->clear();
+            MPI::ResourceRecycler::Instance().RemoveCleaner(this);
         }
         void clear()
         {
             for (auto &i : (*this))
                 if (i != MPI_REQUEST_NULL)
                     MPI_Request_free(&i); //, std::cout << "Free Req" << std::endl;
-            tMPI_reqVec::clear();
+            this->tMPI_reqVec::clear();
         }
     };
 
@@ -297,6 +389,16 @@ namespace DNDS // TODO: get a concurrency header
             }
 
             return ret;
+        }
+
+        inline int Finalize()
+        {
+            MPI::ResourceRecycler::Instance().clean();
+            int finalized{0};
+            int err = MPI_Finalized(&finalized);
+            if (!finalized)
+                err |= MPI_Finalize();
+            return err;
         }
     }
 }

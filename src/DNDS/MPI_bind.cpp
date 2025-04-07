@@ -11,6 +11,8 @@ namespace DNDS
     {
         py::class_<MPIInfo>(m, "MPIInfo")
             .def(py::init<>())
+            .def(py::init([](uintptr_t pComm)
+                          { return std::make_unique<MPIInfo>(MPI_Comm(pComm)); }))
             .def("setWorld", &MPIInfo::setWorld)
             .def_readonly("rank", &MPIInfo::rank)
             .def_readonly("size", &MPIInfo::size)
@@ -81,12 +83,7 @@ namespace DNDS::MPI
             "Finalize",
             []()
             {
-                int finalized{0};
-                int err = MPI_Finalized(&finalized);
-                if (finalized)
-                    return err;
-                else
-                    return err | MPI_Finalize();
+                return MPI::Finalize();
             });
         m_MPI.def("GetMPIThreadLevel", &GetMPIThreadLevel);
     }
