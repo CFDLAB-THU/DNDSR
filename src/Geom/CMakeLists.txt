@@ -36,16 +36,16 @@ dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS}"
 dnds_add_lib(${LIBNAME}_shared "${CPPS}" "${LINKS_SHARED}" "${DNDS_PCH_TARGETS}"
     ON ON ON)  # SHARED,FAST, EXCLUDE
 
-install(TARGETS ${LIBNAME}
-    LIBRARY DESTINATION "DNDSR/lib"
-    ARCHIVE DESTINATION "DNDSR/lib"
-    COMPONENT libs
-)
+# install(TARGETS ${LIBNAME}
+#     LIBRARY DESTINATION "DNDSR/lib"
+#     ARCHIVE DESTINATION "DNDSR/lib"
+#     COMPONENT libs
+# )
 
 install(TARGETS ${LIBNAME}_shared
     LIBRARY DESTINATION "DNDSR/lib"
     ARCHIVE DESTINATION "DNDSR/lib"
-    COMPONENT libs_shared
+    COMPONENT py
 )
 
 set(CPPS_BIND

@@ -3,6 +3,7 @@
 #include "DNDS/Defines_bind.hpp"
 #include "DNDS/Array_bind.hpp"
 #include "Mesh.hpp"
+#include <pybind11_json/pybind11_json.hpp>
 
 namespace DNDS::Geom
 {
@@ -30,10 +31,10 @@ namespace DNDS::Geom
     inline void pybind11_UnstructuredMesh_define(py::module_ &m)
     {
 #define DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(foo) \
-    def(#foo, &UnstructuredMesh::##foo)
+    def(#foo, &UnstructuredMesh::foo)
 
 #define DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(m_name) \
-    def_readonly(#m_name, &UnstructuredMesh::##m_name, py::return_value_policy::reference_internal)
+    def_readonly(#m_name, &UnstructuredMesh::m_name, py::return_value_policy::reference_internal)
 
         auto UnstructuredMesh_ = tPy_UnstructuredMesh(m, "UnstructuredMesh");
         UnstructuredMesh_
@@ -103,8 +104,19 @@ namespace DNDS::Geom
             .def("BuildCell2Cell", &UnstructuredMeshSerialRW::BuildCell2Cell)
             .def(
                 "MeshPartitionCell2Cell",
-                [](UnstructuredMeshSerialRW &self) // use default
-                { self.MeshPartitionCell2Cell(UnstructuredMeshSerialRW::PartitionOptions()); })
+                [](UnstructuredMeshSerialRW &self, py::object options_in) // use default
+                {
+                    auto options_full = UnstructuredMeshSerialRW::PartitionOptions();
+                    auto json_options_full = nlohmann::ordered_json(options_full); // warning: using {} here makes it a list
+                    if (!options_in.is_none())
+                    {
+                        auto json_options_in = nlohmann::json(options_in);
+                        json_options_full.merge_patch(json_options_in);
+                    }
+                    // std::cout << json_options_full << std::endl;
+                    self.MeshPartitionCell2Cell(json_options_full.template get<UnstructuredMeshSerialRW::PartitionOptions>());
+                },
+                py::arg("options") = py::none())
             .def("PartitionReorderToMeshCell2Cell", &UnstructuredMeshSerialRW::PartitionReorderToMeshCell2Cell);
     }
 }

@@ -28,41 +28,41 @@ def test_mesh0():
     mesh.InterpolateFace()
     mesh.AssertOnFaces()
 
-    fig, ax = plt.subplots(figsize=(16, 16), dpi=320)
-    xymaxs = np.array([-1e100, -1e100], dtype=np.double)
-    xymins = np.array([1e100, 1e100], dtype=np.double)
-    for iCell in range(mesh.cell2node.Size()):
-        c2n = mesh.cell2node[iCell].tolist()
-        nodes = []
-        # print(mesh.cell2node[iCell].tolist())
+    # fig, ax = plt.subplots(figsize=(16, 16), dpi=320)
+    # xymaxs = np.array([-1e100, -1e100], dtype=np.double)
+    # xymins = np.array([1e100, 1e100], dtype=np.double)
+    # for iCell in range(mesh.cell2node.Size()):
+    #     c2n = mesh.cell2node[iCell].tolist()
+    #     nodes = []
+    #     # print(mesh.cell2node[iCell].tolist())
 
-        for iNode in c2n:
-            nodes.append(np.array(mesh.coords[iNode]))
-        nodes = np.array(nodes)
+    #     for iNode in c2n:
+    #         nodes.append(np.array(mesh.coords[iNode]))
+    #     nodes = np.array(nodes)
 
-        vertices = nodes[:, 0:2]
-        xymaxs = np.maximum(vertices.max(axis=0), xymaxs)
-        xymins = np.minimum(vertices.min(axis=0), xymins)
-        # print(vertices.max(axis=0))
-        polygon = patches.Polygon(
-            vertices,
-            closed=True,
-            edgecolor="black",
-            facecolor="blue" if iCell < mesh.cell2node.father.Size() else "red",
-            lw=1,
-        )
-        ax.add_patch(polygon)
+    #     vertices = nodes[:, 0:2]
+    #     xymaxs = np.maximum(vertices.max(axis=0), xymaxs)
+    #     xymins = np.minimum(vertices.min(axis=0), xymins)
+    #     # print(vertices.max(axis=0))
+    #     polygon = patches.Polygon(
+    #         vertices,
+    #         closed=True,
+    #         edgecolor="black",
+    #         facecolor="blue" if iCell < mesh.cell2node.father.Size() else "red",
+    #         lw=1,
+    #     )
+    #     ax.add_patch(polygon)
 
-    # Maintain aspect ratio
-    ax.set_aspect("equal")
-    ax.set_xlim(xymins[0], xymaxs[0])
-    ax.set_ylim(xymins[1], xymaxs[1])
-    ax.set_title(f"part_{mpi.rank}")
+    # # Maintain aspect ratio
+    # ax.set_aspect("equal")
+    # ax.set_xlim(xymins[0], xymaxs[0])
+    # ax.set_ylim(xymins[1], xymaxs[1])
+    # ax.set_title(f"part_{mpi.rank}")
 
-    # Show the plot
-    # plt.show(block=False)
-    plt.figure(fig)
-    plt.savefig(f"test_print_part_{mpi.rank}.png")
+    # # Show the plot
+    # # plt.show(block=False)
+    # plt.figure(fig)
+    # plt.savefig(f"test_print_part_{mpi.rank}.png")
 
 
 if __name__ == "__main__":
