@@ -380,6 +380,13 @@ namespace DNDS // ArrayTransformer
             .def("createFatherGlobalMapping", &TArrayTransformer::createFatherGlobalMapping)
             .def("createGhostMapping", [](TArrayTransformer &self, std::vector<index> pullIndexGlobal) -> void
                  { self.createGhostMapping(pullIndexGlobal); }, py::arg("pullIndexGlobal"))
+            .def("createGhostMapping", [](TArrayTransformer &self, py::array_t<index> pullIndexGlobal)
+                 {
+                    std::vector<index> pullIndexVec;
+                    pullIndexVec.reserve(pullIndexGlobal.size());
+                    for(ssize_t i = 0; i < pullIndexGlobal.size(); i++)
+                        pullIndexVec.push_back(pullIndexGlobal.at(i)); // only 1D
+                    self.createGhostMapping(pullIndexVec); }, py::arg("pullIndexGlobal"))
             .def("createGhostMapping", [](TArrayTransformer &self, std::vector<index> pushingIndexLocal, std::vector<index> pushingStarts) -> void
                  { self.createGhostMapping(pushingIndexLocal, pushingStarts); }, py::arg("pushingIndexLocal"), py::arg("pushingStarts"));
         ArrayTransformer_

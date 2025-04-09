@@ -3,17 +3,20 @@ from CartUtil import *
 import scipy.spatial
 from ElemInterpolate import elem_get_interpolation_base
 
-def get_mesh_bnd_elems(osPart: OversetPart2D):
+
+def get_mesh_bnd_elems(osPart: OversetPart2D, includeIDs=None):
     mesh = osPart._mesh
     bnd_elems = []
     for iB in range(mesh.NumBnd()):
         bnd2node = np.array(osPart._mesh.bnd2node[iB], copy=False)
+        bElemInfo = mesh.bndElemInfo[iB, 0]
+        if includeIDs is not None and bElemInfo.zone not in includeIDs:
+            continue
         assert (bnd2node < mesh.NumNodeProc()).all(), str(bnd2node)
         nodeList = []  #!2d: list of nodes represent a bnd element
         for n in bnd2node:
             nodeList.append(np.array(mesh.coords[n], copy=True))
         nodeList = np.array(nodeList).transpose()
-        bElemInfo = mesh.bndElemInfo[iB, 0]
         bnd_elems.append((bElemInfo.getElemType(), bElemInfo.zone, nodeList))
     return bnd_elems
 
@@ -47,17 +50,19 @@ def obtain_part_local_inner_grid_points_dist_dict(
 
                 p = np.zeros(3)
                 p[:2] = gridPointsCoords[:, iP]
-                distP = elem_get_interpolation_base(elemInfo.getElemType(), coords, p).dot(
-                    nodeDists
-                )
+                distP = elem_get_interpolation_base(
+                    elemInfo.getElemType(), coords, p
+                ).dot(nodeDists)
                 local_point_dists[tuple(gridPoints[:, iP])] = distP
     return local_point_dists
 
 
-def obtain_part_local_elem_dists(self: OversetPart2D):
+def obtain_part_local_elem_dists(self: OversetPart2D, bc_names=["WALL"]):
     mpi = self._mpi
     MPI = self._MPI
-    bnd_elems_local = get_mesh_bnd_elems(self)
+    bnd_elems_local = get_mesh_bnd_elems(
+        self, [self._name2ID[name] for name in bc_names]
+    )
     bnd_elems_local_others = MPI.allgather(bnd_elems_local)
 
     bnd_geoms = []
@@ -71,14 +76,12 @@ def obtain_part_local_elem_dists(self: OversetPart2D):
     dists = np.ones((mesh.NumNodeProc()), dtype=np.float64) * 1e-300
     coordsFatherData = np.array(self._mesh.coords.father.data())
     coordsFatherData = coordsFatherData.reshape((3, -1), order="F")
-    coordsFatherData = self.coord_mesh_to_phy(coordsFatherData)
 
     distq, idx = tree.query(coordsFatherData.T)
     dists[0 : mesh.NumNode()] = distq
 
     coordsSonData = np.array(self._mesh.coords.son.data())
     coordsSonData = coordsSonData.reshape((3, -1), order="F")
-    coordsSonData = self.coord_mesh_to_phy(coordsSonData)
 
     distq, idx = tree.query(coordsSonData.T)
     dists[mesh.NumNode() :] = distq
@@ -95,5 +98,5 @@ def obtain_part_local_dists(self: OversetBG2D, osPart: OversetPart2D):
     local_point_dists = obtain_part_local_inner_grid_points_dist_dict(self, osPart)
 
     print(f"points covered: {mpi.rank}, {len(local_point_dists)}")
-    
+
     return local_point_dists

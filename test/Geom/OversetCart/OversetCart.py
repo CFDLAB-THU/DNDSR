@@ -4,6 +4,7 @@ import sys, os, math
 import mpi4py.MPI as MPI
 import numpy as np
 from utils import *
+from CartGridField import CartGridField
 
 
 class OversetPart2D:
@@ -45,10 +46,10 @@ class OversetPart2D:
             (self._xyzMin.transpose(), self._xyzMax.transpose())
         ).reshape((2, 3), order="C")
 
-    def obtain_dist_node(self):
+    def obtain_dist_node(self, bc_names=["WALL"]):
         from OversetCartUtil import obtain_part_local_elem_dists
 
-        self.dist_node = obtain_part_local_elem_dists(self)
+        self.dist_node = obtain_part_local_elem_dists(self, bc_names)
 
 
 class OversetBG2D:
@@ -57,6 +58,7 @@ class OversetBG2D:
         self._MPI = get_mpi4py_comm_from_MPIInfo(mpi)
 
     def set_bg(self, parts: list[OversetPart2D], h: float):
+        mpi = self._mpi
         self.h = h
         box = np.zeros((2, 3))
         box[0, :] = 1e300
@@ -80,7 +82,7 @@ class OversetBG2D:
             origins[iax] = lower
 
         self.xNodes = xNodes
-        self.grid_shape = tuple([v.size for v in xNodes])
+        self.grid_shape = tuple([v.size for v in xNodes])  # shape for global point grid
         self.origins = origins
 
         self.grid_shape = self._MPI.bcast(self.grid_shape, root=0)
@@ -123,13 +125,66 @@ class OversetBG2D:
                 f"{self._mpi.rank} nStarts: {self.nStarts4point}, nProcAx: {self.nProcAx}"
             )
 
+        # for index conversion in DNDSR
+        nPointsPerRank = np.array(
+            [np.array(self.proc_grid_shape(rank)).prod() for rank in range(mpi.size)],
+            dtype=np.int64,
+        )
+        self.global_map_pointsStart = np.concat(([0], np.cumsum(nPointsPerRank)))
+        nCellsPerRank = np.array(
+            [
+                np.array(self.proc_cell_grid_shape(rank)).prod()
+                for rank in range(mpi.size)
+            ],
+            dtype=np.int64,
+        )
+        self.global_map_cellsStart = np.concat(([0], np.cumsum(nCellsPerRank)))
+        self.rank_to_ax_rank_map_i = np.array(
+            [self.rank_to_ax_rank(rank)[0] for rank in range(mpi.size)], dtype=np.int32
+        )
+        self.rank_to_ax_rank_map_j = np.array(
+            [self.rank_to_ax_rank(rank)[1] for rank in range(mpi.size)], dtype=np.int32
+        )
+
+        ## do borders
+        ijk_ranges_point = self.proc_grid_range_expanded(is_point=True)
+        # print(f"{mpi.rank}, { self.proc_grid_range(is_point=True)}, {ijk_ranges_point}")
+        ism_expanded, jsm_expanded = np.meshgrid(
+            *[
+                np.arange(
+                    ijk_ranges_point[iax][0],
+                    ijk_ranges_point[iax][1],
+                    dtype=np.int64,
+                )
+                for iax in range(2)
+            ],
+            indexing="ij",
+        )
+        self.local_point_grid_shape_expanded = ism_expanded.shape
+        grid_point_expanded_idxs_g = self.ijk_to_idx(
+            np.array([ism_expanded, jsm_expanded]),
+            is_point=True,
+        ).flat
+        in_local = (
+            grid_point_expanded_idxs_g >= self.global_map_pointsStart[mpi.rank]
+        ) & (grid_point_expanded_idxs_g < self.global_map_pointsStart[mpi.rank + 1])
+        grid_point_expanded_idxs_g = grid_point_expanded_idxs_g[~in_local]
+        self.grid_point_expanded_idxs_g = np.sort(
+            np.array(grid_point_expanded_idxs_g, dtype=np.int64)
+        )
+        self.grid_point_expanded_idxs_g_ijks_local = self.idx_to_ijk(
+            self.grid_point_expanded_idxs_g, is_point=True, ret_global=True
+        ) - np.array(
+            [[self.proc_grid_range_expanded(is_point=True)[iax][0]] for iax in range(2)]
+        )  # base point  # becomes in expanded array instead of in non-expanded
+
     def rank_to_ax_rank(self, rank=None):
         if rank is None:
             rank = self._mpi.rank
         return (rank // self.nProcAx[1], rank % self.nProcAx[1])
 
-    def proc_cell_grid_shape(self):
-        ax_rank = self.rank_to_ax_rank()
+    def proc_cell_grid_shape(self, rank=None):
+        ax_rank = self.rank_to_ax_rank(rank)
         return tuple(
             [
                 self.nStarts[i][ax_rank[i] + 1] - self.nStarts[i][ax_rank[i]]
@@ -137,17 +192,72 @@ class OversetBG2D:
             ]
         )
 
-    def proc_point_grid_shape(self):
-        ax_rank = self.rank_to_ax_rank()
+    def proc_grid_range(self, rank=None, is_point=True):
+        nStarts_ax = self.nStarts4point if is_point else self.nStarts
+        ax_rank = self.rank_to_ax_rank(rank)
+        return [
+            (nStarts_ax[i][ax_rank[i]], nStarts_ax[i][ax_rank[i] + 1]) for i in range(2)
+        ]
+
+    def proc_grid_shape(self, rank=None, is_point=True):
+        ax_rank = self.rank_to_ax_rank(rank)
+        nStarts_ax = self.nStarts4point if is_point else self.nStarts
         return tuple(
             [
-                self.nStarts4point[i][ax_rank[i] + 1]
-                - self.nStarts4point[i][ax_rank[i]]
+                nStarts_ax[i][ax_rank[i] + 1] - nStarts_ax[i][ax_rank[i]]
                 for i in range(2)
             ]
         )
 
-    def ijk_to_rank(self, ijk, is_point=False):
+    def proc_grid_range_expanded(self, rank=None, is_point=True):
+        ijk_ranges = self.proc_grid_range(rank=rank, is_point=is_point)
+        for iax in range(2):
+            ijk_ranges[iax] = (
+                max(ijk_ranges[iax][0] - 1, 0),
+                min(
+                    ijk_ranges[iax][1] + 2 if is_point else 1,
+                    self.grid_shape[iax] - 0 if is_point else 1,
+                ),
+            )
+        return ijk_ranges
+
+    def proc_grid_shape_expanded(self, rank=None, is_point=True):
+        ijk_ranges = self.proc_grid_range_expanded(rank=rank, is_point=is_point)
+        return tuple([ijk_ranges[iax][1] - ijk_ranges[iax][0] for iax in range(2)])
+
+    def proc_grid_core_start_in_local_expanded(self, rank=None, is_point=True):
+        index_range = self.proc_grid_range(rank, is_point)
+        index_range_expanded = self.proc_grid_range_expanded(rank, is_point)
+        starts = [
+            int(index_range[iax][0] - index_range_expanded[iax][0]) for iax in range(2)
+        ]
+        return starts
+
+    def proc_grid_core_range_in_local_expanded(self, rank=None, is_point=True):
+        starts = self.proc_grid_core_start_in_local_expanded(rank, is_point)
+        return [
+            (starts[iax], starts[iax] + int(self.proc_grid_shape(rank, is_point)[iax]))
+            for iax in range(2)
+        ]
+
+    def global_idx_to_rank(self, idx, is_point=False):
+        ranks = (
+            np.searchsorted(
+                (
+                    self.global_map_pointsStart
+                    if is_point
+                    else self.global_map_cellsStart
+                ),
+                idx,
+                side="right",
+            )
+            - 1
+        )
+        if np.any(ranks < 0) or np.any(ranks >= self._mpi.size):
+            raise ValueError(f"idx {idx} out of range")
+        return ranks
+
+    def global_ijk_to_rank(self, ijk, is_point=False):
         idxs = []
         for iax in range(2):
             # searchsorted gives the insertion point for target
@@ -165,19 +275,95 @@ class OversetBG2D:
         # print(idxs)
         return self.procMap[tuple(idxs)]
 
+    def ijk_to_idx(
+        self, ijk, is_point=False, in_global=True, ret_global=True, ranks=None
+    ):
+        if in_global and ranks is None:
+            ranks = self.global_ijk_to_rank(ijk, is_point)
+        if ranks is None and not in_global:
+            raise ValueError("if input is local, should provide ranks")
+        start_offsets = (
+            self.global_map_pointsStart[ranks]
+            if is_point
+            else self.global_map_cellsStart[ranks]
+        )
+        ax_rank_is = self.rank_to_ax_rank_map_i[ranks]
+        ax_rank_js = self.rank_to_ax_rank_map_j[ranks]
+        nStarts_ax = self.nStarts4point if is_point else self.nStarts
+        nStarts_ax_is = nStarts_ax[0][ax_rank_is]
+        nStarts_ax_js = nStarts_ax[1][ax_rank_js]
+        nStarts_ax_jlen = nStarts_ax[1][ax_rank_js + 1] - nStarts_ax_js
+        ## conversion
+        local_ijks = (
+            ijk - np.array([nStarts_ax_is, nStarts_ax_js]) if in_global else ijk
+        )
+        local_idxs = local_ijks[0] * nStarts_ax_jlen + local_ijks[1]
+        global_idxs = start_offsets + local_idxs
+        return global_idxs if ret_global else local_idxs
+
+    def idx_to_ijk(
+        self, idx, is_point=False, in_global=True, ret_global=True, ranks=None
+    ):
+        if in_global and ranks is None:
+            ranks = self.global_idx_to_rank(idx, is_point)
+        if ranks is None and not in_global:
+            raise ValueError("if input is local, should provide ranks")
+        start_offsets = (
+            self.global_map_pointsStart[ranks]
+            if is_point
+            else self.global_map_cellsStart[ranks]
+        )
+        ax_rank_is = self.rank_to_ax_rank_map_i[ranks]
+        ax_rank_js = self.rank_to_ax_rank_map_j[ranks]
+        nStarts_ax = self.nStarts4point if is_point else self.nStarts
+        nStarts_ax_is = nStarts_ax[0][ax_rank_is]
+        nStarts_ax_js = nStarts_ax[1][ax_rank_js]
+        nStarts_ax_jlen = nStarts_ax[1][ax_rank_js + 1] - nStarts_ax_js
+        ## conversion
+        local_idxs = idx - start_offsets if in_global else idx
+        local_is = local_idxs // nStarts_ax_jlen
+        local_js = local_idxs % nStarts_ax_jlen
+        if ret_global:
+            ijks = np.array([nStarts_ax_is + local_is, nStarts_ax_js + local_js])
+        else:
+            ijks = np.array([local_is, local_js])
+        return ijks
+
+    def proc_grid_ijkarray(
+        self, rank=None, is_point=False, expanded=False, no_mesh=False
+    ):
+        grid_range_method = (
+            self.proc_grid_range_expanded if expanded else self.proc_grid_range
+        )
+        ijkRanges = grid_range_method(rank=rank, is_point=is_point)
+        iss = np.arange(ijkRanges[0][0], ijkRanges[0][1], dtype=np.int64)
+        jss = np.arange(ijkRanges[1][0], ijkRanges[1][1], dtype=np.int64)
+        if no_mesh:
+            return iss, jss
+        ism, jsm = np.meshgrid(iss, jss, indexing="ij")
+        ijks = np.array([ism, jsm])
+        return ijks
+
+    def proc_grid_point_coords(self, expanded=False):
+        return self.origins[
+            :2, np.newaxis, np.newaxis
+        ] + self.h * self.proc_grid_ijkarray(is_point=True, expanded=expanded)
+
     def obtain_dist_map(self, parts: list[OversetPart2D]):
 
         MPI = self._MPI
         mpi = self._mpi
         from OversetCartUtil import obtain_part_local_dists
 
-        for part in parts:
+        proc_dist_maps = []
+
+        for iPart, part in enumerate(parts):
             part_local_dists = obtain_part_local_dists(self, part)
             part_local_dists_items = list(part_local_dists.items())
 
             ijkv = np.array([v[0] for v in part_local_dists_items]).transpose()
             if ijkv.size:
-                ranks = list(self.ijk_to_rank(ijkv))
+                ranks = list(self.global_ijk_to_rank(ijkv))
             else:
                 ranks = []
             # sendLists = [[]] * self._mpi.size # ! this is wrong!!! the empty lists of each item refs the same
@@ -185,16 +371,14 @@ class OversetBG2D:
 
             for i, rank in enumerate(ranks):
                 datac = part_local_dists_items[i]
-                data = ((int(datac[0][0]), int(datac[0][1])), float(datac[1]))
                 sendLists[rank].append(datac)
-                ax_r = self.rank_to_ax_rank(rank)
 
             recvLists = MPI.alltoall(sendLists)
             # print(f"{mpi.rank}, {([len(v) for v in sendLists])}, {len(sendLists)}")
             # return
 
             ax_ranks = self.rank_to_ax_rank()
-            proc_bg_mesh_dist = np.ones(self.proc_point_grid_shape()) * 1e300
+            proc_bg_mesh_dist = np.ones(self.proc_grid_shape()) * 1e300
             for recvL in recvLists:
                 # print(recvL)
                 for g_point, v in recvL:
@@ -208,6 +392,43 @@ class OversetBG2D:
                     )
                     proc_bg_mesh_dist[l_point] = v
             print(f"proc {mpi.rank}: min dist at grid point: {proc_bg_mesh_dist.min()}")
+
+            dist_field = CartGridField(1, self.proc_grid_shape(), mpi)
+            dist_field.set_main_data(proc_bg_mesh_dist[:, :, None])
+            dist_field.set_ghost_info(
+                self.proc_grid_shape_expanded(is_point=True),
+                self.proc_grid_core_range_in_local_expanded(is_point=True),
+                self.grid_point_expanded_idxs_g_ijks_local,
+            )
+            dist_field.set_ghost_global_pull(self.grid_point_expanded_idxs_g)
+            dist_field.trans.startPersistentPull()
+            dist_field.trans.waitPersistentPull()
+            # print(
+            #     f"{mpi.rank} - {self.grid_point_expanded_idxs_g_ijks_local}, {dist_field.ghost.Size()}"
+            # )
+
+            proc_dist_maps.append(dist_field)
+
+        return proc_dist_maps
+
+    def print_proc_dist_maps(self, maps: list[CartGridField]):
+        for iPart, dist_field in enumerate(maps):
+            import matplotlib.pyplot as plt
+
+            data = np.array(dist_field.get_expanded_array()[:, :, 0])
+            data = np.minimum(data, 3)
+            [xv, yv] = self.proc_grid_point_coords(expanded=True)
+            # Create the plot
+            plt.figure(figsize=(8, 6))
+            print(f"{xv.shape}, {yv.shape}, {data.shape}")
+            plt.pcolormesh(
+                xv, yv, data, cmap="viridis", shading="gouraud"
+            )  # 'viridis' is a common colormap
+
+            # Add a colorbar to show the mapping of values to colors
+            plt.colorbar()
+            plt.axis("equal")
+            plt.savefig(f"part_{iPart}_rank_{mpi.rank}.png")
 
 
 if __name__ == "__main__":
@@ -223,25 +444,30 @@ if __name__ == "__main__":
             "..",
             "data",
             "mesh",
-            "NACA0012_H2.cgns",
+            "CylinderNoFar.cgns",
         )
     )
     osPart.obtain_dist_node()
 
     osBG = OversetBG2D(mpi)
-    osBG.set_bg([osPart], 1.0 / 2)
+    osBG.set_bg([osPart], 1.0 / 10)
     assert osBG.procMap[osBG.rank_to_ax_rank()] == mpi.rank
-    osBG.obtain_dist_map([osPart])
+    dist_maps = osBG.obtain_dist_map([osPart])
+    osBG.print_proc_dist_maps(dist_maps)
 
     if mpi.rank == 0:
-        _ = osBG.ijk_to_rank(
+        _ = osBG.global_ijk_to_rank(
             np.random.randint(0, min(osBG.grid_shape[0:2]) - 1, size=(2, 32))
         )
 
-        print(osBG.ijk_to_rank([v - 1 for v in osBG.grid_shape], is_point=True))
+        print(osBG.global_ijk_to_rank([v - 1 for v in osBG.grid_shape], is_point=True))
 
         try:
-            print(osBG.ijk_to_rank([v - 1 for v in osBG.grid_shape], is_point=False))
+            print(
+                osBG.global_ijk_to_rank(
+                    [v - 1 for v in osBG.grid_shape], is_point=False
+                )
+            )
         except ValueError as e:
             print(e)
             print("caught")

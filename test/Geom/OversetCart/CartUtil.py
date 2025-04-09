@@ -1,4 +1,5 @@
 import numpy as np
+
 # import numba
 import copy
 import timeit
@@ -167,15 +168,19 @@ def single_elem_grid_points_mask_2D(
     return points_in_polygon_winding(elem, ll[0], ll[1], closed)
 
 
-def single_elem_box_range_2D(origin: np.ndarray, h: float, elem: np.ndarray):
+def single_elem_box_range_2D(
+    origin: np.ndarray, h: float, elem: np.ndarray, grid_eps=1e-10
+):
     xyzmin = elem.min(axis=1)
     xyzmax = elem.max(axis=1)
 
     lowerijk = np.floor((xyzmin - origin) / h)
     upperijk = np.ceil((xyzmax - origin) / h)
 
-    assert np.all((origin + upperijk * h) >= xyzmax)
-    assert np.all((origin + lowerijk * h) <= xyzmin)
+    assert np.all(
+        (origin + upperijk * h) + grid_eps >= xyzmax
+    ), f"{origin}, {upperijk}, {origin + upperijk * h},\n {elem}\n, {xyzmax}"
+    assert np.all((origin + lowerijk * h) - grid_eps <= xyzmin)
 
     return (np.asarray(lowerijk, dtype=np.int64), np.asarray(upperijk, dtype=np.int64))
 

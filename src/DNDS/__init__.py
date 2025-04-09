@@ -53,6 +53,7 @@ else:
     from ._internal.dnds_pybind11 import *
     from ._internal.dnds_pybind11 import MPI
     from ._internal.dnds_pybind11 import Debug
+
     print(f"module load: {__file__}")
 
 # List the symbols you want to expose from core
@@ -149,12 +150,17 @@ def _get_array_name(
         rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
         align_name = "D"
         className = f"{prepend}_{t_name}_{rs_name}_{rm_name}_{align_name}"
-    elif prepend == "ArrayAdjacency" or prepend == "ArrayEigenVector":
+    elif prepend in {
+        "ArrayAdjacency",
+        "ArrayAdjacencyPair",
+        "ArrayEigenVector",
+        "ArrayEigenVectorPair",
+    }:
         rs_name = _row_size_to_name(row_size)
         rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
         align_name = "D"
         className = f"{prepend}_{rs_name}_{rm_name}_{align_name}"
-    elif prepend == "ArrayEigenMatrix":
+    elif prepend == "ArrayEigenMatrix" or prepend == "ArrayEigenMatrixPair":
         rs_name = _row_size_to_name(row_size)
         rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
         rs_name_n = _row_size_to_name(row_size_n)
@@ -163,10 +169,15 @@ def _get_array_name(
         className = (
             f"{prepend}_{rs_name}x{rs_name_n}_{rm_name}x{rm_name_n}_{align_name}"
         )
-    elif prepend == "ArrayEigenUniMatrixBatch":
+    elif (
+        prepend == "ArrayEigenUniMatrixBatch"
+        or prepend == "ArrayEigenUniMatrixBatchPair"
+    ):
         rs_name = _row_size_to_name(row_size)
         rs_name_n = _row_size_to_name(row_size_n)
         className = f"{prepend}_{rs_name}x{rs_name_n}"
+    else:
+        raise ValueError(f"prepend {prepend} not supported")
 
     triedNames.append(className)
 
@@ -222,6 +233,17 @@ def ArrayAdjacency(
     return cls(*init_args)
 
 
+def ArrayAdjacencyPair(
+    row_size: int | str, row_max: int | str = None, init_args: tuple = ()
+) -> ArrayAdjacencyPair_I_I_D:
+    cls = globals()[
+        _get_array_name(
+            row_size=row_size, row_max=row_max, prepend="ArrayAdjacencyPair"
+        )
+    ]
+    return cls(*init_args)
+
+
 def ArrayEigenMatrix(
     row_size: int | str,
     row_size_n: int | str,
@@ -236,6 +258,25 @@ def ArrayEigenMatrix(
             row_size_n=row_size_n,
             row_max_n=row_max_n,
             prepend="ArrayEigenMatrix",
+        )
+    ]
+    return cls(*init_args)
+
+
+def ArrayEigenMatrixPair(
+    row_size: int | str,
+    row_size_n: int | str,
+    row_max: int | str = None,
+    row_max_n: int | str = None,
+    init_args: tuple = (),
+) -> ArrayEigenMatrixPair_Dx1_Dx1_D:
+    cls = globals()[
+        _get_array_name(
+            row_size=row_size,
+            row_max=row_max,
+            row_size_n=row_size_n,
+            row_max_n=row_max_n,
+            prepend="ArrayEigenMatrixPair",
         )
     ]
     return cls(*init_args)
@@ -256,11 +297,37 @@ def ArrayEigenUniMatrixBatch(
     return cls(*init_args)
 
 
+def ArrayEigenUniMatrixBatchPair(
+    row_size: int | str,
+    row_size_n: int | str,
+    init_args: tuple = (),
+) -> ArrayEigenUniMatrixBatchPair_DxD:
+    cls = globals()[
+        _get_array_name(
+            row_size=row_size,
+            row_size_n=row_size_n,
+            prepend="ArrayEigenUniMatrixBatchPair",
+        )
+    ]
+    return cls(*init_args)
+
+
 def ArrayEigenVector(
     row_size: int | str, row_max: int | str = None, init_args: tuple = ()
 ) -> ArrayEigenVector_I_I_D:
     cls = globals()[
         _get_array_name(row_size=row_size, row_max=row_max, prepend="ArrayEigenVector")
+    ]
+    return cls(*init_args)
+
+
+def ArrayEigenVectorPair(
+    row_size: int | str, row_max: int | str = None, init_args: tuple = ()
+) -> ArrayEigenVectorPair_I_I_D:
+    cls = globals()[
+        _get_array_name(
+            row_size=row_size, row_max=row_max, prepend="ArrayEigenVectorPair"
+        )
     ]
     return cls(*init_args)
 
