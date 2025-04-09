@@ -1,10 +1,11 @@
 import DNDS
 import Geom
 import sys, os, math
-import mpi4py.MPI as MPI
+import mpi4py.MPI as pyMPI
 import numpy as np
 from utils import *
 from CartGridField import CartGridField
+import itertools
 
 
 class OversetPart2D:
@@ -35,8 +36,8 @@ class OversetPart2D:
         coordsFatherData = self.coord_mesh_to_phy(coordsFatherData)
         coordsMax = coordsFatherData.max(axis=1)
         coordsMin = coordsFatherData.min(axis=1)
-        self._MPI.Allreduce(None, coordsMax, op=MPI.MAX)
-        self._MPI.Allreduce(None, coordsMin, op=MPI.MIN)
+        self._MPI.Allreduce(None, coordsMax, op=pyMPI.MAX)
+        self._MPI.Allreduce(None, coordsMin, op=pyMPI.MIN)
         self._xyzMax = coordsMax
         self._xyzMin = coordsMin
 
@@ -349,49 +350,37 @@ class OversetBG2D:
             :2, np.newaxis, np.newaxis
         ] + self.h * self.proc_grid_ijkarray(is_point=True, expanded=expanded)
 
-    def obtain_dist_map(self, parts: list[OversetPart2D]):
-
+    def obtain_dist_map(self, parts: list[OversetPart2D], bc_names=["WALL"]):
         MPI = self._MPI
         mpi = self._mpi
-        from OversetCartUtil import obtain_part_local_dists
+        from OversetCartUtil import obtain_proc_local_bg_dists, get_mesh_bnd_elems
+        from CartUtil import single_elem_get_box_intersection_2D
 
         proc_dist_maps = []
 
         for iPart, part in enumerate(parts):
-            part_local_dists = obtain_part_local_dists(self, part)
-            part_local_dists_items = list(part_local_dists.items())
+            proc_bg_mesh_dist = obtain_proc_local_bg_dists(self, part)
+            bnd_elems = get_mesh_bnd_elems(part)
 
-            ijkv = np.array([v[0] for v in part_local_dists_items]).transpose()
-            if ijkv.size:
-                ranks = list(self.global_ijk_to_rank(ijkv))
-            else:
-                ranks = []
-            # sendLists = [[]] * self._mpi.size # ! this is wrong!!! the empty lists of each item refs the same
-            sendLists = [[] for _ in range(mpi.size)]
+            send_lists = [[] for _ in range(mpi.size)]
+            for type, bcid, coords in bnd_elems:
+                cell_ijks = single_elem_get_box_intersection_2D(
+                    self.origins[:2], self.h, coords[0:2, :]
+                )
+                ranks = self.global_ijk_to_rank(cell_ijks)
+                for ic, rank in enumerate(ranks):
+                    send_lists[rank].append((type, bcid, coords, cell_ijks[:, ic]))
+            recv_lists = MPI.alltoall(send_lists)
+            cell_bnds = {}
+            for type, bcid, coords, cell_ijk in itertools.chain(*recv_lists):
+                cell_ijk_t = tuple(int(v) for v in cell_ijk)
+                item = (type, bcid, coords)
+                if cell_ijk_t in cell_bnds.keys():
+                    cell_bnds[cell_ijk_t].append(item)
+                else:
+                    cell_bnds[cell_ijk_t] = [item]
 
-            for i, rank in enumerate(ranks):
-                datac = part_local_dists_items[i]
-                sendLists[rank].append(datac)
-
-            recvLists = MPI.alltoall(sendLists)
-            # print(f"{mpi.rank}, {([len(v) for v in sendLists])}, {len(sendLists)}")
-            # return
-
-            ax_ranks = self.rank_to_ax_rank()
-            proc_bg_mesh_dist = np.ones(self.proc_grid_shape()) * 1e300
-            for recvL in recvLists:
-                # print(recvL)
-                for g_point, v in recvL:
-                    for ax in range(2):
-                        assert (
-                            g_point[ax] < self.nStarts4point[ax][ax_ranks[ax] + 1]
-                        ), g_point[ax]
-                    l_point = (
-                        g_point[0] - self.nStarts4point[0][ax_ranks[0]],
-                        g_point[1] - self.nStarts4point[1][ax_ranks[1]],
-                    )
-                    proc_bg_mesh_dist[l_point] = v
-            print(f"proc {mpi.rank}: min dist at grid point: {proc_bg_mesh_dist.min()}")
+            print([len(v) for v in send_lists])
 
             dist_field = CartGridField(1, self.proc_grid_shape(), mpi)
             dist_field.set_main_data(proc_bg_mesh_dist[:, :, None])
@@ -407,13 +396,95 @@ class OversetBG2D:
             #     f"{mpi.rank} - {self.grid_point_expanded_idxs_g_ijks_local}, {dist_field.ghost.Size()}"
             # )
 
-            proc_dist_maps.append(dist_field)
+            dist_expanded_array = dist_field.get_expanded_array()
+
+            offsets = [(0, 0), (1, 0), (0, 1), (1, 1)]
+            for ijk, bnd_list in cell_bnds.items():
+                for type, bcid, coords in bnd_list:
+                    assert type == Geom.Elem.ElemType.Line2
+                    if bcid in [part._name2ID[name] for name in bc_names]:
+                        for offset in offsets:
+                            ijkp = tuple([ijk[iax] + offset[iax] for iax in range(2)])
+                            ijkp_in_expanded = tuple(
+                                [
+                                    ijkp[iax]
+                                    - self.proc_grid_range_expanded(is_point=True)[iax][
+                                        0
+                                    ]
+                                    for iax in range(2)
+                                ]
+                            )
+                            if dist_expanded_array[ijkp_in_expanded] > 1e299:
+                                dist_expanded_array[ijkp_in_expanded] = -100
+            dist_field.set_main_data_from_expanded(dist_expanded_array)
+            dist_field.trans.startPersistentPull()
+            dist_field.trans.waitPersistentPull()
+
+            ijks_expanded = self.proc_grid_ijkarray(is_point=True, expanded=True)
+            ijks_expanded[0] -= self.proc_grid_range_expanded()[0][0]
+            ijks_expanded[1] -= self.proc_grid_range_expanded()[1][0]
+            cr = self.proc_grid_core_range_in_local_expanded(is_point=True)
+            ijks_expanded_core = ijks_expanded[
+                :, cr[0][0] : cr[0][1], cr[1][0] : cr[1][1]
+            ]
+            ijks_expanded_core = ijks_expanded_core.reshape((2, -1))
+            ijks_expanded_core_le = np.array(
+                [ijks_expanded_core[0] - 1, ijks_expanded_core[1]]
+            )
+            ijks_expanded_core_ri = np.array(
+                [ijks_expanded_core[0] + 1, ijks_expanded_core[1]]
+            )
+            ijks_expanded_core_lo = np.array(
+                [ijks_expanded_core[0], ijks_expanded_core[1] - 1]
+            )
+            ijks_expanded_core_up = np.array(
+                [ijks_expanded_core[0], ijks_expanded_core[1] + 1]
+            )
+
+            offsets = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+            for iter in range(10000):
+                dist_expanded_array = dist_field.get_expanded_array()
+                dist_expanded_array_new = np.array(dist_expanded_array)
+                count = 0
+                for ic in range(ijks_expanded_core.shape[1]):
+                    ijk = tuple(ijks_expanded_core[:, ic])
+                    if dist_expanded_array[ijk] > 1e299:
+                        for ijk_nei in [
+                            ijks_expanded_core_le[:, ic],
+                            ijks_expanded_core_ri[:, ic],
+                            ijks_expanded_core_lo[:, ic],
+                            ijks_expanded_core_up[:, ic],
+                        ]:
+                            ijk_nei = tuple(ijk_nei)
+                            if (
+                                0 <= ijk_nei[0] < dist_expanded_array.shape[0]
+                                and 0 <= ijk_nei[1] < dist_expanded_array.shape[1]
+                                and dist_expanded_array[ijk_nei] < 0
+                            ):
+                                count += 1
+                                dist_expanded_array_new[ijk] = dist_expanded_array[
+                                    ijk_nei
+                                ]
+                count = MPI.allreduce(count, pyMPI.SUM)
+                if mpi.rank == 0:
+                    print(f"negative hole: iter [{iter}] Done")
+                if count == 0:
+                    break
+                dist_field.set_main_data_from_expanded(dist_expanded_array_new)
+                dist_field.trans.startPersistentPull()
+                dist_field.trans.waitPersistentPull()
+            else:
+                print(f"count left: {count}")
+
+            proc_dist_maps.append((cell_bnds, dist_field))
 
         return proc_dist_maps
 
-    def print_proc_dist_maps(self, maps: list[CartGridField]):
-        for iPart, dist_field in enumerate(maps):
+    def print_proc_dist_maps(self, maps: list[tuple[dict, CartGridField]]):
+        for iPart, item in enumerate(maps):
             import matplotlib.pyplot as plt
+
+            cell_bnds, dist_field = item
 
             data = np.array(dist_field.get_expanded_array()[:, :, 0])
             data = np.minimum(data, 3)
@@ -421,9 +492,23 @@ class OversetBG2D:
             # Create the plot
             plt.figure(figsize=(8, 6))
             print(f"{xv.shape}, {yv.shape}, {data.shape}")
-            plt.pcolormesh(
-                xv, yv, data, cmap="viridis", shading="gouraud"
+            qmesh = plt.pcolormesh(
+                xv,
+                yv,
+                data,
+                cmap="viridis",
+                shading="gouraud",
+                edgecolors="black",
+                linewidths=0.5,
             )  # 'viridis' is a common colormap
+            lw = 0.5
+            for x in xv[:, 0]:
+                plt.plot([x, x], [yv[0, 0], yv[0, -1]], c="k", lw=lw)
+            for y in yv[0, :]:
+                plt.plot([xv[-1, 0], xv[0, 0]], [y, y], c="k", lw=lw)
+            for type, bcid, coords in itertools.chain(*cell_bnds.values()):
+                assert type == Geom.Elem.ElemType.Line2
+                plt.plot(coords[0], coords[1], c="r", marker=".")
 
             # Add a colorbar to show the mapping of values to colors
             plt.colorbar()

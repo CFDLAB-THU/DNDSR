@@ -188,6 +188,17 @@ def single_elem_box_range_2D(
 def single_elem_get_box_intersection_2D(
     origin: np.ndarray, h: float, elem: np.ndarray, closed=True
 ):
+    """get element intersecting boxes
+
+    Args:
+        origin (np.ndarray): _description_
+        h (float): _description_
+        elem (np.ndarray): _description_
+        closed (bool, optional): _description_. Defaults to True.
+
+    Returns:
+        np.ndarray: ijks of the touched cells
+    """
     lowerijk, upperijk = single_elem_box_range_2D(origin, h, elem)
     iss = np.arange(lowerijk[0], upperijk[0], dtype=np.int64)
     jss = np.arange(lowerijk[1], upperijk[1], dtype=np.int64)
@@ -200,6 +211,17 @@ def single_elem_get_box_intersection_2D(
 def single_elem_get_grid_point_2D(
     origin: np.ndarray, h: float, elem: np.ndarray, closed=True
 ):
+    """
+    get grid point ijks inside the element
+    Args:
+        origin (np.ndarray): _description_
+        h (float): _description_
+        elem (np.ndarray): _description_
+        closed (bool, optional): _description_. Defaults to True.
+
+    Returns:
+        np.ndarray: _description_
+    """
     lowerijk, upperijk = single_elem_box_range_2D(origin, h, elem)
     iss = np.arange(lowerijk[0], upperijk[0] + 1, dtype=np.int64)
     jss = np.arange(lowerijk[1], upperijk[1] + 1, dtype=np.int64)

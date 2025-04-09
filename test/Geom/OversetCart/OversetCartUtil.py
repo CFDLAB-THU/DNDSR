@@ -100,3 +100,43 @@ def obtain_part_local_dists(self: OversetBG2D, osPart: OversetPart2D):
     print(f"points covered: {mpi.rank}, {len(local_point_dists)}")
 
     return local_point_dists
+
+
+def obtain_proc_local_bg_dists(self: OversetBG2D, part: OversetPart2D):
+    mpi = self._mpi
+    MPI = self._MPI
+    part_local_dists = obtain_part_local_dists(self, part)
+    part_local_dists_items = list(part_local_dists.items())
+
+    ijkv = np.array([v[0] for v in part_local_dists_items]).transpose()
+    if ijkv.size:
+        ranks = list(self.global_ijk_to_rank(ijkv))
+    else:
+        ranks = []
+    # sendLists = [[]] * self._mpi.size # ! this is wrong!!! the empty lists of each item refs the same
+    sendLists = [[] for _ in range(mpi.size)]
+
+    for i, rank in enumerate(ranks):
+        datac = part_local_dists_items[i]
+        sendLists[rank].append(datac)
+
+    recvLists = MPI.alltoall(sendLists)
+    # print(f"{mpi.rank}, {([len(v) for v in sendLists])}, {len(sendLists)}")
+    # return
+
+    ax_ranks = self.rank_to_ax_rank()
+    proc_bg_mesh_dist = np.ones(self.proc_grid_shape()) * 1e300
+    for recvL in recvLists:
+        # print(recvL)
+        for g_point, v in recvL:
+            for ax in range(2):
+                assert (
+                    g_point[ax] < self.nStarts4point[ax][ax_ranks[ax] + 1]
+                ), g_point[ax]
+            l_point = (
+                g_point[0] - self.nStarts4point[0][ax_ranks[0]],
+                g_point[1] - self.nStarts4point[1][ax_ranks[1]],
+            )
+            proc_bg_mesh_dist[l_point] = v
+    print(f"proc {mpi.rank}: min dist at grid point: {proc_bg_mesh_dist.min()}")
+    return proc_bg_mesh_dist

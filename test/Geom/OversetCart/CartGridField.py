@@ -42,6 +42,17 @@ class CartGridField:
 
         assert (np.array(dist_field.main.data()) == data.flat).all()
 
+    def set_main_data_from_expanded(self, data):
+        dist_field = self
+        cr = self._core_range_in_expanded
+        main_mem = np.array(dist_field.main.data(), copy=False)
+        main_mem.flat = data[cr[0][0] : cr[0][1], cr[1][0] : cr[1][1]].flat
+
+        assert (
+            np.array(dist_field.main.data())
+            == data[cr[0][0] : cr[0][1], cr[1][0] : cr[1][1]].flat
+        ).all()
+
     def set_ghost_global_pull(self, pullIdx):
         self.pair.trans.createFatherGlobalMapping()
         self.pair.trans.createGhostMapping(pullIdx)
