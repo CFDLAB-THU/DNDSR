@@ -1,5 +1,6 @@
 import DNDS, Geom
 import mpi4py as pyMPI
+import scipy.spatial
 from OversetCart import OversetBG2D, OversetPart2D, DistMap
 from utils import get_mpi4py_comm_from_MPIInfo
 import numpy as np
@@ -78,6 +79,8 @@ if __name__ == "__main__":
 
     translates = [[0, 0, 0], [1.5, 0, 0]]
     translates_end = [[0, 0, 0], [0.5, 0, 0]]
+    rot = np.array([0.0, 0])
+    rot_end = np.array([0.0, 0])
     translates = np.array(translates)
     translates_end = np.array(translates_end)
     Nstep = 41
@@ -109,8 +112,15 @@ if __name__ == "__main__":
     inter = np.linspace(0, 1, Nstep)
     for i in range(0, Nstep):
         translate_now = inter[i] * translates_end + (1 - inter[i]) * translates
+        rot_now = inter[i] * rot_end + (1 - inter[i]) * rot
+        import scipy.linalg
+        from scipy.spatial.transform import Rotation as R
+
         transforms = [
-            (np.eye(3, 3), np.array(translate_now[i]))
+            (
+                R.from_euler("xyz", [0, 0, rot_now[i]], degrees=True).as_matrix(),
+                np.array(translate_now[i]),
+            )
             for i in range(len(translate_now))
         ]
         for iPart, part in enumerate(osMan.parts):
@@ -118,4 +128,4 @@ if __name__ == "__main__":
 
         osMan.process_overset(1.0 / 10)
 
-        osMan.print_full_mesh_type(together=True, out_name=f"os_type_{i:04}")
+        osMan.print_full_mesh_type(together=True, out_name=f"os_type_0_{i:04}")

@@ -120,10 +120,6 @@ def obtain_part_local_elem_dists(self: OversetPart2D, bc_names=["WALL"]):
 
 def obtain_part_local_dists(self: OversetBG2D, osPart: OversetPart2D):
     mpi = self._mpi
-    MPI = self._MPI
-    origin = np.array(self.origins[0:2])
-    h = self.h
-    mesh = osPart._mesh
     local_point_dists = obtain_part_local_inner_grid_points_dist_dict(self, osPart)
 
     print(f"points covered: {mpi.rank}, {len(local_point_dists)}")
@@ -556,8 +552,11 @@ def decide_cell_types(
 
     for i, part in enumerate(parts):
         node_is_hole = (
-            self_dist_nodes[i] > min_dists_nodes_other[i]
-        )  # !using self_dist_nodes[i], not using exact nodal values here, for field consistency
+            self_dist_nodes[i]
+            > min_dists_nodes_other[i]
+            # part.dist_node > min_dists_nodes_other[i]
+        )
+        # !using self_dist_nodes[i], not using exact nodal values here, for field consistency
 
         # print("===\n" * 3 + f"i{i}, {node_is_hole.sum()}, {min_dists_nodes_other[i].min()}")
         mesh = part._mesh

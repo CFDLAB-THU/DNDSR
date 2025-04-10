@@ -24,11 +24,24 @@ class OversetPart2D:
     def transform(self, value):
         if not (value[0].shape == (3, 3) and value[1].shape == (3,)):
             raise ValueError("value shape wrong " + f"{value}")
-        rotrott = value[0] * value[0].T
+        rotrott = value[0] @ value[0].T
         err = np.linalg.norm(rotrott - np.eye(3), "fro")
         if err > 1e-5:
             raise ValueError(f"input not close to rotation: {value[0]}")
+        if np.linalg.norm(rotrott * np.array([[0, 0, 1], [0, 0, 1], [1, 1, 0]])) > 1e-5:
+            raise ValueError(f"input not 2d rotation: {value[0]}")
         self._transform = value
+
+        # don't forget to update AABB!
+        coordsFatherData = np.array(self._mesh.coords.father.data())
+        coordsFatherData = coordsFatherData.reshape((3, -1), order="F")
+        coordsFatherData = self.coord_mesh_to_phy(coordsFatherData)
+        coordsMax = coordsFatherData.max(axis=1)
+        coordsMin = coordsFatherData.min(axis=1)
+        self._MPI.Allreduce(None, coordsMax, op=pyMPI.MAX)
+        self._MPI.Allreduce(None, coordsMin, op=pyMPI.MIN)
+        self._xyzMax = coordsMax
+        self._xyzMin = coordsMin
 
     def coord_mesh_to_phy(self, coord_mesh):
         if coord_mesh.ndim == 2:
@@ -385,7 +398,9 @@ class OversetBG2D:
                 - 1
             )
             if np.any(indexAx < 0) or np.any(indexAx >= self.nProcAx[iax]):
-                raise ValueError(f"ijk {ijk} out of range")
+                raise ValueError(
+                    f"ijk {ijk[iax]} {ijk.max(axis=1)} {self.nStarts4point[iax] if is_point else self.nStarts[iax]} {indexAx} out of range"
+                )
             idxs.append(indexAx)
         # print(idxs)
         return self.procMap[tuple(idxs)]
