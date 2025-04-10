@@ -2,6 +2,7 @@ import DNDS, Geom, os, sys
 import mpi4py.MPI as MPI
 import numpy as np
 
+
 def get_mesh_2D(meshFile: str, mpi: DNDS.MPIInfo):
 
     mesh = Geom.UnstructuredMesh(mpi, 2)
@@ -25,3 +26,13 @@ def get_mesh_2D(meshFile: str, mpi: DNDS.MPIInfo):
 def get_mpi4py_comm_from_MPIInfo(mpi: DNDS.MPIInfo):
     return MPI.Comm.fromhandle(mpi.comm())  # handling raw MPI_Comm handle (pointer)
 
+t_travelling_cell_pack = tuple[Geom.Elem.ElemType, int, int, list[int], np.ndarray]
+
+def pack_travelling_cell(
+    cellType: Geom.Elem.ElemType,
+    cellZone: int,
+    iCell: int,
+    cell2nodeRow: list[int],
+    coords: np.ndarray,
+):
+    return (cellType, cellZone, iCell, cell2nodeRow, coords)

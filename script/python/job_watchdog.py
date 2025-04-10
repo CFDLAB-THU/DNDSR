@@ -64,8 +64,8 @@ class Watcher:
         sq_jobs = get_squeue_jobs()
         for dirpath, dirnames, filenames in os.walk(self.job_record):
             for f_record in filenames:
-                if f_record in sq_jobs.keys():
-                    if f_record not in self.stall_records.keys():
+                if f_record in sq_jobs:
+                    if f_record not in self.stall_records:
                         self.stall_records[f_record] = 0
                     last_size, this_size = getset_output_fsize(
                         f_record, self.job_record

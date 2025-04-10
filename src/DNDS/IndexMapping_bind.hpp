@@ -42,9 +42,9 @@ namespace DNDS
                 },
                 py::keep_alive<0, 1>())
             .def("search", [](GlobalOffsetsMapping &self, index globalQuery)
-                 { return self.search(globalQuery); })
+                 { return self.search(globalQuery); }, py::arg("globalQuery"))
             .def("__call__", [](GlobalOffsetsMapping &self, MPI_int rank, index val)
-                 { return self.operator()(rank, val); });
+                 { return self.operator()(rank, val); }, py::arg("rank"), py::arg("val"));
     }
 
     inline auto pybind11_OffsetAscendIndexMapping_declare(py::module_ m)

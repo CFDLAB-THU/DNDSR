@@ -52,8 +52,58 @@ class OversetPart2D:
 
         self.dist_node = obtain_part_local_elem_dists(self, bc_names)
 
+    def get_travelling_cell(self, iCell: int, in_phy: bool = True):
+        mesh = self._mesh
+        part = self
+
+        cell2node = np.array(mesh.cell2node[iCell], copy=False)
+        coords = []
+        for iNode in cell2node:
+            coords.append(np.array(mesh.coords[iNode], copy=True))
+        coords = np.array(coords).transpose()
+        if in_phy:
+            coords = part.coord_mesh_to_phy(coords)
+        elemInfo = mesh.cellElemInfo[iCell, 0]
+        assert elemInfo.getElemType() in {
+            Geom.Elem.ElemType.Tri3,
+            Geom.Elem.ElemType.Quad4,
+        }  # coords is now polygon
+        travelling_cell = pack_travelling_cell(
+            cellType=elemInfo.getElemType(),
+            cellZone=elemInfo.zone,
+            iCell=mesh.cell2node.trans.LGhostMapping(-1, iCell),
+            cell2nodeRow=[
+                mesh.coords.trans.LGhostMapping(-1, iNode) for iNode in cell2node
+            ],
+            coords=coords,
+        )
+        return travelling_cell
+
+
+class DistMap:
+
+    def __init__(
+        self,
+        cell_bnds: dict[tuple[int], list[t_travelling_cell_pack]],
+        dist_field: CartGridField,
+        cell_cell_inds: dict[tuple[int], set[int]],
+        cell_cells_on_bnd: dict[tuple[int], list[t_travelling_cell_pack]],
+    ):
+        (
+            self.cell_bnds,
+            self.dist_field,
+            self.cell_cell_inds,
+            self.cell_cells_on_bnd,
+        ) = (
+            cell_bnds,
+            dist_field,
+            cell_cell_inds,
+            cell_cells_on_bnd,
+        )
+
 
 class OversetBG2D:
+
     def __init__(self, mpi: DNDS.MPIInfo):
         self._mpi = mpi
         self._MPI = get_mpi4py_comm_from_MPIInfo(mpi)
@@ -350,37 +400,35 @@ class OversetBG2D:
             :2, np.newaxis, np.newaxis
         ] + self.h * self.proc_grid_ijkarray(is_point=True, expanded=expanded)
 
+    @staticmethod
+    @property
+    def cell_bnds_type():
+        return dict[tuple[int], list[tuple[Geom.Elem.ElemType, int, np.ndarray]]]
+
+    @staticmethod
+    @property
+    def proc_dist_map_type():
+        return DistMap
+
     def obtain_dist_map(self, parts: list[OversetPart2D], bc_names=["WALL"]):
         MPI = self._MPI
         mpi = self._mpi
-        from OversetCartUtil import obtain_proc_local_bg_dists, get_mesh_bnd_elems
+        from OversetCartUtil import (
+            obtain_proc_local_bg_dists,
+            obtain_proc_local_bg_cell_bnd_elems,
+            obtain_proc_local_bg_cell_cell_elem_inds,
+            obtain_proc_local_bg_cell_elems_with_bnd,
+            get_mesh_bnd_elems,
+            dist_field_neg_hole_expansion,
+        )
         from CartUtil import single_elem_get_box_intersection_2D
 
         proc_dist_maps = []
 
         for iPart, part in enumerate(parts):
             proc_bg_mesh_dist = obtain_proc_local_bg_dists(self, part)
-            bnd_elems = get_mesh_bnd_elems(part)
-
-            send_lists = [[] for _ in range(mpi.size)]
-            for type, bcid, coords in bnd_elems:
-                cell_ijks = single_elem_get_box_intersection_2D(
-                    self.origins[:2], self.h, coords[0:2, :]
-                )
-                ranks = self.global_ijk_to_rank(cell_ijks)
-                for ic, rank in enumerate(ranks):
-                    send_lists[rank].append((type, bcid, coords, cell_ijks[:, ic]))
-            recv_lists = MPI.alltoall(send_lists)
-            cell_bnds = {}
-            for type, bcid, coords, cell_ijk in itertools.chain(*recv_lists):
-                cell_ijk_t = tuple(int(v) for v in cell_ijk)
-                item = (type, bcid, coords)
-                if cell_ijk_t in cell_bnds.keys():
-                    cell_bnds[cell_ijk_t].append(item)
-                else:
-                    cell_bnds[cell_ijk_t] = [item]
-
-            print([len(v) for v in send_lists])
+            cell_bnds = obtain_proc_local_bg_cell_bnd_elems(self, part)
+            cell_cell_inds = obtain_proc_local_bg_cell_cell_elem_inds(self, part)
 
             dist_field = CartGridField(1, self.proc_grid_shape(), mpi)
             dist_field.set_main_data(proc_bg_mesh_dist[:, :, None])
@@ -396,101 +444,37 @@ class OversetBG2D:
             #     f"{mpi.rank} - {self.grid_point_expanded_idxs_g_ijks_local}, {dist_field.ghost.Size()}"
             # )
 
-            dist_expanded_array = dist_field.get_expanded_array()
+            dist_field_neg_hole_expansion(self, part, bc_names, cell_bnds, dist_field)
 
-            offsets = [(0, 0), (1, 0), (0, 1), (1, 1)]
-            for ijk, bnd_list in cell_bnds.items():
-                for type, bcid, coords in bnd_list:
-                    assert type == Geom.Elem.ElemType.Line2
-                    if bcid in [part._name2ID[name] for name in bc_names]:
-                        for offset in offsets:
-                            ijkp = tuple([ijk[iax] + offset[iax] for iax in range(2)])
-                            ijkp_in_expanded = tuple(
-                                [
-                                    ijkp[iax]
-                                    - self.proc_grid_range_expanded(is_point=True)[iax][
-                                        0
-                                    ]
-                                    for iax in range(2)
-                                ]
-                            )
-                            if dist_expanded_array[ijkp_in_expanded] > 1e299:
-                                dist_expanded_array[ijkp_in_expanded] = -100
-            dist_field.set_main_data_from_expanded(dist_expanded_array)
-            dist_field.trans.startPersistentPull()
-            dist_field.trans.waitPersistentPull()
-
-            ijks_expanded = self.proc_grid_ijkarray(is_point=True, expanded=True)
-            ijks_expanded[0] -= self.proc_grid_range_expanded()[0][0]
-            ijks_expanded[1] -= self.proc_grid_range_expanded()[1][0]
-            cr = self.proc_grid_core_range_in_local_expanded(is_point=True)
-            ijks_expanded_core = ijks_expanded[
-                :, cr[0][0] : cr[0][1], cr[1][0] : cr[1][1]
-            ]
-            ijks_expanded_core = ijks_expanded_core.reshape((2, -1))
-            ijks_expanded_core_le = np.array(
-                [ijks_expanded_core[0] - 1, ijks_expanded_core[1]]
-            )
-            ijks_expanded_core_ri = np.array(
-                [ijks_expanded_core[0] + 1, ijks_expanded_core[1]]
-            )
-            ijks_expanded_core_lo = np.array(
-                [ijks_expanded_core[0], ijks_expanded_core[1] - 1]
-            )
-            ijks_expanded_core_up = np.array(
-                [ijks_expanded_core[0], ijks_expanded_core[1] + 1]
+            cell_cells_on_bnd = obtain_proc_local_bg_cell_elems_with_bnd(
+                self, part, cell_bnds, cell_cell_inds
             )
 
-            offsets = [(0, 1), (0, -1), (1, 0), (-1, 0)]
-            for iter in range(10000):
-                dist_expanded_array = dist_field.get_expanded_array()
-                dist_expanded_array_new = np.array(dist_expanded_array)
-                count = 0
-                for ic in range(ijks_expanded_core.shape[1]):
-                    ijk = tuple(ijks_expanded_core[:, ic])
-                    if dist_expanded_array[ijk] > 1e299:
-                        for ijk_nei in [
-                            ijks_expanded_core_le[:, ic],
-                            ijks_expanded_core_ri[:, ic],
-                            ijks_expanded_core_lo[:, ic],
-                            ijks_expanded_core_up[:, ic],
-                        ]:
-                            ijk_nei = tuple(ijk_nei)
-                            if (
-                                0 <= ijk_nei[0] < dist_expanded_array.shape[0]
-                                and 0 <= ijk_nei[1] < dist_expanded_array.shape[1]
-                                and dist_expanded_array[ijk_nei] < 0
-                            ):
-                                count += 1
-                                dist_expanded_array_new[ijk] = dist_expanded_array[
-                                    ijk_nei
-                                ]
-                count = MPI.allreduce(count, pyMPI.SUM)
-                if mpi.rank == 0:
-                    print(f"negative hole: iter [{iter}] Done")
-                if count == 0:
-                    break
-                dist_field.set_main_data_from_expanded(dist_expanded_array_new)
-                dist_field.trans.startPersistentPull()
-                dist_field.trans.waitPersistentPull()
-            else:
-                print(f"count left: {count}")
-
-            proc_dist_maps.append((cell_bnds, dist_field))
+            proc_dist_maps.append(
+                DistMap(cell_bnds, dist_field, cell_cell_inds, cell_cells_on_bnd)
+            )
 
         return proc_dist_maps
 
-    def print_proc_dist_maps(self, maps: list[tuple[dict, CartGridField]]):
-        for iPart, item in enumerate(maps):
+    def print_proc_dist_maps(self, proc_dist_maps: list[DistMap]):
+        for iPart, item in enumerate(proc_dist_maps):
             import matplotlib.pyplot as plt
+            import matplotlib.patches as patches
 
-            cell_bnds, dist_field = item
+            cell_bnds, dist_field, cell_cell_inds = (
+                item.cell_bnds,
+                item.dist_field,
+                item.cell_cell_inds,
+            )
+            cell_cells_on_bnd = item.cell_cells_on_bnd
 
             data = np.array(dist_field.get_expanded_array()[:, :, 0])
             data = np.minimum(data, 3)
+            data = np.maximum(data, -1)
             [xv, yv] = self.proc_grid_point_coords(expanded=True)
             # Create the plot
-            plt.figure(figsize=(8, 6))
+
+            plt.figure(figsize=(8, 6), dpi=320)
             print(f"{xv.shape}, {yv.shape}, {data.shape}")
             qmesh = plt.pcolormesh(
                 xv,
@@ -506,9 +490,40 @@ class OversetBG2D:
                 plt.plot([x, x], [yv[0, 0], yv[0, -1]], c="k", lw=lw)
             for y in yv[0, :]:
                 plt.plot([xv[-1, 0], xv[0, 0]], [y, y], c="k", lw=lw)
-            for type, bcid, coords in itertools.chain(*cell_bnds.values()):
+            for type, bcid, _, b2n, coords in itertools.chain(*cell_bnds.values()):
                 assert type == Geom.Elem.ElemType.Line2
-                plt.plot(coords[0], coords[1], c="r", marker=".")
+                plt.plot(coords[0], coords[1], c="r", marker=".", lw=0.1, ms=0.1)
+            for ijks in cell_bnds.keys():
+                center = (np.array(ijks) + 0.5) * self.h + self.origins[:2]
+                plt.plot(
+                    center[0], center[1], marker="o", ms=5, mfc="none", mew=0.3, c="k"
+                )
+
+            for ijks in cell_cell_inds:
+                center = (np.array(ijks) + 0.5) * self.h + self.origins[:2]
+                number = len(cell_cell_inds[ijks])
+                plt.text(
+                    center[0], center[1], f"{number}", va="center", ha="center", size=4
+                )
+
+            for ijks, elems in cell_cells_on_bnd.items():
+                for cellType, cellZone, iCell, cell2nodeRow, coords in elems:
+                    assert cellType in {
+                        Geom.Elem.ElemType.Quad4,
+                        Geom.Elem.ElemType.Tri3,
+                    }
+                    for iN in range(coords.shape[1]):
+                        # plt.plot(
+                        #     coords[0], coords[1], c="g", marker=".", lw=0.1, ms=0.1
+                        # )
+                        polygon = patches.Polygon(
+                            coords[:2, :].transpose(),
+                            closed=True,
+                            edgecolor="none",
+                            facecolor=(0.5, 0.2, 0, 0.3),
+                            lw=1,
+                        )
+                        plt.gca().add_patch(polygon)
 
             # Add a colorbar to show the mapping of values to colors
             plt.colorbar()
@@ -520,7 +535,7 @@ if __name__ == "__main__":
     mpi = DNDS.MPIInfo()
     mpi.setWorld()
 
-    osPart = OversetPart2D(mpi)
+    osPart = OversetPart2D(mpi, transform=(np.eye(3, 3), np.array([1, 0, 0])))
     osPart.read_mesh(
         os.path.join(
             os.path.dirname(__file__),

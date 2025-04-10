@@ -83,3 +83,31 @@ class CartGridField:
             (-1, self._rs)
         )
         return data_expanded
+
+
+# class CartGridIndTable:
+#     def __init__(self, local_shape: tuple[int, int], mpi: DNDS.MPIInfo, rs_dyn=None):
+#         self._mpi = mpi
+#         self._local_shape = local_shape
+#         local_size = np.array(local_shape, dtype=np.int64).prod()
+
+#         arrPair = DNDS.ArrayAdjacencyPair("I")
+#         arrPair.father = DNDS.ArrayAdjacency("I", init_args=(mpi,))
+#         arrPair.son = DNDS.ArrayAdjacency("I", init_args=(mpi,))
+#         arrPair.TransAttach()
+
+#         arrPair.father.Resize(local_size)
+#         self.pair = arrPair
+
+#     @property
+#     def main(self):
+#         return self.pair.father
+
+#     @property
+#     def ghost(self):
+#         return self.pair.son
+
+#     @property
+#     def trans(self):
+#         return self.pair.trans
+
