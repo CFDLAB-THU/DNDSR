@@ -16,6 +16,20 @@ class OversetPart2D:
         assert transform[0].shape == (3, 3)
         assert transform[1].shape == (3,)
 
+    @property
+    def transform(self):
+        return self._transform
+
+    @transform.setter
+    def transform(self, value):
+        if not (value[0].shape == (3, 3) and value[1].shape == (3,)):
+            raise ValueError("value shape wrong " + f"{value}")
+        rotrott = value[0] * value[0].T
+        err = np.linalg.norm(rotrott - np.eye(3), "fro")
+        if err > 1e-5:
+            raise ValueError(f"input not close to rotation: {value[0]}")
+        self._transform = value
+
     def coord_mesh_to_phy(self, coord_mesh):
         if coord_mesh.ndim == 2:
             return self._transform[0] @ coord_mesh + self._transform[1][:, np.newaxis]
@@ -78,6 +92,56 @@ class OversetPart2D:
             coords=coords,
         )
         return travelling_cell
+
+    def print_full_mesh_type(
+        self,
+        iPart,
+        cell_type_arr: DNDS.ArrayEigenVectorPair_1_1_D,
+        no_hole=False,
+        ax=None,
+    ):
+        mpi = self._mpi
+        MPI = self._MPI
+
+        mesh = self._mesh
+        travelling_cell_type_list = []
+        for iCell in range(mesh.NumCell()):
+            cell_type = cell_type_arr[iCell].tolist()[0]  # float
+            travelling_cell_type_list.append(
+                self.get_travelling_cell(iCell, in_phy=True) + (cell_type,)
+            )
+
+        all_cell_types = MPI.gather(travelling_cell_type_list, root=0)
+
+        if mpi.rank != 0:
+            return
+
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as patches
+
+        self_ax = ax is None
+        if ax is None:
+            fig = plt.figure(figsize=(8, 6), dpi=320)
+            ax = plt.gca()
+        for cellType, _, iCell, _, coords, osType in itertools.chain(*all_cell_types):
+            assert cellType in {Geom.Elem.ElemType.Quad4, Geom.Elem.ElemType.Tri3}
+            if no_hole and not (osType == 0):
+                continue
+            polygon = patches.Polygon(
+                coords[:2, :].transpose(),
+                closed=True,
+                alpha=0.2,
+                edgecolor="k",
+                facecolor=f"C{int(iPart)}",
+                ls="-" if osType == 0 else "none",
+                lw=0.3,
+            )
+            ax.add_patch(polygon)
+
+        if self_ax:
+            plt.axis("equal")
+            plt.savefig(f"part_{iPart}.png")
+            plt.close(fig)
 
 
 class DistMap:
@@ -456,7 +520,20 @@ class OversetBG2D:
 
         return proc_dist_maps
 
-    def print_proc_dist_maps(self, proc_dist_maps: list[DistMap]):
+    def query_dist_from_points(self, distMap: DistMap, points: np.ndarray):
+        from OversetCartUtil import query_dist_from_points
+
+        return query_dist_from_points(self, distMap, points)
+
+    def decide_cell_types(
+        self, parts: list[OversetPart2D], proc_dist_maps: list[DistMap]
+    ):
+        from OversetCartUtil import decide_cell_types
+
+        return decide_cell_types(self, parts, proc_dist_maps)
+
+    def print_proc_dist_maps(self, proc_dist_maps: list[DistMap], cmin=-1, cmax=10):
+        mpi = self._mpi
         for iPart, item in enumerate(proc_dist_maps):
             import matplotlib.pyplot as plt
             import matplotlib.patches as patches
@@ -469,12 +546,12 @@ class OversetBG2D:
             cell_cells_on_bnd = item.cell_cells_on_bnd
 
             data = np.array(dist_field.get_expanded_array()[:, :, 0])
-            data = np.minimum(data, 3)
-            data = np.maximum(data, -1)
+            data = np.minimum(data, cmax)
+            data = np.maximum(data, cmin)
             [xv, yv] = self.proc_grid_point_coords(expanded=True)
             # Create the plot
 
-            plt.figure(figsize=(8, 6), dpi=320)
+            fig = plt.figure(figsize=(8, 6), dpi=320)
             print(f"{xv.shape}, {yv.shape}, {data.shape}")
             qmesh = plt.pcolormesh(
                 xv,
@@ -529,14 +606,22 @@ class OversetBG2D:
             plt.colorbar()
             plt.axis("equal")
             plt.savefig(f"part_{iPart}_rank_{mpi.rank}.png")
+            plt.close(fig)
 
 
 if __name__ == "__main__":
-    mpi = DNDS.MPIInfo()
-    mpi.setWorld()
+    mpiGlob = DNDS.MPIInfo()
+    mpiGlob.setWorld()
+    from OversetCartManager import OversetBG2DManager
 
-    osPart = OversetPart2D(mpi, transform=(np.eye(3, 3), np.array([1, 0, 0])))
-    osPart.read_mesh(
+    translates = [[0, 0, 0], [1.5, 0, 0]]
+
+    transforms = [
+        (np.eye(3, 3), np.array(translates[i])) for i in range(len(translates))
+    ]
+    # translates = [[0, 0, 0]]
+
+    mesh_names = [
         os.path.join(
             os.path.dirname(__file__),
             "..",
@@ -546,21 +631,25 @@ if __name__ == "__main__":
             "mesh",
             "CylinderNoFar.cgns",
         )
-    )
-    osPart.obtain_dist_node()
+    ] * len(transforms)
 
-    osBG = OversetBG2D(mpi)
-    osBG.set_bg([osPart], 1.0 / 10)
-    assert osBG.procMap[osBG.rank_to_ax_rank()] == mpi.rank
-    dist_maps = osBG.obtain_dist_map([osPart])
-    osBG.print_proc_dist_maps(dist_maps)
+    osMan = OversetBG2DManager(mpiGlob)
 
-    if mpi.rank == 0:
+    osMan.read_meshes_and_init(mesh_names, transforms)
+
+    osMan.process_overset(1.0 / 10)
+
+    osMan.print_proc_dist_maps()
+
+    osMan.print_full_mesh_type(together=True)
+
+    osBG = osMan.osBG
+    if mpiGlob.rank == 0:
         _ = osBG.global_ijk_to_rank(
             np.random.randint(0, min(osBG.grid_shape[0:2]) - 1, size=(2, 32))
         )
 
-        print(osBG.global_ijk_to_rank([v - 1 for v in osBG.grid_shape], is_point=True))
+        # print(osBG.global_ijk_to_rank([v - 1 for v in osBG.grid_shape], is_point=True))
 
         try:
             print(

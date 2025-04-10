@@ -138,7 +138,11 @@ namespace DNDS // Array
                         buf_format.reserve(32);
                         for (size_t i = 0; i < TArray::sizeof_T; i++)
                             buf_format += "c"; // now we use a untyped byte data
-                        return py::memoryview::from_buffer(self.data(), TArray::sizeof_T, buf_format.c_str(), {self.DataSize()}, {TArray::sizeof_T});
+                        return py::memoryview::from_buffer(
+                            self.DataSize() ? self.data() : (T *)(&self), // for null buffer
+                            TArray::sizeof_T,
+                            buf_format.c_str(),
+                            {self.DataSize()}, {TArray::sizeof_T});
                     }
                 },
                 py::keep_alive<0, 1>() /* remember to keep alive */);

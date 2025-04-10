@@ -79,9 +79,10 @@ class CartGridField:
         ghost_is, ghost_js = self._grid_point_expanded_idxs_g_ijks_local
 
         data_expanded[cr[0][0] : cr[0][1], cr[1][0] : cr[1][1]] = self.mdata
-        data_expanded[ghost_is, ghost_js] = np.array(self.ghost.data()).reshape(
-            (-1, self._rs)
-        )
+        if ghost_is.size:
+            data_expanded[ghost_is, ghost_js] = np.array(self.ghost.data()).reshape(
+                (-1, self._rs)
+            )
         return data_expanded
 
 
@@ -110,4 +111,3 @@ class CartGridField:
 #     @property
 #     def trans(self):
 #         return self.pair.trans
-

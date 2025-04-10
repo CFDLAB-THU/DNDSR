@@ -174,8 +174,8 @@ def single_elem_box_range_2D(
     xyzmin = elem.min(axis=1)
     xyzmax = elem.max(axis=1)
 
-    lowerijk = np.floor((xyzmin - origin) / h)
-    upperijk = np.ceil((xyzmax - origin) / h)
+    lowerijk = np.floor((xyzmin - origin) / h - grid_eps)
+    upperijk = np.ceil((xyzmax - origin) / h + grid_eps) #add eps here to avoid problems when elem is precisely edge
 
     assert np.all(
         (origin + upperijk * h) + grid_eps >= xyzmax
@@ -230,6 +230,13 @@ def single_elem_get_grid_point_2D(
 
     mask = single_elem_grid_points_mask_2D(origin, h, ijks, elem, closed=closed)
     return ijks[:, mask]
+
+
+def points_get_grid_cells_2D(origin: np.ndarray, h: float, coords: np.ndarray):
+    originCS = np.ones(coords.ndim, dtype=np.int64)
+    originCS[0] = coords.shape[0]
+    lowerijk = np.floor((coords - origin.reshape(originCS)) / h)
+    return np.array(lowerijk, dtype=np.int64)
 
 
 if __name__ == "__main__":

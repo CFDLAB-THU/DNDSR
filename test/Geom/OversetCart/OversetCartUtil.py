@@ -98,14 +98,18 @@ def obtain_part_local_elem_dists(self: OversetPart2D, bc_names=["WALL"]):
     tree = scipy.spatial.KDTree(np.array(bnd_geoms))
 
     mesh = self._mesh
-    dists = np.ones((mesh.NumNodeProc()), dtype=np.float64) * 1e-300
+    dists = np.ones((mesh.NumNodeProc()), dtype=np.float64) * 1e300
     coordsFatherData = np.array(self._mesh.coords.father.data())
     coordsFatherData = coordsFatherData.reshape((3, -1), order="F")
 
     distq, idx = tree.query(coordsFatherData.T)
     dists[0 : mesh.NumNode()] = distq
 
-    coordsSonData = np.array(self._mesh.coords.son.data())
+    coordsSonData = (
+        np.array(self._mesh.coords.son.data())
+        if self._mesh.coords.son.Size()
+        else np.zeros(0)  # why does empty son returns a NULL buffer?
+    )
     coordsSonData = coordsSonData.reshape((3, -1), order="F")
 
     distq, idx = tree.query(coordsSonData.T)
@@ -360,7 +364,7 @@ def obtain_proc_local_bg_cell_cell_elem_inds(self: OversetBG2D, part: OversetPar
     for ijk, iCellG in itertools.chain(*recv_list):
         ijkt = tuple([int(v) for v in ijk])
         d[ijkt].append(iCellG)
-        
+
     for k in d:
         d[k] = set(sorted(d[k]))
 
@@ -368,3 +372,209 @@ def obtain_proc_local_bg_cell_cell_elem_inds(self: OversetBG2D, part: OversetPar
     #     print(d)
 
     return proc_cell_global_ijk_to_part_cell_dict
+
+
+def query_dist_from_points(
+    self: OversetBG2D, distMap: DistMap, points: np.ndarray, rel_tol=1e-8
+):
+    mpi = self._mpi
+    MPI = self._MPI
+    assert points.shape[0] == 2
+    points = np.reshape(points, (2, -1))
+
+    ijks = points_get_grid_cells_2D(self.origins[:2], self.h, points)
+    ranks = self.global_ijk_to_rank(ijks, is_point=False)
+    # print(ranks)
+
+    query_send = [set() for _ in range(mpi.size)]
+    for iq, rank in enumerate(ranks):
+        query_send[rank].add(tuple([int(v) for v in ijks[:, iq]]))
+    query_recv = MPI.alltoall(query_send)
+
+    data_send = [{} for _ in range(mpi.size)]
+
+    proc_grid_point_dists = distMap.dist_field.get_expanded_array()
+
+    for rank_to, queries in enumerate(query_recv):
+        for ijk in queries:
+            ijk_local_p = tuple(
+                [
+                    ijk[iax] - self.proc_grid_range_expanded(is_point=True)[iax][0]
+                    for iax in range(2)
+                ]
+            )
+            dists = [
+                proc_grid_point_dists[
+                    ijk_local_p[0] + disp[0], ijk_local_p[1] + disp[1]
+                ]
+                for disp in [(0, 0), (1, 0), (0, 1), (1, 1)]
+            ]
+            dists = np.array(dists)
+            additional = None
+            if ijk in distMap.cell_bnds:
+                bnd_elems = distMap.cell_bnds[ijk]
+                assert ijk in distMap.cell_cells_on_bnd
+                bnd_cell_elems = distMap.cell_cells_on_bnd[ijk]
+                additional = (bnd_elems, bnd_cell_elems)
+            assert ijk not in data_send[rank_to]
+            data_send[rank_to][ijk] = (dists, additional)
+
+    data_recv = MPI.alltoall(data_send)
+    data_recv_merged = {k: v for d in data_recv for k, v in d.items()}
+
+    dist_results = np.zeros(points.shape[1]) + 1e300
+    for iq in range(points.shape[1]):
+        ijkt = tuple([int(v) for v in ijks[:, iq]])
+        dists, additional = data_recv_merged[ijkt]
+        if dists.max() < 0:
+            dist_results[iq] = dists.max()
+            continue
+        if dists.min() > 1e299:
+            dist_results[iq] = 1e300
+            continue
+        if ((0 <= dists) & (dists <= 1e299)).all():
+            xyz01 = [
+                (
+                    self.origins[iax] + ijkt[iax] * self.h,
+                    self.origins[iax] + (ijkt[iax] + 1) * self.h,
+                )
+                for iax in range(2)
+            ]
+            xis = np.array(
+                [(points[iax, iq] - xyz01[iax][0]) / self.h for iax in range(2)],
+                dtype=np.float64,
+            )
+            assert (
+                (0 - rel_tol <= xis) & (xis <= 1 + rel_tol)
+            ).all(), f"{xis}, {points[:, iq]}"
+
+            bases = [
+                np.array(
+                    [1 - xis[iax] if offset[iax] == 0 else xis[iax] for iax in range(2)]
+                ).prod()
+                for offset in [(0, 0), (1, 0), (0, 1), (1, 1)]
+            ]
+            dist_results[iq] = np.array(bases).dot(dists)
+            continue
+        assert additional is not None, f"{ijkt}, {iq}, {(dists.min(),dists.max())}"
+        bnd_elems, bnd_cell_elems = additional
+        found_num = 0
+        for ct, _, _, _, coords in bnd_cell_elems:  #!check if inside mesh really
+            is_in = points_in_polygon_winding(
+                coords[:2, :], points[0, iq], points[1, iq]
+            )
+            if is_in:
+                found_num += 1
+                break
+        if found_num:
+            if dists.min() < 0:
+                #! exact search!
+                # todo: better exact search
+                distc = 1e300
+                for bct, _, _, _, coords in bnd_elems:
+                    p = points[:, iq]
+                    edist = np.linalg.vector_norm(
+                        coords[:2, :] - p[:, None], axis=0
+                    ).min()
+                    distc = min(distc, edist)
+                    p1 = coords[:2, 0]
+                    p2 = coords[:2, 1]
+                    x12 = p2 - p1
+                    x10 = p - p1
+                    xi = x10.dot(x12) / x12.dot(x12)
+                    if 0 <= xi and xi <= 1:
+                        distM = np.linalg.vector_norm(xi * x12 - x10)
+                        distc = min(distc, distM)
+
+                dist_results[iq] = distc
+                # print(distc)
+            if dists.max() > 1e299:
+                dist_results[iq] = dists.min()
+        else:
+            if dists.min() < 0:
+                dist_results[iq] = dists.min()
+            if dists.max() > 1e299:
+                dist_results[iq] = 1e300
+
+        # raise RuntimeWarning("not implemented")
+
+    # print(data_recv_merged)
+    return dist_results
+
+
+def decide_cell_types(
+    self: OversetBG2D, parts: list[OversetPart2D], proc_dist_maps: list[DistMap]
+):
+    mpi = self._mpi
+    MPI = self._MPI
+    check_pairs = []
+    for i in range(len(parts)):
+        for j in range(len(parts)):
+            check_pairs.append((i, j))
+
+    other_dists_nodes = [{} for _ in range(len(parts))]
+    self_dist_nodes = [None] * len(parts)
+
+    for i, j in check_pairs:
+        part_this = parts[i]
+        dist_that = proc_dist_maps[j]
+        mesh = part_this._mesh
+        coordsFatherData = np.array(mesh.coords.father.data())
+        coordsFatherData = coordsFatherData.reshape((3, -1), order="F")
+
+        coordsSonData = (
+            np.array(mesh.coords.son.data())
+            if mesh.coords.son.Size()
+            else np.zeros(0)  # why does empty son returns a NULL buffer?
+        )
+        coordsSonData = coordsSonData.reshape((3, -1), order="F")
+
+        coordsFullData = np.concat([coordsFatherData, coordsSonData], axis=1)
+        coordsFullData = part_this.coord_mesh_to_phy(
+            coordsFullData
+        )  # do not forget to physical coord
+        coordsFullData = coordsFullData[:2, :]
+
+        if j == i:
+            self_dist_nodes[i] = self.query_dist_from_points(dist_that, coordsFullData)
+        else:
+            other_dists_nodes[i][j] = self.query_dist_from_points(
+                dist_that, coordsFullData
+            )
+
+    min_dists_nodes_other = []
+    for i, other_set in enumerate(other_dists_nodes):
+        part_this = parts[i]
+        mesh = part_this._mesh
+        min_dist_other = np.zeros((mesh.NumNodeProc())) + 1e301
+        for other_dist in other_set.values():
+            min_dist_other = np.minimum(min_dist_other, other_dist)
+            # print("===\n" * 3 + f"i{i}, {other_dist.min()}")
+        min_dists_nodes_other.append(min_dist_other)
+
+    cell_type_arrs = []
+
+    for i, part in enumerate(parts):
+        node_is_hole = (
+            self_dist_nodes[i] > min_dists_nodes_other[i]
+        )  # !using self_dist_nodes[i], not using exact nodal values here, for field consistency
+
+        # print("===\n" * 3 + f"i{i}, {node_is_hole.sum()}, {min_dists_nodes_other[i].min()}")
+        mesh = part._mesh
+        cell_type = np.zeros((mesh.NumCell()))
+        for iCell in range(mesh.NumCell()):
+            c2n = mesh.cell2node[iCell].tolist()
+            c2n_is_hole = node_is_hole[c2n]
+            cell_type[iCell] = 1 if c2n_is_hole.all() else 0
+        cell_type_arr = DNDS.ArrayEigenVectorPair(1)
+        cell_type_arr.father = DNDS.ArrayEigenVector(1, init_args=(mpi,))
+        cell_type_arr.son = DNDS.ArrayEigenVector(1, init_args=(mpi,))
+        cell_type_arr.TransAttach()
+        cell_type_arr.father.Resize(mesh.NumCell())
+        cell_type_arr_father_data_in = np.array(cell_type_arr.father.data(), copy=False)
+        cell_type_arr_father_data_in[:] = cell_type.flat
+        cell_type_arr.trans.BorrowGGIndexing(mesh.cell2node.trans)
+        cell_type_arr.trans.createMPITypes()
+        cell_type_arr.trans.pullOnce()
+        cell_type_arrs.append(cell_type_arr)
+    return (cell_type_arrs, other_dists_nodes)
