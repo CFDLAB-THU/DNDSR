@@ -399,7 +399,7 @@ class OversetBG2D:
             )
             if np.any(indexAx < 0) or np.any(indexAx >= self.nProcAx[iax]):
                 raise ValueError(
-                    f"ijk {ijk[iax]} {ijk.max(axis=1)} {self.nStarts4point[iax] if is_point else self.nStarts[iax]} {indexAx} out of range"
+                    f"ijk {ijk[iax]} {ijk} {self.nStarts4point[iax] if is_point else self.nStarts[iax]} {indexAx} out of range"
                 )
             idxs.append(indexAx)
         # print(idxs)

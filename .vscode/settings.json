@@ -19,6 +19,7 @@
         "external/boost",
         "external/pybind11-2.11.1/include",
         "external/pybind11/include",
+        "external/pybind11_json/include",
         "external/fmt-10.1.1/include",
         "external/fmt/include",
         "external/argparse-3.0/include/argparse",

@@ -5,6 +5,7 @@ from OversetCart import OversetBG2D, OversetPart2D, DistMap
 from utils import get_mpi4py_comm_from_MPIInfo
 import numpy as np
 import sys, os
+import time
 
 
 class OversetBG2DManager:
@@ -44,11 +45,11 @@ class OversetBG2DManager:
             parts, dist_maps
         )
 
-        print(
-            osBG.query_dist_from_points(
-                dist_maps[0], points=np.array([[0.25, 0, 0 - 0.025], [0.5, 0.25, 0.5]])
-            )
-        )
+        # print(
+        #     osBG.query_dist_from_points(
+        #         dist_maps[0], points=np.array([[0.25, 0, 0 - 0.025], [0.5, 0.25, 0.5]])
+        #     )
+        # )
 
     def print_proc_dist_maps(self):
         self.osBG.print_proc_dist_maps(self.dist_maps)
@@ -126,6 +127,9 @@ if __name__ == "__main__":
         for iPart, part in enumerate(osMan.parts):
             part.transform = transforms[iPart]
 
+        t0 = time.perf_counter()
         osMan.process_overset(1.0 / 10)
+        if mpiGlob.rank == 0:
+            print(f"process done. 🥺 time: [{time.perf_counter() - t0}]")
 
         osMan.print_full_mesh_type(together=True, out_name=f"os_type_0_{i:04}")

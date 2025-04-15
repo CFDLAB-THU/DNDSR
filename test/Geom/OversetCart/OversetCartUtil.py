@@ -16,7 +16,7 @@ def get_mesh_bnd_elems(osPart: OversetPart2D, includeIDs=None, is_phy=False):
         if includeIDs is not None and bElemInfo.zone not in includeIDs:
             continue
         assert (bnd2node < mesh.NumNodeProc()).all(), str(bnd2node)
-        nodeList = []  #!2d: list of nodes represent a bnd element
+        nodeList = []  #!2d: list of node coords represent a bnd element
         for n in bnd2node:
             if is_phy:
                 nodeList.append(
@@ -122,7 +122,7 @@ def obtain_part_local_dists(self: OversetBG2D, osPart: OversetPart2D):
     mpi = self._mpi
     local_point_dists = obtain_part_local_inner_grid_points_dist_dict(self, osPart)
 
-    print(f"points covered: {mpi.rank}, {len(local_point_dists)}")
+    # print(f"points covered: {mpi.rank}, {len(local_point_dists)}")
 
     return local_point_dists
 
@@ -163,7 +163,7 @@ def obtain_proc_local_bg_dists(self: OversetBG2D, part: OversetPart2D):
                 g_point[1] - self.nStarts4point[1][ax_ranks[1]],
             )
             proc_bg_mesh_dist[l_point] = v
-    print(f"proc {mpi.rank}: min dist at grid point: {proc_bg_mesh_dist.min()}")
+    # print(f"proc {mpi.rank}: min dist at grid point: {proc_bg_mesh_dist.min()}")
     return proc_bg_mesh_dist
 
 
