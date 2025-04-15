@@ -274,7 +274,8 @@ namespace DNDS::Geom
         if (mesh->getMPI().rank == mRank)
             DNDS::log() << "UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global" << std::endl;
         ConvertAdjSerial2Global(cell2nodeSerial, node_Serial2Global, mesh->getMPI());
-        ConvertAdjSerial2Global(cell2cellSerial, cell_Serial2Global, mesh->getMPI());
+        // !cell2cell discarded
+        // ConvertAdjSerial2Global(cell2cellSerial, cell_Serial2Global, mesh->getMPI());
         ConvertAdjSerial2Global(bnd2nodeSerial, node_Serial2Global, mesh->getMPI());
         ConvertAdjSerial2Global(bnd2cellSerial, cell_Serial2Global, mesh->getMPI());
 
@@ -291,8 +292,9 @@ namespace DNDS::Geom
             DNDS_MAKE_SSP(mesh->cell2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mesh->getMPI());
             DNDS_MAKE_SSP(mesh->cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mesh->getMPI());
         }
-        DNDS_MAKE_SSP(mesh->cell2cell.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cell2cell.son, mesh->getMPI());
+        // !cell2cell discarded
+        // DNDS_MAKE_SSP(mesh->cell2cell.father, mesh->getMPI());
+        // DNDS_MAKE_SSP(mesh->cell2cell.son, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->bnd2node.father, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->bnd2node.son, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->bnd2cell.father, mesh->getMPI());
@@ -306,7 +308,8 @@ namespace DNDS::Geom
         if (mesh->getMPI().rank == mRank)
             DNDS::log() << "UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell" << std::endl;
         // cells transferring
-        TransferDataSerial2Global(cell2cellSerial, mesh->cell2cell.father, cell_push, cell_pushStart, mesh->getMPI());
+        // !cell2cell discarded
+        // TransferDataSerial2Global(cell2cellSerial, mesh->cell2cell.father, cell_push, cell_pushStart, mesh->getMPI());
         TransferDataSerial2Global(cell2nodeSerial, mesh->cell2node.father, cell_push, cell_pushStart, mesh->getMPI());
         if (mesh->isPeriodic)
             TransferDataSerial2Global(cell2nodePbiSerial, mesh->cell2nodePbi.father, cell_push, cell_pushStart, mesh->getMPI());
@@ -320,7 +323,7 @@ namespace DNDS::Geom
 
         {
             DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                              { std::cout << "[" << mesh->getMPI().rank << ": nCell " << mesh->cell2cell.father->Size() << "] " << (((mesh->getMPI().rank + 1) % 10) ? "" : "\n") << std::flush; });
+                              { std::cout << "[" << mesh->getMPI().rank << ": nCell " << mesh->cell2node.father->Size() << "] " << (((mesh->getMPI().rank + 1) % 10) ? "" : "\n") << std::flush; });
             MPI::Barrier(mesh->getMPI().comm);
             if (mesh->getMPI().rank == 0)
                 std::cout << std::endl;
@@ -690,7 +693,7 @@ namespace DNDS::Geom
         node2cell.TransAttach();
         node2cell.trans.createFatherGlobalMapping();
         node2cell.trans.createGhostMapping(ghostNodes);
-        node2cell.trans.createMPITypes();
+        node2cell.trans.createMPITypes(); //! warning, this is not actual final official trans, just needed temporarily
         node2cell.trans.pullOnce();
 
         std::unordered_map<index, index> iNodeGlobal2LocalAppendInNode2Cell;
@@ -703,6 +706,7 @@ namespace DNDS::Geom
                 DNDS_assert(iNodeGlobal2LocalAppendInNode2Cell.count(in));
 
         DNDS_MAKE_SSP(cell2cell.father, mpi);
+        DNDS_MAKE_SSP(cell2cell.son, mpi); // actual outputs need empty but constructed son
         cell2cell.father->Resize(cell2node.father->Size());
         for (index i = 0; i < cell2node.father->Size(); i++)
         {
@@ -722,6 +726,7 @@ namespace DNDS::Geom
         }
         // std::cout << "RecoverCell2CellAndBnd2Cell here2.5" << std::endl;
         DNDS_MAKE_SSP(bnd2cell.father, mpi);
+        DNDS_MAKE_SSP(bnd2cell.son, mpi); // actual outputs need empty but constructed son
         bnd2cell.father->Resize(bnd2node.father->Size());
         // std::cout << "RecoverCell2CellAndBnd2Cell here2.6" << std::endl;
         for (index i = 0; i < bnd2node.father->Size(); i++)
@@ -780,12 +785,12 @@ namespace DNDS::Geom
             DNDS_MAKE_SSP(cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
             cell2nodePbi.TransAttach();
             cell2nodePbi.trans.createFatherGlobalMapping();
-            cell2nodePbi.trans.createGhostMapping(neededCells);
+            cell2nodePbi.trans.createGhostMapping(neededCells); //! warning, this is not actual final official trans, just needed temporarily
             cell2nodePbi.trans.createMPITypes();
             cell2nodePbi.trans.pullOnce();
             DNDS_MAKE_SSP(cell2node.son, mpi);
             cell2node.TransAttach();
-            cell2node.trans.BorrowGGIndexing(cell2nodePbi.trans);
+            cell2node.trans.BorrowGGIndexing(cell2nodePbi.trans); //! warning, this is not actual final official trans, just needed temporarily
             cell2node.trans.createMPITypes();
             cell2node.trans.pullOnce();
             for (index i = 0; i < bnd2cell.father->Size(); i++)
@@ -875,6 +880,8 @@ namespace DNDS::Geom
         BuildGhostPrimary()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert(cell2cell.father && cell2cell.father->Size() == this->NumCell());
+        DNDS_assert(bnd2cell.father && bnd2cell.father->Size() == this->NumBnd());
         /********************************/
         // cells
         {
@@ -956,16 +963,25 @@ namespace DNDS::Geom
         //         std::cout << coords.operator[](iC).transpose() << std::endl;
 
         /********************************/
-        // bnds: dummy now, no actual comm
+        // bnds: added via node2bnd's father part
         {
-
+            DNDS_assert(node2bnd.father);
+            DNDS_assert(this->adjN2CBState == Adj_PointToGlobal);
             bnd2cell.TransAttach();
             bnd2node.TransAttach();
             bndElemInfo.TransAttach();
 
             bnd2cell.trans.createFatherGlobalMapping();
 
-            std::vector<DNDS::index> ghostBnds; // no ghosted bnds now
+            std::vector<DNDS::index> ghostBnds;
+            for (index iNode = 0; iNode < node2bnd.father->Size(); iNode++)
+                for (auto iBnd : node2bnd[iNode])
+                {
+                    auto [ret, rank, val] = bnd2cell.trans.pLGlobalMapping->search(iBnd);
+                    DNDS_assert_info(ret, "search failed");
+                    if (rank != mpi.rank)
+                        ghostBnds.push_back(iBnd);
+                }
             bnd2cell.trans.createGhostMapping(ghostBnds);
 
             bnd2node.trans.BorrowGGIndexing(bnd2cell.trans);
@@ -986,6 +1002,8 @@ namespace DNDS::Geom
     {
         // needs results of BuildGhostPrimary()
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
+        DNDS_assert_info(coords.trans.pLGhostMapping, "trans of coords needed but not built");
 
         /**********************************/
         // convert bnd2cell, bnd2node, cell2cell, cell2node ptrs global to local
@@ -1015,6 +1033,9 @@ namespace DNDS::Geom
         AdjLocal2GlobalPrimary()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
+        DNDS_assert_info(coords.trans.pLGhostMapping, "trans of coords needed but not built");
+
         /**********************************/
         // convert bnd2cell, bnd2node, cell2cell, cell2node ptrs local to global
         /**********************************/
@@ -1225,6 +1246,8 @@ namespace DNDS::Geom
         AdjLocal2GlobalN2CB()
     {
         DNDS_assert(adjN2CBState == Adj_PointToLocal);
+        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
+        DNDS_assert_info(bndElemInfo.trans.pLGhostMapping, "trans of bndElemInfo needed but not built");
         /**********************************/
 #ifdef DNDS_USE_OMP
 #pragma omp parallel for
@@ -1238,7 +1261,7 @@ namespace DNDS::Geom
 #endif
         for (index iNode = 0; iNode < node2bnd.Size(); iNode++)
             for (index &iBnd : node2bnd[iNode])
-                iBnd = BndIndexLocal2Global_NoSon(iBnd); // todo: make bnd have son?
+                iBnd = BndIndexLocal2Global(iBnd); // ! bnd has son now
 
         // MPI::Barrier(mpi.comm);
         /**********************************/
@@ -1249,6 +1272,8 @@ namespace DNDS::Geom
         AdjGlobal2LocalN2CB()
     {
         DNDS_assert(adjN2CBState == Adj_PointToGlobal);
+        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
+        DNDS_assert_info(bndElemInfo.trans.pLGhostMapping, "trans of bndElemInfo needed but not built");
         /**********************************/
 // todo: ensure using dist omp settings not single!
 #ifdef DNDS_USE_OMP
@@ -1263,7 +1288,7 @@ namespace DNDS::Geom
 #endif
         for (index iNode = 0; iNode < node2bnd.Size(); iNode++)
             for (index &iBnd : node2bnd[iNode])
-                iBnd = BndIndexGlobal2Local_NoSon(iBnd); // todo: make bnd have son?
+                iBnd = BndIndexGlobal2Local(iBnd); // ! bnd has son now
 
         // MPI::Barrier(mpi.comm);
         /**********************************/
@@ -1545,10 +1570,10 @@ namespace DNDS::Geom
          * - case 1: both side cells are in the same proc
          * - case 2: other side cell is not in the same proc
          */
-        bnd2face.resize(bndElemInfo.Size(), -1);
-        face2bnd.reserve(bndElemInfo.Size());
+        bnd2face.resize(bndElemInfo.father->Size(), -1); // this mapping only uses main (father) part
+        face2bnd.reserve(bndElemInfo.father->Size());
         std::unordered_map<index, index> iFace2iBnd;
-        for (DNDS::index iBnd = 0; iBnd < bndElemInfo.Size(); iBnd++)
+        for (DNDS::index iBnd = 0; iBnd < bndElemInfo.father->Size(); iBnd++)
         {
             DNDS::index pCell = bnd2cell(iBnd, 0);
             std::vector<DNDS::index> b2nRow = bnd2node[iBnd];

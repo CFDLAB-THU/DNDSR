@@ -66,8 +66,11 @@ namespace DNDS::Euler
             reader->MeshPartitionCell2Cell(config.dataIOControl.meshPartitionOptions);
             reader->PartitionReorderToMeshCell2Cell();
 
+            mesh->RecoverNode2CellAndNode2Bnd();
+            mesh->RecoverCell2CellAndBnd2Cell();
             mesh->BuildGhostPrimary();
             mesh->AdjGlobal2LocalPrimary();
+            mesh->AdjGlobal2LocalN2CB();
             if (config.dataIOControl.meshElevation == 1)
             {
                 DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO2;
@@ -76,8 +79,11 @@ namespace DNDS::Euler
                 std::swap(meshO2, mesh);
 
                 reader->mesh = mesh;
+                mesh->RecoverNode2CellAndNode2Bnd();
+                mesh->RecoverCell2CellAndBnd2Cell();
                 mesh->BuildGhostPrimary();
                 mesh->AdjGlobal2LocalPrimary();
+                mesh->AdjGlobal2LocalN2CB();
             }
             DNDS_assert(config.dataIOControl.meshDirectBisect <= 4);
             for (int iter = 1; iter <= config.dataIOControl.meshDirectBisect; iter++)
@@ -85,6 +91,9 @@ namespace DNDS::Euler
                 DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO2;
                 DNDS_MAKE_SSP(meshO2, mpi, gDimLocal);
                 meshO2->BuildO2FromO1Elevation(*mesh);
+
+                meshO2->RecoverNode2CellAndNode2Bnd();
+                meshO2->RecoverCell2CellAndBnd2Cell();
                 meshO2->BuildGhostPrimary();
                 DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO1B;
                 DNDS_MAKE_SSP(meshO1B, mpi, gDimLocal);
@@ -140,13 +149,16 @@ namespace DNDS::Euler
         // std::cout << "here" << std::endl;
         mesh->InterpolateFace();
         mesh->AssertOnFaces();
-
-        // todo: make this interpolation optional?
-        mesh->AdjLocal2GlobalPrimary();
-        mesh->RecoverNode2CellAndNode2Bnd(); // todo: don't do this if already done
-        mesh->AdjGlobal2LocalPrimary();
+        { // not needed after adding node2cell, node2bnd mandatory
+          // // todo: make this interpolation optional?
+          // mesh->AdjLocal2GlobalPrimary();
+          // mesh->RecoverNode2CellAndNode2Bnd(); // // todo: don't do this if already done
+          // mesh->AdjGlobal2LocalPrimary();
+        }
+        mesh->AdjLocal2GlobalN2CB();
         mesh->BuildGhostN2CB();
         mesh->AdjGlobal2LocalN2CB();
+        log() << fmt::format("{}, NumBndGhost {}", mpi.rank, mesh->NumBndGhost()) << std::endl;
 
         // mesh->AdjLocal2GlobalN2CB();
         // mesh->AdjGlobal2LocalN2CB();

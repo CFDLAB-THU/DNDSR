@@ -318,33 +318,36 @@ namespace DNDS::Geom
             }
         }
         /**********************************/
-        // cell2cell, bnd2cell can be copied; bnd2nodeO2 created with bnd2cell and bnd2node;
-        // cell2cell = meshO1.cell2cell;
-        // bnd2cell = meshO1.bnd2cell;
-        DNDS_MAKE_SSP(cell2cell.father, mpi);
-        DNDS_MAKE_SSP(cell2cell.son, mpi);
-        cell2cell.father->Resize(meshO1.cell2cell.father->Size());
-        for (index iCell = 0; iCell < meshO1.cell2node.father->Size(); iCell++)
+        //! now cell2cell, bnd2cell are lost
         {
-            cell2cell.father->ResizeRow(iCell, meshO1.cell2cell.RowSize(iCell));
-            cell2cell[iCell] = std::vector<index>{meshO1.cell2cell[iCell]};
-            for (auto &iCellOther : cell2cell[iCell])
-            {
-                iCellOther = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, iCellOther);
-            }
+            //! jumped because cell2cell, bnd2cell is to be recovered mandatorily
+            // cell2cell, bnd2cell can be copied; bnd2nodeO2 created with bnd2cell and bnd2node;
+            // cell2cell = meshO1.cell2cell;
+            // bnd2cell = meshO1.bnd2cell;
+            // DNDS_MAKE_SSP(cell2cell.father, mpi);
+            // DNDS_MAKE_SSP(cell2cell.son, mpi);
+            // cell2cell.father->Resize(meshO1.cell2cell.father->Size());
+            // for (index iCell = 0; iCell < meshO1.cell2node.father->Size(); iCell++)
+            // {
+            //     cell2cell.father->ResizeRow(iCell, meshO1.cell2cell.RowSize(iCell));
+            //     cell2cell[iCell] = std::vector<index>{meshO1.cell2cell[iCell]};
+            //     for (auto &iCellOther : cell2cell[iCell])
+            //     {
+            //         iCellOther = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, iCellOther);
+            //     }
+            // }
+            // DNDS_MAKE_SSP(bnd2cell.father, mpi);
+            // DNDS_MAKE_SSP(bnd2cell.son, mpi);
+            // bnd2cell.father->Resize(meshO1.bnd2cell.father->Size());
+            // for (index iBnd = 0; iBnd < meshO1.bnd2node.father->Size(); iBnd++)
+            // {
+            //     bnd2cell(iBnd, 0) = meshO1.bnd2cell(iBnd, 0);
+            //     bnd2cell(iBnd, 1) = meshO1.bnd2cell(iBnd, 1);
+            //     bnd2cell(iBnd, 0) = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, bnd2cell(iBnd, 0));
+            //     if (bnd2cell(iBnd, 1) != UnInitIndex)
+            //         bnd2cell(iBnd, 1) = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, bnd2cell(iBnd, 1));
+            // }
         }
-        DNDS_MAKE_SSP(bnd2cell.father, mpi);
-        DNDS_MAKE_SSP(bnd2cell.son, mpi);
-        bnd2cell.father->Resize(meshO1.bnd2cell.father->Size());
-        for (index iBnd = 0; iBnd < meshO1.bnd2node.father->Size(); iBnd++)
-        {
-            bnd2cell(iBnd, 0) = meshO1.bnd2cell(iBnd, 0);
-            bnd2cell(iBnd, 1) = meshO1.bnd2cell(iBnd, 1);
-            bnd2cell(iBnd, 0) = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, bnd2cell(iBnd, 0));
-            if (bnd2cell(iBnd, 1) != UnInitIndex)
-                bnd2cell(iBnd, 1) = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, bnd2cell(iBnd, 1));
-        }
-
         DNDS_MAKE_SSP(bnd2node.father, mpi);
         DNDS_MAKE_SSP(bnd2node.son, mpi);
         DNDS_MAKE_SSP(bndElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);

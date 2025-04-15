@@ -177,6 +177,7 @@ namespace DNDS::Geom
          */
         index NodeIndexGlobal2Local(DNDS::index iNodeOther)
         {
+            DNDS_assert(coords.trans.pLGhostMapping);
             if (iNodeOther == UnInitIndex)
                 return iNodeOther;
             DNDS::MPI_int rank;
@@ -190,6 +191,7 @@ namespace DNDS::Geom
 
         index NodeIndexLocal2Global(DNDS::index iNodeOther)
         {
+            DNDS_assert(coords.trans.pLGhostMapping);
             if (iNodeOther == UnInitIndex)
                 return iNodeOther;
             if (iNodeOther < 0) // mapping to un-found in father-son
@@ -283,6 +285,35 @@ namespace DNDS::Geom
                 return val;
             else
                 return -1 - iCell;
+        }
+
+        /**
+         * \brief
+         * return normal negative:  mapping to un-found in father-son
+         */
+        index BndIndexGlobal2Local(DNDS::index iBnd)
+        {
+            DNDS_assert(bndElemInfo.trans.pLGhostMapping);
+            if (iBnd == UnInitIndex)
+                return iBnd;
+            DNDS::MPI_int rank;
+            DNDS::index val;
+            auto result = bndElemInfo.trans.pLGhostMapping->search_indexAppend(iBnd, rank, val);
+            if (result)
+                return val;
+            else
+                return -1 - iBnd; // mapping to un-found in father-son
+        }
+
+        index BndIndexLocal2Global(DNDS::index iBnd)
+        {
+            DNDS_assert(bndElemInfo.trans.pLGhostMapping);
+            if (iBnd == UnInitIndex)
+                return iBnd;
+            if (iBnd < 0) // mapping to un-found in father-son
+                return -1 - iBnd;
+            else
+                return bndElemInfo.trans.pLGhostMapping->operator()(-1, iBnd);
         }
 
         index BndIndexLocal2Global_NoSon(index iBnd)
@@ -384,10 +415,12 @@ namespace DNDS::Geom
         index NumNodeGhost() const { return coords.son->Size(); }
         index NumCellGhost() const { return cell2node.son->Size(); }
         index NumFaceGhost() const { return face2node.son->Size(); }
+        index NumBndGhost() const { return bnd2node.son->Size(); }
 
         index NumNodeProc() const { return coords.Size(); }
         index NumCellProc() const { return cell2node.Size(); }
         index NumFaceProc() const { return face2node.Size(); }
+        index NumBndProc() const { return bnd2node.Size(); }
 
         /// @warning must collectively call
         index NumCellGlobal() { return cell2node.father->globalSize(); }
