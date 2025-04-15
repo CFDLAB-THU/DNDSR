@@ -45,6 +45,8 @@ void doPartitioning(const std::string &meshName, int dim)
 
     reader.MeshPartitionCell2Cell(DNDS::Geom::UnstructuredMeshSerialRW::PartitionOptions{});
     reader.PartitionReorderToMeshCell2Cell();
+    mesh->RecoverNode2CellAndNode2Bnd();
+    mesh->RecoverCell2CellAndBnd2Cell();
     mesh->BuildGhostPrimary();
     mesh->AdjGlobal2LocalPrimary();
 
