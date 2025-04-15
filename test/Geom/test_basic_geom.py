@@ -23,6 +23,8 @@ def test_mesh0():
     meshReader.MeshPartitionCell2Cell()
     meshReader.PartitionReorderToMeshCell2Cell()
 
+    mesh.RecoverNode2CellAndNode2Bnd()
+    mesh.RecoverCell2CellAndBnd2Cell()
     mesh.BuildGhostPrimary()
     mesh.AdjGlobal2LocalPrimary()
     mesh.InterpolateFace()

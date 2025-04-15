@@ -23,6 +23,8 @@ def draw_meshes_2D():
     meshReader.MeshPartitionCell2Cell({"metisUfactor": 5})
     meshReader.PartitionReorderToMeshCell2Cell()
 
+    mesh.RecoverNode2CellAndNode2Bnd()
+    mesh.RecoverCell2CellAndBnd2Cell()
     mesh.BuildGhostPrimary()
     mesh.AdjGlobal2LocalPrimary()
     mesh.InterpolateFace()

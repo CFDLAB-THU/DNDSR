@@ -15,6 +15,8 @@ def get_mesh_2D(meshFile: str, mpi: DNDS.MPIInfo):
     meshReader.MeshPartitionCell2Cell({"metisUfactor": 5})
     meshReader.PartitionReorderToMeshCell2Cell()
 
+    mesh.RecoverNode2CellAndNode2Bnd()
+    mesh.RecoverCell2CellAndBnd2Cell()
     mesh.BuildGhostPrimary()
     mesh.AdjGlobal2LocalPrimary()
     mesh.InterpolateFace()
