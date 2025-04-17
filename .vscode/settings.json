@@ -27,6 +27,7 @@
         "external/cpptrace-0.5.1/include/cpptrace",
         "external/cpptrace/include/cpptrace",
         "external/exprtk",
+        "external/cfd_externals/install/include",
         "src"
     ],
     "files.associations": {

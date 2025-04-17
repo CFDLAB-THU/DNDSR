@@ -64,7 +64,7 @@ void doPartitioning(const std::string &meshName, int dim)
 
     serializerP->OpenFile(meshPartPath, false);
     mesh->WriteSerialize(serializerP, "meshPart");
-    serializerPP->CloseFile();
+    serializerP->CloseFile();
 
     MPISerialDo(mpi, [&]()
                 { DNDS::log() << "    Rank: " << mpi.rank << " nCell " << mesh->NumCell() << " nCellGhost " << mesh->NumCellGhost() << std::endl; });

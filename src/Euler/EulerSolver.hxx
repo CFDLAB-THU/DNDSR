@@ -27,8 +27,7 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
+        template <>)
     void EulerSolver<model>::RunImplicitEuler()
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -901,9 +900,11 @@ namespace DNDS::Euler
             {
                 DNDS_assert(config.linearSolverControl.multiGridLP <= 2);
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(cxTemp)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(resTemp)
                 cxTemp = cx;
                 fincrement(cxTemp, cxInc, 1.0, uPos);
-                solve_multigrid(cxTemp, cxInc, cres, resOther, 1, config.linearSolverControl.multiGridLP); //! overwrites cxInc and cres here
+                //! overwrites cxInc, cxTemp and resTemp do not overwrite cres! (as we might use cres for evaluation of convergence)
+                solve_multigrid(cxTemp, cxInc, resTemp, resOther, 1, config.linearSolverControl.multiGridLP);
                 cxInc = cxTemp;
                 cxInc -= cx;
             }
@@ -1305,8 +1306,7 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
+        template <>)
     void EulerSolver<model>::solveLinear(
         real alphaDiag,
         TDof &cres, TDof &cx, TDof &cxInc, TRec &uRecC, TRec uRecIncC,
@@ -1486,8 +1486,7 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
+        template <>)
     void EulerSolver<model>::doPrecondition(real alphaDiag, TDof &cres, TDof &cx, TDof &cxInc, TDof &uTemp,
                                             JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone, int gridLevel)
     {
@@ -1549,8 +1548,7 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
+        template <>)
     void EulerSolver<model>::InitializeRunningEnvironment(EulerSolver<model>::RunningEnvironment &runningEnvironment)
     {
         if (config.timeMarchControl.partitionMeshOnly)
@@ -1579,7 +1577,7 @@ namespace DNDS::Euler
         {
             vfv->BuildUDof(data, 1);
         };
-
+        // std::cout << fmt::format("nVars {}, here50", nVars);
         if (config.timeMarchControl.steadyQuit)
         {
             if (mpi.rank == 0)
@@ -1652,6 +1650,8 @@ namespace DNDS::Euler
         {
             DNDS_assert(config.timeMarchControl.odeCode == 1 || config.timeMarchControl.odeCode == 102);
         }
+
+        // std::cout << fmt::format("nVars {}, here100", nVars);
 
         /*******************************************************/
         /*                 INIT GMRES AND PCG                  */
