@@ -820,6 +820,8 @@ NS_SA=SA
 NS_SA_3D=SA3D
 NS_2EQ=2EQ
 NS_2EQ_3D=2EQ3D
+NS_EX=EX
+NS_EX_3D=EX3D
 CACHE INTERNAL "the Euler Model list to distinguish their explicit instantiation libraries"
 )
 

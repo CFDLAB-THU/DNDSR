@@ -19,8 +19,7 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
+        template <>)
     void EulerEvaluator<model>::EvaluateRHS(
         ArrayDOFV<nVarsFixed> &rhs,
         JacobianDiagBlock<nVarsFixed> &JSource,
@@ -346,6 +345,19 @@ namespace DNDS::Euler
                     TDiffU GradUMeanXy = (GradURxy + GradULxy) * 0.5 +
                                          (1.0 / distGRP) *
                                              (unitNorm * (URxyUnlim - ULxyUnlim).transpose());
+                    if (!GradUMeanXy.allFinite())
+                    {
+                        std::cout << "GradUMeanXy\n"
+                                  << GradUMeanXy << "\n";
+                        std::cout << "GradULxy\n"
+                                  << GradULxy << "\n";
+                        std::cout << "GradURxy\n"
+                                  << GradURxy << "\n";
+                        std::cout << std::endl;
+
+                        DNDS_assert(false);
+                    }
+
                     if (ignoreVis)
                         GradUMeanXy *= 0.;
 
@@ -423,6 +435,7 @@ namespace DNDS::Euler
                     vgXYV(Eigen::all, iG) = GetFaceVGrid(iFace, iGQ);
                 });
             TReal_Batch lam0V, lam123V, lam4V;
+
             TU_Batch fincC = fluxFace(
                 ULxyV, URxyV,
                 ULMeanXy, URMeanXy,

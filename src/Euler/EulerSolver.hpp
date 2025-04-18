@@ -37,7 +37,7 @@ namespace DNDS::Euler
     template <EulerModel model>
     class EulerSolver
     {
-        int nVars;
+        int nVars = getNVars(model);
 
     public:
         typedef EulerEvaluator<model> TEval;
@@ -580,15 +580,19 @@ namespace DNDS::Euler
             Configuration(int nVars)
             {
                 vfvSettings = CFV::VRSettings{gDim};
-                EulerEvaluatorSettings<model>().ReadWriteJSON(eulerSettings, nVars, false);
+                EulerEvaluatorSettings<model>(nVars).ReadWriteJSON(eulerSettings, nVars, false);
                 bcSettings = BoundaryHandler<model>(nVars);
             }
 
         } config = Configuration{};
 
     public:
-        EulerSolver(const MPIInfo &nmpi) : nVars(getNVars(model)), mpi(nmpi)
+        EulerSolver(const MPIInfo &nmpi, int n_nVars = getNVars(model)) : nVars(n_nVars), mpi(nmpi)
         {
+            if (getNVars(model) == DynamicSize)
+                DNDS_assert_info(nVars >= getDim_Fixed(model) + 2, "nVars too small");
+            else
+                DNDS_assert_info(nVars == getNVars(model), "do not change the nVars for this model");
             nOUTS = nVars + 4;
             nOUTSPoint = nVars + 2;
             nOUTSBnd = nVars + 2 + nVars + 3 + 1 + 3; // Uprim + (T,M) + F + Ft + faceZone + Norm

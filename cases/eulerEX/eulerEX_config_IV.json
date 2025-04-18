@@ -1,10 +1,10 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 0.1e-1,
+        "dtImplicit": 1e-1,
         "nTimeStep": 100000,
         "steadyQuit": false,
-        "tEnd": 0.05,
-        "odeCode": 1,
+        "tEnd": 10,
+        "odeCode": 0,
         // "odeCode": 401,
         "odeSetting1": 0.5,
         "odeSetting2": 0,
@@ -22,7 +22,7 @@
         "consoleOutputMode": 0,
         "consoleOutputEveryFix": 0,
         "nDataOutC": 1,
-        "nDataOut": 100,
+        "nDataOut": 1,
         "nDataOutCInternal": 100,
         "nDataOutInternal": 1000000000,
         "tDataOut": 3e+200,
@@ -38,17 +38,17 @@
     },
     "convergenceControl": {
         "nTimeStepInternal": 400,
-        "rhsThresholdInternal": 1e-8,
+        "rhsThresholdInternal": 1e-4,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshDirectBisect": 0,
+        "meshDirectBisect": 4,
         "meshElevation": 0,
-        "meshFile": "../data/mesh/IV10U_10.cgns",
-        "outPltName": "../data/outUnsteady/IV10_xxx-sm",
+        "meshFile": "../data/mesh/IV10_10.cgns",
+        "outPltName": "../data/outUnsteady/IV10_xxx-conv",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -132,7 +132,7 @@
         "nGmresSpace": 5,
         "nGmresIter": 1,
         "initWithLastURecInc": false,
-        "multiGridLP": 1,
+        "multiGridLP": 0,
         "multiGridLPInnerNIter": 4,
         "coarseGridLinearSolverControlList": {
             "1": {
@@ -168,17 +168,20 @@
         "ppEpsIsRelaxed": true,
         // "forceVolURecBeta": false,
         "specialBuiltinInitializer": 2, // 2 is IV, 203 is PPIV
-        // "exprtkInitializers": [
-        //     {
-        //         "exprs": [
-        //             "if ((x[0]-5)^2 + (x[1]-5)^2 < 1) ",
-        //             "    inRegion := 1; ",
-        //             "UPrim[0] += 1; ",
-        //             "UPrim[4] += 0.1; ",
-        //             "0"
-        //         ]
-        //     }
-        // ],
+        "exprtkInitializers": [
+            {
+                "exprs": [
+                    "if ((x[0]-5)^2 + (x[1]-6)^2 < 1) ",
+                    "    inRegion := 1; ",
+                    "// UPrim[0] += 1; ",
+                    "// UPrim[4] += 0.1; ",
+                    "UPrim[5] += 1; ",
+                    "//UPrim[5] += sin(x[0] * pi * 2) * sin(x[1] * pi * 2); ",
+                    "0",
+                    ""
+                ]
+            }
+        ],
         "nCentralSmoothStep": 0,
         "constMassForce": [
             0.0,
@@ -197,7 +200,8 @@
             1,
             1,
             0,
-            3.5
+            3.5,
+            1
         ],
         "idealGasProperty": {
             "gamma": 1.4,

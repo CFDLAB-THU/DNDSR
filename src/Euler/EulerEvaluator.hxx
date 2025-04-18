@@ -669,8 +669,7 @@ namespace DNDS::Euler
     }
 
     DNDS_SWITCH_INTELLISENSE(
-        template <EulerModel model>, template <>
-    )
+        template <EulerModel model>, template <>)
     void EulerEvaluator<model>::LUSGSMatrixSolveJacobianLU(
         real alphaDiag,
         ArrayDOFV<nVarsFixed> &rhs,
@@ -844,8 +843,8 @@ namespace DNDS::Euler
         case 2:   // for IV10 problem
         case 203: // for IV10 problem with PP
         case 202:
-            DNDS_assert(model == NS || model == NS_2D);
-            if constexpr (model == NS || model == NS_2D)
+            DNDS_assert(model == NS || model == NS_2D || model == NS_EX);
+            if constexpr (model == NS || model == NS_2D || model == NS_EX)
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(runtime)
 #endif
@@ -1267,8 +1266,7 @@ namespace DNDS::Euler
     }
 
     DNDS_SWITCH_INTELLISENSE(
-        template <EulerModel model>, template <>
-    )
+        template <EulerModel model>, template <>)
     void EulerEvaluator<model>::LimiterUGrad(ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -1335,8 +1333,7 @@ namespace DNDS::Euler
     }
 
     DNDS_SWITCH_INTELLISENSE(
-        template <EulerModel model>, template <>
-    )
+        template <EulerModel model>, template <>)
     void EulerEvaluator<model>::EvaluateURecBeta(
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,

@@ -14,6 +14,7 @@ namespace DNDS::Euler
     static const auto Seq34 = Eigen::seq(Eigen::fix<3>, Eigen::fix<dim + 1>);    \
     static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>); \
     static const auto SeqG012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<gDim - 1>); \
+    static const auto SeqI52Last = Eigen::seq(Eigen::fix<I4 + 1>, Eigen::last);  \
     static const auto I4 = dim + 1;
 
     template <int nVarsFixed>
@@ -567,6 +568,8 @@ namespace DNDS::Euler
         NS_SA_3D = 4,
         NS_2EQ = 5,
         NS_2EQ_3D = 6,
+        NS_EX = 101,
+        NS_EX_3D = 102,
     };
 
     enum RANSModel
@@ -637,6 +640,8 @@ namespace DNDS::Euler
             return 2;
         else if (model == NS_2EQ || model == NS_2EQ_3D)
             return 3;
+        else if (model == NS_EX || model == NS_EX_3D)
+            return 3;
         return Eigen::Dynamic;
     }
 
@@ -655,6 +660,10 @@ namespace DNDS::Euler
         else if (model == NS_2EQ)
             return 2;
         else if (model == NS_2EQ_3D)
+            return 3;
+        else if (model == NS_EX)
+            return 2;
+        else if (model == NS_EX_3D)
             return 3;
         return Eigen::Dynamic;
     }

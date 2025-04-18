@@ -204,6 +204,10 @@ namespace DNDS::Euler::Gas
                                    U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).dot(dVelo)));
     } // For Lax-Flux jacobian
 
+    /**
+     * \note now this function writes to the whole F, assuming SeqI52Last part is passive scalar
+     * this is valid for RANS and EX
+     */
     template <int dim = 3, typename TU, typename TF, class TVec, class TVecVG>
     inline void GasInviscidFluxFacialIncrement(const TU &U, const TU &dU,
                                                const TVec &unitNorm,
@@ -218,7 +222,10 @@ namespace DNDS::Euler::Gas
             dU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) * vn +
             U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) * dvn + unitNorm * dp;
         F(dim + 1) = (dU(dim + 1) + dp) * vn + (U(dim + 1) + p) * dvn;
-        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) -= dU(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) * vg.dot(unitNorm);
+        static const auto SeqI52Last = Eigen::seq(Eigen::fix<dim + 2>, Eigen::last);
+        if constexpr (U.RowsAtCompileTime == Eigen::Dynamic || U.RowsAtCompileTime > dim + 2)
+            F(SeqI52Last) = dU(SeqI52Last) * vn + U(SeqI52Last) * dvn;
+        F -= dU * vg.dot(unitNorm);
     }
 
     template <int dim = 3, typename TU>

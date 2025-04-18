@@ -194,7 +194,7 @@ namespace DNDS::Euler
         Eigen::Vector<real, -1> refU;
         Eigen::Vector<real, -1> refUPrim;
 
-        EulerEvaluatorSettings()
+        EulerEvaluatorSettings(int nVars)
         {
             if constexpr (model == NS_SA || model == NS_SA_3D)
             {
@@ -204,6 +204,11 @@ namespace DNDS::Euler
             {
                 ransModel = RANSModel::RANS_KOWilcox;
             }
+            farFieldStaticValue.setOnes(nVars);
+            DNDS_assert(nVars > I4);
+            farFieldStaticValue(0) = 1;
+            farFieldStaticValue(Eigen::seq(Eigen::fix<0>, Eigen::fix<I4>)).setZero();
+            farFieldStaticValue(I4) = 2.5;
         }
 
         void ReadWriteJSON(nlohmann::ordered_json &jsonObj, int nVars, bool read)

@@ -124,11 +124,15 @@ namespace DNDS::Euler
 
         EulerEvaluatorSettings<model> settings;
 
-        EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler, const decltype(settings.jsonSettings) &nJsonSettings)
-            : mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->settings.maxOrder + 1)
+        EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler, const decltype(settings.jsonSettings) &nJsonSettings,
+                       int n_nVars = getNVars(model))
+            : nVars(n_nVars), mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->settings.maxOrder + 1), settings(nVars)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            nVars = getNVars(model); //! // TODO: dynamic setting it
+            if (getNVars(model) == DynamicSize)
+                DNDS_assert_info(nVars >= getDim_Fixed(model) + 2, "nVars too small");
+            else
+                DNDS_assert_info(nVars == getNVars(model), "do not change the nVars for this model");
 
             vfv->BuildUGrad(uGradBuf, nVars);
             vfv->BuildUGrad(uGradBufNoLim, nVars);
@@ -676,7 +680,7 @@ namespace DNDS::Euler
             else
                 dF.setZero();
             if (useRoeTerm == 0)
-                dF(Seq01234) += incFsign * lambdaMain * dU(Seq01234);
+                dF += incFsign * lambdaMain * dU;
             else
             {
                 TVec veloRoe;
@@ -685,24 +689,11 @@ namespace DNDS::Euler
                 Gas::RoeFluxIncFDiff<dim>(dU, n, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe,
                                           incFsign * lambda0, incFsign * lambda123, incFsign * lambda4, gamma,
                                           dF);
-                dF(Seq01234) += incFsign * lambdaVis * dU(Seq01234);
+                dF += incFsign * lambdaVis * dU;
             }
+            //! now dF(U, dU) (GasInviscidFluxFacialIncrement) part actually treats the SeqI52Last part (as passive scalars)
+            //! the RANS models and eulerEX use the same transport jacobian form
 
-            if constexpr (model == NS_SA || model == NS_SA_3D)
-            {
-                if (omitF == 0)
-                    dF(I4 + 1) = dU(I4 + 1) * n.dot(velo - vg) + U(I4 + 1) * n.dot(dVelo);
-                dF(I4 + 1) += incFsign * dU(I4 + 1) * lambdaMain;
-            }
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
-            {
-                if (omitF == 0)
-                    dF(I4 + 1) = dU(I4 + 1) * n.dot(velo - vg) + U(I4 + 1) * n.dot(dVelo);
-                dF(I4 + 1) += incFsign * dU(I4 + 1) * lambdaMain;
-                if (omitF == 0)
-                    dF(I4 + 2) = dU(I4 + 2) * n.dot(velo - vg) + U(I4 + 2) * n.dot(dVelo);
-                dF(I4 + 2) += incFsign * dU(I4 + 2) * lambdaMain;
-            }
             return dF;
         }
 
@@ -724,6 +715,7 @@ namespace DNDS::Euler
                     U, UOther, n, vg, btype, J(Eigen::all, i),
                     lambdaMain, lambdaC, lambdaVis, lambda0, lambda123, lambda4,
                     useRoeTerm, incFsign, omitF);
+            //TODO: for eulerEX, use scalar for SeqI52Last part
             return J;
         }
 
@@ -749,15 +741,6 @@ namespace DNDS::Euler
                 velo, dVelo, vg,
                 dp, p,
                 dF);
-            if constexpr (model == NS_SA || model == NS_SA_3D)
-            {
-                dF(I4 + 1) = dU(I4 + 1) * n.dot(velo - vg) + U(I4 + 1) * n.dot(dVelo);
-            }
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
-            {
-                dF(I4 + 1) = dU(I4 + 1) * n.dot(velo - vg) + U(I4 + 1) * n.dot(dVelo);
-                dF(I4 + 2) = dU(I4 + 2) * n.dot(velo - vg) + U(I4 + 2) * n.dot(dVelo);
-            }
             return dF;
         }
 
@@ -1535,7 +1518,7 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
                 TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,                                              \
                 Geom::t_index btype,                                                                                       \
                 typename Gas::RiemannSolverType rsType,                                                                    \
-                index iFace, bool ignoreVis);                                                                                              \
+                index iFace, bool ignoreVis);                                                                              \
         ext template                                                                                                       \
             typename EulerEvaluator<model>::TU                                                                             \
             EulerEvaluator<model>::source(                                                                                 \

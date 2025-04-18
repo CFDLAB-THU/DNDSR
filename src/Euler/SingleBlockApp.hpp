@@ -22,6 +22,10 @@ namespace DNDS::Euler
             return "euler2EQ";
         else if (model == NS_2EQ_3D)
             return "euler2EQ3D";
+        else if (model == NS_EX)
+            return "eulerEX";
+        else if (model == NS_EX_3D)
+            return "eulerEX3D";
         return "_error_app_name_";
     }
 
@@ -38,6 +42,8 @@ namespace DNDS::Euler
 
         argparse::ArgumentParser mainParser(getSingleBlockAppName(model), "version"s + " commit "s + DNDS_MACRO_TO_STRING(DNDS_CURRENT_COMMIT_HASH));
         std::string read_configPath;
+        if (getnVarsFixed(model) == DynamicSize)
+            mainParser.add_argument("field_n_variables").default_value<int>(5).scan<'i', int>();
         mainParser.add_argument("config").default_value("");
         mainParser.add_argument("-k", "--overwrite_key")
             .help("keys to the json entries to overwrite")
@@ -83,11 +89,13 @@ namespace DNDS::Euler
 
         try
         {
-
+            int nVars = getnVarsFixed(model);
+            if (nVars == DynamicSize)
+                nVars = mainParser.get<int>("field_n_variables");
             if (mpi.rank == 0)
                 log() << "Current MPI thread level: " << MPI::GetMPIThreadLevel() << std::endl;
             auto strategy = MPI::CommStrategy::Instance().GetArrayStrategy();
-            Euler::EulerSolver<model> solver(mpi);
+            Euler::EulerSolver<model> solver(mpi, nVars);
             if (mpi.rank == 0)
             {
                 log() << "Reading configuration from " << confJson << std::endl;

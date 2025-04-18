@@ -17,8 +17,7 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>
-    )
+        template <>)
     void EulerEvaluator<model>::GetWallDist()
     {
         if (settings.wallDistScheme == 0 || settings.wallDistScheme == 1 || settings.wallDistScheme == 20)
@@ -819,8 +818,7 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>
-    )
+        template <>)
     void EulerEvaluator<model>::EvaluateDt(
         ArrayDOFV<1> &dt,
         ArrayDOFV<nVarsFixed> &u,
@@ -1004,8 +1002,7 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
+        template <>)
     typename EulerEvaluator<model>::TU_Batch EulerEvaluator<model>::fluxFace(
         const TU_Batch &ULxy,
         const TU_Batch &URxy,
@@ -1057,7 +1054,7 @@ namespace DNDS::Euler
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
             if (!ignoreVis)
             {
-                real muTurb = this->getMuTur(UMeanXYC, DiffUxyC, muRef, muf, iFace); //TODO: make this accept primitive gradients instead
+                real muTurb = this->getMuTur(UMeanXYC, DiffUxyC, muRef, muf, iFace); // TODO: make this accept primitive gradients instead
                 muf += muTurb;
 
                 real k = settings.idealGasProperty.CpGas * muTurb / 0.9 +
@@ -1287,6 +1284,19 @@ namespace DNDS::Euler
             finc(1, Eigen::all).array() += UMeanXy(I4 + 1, Eigen::all).array() * (2. / 3.); //! k's normal stress
             finc(I4, Eigen::all).array() += UMeanXy(I4 + 1, Eigen::all).array() * (2. / 3.) * UMeanXy(1, Eigen::all).array() / UMeanXy(0, Eigen::all).array();
         }
+        if constexpr (model == NS_EX || model == NS_EX_3D)
+        {
+            // real lambdaFaceCC = sqrt(std::abs(asqrMean)) + std::abs((UL(1) / UL(0) - vg(0)) + (UR(1) / UR(0) - vg(0))) * 0.5;
+            Eigen::RowVector<real, -1> lambdaFaceCC = lam123V; //! using velo instead of velo + a
+            if (settings.ransEigScheme == 1)
+                lambdaFaceCC = lambdaFaceCC.array().max(lam0V.array()).max(lam4V.array());
+            auto vnR = ((URxy(Seq123, Eigen::all).array().rowwise() / URxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
+            auto vnL = ((ULxy(Seq123, Eigen::all).array().rowwise() / ULxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
+            finc(SeqI52Last, Eigen::all) =
+                ((vnL * ULxy(SeqI52Last, Eigen::all).array() + vnR * URxy(SeqI52Last, Eigen::all).array()) -
+                 (URxy(SeqI52Last, Eigen::all).array() - ULxy(SeqI52Last, Eigen::all).array()) * lambdaFaceCC.array()) *
+                0.5;
+        }
 
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
         if (!ignoreVis)
@@ -1295,12 +1305,18 @@ namespace DNDS::Euler
 
         if (finc.hasNaN() || (!finc.allFinite()))
         {
-            std::cout << finc.transpose() << std::endl;
-            std::cout << ULxy.transpose() << std::endl;
-            std::cout << URxy.transpose() << std::endl;
-            std::cout << DiffUxy << std::endl;
-            std::cout << unitNorm << std::endl;
-            std::cout << btype << std::endl;
+            std::cout << "finc\n"
+                      << finc.transpose() << "\n";
+            std::cout << "ULxy\n"
+                      << ULxy.transpose() << "\n";
+            std::cout << "URxy\n"
+                      << URxy.transpose() << "\n";
+            std::cout << "DiffUxy\n"
+                      << DiffUxy << "\n";
+            std::cout << "unitNorm\n"
+                      << unitNorm << "\n";
+            std::cout << "btype\n"
+                      << btype << std::endl;
             DNDS_assert(false);
         }
 

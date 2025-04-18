@@ -429,7 +429,7 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(mpi, "ReadMeshAndInitialize 2 nvars " + std::to_string(nVars));
         /*******************************/
         // initialize pEval
-        DNDS_MAKE_SSP(pEval, mesh, vfv, pBCHandler, config.eulerSettings);
+        DNDS_MAKE_SSP(pEval, mesh, vfv, pBCHandler, config.eulerSettings, nVars);
         EulerEvaluator<model> &eval = *pEval;
 
         JD.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
