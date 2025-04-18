@@ -220,18 +220,6 @@ namespace DNDS
 
     std::string getTimeStamp(const MPIInfo &mpi);
 
-    inline void InsertCheck(const MPIInfo &mpi, const std::string &info = "",
-                            const std::string &FUNCTION = "", const std::string &FILE = "", int LINE = -1)
-    {
-#if !(defined(NDEBUG) || defined(NINSERT))
-        MPI::Barrier(mpi.comm);
-        std::cout << "=== CHECK \"" << info << "\"  RANK " << mpi.rank << " ==="
-                  << " @  FName: " << FUNCTION
-                  << " @  Place: " << FILE << ":" << LINE << std::endl;
-        MPI::Barrier(mpi.comm);
-#endif
-    }
-
 #define DNDS_MPI_InsertCheck(mpi, info) \
     InsertCheck(mpi, info, __FUNCTION__, __FILE__, __LINE__)
 
@@ -567,6 +555,21 @@ namespace DNDS::MPI
         [[nodiscard]] bool GetUseAsyncOneByOne() const;
         [[nodiscard]] double GetUseLazyWait() const;
     };
+}
+
+namespace DNDS
+{
+    inline void InsertCheck(const MPIInfo &mpi, const std::string &info = "",
+                            const std::string &FUNCTION = "", const std::string &FILE = "", int LINE = -1)
+    {
+#if !(defined(NDEBUG) || defined(NINSERT))
+        MPI::Barrier(mpi.comm);
+        std::cout << "=== CHECK \"" << info << "\"  RANK " << mpi.rank << " ==="
+                  << " @  FName: " << FUNCTION
+                  << " @  Place: " << FILE << ":" << LINE << std::endl;
+        MPI::Barrier(mpi.comm);
+#endif
+    }
 }
 
 #ifdef NDEBUG_DISABLED
