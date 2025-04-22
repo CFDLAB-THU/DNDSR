@@ -15,6 +15,7 @@ namespace DNDS::Euler
         BCFar,
         BCWall,
         BCWallInvis,
+        BCWallIsothermal,
         BCOut,
         BCOutP,
         BCIn,
@@ -29,6 +30,7 @@ namespace DNDS::Euler
             {BCUnknown, nullptr},
             {BCFar, "BCFar"},
             {BCWall, "BCWall"},
+            {BCWallIsothermal, "BCWallIsothermal"},
             {BCWallInvis, "BCWallInvis"},
             {BCOut, "BCOut"},
             {BCOutP, "BCOutP"},
@@ -141,7 +143,7 @@ namespace DNDS::Euler
                     if (item.count("valueExtra"))
                         bcValueExtra = item["valueExtra"];
                     Eigen::VectorXd bcValue = item["value"];
-                    DNDS_assert_info(bcValue.size() == bc.nVars, "bc value dim not right");
+                    DNDS_assert_info(bcValue.size() == bc.nVars, fmt::format("[{}] bc value dim not right", bcName));
                     bc.BCValues.push_back(bcValue);
                     bc.BCFlags.back()["frameOpt"] = frameOption;
                     bc.BCFlags.back()["anchorOpt"] = anchorOption;
@@ -151,6 +153,7 @@ namespace DNDS::Euler
                 break;
 
                 case EulerBCType::BCWall:
+                case EulerBCType::BCWallIsothermal:
                 case EulerBCType::BCWallInvis:
                 case EulerBCType::BCSpecial:
                 {
@@ -158,15 +161,29 @@ namespace DNDS::Euler
                     uint32_t integrationOption = 0;
                     uint32_t specialOption = 0;
                     Eigen::VectorXd bcValueExtra;
+                    Eigen::VectorXd bcValue;
                     if (item.count("frameOption"))
                         frameOption = item["frameOption"];
                     if (item.count("integrationOption"))
                         integrationOption = item["integrationOption"];
                     if (item.count("valueExtra"))
                         bcValueExtra = item["valueExtra"];
+                    if (item.count("value"))
+                    {
+                        bcValue = item["value"];
+                        std::cout << bcValue.transpose() << std::endl;
+                        DNDS_assert_info(bcValue.size() == bc.nVars, fmt::format("[{}] bc value dim not right", bcName));
+                    }
+                    else
+                    {
+                        bcValue.setZero(bc.nVars);
+                        if (bcType == EulerBCType::BCWallIsothermal)
+                            DNDS_assert_info(false, "missing bc value for BCWallIsothermal");
+                    }
                     if (item.count("specialOption"))
                         specialOption = item["specialOption"];
-                    bc.BCValues.push_back(TU::Zero(bc.nVars));
+                    // DNDS_assert(false);
+                    bc.BCValues.push_back(bcValue);
                     bc.BCFlags.back()["frameOpt"] = frameOption;
                     bc.BCFlags.back()["integrationOpt"] = integrationOption;
                     bc.BCFlags.back()["specialOpt"] = specialOption;
@@ -235,6 +252,7 @@ namespace DNDS::Euler
                 break;
 
                 case EulerBCType::BCWall:
+                case EulerBCType::BCWallIsothermal:
                 case EulerBCType::BCWallInvis:
                 case EulerBCType::BCSpecial:
                 {
@@ -242,6 +260,7 @@ namespace DNDS::Euler
                     item["integrationOption"] = bc.BCFlags.at(i).at("integrationOpt");
                     item["specialOption"] = bc.BCFlags.at(i).at("specialOpt");
                     item["valueExtra"] = bc.BCValuesExtra.at(i);
+                    item["value"] = static_cast<TU_R>(bc.BCValues.at(i));
                 }
                 break;
 

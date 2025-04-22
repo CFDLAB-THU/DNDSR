@@ -17,7 +17,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     void EulerEvaluator<model>::GetWallDist()
     {
         if (settings.wallDistScheme == 0 || settings.wallDistScheme == 1 || settings.wallDistScheme == 20)
@@ -29,7 +30,8 @@ namespace DNDS::Euler
             std::vector<Eigen::Matrix<real, 3, 3>> Triangles;
             for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
             {
-                if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall)
+                if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall ||
+                    pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWallIsothermal)
                 {
                     index iFace = mesh->bnd2face[iBnd];
                     auto elem = mesh->GetFaceElement(iFace);
@@ -215,7 +217,8 @@ namespace DNDS::Euler
             triangles.reserve(mesh->NumBnd() * 8 + 8);
             for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
             {
-                if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall)
+                if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall ||
+                    pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWallIsothermal)
                 {
                     index iFace = mesh->bnd2face[iBnd];
                     auto elem = mesh->GetFaceElement(iFace);
@@ -549,7 +552,7 @@ namespace DNDS::Euler
                         {
                             DNDS_assert(faceBCType != BCUnknown);
                             DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
-                            if (faceBCType == BCWall)
+                            if (faceBCType == BCWall || faceBCType == BCWallIsothermal)
                                 phiOther = -phi[iCell](0);
                             baryOther = bFace * 2 - bary;
                         }
@@ -608,7 +611,7 @@ namespace DNDS::Euler
                         {
                             DNDS_assert(faceBCType != BCUnknown);
                             DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
-                            if (faceBCType == BCWall)
+                            if (faceBCType == BCWall || faceBCType == BCWallIsothermal)
                                 phiOther = -phi[iCell](0), phiOtherFace = -phiThisFace;
                             else
                             {
@@ -818,7 +821,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     void EulerEvaluator<model>::EvaluateDt(
         ArrayDOFV<1> &dt,
         ArrayDOFV<nVarsFixed> &u,
@@ -1002,7 +1006,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     typename EulerEvaluator<model>::TU_Batch EulerEvaluator<model>::fluxFace(
         const TU_Batch &ULxy,
         const TU_Batch &URxy,
@@ -1118,7 +1123,9 @@ namespace DNDS::Euler
         finc.resizeLike(ULxy);
         // TU_Batch finc1;
         // finc1.resizeLike(ULxy);
-        if (settings.rsTypeWall != Gas::UnknownRS && pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall)
+        if (settings.rsTypeWall != Gas::UnknownRS &&
+            (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall ||
+             pBCHandler->GetTypeFromID(btype) == BCWallIsothermal))
         {
             rsType = settings.rsTypeWall;
         }
@@ -1323,7 +1330,11 @@ namespace DNDS::Euler
         return -finc;
     }
 
-    template <EulerModel model>
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>
+    )
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::source(
         const TU &UMeanXy,
         const TDiffU &DiffUxy,
@@ -1488,7 +1499,11 @@ namespace DNDS::Euler
         return ret;
     }
 
-    template <EulerModel model>
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>
+    )
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBoundaryValue(
         TU &ULxy, //! warning, possible that UL is also modified
         const TU &ULMeanXy,
@@ -1865,7 +1880,7 @@ namespace DNDS::Euler
                                             btype, to_string(bTypeEuler), pBCHandler->GetFlagFromIDSoft(btype, "specialOpt")));
         }
         else if (bTypeEuler == EulerBCType::BCWallInvis ||
-                 bTypeEuler == EulerBCType::BCSym) // (no rotating)
+                 bTypeEuler == EulerBCType::BCSym) // (no rotating) no frameOpt == 1 implemneted now //TODO add
         {
             URxy = ULxy;
             if (settings.frameConstRotation.enabled)
@@ -1874,7 +1889,8 @@ namespace DNDS::Euler
             if (settings.frameConstRotation.enabled)
                 this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
         }
-        else if (bTypeEuler == EulerBCType::BCWall)
+        else if (bTypeEuler == EulerBCType::BCWall ||
+                 bTypeEuler == EulerBCType::BCWallIsothermal)
         {
             URxy = ULxy;
             if (geomMode == 0 || true) // now using only the physical mode
@@ -1899,6 +1915,20 @@ namespace DNDS::Euler
                 if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
                     this->TransformVelocityRotatingFrame(URxy, pPhysics, -2);
 #endif
+            }
+
+            if (bTypeEuler == EulerBCType::BCWallIsothermal)
+            {
+                real temp = pBCHandler->GetValueFromID(btype)(0);
+                TU URxyPrim;
+                URxyPrim.resizeLike(ULxy);
+                Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, settings.idealGasProperty.gamma);
+                DNDS_assert_info(URxyPrim(0) > 0 && URxyPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", URxyPrim(0), URxyPrim(I4), temp));
+                // real newPressure = URxyPrim(0) * settings.idealGasProperty.Rgas * temp;
+                // URxyPrim(I4) = newPressure;
+                real newDensity = URxyPrim(I4) / temp / settings.idealGasProperty.Rgas;
+                URxyPrim(0) = newDensity;
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, settings.idealGasProperty.gamma);
             }
             if (model == NS_SA || model == NS_SA_3D)
             {

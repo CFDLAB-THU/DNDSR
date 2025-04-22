@@ -500,7 +500,7 @@ namespace DNDS::Euler
                             }
                         }
                     }
-                    // else if (pBCHandler->GetTypeFromID(btype) == BCWall)
+                    // else if (pBCHandler->GetTypeFromID(btype) == BCWall || pBCHandler->GetTypeFromID(btype) == BCWallIsothermal)
                     // {
                     //     TMat normBase = Geom::NormBuildLocalBaseV<dim>(unitNorm);
                     //     Geom::tPoint pPhysics = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, iCellAtFace, -1);
@@ -759,7 +759,8 @@ namespace DNDS::Euler
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
-                    if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(iFace)) == EulerBCType::BCWall)
+                    if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(iFace)) == EulerBCType::BCWall ||
+                        pBCHandler->GetTypeFromID(mesh->GetFaceZone(iFace)) == EulerBCType::BCWallIsothermal)
                         u[iCell](I4 + 1) *= 1.0; // ! not fixing first layer!
                 }
             }
@@ -777,7 +778,8 @@ namespace DNDS::Euler
                     real d = dWall.at(iCell).mean();
                     // for SST or KOWilcox
                     for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
-                    // if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(c2f[ic2f])) == EulerBCType::BCWall)
+                    // if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(c2f[ic2f])) == EulerBCType::BCWall ||
+                    // pBCHandler->GetTypeFromID(mesh->GetFaceZone(c2f[ic2f])) == EulerBCType::BCWallIsothermal)
                     {
                         real pMean, asqrMean, Hmean;
                         real gamma = settings.idealGasProperty.gamma;

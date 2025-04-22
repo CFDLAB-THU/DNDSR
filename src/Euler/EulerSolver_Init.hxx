@@ -179,7 +179,7 @@ namespace DNDS::Euler
                 [&](Geom::t_index bndId)
                 {
                     auto bType = pBCHandler->GetTypeFromID(bndId);
-                    if (bType == BCWall)
+                    if (bType == BCWall || bType == BCWallIsothermal)
                         return true;
                     if (config.dataIOControl.meshElevationBoundaryMode == 1 &&
                         (bType == BCWallInvis || bType == BCSym))

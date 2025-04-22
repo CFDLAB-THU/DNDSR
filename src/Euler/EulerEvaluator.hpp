@@ -715,7 +715,7 @@ namespace DNDS::Euler
                     U, UOther, n, vg, btype, J(Eigen::all, i),
                     lambdaMain, lambdaC, lambdaVis, lambda0, lambda123, lambda4,
                     useRoeTerm, incFsign, omitF);
-            //TODO: for eulerEX, use scalar for SeqI52Last part
+            // TODO: for eulerEX, use scalar for SeqI52Last part
             return J;
         }
 
@@ -1219,7 +1219,7 @@ namespace DNDS::Euler
                 // if (model == NS_2EQ || model == NS_2EQ_3D)
                 //     if (iCell < mesh->NumCell())
                 //         for (auto f : mesh->cell2face[iCell])
-                //             if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(f)) == BCWall)
+                //             if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(f)) == BCWall || pBCHandler->GetTypeFromID(mesh->GetFaceZone(f)) == BCWallIsothermal)
                 //             { // for SST or KOWilcox
                 //                 TVec uNorm = vfv->GetFaceNorm(f, -1)(Seq012);
                 //                 real vt = (cx[iCell](Seq123) - cx[iCell](Seq123).dot(uNorm) * uNorm).norm() / cx[iCell](0);

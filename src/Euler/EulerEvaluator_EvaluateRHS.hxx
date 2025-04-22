@@ -19,7 +19,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     void EulerEvaluator<model>::EvaluateRHS(
         ArrayDOFV<nVarsFixed> &rhs,
         JacobianDiagBlock<nVarsFixed> &JSource,
@@ -335,7 +336,10 @@ namespace DNDS::Euler
                     if (direct2ndRec1stConv)
                         distGRP = distBary;
                     if (settings.noGRPOnWall && !direct2ndRec1stConv)
-                        distGRP += faceBCType == EulerBCType::BCWall ? veryLargeReal : 0.0;
+                        distGRP += (faceBCType == EulerBCType::BCWall ||
+                                    faceBCType == EulerBCType::BCWallIsothermal)
+                                       ? veryLargeReal
+                                       : 0.0;
 
                     distGRP += faceBCType == EulerBCType::BCWallInvis ? veryLargeReal : 0.0;
                     distGRP += faceBCType == EulerBCType::BCSym ? veryLargeReal : 0.0;
@@ -412,13 +416,29 @@ namespace DNDS::Euler
                         DNDS_assert(false);
                     }
 
-                    if (faceBCType == EulerBCType::BCWall && settings.noRsOnWall)
+                    if ((faceBCType == EulerBCType::BCWall ||
+                         faceBCType == EulerBCType::BCWallIsothermal) &&
+                        settings.noRsOnWall)
                     {
                         TU ULc = ULxy;
                         TU ULcPrim;
                         Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, settings.idealGasProperty.gamma);
                         ULcPrim(Seq123).setZero();
                         Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, settings.idealGasProperty.gamma);
+                        if (faceBCType == EulerBCType::BCWallIsothermal)
+                        {
+                            real temp = pBCHandler->GetValueFromID(mesh->GetFaceZone(iFace))(0);
+                            TU ULcPrim;
+                            ULcPrim.resizeLike(ULc);
+                            Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, settings.idealGasProperty.gamma);
+                            DNDS_assert(ULcPrim(0) > 0 && temp > 0);
+                            DNDS_assert_info(ULcPrim(0) > 0 && ULcPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", ULcPrim(0), ULcPrim(I4), temp));
+                            // real newPressure = ULcPrim(0) * settings.idealGasProperty.Rgas * temp;
+                            // ULcPrim(I4) = newPressure;
+                            real newDensity = ULcPrim(I4) / temp / settings.idealGasProperty.Rgas;
+                            ULcPrim(0) = newDensity;
+                            Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, URxy, settings.idealGasProperty.gamma);
+                        }
                         ULxy = ULc;
                         URxy = ULc;
                     }
@@ -542,6 +562,7 @@ namespace DNDS::Euler
             // integrate BCWall flux
             if (!dontUpdateIntegration)
                 if (faceBCType == EulerBCType::BCWall || // TODO: update to general
+                    faceBCType == EulerBCType::BCWallIsothermal ||
                     (faceBCType == EulerBCType::BCWallInvis && settings.idealGasProperty.muGas < 1e-99))
                 {
                     fluxWallSumLocal -= fluxEs(Eigen::all, 0);
