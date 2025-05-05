@@ -1272,7 +1272,7 @@ namespace DNDS::Euler
     void EulerEvaluator<model>::LimiterUGrad(ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-        static const real safetyRatio = 1 - 1e-5;
+        static const real safetyRatio = 1 - 1e-2;
         static const real E_lb_eps = smallReal;
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(runtime)
@@ -1283,7 +1283,7 @@ namespace DNDS::Euler
             auto c2f = mesh->cell2face[iCell];
 
             TU_Batch uFaceInc;
-            uFaceInc.resize(nVars, c2f.size());
+            uFaceInc.setZero(nVars, c2f.size() * 2); // j < c2f.size(): faceInc; j > c2f.size(): baryInc
             TU uOtherMin = u[iCell];
             TU uOtherMax = u[iCell];
             auto fEInternal = [](const TU &u) -> real
@@ -1303,6 +1303,10 @@ namespace DNDS::Euler
                     uOtherMax = uOtherMin.array().max(u[iCellOther].array());
                     eOtherMin = std::min(eOtherMin, fEInternal(u[iCellOther]));
                     eOtherMax = std::max(eOtherMax, fEInternal(u[iCellOther]));
+                    // ! adding bary value if the other cell exists
+                    // uFaceInc(Eigen::all, ic2f + c2f.size()) =
+                       // uGrad[iCell].transpose() *
+                      //  (vfv->GetOtherCellBaryFromCell(iCell, iCellOther, -1) - vfv->GetCellQuadraturePPhys(iCell, -1))(SeqG012);
                 }
             }
 
@@ -1319,6 +1323,8 @@ namespace DNDS::Euler
             // start PP
 
             TU_Batch uFaceAlpha0 = uFaceInc.colwise() + u[iCell];
+            for (int j = 0; j < uFaceAlpha0.cols(); j++)
+                DNDS_assert(uFaceAlpha0(0, j) > 0);
             real minEFace =
                 (uFaceAlpha0(I4, Eigen::all).array() -
                  0.5 * uFaceAlpha0(Seq123, Eigen::all).colwise().squaredNorm().array() / (uFaceAlpha0(0, Eigen::all).array() + verySmallReal))

@@ -19,8 +19,7 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
+        template <>)
     void EulerEvaluator<model>::EvaluateRHS(
         ArrayDOFV<nVarsFixed> &rhs,
         JacobianDiagBlock<nVarsFixed> &JSource,
@@ -260,6 +259,7 @@ namespace DNDS::Euler
                     real minVol = vfv->GetCellVol(f2c[0]);
                     // DNDS_MPI_InsertCheck(u.father->getMPI(), "RHS inner 2");
                     real distBary = veryLargeReal;
+                    real distBaryPerp = veryLargeReal;
 
                     if (f2c[1] != UnInitIndex)
                     {
@@ -305,6 +305,11 @@ namespace DNDS::Euler
 #endif
                         minVol = std::min(minVol, vfv->GetCellVol(f2c[1]));
                         distBary = (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace) - vfv->GetCellBary(f2c[0])).norm();
+                        distBaryPerp =
+                            std::abs(
+                                (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace) -
+                                 vfv->GetCellBary(f2c[0]))
+                                    .dot(unitNorm));
                     }
                     else if (true) // is bc
                     {
@@ -329,10 +334,17 @@ namespace DNDS::Euler
                         GradURxy = GradULxy;
 #endif
                         distBary = (vfv->GetFaceQuadraturePPhysFromCell(iFace, f2c[0], 0, -1) - vfv->GetCellBary(f2c[0])).norm() * 2.;
+                        distBaryPerp =
+                            std::abs(
+                                (vfv->GetFaceQuadraturePPhysFromCell(iFace, f2c[0], 0, -1) -
+                                 vfv->GetCellBary(f2c[0]))
+                                    .dot(unitNorm)) *
+                            2.;
                     }
                     PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
 
                     real distGRP = minVol / vfv->GetFaceArea(iFace) * 2;
+                    distGRP = std::max(std::min(distBaryPerp, distGRP * 2), distGRP * 0.25); //! USING REAL GEOMETRICAL
                     if (direct2ndRec1stConv)
                         distGRP = distBary;
                     if (settings.noGRPOnWall && !direct2ndRec1stConv)

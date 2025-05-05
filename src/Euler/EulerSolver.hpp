@@ -154,7 +154,7 @@ namespace DNDS::Euler
 
             struct ImplicitReconstructionControl
             {
-
+                bool useExplicit = false;
                 int nInternalRecStep = 1;
                 bool zeroGrads = false;
                 int recLinearScheme = 0; // 0 for original SOR, 1 for GMRES
@@ -174,6 +174,7 @@ namespace DNDS::Euler
                 int zeroRecForStepsInternal = 0;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     ImplicitReconstructionControl,
+                    useExplicit,
                     nInternalRecStep, zeroGrads,
                     recLinearScheme, nGmresSpace, nGmresIter, gmresRecScale,
                     fpcgResetScheme, fpcgResetThres, fpcgResetReport, fpcgMaxPHistory,

@@ -17,8 +17,12 @@ p = a**2 / gamma / rInf
 E = p / (gamma - 1) + 0.5 * rInf * vInf**2
 rg = p / rInf / TInf
 muGasInf = rInf * vInf * LRef / Re
-def Rsuther(T,TRef, SSut):
-    return (T/TRef)**(1.5) * (TRef + SSut) / (T + SSut)
+
+
+def Rsuther(T, TRef, SSut):
+    return (T / TRef) ** (1.5) * (TRef + SSut) / (T + SSut)
+
+
 rsutherInf = Rsuther(TInf, 273.15, 110.4)
 muGas = muGasInf / rsutherInf
 
@@ -27,3 +31,5 @@ vY = vInf * math.sin(alpha / 180 * math.pi)
 UInf = [rInf, vX * rInf, vY if wingDir == "z" else 0, 0 if wingDir == "z" else vY, E]
 
 print(f"UInf = {UInf},\n Rgas = {rg}, muGas = {muGas}")
+
+print(f"\npInf = {p}")

@@ -17,8 +17,7 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>
-    )
+        template <>)
     void EulerEvaluator<model>::GetWallDist()
     {
         if (settings.wallDistScheme == 0 || settings.wallDistScheme == 1 || settings.wallDistScheme == 20)
@@ -821,8 +820,7 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>
-    )
+        template <>)
     void EulerEvaluator<model>::EvaluateDt(
         ArrayDOFV<1> &dt,
         ArrayDOFV<nVarsFixed> &u,
@@ -1006,8 +1004,7 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
+        template <>)
     typename EulerEvaluator<model>::TU_Batch EulerEvaluator<model>::fluxFace(
         const TU_Batch &ULxy,
         const TU_Batch &URxy,
@@ -1048,10 +1045,10 @@ namespace DNDS::Euler
             TDiffU DiffUxyC = DiffUxy(seqC, Eigen::all);
             TDiffU DiffUxyPrimC = DiffUxyPrim(seqC, Eigen::all);
             TVec uNormC = unitNorm(Eigen::all, iB);
-            Gas::IdealGasThermal(UMeanXYC(I4), UMeanXYC(0), (UMeanXy(Seq123, iB) / UMeanXYC(0)).squaredNorm(),
+            Gas::IdealGasThermal(UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm(),
                                  gamma, pMean, asqrMean, Hmean);
+            DNDS_assert_info(pMean > 0, fmt::format("{}, {}, {}", UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm()));
             real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXYC(0));
-            real CSut = settings.idealGasProperty.CSutherland;
             real mufPhy, muf;
             muf = muEff(UMeanXYC, T);
             mufPhy = muf;
@@ -1075,12 +1072,12 @@ namespace DNDS::Euler
                     settings.idealGasProperty.CpGas,
                     VisFlux);
 
+                this->visFluxTurVariable(UMeanXYC, DiffUxyPrimC, muRef, mufPhy, muTurb, uNormC, iFace, VisFlux);
                 if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
                     pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
                 {
-                    // VisFlux *= 0.0;
+                    VisFlux *= 0.0;
                 }
-                this->visFluxTurVariable(UMeanXYC, DiffUxyPrimC, muRef, mufPhy, muTurb, uNormC, iFace, VisFlux);
                 visFluxV(Eigen::all, iB) = VisFlux;
             }
 #endif
@@ -1314,12 +1311,24 @@ namespace DNDS::Euler
         {
             std::cout << "finc\n"
                       << finc.transpose() << "\n";
+            std::cout << "visFluxV\n"
+                      << visFluxV << "\n";
+            std::cout << "lam0V\n"
+                      << lam0V << "\n";
+            std::cout << "lam123V\n"
+                      << lam0V << "\n";
+            std::cout << "lam4V\n"
+                      << lam0V << "\n";
             std::cout << "ULxy\n"
                       << ULxy.transpose() << "\n";
             std::cout << "URxy\n"
                       << URxy.transpose() << "\n";
+            std::cout << "UMeanXy\n"
+                      << UMeanXy.transpose() << "\n";
             std::cout << "DiffUxy\n"
                       << DiffUxy << "\n";
+            std::cout << "DiffUxyPrim\n"
+                      << DiffUxyPrim << "\n";
             std::cout << "unitNorm\n"
                       << unitNorm << "\n";
             std::cout << "btype\n"
@@ -1333,8 +1342,7 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>
-    )
+        template <>)
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::source(
         const TU &UMeanXy,
         const TDiffU &DiffUxy,
@@ -1502,8 +1510,7 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>
-    )
+        template <>)
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBoundaryValue(
         TU &ULxy, //! warning, possible that UL is also modified
         const TU &ULMeanXy,

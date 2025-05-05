@@ -204,7 +204,11 @@ namespace DNDS::Euler
             Timer().StartTimer(PerformanceTimer::Reconstruction);
             if (config.implicitReconstructionControl.storeRecInc)
                 uRecOld = uRecC;
-            if (config.implicitReconstructionControl.recLinearScheme == 0)
+
+            if (config.implicitReconstructionControl.useExplicit)
+            { // pass
+            }
+            else if (config.implicitReconstructionControl.recLinearScheme == 0)
             {
                 for (int iRec = 1; iRec <= nRec; iRec++)
                 {
@@ -426,7 +430,7 @@ namespace DNDS::Euler
             //     uRecC[iCell].m() -= uOld[iCell].m();
 
             DNDS_MPI_InsertCheck(mpi, " Lambda RHS: StartLim");
-            if (config.limiterControl.useLimiter)
+            if (!config.implicitReconstructionControl.useExplicit && config.limiterControl.useLimiter)
             {
                 // vfv->ReconstructionWBAPLimitFacial(
                 //     cx, uRecC, uRecNew, uF0, uF1, ifUseLimiter,
@@ -559,7 +563,7 @@ namespace DNDS::Euler
             if (iter == 1)
                 alphaPPC.setConstant(1.0); // make RHS un-disturbed
             alphaPP_tmp.setConstant(1.0);  // make RHS un-disturbed
-            if (config.limiterControl.usePPRecLimiter)
+            if (!config.implicitReconstructionControl.useExplicit && config.limiterControl.usePPRecLimiter)
             {
                 Timer().StartTimer(PerformanceTimer::Positivity);
                 nLimBeta = 0;
@@ -586,7 +590,10 @@ namespace DNDS::Euler
             }
 
             Timer().StartTimer(PerformanceTimer::RHS);
-            if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter) // todo: opt to using limited for uRecUnlim
+            if (config.implicitReconstructionControl.useExplicit)
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC /* dummy*/, uRecC /* dummy*/,
+                                 betaPPC /* dummy*/, alphaPP_tmp /* dummy*/, false, tSimu + ct * curDtImplicit, TEval::RHS_Direct_2nd_Rec);
+            else if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter) // todo: opt to using limited for uRecUnlim
                 eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecLimited : uRecC, uRecLimited,
                                  betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
             else

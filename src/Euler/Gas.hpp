@@ -1091,6 +1091,24 @@ namespace DNDS::Euler::Gas
         Flux(0) = 0;
         Flux(Seq123) = vStress * norm;
         Flux(dim + 1) = (vStress * velo + k * GradT).dot(norm);
+        if (!Flux.allFinite())
+        {
+            std::cout << "U\n"
+                      << U.transpose() << "\n";
+            std::cout << "GradUPrim\n"
+                      << GradUPrim << "\n";
+            std::cout << "norm\n"
+                      << norm << "\n";
+            std::cout << "gamma\n"
+                      << gamma << "\n";
+            std::cout << "mu\n"
+                      << mu << "\n";
+            std::cout << "k\n"
+                      << k << "\n";
+            std::cout << "Cp\n"
+                      << Cp << "\n";
+            DNDS_assert(false);
+        }
     }
 
     /**
