@@ -320,7 +320,7 @@ namespace DNDS::Geom
                         DataType_t donorDT;
 
                         DNDS_CGNS_CALL_EXIT(cg_conn_info(cgns_file, iBase, iZone, iConn, connName, &gLoc, &connType, &ptType, &npts,
-                                              donorName, &donorZT, &ptType_donor, &donorDT, &npts_donor));
+                                                         donorName, &donorZT, &ptType_donor, &donorDT, &npts_donor));
 
                         DNDS_assert_info(connType == Abutting1to1, "Only support Abutting1to1 in connection!");
                         DNDS_assert_info(ptType == PointList, "Only Supports PointList in connection!");
@@ -362,6 +362,8 @@ namespace DNDS::Geom
         ZoneNodeStarts[0] = 0;
         for (int i = 0; i < ZoneNodeSizes.size(); i++)
             ZoneNodeStarts[i + 1] = ZoneNodeStarts[i] + (ZoneNodeSizes[i] = ZoneCoords[i]->Size());
+        // for (auto v : ZoneNodeStarts)
+        //     std::cout << v << std::endl;
 
         // std::vector<tPoint> PointsFull(ZoneNodeStarts.back());
 
@@ -409,6 +411,7 @@ namespace DNDS::Geom
             }
         }
         DNDS::log() << "CGNS === Assembled Zones have NNodes " << cTop << std::endl;
+        DNDS_assert_info(zonesLeft.empty(), "Did not reach all the zones, might missing zone-connectivities");
 
         coordSerial->Resize(cTop);
         for (DNDS::index i = 0; i < coordSerial->Size(); i++)
