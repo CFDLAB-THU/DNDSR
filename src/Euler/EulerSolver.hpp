@@ -533,9 +533,11 @@ namespace DNDS::Euler
             struct Others
             {
                 int nFreezePassiveInner = 0;
+                int axisSymmetric = 0;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     Others,
-                    nFreezePassiveInner)
+                    nFreezePassiveInner,
+                    axisSymmetric)
             } others;
 
             nlohmann::ordered_json eulerSettings = nlohmann::ordered_json::object();

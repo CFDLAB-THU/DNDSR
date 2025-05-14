@@ -367,6 +367,9 @@ namespace DNDS::Euler
                 u(Eigen::all, Seq123) = mesh->periodicInfo.TransVectorBack<dim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
             });
         vfv->settings.ParseFromJson(config.vfvSettings);
+        if (vfv->SetAxisSymmetric(config.others.axisSymmetric) && mpi.rank == 0)
+            log() << "EulerSolver === Using Axis Symmetric" << std::endl;
+
         vfv->ConstructMetrics();
         vfv->ConstructBaseAndWeight(
             [&](Geom::t_index id, int iOrder) -> real

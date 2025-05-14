@@ -15,8 +15,7 @@ namespace DNDS
             template <int nVarsFixed>
             ,
             template <>
-            template <>
-        )
+            template <>)
         auto VariationalReconstruction<dim>::GetBoundaryRHS(tURec<nVarsFixed> &uRec,
                                                             tUDof<nVarsFixed> &u,
                                                             index iCell, index iFace,
@@ -181,8 +180,7 @@ namespace DNDS
             template <int nVarsFixed>
             ,
             template <>
-            template <>
-        )
+            template <>)
         void VariationalReconstruction<dim>::DoReconstruction2ndGrad(
             tUGrad<nVarsFixed, dim> &uRec,
             tUDof<nVarsFixed> &u,
@@ -385,8 +383,7 @@ namespace DNDS
             template <int nVarsFixed>
             ,
             template <>
-            template <>
-        )
+            template <>)
         void VariationalReconstruction<dim>::DoReconstruction2nd(
             tURec<nVarsFixed> &uRec,
             tUDof<nVarsFixed> &u,
@@ -396,6 +393,10 @@ namespace DNDS
         {
             using namespace Geom;
             using namespace Geom::Elem;
+            using TU = Eigen::Vector<real, nVarsFixed>;
+            using TU_Batch = Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic>;
+            int nVars = u.father->MatRowSize();
+            auto vfv = this;
 
             static tUGrad<nVarsFixed, dim> uGrad;
             if (!uGrad.father || uGrad.father->Size() < mesh->NumCell() || uGrad.father->MatColSize(0) != u.father->MatRowSize())
@@ -407,6 +408,46 @@ namespace DNDS
             static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
 
             this->DoReconstruction2ndGrad(uGrad, u, FBoundary, method);
+
+            // // in place barth limiting
+            // for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            // {
+            //     auto c2f = mesh->cell2face[iCell];
+
+            //     TU_Batch uFaceInc;
+            //     uFaceInc.setZero(nVars, c2f.size() * 2); // j < c2f.size(): faceInc; j > c2f.size(): baryInc
+            //     TU uOtherMin = u[iCell];
+            //     TU uOtherMax = u[iCell];
+            //     for (rowsize ic2f = 0; ic2f < c2f.size(); ic2f++)
+            //     {
+            //         index iFace = c2f[ic2f];
+            //         uFaceInc(Eigen::all, ic2f) =
+            //             uGrad[iCell].transpose() *
+            //             (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellQuadraturePPhys(iCell, -1))(Seq012);
+            //         index iCellOther = mesh->CellFaceOther(iCell, iFace);
+            //         if (iCellOther != UnInitIndex)
+            //         {
+            //             uOtherMin = uOtherMin.array().min(u[iCellOther].array());
+            //             uOtherMax = uOtherMin.array().max(u[iCellOther].array());
+            //         }
+            //     }
+
+            //     TU uFaceIncMax = uFaceInc.array().rowwise().maxCoeff();
+            //     TU uFaceIncMin = uFaceInc.array().rowwise().minCoeff();
+            //     TU alpha0;
+            //     alpha0.setConstant(nVars, 1.0);
+            //     alpha0 = alpha0.array().min(((uOtherMax - u[iCell]).array().abs() / (uFaceIncMax.array().abs() + verySmallReal)));
+            //     alpha0 = alpha0.array().min(((uOtherMin - u[iCell]).array().abs() / (uFaceIncMin.array().abs() + verySmallReal)));
+            //     uGrad[iCell].array().rowwise() *= alpha0.array().transpose();
+
+            //     // kill the axis-cells
+            //     for (rowsize ic2f = 0; ic2f < c2f.size(); ic2f++)
+            //     {
+            //         index iFace = c2f[ic2f];
+            //         if (this->axisFaces.count(iFace))
+            //             uGrad[iCell] *= 0;
+            //     }
+            // }
 
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(runtime)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <set>
 
 #include "VRDefines.hpp"
 #include "VRSettings.hpp"
@@ -33,6 +34,14 @@ namespace DNDS::CFV
         VRSettings settings = VRSettings{dim};
         ssp<Geom::UnstructuredMesh> mesh;
         using TFTrans = std::function<void(Eigen::Ref<MatrixXR>, Geom::t_index)>;
+
+    private:
+        int axisSymmetric = 0;
+        std::set<index> axisFaces;
+
+    public:
+        int GetAxisSymmetric() { return axisSymmetric; }
+        int SetAxisSymmetric(int v) { return axisSymmetric = v; }
 
     private:
         real sumVolume{0}, minVolume{veryLargeReal}, maxVolume{0};
@@ -178,6 +187,30 @@ namespace DNDS::CFV
         }
 
         real GetCellParamVol(index iCell) { return std::get<1>(this->GetCellQuadO1(iCell).GetQuadraturePointInfo(0)); }
+
+        real FaceJacobianDet(const Geom::tSmallCoords &coords, const Geom::Elem::tD01Nj &DiNj)
+        {
+            using namespace Geom;
+            real JDet{0};
+            tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
+            if constexpr (dim == 2)
+                JDet = J(Eigen::all, 0).stableNorm();
+            else
+                JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+            return JDet;
+        }
+
+        real CellJacobianDet(const Geom::tSmallCoords &coordsCell, const Geom::Elem::tD01Nj &DiNj)
+        {
+            using namespace Geom;
+            real JDet{0};
+            tJacobi J = Elem::ShapeJacobianCoordD01Nj(coordsCell, DiNj);
+            if constexpr (dim == 2)
+                JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+            else
+                JDet = J.fullPivLu().determinant();
+            return JDet;
+        }
 
         bool CellIsFaceBack(index iCell, index iFace) const
         {

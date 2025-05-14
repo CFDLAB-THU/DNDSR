@@ -1,6 +1,5 @@
 
 #include "VariationalReconstruction.hpp"
-#include "omp.h"
 #include "DNDS/HardEigen.hpp"
 
 namespace DNDS::CFV
@@ -49,21 +48,34 @@ namespace DNDS::CFV
                 [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                 {
                     tJacobi J = Elem::ShapeJacobianCoordD01Nj(coordsCell, DiNj);
-                    real JDet;
-                    if constexpr (dim == 2)
-                        JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
-                    else
-                        JDet = J.fullPivLu().determinant();
+                    tPoint pPhy = Elem::PPhysicsCoordD01Nj(coordsCell, DiNj);
+                    real JDet = CellJacobianDet(coordsCell, DiNj);
                     // JDet = std::abs(JDet); // use this to pass check even with bad mesh
+                    if (axisSymmetric)
+                        JDet *= std::max(verySmallReal, pPhy(1));
                     vInc = 1 * JDet;
                     cellIntJacobiDet(iCell, iG) = JDet;
+                    cellIntPPhysics(iCell, iG) = pPhy;
                 });
             // if (!(v > 0))
             //     std::cout << fmt::format("cell has ill area result, v = {}, cellType {}", v, int(eCell.type)) << std::endl;
             // for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
             //     if (!(cellIntJacobiDet(iCell, iG) / v > 1e-10))
             //         std::cout << fmt::format("cell has ill jacobi det, det/V {}, cellType {}", cellIntJacobiDet(iCell, iG) / v, int(eCell.type)) << std::endl;;
+            { // using more accurate sum volume
+                real v1{0};
+                qCellMax.Integration(
+                    v1,
+                    [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
+                    {
+                        tPoint pPhy = Elem::PPhysicsCoordD01Nj(coordsCell, DiNj);
+                        real JDet = CellJacobianDet(coordsCell, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
+                        vInc = 1 * JDet;
+                    });
 
+                cellIntJacobiDet[iCell] *= v1 / (v + verySmallReal); // renormalization
+                v = v1;
+            }
             if (!settings.ignoreMeshGeometryDeficiency)
             {
                 DNDS_assert_info(v >= 0, fmt::format("cell has ill area result, v = {}, cellType {}", v, int(eCell.type)));
@@ -87,6 +99,7 @@ namespace DNDS::CFV
             for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
                 cellIntJacobiDet(iCell, iG) += verySmallReal;
             volumeLocal[iCell] = v;
+
             if (iCell < mesh->NumCell()) // non-ghost
 #ifdef DNDS_USE_OMP
 #pragma omp critical
@@ -102,9 +115,7 @@ namespace DNDS::CFV
                 b,
                 [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                 {
-                    tPoint pPhy = Elem::PPhysicsCoordD01Nj(coordsCell, DiNj);
-                    vInc = pPhy * this->GetCellJacobiDet(iCell, iG);
-                    cellIntPPhysics(iCell, iG) = pPhy;
+                    vInc = cellIntPPhysics(iCell, iG) * this->GetCellJacobiDet(iCell, iG);
                 });
             cellBary[iCell] = b / v;
             //****** Get Center
@@ -133,12 +144,7 @@ namespace DNDS::CFV
                 [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                 {
                     tPoint pPhy = Elem::PPhysicsCoordD01Nj(coordsCell, DiNj);
-                    tJacobi J = Elem::ShapeJacobianCoordD01Nj(coordsCell, DiNj);
-                    real JDet;
-                    if constexpr (dim == 2)
-                        JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
-                    else
-                        JDet = J.determinant();
+                    real JDet = CellJacobianDet(coordsCell, DiNj) * (axisSymmetric ? 1 /* using geometrical */ : 1.);
                     tPoint pPhyC = (pPhy - cellBary[iCell]);
                     vInc = (pPhyC * pPhyC.transpose()) * JDet;
                 });
@@ -187,6 +193,7 @@ namespace DNDS::CFV
         // get areas
         faceArea.resize(mesh->NumFaceProc());
         faceAtr.resize(mesh->NumFaceProc());
+        axisFaces.clear();
         this->MakePairDefaultOnFace(faceIntJacobiDet);
         this->MakePairDefaultOnFace(faceMeanNorm);
         this->MakePairDefaultOnFace(faceUnitNorm);
@@ -217,14 +224,22 @@ namespace DNDS::CFV
                 [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                 {
                     tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                    real JDet;
-                    if constexpr (dim == 2)
-                        JDet = J(Eigen::all, 0).stableNorm() + verySmallReal;
-                    else
-                        JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm() + verySmallReal;
+                    tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
+                    real JDet = FaceJacobianDet(coords, DiNj);
+                    if (axisSymmetric)
+                        JDet *= std::max(verySmallReal, pPhy(1));
                     vInc = 1 * JDet;
                     faceIntJacobiDet(iFace, iG) = JDet;
+                    faceIntPPhysics(iFace, iG) = pPhy;
                 });
+            v += verySmallReal;
+            if (axisSymmetric) // could this be helpful out of axisSymmetric context?
+            {
+                if (v < std::pow(this->GetCellVol(mesh->face2cell[iFace][0]), (real(dim) - 1) / real(dim)) * smallReal)
+                    axisFaces.insert(iFace);
+            }
+            for (int iG = 0; iG < qFace.GetNumPoints(); iG++)
+                faceIntJacobiDet(iFace, iG) += verySmallReal;
             faceArea[iFace] = v;
             DNDS_assert_info(v > 0, "face has ill area result");
             for (int iG = 0; iG < qFace.GetNumPoints(); iG++)
@@ -237,7 +252,6 @@ namespace DNDS::CFV
                 [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                 {
                     tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                    tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
                     tPoint np;
                     if constexpr (dim == 2)
                         np = FacialJacobianToNormVec<2>(J);
@@ -245,10 +259,10 @@ namespace DNDS::CFV
                         np = FacialJacobianToNormVec<3>(J);
                     np.stableNormalize();
                     faceUnitNorm(iFace, iG) = np;
-                    faceIntPPhysics(iFace, iG) = pPhy;
                     vInc = np * faceIntJacobiDet(iFace, iG);
                 });
             faceMeanNorm[iFace] = n / v;
+            faceMeanNorm[iFace].stableNormalize(); // might not be unit if is on axis face for axisSymmetric
 
             //****** Get Center
             SummationNoOp noOp;
@@ -394,19 +408,15 @@ namespace DNDS::CFV
                 [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                 {
                     tPoint pPhy = Elem::PPhysicsCoordD01Nj(coordsCell, DiNj);
-                    tJacobi J = Elem::ShapeJacobianCoordD01Nj(coordsCell, DiNj);
-                    real JDet;
-                    if constexpr (dim == 2)
-                        JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
-                    else
-                        JDet = J.determinant();
+                    real JDet = CellJacobianDet(coordsCell, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
                     Eigen::RowVector<real, Eigen::Dynamic> vv;
                     vv.resizeLike(m);
                     this->FDiffBaseValue(vv, pPhy, iCell, -1, -2, 1); // un-dispatched call
+                    DNDS_assert(vv(0) == 1);                          // must have 0th base
                     vInc = vv * JDet;
                 });
             // std::cout << m << std::endl;
-            cellBaseMoment[iCell] = m.transpose() / this->GetCellVol(iCell);
+            cellBaseMoment[iCell] = m.transpose() / m(0); // 0th must be good
             SummationNoOp noOp;
             qCell.Integration(
                 noOp,
@@ -784,7 +794,7 @@ namespace DNDS::CFV
                             {
                                 tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
                                 tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                                real JDet = JacobiDetFace<dim>(J);
+                                real JDet = JacobiDetFace<dim>(J) * (axisSymmetric ? pPhy(1) : 1.);
                                 tPoint np = FacialJacobianToNormVec<dim>(J);
                                 RowVectorXR dbv, dbvD;
                                 dbvD.resize(1, cellAtr[iCell].NDOF);
@@ -877,11 +887,7 @@ namespace DNDS::CFV
                         else
                         {
                             tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                            tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                            if constexpr (dim == 2)
-                                JDet = J(Eigen::all, 0).stableNorm();
-                            else
-                                JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+                            JDet = FaceJacobianDet(coords, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
                             MatrixXR dbv;
                             dbv.resize(faceAtr[iFace].NDIFF, cellAtr[iCell].NDOF);
                             this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
@@ -996,11 +1002,7 @@ namespace DNDS::CFV
                         else
                         {
                             tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                            tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                            if constexpr (dim == 2)
-                                JDet = J(Eigen::all, 0).stableNorm();
-                            else
-                                JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+                            JDet = FaceJacobianDet(coords, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
                             MatrixXR dbvI, dbvJ;
                             dbvI.resize(faceAtr[iFace].NDIFF, cellAtr[iCell].NDOF);
                             dbvJ.resize(faceAtr[iFace].NDIFF, cellAtr[iCellOther].NDOF);
@@ -1090,11 +1092,7 @@ namespace DNDS::CFV
                         else
                         {
                             tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                            tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                            if constexpr (dim == 2)
-                                JDet = J(Eigen::all, 0).stableNorm();
-                            else
-                                JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+                            JDet = FaceJacobianDet(coords, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
                             MatrixXR dbv;
                             dbv.resize(1, cellAtr[iCell].NDOF);
                             this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);

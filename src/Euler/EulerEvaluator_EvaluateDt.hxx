@@ -1095,6 +1095,8 @@ namespace DNDS::Euler
             std::cout << "face at" << vfv->GetFaceQuadraturePPhys(iFace, -1) << '\n';
             std::cout << "UL" << ULxy.transpose() << '\n';
             std::cout << "UR" << URxy.transpose() << std::endl;
+            std::cout << "ULM" << ULMeanXy.transpose() << '\n';
+            std::cout << "URM" << URMeanXy.transpose() << std::endl;
         };
 
         if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
@@ -1404,6 +1406,18 @@ namespace DNDS::Euler
             }
         }
 #endif
+        if (axisSymmetric)
+        {
+            TU uPrim;
+            uPrim.resizeLike(UMeanXy);
+            Gas::IdealGasThermalConservative2Primitive(UMeanXy, uPrim, settings.idealGasProperty.gamma);
+            if (Mode == 0)
+                ret(2) += uPrim(I4) / std::max(verySmallReal, pPhy(1)); // y direction force
+            if (Mode == 1)
+                ; // not implementing axisSymmetric jacobian addition
+            if (Mode == 2)
+                ; // not implementing axisSymmetric jacobian addition
+        }
         if constexpr (model == NS || model == NS_2D || model == NS_3D)
         {
         }

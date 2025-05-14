@@ -79,6 +79,12 @@ namespace DNDS::Euler
         void setPassiveDiscardSource(bool n) { passiveDiscardSource = n; }
 
     private:
+        int axisSymmetric = 0;
+
+    public:
+        int GetAxisSymmetric() { return axisSymmetric; }
+
+    private:
     public:
         ssp<Geom::UnstructuredMesh> mesh;
         ssp<CFV::VariationalReconstruction<gDim>> vfv; //! gDim -> 3 for intellisense //!tmptmp
@@ -126,7 +132,7 @@ namespace DNDS::Euler
 
         EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler, const decltype(settings.jsonSettings) &nJsonSettings,
                        int n_nVars = getNVars(model))
-            : nVars(n_nVars), mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->settings.maxOrder + 1), settings(nVars)
+            : nVars(n_nVars), axisSymmetric(Nvfv->GetAxisSymmetric()), mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->settings.maxOrder + 1), settings(nVars)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             if (getNVars(model) == DynamicSize)
@@ -139,6 +145,9 @@ namespace DNDS::Euler
 
             this->settings.jsonSettings = nJsonSettings;
             this->settings.ReadWriteJSON(settings.jsonSettings, nVars, true);
+
+            if (axisSymmetric)
+                DNDS_assert_info(!settings.ignoreSourceTerm, "you have set source term, do not use ignoreSourceTerm! ");
 
             // lambdaCell.resize(mesh->NumCellProc()); // but only dist part are used, ghost part to not judge for it in facial iter
             lambdaFace.resize(mesh->NumFaceProc());

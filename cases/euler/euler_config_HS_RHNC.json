@@ -1,7 +1,7 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 5e-3,
-        "nTimeStep": 2000,
+        "dtImplicit": 1e-2,
+        "nTimeStep": 20000,
         "steadyQuit": false,
         "odeCode": 0,
         "tEnd": 3e+200,
@@ -23,6 +23,7 @@
         "nConsoleCheck": 1,
         "nConsoleCheckInternal": 10,
         "consoleOutputMode": 0,
+        "nRestartOutC": 50,
         "nRestartOut": 1000,
         "nDataOutC": 10,
         "nDataOut": 1000,
@@ -41,8 +42,8 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/CylinderSquareA.cgns",
-        "outPltName": "../data/outUnsteady/CylinderSquareA/test0_restart_1E6_dt10",
+        "meshFile": "../data/mesh/RoundHeadAndCavity.cgns",
+        "outPltName": "../data/outUnsteady/RoundHeadAndCavity/test0_res_1E6_t5_r1O4/out",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -69,8 +70,8 @@
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 1,
-        "intOrder": 1,
+        "maxOrder": 3,
+        "intOrder": 3,
         "cacheDiffBase": true,
         "jacobiRelax": 1,
         "SORInstead": true,
@@ -128,7 +129,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": true,
         "useScalarJacobian": false,
-        "riemannSolverType": "HLLEP",
+        "riemannSolverType": "Roe_M1",
         "nCentralSmoothStep": 0,
         "constMassForce": [
             0.0,
@@ -136,39 +137,35 @@
             0.0
         ],
         "farFieldStaticValue": [
-            // 1,
-            // 1.0,
-            // 0.0,
-            // 0,
-            // 0.5178571428571429
+            // Ma 6
             1,
             1.0,
             0.0,
             0,
-            0.5714285714285715
+            0.5496031746031746
         ],
-        "boxInitializers": [
-            // {
-            //     "x0": -0.5,
-            //     "x1": 1,
-            //     "y0": -0.5,
-            //     "y1": 0.5,
-            //     "z0": -1,
-            //     "z1": 1,
-            //     "v": [
-            //         1,
-            //         0,
-            //         1,
-            //         0,
-            //         79.8650793650794
-            //     ]
-            // }
+        "boxInitializers": [ // inside cavity
+            {
+                "x0": 0,
+                "x1": 1e100,
+                "y0": -1e100,
+                "y1": 1,
+                "z0": -1e100,
+                "z1": 1e100,
+                "v": [
+                    1,
+                    0,
+                    0,
+                    0,
+                    0.049603174603175
+                ]
+            }
         ],
         "idealGasProperty": {
             "gamma": 1.4,
             // "Rgas": 2.6149943777620887e-05,
-            "Rgas": 0.00010459977511048355,
-            "muGas": 1e-6,
+            "Rgas": 0.00031001984126984125,
+            "muGas": 4e-5, // 4e-3 for Re1000
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4
@@ -178,7 +175,7 @@
         "iStep": 2000,
         "iStepInternal": -1,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/outUnsteady/CylinderSquareA/test0_restart_1E5_O4__1000_p32_restart.dir",
+        "lastRestartFile": "../data/outUnsteady/RoundHeadAndCavity/test0_res_1E6_t5__20000_p32_restart.dir",
         "otherRestartFile": "",
         "otherRestartStoreDim": [
             0

@@ -21,7 +21,7 @@
     },
     "outputControl": {
         "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 10,
+        "nConsoleCheckInternal": 1,
         "consoleOutputMode": 1,
         "nRestartOutCInternal": 1000,
         "nDataOutC": 10,
@@ -35,15 +35,16 @@
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 100,
         "nCFLRampLength": 400,
-        "CFLRampEnd": 20,
+        "CFLRampEnd": 5,
         "useLocalDt": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshScale": 1e-3,
-        "meshFile": "../data/mesh/dualellipsoid_unstr.cgns",
-        "outPltName": "../data/out/dualellipsoid/test0_vr4_rm5_real",
+        // "meshFile": "../data/mesh/dualellipsoid_unstr.cgns",
+        "meshFile": "../data/mesh/dualellipsoid_unstr_corr_r1.cgns",
+        "outPltName": "../data/out/dualellipsoid_corr/test0",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -72,8 +73,8 @@
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 3,
-        "intOrder": 5,
+        "maxOrder": 1,
+        "intOrder": 1,
         "cacheDiffBase": true,
         "jacobiRelax": 1,
         "SORInstead": true,
@@ -103,7 +104,7 @@
         "nGmresSpace": 5,
         "nGmresIter": 1,
         "initWithLastURecInc": false,
-        "multiGridLP": 1,
+        "multiGridLP": 0,
         "multiGridLPInnerNIter": 4,
         "coarseGridLinearSolverControlList": {
             "1": {
@@ -134,7 +135,7 @@
         "useScalarJacobian": false,
         "noRsOnWall": false,
         "noGRPOnWall": false,
-        "riemannSolverType": "Roe_M5", // Roe_M1 does not work well on BCWAllIsothermal -> wall heat flux
+        "riemannSolverType": "Roe_M2", // Roe_M1 does not work well on BCWAllIsothermal -> wall heat flux
         "rsMeanValueEig": 0,
         "rsRotateScheme": 0,
         "nCentralSmoothStep": 0,

@@ -715,7 +715,6 @@ namespace DNDS::Euler
                             }
                         }
 
-                        bool pointOrderReduced;
                         TU ULxy = u[iCell];
                         if (!direct2ndRec)
                             ULxy +=
