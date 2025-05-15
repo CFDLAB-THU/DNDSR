@@ -1591,6 +1591,10 @@ namespace DNDS::Euler
                 log() << "Using steady!" << std::endl;
             config.timeMarchControl.odeCode = 1; // To bdf;
             config.timeMarchControl.nTimeStep = 1;
+            config.timeMarchControl.dtImplicit = 1e100;
+            config.timeMarchControl.useDtPPLimit = false;
+            config.timeMarchControl.dtCFLLimitScale = 1e110;
+            config.outputControl.tDataOut = 1e300; // no t-out steps
         }
         switch (config.timeMarchControl.odeCode)
         {
@@ -1610,8 +1614,8 @@ namespace DNDS::Euler
                 buildDOF, buildScalar,
                 0);
             break;
-        case 1: // BDF2 // Backward Euler
-        case 103:
+        case 1:   // BDF2
+        case 103: // Backward Euler
             if (mpi.rank == 0 && config.timeMarchControl.odeCode == 1)
                 log() << "=== ODE: BDF2 " << std::endl;
             if (mpi.rank == 0 && config.timeMarchControl.odeCode == 103)

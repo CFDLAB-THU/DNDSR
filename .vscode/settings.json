@@ -252,5 +252,6 @@
     "python.analysis.extraPaths": [
         "${workspaceFolder}.src"
     ],
+    "C_Cpp.errorSquiggles": "enabled",
     // "C_Cpp.intelliSenseEngine": "Tag Parser"
 }

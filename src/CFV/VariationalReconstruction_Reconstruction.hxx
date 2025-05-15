@@ -393,8 +393,8 @@ namespace DNDS
         {
             using namespace Geom;
             using namespace Geom::Elem;
-            using TU = Eigen::Vector<real, nVarsFixed>;
-            using TU_Batch = Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic>;
+            // using TU = Eigen::Vector<real, nVarsFixed>;
+            // using TU_Batch = Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic>;
             int nVars = u.father->MatRowSize();
             auto vfv = this;
 
