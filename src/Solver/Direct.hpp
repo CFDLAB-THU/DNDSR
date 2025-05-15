@@ -12,8 +12,6 @@
 
 #include <unordered_set>
 
-#define JSON_ASSERT DNDS_assert
-#include <nlohmann/json.hpp>
 
 namespace DNDS::Direct
 {

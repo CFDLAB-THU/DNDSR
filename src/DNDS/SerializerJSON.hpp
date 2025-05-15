@@ -1,7 +1,7 @@
 #pragma once
 #include "SerializerBase.hpp"
 
-#include <nlohmann/json.hpp>
+#include "DNDS/JsonUtil.hpp"
 #include <fstream>
 #include <map>
 

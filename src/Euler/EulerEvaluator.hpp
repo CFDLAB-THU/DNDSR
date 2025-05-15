@@ -20,8 +20,7 @@
 // #undef __DNDS_REALLY_COMPILING__
 // #endif
 
-#define JSON_ASSERT DNDS_assert
-#include <nlohmann/json.hpp>
+#include "DNDS/JsonUtil.hpp"
 #include "fmt/core.h"
 #include <iomanip>
 #include <functional>

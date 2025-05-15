@@ -1,6 +1,6 @@
 #pragma once
 
-#include <nlohmann/json.hpp>
+#include "DNDS/JsonUtil.hpp"
 #include <set>
 #include "DNDS/Defines.hpp"
 #include "DNDS/MPI.hpp"

@@ -18,9 +18,6 @@
 // #undef __DNDS_REALLY_COMPILING__
 // #endif
 
-#define JSON_ASSERT DNDS_assert
-#include <nlohmann/json.hpp>
-
 namespace DNDS::CFV
 {
     /**
