@@ -1614,6 +1614,15 @@ namespace DNDS::Euler
                 buildDOF, buildScalar,
                 0);
             break;
+        case 202: // esdirk3
+        case 203: // trapz
+            if (mpi.rank == 0)
+                log() << "=== ODE: " + std::vector<std::string>{"ESDIRK3", "Trapz"}.at(config.timeMarchControl.odeCode - 202) << std::endl;
+            ode = std::make_shared<ODE::ImplicitSDIRK4DualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
+                mesh->NumCell(),
+                buildDOF, buildScalar,
+                config.timeMarchControl.odeCode - 200); // 202 -> 2
+            break;
         case 1:   // BDF2
         case 103: // Backward Euler
             if (mpi.rank == 0 && config.timeMarchControl.odeCode == 1)

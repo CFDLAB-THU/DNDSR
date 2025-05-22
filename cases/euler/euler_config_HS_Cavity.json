@@ -1,63 +1,62 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-3,
-        "nTimeStep": 2000,
+        "dtImplicit": 1e-2,
+        "nTimeStep": 10000,
         "steadyQuit": false,
-        "odeCode": 103,
+        "odeCode": 202, //ESDIRK3
+        // "odeCode": 0,
         "tEnd": 3e+200,
         "odeSetting1": 0.55,
         "odeSetting2": 0,
         "odeSetting3": 1.3333,
         "rhsFPPMode": 2,
         "rhsFPPScale": 1,
-        "useDtPPLimit": false,
-        "dtPPLimitScale": 0.1,
         "useRestart": true,
+        "useDtPPLimit": true,
+        "dtPPLimitScale": 2e-1,
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 50,
+        "nTimeStepInternal": 40,
         "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
     "outputControl": {
         "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 1,
-        "consoleOutputMode": 1,
-        "nRestartOut": 100,
-        "nRestartOutCInternal": 1000,
+        "nConsoleCheckInternal": 10,
+        "consoleOutputMode": 0,
+        "nRestartOutC": 50,
+        "nRestartOut": 1000,
         "nDataOutC": 10,
-        "nDataOut": 10,
-        "nDataOutCInternal": 200,
+        "nDataOut": 1000,
+        "nDataOutCInternal": 2000,
         "nDataOutInternal": 1000000000,
-        "tDataOut": 1e300
+        "nTimeAverageOutC": 100,
+        "tDataOut": 0.1
     },
     "implicitCFLControl": {
         "CFL": 0.5,
         "nForceLocalStartStep": 2147483647,
-        "nCFLRampStart": 10,
+        "nCFLRampStart": 0,
         "nCFLRampLength": 10,
-        "CFLRampEnd": 2,
+        "CFLRampEnd": 10,
         "useLocalDt": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshScale": 1e-3,
-        // "meshFile": "../data/mesh/dualellipsoid_unstr.cgns",
-        "meshFile": "../data/mesh/Sharpdoublecone_str_u.cgns",
-        "outPltName": "../data/out/Sharpdoublecone_str_u/test0_su/out_SR1_RM5_O4",
+        "meshFile": "../data/mesh/HSCavityB.cgns",
+        "outPltName": "../data/outUnsteady/HSCavityB/test0_dt10dtpp_R2/out",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
-        "outPltVTKFormat": false,
+        "outPltVTKFormat": true,
         "outAtPointData": true,
         "outAtCellData": true,
         "outBndData": true
     },
     "implicitReconstructionControl": {
-        "useExplicit": false,
         "nInternalRecStep": 1,
         "zeroGrads": false,
         "recLinearScheme": 0,
@@ -65,19 +64,19 @@
         "nGmresIter": 10,
         "recThreshold": 1e-010,
         "nRecConsolCheck": 10,
-        "nRecMultiplyForZeroedGrad": 50
+        "nRecMultiplyForZeroedGrad": 1000
     },
     "limiterControl": {
         "useLimiter": true,
         "smoothIndicatorProcedure": 0,
         "useViscousLimited": false, //!
-        "limiterProcedure": 0, //1 == CWBAP
+        "limiterProcedure": 1, //1 == CWBAP
         "nPartialLimiterStart": 1000000,
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 3,
-        "intOrder": 5,
+        "maxOrder": 1,
+        "intOrder": 1,
         "cacheDiffBase": true,
         "jacobiRelax": 1,
         "SORInstead": true,
@@ -86,7 +85,6 @@
         "WBAP_nStd": 10,
         "normWBAP": false,
         "subs2ndOrder": 1,
-        "subs2ndOrderGGScheme": 0,
         "baseSettings": {
             "localOrientation": false,
             "anisotropicLengths": false
@@ -131,18 +129,15 @@
         }
     },
     "others": {
-        "nFreezePassiveInner": 0,
-        "axisSymmetric": 1
+        "nFreezePassiveInner": 0
+    },
+    "timeAverageControl": {
+        "enabled": true
     },
     "eulerSettings": {
-        "ignoreSourceTerm": false,
+        "ignoreSourceTerm": true,
         "useScalarJacobian": false,
-        "noRsOnWall": false,
-        "noGRPOnWall": false,
-        "ppEpsIsRelaxed": true,
         "riemannSolverType": "Roe_M5",
-        "rsMeanValueEig": 1,
-        "rsRotateScheme": 0,
         "nCentralSmoothStep": 0,
         "constMassForce": [
             0.0,
@@ -150,37 +145,37 @@
             0.0
         ],
         "farFieldStaticValue": [
+            // Ma 6
             1,
             1.0,
             0.0,
             0,
-            0.5114468791091434
+            0.544991541590181
         ],
-        "boxInitializers": [
-            // {
-            //     "x0": -0.5,
-            //     "x1": 1,
-            //     "y0": -0.5,
-            //     "y1": 0.5,
-            //     "z0": -1,
-            //     "z1": 1,
-            //     "v": [
-            //         1,
-            //         0,
-            //         1,
-            //         0,
-            //         79.8650793650794
-            //     ]
-            // }
+        "boxInitializers": [ // inside cavity
+            {
+                "x0": 0,
+                "x1": 1e100,
+                "y0": -1e100,
+                "y1": 0,
+                "z0": -1e100,
+                "z1": 1e100,
+                "v": [
+                    0.333333333333333, // 3x temperature
+                    0.0,
+                    0.0,
+                    0,
+                    0.044991541590181
+                ]
+            }
         ],
         "idealGasProperty": {
             "gamma": 1.4,
-            "Rgas": 4.480187518255745e-05,
-            "muGas": 1.0721940286960357e-05,
+            "Rgas": 0.0001890400907150464,
+            "muGas": 6.464448972523877e-05,
             "prGas": 0.72,
             "TRef": 273.15,
-            // we use nitrogen here!
-            "CSutherland": 107 
+            "CSutherland": 110.4
         }
     },
     "bcSettings": [
@@ -188,60 +183,22 @@
             "name": "wall",
             "type": "BCWallIsothermal",
             "value": [
-                295.8,
+                300,
                 0,
                 0,
                 0,
                 0
             ]
-        },
-        {
-            "name": "axis",
-            "type": "BCWallInvis"
-        },
-        {
-            "name": "inflow",
-            "type": "BCIn",
-            "value": [
-                1,
-                1.0,
-                0.0,
-                0,
-                0.5114468791091434
-            ]
-        },
-        {
-            "name": "out",
-            "type": "BCFar",
-            "value": [
-                1,
-                1.0,
-                0.0,
-                0,
-                0.5114468791091434
-            ]
-        },
-        {
-            "name": "far",
-            "type": "BCFar",
-            "value": [
-                1,
-                1.0,
-                0.0,
-                0,
-                0.5114468791091434
-            ]
         }
     ],
     "restartState": {
-        "iStep": 1,
+        "iStep": 5000,
         "iStepInternal": -1,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/out/Sharpdoublecone_str_u/test0_s/out_RM5__C_p64_restart.dir",
+        "lastRestartFile": "../data/outUnsteady/HSCavityB/test0_dt10dtpp_R1/out__25000_p64_restart.dir",
         "otherRestartFile": "",
         "otherRestartStoreDim": [
             0
         ]
-    },
-    "_tail": 0
+    }
 }
