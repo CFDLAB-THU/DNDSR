@@ -1,7 +1,7 @@
 {
     "timeMarchControl": {
         "dtImplicit": 1e-2,
-        "nTimeStep": 10000,
+        "nTimeStep": 20000,
         "steadyQuit": false,
         "odeCode": 202, //ESDIRK3
         // "odeCode": 0,
@@ -33,7 +33,7 @@
         "nDataOutCInternal": 2000,
         "nDataOutInternal": 1000000000,
         "nTimeAverageOutC": 100,
-        "tDataOut": 0.1
+        "tDataOut": 1
     },
     "implicitCFLControl": {
         "CFL": 0.5,
@@ -46,8 +46,8 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/HSCavityB.cgns",
-        "outPltName": "../data/outUnsteady/HSCavityB/test0_dt10dtpp_R2/out",
+        "meshFile": "../data/mesh/HSCavity10C.cgns",
+        "outPltName": "../data/outUnsteady/HSCavity10C/test0_R4E6_r1/out",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -86,7 +86,7 @@
         "normWBAP": false,
         "subs2ndOrder": 1,
         "baseSettings": {
-            "localOrientation": false,
+            "localOrientation": true,
             "anisotropicLengths": false
         },
         "functionalSettings": {
@@ -172,7 +172,8 @@
         "idealGasProperty": {
             "gamma": 1.4,
             "Rgas": 0.0001890400907150464,
-            "muGas": 6.464448972523877e-05,
+            // "muGas": 6.464448972523877e-05,
+            "muGas": 3.348537093233911e-05,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4
@@ -195,7 +196,7 @@
         "iStep": 5000,
         "iStepInternal": -1,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/outUnsteady/HSCavityB/test0_dt10dtpp_R1/out__25000_p64_restart.dir",
+        "lastRestartFile": "../data/outUnsteady/HSCavity10C/test0_R4E6/out__50000_p64_restart.dir",
         "otherRestartFile": "",
         "otherRestartStoreDim": [
             0

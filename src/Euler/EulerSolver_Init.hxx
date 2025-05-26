@@ -143,6 +143,12 @@ namespace DNDS::Euler
             serializerP->OpenFile(meshPartPath, true);
             mesh->ReadSerialize(serializerP, "meshPart");
             serializerP->CloseFile();
+
+            mesh->RecoverNode2CellAndNode2Bnd();
+            mesh->RecoverCell2CellAndBnd2Cell();
+            mesh->BuildGhostPrimary();
+            mesh->AdjGlobal2LocalPrimary();
+            mesh->AdjGlobal2LocalN2CB();
         }
         if (config.dataIOControl.meshReorderCells == 1)
             mesh->ReorderLocalCells(); // do this early so that faces are natural to cell
@@ -236,7 +242,9 @@ namespace DNDS::Euler
             Serializer::SerializerBaseSSP serializerP = config.dataIOControl.meshPartitionedWriter.BuildSerializer(mpi);
 
             serializerP->OpenFile(meshPartPath, false);
+            mesh->AdjLocal2GlobalPrimary();
             mesh->WriteSerialize(serializerP, "meshPart");
+            mesh->AdjGlobal2LocalPrimary();
             serializerP->CloseFile();
             return; //** mesh preprocess only (without transformation)
         }

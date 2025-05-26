@@ -541,7 +541,6 @@ namespace DNDS::Euler
                               << iCell << std::endl;
                     DNDS_assert(!uInc[iCell].hasNaN());
                 }
-                // if (iScan == 100)
             }
 #if defined(DNDS_DIST_MT_USE_OMP)
         };
@@ -1305,8 +1304,8 @@ namespace DNDS::Euler
                     eOtherMax = std::max(eOtherMax, fEInternal(u[iCellOther]));
                     // ! adding bary value if the other cell exists
                     // uFaceInc(Eigen::all, ic2f + c2f.size()) =
-                       // uGrad[iCell].transpose() *
-                      //  (vfv->GetOtherCellBaryFromCell(iCell, iCellOther, -1) - vfv->GetCellQuadraturePPhys(iCell, -1))(SeqG012);
+                    // uGrad[iCell].transpose() *
+                    //  (vfv->GetOtherCellBaryFromCell(iCell, iCellOther, -1) - vfv->GetCellQuadraturePPhys(iCell, -1))(SeqG012);
                 }
             }
 

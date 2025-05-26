@@ -289,8 +289,8 @@ namespace DNDS::Geom
         DNDS_MAKE_SSP(mesh->cell2node.son, mesh->getMPI());
         if (mesh->isPeriodic)
         {
-            DNDS_MAKE_SSP(mesh->cell2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mesh->getMPI());
-            DNDS_MAKE_SSP(mesh->cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mesh->getMPI());
+            DNDS_MAKE_SSP(mesh->cell2nodePbi.father, mesh->getMPI());
+            DNDS_MAKE_SSP(mesh->cell2nodePbi.son, mesh->getMPI());
         }
         // !cell2cell discarded
         // DNDS_MAKE_SSP(mesh->cell2cell.father, mesh->getMPI());
@@ -299,6 +299,11 @@ namespace DNDS::Geom
         DNDS_MAKE_SSP(mesh->bnd2node.son, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->bnd2cell.father, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->bnd2cell.son, mesh->getMPI());
+        if (mesh->isPeriodic)
+        {
+            DNDS_MAKE_SSP(mesh->bnd2nodePbi.father, mesh->getMPI());
+            DNDS_MAKE_SSP(mesh->bnd2nodePbi.son, mesh->getMPI());
+        }
 
         // coord transferring
         if (mesh->getMPI().rank == mRank)
@@ -320,6 +325,8 @@ namespace DNDS::Geom
         TransferDataSerial2Global(bnd2cellSerial, mesh->bnd2cell.father, bnd_push, bnd_pushStart, mesh->getMPI());
         TransferDataSerial2Global(bnd2nodeSerial, mesh->bnd2node.father, bnd_push, bnd_pushStart, mesh->getMPI());
         TransferDataSerial2Global(bndElemInfoSerial, mesh->bndElemInfo.father, bnd_push, bnd_pushStart, mesh->getMPI());
+        if (mesh->isPeriodic)
+            TransferDataSerial2Global(bnd2nodePbiSerial, mesh->bnd2nodePbi.father, bnd_push, bnd_pushStart, mesh->getMPI());
 
         {
             DNDS::MPISerialDo(mesh->getMPI(), [&]()
@@ -744,27 +751,53 @@ namespace DNDS::Geom
                 std::swap(cellRecCur, cellRecCurNew);
                 initDone = true;
             }
-            // if (cellRecCur.size() && mpi.rank == 0)
-            // {
-            //     for (auto v : cellRecCur)
-            //         std::cout << v << ",";
-            //     std::cout << ":: cellRecCur" << std::endl;
-            // }
+            if (isPeriodic)
+            {
+                std::set<index> cellRecCurOld;
+                std::swap(cellRecCur, cellRecCurOld); // cellRecCur is empty now
+
+                for (auto ic : cellRecCurOld)
+                {
+                    auto [ret, rank, icloc] = cell2node.father->pLGlobalMapping->search(ic);
+                    DNDS_assert(ret && rank == mpi.rank);
+
+                    bool cellContainsBnd = true;
+                    for (int ib2n = 0; ib2n < bnd2node.father->operator[](i).size(); ib2n++)
+                    {
+                        index iNode = bnd2node.father->operator[](i)[ib2n];
+                        auto iNodePbi = bnd2nodePbi.father->operator[](i)[ib2n];
+                        int nIndexMatchNode{0}, nIndexPBIMatchNode{0};
+                        for (int ic2n = 0; ic2n < cell2node[icloc].size(); ic2n++)
+                            if (iNode == cell2node(icloc, ic2n))
+                            {
+                                nIndexMatchNode++;
+                                if (iNodePbi == cell2nodePbi(icloc, ic2n))
+                                    nIndexPBIMatchNode++;
+                            }
+                        DNDS_assert(nIndexMatchNode >= 1);
+                        if (nIndexPBIMatchNode == 0)
+                            cellContainsBnd = false;
+                    }
+                    if (cellContainsBnd)
+                        cellRecCur.insert(ic);
+                }
+            }
             index iCellFound{UnInitIndex};
             index iCellFoundR{UnInitIndex};
             // std::cout << "RecoverCell2CellAndBnd2Cell here L1 2" << std::endl;
             if (isPeriodic && Geom::FaceIDIsPeriodic(bndElemInfo.father->operator()(i, 0).zone))
-            { //! with periodic bnd, can have two cells
-                DNDS_assert_info(cellRecCur.size() == 2,
+            { //! with periodic bnd, can have two cells or 1 cell (1 cell correspond to self-periodic / 1 layer situation)
+                DNDS_assert_info(cellRecCur.size() == 2 || cellRecCur.size() == 1,
                                  fmt::format("cellRecCur.size() is [{}]", cellRecCur.size()));
                 auto it = cellRecCur.begin();
                 iCellFound = *it;
-                ++it;
+                if (cellRecCur.size() == 2)
+                    ++it;
                 iCellFoundR = *it;
             }
             else
             {
-                DNDS_assert(cellRecCur.size() == 1);
+                DNDS_assert_info(cellRecCur.size() == 1, fmt::format("cellRecCur.size() is [{}]", cellRecCur.size()));
                 iCellFound = *cellRecCur.begin();
             }
             bnd2cell.father->operator()(i, 0) = iCellFound;
@@ -794,7 +827,7 @@ namespace DNDS::Geom
             cell2node.trans.createMPITypes();
             cell2node.trans.pullOnce();
             for (index i = 0; i < bnd2cell.father->Size(); i++)
-                if (bnd2cell(i, 1) != UnInitIndex)
+                if (bnd2cell(i, 1) != UnInitIndex && bnd2cell(i, 0) != bnd2cell(i, 1) /* no need to check if both sides are same*/)
                 {
                     index ic0 = bnd2cell(i, 0);
                     index ic1 = bnd2cell(i, 1);
@@ -970,6 +1003,8 @@ namespace DNDS::Geom
             bnd2cell.TransAttach();
             bnd2node.TransAttach();
             bndElemInfo.TransAttach();
+            if (isPeriodic)
+                bnd2nodePbi.TransAttach();
 
             bnd2cell.trans.createFatherGlobalMapping();
 
@@ -985,14 +1020,20 @@ namespace DNDS::Geom
             bnd2cell.trans.createGhostMapping(ghostBnds);
 
             bnd2node.trans.BorrowGGIndexing(bnd2cell.trans);
+            if (isPeriodic)
+                bnd2nodePbi.trans.BorrowGGIndexing(bnd2cell.trans);
             bndElemInfo.trans.BorrowGGIndexing(bnd2cell.trans);
 
             bnd2cell.trans.createMPITypes();
             bnd2node.trans.createMPITypes();
+            if (isPeriodic)
+                bnd2nodePbi.trans.createMPITypes();
             bndElemInfo.trans.createMPITypes();
 
             bnd2cell.trans.pullOnce();
             bnd2node.trans.pullOnce();
+            if (isPeriodic)
+                bnd2nodePbi.trans.pullOnce();
             bndElemInfo.trans.pullOnce();
         }
     }
@@ -1785,7 +1826,7 @@ namespace DNDS::Geom
     void UnstructuredMesh::
         WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name)
     {
-        DNDS_assert(adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
 
         auto cwd = serializerP->GetCurrentPath();
         serializerP->CreatePath(name);
@@ -1800,14 +1841,15 @@ namespace DNDS::Geom
 
         coords.WriteSerialize(serializerP, "coords");
         cell2node.WriteSerialize(serializerP, "cell2node");
-        cell2cell.WriteSerialize(serializerP, "cell2cell");
+        // cell2cell.WriteSerialize(serializerP, "cell2cell");
         cellElemInfo.WriteSerialize(serializerP, "cellElemInfo");
         bnd2node.WriteSerialize(serializerP, "bnd2node");
-        bnd2cell.WriteSerialize(serializerP, "bnd2cell");
+        // bnd2cell.WriteSerialize(serializerP, "bnd2cell");
         bndElemInfo.WriteSerialize(serializerP, "bndElemInfo");
         if (isPeriodic)
         {
             cell2nodePbi.WriteSerialize(serializerP, "cell2nodePbi");
+            bnd2nodePbi.WriteSerialize(serializerP, "bnd2nodePbi");
             periodicInfo.WriteSerializer(serializerP, "periodicInfo");
         }
 
@@ -1847,40 +1889,46 @@ namespace DNDS::Geom
         DNDS_MAKE_SSP(mesh->cell2node.son, mesh->getMPI());
         if (isPeriodic)
         {
-            DNDS_MAKE_SSP(mesh->cell2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mesh->getMPI());
-            DNDS_MAKE_SSP(mesh->cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mesh->getMPI());
+            DNDS_MAKE_SSP(mesh->cell2nodePbi.father, mesh->getMPI());
+            DNDS_MAKE_SSP(mesh->cell2nodePbi.son, mesh->getMPI());
+            DNDS_MAKE_SSP(mesh->bnd2nodePbi.father, mesh->getMPI());
+            DNDS_MAKE_SSP(mesh->bnd2nodePbi.son, mesh->getMPI());
         }
-        DNDS_MAKE_SSP(mesh->cell2cell.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cell2cell.son, mesh->getMPI());
+        // DNDS_MAKE_SSP(mesh->cell2cell.father, mesh->getMPI());
+        // DNDS_MAKE_SSP(mesh->cell2cell.son, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->bnd2node.father, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->bnd2node.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bnd2cell.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bnd2cell.son, mesh->getMPI());
+        // DNDS_MAKE_SSP(mesh->bnd2cell.father, mesh->getMPI());
+        // DNDS_MAKE_SSP(mesh->bnd2cell.son, mesh->getMPI());
 
         coords.ReadSerialize(serializerP, "coords");
         cell2node.ReadSerialize(serializerP, "cell2node");
-        cell2cell.ReadSerialize(serializerP, "cell2cell");
+        // cell2cell.ReadSerialize(serializerP, "cell2cell");
         cellElemInfo.ReadSerialize(serializerP, "cellElemInfo");
         bnd2node.ReadSerialize(serializerP, "bnd2node");
-        bnd2cell.ReadSerialize(serializerP, "bnd2cell");
+        // bnd2cell.ReadSerialize(serializerP, "bnd2cell");
         bndElemInfo.ReadSerialize(serializerP, "bndElemInfo");
         if (isPeriodic)
         {
             cell2nodePbi.ReadSerialize(serializerP, "cell2nodePbi");
+            bnd2nodePbi.ReadSerialize(serializerP, "bnd2nodePbi");
             periodicInfo.ReadSerializer(serializerP, "periodicInfo");
         }
 
         // after matters:
         coords.trans.createMPITypes();
         cell2node.trans.createMPITypes();
-        cell2cell.trans.createMPITypes();
+        // cell2cell.trans.createMPITypes();
         cellElemInfo.trans.createMPITypes();
         bnd2node.trans.createMPITypes();
-        bnd2cell.trans.createMPITypes();
+        // bnd2cell.trans.createMPITypes();
         bndElemInfo.trans.createMPITypes();
         if (isPeriodic)
+        {
             cell2nodePbi.trans.createMPITypes();
-        adjPrimaryState = Adj_PointToLocal; // the file is pointing to local
+            bnd2nodePbi.trans.createMPITypes();
+        }
+        adjPrimaryState = Adj_PointToGlobal; // the file is pointing to local
 
         index nCellG = this->NumCellGlobal(); // collective call!
         index nNodeG = this->NumNodeGlobal(); // collective call!

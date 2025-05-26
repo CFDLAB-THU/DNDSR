@@ -109,6 +109,7 @@ namespace DNDS::Geom
         tElemInfoArrayPair bndElemInfo;
         /// periodic only, after reader
         tPbiPair cell2nodePbi;
+        tPbiPair bnd2nodePbi;
 
         /// inverse relations
         tAdjPair node2cell;
@@ -170,6 +171,30 @@ namespace DNDS::Geom
 
         UnstructuredMesh(const DNDS::MPIInfo &n_mpi, int n_dim)
             : mpi(n_mpi), dim(n_dim) {}
+
+        auto getCell2NodeIndexPbiRow(index iCell)
+        {
+            std::vector<Geom::NodeIndexPBI> ret;
+            ret.reserve(cell2node[iCell].size());
+            for (int ic2n = 0; ic2n < cell2node[iCell].size(); ic2n++)
+                if (isPeriodic)
+                    ret.push_back(Geom::NodeIndexPBI{cell2node[iCell][ic2n], cell2nodePbi[iCell][ic2n]});
+                else
+                    ret.push_back(Geom::NodeIndexPBI{cell2node[iCell][ic2n], Geom::NodePeriodicBits{}});
+            return ret;
+        }
+
+        auto getBnd2NodeIndexPbiRow(index iBnd)
+        {
+            std::vector<Geom::NodeIndexPBI> ret;
+            ret.reserve(bnd2node[iBnd].size());
+            for (int ib2n = 0; ib2n < bnd2node[iBnd].size(); ib2n++)
+                if (isPeriodic)
+                    ret.push_back(Geom::NodeIndexPBI{bnd2node[iBnd][ib2n], bnd2nodePbi[iBnd][ib2n]});
+                else
+                    ret.push_back(Geom::NodeIndexPBI{bnd2node[iBnd][ib2n], Geom::NodePeriodicBits{}});
+            return ret;
+        }
 
         /**
          * \brief
@@ -668,6 +693,7 @@ namespace DNDS::Geom
         tElemInfoArray bndElemInfoSerial;  // created through reading
         tAdj2 bnd2cellSerial;              // created through reading
         tPbi cell2nodePbiSerial;           // created through reading-Deduplicate
+        tPbi bnd2nodePbiSerial;            // created through reading-Deduplicate
         /***************************************************************/
         // Current Method: R/W don't manage actually used interpolation,
         // but manually get cell2cell or node2node

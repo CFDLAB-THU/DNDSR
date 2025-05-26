@@ -3,7 +3,6 @@
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
 #include "RadialBasisFunction.hpp"
 
-#include <omp.h>
 #include <fmt/core.h>
 #include <functional>
 #include <unordered_set>
@@ -321,83 +320,96 @@ namespace DNDS::Geom
         //! now cell2cell, bnd2cell are lost
         {
             //! jumped because cell2cell, bnd2cell is to be recovered mandatorily
-            // cell2cell, bnd2cell can be copied; bnd2nodeO2 created with bnd2cell and bnd2node;
-            // cell2cell = meshO1.cell2cell;
-            // bnd2cell = meshO1.bnd2cell;
-            // DNDS_MAKE_SSP(cell2cell.father, mpi);
-            // DNDS_MAKE_SSP(cell2cell.son, mpi);
-            // cell2cell.father->Resize(meshO1.cell2cell.father->Size());
-            // for (index iCell = 0; iCell < meshO1.cell2node.father->Size(); iCell++)
-            // {
-            //     cell2cell.father->ResizeRow(iCell, meshO1.cell2cell.RowSize(iCell));
-            //     cell2cell[iCell] = std::vector<index>{meshO1.cell2cell[iCell]};
-            //     for (auto &iCellOther : cell2cell[iCell])
-            //     {
-            //         iCellOther = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, iCellOther);
-            //     }
-            // }
-            // DNDS_MAKE_SSP(bnd2cell.father, mpi);
-            // DNDS_MAKE_SSP(bnd2cell.son, mpi);
-            // bnd2cell.father->Resize(meshO1.bnd2cell.father->Size());
-            // for (index iBnd = 0; iBnd < meshO1.bnd2node.father->Size(); iBnd++)
-            // {
-            //     bnd2cell(iBnd, 0) = meshO1.bnd2cell(iBnd, 0);
-            //     bnd2cell(iBnd, 1) = meshO1.bnd2cell(iBnd, 1);
-            //     bnd2cell(iBnd, 0) = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, bnd2cell(iBnd, 0));
-            //     if (bnd2cell(iBnd, 1) != UnInitIndex)
-            //         bnd2cell(iBnd, 1) = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, bnd2cell(iBnd, 1));
-            // }
         }
         DNDS_MAKE_SSP(bnd2node.father, mpi);
         DNDS_MAKE_SSP(bnd2node.son, mpi);
-        DNDS_MAKE_SSP(bndElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(bndElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        DNDS_MAKE_SSP(bndElemInfo.father, mpi);
+        DNDS_MAKE_SSP(bndElemInfo.son, mpi);
+        if (isPeriodic)
+        {
+            DNDS_MAKE_SSP(bnd2nodePbi.father, getMPI());
+            DNDS_MAKE_SSP(bnd2nodePbi.son, getMPI());
+        }
         bnd2node.father->Resize(meshO1.bnd2node.father->Size());
         bndElemInfo.father->Resize(meshO1.bnd2node.father->Size());
+        if (isPeriodic)
+            bnd2nodePbi.father->Resize(meshO1.bnd2node.father->Size());
         for (index iBnd = 0; iBnd < meshO1.bnd2node.father->Size(); iBnd++)
         {
             index iCell = meshO1.bnd2cell(iBnd, 0); // my own bnd2cell is to global!
             auto eCellO2 = this->GetCellElement(iCell);
             auto b2n = meshO1.bnd2node[iBnd];
             auto c2nO2 = this->cell2node[iCell];
+            std::vector<NodeIndexPBI> b2nPbi = meshO1.getBnd2NodeIndexPbiRow(iBnd);
+            std::vector<NodeIndexPBI> c2nPbiO2 = this->getCell2NodeIndexPbiRow(iCell);
+
             std::vector<index> b2nv = b2n;
-            for (auto &i : b2nv)
+            std::vector<NodeIndexPBI> b2nPbiv = b2nPbi;
+            for (int ib2n = 0; ib2n < b2nv.size(); ib2n++)
             {
+                index iN = b2nv[ib2n];
                 //* note that b2nv holds O1 nodes' old and local indices
-                index iNodeOldGlobal = meshO1.coords.trans.pLGhostMapping->operator()(-1, i);
+                index iNodeOldGlobal = meshO1.coords.trans.pLGhostMapping->operator()(-1, iN);
                 index nodeOldOrigLocalIdx{-1};
                 int nodeOldOrigRank{-1};
                 if (!meshO1.coords.trans.pLGlobalMapping->search(iNodeOldGlobal, nodeOldOrigRank, nodeOldOrigLocalIdx))
                     DNDS_assert_info(false, "search failed");
                 // nodeOldOrigRank and nodeOldOrigLocalIdx is same in new
-                i = coords.father->pLGlobalMapping->operator()(nodeOldOrigRank, nodeOldOrigLocalIdx); // now point to global
+                iN = coords.father->pLGlobalMapping->operator()(nodeOldOrigRank, nodeOldOrigLocalIdx); // now point to global
+                b2nv[ib2n] = iN;
+                b2nPbiv[ib2n].i = iN; // also update this
             }
-            std::sort(b2nv.begin(), b2nv.end());
+            std::vector<index> b2nvSorted = b2nv;
+            std::vector<NodeIndexPBI> b2nPbivSorted = b2nPbiv;
+            std::sort(b2nvSorted.begin(), b2nvSorted.end());
+            std::sort(b2nPbivSorted.begin(), b2nPbivSorted.end());
 
             int nFound{0};
             int c2fFound{-1};
             std::vector<index> b2nO2Found;
+            std::vector<NodeIndexPBI> b2nPbiO2Found;
             Elem::Element eBndFound;
-
             for (int ic2f = 0; ic2f < eCellO2.GetNumFaces(); ic2f++)
             {
                 auto eFaceO2 = eCellO2.ObtainFace(ic2f);
                 std::vector<index> f2nO2, f2nO2Sorted;
+                std::vector<NodeIndexPBI> f2nPbiO2, f2nPbiO2Sorted;
                 f2nO2.resize(eFaceO2.GetNumNodes());
                 eCellO2.ExtractFaceNodes(ic2f, c2nO2, f2nO2);
+                if (isPeriodic)
+                {
+                    f2nPbiO2.resize(eFaceO2.GetNumNodes());
+                    eCellO2.ExtractFaceNodes(ic2f, c2nPbiO2, f2nPbiO2);
+                }
                 f2nO2Sorted = f2nO2;
                 std::sort(f2nO2Sorted.begin(), f2nO2Sorted.end()); //! cannot use sorted
-                if (std::includes(f2nO2Sorted.begin(), f2nO2Sorted.end(), b2nv.begin(), b2nv.end()))
+                f2nPbiO2Sorted = f2nPbiO2;
+                std::sort(f2nPbiO2Sorted.begin(), f2nPbiO2Sorted.end()); //! cannot use sorted
+                if (std::includes(f2nO2Sorted.begin(), f2nO2Sorted.end(), b2nvSorted.begin(), b2nvSorted.end()))
                 {
+                    if (isPeriodic) // need to doublecheck if pbis match
+                    {
+                        if (std::includes(f2nPbiO2Sorted.begin(), f2nPbiO2Sorted.end(), b2nPbivSorted.begin(), b2nPbivSorted.end()))
+                            ;
+                        else
+                            continue;
+                    }
                     nFound++;
                     c2fFound = ic2f;
                     b2nO2Found = f2nO2;
+                    b2nPbiO2Found = f2nPbiO2;
                     eBndFound = eFaceO2;
                 }
             }
             DNDS_assert(nFound == 1);
             bnd2node.father->ResizeRow(iBnd, b2nO2Found.size());
             bnd2node[iBnd] = b2nO2Found;
+            if (isPeriodic)
+            {
+                bnd2nodePbi.father->ResizeRow(iBnd, b2nO2Found.size());
+                for (int ib2n = 0; ib2n < b2nPbiO2Found.size(); ib2n++)
+                    bnd2nodePbi[iBnd][ib2n] = b2nPbiO2Found[ib2n].pbi;
+            }
             bndElemInfo(iBnd, 0) = meshO1.bndElemInfo(iBnd, 0);
             bndElemInfo(iBnd, 0).setElemType(eBndFound.type);
         }
@@ -524,6 +536,7 @@ namespace DNDS::Geom
         //* bnd
 
         std::vector<std::vector<index>> bnd2nodeV;
+        std::vector<std::vector<NodePeriodicBits>> bnd2nodePbiV;
         std::vector<ElemInfo> bndElemInfoV;
         for (index iBnd = 0; iBnd < meshO2.bnd2node.father->Size(); iBnd++)
         {
@@ -555,8 +568,15 @@ namespace DNDS::Geom
                 auto eBndSub = eBnd.ObtainO2BisectElem(iBi);
                 std::vector<index> b2nSub;
                 b2nSub.resize(eBndSub.GetNumNodes());
+                std::vector<NodePeriodicBits> b2nPbiSub;
+                b2nPbiSub.resize(eBndSub.GetNumNodes());
                 eBnd.ExtractO2BisectElemNodes(iBi, iBiVariant, meshO2.bnd2node[iBnd], b2nSub);
                 bnd2nodeV.push_back(b2nSub);
+                if (isPeriodic)
+                {
+                    eBnd.ExtractO2BisectElemNodes(iBi, iBiVariant, meshO2.bnd2nodePbi[iBnd], b2nPbiSub);
+                    bnd2nodePbiV.push_back(b2nPbiSub);
+                }
                 ElemInfo eInfo = meshO2.bndElemInfo(iBnd, 0);
                 eInfo.setElemType(eBndSub.type);
                 bndElemInfoV.push_back(eInfo);
@@ -566,14 +586,28 @@ namespace DNDS::Geom
         DNDS_MAKE_SSP(bnd2node.son, mpi);
         DNDS_MAKE_SSP(bndElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
         DNDS_MAKE_SSP(bndElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        if (isPeriodic)
+        {
+            DNDS_MAKE_SSP(bnd2nodePbi.father, mpi);
+            DNDS_MAKE_SSP(bnd2nodePbi.son, mpi);
+        }
         bnd2node.father->Resize(bnd2nodeV.size());
         bndElemInfo.father->Resize(bndElemInfoV.size());
         DNDS_assert(bndElemInfoV.size() == bnd2nodeV.size());
+        if (isPeriodic)
+            bnd2nodePbi.father->Resize(bnd2nodePbiV.size()), DNDS_assert(bnd2nodePbiV.size() == bnd2nodeV.size());
         for (index i = 0; i < bnd2nodeV.size(); i++)
         {
             bnd2node.father->ResizeRow(i, bnd2nodeV[i].size());
             for (rowsize ic2n = 0; ic2n < bnd2nodeV[i].size(); ic2n++)
                 bnd2node.father->operator()(i, ic2n) = bnd2nodeV[i][ic2n];
+            if (isPeriodic)
+            {
+                bnd2nodePbi.father->ResizeRow(i, bnd2nodePbiV[i].size());
+                DNDS_assert(bnd2nodePbiV[i].size() == bnd2nodeV[i].size());
+                for (rowsize ic2n = 0; ic2n < bnd2nodePbiV[i].size(); ic2n++)
+                    bnd2nodePbi.father->operator()(i, ic2n) = bnd2nodePbiV[i][ic2n];
+            }
             bndElemInfo(i, 0) = bndElemInfoV[i];
         }
 
