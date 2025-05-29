@@ -100,6 +100,7 @@ namespace DNDS::Euler
         std::vector<real> lambdaFace123;
         std::vector<real> lambdaFace4;
         std::vector<real> deltaLambdaFace;
+        ArrayDOFV<1> deltaLambdaCell;
 
         // grad fix
         std::vector<TDiffU> gradUFix;
@@ -158,6 +159,7 @@ namespace DNDS::Euler
             lambdaFace4.resize(mesh->NumFaceProc(), 0.);
 
             deltaLambdaFace.resize(lambdaFace.size());
+            vfv->BuildUDof(deltaLambdaCell, 1);
 
             if (settings.useSourceGradFixGG)
             {

@@ -751,7 +751,7 @@ namespace DNDS::Geom
                 std::swap(cellRecCur, cellRecCurNew);
                 initDone = true;
             }
-            if (isPeriodic)
+            if (isPeriodic) // do additional check to avoid 2-layer-periodic problem
             {
                 std::set<index> cellRecCurOld;
                 std::swap(cellRecCur, cellRecCurOld); // cellRecCur is empty now
@@ -759,7 +759,9 @@ namespace DNDS::Geom
                 for (auto ic : cellRecCurOld)
                 {
                     auto [ret, rank, icloc] = cell2node.father->pLGlobalMapping->search(ic);
-                    DNDS_assert(ret && rank == mpi.rank);
+                    DNDS_assert(ret);
+                    if (rank != mpi.rank)
+                        continue;
 
                     bool cellContainsBnd = true;
                     for (int ib2n = 0; ib2n < bnd2node.father->operator[](i).size(); ib2n++)

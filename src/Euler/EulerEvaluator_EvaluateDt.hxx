@@ -919,10 +919,12 @@ namespace DNDS::Euler
             // DNDS_assert(asqrMean >= 0);
             // real aMean = std::sqrt(asqrMean); // original
             real lambdaConvection = std::abs(veloNMean - vgN) + aMean;
-            lambdaConvection = std::max(std::sqrt(asqrL) + std::abs(veloNL - vgN), std::sqrt(asqrR) + std::abs(veloNR - vgN));
             DNDS_assert_info(
                 asqrL >= 0 && asqrR >= 0,
                 fmt::format(" mean value violates PP! asqr: [{} {}]", asqrL, asqrR));
+            real aL = std::sqrt(asqrL);
+            real aR = std::sqrt(asqrR);
+            lambdaConvection = std::max(aL + std::abs(veloNL - vgN), aR + std::abs(veloNR - vgN));
 
             // ! refvalue:
             real muRef = settings.idealGasProperty.muGas;
@@ -966,7 +968,7 @@ namespace DNDS::Euler
             // if (f2c[1] != UnInitIndex) // can't be non local
             //     lambdaCell[f2c[1]] += lambdaFace[iFace] * vfv->GetFaceArea(iFace);
 
-            deltaLambdaFace[iFace] = std::abs((vR - vL).dot(unitNorm)) + std::sqrt(std::abs(asqrR - asqrL)) * 0.7071;
+            deltaLambdaFace[iFace] = std::max<real>({std::abs((vR - vL).dot(unitNorm) + aR - aL), std::abs((vR - vL).dot(unitNorm) - aR + aL), std::abs(aL - aR)});
         }
         real dtMin = veryLargeReal;
 #if defined(DNDS_DIST_MT_USE_OMP)
@@ -981,13 +983,18 @@ namespace DNDS::Euler
             // exit(0);
             dt[iCell](0) = std::min(CFL * vfv->GetCellVol(iCell) * vfv->GetCellSmoothScaleRatio(iCell) / (lambdaCellC + 1e-100), MaxDt);
             dtMin = std::min(dtMin, dt[iCell](0));
+            deltaLambdaCell[iCell](0) = 0;
+            for (auto iFace : mesh->cell2face[iCell])
+                deltaLambdaCell[iCell](0) = std::max(deltaLambdaCell[iCell](0), deltaLambdaFace[iFace]);
             // if (iCell == 10756)
             // {
             //     std::cout << std::endl;
             // }
         }
 
+        deltaLambdaCell.trans.startPersistentPull();
         MPI::Allreduce(&dtMin, &dtMinall, 1, DNDS_MPI_REAL, MPI_MIN, u.father->getMPI().comm);
+        deltaLambdaCell.trans.waitPersistentPull();
 
         // if (uRec.father->getMPI().rank == 0)
         //     std::cout << "dt min is " << dtMinall << std::endl;
@@ -1032,6 +1039,12 @@ namespace DNDS::Euler
         // PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
         real muRef = settings.idealGasProperty.muGas;
         real TRef = settings.idealGasProperty.TRef;
+
+        auto f2c = mesh->face2cell[iFace];
+        real dLambda = deltaLambdaCell[f2c[0]](0);
+        if (f2c[1] != UnInitIndex)
+            dLambda = std::max(dLambda, deltaLambdaCell[f2c[1]](0));
+        real fixScale = settings.rsFixScale;
 
         /** viscous flux **/
         TU_Batch visFluxV;
@@ -1112,10 +1125,10 @@ namespace DNDS::Euler
         auto RSWrapper_XY =
             [&](Gas::RiemannSolverType rsType,
                 auto &&UL, auto &&UR, auto &&ULm, auto &&URm, auto &&vg, auto &&n,
-                real gamma, auto &&finc, real dLambda,
+                real gamma, auto &&finc, real dLambda, real fixScale,
                 real &lam0, real &lam123, real &lam4)
         {
-            Gas::InviscidFlux_IdealGas_Dispatcher<dim>(rsType, UL, UR, ULm, URm, vg, n, gamma, finc, dLambda, exitFun, lam0, lam123, lam4);
+            Gas::InviscidFlux_IdealGas_Dispatcher<dim>(rsType, UL, UR, ULm, URm, vg, n, gamma, finc, dLambda, fixScale, exitFun, lam0, lam123, lam4);
         };
 
         TU_Batch finc;
@@ -1138,7 +1151,7 @@ namespace DNDS::Euler
                 Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
                     rsType,
                     ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
-                    settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
+                    settings.idealGasProperty.gamma, finc, dLambda, fixScale,
                     exitFun, lam0, lam123, lam4);
                 lam0V.setConstant(lam0);
                 lam123V.setConstant(lam123);
@@ -1149,7 +1162,7 @@ namespace DNDS::Euler
                 {
                     RSWrapper_XY(rsType, ULxy(Eigen::all, iB), URxy(Eigen::all, iB), ULMeanXy, URMeanXy,
                                  vgXY(Eigen::all, iB), unitNorm(Eigen::all, iB),
-                                 settings.idealGasProperty.gamma, finc(Eigen::all, iB), deltaLambdaFace[iFace],
+                                 settings.idealGasProperty.gamma, finc(Eigen::all, iB), dLambda, fixScale,
                                  lam0V(iB), lam123V(iB), lam4V(iB));
                 }
         };
@@ -1170,22 +1183,44 @@ namespace DNDS::Euler
                 runRsOnNorm();
             else
             {
-                TVec N1 = diffVelo / diffVeloN;
+                TVec N1;
+                if (settings.rsRotateScheme == 1)
+                    N1 = diffVelo / diffVeloN;
+                else if (settings.rsRotateScheme == 2)
+                    N1 = unitNormC;
+                else
+                    DNDS_assert(false);
                 DNDS_assert_info(std::abs(N1.norm() - 1) < 1e-5, fmt::format("{}", diffVeloN));
+                N1 *= sign(N1.dot(unitNormC));
                 TReal_Batch N1Proj = N1.transpose() * unitNorm;
 
                 TVec_Batch N2 = unitNorm - N1 * N1Proj;
-                TReal_Batch N2Proj = N2.colwise().norm().array().max(smallReal * 10);
+                TReal_Batch N2Proj = N2.colwise().norm().array().max(verySmallReal * 10);
                 N2.array().rowwise() /= N2Proj.array();
 
                 real N1ProjC = N1.dot(unitNormC);
                 TVec N2C = unitNormC - N1 * N1ProjC;
-                real N2CProj = std::max(N2C.norm(), smallReal * 10);
+                real N2CProj = std::max(N2C.norm(), verySmallReal * 10);
                 N2C /= N2CProj;
 
                 TVec_Batch N1B;
                 N1B.resizeLike(N2);
                 N1B.colwise() = N1;
+
+                if (false)
+                {
+                    std::cout << unitNorm << "\n";
+                    std::cout << "N1" << "\n";
+                    std::cout << N1.transpose() << "\n";
+                    std::cout << N1B.transpose() << "\n";
+                    std::cout << N1Proj << "\n";
+                    std::cout << "N2" << "\n";
+                    std::cout << N2.transpose() << "\n";
+                    std::cout << N2Proj << "\n";
+                    std::cout << N2C.transpose() << "\n";
+                    std::cout << N2CProj << "\n";
+                    std::cout << std::endl;
+                }
 
                 TReal_Batch lam4V1, lam0V1, lam123V1;
                 lam0V1.resizeLike(lam0V);
@@ -1204,7 +1239,7 @@ namespace DNDS::Euler
                     Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
                         rsTypeAux,
                         ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N1B, N1,
-                        settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
+                        settings.idealGasProperty.gamma, F1, dLambda, fixScale,
                         exitFun, lam0, lam123, lam4);
                     lam0V1.setConstant(lam0);
                     lam123V1.setConstant(lam123);
@@ -1215,7 +1250,7 @@ namespace DNDS::Euler
                     {
                         RSWrapper_XY(rsTypeAux, ULxy(Eigen::all, iB), URxy(Eigen::all, iB), ULMeanXy, URMeanXy,
                                      vgXY(Eigen::all, iB), N1,
-                                     settings.idealGasProperty.gamma, F1(Eigen::all, iB), deltaLambdaFace[iFace],
+                                     settings.idealGasProperty.gamma, F1(Eigen::all, iB), dLambda, fixScale,
                                      lam0V1(iB), lam123V1(iB), lam4V1(iB));
                     }
 
@@ -1226,7 +1261,7 @@ namespace DNDS::Euler
                     Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
                         rsType,
                         ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N2, N2C,
-                        settings.idealGasProperty.gamma, finc, deltaLambdaFace[iFace],
+                        settings.idealGasProperty.gamma, finc, dLambda, fixScale,
                         exitFun, lam0, lam123, lam4);
                     lam0V.setConstant(lam0);
                     lam123V.setConstant(lam123);
@@ -1237,7 +1272,7 @@ namespace DNDS::Euler
                     {
                         RSWrapper_XY(rsType, ULxy(Eigen::all, iB), URxy(Eigen::all, iB), ULMeanXy, URMeanXy,
                                      vgXY(Eigen::all, iB), N2(Eigen::all, iB),
-                                     settings.idealGasProperty.gamma, finc(Eigen::all, iB), deltaLambdaFace[iFace],
+                                     settings.idealGasProperty.gamma, finc(Eigen::all, iB), dLambda, fixScale,
                                      lam0V(iB), lam123V(iB), lam4V(iB));
                     }
 
@@ -1250,7 +1285,11 @@ namespace DNDS::Euler
                 lam123V.array() *= N2Proj.array() / N12ProjSum.array();
                 lam0V.array() += N1Proj.array() * lam0V1.array() / N12ProjSum.array();
                 lam4V.array() += N1Proj.array() * lam4V1.array() / N12ProjSum.array();
-                lam123V.array() += N1Proj.array() * lam123V1.array() / N12ProjSum.array();
+                lam123V.array() += N1Proj.array() * lam123V1.array() / N12ProjSum.array(); // todo: fix these
+
+                lam0V = lam0V1;
+                lam123V = lam123V1;
+                lam4V = lam4V1;
             }
         }
 

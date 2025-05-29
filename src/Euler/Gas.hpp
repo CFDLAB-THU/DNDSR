@@ -23,6 +23,10 @@ namespace DNDS::Euler::Gas
         Roe_M3 = 13,
         Roe_M4 = 14,
         Roe_M5 = 15,
+        Roe_M6 = 16,
+        Roe_M7 = 17,
+        Roe_M8 = 18,
+        Roe_M9 = 19,
     };
 
     NLOHMANN_JSON_SERIALIZE_ENUM(
@@ -38,6 +42,10 @@ namespace DNDS::Euler::Gas
             {Roe_M3, "Roe_M3"},
             {Roe_M4, "Roe_M4"},
             {Roe_M5, "Roe_M5"},
+            {Roe_M6, "Roe_M6"},
+            {Roe_M7, "Roe_M7"},
+            {Roe_M8, "Roe_M8"},
+            {Roe_M9, "Roe_M9"},
         })
 
     /**
@@ -265,7 +273,7 @@ namespace DNDS::Euler::Gas
               typename TF, typename TFdumpInfo>
     void HLLEPFlux_IdealGas(const TUL &UL, const TUR &UR, const TULm &ULm, const TURm &URm,
                             const TVecVG &vg, const TVecN &n,
-                            real gamma, TF &F, real dLambda,
+                            real gamma, TF &F, real dLambda, real fixScale,
                             const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
         static real scaleHartenYee = 0.05;
@@ -395,7 +403,7 @@ namespace DNDS::Euler::Gas
               typename TF, typename TFdumpInfo>
     void HLLCFlux_IdealGas_HartenYee(const TUL &UL, const TUR &UR, const TULm &ULm, const TURm &URm,
                                      const TVecVG &vg, const TVecN &n,
-                                     real gamma, TF &F, real dLambda,
+                                     real gamma, TF &F, real dLambda, real fixScale,
                                      const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
         //! warning: has accuracy issue (see IV test)
@@ -517,6 +525,116 @@ namespace DNDS::Euler::Gas
         }
     }
 
+    template <int eigScheme>
+    void Roe_EntropyFixer(const real aL, const real aR, const real aAve,
+                          const real uL, const real uR, const real uAve,
+                          const real VL, const real VR, const real VAve, // V is magnitude of velo
+                          real dLambda, real fixScale,
+                          real &lam0, real &lam123, real &lam4)
+    {
+        const real scaleHartenYee = 0.05 * fixScale;
+        const real scaleLD = 0.2 * fixScale;
+        const real scaleHFix = 0.25 * fixScale;
+        if constexpr (eigScheme == 0)
+        {
+            //*H2
+            auto Flim = [=](real v, real lam, real lamL, real lamR)
+            {
+                real thresH = std::max<real>({0., lam - lamL, lamR - lam}) * scaleHartenYee;
+                if (v < thresH)
+                    return (sqr(v) / thresH + thresH) * 0.5;
+                else
+                    return v;
+            };
+
+            lam0 = Flim(lam0, uAve - aAve, uL - aL, uR - aR);
+            lam123 = Flim(lam123, uAve, uL, uR);
+            lam4 = Flim(lam4, uAve + aAve, uL + aL, uR + aR);
+            //*H2
+
+            // lam0 = std::max(lam0, dLambda * scaleHFix);
+            // lam123 = std::max(lam123, dLambda * scaleHFix);
+            // lam4 = std::max(lam4, dLambda * scaleHFix);
+        }
+        else if constexpr (eigScheme == 1)
+        {
+            //* cLLF
+            real aLm = aL;
+            real aRm = aR;
+            real veloLm0 = uL;
+            real veloRm0 = uR;
+            real uLm = signTol(veloLm0, aLm * smallReal) * std::max(std::abs(veloLm0), aLm * scaleLD);
+            real uRm = signTol(veloRm0, aRm * smallReal) * std::max(std::abs(veloRm0), aRm * scaleLD);
+            lam0 = std::max(std::abs(uLm - aLm), std::abs(uRm - aRm));
+            lam123 = std::max(std::abs(uLm), std::abs(uRm));
+            lam4 = std::max(std::abs(uLm + aLm), std::abs(uRm + aRm));
+        }
+        else if constexpr (eigScheme == 3)
+        {
+            //*LD, Roe_M
+            /**
+             * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
+             */
+            real LDthreshold = std::abs(uAve) / scaleLD;
+            real aRoeStar = std::min(LDthreshold, aAve);
+            lam0 = std::abs(uAve - aRoeStar);
+            lam4 = std::abs(uAve + aRoeStar);
+        }
+        else if constexpr (eigScheme == 4)
+        {
+            //*ID, Roe_M
+            /**
+             * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
+             */
+#ifdef USE_SIGN_MINUS_AT_ROE_M4_FLUX
+            real uStar = signM(uAve) * std::max(aAve * scaleLD, std::abs(uAve));
+#else
+            real uStar = signTol(uAve, aAve * smallReal) * std::max(aAve * scaleLD, std::abs(uAve)); //! why signM here?
+#endif
+            lam0 = std::abs(uStar - aAve);
+            lam123 = std::abs(uStar);
+            lam4 = std::abs(uStar + aAve);
+        }
+        else if constexpr (eigScheme == 5)
+        {
+            //*LD, cLLF_M
+            /**
+             * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
+             */
+            real veloLm0 = uL;
+            real veloRm0 = uR;
+            real aLm = std::min(aL, std::abs(veloLm0) / scaleLD);
+            real aRm = std::min(aR, std::abs(veloRm0) / scaleLD);
+            lam0 = std::max(std::abs(veloLm0 - aLm), std::abs(veloRm0 - aRm));
+            lam123 = std::max(std::abs(veloLm0), std::abs(veloRm0));
+            lam4 = std::max(std::abs(veloLm0 + aLm), std::abs(veloRm0 + aRm));
+            //*LD, cLLF_M
+        }
+        else if constexpr (eigScheme == 6) // simply H-correction
+        {
+            lam0 = std::max(lam0, dLambda * scaleHFix);
+            lam4 = std::max(lam4, dLambda * scaleHFix);
+            lam123 = std::max(lam123, dLambda * scaleHFix);
+        }
+        else if constexpr (eigScheme == 7) // simply Harten-Yee-fix
+        {
+            //*HY
+            real thresholdHartenYee = scaleHartenYee * (VAve + aAve);
+            real thresholdHartenYeeS = sqr(thresholdHartenYee);
+            if (lam0 < thresholdHartenYee)
+                lam0 = (sqr(lam0) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            if (lam4 < thresholdHartenYee)
+                lam4 = (sqr(lam4) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            if (lam123 < thresholdHartenYee)
+                lam123 = (sqr(lam123) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            //*HY
+        }
+        else
+        {
+            DNDS_assert(false);
+        }
+    }
+
     template <int dim = 3, int eigScheme = 0,
               typename TUL, typename TUR,
               typename TULm, typename TURm,
@@ -525,11 +643,11 @@ namespace DNDS::Euler::Gas
     void RoeFlux_IdealGas_HartenYee(const TUL &UL, const TUR &UR,
                                     const TULm &ULm, const TURm &URm,
                                     const TVecVG &vg, const TVecN &n,
-                                    real gamma, TF &F, real dLambda,
+                                    real gamma, TF &F, real dLambda, real fixScale,
                                     const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
-        static real scaleHartenYee = 0.05;
-        static real scaleLD = 0.2;
+        static const real scaleHartenYee = 0.05;
+        static const real scaleLD = 0.2;
         using TVec = Eigen::Vector<real, dim>;
 
         if (!(UL(0) > 0 && UR(0) > 0))
@@ -581,29 +699,7 @@ namespace DNDS::Euler::Gas
         real veloLm0 = (veloLm - vg).dot(n);
         real veloRm0 = (veloRm - vg).dot(n);
 
-        if constexpr (eigScheme == 0)
-        {
-            //*HY
-            real thresholdHartenYee = std::max(scaleHartenYee * (std::sqrt(vsqrRoe) + aRoe), dLambda);
-            real thresholdHartenYeeS = thresholdHartenYee * thresholdHartenYee;
-            if (lam0 < thresholdHartenYee)
-                lam0 = (sqr(lam0) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
-            if (lam4 < thresholdHartenYee)
-                lam4 = (sqr(lam4) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
-            //*HY
-        }
-        else if constexpr (eigScheme == 1)
-        {
-            //* cLLF
-            real aLm = std::sqrt(asqrLm);
-            real aRm = std::sqrt(asqrRm);
-            real uLm = signTol(veloLm0, aLm * smallReal) * std::max(std::abs(veloLm0), aLm * scaleLD);
-            real uRm = signTol(veloRm0, aRm * smallReal) * std::max(std::abs(veloRm0), aRm * scaleLD);
-            lam0 = std::max(std::abs(uLm - aLm), std::abs(uRm - aRm));
-            lam123 = std::max(std::abs(uLm), std::abs(uRm));
-            lam4 = std::max(std::abs(uLm + aLm), std::abs(uRm + aRm));
-        }
-        else if constexpr (eigScheme == 2)
+        if constexpr (eigScheme == 2)
         {
             // *vanilla Lax
             // lam0 = lam123 = lam4 = std::max({lam0, lam123, lam4});
@@ -613,59 +709,12 @@ namespace DNDS::Euler::Gas
                 0.5 * lam0 * (UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) - UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)));
             return; //* early exit
         }
-        else if constexpr (eigScheme == 3)
-        {
-            //*LD, Roe_M
-            /**
-             * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
-             */
-            real LDthreshold = std::abs(veloRoe0) / scaleLD;
-            real aRoeStar = std::min(LDthreshold, aRoe);
-            lam0 = std::abs(veloRoe0 - aRoeStar);
-            lam4 = std::abs(veloRoe0 + aRoeStar);
-        }
-        else if constexpr (eigScheme == 4)
-        {
-            //*ID, Roe_M
-            /**
-             * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
-             */
-#ifdef USE_SIGN_MINUS_AT_ROE_M4_FLUX
-            real uStar = signM(veloRoe0) * std::max(aRoe * scaleLD, std::abs(veloRoe0));
-#else
-            real uStar = signTol(veloRoe0, aRoe * smallReal) * std::max(aRoe * scaleLD, std::abs(veloRoe0)); //! why signM here?
-#endif
-            lam0 = std::abs(uStar - aRoe);
-            lam123 = std::abs(uStar);
-            lam4 = std::abs(uStar + aRoe);
-            // std::cout << "here" << std::endl;
-
-            // real thresholdHartenYee = std::max(scaleLD * (std::sqrt(vsqrRoe) + aRoe), 0);
-            // real thresholdHartenYeeS = thresholdHartenYee * thresholdHartenYee;
-            // if (lam0 < thresholdHartenYee)
-            //     lam0 = (sqr(lam0) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
-            // if (lam4 < thresholdHartenYee)
-            //     lam4 = (sqr(lam4) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
-            // if (lam123 < thresholdHartenYee)
-            //     lam123 = (sqr(lam123) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
-        }
-        else if constexpr (eigScheme == 5)
-        {
-            //*LD, cLLF_M
-            /**
-             * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
-             */
-            real aLm = std::min(std::sqrt(asqrLm), std::abs(veloLm0) / scaleLD);
-            real aRm = std::min(std::sqrt(asqrRm), std::abs(veloRm0) / scaleLD);
-            lam0 = std::max(std::abs(veloLm0 - aLm), std::abs(veloRm0 - aRm));
-            lam123 = std::max(std::abs(veloLm0), std::abs(veloRm0));
-            lam4 = std::max(std::abs(veloLm0 + aLm), std::abs(veloRm0 + aRm));
-            //*LD, cLLF_M
-        }
         else
-        {
-            DNDS_assert(false);
-        }
+            Roe_EntropyFixer<eigScheme>(std::sqrt(asqrLm), std::sqrt(asqrRm), aRoe,
+                                        veloLm0, veloRm0, veloRoe0,
+                                        (veloLm - vg).norm(), (veloRm - vg).norm(), (veloRoe - vg).norm(),
+                                        dLambda, fixScale,
+                                        lam0, lam123, lam4);
 
         Eigen::Vector<real, dim + 2> incU =
             UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) -
@@ -764,7 +813,7 @@ namespace DNDS::Euler::Gas
                                           const TULm &ULm, const TURm &URm,
                                           const TVecVG &vg, const TVecVGm &vgm,
                                           const TVecN &n, const TVecNm &nm,
-                                          real gamma, TF &F, real dLambda,
+                                          real gamma, TF &F, real dLambda, real fixScale,
                                           const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
         static real scaleHartenYee = 0.05;
@@ -834,27 +883,7 @@ namespace DNDS::Euler::Gas
         lam123 = std::abs(veloRoeRN);
         lam4 = std::abs(veloRoeRN + aRoe);
 
-        if constexpr (eigScheme == 0)
-        {
-            //*HY
-            real thresholdHartenYee = std::max(scaleHartenYee * (std::sqrt(vsqrRoe) + aRoe), dLambda);
-            real thresholdHartenYeeS = thresholdHartenYee * thresholdHartenYee;
-            if (lam0 < thresholdHartenYee)
-                lam0 = (sqr(lam0) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
-            if (lam4 < thresholdHartenYee)
-                lam4 = (sqr(lam4) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
-            //*HY
-        }
-        else if constexpr (eigScheme == 1)
-        {
-            //* cLLF
-            real aLm = std::sqrt(asqrLm);
-            real aRm = std::sqrt(asqrRm);
-            lam0 = std::max(std::abs(veloLm0 - aLm), std::abs(veloRm0 - aRm));
-            lam123 = std::max(std::abs(veloLm0), std::abs(veloRm0));
-            lam4 = std::max(std::abs(veloLm0 + aLm), std::abs(veloRm0 + aRm));
-        }
-        else if constexpr (eigScheme == 2)
+        if constexpr (eigScheme == 2)
         {
             // *vanilla Lax
             // lam0 = lam123 = lam4 = std::max({lam0, lam123, lam4});
@@ -864,49 +893,12 @@ namespace DNDS::Euler::Gas
                 0.5 * lam0 * (UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) - UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all));
             return; //* early exit
         }
-        else if constexpr (eigScheme == 3)
-        {
-            //*LD, Roe_M
-            /**
-             * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
-             */
-            real LDthreshold = std::abs(veloRoeRN) / scaleLD;
-            real aRoeStar = std::min(LDthreshold, aRoe);
-            lam0 = std::abs(veloRoeRN - aRoeStar);
-            lam4 = std::abs(veloRoeRN + aRoeStar);
-        }
-        else if constexpr (eigScheme == 4)
-        {
-            //*ID, Roe_M
-            /**
-             * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
-             */
-#ifdef USE_SIGN_MINUS_AT_ROE_M4_FLUX
-            real uStar = signM(veloRoeRN) * std::max(aRoe * scaleLD, std::abs(veloRoeRN));
-#else
-            real uStar = signTol(veloRoeRN, aRoe * smallReal) * std::max(aRoe * scaleLD, std::abs(veloRoeRN)); //! why signM here?
-#endif
-            lam0 = std::abs(uStar - aRoe);
-            lam123 = std::abs(uStar);
-            lam4 = std::abs(uStar + aRoe);
-        }
-        else if constexpr (eigScheme == 5)
-        {
-            //*LD, cLLF_M
-            /**
-             * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
-             */
-            real aLm = std::min(std::sqrt(asqrLm), std::abs(veloLm0) / scaleLD);
-            real aRm = std::min(std::sqrt(asqrRm), std::abs(veloRm0) / scaleLD);
-            lam0 = std::max(std::abs(veloLm0 - aLm), std::abs(veloRm0 - aRm));
-            lam123 = std::max(std::abs(veloLm0), std::abs(veloRm0));
-            lam4 = std::max(std::abs(veloLm0 + aLm), std::abs(veloRm0 + aRm));
-            //*LD, cLLF_M
-        }
         else
-        {
-            DNDS_assert(false);
-        }
+            Roe_EntropyFixer<eigScheme>(std::sqrt(asqrLm), std::sqrt(asqrRm), aRoe,
+                                        veloLm0, veloRm0, veloRoeRN,
+                                        (veloLm - vgm).norm(), (veloRm - vgm).norm(), (veloRoe - vgm).norm(),
+                                        dLambda, fixScale,
+                                        lam0, lam123, lam4);
 
         TU5_Batch incU =
             UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) -
@@ -957,47 +949,51 @@ namespace DNDS::Euler::Gas
         RiemannSolverType type,
         TUL &&UL, TUR &&UR, TULm &&ULm, TURm &&URm,
         TVecVG &&vg, TVecN &&n, real gamma, TF &&F,
-        real dLambda,
+        real dLambda, real fixScale,
         TFdumpInfo &&dumpInfo, real &lam0, real &lam123, real &lam4)
     {
+#define DNDS_GAS_CALL_ROE(type)                               \
+    RoeFlux_IdealGas_HartenYee<dim, type>(                    \
+        UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale, \
+        dumpInfo, lam0, lam123, lam4)
+
         if (type == Roe)
             RoeFlux_IdealGas_HartenYee<dim>(
-                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale,
                 dumpInfo, lam0, lam123, lam4);
         else if (type == Roe_M1)
-            RoeFlux_IdealGas_HartenYee<dim, 1>(
-                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
-                dumpInfo, lam0, lam123, lam4);
+            DNDS_GAS_CALL_ROE(1);
         else if (type == Roe_M2)
-            RoeFlux_IdealGas_HartenYee<dim, 2>(
-                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
-                dumpInfo, lam0, lam123, lam4);
+            DNDS_GAS_CALL_ROE(2);
         else if (type == Roe_M3)
-            RoeFlux_IdealGas_HartenYee<dim, 3>(
-                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
-                dumpInfo, lam0, lam123, lam4);
+            DNDS_GAS_CALL_ROE(3);
         else if (type == Roe_M4)
-            RoeFlux_IdealGas_HartenYee<dim, 4>(
-                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
-                dumpInfo, lam0, lam123, lam4);
+            DNDS_GAS_CALL_ROE(4);
         else if (type == Roe_M5)
-            RoeFlux_IdealGas_HartenYee<dim, 5>(
-                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
-                dumpInfo, lam0, lam123, lam4);
+            DNDS_GAS_CALL_ROE(5);
+        else if (type == Roe_M6)
+            DNDS_GAS_CALL_ROE(6);
+        else if (type == Roe_M7)
+            DNDS_GAS_CALL_ROE(7);
+        else if (type == Roe_M8)
+            DNDS_GAS_CALL_ROE(8);
+        else if (type == Roe_M9)
+            DNDS_GAS_CALL_ROE(9);
         else if (type == HLLEP)
             HLLEPFlux_IdealGas<dim, 0>(
-                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale,
                 dumpInfo, lam0, lam123, lam4);
         else if (type == HLLEP_V1)
             HLLEPFlux_IdealGas<dim, 1>(
-                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale,
                 dumpInfo, lam0, lam123, lam4);
         else if (type == HLLC)
             HLLCFlux_IdealGas_HartenYee<dim>(
-                UL, UR, ULm, URm, vg, n, gamma, F, dLambda,
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale,
                 dumpInfo, lam0, lam123, lam4);
         else
             DNDS_assert_info(false, "the rs type is invalid");
+#undef DNDS_GAS_CALL_ROE
     }
 
     template <int dim = 3,
@@ -1012,35 +1008,39 @@ namespace DNDS::Euler::Gas
         TULm &&ULm, TURm &&URm,
         TVecVG &&vg, TVecVGm &&vgm,
         TVecN &&n, TVecNm &&nm,
-        real gamma, TF &&F, real dLambda,
+        real gamma, TF &&F, real dLambda, real fixScale,
         TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
+#define DNDS_GAS_CALL_ROE(type)                                        \
+    RoeFlux_IdealGas_HartenYee_Batch<dim, type>(                       \
+        UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda, fixScale, \
+        dumpInfo, lam0, lam123, lam4)
+
         if (type == Roe)
             RoeFlux_IdealGas_HartenYee_Batch<dim>(
-                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda,
+                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda, fixScale,
                 dumpInfo, lam0, lam123, lam4);
         else if (type == Roe_M1)
-            RoeFlux_IdealGas_HartenYee_Batch<dim, 1>(
-                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda,
-                dumpInfo, lam0, lam123, lam4);
+            DNDS_GAS_CALL_ROE(1);
         else if (type == Roe_M2)
-            RoeFlux_IdealGas_HartenYee_Batch<dim, 2>(
-                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda,
-                dumpInfo, lam0, lam123, lam4);
+            DNDS_GAS_CALL_ROE(2);
         else if (type == Roe_M3)
-            RoeFlux_IdealGas_HartenYee_Batch<dim, 3>(
-                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda,
-                dumpInfo, lam0, lam123, lam4);
+            DNDS_GAS_CALL_ROE(3);
         else if (type == Roe_M4)
-            RoeFlux_IdealGas_HartenYee_Batch<dim, 4>(
-                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda,
-                dumpInfo, lam0, lam123, lam4);
+            DNDS_GAS_CALL_ROE(4);
         else if (type == Roe_M5)
-            RoeFlux_IdealGas_HartenYee_Batch<dim, 5>(
-                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda,
-                dumpInfo, lam0, lam123, lam4);
+            DNDS_GAS_CALL_ROE(5);
+        else if (type == Roe_M6)
+            DNDS_GAS_CALL_ROE(6);
+        else if (type == Roe_M7)
+            DNDS_GAS_CALL_ROE(7);
+        else if (type == Roe_M8)
+            DNDS_GAS_CALL_ROE(8);
+        else if (type == Roe_M9)
+            DNDS_GAS_CALL_ROE(9);
         else
             DNDS_assert_info(false, "the rs type is invalid (for batch version)");
+#undef DNDS_GAS_CALL_ROE
     }
 
     /**

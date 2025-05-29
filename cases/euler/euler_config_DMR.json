@@ -3,7 +3,7 @@
         "dtImplicit": 2e-4,
         "nTimeStep": 1250,
         "steadyQuit": false,
-        "odeCode": 1,
+        "odeCode": 202,
         "tEnd": 3e+200,
         // "odeSetting1": 0.5,
         // "odeSetting2": 0,
@@ -45,8 +45,8 @@
         "useLocalDt": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 200,
-        "rhsThresholdInternal": 1e-4,
+        "nTimeStepInternal": 40,
+        "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
@@ -54,7 +54,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/UniformDM480.cgns",
-        "outPltName": "../data/outUnsteady/DM480-1/UniformDM480_T5_TS3_RM2-BDF2-V2T2",
+        "outPltName": "../data/outUnsteady/DM480-ARSTest/testO2_RM2/out",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -88,14 +88,15 @@
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 3,
-        "intOrder": 5,
+        "maxOrder": 1,
+        "intOrder": 1,
         "jacobiRelax": 1.0,
         "SORInstead": false,
         "smoothThreshold": 1e-2,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
         "limiterBiwayAlter": 0, // 1=MM, 2=PN, 3=MEMM, 4=WBAP_L2_cut
+        "subs2ndOrder": 1,
         "functionalSettings": {
             "scaleType": "BaryDiff",
             "scaleMultiplier": 1,
