@@ -108,7 +108,9 @@ function(dnds_add_py_module LIBNAME CPPS LINKS PCH_TARGET SHARED FAST USE_EXCLUD
         add_fast_flags(${LIBNAME})
     endif()
     if (UNIX)
-        target_compile_options(${LIBNAME} PRIVATE -flto=${DNDS_LTO_N})
+        #! mind that need both compile and link options!
+        target_compile_options(${LIBNAME} PRIVATE -flto=${DNDS_LTO_N} -fuse-linker-plugin)
+        target_link_options(${LIBNAME} PRIVATE -flto=${DNDS_LTO_N} -fuse-linker-plugin)
     endif()
 endfunction(dnds_add_py_module)
 

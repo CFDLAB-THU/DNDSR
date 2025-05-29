@@ -20,7 +20,9 @@ cd $SCRIPT_DIR
 # ldd pybind11-stubgen
 
 export PYTHONPATH=$PYTHONPATH:$(pwd)
-pybind11-stubgen DNDS -o pybind11-stubgen-out
+
+### DNDS
+pybind11-stubgen DNDS -o pybind11-stubgen-out || exit 1
 
 # cp -v DNDS/_internal/dnds_pybind11/*.pyi DNDS/
 
@@ -29,12 +31,26 @@ for file in pybind11-stubgen-out/DNDS/_internal/dnds_pybind11/*.pyi; do
     echo "$file -> pybind11-stubgen-out/DNDS/$(basename "$file")"
 done
 
-pybind11-stubgen Geom -o pybind11-stubgen-out
+### Geom
+
+pybind11-stubgen Geom -o pybind11-stubgen-out || exit 1
 
 for file in pybind11-stubgen-out/Geom/_internal/geom_pybind11/*.pyi; do
     cat "$file" >> "pybind11-stubgen-out/Geom/$(basename "$file")"
     echo "$file -> pybind11-stubgen-out/Geom/$(basename "$file")"
 done
+
+### CFV
+
+pybind11-stubgen CFV -o pybind11-stubgen-out || exit 1
+
+# no sub-modules here
+# for file in pybind11-stubgen-out/CFV/_internal/cfv_pybind11/*.pyi; do
+#     cat "$file" >> "pybind11-stubgen-out/CFV/$(basename "$file")"
+#     echo "$file -> pybind11-stubgen-out/CFV/$(basename "$file")"
+# done
+
+### copy
 
 cp -rv pybind11-stubgen-out/* .
 

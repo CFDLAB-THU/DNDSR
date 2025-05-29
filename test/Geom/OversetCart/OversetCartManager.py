@@ -5,7 +5,7 @@ from OversetCart import OversetBG2D, OversetPart2D, DistMap
 from utils import get_mpi4py_comm_from_MPIInfo
 import numpy as np
 import sys, os
-import time
+import time, itertools
 
 
 class OversetBG2DManager:
@@ -50,21 +50,49 @@ class OversetBG2DManager:
         #         dist_maps[0], points=np.array([[0.25, 0, 0 - 0.025], [0.5, 0.25, 0.5]])
         #     )
         # )
+        self.part_bnd_templates = []
+        for iPart, part in enumerate(parts):
+            iFacesSourceLoc, coords_mid = part.get_holed_faces_midpt(
+                self.cell_type_arrs[iPart]
+            )
+            iPartTemp, iCellTemp = osBG.decide_point_templates(
+                parts, dist_maps, coords_mid
+            )
+            self.part_bnd_templates.append((iPartTemp, iCellTemp, iFacesSourceLoc))
+
+    def cache_templates(self):
+        pass
 
     def print_proc_dist_maps(self):
         self.osBG.print_proc_dist_maps(self.dist_maps)
 
     def print_full_mesh_type(self, out_name="", together=False):
+        highlight_iCells_list = []
+        for iPart, part in enumerate(self.parts):
+            highlight_iCells = set()
+            for iPartTemp, iCellTemp, iFacesSourceLoc in self.part_bnd_templates:
+                highlight_iCells.update(set(iCellTemp[iPartTemp == iPart]))
+            highlight_iCells_list.append(highlight_iCells)
+
         if not together:
             for iPart, part in enumerate(self.parts):
-                part.print_full_mesh_type(iPart, self.cell_type_arrs[iPart])
+                part.print_full_mesh_type(
+                    iPart,
+                    self.cell_type_arrs[iPart],
+                    highlight_iCells=highlight_iCells_list[iPart],
+                )
         else:
             import matplotlib.pyplot as plt
 
             fig = plt.figure(figsize=(8, 6), dpi=400)
+
             for iPart, part in enumerate(self.parts):
                 part.print_full_mesh_type(
-                    iPart, self.cell_type_arrs[iPart], no_hole=True, ax=plt.gca()
+                    iPart,
+                    self.cell_type_arrs[iPart],
+                    no_hole=True,
+                    ax=plt.gca(),
+                    highlight_iCells=highlight_iCells_list[iPart],
                 )
             plt.axis("equal")
             plt.gca().autoscale()
@@ -74,14 +102,12 @@ class OversetBG2DManager:
             plt.close(fig)
 
 
-if __name__ == "__main__":
-    mpiGlob = DNDS.MPIInfo()
-    mpiGlob.setWorld()
-
+def AnimateMotion(mpi: DNDS.MPIInfo):
+    mpiGlob = mpi
     translates = [[0, 0, 0], [1.5, 0, 0]]
     translates_end = [[0, 0, 0], [0.5, 0, 0]]
     rot = np.array([0.0, 0])
-    rot_end = np.array([0.0, 0])
+    rot_end = np.array([0.0, 90])
     translates = np.array(translates)
     translates_end = np.array(translates_end)
     Nstep = 41
@@ -130,6 +156,15 @@ if __name__ == "__main__":
         t0 = time.perf_counter()
         osMan.process_overset(1.0 / 10)
         if mpiGlob.rank == 0:
-            print(f"process done. 🥺 time: [{time.perf_counter() - t0}]")
+            print(
+                f"[{i+1}/{Nstep}] process done. 🥺 time: [{time.perf_counter() - t0}]"
+            )
 
-        osMan.print_full_mesh_type(together=True, out_name=f"os_type_0_{i:04}")
+        osMan.print_full_mesh_type(together=True, out_name=f"os_type_1_{i:04}")
+
+
+if __name__ == "__main__":
+    mpiGlob = DNDS.MPIInfo()
+    mpiGlob.setWorld()
+
+    AnimateMotion(mpiGlob)

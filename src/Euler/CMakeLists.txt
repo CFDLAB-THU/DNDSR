@@ -12,6 +12,8 @@ dnds
 ${DNDS_EXTERNAL_LIBS}
 )
 
+message(STATUS "here!!!! ${DNDS_Euler_Models_List}")
+
 foreach(item IN LISTS DNDS_Euler_Models_List)
     string(REPLACE "=" ";" keyval ${item})
     list(GET keyval 0 key)

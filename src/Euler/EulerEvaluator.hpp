@@ -65,6 +65,41 @@ namespace DNDS::Euler
 
         typedef CFV::VariationalReconstruction<gDim> TVFV;
         typedef ssp<CFV::VariationalReconstruction<gDim>> TpVFV;
+        typedef ssp<BoundaryHandler<model>> TpBCHandler;
+
+    public:
+        static void InitializeFV(ssp<Geom::UnstructuredMesh> mesh, TpVFV vfv, TpBCHandler pBCHandler)
+        {
+            vfv->SetPeriodicTransformations(
+                [&](auto u, Geom::t_index id)
+                {
+                    DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+                    u(Eigen::all, Seq123) = mesh->periodicInfo.TransVector<dim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
+                },
+                [&](auto u, Geom::t_index id)
+                {
+                    DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+                    u(Eigen::all, Seq123) = mesh->periodicInfo.TransVectorBack<dim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
+                });
+
+            vfv->ConstructMetrics();
+            vfv->ConstructBaseAndWeight(
+                [&](Geom::t_index id, int iOrder) -> real
+                {
+                    auto type = pBCHandler->GetTypeFromID(id);
+                    if (type == BCSpecial || type == BCOut)
+                        return 0;
+                    if (type == BCFar) // use Dirichlet type
+                        return iOrder ? 0. : 1.;
+                    if (type == BCWallInvis || type == BCSym)
+                        return iOrder ? 0. : 1.;
+                    if (Geom::FaceIDIsPeriodic(id))
+                        return iOrder ? 1. : 1.; //! treat as real internal
+                    // others: use Dirichlet type
+                    return iOrder ? 0. : 1.;
+                });
+            vfv->ConstructRecCoeff();
+        }
 
     public:
         // static const int gdim = 2; //* geometry dim

@@ -518,6 +518,7 @@ if(UNIX OR MINGW)
         add_compile_options(-funsafe-math-optimizations)
         message(WARNING "using -funsafe-math-optimization")
     endif()
+    add_compile_options(-fdiagnostics-color=always)
     
     ### set warnings
     # -Wconversion
@@ -592,6 +593,7 @@ elseif(WIN32 OR MSVC)
             add_compile_options(-march=native)
             message(WARNING "using -march=native")
         endif()
+        add_compile_options(-fdiagnostics-color=always)
         message(STATUS "MSVC ${MSVC}")
         message(STATUS "MSVC_VERSION ${MSVC_VERSION}")
     endif()

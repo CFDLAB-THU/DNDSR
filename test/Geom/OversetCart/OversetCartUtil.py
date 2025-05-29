@@ -312,6 +312,46 @@ def obtain_proc_local_bg_cell_bnd_elems(self: OversetBG2D, part: OversetPart2D):
     for cell_ijk, travelling_bnd_elem in itertools.chain(*recv_lists):
         cell_ijk_t = tuple(int(v) for v in cell_ijk)
         cell_bnds[cell_ijk_t].append(travelling_bnd_elem)
+    return dict(cell_bnds)
+
+
+def expand_proc_local_bg_cell_bnd_elems(self: OversetBG2D, cell_bnds: dict):
+    mpi = self._mpi
+    MPI = self._MPI
+
+    cell_bnds = dict(cell_bnds)
+
+    bg_cell_range = self.proc_grid_range(is_point=False)
+    proc_grid_ijks_expanded = self.proc_grid_ijkarray(expanded=True).reshape(2, -1)
+    ijk_fringe = []
+    for iIJK in range(proc_grid_ijks_expanded.shape[1]):
+        ijk = [int(proc_grid_ijks_expanded[iax, iIJK]) for iax in range(2)]
+        ijkInCore = [
+            bg_cell_range[iax][0] <= ijk[iax] < bg_cell_range[iax][1]
+            for iax in range(2)
+        ]
+        if not (ijkInCore[0] and ijkInCore[1]):
+            ijk_fringe.append(tuple(ijk))
+    ijk_fringe = np.array(ijk_fringe, dtype=np.int64).T
+    ranks = self.global_ijk_to_rank(ijk_fringe)
+    req_lists = [[] for _ in range(mpi.size)]
+    for i, rank in enumerate(ranks):
+        req_lists[rank].append(ijk_fringe[:, i])
+    req_cur = MPI.alltoall(req_lists)
+    send_lists_fringe_cell_bnd = [[] for rank in range(mpi.size)]
+    for rank_source, ijks in enumerate(req_cur):
+        for ijk in ijks:
+            ijk_t = tuple(int(v) for v in ijk)
+            if ijk_t in cell_bnds:
+                send_lists_fringe_cell_bnd[rank_source].append(
+                    (ijk_t, cell_bnds[ijk_t])
+                )
+    recv_lists_fringe_cell_bnd = MPI.alltoall(send_lists_fringe_cell_bnd)
+
+    for ijk_t, bnds_list in itertools.chain(*recv_lists_fringe_cell_bnd):
+        assert ijk_t not in cell_bnds
+        cell_bnds[ijk_t] = bnds_list
+
     return cell_bnds
 
 
@@ -412,6 +452,20 @@ def query_dist_from_points(
                 assert ijk in distMap.cell_cells_on_bnd
                 bnd_cell_elems = distMap.cell_cells_on_bnd[ijk]
                 additional = (bnd_elems, bnd_cell_elems)
+
+                # only boundary-cut bg-cells check neighbour bg-cell for bnd elem
+                ijk_neighs = [
+                    (ijk[0] - 1, ijk[1]),
+                    (ijk[0] + 1, ijk[1]),
+                    (ijk[0], ijk[1] - 1),
+                    (ijk[0], ijk[1] + 1),
+                ]
+                for ijk_neigh in ijk_neighs:
+                    if (
+                        ijk_neigh in distMap.cell_bnds_expanded
+                    ):  # no need to ensure neigh is a valid ijk
+                        additional[0].extend(distMap.cell_bnds_expanded[ijk_neigh])
+
             assert ijk not in data_send[rank_to]
             data_send[rank_to][ijk] = (dists, additional)
 
@@ -498,6 +552,74 @@ def query_dist_from_points(
     return dist_results
 
 
+def query_template_cell_from_points(
+    self: OversetBG2D, osPart: OversetPart2D, distMap: DistMap, points: np.ndarray
+):
+    mpi = self._mpi
+    MPI = self._MPI
+    mesh = osPart._mesh
+    points = np.reshape(points, (2, -1))
+
+    ijks = points_get_grid_cells_2D(self.origins[:2], self.h, points)
+    ranks = self.global_ijk_to_rank(ijks, is_point=False)
+
+    query_send = [set() for _ in range(mpi.size)]
+    for iq, rank in enumerate(ranks):
+        query_send[rank].add(tuple([int(v) for v in ijks[:, iq]]))
+    query_recv = MPI.alltoall(query_send)
+
+    data_send = [{} for _ in range(mpi.size)]
+    for rank, query_recv_rank in enumerate(query_recv):
+        for ijk in query_recv_rank:
+            data_send[rank][ijk] = distMap.cell_cell_inds[ijk]
+    data_recv = MPI.alltoall(data_send)
+    ijk_to_cell_data_recv_merged = {k: v for d in data_recv for k, v in d.items()}
+
+    iCellGs = set()
+    for v in ijk_to_cell_data_recv_merged.values():
+        iCellGs.update(v)
+    cell_req_send = [[] for _ in range(mpi.size)]
+    for iCellG in iCellGs:
+        ret, rank, iCell = mesh.cell2node.trans.LGlobalMapping.search(iCellG)
+        assert ret, "search failed"
+        # print(rank)
+        cell_req_send[rank].append((iCell, iCellG))
+    cell_req_recv = MPI.alltoall(cell_req_send)
+    travelling_cell_data_send = []
+    for cell_reqs in cell_req_recv:
+        data_c = []
+        for iCell, iCellG in cell_reqs:
+            data_c.append((iCellG, osPart.get_travelling_cell(iCell, in_phy=True)))
+        travelling_cell_data_send.append(data_c)
+    travelling_cell_data_recv = MPI.alltoall(travelling_cell_data_send)
+    travelling_cell_data_recv_dict = {}
+    for iCellG, travelling_cell in itertools.chain(*travelling_cell_data_recv):
+        travelling_cell_data_recv_dict[iCellG] = travelling_cell
+
+    template_iCellGs = []
+    for iq, rank in enumerate(ranks):
+        ijk_t = tuple([int(v) for v in ijks[:, iq]])
+        cells = [
+            (iCellG, travelling_cell_data_recv_dict[iCellG])
+            for iCellG in ijk_to_cell_data_recv_merged[ijk_t]
+        ]
+        iCellG_template = -1
+        for iCellG, travelling_cell in cells:
+            cellType, cellZone, iCell, cell2nodeRow, coords = travelling_cell
+            assert cellType in {
+                Geom.Elem.ElemType.Quad4,
+                Geom.Elem.ElemType.Tri3,
+            }
+            is_in = points_in_polygon_winding(
+                coords[:2, :], points[0, iq], points[1, iq]
+            )
+            if is_in:
+                iCellG_template = iCellG
+        # assert iCellG_template >= 0, "template query not found"
+        template_iCellGs.append(iCellG_template)
+    return template_iCellGs
+
+
 def decide_cell_types(
     self: OversetBG2D, parts: list[OversetPart2D], proc_dist_maps: list[DistMap]
 ):
@@ -552,7 +674,7 @@ def decide_cell_types(
 
     for i, part in enumerate(parts):
         node_is_hole = (
-            self_dist_nodes[i]
+            self_dist_nodes[i] * 0.9
             > min_dists_nodes_other[i]
             # part.dist_node > min_dists_nodes_other[i]
         )
@@ -577,3 +699,35 @@ def decide_cell_types(
         cell_type_arr.trans.pullOnce()
         cell_type_arrs.append(cell_type_arr)
     return (cell_type_arrs, other_dists_nodes)
+
+
+def decide_point_templates(
+    self: OversetBG2D,
+    parts: list[OversetPart2D],
+    proc_dist_maps: list[DistMap],
+    points: np.ndarray,
+):
+    mpi = self._mpi
+    MPI = self._MPI
+    points = np.reshape(points, (2, -1))
+
+    assert len(parts) == len(proc_dist_maps)
+
+    dists_pts = []
+    for dist_that in proc_dist_maps:
+        dists_pts.append(self.query_dist_from_points(dist_that, points))
+    # print(dists_pts)
+    dist_pts_a = np.array(dists_pts, dtype=np.float64)
+    min_dist_loc = np.argmin(dist_pts_a, axis=0)
+    min_dist = np.min(dist_pts_a, axis=0)
+    inds = np.arange(len(min_dist))
+    iCellGs = np.ones_like(inds) * -1  # at iPart == min_dist_loc
+
+    for i, part in enumerate(parts):
+        inds_c = inds[min_dist_loc == i]
+        points_c = points[:, inds_c]
+        iCellGs[inds_c] = self.query_template_cell_from_points(
+            part, proc_dist_maps[i], points_c
+        )
+
+    return (np.array(min_dist_loc), np.array(iCellGs))

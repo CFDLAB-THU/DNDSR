@@ -20,7 +20,7 @@ version = "0.0.0"
 [tool.scikit-build]
 cmake.minimum-version = "3.21"
 cmake.build-type = "Release"
-build.targets = ["dnds_pybind11", "geom_pybind11"]
+build.targets = ["dnds_pybind11", "geom_pybind11", "cfv_pybind11"]
 build.verbose = true
 build-dir = "build_py"
 cmake.args = ["-G Ninja"]
