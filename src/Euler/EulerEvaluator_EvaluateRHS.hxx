@@ -616,14 +616,21 @@ namespace DNDS::Euler
 #pragma omp parallel for schedule(runtime)
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            auto f2c = mesh->cell2face[iCell];
-            for (int ic2f = 0; ic2f < f2c.size(); ic2f++)
+            auto c2f = mesh->cell2face[iCell];
+            for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
-                index iFace = f2c[ic2f];
+                index iFace = c2f[ic2f];
                 int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
                 TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1);
                 this->UFromFace2Cell(fluxFaceC, iFace, iCell, if2c);
+
                 rhs[iCell] += fluxFaceC / vfv->GetCellVol(iCell);
+                if (mesh->face2cell(iFace, 1 - if2c) == iCell) // check for self-facing face
+                {
+                    TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1) * (-1);
+                    this->UFromFace2Cell(fluxFaceC, iFace, iCell, 1 - if2c); // use 1-if2c to force use the other periodic state
+                    rhs[iCell] += fluxFaceC / vfv->GetCellVol(iCell);
+                }
             }
         }
 #endif

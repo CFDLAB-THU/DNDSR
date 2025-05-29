@@ -107,6 +107,7 @@ namespace DNDS::ODE
         Eigen::RowVector<real, -1> butcherB;
         int nInnerStage = 3;
         int schemeC = 0;
+        bool explicitFirst = false;
         int hasLastEndPointR = 0;
         int latestStage = 0;
 
@@ -157,6 +158,7 @@ namespace DNDS::ODE
             else if (schemeCode == 1)
             {
                 nInnerStage = 6;
+                explicitFirst = true;
                 butcherA.resize(nInnerStage, nInnerStage);
                 butcherC.resize(nInnerStage);
                 butcherB.resize(nInnerStage);
@@ -169,6 +171,38 @@ namespace DNDS::ODE
                     0.1579162951616714, 0, 0.1867589405240008, 0.6805652953093346, -0.2752405309950067, 0.25;
                 butcherB = butcherA(Eigen::last, Eigen::all);
                 butcherC << 0, 0.5, 0.332, 0.62, 0.849999966747388, 1;
+            }
+            else if (schemeCode == 2) // esdirk3
+            {
+                nInnerStage = 4;
+                explicitFirst = true;
+
+                butcherA.resize(nInnerStage, nInnerStage);
+                butcherC.resize(nInnerStage);
+                butcherB.resize(nInnerStage);
+                double alphaC = double(1767732205903) / double(4055673282236);
+
+                butcherA << verySmallReal, 0, 0, 0,
+                    alphaC, alphaC, 0, 0,
+                    real(2746238789719) / real(10658868560708), real(-640167445237) / real(6845629431997), alphaC, 0,
+                    real(1471266399579) / real(7840856788654), real(-4482444167858) / real(7529755066697), real(11266239266428) / real(11593286722821), alphaC;
+
+                butcherB = butcherA(Eigen::last, Eigen::all);
+                butcherC = butcherA.rowwise().sum();
+                butcherC(0) = 0;
+                butcherC(3) = 1;
+            }
+            else if (schemeCode == 3) // trapezoid rule
+            {
+                nInnerStage = 2;
+                explicitFirst = true;
+                butcherA.resize(nInnerStage, nInnerStage);
+                butcherC.resize(nInnerStage);
+                butcherB.resize(nInnerStage);
+                butcherA << verySmallReal, 0,
+                    0.5, 0.5;
+                butcherB = butcherA(Eigen::last, Eigen::all);
+                butcherC << 0, 1;
             }
             else
             {
@@ -203,7 +237,7 @@ namespace DNDS::ODE
                 int iter = 1;
                 for (; iter <= maxIter; iter++)
                 {
-                    if (schemeC == 1 && iB == 0) // for esdirk first frhs evaluation
+                    if (explicitFirst && iB == 0) // for esdirk first frhs evaluation
                     {
                         if (hasLastEndPointR)
                             rhsbuf[0] = rhsbuf[nInnerStage - 1];
@@ -243,7 +277,7 @@ namespace DNDS::ODE
 
                     if (fstop(iter, rhs, iB + 1))
                         break;
-                    if (schemeC == 1 && iB == 0) // for esdirk
+                    if (explicitFirst && iB == 0) // for esdirk
                         break;
 
                     // TODO: add time dependent rhs
@@ -251,7 +285,7 @@ namespace DNDS::ODE
                 if (iter > maxIter)
                     fstop(iter, rhs, iB + 1);
             }
-            if (schemeC == 1) // for esdirk
+            if (explicitFirst) // for esdirk
             {
                 hasLastEndPointR = 1;
                 return;

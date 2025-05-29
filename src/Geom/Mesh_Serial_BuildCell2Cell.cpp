@@ -190,12 +190,23 @@ namespace DNDS::Geom
                     donorNode2Cell[iNode].push_back(iCell);
                 }
             }
+        std::unordered_map<index, std::vector<index>> donorNode2Bnd;
+        for (DNDS::index iBnd = 0; iBnd < bnd2nodeSerial->Size(); iBnd++)
+            for (DNDS::rowsize iN = 0; iN < Elem::Element{(*bndElemInfoSerial)(iBnd, 0).getElemType()}.GetNumVertices(); iN++)
+            {
+                auto iNode = (*bnd2nodeSerial)(iBnd, iN);
+                if (iNodeDonorToMain1.count(iNode) || iNodeDonorToMain2.count(iNode) || iNodeDonorToMain3.count(iNode))
+                {
+                    donorNode2Bnd[iNode].push_back(iBnd);
+                }
+            }
         /**********************************************************************************************************************/
 
-        DNDS_MAKE_SSP(cell2nodePbiSerial, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mesh->getMPI());
+        DNDS_MAKE_SSP(cell2nodePbiSerial, mesh->getMPI());
         cell2nodePbiSerial->Resize(cell2nodeSerial->Size());
         for (index iCell = 0; iCell < cell2nodeSerial->Size(); iCell++)
             cell2nodePbiSerial->ResizeRow(iCell, cell2nodeSerial->RowSize(iCell));
+        // scan the periodic bnds
         for (index iBnd = 0; iBnd < bnd2nodeSerial->Size(); iBnd++)
         {
             auto faceID = bndElemInfoSerial->operator()(iBnd, 0).zone;
@@ -216,6 +227,36 @@ namespace DNDS::Geom
                                         (*cell2nodePbiSerial)(iCell, ic2n).setP2True();
                                     if (faceID == BC_ID_PERIODIC_3_DONOR)
                                         (*cell2nodePbiSerial)(iCell, ic2n).setP3True();
+                                }
+                            }
+                }
+            }
+        }
+        DNDS_MAKE_SSP(bnd2nodePbiSerial, mesh->getMPI());
+        bnd2nodePbiSerial->Resize(bnd2nodeSerial->Size());
+        for (index iBnd = 0; iBnd < bnd2nodeSerial->Size(); iBnd++)
+            bnd2nodePbiSerial->ResizeRow(iBnd, bnd2nodeSerial->RowSize(iBnd));
+        // scan the periodic bnds
+        for (index iBnd = 0; iBnd < bnd2nodeSerial->Size(); iBnd++)
+        {
+            auto faceID = bndElemInfoSerial->operator()(iBnd, 0).zone;
+            if (FaceIDIsPeriodicDonor(faceID))
+            {
+                for (auto iNodeFace : (*bnd2nodeSerial)[iBnd])
+                {
+                    DNDS_assert(donorNode2Bnd.count(iNodeFace));
+                    for (auto iBndAdj : donorNode2Bnd[iNodeFace])
+                        for (auto iNode : (*bnd2nodeSerial)[iBnd])
+                            for (rowsize ic2n = 0; ic2n < (*bnd2nodeSerial).RowSize(iBndAdj); ic2n++)
+                            {
+                                if ((*bnd2nodeSerial)(iBndAdj, ic2n) == iNode)
+                                {
+                                    if (faceID == BC_ID_PERIODIC_1_DONOR)
+                                        (*bnd2nodePbiSerial)(iBndAdj, ic2n).setP1True();
+                                    if (faceID == BC_ID_PERIODIC_2_DONOR)
+                                        (*bnd2nodePbiSerial)(iBndAdj, ic2n).setP2True();
+                                    if (faceID == BC_ID_PERIODIC_3_DONOR)
+                                        (*bnd2nodePbiSerial)(iBndAdj, ic2n).setP3True();
                                 }
                             }
                 }
@@ -272,6 +313,7 @@ namespace DNDS::Geom
         // } //TODO
 
         cell2nodePbiSerial->Compress();
+        bnd2nodePbiSerial->Compress();
 
         decltype(coordSerial) coordSerialOld = coordSerial;
         DNDS_MAKE_SSP(coordSerial, mesh->getMPI());

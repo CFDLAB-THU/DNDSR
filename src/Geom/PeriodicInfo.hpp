@@ -33,6 +33,10 @@ namespace DNDS::Geom
         {
             return bool(__v);
         }
+        bool operator==(const NodePeriodicBits &r) const
+        {
+            return uint8_t(r) == uint8_t(*this);
+        }
         static MPI_Datatype CommType() { return MPI_UINT8_T; }
         static int CommMult() { return 1; }
 
@@ -46,6 +50,29 @@ namespace DNDS::Geom
     static const NodePeriodicBits nodePB1{0x01U};
     static const NodePeriodicBits nodePB2{0x02U};
     static const NodePeriodicBits nodePB3{0x04U};
+
+    struct NodeIndexPBI
+    {
+        index i;
+        NodePeriodicBits pbi;
+
+        bool operator<(const NodeIndexPBI &r) const
+        {
+            if (i < r.i)
+                return true;
+            else if (i == r.i)
+                return uint8_t(pbi) < uint8_t(r.pbi);
+            else
+                return false;
+        }
+
+        bool operator==(const NodeIndexPBI &r) const
+        {
+            return r.i == i && r.pbi == pbi;
+        }
+
+        bool operator!=(const NodeIndexPBI &r) const { return !(*this == r); }
+    };
 
     inline bool isCollaborativeNodePeriodicBits(const std::vector<NodePeriodicBits> &a, const std::vector<NodePeriodicBits> &b)
     {

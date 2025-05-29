@@ -1468,6 +1468,7 @@ namespace DNDS::Geom
 
     void UnstructuredMesh::PrintMeshCGNS(std::string fname, const t_FBCID_2_Name &fbcid2name, const std::vector<std::string> &allNames)
     {
+        DNDS_assert_info(!isPeriodic, "PrintMeshCGNS does not handle periodic mesh!");
         /*****************************/
         /*     Data preparation:     */
         /*****************************/
