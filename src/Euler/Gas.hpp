@@ -345,10 +345,10 @@ namespace DNDS::Euler::Gas
         // std::cout << alpha.transpose() << std::endl;
         // std::cout << std::endl;
 
-        real SL = std::min(lam0, veloLm0 - std::sqrt(asqrL));
-        real SR = std::max(lam4, veloRm0 + std::sqrt(asqrR));
+        real SL = std::min(veloRoe0 - aRoe, veloLm0 - std::sqrt(asqrL));
+        real SR = std::max(veloRoe0 + aRoe, veloRm0 + std::sqrt(asqrR));
         real UU = std::abs(veloRoe0);
-        real dfix = aRoe / (aRoe + UU);
+        real dfix = aRoe / (aRoe + std::max(UU, dLambda * fixScale));
         real SP = std::max(SR, 0.0);
         real SM = std::min(SL, 0.0);
 
@@ -373,13 +373,18 @@ namespace DNDS::Euler::Gas
         else
         {
             // ? HLLEP_V1
-            real delta1 = aRoe / (std::abs(veloRoe0) + aRoe + verySmallReal);
+            // real delta1 = aRoe / (UU + aRoe + verySmallReal);
+            // real delta1 = 0.5;
+            real delta1 = dfix;
             real delta2 = 0.0;
             real delta3 = 0.0;
 
             lam123 = ((SP + SM) * (veloRoe0)-2.0 * (1.0 - delta1) * (SP * SM)) / (SP - SM);
             lam4 = ((SP + SM) * (veloRoe0 + aRoe) - 2.0 * (1.0 - delta2) * (SP * SM)) / (SP - SM);
             lam0 = ((SP + SM) * (veloRoe0 - aRoe) - 2.0 * (1.0 - delta3) * (SP * SM)) / (SP - SM);
+            lam123 = std::abs(lam123);
+            lam0 = std::abs(lam0);
+            lam4 = std::abs(lam4);
 
             alpha0 *= lam0;
             alpha1 *= lam123;
