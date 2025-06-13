@@ -2,7 +2,7 @@
 
 #include "DNDS/Defines.hpp"
 #include "Geometric.hpp"
-#include <nlohmann/json.hpp>
+#include "DNDS/JsonUtil.hpp"
 
 namespace DNDS::Geom::RBF
 {

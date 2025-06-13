@@ -40,13 +40,19 @@ namespace DNDS::Geom
         UnstructuredMesh_
             .def(py::init<>([](const MPIInfo &mpi, int n_dim)
                             { return std::make_shared<UnstructuredMesh>(mpi, n_dim); }))
+            // basic
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(coords)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cell2node)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(bnd2node)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(bnd2cell)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cell2cell)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cellElemInfo)
-            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(bndElemInfo);
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(bndElemInfo)
+            // interpolated
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cell2face)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(face2cell)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(face2node)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(faceElemInfo);
 
         UnstructuredMesh_
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(RecoverNode2CellAndNode2Bnd)

@@ -1,5 +1,5 @@
 #pragma once
-#include <nlohmann/json.hpp>
+#include "DNDS/JsonUtil.hpp"
 
 #include "Euler.hpp"
 #include "Gas.hpp"

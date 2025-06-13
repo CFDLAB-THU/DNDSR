@@ -6,6 +6,10 @@ namespace py = pybind11;
 
 namespace DNDS
 {
+
+    template <class T>
+    using py_class_ssp = py::class_<T, ssp<T>>;
+
     template <class T>
     bool py_buffer_contains_T(const py::buffer_info &info)
     {
@@ -78,5 +82,9 @@ namespace DNDS
                  { return UnInitIndex; })
             .def("_get_UnInitRowsize", []()
                  { return UnInitRowsize; });
+
+        m.attr("UnInitReal") = py::float_(UnInitReal);
+        m.attr("UnInitIndex") = py::int_(UnInitIndex);
+        m.attr("UnInitRowsize") = py::int_(UnInitRowsize);
     }
 }

@@ -1,7 +1,7 @@
 #pragma once
 #include "DNDS/Defines.hpp"
 
-#include <nlohmann/json.hpp>
+#include "DNDS/JsonUtil.hpp"
 #include <fmt/core.h>
 
 namespace DNDS::Euler::Gas

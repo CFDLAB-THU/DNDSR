@@ -80,6 +80,15 @@ class OversetPart2D:
         self.dist_node = obtain_part_local_elem_dists(self, bc_names)
 
     def get_travelling_cell(self, iCell: int, in_phy: bool = True):
+        """_summary_
+
+        Args:
+            iCell (int): is local iCell
+            in_phy (bool, optional): in physical instead of mesh space. Defaults to True.
+
+        Returns:
+            tuple[ElemType, int, int, list[int], ndarray]: travelling cell
+        """
         mesh = self._mesh
         part = self
 
@@ -106,15 +115,53 @@ class OversetPart2D:
         )
         return travelling_cell
 
+    def get_holed_faces_midpt(self, cell_type_arr: DNDS.ArrayEigenVectorPair_1_1_D):
+        """_summary_
+
+        Args:
+            cell_type_arr (DNDS.ArrayEigenVectorPair_1_1_D): _description_
+
+        Returns:
+            (array, array): iFaces (local), midpt coords
+        """
+        mesh = self._mesh
+        faces = []
+        coords_mid = []
+        for iFace in range(mesh.NumFaceProc()):
+            f2c = mesh.face2cell[iFace].tolist()
+            type_L = cell_type_arr[f2c[0]].tolist()[0]
+            type_R = type_L
+            if f2c[1] != DNDS.UnInitIndex:
+                type_R = cell_type_arr[f2c[1]].tolist()[0]
+            if type_L != type_R:
+                faces.append(iFace)
+                faceAtr = mesh.faceElemInfo[iFace, 0]
+                assert faceAtr.getElemType() == Geom.Elem.ElemType.Line2
+                f2n = mesh.face2node[iFace].tolist()
+                coord_mid = (
+                    np.array(mesh.coords[f2n[0]]) + np.array(mesh.coords[f2n[1]])
+                ) * 0.5
+                coord_mid = self.coord_mesh_to_phy(coord_mid)
+                coords_mid.append(coord_mid[:2])
+        coords_mid = np.array(coords_mid).reshape(-1, 2).T
+
+        return (np.array(faces, dtype=np.int64), coords_mid)
+
     def print_full_mesh_type(
         self,
         iPart,
         cell_type_arr: DNDS.ArrayEigenVectorPair_1_1_D,
         no_hole=False,
         ax=None,
+        highlight_iCells=set(),
     ):
         mpi = self._mpi
         MPI = self._MPI
+
+        highlight_iCells = set([int(v) for v in highlight_iCells])
+        highlight_iCells = MPI.gather(list(highlight_iCells), root=0)
+        if mpi.rank == 0:
+            highlight_iCells = set(itertools.chain(*highlight_iCells))
 
         mesh = self._mesh
         travelling_cell_type_list = []
@@ -140,10 +187,12 @@ class OversetPart2D:
             assert cellType in {Geom.Elem.ElemType.Quad4, Geom.Elem.ElemType.Tri3}
             if no_hole and not (osType == 0):
                 continue
+            # if int(iCell) in highlight_iCells:
+            #     print(f"HIGHLIGHT {iPart},{iCell}")
             polygon = patches.Polygon(
                 coords[:2, :].transpose(),
                 closed=True,
-                alpha=0.2,
+                alpha=0.8 if int(iCell) in highlight_iCells else 0.2,
                 edgecolor="k",
                 facecolor=f"C{int(iPart)}",
                 ls="-" if osType == 0 else "none",
@@ -165,17 +214,20 @@ class DistMap:
         dist_field: CartGridField,
         cell_cell_inds: dict[tuple[int], set[int]],
         cell_cells_on_bnd: dict[tuple[int], list[t_travelling_cell_pack]],
+        cell_bnds_expanded: dict[tuple[int], list[t_travelling_cell_pack]],
     ):
         (
-            self.cell_bnds,
-            self.dist_field,
-            self.cell_cell_inds,
-            self.cell_cells_on_bnd,
+            self.cell_bnds,  # ijk (g) to travelling boundary elements on the current cell
+            self.dist_field,  # scalar field representing interpolated distance
+            self.cell_cell_inds,  # ijk (g) to global cells intersecting
+            self.cell_cells_on_bnd,  #  with all the cells on the bg cell having on zero cell_bnds
+            self.cell_bnds_expanded,  # cell_bnds but with fringe records
         ) = (
             cell_bnds,
             dist_field,
             cell_cell_inds,
             cell_cells_on_bnd,
+            cell_bnds_expanded,
         )
 
 
@@ -343,8 +395,9 @@ class OversetBG2D:
             ijk_ranges[iax] = (
                 max(ijk_ranges[iax][0] - 1, 0),
                 min(
-                    ijk_ranges[iax][1] + 2 if is_point else 1,
-                    self.grid_shape[iax] - 0 if is_point else 1,
+                    ijk_ranges[iax][1] + (2 if is_point else 1),
+                    self.grid_shape[iax]
+                    - (0 if is_point else 1),  # mind this parentheses
                 ),
             )
         return ijk_ranges
@@ -386,6 +439,8 @@ class OversetBG2D:
         return ranks
 
     def global_ijk_to_rank(self, ijk, is_point=False):
+        if len(ijk) == 0:
+            return []
         idxs = []
         for iax in range(2):
             # searchsorted gives the insertion point for target
@@ -495,6 +550,7 @@ class OversetBG2D:
         from OversetCartUtil import (
             obtain_proc_local_bg_dists,
             obtain_proc_local_bg_cell_bnd_elems,
+            expand_proc_local_bg_cell_bnd_elems,
             obtain_proc_local_bg_cell_cell_elem_inds,
             obtain_proc_local_bg_cell_elems_with_bnd,
             get_mesh_bnd_elems,
@@ -507,6 +563,7 @@ class OversetBG2D:
         for iPart, part in enumerate(parts):
             proc_bg_mesh_dist = obtain_proc_local_bg_dists(self, part)
             cell_bnds = obtain_proc_local_bg_cell_bnd_elems(self, part)
+            cell_bnds_expanded = expand_proc_local_bg_cell_bnd_elems(self, cell_bnds)
             cell_cell_inds = obtain_proc_local_bg_cell_cell_elem_inds(self, part)
 
             dist_field = CartGridField(1, self.proc_grid_shape(), mpi)
@@ -529,9 +586,15 @@ class OversetBG2D:
                 self, part, cell_bnds, cell_cell_inds
             )
 
-            proc_dist_maps.append(
-                DistMap(cell_bnds, dist_field, cell_cell_inds, cell_cells_on_bnd)
+            new_dist_map = DistMap(
+                cell_bnds,
+                dist_field,
+                cell_cell_inds,
+                cell_cells_on_bnd,
+                cell_bnds_expanded,
             )
+
+            proc_dist_maps.append(new_dist_map)
 
         return proc_dist_maps
 
@@ -540,12 +603,31 @@ class OversetBG2D:
 
         return query_dist_from_points(self, distMap, points)
 
+    def query_template_cell_from_points(
+        self, osPart: OversetPart2D, distMap: DistMap, points: np.ndarray
+    ):
+        from OversetCartUtil import query_template_cell_from_points
+
+        return query_template_cell_from_points(self, osPart, distMap, points)
+
     def decide_cell_types(
         self, parts: list[OversetPart2D], proc_dist_maps: list[DistMap]
     ):
         from OversetCartUtil import decide_cell_types
 
         return decide_cell_types(self, parts, proc_dist_maps)
+
+    def decide_point_templates(
+        self,
+        parts: list[OversetPart2D],
+        proc_dist_maps: list[DistMap],
+        points: np.ndarray,
+    ):
+        from OversetCartUtil import decide_point_templates
+
+        return decide_point_templates(
+            self, parts, proc_dist_maps, points
+        )  # iPartTemp,iCellTemp
 
     def print_proc_dist_maps(self, proc_dist_maps: list[DistMap], cmin=-1, cmax=10):
         mpi = self._mpi

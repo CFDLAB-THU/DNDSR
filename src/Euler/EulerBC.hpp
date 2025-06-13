@@ -5,7 +5,7 @@
 
 #include <unordered_map>
 
-#include <nlohmann/json.hpp>
+#include "DNDS/JsonUtil.hpp"
 
 namespace DNDS::Euler
 {

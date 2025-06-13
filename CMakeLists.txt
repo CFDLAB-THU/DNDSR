@@ -518,6 +518,7 @@ if(UNIX OR MINGW)
         add_compile_options(-funsafe-math-optimizations)
         message(WARNING "using -funsafe-math-optimization")
     endif()
+    add_compile_options(-fdiagnostics-color=always)
     
     ### set warnings
     # -Wconversion
@@ -592,6 +593,7 @@ elseif(WIN32 OR MSVC)
             add_compile_options(-march=native)
             message(WARNING "using -march=native")
         endif()
+        add_compile_options(-fdiagnostics-color=always)
         message(STATUS "MSVC ${MSVC}")
         message(STATUS "MSVC_VERSION ${MSVC_VERSION}")
     endif()
@@ -699,6 +701,24 @@ endif()
 message(STATUS "DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}")
 message(STATUS "DNDS_EXTERNAL_INCLUDES ${DNDS_EXTERNAL_INCLUDES}")
 
+#######################################
+#       START OF CORE TARGETS         #
+#######################################
+
+
+
+set(DNDS_Euler_Models_List
+NS=
+NS_2D=2D 
+NS_3D=3D
+NS_SA=SA
+NS_SA_3D=SA3D
+NS_2EQ=2EQ
+NS_2EQ_3D=2EQ3D
+NS_EX=EX
+NS_EX_3D=EX3D
+CACHE INTERNAL "the Euler Model list to distinguish their explicit instantiation libraries"
+)
 
 
 
@@ -812,18 +832,7 @@ ADD_EXE_APP("${DNDS_APPS_Geom}" "app/Geom" "geom;dnds;" ON)
 ADD_EXE_APP("${DNDS_APPS_CFV}" "app/CFV" "cfv;geom;dnds;" ON)
 ADD_EXE_APP("${DNDS_APPS_Euler}" "app/Euler" "cfv;geom;dnds;" ON)
 
-set(DNDS_Euler_Models_List
-NS=
-NS_2D=2D 
-NS_3D=3D
-NS_SA=SA
-NS_SA_3D=SA3D
-NS_2EQ=2EQ
-NS_2EQ_3D=2EQ3D
-NS_EX=EX
-NS_EX_3D=EX3D
-CACHE INTERNAL "the Euler Model list to distinguish their explicit instantiation libraries"
-)
+
 
 set(DNDS_APPS_Euler_Models)
 
