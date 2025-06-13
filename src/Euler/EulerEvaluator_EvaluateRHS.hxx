@@ -48,6 +48,7 @@ namespace DNDS::Euler
         bool dontUpdateBndFlux = flags & RHS_Dont_Record_Bud_Flux;
         bool direct2ndRec = flags & RHS_Direct_2nd_Rec;
         bool direct2ndRec1stConv = flags & RHS_Direct_2nd_Rec_1st_Conv;
+        bool direct2ndUseLimiter = flags & RHS_Direct_2nd_Rec_use_limiter;
         DNDS_assert(direct2ndRec1stConv ? direct2ndRec : true);
         auto rsType = settings.rsType;
 #ifdef USE_MG_O1_LLF_FLUX
@@ -110,13 +111,15 @@ namespace DNDS::Euler
             vfv->DoReconstruction2ndGrad(uGradBufNoLim, u, FBoundary, settings.direct2ndRecMethod);
             uGradBufNoLim.trans.startPersistentPull(); // this can be safely put before LimiterUGradCall
             // uGradBuf = uGradBufNoLim;
-            if (!direct2ndRec1stConv)
+            if (!direct2ndRec1stConv && direct2ndUseLimiter)
                 this->LimiterUGrad(u, uGradBufNoLim, uGradBuf);
-            if (!direct2ndRec1stConv)
+            if (!direct2ndRec1stConv && direct2ndUseLimiter)
                 uGradBuf.trans.startPersistentPull();
             uGradBufNoLim.trans.waitPersistentPull(); // todo: utilize the uGradBufNoLim to match the implicit reconstruction's "useViscousLimited": false
-            if (!direct2ndRec1stConv)
+            if (!direct2ndRec1stConv && direct2ndUseLimiter)
                 uGradBuf.trans.waitPersistentPull();
+            else
+                uGradBuf = uGradBufNoLim;
         }
 
 #if defined(DNDS_DIST_MT_USE_OMP)

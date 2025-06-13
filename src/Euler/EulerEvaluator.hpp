@@ -208,18 +208,23 @@ namespace DNDS::Euler
         void GetWallDist();
 
         /******************************************************/
+        static const uint64_t DT_No_Flags = 0x0ull;
+        static const uint64_t DT_Dont_update_lambda01234 = 0x1ull << 0;
         void EvaluateDt(
             ArrayDOFV<1> &dt,
             ArrayDOFV<nVarsFixed> &u,
             ArrayRECV<nVarsFixed> &uRec,
             real CFL, real &dtMinall, real MaxDt = 1,
-            bool UseLocaldt = false);
+            bool UseLocaldt = false,
+            uint64_t flags = DT_No_Flags);
 
+        static const uint64_t RHS_No_Flags = 0x0ull;
         static const uint64_t RHS_Ignore_Viscosity = 0x1ull << 0;
         static const uint64_t RHS_Dont_Update_Integration = 0x1ull << 1;
         static const uint64_t RHS_Dont_Record_Bud_Flux = 0x1ull << 2;
         static const uint64_t RHS_Direct_2nd_Rec = 0x1ull << 8;
         static const uint64_t RHS_Direct_2nd_Rec_1st_Conv = 0x1ull << 9;
+        static const uint64_t RHS_Direct_2nd_Rec_use_limiter = 0x1ull << 10;
 
         /**
          * @brief
@@ -236,7 +241,7 @@ namespace DNDS::Euler
             ArrayDOFV<1> &cellRHSAlpha,
             bool onlyOnHalfAlpha,
             real t,
-            uint64_t flags = 0);
+            uint64_t flags = RHS_No_Flags);
 
         void LUSGSMatrixInit(
             JacobianDiagBlock<nVarsFixed> &JDiag,
@@ -1510,7 +1515,8 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
             ArrayDOFV<nVarsFixed> &u,                                                                                      \
             ArrayRECV<nVarsFixed> &uRec,                                                                                   \
             real CFL, real &dtMinall, real MaxDt,                                                                          \
-            bool UseLocaldt);                                                                                              \
+            bool UseLocaldt,                                                                                               \
+            uint64_t flags);                                                                                               \
         ext template                                                                                                       \
             typename EulerEvaluator<model>::TU_Batch                                                                       \
             EulerEvaluator<model>::fluxFace(                                                                               \

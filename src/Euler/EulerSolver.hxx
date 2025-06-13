@@ -184,7 +184,8 @@ namespace DNDS::Euler
                 betaPPC.setConstant(1.0);
                 alphaPP_tmp.setConstant(1.0);
                 uRecNew.setConstant(0.0);
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit, TEval::RHS_Ignore_Viscosity); // TODO: test with viscosity
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
+                                 TEval::RHS_Ignore_Viscosity); // TODO: test with viscosity // TODO: RHS_Direct_2nd_Rec_1st_Conv?
                 // vfv->DoReconstruction2nd(uRecOld, cx, FBoundary, 1, std::vector<int>());
                 // eval.EvaluateRHS(crhs, JSourceC, cx, uRecOld, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
                 //                  0); // TEval::RHS_Ignore_Viscosity
@@ -592,7 +593,8 @@ namespace DNDS::Euler
             Timer().StartTimer(PerformanceTimer::RHS);
             if (config.implicitReconstructionControl.useExplicit)
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecC /* dummy*/, uRecC /* dummy*/,
-                                 betaPPC /* dummy*/, alphaPP_tmp /* dummy*/, false, tSimu + ct * curDtImplicit, TEval::RHS_Direct_2nd_Rec);
+                                 betaPPC /* dummy*/, alphaPP_tmp /* dummy*/, false, tSimu + ct * curDtImplicit,
+                                 TEval::RHS_Direct_2nd_Rec | (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
             else if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter) // todo: opt to using limited for uRecUnlim
                 eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecLimited : uRecC, uRecLimited,
                                  betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
@@ -829,46 +831,58 @@ namespace DNDS::Euler
                         resOtherCurMG.addTo(uMG1, 1. / dt);
                     }
 
+                    // from uMG1 to rhsTemp - JSourceTmp
+                    auto call_evaluate_rhs = [&]()
+                    {
+                        if (mgLevel == 1)
+                            eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
+                                             config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
+                                             betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
+                                             TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration |
+                                                 (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+                        else if (mgLevel == 2)
+                            eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
+                                             config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
+                                             betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
+                                             (TEval::RHS_Direct_2nd_Rec_1st_Conv * use_1st_conv) |
+                                                 TEval::RHS_Direct_2nd_Rec |
+                                                 TEval::RHS_Dont_Record_Bud_Flux |
+                                                 TEval::RHS_Dont_Update_Integration |
+                                                 (TEval::RHS_Ignore_Viscosity * use_1st_conv_ignore_vis) |
+                                                 (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+                        else
+                            DNDS_assert(false);
+                    };
+
                     for (int iIterMG = 1; iIterMG <= curMGIter; iIterMG++)
                     {
 
-                        // from uMG1 to rhsTemp - JSourceTmp
-                        auto call_evaluate_rhs = [&]()
+                        if (curMGIter > 1)
                         {
-                            if (mgLevel == 1)
-                                eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
-                                                 config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
-                                                 betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
-                                                 TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
-                            else if (mgLevel == 2)
-                                eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
-                                                 config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
-                                                 betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
-                                                 (TEval::RHS_Direct_2nd_Rec_1st_Conv * use_1st_conv) |
-                                                     TEval::RHS_Direct_2nd_Rec |
-                                                     TEval::RHS_Dont_Record_Bud_Flux |
-                                                     TEval::RHS_Dont_Update_Integration |
-                                                     (TEval::RHS_Ignore_Viscosity * use_1st_conv_ignore_vis));
-                            else
-                                DNDS_assert(false);
-                        };
-                        call_evaluate_rhs();
-
-                        rhsTemp.trans.startPersistentPull();
-                        rhsTemp.trans.waitPersistentPull();
-                        if (iIterMG == 1)
-                        {
-                            // rhsInitCurMG1 = rhsTemp;
-                            resOtherCurMG.addTo(rhsTemp, -alphaDiag);
+                            if (iIterMG > 1)
+                                fdtau(uMG1, dTauC, alphaDiag, uPos); //! warning! dTauC is overwritten
+                            call_evaluate_rhs();
+                            rhsTemp.trans.startPersistentPull();
+                            rhsTemp.trans.waitPersistentPull();
+                            if (iIterMG == 1)
+                            {
+                                // rhsInitCurMG1 = rhsTemp;
+                                resOtherCurMG.addTo(rhsTemp, -alphaDiag);
+                            }
+                            // if (mgLevel < mgLevelMax && iIterMG == 1) // pre smoother coarser grid call
+                            //     solve_multigrid_impl_ref(uMG1, rhsTemp, resOtherCurMG, mgLevel + 1, mgLevelMax, solve_multigrid_impl_ref);
+                            rhsTemp *= alphaDiag;
+                            rhsTemp += resOtherCurMG;
+                            rhsTemp.addTo(uMG1, -1. / dt);
+                            // todo: add rhsfpphere
+                            // rhsTemp === alphaDiag * rhs(cur) - alphaDiag * rhs(at_step_1) - uMG1 / dt + uMG1Init / dt
                         }
-                        // if (mgLevel < mgLevelMax && iIterMG == 1) // pre smoother coarser grid call
-                        //     solve_multigrid_impl_ref(uMG1, rhsTemp, resOtherCurMG, mgLevel + 1, mgLevelMax, solve_multigrid_impl_ref);
-                        rhsTemp *= alphaDiag;
-                        rhsTemp += resOtherCurMG;
-                        rhsTemp.addTo(uMG1, -1. / dt);
-                        // todo: add rhsfpphere
-                        // rhsTemp === alphaDiag * rhs(cur) - alphaDiag * rhs(at_step_1) - uMG1 / dt + uMG1Init / dt
-                        fdtau(uMG1, dTauC, alphaDiag, uPos); //! warning! dTauC is overwritten
+                        else
+                        {
+                            rhsTemp = resOtherCurMG;
+                            rhsTemp.addTo(uMG1, -1. / dt);
+                        }
+
                         eval.LUSGSMatrixInit(JDTmp, JSourceTmp, dTauC, dt, alphaDiag, uMG1, uRecNew, 0, tSimu);
 
                         if (iIterMG % config.linearSolverControl.multiGridLPInnerNSee == 0)
@@ -899,6 +913,7 @@ namespace DNDS::Euler
                     // alphaDiag *rhsTemp(x + xinc) - xinc / dt == alphaDiag *rhsTemp(x) - res_of_first
                 };
 
+                fdtau(x_upper, dTauC, alphaDiag, uPos); // warning: fdtau resets lambda01234, crucial if useRoeJacobian
                 frhs(rhsBuf, x_upper, dTauC, iter, ct, uPos);
                 solve_multigrid_impl(x_upper, rhsBuf, resOther, mgLevelInit, mgLevelMax, solve_multigrid_impl);
             };
@@ -913,7 +928,7 @@ namespace DNDS::Euler
                 //! overwrites cxInc, cxTemp and resTemp do not overwrite cres! (as we might use cres for evaluation of convergence)
                 solve_multigrid(cxTemp, cxInc, resTemp, resOther, 1, config.linearSolverControl.multiGridLP);
                 cxInc = cxTemp;
-                cxInc -= cx;
+                cxInc -= cx; //TODO: renew fsolve to produce cxNew instead of cxInc!!!
             }
             // eval.FixIncrement(cx, cxInc);
             // !freeze something

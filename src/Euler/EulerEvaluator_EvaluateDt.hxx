@@ -826,10 +826,13 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,
         real CFL, real &dtMinall, real MaxDt,
-        bool UseLocaldt)
+        bool UseLocaldt,
+        uint64_t flags)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateDt 1");
+
+        bool dont_update_lambda01234 = flags & DT_Dont_update_lambda01234;
 
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(runtime)
@@ -952,7 +955,8 @@ namespace DNDS::Euler
             lambdaFace[iFace] = lambdaConvection + lamVis * area * (1. / vfv->GetCellVol(iCellL) + 1. / volR);
             lambdaFaceC[iFace] = std::abs(veloNMean - vgN) + lamVis * area * (1. / vfv->GetCellVol(iCellL) + 1. / volR); // passive part
             lambdaFaceVis[iFace] = lamVis * area * (1. / vfv->GetCellVol(iCellL) + 1. / volR);
-            lambdaFace0[iFace] = lambdaFace123[iFace] = lambdaFace4[iFace] = lambdaConvection;
+            if (!dont_update_lambda01234)
+                lambdaFace0[iFace] = lambdaFace123[iFace] = lambdaFace4[iFace] = lambdaConvection;
 
             // if (f2c[0] == 10756)
             // {

@@ -57,6 +57,8 @@ namespace DNDS::Euler
         }
         void operator*=(real R)
         {
+            if (R == 1.)
+                return;
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(static)
 #endif
