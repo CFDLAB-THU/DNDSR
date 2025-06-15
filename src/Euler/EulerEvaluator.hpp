@@ -248,8 +248,9 @@ namespace DNDS::Euler
             ArrayDOFV<1> &dt,
             ArrayDOFV<nVarsFixed> &u,
             ArrayRECV<nVarsFixed> &uRec,
-            real CFL, real &dtMinall, real MaxDt = 1,
-            bool UseLocaldt = false,
+            real CFL, real &dtMinall, real MaxDt,
+            bool UseLocaldt,
+            real t,
             uint64_t flags = DT_No_Flags);
 
         static const uint64_t RHS_No_Flags = 0x0ull;
@@ -259,6 +260,7 @@ namespace DNDS::Euler
         static const uint64_t RHS_Direct_2nd_Rec = 0x1ull << 8;
         static const uint64_t RHS_Direct_2nd_Rec_1st_Conv = 0x1ull << 9;
         static const uint64_t RHS_Direct_2nd_Rec_use_limiter = 0x1ull << 10;
+        static const uint64_t RHS_Direct_2nd_Rec_already_have_uGradBufNoLim = 0x1ull << 11;
 
         /**
          * @brief
@@ -1550,6 +1552,7 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
             ArrayRECV<nVarsFixed> &uRec,                                                                                   \
             real CFL, real &dtMinall, real MaxDt,                                                                          \
             bool UseLocaldt,                                                                                               \
+            real t,                                                                                                        \
             uint64_t flags);                                                                                               \
         ext template                                                                                                       \
             typename EulerEvaluator<model>::TU_Batch                                                                       \

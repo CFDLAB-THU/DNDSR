@@ -827,6 +827,7 @@ namespace DNDS::Euler
         ArrayRECV<nVarsFixed> &uRec,
         real CFL, real &dtMinall, real MaxDt,
         bool UseLocaldt,
+        real t,
         uint64_t flags)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -834,6 +835,24 @@ namespace DNDS::Euler
 
         bool dont_update_lambda01234 = flags & DT_Dont_update_lambda01234;
 
+        { // 2nd order reconstruction
+            typename TVFV::template TFBoundary<nVarsFixed>
+                FBoundary = [&](const TU &UL, const TU &UMean, index iCell, index iFace, int ig,
+                                const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType) -> TU
+            {
+                TVec normOutV = normOut(Seq012);
+                Eigen::Matrix<real, dim, dim> normBase = Geom::NormBuildLocalBaseV<dim>(normOutV);
+                bool compressed = false;
+                TU ULfixed = this->CompressRecPart(
+                    UMean,
+                    UL - UMean,
+                    compressed);
+                return this->generateBoundaryValue(ULfixed, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, t, bType, true, 1);
+            };
+            vfv->DoReconstruction2ndGrad(uGradBufNoLim, u, FBoundary, settings.direct2ndRecMethod);
+            uGradBufNoLim.trans.startPersistentPull();
+            uGradBufNoLim.trans.waitPersistentPull();
+        }
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(runtime)
 #endif
@@ -867,26 +886,28 @@ namespace DNDS::Euler
             GradULxy.resize(Eigen::NoChange, nVars);
             GradURxy.resize(Eigen::NoChange, nVars);
             GradULxy.setZero(), GradURxy.setZero();
-            if constexpr (gDim == 2)
-                GradULxy({0, 1}, Eigen::all) =
-                    vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, -1, std::array<int, 2>{1, 2}, 3) *
-                    uRec[f2c[0]]; // 2d here
-            else
-                GradULxy({0, 1, 2}, Eigen::all) =
-                    vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, -1, std::array<int, 3>{1, 2, 3}, 4) *
-                    uRec[f2c[0]]; // 3d here
+            GradULxy(SeqG012, Eigen::all) = uGradBuf[f2c[0]];
+            // if constexpr (gDim == 2)
+            //     GradULxy({0, 1}, Eigen::all) =
+            //         vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, -1, std::array<int, 2>{1, 2}, 3) *
+            //         uRec[f2c[0]]; // 2d here
+            // else
+            //     GradULxy({0, 1, 2}, Eigen::all) =
+            //         vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, -1, std::array<int, 3>{1, 2, 3}, 4) *
+            //         uRec[f2c[0]]; // 3d here
             this->DiffUFromCell2Face(GradULxy, iFace, f2c[0], 0);
             GradURxy = GradULxy;
             if (f2c[1] != UnInitIndex)
             {
-                if constexpr (gDim == 2)
-                    GradURxy({0, 1}, Eigen::all) =
-                        vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, -1, std::array<int, 2>{1, 2}, 3) *
-                        uRec[f2c[1]]; // 2d here
-                else
-                    GradURxy({0, 1, 2}, Eigen::all) =
-                        vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, -1, std::array<int, 3>{1, 2, 3}, 4) *
-                        uRec[f2c[1]]; // 3d here
+                GradURxy(SeqG012, Eigen::all) = uGradBuf[f2c[1]];
+                // if constexpr (gDim == 2)
+                //     GradURxy({0, 1}, Eigen::all) =
+                //         vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, -1, std::array<int, 2>{1, 2}, 3) *
+                //         uRec[f2c[1]]; // 2d here
+                // else
+                //     GradURxy({0, 1, 2}, Eigen::all) =
+                //         vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, -1, std::array<int, 3>{1, 2, 3}, 4) *
+                //         uRec[f2c[1]]; // 3d here
                 this->DiffUFromCell2Face(GradURxy, iFace, f2c[1], 1);
             }
             TDiffU GradUMeanXY = (GradURxy + GradULxy) / 2;

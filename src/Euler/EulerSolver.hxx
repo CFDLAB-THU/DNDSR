@@ -634,7 +634,7 @@ namespace DNDS::Euler
             // uRec.trans.startPersistentPull();
             // uRec.trans.waitPersistentPull();
             auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
-            eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt);
+            eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu);
             for (int iS = 1; iS <= config.implicitCFLControl.nSmoothDTau; iS++)
             {
                 // ArrayDOFV<1> dTauNew = dTau; //TODO: copying is still unusable; consider doing copiers on the level of ArrayDOFV and ArrayRecV
@@ -839,6 +839,7 @@ namespace DNDS::Euler
                                              config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
                                              betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
                                              TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration |
+                                                 TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
                                                  (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
                         else if (mgLevel == 2)
                             eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
@@ -849,6 +850,7 @@ namespace DNDS::Euler
                                                  TEval::RHS_Dont_Record_Bud_Flux |
                                                  TEval::RHS_Dont_Update_Integration |
                                                  (TEval::RHS_Ignore_Viscosity * use_1st_conv_ignore_vis) |
+                                                 TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
                                                  (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
                         else
                             DNDS_assert(false);
@@ -857,7 +859,7 @@ namespace DNDS::Euler
                     for (int iIterMG = 1; iIterMG <= curMGIter; iIterMG++)
                     {
 
-                        if (curMGIter > 1)
+                        // if (curMGIter > 1 && mgLevel == mgLevelMax) // this is used for checking lusgs-1lusgs == 2xlusgs
                         {
                             if (iIterMG > 1)
                                 fdtau(uMG1, dTauC, alphaDiag, uPos); //! warning! dTauC is overwritten
@@ -877,11 +879,11 @@ namespace DNDS::Euler
                             // todo: add rhsfpphere
                             // rhsTemp === alphaDiag * rhs(cur) - alphaDiag * rhs(at_step_1) - uMG1 / dt + uMG1Init / dt
                         }
-                        else
-                        {
-                            rhsTemp = resOtherCurMG;
-                            rhsTemp.addTo(uMG1, -1. / dt);
-                        }
+                        // else
+                        // {
+                        //     rhsTemp = resOtherCurMG;
+                        //     rhsTemp.addTo(uMG1, -1. / dt);
+                        // }
 
                         eval.LUSGSMatrixInit(JDTmp, JSourceTmp, dTauC, dt, alphaDiag, uMG1, uRecNew, 0, tSimu);
 
@@ -915,6 +917,8 @@ namespace DNDS::Euler
 
                 fdtau(x_upper, dTauC, alphaDiag, uPos); // warning: fdtau resets lambda01234, crucial if useRoeJacobian
                 frhs(rhsBuf, x_upper, dTauC, iter, ct, uPos);
+                rhsBuf.trans.startPersistentPull();
+                rhsBuf.trans.waitPersistentPull();
                 solve_multigrid_impl(x_upper, rhsBuf, resOther, mgLevelInit, mgLevelMax, solve_multigrid_impl);
             };
 
@@ -928,7 +932,7 @@ namespace DNDS::Euler
                 //! overwrites cxInc, cxTemp and resTemp do not overwrite cres! (as we might use cres for evaluation of convergence)
                 solve_multigrid(cxTemp, cxInc, resTemp, resOther, 1, config.linearSolverControl.multiGridLP);
                 cxInc = cxTemp;
-                cxInc -= cx; //TODO: renew fsolve to produce cxNew instead of cxInc!!!
+                cxInc -= cx; // TODO: renew fsolve to produce cxNew instead of cxInc!!!
             }
             // eval.FixIncrement(cx, cxInc);
             // !freeze something
@@ -964,14 +968,14 @@ namespace DNDS::Euler
             auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
             auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
             // TODO: use "update spectral radius" procedure? or force update in fsolve
-            eval.EvaluateDt(dTau, cx1, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt);
+            eval.EvaluateDt(dTau, cx1, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu);
             dTau *= Coefs[2];
             eval.LUSGSMatrixInit(JD1, JSource1,
                                  dTau, dt * Coefs[2], alphaDiag,
                                  cx1, uRec,
                                  0,
                                  tSimu);
-            eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt);
+            eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu);
             dTau *= Coefs[3] * veryLargeReal;
             eval.LUSGSMatrixInit(JD, JSource,
                                  dTau, dt * Coefs[3], alphaDiag,
