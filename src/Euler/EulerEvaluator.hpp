@@ -737,7 +737,20 @@ namespace DNDS::Euler
             {
                 TVec veloRoe;
                 real vsqrRoe{0}, aRoe{0}, asqrRoe{0}, HRoe{0};
-                Gas::GetRoeAverage<dim>(U, UOther, gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe);
+                TU uMean(U.size());
+                Gas::GetRoeAverage<dim>(U, UOther, gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, uMean);
+                {
+                    // TVec dVeloRoe;
+                    // real dpRoe;
+                    // Gas::IdealGasUIncrement<dim>(uMean, dU, veloRoe, gamma, dVeloRoe, dpRoe);
+                    // Gas::GasInviscidFluxFacialIncrement<dim>(
+                    //     uMean, dU,
+                    //     n,
+                    //     veloRoe, dVeloRoe, vg,
+                    //     dp, p,
+                    //     dF);
+                }
+                // lambda0 = lambda123 = lambda4 = aRoe + std::abs(veloRoe.dot(n));
                 Gas::RoeFluxIncFDiff<dim>(dU, n, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe,
                                           incFsign * lambda0, incFsign * lambda123, incFsign * lambda4, gamma,
                                           dF);

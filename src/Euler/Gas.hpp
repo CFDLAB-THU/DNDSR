@@ -751,13 +751,15 @@ namespace DNDS::Euler::Gas
         F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = (FL + FR) * 0.5 - 0.5 * incF;
     }
 
-    template <int dim = 3, typename TUL, typename TUR, typename TVecV>
+    template <int dim = 3, typename TUL, typename TUR, typename TVecV, typename TUOut>
     void GetRoeAverage(const TUL &UL, const TUR &UR, real gamma,
-                       TVecV &veloRoe, real &vsqrRoe, real &aRoe, real &asqrRoe, real &HRoe)
+                       TVecV &veloRoe, real &vsqrRoe, real &aRoe, real &asqrRoe, real &HRoe, TUOut &UOut)
     {
         using TVec = Eigen::Vector<real, dim>;
-        TVec veloLm = (UL(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / UL(0)).matrix();
-        TVec veloRm = (UR(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / UR(0)).matrix();
+        static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+        static const auto I4 = dim + 1;
+        TVec veloLm = (UL(Seq123).array() / UL(0)).matrix();
+        TVec veloRm = (UR(Seq123).array() / UR(0)).matrix();
         real asqrLm, asqrRm, pLm, pRm, HLm, HRm;
         real vsqrLm = veloLm.squaredNorm();
         real vsqrRm = veloRm.squaredNorm();
@@ -773,6 +775,15 @@ namespace DNDS::Euler::Gas
         asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
         DNDS_assert(asqrRoe >= 0);
         aRoe = std::sqrt(asqrRoe);
+
+        UOut(0) = sqrtRhoLm * sqrtRhoRm;
+        UOut(Seq123) = veloRoe * UOut(0);
+        real pRoe = asqrRoe * UOut(0) / gamma;
+        UOut(I4) = pRoe / (gamma - 1) + 0.5 * vsqrRoe * UOut(0);
+        UOut(Eigen::seq(I4 + 1, Eigen::last)) =
+            UOut(0) / (sqrtRhoLm + sqrtRhoRm) *
+            (UL(Eigen::seq(I4 + 1, Eigen::last)) / sqrtRhoLm +
+             UR(Eigen::seq(I4 + 1, Eigen::last)) / sqrtRhoRm);
     }
 
     template <int dim = 3, typename TDU, typename TDF, typename TVecV, typename TVecN>
@@ -781,6 +792,7 @@ namespace DNDS::Euler::Gas
                          real lam0, real lam123, real lam4, real gamma,
                          TDF &incF)
     {
+        static const auto SeqI52Last = Eigen::seq(Eigen::fix<dim + 2>, Eigen::last);
         using TVec = Eigen::Vector<real, dim>;
         real veloRoeN = veloRoe.dot(n);
 
@@ -806,6 +818,8 @@ namespace DNDS::Euler::Gas
         incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) +=
             (veloRoe - aRoe * n) * alpha0 + (veloRoe + aRoe * n) * alpha4 +
             veloRoe * alpha1 + alpha23VT;
+        // ! handling the passive part of U!
+        incF(SeqI52Last) += incU(SeqI52Last) * lam123;
     }
 
     template <int dim = 3, int eigScheme = 0,
