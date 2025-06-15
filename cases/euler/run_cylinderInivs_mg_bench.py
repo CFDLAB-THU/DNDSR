@@ -8,9 +8,9 @@ from utils.GraceExit import GraceExit
 
 handler = GraceExit(max_attempts=5)
 
-config_name = os.path.join(dirname, "config_0012_mg_bench.json")
+config_name = os.path.join(dirname, "config_cylinderInvis_mg_bench.json")
 
-out_base = "../data/out/NACA0012_H2-MGtest_3_VRes_AOA05.dir"
+out_base = "../data/out/CylinderInvisHalfA-MGtest_0_VRes.dir"
 
 name_prefix = ""
 
@@ -18,7 +18,6 @@ name_prefix = "x-"
 
 os.makedirs(out_base, exist_ok=True)
 
-nProc = 16
 
 opt_0 = {}
 opt_0["n_iter"] = 10000
@@ -52,31 +51,31 @@ opts = [
 
 mg_seqs = [
     (0, 0, 0),
-    # # ! 1 level
+    # 1 level
     (1, 2, 0),
     (1, 4, 0),
     (1, 8, 0),
-    # (1, 16, 0),
-    # ! 2 level thin
+    (1, 16, 0),
+    # 2 level thin
     (2, 1, 2),
     (2, 1, 4),
     (2, 1, 8),
-    # (2, 1, 16),
-    # ! 2 level mul 2
+    (2, 1, 16),
+    # 2 level mul 2
     (2, 2, 2),
     (2, 2, 4),
     (2, 2, 8),
-    # (2, 2, 16),
-    # ! 2 level mul 4
+    (2, 2, 16),
+    # 2 level mul 4
     (2, 4, 2),
     (2, 4, 4),
     (2, 4, 8),
     (2, 4, 16),
-    # ! 2 level mul 6
+    # 2 level mul 6
     (2, 8, 2),
     (2, 8, 4),
     (2, 8, 8),
-    # (2, 8, 16),
+    (2, 8, 16),
 ]
 
 
@@ -147,7 +146,7 @@ print(options_list)
 
 try:
     for name, options in options_list.items():
-        cmd = f"mpirun -np {nProc} app/eulerSA.exe {config_name}"
+        cmd = f"mpirun -np 16 app/euler.exe {config_name}"
         for opt in options:
             cmd += f" -k {opt[0]}"
             cmd += f" -v {opt[1]}"
