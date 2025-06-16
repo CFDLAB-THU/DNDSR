@@ -68,15 +68,15 @@ namespace DNDS::Euler
         typedef ssp<BoundaryHandler<model>> TpBCHandler;
 
     public:
-        static void InitializeFV(ssp<Geom::UnstructuredMesh> mesh, TpVFV vfv, TpBCHandler pBCHandler)
+        static void InitializeFV(ssp<Geom::UnstructuredMesh> &mesh, TpVFV vfv, TpBCHandler pBCHandler)
         {
             vfv->SetPeriodicTransformations(
-                [&](auto u, Geom::t_index id)
+                [mesh](auto u, Geom::t_index id) //! important caveat! using & captures mesh shared_ptr as reference, lost if inbound pointer is destoried!!
                 {
                     DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
                     u(Eigen::all, Seq123) = mesh->periodicInfo.TransVector<dim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
                 },
-                [&](auto u, Geom::t_index id)
+                [mesh](auto u, Geom::t_index id)
                 {
                     DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
                     u(Eigen::all, Seq123) = mesh->periodicInfo.TransVectorBack<dim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
