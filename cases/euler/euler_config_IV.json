@@ -47,8 +47,9 @@
         "meshRotZ": 0.0,
         "meshDirectBisect": 1,
         "meshElevation": 0,
-        "meshFile": "../data/mesh/IV10_160.cgns",
-        "outPltName": "../data/outUnsteady/PP5/IV/out_B4",
+        "meshReorderCells": true,
+        "meshFile": "../data/mesh/IV10_10.cgns",
+        "outPltName": "../data/outUnsteady/PP5/IV/condTest-out_B0_Square",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -115,6 +116,9 @@
             "scaleType": "BaryDiff",
             // "scaleMultiplier": 0.5,
             "dirWeightScheme": "Factorial",
+            "geomWeightScheme": "HQM_SD",
+            "geomWeightPower": 0.5,
+            "geomWeightBias": 1,
             // "dirWeightScheme": "HQM_OPT",
             // "useAnisotropicFunctional": true,
             // "tanWeightScale": 0,
@@ -156,7 +160,17 @@
         }
     },
     "others": {
-        "nFreezePassiveInner": 0
+        "nFreezePassiveInner": 0,
+        "printRecMatrix": true,
+        "recMatrixWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 5,
+            "hdfChunkSize": 4096,
+            "hdfCollOnMeta": true,
+            "hdfCollOnData": false,
+            "jsonBinaryDeflateLevel": 5,
+            "jsonUseCodecOnUInt8": true
+        }
     },
     "eulerSettings": {
         "ignoreSourceTerm": true,

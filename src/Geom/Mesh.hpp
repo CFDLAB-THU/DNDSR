@@ -96,6 +96,8 @@ namespace DNDS::Geom
         MeshAdjState adjC2FState{Adj_Unknown};
         // state of: node2cell, node2bnd
         MeshAdjState adjN2CBState{Adj_Unknown};
+        // state of: cell2cellFace
+        MeshAdjState adjC2CFaceState{Adj_Unknown};
         Periodicity periodicInfo;
         index nNodeO1{-1};
         MeshElevationState elevState = Elevation_Untouched;
@@ -125,6 +127,9 @@ namespace DNDS::Geom
         std::unordered_map<index, index> face2bnd;
         /// periodic only, after interpolated
         tPbiPair face2nodePbi;
+
+        /// consturct on demand
+        tAdjPair cell2cellFace;
 
         /// parent built
         std::vector<index> node2parentNode; // from local-appended iNode to local-appended iNode in parent
@@ -409,6 +414,10 @@ namespace DNDS::Geom
         void AdjLocal2GlobalN2CB();
 
         void AssertOnN2CB();
+
+        void BuildCell2CellFace();
+        void AdjGlobal2LocalC2CFace();
+        void AdjLocal2GlobalC2CFace();
 
         void InterpolateFace();
         void AssertOnFaces();

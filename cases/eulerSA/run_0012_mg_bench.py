@@ -14,7 +14,7 @@ out_base = "../data/out/NACA0012_H2-MGtest_3_VRes_AOA05.dir"
 
 name_prefix = ""
 
-name_prefix = "x-"
+# name_prefix = "x-"
 
 os.makedirs(out_base, exist_ok=True)
 
@@ -37,7 +37,7 @@ opt_1["jC_append"] = 2
 opt_1["name_append"] = "ilu"  # smoother
 
 opt_2 = {}
-opt_2["n_iter"] = 20000
+opt_2["n_iter"] = 40000
 opt_2["gC_base"] = 0
 opt_2["jC_base"] = 1
 opt_2["name_base"] = "lusgs"
@@ -45,9 +45,9 @@ opt_2["jC_append"] = 1
 opt_2["name_append"] = "lusgs"  # smoother
 
 opts = [
-    # opt_2,  # LUSGS
-    opt_1,  # ILU
-    # opt_0,  # GMRES-ILU
+    opt_0,  # GMRES-ILU
+    # opt_1,  # ILU
+    opt_2,  # LUSGS
 ]
 
 mg_seqs = [
@@ -71,7 +71,7 @@ mg_seqs = [
     (2, 4, 2),
     (2, 4, 4),
     (2, 4, 8),
-    (2, 4, 16),
+    # (2, 4, 16),
     # ! 2 level mul 6
     (2, 8, 2),
     (2, 8, 4),

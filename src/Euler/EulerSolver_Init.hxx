@@ -121,19 +121,20 @@ namespace DNDS::Euler
             std::string meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
                                       (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) +
                                       (config.dataIOControl.meshDirectBisect > 0 ? "_bisect" + std::to_string(config.dataIOControl.meshDirectBisect) : ""s);
-            std::string meshPartPath;
-            if (config.dataIOControl.meshPartitionedReaderType == "JSON")
-            {
-                std::filesystem::path meshOutDir{meshOutName + ".dir"};
-                // std::filesystem::create_directories(meshOutDir); // reading not writing
-                meshPartPath = getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
-            }
-            else if (config.dataIOControl.meshPartitionedReaderType == "H5")
-            {
-                meshPartPath = meshOutName + ".dnds.h5";
-            }
-            else
-                DNDS_assert_info(false, "serializer is invalid");
+            // std::string meshPartPath;
+            // if (config.dataIOControl.meshPartitionedReaderType == "JSON")
+            // {
+            //     std::filesystem::path meshOutDir{meshOutName + ".dir"};
+            //     // std::filesystem::create_directories(meshOutDir); // reading not writing
+            //     meshPartPath = getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
+            // }
+            // else if (config.dataIOControl.meshPartitionedReaderType == "H5")
+            // {
+            //     meshPartPath = meshOutName + ".dnds.h5";
+            // }
+            // else
+            //     DNDS_assert_info(false, "serializer is invalid");
+            auto [meshOutNameMod, meshPartPath] = config.dataIOControl.meshPartitionedWriter.ModifyFilePath(meshOutName, mpi, "part_%d", true);
 
             Serializer::SerializerBaseSSP serializerP = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).BuildSerializer(mpi);
 
@@ -217,27 +218,29 @@ namespace DNDS::Euler
         if (config.timeMarchControl.partitionMeshOnly)
         {
             using namespace std::literals;
-            std::string meshPartPath;
             std::string meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
                                       (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) +
                                       (config.dataIOControl.meshDirectBisect > 0 ? "_bisect" + std::to_string(config.dataIOControl.meshDirectBisect) : ""s);
 
-            if (config.dataIOControl.meshPartitionedWriter.type == "JSON")
-            {
-                meshOutName += ".dir";
-                std::filesystem::path meshOutDir{meshOutName};
-                std::filesystem::create_directories(meshOutDir);
-                meshPartPath = DNDS::getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
-            }
-            else if (config.dataIOControl.meshPartitionedWriter.type == "H5")
-            {
-                meshOutName += ".dnds.h5";
-                meshPartPath = meshOutName;
-                std::filesystem::path outPath = meshPartPath;
-                std::filesystem::create_directories(outPath.parent_path() / ".");
-            }
-            else
-                DNDS_assert_info(false, "serializer is invalid");
+            // std::string meshPartPath;
+            // if (config.dataIOControl.meshPartitionedWriter.type == "JSON")
+            // {
+            //     meshOutName += ".dir";
+            //     std::filesystem::path meshOutDir{meshOutName};
+            //     std::filesystem::create_directories(meshOutDir);
+            //     meshPartPath = DNDS::getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
+            // }
+            // else if (config.dataIOControl.meshPartitionedWriter.type == "H5")
+            // {
+            //     meshOutName += ".dnds.h5";
+            //     meshPartPath = meshOutName;
+            //     std::filesystem::path outPath = meshPartPath;
+            //     std::filesystem::create_directories(outPath.parent_path() / ".");
+            // }
+            // else
+            //     DNDS_assert_info(false, "serializer is invalid");
+
+            auto [meshOutNameMod, meshPartPath] = config.dataIOControl.meshPartitionedWriter.ModifyFilePath(meshOutName, mpi, "part_%d", false);
 
             Serializer::SerializerBaseSSP serializerP = config.dataIOControl.meshPartitionedWriter.BuildSerializer(mpi);
 
@@ -367,6 +370,15 @@ namespace DNDS::Euler
         if (vfv->SetAxisSymmetric(config.others.axisSymmetric) && mpi.rank == 0)
             log() << "EulerSolver === Using Axis Symmetric" << std::endl;
         TEval::InitializeFV(mesh, vfv, pBCHandler);
+        if (config.others.printRecMatrix)
+        {
+            auto serializerP = config.others.recMatrixWriter.BuildSerializer(mpi);
+            std::string fName = config.dataIOControl.outPltName + "_RecMatrix";
+            auto [fNameMod, partPath] = config.others.recMatrixWriter.ModifyFilePath(fName, mpi, "part_%d", true);
+            serializerP->OpenFile(partPath, false);
+            vfv->WriteSerializeRecMatrix(serializerP);
+            serializerP->CloseFile();
+        }
 
         vfv->BuildUDof(u, nVars);
         vfv->BuildUDof(uIncBufODE, nVars);

@@ -6,7 +6,6 @@
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
-#include <omp.h>
 #include <filesystem>
 #include <fmt/core.h>
 #include "DNDS/EigenPCH.hpp"
@@ -1382,6 +1381,64 @@ namespace DNDS::Geom
                             bnd_main_nodes_adj_ghost_num.at(iNodeOther)++;
         for (auto [iNode, num_ghost_adj] : bnd_main_nodes_adj_ghost_num)
             DNDS_assert(num_ghost_adj);
+    }
+
+    void UnstructuredMesh::BuildCell2CellFace()
+    {
+        DNDS_assert(adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert(adjFacialState == Adj_PointToLocal);
+        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
+
+        DNDS_MAKE_SSP(cell2cellFace.father, mpi);
+        DNDS_MAKE_SSP(cell2cellFace.son, mpi);
+        cell2cellFace.father->Resize(this->NumCell());
+        for (index iCell = 0; iCell < this->NumCell(); iCell++)
+        {
+            cell2cellFace.ResizeRow(iCell, cell2face[iCell].size());
+            for (rowsize ic2f = 0; ic2f < cell2face[iCell].size(); ic2f++)
+            {
+                index iFace = cell2face[iCell][ic2f];
+                index iCellOther = this->CellFaceOther(iCell, iFace);
+                DNDS_assert(iCellOther < this->NumCellProc());
+                cell2cellFace[iCell][ic2f] = this->CellIndexLocal2Global(iCellOther);
+            }
+        }
+        cell2cellFace.father->Compress();
+        cell2cellFace.TransAttach();
+        cell2cellFace.trans.BorrowGGIndexing(cell2node.trans);
+        cell2cellFace.trans.createMPITypes();
+        cell2cellFace.trans.pullOnce(); // warning! to pull the adj, must be in global state!
+        adjC2CFaceState = Adj_PointToGlobal;
+    }
+
+    void UnstructuredMesh::AdjLocal2GlobalC2CFace()
+    {
+        // needs results of BuildGhostPrimary()
+        DNDS_assert(adjC2CFaceState == Adj_PointToLocal);
+        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
+
+        /**********************************/
+        for (DNDS::index iCell = 0; iCell < cell2cellFace.Size(); iCell++)
+            for (DNDS::rowsize j = 0; j < cell2cellFace.RowSize(iCell); j++)
+                cell2cellFace(iCell, j) = CellIndexLocal2Global(cell2cellFace(iCell, j));
+        /**********************************/
+
+        adjC2CFaceState = Adj_PointToGlobal;
+    }
+
+    void UnstructuredMesh::AdjGlobal2LocalC2CFace()
+    {
+        // needs results of BuildGhostPrimary()
+        DNDS_assert(adjC2CFaceState == Adj_PointToGlobal);
+        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
+
+        /**********************************/
+        for (DNDS::index iCell = 0; iCell < cell2cellFace.Size(); iCell++)
+            for (DNDS::rowsize j = 0; j < cell2cellFace.RowSize(iCell); j++)
+                cell2cellFace(iCell, j) = CellIndexGlobal2Local(cell2cellFace(iCell, j));
+        /**********************************/
+
+        adjC2CFaceState = Adj_PointToLocal;
     }
 
     /// @todo //TODO: handle periodic cases

@@ -413,7 +413,7 @@ namespace DNDS
                     return val + mainOffset;
                 else
                 {
-                    DNDS_assert(val - mainSize < ghostStart.back());
+                    DNDS_assert_info(val - mainSize < ghostStart.back(), fmt::format("{}, {}, ghostSize {}", val, mainSize, ghostStart.back()));
                     return ghostIndex.at(val - mainSize);
                 }
             }

@@ -533,10 +533,14 @@ namespace DNDS::Euler
             {
                 int nFreezePassiveInner = 0;
                 int axisSymmetric = 0;
+                bool printRecMatrix = false;
+                Serializer::SerializerFactory recMatrixWriter;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     Others,
                     nFreezePassiveInner,
-                    axisSymmetric)
+                    axisSymmetric,
+                    printRecMatrix,
+                    recMatrixWriter)
             } others;
 
             nlohmann::ordered_json eulerSettings = nlohmann::ordered_json::object();

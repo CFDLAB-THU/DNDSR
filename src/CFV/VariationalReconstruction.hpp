@@ -1264,6 +1264,25 @@ namespace DNDS::CFV
             bool ifAll,
             const tFMEig<nVarsFixed> &FM, const tFMEig<nVarsFixed> &FMI,
             bool putIntoNew = false);
+
+        void WriteSerializeRecMatrix(Serializer::SerializerBaseSSP serializerP)
+        {
+            using namespace Geom;
+            std::string name = "VR_Matrix";
+            auto cwd = serializerP->GetCurrentPath();
+            serializerP->CreatePath(name);
+            serializerP->GoToPath(name);
+
+            mesh->BuildCell2CellFace();
+            mesh->cell2cellFace.WriteSerialize(serializerP, "cell2cellFace", true);
+            mesh->AdjGlobal2LocalC2CFace();
+
+            DNDS_assert(matrixAAInvB.father->Size() == mesh->NumCell());
+            DNDS_assert(matrixAAInvB.son->Size() == mesh->NumCellGhost());
+            matrixAAInvB.WriteSerialize(serializerP, "matrixAAInvB", false);
+
+            serializerP->GoToPath(cwd);
+        }
     };
 }
 
