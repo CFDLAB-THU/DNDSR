@@ -1635,8 +1635,9 @@ namespace DNDS::Euler
             break;
         case 202: // esdirk3
         case 203: // trapz
+        case 204: // esdirk2
             if (mpi.rank == 0)
-                log() << "=== ODE: " + std::vector<std::string>{"ESDIRK3", "Trapz"}.at(config.timeMarchControl.odeCode - 202) << std::endl;
+                log() << "=== ODE: " + std::vector<std::string>{"ESDIRK3", "Trapz", "ESDIRK2"}.at(config.timeMarchControl.odeCode - 202) << std::endl;
             ode = std::make_shared<ODE::ImplicitSDIRK4DualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
                 mesh->NumCell(),
                 buildDOF, buildScalar,

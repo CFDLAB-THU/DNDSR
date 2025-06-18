@@ -204,6 +204,27 @@ namespace DNDS::ODE
                 butcherB = butcherA(Eigen::last, Eigen::all);
                 butcherC << 0, 1;
             }
+            else if (schemeCode == 4) // esdirk2
+            {
+                nInnerStage = 3;
+                explicitFirst = true;
+                butcherA.resize(nInnerStage, nInnerStage);
+                butcherC.resize(nInnerStage);
+                butcherB.resize(nInnerStage);
+
+                real gamma = 1. - std::sqrt(2.0) * 0.5;
+                real b2 = (1. - 2 * gamma) / (4 * gamma);
+                double alphaC = double(1767732205903) / double(4055673282236);
+
+                butcherA << verySmallReal, 0, 0,
+                    gamma, gamma, 0,
+                    1 - b2 - gamma, b2, gamma;
+
+                butcherB = butcherA(Eigen::last, Eigen::all);
+                butcherC = butcherA.rowwise().sum();
+                butcherC(0) = 0;
+                butcherC(2) = 1;
+            }
             else
             {
                 DNDS_assert(false);
