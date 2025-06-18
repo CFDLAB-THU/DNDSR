@@ -115,13 +115,13 @@ namespace DNDS::Euler
                 uGradBufNoLim.trans.startPersistentPull(); // this can be safely put before LimiterUGradCall
             }
             // uGradBuf = uGradBufNoLim;
-            if (!direct2ndRec1stConv && direct2ndUseLimiter)
-                this->LimiterUGrad(u, uGradBufNoLim, uGradBuf);
-            if (!direct2ndRec1stConv && direct2ndUseLimiter)
+            if (!direct2ndRec1stConv)
+                this->LimiterUGrad(u, uGradBufNoLim, uGradBuf, direct2ndUseLimiter ? LIMITER_UGRAD_No_Flags : LIMITER_UGRAD_Disable_Shock_Limiter);
+            if (!direct2ndRec1stConv)
                 uGradBuf.trans.startPersistentPull();
             if (!direct2ndRec_already_have_uGradBufNoLim)
                 uGradBufNoLim.trans.waitPersistentPull(); // todo: utilize the uGradBufNoLim to match the implicit reconstruction's "useViscousLimited": false
-            if (!direct2ndRec1stConv && direct2ndUseLimiter)
+            if (!direct2ndRec1stConv)
                 uGradBuf.trans.waitPersistentPull();
             else
                 uGradBuf = uGradBufNoLim;

@@ -1268,11 +1268,16 @@ namespace DNDS::Euler
 
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, template <>)
-    void EulerEvaluator<model>::LimiterUGrad(ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew)
+    void EulerEvaluator<model>::LimiterUGrad(
+        ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew,
+        uint64_t flags)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         static const real safetyRatio = 1 - 1e-2;
         static const real E_lb_eps = smallReal;
+
+        bool disable_shock_limiter = flags & LIMITER_UGRAD_Disable_Shock_Limiter;
+
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp parallel for schedule(runtime)
 #endif
@@ -1311,15 +1316,26 @@ namespace DNDS::Euler
 
             TU uFaceIncMax = uFaceInc.array().rowwise().maxCoeff();
             TU uFaceIncMin = uFaceInc.array().rowwise().minCoeff();
-            TU alpha0;
-            alpha0.setConstant(nVars, 1.0);
-            alpha0 = alpha0.array().min(((uOtherMax - u[iCell]).array().abs() / (uFaceIncMax.array().abs() + verySmallReal)));
-            alpha0 = alpha0.array().min(((uOtherMin - u[iCell]).array().abs() / (uFaceIncMin.array().abs() + verySmallReal)));
-
-            uGradNew[iCell].array().rowwise() *= alpha0.array().transpose();
-            uFaceInc.array().colwise() *= alpha0.array();
+            if (!disable_shock_limiter)
+            {
+                TU alpha0;
+                alpha0.setConstant(nVars, 1.0);
+                alpha0 = alpha0.array().min(((uOtherMax - u[iCell]).array().abs() / (uFaceIncMax.array().abs() + verySmallReal)));
+                alpha0 = alpha0.array().min(((uOtherMin - u[iCell]).array().abs() / (uFaceIncMin.array().abs() + verySmallReal)));
+                uGradNew[iCell].array().rowwise() *= alpha0.array().transpose();
+                uFaceInc.array().colwise() *= alpha0.array();
+            }
 
             // start PP
+            real alphaPP_Rho = 1.0;
+            if (disable_shock_limiter) // do rho PP first
+            {
+                alphaPP_Rho = std::min(alphaPP_Rho, u[iCell][0] / (std::abs(uFaceIncMin(0)) + smallReal * u[iCell][0]));
+                if (alphaPP_Rho < 1.0)
+                    alphaPP_Rho *= safetyRatio;
+                uGradNew[iCell].array() *= alphaPP_Rho;
+                uFaceInc.array() *= alphaPP_Rho;
+            }
 
             TU_Batch uFaceAlpha0 = uFaceInc.colwise() + u[iCell];
             for (int j = 0; j < uFaceAlpha0.cols(); j++)

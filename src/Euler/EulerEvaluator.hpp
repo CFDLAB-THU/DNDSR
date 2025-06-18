@@ -394,7 +394,11 @@ namespace DNDS::Euler
             { return 1.0; },
             real t = 0);
 
-        void LimiterUGrad(ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew);
+        static const uint64_t LIMITER_UGRAD_No_Flags = 0x0ull;
+        static const uint64_t LIMITER_UGRAD_Disable_Shock_Limiter = 0x1ull << 0;
+
+        void LimiterUGrad(ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew,
+                          uint64_t flags = LIMITER_UGRAD_No_Flags);
 
         static const int EvaluateURecBeta_DEFAULT = 0x00;
         static const int EvaluateURecBeta_COMPRESS_TO_MEAN = 0x01;
@@ -1516,7 +1520,8 @@ namespace DNDS::Euler
             real t);                                                                                                      \
                                                                                                                           \
         ext template void EulerEvaluator<model>::LimiterUGrad(                                                            \
-            ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew);       \
+            ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew,        \
+            uint64_t flags);                                                                                              \
                                                                                                                           \
         ext template void EulerEvaluator<model>::EvaluateURecBeta(                                                        \
             ArrayDOFV<nVarsFixed> &u,                                                                                     \
