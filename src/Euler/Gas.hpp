@@ -1068,7 +1068,7 @@ namespace DNDS::Euler::Gas
      *
      */
     template <int dim = 3, typename TU, typename TGradU, typename TFlux, typename TNorm>
-    void ViscousFlux_IdealGas(const TU &U, const TGradU &GradUPrim, TNorm norm, bool adiabatic, real gamma,
+    void ViscousFlux_IdealGas(TU &&U, TGradU &&GradUPrim, TNorm norm, bool adiabatic, real gamma,
                               real mu, real mutRatio, bool mutQCRFix, real k, real Cp, TFlux &Flux)
     {
         static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>);
@@ -1168,6 +1168,62 @@ namespace DNDS::Euler::Gas
                                                  (U(0) * GradU(Seq012, Seq123) -
                                                   GradU(Seq012, 0) * Eigen::RowVector<real, dim>(U(Seq123))); // dU_j/dx_i
         return diffVelo;
+    }
+
+    template <int dim = 3, typename TU, typename TGradU, typename TNorm>
+    real PP_VisFlux_Beta(TU &&U, TGradU &&GradUPrim, TNorm norm, bool adiabatic, real gamma,
+                         real mu, real mutRatio, bool mutQCRFix, real k, real Cp)
+    {
+        // Xiangxiong Zhang: On positivity-preserving high order discontinuous Galerkin schemes for compressible Navier–Stokes equations
+        // Eq. (22b)
+        static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>);
+        static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
+        static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+        static const auto I4 = dim + 1;
+
+        Eigen::Vector<real, dim> velo = U(Seq123) / U(0);
+        static const real lambda = -2. / 3.;
+        Eigen::Matrix<real, dim, dim> diffVelo = GradUPrim(Seq012, Seq123); // dU_j/dx_i
+        Eigen::Vector<real, dim> GradP = GradUPrim(Seq012, dim + 1);
+        real vSqr = velo.squaredNorm();
+        real e = U(dim + 1) - U(0) * 0.5 * vSqr;
+        real p = (gamma - 1) * e;
+
+        Eigen::Vector<real, dim> GradT = (gamma / ((gamma - 1) * Cp * U(0) * U(0))) *
+                                         (U(0) * GradP - p * GradUPrim(Seq012, 0)); // GradU(:,0) is grad rho no matter prim or not
+
+        if (adiabatic) //! is this fix reasonable?
+            GradT -= GradT.dot(norm) * norm;
+
+        Eigen::Matrix<real, dim, dim> vStress = (diffVelo + diffVelo.transpose()) * mu +
+                                                Eigen::Matrix<real, dim, dim>::Identity() * (lambda * mu * diffVelo.trace());
+        if (mutQCRFix)
+        {
+            real b = std::sqrt((diffVelo.array() * diffVelo.array()).sum());
+            Eigen::Matrix<real, dim, dim> O = (diffVelo.transpose() - diffVelo) / (b + verySmallReal); // dU_i/dx_j-dU_j/dx_i
+            real ccr1 = 0.3;
+            Eigen::Matrix<real, dim, dim> vStressQCRFix;
+            vStressQCRFix.setZero();
+            vStressQCRFix.diagonal() = (vStress.array() * O.array()).rowwise().sum();
+            vStressQCRFix(0, 1) = O(0, 1) * (vStress(1, 1) - vStress(0, 0));
+            if (dim == 3)
+            {
+                vStressQCRFix(0, 1) += O(1, 2) * vStress(0, 2) + O(0, 2) * vStress(1, 2);
+                vStressQCRFix(0, 2) = O(0, 2) * (vStress(2, 2) - vStress(0, 0)) + O(0, 1) * vStress(2, 1) + O(2, 1) * vStress(0, 1);
+                vStressQCRFix(1, 2) = O(1, 2) * (vStress(2, 2) - vStress(1, 1)) + O(1, 0) * vStress(2, 0) + O(2, 0) * vStress(1, 0);
+            }
+            Eigen::Matrix<real, dim, dim> vStressQCRFixFull = vStressQCRFix + vStressQCRFix.transpose();
+            vStress -= ccr1 * mutRatio * vStressQCRFixFull;
+        }
+
+        real qNorm = k * GradT.dot(norm);
+        Eigen::Vector<real, dim> tauNorm = vStress * norm;
+
+        real beta = 0.5 / (U(0) * e) *
+                    (std::sqrt(sqr(U(0)) * sqr(qNorm) + 2 * U(0) * e * tauNorm.squaredNorm()) +
+                     U(0) * std::abs(qNorm));
+
+        return beta;
     }
 
     /**

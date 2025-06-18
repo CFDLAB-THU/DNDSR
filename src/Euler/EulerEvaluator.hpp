@@ -607,6 +607,10 @@ namespace DNDS::Euler
             const TU_Batch &URxy,
             const TU &ULMeanXy,
             const TU &URMeanXy,
+            const TDiffU_Batch &DiffUxyL,
+            const TDiffU_Batch &DiffUxyR,
+            const TDiffU_Batch &DiffUxyPrimL,
+            const TDiffU_Batch &DiffUxyPrimR,
             const TDiffU_Batch &DiffUxy,
             const TDiffU_Batch &DiffUxyPrim,
             const TVec_Batch &unitNorm,
@@ -1579,6 +1583,10 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
                 const TU_Batch &URxy,                                                                                      \
                 const TU &ULMeanXy,                                                                                        \
                 const TU &URMeanXy,                                                                                        \
+                const TDiffU_Batch &DiffUxyL,                                                                              \
+                const TDiffU_Batch &DiffUxyR,                                                                              \
+                const TDiffU_Batch &DiffUxyPrimL,                                                                          \
+                const TDiffU_Batch &DiffUxyPrimR,                                                                          \
                 const TDiffU_Batch &DiffUxy,                                                                               \
                 const TDiffU_Batch &DiffUxyPrim,                                                                           \
                 const TVec_Batch &unitNorm,                                                                                \

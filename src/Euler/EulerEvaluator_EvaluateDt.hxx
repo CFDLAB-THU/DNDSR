@@ -1042,6 +1042,10 @@ namespace DNDS::Euler
         const TU_Batch &URxy,
         const TU &ULMeanXy,
         const TU &URMeanXy,
+        const TDiffU_Batch &DiffUxyL,
+        const TDiffU_Batch &DiffUxyR,
+        const TDiffU_Batch &DiffUxyPrimL,
+        const TDiffU_Batch &DiffUxyPrimR,
         const TDiffU_Batch &DiffUxy,
         const TDiffU_Batch &DiffUxyPrim,
         const TVec_Batch &unitNorm,
@@ -1102,14 +1106,55 @@ namespace DNDS::Euler
                 TU VisFlux;
                 VisFlux.resizeLike(ULMeanXy);
                 VisFlux.setZero();
-                Gas::ViscousFlux_IdealGas<dim>(
-                    UMeanXYC, DiffUxyPrimC, uNormC, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
-                    settings.idealGasProperty.gamma,
-                    muf, muTurb / (muf + verySmallReal), settings.ransUseQCR,
-                    k,
-                    settings.idealGasProperty.CpGas,
-                    VisFlux);
 
+                auto callVisFlux = [&](auto U__, auto DiffU__, auto &VF__)
+                {
+                    Gas::ViscousFlux_IdealGas<dim>(
+                        U__, DiffU__, uNormC, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
+                        settings.idealGasProperty.gamma,
+                        muf, muTurb / (muf + verySmallReal), settings.ransUseQCR,
+                        k,
+                        settings.idealGasProperty.CpGas,
+                        VF__);
+                };
+
+                if (false) // ZXX LLF mode
+                {
+                    //! todo: fuse with visflux calculation
+                    auto getPP_VisFlux_Beta = [&](auto U__, auto DiffU__, auto &VF__)
+                    {
+                        return Gas::PP_VisFlux_Beta(
+                            U__, DiffU__, uNormC, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
+                            settings.idealGasProperty.gamma,
+                            muf, muTurb / (muf + verySmallReal), settings.ransUseQCR,
+                            k,
+                            settings.idealGasProperty.CpGas);
+                    };
+
+                    auto ULXYC = ULxy(Eigen::all, iB);
+                    auto URXYC = URxy(Eigen::all, iB);
+                    auto DiffUxyPrimLC = DiffUxyPrimL(seqC, Eigen::all);
+                    auto DiffUxyPrimRC = DiffUxyPrimR(seqC, Eigen::all);
+                    TU VisFluxL, VisFluxR;
+                    VisFluxL.resizeLike(ULMeanXy), VisFluxL.setZero();
+                    VisFluxR.resizeLike(ULMeanXy), VisFluxR.setZero();
+                    callVisFlux(ULXYC, DiffUxyPrimLC, VisFluxL);
+                    real betaL = getPP_VisFlux_Beta(ULXYC, DiffUxyPrimLC, VisFluxL);
+                    callVisFlux(URXYC, DiffUxyPrimRC, VisFluxR);
+                    real betaR = getPP_VisFlux_Beta(URXYC, DiffUxyPrimRC, VisFluxR);
+                    real betaVis = std::max(betaL, betaR);
+                    VisFlux = 0.5 * (VisFluxL + VisFluxR + betaVis * (URXYC - ULXYC));
+                }
+                else
+                { // original FV mode
+                    Gas::ViscousFlux_IdealGas<dim>(
+                        UMeanXYC, DiffUxyPrimC, uNormC, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
+                        settings.idealGasProperty.gamma,
+                        muf, muTurb / (muf + verySmallReal), settings.ransUseQCR,
+                        k,
+                        settings.idealGasProperty.CpGas,
+                        VisFlux);
+                }
                 this->visFluxTurVariable(UMeanXYC, DiffUxyPrimC, muRef, mufPhy, muTurb, uNormC, iFace, VisFlux);
                 if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
                     pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)

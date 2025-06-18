@@ -172,9 +172,15 @@ namespace DNDS::Euler
             TU_Batch ULxyV, URxyV;
             ULxyV.resize(u.father->MatRowSize(), gFace.GetNumPoints());
             URxyV.resizeLike(ULxyV);
+            TDiffU_Batch DiffUxyVL, DiffUxyPrimVL;
+            TDiffU_Batch DiffUxyVR, DiffUxyPrimVR;
             TDiffU_Batch DiffUxyV, DiffUxyPrimV;
             DiffUxyV.resize(dim * gFace.GetNumPoints(), u.father->MatRowSize());
             DiffUxyPrimV.resizeLike(DiffUxyV);
+            DiffUxyVL.resizeLike(DiffUxyV);
+            DiffUxyVR.resizeLike(DiffUxyV);
+            DiffUxyPrimVL.resizeLike(DiffUxyV);
+            DiffUxyPrimVR.resizeLike(DiffUxyV);
             TVec_Batch unitNormV, vgXYV;
             unitNormV.resize(dim, gFace.GetNumPoints()), vgXYV.resizeLike(unitNormV);
 
@@ -386,17 +392,16 @@ namespace DNDS::Euler
                         GradUMeanXy *= 0.;
 
                     TDiffU GradUMeanXyPrim;
+                    TDiffU GradULxyPrim, GradURxyPrim;
                     real gamma = settings.idealGasProperty.gamma;
+                    GradULxyPrim.resizeLike(GradURxy), GradURxyPrim.resizeLike(GradURxy);
+                    Gas::GradientCons2Prim_IdealGas<dim>(ULxy, GradULxy, GradULxyPrim, gamma);
+                    Gas::GradientCons2Prim_IdealGas<dim>(URxy, GradURxy, GradURxyPrim, gamma);
                     if (settings.usePrimGradInVisFlux)
                     {
-                        TDiffU GradULxyPrim, GradURxyPrim;
-                        GradULxyPrim.resizeLike(GradURxy), GradURxyPrim.resizeLike(GradURxy);
-                        Gas::GradientCons2Prim_IdealGas<dim>(ULxy, GradULxy, GradULxyPrim, gamma);
-                        Gas::GradientCons2Prim_IdealGas<dim>(URxy, GradURxy, GradURxyPrim, gamma);
                         TU URxyPrim(cnvars), ULxyPrim(cnvars);
                         Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrim, gamma);
                         Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gamma);
-
                         GradUMeanXyPrim = (GradURxyPrim + GradULxyPrim) * 0.5 +
                                           (1.0 / distGRP) *
                                               (unitNorm * (URxyPrim - ULxyPrim).transpose());
@@ -417,7 +422,9 @@ namespace DNDS::Euler
                         faceBCType == EulerBCType::BCFar ||
                         faceBCType == EulerBCType::BCSpecial ||
                         faceBCType == EulerBCType::BCSym)
-                        GradUMeanXy *= 0, GradUMeanXyPrim *= 0; // force no viscid flux
+                        GradUMeanXy *= 0, GradUMeanXyPrim *= 0,
+                            GradULxy *= 0, GradULxyPrim *= 0,
+                            GradURxy *= 0, GradURxyPrim *= 0; // force no viscid flux
 
                     if (!GradUMeanXy.allFinite())
                     {
@@ -470,6 +477,10 @@ namespace DNDS::Euler
                     {
                         DiffUxyV(seqC, Eigen::all) = GradUMeanXy;
                         DiffUxyPrimV(seqC, Eigen::all) = GradUMeanXyPrim;
+                        DiffUxyVL(seqC, Eigen::all) = GradULxy;
+                        DiffUxyVR(seqC, Eigen::all) = GradURxy;
+                        DiffUxyPrimVL(seqC, Eigen::all) = GradULxyPrim;
+                        DiffUxyPrimVR(seqC, Eigen::all) = GradURxyPrim;
                     }
                     unitNormV(Eigen::all, iG) = unitNorm;
                     vgXYV(Eigen::all, iG) = GetFaceVGrid(iFace, iGQ);
@@ -479,6 +490,8 @@ namespace DNDS::Euler
             TU_Batch fincC = fluxFace(
                 ULxyV, URxyV,
                 ULMeanXy, URMeanXy,
+                DiffUxyVL, DiffUxyVR,
+                DiffUxyPrimVL, DiffUxyPrimVR,
                 DiffUxyV, DiffUxyPrimV,
                 unitNormV,
                 vgXYV,
