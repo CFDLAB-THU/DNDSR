@@ -147,7 +147,7 @@
         "jacobiCode": 2,
         "sgsIter": 0,
         "sgsWithRec": 0,
-        "gmresCode": 0,
+        "gmresCode": 1,
         "gmresScale": 2,
         "nGmresSpace": 5,
         "nGmresIter": 1,

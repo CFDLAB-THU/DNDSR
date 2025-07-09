@@ -290,6 +290,7 @@ namespace DNDS::Euler
 
         void LUSGSMatrixVec(
             real alphaDiag,
+            real t,
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
             JacobianDiagBlock<nVarsFixed> &JDiag,
@@ -297,6 +298,7 @@ namespace DNDS::Euler
 
         void LUSGSMatrixToJacobianLU(
             real alphaDiag,
+            real t,
             ArrayDOFV<nVarsFixed> &u,
             JacobianDiagBlock<nVarsFixed> &JDiag,
             JacobianLocalLU<nVarsFixed> &jacLU);
@@ -311,6 +313,7 @@ namespace DNDS::Euler
          */
         void UpdateLUSGSForward(
             real alphaDiag,
+            real t,
             ArrayDOFV<nVarsFixed> &rhs,
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
@@ -324,6 +327,7 @@ namespace DNDS::Euler
          */
         void UpdateLUSGSBackward(
             real alphaDiag,
+            real t,
             ArrayDOFV<nVarsFixed> &rhs,
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
@@ -332,6 +336,7 @@ namespace DNDS::Euler
 
         void UpdateSGS(
             real alphaDiag,
+            real t,
             ArrayDOFV<nVarsFixed> &rhs,
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
@@ -341,6 +346,7 @@ namespace DNDS::Euler
 
         void LUSGSMatrixSolveJacobianLU(
             real alphaDiag,
+            real t,
             ArrayDOFV<nVarsFixed> &rhs,
             ArrayDOFV<nVarsFixed> &u,
             ArrayDOFV<nVarsFixed> &uInc,
@@ -352,6 +358,7 @@ namespace DNDS::Euler
 
         void UpdateSGSWithRec(
             real alphaDiag,
+            real t,
             ArrayDOFV<nVarsFixed> &rhs,
             ArrayDOFV<nVarsFixed> &u,
             ArrayRECV<nVarsFixed> &uRec,
@@ -931,6 +938,7 @@ namespace DNDS::Euler
         /**
          * \brief
          * iG < -1: anywhere
+         * linMode == 0: ULxy is inc, ULMeanXy is base
          */
         TU generateBoundaryValue(
             TU &ULxy, //! warning, possible that UL is also modified
@@ -942,7 +950,8 @@ namespace DNDS::Euler
             real t,
             Geom::t_index btype,
             bool fixUL = false,
-            int geomMode = 0);
+            int geomMode = 0,
+            int linMode = 0);
 
         void PrintBCProfiles(const std::string &name, ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
         {
@@ -1438,6 +1447,7 @@ namespace DNDS::Euler
                                                                                                                           \
         ext template void EulerEvaluator<model>::LUSGSMatrixVec(                                                          \
             real alphaDiag,                                                                                               \
+            real t,                                                                                                       \
             ArrayDOFV<nVarsFixed> &u,                                                                                     \
             ArrayDOFV<nVarsFixed> &uInc,                                                                                  \
             JacobianDiagBlock<nVarsFixed> &JDiag,                                                                         \
@@ -1445,12 +1455,14 @@ namespace DNDS::Euler
                                                                                                                           \
         ext template void EulerEvaluator<model>::LUSGSMatrixToJacobianLU(                                                 \
             real alphaDiag,                                                                                               \
+            real t,                                                                                                       \
             ArrayDOFV<nVarsFixed> &u,                                                                                     \
             JacobianDiagBlock<nVarsFixed> &JDiag,                                                                         \
             JacobianLocalLU<nVarsFixed> &jacLU);                                                                          \
                                                                                                                           \
         ext template void EulerEvaluator<model>::UpdateLUSGSForward(                                                      \
             real alphaDiag,                                                                                               \
+            real t,                                                                                                       \
             ArrayDOFV<nVarsFixed> &rhs,                                                                                   \
             ArrayDOFV<nVarsFixed> &u,                                                                                     \
             ArrayDOFV<nVarsFixed> &uInc,                                                                                  \
@@ -1459,6 +1471,7 @@ namespace DNDS::Euler
                                                                                                                           \
         ext template void EulerEvaluator<model>::UpdateLUSGSBackward(                                                     \
             real alphaDiag,                                                                                               \
+            real t,                                                                                                       \
             ArrayDOFV<nVarsFixed> &rhs,                                                                                   \
             ArrayDOFV<nVarsFixed> &u,                                                                                     \
             ArrayDOFV<nVarsFixed> &uInc,                                                                                  \
@@ -1467,6 +1480,7 @@ namespace DNDS::Euler
                                                                                                                           \
         ext template void EulerEvaluator<model>::UpdateSGS(                                                               \
             real alphaDiag,                                                                                               \
+            real t,                                                                                                       \
             ArrayDOFV<nVarsFixed> &rhs,                                                                                   \
             ArrayDOFV<nVarsFixed> &u,                                                                                     \
             ArrayDOFV<nVarsFixed> &uInc,                                                                                  \
@@ -1475,6 +1489,7 @@ namespace DNDS::Euler
             bool forward, TU &sumInc);                                                                                    \
         ext template void EulerEvaluator<model>::UpdateSGSWithRec(                                                        \
             real alphaDiag,                                                                                               \
+            real t,                                                                                                       \
             ArrayDOFV<nVarsFixed> &rhs,                                                                                   \
             ArrayDOFV<nVarsFixed> &u,                                                                                     \
             ArrayRECV<nVarsFixed> &uRec,                                                                                  \
@@ -1485,6 +1500,7 @@ namespace DNDS::Euler
                                                                                                                           \
         ext template void EulerEvaluator<model>::LUSGSMatrixSolveJacobianLU(                                              \
             real alphaDiag,                                                                                               \
+            real t,                                                                                                       \
             ArrayDOFV<nVarsFixed> &rhs,                                                                                   \
             ArrayDOFV<nVarsFixed> &u,                                                                                     \
             ArrayDOFV<nVarsFixed> &uInc,                                                                                  \
@@ -1613,7 +1629,7 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
                 real t,                                                                                                    \
                 Geom::t_index btype,                                                                                       \
                 bool fixUL,                                                                                                \
-                int geomMode);                                                                                             \
+                int geomMode, int linMode);                                                                                \
         ext template void EulerEvaluator<model>::InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs); \
     }
 

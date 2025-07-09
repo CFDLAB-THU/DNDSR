@@ -771,7 +771,7 @@ namespace DNDS::Euler
             //     cres[iCell] = eval.CompressInc(cx[iCell], cres[iCell] * dTau[iCell]) / dTau[iCell];
             // }
             cxInc.setConstant(0.0);
-            this->solveLinear(alphaDiag, cres, cx, cxInc, uRecC, uRecIncC,
+            this->solveLinear(alphaDiag, tSimu, cres, cx, cxInc, uRecC, uRecIncC,
                               JDC, *gmres, 0);
             // cxInc: in: full increment from previous level; out: full increment form current level
             const auto solve_multigrid = [&](TDof &x_upper, TDof &xIncBuf, TDof &rhsBuf, const TDof &resOther, int mgLevelInit, int mgLevelMax)
@@ -895,7 +895,7 @@ namespace DNDS::Euler
                                 log() << fmt::format("MG Level LP [{}] iter [{}] res [{:.3e}]", mgLevel, iIterMG, resNorm.transpose()) << std::endl;
                         }
                         xIncBuf.setConstant(0.0);
-                        solveLinear(alphaDiag, rhsTemp, uMG1, xIncBuf, uRecNew, uRecNew,
+                        solveLinear(alphaDiag, tSimu, rhsTemp, uMG1, xIncBuf, uRecNew, uRecNew,
                                     JDTmp, *gmres, mgLevel);
                         fincrement(uMG1, xIncBuf, 1.0, uPos);
                         // solve_multigrid_impl(x_base, cxInc, mgLevel + 1, mgLevelMax);
@@ -929,8 +929,10 @@ namespace DNDS::Euler
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(resTemp)
                 cxTemp = cx;
                 fincrement(cxTemp, cxInc, 1.0, uPos);
+                // eval.settings.useRoeJacobian = true;
                 //! overwrites cxInc, cxTemp and resTemp do not overwrite cres! (as we might use cres for evaluation of convergence)
                 solve_multigrid(cxTemp, cxInc, resTemp, resOther, 1, config.linearSolverControl.multiGridLP);
+                // eval.settings.useRoeJacobian = false;
                 cxInc = cxTemp;
                 cxInc -= cx; // TODO: renew fsolve to produce cxNew instead of cxInc!!!
             }
@@ -993,17 +995,17 @@ namespace DNDS::Euler
                 // //! LUSGS
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
 
-                eval.UpdateLUSGSForward(alphaDiag, crhs, cx1, cxInc, JD1, cxInc);
+                eval.UpdateLUSGSForward(alphaDiag, tSimu, crhs, cx1, cxInc, JD1, cxInc);
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
-                eval.UpdateLUSGSBackward(alphaDiag, crhs, cx1, cxInc, JD1, cxInc);
+                eval.UpdateLUSGSBackward(alphaDiag, tSimu, crhs, cx1, cxInc, JD1, cxInc);
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
                 uTemp = cxInc;
-                eval.UpdateLUSGSForward(alphaDiag, uTemp, cx, cxInc, JD, cxInc);
+                eval.UpdateLUSGSForward(alphaDiag, tSimu, uTemp, cx, cxInc, JD, cxInc);
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
-                eval.UpdateLUSGSBackward(alphaDiag, uTemp, cx, cxInc, JD, cxInc);
+                eval.UpdateLUSGSBackward(alphaDiag, tSimu, uTemp, cx, cxInc, JD, cxInc);
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
                 cxInc *= 1. / (dt * Coefs[1]);
@@ -1017,11 +1019,11 @@ namespace DNDS::Euler
                 gmres->solve(
                     [&](decltype(u) &x, decltype(u) &Ax)
                     {
-                        eval.LUSGSMatrixVec(alphaDiag, cx, x, JD, Ax);
+                        eval.LUSGSMatrixVec(alphaDiag, tSimu, cx, x, JD, Ax);
                         Ax.trans.startPersistentPull();
                         Ax.trans.waitPersistentPull();
                         uTemp = Ax;
-                        eval.LUSGSMatrixVec(alphaDiag, cx1, uTemp, JD1, Ax);
+                        eval.LUSGSMatrixVec(alphaDiag, tSimu, cx1, uTemp, JD1, Ax);
                         Ax.trans.startPersistentPull();
                         Ax.trans.waitPersistentPull();
                         Ax *= dt * Coefs[1];
@@ -1030,17 +1032,17 @@ namespace DNDS::Euler
                     [&](decltype(u) &x, decltype(u) &MLx)
                     {
                         // x as rhs, and MLx as uinc
-                        eval.UpdateLUSGSForward(alphaDiag, x, cx1, MLx, JD1, MLx);
+                        eval.UpdateLUSGSForward(alphaDiag, tSimu, x, cx1, MLx, JD1, MLx);
                         MLx.trans.startPersistentPull();
                         MLx.trans.waitPersistentPull();
-                        eval.UpdateLUSGSBackward(alphaDiag, x, cx1, MLx, JD1, MLx);
+                        eval.UpdateLUSGSBackward(alphaDiag, tSimu, x, cx1, MLx, JD1, MLx);
                         MLx.trans.startPersistentPull();
                         MLx.trans.waitPersistentPull();
                         uTemp = MLx;
-                        eval.UpdateLUSGSForward(alphaDiag, uTemp, cx, MLx, JD, MLx);
+                        eval.UpdateLUSGSForward(alphaDiag, tSimu, uTemp, cx, MLx, JD, MLx);
                         MLx.trans.startPersistentPull();
                         MLx.trans.waitPersistentPull();
-                        eval.UpdateLUSGSBackward(alphaDiag, uTemp, cx, MLx, JD, MLx);
+                        eval.UpdateLUSGSBackward(alphaDiag, tSimu, uTemp, cx, MLx, JD, MLx);
                         MLx.trans.startPersistentPull();
                         MLx.trans.waitPersistentPull();
                         MLx *= 1. / (dt * Coefs[1]);
@@ -1334,7 +1336,7 @@ namespace DNDS::Euler
         // the intellisense friendly definition
         template <>)
     void EulerSolver<model>::solveLinear(
-        real alphaDiag,
+        real alphaDiag, real t,
         TDof &cres, TDof &cx, TDof &cxInc, TRec &uRecC, TRec uRecIncC,
         JacobianDiagBlock<nVarsFixed> &JDC, tGMRES_u &gmres, int gridLevel)
     {
@@ -1395,20 +1397,20 @@ namespace DNDS::Euler
             if (initWithLastURecInc)
             {
                 DNDS_assert(config.implicitReconstructionControl.storeRecInc);
-                eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecIncC, JDC, true, sgsRes);
+                eval.UpdateSGSWithRec(alphaDiag, t, cres, cx, uRecC, cxInc, uRecIncC, JDC, true, sgsRes);
                 // for (index iCell = 0; iCell < uRecIncC.Size(); iCell++)
                 //     std::cout << "-------\n"
                 //               << uRecIncC[iCell] << std::endl;
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
-                eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecIncC, JDC, false, sgsRes);
+                eval.UpdateSGSWithRec(alphaDiag, t, cres, cx, uRecC, cxInc, uRecIncC, JDC, false, sgsRes);
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
             }
             else
             {
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
-                doPrecondition(alphaDiag, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
+                doPrecondition(alphaDiag, t, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
             }
 
             if (sgsWithRec != 0)
@@ -1423,17 +1425,17 @@ namespace DNDS::Euler
                         false);
                     uRecNew.trans.startPersistentPull();
                     uRecNew.trans.waitPersistentPull();
-                    eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecNew, JDC, true, sgsRes);
+                    eval.UpdateSGSWithRec(alphaDiag, t, cres, cx, uRecC, cxInc, uRecNew, JDC, true, sgsRes);
                     cxInc.trans.startPersistentPull();
                     cxInc.trans.waitPersistentPull();
-                    eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecNew, JDC, false, sgsRes);
+                    eval.UpdateSGSWithRec(alphaDiag, t, cres, cx, uRecC, cxInc, uRecNew, JDC, false, sgsRes);
                     cxInc.trans.startPersistentPull();
                     cxInc.trans.waitPersistentPull();
                 }
                 else
                 {
                     DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
-                    doPrecondition(alphaDiag, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
+                    doPrecondition(alphaDiag, t, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
                 }
                 if (iterSGS == 1)
                     sgsRes0 = sgsRes;
@@ -1473,7 +1475,7 @@ namespace DNDS::Euler
             gmres.solve(
                 [&](TDof &x, TDof &Ax)
                 {
-                    eval.LUSGSMatrixVec(alphaDiag, cx, x, JDC, Ax);
+                    eval.LUSGSMatrixVec(alphaDiag, t, cx, x, JDC, Ax);
                     Ax.trans.startPersistentPull();
                     Ax.trans.waitPersistentPull();
                 },
@@ -1481,10 +1483,10 @@ namespace DNDS::Euler
                 {
                     // x as rhs, and MLx as uinc
                     MLx.setConstant(0.0), inputIsZero = true; //! start as zero
-                    doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
+                    doPrecondition(alphaDiag, t, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
                     for (int i = 0; i < sgsIter; i++)
                     {
-                        doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
+                        doPrecondition(alphaDiag, t, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
                     }
                 },
                 [&](TDof &a, TDof &b) -> real
@@ -1513,7 +1515,8 @@ namespace DNDS::Euler
         ,
         // the intellisense friendly definition
         template <>)
-    void EulerSolver<model>::doPrecondition(real alphaDiag, TDof &cres, TDof &cx, TDof &cxInc, TDof &uTemp,
+    void EulerSolver<model>::doPrecondition(real alphaDiag, real t, 
+                                            TDof &cres, TDof &cx, TDof &cxInc, TDof &uTemp,
                                             JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone, int gridLevel)
     {
         DNDS_assert(pEval);
@@ -1533,12 +1536,12 @@ namespace DNDS::Euler
         if (jacobiCode <= 1)
         {
             bool useJacobi = jacobiCode == 0;
-            eval.UpdateSGS(alphaDiag, cres, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, true, sgsRes);
+            eval.UpdateSGS(alphaDiag, t, cres, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, true, sgsRes);
             if (useJacobi)
                 cxInc = uTemp;
             cxInc.trans.startPersistentPull();
             cxInc.trans.waitPersistentPull();
-            eval.UpdateSGS(alphaDiag, cres, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, false, sgsRes);
+            eval.UpdateSGS(alphaDiag, t, cres, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, false, sgsRes);
             if (useJacobi)
                 cxInc = uTemp;
             cxInc.trans.startPersistentPull();
@@ -1556,10 +1559,10 @@ namespace DNDS::Euler
             DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
             DNDS_assert_info(config.linearSolverControl.directPrecControl.useDirectPrec, "need to use config.linearSolverControl.directPrecControl.useDirectPrec first !");
             if (!hasLUDone)
-                eval.LUSGSMatrixToJacobianLU(alphaDiag, cx, JDC, *JLocalLU), hasLUDone = true;
+                eval.LUSGSMatrixToJacobianLU(alphaDiag, t, cx, JDC, *JLocalLU), hasLUDone = true;
             for (int iii = 0; iii < 2; iii++)
             {
-                eval.LUSGSMatrixSolveJacobianLU(alphaDiag, cres, cx, cxInc, uTemp, rhsTemp, JDC, *JLocalLU, sgsRes);
+                eval.LUSGSMatrixSolveJacobianLU(alphaDiag, t, cres, cx, cxInc, uTemp, rhsTemp, JDC, *JLocalLU, sgsRes);
                 uTemp.SwapDataFatherSon(cxInc);
                 // cxInc = uTemp;
                 cxInc.trans.startPersistentPull();

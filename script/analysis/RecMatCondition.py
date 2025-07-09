@@ -293,15 +293,9 @@ def scipy_lin_get_rho(A: spsp.bsr_array):
     return maxEVal
 
 
-if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser("RecMatCondition")
-    parser.add_argument("file_name")
-
-    args = parser.parse_args()
-    assert os.path.exists(args.file_name)
-
-    matrixAAInvB, (mat_Rows, mat_Cols) = read_matrix(args.file_name)
+def run_analysis(fname):
+    assert os.path.exists(fname), fname
+    matrixAAInvB, (mat_Rows, mat_Cols) = read_matrix(fname)
     matrixAB = matrix_get_no_inverse(matrixAAInvB)
     print(f"A Cond Max:   {matrix_get_diag_max_cond(matrixAB):.2e}")
     print(f"max Sym deviation {matrix_get_sym_deviation_max(matrixAB):.2e}")
@@ -321,6 +315,41 @@ if __name__ == "__main__":
     rhoAJ = scipy_bsr_get_rho(bsr_matrixJacobianIter)
 
     print("\n=== Matirx AG ===")
-    rhoAJ = scipy_lin_get_rho(
+    rhoAG = scipy_lin_get_rho(
         matrix_to_lin_SOR_mat(matrixAB, blk_r=mat_Rows, blk_c=mat_Cols, omega=1.0)
     )
+    return {
+        "condA": condA,
+        "condDIA": condDIA,
+        "rhoAJ": rhoAJ,
+        "rhoAG": rhoAG,
+    }
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser("RecMatCondition")
+    parser.add_argument("file_name")
+
+    args = parser.parse_args()
+    assert os.path.exists(args.file_name)
+    run_analysis(args.file_name)
+
+    # fnames = [
+    #     "../data/outUnsteady/PP5/IV/condTest-out_B0_Square_RecMatrix.dnds.h5",
+    #     "../data/outUnsteady/PP5/IV/condTest-out_B0_Square_Pert0_RecMatrix.dnds.h5",
+    #     "../data/outUnsteady/PP5/IV/condTest-out_B0_Tri_RecMatrix.dnds.h5",
+    #     "../data/outUnsteady/PP5/IV/condTest-out_B0_Tri_Pert0_RecMatrix.dnds.h5",
+    # ]
+    # results = []
+    # for fname in fnames:
+    #     print("\n"*2)
+    #     print("=="*10)
+    #     print(fname)
+    #     results.append(run_analysis(fname))
+
+    # for i, result in enumerate(results):
+    #     print("\n")
+    #     print(fnames[i])
+    #     for k, v in result.items():
+    #         print(f"  - {k}: {v:.04g}")

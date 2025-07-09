@@ -16,7 +16,7 @@
     },
     "outputControl": {
         "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 10,
+        "nConsoleCheckInternal": 1,
         "consoleOutputMode": 1,
         "nDataOutC": 100,
         "nDataOut": 10,

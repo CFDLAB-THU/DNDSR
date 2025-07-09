@@ -10,11 +10,11 @@ handler = GraceExit(max_attempts=5)
 
 config_name = os.path.join(dirname, "config_cylinderInvis_mg_bench.json")
 
-out_base = "../data/out/CylinderInvisHalfA-MGtest_0_VRes.dir"
+out_base = "../data/out/CylinderInvisHalfA-MGtest_1_VRes.dir"
 
 name_prefix = ""
 
-name_prefix = "x-"
+name_prefix = "x1-"
 
 os.makedirs(out_base, exist_ok=True)
 
@@ -43,10 +43,19 @@ opt_2["name_base"] = "lusgs"
 opt_2["jC_append"] = 1
 opt_2["name_append"] = "lusgs"  # smoother
 
+opt_3 = {}
+opt_3["n_iter"] = 10000
+opt_3["gC_base"] = 1
+opt_3["jC_base"] = 1
+opt_3["name_base"] = "gmres5x1lusgs"
+opt_3["jC_append"] = 1
+opt_3["name_append"] = "lusgs"  # smoother
+
 opts = [
-    # opt_2,  # LUSGS
+    opt_2,  # LUSGS
     opt_1,  # ILU
-    # opt_0,  # GMRES-ILU
+    opt_0,  # GMRES-ILU
+    opt_3,  # GMRES-LUSGS
 ]
 
 mg_seqs = [
@@ -71,7 +80,7 @@ mg_seqs = [
     (2, 4, 4),
     (2, 4, 8),
     (2, 4, 16),
-    # 2 level mul 6
+    # 2 level mul 8
     (2, 8, 2),
     (2, 8, 4),
     (2, 8, 8),

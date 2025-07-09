@@ -54,7 +54,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/UniformDM480.cgns",
-        "outPltName": "../data/outUnsteady/DM480-ARSTest/testO2_RM2/out",
+        "outPltName": "../data/outUnsteady/DM480-ARSTest/testO2_rotRM0RM2F0/out",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -117,10 +117,11 @@
     "eulerSettings": {
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
-        "riemannSolverType": "Roe_M2",
+        "riemannSolverType": "Roe",
         "riemannSolverTypeAux": "Roe_M2",
         "rsMeanValueEig": 1,
-        "rsRotateScheme": 0,
+        "rsFixScale": 0,
+        "rsRotateScheme": 1,
         "constMassForce": [
             0.0,
             0.0,

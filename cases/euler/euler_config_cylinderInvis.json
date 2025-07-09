@@ -31,7 +31,7 @@
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
-        "CFL": 20.0,
+        "CFL": 50.0,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 2147483647,
         "nCFLRampLength": 2147483647,
@@ -44,7 +44,7 @@
         "meshReorderCells": 1,
         "meshFile": "../data/mesh/CylinderInvisHalfA.cgns",
         // "meshFile": "../data/mesh/CylinderA1-Invis.cgns",
-        "outPltName": "../data/out/CylinderInvisHalfA-MGtest_0_VRes.dir/x-ilu-4lusgs",
+        "outPltName": "../data/out/CylinderInvisHalfA-MGtest_1_VRes.dir/xx-ilu",
         // "outPltName": "../data/outUnsteady/CylinderA1-Invis/test1_M0d01/ilu",
         "outPltMode": 0,
         "readMeshMode": 0,
@@ -99,12 +99,12 @@
         "gmresScale": 2,
         "nGmresSpace": 5,
         "nGmresIter": 1,
-        "multiGridLP": 1,
+        "multiGridLP": 0,
         "multiGridLPInnerNIter": 4,
         "multiGridLPInnerNSee": 100,
         "coarseGridLinearSolverControlList": {
             "1": {
-                "jacobiCode": 1,
+                "jacobiCode": 2,
                 "sgsIter": 0,
                 "gmresCode": 0,
                 "gmresScale": 0,
@@ -130,7 +130,7 @@
         },
         "directPrecControl": {
             "useDirectPrec": true,
-            "iluCode": 2,
+            "iluCode": 4,
             "orderingCode": 4,
             "_tail": 0
         }
@@ -141,7 +141,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": true,
         "useScalarJacobian": false,
-        // "useRoeJacobian": true,
+        "useRoeJacobian": true,
         "riemannSolverType": "Roe_M1",
         "riemannSolverTypeAux": "Roe_M2",
         "rsMeanValueEig": 1,

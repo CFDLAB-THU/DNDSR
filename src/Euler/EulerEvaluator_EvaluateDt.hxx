@@ -1599,7 +1599,7 @@ namespace DNDS::Euler
         real t,
         Geom::t_index btype,
         bool fixUL,
-        int geomMode)
+        int geomMode, int linMode)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_assert(iG >= -2);
@@ -1608,10 +1608,17 @@ namespace DNDS::Euler
         URxy.resizeLike(ULxy);
         auto bTypeEuler = pBCHandler->GetTypeFromID(btype);
 
+        //TODO: for all linMode == 1: implement more precise linearized BC
+
         if (bTypeEuler == EulerBCType::BCSpecial ||
             bTypeEuler == EulerBCType::BCFar ||
             bTypeEuler == EulerBCType::BCOutP)
         {
+            if (linMode == 1)
+            {
+                URxy.setZero();
+                return URxy;
+            }
             DNDS_assert(ULxy(0) > 0);
             if (btype == Geom::BC_ID_DEFAULT_FAR ||
                 bTypeEuler == EulerBCType::BCFar ||
@@ -1967,12 +1974,17 @@ namespace DNDS::Euler
         else if (bTypeEuler == EulerBCType::BCWallInvis ||
                  bTypeEuler == EulerBCType::BCSym) // (no rotating) no frameOpt == 1 implemneted now //TODO add
         {
+            //* linMode == 1: same
             URxy = ULxy;
             if (settings.frameConstRotation.enabled)
                 this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
             URxy(Seq123) -= 2 * URxy(Seq123).dot(uNorm) * uNorm; // mirrored!
             if (settings.frameConstRotation.enabled)
                 this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
+            if (linMode == 1)
+            {
+                return URxy;
+            }
         }
         else if (bTypeEuler == EulerBCType::BCWall ||
                  bTypeEuler == EulerBCType::BCWallIsothermal)
@@ -2000,6 +2012,11 @@ namespace DNDS::Euler
                 if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
                     this->TransformVelocityRotatingFrame(URxy, pPhysics, -2);
 #endif
+            }
+
+            if (linMode == 1)
+            {
+                return URxy;
             }
 
             if (bTypeEuler == EulerBCType::BCWallIsothermal)
@@ -2073,10 +2090,20 @@ namespace DNDS::Euler
         }
         else if (bTypeEuler == EulerBCType::BCOut)
         {
+            if (linMode == 1)
+            {
+                URxy.setZero();
+                return URxy;
+            }
             URxy = ULxy;
         }
         else if (bTypeEuler == EulerBCType::BCIn)
         {
+            if (linMode == 1)
+            {
+                URxy.setZero();
+                return URxy;
+            }
             URxy = pBCHandler->GetValueFromID(btype);
             if (pCLDriver)
                 URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);
@@ -2090,6 +2117,11 @@ namespace DNDS::Euler
         }
         else if (bTypeEuler == EulerBCType::BCInPsTs)
         {
+            if (linMode == 1)
+            {
+                URxy.setZero();
+                return URxy;
+            }
             real rvNorm = ULxy(Seq123).dot(uNorm(Seq012));
             TU ULxyStatic = ULxy;
             if (settings.frameConstRotation.enabled)

@@ -16,13 +16,13 @@
     },
     "convergenceControl": {
         "nTimeStepInternal": 400000,
-        "rhsThresholdInternal": 1e-12,
+        "rhsThresholdInternal": 1e-10,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
     "outputControl": {
         "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 10,
+        "nConsoleCheckInternal": 1,
         "consoleOutputMode": 0,
         "nDataOutC": 10,
         "nDataOut": 1000,

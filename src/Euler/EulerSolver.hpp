@@ -1057,13 +1057,14 @@ namespace DNDS::Euler
          * \warning explicit inst not existent
          */
         void solveLinear(
-            real alphaDiag,
+            real alphaDiag, real t,
             TDof &cres, TDof &cx, TDof &cxInc, TRec &uRecC, TRec uRecIncC,
             JacobianDiagBlock<nVarsFixed> &JDC, tGMRES_u &gmres, int gridLevel);
         /**
          * \warning explicit inst not existent
          */
-        void doPrecondition(real alphaDiag, TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp,
+        void doPrecondition(real alphaDiag, real t,
+                            TDof &crhs, TDof &cx, TDof &cxInc, TDof &uTemp,
                             JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone, int gridLevel);
 
         bool functor_fstop(int iter, ArrayDOFV<nVarsFixed> &cres, int iStep, RunningEnvironment &env);

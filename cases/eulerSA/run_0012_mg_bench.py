@@ -1,5 +1,6 @@
 import os
 import sys
+import pprint
 
 dirname = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(dirname, "..", "..", "script"))
@@ -14,7 +15,7 @@ out_base = "../data/out/NACA0012_H2-MGtest_3_VRes_AOA05.dir"
 
 name_prefix = ""
 
-# name_prefix = "x-"
+name_prefix = "x1-"
 
 os.makedirs(out_base, exist_ok=True)
 
@@ -44,9 +45,18 @@ opt_2["name_base"] = "lusgs"
 opt_2["jC_append"] = 1
 opt_2["name_append"] = "lusgs"  # smoother
 
+opt_3 = {}
+opt_3["n_iter"] = 10000
+opt_3["gC_base"] = 1
+opt_3["jC_base"] = 1
+opt_3["name_base"] = "gmres5x1lusgs"
+opt_3["jC_append"] = 1
+opt_3["name_append"] = "lusgs"  # smoother  
+
 opts = [
     opt_0,  # GMRES-ILU
-    # opt_1,  # ILU
+    opt_1,  # ILU
+    opt_3,  # GMRES-LUSGS
     opt_2,  # LUSGS
 ]
 
@@ -78,6 +88,8 @@ mg_seqs = [
     (2, 8, 8),
     # (2, 8, 16),
 ]
+
+# mg_seqs = [(0, 0, 0)] #! overwrite: only no mg cases
 
 
 def get_options(
@@ -142,7 +154,9 @@ options_list = {}
 for opt in opts:
     options_list.update(get_options(**opt))
 
-print(options_list)
+pprint.pprint(options_list)
+for v in options_list.keys():
+    print(v)
 
 
 try:

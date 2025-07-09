@@ -51,19 +51,56 @@ namespace DNDS::Euler
                 rowsize iCellAtFace = f2c[0] == iCell ? 0 : 1;
                 TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
                                 (iCellAtFace ? -1 : 1); // faces out
-                if (iCellOther == UnInitIndex)
-                    iCellOther = iCell; //! todo: deal with bcs
-                TU uj = u[iCellOther];
+                TU uj;
+                if (iCellOther == UnInitIndex) // handle BC
+                {
+                    TU UL = u[iCell];
+                    uj = this->generateBoundaryValue(UL, u[iCell], iCell, iFace, -1,
+                                                     unitNorm,
+                                                     Geom::NormBuildLocalBaseV<dim>(unitNorm),
+                                                     vfv->GetFaceQuadraturePPhys(iFace, -1),
+                                                     t,
+                                                     mesh->GetFaceZone(iFace),
+                                                     false, 0);
+                }
+                else
+                    uj = u[iCellOther];
                 if (iCellOther != UnInitIndex)
                     this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
                 TJacobianU jacII = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
                     u[iCell], uj,
                     unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                    Geom::BC_ID_INTERNAL,
+                    mesh->GetFaceZone(iFace),
                     lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
                     iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
                     // swap lambda0 and lambda4 if iCellAtFace==1
-                    true, +1, 1); // for this is diff(uthis) not diff(uthat)
+                    true, +1, 1);              // for this is diff(uthis) not diff(uthat)
+                if (iCellOther == UnInitIndex) // handle BC
+                {
+                    TJacobianU JBC;
+                    JBC.resize(nVars, nVars);
+                    JBC.setIdentity();
+                    for (int i = 0; i < nVars; i++)
+                    {
+                        TU VE = JBC(Eigen::all, i);
+                        JBC(Eigen::all, i) = this->generateBoundaryValue(VE, u[iCell], iCell, iFace, -1,
+                                                                         unitNorm,
+                                                                         Geom::NormBuildLocalBaseV<dim>(unitNorm),
+                                                                         vfv->GetFaceQuadraturePPhys(iFace, -1),
+                                                                         t,
+                                                                         mesh->GetFaceZone(iFace),
+                                                                         false, 0, /*linMode=*/1);
+                    }
+                    TJacobianU jacIJ = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
+                        uj, u[iCell],
+                        unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                        mesh->GetFaceZone(iFace),
+                        lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                        iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                        // swap lambda0 and lambda4 if iCellAtFace==1
+                        true, -1, 0);
+                    JDiag.getBlock(iCell) += (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * (jacIJ * JBC);
+                }
                 JDiag.getBlock(iCell) += (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacII;
                 // std::cout << "JacII\n";
                 // std::cout << jacII << "\n";
@@ -100,9 +137,11 @@ namespace DNDS::Euler
         // exit(-1);
     }
 
-    template <EulerModel model>
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, )
     void EulerEvaluator<model>::LUSGSMatrixVec(
         real alphaDiag,
+        real t,
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
         JacobianDiagBlock<nVarsFixed> &JDiag,
@@ -203,7 +242,7 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, )
     void EulerEvaluator<model>::LUSGSMatrixToJacobianLU(
-        real alphaDiag,
+        real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &u,
         JacobianDiagBlock<nVarsFixed> &JDiag,
         JacobianLocalLU<nVarsFixed> &jacLU)
@@ -274,7 +313,7 @@ namespace DNDS::Euler
 
     template <EulerModel model>
     void EulerEvaluator<model>::UpdateLUSGSForward(
-        real alphaDiag,
+        real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &rhs,
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
@@ -359,7 +398,7 @@ namespace DNDS::Euler
 
     template <EulerModel model>
     void EulerEvaluator<model>::UpdateLUSGSBackward(
-        real alphaDiag,
+        real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &rhs,
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
@@ -425,7 +464,7 @@ namespace DNDS::Euler
 
     template <EulerModel model>
     void EulerEvaluator<model>::UpdateSGS(
-        real alphaDiag,
+        real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &rhs,
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
@@ -563,7 +602,7 @@ namespace DNDS::Euler
 
     template <EulerModel model>
     void EulerEvaluator<model>::UpdateSGSWithRec(
-        real alphaDiag,
+        real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &rhs,
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,
@@ -670,7 +709,7 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, template <>)
     void EulerEvaluator<model>::LUSGSMatrixSolveJacobianLU(
-        real alphaDiag,
+        real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &rhs,
         ArrayDOFV<nVarsFixed> &u,
         ArrayDOFV<nVarsFixed> &uInc,
