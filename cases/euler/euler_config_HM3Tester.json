@@ -7,10 +7,10 @@
         "odeCode": 411,
         "odeSetting1": 0.5,
         "odeSetting2": 0,
-        "odeSetting3": 1.2,
-        "odeSetting4": 0,
+        "odeSetting3": 1,
+        "odeSetting4": 1,
         "odeSettingsExtra": {
-            "nMG": 4,
+            "nMG": 0,
             "thetaMMG": 0.0,
             "coefIncMidMG": 0.0
         },
@@ -53,7 +53,7 @@
         "meshRotZ": 0.0,
         "meshReorderCells": true,
         "meshFile": "../data/mesh/IV10_160.cgns",
-        "outPltName": "../data/outUnsteady/IV_HM3Test/IV10c",
+        "outPltName": "../data/outUnsteady/IV_HM3Test/IV10c_0d75_m0d0",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,

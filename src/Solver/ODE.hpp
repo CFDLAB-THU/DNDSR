@@ -1110,24 +1110,49 @@ namespace DNDS::ODE
                         frhs(rhsbuf[2], xMid, dTauMid, iter, alphaHM3, 1);
 
                         rhsFull.setConstant(0.0);
+                        real theta2Scale = 1 - thetaM2 * cInter(1);
+                        DNDS_assert_info(theta2Scale > 0, fmt::format("thetaM2 {}, cInter(1) {}", thetaM2, cInter(1)));
+                        theta2Scale = 1. / theta2Scale;
+                        bool theta2LimitSitu = thetaM2 < -1e5;
+                        real xLastCoef = !theta2LimitSitu
+                                             ? (theta2Scale * (1. + thetaM2 * cInter(0)) / dt)
+                                             : (-cInter(0) / cInter(1) / dt);
+                        real xMidCoef = !theta2LimitSitu
+                                            ? (-theta2Scale * thetaM2 * 1. / dt)
+                                            : (1 / cInter(1) * 1. / dt);
+                        real xPrevCoef = !theta2LimitSitu
+                                             ? (theta2Scale * thetaM2 * cInter(2) / dt)
+                                             : (-1. / cInter(1) * cInter(2) / dt);
+                        real rLastCoef = theta2Scale * (wInteg(0) + thetaM2 * (stepIsRealU3R1 ? 0.0 : cInter(2)));
+                        if (theta2LimitSitu)
+                            rLastCoef = -1. / cInter(1) * (stepIsRealU3R1 ? 0.0 : cInter(2));
+                        real rMidCoef = theta2LimitSitu ? 0.0 : theta2Scale * wInteg(1);
+                        real rCoef = !theta2LimitSitu ? (theta2Scale * (wInteg(2) + thetaM2 * cInter(3)))
+                                                      : (-1. / cInter(1) * cInter(3));
+                        // std::cout << xLastCoef << " "
+                        //           << xMidCoef << " "
+                        //           << xPrevCoef << " "
+                        //           << rLastCoef << " "
+                        //           << rMidCoef << " "
+                        //           << rCoef << " " << std::endl;
                         {
-                            rhsFull.addTo(xLast, (1. + thetaM2 * cInter(0)) / dt);
+                            rhsFull.addTo(xLast, xLastCoef);
                             if (thetaM2)
                             {
-                                rhsFull.addTo(x, thetaM2 * cInter(1) / dt);
-                                rhsFull.addTo(xMid, -thetaM2 * 1. / dt);
+                                // rhsFull.addTo(x, thetaM2 * cInter(1) / dt); // need to add to diag part!!
+                                rhsFull.addTo(xMid, xMidCoef);
                                 if (stepIsRealU3R1)
-                                    rhsFull.addTo(xPrev, thetaM2 * cInter(2) / dt);
+                                    rhsFull.addTo(xPrev, xPrevCoef);
                             }
 
-                            rhsFull.addTo(rhsbuf[0], wInteg(0) + thetaM2 * (stepIsRealU3R1 ? 0.0 : cInter(2)));
-                            rhsFull.addTo(rhsbuf[2], wInteg(1));
+                            rhsFull.addTo(rhsbuf[0], rLastCoef);
+                            rhsFull.addTo(rhsbuf[2], rMidCoef);
 
                             resOther = rhsFull;
                             rhsFull.addTo(x, -1. / dt);
-                            rhsFull.addTo(rhsbuf[1], wInteg(2) + thetaM2 * cInter(3));
+                            rhsFull.addTo(rhsbuf[1], rCoef);
 
-                            fsolve(x, rhsFull, resOther, dTau, dt, wInteg(2) + thetaM2 * cInter(3), xinc, iter, 1.0, 0);
+                            fsolve(x, rhsFull, resOther, dTau, dt, rCoef, xinc, iter, 1.0, 0);
                         }
 
                         fincrement(x, xinc, 1.0, 0);
@@ -1157,7 +1182,8 @@ namespace DNDS::ODE
                             for (int iMG = 1; iMG <= nMG; iMG++)
                             {
                                 // use upos == 2 for lower order spacial frhs
-                                fdt(x, dTau, 1.0, /*upos=*/2);
+                                fdt(x, dTau, 1.0, /*upos=*/
+                                    2);
                                 frhs(rhsbuf[1], x, dTau, iter, 1.0, /*upos=*/2); // pos = 0 for original RHS
                                 if (iMG == 1)
                                 {
