@@ -887,7 +887,7 @@ namespace DNDS::ODE
         TDTAU dTau, dTauMid;
         TDATA xMid, rhsMid, rhsFull, resOther;
         std::vector<TDATA> rhsbuf;
-        TDATA xLast, xMG0;
+        TDATA xLast, xMG0, xMG;
         TDATA xIncPrev;
         index DOF;
         index cnPrev;
@@ -900,8 +900,8 @@ namespace DNDS::ODE
         int nStartIter = 0;
         real thetaM1 = 0.9146;
         real thetaM2 = 0.0;
-        real thetaMMG = 0.0;
-        real coefIncMidMG = 0.5;
+        real thetaMMG = 1.0;
+        real coefIncMidMG = 1.0;
         real alphaHM3 = 0.5;
         int maskHM3 = 0;
         int maskHM3Exe = 0;
@@ -943,6 +943,7 @@ namespace DNDS::ODE
             finit(xLast);
             finit(xIncPrev);
             finit(xMG0);
+            finit(xMG);
             finit(xIncDamper);
             finit(xIncDamper2);
             finit(xPrev);
@@ -1177,28 +1178,35 @@ namespace DNDS::ODE
                         {
                             resOther = rhsFull;
                             xMG0 = x;
+                            xMG0 *= 0.5;
+                            xMG0.addTo(xMid, 0.5);
+                            xMG = xMG0;
                             // F_trapz == (xLast - x) / dt + (rLast + r) * 0.5
                             // F_trapz - F_trapz_0 == (x0 - x) / dt + (r - r_0) * 0.5
+                            real mgTrapzAlpha = 1.0;
                             for (int iMG = 1; iMG <= nMG; iMG++)
                             {
                                 // use upos == 2 for lower order spacial frhs
-                                fdt(x, dTau, 1.0, /*upos=*/
-                                    2);
-                                frhs(rhsbuf[1], x, dTau, iter, 1.0, /*upos=*/2); // pos = 0 for original RHS
-                                if (iMG == 1)
+                                fdt(xMG, dTau, 1.0, /*upos=*/2);
+                                frhs(rhsbuf[1], xMG, dTau, iter, 1.0, /*upos=*/2); // pos = 0 for original RHS
+                                if (iMG == 1 and /*1 smoother shortcut*/ nMG > 1)
                                 {
-                                    resOther.addTo(rhsbuf[1], -0.5);
-                                    resOther.addTo(x, 1. / dt);
+                                    resOther.addTo(rhsbuf[1], -mgTrapzAlpha);
+                                    resOther.addTo(xMG, 1. / dt);
                                 }
                                 rhsMid = resOther;
-                                rhsMid.addTo(rhsbuf[1], 0.5);
-                                rhsMid.addTo(x, -1. / dt);
+                                if (/*1 smoother shortcut*/ nMG > 1)
+                                {
+                                    rhsMid.addTo(rhsbuf[1], mgTrapzAlpha);
+                                    rhsMid.addTo(xMG, -1. / dt);
+                                }
 
-                                fsolve(x, rhsMid, resOther, dTau, dt, 0.5, xinc, iter, 1.0, /*upos=*/2);
-                                fincrement(x, xinc, 1.0, /*upos=*/2);
+                                fsolve(xMG, rhsMid, resOther, dTau, dt, mgTrapzAlpha, xinc, iter, 1.0, /*upos=*/2);
+                                fincrement(xMG, xinc, 1.0, /*upos=*/2);
                             }
-                            xinc = x;
+                            xinc = xMG;
                             xinc.addTo(xMG0, -1.0);
+                            fincrement(x, xinc, 1.0, 0);
                             if (coefIncMidMG)
                                 fincrement(xMid, xinc, coefIncMidMG, 1);
                             fdt(xMid, dTauMid, 1.0, 1);

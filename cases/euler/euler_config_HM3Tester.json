@@ -7,12 +7,12 @@
         "odeCode": 411,
         "odeSetting1": 0.5,
         "odeSetting2": 0,
-        "odeSetting3": 1,
-        "odeSetting4": 1,
+        "odeSetting3": 0.75,
+        "odeSetting4": -1e10,
         "odeSettingsExtra": {
-            "nMG": 0,
-            "thetaMMG": 0.0,
-            "coefIncMidMG": 0.0
+            "nMG": 4,
+            "thetaMMG": 1,
+            "coefIncMidMG": 1
         },
         // "odeCode": 401,
         // "odeSetting1": 0.5,
@@ -53,7 +53,7 @@
         "meshRotZ": 0.0,
         "meshReorderCells": true,
         "meshFile": "../data/mesh/IV10_160.cgns",
-        "outPltName": "../data/outUnsteady/IV_HM3Test/IV10c_0d75_m0d0",
+        "outPltName": "../data/outUnsteady/IV_HM3Test/IV10c_0d75_mI-MG4c1",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -107,7 +107,7 @@
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
-        "subs2ndOrder": 0,
+        "subs2ndOrder": 1,
         "baseSettings": {
             "localOrientation": false,
             "anisotropicLengths": false

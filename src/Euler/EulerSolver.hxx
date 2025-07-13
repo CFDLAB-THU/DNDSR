@@ -630,6 +630,17 @@ namespace DNDS::Euler
                                         TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration |
                                             TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
                                             (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+                //! note: in HM3 IV test for TPMG, this O1 version makes convergence slower compared to the O2 one, why?
+                // static const int use_1st_conv = 1;
+                // static const int use_1st_conv_ignore_vis = 0;
+                // return eval.EvaluateRHS(crhs, JSource, cx, uRecNew, uRecNew, betaPP, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
+                //                         (TEval::RHS_Direct_2nd_Rec_1st_Conv * use_1st_conv) |
+                //                             TEval::RHS_Direct_2nd_Rec |
+                //                             TEval::RHS_Dont_Record_Bud_Flux |
+                //                             TEval::RHS_Dont_Update_Integration |
+                //                             (TEval::RHS_Ignore_Viscosity * use_1st_conv_ignore_vis) |
+                //                             TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
+                //                             (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
             }
             return frhsOuter(crhs, cx, dTau, iter, ct, uPos, 1); // reconstructionFlag == 1
         };
@@ -716,6 +727,7 @@ namespace DNDS::Euler
             auto &uRecIncC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRecInc1 : uRecInc;
             auto &alphaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? alphaPP1 : alphaPP;
             auto &betaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? betaPP1 : betaPP;
+            bool isTPMGLevel = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 2;
 
             Timer().StartTimer(PerformanceTimer::Positivity);
             if (config.timeMarchControl.rhsFPPMode == 1 || config.timeMarchControl.rhsFPPMode == 11)
@@ -780,7 +792,7 @@ namespace DNDS::Euler
             // }
             cxInc.setConstant(0.0);
             this->solveLinear(alphaDiag, tSimu, cres, cx, cxInc, uRecC, uRecIncC,
-                              JDC, *gmres, 0);
+                              JDC, *gmres, !isTPMGLevel ? 0 : 1); //! here we borrow PMG's level1 setting into TPMG
             // cxInc: in: full increment from previous level; out: full increment form current level
             const auto solve_multigrid = [&](TDof &x_upper, TDof &xIncBuf, TDof &rhsBuf, const TDof &resOther, int mgLevelInit, int mgLevelMax)
             {
