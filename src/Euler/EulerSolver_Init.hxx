@@ -392,7 +392,7 @@ namespace DNDS::Euler
                          { vfv->BuildUDof(uu, nVars); });
 
         vfv->BuildURec(uRec, nVars);
-        if (config.timeMarchControl.odeCode == 401)
+        if (config.timeMarchControl.timeMarchIsTwoStage())
             vfv->BuildURec(uRec1, nVars);
         vfv->BuildURec(uRecLimited, nVars);
         vfv->BuildURec(uRecNew, nVars);
@@ -407,7 +407,7 @@ namespace DNDS::Euler
         vfv->BuildUDof(dTauTmp, 1);
         betaPP.setConstant(1.0);
         alphaPP.setConstant(1.0);
-        if (config.timeMarchControl.odeCode == 401)
+        if (config.timeMarchControl.timeMarchIsTwoStage())
         {
             vfv->BuildUDof(betaPP1, 1);
             vfv->BuildUDof(alphaPP1, 1);
@@ -417,7 +417,7 @@ namespace DNDS::Euler
         if (config.implicitReconstructionControl.storeRecInc)
         {
             vfv->BuildURec(uRecInc, nVars);
-            if (config.timeMarchControl.odeCode == 401)
+            if (config.timeMarchControl.timeMarchIsTwoStage())
                 vfv->BuildURec(uRecInc1, nVars);
         }
 
@@ -429,7 +429,7 @@ namespace DNDS::Euler
 
         JD.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
         JSource.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
-        if (config.timeMarchControl.odeCode == 401)
+        if (config.timeMarchControl.timeMarchIsTwoStage())
         {
             JD1.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
             JSource1.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
@@ -507,9 +507,9 @@ namespace DNDS::Euler
         using namespace std::literals;
         DNDS_EULERSOLVER_RUNNINGENV_GET_REF_LIST
         iterAll++;
-        // auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
+        // auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
 
-        // auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
+        // auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
 
         Eigen::VectorFMTSafe<real, -1> res(nVars);
         eval.EvaluateNorm(res, cres, 1, config.convergenceControl.useVolWiseResidual);

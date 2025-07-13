@@ -1,26 +1,24 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 0.5e-1,
-        "nTimeStep": 40,
+        "dtImplicit": 10e-1,
+        "nTimeStep": 10,
         "steadyQuit": false,
         "tEnd": 3e+200,
-        "odeCode": 401,
+        "odeCode": 411,
+        "odeSetting1": 0.5,
+        "odeSetting2": 0,
+        "odeSetting3": 1.2,
+        "odeSetting4": 0,
+        "odeSettingsExtra": {
+            "nMG": 4,
+            "thetaMMG": 0.0,
+            "coefIncMidMG": 0.0
+        },
+        // "odeCode": 401,
         // "odeSetting1": 0.5,
         // "odeSetting2": 0,
         // "odeSetting3": 1.2,
         // "odeSetting4": 0,
-        // "odeSetting1": 0.55,
-        // "odeSetting2": 0,
-        // "odeSetting3": 1.333,
-        // "odeSetting4": 0,
-        // "odeSetting1": 0.25,
-        // "odeSetting2": 0,
-        // "odeSetting3": 1,
-        // "odeSetting4": 1,
-        "odeSetting1": 0.5,
-        "odeSetting2": 0,
-        "odeSetting3": 1.333,
-        "odeSetting4": 2,
         // "rhsFPPMode": 1,
         // "rhsFPPScale": 0.01,
         "_tail": 0
@@ -53,8 +51,9 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
+        "meshReorderCells": true,
         "meshFile": "../data/mesh/IV10_160.cgns",
-        "outPltName": "../data/outUnsteady/IV10c",
+        "outPltName": "../data/outUnsteady/IV_HM3Test/IV10c",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -101,8 +100,8 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
-        "cacheDiffBase": false,
+        "intOrder": 5,
+        "cacheDiffBase": true,
         "jacobiRelax": 1,
         "SORInstead": true,
         "smoothThreshold": 1e-3,
@@ -134,7 +133,29 @@
         "gmresCode": 0,
         "nGmresSpace": 5,
         "nGmresIter": 1,
-        "initWithLastURecInc": false
+        "initWithLastURecInc": false,
+        "multiGridLP": 0,
+        "multiGridLPInnerNIter": 4,
+        "coarseGridLinearSolverControlList": {
+            "1": {
+                "jacobiCode": 0,
+                "sgsIter": 4,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0,
+                "centralSmoothInputResidual": 0
+            }
+        },
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2,
+            "orderingCode": 4,
+            "_tail": 0
+        }
     },
     "others": {
         "nFreezePassiveInner": 0

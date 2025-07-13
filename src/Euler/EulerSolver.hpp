@@ -132,6 +132,7 @@ namespace DNDS::Euler
                 real odeSetting2 = 0;
                 real odeSetting3 = 0;
                 real odeSetting4 = 0;
+                nlohmann::ordered_json odeSettingsExtra;
                 bool partitionMeshOnly = false;
                 real dtIncreaseLimit = 2;
                 int dtIncreaseAfterCount = 0;
@@ -144,11 +145,15 @@ namespace DNDS::Euler
                     dtImplicit, dtImplicitMin, nTimeStep,
                     steadyQuit, useRestart,
                     useImplicitPP, rhsFPPMode, rhsFPPScale, rhsFPPRelax, incrementPPRelax,
-                    odeCode, tEnd, odeSetting1, odeSetting2, odeSetting3, odeSetting4,
+                    odeCode, tEnd, odeSetting1, odeSetting2, odeSetting3, odeSetting4, odeSettingsExtra,
                     partitionMeshOnly,
                     dtIncreaseLimit, dtIncreaseAfterCount,
                     dtCFLLimitScale, dtPPLimitRelax,
                     useDtPPLimit, dtPPLimitScale)
+                bool timeMarchIsTwoStage()
+                {
+                    return odeCode == 401 || (odeCode >= 411 && odeCode <= 413);
+                }
             } timeMarchControl;
 
             struct ImplicitReconstructionControl

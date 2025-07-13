@@ -2,6 +2,7 @@
 #include "DNDS/Defines.hpp"
 #include "DNDS/MPI.hpp"
 #include "Scalar.hpp"
+#include "DNDS/JsonUtil.hpp"
 
 namespace DNDS::ODE
 {
@@ -21,6 +22,12 @@ namespace DNDS::ODE
         virtual ~ImplicitDualTimeStep() = default;
 
         virtual TDATA &getLatestRHS() = 0;
+
+        virtual void SetExtraParams(const nlohmann::ordered_json &j)
+        {
+            for (auto &[k, v] : j.items())
+                DNDS_assert_info(false, "no extra params to handle! key is " + k);
+        };
     };
 
     template <class TDATA, class TDTAU>
@@ -877,10 +884,10 @@ namespace DNDS::ODE
             TDTAU &, const std::vector<real> &,
             real, real, TDATA &, int, int)>;
 
-        TDTAU dTau;
+        TDTAU dTau, dTauMid;
         TDATA xMid, rhsMid, rhsFull, resOther;
         std::vector<TDATA> rhsbuf;
-        TDATA xLast;
+        TDATA xLast, xMG0;
         TDATA xIncPrev;
         index DOF;
         index cnPrev;
@@ -892,9 +899,14 @@ namespace DNDS::ODE
         int curSolveMethod = 0;
         int nStartIter = 0;
         real thetaM1 = 0.9146;
+        real thetaM2 = 0.0;
+        real thetaMMG = 0.0;
+        real coefIncMidMG = 0.5;
         real alphaHM3 = 0.5;
         int maskHM3 = 0;
         int maskHM3Exe = 0;
+
+        int nMG = 0;
 
         TDATA xPrev;
         real dtPrev = 0;
@@ -907,16 +919,19 @@ namespace DNDS::ODE
         template <class Finit, class FinitDtau>
         ImplicitHermite3SimpleJacobianDualStep(
             index NDOF, Finit &&finit = [](TDATA &) {}, FinitDtau &&finitDtau = [](TDTAU &) {},
-            real alpha = 0.55, int nCurSolveMethod = 0, int nnStartIter = 0, real thetaM1n = 0.9146, int mask = 0)
+            real alpha = 0.55, int nCurSolveMethod = 0, int nnStartIter = 0,
+            real thetaM1n = 0.9146, real thetaM2n = 0.0, int mask = 0,
+            int nMGn = 4)
             : DOF(NDOF),
               cnPrev(0),
               curSolveMethod(nCurSolveMethod),
               nStartIter(nnStartIter),
               thetaM1(thetaM1n),
+              thetaM2(thetaM2n),
               alphaHM3(alpha),
-              maskHM3(mask)
+              maskHM3(mask),
+              nMG(nMGn)
         {
-
             rhsbuf.resize(3);
             finit(rhsbuf[0]);
             finit(rhsbuf[1]);
@@ -927,13 +942,41 @@ namespace DNDS::ODE
             finit(resOther);
             finit(xLast);
             finit(xIncPrev);
+            finit(xMG0);
             finit(xIncDamper);
             finit(xIncDamper2);
             finit(xPrev);
             finitDtau(dTau);
+            finitDtau(dTauMid);
 
             DNDS_assert_info(mask == 0 || mask == 1 || mask == 2, "mask not supported");
             SetCoefs(1);
+        }
+
+        virtual void SetExtraParams(const nlohmann::ordered_json &j) override
+        {
+            for (auto &[k, v] : j.items())
+            {
+                if (k == "nMG")
+                {
+                    DNDS_assert_info(v.is_number(), "need a number for nMG");
+                    nMG = v;
+                }
+                else if (k == "thetaMMG")
+                {
+                    DNDS_assert_info(v.is_number(), "need a number for thetaMMG");
+                    thetaMMG = v;
+                }
+                else if (k == "coefIncMidMG")
+                {
+                    DNDS_assert_info(v.is_number(), "need a number for coefIncMidMG");
+                    coefIncMidMG = v;
+                }
+                else
+                {
+                    DNDS_assert_info(false, "no such key for HM3: " + k);
+                }
+            }
         }
 
         void SetCoefs(real hR1 = 1)
@@ -1005,19 +1048,26 @@ namespace DNDS::ODE
             SetCoefs(dtPrev / (dt + verySmallReal));
             xLast = x;
             xMid = x;
-            fdt(xLast, dTau, 1.0, 0);
 
             if (hasLastEndPointR)
+            {
                 rhsbuf[0] = rhsbuf[1];
+                // dTau = dTau here
+            }
             else
+            {
+                fdt(xLast, dTau, 1.0, 0);
                 frhs(rhsbuf[0], xLast, dTau, INT_MAX, 0.0, 0);
+            }
             rhsbuf[1] = rhsbuf[0];
             rhsbuf[2] = rhsbuf[0];
+            dTauMid = dTau;
 
             xIncPrev.setConstant(0.0);
             int iter = 1;
 
             int method = curSolveMethod;
+            bool stepIsRealU3R1 = prevSize >= 1 && maskHM3 == 2;
 
             for (; iter <= maxIter; iter++)
             {
@@ -1040,52 +1090,97 @@ namespace DNDS::ODE
                         rhsMid.setConstant(0.0);
                         real thetaCur = thetaM1;
                         {
-                            if (prevSize >= 1 && maskHM3 == 2) // U3R1, cInter[2] is reused for xPrev
-                            {
-                                rhsMid.addTo(xLast, (cInter(0) + thetaCur) / dt);
-                                rhsMid.addTo(x, (cInter(1) - thetaCur) / dt);
+                            if (maskHM3Exe == 1 && maskHM3 == 2)
+                                thetaCur = 1; // for U2R1 filling first step of U3R1
+                            rhsMid.addTo(xLast, (cInter(0) + thetaCur) / dt);
+                            rhsMid.addTo(x, (cInter(1) - thetaCur) / dt);
+                            if (stepIsRealU3R1)
                                 rhsMid.addTo(xPrev, cInter(2) / dt);
-                                rhsMid.addTo(rhsbuf[0], 0 + thetaCur * wInteg(0));
-                                rhsMid.addTo(rhsbuf[1], cInter(3) + thetaCur * wInteg(2));
-                                resOther = rhsMid;
-                                rhsMid.addTo(xMid, -1. / dt);
-                                rhsMid.addTo(rhsbuf[2], thetaCur * wInteg(1));
-                            }
-                            else
-                            {
-                                if (maskHM3Exe == 1 && maskHM3 == 2)
-                                    thetaCur = 1; // for U2R1 filling
-                                rhsMid.addTo(xLast, (cInter(0) + thetaCur) / dt);
-                                rhsMid.addTo(x, (cInter(1) - thetaCur) / dt);
-                                rhsMid.addTo(rhsbuf[0], cInter(2) + thetaCur * wInteg(0));
-                                rhsMid.addTo(rhsbuf[1], cInter(3) + thetaCur * wInteg(2));
-                                resOther = rhsMid;
-                                rhsMid.addTo(xMid, -1. / dt);
-                                rhsMid.addTo(rhsbuf[2], thetaCur * wInteg(1));
-                            }
-                            fdt(xMid, dTau, 1.0, 1);
-                            fsolve(xMid, rhsMid, resOther, dTau, dt, std::abs(thetaCur * wInteg(1)), xinc, iter, alphaHM3, 1);
+                            rhsMid.addTo(rhsbuf[0], (stepIsRealU3R1 ? 0.0 : cInter(2)) + thetaCur * wInteg(0));
+                            rhsMid.addTo(rhsbuf[1], cInter(3) + thetaCur * wInteg(2));
+                            resOther = rhsMid;
+                            rhsMid.addTo(xMid, -1. / dt);
+                            rhsMid.addTo(rhsbuf[2], thetaCur * wInteg(1));
+
+                            fsolve(xMid, rhsMid, resOther, dTauMid, dt, std::abs(thetaCur * wInteg(1)), xinc, iter, alphaHM3, 1);
                         }
 
                         fincrement(xMid, xinc, 1.0, 1);
-
-                        frhs(rhsbuf[2], xMid, dTau, iter, alphaHM3, 1);
+                        fdt(xMid, dTauMid, 1.0, 1);
+                        frhs(rhsbuf[2], xMid, dTauMid, iter, alphaHM3, 1);
 
                         rhsFull.setConstant(0.0);
                         {
-                            rhsFull.addTo(xLast, 1. / dt);
-                            rhsFull.addTo(rhsbuf[0], wInteg(0));
+                            rhsFull.addTo(xLast, (1. + thetaM2 * cInter(0)) / dt);
+                            if (thetaM2)
+                            {
+                                rhsFull.addTo(x, thetaM2 * cInter(1) / dt);
+                                rhsFull.addTo(xMid, -thetaM2 * 1. / dt);
+                                if (stepIsRealU3R1)
+                                    rhsFull.addTo(xPrev, thetaM2 * cInter(2) / dt);
+                            }
+
+                            rhsFull.addTo(rhsbuf[0], wInteg(0) + thetaM2 * (stepIsRealU3R1 ? 0.0 : cInter(2)));
                             rhsFull.addTo(rhsbuf[2], wInteg(1));
+
                             resOther = rhsFull;
                             rhsFull.addTo(x, -1. / dt);
-                            rhsFull.addTo(rhsbuf[1], wInteg(2));
-                            fdt(x, dTau, 1.0, 0);
-                            fsolve(x, rhsFull, resOther, dTau, dt, wInteg(2), xinc, iter, 1.0, 0);
+                            rhsFull.addTo(rhsbuf[1], wInteg(2) + thetaM2 * cInter(3));
+
+                            fsolve(x, rhsFull, resOther, dTau, dt, wInteg(2) + thetaM2 * cInter(3), xinc, iter, 1.0, 0);
                         }
 
                         fincrement(x, xinc, 1.0, 0);
-
+                        fdt(x, dTau, 1.0, 0);
                         frhs(rhsbuf[1], x, dTau, iter, 1.0, 0);
+
+                        // residual #1 + #0 * thetaMMG
+                        rhsFull.setConstant(0.0);
+                        rhsFull.addTo(xLast, (1. + thetaMMG * cInter(0)) / dt);
+                        rhsFull.addTo(x, (thetaMMG * cInter(1)) / dt);
+                        rhsFull.addTo(xMid, -thetaMMG * 1. / dt);
+                        if (stepIsRealU3R1)
+                            rhsFull.addTo(xPrev, thetaMMG * cInter(2) / dt);
+                        rhsFull.addTo(rhsbuf[0], wInteg(0) + thetaMMG * (stepIsRealU3R1 ? 0.0 : cInter(2)));
+                        rhsFull.addTo(rhsbuf[2], wInteg(1));
+                        rhsFull.addTo(x, -1. / dt);
+                        rhsFull.addTo(rhsbuf[1], wInteg(2) + thetaMMG * cInter(3));
+                        // std::cout << thetaMMG << std::endl;
+
+                        // * START pMG part
+                        if (nMG)
+                        {
+                            resOther = rhsFull;
+                            xMG0 = x;
+                            // F_trapz == (xLast - x) / dt + (rLast + r) * 0.5
+                            // F_trapz - F_trapz_0 == (x0 - x) / dt + (r - r_0) * 0.5
+                            for (int iMG = 1; iMG <= nMG; iMG++)
+                            {
+                                // use upos == 2 for lower order spacial frhs
+                                fdt(x, dTau, 1.0, /*upos=*/2);
+                                frhs(rhsbuf[1], x, dTau, iter, 1.0, /*upos=*/2); // pos = 0 for original RHS
+                                if (iMG == 1)
+                                {
+                                    resOther.addTo(rhsbuf[1], -0.5);
+                                    resOther.addTo(x, 1. / dt);
+                                }
+                                rhsMid = resOther;
+                                rhsMid.addTo(rhsbuf[1], 0.5);
+                                rhsMid.addTo(x, -1. / dt);
+
+                                fsolve(x, rhsMid, resOther, dTau, dt, 0.5, xinc, iter, 1.0, /*upos=*/2);
+                                fincrement(x, xinc, 1.0, /*upos=*/2);
+                            }
+                            xinc = x;
+                            xinc.addTo(xMG0, -1.0);
+                            if (coefIncMidMG)
+                                fincrement(xMid, xinc, coefIncMidMG, 1);
+                            fdt(xMid, dTauMid, 1.0, 1);
+                            frhs(rhsbuf[2], xMid, dTauMid, iter, alphaHM3, 1);
+
+                            fdt(x, dTau, 1.0, 0);
+                            frhs(rhsbuf[1], x, dTau, iter, 1.0, 0);
+                        }
                     }
                     else
                     {
@@ -1095,12 +1190,12 @@ namespace DNDS::ODE
 
                 xIncPrev = xinc;
 
-                if (fstop(iter, method == 0 ? rhsMid : rhsFull, 1))
+                if (fstop(iter, rhsFull, 1))
                     if (iter >= nStartIter)
                         break;
             }
             if (iter > maxIter)
-                fstop(iter, method == 0 ? rhsMid : rhsFull, 1);
+                fstop(iter, rhsFull, 1);
 
             hasLastEndPointR = 1;
 

@@ -127,11 +127,11 @@ namespace DNDS::Euler
         {
             cx.trans.startPersistentPull();
             cx.trans.waitPersistentPull(); // for hermite3
-            auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
-            auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
-            auto &uRecIncC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRecInc1 : uRecInc;
-            auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
-            auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
+            auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
+            auto &JSourceC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JSource1 : JSource;
+            auto &uRecIncC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRecInc1 : uRecInc;
+            auto &alphaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? alphaPP1 : alphaPP;
+            auto &betaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? betaPP1 : betaPP;
             // if (mpi.rank == 0)
             //     std::cout << uRecC.father.get() << std::endl;
             typename TVFV::template TFBoundary<nVarsFixed>
@@ -315,8 +315,8 @@ namespace DNDS::Euler
             {
                 Eigen::Array<real, 1, Eigen::Dynamic> resB;
                 int nPCGIterAll{0};
-                auto &pcgRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? pcgRec1 : pcgRec;
-                auto &uRecBC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRecB1 : uRecB;
+                auto &pcgRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? pcgRec1 : pcgRec;
+                auto &uRecBC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRecB1 : uRecB;
 
                 if (iter <= 2 //! consecutive pcg is bad in 0012, using separate pcg
                     || pcgRecC->getPHistorySize() >= config.implicitReconstructionControl.fpcgMaxPHistory)
@@ -421,7 +421,7 @@ namespace DNDS::Euler
             if (gradIsZero)
             {
                 uRec = uRecC;
-                if (config.timeMarchControl.odeCode == 401)
+                if (config.timeMarchControl.timeMarchIsTwoStage())
                     uRec1 = uRecC;
                 gradIsZero = false;
             }
@@ -623,6 +623,14 @@ namespace DNDS::Euler
                 ArrayDOFV<1> &dTau,
                 int iter, real ct, int uPos)
         {
+            if (config.timeMarchControl.timeMarchIsTwoStage() && uPos == 2) // special for two stage (HM3):
+            {
+                // ! mind that JSource, betaPP uses as uPos == 0
+                return eval.EvaluateRHS(crhs, JSource, cx, uRecNew, uRecNew, betaPP, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
+                                        TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration |
+                                            TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
+                                            (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+            }
             return frhsOuter(crhs, cx, dTau, iter, ct, uPos, 1); // reconstructionFlag == 1
         };
 
@@ -633,7 +641,7 @@ namespace DNDS::Euler
             cx.trans.waitPersistentPull();
             // uRec.trans.startPersistentPull();
             // uRec.trans.waitPersistentPull();
-            auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
+            auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
             eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu);
             for (int iS = 1; iS <= config.implicitCFLControl.nSmoothDTau; iS++)
             {
@@ -654,10 +662,10 @@ namespace DNDS::Euler
                               real alpha, int uPos)
         {
             Timer().StartTimer(PerformanceTimer::Positivity);
-            auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
-            auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
-            auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
-            auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
+            auto &alphaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? alphaPP1 : alphaPP;
+            auto &betaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? betaPP1 : betaPP;
+            auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
+            auto &JSourceC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JSource1 : JSource;
             nLimInc = 0;
             alphaMinInc = 1;
             eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, cxInc, alphaPP_tmp, nLimInc, alphaMinInc, config.timeMarchControl.incrementPPRelax,
@@ -702,12 +710,12 @@ namespace DNDS::Euler
                 eval.CentralSmoothResidual(rhsTemp, cres, uTemp);
             }
 
-            auto &JDC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JD1 : JD;
-            auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
-            auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
-            auto &uRecIncC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRecInc1 : uRecInc;
-            auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
-            auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
+            auto &JDC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JD1 : JD;
+            auto &JSourceC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JSource1 : JSource;
+            auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
+            auto &uRecIncC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRecInc1 : uRecInc;
+            auto &alphaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? alphaPP1 : alphaPP;
+            auto &betaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? betaPP1 : betaPP;
 
             Timer().StartTimer(PerformanceTimer::Positivity);
             if (config.timeMarchControl.rhsFPPMode == 1 || config.timeMarchControl.rhsFPPMode == 11)
@@ -966,9 +974,9 @@ namespace DNDS::Euler
             }
 
             cxInc.setConstant(0.0);
-            auto &JDC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JD1 : JD;
-            auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
-            auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
+            auto &JDC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JD1 : JD;
+            auto &JSourceC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JSource1 : JSource;
+            auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
             // TODO: use "update spectral radius" procedure? or force update in fsolve
             eval.EvaluateDt(dTau, cx1, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu);
             dTau *= Coefs[2];
@@ -1080,7 +1088,7 @@ namespace DNDS::Euler
                                    ArrayDOFV<nVarsFixed> &v,
                                    int uPos)
         {
-            auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
+            auto &alphaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? alphaPP1 : alphaPP;
             for (index i = 0; i < v.Size(); i++)
                 v[i] *= alphaPPC[i](0);
         };
@@ -1095,10 +1103,10 @@ namespace DNDS::Euler
                                   int uPos)
         {
             Timer().StartTimer(PerformanceTimer::Positivity);
-            auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
-            auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
-            auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
-            auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
+            auto &alphaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? alphaPP1 : alphaPP;
+            auto &betaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? betaPP1 : betaPP;
+            auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
+            auto &JSourceC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JSource1 : JSource;
             renewRhsIncPart(); // un-fixed now
             // rhsIncPart.trans.startPersistentPull();
             // rhsIncPart.trans.waitPersistentPull(); //seems not needed
@@ -1303,7 +1311,7 @@ namespace DNDS::Euler
                     break;
                 }
             }
-            else if (config.timeMarchControl.odeCode == 401 && false)
+            else if (config.timeMarchControl.timeMarchIsTwoStage() && false)
                 std::dynamic_pointer_cast<ODE::ImplicitHermite3SimpleJacobianDualStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(ode)
                     ->StepNested(
                         u, uIncBufODE,
@@ -1515,7 +1523,7 @@ namespace DNDS::Euler
         ,
         // the intellisense friendly definition
         template <>)
-    void EulerSolver<model>::doPrecondition(real alphaDiag, real t, 
+    void EulerSolver<model>::doPrecondition(real alphaDiag, real t,
                                             TDof &cres, TDof &cx, TDof &cxInc, TDof &uTemp,
                                             JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone, int gridLevel)
     {
@@ -1674,6 +1682,7 @@ namespace DNDS::Euler
                 false); // TODO: add local stepping options
             break;
         case 401: // H3S
+            DNDS_assert(config.timeMarchControl.timeMarchIsTwoStage());
             if (mpi.rank == 0)
                 log() << "=== ODE: Hermite3 (simple jacobian) " << std::endl;
             ode = std::make_shared<ODE::ImplicitHermite3SimpleJacobianDualStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
@@ -1683,12 +1692,34 @@ namespace DNDS::Euler
                 std::round(config.timeMarchControl.odeSetting2),                                         // Backward Euler Starter
                 0,                                                                                       // method
                 config.timeMarchControl.odeSetting3 == 0 ? 0.9146 : config.timeMarchControl.odeSetting3, // thetaM1
+                0.0,                                                                                     // thetaM2 = 0
                 std::round(config.timeMarchControl.odeSetting4)                                          // mask
+            );
+            break;
+        case 411: // H3S U2R2
+        case 412: // H3S U2R1
+        case 413: // H3S U3R1
+            DNDS_assert(config.timeMarchControl.timeMarchIsTwoStage());
+            if (mpi.rank == 0)
+                log() << "=== ODE: Hermite3 (simple jacobian) " + fmt::format("Mask {}", config.timeMarchControl.odeCode - 411)
+                      << std::endl;
+            ode = std::make_shared<ODE::ImplicitHermite3SimpleJacobianDualStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
+                mesh->NumCell(),
+                buildDOF, buildScalar,
+                config.timeMarchControl.odeSetting1 == 0 ? 0.55 : config.timeMarchControl.odeSetting1,
+                std::round(config.timeMarchControl.odeSetting2),                                         // Backward Euler Starter
+                0,                                                                                       // method
+                config.timeMarchControl.odeSetting3 == 0 ? 0.9146 : config.timeMarchControl.odeSetting3, // thetaM1
+                config.timeMarchControl.odeSetting4 == 0 ? 0.0 : config.timeMarchControl.odeSetting4,    // thetaM2
+                config.timeMarchControl.odeCode - 411                                                    // mask
             );
             break;
         default:
             DNDS_assert_info(false, "no such ode code");
         }
+        if (config.timeMarchControl.odeSettingsExtra.is_object())
+            ode->SetExtraParams(config.timeMarchControl.odeSettingsExtra);
+
         if (config.timeMarchControl.useImplicitPP)
         {
             DNDS_assert(config.timeMarchControl.odeCode == 1 || config.timeMarchControl.odeCode == 102);
@@ -1724,7 +1755,7 @@ namespace DNDS::Euler
                     vfv->BuildURec(data, nVars);
                 });
 
-        if (config.implicitReconstructionControl.recLinearScheme == 2 || config.timeMarchControl.odeCode == 401)
+        if (config.implicitReconstructionControl.recLinearScheme == 2 || config.timeMarchControl.timeMarchIsTwoStage())
             pcgRec1 = std::make_unique<tPCG_uRec>(
                 [&](decltype(uRec) &data)
                 {
