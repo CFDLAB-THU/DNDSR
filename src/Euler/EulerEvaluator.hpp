@@ -609,7 +609,7 @@ namespace DNDS::Euler
             }
         }
 
-        TU_Batch fluxFace(
+        void fluxFace(
             const TU_Batch &ULxy,
             const TU_Batch &URxy,
             const TU &ULMeanXy,
@@ -622,6 +622,7 @@ namespace DNDS::Euler
             const TVec &vgC,
             TU_Batch &FLfix,
             TU_Batch &FRfix,
+            TU_Batch &finc,
             TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,
             Geom::t_index btype,
             typename Gas::RiemannSolverType rsType,
@@ -1588,25 +1589,25 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
             bool UseLocaldt,                                                                                               \
             real t,                                                                                                        \
             uint64_t flags);                                                                                               \
-        ext template                                                                                                       \
-            typename EulerEvaluator<model>::TU_Batch                                                                       \
-            EulerEvaluator<model>::fluxFace(                                                                               \
-                const TU_Batch &ULxy,                                                                                      \
-                const TU_Batch &URxy,                                                                                      \
-                const TU &ULMeanXy,                                                                                        \
-                const TU &URMeanXy,                                                                                        \
-                const TDiffU_Batch &DiffUxy,                                                                               \
-                const TDiffU_Batch &DiffUxyPrim,                                                                           \
-                const TVec_Batch &unitNorm,                                                                                \
-                const TVec_Batch &vg,                                                                                      \
-                const TVec &unitNormC,                                                                                     \
-                const TVec &vgC,                                                                                           \
-                TU_Batch &FLfix,                                                                                           \
-                TU_Batch &FRfix,                                                                                           \
-                TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,                                              \
-                Geom::t_index btype,                                                                                       \
-                typename Gas::RiemannSolverType rsType,                                                                    \
-                index iFace, bool ignoreVis);                                                                              \
+        ext template void                                                                                                  \
+        EulerEvaluator<model>::fluxFace(                                                                                   \
+            const TU_Batch &ULxy,                                                                                          \
+            const TU_Batch &URxy,                                                                                          \
+            const TU &ULMeanXy,                                                                                            \
+            const TU &URMeanXy,                                                                                            \
+            const TDiffU_Batch &DiffUxy,                                                                                   \
+            const TDiffU_Batch &DiffUxyPrim,                                                                               \
+            const TVec_Batch &unitNorm,                                                                                    \
+            const TVec_Batch &vg,                                                                                          \
+            const TVec &unitNormC,                                                                                         \
+            const TVec &vgC,                                                                                               \
+            TU_Batch &FLfix,                                                                                               \
+            TU_Batch &FRfix,                                                                                               \
+            TU_Batch &finc,                                                                                                \
+            TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,                                                  \
+            Geom::t_index btype,                                                                                           \
+            typename Gas::RiemannSolverType rsType,                                                                        \
+            index iFace, bool ignoreVis);                                                                                  \
         ext template                                                                                                       \
             typename EulerEvaluator<model>::TU                                                                             \
             EulerEvaluator<model>::source(                                                                                 \

@@ -15,6 +15,50 @@
 
 namespace DNDS::Geom
 {
+
+    inline auto PartitionSerialAdj_Metis(
+        const tLocalMatStruct &mat, int nPart, int metisNCuts = 1, int metisUfactor = 5, int metisSeed = 0)
+    {
+        _METIS::idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat.size()));
+        _METIS::idx_t nCon{1}, options[METIS_NOPTIONS];
+        _METIS::METIS_SetDefaultOptions(options);
+        {
+            options[_METIS::METIS_OPTION_OBJTYPE] = _METIS::METIS_OBJTYPE_CUT;
+            options[_METIS::METIS_OPTION_CTYPE] = _METIS::METIS_CTYPE_SHEM; //? could try shem?
+            options[_METIS::METIS_OPTION_IPTYPE] = _METIS::METIS_IPTYPE_GROW;
+            options[_METIS::METIS_OPTION_RTYPE] = _METIS::METIS_RTYPE_FM;
+            // options[METIS_OPTION_NO2HOP] = 0; // only available in metis 5.1.0
+            options[_METIS::METIS_OPTION_NCUTS] = std::max(metisNCuts, 1);
+            options[_METIS::METIS_OPTION_NITER] = 10;
+            // options[_METIS::METIS_OPTION_UFACTOR] = 30; // load imbalance factor, fow k-way
+            options[_METIS::METIS_OPTION_UFACTOR] = metisUfactor;
+            options[_METIS::METIS_OPTION_MINCONN] = 1;
+            options[_METIS::METIS_OPTION_CONTIG] = 1;       // ! forcing contigious partition now ? necessary?
+            options[_METIS::METIS_OPTION_SEED] = metisSeed; // ! seeding 0 for determined result
+            options[_METIS::METIS_OPTION_NUMBERING] = 0;
+            // options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME | _METIS::METIS_DBG_IPART;
+            // options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME;
+        }
+        const std::vector<std::vector<index>> &cell2cellFaceV = mat;
+        std::vector<_METIS::idx_t> adjncy, xadj, perm, iPerm;
+        xadj.resize(nCell + 1);
+        xadj[0] = 0;
+        for (_METIS::idx_t iC = 0; iC < nCell; iC++)
+            xadj[iC + 1] = signedIntSafeAdd<_METIS::idx_t>(xadj[iC], size_t_to_signed<_METIS::idx_t>(cell2cellFaceV[iC].size())); //! check overflow!
+        adjncy.resize(xadj.back());
+        for (_METIS::idx_t iC = 0; iC < nCell; iC++)
+            std::copy(cell2cellFaceV[iC].begin(), cell2cellFaceV[iC].end(), adjncy.begin() + xadj[iC]);
+        _METIS::idx_t objval;
+        std::vector<_METIS::idx_t> partOut(nCell);
+        auto ret = _METIS::METIS_PartGraphRecursive(
+            &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
+            &nPart, NULL, NULL, options, &objval, partOut.data());
+
+        DNDS_assert_info(ret == _METIS::METIS_OK, fmt::format("Metis return not ok, [{}]", ret));
+
+        return partOut;
+    }
+
     inline std::pair<std::vector<index>, std::vector<index>> ReorderSerialAdj_Metis(const tLocalMatStruct &mat)
     {
         _METIS::idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat.size()));

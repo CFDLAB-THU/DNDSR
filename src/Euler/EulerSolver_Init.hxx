@@ -151,8 +151,20 @@ namespace DNDS::Euler
             mesh->AdjGlobal2LocalPrimary();
             mesh->AdjGlobal2LocalN2CB();
         }
+#ifdef DNDS_USE_OMP
+        // omp_set_num_threads( // note that the meaning is like "omp_set_max_threads()"
+        //     DNDS::MPIWorldSize() == -1
+        //         ? std::min(omp_get_num_procs(), omp_get_max_threads())
+        //         : (get_env_DNDS_DIST_OMP_NUM_THREADS() == 0 ? 1 : DNDS::get_env_DNDS_DIST_OMP_NUM_THREADS()));
+        omp_set_num_threads(
+            (get_env_DNDS_DIST_OMP_NUM_THREADS() == 0 ? 1 : DNDS::get_env_DNDS_DIST_OMP_NUM_THREADS()));
+#endif
         if (config.dataIOControl.meshReorderCells == 1)
+#ifdef DNDS_USE_OMP
+            mesh->ReorderLocalCells(get_env_DNDS_DIST_OMP_NUM_THREADS());
+#else
             mesh->ReorderLocalCells(); // do this early so that faces are natural to cell
+#endif
         // std::cout << "here" << std::endl;
         mesh->InterpolateFace();
         mesh->AssertOnFaces();
@@ -252,12 +264,6 @@ namespace DNDS::Euler
             return; //** mesh preprocess only (without transformation)
         }
 
-#ifdef DNDS_USE_OMP
-        omp_set_num_threads( // note that the meaning is like "omp_set_max_threads()"
-            DNDS::MPIWorldSize() == 1
-                ? std::min(omp_get_num_procs(), omp_get_max_threads())
-                : (get_env_DNDS_DIST_OMP_NUM_THREADS() == 0 ? 1 : DNDS::get_env_DNDS_DIST_OMP_NUM_THREADS()));
-#endif
         mesh->ConstructBndMesh(*meshBnd);
         if (config.dataIOControl.outPltMode == 0)
         {

@@ -649,3 +649,26 @@ namespace DNDS
 {
     std::string GetSetVersionName(const std::string &ver = "");
 }
+
+
+/*
+
+
+
+
+
+
+
+
+
+
+
+*/
+
+#if defined(_MSC_VER)
+#define DNDS_RESTRICT __restrict
+#elif defined(__GNUC__) || defined(__clang__)
+#define DNDS_RESTRICT __restrict__
+#else
+#define DNDS_RESTRICT
+#endif

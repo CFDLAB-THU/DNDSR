@@ -450,9 +450,15 @@ namespace DNDS
             // }
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#pragma omp parallel for schedule(static)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+
+            // #if defined(DNDS_DIST_MT_USE_OMP)
+            // #pragma omp parallel for schedule(static)
+            // #endif
+            //             for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
+            //                 for (index iCell = mesh->LocalPartStart(iPart); iCell < mesh->LocalPartEnd(iPart); iCell++)
             {
                 int nVars = u[iCell].size();
                 auto c2f = mesh->cell2face[iCell];
@@ -517,11 +523,15 @@ namespace DNDS
 
             };
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#pragma omp parallel for schedule(static)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            // #if defined(DNDS_DIST_MT_USE_OMP)
+            // #pragma omp parallel for schedule(static)
+            // #endif
+            //             for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
+            //                 for (index iCell = mesh->LocalPartStart(iPart); iCell < mesh->LocalPartEnd(iPart); iCell++)
             {
-                cellOp(iCell);
                 real relax = cellAtr[iCell].relax;
 
                 if (recordInc)
@@ -610,13 +620,13 @@ namespace DNDS
             {
                 if (putIntoNew && settings.SORInstead)
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#pragma omp parallel for schedule(static)
 #endif
                     for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                         uRecNew[iCell].swap(uRec[iCell]);
                 if ((!putIntoNew) && (!settings.SORInstead))
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#pragma omp parallel for schedule(static)
 #endif
                     for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                         uRec[iCell].swap(uRecNew[iCell]);
@@ -641,7 +651,7 @@ namespace DNDS
             if (settings.maxOrder == 1 && settings.subs2ndOrder != 0)
             {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#pragma omp parallel for schedule(static)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                     uRecNew[iCell].setZero();

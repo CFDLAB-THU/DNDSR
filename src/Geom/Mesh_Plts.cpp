@@ -388,7 +388,15 @@ namespace DNDS::Geom
                 DNDS_assert_info(ret, "search failed");
             }
             else if (flag == 1)
+            {
                 r = mesh->getMPI().rank;
+                // if (mesh->localPartitionStarts.size()) // debug: for inspection of sub-partitions
+                // {
+                //     r *= 10000;
+                //     auto &lps = mesh->localPartitionStarts;
+                //     r += std::upper_bound(lps.begin(), lps.end(), iv) - lps.begin();
+                // }
+            }
             writeDouble(r);
         }
 

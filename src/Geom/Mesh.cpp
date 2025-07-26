@@ -2168,16 +2168,71 @@ namespace DNDS::Geom
                 control.getILUCode());
     }
 
-    void UnstructuredMesh::ReorderLocalCells()
+    void UnstructuredMesh::ReorderLocalCells(int nParts)
     {
         DNDS_assert(this->adjPrimaryState == Adj_PointToLocal);
         auto cell2cellFaceV = this->GetCell2CellFaceVLocal();
         index bwOld{0}, bwNew{0};
-        auto [cellNew2Old, cellOld2New] = ReorderSerialAdj_CorrectRCM(cell2cellFaceV, bwOld, bwNew);
+        std::vector<index> cellOld2New;
+        if (nParts <= 1)
+        {
+            auto [cellNew2Old_, cellOld2New_] = ReorderSerialAdj_CorrectRCM(cell2cellFaceV, bwOld, bwNew);
+            cellOld2New = std::move(cellOld2New_);
+            localPartitionStarts.resize(2);
+            localPartitionStarts[0] = 0;
+            localPartitionStarts[1] = this->NumCell();
+        }
+        else
+        {
+            auto partition_local = PartitionSerialAdj_Metis(cell2cellFaceV, nParts);
+
+            std::vector<std::vector<index>> partsOldiCells(nParts);
+            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+            {
+                auto iP = partition_local.at(iCell);
+                DNDS_assert(0 <= iP and iP < nParts);
+                partsOldiCells.at(iP).push_back(iCell);
+            }
+            localPartitionStarts.resize(nParts + 1);
+            localPartitionStarts[0] = 0;
+            for (int iPart = 0; iPart < nParts; iPart++)
+                localPartitionStarts[iPart + 1] = localPartitionStarts[iPart] + partsOldiCells.at(iPart).size();
+            std::vector<index> partsCellOld2New(nParts);
+            partsCellOld2New.resize(this->NumCell(), UnInitIndex);
+            for (int iPart = 0; iPart < nParts; iPart++)
+            {
+                for (index iCellNew = 0; iCellNew < partsOldiCells[iPart].size(); iCellNew++)
+                    partsCellOld2New.at(partsOldiCells[iPart][iCellNew]) = iCellNew;
+            }
+            cellOld2New.resize(this->NumCell(), UnInitIndex);
+            for (int iPart = 0; iPart < nParts; iPart++)
+            {
+                tLocalMatStruct cell2cellFaceV_part(localPartitionStarts[iPart + 1] - localPartitionStarts[iPart]);
+                for (index iCellN = 0; iCellN < cell2cellFaceV_part.size(); iCellN++)
+                {
+                    auto row = cell2cellFaceV[partsOldiCells[iPart].at(iCellN)];
+                    std::vector<index> row_in_part;
+                    std::copy_if(row.begin(), row.end(), std::back_inserter(row_in_part), [&](index v)
+                                 { return partition_local.at(v) == iPart; });
+                    for (auto &v : row_in_part)
+                        v = partsCellOld2New.at(v);
+                    cell2cellFaceV_part[iCellN] = std::move(row_in_part);
+                }
+                index bwOld_part{0}, bwNew_part{0};
+                auto [cellNewNew2New_, cellNew2NewNew_] = ReorderSerialAdj_CorrectRCM(cell2cellFaceV_part, bwOld_part, bwNew_part);
+                bwOld = std::max(bwOld, bwOld_part);
+                bwNew = std::max(bwNew, bwNew_part);
+                for (index iCellN = 0; iCellN < cell2cellFaceV_part.size(); iCellN++)
+                    cellOld2New.at(partsOldiCells[iPart].at(iCellN)) = localPartitionStarts[iPart] + cellNew2NewNew_.at(iCellN);
+            }
+            for (auto v : cellOld2New)
+                DNDS_assert(v >= 0 and v < this->NumCell());
+        }
+
         MPI::AllreduceOneIndex(bwOld, MPI_MAX, mpi);
         MPI::AllreduceOneIndex(bwNew, MPI_MAX, mpi);
         if (mpi.rank == mRank)
-            log() << fmt::format("UnstructuredMesh === ReorderLocalCells, got reordering, bw [{}] to [{}]", bwOld, bwNew) << std::endl;
+            log() << fmt::format("UnstructuredMesh === ReorderLocalCells, nPart0 [{}], got reordering, bw [{}] to [{}]", nParts, bwOld, bwNew) << std::endl;
         tAdj1Pair cellOld2NewArr;
         DNDS_MAKE_SSP(cellOld2NewArr.father, mpi);
         DNDS_MAKE_SSP(cellOld2NewArr.son, mpi);

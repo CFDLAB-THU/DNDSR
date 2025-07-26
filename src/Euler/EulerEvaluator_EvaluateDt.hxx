@@ -1037,7 +1037,7 @@ namespace DNDS::Euler
         ,
         // the intellisense friendly definition
         template <>)
-    typename EulerEvaluator<model>::TU_Batch EulerEvaluator<model>::fluxFace(
+    void EulerEvaluator<model>::fluxFace(
         const TU_Batch &ULxy,
         const TU_Batch &URxy,
         const TU &ULMeanXy,
@@ -1050,12 +1050,57 @@ namespace DNDS::Euler
         const TVec &vgC,
         TU_Batch &FLfix,
         TU_Batch &FRfix,
+        TU_Batch &finc,
         TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,
         Geom::t_index btype,
         typename Gas::RiemannSolverType rsType,
         index iFace, bool ignoreVis)
     {
+        finc.resizeLike(ULxy);
+        DNDS_assert(&DiffUxy != &DiffUxyPrim);
+        DNDS_assert(&ULMeanXy != &URMeanXy);
+        DNDS_assert(&DiffUxy != &DiffUxyPrim);
+        DNDS_assert(&unitNorm != &vgXY);
+        DNDS_assert(&unitNormC != &vgC);
+        DNDS_assert(&FLfix != &FRfix);
+        DNDS_assert(&lam0V != &lam123V);
+        DNDS_assert(&lam123V != &lam4V); // aliasing check not complete here
+
+        auto fluxFace_impl =
+            [&](
+                const TU_Batch *DNDS_RESTRICT p_ULxy,
+                const TU_Batch *DNDS_RESTRICT p_URxy,
+                const TU *DNDS_RESTRICT p_ULMeanXy,
+                const TU *DNDS_RESTRICT p_URMeanXy,
+                const TDiffU_Batch *DNDS_RESTRICT p_DiffUxy,
+                const TDiffU_Batch *DNDS_RESTRICT p_DiffUxyPrim,
+                const TVec_Batch *DNDS_RESTRICT p_unitNorm,
+                const TVec_Batch *DNDS_RESTRICT p_vgXY,
+                const TVec *DNDS_RESTRICT p_unitNormC,
+                const TVec *DNDS_RESTRICT p_vgC,
+                TU_Batch *DNDS_RESTRICT p_FLfix,
+                TU_Batch *DNDS_RESTRICT p_FRfix,
+                TReal_Batch *DNDS_RESTRICT p_lam0V, TReal_Batch *DNDS_RESTRICT p_lam123V, TReal_Batch *DNDS_RESTRICT p_lam4V,
+                Geom::t_index btype,
+                typename Gas::RiemannSolverType rsType)
+        // clang-format off
+        {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        const TU_Batch &ULxy = *p_ULxy;
+        const TU_Batch &URxy = *p_URxy;
+        const TU &ULMeanXy = *p_ULMeanXy;
+        const TU &URMeanXy = *p_URMeanXy;
+        const TDiffU_Batch &DiffUxy = *p_DiffUxy;
+        const TDiffU_Batch &DiffUxyPrim = *p_DiffUxyPrim;
+        const TVec_Batch &unitNorm = *p_unitNorm;
+        const TVec_Batch &vgXY = *p_vgXY;
+        const TVec &unitNormC = *p_unitNormC;
+        const TVec &vgC = *p_vgC;
+        TU_Batch &FLfix = *p_FLfix;
+        TU_Batch &FRfix = *p_FRfix;
+        TReal_Batch &lam0V = *p_lam0V;
+        TReal_Batch &lam123V = *p_lam123V;
+        TReal_Batch &lam4V = *p_lam4V;
 
         int nB = ULxy.cols();
 
@@ -1084,7 +1129,7 @@ namespace DNDS::Euler
             TDiffU DiffUxyPrimC = DiffUxyPrim(seqC, Eigen::all);
             TVec uNormC = unitNorm(Eigen::all, iB);
             Gas::IdealGasThermal(UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm(),
-                                 gamma, pMean, asqrMean, Hmean);
+                                    gamma, pMean, asqrMean, Hmean);
             DNDS_assert_info(pMean > 0, fmt::format("{}, {}, {}", UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm()));
             real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXYC(0));
             real mufPhy, muf;
@@ -1098,7 +1143,7 @@ namespace DNDS::Euler
                 muf += muTurb;
 
                 real k = settings.idealGasProperty.CpGas * muTurb / 0.9 +
-                         settings.idealGasProperty.CpGas * mufPhy / settings.idealGasProperty.prGas;
+                            settings.idealGasProperty.CpGas * mufPhy / settings.idealGasProperty.prGas;
                 TU VisFlux;
                 VisFlux.resizeLike(ULMeanXy);
                 VisFlux.setZero();
@@ -1156,8 +1201,6 @@ namespace DNDS::Euler
             Gas::InviscidFlux_IdealGas_Dispatcher<dim>(rsType, UL, UR, ULm, URm, vg, n, gamma, finc, dLambda, fixScale, exitFun, lam0, lam123, lam4);
         };
 
-        TU_Batch finc;
-        finc.resizeLike(ULxy);
         // TU_Batch finc1;
         // finc1.resizeLike(ULxy);
         if (settings.rsTypeWall != Gas::UnknownRS &&
@@ -1402,7 +1445,25 @@ namespace DNDS::Euler
             DNDS_assert(false);
         }
 
-        return -finc;
+        finc *= -1.0;
+        };
+        // clang-format on
+        return fluxFace_impl(
+            &ULxy,
+            &URxy,
+            &ULMeanXy,
+            &URMeanXy,
+            &DiffUxy,
+            &DiffUxyPrim,
+            &unitNorm,
+            &vgXY,
+            &unitNormC,
+            &vgC,
+            &FLfix,
+            &FRfix,
+            &lam0V, &lam123V, &lam4V,
+            btype,
+            rsType);
     }
 
     DNDS_SWITCH_INTELLISENSE(
@@ -1608,7 +1669,7 @@ namespace DNDS::Euler
         URxy.resizeLike(ULxy);
         auto bTypeEuler = pBCHandler->GetTypeFromID(btype);
 
-        //TODO: for all linMode == 1: implement more precise linearized BC
+        // TODO: for all linMode == 1: implement more precise linearized BC
 
         if (bTypeEuler == EulerBCType::BCSpecial ||
             bTypeEuler == EulerBCType::BCFar ||

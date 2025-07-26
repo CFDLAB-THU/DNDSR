@@ -174,6 +174,8 @@ namespace DNDS::Geom
         /// for cell local factorization
         tLocalMatStruct cell2cellFaceVLocal;
 
+        std::vector<index> localPartitionStarts;
+
         UnstructuredMesh(const DNDS::MPIInfo &n_mpi, int n_dim)
             : mpi(n_mpi), dim(n_dim) {}
 
@@ -439,7 +441,11 @@ namespace DNDS::Geom
          * \warning RecreatePeriodicNodes and BuildVTKConnectivity results are invalid after this;
          * \warning bnd mesh's cell2parentCell is invalid after this
          */
-        void ReorderLocalCells();
+        void ReorderLocalCells(int nParts = 1);
+
+        int NLocalParts() const { return localPartitionStarts.size() ? localPartitionStarts.size() - 1 : 1; }
+        index LocalPartStart(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart) : 0; }
+        index LocalPartEnd(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart + 1) : this->NumCell(); }
 
         index NumNode() const { return coords.father->Size(); }
         index NumCell() const { return cell2node.father->Size(); }

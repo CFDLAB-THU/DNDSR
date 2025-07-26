@@ -476,7 +476,8 @@ namespace DNDS::Euler
                 });
             TReal_Batch lam0V, lam123V, lam4V;
 
-            TU_Batch fincC = fluxFace(
+            TU_Batch fincC;
+            fluxFace(
                 ULxyV, URxyV,
                 ULMeanXy, URMeanXy,
                 DiffUxyV, DiffUxyPrimV,
@@ -486,6 +487,7 @@ namespace DNDS::Euler
                 GetFaceVGrid(iFace, -1),
                 FLFix,
                 FRFix,
+                fincC,
                 lam0V, lam123V, lam4V,
                 mesh->GetFaceZone(iFace),
                 rsType,
