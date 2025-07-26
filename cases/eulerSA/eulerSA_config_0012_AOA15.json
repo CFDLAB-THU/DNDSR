@@ -16,7 +16,7 @@
     },
     "outputControl": {
         "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 10,
+        "nConsoleCheckInternal": 1,
         "consoleOutputMode": 1,
         "nDataOutC": 100,
         "nDataOut": 10,
@@ -31,9 +31,11 @@
             "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   ",
             "res {termRed}{resRel:.15e}{termReset}   ",
             "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
-            "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"
+            "Time[{telapsedM:.3f}] recTime[{trec:.5f}] recTimeM[{trecM:.5f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"
         ],
-        "dataOutAtInit": true
+        "dataOutAtInit": true,
+        "useCollectiveTimer": true,
+        "_tail": 0
     },
     "implicitCFLControl": {
         "CFL": 50,
@@ -47,11 +49,11 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2-MGtest_1_AOA15.dir/test",
+        "outPltName": "../data/out/NACA0012_H2-MGtest_1_AOA15.dir/testP32MT_new_ilu_n6",
         "outPltMode": 0,
         "readMeshMode": 0,
         "meshDirectBisect": 0,
-        "meshReorderCells": 0,
+        "meshReorderCells": 1,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": false,
         "outAtPointData": true,
@@ -94,7 +96,7 @@
         "fpcgResetReport": 1,
         "recThreshold": 1e-05,
         "nRecConsolCheck": 10,
-        "storeRecInc": true,
+        // "storeRecInc": true,
         "dampRecIncDTau": false
     },
     "limiterControl": {
@@ -117,7 +119,7 @@
         "subs2ndOrder": 1,
         "subs2ndOrderGGScheme": 0,
         "baseSettings": {
-            "localOrientation": true,
+            "localOrientation": false,
             "anisotropicLengths": false
         },
         "functionalSettings": {
@@ -145,13 +147,13 @@
     },
     "linearSolverControl": {
         "jacobiCode": 2,
-        "sgsIter": 0,
+        "sgsIter": 2,
         "sgsWithRec": 0,
-        "gmresCode": 1,
+        "gmresCode": 0,
         "gmresScale": 2,
         "nGmresSpace": 5,
         "nGmresIter": 1,
-        "multiGridLP": 2,
+        "multiGridLP": 0,
         "multiGridLPInnerNIter": 4,
         "multiGridLPInnerNSee": 100,
         "coarseGridLinearSolverControlList": {
@@ -183,7 +185,7 @@
         "directPrecControl": {
             "useDirectPrec": true,
             "iluCode": 2,
-            "orderingCode": 4,
+            "orderingCode": 0,
             "_tail": 0
         }
     },

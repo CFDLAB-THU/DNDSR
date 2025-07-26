@@ -1555,15 +1555,13 @@ namespace DNDS::Euler
 
         if (jacobiCode <= 1)
         {
-            bool useJacobi = jacobiCode == 0;
-            eval.UpdateSGS(alphaDiag, t, cres, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, true, sgsRes);
-            if (useJacobi)
-                cxInc = uTemp;
+            bool useGS = jacobiCode == 1;
+            eval.UpdateSGS(alphaDiag, t, cres, cx, cxInc, uTemp, JDC, true, useGS, sgsRes);
+            cxInc = uTemp;
             cxInc.trans.startPersistentPull();
             cxInc.trans.waitPersistentPull();
-            eval.UpdateSGS(alphaDiag, t, cres, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, false, sgsRes);
-            if (useJacobi)
-                cxInc = uTemp;
+            eval.UpdateSGS(alphaDiag, t, cres, cx, cxInc, uTemp, JDC, false, useGS, sgsRes);
+            cxInc = uTemp;
             cxInc.trans.startPersistentPull();
             cxInc.trans.waitPersistentPull();
             // eval.UpdateLUSGSForward(alphaDiag, cres, cx, cxInc, JDC, cxInc);
@@ -1582,13 +1580,13 @@ namespace DNDS::Euler
                 eval.LUSGSMatrixToJacobianLU(alphaDiag, t, cx, JDC, *JLocalLU), hasLUDone = true;
             for (int iii = 0; iii < 2; iii++)
             {
-                eval.LUSGSMatrixSolveJacobianLU(alphaDiag, t, cres, cx, cxInc, uTemp, rhsTemp, JDC, *JLocalLU, sgsRes);
+                eval.LUSGSMatrixSolveJacobianLU(alphaDiag, t, cres, cx, cxInc, uTemp, rhsTemp, JDC, *JLocalLU, inputIsZero, sgsRes);
                 uTemp.SwapDataFatherSon(cxInc);
                 // cxInc = uTemp;
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
+                inputIsZero = false;
             }
-            inputIsZero = false;
         }
     }
 

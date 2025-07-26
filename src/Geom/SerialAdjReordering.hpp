@@ -17,7 +17,8 @@ namespace DNDS::Geom
 {
 
     inline auto PartitionSerialAdj_Metis(
-        const tLocalMatStruct &mat, int nPart, int metisNCuts = 1, int metisUfactor = 5, int metisSeed = 0)
+        const tLocalMatStruct &mat, int nPart,
+        std::string metisType = "KWAY", int metisNCuts = 3, int metisUfactor = 5, int metisSeed = 0)
     {
         _METIS::idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat.size()));
         _METIS::idx_t nCon{1}, options[METIS_NOPTIONS];
@@ -50,9 +51,16 @@ namespace DNDS::Geom
             std::copy(cell2cellFaceV[iC].begin(), cell2cellFaceV[iC].end(), adjncy.begin() + xadj[iC]);
         _METIS::idx_t objval;
         std::vector<_METIS::idx_t> partOut(nCell);
-        auto ret = _METIS::METIS_PartGraphRecursive(
-            &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
-            &nPart, NULL, NULL, options, &objval, partOut.data());
+
+        int ret{0};
+        if (metisType == "RB")
+            ret = _METIS::METIS_PartGraphRecursive(
+                &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
+                &nPart, NULL, NULL, options, &objval, partOut.data());
+        else if (metisType == "KWAY")
+            ret = _METIS::METIS_PartGraphKway(
+                &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
+                &nPart, NULL, NULL, options, &objval, partOut.data());
 
         DNDS_assert_info(ret == _METIS::METIS_OK, fmt::format("Metis return not ok, [{}]", ret));
 

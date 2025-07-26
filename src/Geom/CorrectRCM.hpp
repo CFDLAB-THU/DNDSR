@@ -179,7 +179,7 @@ namespace CorrectRCM
                 os.value().get() << "  Part [" << iIter << "], " << "processed [" << cTop << "/" << G.GetNVertices() << "]" << std::endl;
             if (unvisited.empty())
                 break;
-            nextRoot = *unvisited.begin();
+            nextRoot = *unvisited.begin(); // we handle disjoint graphs
         }
         if (os.has_value())
             os.value().get() << "CorrectRCM::CuthillMcKeeOrdering: Finished" << std::endl;

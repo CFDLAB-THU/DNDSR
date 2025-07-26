@@ -71,9 +71,33 @@ namespace DNDS::Euler
             // for (index i = 0; i < this->Size(); i++)
             //     this->operator[](i) = R.operator[](i);
             DNDS_assert(R.father->RawDataVector().size() == this->father->RawDataVector().size());
-            std::copy(R.father->RawDataVector().begin(), R.father->RawDataVector().end(), this->father->RawDataVector().begin());
             DNDS_assert(R.son->RawDataVector().size() == this->son->RawDataVector().size());
+
+            // #if defined(DNDS_DIST_MT_USE_OMP)
+            //             {
+            //                 size_t part_size = R.father->RawDataVector().size() / omp_get_max_threads();
+            // #pragma omp parallel for schedule(static)
+            //                 for (int iT = 0; iT < omp_get_max_threads(); iT++)
+            //                     std::copy(R.father->RawDataVector().begin() + part_size * iT,
+            //                               (iT == omp_get_max_threads() - 1)
+            //                                   ? R.father->RawDataVector().end()
+            //                                   : R.father->RawDataVector().begin() + part_size * (iT + 1),
+            //                               this->father->RawDataVector().begin() + part_size * iT);
+            //             }
+            //             {
+            //                 size_t part_size = R.son->RawDataVector().size() / omp_get_max_threads();
+            // #pragma omp parallel for schedule(static)
+            //                 for (int iT = 0; iT < omp_get_max_threads(); iT++)
+            //                     std::copy(R.son->RawDataVector().begin() + part_size * iT,
+            //                               (iT == omp_get_max_threads() - 1)
+            //                                   ? R.son->RawDataVector().end()
+            //                                   : R.son->RawDataVector().begin() + part_size * (iT + 1),
+            //                               this->son->RawDataVector().begin() + part_size * iT);
+            //             }
+            // #else
+            std::copy(R.father->RawDataVector().begin(), R.father->RawDataVector().end(), this->father->RawDataVector().begin());
             std::copy(R.son->RawDataVector().begin(), R.son->RawDataVector().end(), this->son->RawDataVector().begin());
+            // #endif
         }
 
         void addTo(const t_self &R, real r)

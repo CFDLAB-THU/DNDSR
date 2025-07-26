@@ -157,3 +157,19 @@ RHS time: (intOrderVR=5, cacheDiffBase=true)
 | ----------------------- | ---------- | ---------- |
 | IV10U_10_bisect3 serial | 0.112      | 0.079      |
 | Uniform32_3D_Periodic 4 | 0.781      | 0.353      |
+
+
+## OMP
+
+running OMP needs caution (mpi/srun needs to allocate enough cores to each process)
+
+For openMPI running on local machine:
+
+```bash
+export OMP_NUM_THREADS=32
+export OMP_SCHEDULE=GUIDED
+export DNDS_DIST_OMP_NUM_THREADS=8
+mpirun --bind-to core --map-by slot:PE=$DNDS_DIST_OMP_NUM_THREADS --report-bindings -np 4 app/eulerSA.exe ../cases/eulerSA/eulerSA_config_0012_AOA15.json
+```
+
+remember using `meshReorderCells` to allow local partitions

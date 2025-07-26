@@ -76,23 +76,6 @@ namespace DNDS::Euler
                 v.second.Reset();
         }
 
-        auto cellIsHalfAlpha = [&](index iCell) -> bool // iCell should be internal
-        {
-            bool ret = false;
-            if (cellRHSAlpha[iCell](0) == 1.0)
-            {
-                auto c2f = mesh->cell2face[iCell];
-                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
-                {
-                    index iCellOther = vfv->CellFaceOther(iCell, c2f[ic2f]);
-                    if (iCellOther != UnInitIndex)
-                        if (cellRHSAlpha[iCellOther](0) != 1.0)
-                            ret = true;
-                }
-            }
-            return ret;
-        };
-
         // direct2ndRec = true;
         if (direct2ndRec)
         {
@@ -139,6 +122,8 @@ namespace DNDS::Euler
 
         };
 
+        double t0 = MPI_Wtime();
+
 #if defined(DNDS_DIST_MT_USE_OMP)
 #pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
 #pragma omp parallel for schedule(runtime) reduction(TUAdd : fluxWallSumLocal)
@@ -149,16 +134,6 @@ namespace DNDS::Euler
             auto f2c = mesh->face2cell[iFace];
             Elem::Quadrature gFace = direct2ndRec ? vfv->GetFaceQuadO1(iFace) : vfv->GetFaceQuad(iFace);
             Eigen::Matrix<real, nVarsFixed, 1, Eigen::ColMajor> fluxEs(cnvars, 1);
-            if (onlyOnHalfAlpha)
-            {
-                // bool lIsHalfAlpha = cellIsHalfAlpha(f2c[0]);
-                // bool rIsHalfAlpha =
-                //     (f2c[1] != UnInitIndex && f2c[1] < mesh->NumCell()) // must be owned cell!
-                //         ? cellIsHalfAlpha(f2c[0])
-                //         : false;
-                // if (!(lIsHalfAlpha || rIsHalfAlpha))
-                //     continue;
-            }
 
             fluxEs.setZero();
 
@@ -623,27 +598,29 @@ namespace DNDS::Euler
         }
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
-        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-        {
-            auto c2f = mesh->cell2face[iCell];
-            for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+#pragma omp parallel for schedule(static)
+        for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
+            for (index iCell = mesh->LocalPartStart(iPart); iCell < mesh->LocalPartEnd(iPart); iCell++)
             {
-                index iFace = c2f[ic2f];
-                int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
-                TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1);
-                this->UFromFace2Cell(fluxFaceC, iFace, iCell, if2c);
-
-                rhs[iCell] += fluxFaceC / vfv->GetCellVol(iCell);
-                if (mesh->face2cell(iFace, 1 - if2c) == iCell) // check for self-facing face
+                auto c2f = mesh->cell2face[iCell];
+                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
-                    TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1) * (-1);
-                    this->UFromFace2Cell(fluxFaceC, iFace, iCell, 1 - if2c); // use 1-if2c to force use the other periodic state
+                    index iFace = c2f[ic2f];
+                    int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1);
+                    this->UFromFace2Cell(fluxFaceC, iFace, iCell, if2c);
+
                     rhs[iCell] += fluxFaceC / vfv->GetCellVol(iCell);
+                    if (mesh->face2cell(iFace, 1 - if2c) == iCell) // check for self-facing face
+                    {
+                        TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1) * (-1);
+                        this->UFromFace2Cell(fluxFaceC, iFace, iCell, 1 - if2c); // use 1-if2c to force use the other periodic state
+                        rhs[iCell] += fluxFaceC / vfv->GetCellVol(iCell);
+                    }
                 }
             }
-        }
 #endif
+        double t1 = MPI_Wtime();
 
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS After Flux");
 
@@ -655,16 +632,11 @@ namespace DNDS::Euler
         {
             JSource.clearValues();
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#pragma omp parallel for schedule(guided)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 cellOp(iCell);
-                if (onlyOnHalfAlpha)
-                {
-                    //     if (!cellIsHalfAlpha(iCell))
-                    //         continue;
-                }
                 auto gCell = direct2ndRec ? vfv->GetCellQuadO1(iCell) : vfv->GetCellQuad(iCell);
 
                 TDiffU cellGrad2nd;
@@ -794,5 +766,12 @@ namespace DNDS::Euler
             for (auto &i : bndIntegrations)
                 i.second.Reduce();
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateRHS -1");
+
+        double t2 = MPI_Wtime();
+
+        // if (u.father->getMPI().rank == 0)
+        // {
+        //     std::cout << fmt::format("ti01 [{}] ti12 [{}]", t1 - t0, t2 - t1) << std::endl;
+        // }
     }
 }

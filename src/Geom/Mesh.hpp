@@ -172,7 +172,7 @@ namespace DNDS::Geom
         // tAdj1Pair bndFaces; // no comm needed for now
 
         /// for cell local factorization
-        tLocalMatStruct cell2cellFaceVLocal;
+        tLocalMatStruct cell2cellFaceVLocalParts;
 
         std::vector<index> localPartitionStarts;
 
@@ -433,7 +433,7 @@ namespace DNDS::Geom
          * cell2cell for local mesh, which do not contain
          * the diagonal part; should be a diag-less symmetric adjacency matrix
          */
-        tLocalMatStruct GetCell2CellFaceVLocal();
+        tLocalMatStruct GetCell2CellFaceVLocal(bool onLocalPartition = false);
 
         void ObtainLocalFactFillOrdering(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control);                // 1 uses metis, 2 uses MMD, //TODO 10 uses geometric based searching
         void ObtainSymmetricSymbolicFactorization(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control) const; // -1 use full LU, 0-3 use ilu(code),

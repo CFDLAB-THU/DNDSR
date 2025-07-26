@@ -342,7 +342,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &uInc,
             ArrayDOFV<nVarsFixed> &uIncNew,
             JacobianDiagBlock<nVarsFixed> &JDiag,
-            bool forward, TU &sumInc);
+            bool forward, bool gsUpdate, TU &sumInc);
 
         void LUSGSMatrixSolveJacobianLU(
             real alphaDiag,
@@ -354,6 +354,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &bBuf,
             JacobianDiagBlock<nVarsFixed> &JDiag,
             JacobianLocalLU<nVarsFixed> &jacLU,
+            bool uIncIsZero,
             TU &sumInc);
 
         void UpdateSGSWithRec(
@@ -1487,7 +1488,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &uInc,                                                                                  \
             ArrayDOFV<nVarsFixed> &uIncNew,                                                                               \
             JacobianDiagBlock<nVarsFixed> &JDiag,                                                                         \
-            bool forward, TU &sumInc);                                                                                    \
+            bool forward, bool gsUpdate, TU &sumInc);                                                                     \
         ext template void EulerEvaluator<model>::UpdateSGSWithRec(                                                        \
             real alphaDiag,                                                                                               \
             real t,                                                                                                       \
@@ -1509,6 +1510,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &bBuf,                                                                                  \
             JacobianDiagBlock<nVarsFixed> &JDiag,                                                                         \
             JacobianLocalLU<nVarsFixed> &jacLU,                                                                           \
+            bool uIncIsZero,                                                                                              \
             TU &sumInc);                                                                                                  \
                                                                                                                           \
         ext template void EulerEvaluator<model>::InitializeUDOF(ArrayDOFV<nVarsFixed> &u);                                \

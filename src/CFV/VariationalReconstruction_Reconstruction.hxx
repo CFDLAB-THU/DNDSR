@@ -519,102 +519,100 @@ namespace DNDS
                 return;
             }
 
-            auto cellOp = [&](index iCell) {
-
-            };
-#if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
-#endif
-            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             // #if defined(DNDS_DIST_MT_USE_OMP)
             // #pragma omp parallel for schedule(static)
             // #endif
-            //             for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
-            //                 for (index iCell = mesh->LocalPartStart(iPart); iCell < mesh->LocalPartEnd(iPart); iCell++)
-            {
-                real relax = cellAtr[iCell].relax;
+            //             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
 
-                if (recordInc)
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(static)
+#endif
+            for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
+                for (index iCell = mesh->LocalPartStart(iPart); iCell < mesh->LocalPartEnd(iPart); iCell++)
                 {
-                    if (uRecIsZero)
-                        uRecNew[iCell].setZero();
-                    else
-                        uRecNew[iCell] = uRec[iCell];
-                }
-                else if (settings.SORInstead)
-                    uRec[iCell] = uRec[iCell] * ((recordInc ? 0 : 1) - relax);
-                else
-                    uRecNew[iCell] = uRec[iCell] * ((recordInc ? 0 : 1) - relax);
+                    real relax = cellAtr[iCell].relax;
 
-                auto c2f = mesh->cell2face[iCell];
-                auto matrixAAInvBRow = matrixAAInvB[iCell];
-                auto vectorAInvBRow = vectorAInvB[iCell];
-                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
-                {
-                    index iFace = c2f[ic2f];
-                    index iCellOther = CellFaceOther(iCell, iFace);
-                    auto faceID = mesh->GetFaceZone(iFace);
-                    int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
-                    if (iCellOther != UnInitIndex)
+                    if (recordInc)
                     {
-                        Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther];
-                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOther = uRec[iCellOther];
-                        if (mesh->isPeriodic)
+                        if (uRecIsZero)
+                            uRecNew[iCell].setZero();
+                        else
+                            uRecNew[iCell] = uRec[iCell];
+                    }
+                    else if (settings.SORInstead)
+                        uRec[iCell] = uRec[iCell] * ((recordInc ? 0 : 1) - relax);
+                    else
+                        uRecNew[iCell] = uRec[iCell] * ((recordInc ? 0 : 1) - relax);
+
+                    auto c2f = mesh->cell2face[iCell];
+                    auto matrixAAInvBRow = matrixAAInvB[iCell];
+                    auto vectorAInvBRow = vectorAInvB[iCell];
+                    for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+                    {
+                        index iFace = c2f[ic2f];
+                        index iCellOther = CellFaceOther(iCell, iFace);
+                        auto faceID = mesh->GetFaceZone(iFace);
+                        int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                        if (iCellOther != UnInitIndex)
                         {
-                            DNDS_assert(FTransPeriodic && FTransPeriodicBack);
-                            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                                FTransPeriodic(uOther, faceID), FTransPeriodic(uRecOther, faceID);
-                            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                                FTransPeriodicBack(uOther, faceID), FTransPeriodicBack(uRecOther, faceID);
-                        }
-                        if (recordInc)
-                        {
-                            if (uRecIsZero)
-                                uRecNew[iCell] -=
-                                    (vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
+                            Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther];
+                            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOther = uRec[iCellOther];
+                            if (mesh->isPeriodic)
+                            {
+                                DNDS_assert(FTransPeriodic && FTransPeriodicBack);
+                                if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
+                                    (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
+                                    FTransPeriodic(uOther, faceID), FTransPeriodic(uRecOther, faceID);
+                                if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
+                                    (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
+                                    FTransPeriodicBack(uOther, faceID), FTransPeriodicBack(uRecOther, faceID);
+                            }
+                            if (recordInc)
+                            {
+                                if (uRecIsZero)
+                                    uRecNew[iCell] -=
+                                        (vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
+                                else
+                                    uRecNew[iCell] -=
+                                        (matrixAAInvBRow[ic2f + 1] * uRecOther +
+                                         vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
+                            }
+                            else if (settings.SORInstead)
+                                uRec[iCell] +=
+                                    relax *
+                                    (matrixAAInvBRow[ic2f + 1] * uRecOther +
+                                     vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
                             else
-                                uRecNew[iCell] -=
+                                uRecNew[iCell] +=
+                                    relax *
                                     (matrixAAInvBRow[ic2f + 1] * uRecOther +
                                      vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
                         }
-                        else if (settings.SORInstead)
-                            uRec[iCell] +=
-                                relax *
-                                (matrixAAInvBRow[ic2f + 1] * uRecOther +
-                                 vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
                         else
-                            uRecNew[iCell] +=
-                                relax *
-                                (matrixAAInvBRow[ic2f + 1] * uRecOther +
-                                 vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
-                    }
-                    else
-                    {
-                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC = GetBoundaryRHS(uRec, u, iCell, iFace, FBoundary);
-                        // BCC *= 0;
-                        if (recordInc)
                         {
-                            if (uRecIsZero)
-                                ;
+                            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC = GetBoundaryRHS(uRec, u, iCell, iFace, FBoundary);
+                            // BCC *= 0;
+                            if (recordInc)
+                            {
+                                if (uRecIsZero)
+                                    ;
+                                else
+                                    uRecNew[iCell] -=
+                                        matrixAAInvBRow[0] * BCC;
+                            }
+                            else if (settings.SORInstead && !recordInc)
+                                uRec[iCell] +=
+                                    relax * matrixAAInvBRow[0] * BCC;
                             else
-                                uRecNew[iCell] -=
-                                    matrixAAInvBRow[0] * BCC;
+                                uRecNew[iCell] +=
+                                    relax * matrixAAInvBRow[0] * BCC;
                         }
-                        else if (settings.SORInstead && !recordInc)
-                            uRec[iCell] +=
-                                relax * matrixAAInvBRow[0] * BCC;
-                        else
-                            uRecNew[iCell] +=
-                                relax * matrixAAInvBRow[0] * BCC;
+                    }
+                    if ((!uRecNew[iCell].allFinite()) || (!uRec[iCell].allFinite()))
+                    {
+                        DNDS_assert(false);
                     }
                 }
-                if ((!uRecNew[iCell].allFinite()) || (!uRec[iCell].allFinite()))
-                {
-                    DNDS_assert(false);
-                }
-            }
 
             if (!recordInc)
             {

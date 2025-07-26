@@ -2164,7 +2164,8 @@ namespace DNDS::Geom
     {
         if (control.useDirectPrec)
             symLU.ObtainSymmetricSymbolicFactorization(
-                cell2cellFaceVLocal,
+                cell2cellFaceVLocalParts,
+                this->localPartitionStarts,
                 control.getILUCode());
     }
 
