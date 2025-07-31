@@ -855,7 +855,7 @@ namespace DNDS::ODE
 
         virtual TDATA &getLatestRHS() override
         {
-            return rhs;
+            return rhsbuf[0];
         }
 
         virtual ~ImplicitVBDFDualTimeStep() = default;
@@ -1161,21 +1161,35 @@ namespace DNDS::ODE
                         frhs(rhsbuf[1], x, dTau, iter, 1.0, 0);
 
                         // residual #1 + #0 * thetaMMG
-                        rhsFull.setConstant(0.0);
-                        rhsFull.addTo(xLast, (1. + thetaMMG * cInter(0)) / dt);
-                        rhsFull.addTo(x, (thetaMMG * cInter(1)) / dt);
-                        rhsFull.addTo(xMid, -thetaMMG * 1. / dt);
-                        if (stepIsRealU3R1)
-                            rhsFull.addTo(xPrev, thetaMMG * cInter(2) / dt);
-                        rhsFull.addTo(rhsbuf[0], wInteg(0) + thetaMMG * (stepIsRealU3R1 ? 0.0 : cInter(2)));
-                        rhsFull.addTo(rhsbuf[2], wInteg(1));
-                        rhsFull.addTo(x, -1. / dt);
-                        rhsFull.addTo(rhsbuf[1], wInteg(2) + thetaMMG * cInter(3));
+                        {
+                            rhsFull.setConstant(0.0);
+                            rhsFull.addTo(xLast, (1. + thetaMMG * cInter(0)) / dt);
+                            rhsFull.addTo(x, (thetaMMG * cInter(1)) / dt);
+                            rhsFull.addTo(xMid, -thetaMMG * 1. / dt);
+                            if (stepIsRealU3R1)
+                                rhsFull.addTo(xPrev, thetaMMG * cInter(2) / dt);
+                            rhsFull.addTo(rhsbuf[0], wInteg(0) + thetaMMG * (stepIsRealU3R1 ? 0.0 : cInter(2)));
+                            rhsFull.addTo(rhsbuf[2], wInteg(1));
+                            rhsFull.addTo(x, -1. / dt);
+                            rhsFull.addTo(rhsbuf[1], wInteg(2) + thetaMMG * cInter(3));
+                        }
                         // std::cout << thetaMMG << std::endl;
 
                         // * START pMG part
                         if (nMG)
                         {
+                            {
+                                // resOther.setConstant(0.0);
+                                // resOther.addTo(xLast, (1. + thetaMMG * cInter(0)) / dt);
+                                // resOther.addTo(x, (thetaMMG * cInter(1)) / dt);
+                                // resOther.addTo(xMid, -thetaMMG * 1. / dt);
+                                // if (stepIsRealU3R1)
+                                //     resOther.addTo(xPrev, thetaMMG * cInter(2) / dt);
+                                // resOther.addTo(rhsbuf[0], wInteg(0) + thetaMMG * (stepIsRealU3R1 ? 0.0 : cInter(2)));
+                                // resOther.addTo(rhsbuf[2], wInteg(1));
+                                // resOther.addTo(x, -1. / dt);
+                                // resOther.addTo(rhsbuf[1], wInteg(2) + thetaMMG * cInter(3));
+                            }
                             resOther = rhsFull;
                             xMG0 = x;
                             xMG0 *= 0.5;
