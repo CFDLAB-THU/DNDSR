@@ -197,13 +197,24 @@ namespace DNDS::Serializer
         // std::cout << "name is " << name << std::endl;
         if (info->type == H5L_TYPE_HARD)
         {
+            data->contents.groups.push_back(name);
+            return 0;
+            //! now it seems obj_info is not correctly retrieved with type=Unknown
+            //! TODO: fix this and get actual object type
             H5O_info_t obj_info;
             hid_t lapl_id = H5Pcreate(H5P_LINK_ACCESS);
             DNDS_assert(lapl_id >= 0);
-            if (coll_on_meta)
-                herr = H5Pset_all_coll_metadata_ops(lapl_id, true), H5CHECK_Set;
+            herr = H5Pset_all_coll_metadata_ops(lapl_id, true), H5CHECK_Set;
+            // if (coll_on_meta)
+            //     herr = H5Pset_all_coll_metadata_ops(lapl_id, true), H5CHECK_Set;
             if (H5Oget_info_by_name(group_id, name, &obj_info, H5P_DEFAULT, lapl_id) >= 0)
             {
+                std::cout << "name is " << name << ", \n"
+                          << obj_info.type << "\n"
+                          << obj_info.mtime << "\n"
+                          << obj_info.rc << "\n"
+                          << obj_info.fileno << "\n"
+                          << std::endl;
                 switch (obj_info.type)
                 {
                 case H5O_TYPE_GROUP:
@@ -226,6 +237,7 @@ namespace DNDS::Serializer
             else
             {
                 std::cerr << "Error getting object info for: " << full_name << std::endl;
+                H5Eprint2(H5E_DEFAULT, stderr);
             }
             herr = H5Pclose(lapl_id), H5CHECK_Close;
         }
