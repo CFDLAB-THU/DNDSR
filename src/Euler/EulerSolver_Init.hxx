@@ -517,16 +517,32 @@ namespace DNDS::Euler
 
         // auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
 
+        bool useRHSasResBase = !config.timeMarchControl.steadyQuit && config.convergenceControl.resBaseType == 1;
+
         Eigen::VectorFMTSafe<real, -1> res(nVars);
         eval.EvaluateNorm(res, cres, 1, config.convergenceControl.useVolWiseResidual);
         Eigen::VectorFMTSafe<real, -1> resBaseNorm = res;
-        // if (!config.timeMarchControl.steadyQuit) // use RHS instead of res
-        //     eval.EvaluateNorm(resBaseNorm, ode->getLatestRHS(), 1, config.convergenceControl.useVolWiseResidual);
-        // if (iter == 1 && iStep == 1) // * using 1st rk step for reference
+
         if (iter == 1)
-            resBaseCInternal = resBaseNorm;
-        else
-            resBaseCInternal = resBaseCInternal.array().max(resBaseNorm.array()); //! using max !
+            resBaseCInternal.setZero();
+
+        if (useRHSasResBase)
+        {
+            if (iter == 1)
+            {
+                Eigen::VectorFMTSafe<real, -1> rhsBaseNorm(nVars);
+                eval.EvaluateNorm(rhsBaseNorm, ode->getLatestRHS(), 1, config.convergenceControl.useVolWiseResidual);
+                resBaseCInternal = rhsBaseNorm;
+            }
+            // {
+            //     resBaseNorm = resBaseCInternal; // using Only RHS no res
+            // }
+        }
+
+        // if (iter == 1 && iStep == 1)
+        // * using 1st rk step for reference
+        
+        resBaseCInternal = resBaseCInternal.array().max(resBaseNorm.array()); //! using max !
 
         Eigen::VectorFMTSafe<real, -1> resRel = (res.array() / (resBaseCInternal.array() + verySmallReal)).matrix();
         bool ifStop = resRel(0) < config.convergenceControl.rhsThresholdInternal; // ! using only rho's residual

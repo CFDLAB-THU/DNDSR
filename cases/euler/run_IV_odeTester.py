@@ -14,23 +14,35 @@ handler = GraceExit(max_attempts=5)
 
 config_name = os.path.join(dirname, "euler_config_HM3Tester.json")
 
-out_base = "../data/outUnsteady/IV_HM3Test_B0"
+# out_base = "../data/outUnsteady/IV_HM3Test_B0_JC2"
+
+out_base = "../data/outUnsteady/IV_HM3Test_B0_JC2_RB"
 
 ode_select = [
     "U2R2",
     "U2R2OP",
-    "U2R2Pre0p75m2",
-    "U2R2Pre1mInf",
-    "U2R2Pre1m2",
-    # "ESDIRK4",
-    # "BDF2",
+    "U2R2Pre0p75m0",
+    # "U2R2Pre0p75m2",
+    # "U2R2Pre1m2",
+    "ESDIRK4",
+    "BDF2",
+    # "U2R2Pre1mInf",
 ]
+
+dt_opts = collections.defaultdict(lambda: [0.4, 0.2, 0.1, 0.1 / 2, 0.1 / 4])
+dt_opts["BDF2"] = [0.4, 0.2, 0.1, 0.1 / 2, 0.1 / 4, 0.1 / 8, 0.1 / 16]
 
 name_prefix = ""
 
 # name_prefix = "x1-"
 
 os.makedirs(out_base, exist_ok=True)
+
+global_opt = {
+    "/linearSolverControl/jacobiCode": 2,
+    "/linearSolverControl/sgsIter": 0,
+    "/dataIOControl/meshDirectBisect": 0,
+}
 
 ode_opts = {}
 
@@ -86,6 +98,19 @@ ode_opts["U2R2Pre0p75m2"] = {
     },
 }
 
+ode_opts["U2R2Pre0p75m0"] = {
+    "/timeMarchControl/odeCode": 411,
+    "/timeMarchControl/odeSetting1": 0.5,
+    "/timeMarchControl/odeSetting2": 0,
+    "/timeMarchControl/odeSetting3": 0.75,
+    "/timeMarchControl/odeSetting4": 0,
+    "/timeMarchControl/odeSettingsExtra": {
+        "nMG": 0,
+        "thetaMMG": 1,
+        "coefIncMidMG": 1,
+    },
+}
+
 ode_opts["U2R2OP"] = {
     "/timeMarchControl/odeCode": 411,
     "/timeMarchControl/odeSetting1": 0.5,
@@ -111,19 +136,19 @@ ode_opts["BDF2"] = {
 
 # as tEnd = 2
 
-dt_opts = collections.defaultdict(lambda: [0.4, 0.2, 0.1, 0.1 / 2, 0.1 / 4])
-dt_opts["BDF2"] = [0.4, 0.2, 0.1, 0.1 / 2, 0.1 / 4, 0.1 / 8, 0.1 / 16, 0.1 / 32]
-
 
 options_list = {}
 
 for ode in ode_select:
     ode_opt = ode_opts[ode]
     dt_opt = dt_opts[ode]
+    cur_opt = {}
+    cur_opt.update(global_opt)
+    cur_opt.update(ode_opt)
     for idt, dt in enumerate(dt_opt):
         case_name = name_prefix + f"out_{ode}_{idt}"
         cOption = []
-        for k, v in ode_opt.items():
+        for k, v in cur_opt.items():
             cOption.append((k, json.dumps(v)))
         cOption.append(("/timeMarchControl/dtImplicit", f"{dt}"))
         cOption.append(
@@ -161,7 +186,11 @@ try:
         print("--" * 32)
         pprint.pprint(cmd)
 
-        with open(os.path.join(out_base, f"{name}-stdout.txt"), "w") as stdout_file:
+        stdout_file = os.path.join(out_base, f"{name}-stdout.txt")
+
+        print(f"stdout_file: {stdout_file}")
+
+        with open(stdout_file, "w") as stdout_file:
             subprocess.run(
                 cmd,
                 stdout=stdout_file,

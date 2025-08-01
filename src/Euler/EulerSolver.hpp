@@ -279,6 +279,7 @@ namespace DNDS::Euler
                 int nAnchorUpdateStart = 0;
                 real rhsThresholdInternal = 1e-10;
                 real res_base = 0;
+                int resBaseType = 0; // 1 to use rhs as base in unsteady
                 bool useVolWiseResidual = false;
                 bool useCLDriver = false;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
@@ -286,7 +287,7 @@ namespace DNDS::Euler
                     nTimeStepInternal, nTimeStepInternalMin,
                     nAnchorUpdate, nAnchorUpdateStart,
                     rhsThresholdInternal,
-                    res_base,
+                    res_base, resBaseType,
                     useVolWiseResidual,
                     useCLDriver)
             } convergenceControl;

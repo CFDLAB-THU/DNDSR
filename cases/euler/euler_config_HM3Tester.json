@@ -4,17 +4,17 @@
         "nTimeStep": 10000,
         "steadyQuit": false,
         "tEnd": 2,
-        // "odeCode": 0,
-        "odeCode": 411,
-        "odeSetting1": 0.5,
-        "odeSetting2": 0,
-        "odeSetting3": 0.75,
-        "odeSetting4": -1e10,
-        "odeSettingsExtra": {
-            "nMG": 0,
-            "thetaMMG": 1,
-            "coefIncMidMG": 1
-        },
+        "odeCode": 0,
+        // "odeCode": 411,
+        // "odeSetting1": 0.5,
+        // "odeSetting2": 0,
+        // "odeSetting3": 0.75,
+        // "odeSetting4": -1e10,
+        // "odeSettingsExtra": {
+        //     "nMG": 0,
+        //     "thetaMMG": 1,
+        //     "coefIncMidMG": 1
+        // },
         // "odeCode": 401,
         // "odeSetting1": 0.5,
         // "odeSetting2": 0,
@@ -47,6 +47,7 @@
         "nTimeStepInternal": 4000,
         "rhsThresholdInternal": 1e-6,
         "res_base": 0.0,
+        "resBaseType": 1,
         "useVolWiseResidual": true
     },
     "dataIOControl": {
@@ -127,8 +128,8 @@
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 0,
-        "sgsIter": 4,
+        "jacobiCode": 2,
+        "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
