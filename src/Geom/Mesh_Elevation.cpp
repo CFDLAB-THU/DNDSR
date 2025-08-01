@@ -126,6 +126,12 @@ namespace DNDS::Geom
         MPI::Allreduce(&localNewNodeNum, &numNewNode, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
         if (mpi.rank == mRank)
             log() << fmt::format("=== Mesh Elevation: Num NewNode {} ", numNewNode) << std::endl;
+        index localNewNodeNumOffset{0};
+        MPI::Scan(&localNewNodeNum, &localNewNodeNumOffset, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        if (mpi.rank == mpi.size - 1)
+            DNDS_assert(localNewNodeNumOffset == numNewNode);
+        localNewNodeNumOffset -= localNewNodeNum;
+        index numNodeO1Global = meshO1.NumNodeGlobal();
 
         /**********************************/
         // build each proc coordO2 from cellNewNodes
@@ -137,6 +143,16 @@ namespace DNDS::Geom
         for (index iC = meshO1.coords.father->Size(); iC < meshO1.coords.father->Size() + localNewNodeNum; iC++)
             coords[iC] = newCoords.at(iC - meshO1.coords.father->Size());
         coords.father->createGlobalMapping();
+
+        DNDS_MAKE_SSP(node2nodeOrig.father, mpi);
+        DNDS_MAKE_SSP(node2nodeOrig.son, mpi);
+        node2nodeOrig.father->Resize(meshO1.coords.father->Size() + localNewNodeNum);
+        for (index iC = 0; iC < meshO1.coords.father->Size(); iC++)
+            node2nodeOrig[iC] = meshO1.node2nodeOrig[iC];
+        for (index iC = meshO1.coords.father->Size(); iC < meshO1.coords.father->Size() + localNewNodeNum; iC++)
+            node2nodeOrig[iC][0] = // new node does not correspond to any "original", so assigned sequential new space
+                numNodeO1Global +
+                (iC - meshO1.coords.father->Size() + localNewNodeNumOffset);
 
         // tAdj1Pair nodeLocalIdxOld;
         // DNDS_MAKE_SSP(nodeLocalIdxOld.father, mpi);
@@ -189,6 +205,11 @@ namespace DNDS::Geom
         coords.trans.createMPITypes();
         coords.trans.pullOnce();
 
+        node2nodeOrig.TransAttach();
+        node2nodeOrig.trans.BorrowGGIndexing(coords.trans);
+        node2nodeOrig.trans.createMPITypes();
+        node2nodeOrig.trans.pullOnce();
+
         /**********************************/
         // each cell obtain new global cell2node global state with cellNewNodesGlobalPair
         DNDS_MAKE_SSP(cell2node.father, mpi);
@@ -200,11 +221,14 @@ namespace DNDS::Geom
             DNDS_MAKE_SSP(cell2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), getMPI());
             DNDS_MAKE_SSP(cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), getMPI());
         }
+        DNDS_MAKE_SSP(cell2cellOrig.father, mpi);
+        DNDS_MAKE_SSP(cell2cellOrig.son, mpi);
 
         cell2node.father->Resize(meshO1.cell2node.father->Size());
         cellElemInfo.father->Resize(meshO1.cell2node.father->Size());
         if (isPeriodic)
             cell2nodePbi.father->Resize(meshO1.cell2node.father->Size());
+        cell2cellOrig.father->Resize(meshO1.cell2cellOrig.father->Size());
         for (index iCell = 0; iCell < meshO1.cell2node.father->Size(); iCell++)
         {
             Elem::Element eCell = meshO1.GetCellElement(iCell);
@@ -234,6 +258,7 @@ namespace DNDS::Geom
 
             cellElemInfo(iCell, 0) = meshO1.cellElemInfo(iCell, 0);
             cellElemInfo(iCell, 0).setElemType(eCellO2.type); // update cell elem info
+            cell2cellOrig[iCell] = meshO1.cell2cellOrig[iCell];
         }
         // std::cout << "XXXXXXXXXXXXXXXXXXXXXXXXXXX" << std::endl;
         for (index iCell = 0; iCell < meshO1.cell2node.father->Size(); iCell++)
@@ -334,6 +359,8 @@ namespace DNDS::Geom
         bndElemInfo.father->Resize(meshO1.bnd2node.father->Size());
         if (isPeriodic)
             bnd2nodePbi.father->Resize(meshO1.bnd2node.father->Size());
+        DNDS_MAKE_SSP(bnd2bndOrig.father, mpi);
+        DNDS_MAKE_SSP(bnd2bndOrig.son, mpi);
         for (index iBnd = 0; iBnd < meshO1.bnd2node.father->Size(); iBnd++)
         {
             index iCell = meshO1.bnd2cell(iBnd, 0); // my own bnd2cell is to global!
@@ -412,6 +439,7 @@ namespace DNDS::Geom
             }
             bndElemInfo(iBnd, 0) = meshO1.bndElemInfo(iBnd, 0);
             bndElemInfo(iBnd, 0).setElemType(eBndFound.type);
+            bnd2bndOrig[iBnd] = meshO1.bnd2bndOrig[iBnd];
         }
         adjPrimaryState = Adj_PointToGlobal;
 
@@ -473,6 +501,22 @@ namespace DNDS::Geom
         std::vector<std::vector<index>> cell2nodeV;
         std::vector<std::vector<NodePeriodicBits>> cell2nodePbiV;
         std::vector<ElemInfo> cellElemInfoV;
+        // std::vector<index> cell2cellOrigV;
+
+        index newNumCell = 0;
+        for (index iCell = 0; iCell < meshO2.cell2node.father->Size(); iCell++)
+        {
+            auto eCell = meshO2.GetCellElement(iCell);
+            newNumCell += eCell.GetO2NumBisect();
+        }
+        cell2nodeV.reserve(newNumCell);
+        cell2nodePbiV.reserve(newNumCell);
+        cellElemInfoV.reserve(newNumCell);
+        // cell2cellOrigV.reserve(newNumCell);
+
+        // index newNumCellOffset = 0;
+        // MPI::Scan(&newNumCell, &newNumCellOffset, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        // newNumCellOffset -= newNumCell;
 
         for (index iCell = 0; iCell < meshO2.cell2node.father->Size(); iCell++)
         {
@@ -498,24 +542,31 @@ namespace DNDS::Geom
                     eCell.ExtractO2BisectElemNodes(iBi, iBiVariant, meshO2.cell2nodePbi[iCell], c2nPbiSub);
                     cell2nodePbiV.push_back(c2nPbiSub);
                 }
+                //! cell2cellOrig uses new global size later, cell2cellOrigV discarded
+                // cell2cellOrigV.push_back(newNumCellOffset + cell2cellOrigV.size());
+                // cell2cellOrigV.push_back(UnInitIndex);
             }
         }
         // std::cout << "here1" << std::endl;
         DNDS_MAKE_SSP(cell2node.father, mpi);
         DNDS_MAKE_SSP(cell2node.son, mpi);
-        DNDS_MAKE_SSP(cellElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(cellElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        DNDS_MAKE_SSP(cellElemInfo.father, mpi);
+        DNDS_MAKE_SSP(cellElemInfo.son, mpi);
         if (isPeriodic)
-        {
+        { // we preserve a sample of detailed array constructor
             DNDS_MAKE_SSP(cell2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
             DNDS_MAKE_SSP(cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
         }
+        DNDS_MAKE_SSP(cell2cellOrig.father, mpi);
+        DNDS_MAKE_SSP(cell2cellOrig.son, mpi);
         cell2node.father->Resize(cell2nodeV.size());
         cellElemInfo.father->Resize(cellElemInfoV.size());
         DNDS_assert(cellElemInfoV.size() == cell2nodeV.size());
         if (isPeriodic)
             cell2nodePbi.father->Resize(cell2nodePbiV.size()),
                 DNDS_assert(cell2nodePbiV.size() == cell2nodeV.size());
+        cell2cellOrig.father->Resize(cell2nodeV.size());
+        cell2node.father->createGlobalMapping();
         for (index i = 0; i < cell2nodeV.size(); i++)
         {
             cell2node.father->ResizeRow(i, cell2nodeV[i].size());
@@ -529,6 +580,8 @@ namespace DNDS::Geom
                 for (rowsize ic2n = 0; ic2n < cell2nodePbiV[i].size(); ic2n++)
                     cell2nodePbi.father->operator()(i, ic2n) = cell2nodePbiV[i][ic2n];
             }
+            //! cell2cellOrig uses new global size now
+            cell2cellOrig(i, 0) = cell2node.father->pLGlobalMapping->operator()(mpi.rank, i);
         }
         // std::cout << "here2" << std::endl;
 
@@ -591,11 +644,16 @@ namespace DNDS::Geom
             DNDS_MAKE_SSP(bnd2nodePbi.father, mpi);
             DNDS_MAKE_SSP(bnd2nodePbi.son, mpi);
         }
+        DNDS_MAKE_SSP(bnd2bndOrig.father, mpi);
+        DNDS_MAKE_SSP(bnd2bndOrig.son, mpi);
         bnd2node.father->Resize(bnd2nodeV.size());
         bndElemInfo.father->Resize(bndElemInfoV.size());
         DNDS_assert(bndElemInfoV.size() == bnd2nodeV.size());
         if (isPeriodic)
             bnd2nodePbi.father->Resize(bnd2nodePbiV.size()), DNDS_assert(bnd2nodePbiV.size() == bnd2nodeV.size());
+        bnd2bndOrig.father->Resize(bnd2nodeV.size());
+        bnd2node.father->createGlobalMapping();
+
         for (index i = 0; i < bnd2nodeV.size(); i++)
         {
             bnd2node.father->ResizeRow(i, bnd2nodeV[i].size());
@@ -609,6 +667,8 @@ namespace DNDS::Geom
                     bnd2nodePbi.father->operator()(i, ic2n) = bnd2nodePbiV[i][ic2n];
             }
             bndElemInfo(i, 0) = bndElemInfoV[i];
+            //! bnd2bndOrig uses new global size now
+            bnd2bndOrig(i, 0) = bnd2node.father->pLGlobalMapping->operator()(mpi.rank, i);
         }
 
         //* unhandled info

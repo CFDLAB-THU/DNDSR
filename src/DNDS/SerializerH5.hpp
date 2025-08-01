@@ -4,6 +4,7 @@
 #include <hdf5.h>
 #include <fstream>
 #include <map>
+#include <set>
 
 namespace DNDS::Serializer
 {
@@ -52,6 +53,7 @@ namespace DNDS::Serializer
         void GoToPath(const std::string &p) override;
         bool IsPerRank() override { return false; }
         std::string GetCurrentPath() override;
+        std::set<std::string> ListCurrentPath() override;
 
         void WriteInt(const std::string &name, int v) override;
         void WriteIndex(const std::string &name, index v) override;

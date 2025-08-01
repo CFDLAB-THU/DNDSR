@@ -763,118 +763,11 @@ namespace DNDS::Euler
                 logConfig.close();
             }
         }
-        void ReadRestart(std::string fname)
-        {
-            if (mpi.rank == 0)
-                log() << fmt::format("=== Reading Restart From [{}]", fname) << std::endl;
-            std::filesystem::path outPath;
-            outPath = fname;
+        void ReadRestart(std::string fname);
 
-            Serializer::SerializerBaseSSP serializerP;
+        void ReadRestartOtherSolver(std::string fname, const std::vector<int> &dimStore);
 
-            if (sstringHasSuffix(fname, ".dir"))
-            {
-                char BUF[512];
-                std::sprintf(BUF, "%04d", mpi.rank);
-                fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
-
-                serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
-                std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
-            }
-            else if (sstringHasSuffix(fname, ".dnds.h5"))
-            {
-                serializerP = std::make_shared<DNDS::Serializer::SerializerH5>(mpi);
-            }
-            else
-                DNDS_assert_info(false, "restart file suffix not supported");
-
-            serializerP->OpenFile(fname, true);
-            u.ReadSerialize(serializerP, "u");
-            serializerP->CloseFile();
-            if (mpi.rank == 0)
-                log() << fmt::format("=== Read Restart") << std::endl;
-        }
-
-        void ReadRestartOtherSolver(std::string fname, const std::vector<int> &dimStore)
-        {
-            ArrayDOFV<Eigen::Dynamic> readBuf;
-            DNDS_MAKE_SSP(readBuf.father, mpi);
-            DNDS_MAKE_SSP(readBuf.son, mpi);
-
-            if (mpi.rank == 0)
-                log() << fmt::format("=== Reading Other Solver Restart From [{}]", fname) << std::endl;
-            std::filesystem::path outPath;
-            outPath = fname;
-
-            Serializer::SerializerBaseSSP serializerP;
-            if (sstringHasSuffix(fname, ".dir"))
-            {
-                char BUF[512];
-                std::sprintf(BUF, "%04d", mpi.rank);
-                fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
-
-                serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
-                std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
-            }
-            else if (sstringHasSuffix(fname, ".dnds.h5"))
-            {
-                serializerP = std::make_shared<DNDS::Serializer::SerializerH5>(mpi);
-                // std::dynamic_pointer_cast<DNDS::Serializer::SerializerH5>(serializerP)
-                //     ->SetChunkAndDeflate(config.dataIOControl.restartWriterH5Chunk, config.dataIOControl.restartWriterH5Deflate);
-            }
-            else
-                DNDS_assert_info(false, "restart file suffix not supported");
-
-            serializerP->OpenFile(fname, true);
-            readBuf.ReadSerialize(serializerP, "u");
-            serializerP->CloseFile();
-
-            DNDS_assert_info(readBuf.father->Size() == u.father->Size(), fmt::format("{}, {}", readBuf.father->Size(), u.father->Size()));
-            DNDS_assert_info(readBuf.son->Size() == u.son->Size(), fmt::format("{}, {}", readBuf.son->Size(), u.son->Size()));
-            int iMax = std::min(u.RowSize(), readBuf.RowSize()) - 1; // could use this
-            for (auto item : dimStore)
-                DNDS_assert(item <= iMax);
-            for (index iCell = 0; iCell < u.Size(); iCell++)
-            {
-                // std::cout << iCell << ": " << readBuf[iCell].transpose() << std::endl;
-
-                u[iCell](dimStore) = readBuf[iCell](dimStore);
-            }
-
-            if (mpi.rank == 0)
-                log() << fmt::format("=== Read Restart") << std::endl;
-        }
-
-        void PrintRestart(std::string fname)
-        {
-            if (config.dataIOControl.restartWriter.type == "JSON")
-            {
-                std::filesystem::path outPath;
-                outPath = {fname + "_p" + std::to_string(mpi.size) + "_restart.dir"};
-                std::filesystem::create_directories(outPath);
-                char BUF[512];
-                std::sprintf(BUF, "%04d", mpi.rank);
-                fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
-                config.restartState.lastRestartFile = getStringForcePath(outPath);
-            }
-            else if (config.dataIOControl.restartWriter.type == "H5")
-            {
-                fname += "_p" + std::to_string(mpi.size) + ".restart.dnds.h5";
-                std::filesystem::path outPath = fname;
-                std::filesystem::create_directories(outPath.parent_path() / ".");
-                config.restartState.lastRestartFile = fname;
-            }
-            else
-                DNDS_assert_info(false, "restartWriter is invalid");
-
-            Serializer::SerializerBaseSSP serializerP = config.dataIOControl.restartWriter.BuildSerializer(mpi);
-
-            serializerP->OpenFile(fname, false);
-            u.WriteSerialize(serializerP, "u");
-            serializerP->CloseFile();
-
-            PrintConfig();
-        }
+        void PrintRestart(std::string fname);
 
         using tAdditionalCellScalarList = tCellScalarList;
 
@@ -1075,6 +968,10 @@ namespace DNDS::Euler
 
         bool functor_fstop(int iter, ArrayDOFV<nVarsFixed> &cres, int iStep, RunningEnvironment &env);
         bool functor_fmainloop(RunningEnvironment &env);
+
+        auto getMPI() const { return mpi; }
+        auto getMesh() const { return mesh; }
+        auto getVFV() const { return vfv; }
     };
 }
 
@@ -1103,6 +1000,12 @@ DNDS_EULERSOLVER_INS_EXTERN(NS_2EQ_3D, extern);
             tAdditionalCellScalarList &additionalCellScalars,         \
             TEval &eval, real tSimu,                                  \
             PrintDataMode mode);                                      \
+        ext template void EulerSolver<model>::PrintRestart(           \
+            std::string fname);                                       \
+        ext template void EulerSolver<model>::ReadRestart(            \
+            std::string fname);                                       \
+        ext template void EulerSolver<model>::ReadRestartOtherSolver( \
+            std::string fname, const std::vector<int> &dimStore);     \
     }
 
 DNDS_EULERSOLVER_PRINTDATA_INS_EXTERN(NS, extern);

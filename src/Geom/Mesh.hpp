@@ -109,6 +109,9 @@ namespace DNDS::Geom
         tAdjPair cell2cell;
         tElemInfoArrayPair cellElemInfo;
         tElemInfoArrayPair bndElemInfo;
+        tAdj1Pair cell2cellOrig;
+        tAdj1Pair node2nodeOrig;
+        tAdj1Pair bnd2bndOrig;
         /// periodic only, after reader
         tPbiPair cell2nodePbi;
         tPbiPair bnd2nodePbi;
@@ -707,6 +710,9 @@ namespace DNDS::Geom
         tElemInfoArray cellElemInfoSerial; // created through reading
         tElemInfoArray bndElemInfoSerial;  // created through reading
         tAdj2 bnd2cellSerial;              // created through reading
+        tAdj1 cell2cellOrigSerial;         // created through reading
+        tAdj1 node2nodeOrigSerial;         // created through reading
+        tAdj1 bnd2bndOrigSerial;         // created through reading
         tPbi cell2nodePbiSerial;           // created through reading-Deduplicate
         tPbi bnd2nodePbiSerial;            // created through reading-Deduplicate
         /***************************************************************/
@@ -859,6 +865,9 @@ namespace DNDS::Geom
             bnd2nodeSerial.reset();
             bnd2cellSerial.reset();
             bndElemInfoSerial.reset();
+            cell2cellOrigSerial.reset();
+            node2nodeOrigSerial.reset();
+            bnd2bndOrigSerial.reset();
             mode = UnknownMode;
             dataIsSerialIn = dataIsSerialOut = false;
         }

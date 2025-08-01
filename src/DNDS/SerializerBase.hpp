@@ -2,6 +2,8 @@
 
 #include "Defines.hpp"
 #include "MPI.hpp"
+#include <set>
+
 namespace DNDS::Serializer
 {
     static const index Offset_Parts = -1;
@@ -86,6 +88,7 @@ namespace DNDS::Serializer
         virtual void GoToPath(const std::string &p) = 0;
         virtual bool IsPerRank() = 0;
         virtual std::string GetCurrentPath() = 0;
+        virtual std::set<std::string> ListCurrentPath() = 0;
 
         virtual void WriteInt(const std::string &name, int v) = 0;
         virtual void WriteIndex(const std::string &name, index v) = 0;

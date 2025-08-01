@@ -838,4 +838,190 @@ namespace DNDS::Euler
 
         DNDS_MPI_InsertCheck(mpi, "EulerSolver<model>::PrintData === bnd output done");
     }
+
+    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    void EulerSolver<model>::PrintRestart(std::string fname)
+    {
+        if (config.dataIOControl.restartWriter.type == "JSON")
+        {
+            std::filesystem::path outPath;
+            outPath = {fname + "_p" + std::to_string(mpi.size) + "_restart.dir"};
+            std::filesystem::create_directories(outPath);
+            char BUF[512];
+            std::sprintf(BUF, "%04d", mpi.rank);
+            fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
+            config.restartState.lastRestartFile = getStringForcePath(outPath);
+        }
+        else if (config.dataIOControl.restartWriter.type == "H5")
+        {
+            fname += "_p" + std::to_string(mpi.size) + ".restart.dnds.h5";
+            std::filesystem::path outPath = fname;
+            std::filesystem::create_directories(outPath.parent_path() / ".");
+            config.restartState.lastRestartFile = fname;
+        }
+        else
+            DNDS_assert_info(false, "restartWriter is invalid");
+
+        Serializer::SerializerBaseSSP serializerP = config.dataIOControl.restartWriter.BuildSerializer(mpi);
+
+        serializerP->OpenFile(fname, false);
+        u.WriteSerialize(serializerP, "u", /*PIG*/ false, /*son*/ false);
+        mesh->cell2cellOrig.WriteSerialize(serializerP, "cell2cellOrig", /*PIG*/ false, /*son*/ false);
+        serializerP->CloseFile();
+
+        PrintConfig();
+    }
+
+    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    void paste_read_restart_with_cell_ordering(
+        EulerSolver<model> &self,
+        typename EulerSolver<model>::TDof &u,
+        typename EulerSolver<model>::TDof &uRead,
+        Serializer::SerializerBaseSSP serializerP)
+    {
+        auto mesh = self.getMesh();
+        auto mpi = self.getMPI();
+        auto vfv = self.getVFV();
+        auto list_current_path = serializerP->ListCurrentPath();
+        if (mpi.rank == 0)
+        {
+            log() << "Contains: [";
+            for (auto &v : list_current_path)
+                log() << v << ", ";
+            log() << "]";
+            log() << std::endl;
+        }
+        if (list_current_path.count("cell2cellOrig"))
+        {
+            // TODO: lazy-build this inverse map
+            std::unordered_map<index, index> cellOrig2localCell;
+            cellOrig2localCell.reserve(mesh->NumCell());
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                cellOrig2localCell[mesh->cell2cellOrig(iCell, 0)] = iCell;
+            bool isLocalReorder = true;
+
+            Geom::tAdj1Pair cell2cellOrigRead;
+            DNDS_MAKE_SSP(cell2cellOrigRead.father, mpi);
+            DNDS_MAKE_SSP(cell2cellOrigRead.son, mpi);
+            cell2cellOrigRead.ReadSerialize(serializerP, "cell2cellOrig", /*PIG*/ false, /*son*/ false);
+            DNDS_assert_info(cell2cellOrigRead.father->Size() == u.father->Size(),
+                             fmt::format("read size of cell2cellOrig not consistent: needed {}, got {}",
+                                         u.father->Size(), cell2cellOrigRead.father->Size()));
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                if (cellOrig2localCell.count(cell2cellOrigRead(iCell, 0)) == 0)
+                    isLocalReorder = false;
+            DNDS_assert_info(isLocalReorder, "must be local reorder now! global reorder not implemented for now");
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                index iCellOrigG = cell2cellOrigRead(iCell, 0);
+                u[cellOrig2localCell.at(iCellOrigG)] = uRead[iCell];
+            }
+        }
+        else
+        {
+            u.CopyFather(uRead);
+            log() << TermColor::Red << "!!! Warning !!!\n"
+                  << "Reading restart without cell2cellOrig information, ordering could be bad!" << std::endl;
+        }
+    }
+
+    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    void EulerSolver<model>::ReadRestart(std::string fname)
+    {
+        if (mpi.rank == 0)
+            log() << fmt::format("=== Reading Restart From [{}]", fname) << std::endl;
+        std::filesystem::path outPath;
+        outPath = fname;
+
+        Serializer::SerializerBaseSSP serializerP;
+
+        if (sstringHasSuffix(fname, ".dir"))
+        {
+            char BUF[512];
+            std::sprintf(BUF, "%04d", mpi.rank);
+            fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
+
+            serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+            std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
+        }
+        else if (sstringHasSuffix(fname, ".dnds.h5"))
+        {
+            serializerP = std::make_shared<DNDS::Serializer::SerializerH5>(mpi);
+        }
+        else
+            DNDS_assert_info(false, "restart file suffix not supported");
+
+        serializerP->OpenFile(fname, true);
+        TDof uRead;
+        vfv->BuildUDof(uRead, nVars, false, false);
+        uRead.ReadSerialize(serializerP, "u", /*PIG*/ false, /*son*/ false);
+        DNDS_assert_info(uRead.father->Size() == u.father->Size(),
+                         fmt::format("read size not consistent: needed {}, got {}",
+                                     u.father->Size(), uRead.father->Size()));
+
+        // Doing reorder
+        paste_read_restart_with_cell_ordering(*this, u, uRead, serializerP);
+
+        u.trans.startPersistentPull();
+        u.trans.waitPersistentPull();
+
+        MPI::Barrier(mpi.comm);
+        serializerP->CloseFile();
+        if (mpi.rank == 0)
+            log() << fmt::format("=== Read Restart") << std::endl;
+    }
+
+    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    void EulerSolver<model>::ReadRestartOtherSolver(std::string fname, const std::vector<int> &dimStore)
+    {
+        ArrayDOFV<Eigen::Dynamic> readBuf;
+        DNDS_MAKE_SSP(readBuf.father, mpi);
+        DNDS_MAKE_SSP(readBuf.son, mpi);
+
+        if (mpi.rank == 0)
+            log() << fmt::format("=== Reading Other Solver Restart From [{}]", fname) << std::endl;
+        std::filesystem::path outPath;
+        outPath = fname;
+
+        Serializer::SerializerBaseSSP serializerP;
+        if (sstringHasSuffix(fname, ".dir"))
+        {
+            char BUF[512];
+            std::sprintf(BUF, "%04d", mpi.rank);
+            fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
+
+            serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+            std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
+        }
+        else if (sstringHasSuffix(fname, ".dnds.h5"))
+        {
+            serializerP = std::make_shared<DNDS::Serializer::SerializerH5>(mpi);
+            // std::dynamic_pointer_cast<DNDS::Serializer::SerializerH5>(serializerP)
+            //     ->SetChunkAndDeflate(config.dataIOControl.restartWriterH5Chunk, config.dataIOControl.restartWriterH5Deflate);
+        }
+        else
+            DNDS_assert_info(false, "restart file suffix not supported");
+
+        serializerP->OpenFile(fname, true);
+        readBuf.ReadSerialize(serializerP, "u");
+
+        DNDS_assert_info(readBuf.father->Size() == u.father->Size(), fmt::format("{}, {}", readBuf.father->Size(), u.father->Size()));
+        DNDS_assert_info(readBuf.son->Size() == u.son->Size(), fmt::format("{}, {}", readBuf.son->Size(), u.son->Size()));
+        int iMax = std::min(u.RowSize(), readBuf.RowSize()) - 1; // could use this
+        for (auto item : dimStore)
+            DNDS_assert(item <= iMax);
+        TDof uRead;
+        vfv->BuildUDof(uRead, nVars, false, false);
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        {
+            // std::cout << iCell << ": " << readBuf[iCell].transpose() << std::endl;
+            uRead[iCell](dimStore) = readBuf[iCell](dimStore);
+        }
+
+        paste_read_restart_with_cell_ordering(*this, u, uRead, serializerP);
+
+        serializerP->CloseFile();
+        if (mpi.rank == 0)
+            log() << fmt::format("=== Read Restart") << std::endl;
+    }
 }

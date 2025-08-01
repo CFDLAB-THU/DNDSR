@@ -4,6 +4,7 @@
 #include "base64_rfc4648.hpp"
 #include <zlib.h>
 #include <fmt/core.h>
+#include <set>
 
 namespace DNDS::Serializer
 {
@@ -85,6 +86,17 @@ namespace DNDS::Serializer
     std::string SerializerJSON::GetCurrentPath()
     {
         return cP;
+    }
+
+    std::set<std::string> SerializerJSON::ListCurrentPath()
+    {
+        auto cPointer = nlohmann::json::json_pointer(cP);
+        auto v = jObj[cPointer];
+        DNDS_assert_info(v.is_object(), fmt::format("current path is not an object " + cP));
+        std::set<std::string> ret;
+        for (auto &[key, value] : v.items())
+            ret.insert(key);
+        return ret;
     }
 
     void SerializerJSON::WriteInt(const std::string &name, int v)

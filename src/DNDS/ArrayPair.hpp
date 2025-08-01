@@ -146,7 +146,7 @@ namespace DNDS
             return vector_hash<index>()(hashes);
         }
 
-        void WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name, bool includePIG = true)
+        void WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name, bool includePIG = true, bool includeSon=true)
         {
             if (includePIG)
                 DNDS_assert_info(trans.pLGlobalMapping && trans.pLGhostMapping, "pair's trans not having ghost info");
@@ -169,7 +169,8 @@ namespace DNDS
 
             // now using the parts (calculate offsets)
             father->WriteSerializer(serializerP, "father", Serializer::ArrayGlobalOffset_Parts);
-            son->WriteSerializer(serializerP, "son", Serializer::ArrayGlobalOffset_Parts);
+            if (includeSon)
+                son->WriteSerializer(serializerP, "son", Serializer::ArrayGlobalOffset_Parts);
             /***************************/
             // ghost info
             // static_assert(std::is_same_v<rowsize, MPI_int>);
@@ -184,7 +185,7 @@ namespace DNDS
         /**
          * @warning if includePIG == true, need to createMPITypes after this
          */
-        void ReadSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name, bool includePIG = true)
+        void ReadSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name, bool includePIG = true, bool includeSon = true)
         {
             DNDS_assert(father && son);
             this->TransAttach();
@@ -202,7 +203,8 @@ namespace DNDS
             auto offsetV_father = Serializer::ArrayGlobalOffset_Unknown;
             auto offsetV_son = Serializer::ArrayGlobalOffset_Unknown;
             father->ReadSerializer(serializerP, "father", offsetV_father);
-            son->ReadSerializer(serializerP, "son", offsetV_son);
+            if (includeSon)
+                son->ReadSerializer(serializerP, "son", offsetV_son);
             /***************************/
             // ghost info
             // static_assert(std::is_same_v<rowsize, MPI_int>);

@@ -24,6 +24,9 @@ namespace DNDS::Geom
         DNDS_MAKE_SSP(cellElemInfoSerial, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
         DNDS_MAKE_SSP(bndElemInfoSerial, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
         DNDS_MAKE_SSP(bnd2cellSerial, mesh->getMPI());
+        DNDS_MAKE_SSP(cell2cellOrigSerial, mesh->getMPI());
+        DNDS_MAKE_SSP(node2nodeOrigSerial, mesh->getMPI());
+        DNDS_MAKE_SSP(bnd2bndOrigSerial, mesh->getMPI());
 
         if (mRank != mesh->getMPI().rank) //! parallel done!!! now serial!!!
             return;
@@ -448,7 +451,10 @@ namespace DNDS::Geom
         cell2nodeSerial->Resize(nVolElem);
         bnd2nodeSerial->Resize(nBndElem);
         cellElemInfoSerial->Resize(nVolElem);
+        cell2cellOrigSerial->Resize(nVolElem);
         bndElemInfoSerial->Resize(nBndElem);
+        node2nodeOrigSerial->Resize(coordSerial->Size());
+        bnd2bndOrigSerial->Resize(nBndElem);
         nVolElem = 0;
         nBndElem = 0;
         for (int iGZ = 0; iGZ < ZoneNodeSizes.size(); iGZ++)
@@ -527,6 +533,14 @@ namespace DNDS::Geom
         }
         for (DNDS::index iB = 0; iB < bnd2cellSerial->Size(); iB++)
             DNDS_assert((*bnd2cellSerial)[iB][0] != DNDS::UnInitIndex); // check all bnds have a cell
+
+        // fill in original indices
+        for (DNDS::index iCell = 0; iCell < cell2cellOrigSerial->Size(); iCell++)
+            cell2cellOrigSerial->operator()(iCell, 0) = iCell;
+        for (DNDS::index iNode = 0; iNode < node2nodeOrigSerial->Size(); iNode++)
+            node2nodeOrigSerial->operator()(iNode, 0) = iNode;
+        for (DNDS::index iBnd = 0; iBnd < bnd2bndOrigSerial->Size(); iBnd++)
+            bnd2bndOrigSerial->operator()(iBnd, 0) = iBnd;
 
         cg_close(cgns_file);
 
