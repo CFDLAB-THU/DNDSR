@@ -1,35 +1,61 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-1,
-        "nTimeStep": 2000,
+        // "dtImplicit": 0.05,
+        "dtImplicit": 0.2,
+        "nTimeStep": 10000,
         "steadyQuit": false,
-        "odeCode": 401,
-        "tEnd": 3e+200,
-        "odeSetting1": 0.55,
+        // "tEnd": 3e+200,
+        "tEnd": 1.0,
+        // "odeCode": 1,
+        // "odeCode": 0,
+        "odeCode": 411,
+        "odeSetting1": 0.5,
         "odeSetting2": 0,
-        "odeSetting3": 1.3333,
-        "rhsFPPMode": 1,
-        "rhsFPPScale": 1,
+        "odeSetting3": 0.75,
+        "odeSetting4": -1e-10,
+        "odeSettingsExtra": {
+            "nMG": 0,
+            "thetaMMG": 1,
+            "coefIncMidMG": 1
+        },
+        // "odeCode": 401,
+        // "odeSetting1": 0.55,
+        // "odeSetting2": 0,
+        // "odeSetting3": 1.333,
+        "rhsFPPMode": 2,
+        "rhsFPPScale": 1e-2,
+        "useRestart": true,
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 400,
-        "rhsThresholdInternal": 1e-4,
+        "nTimeStepInternal": 2000,
+        "nTimeStepInternalMin": 11,
+        "rhsThresholdInternal": 1e-5,
+        // "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
-        "useVolWiseResidual": true
+        "resBaseType": 1,
+        // "useVolWiseResidual": true,
+        "useVolWiseResidual": true,
+        "mergeMultiResidual": 1,
+        "normOrd": 1,
+        "_tail": 0
     },
     "outputControl": {
         "nConsoleCheck": 1,
         "nConsoleCheckInternal": 10,
-        "consoleOutputMode": 0,
-        "nDataOutC": 10,
+        "consoleOutputMode": 1,
+        "consoleOutputEveryFix": 1,
+        "nDataOutC": 100,
         "nDataOut": 1000,
-        "nDataOutCInternal": 2000,
+        "nDataOutCInternal": 200,
         "nDataOutInternal": 1000000000,
-        "tDataOut": 3e+200
+        "nRestartOutC": 100,
+        "nRestartOut": 1000,
+        "tDataOut": 3e+200,
+        "dataOutAtInit": true
     },
     "implicitCFLControl": {
-        "CFL": 10.0,
+        "CFL": 50.0,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 2147483647,
         "nCFLRampLength": 2147483647,
@@ -39,60 +65,91 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/CylinderA1.cgns",
-        "outPltName": "../data/outUnsteady/CylinderA1_RE2000/CylinderA1_RE2000_HM3",
+        "meshReorderCells": true,
+        "meshFile": "../data/mesh/CylinderB1.cgns",
+        "outPltName": "../data/outCylinderB1/CylinderB1_T0Test/test",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": false,
+        "outPltVTKHDFFormat": true,
+        "hdfDeflateLevel": 5,
+        "hdfChunkSize": 32768,
         "outAtPointData": true,
-        "outAtCellData": true
+        "outAtCellData": true,
+        "restartWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 5,
+            "hdfChunkSize": 32768,
+            "hdfCollOnMeta": true,
+            "hdfCollOnData": false,
+            "jsonBinaryDeflateLevel": 5,
+            "jsonUseCodecOnUInt8": true
+        },
+        // we specify the mesh partition to ensure it being consisent
+        "meshPartitionOptions": {
+            "metisType": "KWAY",
+            "metisUfactor": 20,
+            "metisSeed": 0,
+            "edgeWeightMethod": 0,
+            "metisNcuts": 3
+        }
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
         "zeroGrads": false,
         "recLinearScheme": 0,
         "nGmresSpace": 5,
-        "nGmresIter": 10,
+        "nGmresIter": 1,
         "recThreshold": 1e-010,
         "nRecConsolCheck": 10,
-        "nRecMultiplyForZeroedGrad": 1000
+        "nRecMultiplyForZeroedGrad": 1000,
+        "zeroRecForSteps": 0
     },
     "limiterControl": {
         "useLimiter": false,
         "smoothIndicatorProcedure": 0,
-        "limiterProcedure": 1, //1 == CWBAP
+        "limiterProcedure": 1,
+        //1 == CWBAP
         "nPartialLimiterStart": 1000000,
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 3,
-        "intOrder": 3,
-        "cacheDiffBase": false,
+        "maxOrder": 1,
+        "intOrder": 1,
         "jacobiRelax": 1,
-        "SORInstead": true,
+        "SORInstead": false,
         "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
         "normWBAP": false,
+        "cacheDiffBase": true,
         "subs2ndOrder": 1,
         "baseSettings": {
-            "localOrientation": true,
+            "localOrientation": false,
             "anisotropicLengths": false
         },
         "functionalSettings": {
             "scaleType": "BaryDiff",
             "scaleMultiplier": 1.0,
             "dirWeightScheme": "HQM_OPT",
-            "geomWeightScheme": "HQM_SD"
+            "geomWeightScheme": "HQM_SD",
+            // "geomWeightPower": 0.0,
+            "_tail": 0
         }
     },
     "linearSolverControl": {
+        "jacobiCode": 2,
         "sgsIter": 0,
-        "sgsWithRec": 1,
+        "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
         "nGmresSpace": 5,
-        "nGmresIter": 1
+        "nGmresIter": 2,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2,
+            "orderingCode": 0
+        }
     },
     "others": {
         "nFreezePassiveInner": 0
@@ -112,7 +169,7 @@
             1,
             0,
             0,
-            79.8650793650794
+            179.0714285714286
         ],
         "boxInitializers": [
             // {
@@ -133,11 +190,19 @@
         ],
         "idealGasProperty": {
             "gamma": 1.4,
-            "Rgas": 0.116221972344982,
-            "muGas": 5e-4,
+            "Rgas": 0.2614994377762088,
+            "muGas": 0.0008333333333333334,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4
         }
+    },
+    "restartState": {
+        "iStep": 10000,
+        "iStepInternal": -1,
+        "odeCodePrev": -1,
+        // "lastRestartFile": "../data/outCylinderB1/CylinderB1_T0Starter/out_bdf2__10000_p8.restart.dnds.h5"
+        // "lastRestartFile": "../data/outCylinderB1/CylinderB1_T0Starter/out_bdf2_u2r2Refine__10000_p8.restart.dnds.h5"
+        "lastRestartFile": "../data/outCylinderB1/CylinderB1_T0Ref/out_ref_esdirk4__1000_p8.restart.dnds.h5"
     }
 }

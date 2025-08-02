@@ -520,7 +520,15 @@ namespace DNDS::Euler
         bool useRHSasResBase = !config.timeMarchControl.steadyQuit && config.convergenceControl.resBaseType == 1;
 
         Eigen::VectorFMTSafe<real, -1> res(nVars);
-        eval.EvaluateNorm(res, cres, 1, config.convergenceControl.useVolWiseResidual);
+        eval.EvaluateNorm(res, cres, config.convergenceControl.normOrd, config.convergenceControl.useVolWiseResidual);
+        if (config.convergenceControl.mergeMultiResidual == 1 && config.timeMarchControl.timeMarchIsTwoStage())
+        {
+            Eigen::VectorFMTSafe<real, -1> res1(nVars);
+            eval.EvaluateNorm(res1, ode->getRES(1), config.convergenceControl.normOrd, config.convergenceControl.useVolWiseResidual);
+            res += res1;
+            res *= 0.5;
+        }
+
         Eigen::VectorFMTSafe<real, -1> resBaseNorm = res;
 
         if (iter == 1)
@@ -541,7 +549,7 @@ namespace DNDS::Euler
 
         // if (iter == 1 && iStep == 1)
         // * using 1st rk step for reference
-        
+
         resBaseCInternal = resBaseCInternal.array().max(resBaseNorm.array()); //! using max !
 
         Eigen::VectorFMTSafe<real, -1> resRel = (res.array() / (resBaseCInternal.array() + verySmallReal)).matrix();

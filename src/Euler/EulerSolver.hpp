@@ -279,7 +279,9 @@ namespace DNDS::Euler
                 int nAnchorUpdateStart = 0;
                 real rhsThresholdInternal = 1e-10;
                 real res_base = 0;
-                int resBaseType = 0; // 1 to use rhs as base in unsteady
+                int resBaseType = 0;        // 1 to use rhs as base in unsteady
+                int mergeMultiResidual = 0; // for HM3, merge stage residuals
+                int normOrd = 1;            // use LN norm
                 bool useVolWiseResidual = false;
                 bool useCLDriver = false;
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
@@ -288,6 +290,8 @@ namespace DNDS::Euler
                     nAnchorUpdate, nAnchorUpdateStart,
                     rhsThresholdInternal,
                     res_base, resBaseType,
+                    mergeMultiResidual,
+                    normOrd,
                     useVolWiseResidual,
                     useCLDriver)
             } convergenceControl;

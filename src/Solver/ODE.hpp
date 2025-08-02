@@ -23,6 +23,10 @@ namespace DNDS::ODE
 
         virtual TDATA &getLatestRHS() = 0;
 
+        virtual TDATA &getRHS(int i) = 0;
+
+        virtual TDATA &getRES(int i) = 0;
+
         virtual void SetExtraParams(const nlohmann::ordered_json &j)
         {
             for (auto &[k, v] : j.items())
@@ -102,6 +106,16 @@ namespace DNDS::ODE
         virtual TDATA &getLatestRHS() override
         {
             return rhsbuf[0];
+        }
+
+        TDATA &getRHS(int i) override
+        {
+            return rhsbuf[0];
+        }
+
+        TDATA &getRES(int i) override
+        {
+            return rhs;
         }
     };
 
@@ -330,6 +344,18 @@ namespace DNDS::ODE
             return rhsbuf[latestStage];
         }
 
+        TDATA &getRHS(int i) override
+        {
+            DNDS_assert(i >= 0 && i < rhsbuf.size());
+            return rhsbuf[i];
+        }
+
+        TDATA &getRES(int i) override
+        {
+            // todo: enable on-demanc calculation
+            return rhs;
+        }
+
         virtual ~ImplicitSDIRK4DualTimeStep() = default;
     };
 
@@ -549,6 +575,16 @@ namespace DNDS::ODE
         virtual TDATA &getLatestRHS() override
         {
             return rhsbuf[0];
+        }
+
+        TDATA &getRHS(int i) override
+        {
+            return rhsbuf[0];
+        }
+
+        TDATA &getRES(int i) override
+        {
+            return rhs;
         }
 
         virtual ~ImplicitBDFDualTimeStep() = default;
@@ -856,6 +892,16 @@ namespace DNDS::ODE
         virtual TDATA &getLatestRHS() override
         {
             return rhsbuf[0];
+        }
+
+        TDATA &getRHS(int i) override
+        {
+            return rhsbuf[0];
+        }
+
+        TDATA &getRES(int i) override
+        {
+            return rhs;
         }
 
         virtual ~ImplicitVBDFDualTimeStep() = default;
@@ -1365,6 +1411,20 @@ namespace DNDS::ODE
             return rhsbuf[1];
         }
 
+        TDATA &getRHS(int i) override
+        {
+            // note that 0 for tn, 1 for tn+1, 2 or tn+c2
+            DNDS_assert(i >= 0 && i < rhsbuf.size());
+            return rhsbuf[i];
+        }
+
+        TDATA &getRES(int i) override
+        {
+            DNDS_assert(i >= 0 && i < 2);
+            // todo: enable on-demanc calculation
+            return i == 0 ? rhsFull : rhsMid;
+        }
+
         virtual ~ImplicitHermite3SimpleJacobianDualStep() = default;
     };
 
@@ -1459,6 +1519,18 @@ namespace DNDS::ODE
         virtual TDATA &getLatestRHS() override
         {
             return rhsbuf[0];
+        }
+
+        TDATA &getRHS(int i) override
+        {
+            DNDS_assert(i >= 0 && i < rhsbuf.size());
+            return rhsbuf[i];
+        }
+
+        TDATA &getRES(int i) override
+        {
+            // todo: return a zero (for this is explicit)
+            return rhs;
         }
     };
 }
