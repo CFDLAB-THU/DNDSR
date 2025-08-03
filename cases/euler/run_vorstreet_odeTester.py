@@ -12,7 +12,7 @@ from utils.GraceExit import GraceExit
 handler = GraceExit(max_attempts=5)
 
 def run():
-    no_run = True
+    no_run = False
     config_name = os.path.join(dirname, "euler_config_vorstreet_Start.json")
     out_base = "../data/outCylinderB1/CylinderB1_T0BenchODE_T7_prtr"
     nThread = 2

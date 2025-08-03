@@ -1,9 +1,9 @@
 {
     "timeMarchControl": {
         "dtImplicit": 1e-1,
-        "nTimeStep": 2000,
+        "nTimeStep": 1,
         "steadyQuit": false,
-        "useRestart": true,
+        "useRestart": false,
         "odeCode": 401,
         "tEnd": 3e+200,
         "odeSetting1": 0.55,
@@ -41,30 +41,30 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/CylinderA1_L.cgns",
-        "outPltName": "../data/outUnsteady/CylinderA1_L_RE2000_HM3_S450",
-        "outLogName": "../data/outUnsteady/CylinderA1_L_RE2000_HM3_S450",
-        "outRestartName": "../data/outUnsteady/CylinderA1_L_RE2000_HM3_S450",
-        "outPltMode": 0,
-        "readMeshMode": 1,
+        "meshFile": "../data/mesh/CylinderA1_L5.cgns",
+        "outPltName": "../data/outUnsteady/Vorstreet3D/L5test",
+        "outPltMode": 1,
+        "readMeshMode": 0,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": false,
+        "outPltVTKHDFFormat": true,
         "outAtPointData": true,
-        "outAtCellData": true
+        "outAtCellData": true,
+        "outBndData": true
     },
     "boundaryDefinition": {
         "PeriodicTranslation3": [
             0.0,
             0.0,
-            10.0
+            0.5
         ]
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
         "zeroGrads": false,
-        "recLinearScheme": 0,
+        "recLinearScheme": 2,
         "nGmresSpace": 5,
-        "nGmresIter": 10,
+        "nGmresIter": 1,
         "recThreshold": 1e-010,
         "nRecConsolCheck": 10,
         "nRecMultiplyForZeroedGrad": 1000
