@@ -44,7 +44,7 @@
         "meshReorderCells": 1,
         "meshFile": "../data/mesh/CylinderInvisHalfA.cgns",
         // "meshFile": "../data/mesh/CylinderA1-Invis.cgns",
-        "outPltName": "../data/out/CylinderInvisHalfA-MGtest_1_VRes.dir/xx-ilu",
+        "outPltName": "../data/out/CylinderInvisHalfA-test_additive.dir/xx-ilu",
         // "outPltName": "../data/outUnsteady/CylinderA1-Invis/test1_M0d01/ilu",
         "outPltMode": 0,
         "readMeshMode": 0,
@@ -54,6 +54,7 @@
         "outAtCellData": true
     },
     "implicitReconstructionControl": {
+        "useAdditive": true,
         // "nInternalRecStep": 10,
         "zeroGrads": false,
         "recLinearScheme": 0,

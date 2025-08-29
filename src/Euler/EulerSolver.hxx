@@ -76,6 +76,13 @@ namespace DNDS::Euler
         eval.InitializeUDOF(u);
         if (config.timeAverageControl.enabled)
             wAveraged.setConstant(0.0);
+        uRec.setConstant(0.0);
+        u_uRec.setConstant(0.0);
+        if (config.timeMarchControl.timeMarchIsTwoStage())
+        {
+            uRec1.setConstant(0.0);
+            u_uRec1.setConstant(0.0);
+        }
         if (config.timeMarchControl.useRestart)
         {
 
@@ -128,6 +135,7 @@ namespace DNDS::Euler
             cx.trans.startPersistentPull();
             cx.trans.waitPersistentPull(); // for hermite3
             auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
+            auto &u_uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? u_uRec1 : u_uRec;
             auto &JSourceC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JSource1 : JSource;
             auto &uRecIncC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRecInc1 : uRecInc;
             auto &alphaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? alphaPP1 : alphaPP;
@@ -144,6 +152,20 @@ namespace DNDS::Euler
                 TU ULfixed = eval.CompressRecPart(
                     UMean,
                     UL - UMean,
+                    compressed);
+                return eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true, 1);
+            };
+            typename TVFV::template TFBoundary<nVarsFixed>
+                FBoundary_inc = [&](const TU &UL, const TU &UMean, index iCell, index iFace, int ig,
+                                    const Geom::tPoint &normOut, const Geom::tPoint &pPhy, const Geom::t_index bType) -> TU
+            {
+                //! TODO: make this correct!
+                TVec normOutV = normOut(Seq012);
+                Eigen::Matrix<real, dim, dim> normBase = Geom::NormBuildLocalBaseV<dim>(normOutV);
+                bool compressed = false;
+                TU ULfixed = eval.CompressRecPart(
+                    cx[iCell],
+                    UL - UMean, //! should add cx's reconstructed increment here!
                     compressed);
                 return eval.generateBoundaryValue(ULfixed, UMean, iCell, iFace, ig, normOutV, normBase, pPhy, tSimu + ct * curDtImplicit, bType, true, 1);
             };
@@ -203,22 +225,29 @@ namespace DNDS::Euler
             }
             real recIncBase = 0;
             Timer().StartTimer(PerformanceTimer::Reconstruction);
-            if (config.implicitReconstructionControl.storeRecInc)
-                uRecOld = uRecC;
+            // if (config.implicitReconstructionControl.storeRecInc)
+            uRecOld = uRecC;
+
+            DNDS_EULER_SOLVER_GET_TEMP_UDOF(u_inc)
+            u_inc = cx;
+            u_inc.addTo(u_uRecC, -1.0);
+            auto &u_rec_base = config.implicitReconstructionControl.useAdditive ? u_inc : cx;
 
             if (config.implicitReconstructionControl.useExplicit)
             { // pass
             }
             else if (config.implicitReconstructionControl.recLinearScheme == 0)
             {
+                if (config.implicitReconstructionControl.useAdditive)
+                    uRecC.setConstant(0.0);
                 for (int iRec = 1; iRec <= nRec; iRec++)
                 {
                     if (nRec > 1)
                         uRecNew1 = uRecC;
 
                     vfv->DoReconstructionIter(
-                        uRecC, uRecNew, cx,
-                        FBoundary,
+                        uRecC, uRecNew, u_rec_base,
+                        config.implicitReconstructionControl.useAdditive ? FBoundary_inc : FBoundary,
                         false);
 
                     uRecC.trans.startPersistentPull();
@@ -240,6 +269,8 @@ namespace DNDS::Euler
                             break;
                     }
                 }
+                if (config.implicitReconstructionControl.useAdditive)
+                    uRecC.addTo(uRecOld, 1.0);
             }
             else if (config.implicitReconstructionControl.recLinearScheme == 1)
             {
@@ -417,6 +448,7 @@ namespace DNDS::Euler
                 mask[1] = 6;
                 vfv->DoReconstruction2nd(uRec, u, FBoundary, 1, mask);
             }
+            u_uRecC = cx;
             Timer().StopTimer(PerformanceTimer::Reconstruction);
             if (gradIsZero)
             {

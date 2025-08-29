@@ -71,6 +71,7 @@ namespace DNDS::Euler
 
         ArrayDOFV<nVarsFixed> u, uIncBufODE, wAveraged, uAveraged;
         ObjectPool<ArrayDOFV<nVarsFixed>> uPool; // for temporary u entries
+        ArrayDOFV<nVarsFixed> u_uRec, u_uRec1;
         ArrayRECV<nVarsFixed> uRec, uRecLimited, uRecNew, uRecNew1, uRecOld, uRec1, uRecInc, uRecInc1, uRecB, uRecB1;
         JacobianDiagBlock<nVarsFixed> JD, JD1, JDTmp, JSource, JSource1, JSourceTmp;
         ssp<JacobianLocalLU<nVarsFixed>> JLocalLU;
@@ -159,6 +160,7 @@ namespace DNDS::Euler
             struct ImplicitReconstructionControl
             {
                 bool useExplicit = false;
+                bool useAdditive = false;
                 int nInternalRecStep = 1;
                 bool zeroGrads = false;
                 int recLinearScheme = 0; // 0 for original SOR, 1 for GMRES
@@ -179,6 +181,7 @@ namespace DNDS::Euler
                 DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
                     ImplicitReconstructionControl,
                     useExplicit,
+                    useAdditive,
                     nInternalRecStep, zeroGrads,
                     recLinearScheme, nGmresSpace, nGmresIter, gmresRecScale,
                     fpcgResetScheme, fpcgResetThres, fpcgResetReport, fpcgMaxPHistory,

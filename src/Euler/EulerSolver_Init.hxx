@@ -398,8 +398,12 @@ namespace DNDS::Euler
                          { vfv->BuildUDof(uu, nVars); });
 
         vfv->BuildURec(uRec, nVars);
+        vfv->BuildUDof(u_uRec, nVars); // for additive reconstruction
         if (config.timeMarchControl.timeMarchIsTwoStage())
+        {
             vfv->BuildURec(uRec1, nVars);
+            vfv->BuildUDof(u_uRec1, nVars); // for additive reconstruction
+        }
         vfv->BuildURec(uRecLimited, nVars);
         vfv->BuildURec(uRecNew, nVars);
         vfv->BuildURec(uRecNew1, nVars);
@@ -1034,7 +1038,16 @@ namespace DNDS::Euler
             }
         }
         if (config.implicitReconstructionControl.zeroGrads)
-            uRec.setConstant(0.0), gradIsZero = true;
+        {
+            uRec.setConstant(0.0);
+            u_uRec.setConstant(0.0);
+            if (config.timeMarchControl.timeMarchIsTwoStage())
+            {
+                uRec1.setConstant(0.0);
+                u_uRec1.setConstant(0.0);
+            }
+            gradIsZero = true;
+        }
 
         stepCount++;
 
