@@ -14,7 +14,7 @@ handler = GraceExit(max_attempts=5)
 def run():
     no_run = False
     config_name = os.path.join(dirname, "euler_config_vorstreet_Start.json")
-    out_base = "../data/outCylinderB1/CylinderB1_T0BenchODE_T7_prtr"
+    out_base = "../data/outCylinderB1/CylinderB1_T0BenchODE_T7_prtr_JC1"
     nThread = 2
     ode_select = [
         "U2R2",
@@ -55,7 +55,7 @@ def run():
     name_prefix = ""
     # name_prefix = "x1-"
     global_opt = {
-        "/linearSolverControl/jacobiCode": 2,
+        "/linearSolverControl/jacobiCode": 1,
         "/linearSolverControl/sgsIter": 0,
         # "/linearSolverControl/directPrecControl/iluCode": -1,
         # "/linearSolverControl/directPrecControl/orderingCode": 2, # 2 is mmd

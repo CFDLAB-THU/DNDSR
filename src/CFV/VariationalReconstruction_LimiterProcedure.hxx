@@ -582,6 +582,9 @@ namespace DNDS::CFV
         }
         if (!putIntoNew)
         {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#pragma omp parallel for schedule(runtime)
+#endif
             for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // mind the edge
                 uRec[iCell] = uRecNew[iCell];
         }

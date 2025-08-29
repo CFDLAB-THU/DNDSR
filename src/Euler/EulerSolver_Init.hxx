@@ -592,6 +592,7 @@ namespace DNDS::Euler
                                      DNDS_FMT_ARG(step),
                                      DNDS_FMT_ARG(iStep),
                                      DNDS_FMT_ARG(iter),
+                                     DNDS_FMT_ARG(iterAll),
                                      fmt::arg("resRel", resRel.transpose()),
                                      fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
                                      DNDS_FMT_ARG(tSimu),

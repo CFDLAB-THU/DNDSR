@@ -14,7 +14,7 @@
         "odeSetting3": 0.75,
         "odeSetting4": -1e-10,
         "odeSettingsExtra": {
-            "nMG": 0,
+            "nMG": 2,
             "thetaMMG": 1,
             "coefIncMidMG": 1
         },
@@ -30,12 +30,12 @@
     "convergenceControl": {
         "nTimeStepInternal": 2000,
         "nTimeStepInternalMin": 11,
-        "rhsThresholdInternal": 1e-5,
+        "rhsThresholdInternal": 1e-4,
         // "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
         "resBaseType": 1,
         // "useVolWiseResidual": true,
-        "useVolWiseResidual": true,
+        "useVolWiseResidual": false,
         "mergeMultiResidual": 1,
         "normOrd": 1,
         "_tail": 0
@@ -52,6 +52,12 @@
         "nRestartOutC": 100,
         "nRestartOut": 1000,
         "tDataOut": 3e+200,
+        "consoleMainOutputFormatInternal": [
+            "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d},{iterAll:4d}]   ",
+            "res {termRed}{resRel:.3e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
+            "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"
+        ],
         "dataOutAtInit": true
     },
     "implicitCFLControl": {
@@ -115,8 +121,8 @@
         "nPartialLimiterStartLocal": 1000000
     },
     "vfvSettings": {
-        "maxOrder": 1,
-        "intOrder": 1,
+        "maxOrder": 3,
+        "intOrder": 5,
         "jacobiRelax": 1,
         "SORInstead": false,
         "smoothThreshold": 1e-3,
@@ -138,13 +144,27 @@
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 2,
-        "sgsIter": 0,
+        "jacobiCode": 0,
+        "sgsIter": 4,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
         "nGmresSpace": 5,
         "nGmresIter": 2,
+        "coarseGridLinearSolverControlList": {
+            "1": {
+                "jacobiCode": 0,
+                "sgsIter": 4,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0,
+                "centralSmoothInputResidual": 0
+            }
+        },
         "directPrecControl": {
             "useDirectPrec": true,
             "iluCode": 2,

@@ -19,7 +19,7 @@ def run():
 
     # out_base = "../data/outUnsteady/IV_HM3Test_B0_JC2"
 
-    out_base = "../data/outUnsteady/IV_HM3Test_B0_JC2_RB_tr"
+    out_base = "../data/outUnsteady/IV_HM3Test_B0_JC1_RB_tr"
 
     ode_select = [
         "U2R2",
@@ -43,7 +43,7 @@ def run():
 
     os.makedirs(out_base, exist_ok=True)
     global_opt = {
-        "/linearSolverControl/jacobiCode": 2,
+        "/linearSolverControl/jacobiCode": 1,
         "/linearSolverControl/sgsIter": 0,
         "/dataIOControl/meshDirectBisect": 0,
         "/convergenceControl/useVolWiseResidual": False,
