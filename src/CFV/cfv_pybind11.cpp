@@ -4,8 +4,10 @@
 
 PYBIND11_MODULE(cfv_pybind11, m)
 {
-    auto m_dnds = py::module_::import("DNDS");
-    auto m_geom = py::module_::import("Geom");
+    //! hard coded dependency here
+    //! better solution?
+    auto m_dnds = py::module_::import("DNDSR.DNDS");
+    auto m_geom = py::module_::import("DNDSR.Geom");
     using namespace DNDS::CFV;
 
     pybind11_VRDefines_define(m, m_dnds);

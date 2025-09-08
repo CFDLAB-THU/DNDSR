@@ -1,5 +1,4 @@
-import DNDS
-import Geom
+from DNDSR import DNDS, Geom
 import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches

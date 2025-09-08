@@ -1,4 +1,4 @@
-import DNDS, Geom
+from DNDSR import DNDS, Geom
 import numpy as np
 import numba
 

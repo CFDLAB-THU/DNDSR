@@ -36,3 +36,4 @@ venv*
 *.pyc
 srcOrig
 newSrc*
+.cache

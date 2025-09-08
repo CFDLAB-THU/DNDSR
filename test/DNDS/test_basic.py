@@ -3,7 +3,7 @@ import sys, os
 sys.path.append(
     os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "src")
 )
-import DNDS
+from DNDSR import DNDS
 
 # import DNDSR.DNDS as DNDS
 import numpy as np
@@ -75,8 +75,8 @@ def test_array_trans(mpi: DNDS.MPIInfo, mode: str = "global"):
 
     assert arrayR3son_1.Size() == len(pullIdx)
     assert np.all(np.array(arrayR3son_1.data()) == 1.335)
-    
-    
+
+
 def test_ParArrayPair(mpi: DNDS.MPIInfo):
     arrayIIPair = DNDS.ParArrayPair("q", "I")
     #!todo: check null status
@@ -97,8 +97,6 @@ def test_ParArrayPair(mpi: DNDS.MPIInfo):
     arrayIIPair.trans.pullOnce()
     assert arrayIIPair.son.Size() == len(pullIdx)
     assert (np.array(arrayIIPair.son.data()) == 123123).all()
-    
-    
 
 
 def test_arrayRU(mpi: DNDS.MPIInfo):
@@ -291,5 +289,3 @@ if __name__ == "__main__":
     test_ArrayEigenUniMatrixBatch(mpiC)
 
     print(f"{mpiC.rank} / {mpiC.size}, {mpiC.comm():x}")
-
-

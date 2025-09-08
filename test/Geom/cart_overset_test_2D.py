@@ -1,5 +1,4 @@
-import DNDS
-import Geom
+from DNDSR import DNDS, Geom
 import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -30,10 +29,8 @@ def get_mesh_2D(meshFile: str):
     return mesh, meshReader
 
 
-
 if __name__ == "__main__":
     meshFile = os.path.join(
         os.path.dirname(__file__), "..", "..", "data", "mesh", "NACA0012_H2.cgns"
     )
     m, msr = get_mesh_2D(meshFile)
-    

@@ -10,9 +10,10 @@ DNDSR_libext_dir = os.path.realpath(
 DNDSR_lib_dir = os.path.realpath(os.path.join(__file_dir__, "..", "lib"))
 DNDSR_mod_dir = os.path.realpath(os.path.join(__file_dir__, ".."))
 
-sys.path.append(DNDSR_mod_dir)
-import DNDS
-import CFV
+# !never do this! meddling with package name
+# sys.path.append(DNDSR_mod_dir)
+# import DNDS
+# import CFV
 
 
 def _pre_import():

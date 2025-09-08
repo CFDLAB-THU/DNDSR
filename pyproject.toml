@@ -1,6 +1,12 @@
 # usage:
 # CC=/usr/bin/gcc CXX=/usr/bin/g++ CMAKE_BUILD_PARALLEL_LEVEL=16 pip install . --verbose
 
+# editable: 
+# CC=/usr/bin/gcc CXX=/usr/bin/g++ CMAKE_BUILD_PARALLEL_LEVEL=16 pip install -e . --verbose
+# update cpp only:
+# cmake --build .  -t dnds_pybind11 geom_pybind11 cfv_pybind11 -j32 && cmake --install .
+
+
 [build-system]
 requires = [
     "scikit-build-core>=0.3.3",
@@ -35,3 +41,5 @@ sdist.include = [
 [tool.scikit-build.wheel.packages]
 "DNDSR/DNDS" = "src/DNDS"
 "DNDSR/DNDS/_internal" = "src/DNDS/_internal"
+"DNDSR/Geom" = "src/Geom"
+"DNDSR/Geom/_internal" = "src/Geom/_internal"

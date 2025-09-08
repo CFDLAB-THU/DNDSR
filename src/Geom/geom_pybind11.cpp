@@ -5,7 +5,10 @@
 
 PYBIND11_MODULE(geom_pybind11, m)
 {
-    py::module_::import("DNDS");
+    //! hard coded dependency here
+    //! better solution?
+    py::module_::import("DNDSR.DNDS");
+    
     using namespace DNDS::Geom;
     auto m_elem = m.def_submodule("Elem");
     Elem::pybind11_ElemType_define(m_elem);

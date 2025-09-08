@@ -1,4 +1,4 @@
-import DNDS, Geom
+from DNDSR import DNDS, Geom
 import mpi4py as pyMPI
 import scipy.spatial
 from OversetCart import OversetBG2D, OversetPart2D, DistMap

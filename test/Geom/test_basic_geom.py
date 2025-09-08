@@ -1,9 +1,15 @@
-import DNDS
-import Geom
+# import DNDS
+# import Geom
+
+
+from DNDSR import DNDS as DNDS
+from DNDSR import Geom as Geom
 import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
+
+print(DNDS.__file__)
 
 
 def test_mesh0():

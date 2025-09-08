@@ -1,6 +1,6 @@
 
 
-import Geom
+from . import Geom
 
 # print(dir(Geom))
 

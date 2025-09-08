@@ -11,8 +11,7 @@ DNDSR_libext_dir = os.path.realpath(
 DNDSR_lib_dir = os.path.realpath(os.path.join(__file_dir__, "..", "lib"))
 DNDSR_mod_dir = os.path.realpath(os.path.join(__file_dir__, ".."))
 
-sys.path.append(DNDSR_mod_dir)
-import DNDS
+# import DNDSR.DNDS
 
 def _pre_import():
 

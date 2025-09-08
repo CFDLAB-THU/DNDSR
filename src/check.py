@@ -1,4 +1,4 @@
-import DNDS
+from DNDSR import DNDS
 import numpy as np
 import pytest
 

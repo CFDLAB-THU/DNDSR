@@ -1,5 +1,4 @@
-import DNDS
-import Geom
+from DNDSR import DNDS, Geom
 import sys, os, math
 import mpi4py.MPI as pyMPI
 import numpy as np
