@@ -31,8 +31,12 @@ def test_mesh0():
 
     mesh.RecoverNode2CellAndNode2Bnd()
     mesh.RecoverCell2CellAndBnd2Cell()
+
     mesh.BuildGhostPrimary()
     mesh.AdjGlobal2LocalPrimary()
+    mesh.AdjGlobal2LocalN2CB()
+
+    mesh.ReorderLocalCells()
     mesh.InterpolateFace()
     mesh.AssertOnFaces()
 

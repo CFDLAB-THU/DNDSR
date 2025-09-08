@@ -92,6 +92,8 @@ namespace DNDS::Geom
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumFaceProc);
         //!!
 
+        UnstructuredMesh_.def("ReorderLocalCells", &UnstructuredMesh::ReorderLocalCells, py::arg("nParts") = 1);
+
 #undef DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER
 #undef DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC
     }

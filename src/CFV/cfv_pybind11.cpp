@@ -10,6 +10,8 @@ PYBIND11_MODULE(cfv_pybind11, m)
     auto m_geom = py::module_::import("DNDSR.Geom");
     using namespace DNDS::CFV;
 
+    auto m_placeholder_submodule = m.def_submodule("placeholder_submodule");
+
     pybind11_VRDefines_define(m, m_dnds);
 
     pybind11_VariationalReconstruction_define<2>(m);

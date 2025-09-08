@@ -50,8 +50,8 @@ if __name__ == "__main__":
     from _internal.dnds_pybind11 import MPI
     from _internal.dnds_pybind11 import Debug
 else:
-    import sys
-    print(sys.modules.keys())
+    # import sys
+    # print(sys.modules.keys())
     from ._internal.dnds_pybind11 import *
     from ._internal.dnds_pybind11 import MPI
     from ._internal.dnds_pybind11 import Debug

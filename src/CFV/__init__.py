@@ -54,7 +54,7 @@ else:
     print(f"module load: {__file__}")
 
 
-__all__ = ["Elem"]
+__all__ = []
 
 if __name__ == "__main__":
     print(__all__)
