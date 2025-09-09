@@ -18,7 +18,7 @@ namespace DNDS::Geom
 
     inline auto PartitionSerialAdj_Metis(
         const tLocalMatStruct &mat, int nPart,
-        std::string metisType = "KWAY", int metisNCuts = 3, int metisUfactor = 5, int metisSeed = 0)
+        std::string metisType = "KWAY", int metisNcuts = 3, int metisUfactor = 5, int metisSeed = 0)
     {
         _METIS::idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat.size()));
         _METIS::idx_t nCon{1}, options[METIS_NOPTIONS];
@@ -29,7 +29,7 @@ namespace DNDS::Geom
             options[_METIS::METIS_OPTION_IPTYPE] = _METIS::METIS_IPTYPE_GROW;
             options[_METIS::METIS_OPTION_RTYPE] = _METIS::METIS_RTYPE_FM;
             // options[METIS_OPTION_NO2HOP] = 0; // only available in metis 5.1.0
-            options[_METIS::METIS_OPTION_NCUTS] = std::max(metisNCuts, 1);
+            options[_METIS::METIS_OPTION_NCUTS] = std::max(metisNcuts, 1);
             options[_METIS::METIS_OPTION_NITER] = 10;
             // options[_METIS::METIS_OPTION_UFACTOR] = 30; // load imbalance factor, fow k-way
             options[_METIS::METIS_OPTION_UFACTOR] = metisUfactor;

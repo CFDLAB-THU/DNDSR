@@ -4,6 +4,7 @@
 
 from DNDSR import DNDS as DNDS
 from DNDSR import Geom as Geom
+from DNDSR.Geom.utils import create_mesh_from_CGNS, create_bnd_mesh
 import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -16,29 +17,15 @@ def test_mesh0():
     mpi = DNDS.MPIInfo()
     mpi.setWorld()
 
-    mesh = Geom.UnstructuredMesh(mpi, 2)
-    meshReader = Geom.UnstructuredMeshSerialRW(mesh, 0)
-    name2ID = meshReader.ReadFromCGNSSerial(
+    mesh, reader, name2Id = create_mesh_from_CGNS(
         os.path.join(
             os.path.dirname(__file__), "..", "..", "data", "mesh", "NACA0012_H2.cgns"
-        )
+        ),
+        mpi,
+        2
     )
-    print(name2ID.n2id_map)
-    meshReader.Deduplicate1to1Periodic(1e-9)
-    meshReader.BuildCell2Cell()
-    meshReader.MeshPartitionCell2Cell()
-    meshReader.PartitionReorderToMeshCell2Cell()
 
-    mesh.RecoverNode2CellAndNode2Bnd()
-    mesh.RecoverCell2CellAndBnd2Cell()
-
-    mesh.BuildGhostPrimary()
-    mesh.AdjGlobal2LocalPrimary()
-    mesh.AdjGlobal2LocalN2CB()
-
-    mesh.ReorderLocalCells()
-    mesh.InterpolateFace()
-    mesh.AssertOnFaces()
+    meshBnd, readerBnd = create_bnd_mesh(mesh)
 
     # fig, ax = plt.subplots(figsize=(16, 16), dpi=320)
     # xymaxs = np.array([-1e100, -1e100], dtype=np.double)

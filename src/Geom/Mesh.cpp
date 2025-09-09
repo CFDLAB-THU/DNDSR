@@ -618,6 +618,38 @@ namespace DNDS::Geom
         }
     }
 
+    void UnstructuredMesh::SetPeriodicGeometry(
+        const tPoint &translation1,
+        const tPoint &rotationCenter1,
+        const tPoint &eulerAngles1,
+        const tPoint &translation2,
+        const tPoint &rotationCenter2,
+        const tPoint &eulerAngles2,
+        const tPoint &translation3,
+        const tPoint &rotationCenter3,
+        const tPoint &eulerAngles3)
+    {
+        auto mesh = this;
+        mesh->periodicInfo.translation[1] = translation1;
+        mesh->periodicInfo.translation[2] = translation2;
+        mesh->periodicInfo.translation[3] = translation3;
+        mesh->periodicInfo.rotationCenter[1] = rotationCenter1;
+        mesh->periodicInfo.rotationCenter[2] = rotationCenter2;
+        mesh->periodicInfo.rotationCenter[3] = rotationCenter3;
+        mesh->periodicInfo.rotation[1] =
+            Geom::RotZ(eulerAngles1[2]) *
+            Geom::RotY(eulerAngles1[1]) *
+            Geom::RotX(eulerAngles1[0]);
+        mesh->periodicInfo.rotation[2] =
+            Geom::RotZ(eulerAngles2[2]) *
+            Geom::RotY(eulerAngles2[1]) *
+            Geom::RotX(eulerAngles2[0]);
+        mesh->periodicInfo.rotation[3] =
+            Geom::RotZ(eulerAngles3[2]) *
+            Geom::RotY(eulerAngles3[1]) *
+            Geom::RotX(eulerAngles3[0]);
+    }
+
     void UnstructuredMesh::
         RecoverNode2CellAndNode2Bnd()
     {

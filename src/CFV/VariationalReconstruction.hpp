@@ -29,6 +29,9 @@ namespace DNDS::CFV
     class VariationalReconstruction
     {
     public:
+        int getDim() const { return dim; }
+
+    public:
         MPI_int mRank{0};
         MPIInfo mpi;
         VRSettings settings = VRSettings{dim};
@@ -115,6 +118,29 @@ namespace DNDS::CFV
         {
             FTransPeriodic = nFTransPeriodic;
             FTransPeriodicBack = nFTransPeriodicBack;
+        }
+
+        // directly SetPeriodicTransformations with mesh knowing that there is only
+        // a 2D/3D vector in it
+        template <size_t pDim>
+        void SetPeriodicTransformations(std::array<int, pDim> Seq123)
+        {
+            SetPeriodicTransformations(
+                [mesh = mesh, Seq123](auto u, Geom::t_index id)
+                {
+                    u(Eigen::all, Seq123) = mesh->periodicInfo.TransVector<pDim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
+                },
+                [mesh = mesh, Seq123](auto u, Geom::t_index id)
+                {
+                    u(Eigen::all, Seq123) = mesh->periodicInfo.TransVectorBack<pDim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
+                });
+        }
+
+        void SetPeriodicTransformations()
+        {
+            SetPeriodicTransformations(
+                [](auto u, Geom::t_index id) {},
+                [](auto u, Geom::t_index id) {});
         }
 
         void ConstructMetrics();

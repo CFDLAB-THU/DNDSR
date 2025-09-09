@@ -250,7 +250,7 @@
     ],
     "python.analysis.autoImportCompletions": false,
     "python.analysis.extraPaths": [
-        "${workspaceFolder}.src"
+        "${workspaceFolder}"
     ],
     "C_Cpp.errorSquiggles": "enabled",
     // "C_Cpp.intelliSenseEngine": "Tag Parser"

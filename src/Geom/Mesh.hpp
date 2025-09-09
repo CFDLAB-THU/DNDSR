@@ -182,6 +182,8 @@ namespace DNDS::Geom
         UnstructuredMesh(const DNDS::MPIInfo &n_mpi, int n_dim)
             : mpi(n_mpi), dim(n_dim) {}
 
+        int getDim() const { return dim; }
+
         auto getCell2NodeIndexPbiRow(index iCell)
         {
             std::vector<Geom::NodeIndexPBI> ret;
@@ -379,6 +381,17 @@ namespace DNDS::Geom
             else
                 return -1 - iBnd;
         }
+
+        void SetPeriodicGeometry(
+            const tPoint &translation1,
+            const tPoint &rotationCenter1,
+            const tPoint &eulerAngles1,
+            const tPoint &translation2,
+            const tPoint &rotationCenter2,
+            const tPoint &eulerAngles2,
+            const tPoint &translation3,
+            const tPoint &rotationCenter3,
+            const tPoint &eulerAngles3);
 
         /**
          * \brief only requires father part of cell2node, bnd2node and coords
@@ -712,7 +725,7 @@ namespace DNDS::Geom
         tAdj2 bnd2cellSerial;              // created through reading
         tAdj1 cell2cellOrigSerial;         // created through reading
         tAdj1 node2nodeOrigSerial;         // created through reading
-        tAdj1 bnd2bndOrigSerial;         // created through reading
+        tAdj1 bnd2bndOrigSerial;           // created through reading
         tPbi cell2nodePbiSerial;           // created through reading-Deduplicate
         tPbi bnd2nodePbiSerial;            // created through reading-Deduplicate
         /***************************************************************/

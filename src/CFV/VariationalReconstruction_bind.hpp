@@ -2,6 +2,8 @@
 
 #include "DNDS/Defines_bind.hpp"
 #include "DNDS/Array_bind.hpp"
+#include <pybind11/functional.h>
+#include <pybind11_json/pybind11_json.hpp>
 
 #include "VariationalReconstruction.hpp"
 
@@ -21,11 +23,55 @@ namespace DNDS::CFV
                           { return std::make_shared<T>(mpi, mesh); }),
                  py::arg("mpi"), py::arg("mesh"))
             .def("ConstructMetrics", &T::ConstructMetrics)
-            .def("ConstructBaseAndWeight", [&](T &self)
-                 { self.ConstructBaseAndWeight(); })
-            // todo: the functor-in version; remember the GIL!
+            .def(
+                "ConstructBaseAndWeight",
+                [](T &self, typename T::tFGetBoundaryWeight f)
+                {
+                    self.ConstructBaseAndWeight(
+                        [f](Geom::t_index id, int order)
+                        {
+                            py::gil_scoped_acquire scope_gil;
+                            return f(id, order);
+                        });
+                },
+                py::arg("map_bcId_iOrder_to_bCweight"))
+            .def(
+                "ConstructBaseAndWeight_map",
+                [](T &self, const std::map<std::pair<Geom::t_index, int>, real> &m)
+                {
+                    self.ConstructBaseAndWeight(
+                        [&](Geom::t_index id, int order)
+                        {
+                            if (m.count({id, order}))
+                                return m.at({id, order});
+                            else
+                                return 0.0;
+                        });
+                },
+                py::arg("map_bcId_iOrder_to_bCweight"))
             .def("ConstructRecCoeff", &T::ConstructRecCoeff);
         // TODO: wrap Euler-related calls in EulerSolver inside euler!
+
+        VariationalReconstruction_
+            .def("SetPeriodicTransformations3d", [](T &self, std::array<int, 3> Seq123)
+                 { self.SetPeriodicTransformations(Seq123); }, py::arg("Seq123"))
+            .def("SetPeriodicTransformations2d", [](T &self, std::array<int, 2> Seq123)
+                 { self.SetPeriodicTransformations(Seq123); }, py::arg("Seq123"))
+            .def("SetPeriodicTransformationsNoOp", [](T &self)
+                 { self.SetPeriodicTransformations(); });
+
+        VariationalReconstruction_
+            .def(
+                "ParseSettings", [](T &self, py::object settings)
+                { 
+                    VRSettings defaultSettings(self.getDim());
+                    nlohmann::ordered_json defaultJson;
+                    defaultSettings.WriteIntoJson(defaultJson);
+                    nlohmann::json settings_json = settings;
+                    defaultJson.merge_patch(settings_json);
+                    self.settings.ParseFromJson(defaultJson);
+                },
+                py::arg("Seq123"));
 
 #define DNDS_CFV_VR_PYBIND11_DEFINE_BuildUDof(nVarsFixed)                            \
     VariationalReconstruction_.def(                                                  \

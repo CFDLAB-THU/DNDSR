@@ -4,6 +4,7 @@
 #include "DNDS/Array_bind.hpp"
 #include "Mesh.hpp"
 #include <pybind11_json/pybind11_json.hpp>
+#include <pybind11/eigen.h>
 
 namespace DNDS::Geom
 {
@@ -80,6 +81,8 @@ namespace DNDS::Geom
             // ObtainLocalFactFillOrdering
             // ObtainSymmetricSymbolicFactorization
             // .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(ReorderLocalCells) //! it has argument now
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(getMPI)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(getDim)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumNode)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumCell)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumFace)
@@ -87,12 +90,37 @@ namespace DNDS::Geom
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumNodeGhost)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumCellGhost)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumFaceGhost)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumBndGhost)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumNodeProc)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumCellProc)
-            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumFaceProc);
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumFaceProc)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumBndProc)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumNodeGlobal)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumCellGlobal)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumFaceGlobal)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(NumBndGlobal);
         //!!
+        UnstructuredMesh_
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildO2FromO1Elevation)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildBisectO1FormO2)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(RecreatePeriodicNodes)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildVTKConnectivity);
 
-        UnstructuredMesh_.def("ReorderLocalCells", &UnstructuredMesh::ReorderLocalCells, py::arg("nParts") = 1);
+        UnstructuredMesh_
+            .def("ReorderLocalCells", &UnstructuredMesh::ReorderLocalCells, py::arg("nParts") = 1)
+            .def("ReadSerialize", &UnstructuredMesh::ReadSerialize, py::arg("serializer"), py::arg("name"))
+            .def("WriteSerialize", &UnstructuredMesh::WriteSerialize, py::arg("serializer"), py::arg("name"));
+
+        UnstructuredMesh_.def("SetPeriodicGeometry", &UnstructuredMesh::SetPeriodicGeometry,
+                              py::arg("translation1") = Geom::tPoint{1, 0, 0},
+                              py::arg("rotationCenter1") = Geom::tPoint{0, 0, 0},
+                              py::arg("eulerAngles1") = Geom::tPoint{0, 0, 0},
+                              py::arg("translation2") = Geom::tPoint{0, 1, 0},
+                              py::arg("rotationCenter2") = Geom::tPoint{0, 0, 0},
+                              py::arg("eulerAngles2") = Geom::tPoint{0, 0, 0},
+                              py::arg("translation3") = Geom::tPoint{0, 0, 1},
+                              py::arg("rotationCenter3") = Geom::tPoint{0, 0, 0},
+                              py::arg("eulerAngles3") = Geom::tPoint{0, 0, 0});
 
 #undef DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER
 #undef DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC
@@ -108,12 +136,13 @@ namespace DNDS::Geom
                      [](ssp<UnstructuredMesh> mesh, MPI_int mRank)
                      { return std::make_shared<UnstructuredMeshSerialRW>(mesh, mRank); }),
                  py::arg("mesh"), py::arg("mRank") = 0)
-            .def_readonly("mesh", &UnstructuredMeshSerialRW::mesh)
+            .def_readwrite("mesh", &UnstructuredMeshSerialRW::mesh)
             .def_readonly("dataIsSerialOut", &UnstructuredMeshSerialRW::dataIsSerialOut)
             .def_readonly("dataIsSerialIn", &UnstructuredMeshSerialRW::dataIsSerialIn)
             .def("ReadFromCGNSSerial", py::overload_cast<const std::string &>(&UnstructuredMeshSerialRW::ReadFromCGNSSerial))
             .def("Deduplicate1to1Periodic", &UnstructuredMeshSerialRW::Deduplicate1to1Periodic)
             .def("BuildCell2Cell", &UnstructuredMeshSerialRW::BuildCell2Cell)
+            .def("BuildSerialOut", &UnstructuredMeshSerialRW::BuildSerialOut)
             .def(
                 "MeshPartitionCell2Cell",
                 [](UnstructuredMeshSerialRW &self, py::object options_in) // use default
