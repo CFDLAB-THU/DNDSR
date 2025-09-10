@@ -37,3 +37,4 @@ venv*
 srcOrig
 newSrc*
 .cache
+*.ipynb_*

@@ -23,6 +23,10 @@ def test_basic():
         meshFile,
         mpi,
         2,
+        periodic_geometry={
+            "translation1": [3, 0, 0],
+            "translation2": [0, 3, 0],
+        },
     )
 
     meshBnd, readerBnd = create_bnd_mesh(mesh)

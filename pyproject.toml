@@ -43,3 +43,5 @@ sdist.include = [
 "DNDSR/DNDS/_internal" = "src/DNDS/_internal"
 "DNDSR/Geom" = "src/Geom"
 "DNDSR/Geom/_internal" = "src/Geom/_internal"
+"DNDSR/CFV" = "src/CFV"
+"DNDSR/CFV/_internal" = "src/CFV/_internal"

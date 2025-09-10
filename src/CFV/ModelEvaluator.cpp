@@ -10,6 +10,9 @@ namespace DNDS::CFV
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
         static const auto SeqG012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
 
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            rhs[iCell].setZero();
+
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
             auto f2c = mesh->face2cell[iFace];
