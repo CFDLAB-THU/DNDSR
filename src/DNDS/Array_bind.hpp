@@ -58,11 +58,13 @@ namespace DNDS
     using tPy_ParArray = py::class_<ParArray<T, _row_size, _row_max, _align>, ssp<ParArray<T, _row_size, _row_max, _align>>>;
 
     template <class TArray>
-    using tPy_ArrayTransformer = py::class_<ArrayTransformerType_t<TArray>>; // ! unique ptr
+    // using tPy_ArrayTransformer = py::class_<ArrayTransformerType_t<TArray>>; // ! unique ptr
+    using tPy_ArrayTransformer = py_class_ssp<ArrayTransformerType_t<TArray>>; // ! shared ptr
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    using tPy_ParArrayPair = py::class_<ArrayPair<ParArray<T, _row_size, _row_max, _align>>>; // ! unique ptr
-}
+    // using tPy_ParArrayPair = py::class_<ArrayPair<ParArray<T, _row_size, _row_max, _align>>>; // ! unique ptr
+    using tPy_ParArrayPair = py_class_ssp<ArrayPair<ParArray<T, _row_size, _row_max, _align>>>; // ! shared ptr
+}   
 
 namespace DNDS // Array
 {

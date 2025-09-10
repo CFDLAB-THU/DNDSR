@@ -11,10 +11,16 @@ def test_basic():
     mpi = DNDS.MPIInfo()
     mpi.setWorld()
 
+    meshFile = os.path.join(
+        os.path.dirname(__file__), "..", "..", "data", "mesh", "NACA0012_H2.cgns"
+    )
+
+    meshFile = os.path.join(
+        os.path.dirname(__file__), "..", "..", "data", "mesh", "Uniform_3x3.cgns"
+    )
+
     mesh, reader, name2Id = create_mesh_from_CGNS(
-        os.path.join(
-            os.path.dirname(__file__), "..", "..", "data", "mesh", "NACA0012_H2.cgns"
-        ),
+        meshFile,
         mpi,
         2,
     )
@@ -22,7 +28,10 @@ def test_basic():
     meshBnd, readerBnd = create_bnd_mesh(mesh)
 
     vfvSettings = json.loads(
-    "".join([line if not line.strip().startswith("//") else "" for line in """{
+        "".join(
+            [
+                line if not line.strip().startswith("//") else ""
+                for line in """{
         "maxOrder": 3,
         "intOrder": 5,
         "intOrderVR": 5,
@@ -61,7 +70,9 @@ def test_basic():
             "_tail": 0
         }
     }
-    """.splitlines()])
+    """.splitlines()
+            ]
+        )
     )
     print(vfvSettings)
 
@@ -78,9 +89,36 @@ def test_basic():
             bcid_2_bcweight_map[(id, 1)] = 1.0
             bcid_2_bcweight_map[(id, 2)] = 1.0
             bcid_2_bcweight_map[(id, 3)] = 1.0
-    vfv.ConstructMetrics()        
+    vfv.ConstructMetrics()
     vfv.ConstructBaseAndWeight_map(bcid_2_bcweight_map)
     vfv.ConstructRecCoeff()
+
+    u = CFV.tUDof_1()
+    rhs = CFV.tUDof_1()
+    uRec, uRecNew = [CFV.tURec_1() for _ in range(2)]
+    for u_ in [u, rhs]:
+        vfv.BuildUDof_1(u_, 1)
+    for uRec_ in [uRec, uRecNew]:
+        vfv.BuildURec_1(uRec_, 1)
+    for i in range(mesh.NumCell()):
+        u_i = np.array(u[i], copy=False)
+        u_i[0] = vfv.GetCellBary(i)[0]
+        print(vfv.GetCellBary(i))
+        print(np.array(u[i], copy=False))
+
+    print(
+        f"rank [{mpi.rank}], u.Size() = {u.Size()}, u.father.Size() = {u.father.Size()}"
+        + "\n"
+        + f"{u.trans.mpi}"
+    )
+    eval = CFV.ModelEvaluator(mesh, vfv, {})
+    eval.EvaluateRHS(rhs, u, uRec, 0.0)
+    for i in range(mesh.NumCell()):
+        print(np.array(rhs[i], copy=False))
+    FBoundary = eval.get_FBoundary(0.5)
+    eval.DoReconstructionIter(uRec, uRecNew, u, 0.0, False)
+    for i in range(mesh.NumCell()):
+        print(np.array(uRec[i], copy=False))
 
 
 if __name__ == "__main__":

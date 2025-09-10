@@ -21,25 +21,12 @@ ${DNDS_EXTERNAL_LIBS}
 
 set(CPPS
 VariationalReconstruction.cpp
-_explicit_instantiation/VariationalReconstruction_Reconstruction_2_4.cpp
-_explicit_instantiation/VariationalReconstruction_Reconstruction_2_5.cpp
-_explicit_instantiation/VariationalReconstruction_Reconstruction_2_6.cpp
-_explicit_instantiation/VariationalReconstruction_Reconstruction_2_7.cpp
-_explicit_instantiation/VariationalReconstruction_Reconstruction_2_D.cpp
-_explicit_instantiation/VariationalReconstruction_Reconstruction_3_5.cpp
-_explicit_instantiation/VariationalReconstruction_Reconstruction_3_6.cpp
-_explicit_instantiation/VariationalReconstruction_Reconstruction_3_7.cpp
-_explicit_instantiation/VariationalReconstruction_Reconstruction_3_D.cpp
-_explicit_instantiation/VariationalReconstruction_LimiterProcedure_2_4.cpp
-_explicit_instantiation/VariationalReconstruction_LimiterProcedure_2_5.cpp
-_explicit_instantiation/VariationalReconstruction_LimiterProcedure_2_6.cpp
-_explicit_instantiation/VariationalReconstruction_LimiterProcedure_2_7.cpp
-_explicit_instantiation/VariationalReconstruction_LimiterProcedure_2_D.cpp
-_explicit_instantiation/VariationalReconstruction_LimiterProcedure_3_5.cpp
-_explicit_instantiation/VariationalReconstruction_LimiterProcedure_3_6.cpp
-_explicit_instantiation/VariationalReconstruction_LimiterProcedure_3_7.cpp
-_explicit_instantiation/VariationalReconstruction_LimiterProcedure_3_D.cpp
+ModelEvaluator.cpp
 )
+
+file(GLOB EXPLICIT_INST_CPP_FILES "_explicit_instantiation/*.cpp")
+
+list(APPEND CPPS ${EXPLICIT_INST_CPP_FILES})
 
 dnds_add_lib(${LIBNAME}        "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
             OFF ON ON) # SHARED, FAST, EXCLUDE

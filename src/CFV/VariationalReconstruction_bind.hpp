@@ -4,6 +4,7 @@
 #include "DNDS/Array_bind.hpp"
 #include <pybind11/functional.h>
 #include <pybind11_json/pybind11_json.hpp>
+#include <pybind11/eigen.h>
 
 #include "VariationalReconstruction.hpp"
 
@@ -69,9 +70,11 @@ namespace DNDS::CFV
                     defaultSettings.WriteIntoJson(defaultJson);
                     nlohmann::json settings_json = settings;
                     defaultJson.merge_patch(settings_json);
-                    self.settings.ParseFromJson(defaultJson);
-                },
+                    self.settings.ParseFromJson(defaultJson); },
                 py::arg("Seq123"));
+        VariationalReconstruction_
+            .def(
+                "GetCellBary", &T::GetCellBary, py::arg("iCell"));
 
 #define DNDS_CFV_VR_PYBIND11_DEFINE_BuildUDof(nVarsFixed)                            \
     VariationalReconstruction_.def(                                                  \
@@ -99,6 +102,7 @@ namespace DNDS::CFV
     }
         if constexpr (dim == 2)
         {
+            DNDS_CFV_VR_PYBIND11_DEFINE_BuildCalls(1);
             DNDS_CFV_VR_PYBIND11_DEFINE_BuildCalls(4);
             DNDS_CFV_VR_PYBIND11_DEFINE_BuildCalls(5);
             DNDS_CFV_VR_PYBIND11_DEFINE_BuildCalls(6);
@@ -107,6 +111,7 @@ namespace DNDS::CFV
         }
         else
         {
+            DNDS_CFV_VR_PYBIND11_DEFINE_BuildCalls(1);
             DNDS_CFV_VR_PYBIND11_DEFINE_BuildCalls(5);
             DNDS_CFV_VR_PYBIND11_DEFINE_BuildCalls(6);
             DNDS_CFV_VR_PYBIND11_DEFINE_BuildCalls(7);

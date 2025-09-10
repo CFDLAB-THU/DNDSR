@@ -1,6 +1,7 @@
 
 #include "VRDefines_bind.hpp"
 #include "VariationalReconstruction_bind.hpp"
+#include "ModelEvaluator_bind.hpp"
 
 PYBIND11_MODULE(cfv_pybind11, m)
 {
@@ -16,4 +17,6 @@ PYBIND11_MODULE(cfv_pybind11, m)
 
     pybind11_VariationalReconstruction_define<2>(m);
     pybind11_VariationalReconstruction_define<3>(m);
+
+    pybind11_ModelEvaluator_define(m);
 }
