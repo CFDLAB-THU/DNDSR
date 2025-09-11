@@ -195,7 +195,7 @@ namespace DNDS::Euler
                     TU ULxy = u[f2c[0]];
                     if (direct2ndRec && !direct2ndRec1stConv)
                         ULxy += uGradBuf[f2c[0]].transpose() * (vfv->GetFaceQuadraturePPhysFromCell(iFace, f2c[0], 0, -1) - vfv->GetCellQuadraturePPhys(f2c[0], -1))(SeqG012);
-                    else
+                    else if (!direct2ndRec1stConv)
                         ULxy += (vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iGQ, std::array<int, 1>{0}, 1) *
                                  uRec[f2c[0]])
                                     .transpose() *
@@ -223,7 +223,7 @@ namespace DNDS::Euler
 
                     if (direct2ndRec && !direct2ndRec1stConv)
                         GradULxy(SeqG012, Eigen::all) = uGradBuf[f2c[0]];
-                    else
+                    else if (!direct2ndRec1stConv)
                     {
                         if constexpr (gDim == 2)
                             GradULxy({0, 1}, Eigen::all) =
@@ -249,7 +249,7 @@ namespace DNDS::Euler
                         URxy = u[f2c[1]];
                         if (direct2ndRec && !direct2ndRec1stConv)
                             URxy += uGradBuf[f2c[1]].transpose() * (vfv->GetFaceQuadraturePPhysFromCell(iFace, f2c[1], 1, -1) - vfv->GetCellQuadraturePPhys(f2c[1], -1))(SeqG012);
-                        else
+                        else if (!direct2ndRec1stConv)
                             URxy += (vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iGQ, std::array<int, 1>{0}, 1) *
                                      uRec[f2c[1]])
                                         .transpose() *
@@ -271,7 +271,7 @@ namespace DNDS::Euler
 
                         if (direct2ndRec && !direct2ndRec1stConv)
                             GradURxy(SeqG012, Eigen::all) = uGradBuf[f2c[1]];
-                        else
+                        else if (!direct2ndRec1stConv)
                         {
                             if constexpr (gDim == 2)
                                 GradURxy({0, 1}, Eigen::all) =
