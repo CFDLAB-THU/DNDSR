@@ -424,6 +424,21 @@ namespace DNDS::CFV
             return matrixAAInvB(iCell, 0);
         }
 
+        auto GetCellRecMatAInvB(index iCell, int ic2f)
+        {
+            return matrixAAInvB(iCell, 1 + ic2f);
+        }
+
+        auto &get_matrixAAInvB()
+        {
+            return matrixAAInvB;
+        }
+
+        auto &get_vectorAInvB()
+        {
+            return vectorAInvB;
+        }
+
         /**
          * @brief flag = 0 means use moment data, or else use no moment (as 0)
          * pPhy must be relative to cell

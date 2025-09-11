@@ -121,5 +121,17 @@ namespace DNDS::CFV
 #undef DNDS_CFV_VR_PYBIND11_DEFINE_BuildURec
 #undef DNDS_CFV_VR_PYBIND11_DEFINE_BuildUGrad
 #undef DNDS_CFV_VR_PYBIND11_DEFINE_BuildCalls
+
+        VariationalReconstruction_
+            .def_property_readonly("matrixAAInvB", &T::get_matrixAAInvB)
+            .def_property_readonly("vectorAInvB", &T::get_vectorAInvB);
+
+        VariationalReconstruction_
+            .def("GetFaceNorm", &T::GetFaceNorm,
+                 py::arg("iFace"), py::arg("iG"))
+            .def("GetFaceNormFromCell", &T::GetFaceNormFromCell,
+                 py::arg("iFace"), py::arg("iCell"), py::arg("if2c"), py::arg("ig"))
+            .def("GetCellVol", &T::GetCellVol, py::arg("iCell"))
+            .def("GetFaceArea", &T::GetFaceArea, py::arg("iFace"));
     }
 }

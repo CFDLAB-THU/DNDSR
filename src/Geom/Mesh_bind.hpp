@@ -105,6 +105,8 @@ namespace DNDS::Geom
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildBisectO1FormO2)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(RecreatePeriodicNodes)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildVTKConnectivity);
+#undef DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER
+#undef DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC
 
         UnstructuredMesh_
             .def("ReorderLocalCells", &UnstructuredMesh::ReorderLocalCells, py::arg("nParts") = 1)
@@ -122,8 +124,11 @@ namespace DNDS::Geom
                               py::arg("rotationCenter3") = Geom::tPoint{0, 0, 0},
                               py::arg("eulerAngles3") = Geom::tPoint{0, 0, 0});
 
-#undef DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER
-#undef DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC
+        UnstructuredMesh_
+            .def("CellFaceOther", &UnstructuredMesh::CellFaceOther,
+                 py::arg("iCell"), py::arg("iFace"))
+            .def("CellIsFaceBack", &UnstructuredMesh::CellIsFaceBack,
+                 py::arg("iCell"), py::arg("iFace"));
     }
 
     using tPy_UnstructuredMeshSerialRW = py::class_<UnstructuredMeshSerialRW, ssp<UnstructuredMeshSerialRW>>;

@@ -33,9 +33,15 @@ namespace DNDS::CFV
                         return std::make_shared<ModelEvaluator>(mesh, vfv, defaultSettings);
                     }),
                 py::arg("mesh"), py::arg("vfv"), py::arg("settings"));
+
+        auto EvaluateRHSOptions_ = py::class_<ModelEvaluator::EvaluateRHSOptions>(ModelEvaluator_, "EvaluateRHSOptions");
+        EvaluateRHSOptions_
+            .def(py::init())
+            .def_readwrite("direct2ndRec", &ModelEvaluator::EvaluateRHSOptions::direct2ndRec)
+            .def_readwrite("direct2ndRec1stConv", &ModelEvaluator::EvaluateRHSOptions::direct2ndRec1stConv);
         ModelEvaluator_
             .def("EvaluateRHS", &ModelEvaluator::EvaluateRHS,
-                 py::arg("rhs"), py::arg("u"), py::arg("uRec"), py::arg("t"))
+                 py::arg("rhs"), py::arg("u"), py::arg("uRec"), py::arg("t"), py::arg("options") = ModelEvaluator::EvaluateRHSOptions{})
             .def("get_FBoundary", &ModelEvaluator::get_FBoundary, py::arg("t"));
 
         ModelEvaluator_

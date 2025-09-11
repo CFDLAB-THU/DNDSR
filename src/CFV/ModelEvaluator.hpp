@@ -30,6 +30,8 @@ namespace DNDS::CFV
         ssp<tvfv> vfv;
         ModelSettings settings;
 
+        tUGrad<nVarsFixed, dim> uGradBuf;
+
     public:
         using TVec = Eigen::Matrix<real, dim, 1>;
         using TMat = Eigen::Matrix<real, dim, dim>;
@@ -41,6 +43,7 @@ namespace DNDS::CFV
                        const ModelSettings &settings_)
             : mesh(mesh_), vfv(vfv_), settings(settings_)
         {
+            vfv->BuildUGrad(uGradBuf, nVarsFixed);
         }
 
         Tvfv_FBoundary get_FBoundary(real t)
@@ -76,7 +79,15 @@ namespace DNDS::CFV
             return TU{0.0};
         }
 
-        void EvaluateRHS(tUDof<nVarsFixed> &rhs, tUDof<nVarsFixed> &u, tURec<nVarsFixed> &uRec, real t);
+        struct EvaluateRHSOptions
+        {
+            bool direct2ndRec = false;
+            bool direct2ndRec1stConv = false;
+            EvaluateRHSOptions() {}
+        };
+
+        void EvaluateRHS(tUDof<nVarsFixed> &rhs, tUDof<nVarsFixed> &u, tURec<nVarsFixed> &uRec, real t,
+                         const EvaluateRHSOptions &options = EvaluateRHSOptions{});
 
         void DoReconstructionIter(tURec<nVarsFixed> &uRec,
                                   tURec<nVarsFixed> &uRecNew,
