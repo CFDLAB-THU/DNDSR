@@ -34,6 +34,20 @@ namespace DNDS::CFV
                     }),
                 py::arg("mesh"), py::arg("vfv"), py::arg("settings"));
 
+        ModelEvaluator_
+            .def(
+                "ParseSettings",
+                [](ModelEvaluator &self, py::object settings)
+                {
+                    ModelSettings defaultSettings;
+                    nlohmann::ordered_json defaultJson;
+                    to_json(defaultJson, defaultSettings);
+                    nlohmann::json settings_json = settings;
+                    defaultJson.merge_patch(settings_json);
+                    from_json(defaultJson, defaultSettings);
+                    self.get_settings() = defaultJson;
+                });
+
         auto EvaluateRHSOptions_ = py::class_<ModelEvaluator::EvaluateRHSOptions>(ModelEvaluator_, "EvaluateRHSOptions");
         EvaluateRHSOptions_
             .def(py::init())

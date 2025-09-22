@@ -101,7 +101,8 @@ namespace DNDS::CFV
                                    (unitNorm * (URxy - ULxy).transpose());
                     real an = unitNorm(0) * settings.ax + unitNorm(1) * settings.ay;
                     finc = -(an * URxy + an * ULxy) * 0.5 + 0.5 * std::abs(an) * (URxy - ULxy);
-                    // TODO: viscous
+                    // viscous:
+                    finc += GradUMeanXy.transpose() * unitNorm * settings.sigma;
                     finc *= vfv->GetFaceJacobiDet(iFace, iG);
                 });
             rhs[f2c[0]] += fluxEs / vfv->GetCellVol(f2c[0]);

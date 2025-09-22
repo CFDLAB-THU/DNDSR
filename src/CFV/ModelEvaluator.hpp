@@ -46,6 +46,8 @@ namespace DNDS::CFV
             vfv->BuildUGrad(uGradBuf, nVarsFixed);
         }
 
+        ModelSettings &get_settings() { return settings; }
+
         Tvfv_FBoundary get_FBoundary(real t)
         {
 

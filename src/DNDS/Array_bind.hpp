@@ -133,7 +133,9 @@ namespace DNDS // Array
                 [](TArray &self)
                 {
                     if constexpr (std::is_arithmetic_v<T>)
-                        return py::memoryview::from_buffer<T>(self.data(), {self.DataSize()}, {TArray::sizeof_T});
+                        return py::memoryview::from_buffer<T>(
+                            self.DataSize() ? self.data() : (T *)(&self), // for null buffer
+                            {self.DataSize()}, {TArray::sizeof_T});
                     else // todo: determine if have pybind11_buffer_format()
                     {
                         std::string buf_format;

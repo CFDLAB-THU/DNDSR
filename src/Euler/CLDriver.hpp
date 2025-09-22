@@ -27,7 +27,7 @@ namespace DNDS::Euler
         real CLconvergeThreshold = 1e-3;
         index CLconvergeWindow = 10;
 
-        index CLconvergeLongWindow = 100;
+        index CLconvergeLongWindow = 100; // for converged-at-target exit of main iteration loop
         real CLconvergeLongThreshold = 1e-4;
         bool CLconvergeLongStrictAoA = false;
 

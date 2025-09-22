@@ -24,6 +24,10 @@ namespace DNDS::CFV
         this->MakePairDefaultOnCell(cellMajorHBox);
         this->MakePairDefaultOnCell(cellMajorCoord, 3, 3);
         this->MakePairDefaultOnCell(cellInertia, 3, 3);
+        sumVolume = 0.0;
+        minVolume = veryLargeReal;
+        maxVolume = -veryLargeReal;
+
 #ifdef DNDS_USE_OMP
 #pragma omp parallel for
 #endif
