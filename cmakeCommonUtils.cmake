@@ -97,6 +97,7 @@ function(dnds_add_py_module LIBNAME CPPS LINKS PCH_TARGET SHARED FAST USE_EXCLUD
     # message(DEBUG "Include directories for ${LIBNAME}: ${INCLUDE_DIRS}")
     
     target_link_libraries(${LIBNAME} PRIVATE ${LINKS})
+    # target_link_libraries(${LIBNAME} PRIVATE pybind11::module) # to not rely directly on Python env for Python.h #? not needed for pybind11_add_module? 
     # target_link_libraries(${LIBNAME} PRIVATE ${PCH_LINKS})
     if((CMAKE_VERSION VERSION_GREATER_EQUAL "3.16") AND DNDS_USE_PRECOMPILED_HEADER)
         target_precompile_headers(${LIBNAME} REUSE_FROM ${PCH_TARGET})

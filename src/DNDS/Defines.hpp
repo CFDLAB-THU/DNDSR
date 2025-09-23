@@ -173,7 +173,7 @@ namespace DNDS
     const rowsize NonUniformSize = -2;
     static_assert(DynamicSize != NonUniformSize, "DynamicSize, NonUniformSize definition conflict");
 
-    inline constexpr int RowSize_To_EigenSize(rowsize rs)
+    constexpr int RowSize_To_EigenSize(rowsize rs)
     {
         return rs >= 0 ? static_cast<int>(rs) : (rs == DynamicSize || rs == NonUniformSize ? Eigen::Dynamic : INT_MIN);
     }
@@ -195,7 +195,7 @@ namespace DNDS
 
 namespace DNDS
 {
-    extern std::ostream *logStream;
+    extern ssp<std::ostream> logStream;
 
     extern bool useCout;
 
@@ -205,7 +205,9 @@ namespace DNDS
 
     bool logIsTTY();
 
-    void setLogStream(std::ostream *nstream);
+    void setLogStream(ssp<std::ostream> nstream);
+
+    void setLogStreamCout();
 
     int get_terminal_width();
 
@@ -308,7 +310,7 @@ namespace DNDS
 
     /// \brief l must be non-negative, r must be positive. integers
     template <class TL, class TR>
-    inline constexpr auto divCeil(TL l, TR r)
+    constexpr auto divCeil(TL l, TR r)
     {
         return l / r + (l % r) ? 1 : 0;
     }
@@ -329,41 +331,41 @@ namespace DNDS
 namespace DNDS
 {
     template <typename T>
-    inline constexpr T sqr(const T &a)
+    constexpr T sqr(const T &a)
     {
         static_assert(std::is_arithmetic_v<T>, "need arithmetic");
         return a * a;
     }
 
     template <typename T>
-    inline constexpr T cube(const T &a)
+    constexpr T cube(const T &a)
     {
         static_assert(std::is_arithmetic_v<T>, "need arithmetic");
         return a * a * a;
     }
 
-    inline constexpr real sign(real a)
+    constexpr real sign(real a)
     {
         return a > 0 ? 1 : (a < 0 ? -1 : 0);
     }
 
-    inline constexpr real signTol(real a, real tol)
+    constexpr real signTol(real a, real tol)
     {
         return a > tol ? 1 : (a < -tol ? -1 : 0);
     }
 
-    inline constexpr real signP(real a)
+    constexpr real signP(real a)
     {
         return a >= 0 ? 1 : -1;
     }
 
-    inline constexpr real signM(real a)
+    constexpr real signM(real a)
     {
         return a <= 0 ? -1 : 1;
     }
 
     template <typename T>
-    inline constexpr T mod(T a, T b)
+    constexpr T mod(T a, T b)
     {
         static_assert(std::is_signed<T>::value && std::is_integral<T>::value, "not legal mod type");
         T val = a % b;
@@ -373,7 +375,7 @@ namespace DNDS
     }
 
     template <typename T>
-    inline constexpr T divide_ceil(T a, T b)
+    constexpr T divide_ceil(T a, T b)
     {
         static_assert(std::is_integral<T>::value, "not legal mod type");
         return a / b + (a % b ? 1 : 0);
@@ -649,7 +651,6 @@ namespace DNDS
 {
     std::string GetSetVersionName(const std::string &ver = "");
 }
-
 
 /*
 

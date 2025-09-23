@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 #include <set>
+#include <utility>
 
 #include "VRDefines.hpp"
 #include "VRSettings.hpp"
@@ -107,7 +108,7 @@ namespace DNDS::CFV
 
     public:
         VariationalReconstruction(MPIInfo nMpi, ssp<Geom::UnstructuredMesh> nMesh)
-            : mpi(nMpi), mesh(nMesh)
+            : mpi(nMpi), mesh(std::move(nMesh))
         {
             DNDS_assert(dim == mesh->dim);
             mRank = mesh->mRank;
@@ -674,6 +675,8 @@ namespace DNDS::CFV
                                         DiffJ({0}, {j})) * //! i, j needed in {}!
                                     wgd(0);
                                 break;
+                            default:
+                                DNDS_assert(false);
                             }
                         }
                 }
@@ -710,6 +713,8 @@ namespace DNDS::CFV
                                         DiffJ({0}, {j})) *
                                     wgd(0);
                                 break;
+                            default:
+                                DNDS_assert(false);
                             }
                         }
                 }
@@ -828,6 +833,8 @@ namespace DNDS::CFV
                                         DiffJ_Norm({0}, {j})) * //! i, j needed in {}!
                                     wgd(0);
                                 break;
+                            default:
+                                DNDS_assert(false);
                             }
                         }
                 }
@@ -864,6 +871,8 @@ namespace DNDS::CFV
                                         DiffJ_Norm({0}, {j})) *
                                     wgd(0);
                                 break;
+                            default:
+                                DNDS_assert(false);
                             }
                         }
                 }
@@ -1326,7 +1335,7 @@ namespace DNDS::CFV
         }
     };
 }
-
+// NOLINTBEGIN(bugprone-macro-parentheses)
 #define DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(dim, nVarsFixed, ext)          \
     namespace DNDS::CFV                                                                         \
     {                                                                                           \
@@ -1378,6 +1387,7 @@ DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, 6, extern)
 DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, 7, extern)
 DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, Eigen::Dynamic, extern)
 
+
 #define DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(dim, nVarsFixed, ext)             \
     namespace DNDS::CFV                                                                              \
     {                                                                                                \
@@ -1410,6 +1420,7 @@ DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, Eigen::Dynamic, exte
             const tFMEig<nVarsFixed> &FM, const tFMEig<nVarsFixed> &FMI,                             \
             bool putIntoNew);                                                                        \
     }
+// NOLINTEND(bugprone-macro-parentheses)
 DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(2, 1, extern)
 DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(2, 4, extern)
 DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(2, 5, extern)

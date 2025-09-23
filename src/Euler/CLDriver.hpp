@@ -4,7 +4,6 @@
 #include <set>
 #include "DNDS/Defines.hpp"
 #include "DNDS/MPI.hpp"
-#include "DNDS/JsonUtil.hpp"
 #include "Geom/Geometric.hpp"
 
 namespace DNDS::Euler
@@ -50,13 +49,13 @@ namespace DNDS::Euler
         index CLHistorySize = 0;
         index CLHistoryHead = 0;
         index CLAtTargetAcc = 0;
-        void _PushCL(real CL)
+        void PushCL_(real CL)
         {
             CLHistoryHead = mod<index>(CLHistoryHead + 1, CLHistory.size());
             CLHistory(CLHistoryHead) = CL;
             CLHistorySize++;
         }
-        void _ClearCL()
+        void ClearCL_()
         {
             CLHistory.setConstant(veryLargeReal);
             CLHistorySize = 0;
@@ -90,7 +89,7 @@ namespace DNDS::Euler
 
         void Update(index iter, real CL, const MPIInfo &mpi)
         {
-            _PushCL(CL);
+            PushCL_(CL);
             real curCLErr = std::abs(settings.targetCL - CL);
             // if (mpi.rank == 0)
             //     std::cout << fmt::format("curCLErr {}, n = {}", curCLErr, CLAtTargetAcc) << std::endl;
@@ -130,7 +129,7 @@ namespace DNDS::Euler
                     AOA = AOANew;
                     if (settings.CLconvergeLongStrictAoA)
                         CLAtTargetAcc = 0;
-                    _ClearCL();
+                    ClearCL_();
 
                     if (mpi.rank == 0)
                         log() << fmt::format("=== CLDriver at iter [{}], CL converged = [{}+-{:.1e}], CLSlope = [{}], newAOA [{}]",

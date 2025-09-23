@@ -62,12 +62,14 @@ install(TARGETS ${LIBNAME}_shared
 
 set(CPPS_BIND
 dnds_pybind11.cpp
+Defines_bind.cpp
 MPI_bind.cpp
 Array_bind.cpp
 ArrayDerived/ArrayAdjacency_bind.cpp
 ArrayDerived/ArrayEigenMatrix_bind.cpp
 ArrayDerived/ArrayEigenUniMatrixBatch_bind.cpp
 ArrayDerived/ArrayEigenVector_bind.cpp
+Serializer_bind.cpp
 )
 
 file(GLOB ARRAY_BIND_OFFSET_SOURCES "Array_bind_offset/*.cpp")

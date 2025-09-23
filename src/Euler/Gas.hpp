@@ -6,8 +6,8 @@
 
 namespace DNDS::Euler::Gas
 {
-    typedef Eigen::Vector3d tVec;
-    typedef Eigen::Vector2d tVec2;
+    using tVec = Eigen::Vector3d;
+    using tVec2 = Eigen::Vector2d;
 
     static const int MaxBatch = 16;
 
@@ -138,7 +138,7 @@ namespace DNDS::Euler::Gas
         real vSqr = prim(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).squaredNorm();
         real rho = prim(0);
         real p = prim(dim + 1);
-        real E = p / (gamma - 1) + rho * 0.5 * vSqr;
+        real E = p / (gamma - 1) + (rho * 0.5 * vSqr);
         U(0) = rho;
         U(dim + 1) = E;
         DNDS_assert(rho > 0);
@@ -835,8 +835,8 @@ namespace DNDS::Euler::Gas
                                           real gamma, TF &F, real dLambda, real fixScale,
                                           const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
-        static real scaleHartenYee = 0.05;
-        static real scaleLD = 0.2;
+        static const real scaleHartenYee = 0.05;
+        static const real scaleLD = 0.2;
         using TVec = Eigen::Vector<real, dim>;
         using TVec_Batch = Eigen::Matrix<real, dim, -1, Eigen::ColMajor, dim, MaxBatch>;
         using TReal_Batch = Eigen::Matrix<real, 1, -1, Eigen::RowMajor, 1, MaxBatch>;

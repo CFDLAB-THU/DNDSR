@@ -2,11 +2,14 @@
 
 #include "Defines.hpp"
 #include <pybind11/pybind11.h>
+#include <pybind11/iostream.h>
 namespace py = pybind11;
 
 namespace DNDS
 {
-
+#define DNDS_PYBIND11_OSTREAM_GUARD py::call_guard<py::scoped_ostream_redirect, \
+                                                   py::scoped_estream_redirect>()
+                                                   
     template <class T>
     using py_class_ssp = py::class_<T, ssp<T>>;
 

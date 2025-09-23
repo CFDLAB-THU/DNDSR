@@ -42,6 +42,8 @@ install(TARGETS ${LIBNAME}_shared
 
 set(CPPS_BIND
 cfv_pybind11.cpp
+ModelEvaluator_bind.cpp
+VariationalReconstruction_bind.cpp
 )
 
 dnds_add_py_module(${LIBNAME}_pybind11 "${CPPS_BIND}" "${LIBNAME}_shared;${LINKS_SHARED}" "${DNDS_PCH_TARGETS_FAST}"

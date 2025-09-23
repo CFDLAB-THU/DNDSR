@@ -253,5 +253,20 @@
         "${workspaceFolder}"
     ],
     "C_Cpp.errorSquiggles": "enabled",
+    "C_Cpp.files.exclude": {
+        "**/cfd_externals/**": true,
+        "**/.vscode": true,
+        "**/.vs": true
+    },
+    "C_Cpp.exclusionPolicy": "checkFilesAndFolders",
+    "clangd.path": "clangd-19",
+    "C_Cpp.intelliSenseEngine": "disabled",
     // "C_Cpp.intelliSenseEngine": "Tag Parser"
+    "[cpp]": {
+        "editor.wordBasedSuggestions": "off",
+        "editor.semanticHighlighting.enabled": true,
+        "editor.stickyScroll.defaultModel": "foldingProviderModel",
+        "editor.suggest.insertMode": "replace",
+        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd",
+    },
 }

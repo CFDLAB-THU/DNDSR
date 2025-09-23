@@ -1,6 +1,7 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
+#include <utility>
 
 #include "VariationalReconstruction.hpp"
 
@@ -41,7 +42,7 @@ namespace DNDS::CFV
 
         ModelEvaluator(decltype(mesh) mesh_, decltype(vfv) vfv_,
                        const ModelSettings &settings_)
-            : mesh(mesh_), vfv(vfv_), settings(settings_)
+            : mesh(std::move(mesh_)), vfv(std::move(vfv_)), settings(settings_)
         {
             vfv->BuildUGrad(uGradBuf, nVarsFixed);
         }

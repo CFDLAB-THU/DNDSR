@@ -23,7 +23,8 @@ namespace DNDS::CFV
             .def(py::init([](MPIInfo &mpi, ssp<Geom::UnstructuredMesh> mesh)
                           { return std::make_shared<T>(mpi, mesh); }),
                  py::arg("mpi"), py::arg("mesh"))
-            .def("ConstructMetrics", &T::ConstructMetrics)
+            .def("ConstructMetrics", &T::ConstructMetrics,
+                 DNDS_PYBIND11_OSTREAM_GUARD)
             .def(
                 "ConstructBaseAndWeight",
                 [](T &self, typename T::tFGetBoundaryWeight f)
@@ -35,7 +36,8 @@ namespace DNDS::CFV
                             return f(id, order);
                         });
                 },
-                py::arg("map_bcId_iOrder_to_bCweight"))
+                py::arg("map_bcId_iOrder_to_bCweight"),
+                DNDS_PYBIND11_OSTREAM_GUARD)
             .def(
                 "ConstructBaseAndWeight_map",
                 [](T &self, const std::map<std::pair<Geom::t_index, int>, real> &m)
@@ -49,8 +51,10 @@ namespace DNDS::CFV
                                 return 0.0;
                         });
                 },
-                py::arg("map_bcId_iOrder_to_bCweight"))
-            .def("ConstructRecCoeff", &T::ConstructRecCoeff);
+                py::arg("map_bcId_iOrder_to_bCweight"),
+                DNDS_PYBIND11_OSTREAM_GUARD)
+            .def("ConstructRecCoeff", &T::ConstructRecCoeff,
+                 DNDS_PYBIND11_OSTREAM_GUARD);
         // TODO: wrap Euler-related calls in EulerSolver inside euler!
 
         VariationalReconstruction_
@@ -76,24 +80,27 @@ namespace DNDS::CFV
             .def(
                 "GetCellBary", &T::GetCellBary, py::arg("iCell"));
 
-#define DNDS_CFV_VR_PYBIND11_DEFINE_BuildUDof(nVarsFixed)                            \
-    VariationalReconstruction_.def(                                                  \
-        ("BuildUDof_" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                   \
-        [](T &self, tUDof<nVarsFixed> &u, int nVars, bool buildSon, bool buildTrans) \
-        { self.BuildUDof(u, nVars, buildSon, buildTrans); },                         \
-        py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true, py::arg("buildTrans") = true)
-#define DNDS_CFV_VR_PYBIND11_DEFINE_BuildURec(nVarsFixed)                            \
-    VariationalReconstruction_.def(                                                  \
-        ("BuildURec_" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                   \
-        [](T &self, tURec<nVarsFixed> &u, int nVars, bool buildSon, bool buildTrans) \
-        { self.BuildURec(u, nVars, buildSon, buildTrans); },                         \
-        py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true, py::arg("buildTrans") = true)
-#define DNDS_CFV_VR_PYBIND11_DEFINE_BuildUGrad(nVarsFixed)                                 \
-    VariationalReconstruction_.def(                                                        \
-        ("BuildUGrad_" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                        \
-        [](T &self, tUGrad<nVarsFixed, dim> &u, int nVars, bool buildSon, bool buildTrans) \
-        { self.BuildUGrad(u, nVars, buildSon, buildTrans); },                              \
-        py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true, py::arg("buildTrans") = true)
+#define DNDS_CFV_VR_PYBIND11_DEFINE_BuildUDof(nVarsFixed)                                         \
+    VariationalReconstruction_.def(                                                               \
+        ("BuildUDof_" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                                \
+        [](T &self, tUDof<nVarsFixed> &u, int nVars, bool buildSon, bool buildTrans)              \
+        { self.BuildUDof(u, nVars, buildSon, buildTrans); },                                      \
+        py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true, py::arg("buildTrans") = true, \
+        DNDS_PYBIND11_OSTREAM_GUARD)
+#define DNDS_CFV_VR_PYBIND11_DEFINE_BuildURec(nVarsFixed)                                         \
+    VariationalReconstruction_.def(                                                               \
+        ("BuildURec_" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                                \
+        [](T &self, tURec<nVarsFixed> &u, int nVars, bool buildSon, bool buildTrans)              \
+        { self.BuildURec(u, nVars, buildSon, buildTrans); },                                      \
+        py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true, py::arg("buildTrans") = true, \
+        DNDS_PYBIND11_OSTREAM_GUARD)
+#define DNDS_CFV_VR_PYBIND11_DEFINE_BuildUGrad(nVarsFixed)                                        \
+    VariationalReconstruction_.def(                                                               \
+        ("BuildUGrad_" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                               \
+        [](T &self, tUGrad<nVarsFixed, dim> &u, int nVars, bool buildSon, bool buildTrans)        \
+        { self.BuildUGrad(u, nVars, buildSon, buildTrans); },                                     \
+        py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true, py::arg("buildTrans") = true, \
+        DNDS_PYBIND11_OSTREAM_GUARD)
 #define DNDS_CFV_VR_PYBIND11_DEFINE_BuildCalls(nVarsFixed)  \
     {                                                       \
         DNDS_CFV_VR_PYBIND11_DEFINE_BuildUDof(nVarsFixed);  \

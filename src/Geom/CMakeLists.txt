@@ -50,6 +50,8 @@ install(TARGETS ${LIBNAME}_shared
 
 set(CPPS_BIND
 geom_pybind11.cpp
+Elements_bind.cpp
+Mesh_bind.cpp
 )
 
 dnds_add_py_module(${LIBNAME}_pybind11 "${CPPS_BIND}" "${LIBNAME}_shared;${LINKS_SHARED}" "${DNDS_PCH_TARGETS_FAST}"

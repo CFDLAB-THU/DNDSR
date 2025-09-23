@@ -19,7 +19,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     void EulerEvaluator<model>::EvaluateRHS(
         ArrayDOFV<nVarsFixed> &rhs,
         JacobianDiagBlock<nVarsFixed> &JSource,
@@ -69,7 +70,7 @@ namespace DNDS::Euler
                 if (!bndIntegrations.count(i))
                 {
                     auto intOpt = pBCHandler->GetFlagFromIDSoft(i, "integrationOpt");
-                    bndIntegrations.emplace(std::make_pair(i, IntegrationRecorder(mesh->getMPI(), intOpt == 1 ? nVars : nVars + 2)));
+                    bndIntegrations.emplace(i, IntegrationRecorder(mesh->getMPI(), intOpt == 1 ? nVars : nVars + 2));
                 }
             }
             for (auto &v : bndIntegrations)

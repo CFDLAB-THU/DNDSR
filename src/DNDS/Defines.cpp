@@ -37,7 +37,7 @@ namespace DNDS
         return false;
     }
 
-    std::ostream *logStream;
+    ssp<std::ostream> logStream;
 
     bool useCout = true;
 
@@ -45,7 +45,9 @@ namespace DNDS
 
     bool logIsTTY() { return ostreamIsTTY(*logStream); }
 
-    void setLogStream(std::ostream *nstream) { useCout = false, logStream = nstream; }
+    void setLogStream(ssp<std::ostream> nstream) { useCout = false, logStream = nstream; }
+
+    void setLogStreamCout() { useCout = true, logStream.reset(); }
 
     int get_terminal_width()
     {
