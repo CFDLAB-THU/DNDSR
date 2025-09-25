@@ -14,7 +14,7 @@ requires = [
     "pybind11-stubgen",
     "typing_extensions",
     "numpy",
-    "ninja"
+    "ninja",
 ]
 build-backend = "scikit_build_core.build"
 

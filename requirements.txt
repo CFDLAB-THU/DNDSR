@@ -12,3 +12,6 @@ dash
 pytest
 pytest-mpi
 mpi4py
+compdb
+h5py
+typing_extensions

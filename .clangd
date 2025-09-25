@@ -1,3 +1,6 @@
+# to install clangd-19 on ubuntu
+# apt install clang-19 clangd-19 libclang-19-dev libomp-19-dev
+
 CompileFlags:
   Add: [-std=c++17]
   Remove: [-flto*]

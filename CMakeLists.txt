@@ -20,6 +20,10 @@ set(CMAKE_BUILD_TYPE Release CACHE STRING "Release or Debug")
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
     "Release" "Debug" "RelWithDebInfo" "MinSizeRel")
 
+if(DNDS_GENERATE_COMPILE_COMMANDS)
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()
+
 
 # ##########################################
 project(DNDSR LANGUAGES CXX) #! need to be in front of find_package(MPI)
@@ -113,6 +117,9 @@ set(DNDS_SUPERLU_DIST_USE_BLAS OFF CACHE BOOL "use blas in superlu_dist")
 set(DNDS_RECORD_COMMIT ON CACHE BOOL "record commit id for each cmake configure")
 set(DNDS_VERBOSE_BUILDING OFF CACHE BOOL "make the makefile verbose, overrides CMAKE_VERBOSE_MAKEFILE")
 set(DNDS_USE_CLANG_TIDY OFF CACHE BOOL "use clang-tidy")
+
+set(DNDS_GENERATE_COMPILE_COMMANDS OFF CACHE BOOL "generate proper compile_commands.json and post-process for clangd")
+
 
 # for we need fmtlib to give a shared library
 set(BUILD_SHARED_LIBS ON CACHE BOOL "set by DNDS, not used for now")
@@ -358,8 +365,8 @@ if (MPI_CXX_FOUND)
 endif()
 
 if(DNDS_EXTERNAL_LIB_BACKTRACE)
-list(APPEND DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIB_BACKTRACE})
-add_compile_definitions(BOOST_STACKTRACE_USE_BACKTRACE)
+    list(APPEND DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIB_BACKTRACE})
+    add_compile_definitions(BOOST_STACKTRACE_USE_BACKTRACE)
 endif()
 
 # set(DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}
@@ -668,6 +675,7 @@ endif()
 
 if (MPI_CXX_FOUND)
     set(DNDS_EXTERNAL_INCLUDES ${MPI_CXX_INCLUDE_DIRS} ${DNDS_EXTERNAL_INCLUDES})
+    message(STATUS "MPI_CXX_INCLUDE_DIRS ${MPI_CXX_INCLUDE_DIRS}")
 endif()
 
 set(DNDS_INCLUDES ${PROJECT_SOURCE_DIR}/src  CACHE INTERNAL "Project Public Includes")
@@ -884,6 +892,32 @@ if (DOXYGEN_FOUND)
 else(DOXYGEN_FOUND)
     message("Doxygen Not Found")
 endif(DOXYGEN_FOUND)
+
+if(DNDS_GENERATE_COMPILE_COMMANDS)
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+    find_program(COMpdb_EXECUTABLE compdb)
+    if(NOT COMpdb_EXECUTABLE)
+        message(WARNING "compdb not found. Install it with: pip install compdb")
+    endif()
+    if(COMpdb_EXECUTABLE AND CMAKE_EXPORT_COMPILE_COMMANDS)
+        add_custom_target(process-compile-commands
+            COMMAND ${COMpdb_EXECUTABLE} -p ${CMAKE_BINARY_DIR} list > ${CMAKE_BINARY_DIR}/compile_commands_processed.json
+            DEPENDS ${CMAKE_BINARY_DIR}/compile_commands.json
+            COMMENT "Processing compile_commands.json with compdb"
+            VERBATIM
+        )
+        
+        # Optional: Create a symlink in source directory for IDE convenience
+        if(CMAKE_HOST_UNIX)
+            add_custom_command(TARGET process-compile-commands POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E create_symlink 
+                    ${CMAKE_BINARY_DIR}/compile_commands_processed.json 
+                    ${CMAKE_SOURCE_DIR}/compile_commands.json
+                COMMENT "Creating symlink to processed compile_commands.json in source directory"
+            )
+        endif()
+    endif()
+endif()
 
 
 
