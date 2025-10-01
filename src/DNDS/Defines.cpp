@@ -125,6 +125,7 @@ namespace DNDS
                 }
                 catch (...)
                 {
+                    ret = -1;
                 }
         }
         return ret;
@@ -144,6 +145,7 @@ namespace DNDS
                 }
                 catch (...)
                 {
+                    ret = -1;
                 }
         }
         return ret;

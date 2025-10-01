@@ -186,7 +186,7 @@ namespace DNDS
             serializerP->GoToPath(name);
 
             this->t_base::WriteSerializer(serializerP, "array", offset);
-            serializerP->WriteString("DerivedType", this->GetDerivedArraySignature());
+            serializerP->WriteString("DerivedType", GetDerivedArraySignature());
             serializerP->WriteInt("mat_nRow_dynamic", _mat_nRow_dynamic);
             if constexpr (_mat_ni == NonUniformSize)
                 serializerP->WriteSharedRowsizeVector("mat_nRows", _mat_nRows, offset);

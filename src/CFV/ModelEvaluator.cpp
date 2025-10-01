@@ -1,4 +1,5 @@
 #include "ModelEvaluator.hpp"
+#include "DNDS/Defines.hpp"
 
 namespace DNDS::CFV
 {
@@ -7,7 +8,7 @@ namespace DNDS::CFV
         const ModelEvaluator::EvaluateRHSOptions &options)
     {
         using namespace Geom;
-        int cnvars = nVarsFixed;
+        int cnvars = u.father->MatRowSize();
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
         static const auto SeqG012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
 
@@ -19,7 +20,7 @@ namespace DNDS::CFV
 
         if (direct2ndRec)
         {
-            vfv->DoReconstruction2ndGrad(uGradBuf, u, this->get_FBoundary(t), 1 /* green gauss*/);
+            vfv->DoReconstruction2ndGrad<nVarsFixed>(uGradBuf, u, this->get_FBoundary(t), 1 /* green gauss*/);
             uGradBuf.trans.startPersistentPull();
             uGradBuf.trans.waitPersistentPull();
         }
@@ -49,7 +50,8 @@ namespace DNDS::CFV
                                     .transpose();
                     TU URxy;
                     TDiffU GradULxy, GradURxy;
-                    GradULxy.setZero(), GradURxy.setZero();
+                    URxy.setZero(cnvars);
+                    GradULxy.setZero(dim, cnvars), GradURxy.setZero(dim, cnvars);
 
                     if (direct2ndRec && !direct2ndRec1stConv)
                         GradULxy(SeqG012, Eigen::all) = uGradBuf[f2c[0]];

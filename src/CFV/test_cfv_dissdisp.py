@@ -92,7 +92,9 @@ class WaveTester:
         sigma=0.0,
         AR=1.0,
         ob=0.0,
+        batch_size=1,
     ):
+        self.batch_size = batch_size
         self.mpi = mpi
         self.ax = ax
         self.ay = ay
@@ -173,19 +175,21 @@ class WaveTester:
 
         self.mesh = mesh
         self.vfv = vfv
-        self.eval = CFV.ModelEvaluator(mesh, vfv, {"ax": ax, "ay": ay, "sigma": sigma})
+        self.eval = CFV.ModelEvaluator(
+            mesh, vfv, {"ax": ax, "ay": ay, "sigma": sigma}, batch_size
+        )
 
-        u_real, rhs_real = [CFV.tUDof_1() for _ in range(2)]
-        uRec_real, uRecNew_real = [CFV.tURec_1() for _ in range(2)]
-        u_imag, rhs_imag = [CFV.tUDof_1() for _ in range(2)]
-        uRec_imag, uRecNew_imag = [CFV.tURec_1() for _ in range(2)]
+        u_real, rhs_real = [CFV.tUDof_D() for _ in range(2)]
+        uRec_real, uRecNew_real = [CFV.tURec_D() for _ in range(2)]
+        u_imag, rhs_imag = [CFV.tUDof_D() for _ in range(2)]
+        uRec_imag, uRecNew_imag = [CFV.tURec_D() for _ in range(2)]
         self.u_list = [u_real, rhs_real, u_imag, rhs_imag]
         self.uRec_list = [uRec_real, uRecNew_real, uRec_imag, uRecNew_imag]
 
         for u_ in self.u_list:
-            vfv.BuildUDof_1(u_, 1)
+            vfv.BuildUDof_D(u_, batch_size)
         for uRec_ in self.uRec_list:
-            vfv.BuildURec_1(uRec_, 1)
+            vfv.BuildURec_D(uRec_, batch_size)
 
         nFree = 0
         for iCell in range(mesh.NumCell()):
@@ -198,7 +202,8 @@ class WaveTester:
             ):
                 self.iCellFree = iCell
                 nFree += 1
-        assert nFree == 1
+        if not nFree == 1:
+            raise ValueError("nFree not 1")
 
     def update_vfv_settings(self, vfvSettings):
         mpi = self.mpi
@@ -238,15 +243,15 @@ class WaveTester:
         u_real, rhs_real, u_imag, rhs_imag = self.u_list
         return np.array(u_real[self.iCellFree]) + 1j * np.array(u_imag[self.iCellFree])
 
-    def set_uFree(self, r: float, i: float):
+    def set_uFree(self, r: np.ndarray, i: np.ndarray):
         u_real, rhs_real, u_imag, rhs_imag = self.u_list
         np.array(u_real[self.iCellFree], copy=False)[:] = r
         np.array(u_imag[self.iCellFree], copy=False)[:] = i
 
     def test_one_wave(
         self,
-        kx=0.1,
-        ky=0.0,
+        kx: np.ndarray,
+        ky: np.ndarray,
         n_iter=10000,
         tol=1e-15,
         n_print=0,
@@ -254,6 +259,11 @@ class WaveTester:
         u_free=1 + 0j,
         rhsOptions=CFV.ModelEvaluator.EvaluateRHSOptions(),
     ):
+        if kx.size != self.batch_size or ky.size != self.batch_size:
+            raise ValueError("input k size not right")
+
+        kx = kx.flatten()
+        ky = ky.flatten()
         vfv = self.vfv
         mesh = self.mesh
         eval = self.eval
@@ -269,15 +279,15 @@ class WaveTester:
         eval.EvaluateRHS(rhs_real, u_real, uRec_real, 0.0, options=rhsOptions)
         eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag, 0.0, options=rhsOptions)
         return (
-            rhs_real[self.iCellFree].tolist()[0][0]
-            + 1j * rhs_imag[self.iCellFree].tolist()[0][0]
-        )
+            np.array(rhs_real[self.iCellFree]) + 1j * np.array(rhs_imag[self.iCellFree])
+        ).flatten()
 
     def test_conv_rate(
         self,
         dTau=10,
-        kx=0.1,
-        ky=0.0,
+        dT=1e100,
+        kx: np.ndarray = np.array([0]),
+        ky: np.ndarray = np.array([0]),
         n_iter=10000,
         tol=1e-15,
         n_print=0,
@@ -289,6 +299,12 @@ class WaveTester:
         multigrid_res_fact=(1.0, 1.0),
         multigrid_dtau_fact=(1.0, 1.0),
     ):
+        if kx.size != self.batch_size or ky.size != self.batch_size:
+            raise ValueError("input k size not right")
+
+        kx = kx.flatten()
+        ky = ky.flatten()
+        
         vfv = self.vfv
         mesh = self.mesh
         eval = self.eval
@@ -333,7 +349,7 @@ class WaveTester:
             )
 
             xcr = vfv.GetCellBary(iCellOther) - xcC
-            wave_val = np.exp(1j * (kx * xcr[0] + ky * xcr[1]))
+            wave_val = np.exp(1j * (kx * xcr[0] + ky * xcr[1])).reshape(-1, 1)
             dFdu = (1 + wave_val) * 0.5 * a_out - 0.5 * np.abs(a_out) * (wave_val - 1)
             dFdu += -0.5 * a_vis * (wave_val - 1)
 
@@ -384,16 +400,16 @@ class WaveTester:
             eval.EvaluateRHS(rhs_real, u_real, uRec_real, 0.0, options=rhsOptionsTop)
             eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag, 0.0, options=rhsOptionsTop)
 
-            uFreeNew = self.get_uFreeComplex() + self.get_rhsFreeComplex() / (
-                -J_top + 1.0 / (dTau * 1.0)
-            )
+            uFreeNew = self.get_uFreeComplex() + (
+                self.get_rhsFreeComplex() - self.get_uFreeComplex() / dT
+            ) / (-J_top + 1.0 / (dTau * 1.0) + 1.0 / dT)
             self.set_uFree(np.real(uFreeNew), np.imag(uFreeNew))
             self.uSync(kx, ky)
 
         self.DoReconstruction(kx, ky, n_iter, tol, n_print, n_iter_min=n_iter_min)
         eval.EvaluateRHS(rhs_real, u_real, uRec_real, 0.0, options=rhsOptionsTop)
         eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag, 0.0, options=rhsOptionsTop)
-        rhs_top = self.get_rhsFreeComplex()
+        rhs_top = self.get_rhsFreeComplex() - self.get_uFreeComplex() / dT
 
         ################# O1
 
@@ -405,18 +421,24 @@ class WaveTester:
         # self.DoReconstruction(kx, ky, n_iter, tol, n_print, n_iter_min=n_iter_min)
         eval.EvaluateRHS(rhs_real, u_real, uRec_real, 0.0, options=options1)
         eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag, 0.0, options=options1)
-        rhs1_init = self.get_rhsFreeComplex()
+        rhs1_init = self.get_rhsFreeComplex() - self.get_uFreeComplex() / dT
         for iter in range(multigrid_niters[0]):
             uFreeNew = self.get_uFreeComplex() + (
-                self.get_rhsFreeComplex() - rhs1_init + rhs_top * multigrid_res_fact[0]
-            ) / (-J_p1 + 1.0 / (dTau * multigrid_dtau_fact[0]))
+                self.get_rhsFreeComplex()
+                - self.get_uFreeComplex() / dT
+                - rhs1_init
+                + rhs_top * multigrid_res_fact[0]
+            ) / (-J_p1 + 1.0 / (dTau * multigrid_dtau_fact[0]) + 1.0 / dT)
             self.set_uFree(np.real(uFreeNew), np.imag(uFreeNew))
             self.uSync(kx, ky)
             eval.EvaluateRHS(rhs_real, u_real, uRec_real, 0.0, options=options1)
             eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag, 0.0, options=options1)
-        rhs_1 = (self.get_rhsFreeComplex() - rhs1_init) + rhs_top * multigrid_res_fact[
-            0
-        ]
+        rhs_1 = (
+            self.get_rhsFreeComplex()
+            - self.get_uFreeComplex() / dT
+            - rhs1_init
+            + rhs_top * multigrid_res_fact[0]
+        )
 
         ################# O0
 
@@ -428,19 +450,22 @@ class WaveTester:
         # self.DoReconstruction(kx, ky, n_iter, tol, n_print, n_iter_min=n_iter_min)
         eval.EvaluateRHS(rhs_real, u_real, uRec_real, 0.0, options=options0)
         eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag, 0.0, options=options0)
-        rhs0_init = self.get_rhsFreeComplex()
+        rhs0_init = self.get_rhsFreeComplex() - self.get_uFreeComplex() / dT
         for iter in range(multigrid_niters[1]):
             uFreeNew = self.get_uFreeComplex() + (
-                self.get_rhsFreeComplex() - rhs0_init + rhs_1 * multigrid_res_fact[1]
-            ) / (-J + 1.0 / (dTau * multigrid_dtau_fact[1]))
+                self.get_rhsFreeComplex()
+                - self.get_uFreeComplex() / dT
+                - rhs0_init
+                + rhs_1 * multigrid_res_fact[1]
+            ) / (-J + 1.0 / (dTau * multigrid_dtau_fact[1]) + 1.0 / dT)
             self.set_uFree(np.real(uFreeNew), np.imag(uFreeNew))
             self.uSync(kx, ky)
             eval.EvaluateRHS(rhs_real, u_real, uRec_real, 0.0, options=options0)
             eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag, 0.0, options=options0)
 
-        return self.get_uFreeComplex().flatten()[0]
+        return self.get_uFreeComplex().flatten()
 
-    def uRecSync(self, kx: float, ky: float):
+    def uRecSync(self, kx: np.ndarray, ky: np.ndarray):
         vfv = self.vfv
         uRec_real, uRecNew_real, uRec_imag, uRecNew_imag = self.uRec_list
         for iCell in range(self.mesh.NumCell()):
@@ -449,6 +474,7 @@ class WaveTester:
             xc = vfv.GetCellBary(iCell)
             xcr = xc - vfv.GetCellBary(self.iCellFree)
             wave_val = np.exp(1j * (kx * xcr[0] + ky * xcr[1]))
+            wave_val = wave_val.reshape(1, -1)
             # fmt: off
             np.array(uRec_real[iCell], copy=False)[:] = \
                 np.array(uRec_real[self.iCellFree]) * np.real(wave_val) - \
@@ -458,7 +484,7 @@ class WaveTester:
                 np.array(uRec_real[self.iCellFree]) * np.imag(wave_val)
             # fmt: on
 
-    def uSync(self, kx: float, ky: float):
+    def uSync(self, kx: np.ndarray, ky: np.ndarray):
         vfv = self.vfv
         u_real, rhs_real, u_imag, rhs_imag = self.u_list
         for iCell in range(self.mesh.NumCell()):
@@ -466,7 +492,7 @@ class WaveTester:
                 continue
             xc = vfv.GetCellBary(iCell)
             xcr = xc - vfv.GetCellBary(self.iCellFree)
-            wave_val = np.exp(1j * (kx * xcr[0] + ky * xcr[1]))
+            wave_val = np.exp(1j * (kx * xcr[0] + ky * xcr[1])).reshape(-1, 1)
             # fmt: off
             np.array(u_real[iCell], copy=False)[:] = \
                 np.array(u_real[self.iCellFree]) * np.real(wave_val) - \
@@ -497,29 +523,36 @@ class WaveTester:
             M, N = AInv.shape
             assert M == N
             MatC = np.eye(M, M, dtype=np.complex128)
-            RhsC = np.zeros((M, 1), dtype=np.complex128)
+            MatC = np.repeat(MatC[np.newaxis, :, :], self.batch_size, axis=0)
+            RhsC = np.zeros((self.batch_size, M, 1), dtype=np.complex128)
             xcC = vfv.GetCellBary(self.iCellFree)
             uC = np.array(u_real[self.iCellFree]) + 1j * np.array(
                 u_imag[self.iCellFree]
             )
+
             for ic2f, iFace in enumerate(c2f):
                 iCellOther = mesh.CellFaceOther(self.iCellFree, iFace)
                 xcr = vfv.GetCellBary(iCellOther) - xcC
                 wave_val = np.exp(1j * (kx * xcr[0] + ky * xcr[1]))
                 # print(np.array(matrixAAInvB[self.iCellFree, ic2f + 2], copy=False))
-                MatC -= wave_val * np.array(
-                    matrixAAInvB[self.iCellFree, ic2f + 1], copy=False
+                # fmt: off
+                MatC -= (
+                    wave_val[:, np.newaxis, np.newaxis]
+                    * np.array(matrixAAInvB[self.iCellFree, ic2f + 1], copy=False)[np.newaxis, :, :]
                 )
+                # fmt: on
                 uOther = np.array(u_real[iCellOther]) + 1j * np.array(
                     u_imag[iCellOther]
                 )
-                RhsC += (uOther - uC) * np.array(
+                RhsC += (uOther - uC)[:, :, np.newaxis] * np.array(
                     vectorAInvB[self.iCellFree, ic2f], copy=False
-                )
+                )[np.newaxis, :, :]
             # print(np.linalg.eig(MatC))
             uRecFree = np.linalg.solve(MatC, RhsC)
-            np.array(uRec_real[self.iCellFree], copy=False)[:] = np.real(uRecFree)
-            np.array(uRec_imag[self.iCellFree], copy=False)[:] = np.imag(uRecFree)
+            # fmt: off
+            np.array(uRec_real[self.iCellFree], copy=False)[:] = np.real(uRecFree).reshape(-1, M).T
+            np.array(uRec_imag[self.iCellFree], copy=False)[:] = np.imag(uRecFree).reshape(-1, M).T
+            # fmt: on
             self.uRecSync(kx, ky)
             return
 
@@ -566,15 +599,28 @@ def test():
 
     mpi = DNDS.MPIInfo()
     mpi.setWorld()
-    tester = WaveTester(mpi)
-    print(tester.test_one_wave(np.pi * 0.1, 0.0))
+    tester = WaveTester(mpi, batch_size=3)
+    # print(
+    #     tester.test_one_wave(
+    #         kx=np.pi * np.array([0, 0.1, 0.1]),
+    #         ky=np.pi * np.array([0, 0, 0]),
+    #     )
+    # )
 
     # kxs = np.linspace(0, 1, 101) * np.pi
     # kappaNum = np.zeros_like(kxs, dtype=np.complex128)
     # for ikx, kx in enumerate(kxs):
     #     kappaNum[ikx] = 1j * tester.test_one_wave(kx, 0.0)
 
-    print(tester.test_conv_rate(10, kx=np.pi * 0.1, ky=0, multigrid_niters=(4, 0)))
+    print(
+        tester.test_conv_rate(
+            10,
+            dT=0.1,
+            kx=np.pi * np.array([0, 0.1, 0.1]),
+            ky=np.pi * np.array([0, 0, 0]),
+            multigrid_niters=(0, 0),
+        )
+    )
 
 
 if __name__ == "__main__":

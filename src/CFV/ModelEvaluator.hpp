@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <utility>
 
+#include "DNDS/Defines.hpp"
 #include "VariationalReconstruction.hpp"
 
 namespace DNDS::CFV
@@ -22,7 +23,7 @@ namespace DNDS::CFV
     class ModelEvaluator
     {
     public:
-        static const int nVarsFixed = 1;
+        static const int nVarsFixed = DynamicSize;
         static const int dim = 2;
         using tvfv = CFV::VariationalReconstruction<dim>;
 
@@ -38,13 +39,13 @@ namespace DNDS::CFV
         using TMat = Eigen::Matrix<real, dim, dim>;
         using TU = Eigen::Matrix<real, nVarsFixed, 1>;
         using TDiffU = Eigen::Matrix<real, dim, nVarsFixed>;
-        using Tvfv_FBoundary = typename tvfv::TFBoundary<1>;
+        using Tvfv_FBoundary = typename tvfv::TFBoundary<nVarsFixed>;
 
         ModelEvaluator(decltype(mesh) mesh_, decltype(vfv) vfv_,
-                       const ModelSettings &settings_)
+                       const ModelSettings &settings_, int nVars)
             : mesh(std::move(mesh_)), vfv(std::move(vfv_)), settings(settings_)
         {
-            vfv->BuildUGrad(uGradBuf, nVarsFixed);
+            vfv->BuildUGrad(uGradBuf, nVars);
         }
 
         ModelSettings &get_settings() { return settings; }
@@ -79,7 +80,10 @@ namespace DNDS::CFV
                                  int geomMode = 0,
                                  int linMode = 0)
         {
-            return TU{0.0};
+            TU ret;
+            ret.resizeLike(ULxy);
+            ret.setZero();
+            return ret;
         }
 
         struct EvaluateRHSOptions
@@ -100,9 +104,9 @@ namespace DNDS::CFV
                                   bool recordInc = false,
                                   bool uRecIsZero = false)
         {
-            vfv->DoReconstructionIter(uRec, uRecNew, u,
-                                      get_FBoundary(t),
-                                      putIntoNew, recordInc, uRecIsZero);
+            vfv->DoReconstructionIter<nVarsFixed>(uRec, uRecNew, u,
+                                                  get_FBoundary(t),
+                                                  putIntoNew, recordInc, uRecIsZero);
         }
     };
 }

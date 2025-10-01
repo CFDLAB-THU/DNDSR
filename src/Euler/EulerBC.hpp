@@ -121,7 +121,7 @@ namespace DNDS::Euler
             {
                 EulerBCType bcType = item["type"].get<EulerBCType>();
                 std::string bcName = item["name"];
-                bc.BCFlags.emplace_back(TFlags{});
+                bc.BCFlags.emplace_back();
                 switch (bcType)
                 {
                 case EulerBCType::BCFar:

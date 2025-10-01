@@ -1315,7 +1315,7 @@ namespace DNDS::CFV
             const tFMEig<nVarsFixed> &FM, const tFMEig<nVarsFixed> &FMI,
             bool putIntoNew = false);
 
-        void WriteSerializeRecMatrix(Serializer::SerializerBaseSSP serializerP)
+        void WriteSerializeRecMatrix(const Serializer::SerializerBaseSSP& serializerP)
         {
             using namespace Geom;
             std::string name = "VR_Matrix";

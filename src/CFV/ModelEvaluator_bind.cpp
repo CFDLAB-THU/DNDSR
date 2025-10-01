@@ -10,7 +10,8 @@ namespace DNDS::CFV
                 py::init(
                     [](ssp<Geom::UnstructuredMesh> mesh,
                        ssp<CFV::VariationalReconstruction<ModelEvaluator::dim>> vfv,
-                       py::object settings)
+                       py::object settings,
+                       int nVars)
                     {
                         ModelSettings defaultSettings;
                         nlohmann::ordered_json defaultJson;
@@ -19,9 +20,9 @@ namespace DNDS::CFV
                         defaultJson.merge_patch(settings_json);
                         from_json(defaultJson, defaultSettings);
 
-                        return std::make_shared<ModelEvaluator>(mesh, vfv, defaultSettings);
+                        return std::make_shared<ModelEvaluator>(mesh, vfv, defaultSettings, nVars);
                     }),
-                py::arg("mesh"), py::arg("vfv"), py::arg("settings"));
+                py::arg("mesh"), py::arg("vfv"), py::arg("settings"), py::arg("nVars"));
 
         ModelEvaluator_
             .def(
