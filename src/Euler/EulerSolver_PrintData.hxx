@@ -18,7 +18,8 @@ namespace DNDS::Euler
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         reader->SetASCIIPrecision(config.dataIOControl.nASCIIPrecision);
         reader->SetVTKFloatEncodeMode(config.dataIOControl.vtuFloatEncodeMode);
-        mesh->SetHDF5OutSetting(config.dataIOControl.hdfChunkSize, config.dataIOControl.hdfDeflateLevel);
+        mesh->SetHDF5OutSetting(config.dataIOControl.hdfChunkSize, config.dataIOControl.hdfDeflateLevel,
+                                config.dataIOControl.hdfCollOnData, config.dataIOControl.hdfCollOnMeta);
         const int cDim = dim;
 
         ArrayDOFV<nVarsFixed> &uOut = mode == PrintDataTimeAverage ? uAveraged : u;

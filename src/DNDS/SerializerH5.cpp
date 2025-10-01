@@ -411,7 +411,7 @@ namespace DNDS::Serializer
 
         herr_t herr{0};
         hid_t dxpl_id = H5Pcreate(H5P_DATASET_XFER);
-        if ((offset.isDist() || offset == ArrayGlobalOffset_Parts) && (coll_on_data || deflateLevel > 0)) //! is this necessary?
+        if ((offset.isDist() || offset == ArrayGlobalOffset_Parts) && coll_on_data) //! is this necessary?
             herr = H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE), H5CHECK_Set;
         else
             herr = H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_INDEPENDENT), H5CHECK_Set;

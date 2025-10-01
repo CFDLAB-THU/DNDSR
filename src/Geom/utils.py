@@ -11,7 +11,7 @@ def default_serializer_factory():
             "type": "H5",
             "hdfDeflateLevel": 0,
             "hdfChunkSize": 0,
-            "hdfCollOnMeta": True,
+            "hdfCollOnMeta": False,
             "hdfCollOnData": False,
             "jsonBinaryDeflateLevel": 5,
             "jsonUseCodecOnUInt8": True,

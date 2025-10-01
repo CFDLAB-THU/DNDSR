@@ -334,6 +334,8 @@ namespace DNDS::Euler
                 std::string vtuFloatEncodeMode = "binary";
                 int hdfChunkSize = 32768;
                 int hdfDeflateLevel = 0;
+                int hdfCollOnData = false;
+                int hdfCollOnMeta = false;
                 bool outVolumeData = true;
                 bool outBndData = false;
 
@@ -386,7 +388,7 @@ namespace DNDS::Euler
                     outAtCellData,
                     nASCIIPrecision,
                     vtuFloatEncodeMode,
-                    hdfChunkSize, hdfDeflateLevel,
+                    hdfChunkSize, hdfDeflateLevel, hdfCollOnMeta, hdfCollOnData,
                     outVolumeData,
                     outBndData,
                     outCellScalarNames,

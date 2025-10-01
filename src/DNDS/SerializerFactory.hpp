@@ -12,8 +12,8 @@ namespace DNDS::Serializer
         std::string type = "JSON";
         int hdfDeflateLevel = 0;
         int hdfChunkSize = 0;
-        bool hdfCollOnMeta = true;
         bool hdfCollOnData = false;
+        bool hdfCollOnMeta = false;
         int jsonBinaryDeflateLevel = 5;
         bool jsonUseCodecOnUInt8 = true;
 
