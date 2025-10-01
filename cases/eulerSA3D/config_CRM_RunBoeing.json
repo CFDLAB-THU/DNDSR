@@ -16,9 +16,10 @@
     },
     "convergenceControl": {
         "nTimeStepInternal": 5000,
-        "rhsThresholdInternal": 1e-8,
+        "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
-        "useVolWiseResidual": true
+        "useVolWiseResidual": true,
+        "useCLDriver": true
     },
     "outputControl": {
         "nConsoleCheck": 1,
@@ -76,17 +77,13 @@
         "restartWriter": {
             "type": "H5",
             "hdfDeflateLevel": 5,
-            "hdfChunkSize": 4096,
-            "hdfCollOnMeta": true,
-            "hdfCollOnData": false
+            "hdfChunkSize": 4096
         },
         "meshPartitionedReaderType": "H5",
         "meshPartitionedWriter": {
             "type": "H5",
             "hdfDeflateLevel": 5,
-            "hdfChunkSize": 4096,
-            "hdfCollOnMeta": true,
-            "hdfCollOnData": false
+            "hdfChunkSize": 4096
         },
         "_tail": 0
     },
@@ -198,7 +195,7 @@
         "noGRPOnWall": true,
         "minWallDist": 1e-9,
         "wallDistScheme": 0,
-        // "wallDistExection": 3,
+        "wallDistExection": 4,
         "wallDistCellLoadSize": 2560,
         "wallDistRefineMax": 1, // inches
         "wallDistIter": 1000,
@@ -240,9 +237,11 @@
             "targetCL": 0.5,
             "CLIncrementRelax": 0.25,
             "nIterStartDrive": 1000000,
-            "nIterConvergeMin": 200,
+            "nIterConvergeMin": 100,
             "CLconvergeThreshold": 0.001,
-            "CLconvergeWindow": 50
+            "CLconvergeWindow": 40,
+            "CLconvergeLongWindow": 400,
+            "CLconvergeLongThreshold": 0.8e-4
         },
         "cLDriverBCNames": [
             "wall_wing",

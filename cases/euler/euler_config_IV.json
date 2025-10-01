@@ -167,8 +167,6 @@
         //     "type": "H5",
         //     "hdfDeflateLevel": 5,
         //     "hdfChunkSize": 4096,
-        //     "hdfCollOnMeta": true,
-        //     "hdfCollOnData": false,
         //     "jsonBinaryDeflateLevel": 5,
         //     "jsonUseCodecOnUInt8": true
         // },

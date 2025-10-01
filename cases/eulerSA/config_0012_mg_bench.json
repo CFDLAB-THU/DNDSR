@@ -66,8 +66,6 @@
             "type": "H5",
             "hdfDeflateLevel": 0,
             "hdfChunkSize": 0,
-            "hdfCollOnMeta": true,
-            "hdfCollOnData": false,
             "jsonBinaryDeflateLevel": 5,
             "jsonUseCodecOnUInt8": true
         },
@@ -76,8 +74,6 @@
             "type": "H5",
             "hdfDeflateLevel": 0,
             "hdfChunkSize": 0,
-            "hdfCollOnMeta": true,
-            "hdfCollOnData": false,
             "jsonBinaryDeflateLevel": 9,
             "jsonUseCodecOnUInt8": true
         },

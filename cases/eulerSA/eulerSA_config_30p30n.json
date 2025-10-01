@@ -26,7 +26,8 @@
         "nRestartOutC": 10,
         "nRestartOutCInternal": 200,
         "nRestartOutInternal": 1000000000,
-        "tDataOut": 3e+200
+        "tDataOut": 3e+200,
+        "dataOutAtInit": true
     },
     "implicitCFLControl": {
         "CFL": 20,
@@ -50,7 +51,12 @@
         "outPltVTKFormat": false,
         "outAtPointData": true,
         "outAtCellData": true,
-        "outBndData": true
+        "outBndData": true,
+        "outCellScalarNames": [
+            // "minJacobiDetRel",
+            // "cellVolume",
+            "dWall"
+        ]
     },
     "boundaryDefinition": {},
     "implicitReconstructionControl": {
@@ -73,7 +79,7 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
+        "intOrder": 5,
         "cacheDiffBase": true,
         "jacobiRelax": 1.0,
         "SORInstead": true,
@@ -127,8 +133,16 @@
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe",
-        "rsMeanValueChar": 1,
+        "riemannSolverType": "Roe_M1",
+        "wallDistScheme": 1,
+        "wallDistExection": 5,
+        "wallDistRefineMax": 0.01,
+        "wallDistIter": 1000,
+        "wallDistLinSolver": 0,
+        "wallDistResTol": 1e-4,
+        "wallDistPoissonP": 6,
+        "wallDistDTauScale": 10,
+        "wallDistNJacobiSweep": 100,
         "constMassForce": [
             0.0,
             0.0,

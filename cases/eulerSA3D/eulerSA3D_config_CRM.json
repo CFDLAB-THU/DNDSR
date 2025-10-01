@@ -74,17 +74,13 @@
         "restartWriter": {
             "type": "H5",
             "hdfDeflateLevel": 5,
-            "hdfChunkSize": 4096,
-            "hdfCollOnMeta": true,
-            "hdfCollOnData": false
+            "hdfChunkSize": 4096
         },
         "meshPartitionedReaderType": "H5",
         "meshPartitionedWriter": {
             "type": "H5",
             "hdfDeflateLevel": 5,
-            "hdfChunkSize": 4096,
-            "hdfCollOnMeta": true,
-            "hdfCollOnData": false
+            "hdfChunkSize": 4096
         },
         "_tail": 0
     },
