@@ -13,7 +13,7 @@ namespace DNDS::Serializer
         int hdfDeflateLevel = 0;
         int hdfChunkSize = 0;
         bool hdfCollOnData = false;
-        bool hdfCollOnMeta = false;
+        bool hdfCollOnMeta = true;
         int jsonBinaryDeflateLevel = 5;
         bool jsonUseCodecOnUInt8 = true;
 

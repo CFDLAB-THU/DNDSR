@@ -157,7 +157,7 @@ namespace DNDS::Geom
             size_t chunkSize = 128;
             int deflateLevel = 1;
             bool coll_on_data = false;
-            bool coll_on_meta = false;
+            bool coll_on_meta = true;
         } hdf5OutSetting;
 
         /// only elevation
@@ -683,7 +683,7 @@ namespace DNDS::Geom
             const tFGetVecData &vectorDataPoint,
             double t, MPI_Comm commDup);
 
-        void SetHDF5OutSetting(size_t chunkSiz, int deflateLevel, bool coll_on_data = false, bool coll_on_meta = false)
+        void SetHDF5OutSetting(size_t chunkSiz, int deflateLevel, bool coll_on_data, bool coll_on_meta)
         {
             hdf5OutSetting.chunkSize = chunkSiz;
             hdf5OutSetting.deflateLevel = deflateLevel;

@@ -1322,7 +1322,7 @@ namespace DNDS::Geom
         hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
 
         herr = H5Pset_fapl_mpio(plist_id, commDup, MPI_INFO_NULL), H5SS; // Set up file access property list with parallel I/O access
-        herr = H5Pset_all_coll_metadata_ops(plist_id, true), H5SS;
+        herr = H5Pset_all_coll_metadata_ops(plist_id, hdf5OutSetting.coll_on_meta), H5SS;
         herr = H5Pset_coll_metadata_write(plist_id, hdf5OutSetting.coll_on_meta), H5SS;
         hid_t file_id = H5Fcreate(fname.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
         DNDS_assert_info(H5I_INVALID_HID != file_id, "file open failed");
@@ -1364,7 +1364,7 @@ namespace DNDS::Geom
         DNDS_assert(herr >= 0);
 
         plist_id = H5Pcreate(H5P_DATASET_XFER);
-        if (hdf5OutSetting.coll_on_data)
+        if (hdf5OutSetting.coll_on_data || hdf5OutSetting.deflateLevel > 0)
             herr |= H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
         else
             herr |= H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_INDEPENDENT);
