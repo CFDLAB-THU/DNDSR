@@ -1,3 +1,4 @@
+#include "DNDS/Defines.hpp"
 #include "Mesh.hpp"
 #include "Quadrature.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
@@ -355,12 +356,13 @@ namespace DNDS::Geom
             DNDS_MAKE_SSP(bnd2nodePbi.father, getMPI());
             DNDS_MAKE_SSP(bnd2nodePbi.son, getMPI());
         }
+        DNDS_MAKE_SSP(bnd2bndOrig.father, mpi);
+        DNDS_MAKE_SSP(bnd2bndOrig.son, mpi);
         bnd2node.father->Resize(meshO1.bnd2node.father->Size());
         bndElemInfo.father->Resize(meshO1.bnd2node.father->Size());
         if (isPeriodic)
             bnd2nodePbi.father->Resize(meshO1.bnd2node.father->Size());
-        DNDS_MAKE_SSP(bnd2bndOrig.father, mpi);
-        DNDS_MAKE_SSP(bnd2bndOrig.son, mpi);
+        bnd2bndOrig.father->Resize(meshO1.bnd2node.father->Size());
         for (index iBnd = 0; iBnd < meshO1.bnd2node.father->Size(); iBnd++)
         {
             index iCell = meshO1.bnd2cell(iBnd, 0); // my own bnd2cell is to global!
@@ -494,7 +496,9 @@ namespace DNDS::Geom
         elevState = MeshElevationState::Elevation_Untouched;
 
         DNDS_MAKE_SSP(coords.son, mpi);
-        coords.father = meshO2.coords.father; // coords are the same
+        coords.father = meshO2.coords.father; // coords are the same, taken without change
+        DNDS_MAKE_SSP(node2nodeOrig.son, mpi);
+        node2nodeOrig.father = meshO2.node2nodeOrig.father; // node2nodeOrig corresponds to coords, and is taken without change
 
         /**********************************/
         //* cell
@@ -1052,7 +1056,7 @@ namespace DNDS::Geom
                         if (isPeriodic)
                             normN = periodicInfo.GetVectorByBits<3, 1>(normN, face2nodePbiExtended[iFace][if2n]);
                         real sinValMax = 0;
-                        for (auto e : edges)
+                        for (auto &e : edges)
                             sinValMax = std::max(sinValMax, std::abs(e.dot(normN.stableNormalized())));
                         //! angle is here
                         //* now using FFMaxAngle also

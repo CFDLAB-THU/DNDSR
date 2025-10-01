@@ -6,6 +6,7 @@
 #include "ArrayDerived/ArrayEigenMatrix.hpp"
 #include "ArrayDerived/ArrayEigenMatrixBatch.hpp"
 #include "ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
+#include <fmt/format.h>
 namespace DNDS
 {
     template <class TArray = ParArray<real, 1>>
@@ -105,7 +106,8 @@ namespace DNDS
 
         void TransAttach()
         {
-            DNDS_assert(bool(father) && bool(son));
+            DNDS_assert_info(bool(father) && bool(son),
+                             fmt::format("father and son need to be constructed before Trans Attach. Array is {}", TArray::GetArrayName()));
             trans.setFatherSon(father, son);
         }
 
@@ -146,7 +148,7 @@ namespace DNDS
             return vector_hash<index>()(hashes);
         }
 
-        void WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name, bool includePIG = true, bool includeSon=true)
+        void WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name, bool includePIG = true, bool includeSon = true)
         {
             if (includePIG)
                 DNDS_assert_info(trans.pLGlobalMapping && trans.pLGhostMapping, "pair's trans not having ghost info");

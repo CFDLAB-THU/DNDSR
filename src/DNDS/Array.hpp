@@ -446,11 +446,11 @@ namespace DNDS
             DNDS_assert_info(iRow < _size && iRow >= 0,
                              fmt::format(
                                  "query position i[{}] out of range [0, {}), sig--{}",
-                                 iRow, _size, GetArraySignature()));
+                                 iRow, _size, GetArrayName()));
             DNDS_assert_info(iCol < RowSize(iRow) && iCol >= 0,
                              fmt::format(
                                  "query position j[{}] out of range [0, {}), sig--{}",
-                                 iCol, RowSize(iRow), GetArraySignature()));
+                                 iCol, RowSize(iRow), GetArrayName()));
             if constexpr (_dataLayout == TABLE_StaticFixed)
                 return _data.at(iRow * rs + iCol);
             else if constexpr (_dataLayout == TABLE_StaticMax)
@@ -600,6 +600,25 @@ namespace DNDS
             {
                 _data.swap(R._data);
             }
+        }
+
+        static std::string GetArrayName()
+        {
+            std::string Layout;
+            if constexpr (_dataLayout == CSR)
+                Layout = "CSR";
+            if constexpr (_dataLayout == TABLE_StaticFixed)
+                Layout = "TABLE_StaticFixed";
+            if constexpr (_dataLayout == TABLE_Fixed)
+                Layout = "TABLE_Fixed";
+            if constexpr (_dataLayout == TABLE_StaticMax)
+                Layout = "TABLE_StaticMax";
+            if constexpr (_dataLayout == TABLE_Max)
+                Layout = "TABLE_Max";
+            return Layout + "__" +
+                   typeid(T).name() + "_" + std::to_string(sizeof_T) + "_" + RowSize_To_PySnippet(_row_size) +
+                   "_" + RowSize_To_PySnippet(_row_max) +
+                   "_" + RowSize_To_PySnippet(_align);
         }
 
         static std::string GetArraySignature()
