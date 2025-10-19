@@ -77,7 +77,7 @@ endif()
 # need CUDA project support ?
 # manual perferences
 # set(CMAKE_CXX_STANDARD_REQUIRED 17)
-# set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 17)
 
 #! why?
 # find_package(MPI REQUIRED)
@@ -88,6 +88,7 @@ set(DNDS_USE_DNDS_NDEBUG_MACRO OFF CACHE BOOL "use DNDS_NDEBUG macro")
 set(DNDS_USE_NDEBUG_MACRO OFF CACHE BOOL "use NDEBUG macro for eigen output and cassert etc") # performance impact is small so off by default(without -DNDEBUG)
 set(DNDS_USE_PARALLEL_MACRO OFF CACHE BOOL "for auto multi-thread?")
 set(DNDS_USE_OMP ON CACHE BOOL "enables openmp functionality")
+set(DNDS_USE_CUDA OFF CACHE BOOL "enables cuda functionality")
 set(DNDS_DIST_MT_USE_OMP OFF CACHE BOOL "use openmp in purely distributed code for multi-treading")
 set(DNDS_FAST_BUILD_FAST ON CACHE BOOL "don't -g on basic modules")
 set(DNDS_USE_NO_OMIT_FRAME_POINTER OFf CACHE BOOL "in fast build fast part, use -fno-omit-frame-pointer to get correct call graph in perf's fp mode")
@@ -159,6 +160,21 @@ if(DNDS_LTO)
         string(APPEND CMAKE_CXX_FLAGS_RELEASE " -flto=${DNDS_LTO_N}")
     endif()
     # ! todo: add changing to gcc-ar gcc-ranlib gcc-nm
+endif()
+
+if(DNDS_USE_CUDA)
+    set(CMAKE_CUDA_STANDARD 17) 
+    set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+    enable_language(CUDA)
+    add_compile_definitions(DNDS_USE_CUDA)
+
+    find_package(CUDAToolkit REQUIRED)
+    if(CUDAToolkit_FOUND)
+        message(STATUS "Found CUDA toolkit: ${CUDAToolkit_VERSION}")
+    else()
+        message(FATAL_ERROR "CUDA toolkit required but not found")
+    endif()
+    # !
 endif()
 
 if(DNDS_USE_FULL_TEMPLATE_TRACE)
@@ -391,7 +407,7 @@ if (DNDS_EIGEN_USE_LAPACK)
     list(APPEND DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIB_LAPACK})
     list(APPEND DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIB_LAPACKE})
 endif()
-message(DEBUG "DNDS_EXTERNAL_LIBS external files:  ${DNDS_EXTERNAL_LIBS}")
+message(DEBUG "DNDS_EXTERNAL_LIBS external files (to be installed):  ${DNDS_EXTERNAL_LIBS}")
 
 set(DNDS_EXTERNAL_LIBS_REAL "" CACHE INTERNAL
     "Project Public External Lib Dependencies' Directories")
@@ -444,12 +460,13 @@ message(DEBUG "DNDS_EXTERNAL_LIBS_REAL:  ${DNDS_EXTERNAL_LIBS_REAL}")
 # add internal built libraries
 
 list(APPEND DNDS_EXTERNAL_LIBS fmt::fmt)
+if (DNDS_USE_CUDA)
+    list(APPEND DNDS_EXTERNAL_LIBS CUDA::cudart)
+endif()
 
 if(DNDS_EXTERNAL_INCLUDE_SUPERLU)
     list(APPEND DNDS_EXTERNAL_LIBS superlu_dist)
 endif()
-
-message(STATUS "DNDS_EXTERNAL_LIBS   ${DNDS_EXTERNAL_LIBS}")
 
 set(DNDS_EXTERNAL_INCLUDES 
     ${DNDS_EXTERNAL_INCLUDE_ZLIB}
@@ -474,9 +491,13 @@ set(DNDS_EXTERNAL_INCLUDES
     CACHE INTERNAL "Project External Includes")
 
 if(DNDS_EXTERNAL_INCLUDE_SUPERLU)
-set(DNDS_EXTERNAL_INCLUDES ${DNDS_EXTERNAL_INCLUDES}
-    ${DNDS_EXTERNAL_INCLUDE_SUPERLU}/SRC
-    CACHE INTERNAL "Project External Includes")
+    set(DNDS_EXTERNAL_INCLUDES ${DNDS_EXTERNAL_INCLUDES}
+        ${DNDS_EXTERNAL_INCLUDE_SUPERLU}/SRC
+        CACHE INTERNAL "Project External Includes")
+endif()
+
+if(DNDS_USE_CUDA)
+    list(APPEND DNDS_EXTERNAL_INCLUDES ${CUDAToolkit_INCLUDE_DIRS})
 endif()
 
 set(DNDS_PCH_TARGETS "sss")
@@ -529,8 +550,13 @@ if(UNIX OR MINGW)
     
     ### set warnings
     # -Wconversion
-    add_compile_options(-Wall -Wno-unused-but-set-variable -Wno-unused-variable -Werror=return-type)
-    
+    add_compile_options(
+        -Wall -Wno-unused-but-set-variable -Wno-unused-variable 
+        $<$<NOT:$<COMPILE_LANGUAGE:CUDA>>:-Werror=return-type>
+        )
+    add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=128>)
+    add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=2417>)
+    add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
 
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
         if (DNDS_USE_OMP)
@@ -804,11 +830,11 @@ if (UNIX)
 endif()
 
 
-function(ADD_EXE_APP EXES MAIN_DIR LIBS USE_EXCLUDE_FROM_ALL)
+function(ADD_EXE_APP EXES MAIN_DIR LIBS USE_EXCLUDE_FROM_ALL SRC_SUFFIX)
     message(STATUS "To add exes: ${EXES} with libs: ${LIBS}")
     foreach(EXE ${EXES})
         # add_executable(${EXE} app/external/${EXE}.cpp $<TARGET_OBJECTS:${OBJS}>)
-        add_executable(${EXE} ${MAIN_DIR}/${EXE}.cpp)
+        add_executable(${EXE} ${MAIN_DIR}/${EXE}.${SRC_SUFFIX})
         if(USE_EXCLUDE_FROM_ALL)
             set_target_properties(${EXE} PROPERTIES EXCLUDE_FROM_ALL ON)
         endif()
@@ -833,12 +859,13 @@ endfunction(ADD_EXE_APP)
 # dnds
 
 ## Mind That the TOPOLOGICAL ORDER should be obeyed!
-ADD_EXE_APP("${DNDS_APPS_EXTERNAL}" "app/external" ";" ON)
-ADD_EXE_APP("${DNDS_APPS_DNDS}" "app/DNDS" "dnds;" ON)
-ADD_EXE_APP("${DNDS_APPS_Solver}" "app/Solver" "dnds;" ON)
-ADD_EXE_APP("${DNDS_APPS_Geom}" "app/Geom" "geom;dnds;" ON)
-ADD_EXE_APP("${DNDS_APPS_CFV}" "app/CFV" "cfv;geom;dnds;" ON)
-ADD_EXE_APP("${DNDS_APPS_Euler}" "app/Euler" "cfv;geom;dnds;" ON)
+ADD_EXE_APP("${DNDS_APPS_EXTERNAL}" "app/external" ";" ON cpp)
+ADD_EXE_APP("${DNDS_APPS_DNDS}" "app/DNDS" "dnds;" ON cpp)
+ADD_EXE_APP(array_cuda_Test "app/DNDS" "dnds;" ON cu)
+ADD_EXE_APP("${DNDS_APPS_Solver}" "app/Solver" "dnds;" ON cpp)
+ADD_EXE_APP("${DNDS_APPS_Geom}" "app/Geom" "geom;dnds;" ON cpp)
+ADD_EXE_APP("${DNDS_APPS_CFV}" "app/CFV" "cfv;geom;dnds;" ON cpp)
+ADD_EXE_APP("${DNDS_APPS_Euler}" "app/Euler" "cfv;geom;dnds;" ON cpp)
 
 
 
@@ -852,7 +879,7 @@ foreach(item IN LISTS DNDS_Euler_Models_List)
     list(APPEND DNDS_APPS_Euler_Models "${EXE_NAME}")
     message(DEBUG "${keyval} --- ${value} --- ${EXE_NAME}")
     ## Mind That the TOPOLOGICAL ORDER should be obeyed!
-    ADD_EXE_APP("${EXE_NAME}" "app/Euler" "euler_library_${key};euler_library_fast_${key};cfv;geom;dnds;" ON)
+    ADD_EXE_APP("${EXE_NAME}" "app/Euler" "euler_library_${key};euler_library_fast_${key};cfv;geom;dnds;" ON cpp)
     ## This works because cmake detects dependency and reorders the libraries
     # ADD_EXE_APP("${EXE_NAME}" "app/Euler" "dnds;geom;cfv;euler_library_fast_${key};euler_library_${key};")
 endforeach()

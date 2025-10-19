@@ -1,55 +1,13 @@
 #pragma once
 #ifndef DNDS_ARRAY_PAIR_HPP
 #define DNDS_ARRAY_PAIR_HPP
-
+#include "DNDS/ArrayDerived/ArrayAdjacency_DeviceView.hpp"
+#include "DNDS/Defines.hpp"
+#include "DNDS/DeviceStorage.hpp"
 #include "../ArrayTransformer.hpp"
 
 namespace DNDS
 {
-    class AdjacencyRow // instead of std::vector<index> for building on raw buffer as a "mapping" object
-    {
-        index *__p_indices;
-        rowsize __Row_size;
-
-    public:
-        AdjacencyRow(index *ptr, rowsize siz) : __p_indices(ptr), __Row_size(siz) {} // default actually
-
-        index &operator[](rowsize j)
-        {
-            DNDS_assert(j >= 0 && j < __Row_size);
-            return __p_indices[j];
-        }
-
-        index operator[](rowsize j) const
-        {
-            DNDS_assert(j >= 0 && j < __Row_size);
-            return __p_indices[j];
-        }
-
-        operator std::vector<index>() const // copies to a new std::vector<index>
-        {
-            return {__p_indices, __p_indices + __Row_size};
-        }
-
-        void operator=(const std::vector<index> &r)
-        {
-            DNDS_assert(__Row_size == r.size());
-            std::copy(r.begin(), r.end(), __p_indices);
-        }
-
-        void operator=(const AdjacencyRow &r)
-        {
-            DNDS_assert(__Row_size == r.size());
-            std::copy(r.cbegin(), r.cend(), __p_indices);
-        }
-
-        index *begin() { return __p_indices; }
-        index *end() { return __p_indices + __Row_size; } // past-end
-        index *cbegin() const { return __p_indices; }
-        index *cend() const { return __p_indices + __Row_size; } // past-end
-        [[nodiscard]] rowsize size() const { return __Row_size; }
-    };
-
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ArrayAdjacency : public ParArray<index, _row_size, _row_max, _align>
     {
@@ -73,6 +31,12 @@ namespace DNDS
         }
 
         index *rowPtr(index i) { return t_base::operator[](i); }
+
+        template <DeviceBackend B>
+        auto deviceView()
+        {
+            return ArrayAdjacencyDeviceView<B, _row_size, _row_max, _align>{t_base::template deviceView<B>()};
+        }
     };
 
 }

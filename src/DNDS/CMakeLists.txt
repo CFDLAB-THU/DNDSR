@@ -31,6 +31,7 @@ ${DNDS_EXTERNAL_LIBS}
 set(CPPS
 MPI.cpp
 Defines.cpp
+DeviceStorage.cpp
 Profiling.cpp
 HardEigen.cpp
 SerializerJSON.cpp

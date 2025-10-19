@@ -4,6 +4,7 @@
 #include "EigenPCH.hpp"
 #include <cassert>
 #include <cstdint>
+#include <cstdio>
 #include <vector>
 #include <memory>
 #include <tuple>
@@ -16,6 +17,7 @@
 #include <functional>
 #include <locale>
 #include <csignal>
+#include <cstdarg>
 
 #include <fmt/core.h>
 
@@ -80,6 +82,19 @@ inline void __DNDS_assert_false_info(const char *expr, const char *file, int lin
     std::abort();
 }
 
+inline void __DNDS_assert_false_infof(const char *expr, const char *file, int line,
+                                      const char *info, ...)
+{
+    va_list args;
+    va_start(args, info);
+    std::cerr << __DNDS_getTraceString() << "\n";
+    std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n";
+    char format_buf[1024 * 512];
+    std::snprintf(format_buf, sizeof(format_buf), info, args);
+    std::cerr << format_buf << std::endl;
+    std::abort();
+}
+
 #ifdef DNDS_NDEBUG
 #define DNDS_assert(expr) (void(0))
 #define DNDS_assert_info(expr, info) (void(0))
@@ -92,6 +107,10 @@ inline void __DNDS_assert_false_info(const char *expr, const char *file, int lin
     ((static_cast<bool>(expr))       \
          ? void(0)                   \
          : __DNDS_assert_false_info(#expr, __FILE__, __LINE__, info))
+#define DNDS_assert_infof(expr, info, ...) \
+    ((static_cast<bool>(expr))             \
+         ? void(0)                         \
+         : __DNDS_assert_false_infof(#expr, __FILE__, __LINE__, info, ##__VA_ARGS__))
 #endif
 
 extern "C" void DNDS_signal_handler(int signal);
@@ -105,6 +124,30 @@ namespace DNDS
         // std::signal(SIGKILL, DNDS_signal_handler);
     }
 }
+
+/***************/
+
+#ifdef DNDS_USE_CUDA
+#include <cuda_runtime.h>
+#endif
+
+
+
+#if defined(DNDS_USE_CUDA)
+#define DNDS_DEVICE_CALLABLE __host__ __device__
+#define DNDS_GLOBAL __global__
+#define DNDS_CONSTANT __constant__
+#else
+#define DNDS_DEVICE_CALLABLE
+#define DNDS_GLOBAL
+#define DNDS_CONSTANT
+#endif
+
+#define DNDS_DEVICE_TRIVIAL_COPY_DEFINE(T, T_Self)               \
+    DNDS_DEVICE_CALLABLE T() = default;                          \
+    DNDS_DEVICE_CALLABLE T(const T_Self &) = default;            \
+    DNDS_DEVICE_CALLABLE T &operator=(const T_Self &) = default; \
+    DNDS_DEVICE_CALLABLE ~T() = default;
 
 /***************/
 

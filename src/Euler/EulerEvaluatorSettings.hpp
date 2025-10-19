@@ -30,7 +30,7 @@ namespace DNDS::Euler
         int specialBuiltinInitializer = 0;
 
         real uRecAlphaCompressPower = 1;
-        real uRecBetaCompressPower = 11;
+        real uRecBetaCompressPower = 1;
         bool forceVolURecBeta = true;
         bool ppEpsIsRelaxed = false;
 

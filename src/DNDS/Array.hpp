@@ -1,4 +1,6 @@
 #pragma once
+#include <cassert>
+#include <memory>
 #ifndef DNDS_ARRAY_HPP
 #define DNDS_ARRAY_HPP
 
@@ -10,49 +12,14 @@
 #include <fmt/core.h>
 
 #include "Defines.hpp"
+#include "ArrayBasic.hpp"
+#include "DeviceStorage.hpp"
+#include "DeviceView.hpp"
 #include "SerializerBase.hpp"
 #include "SerializerJSON.hpp"
 
 namespace DNDS
 {
-    static const rowsize NoAlign = -1;
-
-    enum DataLayout
-    {
-        ErrorLayout,
-        TABLE_StaticFixed,
-        TABLE_Fixed,
-        TABLE_Max,
-        TABLE_StaticMax,
-        CSR,
-    };
-
-    inline constexpr bool isTABLE(DataLayout lo)
-    {
-        return lo == TABLE_StaticFixed || lo == TABLE_Fixed || lo == TABLE_Max || lo == TABLE_StaticMax;
-    }
-    inline constexpr bool isTABLE_Fixed(DataLayout lo)
-    {
-        return lo == TABLE_StaticFixed || lo == TABLE_Fixed;
-    }
-    inline constexpr bool isTABLE_Max(DataLayout lo)
-    {
-        return lo == TABLE_Max || lo == TABLE_StaticMax;
-    }
-    inline constexpr bool isTABLE_Static(DataLayout lo)
-    {
-        return lo == TABLE_StaticFixed || lo == TABLE_StaticMax;
-    }
-    inline constexpr bool isTABLE_Dynamic(DataLayout lo)
-    {
-        return lo == TABLE_Fixed || lo == TABLE_Max;
-    }
-
-    template <class T>
-    inline constexpr bool array_comp_acceptable()
-    {
-        return std::is_trivially_copyable_v<T> || Meta::is_fixed_data_real_eigen_matrix_v<T>;
-    }
 
     /**
      * @brief 2D var-len data container template
@@ -73,47 +40,28 @@ namespace DNDS
      * @tparam _align
      */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    class Array
+    class Array : public ArrayLayout<T, _row_size, _row_max, _align>
     {
     public:
-        using value_type = T;
         using self_type = Array<T, _row_size, _row_max, _align>;
-        static const rowsize al = _align;
-        static const rowsize rs = _row_size;
-        static const rowsize rm = _row_max;
-        static const size_t sizeof_T = sizeof(value_type);
 
-        static_assert(sizeof_T <= (1024ULL * 1024ULL * 1024ULL), "Row size larger than 1G");
-        static_assert(array_comp_acceptable<T>(), "Do not put in a non trivially copyable type ");
+        using t_Layout = ArrayLayout<T, _row_size, _row_max, _align>;
+        using t_Layout::al,
+            t_Layout::rs,
+            t_Layout::rm,
+            t_Layout::sizeof_T,
+            t_Layout::s_T,
+            t_Layout::_GetDataLayout,
+            t_Layout::_dataLayout,
+            t_Layout::isCSR;
+        using t_Layout::GetArrayName,
+            t_Layout::GetArraySignature,
+            t_Layout::GetArraySignatureRelaxed,
+            t_Layout::ParseArraySignatureTuple,
+            t_Layout::ArraySignatureIsCompatible;
+        using typename t_Layout::value_type;
 
-        static_assert(al == NoAlign || al >= 1, "Align bad");
-
-        static const rowsize s_T = al == NoAlign ? sizeof_T : (sizeof_T / al + 1) * al;
-        static_assert(s_T >= sizeof_T && s_T - sizeof_T < (al == NoAlign ? 1 : al), "I1");
-
-        static constexpr DataLayout _GetDataLayout()
-        {
-            if constexpr (rs != DynamicSize && rs != NonUniformSize && rs >= 0)
-                return TABLE_StaticFixed;
-            else if constexpr (rs == DynamicSize)
-                return TABLE_Fixed;
-            else if constexpr (rs == NonUniformSize)
-            {
-                if constexpr (rm == NonUniformSize)
-                    return CSR;
-                else if constexpr (rm == DynamicSize)
-                    return TABLE_Max;
-                else if constexpr (rm >= 0)
-                    return TABLE_StaticMax;
-                else
-                    return ErrorLayout;
-            }
-            else
-                return ErrorLayout;
-        }
-        static const DataLayout _dataLayout = _GetDataLayout();
-        static_assert(_dataLayout != ErrorLayout, "Layout Error");
-        static const bool isCSR = _dataLayout == CSR;
+        using t_View = ArrayView<T, _row_size, _row_max, _align>;
 
     public:
         //* compressed data
@@ -214,7 +162,7 @@ namespace DNDS
                 DNDS_assert_info(false, "invalid call");
         }
 
-        [[nodiscard]] rowsize RowSizeField(index iRow)
+        [[nodiscard]] rowsize RowSizeField(index iRow) const
         {
             if constexpr (_dataLayout == CSR)
                 return this->RowSize(iRow);
@@ -222,22 +170,25 @@ namespace DNDS
                 DNDS_assert_info(false, "invalid call");
         }
 
-        [[nodiscard]] bool IfCompressed() const
+    private:
+        [[nodiscard]] bool IfCompressed_() const
         {
-
             if constexpr (_dataLayout == CSR)
             {
                 if (_size > 0)
                 {
                     return bool(_pRowStart);
                 }
-                return false; // size 0 array is defined as un-compressed
-            }
-            else
-            {
-                DNDS_assert_info(false, "invalid call");
                 return false;
             }
+            return true;
+        }
+
+    public:
+        [[nodiscard]] bool IfCompressed() const
+        {
+            static_assert(_dataLayout == CSR, "invalid call");
+            return IfCompressed_();
         }
 
         void CSRDecompress()
@@ -371,6 +322,10 @@ namespace DNDS
             }
             else
             {
+                static_assert(_dataLayout == CSR ||
+                                  _dataLayout == TABLE_StaticFixed ||
+                                  _dataLayout == TABLE_StaticMax,
+                              "Resize(index nSize) is invalid call");
                 DNDS_assert_info(false, "invalid call");
             }
         }
@@ -420,6 +375,10 @@ namespace DNDS
             }
             else
             {
+                static_assert(_dataLayout == CSR ||
+                                  _dataLayout == TABLE_Max ||
+                                  _dataLayout == TABLE_StaticMax,
+                              "invalid call");
                 DNDS_assert_info(false, "invalid call");
             }
         }
@@ -435,11 +394,21 @@ namespace DNDS
             else
             {
                 DNDS_assert_info(false, "invalid call");
+                static_assert(_dataLayout == CSR, "invalid call");
             }
         }
 
         // TODO: Data reference query method and pointer query method
         // TODO: ? same-size compress for non-uniforms
+
+        t_View view()
+        {
+            return t_View(_size, _data.data(), _data.size(),
+                          _pRowStart ? _pRowStart->data() : nullptr, _pRowStart ? _pRowStart->size() : 0,
+                          _pRowSizes ? _pRowSizes->data() : nullptr, _pRowSizes ? _pRowSizes->size() : 0,
+                          _row_size_dynamic,
+                          IfCompressed_(), &_dataUncompressed);
+        }
 
         const T &at(index iRow, rowsize iCol) const
         {
@@ -490,34 +459,35 @@ namespace DNDS
          */
         T *operator[](index iRow)
         {
-            DNDS_assert_info(iRow <= _size && iRow >= 0, "query position i out of range");
-            if constexpr (_dataLayout == TABLE_StaticFixed)
-                return _data.data() + iRow * rs;
-            else if constexpr (_dataLayout == TABLE_StaticMax)
-                return _data.data() + iRow * rm;
-            else if constexpr (_dataLayout == TABLE_Fixed)
-                return _data.data() + iRow * _row_size_dynamic;
-            else if constexpr (_dataLayout == TABLE_Max)
-                return _data.data() + iRow * _row_size_dynamic;
-            else if constexpr (_dataLayout == CSR)
-            {
-                if (IfCompressed())
-                    return _data.data() + _pRowStart->at(iRow);
-                else if (this->Size() == 0)
-                {
-                    static_assert(((T *)(NULL) - (T *)(NULL)) == 0);
-                    return (T *)(NULL); // used for past-the-end inquiry of size 0 array
-                }
-                else
-                {
-                    DNDS_assert_info(iRow < _size, "past-the-end query forbidden for CSR uncompressed");
-                    return _dataUncompressed.at(iRow).data();
-                }
-            }
-            else
-            {
-                DNDS_assert_info(false, "invalid call");
-            }
+            return this->view().operator[](iRow);
+            // DNDS_assert_info(iRow <= _size && iRow >= 0, "query position i out of range");
+            // if constexpr (_dataLayout == TABLE_StaticFixed)
+            //     return _data.data() + iRow * rs;
+            // else if constexpr (_dataLayout == TABLE_StaticMax)
+            //     return _data.data() + iRow * rm;
+            // else if constexpr (_dataLayout == TABLE_Fixed)
+            //     return _data.data() + iRow * _row_size_dynamic;
+            // else if constexpr (_dataLayout == TABLE_Max)
+            //     return _data.data() + iRow * _row_size_dynamic;
+            // else if constexpr (_dataLayout == CSR)
+            // {
+            //     if (IfCompressed())
+            //         return _data.data() + _pRowStart->at(iRow);
+            //     else if (this->Size() == 0)
+            //     {
+            //         static_assert(((T *)(NULL) - (T *)(NULL)) == 0);
+            //         return (T *)(NULL); // used for past-the-end inquiry of size 0 array
+            //     }
+            //     else
+            //     {
+            //         DNDS_assert_info(iRow < _size, "past-the-end query forbidden for CSR uncompressed");
+            //         return _dataUncompressed.at(iRow).data();
+            //     }
+            // }
+            // else
+            // {
+            //     DNDS_assert_info(false, "invalid call");
+            // }
         }
 
         const T *operator[](index iRow) const
@@ -539,6 +509,11 @@ namespace DNDS
             if constexpr (_dataLayout == CSR)
                 DNDS_assert_info(this->IfCompressed(), "CSR must be compressed to get data pointer");
             return _data.size();
+        }
+
+        size_t DataSizeBytes()
+        {
+            return this->DataSize() * sizeof_T;
         }
 
         std::size_t hash()
@@ -576,9 +551,22 @@ namespace DNDS
 
         void CopyData(const self_type &R)
         {
-            this->operator=(R); // currently ok!
+            // this->operator=(R); // currently ok!
+            this->_size = R._size;
+            this->_data = R._data;
+            this->_pRowSizes = R._pRowSizes;
+            this->_pRowStart = R._pRowStart;
+            this->_dataUncompressed = R._dataUncompressed;
+            this->_row_size_dynamic = R._row_size_dynamic;
+
+            this->deviceBackend = R.deviceBackend;
+            // non-trivial copy call: unique_ptr
+            this->deviceStorage = R.deviceStorage ? R.deviceStorage->clone() : nullptr;
+            this->deviceStorage_rowsizes = R.deviceStorage_rowsizes;
+            this->deviceStorage_rowstart = R.deviceStorage_rowstart;
         }
 
+        // TODO: SwapData on device?
         void SwapData(self_type &R)
         {
             DNDS_assert(R.Size() == this->Size());
@@ -600,81 +588,12 @@ namespace DNDS
             {
                 _data.swap(R._data);
             }
-        }
-
-        static std::string GetArrayName()
-        {
-            std::string Layout;
-            if constexpr (_dataLayout == CSR)
-                Layout = "CSR";
-            if constexpr (_dataLayout == TABLE_StaticFixed)
-                Layout = "TABLE_StaticFixed";
-            if constexpr (_dataLayout == TABLE_Fixed)
-                Layout = "TABLE_Fixed";
-            if constexpr (_dataLayout == TABLE_StaticMax)
-                Layout = "TABLE_StaticMax";
-            if constexpr (_dataLayout == TABLE_Max)
-                Layout = "TABLE_Max";
-            return Layout + "__" +
-                   typeid(T).name() + "_" + std::to_string(sizeof_T) + "_" + RowSize_To_PySnippet(_row_size) +
-                   "_" + RowSize_To_PySnippet(_row_max) +
-                   "_" + RowSize_To_PySnippet(_align);
-        }
-
-        static std::string GetArraySignature()
-        {
-            std::string Layout;
-            if constexpr (_dataLayout == CSR)
-                Layout = "CSR";
-            if constexpr (_dataLayout == TABLE_StaticFixed)
-                Layout = "TABLE_StaticFixed";
-            if constexpr (_dataLayout == TABLE_Fixed)
-                Layout = "TABLE_Fixed";
-            if constexpr (_dataLayout == TABLE_StaticMax)
-                Layout = "TABLE_StaticMax";
-            if constexpr (_dataLayout == TABLE_Max)
-                Layout = "TABLE_Max";
-            return Layout + "__" + std::to_string(sizeof_T) + "_" + std::to_string(_row_size) +
-                   "_" + std::to_string(_row_max) +
-                   "_" + std::to_string(_align);
-        }
-
-        static std::string GetArraySignatureRelaxed()
-        {
-            std::string Layout;
-            if constexpr (_dataLayout == CSR)
-                Layout = "CSR";
-            if constexpr (_dataLayout == TABLE_StaticFixed)
-                Layout = "TABLE_StaticFixed";
-            if constexpr (_dataLayout == TABLE_Fixed)
-                Layout = "TABLE_Fixed";
-            if constexpr (_dataLayout == TABLE_StaticMax)
-                Layout = "TABLE_StaticMax";
-            if constexpr (_dataLayout == TABLE_Max)
-                Layout = "TABLE_Max";
-            return Layout + "__" + std::to_string(sizeof_T) + "_" + std::to_string(-1) +
-                   "_" + std::to_string(-1) +
-                   "_" + std::to_string(_align);
-        }
-
-        std::tuple<int, int, int, int> ParseArraySignatureTuple(const std::string &v)
-        {
-            auto strings = splitSStringClean(v, '_');
-            DNDS_assert(strings.size() == 5 || strings.size() == 6);
-            auto sz = strings.size();
-            return std::make_tuple(std::stoi(strings[sz - 4]), std::stoi(strings[sz - 3]), std::stoi(strings[sz - 2]), std::stoi(strings[sz - 1]));
-        }
-
-        bool ArraySignatureIsCompatible(const std::string &v)
-        {
-            auto [sz, rs, rm, align] = ParseArraySignatureTuple(v);
-            if (sz != sizeof_T)
-                return false;
-            if (rs >= 0 && _row_size >= 0 && rs != _row_size)
-                return false;
-            if (rm >= 0 && _row_max >= 0 && rm != _row_max)
-                return false;
-            return true;
+            {
+                DNDS_assert(deviceBackend == R.deviceBackend);
+                deviceStorage.swap(R.deviceStorage);
+                deviceStorage_rowstart.swap(R.deviceStorage_rowstart);
+                deviceStorage_rowsizes.swap(R.deviceStorage_rowsizes);
+            }
         }
 
         void __WriteSerializerData(const Serializer::SerializerBaseSSP &serializerP, Serializer::ArrayGlobalOffset offset)
@@ -726,7 +645,7 @@ namespace DNDS
             serializerP->CreatePath(name);
             serializerP->GoToPath(name);
 
-            serializerP->WriteString("array_sig", this->GetArraySignature());
+            serializerP->WriteString("array_sig", GetArraySignature());
             serializerP->WriteString("array_type", typeid(self_type).name());
             if (serializerP->IsPerRank())
                 serializerP->WriteIndex("size", _size);
@@ -824,6 +743,75 @@ namespace DNDS
             // TODO: check data validity
 
             serializerP->GoToPath(cwd);
+        }
+
+    public:
+        DeviceBackend deviceBackend = DeviceBackend::Unknown;
+        t_supDeviceStorageBase deviceStorage;
+        t_sspDeviceStorageBase deviceStorage_rowstart;
+        t_sspDeviceStorageBase deviceStorage_rowsizes;
+
+        void to_host()
+        {
+            if constexpr (_dataLayout == CSR)
+                DNDS_assert_info(IfCompressed(), "CSR need compressing before to_host");
+            DNDS_assert(deviceStorage);
+            deviceStorage->copy_device_to_host(this->data(), this->DataSizeBytes());
+
+            //* not copying rowstart/rowsizes back
+
+            deviceBackend = DeviceBackend::Unknown;
+        }
+
+        void to_device(DeviceBackend backend = DeviceBackend::Host)
+        {
+            if constexpr (_dataLayout == CSR)
+                DNDS_assert_info(IfCompressed(), "CSR need compressing before to_device");
+            if (!deviceStorage || deviceStorage->bytes() != this->DataSizeBytes())
+                deviceStorage = device_storage_create<T>(backend, this->DataSize());
+            deviceStorage->copy_host_to_device(this->data(), this->DataSizeBytes());
+            if (_pRowStart)
+            {
+                size_t rowstart_size = this->_pRowStart->size();
+                if (!deviceStorage_rowstart || deviceStorage_rowstart->bytes() != rowstart_size * sizeof(index))
+                    deviceStorage_rowstart = device_storage_create_shared<index>(backend, rowstart_size);
+                deviceStorage_rowstart->copy_host_to_device(this->_pRowStart->data(), rowstart_size * sizeof(index));
+            }
+            if (_pRowSizes)
+            {
+                size_t rowsizes_size = this->_pRowSizes->size();
+                if (!deviceStorage_rowsizes || deviceStorage_rowsizes->bytes() != rowsizes_size * sizeof(rowsize))
+                    deviceStorage_rowsizes = device_storage_create_shared<rowsize>(backend, rowsizes_size);
+                deviceStorage_rowstart->copy_host_to_device(this->_pRowSizes->data(), rowsizes_size * sizeof(rowsize));
+            }
+
+            deviceBackend = deviceStorage->backend();
+        }
+
+        void clear_device()
+        {
+            deviceStorage.reset();
+            deviceStorage_rowstart.reset();
+            deviceStorage_rowsizes.reset();
+
+            deviceBackend = DeviceBackend::Unknown;
+        }
+
+        template <DeviceBackend B>
+        auto deviceView()
+        {
+            DNDS_assert_info(this->deviceBackend == B &&
+                                 this->deviceBackend != DeviceBackend::Unknown,
+                             "not on this device");
+
+            return ArrayDeviceView_build<B, T, _row_size, _row_max, _align>(
+                _size, _data.data(), _data.size(),
+                _pRowStart ? _pRowStart->data() : nullptr, _pRowStart ? _pRowStart->size() : 0,
+                _pRowSizes ? _pRowSizes->data() : nullptr, _pRowSizes ? _pRowSizes->size() : 0,
+                _row_size_dynamic,
+                deviceStorage ? reinterpret_cast<T *>(deviceStorage->raw_ptr()) : nullptr,
+                deviceStorage_rowstart ? reinterpret_cast<index *>(deviceStorage_rowstart->raw_ptr()) : nullptr,
+                deviceStorage_rowsizes ? reinterpret_cast<rowsize *>(deviceStorage_rowsizes->raw_ptr()) : nullptr);
         }
     };
 
