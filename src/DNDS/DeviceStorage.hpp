@@ -49,26 +49,37 @@ namespace DNDS
     class DeviceStorage<T, DeviceBackend::Host> : public DeviceStorageBase
     {
         using self_type = DeviceStorage<T, DeviceBackend::Host>;
-        std::vector<T> data;
+        // std::vector<T> data;
+        size_t _size = 0;
+        T *data = nullptr;
 
     public:
-        explicit DeviceStorage(size_t n) : data(n) {}
+        explicit DeviceStorage(size_t n) : //  data(n),
+                                           _size(n)
+        {
+        }
 
         void *raw_ptr() override
         {
-            return reinterpret_cast<void *>(data.data());
+            // return reinterpret_cast<void *>(data.data());
+            // ! point-back design:
+            return reinterpret_cast<void *>(data);
         }
         void copy_host_to_device(void *host_ptr, size_t n_bytes) override
         {
             DNDS_assert_info(n_bytes == bytes(), "bytes size mismatch");
             T *host_T_ptr = reinterpret_cast<T *>(host_ptr);
-            std::copy(host_T_ptr, host_T_ptr + data.size(), data.begin());
+            // std::copy(host_T_ptr, host_T_ptr + data.size(), data.begin());
+            // ! point-back design:
+            data = host_T_ptr;
         }
         void copy_device_to_host(void *host_ptr, size_t n_bytes) override
         {
             DNDS_assert_info(n_bytes == bytes(), "bytes size mismatch");
             T *host_T_ptr = reinterpret_cast<T *>(host_ptr);
-            std::copy(data.begin(), data.end(), host_T_ptr);
+            // std::copy(data.begin(), data.end(), host_T_ptr);
+            // ! point-back design:
+            // do nothing
         }
         std::unique_ptr<DeviceStorageBase> clone() override
         {
@@ -76,7 +87,9 @@ namespace DNDS
         }
         [[nodiscard]] size_t bytes() const override
         {
-            return data.size() * sizeof(T);
+            // return data.size() * sizeof(T);
+            // ! point-back design:
+            return _size * sizeof(T);
         }
         [[nodiscard]] DeviceBackend backend() const override
         {
@@ -169,4 +182,43 @@ namespace DNDS
             return nullptr;
         }
     }
+
+    template <typename T>
+    struct host_device_vector : public std::vector<T>
+    {
+        using t_base = std::vector<T>;
+        using t_base::t_base;
+
+        t_supDeviceStorageBase deviceStorage;
+
+        void to_device(DeviceBackend backend = DeviceBackend::Host)
+        {
+            if (!deviceStorage || deviceStorage->bytes() != this->size() * sizeof(T))
+                deviceStorage = device_storage_create<T>(backend, this->size());
+            deviceStorage->copy_host_to_device(this->data(), this->size() * sizeof(T));
+        }
+
+        void to_host()
+        {
+            DNDS_assert(deviceStorage);
+            deviceStorage->copy_device_to_host(this->data(), this->size() * sizeof(T));
+        }
+
+        T *dataDevice()
+        {
+            return deviceStorage ? reinterpret_cast<T *>(deviceStorage->raw_ptr()) : nullptr;
+        }
+
+        host_device_vector &operator=(const host_device_vector<T> &R)
+        {
+            this->t_base::operator=(R);
+            this->deviceStorage = R.deviceStorage ? R.deviceStorage->clone() : nullptr;
+            return *this;
+        }
+
+        host_device_vector(const host_device_vector<T> &R) : t_base(R)
+        {
+            this->deviceStorage = R.deviceStorage ? R.deviceStorage->clone() : nullptr;
+        }
+    };
 }

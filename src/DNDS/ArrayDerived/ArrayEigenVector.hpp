@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../ArrayTransformer.hpp"
+#include "ArrayEigenVector_DeviceView.hpp"
+#include "DNDS/DeviceStorage.hpp"
 
 namespace DNDS
 {
@@ -11,7 +13,8 @@ namespace DNDS
         using t_base = ParArray<real, _vec_size, _row_max, _align>;
         using t_base::t_base;
 
-        using t_EigenVector = Eigen::Matrix<real, RowSize_To_EigenSize(_vec_size), 1>;
+        using t_EigenVector = Eigen::Matrix<real, RowSize_To_EigenSize(_vec_size), 1,
+                                            Eigen::DontAlign | Eigen::ColMajor, RowSize_To_EigenSize(_row_max), 1>;
         using t_EigenMap = Eigen::Map<t_EigenVector, Eigen::Unaligned>; // default no buffer align and stride
 
         using t_copy = t_EigenVector;
@@ -24,5 +27,14 @@ namespace DNDS
 
         using t_base::ReadSerializer;
         using t_base::WriteSerializer; //! because no extra data than Array<>
+
+        template <DeviceBackend B>
+        using t_deviceView = ArrayEigenVectorDeviceView<B, _vec_size, _row_max, _align>;
+
+        template <DeviceBackend B>
+        auto deviceView()
+        {
+            return t_deviceView<B>{t_base::template deviceView<B>()};
+        }
     };
 }

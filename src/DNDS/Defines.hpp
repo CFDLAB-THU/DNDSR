@@ -1,5 +1,5 @@
 #pragma once
-
+#include "Macros.hpp"
 // #define NDEBUG
 #include "EigenPCH.hpp"
 #include <cassert>
@@ -30,7 +30,7 @@
 // #include <process.h>
 #endif
 
-#include "Macros.hpp"
+
 #include "Experimentals.hpp"
 #include "Warnings.hpp"
 

@@ -202,7 +202,7 @@ namespace DNDS::Serializer
         DNDS_assert(jObj[cPointer][name].is_string());
         v = jObj[cPointer][name].get<std::remove_reference_t<decltype(v)>>();
     }
-    void SerializerJSON::ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> &v, ArrayGlobalOffset &offset)
+    void SerializerJSON::ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> v, ArrayGlobalOffset &offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         using tValue = std::vector<index>;
@@ -229,7 +229,7 @@ namespace DNDS::Serializer
         }
         offset = ArrayGlobalOffset_Unknown;
     }
-    void SerializerJSON::ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> &v, ArrayGlobalOffset &offset)
+    void SerializerJSON::ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> v, ArrayGlobalOffset &offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         using tValue = std::vector<rowsize>;

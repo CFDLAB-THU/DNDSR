@@ -33,10 +33,16 @@ namespace DNDS
         index *rowPtr(index i) { return t_base::operator[](i); }
 
         template <DeviceBackend B>
+        using t_deviceView = ArrayAdjacencyDeviceView<B, _row_size, _row_max, _align>;
+
+        template <DeviceBackend B>
         auto deviceView()
         {
-            return ArrayAdjacencyDeviceView<B, _row_size, _row_max, _align>{t_base::template deviceView<B>()};
+            return t_deviceView<B>{t_base::template deviceView<B>()};
         }
+
+        using t_base::to_device;
+        using t_base::to_host;
     };
 
 }

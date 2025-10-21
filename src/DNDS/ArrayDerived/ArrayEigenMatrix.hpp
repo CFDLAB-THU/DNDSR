@@ -1,25 +1,12 @@
 #pragma once
 
 #include "../ArrayTransformer.hpp"
+#include "ArrayEigenMatrix_DeviceView.hpp"
+#include "DNDS/Defines.hpp"
+#include "DNDS/DeviceStorage.hpp"
 
 namespace DNDS
 {
-    template <rowsize _mat_ni, rowsize _mat_nj>
-    inline constexpr rowsize __OneMatGetRowSize()
-    {
-        if constexpr (_mat_ni >= 0 && _mat_nj >= 0)
-        {
-            return _mat_ni * _mat_nj;
-        }
-        else if constexpr (_mat_ni == NonUniformSize || _mat_nj == NonUniformSize)
-        {
-            return NonUniformSize;
-        }
-        else
-        {
-            return DynamicSize;
-        }
-    }
 
     template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
               rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
@@ -36,7 +23,8 @@ namespace DNDS
                                 __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
                                 _align>;
         using t_base::t_base;
-        using t_pRowSizes = typename t_base::t_pRowSizes;
+        // using t_pRowSizes = typename t_base::t_pRowSizes;
+        using t_pRowSizes = ssp<host_device_vector<rowsize>>;
 
         using t_EigenMatrix = Eigen::Matrix<real, RowSize_To_EigenSize(_mat_ni), RowSize_To_EigenSize(_mat_nj)>;
         using t_EigenMap = Eigen::Map<t_EigenMatrix, Eigen::Unaligned>;             // default no buffer align and stride
@@ -71,7 +59,7 @@ namespace DNDS
             this->t_base::Resize(nSize, nSizeRowDynamic * nSizeColDynamic);
         }
 
-        rowsize MatRowSize(index iMat = 0) const
+        [[nodiscard]] rowsize MatRowSize(index iMat = 0) const
         {
             if constexpr (_mat_ni >= 0)
                 return _mat_ni;
@@ -82,7 +70,7 @@ namespace DNDS
             return UnInitRowsize; // invalid branch
         }
 
-        rowsize MatColSize(index iMat = 0) const
+        [[nodiscard]] rowsize MatColSize(index iMat = 0) const
         {
             if constexpr (_mat_nj >= 0)
                 return _mat_nj;
@@ -232,6 +220,27 @@ namespace DNDS
             }
 
             serializerP->GoToPath(cwd);
+        }
+
+        template <DeviceBackend B>
+        using t_deviceView = ArrayEigenMatrixDeviceView<B, _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>;
+
+        template <DeviceBackend B>
+        auto deviceView()
+        {
+            auto base_view = t_base::template deviceView<B>();
+            return t_deviceView<B>(base_view,
+                                   // do more delicate dispatching for extensions?
+                                   B == DeviceBackend::Host ? _mat_nRows->data() : _mat_nRows->dataDevice(),
+                                   _mat_nRow_dynamic);
+        }
+
+        using t_base::to_host; // we only copy primary data back (no structure modification allowed from device)
+
+        void to_device(DeviceBackend backend)
+        {
+            this->t_base::to_device(backend);
+            _mat_nRows->to_device(backend);
         }
     };
 }

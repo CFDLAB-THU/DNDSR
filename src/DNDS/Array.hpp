@@ -65,22 +65,24 @@ namespace DNDS
 
     public:
         //* compressed data
-        using t_Data = std::vector<value_type>;
+        using t_Data = host_device_vector<value_type>;
         //* uncompressed data (only for CSR)
         using t_DataUncompressed = std::vector<std::vector<value_type>>;
 
         //* non uniform data: CSR
-        using t_RowStart = std::vector<index>;
+        using t_RowStart = host_device_vector<index>;
         using t_pRowStart = ssp<t_RowStart>;
 
         //* non uniform-with max data: TABLE
-        using t_RowSizes = std::vector<rowsize>;
+        using t_RowSizes = host_device_vector<rowsize>;
         using t_pRowSizes = ssp<t_RowSizes>;
 
-    private:
+    protected:
         t_pRowStart _pRowStart; // CSR   in number of T
         t_pRowSizes _pRowSizes; // TABLE in number of T
         t_Data _data;
+        DeviceBackend deviceBackend = DeviceBackend::Unknown;
+
         t_DataUncompressed _dataUncompressed;
 
         index _size = 0;               // in number of T
@@ -170,7 +172,7 @@ namespace DNDS
                 DNDS_assert_info(false, "invalid call");
         }
 
-    private:
+    protected:
         [[nodiscard]] bool IfCompressed_() const
         {
             if constexpr (_dataLayout == CSR)
@@ -274,7 +276,8 @@ namespace DNDS
                 DNDS_assert_info(!IfCompressed(), "Need to decompress before auto resizing");
                 _size = nSize;
                 // _dataUncompressed.resize(nSize, typename decltype(_dataUncompressed)::value_type(nRow_size_dynamic));
-                _dataUncompressed.resize(nSize);
+                // _dataUncompressed.resize(nSize);
+                _dataUncompressed.assign(nSize, typename decltype(_dataUncompressed)::value_type(nRow_size_dynamic));
             }
             else
             {
@@ -561,9 +564,6 @@ namespace DNDS
 
             this->deviceBackend = R.deviceBackend;
             // non-trivial copy call: unique_ptr
-            this->deviceStorage = R.deviceStorage ? R.deviceStorage->clone() : nullptr;
-            this->deviceStorage_rowsizes = R.deviceStorage_rowsizes;
-            this->deviceStorage_rowstart = R.deviceStorage_rowstart;
         }
 
         // TODO: SwapData on device?
@@ -589,10 +589,7 @@ namespace DNDS
                 _data.swap(R._data);
             }
             {
-                DNDS_assert(deviceBackend == R.deviceBackend);
-                deviceStorage.swap(R.deviceStorage);
-                deviceStorage_rowstart.swap(R.deviceStorage_rowstart);
-                deviceStorage_rowsizes.swap(R.deviceStorage_rowsizes);
+                std::swap(deviceBackend, R.deviceBackend);
             }
         }
 
@@ -746,20 +743,12 @@ namespace DNDS
         }
 
     public:
-        DeviceBackend deviceBackend = DeviceBackend::Unknown;
-        t_supDeviceStorageBase deviceStorage;
-        t_sspDeviceStorageBase deviceStorage_rowstart;
-        t_sspDeviceStorageBase deviceStorage_rowsizes;
-
         void to_host()
         {
             if constexpr (_dataLayout == CSR)
                 DNDS_assert_info(IfCompressed(), "CSR need compressing before to_host");
-            DNDS_assert(deviceStorage);
-            deviceStorage->copy_device_to_host(this->data(), this->DataSizeBytes());
-
-            //* not copying rowstart/rowsizes back
-
+            DNDS_assert(_data.deviceStorage);
+            _data.to_host();
             deviceBackend = DeviceBackend::Unknown;
         }
 
@@ -767,32 +756,21 @@ namespace DNDS
         {
             if constexpr (_dataLayout == CSR)
                 DNDS_assert_info(IfCompressed(), "CSR need compressing before to_device");
-            if (!deviceStorage || deviceStorage->bytes() != this->DataSizeBytes())
-                deviceStorage = device_storage_create<T>(backend, this->DataSize());
-            deviceStorage->copy_host_to_device(this->data(), this->DataSizeBytes());
+            _data.to_device(backend);
             if (_pRowStart)
-            {
-                size_t rowstart_size = this->_pRowStart->size();
-                if (!deviceStorage_rowstart || deviceStorage_rowstart->bytes() != rowstart_size * sizeof(index))
-                    deviceStorage_rowstart = device_storage_create_shared<index>(backend, rowstart_size);
-                deviceStorage_rowstart->copy_host_to_device(this->_pRowStart->data(), rowstart_size * sizeof(index));
-            }
+                _pRowStart->to_device(backend);
             if (_pRowSizes)
-            {
-                size_t rowsizes_size = this->_pRowSizes->size();
-                if (!deviceStorage_rowsizes || deviceStorage_rowsizes->bytes() != rowsizes_size * sizeof(rowsize))
-                    deviceStorage_rowsizes = device_storage_create_shared<rowsize>(backend, rowsizes_size);
-                deviceStorage_rowstart->copy_host_to_device(this->_pRowSizes->data(), rowsizes_size * sizeof(rowsize));
-            }
-
-            deviceBackend = deviceStorage->backend();
+                _pRowSizes->to_device(backend);
+            deviceBackend = _data.deviceStorage->backend();
         }
 
         void clear_device()
         {
-            deviceStorage.reset();
-            deviceStorage_rowstart.reset();
-            deviceStorage_rowsizes.reset();
+            _data.deviceStorage.reset();
+            if (_pRowStart)
+                _pRowStart->deviceStorage.reset();
+            if (_pRowSizes)
+                _pRowSizes->deviceStorage.reset();
 
             deviceBackend = DeviceBackend::Unknown;
         }
@@ -800,8 +778,9 @@ namespace DNDS
         template <DeviceBackend B>
         auto deviceView()
         {
-            DNDS_assert_info(this->deviceBackend == B &&
-                                 this->deviceBackend != DeviceBackend::Unknown,
+            DNDS_assert_info((this->deviceBackend == B &&
+                              B != DeviceBackend::Unknown) ||
+                                 (B == DeviceBackend::Host),
                              "not on this device");
 
             return ArrayDeviceView_build<B, T, _row_size, _row_max, _align>(
@@ -809,9 +788,9 @@ namespace DNDS
                 _pRowStart ? _pRowStart->data() : nullptr, _pRowStart ? _pRowStart->size() : 0,
                 _pRowSizes ? _pRowSizes->data() : nullptr, _pRowSizes ? _pRowSizes->size() : 0,
                 _row_size_dynamic,
-                deviceStorage ? reinterpret_cast<T *>(deviceStorage->raw_ptr()) : nullptr,
-                deviceStorage_rowstart ? reinterpret_cast<index *>(deviceStorage_rowstart->raw_ptr()) : nullptr,
-                deviceStorage_rowsizes ? reinterpret_cast<rowsize *>(deviceStorage_rowsizes->raw_ptr()) : nullptr);
+                _data.dataDevice(),
+                _pRowStart ? _pRowStart->dataDevice() : nullptr,
+                _pRowSizes ? _pRowSizes->dataDevice() : nullptr);
         }
     };
 

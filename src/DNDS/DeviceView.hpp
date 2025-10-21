@@ -17,7 +17,11 @@ namespace DNDS
 
     template <DeviceBackend B,
               class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    class ArrayDeviceView;
+    class ArrayDeviceView : public ArrayView<T, _row_size, _row_max, _align>
+    {
+    public:
+        ArrayDeviceView() = delete;
+    };
 
     template <class T, rowsize _row_size, rowsize _row_max, rowsize _align>
     class ArrayDeviceView<
@@ -54,7 +58,7 @@ namespace DNDS
             return this->at_compressed(iRow, iCol);
         }
 
-        DNDS_DEVICE_CALLABLE T* operator[](index iRow)
+        DNDS_DEVICE_CALLABLE T *operator[](index iRow)
         {
             return this->get_rowstart_pointer_compressed(iRow);
         }

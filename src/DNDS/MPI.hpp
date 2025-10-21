@@ -411,7 +411,7 @@ namespace DNDS
         {
             uint8_t *obuf;
             int osize;
-            MPI_Buffer_detach(&obuf, &osize);
+            MPI_Buffer_detach(reinterpret_cast<void *>(&obuf) /* caution */, &osize);
 
             buf.resize(1024ULL * 1024ULL);
             MPI_Buffer_attach(buf.data(), int(buf.size())); //! warning, bufsize could overflow
@@ -433,14 +433,14 @@ namespace DNDS
                 // std::cout << "claim in " << std::endl;
                 uint8_t *obuf;
                 int osize;
-                MPI_Buffer_detach(&obuf, &osize);
+                MPI_Buffer_detach(reinterpret_cast<void *>(&obuf) /* caution */, &osize);
 #ifdef MPIBufferHandler_REPORT_CHANGE
                 std::cout << "MPIBufferHandler: New BUf at " << reportRank << std::endl
                           << osize << std::endl;
 #endif
                 DNDS_assert(static_cast<size_type>(osize) == buf.size());
                 buf.resize(claimed + cs);
-                MPI_Buffer_attach(buf.data(), buf.size());
+                MPI_Buffer_attach(buf.data(), size_t_to_signed<MPI_int>(buf.size()));
 #ifdef MPIBufferHandler_REPORT_CHANGE
                 std::cout << " -> " << buf.size() << std::endl;
 #endif
@@ -449,7 +449,7 @@ namespace DNDS
         }
         void unclaim(MPI_int cs)
         {
-            DNDS_assert(claimed >= cs);
+            DNDS_assert(size_t_to_signed<MPI_int>(claimed) >= cs);
             claimed -= cs;
         }
         void *getBuf()

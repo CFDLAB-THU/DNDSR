@@ -1,25 +1,13 @@
 #pragma once
 
 #include "../ArrayTransformer.hpp"
+#include "DNDS/ArrayBasic.hpp"
+#include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch_DeviceView.hpp"
 
 namespace DNDS
 {
-    template <int a, int b>
-    inline constexpr rowsize EigenSize_Mul_RowSize()
-    {
-        if constexpr (a >= 0 && b >= 0)
-        {
-            return a * b;
-        }
-        if constexpr (a == Eigen::Dynamic || b == Eigen::Dynamic)
-        {
-            return DynamicSize;
-        }
-        return DNDS_ROWSIZE_MIN;
-    }
-
     template <int _n_row, int _n_col>
-    class ArrayEigenUniMatrixBatch : public ParArray<real, NonUniformSize> // use CSR array
+    class ArrayEigenUniMatrixBatch : public ParArray<real, NonUniformSize, NonUniformSize, NoAlign> // use CSR array
     {
         static_assert(_n_row >= 0 || _n_row == Eigen::Dynamic, "invalid _n_row");
         static_assert(_n_col >= 0 || _n_col == Eigen::Dynamic, "invalid _n_col");
@@ -92,9 +80,15 @@ namespace DNDS
         }
 
     public:
-        int Rows() const { return _n_row > 0 ? _n_row : _row_dynamic; }
-        int Cols() const { return _n_col > 0 ? _n_col : _col_dynamic; }
-        int MSize() const
+        auto view()
+        {
+            return ArrayEigenUniMatrixBatchDeviceView<DeviceBackend::Host, _n_row, _n_col>{
+                t_base::view(), _row_dynamic, _col_dynamic, _m_size};
+        }
+
+        [[nodiscard]] int Rows() const { return _n_row > 0 ? _n_row : _row_dynamic; }
+        [[nodiscard]] int Cols() const { return _n_col > 0 ? _n_col : _col_dynamic; }
+        [[nodiscard]] int MSize() const
         {
             if constexpr (_n_row >= 0 && _n_col >= 0)
                 return _n_row * _n_col;
@@ -112,30 +106,30 @@ namespace DNDS
             this->t_base::ResizeRow(i, b_size * MSize());
         }
 
-        rowsize BatchSize(index i) const
+        [[nodiscard]] rowsize BatchSize(index i) const
         {
             return this->RowSize(i);
         }
 
-        rowsize RowSize(index i) const
+        [[nodiscard]] rowsize RowSize(index i) const
         {
             rowsize row_size_c = this->t_base::RowSize(i);
             DNDS_assert(MSize() != 0 && row_size_c % MSize() == 0);
             return row_size_c / MSize();
         }
 
-        auto operator()(index i, rowsize j)
+        t_EigenMap operator()(index i, rowsize j)
         {
             DNDS_assert(j >= 0 && j < this->RowSize(i));
             // if constexpr (_n_row >= 0 && _n_col >= 0)
-            return t_EigenMap(this->t_base::operator[](i) + MSize() * j, Rows(), Cols());
+            return {this->t_base::operator[](i) + MSize() * j, Rows(), Cols()};
         }
 
-        auto operator()(index i, rowsize j) const
+        t_EigenMap_const operator()(index i, rowsize j) const
         {
             DNDS_assert(j >= 0 && j < this->RowSize(i));
             // if constexpr (_n_row >= 0 && _n_col >= 0)
-            return t_EigenMap_const(this->t_base::operator[](i) + MSize() * j, Rows(), Cols());
+            return {this->t_base::operator[](i) + MSize() * j, Rows(), Cols()};
         }
 
         std::vector<t_EigenMap> operator[](index i)
@@ -161,7 +155,7 @@ namespace DNDS
             serializerP->CreatePath(name);
             serializerP->GoToPath(name);
 
-            serializerP->WriteString("DerivedType", this->GetDerivedArraySignature());
+            serializerP->WriteString("DerivedType", GetDerivedArraySignature());
             serializerP->WriteInt("row_dynamic", _row_dynamic);
             serializerP->WriteInt("col_dynamic", _col_dynamic);
             serializerP->WriteInt("m_size", _m_size);
@@ -186,5 +180,17 @@ namespace DNDS
 
             serializerP->GoToPath(cwd);
         }
+
+        template <DeviceBackend B>
+        using t_deviceView = ArrayEigenUniMatrixBatchDeviceView<B, _n_row, _n_col>;
+
+        template <DeviceBackend B>
+        auto deviceView()
+        {
+            return t_deviceView<B>{t_base::template deviceView<B>(), _row_dynamic, _col_dynamic, _m_size};
+        }
+
+        using t_base::to_device;
+        using t_base::to_host;
     };
 }

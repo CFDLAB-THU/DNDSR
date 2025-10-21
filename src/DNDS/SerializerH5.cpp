@@ -821,7 +821,7 @@ namespace DNDS::Serializer
     {
         ReadAttributeScalar<std::string>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
-    void SerializerH5::ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> &v, ArrayGlobalOffset &offset)
+    void SerializerH5::ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> v, ArrayGlobalOffset &offset)
     {
         using tValue = std::vector<index>;
         herr_t herr;
@@ -854,7 +854,7 @@ namespace DNDS::Serializer
             ReadDataVector<index>(refPath, v->data(), size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
         }
     }
-    void SerializerH5::ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> &v, ArrayGlobalOffset &offset)
+    void SerializerH5::ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> v, ArrayGlobalOffset &offset)
     {
         using tValue = std::vector<rowsize>;
         herr_t herr;

@@ -124,8 +124,8 @@ namespace DNDS::Serializer
         virtual void ReadIndexVector(const std::string &name, std::vector<index> &v, ArrayGlobalOffset &offset) = 0;
         virtual void ReadRowsizeVector(const std::string &name, std::vector<rowsize> &v, ArrayGlobalOffset &offset) = 0;
         virtual void ReadRealVector(const std::string &name, std::vector<real> &v, ArrayGlobalOffset &offset) = 0;
-        virtual void ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> &v, ArrayGlobalOffset &offset) = 0;
-        virtual void ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> &v, ArrayGlobalOffset &offset) = 0;
+        virtual void ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> v, ArrayGlobalOffset &offset) = 0;
+        virtual void ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> v, ArrayGlobalOffset &offset) = 0;
         /**
          * @brief
          * @param data if data == nullptr, only get the size not reading any data
@@ -135,8 +135,8 @@ namespace DNDS::Serializer
         // virtual void ReadIndexVectorParallel(const std::string &name, const std::vector<index> &v, ArrayGlobalOffset offset) = 0;
         // virtual void ReadRowsizeVectorParallel(const std::string &name, const std::vector<rowsize> &v, ArrayGlobalOffset offset) = 0;
         // virtual void ReadRealVectorParallel(const std::string &name, const std::vector<real> &v, ArrayGlobalOffset offset) = 0;
-        // virtual void ReadSharedIndexVectorParallel(const std::string &name, const ssp<std::vector<index>> &v, ArrayGlobalOffset offset) = 0;
-        // virtual void ReadSharedRowsizeVectorParallel(const std::string &name, const ssp<std::vector<rowsize>> &v, ArrayGlobalOffset offset) = 0;
+        // virtual void ReadSharedIndexVectorParallel(const std::string &name, const ssp<std::vector<index>> v, ArrayGlobalOffset offset) = 0;
+        // virtual void ReadSharedRowsizeVectorParallel(const std::string &name, const ssp<std::vector<rowsize>> v, ArrayGlobalOffset offset) = 0;
         // virtual void ReadUint8ArrayParallel(const std::string &name, const uint8_t *data, index size, ArrayGlobalOffset offset) = 0;
     };
 

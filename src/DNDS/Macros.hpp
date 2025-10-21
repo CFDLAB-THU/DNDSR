@@ -6,6 +6,8 @@
 
 #define EIGEN_HAS_CXX14_VARIABLE_TEMPLATES 1
 
+#define EIGEN_DONT_PARALLELIZE 1
+
 static const std::string DNDS_Macros_State = std::string("DNDS_Macros ")
 #ifdef EIGEN_USE_BLAS
                                              + " EIGEN_USE_BLAS "
