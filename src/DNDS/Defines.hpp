@@ -1,6 +1,7 @@
 #pragma once
 #include "Macros.hpp"
 // #define NDEBUG
+#include "Errors.hpp"
 #include "EigenPCH.hpp"
 #include <cassert>
 #include <cstdint>
@@ -22,7 +23,7 @@
 #include <fmt/core.h>
 
 #ifdef DNDS_USE_OMP
-#include <omp.h>
+#    include <omp.h>
 #endif
 
 #if defined(_WIN32) || defined(__WINDOWS_)
@@ -30,88 +31,9 @@
 // #include <process.h>
 #endif
 
-
-#include "Experimentals.hpp"
-#include "Warnings.hpp"
-
-static const std::string DNDS_Defines_state =
-    std::string("DNDS_Defines ") + DNDS_Macros_State + DNDS_Experimentals_State
-#ifdef NDEBUG
-    + " NDEBUG "
-#else
-    + " (no NDEBUG) "
-#endif
-#ifdef NINSERT
-    + " NINSERT "
-#else
-    + " (no NINSERT) "
-#endif
-    ;
-
-#ifndef DNDS_CURRENT_COMMIT_HASH
-#define DNDS_CURRENT_COMMIT_HASH UNKNOWN
-#endif
-
-#define DNDS_MACRO_TO_STRING(V) __DNDS_str(V)
-#define __DNDS_str(V) #V
-
-#ifdef __DNDS_REALLY_COMPILING__
-#define DNDS_SWITCH_INTELLISENSE(real, intellisense) real
-#else
-#define DNDS_SWITCH_INTELLISENSE(real, intellisense) intellisense
-#endif
-
 #define DNDS_FMT_ARG(V) fmt::arg(#V, V)
 
 /***************/ // DNDS_assertS
-
-std::string __DNDS_getTraceString();
-
-inline void __DNDS_assert_false(const char *expr, const char *file, int line)
-{
-    std::cerr << __DNDS_getTraceString() << "\n";
-    std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]" << std::endl;
-    std::abort();
-}
-
-inline void __DNDS_assert_false_info(const char *expr, const char *file, int line, const std::string &info)
-{
-    std::cerr << __DNDS_getTraceString() << "\n";
-    std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n"
-              << info << std::endl;
-    std::abort();
-}
-
-inline void __DNDS_assert_false_infof(const char *expr, const char *file, int line,
-                                      const char *info, ...)
-{
-    va_list args;
-    va_start(args, info);
-    std::cerr << __DNDS_getTraceString() << "\n";
-    std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n";
-    char format_buf[1024 * 512];
-    std::snprintf(format_buf, sizeof(format_buf), info, args);
-    std::cerr << format_buf << std::endl;
-    std::abort();
-}
-
-#ifdef DNDS_NDEBUG
-#define DNDS_assert(expr) (void(0))
-#define DNDS_assert_info(expr, info) (void(0))
-#else
-#define DNDS_assert(expr)      \
-    ((static_cast<bool>(expr)) \
-         ? void(0)             \
-         : __DNDS_assert_false(#expr, __FILE__, __LINE__))
-#define DNDS_assert_info(expr, info) \
-    ((static_cast<bool>(expr))       \
-         ? void(0)                   \
-         : __DNDS_assert_false_info(#expr, __FILE__, __LINE__, info))
-#define DNDS_assert_infof(expr, info, ...) \
-    ((static_cast<bool>(expr))             \
-         ? void(0)                         \
-         : __DNDS_assert_false_infof(#expr, __FILE__, __LINE__, info, ##__VA_ARGS__))
-#endif
 
 extern "C" void DNDS_signal_handler(int signal);
 
@@ -128,19 +50,17 @@ namespace DNDS
 /***************/
 
 #ifdef DNDS_USE_CUDA
-#include <cuda_runtime.h>
+#    include <cuda_runtime.h>
 #endif
 
-
-
 #if defined(DNDS_USE_CUDA)
-#define DNDS_DEVICE_CALLABLE __host__ __device__
-#define DNDS_GLOBAL __global__
-#define DNDS_CONSTANT __constant__
+#    define DNDS_DEVICE_CALLABLE __host__ __device__
+#    define DNDS_GLOBAL __global__
+#    define DNDS_CONSTANT __constant__
 #else
-#define DNDS_DEVICE_CALLABLE
-#define DNDS_GLOBAL
-#define DNDS_CONSTANT
+#    define DNDS_DEVICE_CALLABLE
+#    define DNDS_GLOBAL
+#    define DNDS_CONSTANT
 #endif
 
 #define DNDS_DEVICE_TRIVIAL_COPY_DEFINE(T, T_Self)               \
@@ -710,9 +630,9 @@ namespace DNDS
 */
 
 #if defined(_MSC_VER)
-#define DNDS_RESTRICT __restrict
+#    define DNDS_RESTRICT __restrict
 #elif defined(__GNUC__) || defined(__clang__)
-#define DNDS_RESTRICT __restrict__
+#    define DNDS_RESTRICT __restrict__
 #else
-#define DNDS_RESTRICT
+#    define DNDS_RESTRICT
 #endif

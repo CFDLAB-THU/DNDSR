@@ -181,9 +181,9 @@ namespace DNDS
                 {
                     return bool(_pRowStart);
                 }
-                return false;
+                return bool(_pRowStart); // size-0 array is not always considered compressed
             }
-            return true;
+            return true; // non-CSR ones are always compressed
         }
 
     public:

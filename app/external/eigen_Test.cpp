@@ -1,3 +1,4 @@
+// #define EIGEN_NO_MALLOC
 #include "Eigen/Dense"
 #include "DNDS/Defines.hpp"
 #include <unsupported/Eigen/CXX11/TensorSymmetry>

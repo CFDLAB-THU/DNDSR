@@ -6,9 +6,76 @@
 #include "ArrayDerived/ArrayEigenMatrix.hpp"
 #include "ArrayDerived/ArrayEigenMatrixBatch.hpp"
 #include "ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
+#include "DNDS/Defines.hpp"
+#include "DNDS/DeviceStorage.hpp"
+#include "DeviceView.hpp"
 #include <fmt/format.h>
 namespace DNDS
 {
+    template <DeviceBackend B, class TArray = ParArray<real, 1>>
+    struct ArrayPairDeviceView
+    {
+        using t_arrayDeviceView = typename TArray::template t_deviceView<B>;
+
+        t_arrayDeviceView father;
+        t_arrayDeviceView son;
+
+        DNDS_DEVICE_CALLABLE ArrayPairDeviceView(const t_arrayDeviceView &n_father, const t_arrayDeviceView &n_son)
+            : father(n_father), son(n_son) {}
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index Size() const
+        {
+            return father.Size() + son.Size();
+        }
+
+        DNDS_DEVICE_CALLABLE auto RowSize() const
+        {
+            return father.RowSize();
+        }
+
+        DNDS_DEVICE_CALLABLE auto RowSize(index i) const
+        {
+            if (i >= 0 && i < father.Size())
+                return father.RowSize(i);
+            else
+                return son.RowSize(i - father.Size());
+        }
+
+        DNDS_DEVICE_CALLABLE auto operator[](index i) const
+        {
+            if (i >= 0 && i < father.Size())
+                return father.operator[](i);
+            else
+                return son.operator[](i - father.Size());
+        }
+
+        DNDS_DEVICE_CALLABLE auto operator[](index i)
+        {
+            if (i >= 0 && i < father.Size())
+                return father.operator[](i);
+            else
+                return son.operator[](i - father.Size());
+        }
+
+        template <class... TOthers>
+        DNDS_DEVICE_CALLABLE auto operator()(index i, TOthers... aOthers)
+        {
+            if (i >= 0 && i < father.Size())
+                return father.operator()(i, aOthers...);
+            else
+                return son.operator()(i - father.Size(), aOthers...);
+        }
+
+        template <class... TOthers>
+        DNDS_DEVICE_CALLABLE auto operator()(index i, TOthers... aOthers) const
+        {
+            if (i >= 0 && i < father.Size())
+                return father.operator()(i, aOthers...);
+            else
+                return son.operator()(i - father.Size(), aOthers...);
+        }
+    };
+
     template <class TArray = ParArray<real, 1>>
     struct ArrayPair
     {
@@ -222,6 +289,34 @@ namespace DNDS
             /***************************/
 
             serializerP->GoToPath(cwd);
+        }
+
+        template <DeviceBackend B>
+        using t_deviceView = ArrayPairDeviceView<B, TArray>;
+
+        template <DeviceBackend B>
+        auto deviceView()
+        {
+            DNDS_assert_info(father && son, "need both father and son to exist for device view");
+            return t_deviceView<B>{
+                father->template deviceView<B>(),
+                son->template deviceView<B>()};
+        }
+
+        void to_device(DeviceBackend backend)
+        {
+            if (father)
+                father->to_device(backend);
+            if (son)
+                son->to_device(backend);
+        }
+
+        void to_host()
+        {
+            if (father)
+                father->to_host();
+            if (son)
+                son->to_host();
         }
     };
 

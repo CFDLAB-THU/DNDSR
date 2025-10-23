@@ -1,10 +1,13 @@
 #include "DNDS/Array.hpp"
 
+// #include "array_cuda_Test.hpp"
 #include "DNDS/ArrayDerived/ArrayAdjacency.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenVector.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenMatrix.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenMatrixBatch.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
+#include "DNDS/ArrayPair.hpp"
+#include "DNDS/DeviceStorage.hpp"
 
 #include <iostream>
 
@@ -217,6 +220,57 @@ namespace DNDS
         }
     }
 
+    namespace array_cuda_Test_EigenUniMatrixBatchPair
+    {
+        //! note: you might need new clangd, like 21.0+ to correctly lint this
+        using t_Arr = ArrayEigenUniMatrixBatchPair<Eigen::Dynamic, Eigen::Dynamic>;
+        // using t_Arr_view = ArrayPairDeviceView<DeviceBackend::CUDA, t_Arr>;
+        using t_Arr_view = typename t_Arr::t_deviceView<DeviceBackend::CUDA>;
+        DNDS_GLOBAL inline void op_kernel(t_Arr_view arr)
+        {
+            int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            if (tid >= arr.Size())
+                return;
+            for (int j = 0; j < arr.RowSize(tid); j++)
+                arr(tid, j) = arr(tid, j).array() * arr(tid, j).array();
+        }
+
+        inline void test(MPIInfo &mpi)
+        {
+            t_Arr arr;
+
+            std::cout << arr.father->GetArrayName() << std::endl;
+            DNDS_MAKE_SSP(arr.father, mpi);
+            DNDS_MAKE_SSP(arr.son, mpi);
+            arr.father->Resize(32, 3, 3);
+            arr.son->Resize(2, 3, 3);
+            for (int i = 0; i < arr.Size(); i++)
+            {
+                // arr.ResizeMat(i, i % 3 + 2, i % 3 + 4);
+                arr.ResizeRow(i, i % 3 + 1);
+                for (int j = 0; j < arr.RowSize(i); j++)
+                    arr(i, j).setConstant(2.0);
+            }
+            if (arr.father->GetDataLayout() == CSR)
+                arr.father->Compress();
+            if (arr.son->GetDataLayout() == CSR)
+                arr.son->Compress();
+            arr.to_device(DeviceBackend::CUDA);
+            int threadsPerBlock = 1024;
+            int blocksPerGrid = (arr.Size() + threadsPerBlock - 1) / threadsPerBlock;
+            op_kernel<<<blocksPerGrid, threadsPerBlock>>>(arr.template deviceView<DeviceBackend::CUDA>());
+            arr.to_host();
+            for (int i = 0; i < arr.Size(); i++)
+            {
+                for (int j = 0; j < arr.RowSize(i); j++)
+                {
+                    // std::cout << arr(i, j) << std::endl;
+                    DNDS_assert((arr(i, j).array() - 4.0).matrix().squaredNorm() == 0.0);
+                }
+            }
+        }
+    }
+
     void array_cuda_Test(MPIInfo &mpi)
     {
         std::cout << "Adjacency: \n";
@@ -233,6 +287,9 @@ namespace DNDS
 
         std::cout << "EigenUniMatrixBatch: \n";
         array_cuda_Test_EigenUniMatrixBatch::test(mpi);
+
+        std::cout << "EigenUniMatrixBatchPair: \n";
+        array_cuda_Test_EigenUniMatrixBatchPair::test(mpi);
     }
 }
 

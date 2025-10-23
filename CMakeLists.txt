@@ -4,6 +4,18 @@
 ## cmake -G "MinGW Makefiles" -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icx ..
 
 
+# Prevent in-source builds
+get_filename_component(_src "${CMAKE_SOURCE_DIR}" REALPATH)
+get_filename_component(_bin "${CMAKE_BINARY_DIR}" REALPATH)
+if(_src STREQUAL _bin)
+  message(FATAL_ERROR
+    "In-source builds are not allowed.\n"
+    "Please create a separate build directory, for example:\n"
+    "  cmake -S . -B build\n"
+    "Then build with:\n"
+    "  cmake --build build")
+endif()
+
 if(UNIX OR MINGW)
     cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
 else()
@@ -175,6 +187,7 @@ if(DNDS_USE_CUDA)
         message(FATAL_ERROR "CUDA toolkit required but not found")
     endif()
     # !
+    set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE} -O2 -Xcompiler=-O3" )
 endif()
 
 if(DNDS_USE_FULL_TEMPLATE_TRACE)
@@ -555,6 +568,7 @@ if(UNIX OR MINGW)
         $<$<NOT:$<COMPILE_LANGUAGE:CUDA>>:-Werror=return-type>
         )
     add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=128>)
+    add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=177>) # declared but never referenced
     add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=2417>)
     add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
 
@@ -777,6 +791,11 @@ stdPowerTest
 objectPool_test
 )
 
+set(DNDS_APPS_DNDS_CU
+array_cuda_Test
+array_cuda_Bench
+)
+
 set(DNDS_APPS_Geom
 elements_Test
 meshSerial_Test
@@ -861,7 +880,7 @@ endfunction(ADD_EXE_APP)
 ## Mind That the TOPOLOGICAL ORDER should be obeyed!
 ADD_EXE_APP("${DNDS_APPS_EXTERNAL}" "app/external" ";" ON cpp)
 ADD_EXE_APP("${DNDS_APPS_DNDS}" "app/DNDS" "dnds;" ON cpp)
-ADD_EXE_APP(array_cuda_Test "app/DNDS" "dnds;" ON cu)
+ADD_EXE_APP("${DNDS_APPS_DNDS_CU}" "app/DNDS" "dnds;" ON cu)
 ADD_EXE_APP("${DNDS_APPS_Solver}" "app/Solver" "dnds;" ON cpp)
 ADD_EXE_APP("${DNDS_APPS_Geom}" "app/Geom" "geom;dnds;" ON cpp)
 ADD_EXE_APP("${DNDS_APPS_CFV}" "app/CFV" "cfv;geom;dnds;" ON cpp)

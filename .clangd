@@ -3,7 +3,12 @@
 
 CompileFlags:
   Add: [-std=c++17]
-  Remove: [-flto*]
+  Remove: [
+      -flto*,
+      --generate-code=*, # for CUDA
+      -forward-unknown-to-host-compiler, # for CUDA
+      --expt-relaxed-constexpr, # for CUDA
+    ]
 
 # -I/home/harry/anaconda3/include/python3.9,
 Diagnostics:
