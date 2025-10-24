@@ -106,6 +106,8 @@ namespace DNDS::CFV
                 UnknownAnisotropic = -1,
                 InertiaCoord = 0,
                 InertiaCoordBB = 1,
+                Norm = 2,
+                CentDiff = 3,
             } anisotropicType = AnisotropicType::InertiaCoord;
 
             real inertiaWeightPower = 1.0;
@@ -248,7 +250,11 @@ namespace DNDS::CFV
 
     NLOHMANN_JSON_SERIALIZE_ENUM(
         VRSettings::FunctionalSettings::AnisotropicType,
-        {{VRSettings::FunctionalSettings::AnisotropicType::UnknownAnisotropic, nullptr},
-         {VRSettings::FunctionalSettings::AnisotropicType::InertiaCoord, "InertiaCoord"},
-         {VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBB, "InertiaCoordBB"}})
+        {
+            {VRSettings::FunctionalSettings::AnisotropicType::UnknownAnisotropic, nullptr},
+            {VRSettings::FunctionalSettings::AnisotropicType::InertiaCoord, "InertiaCoord"},
+            {VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBB, "InertiaCoordBB"},
+            {VRSettings::FunctionalSettings::AnisotropicType::Norm, "Norm"},
+            {VRSettings::FunctionalSettings::AnisotropicType::CentDiff, "CentDiff"},
+        })
 }

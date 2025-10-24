@@ -64,7 +64,7 @@ namespace DNDS
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     // using tPy_ParArrayPair = py::class_<ArrayPair<ParArray<T, _row_size, _row_max, _align>>>; // ! unique ptr
     using tPy_ParArrayPair = py_class_ssp<ArrayPair<ParArray<T, _row_size, _row_max, _align>>>; // ! shared ptr
-}   
+}
 
 namespace DNDS // Array
 {
@@ -99,10 +99,12 @@ namespace DNDS // Array
 
         Array_
             .def(py::init<>())
-            .def("Size", &TArray::Size)
-            .def("Compress", &TArray::Compress)
-            .def("Decompress", &TArray::Decompress)
-            .def("IfCompressed", &TArray::IfCompressed);
+            .def("Size", &TArray::Size);
+        if constexpr (TArray::GetDataLayoutStatic() == CSR)
+            Array_
+                .def("Compress", &TArray::Compress)
+                .def("Decompress", &TArray::Decompress)
+                .def("IfCompressed", &TArray::IfCompressed);
         Array_
             .def(
                 "getRowStart",
@@ -155,9 +157,13 @@ namespace DNDS // Array
             .def("Rowsize", py::overload_cast<index>(&TArray::RowSize, py::const_), py::arg("iRow"));
         Array_
             .def("Rowsize", py::overload_cast<>(&TArray::RowSize, py::const_));
-        Array_
-            .def("Resize", [](TArray &self, index nRow)
-                 { self.Resize(nRow); }, py::arg("nRow"));
+        if constexpr (
+            TArray::GetDataLayoutStatic() == CSR ||
+            TArray::GetDataLayoutStatic() == TABLE_StaticFixed ||
+            TArray::GetDataLayoutStatic() == TABLE_StaticMax)
+            Array_
+                .def("Resize", [](TArray &self, index nRow)
+                     { self.Resize(nRow); }, py::arg("nRow"));
         Array_
             .def("Resize", [](TArray &self, index nRow, rowsize nRowsizeDynamic)
                  { self.Resize(nRow, nRowsizeDynamic); }, py::arg("nRow"), py::arg("rowsizeDynamic"));
@@ -172,8 +178,11 @@ namespace DNDS // Array
                                     { return rowsizes.at(iRow); });
                     },
                     py::arg("nRow"), py::arg("rowsizesArray"));
-        Array_
-            .def("ResizeRow", &TArray::ResizeRow, py::arg("iRow"), py::arg("nRowsize"));
+        if constexpr (TArray::GetDataLayoutStatic() == CSR ||
+                      TArray::GetDataLayoutStatic() == TABLE_Max ||
+                      TArray::GetDataLayoutStatic() == TABLE_StaticMax)
+            Array_
+                .def("ResizeRow", &TArray::ResizeRow, py::arg("iRow"), py::arg("nRowsize"));
         Array_
             .def("__getitem__",
                  [](const TArray &self, std::tuple<index, rowsize> index_)
@@ -294,6 +303,9 @@ namespace DNDS // ParArrayPair
             .def("TransAttach", &TPair::TransAttach)
             .def("hash", &TPair::hash)
             .def("Size", &TPair::Size);
+        if constexpr (TPair::t_arr::GetDataLayoutStatic() == CSR)
+            Pair_
+                .def("CompressBoth", &TPair::CompressBoth);
     }
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>

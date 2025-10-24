@@ -550,7 +550,8 @@ namespace DNDS
             return o;
         }
 
-        DataLayout GetDataLayout() { return _dataLayout; }
+        static constexpr DataLayout GetDataLayoutStatic() { return _dataLayout; }
+        constexpr DataLayout GetDataLayout() { return _dataLayout; }
 
         void CopyData(const self_type &R)
         {

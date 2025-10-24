@@ -29,7 +29,7 @@ namespace DNDS::CFV
         maxVolume = -veryLargeReal;
 
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
         {
@@ -106,7 +106,7 @@ namespace DNDS::CFV
 
             if (iCell < mesh->NumCell()) // non-ghost
 #ifdef DNDS_USE_OMP
-#pragma omp critical
+#    pragma omp critical
 #endif
             {
                 sumVolume += v;
@@ -205,7 +205,7 @@ namespace DNDS::CFV
         this->MakePairDefaultOnFace(faceCent);
 
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
@@ -387,7 +387,7 @@ namespace DNDS::CFV
             volIntCholeskyL.resize(mesh->NumCellProc());
 
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
         {
@@ -483,7 +483,7 @@ namespace DNDS::CFV
                 std::min(maxNDIFF, static_cast<int>(settings.cacheDiffBaseSize)), maxNDOF * 2);
         }
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
@@ -652,8 +652,9 @@ namespace DNDS::CFV
                 wg = settings.functionalSettings.geomWeightBias +
                      std::pow(std::pow(this->GetFaceArea(iFace), 1. / real(dim - 1)) / faceBaryDiffV.norm(), settings.functionalSettings.geomWeightPower * 0.5);
             if (settings.functionalSettings.geomWeightScheme == VRSettings::FunctionalSettings::GeomWeightScheme::SD_Power)
-                wg = std::pow(this->GetFaceArea(iFace), settings.functionalSettings.geomWeightPower1 * 0.5) *
-                     std::pow(faceBaryDiffV.norm(), settings.functionalSettings.geomWeightPower2 * 0.5);
+                wg = settings.functionalSettings.geomWeightBias +
+                     std::pow(this->GetFaceArea(iFace), settings.functionalSettings.geomWeightPower1 * 0.5) *
+                         std::pow(faceBaryDiffV.norm(), settings.functionalSettings.geomWeightPower2 * 0.5);
 
             // *get dir weight
             Eigen::Vector<real, Eigen::Dynamic> wd;
@@ -851,7 +852,7 @@ namespace DNDS::CFV
             matrixACholeskyL.resize(mesh->NumCellProc());
         real maxCond = 0.0;
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++) // only non-ghost
         {

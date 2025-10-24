@@ -80,6 +80,7 @@ namespace DNDS
     struct ArrayPair
     {
         using t_self = ArrayPair<TArray>;
+        using t_arr = TArray;
         ssp<TArray> father;
         ssp<TArray> son;
         using TTrans = typename ArrayTransformerType<TArray>::Type;

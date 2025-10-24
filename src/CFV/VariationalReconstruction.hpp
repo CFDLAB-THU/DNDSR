@@ -486,6 +486,10 @@ namespace DNDS::CFV
                 // std::cout << simpleScale.transpose() << std::endl;
                 tPoint pPhysicsCMajor = cellMajorCoord[iCell].transpose() * pPhysicsC;
                 tPoint pPhysicsCScaled = pPhysicsCMajor.array() / simpleScale.array();
+                // std::cout << "iCell " << iCell << "\n";
+                // std::cout << simpleScale.transpose() << "\n";
+                // std::cout << pPhysicsCMajor.transpose() << "\n";
+                // std::cout << pPhysicsCScaled.transpose() << std::endl;
                 if constexpr (dim == 2)
                     FPolynomialFill2D(DiBj, pPhysicsCScaled(0), pPhysicsCScaled(1), pPhysicsCScaled(2), simpleScale(0), simpleScale(1), simpleScale(2), DiBj.rows(), DiBj.cols());
                 else
@@ -638,9 +642,9 @@ namespace DNDS::CFV
             if (!settings.functionalSettings.useAnisotropicFunctional)
             {
 #ifdef USE_ECCENTRIC_COMB_POW_2
-#define __POWV 2
+#    define __POWV 2
 #else
-#define __POWV 1
+#    define __POWV 1
 #endif
                 if constexpr (dim == 2)
                 {
@@ -782,8 +786,20 @@ namespace DNDS::CFV
                     // coordTrans(0, Eigen::all) = norm.transpose() * faceL;
                     // coordTrans({1, 2}, Eigen::all).setZero();
                 }
+                if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::Norm ||
+                    settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::CentDiff)
                 {
                     tPoint norm = this->GetFaceNorm(iFace, -1);
+                    if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::CentDiff)
+                    {
+                        if (mesh->face2cell(iFace, 1) != UnInitIndex)
+                        {
+                            norm = this->GetOtherCellBaryFromCell(mesh->face2cell(iFace, 0),
+                                                                  mesh->face2cell(iFace, 1), iFace) -
+                                   this->GetCellBary(mesh->face2cell(iFace, 0));
+                            norm.normalize();
+                        }
+                    }
                     real areaL = this->GetFaceArea(iFace);
                     if constexpr (dim == 3)
                         areaL = std::sqrt(areaL);
@@ -877,7 +893,7 @@ namespace DNDS::CFV
                         }
                 }
 #ifdef __POWV
-#undef __POWV
+#    undef __POWV
 #endif
             }
             return Conj;
@@ -1315,7 +1331,7 @@ namespace DNDS::CFV
             const tFMEig<nVarsFixed> &FM, const tFMEig<nVarsFixed> &FMI,
             bool putIntoNew = false);
 
-        void WriteSerializeRecMatrix(const Serializer::SerializerBaseSSP& serializerP)
+        void WriteSerializeRecMatrix(const Serializer::SerializerBaseSSP &serializerP)
         {
             using namespace Geom;
             std::string name = "VR_Matrix";
@@ -1386,7 +1402,6 @@ DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, 5, extern)
 DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, 6, extern)
 DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, 7, extern)
 DNDS_VARIATIONALRECONSTRUCTION_RECONSTRUCTION_INS_EXTERN(3, Eigen::Dynamic, extern)
-
 
 #define DNDS_VARIATIONALRECONSTRUCTION_LIMITERPROCEDURE_INS_EXTERN(dim, nVarsFixed, ext)             \
     namespace DNDS::CFV                                                                              \
