@@ -14,343 +14,33 @@ namespace DNDS::CFV
 
         /***************************************/
         // get volumes
-        volumeLocal.resize(mesh->NumCellProc());
-        cellAtr.resize(mesh->NumCellProc());
-        this->MakePairDefaultOnCell(cellIntJacobiDet);
-        this->MakePairDefaultOnCell(cellBary);
-        this->MakePairDefaultOnCell(cellCent);
-        this->MakePairDefaultOnCell(cellIntPPhysics);
-        this->MakePairDefaultOnCell(cellAlignedHBox);
-        this->MakePairDefaultOnCell(cellMajorHBox);
-        this->MakePairDefaultOnCell(cellMajorCoord, 3, 3);
-        this->MakePairDefaultOnCell(cellInertia, 3, 3);
-        sumVolume = 0.0;
-        minVolume = veryLargeReal;
-        maxVolume = -veryLargeReal;
+        this->SetCellAtrBasic();
+        this->ConstructCellVolume();
+        this->ConstructCellBary();
+        this->ConstructCellCent();
+        this->ConstructCellIntJacobiDet();
+        this->ConstructCellIntPPhysics();
+        this->ConstructCellAlignedHBox();
+        this->ConstructCellMajorHBoxCoordInertia();
 
-#ifdef DNDS_USE_OMP
-#    pragma omp parallel for
-#endif
-        for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
-        {
-            cellAtr[iCell].intOrder = settings.intOrder;
-            cellAtr[iCell].Order = settings.maxOrder;
-            auto eCell = mesh->GetCellElement(iCell);
-            auto qCell = Quadrature{eCell, cellAtr[iCell].intOrder};
-            auto qCellO1 = Quadrature{eCell, 1};
-            auto qCellMax = Quadrature{eCell, INT_ORDER_MAX};
-            DNDS_assert(qCellO1.GetNumPoints() == 1);
-            cellIntJacobiDet.ResizeRow(iCell, qCell.GetNumPoints());
-            cellIntPPhysics.ResizeRow(iCell, qCell.GetNumPoints());
-
-            tSmallCoords coordsCell;
-            mesh->GetCoordsOnCell(iCell, coordsCell);
-            //****** Get Int Point Det and Vol
-            real v{0};
-            qCell.Integration(
-                v,
-                [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
-                {
-                    tJacobi J = Elem::ShapeJacobianCoordD01Nj(coordsCell, DiNj);
-                    tPoint pPhy = Elem::PPhysicsCoordD01Nj(coordsCell, DiNj);
-                    real JDet = CellJacobianDet(coordsCell, DiNj);
-                    // JDet = std::abs(JDet); // use this to pass check even with bad mesh
-                    if (axisSymmetric)
-                        JDet *= std::max(verySmallReal, pPhy(1));
-                    vInc = 1 * JDet;
-                    cellIntJacobiDet(iCell, iG) = JDet;
-                    cellIntPPhysics(iCell, iG) = pPhy;
-                });
-            // if (!(v > 0))
-            //     std::cout << fmt::format("cell has ill area result, v = {}, cellType {}", v, int(eCell.type)) << std::endl;
-            // for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
-            //     if (!(cellIntJacobiDet(iCell, iG) / v > 1e-10))
-            //         std::cout << fmt::format("cell has ill jacobi det, det/V {}, cellType {}", cellIntJacobiDet(iCell, iG) / v, int(eCell.type)) << std::endl;;
-            { // using more accurate sum volume
-                real v1{0};
-                qCellMax.Integration(
-                    v1,
-                    [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
-                    {
-                        tPoint pPhy = Elem::PPhysicsCoordD01Nj(coordsCell, DiNj);
-                        real JDet = CellJacobianDet(coordsCell, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
-                        vInc = 1 * JDet;
-                    });
-
-                cellIntJacobiDet[iCell] *= v1 / (v + verySmallReal); // renormalization
-                v = v1;
-            }
-            if (!settings.ignoreMeshGeometryDeficiency)
-            {
-                DNDS_assert_info(v >= 0, fmt::format("cell has ill area result, v = {}, cellType {}", v, int(eCell.type)));
-
-                for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
-                    DNDS_assert_info(
-                        cellIntJacobiDet(iCell, iG) / (v + verySmallReal) >= 0,
-                        fmt::format("cell has ill jacobi det, det/V {}, cellType {}", cellIntJacobiDet(iCell, iG) / v, int(eCell.type)));
-            }
-            else
-            {
-                if (v > 0 && (cellIntJacobiDet[iCell].array() > 0.0).all())
-                    ; // good
-                else
-                { // v = std::max(0.0, v);
-                    v = std::abs(v);
-                    cellIntJacobiDet[iCell].setConstant(GetCellVol(iCell) / GetCellParamVol(iCell));
-                }
-            }
-            v += verySmallReal;
-            for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
-                cellIntJacobiDet(iCell, iG) += verySmallReal;
-            volumeLocal[iCell] = v;
-
-            if (iCell < mesh->NumCell()) // non-ghost
-#ifdef DNDS_USE_OMP
-#    pragma omp critical
-#endif
-            {
-                sumVolume += v;
-                minVolume = std::min(minVolume, v);
-                maxVolume = std::max(maxVolume, v);
-            }
-            //****** Get Int Point PPhy and Bary
-            tPoint b{0, 0, 0};
-            qCell.Integration(
-                b,
-                [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
-                {
-                    vInc = cellIntPPhysics(iCell, iG) * this->GetCellJacobiDet(iCell, iG);
-                });
-            cellBary[iCell] = b / v;
-            //****** Get Center
-            SummationNoOp noOp;
-            qCellO1.Integration(
-                noOp,
-                [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
-                {
-                    tPoint pPhy = Elem::PPhysicsCoordD01Nj(coordsCell, DiNj);
-                    cellCent[iCell] = pPhy;
-                });
-
-            //****** Get HBox aligned
-            tSmallCoords coordsCellC = coordsCell.colwise() - this->GetCellBary(iCell);
-            DNDS_assert(coordsCellC.cols() == coordsCell.cols());
-            tPoint hBox = coordsCellC.array().abs().rowwise().maxCoeff();
-            if constexpr (dim == 2)
-                hBox(2) = 1;
-            cellAlignedHBox[iCell] = hBox;
-
-            //****** Get Major Axis
-            tJacobi inertia;
-            inertia.setZero();
-            qCellMax.Integration(
-                inertia,
-                [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
-                {
-                    tPoint pPhy = Elem::PPhysicsCoordD01Nj(coordsCell, DiNj);
-                    real JDet = CellJacobianDet(coordsCell, DiNj) * (axisSymmetric ? 1 /* using geometrical */ : 1.);
-                    tPoint pPhyC = (pPhy - cellBary[iCell]);
-                    vInc = (pPhyC * pPhyC.transpose()) * JDet;
-                });
-            inertia /= this->GetCellVol(iCell);
-            real inerNorm = inertia.norm();
-            real inerCond = 1;
-            if constexpr (dim == 2)
-                inerCond = HardEigen::Eigen2x2RealSymEigenDecompositionGetCond(inertia({0, 1}, {0, 1}));
-            else
-                inerCond = HardEigen::Eigen3x3RealSymEigenDecompositionGetCond(inertia);
-
-            if (inerCond < 1 + smallReal)
-            {
-                inertia(0, 0) += inerNorm * smallReal * 10;
-                inertia(1, 1) += inerNorm * smallReal;
-            }
-
-            cellInertia[iCell] = inertia;
-            tJacobi decRet;
-            decRet.setIdentity();
-            if constexpr (dim == 3)
-                decRet = HardEigen::Eigen3x3RealSymEigenDecompositionNormalized(inertia);
-            else
-                decRet({0, 1}, {0, 1}) = HardEigen::Eigen2x2RealSymEigenDecompositionNormalized(inertia({0, 1}, {0, 1}));
-            cellMajorCoord[iCell] = decRet;
-            tSmallCoords coordsCellM = cellMajorCoord[iCell].transpose() * coordsCellC;
-            tPoint hBoxM = coordsCellM.array().abs().rowwise().maxCoeff();
-            if constexpr (dim == 2)
-                hBoxM(2) = 1;
-            cellMajorHBox[iCell] = hBoxM;
-        }
-        real sumVolumeAll{0};
-        MPI::AllreduceOneReal(sumVolume, MPI_SUM, mpi);
-        MPI::AllreduceOneReal(minVolume, MPI_MIN, mpi);
-        MPI::AllreduceOneReal(maxVolume, MPI_MAX, mpi);
         if (mpi.rank == mRank)
             log()
                 << fmt::format(
                        "VariationalReconstruction<dim>::ConstructMetrics() === \n ===Sum/Min/Max Volume [{:.10g};  {:.5g}, {:.5g}]",
                        sumVolume, minVolume, maxVolume)
                 << std::endl;
-        volGlobal = sumVolume;
-        cellIntJacobiDet.CompressBoth();
-        cellIntPPhysics.CompressBoth();
+
         /***************************************/
         // get areas
-        faceArea.resize(mesh->NumFaceProc());
-        faceAtr.resize(mesh->NumFaceProc());
-        axisFaces.clear();
-        this->MakePairDefaultOnFace(faceIntJacobiDet);
-        this->MakePairDefaultOnFace(faceMeanNorm);
-        this->MakePairDefaultOnFace(faceUnitNorm);
-        this->MakePairDefaultOnFace(faceIntPPhysics);
-        this->MakePairDefaultOnFace(faceCent);
+        this->SetFaceAtrBasic();
+        this->ConstructFaceCent();
+        this->ConstructFaceArea();
+        this->ConstructFaceIntJacobiDet();
+        this->ConstructFaceIntPPhysics();
+        this->ConstructFaceUnitNorm();
+        this->ConstructFaceMeanNorm();
 
-#ifdef DNDS_USE_OMP
-#    pragma omp parallel for
-#endif
-        for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
-        {
-            faceAtr[iFace].intOrder = settings.intOrder;
-            auto eFace = mesh->GetFaceElement(iFace);
-            auto qFace = Quadrature{eFace, faceAtr[iFace].intOrder};
-            auto qFaceO1 = Quadrature{eFace, 1};
-            DNDS_assert(qFaceO1.GetNumPoints() == 1);
-            faceIntJacobiDet.ResizeRow(iFace, qFace.GetNumPoints());
-            faceIntPPhysics.ResizeRow(iFace, qFace.GetNumPoints());
-            faceUnitNorm.ResizeRow(iFace, qFace.GetNumPoints());
-
-            tSmallCoords coords;
-            mesh->GetCoordsOnFace(iFace, coords);
-
-            //****** Get Int Point Det and Vol
-            real v{0};
-            qFace.Integration(
-                v,
-                [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
-                {
-                    tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                    tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                    real JDet = FaceJacobianDet(coords, DiNj);
-                    if (axisSymmetric)
-                        JDet *= std::max(verySmallReal, pPhy(1));
-                    vInc = 1 * JDet;
-                    faceIntJacobiDet(iFace, iG) = JDet;
-                    faceIntPPhysics(iFace, iG) = pPhy;
-                });
-            v += verySmallReal;
-            if (axisSymmetric) // could this be helpful out of axisSymmetric context?
-            {
-                if (v < std::pow(this->GetCellVol(mesh->face2cell[iFace][0]), (real(dim) - 1) / real(dim)) * smallReal)
-                    axisFaces.insert(iFace);
-            }
-            for (int iG = 0; iG < qFace.GetNumPoints(); iG++)
-                faceIntJacobiDet(iFace, iG) += verySmallReal;
-            faceArea[iFace] = v;
-            DNDS_assert_info(v > 0, "face has ill area result");
-            for (int iG = 0; iG < qFace.GetNumPoints(); iG++)
-                DNDS_assert_info(faceIntJacobiDet(iFace, iG) / v > 1e-10, "face has ill jacobi det");
-
-            //****** Get Int Point Norm/pPhy and Mean Norm
-            tPoint n{0, 0, 0};
-            qFace.Integration(
-                n,
-                [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
-                {
-                    tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-                    tPoint np;
-                    if constexpr (dim == 2)
-                        np = FacialJacobianToNormVec<2>(J);
-                    else
-                        np = FacialJacobianToNormVec<3>(J);
-                    np.stableNormalize();
-                    faceUnitNorm(iFace, iG) = np;
-                    vInc = np * faceIntJacobiDet(iFace, iG);
-                });
-            faceMeanNorm[iFace] = n / v;
-            faceMeanNorm[iFace].stableNormalize(); // might not be unit if is on axis face for axisSymmetric
-
-            //****** Get Center
-            SummationNoOp noOp;
-            qFaceO1.Integration(
-                noOp,
-                [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
-                {
-                    tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                    faceCent[iFace] = pPhy;
-                });
-            // std::cout << " ================================ " << std::endl;
-            // std::cout << coords << std::endl;
-            // std::cout << faceCent[iFace].transpose() << std::endl;
-            // std::cout << (faceCent[iFace] - cellCent[mesh->face2cell(iFace, 0)]).transpose() << std::endl;
-            // std::cout << faceMeanNorm[iFace].transpose() << std::endl;
-            // std::cout << "=\n";
-            // tSmallCoords coordsCell;
-            // mesh->GetCoords(mesh->cell2node[mesh->face2cell(iFace, 0)], coordsCell);
-            // std::cout << coordsCell << std::endl;
-
-            /// ! if the faces and f2c are created right, and not distorting too much
-            if (!settings.ignoreMeshGeometryDeficiency)
-                DNDS_assert_info(
-                    (this->GetFaceQuadraturePPhysFromCell(iFace, mesh->face2cell(iFace, 0), -1, -1) -
-                     this->GetCellQuadraturePPhys(mesh->face2cell(iFace, 0), -1))
-                            .dot(faceMeanNorm[iFace]) >= 0,
-                    "face mean norm is not the same side as faceCenter - cellCenter");
-        }
-        faceUnitNorm.CompressBoth();
-        faceIntPPhysics.CompressBoth();
-        faceIntJacobiDet.CompressBoth();
-
-        this->MakePairDefaultOnCell(cellSmoothScale);
-        cellSmoothScale.TransAttach();
-        cellSmoothScale.trans.BorrowGGIndexing(mesh->cell2cell.trans);
-        cellSmoothScale.trans.createMPITypes();
-        cellSmoothScale.trans.initPersistentPull();
-        std::vector<real> cellScale(mesh->NumCellProc());
-        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-        {
-            real faceSum{0};
-            for (auto iFace : mesh->cell2face[iCell])
-                faceSum += this->GetFaceArea(iFace);
-            cellScale[iCell] = this->GetCellVol(iCell) / (faceSum + verySmallReal);
-            cellSmoothScale(iCell, 0) = cellScale[iCell];
-        }
-        std::vector<real> cellScaleNew = cellScale;
-        for (int iter = 1; iter <= settings.nIterCellSmoothScale; iter++)
-        {
-            cellSmoothScale.trans.startPersistentPull();
-            cellSmoothScale.trans.waitPersistentPull();
-            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-            {
-                real nAdj{0}, sum{0};
-                for (index iFace : mesh->cell2face[iCell])
-                {
-                    index iCellOther = this->CellFaceOther(iCell, iFace);
-                    if (iCellOther != UnInitIndex)
-                    {
-                        nAdj += 1.;
-                        sum += cellSmoothScale(iCellOther, 0);
-                    }
-                }
-                real smootherCentWeight = 1;
-                sum += nAdj * smootherCentWeight * cellSmoothScale(iCell, 0);
-                sum /= nAdj * (1 + smootherCentWeight);
-                cellScaleNew[iCell] = std::min(cellSmoothScale(iCell, 0), sum);
-            }
-            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                cellSmoothScale(iCell, 0) = cellScaleNew[iCell];
-        }
-        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-            cellSmoothScale(iCell, 0) /= cellScale[iCell];
-        cellSmoothScale.trans.startPersistentPull();
-        cellSmoothScale.trans.waitPersistentPull();
-
-        real minCellSmoothScale{veryLargeReal};
-        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-            minCellSmoothScale = std::min(cellSmoothScale(iCell, 0), minCellSmoothScale);
-        MPI::AllreduceOneReal(minCellSmoothScale, MPI_MIN, mpi);
-
-        if (mpi.rank == mRank)
-            log() << fmt::format("=== cellSmoothScale min [{:.5g}]", minCellSmoothScale)
-                  << std::endl;
+        this->ConstructCellSmoothScale();
     }
 
     template void
@@ -385,15 +75,12 @@ namespace DNDS::CFV
         }
         if (needVolIntCholeskyL)
             volIntCholeskyL.resize(mesh->NumCellProc());
-
 #ifdef DNDS_USE_OMP
 #    pragma omp parallel for
 #endif
         for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
         {
-            cellAtr[iCell].NDIFF = maxNDIFF;
-            cellAtr[iCell].NDOF = maxNDOF;
-            cellAtr[iCell].relax = settings.jacobiRelax;
+            GetCellAtr(iCell).relax = settings.jacobiRelax;
             auto qCell = this->GetCellQuad(iCell);
             auto qCellO1 = this->GetCellQuadO1(iCell);
             auto qCellMax = Quadrature{mesh->GetCellElement(iCell), INT_ORDER_MAX};
@@ -406,13 +93,13 @@ namespace DNDS::CFV
             mesh->GetCoordsOnCell(iCell, coordsCell);
 
             Eigen::RowVector<real, Eigen::Dynamic> m;
-            m.setZero(cellAtr[iCell].NDOF);
+            m.setZero(GetCellAtr(iCell).NDOF);
             qCellMax.Integration(
                 m,
                 [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                 {
                     tPoint pPhy = Elem::PPhysicsCoordD01Nj(coordsCell, DiNj);
-                    real JDet = CellJacobianDet(coordsCell, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
+                    real JDet = CellJacobianDet<dim>(coordsCell, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
                     Eigen::RowVector<real, Eigen::Dynamic> vv;
                     vv.resizeLike(m);
                     this->FDiffBaseValue(vv, pPhy, iCell, -1, -2, 1); // un-dispatched call
@@ -430,8 +117,8 @@ namespace DNDS::CFV
                     {
                         MatrixXR dbv;
                         dbv.resize(
-                            std::min(cellAtr[iCell].NDIFF, settings.cacheDiffBaseSize),
-                            cellAtr[iCell].NDOF);
+                            std::min(GetCellAtr(iCell).NDIFF, settings.cacheDiffBaseSize),
+                            GetCellAtr(iCell).NDOF);
                         this->FDiffBaseValue(dbv, this->GetCellQuadraturePPhys(iCell, iG), iCell, -1, iG, 0);
                         cellDiffBaseCache(iCell, iG) = dbv;
                     }
@@ -444,8 +131,8 @@ namespace DNDS::CFV
                     {
                         MatrixXR dbv;
                         dbv.resize(
-                            std::min(cellAtr[iCell].NDIFF, settings.cacheDiffBaseSize),
-                            cellAtr[iCell].NDOF);
+                            std::min(GetCellAtr(iCell).NDIFF, settings.cacheDiffBaseSize),
+                            GetCellAtr(iCell).NDOF);
                         this->FDiffBaseValue(dbv, this->GetCellQuadraturePPhys(iCell, -1), iCell, -1, -1, 0);
                         cellDiffBaseCacheCent[iCell] = dbv;
                     }
@@ -453,7 +140,7 @@ namespace DNDS::CFV
 
             //****** Get Orthogonization Coefs
             MatrixXR MBiBj;
-            MBiBj.setZero(cellAtr[iCell].NDOF - 1, cellAtr[iCell].NDOF - 1);
+            MBiBj.setZero(GetCellAtr(iCell).NDOF - 1, GetCellAtr(iCell).NDOF - 1);
             qCell.Integration(
                 MBiBj,
                 [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
@@ -467,7 +154,6 @@ namespace DNDS::CFV
                 volIntCholeskyL.at(iCell).resizeLike(MBiBj),
                     volIntCholeskyL.at(iCell) = MBiBj.llt().matrixL();
         }
-
         /******************************/
         // *face's weight and cache
         this->MakePairDefaultOnFace(faceWeight, settings.maxOrder + 1);
@@ -487,8 +173,6 @@ namespace DNDS::CFV
 #endif
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
-            faceAtr[iFace].NDIFF = maxNDIFF;
-            faceAtr[iFace].NDOF = 0;
             auto qFace = this->GetFaceQuad(iFace);
             auto qFaceO1 = this->GetFaceQuadO1(iFace);
             if (settings.cacheDiffBase)
@@ -521,8 +205,8 @@ namespace DNDS::CFV
                         {
                             MatrixXR dbv;
                             dbv.resize(
-                                std::min(faceAtr[iFace].NDIFF, settings.cacheDiffBaseSize),
-                                cellAtr[iCell].NDOF);
+                                std::min(GetFaceAtr(iFace).NDIFF, settings.cacheDiffBaseSize),
+                                GetCellAtr(iCell).NDOF);
                             this->FDiffBaseValue(dbv, this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, iG), iCell, iFace, iG, 0);
                             faceDiffBaseCache(iFace, if2c * qFace.GetNumPoints() + iG) = dbv;
                         }
@@ -535,8 +219,8 @@ namespace DNDS::CFV
                         {
                             MatrixXR dbv;
                             dbv.resize(
-                                std::min(faceAtr[iFace].NDIFF, settings.cacheDiffBaseSize),
-                                cellAtr[iCell].NDOF);
+                                std::min(GetFaceAtr(iFace).NDIFF, settings.cacheDiffBaseSize),
+                                GetCellAtr(iCell).NDOF);
                             this->FDiffBaseValue(dbv, this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1), iCell, iFace, -1, 0);
                             int maxNDOF = GetNDof<dim>(settings.maxOrder);
                             faceDiffBaseCacheCent[iFace](
@@ -802,7 +486,7 @@ namespace DNDS::CFV
                                 real JDet = JacobiDetFace<dim>(J) * (axisSymmetric ? pPhy(1) : 1.);
                                 tPoint np = FacialJacobianToNormVec<dim>(J);
                                 RowVectorXR dbv, dbvD;
-                                dbvD.resize(1, cellAtr[iCell].NDOF);
+                                dbvD.resize(1, GetCellAtr(iCell).NDOF);
                                 this->FDiffBaseValue(dbvD, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
                                 dbv = dbvD(0, Eigen::seq(Eigen::fix<1>, Eigen::last));
                                 BndVRPointCache cacheEntry;
@@ -866,10 +550,9 @@ namespace DNDS::CFV
             std::vector<Eigen::Vector<real, Eigen::Dynamic>> local_bs;
             local_Bs.reserve(mesh->cell2face.RowSize(iCell));
             local_bs.reserve(mesh->cell2face.RowSize(iCell));
-
             //*get A
             MatrixXR A;
-            A.setZero(cellAtr[iCell].NDOF - 1, cellAtr[iCell].NDOF - 1);
+            A.setZero(GetCellAtr(iCell).NDOF - 1, GetCellAtr(iCell).NDOF - 1);
             for (int ic2f = 0; ic2f < mesh->cell2face.RowSize(iCell); ic2f++)
             {
                 index iFace = mesh->cell2face(iCell, ic2f);
@@ -892,9 +575,9 @@ namespace DNDS::CFV
                         else
                         {
                             tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                            JDet = FaceJacobianDet(coords, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
+                            JDet = FaceJacobianDet(dim, coords, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
                             MatrixXR dbv;
-                            dbv.resize(faceAtr[iFace].NDIFF, cellAtr[iCell].NDOF);
+                            dbv.resize(GetFaceAtr(iFace).NDIFF, GetCellAtr(iCell).NDOF);
                             this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
                             DiffI = dbv(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
                         }
@@ -990,7 +673,7 @@ namespace DNDS::CFV
                     // if is periodic, then use internal //TODO!
                 }
                 MatrixXR B;
-                B.setZero(cellAtr[iCell].NDOF - 1, cellAtr[iCellOther].NDOF - 1);
+                B.setZero(GetCellAtr(iCell).NDOF - 1, GetCellAtr(iCellOther).NDOF - 1);
                 qFaceVR.Integration(
                     B,
                     [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
@@ -1007,10 +690,10 @@ namespace DNDS::CFV
                         else
                         {
                             tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                            JDet = FaceJacobianDet(coords, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
+                            JDet = FaceJacobianDet(dim, coords, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
                             MatrixXR dbvI, dbvJ;
-                            dbvI.resize(faceAtr[iFace].NDIFF, cellAtr[iCell].NDOF);
-                            dbvJ.resize(faceAtr[iFace].NDIFF, cellAtr[iCellOther].NDOF);
+                            dbvI.resize(GetFaceAtr(iFace).NDIFF, GetCellAtr(iCell).NDOF);
+                            dbvJ.resize(GetFaceAtr(iFace).NDIFF, GetCellAtr(iCellOther).NDOF);
                             this->FDiffBaseValue(dbvI, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
                             this->FDiffBaseValue(dbvJ, this->GetFacePointFromCell(iFace, iCellOther, -1, pPhy), iCellOther, iFace, -2, 0);
 
@@ -1082,7 +765,7 @@ namespace DNDS::CFV
                 if (!settings.intOrderVRIsSame())
                     mesh->GetCoordsOnFace(iFace, coords);
                 VectorXR b;
-                b.setZero(cellAtr[iCell].NDOF - 1, 1);
+                b.setZero(GetCellAtr(iCell).NDOF - 1, 1);
                 qFaceVR.Integration(
                     b,
                     [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
@@ -1097,9 +780,9 @@ namespace DNDS::CFV
                         else
                         {
                             tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
-                            JDet = FaceJacobianDet(coords, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
+                            JDet = FaceJacobianDet(dim, coords, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
                             MatrixXR dbv;
-                            dbv.resize(1, cellAtr[iCell].NDOF);
+                            dbv.resize(1, GetCellAtr(iCell).NDOF);
                             this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
                             DiffI = dbv(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
                         }

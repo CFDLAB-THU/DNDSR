@@ -45,5 +45,17 @@ namespace DNDS::CFV
         uint8_t NDOF = -1;
         uint8_t NDIFF = -1;
         uint8_t intOrder = 1;
+
+        static MPI_Datatype CommType()
+        {
+            //! TODO: make this not endian-sensitive: use static registering
+            static_assert(sizeof(RecAtr) <= 1ULL * 16);
+            return MPI_INT8_T;
+        }
+        static int CommMult() { return 16; }
+        static std::string pybind11_name() { return "RecAtr"; }
     };
+
+    using tRecAtrPair = DNDS::ArrayPair<DNDS::ParArray<RecAtr, 1>>;
+    using tRecAtr = decltype(tRecAtrPair::father);
 }

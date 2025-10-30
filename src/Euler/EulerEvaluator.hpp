@@ -167,7 +167,7 @@ namespace DNDS::Euler
 
         EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler, const decltype(settings.jsonSettings) &nJsonSettings,
                        int n_nVars = getNVars(model))
-            : nVars(n_nVars), axisSymmetric(Nvfv->GetAxisSymmetric()), mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->settings.maxOrder + 1), settings(nVars)
+            : nVars(n_nVars), axisSymmetric(Nvfv->GetAxisSymmetric()), mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->getSettings().maxOrder + 1), settings(nVars)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             if (getNVars(model) == DynamicSize)
@@ -1396,7 +1396,7 @@ namespace DNDS::Euler
             {
                 real epsC = settings.centralSmoothEps;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {

@@ -68,7 +68,7 @@ namespace DNDS::Euler
                         (*outDist)[iCell][I4 + 1] = T;
                         (*outDist)[iCell][I4 + 2] = M;
                         // (*outDist)[iCell][7] = (bool)(ifUseLimiter[iCell] & 0x0000000FU);
-                        (*outDist)[iCell][I4 + 3] = ifUseLimiter[iCell][0] / (vfv->settings.smoothThreshold + verySmallReal);
+                        (*outDist)[iCell][I4 + 3] = ifUseLimiter[iCell][0] / (vfv->getSettings().smoothThreshold + verySmallReal);
                         // std::cout << iCell << ode.rhsbuf[0][iCell] << std::endl;
                         (*outDist)[iCell][I4 + 4] = odeResidualF(iCell);
                         // { // see the cond

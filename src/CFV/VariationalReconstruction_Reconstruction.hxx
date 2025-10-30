@@ -530,7 +530,7 @@ namespace DNDS
             for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
                 for (index iCell = mesh->LocalPartStart(iPart); iCell < mesh->LocalPartEnd(iPart); iCell++)
                 {
-                    real relax = cellAtr[iCell].relax;
+                    real relax = GetCellAtr(iCell).relax;
 
                     if (recordInc)
                     {
@@ -717,7 +717,7 @@ namespace DNDS
                 index iCell = iScan;
                 if (reverse)
                     iCell = mesh->NumCell() - 1 - iCell;
-                real relax = cellAtr[iCell].relax;
+                real relax = GetCellAtr(iCell).relax;
 
                 uRecNew[iCell] = (1 - relax) * uRecNew[iCell] + uRecInc[iCell];
 

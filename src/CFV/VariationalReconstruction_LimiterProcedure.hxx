@@ -14,7 +14,7 @@ namespace DNDS::CFV
         static const int maxNDiff = dim == 2 ? 10 : 20;
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -34,7 +34,7 @@ namespace DNDS::CFV
                     IJIISI,
                     [&](auto &finc, int ig)
                     {
-                        int nDiff = faceAtr[iFace].NDIFF;
+                        int nDiff = GetFaceAtr(iFace).NDIFF;
                         // int nDiff = 1;
                         tPoint unitNorm = faceMeanNorm[iFace];
 
@@ -109,7 +109,7 @@ namespace DNDS::CFV
         int nVars = u.RowSize();
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -196,7 +196,7 @@ namespace DNDS::CFV
         using namespace Geom;
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -206,7 +206,7 @@ namespace DNDS::CFV
                 uRecNew[iCell] = uRec[iCell]; //! no lim need to copy !!!!
                 continue;
             }
-            index NRecDOF = cellAtr[iCell].NDOF - 1;
+            index NRecDOF = GetCellAtr(iCell).NDOF - 1;
             auto c2f = mesh->cell2face[iCell];
             std::vector<Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOF>> uFaces(c2f.size());
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
@@ -277,7 +277,7 @@ namespace DNDS::CFV
 
                     if (iCellOther != UnInitIndex)
                     {
-                        index NRecDOFOther = cellAtr[iCellOther].NDOF - 1;
+                        index NRecDOFOther = GetCellAtr(iCellOther).NDOF - 1;
                         index NRecDOFLim = std::min(NRecDOFOther, NRecDOF);
                         if (NRecDOFLim < (LimEnd + 1))
                             continue; // reserved for p-adaption
@@ -357,7 +357,7 @@ namespace DNDS::CFV
 
                 real n = settings.WBAP_nStd;
                 if (settings.normWBAP)
-                    FWBAP_L2_Multiway_Polynomial2D(uOthers, uOthers.size(), uLimOutArray, n); //TODO: add 3D version here!
+                    FWBAP_L2_Multiway_Polynomial2D(uOthers, uOthers.size(), uLimOutArray, n); // TODO: add 3D version here!
                 else
                     FWBAP_L2_Multiway(uOthers, uOthers.size(), uLimOutArray, n);
 
@@ -373,7 +373,7 @@ namespace DNDS::CFV
         if (!putIntoNew)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // mind the edge
                 uRec[iCell] = uRecNew[iCell];
@@ -396,7 +396,7 @@ namespace DNDS::CFV
 
         int cPOrder = settings.maxOrder;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // mind the edge
             uRecNew[iCell] = uRec[iCell];
@@ -436,12 +436,12 @@ namespace DNDS::CFV
                     DNDS_assert(false);
                 }
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // mind the edge
                 uRecBuf[iCell] = uRecNew[iCell];
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -451,7 +451,7 @@ namespace DNDS::CFV
                     // uRecNew[iCell] = uRecBuf[iCell]; //! no copy for 3wbap!
                     continue;
                 }
-                index NRecDOF = cellAtr[iCell].NDOF - 1;
+                index NRecDOF = GetCellAtr(iCell).NDOF - 1;
                 auto c2f = mesh->cell2face[iCell];
                 // std::vector<Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOF>> uFaces(c2f.size());
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
@@ -485,7 +485,7 @@ namespace DNDS::CFV
 
                     if (iCellOther != UnInitIndex)
                     {
-                        index NRecDOFOther = cellAtr[iCellOther].NDOF - 1;
+                        index NRecDOFOther = GetCellAtr(iCellOther).NDOF - 1;
                         index NRecDOFLim = std::min(NRecDOFOther, NRecDOF);
                         if (NRecDOFLim < (LimEnd + 1))
                             continue; // reserved for p-adaption
@@ -583,7 +583,7 @@ namespace DNDS::CFV
         if (!putIntoNew)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // mind the edge
                 uRec[iCell] = uRecNew[iCell];

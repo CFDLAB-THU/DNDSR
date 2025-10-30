@@ -37,7 +37,11 @@ namespace DNDS::Geom
         //     return zone >= 0;
         // }
 
-        static MPI_Datatype CommType() { return MPI_INT32_T; }
+        static MPI_Datatype CommType()
+        {
+            static_assert(sizeof(ElemInfo) <= (4ULL * 2));
+            return MPI_INT32_T;
+        }
         static int CommMult() { return 2; }
         static std::string pybind11_name() { return "ElemInfo"; }
     };

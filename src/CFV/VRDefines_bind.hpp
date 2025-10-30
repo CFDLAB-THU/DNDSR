@@ -45,14 +45,24 @@ namespace DNDS::CFV
             pybind11_ArrayEigenUniMatrixBatchPair_get_class<DynamicSize, DynamicSize>(m_dnds);
     }
 
+    inline void pybind11_define_RecAtrArrayPair_and_alias(py::module_ &m)
+    {
+        pybind11_Array_define<RecAtr>(m);
+        pybind11_ParArray_define<RecAtr>(m);
+        pybind11_ArrayTransformer_define<ParArray<RecAtr>>(m);
+        pybind11_ParArrayPair_define<RecAtr>(m);
+        m.attr("tRecAtrPair") =
+            pybind11_ParArrayPair_get_class<RecAtr>(m);
+    }
+
     // TODO: tVecsPair, tVMatPair, tCoeffPair, t3VecsPair, t3VecPair, t3MatPair
 
     inline void pybind11_VRDefines_define(py::module_ &m, py::module_ &m_dnds)
     {
-#define DNDS_CFV_DEFINE_ALIAS(nVarsFixed)                   \
-    {                                                       \
-        pybind11_define_tURec_alias<nVarsFixed>(m, m_dnds); \
-        pybind11_define_tUDof_alias<nVarsFixed>(m, m_dnds); \
+#define DNDS_CFV_DEFINE_ALIAS(nVarsFixed)                    \
+    {                                                        \
+        pybind11_define_tURec_alias<nVarsFixed>(m, m_dnds);  \
+        pybind11_define_tUDof_alias<nVarsFixed>(m, m_dnds);  \
         pybind11_define_tUGrad_alias<nVarsFixed>(m, m_dnds); \
     }
         DNDS_CFV_DEFINE_ALIAS(1);
@@ -63,8 +73,10 @@ namespace DNDS::CFV
         DNDS_CFV_DEFINE_ALIAS(6);
         DNDS_CFV_DEFINE_ALIAS(7);
         DNDS_CFV_DEFINE_ALIAS(DynamicSize);
+#undef DNDS_CFV_DEFINE_ALIAS
 
         pybind11_define_tVVecPair_alias(m, m_dnds);
         pybind11_define_tMatsPair_alias(m, m_dnds);
+        pybind11_define_RecAtrArrayPair_and_alias(m);
     }
 }

@@ -8,8 +8,7 @@
 #include "VRSettings.hpp"
 #include "Geom/BaseFunction.hpp"
 #include "Geom/DiffTensors.hpp"
-
-#include "fmt/core.h"
+#include "FiniteVolume.hpp"
 
 namespace DNDS::CFV
 {
@@ -27,48 +26,31 @@ namespace DNDS::CFV
      *
      */
     template <int dim = 2>
-    class VariationalReconstruction
+    class VariationalReconstruction : public FiniteVolume
     {
     public:
         int getDim() const { return dim; }
+        using t_base = FiniteVolume;
+
+    private:
+        VRSettings settings = VRSettings{dim};
 
     public:
-        MPI_int mRank{0};
-        MPIInfo mpi;
-        VRSettings settings = VRSettings{dim};
-        ssp<Geom::UnstructuredMesh> mesh;
+        [[nodiscard]] const VRSettings &getSettings() const
+        {
+            return settings;
+        }
+
+        void parseSettings(VRSettings::json &j)
+        {
+            settings.ParseFromJson(j);
+            t_base::settings = settings; //! we just slice the settings struct here
+        }
+
+    public:
         using TFTrans = std::function<void(Eigen::Ref<MatrixXR>, Geom::t_index)>;
 
     private:
-        int axisSymmetric = 0;
-        std::set<index> axisFaces;
-
-    public:
-        int GetAxisSymmetric() { return axisSymmetric; }
-        int SetAxisSymmetric(int v) { return axisSymmetric = v; }
-
-    private:
-        real sumVolume{0}, minVolume{veryLargeReal}, maxVolume{0};
-        real volGlobal{0};             /// @brief constructed using ConstructMetrics()
-        std::vector<real> volumeLocal; /// @brief constructed using ConstructMetrics()
-        std::vector<real> faceArea;    /// @brief constructed using ConstructMetrics()
-        std::vector<RecAtr> cellAtr;   /// @brief constructed using ConstructMetrics()
-        std::vector<RecAtr> faceAtr;   /// @brief constructed using ConstructMetrics()
-        tCoeffPair cellIntJacobiDet;   /// @brief constructed using ConstructMetrics()
-        tCoeffPair faceIntJacobiDet;   /// @brief constructed using ConstructMetrics()
-        t3VecsPair faceUnitNorm;       /// @brief constructed using ConstructMetrics()
-        t3VecPair faceMeanNorm;        /// @brief constructed using ConstructMetrics()
-        t3VecPair cellBary;            /// @brief constructed using ConstructMetrics()
-        t3VecPair faceCent;            /// @brief constructed using ConstructMetrics()
-        t3VecPair cellCent;            /// @brief constructed using ConstructMetrics()
-        t3VecsPair cellIntPPhysics;    /// @brief constructed using ConstructMetrics()
-        t3VecsPair faceIntPPhysics;    /// @brief constructed using ConstructMetrics()
-        t3VecPair cellAlignedHBox;     /// @brief constructed using ConstructMetrics()
-        t3VecPair cellMajorHBox;       /// @brief constructed using ConstructMetrics()
-        t3MatPair cellMajorCoord;      /// @brief constructed using ConstructMetrics()
-        t3MatPair cellInertia;         /// @brief constructed using ConstructMetrics()
-        tScalarPair cellSmoothScale;   /// @brief constructed using ConstructMetrics()
-
         t3VecPair faceAlignedScales;     /// @brief constructed using ConstructBaseAndWeight()
         t3MatPair faceMajorCoordScale;   /// @brief constructed using ConstructBaseAndWeight() //TODO
         tVVecPair cellBaseMoment;        /// @brief constructed using ConstructBaseAndWeight()
@@ -102,17 +84,14 @@ namespace DNDS::CFV
         std::vector<Eigen::MatrixXd> matrixACholeskyL;
         bool needMatrixACholeskyL = false;
 
-        Geom::Base::CFVPeriodicity periodicity;
         // for periodic transformation inside scalars, eg. velocity components
         TFTrans FTransPeriodic, FTransPeriodicBack;
 
     public:
         VariationalReconstruction(MPIInfo nMpi, ssp<Geom::UnstructuredMesh> nMesh)
-            : mpi(nMpi), mesh(std::move(nMesh))
+            : FiniteVolume(nMpi, nMesh)
         {
             DNDS_assert(dim == mesh->dim);
-            mRank = mesh->mRank;
-            periodicity = mesh->periodicInfo; //! copy here
         }
 
         void SetPeriodicTransformations(const TFTrans &nFTransPeriodic, const TFTrans &nFTransPeriodicBack)
@@ -152,273 +131,6 @@ namespace DNDS::CFV
                                     { return 1.0; });
 
         void ConstructRecCoeff();
-
-        /**
-         * @brief make pair with default MPI type, match **cell** layout
-         *
-         * @tparam TArrayPair ArrayPair's type
-         * @tparam TOthers A list of additional resizing parameter types
-         * @param aPair the pair to be constructed
-         * @param others additional resizing parameters
-         */
-        template <class TArrayPair, class... TOthers>
-        void MakePairDefaultOnCell(TArrayPair &aPair, TOthers... others)
-        {
-            DNDS_MAKE_SSP(aPair.father, mpi);
-            DNDS_MAKE_SSP(aPair.son, mpi);
-            aPair.father->Resize(mesh->NumCell(), others...);
-            aPair.son->Resize(mesh->NumCellGhost(), others...);
-        }
-
-        /**
-         * @brief make pair with default MPI type, match **face** layout
-         *
-         * @tparam TArrayPair ArrayPair's type
-         * @tparam TOthers A list of additional resizing parameter types
-         * @param aPair the pair to be constructed
-         * @param others additional resizing parameters
-         */
-        template <class TArrayPair, class... TOthers>
-        void MakePairDefaultOnFace(TArrayPair &aPair, TOthers... others)
-        {
-            DNDS_MAKE_SSP(aPair.father, mpi);
-            DNDS_MAKE_SSP(aPair.son, mpi);
-            aPair.father->Resize(mesh->NumFace(), others...);
-            aPair.son->Resize(mesh->NumFaceGhost(), others...);
-        }
-
-        Geom::Elem::Quadrature GetFaceQuad(index iFace) const
-        {
-            auto e = mesh->GetFaceElement(iFace);
-            return Geom::Elem::Quadrature{e, faceAtr[iFace].intOrder};
-        }
-
-        Geom::Elem::Quadrature GetFaceQuadO1(index iFace) const
-        {
-            auto e = mesh->GetFaceElement(iFace);
-            return Geom::Elem::Quadrature{e, 1};
-        }
-
-        real GetFaceParamArea(index iFace) { return std::get<1>(this->GetFaceQuadO1(iFace).GetQuadraturePointInfo(0)); }
-
-        Geom::Elem::Quadrature GetCellQuad(index iCell) const
-        {
-            auto e = mesh->GetCellElement(iCell);
-            return Geom::Elem::Quadrature{e, cellAtr[iCell].intOrder};
-        }
-
-        Geom::Elem::Quadrature GetCellQuadO1(index iCell) const
-        {
-            auto e = mesh->GetCellElement(iCell);
-            return Geom::Elem::Quadrature{e, 1};
-        }
-
-        real GetCellParamVol(index iCell) { return std::get<1>(this->GetCellQuadO1(iCell).GetQuadraturePointInfo(0)); }
-
-        real FaceJacobianDet(const Geom::tSmallCoords &coords, const Geom::Elem::tD01Nj &DiNj)
-        {
-            using namespace Geom;
-            real JDet{0};
-            tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
-            if constexpr (dim == 2)
-                JDet = J(Eigen::all, 0).stableNorm();
-            else
-                JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
-            return JDet;
-        }
-
-        real CellJacobianDet(const Geom::tSmallCoords &coordsCell, const Geom::Elem::tD01Nj &DiNj)
-        {
-            using namespace Geom;
-            real JDet{0};
-            tJacobi J = Elem::ShapeJacobianCoordD01Nj(coordsCell, DiNj);
-            if constexpr (dim == 2)
-                JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
-            else
-                JDet = J.fullPivLu().determinant();
-            return JDet;
-        }
-
-        bool CellIsFaceBack(index iCell, index iFace) const
-        {
-            return mesh->CellIsFaceBack(iCell, iFace);
-        }
-
-        index CellFaceOther(index iCell, index iFace) const
-        {
-            return mesh->CellFaceOther(iCell, iFace);
-        }
-
-        Geom::tPoint GetFaceNorm(index iFace, int iG) const
-        {
-            if (iG >= 0)
-                return faceUnitNorm(iFace, iG);
-            else
-                return faceMeanNorm[iFace];
-        }
-
-        auto GetFaceAtr(index iFace) const
-        {
-            return faceAtr.at(iFace);
-        }
-
-        auto GetCellAtr(index iCell) const
-        {
-            return cellAtr.at(iCell);
-        }
-
-        real GetCellSmoothScaleRatio(index iCell) const
-        {
-            return cellSmoothScale(iCell, 0);
-        }
-
-        real GetGlobalVol() const { return volGlobal; }
-
-        Geom::tPoint GetFaceNormFromCell(index iFace, index iCell, rowsize if2c, int iG)
-        {
-            if (!mesh->isPeriodic)
-                return GetFaceNorm(iFace, iG);
-            auto faceID = mesh->faceElemInfo[iFace]->zone;
-            if (!Geom::FaceIDIsPeriodic(faceID))
-                return GetFaceNorm(iFace, iG);
-            if (if2c < 0)
-                if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
-            if (if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID))
-                return mesh->periodicInfo.TransVector(GetFaceNorm(iFace, iG), faceID);
-            if (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID))
-                return mesh->periodicInfo.TransVectorBack(GetFaceNorm(iFace, iG), faceID);
-            return GetFaceNorm(iFace, iG);
-        }
-
-        Geom::tPoint GetFaceQuadraturePPhys(index iFace, int iG)
-        {
-            if (iG >= 0)
-                return faceIntPPhysics(iFace, iG);
-            else
-                return faceCent[iFace];
-        }
-
-        Geom::tPoint GetFaceQuadraturePPhysFromCell(index iFace, index iCell, rowsize if2c, int iG)
-        {
-            if (!mesh->isPeriodic)
-                return GetFaceQuadraturePPhys(iFace, iG);
-            auto faceID = mesh->faceElemInfo[iFace]->zone;
-            if (!Geom::FaceIDIsPeriodic(faceID))
-                return GetFaceQuadraturePPhys(iFace, iG);
-            if (if2c < 0)
-                if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
-            if (if2c == 1 && Geom ::FaceIDIsPeriodicMain(faceID)) // I am donor
-            {
-                // std::cout << iFace <<" " << iCell << " " <<if2c << std::endl;
-                // std::cout << GetFaceQuadraturePPhys(iFace, iG).transpose() << std::endl;
-                // std::cout << mesh->periodicInfo.TransCoord(GetFaceQuadraturePPhys(iFace, iG), faceID).transpose() << std::endl;
-                // std::abort();
-                return mesh->periodicInfo.TransCoord(GetFaceQuadraturePPhys(iFace, iG), faceID);
-            }
-            if (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) // I am main
-                return mesh->periodicInfo.TransCoordBack(GetFaceQuadraturePPhys(iFace, iG), faceID);
-            return GetFaceQuadraturePPhys(iFace, iG);
-        }
-
-        Geom::tPoint GetFacePointFromCell(index iFace, index iCell, rowsize if2c, const Geom::tPoint &pnt)
-        {
-            if (!mesh->isPeriodic)
-                return pnt;
-            auto faceID = mesh->faceElemInfo[iFace]->zone;
-            if (!Geom::FaceIDIsPeriodic(faceID))
-                return pnt;
-            if (if2c < 0)
-                if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
-            if (if2c == 1 && Geom ::FaceIDIsPeriodicMain(faceID)) // I am donor
-            {
-                // std::cout << iFace <<" " << iCell << " " <<if2c << std::endl;
-                // std::cout << pnt.transpose() << std::endl;
-                // std::cout << mesh->periodicInfo.TransCoord(pnt, faceID).transpose() << std::endl;
-                // std::abort();
-                return mesh->periodicInfo.TransCoord(pnt, faceID);
-            }
-            if (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) // I am main
-                return mesh->periodicInfo.TransCoordBack(pnt, faceID);
-            return pnt;
-        }
-
-        Geom::tPoint GetOtherCellBaryFromCell(
-            index iCell, index iCellOther,
-            index iFace)
-        {
-            if (!mesh->isPeriodic)
-                return GetCellBary(iCellOther);
-
-            auto faceID = mesh->faceElemInfo[iFace]->zone;
-            if (!Geom::FaceIDIsPeriodic(faceID))
-                return GetCellBary(iCellOther);
-            rowsize if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
-            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                return mesh->periodicInfo.TransCoord(GetCellBary(iCellOther), faceID);
-            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                return mesh->periodicInfo.TransCoordBack(GetCellBary(iCellOther), faceID);
-            return GetCellBary(iCellOther);
-        }
-
-        Geom::tPoint GetOtherCellPointFromCell(
-            index iCell, index iCellOther,
-            index iFace, const Geom::tPoint &pnt)
-        {
-            if (!mesh->isPeriodic)
-                return pnt;
-
-            auto faceID = mesh->faceElemInfo[iFace]->zone;
-            if (!Geom::FaceIDIsPeriodic(faceID))
-                return pnt;
-            rowsize if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
-            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                return mesh->periodicInfo.TransCoord(pnt, faceID);
-            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                return mesh->periodicInfo.TransCoordBack(pnt, faceID);
-            return pnt;
-        }
-
-        Geom::tGPoint GetOtherCellInertiaFromCell(
-            index iCell, index iCellOther,
-            index iFace)
-        { // structure copy of GetOtherCellBaryFromCell
-            if (!mesh->isPeriodic)
-                return cellInertia[iCellOther];
-
-            auto faceID = mesh->faceElemInfo[iFace]->zone;
-            if (!Geom::FaceIDIsPeriodic(faceID))
-                return cellInertia[iCellOther];
-            rowsize if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
-            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                return mesh->periodicInfo.TransMat<3>(cellInertia[iCellOther], faceID);
-            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                return mesh->periodicInfo.TransMatBack<3>(cellInertia[iCellOther], faceID);
-            return cellInertia[iCellOther];
-        }
-
-        Geom::tPoint GetCellQuadraturePPhys(index iCell, int iG)
-        {
-            if (iG >= 0)
-                return cellIntPPhysics(iCell, iG);
-            else
-                return cellCent[iCell];
-        }
-
-        Geom::tPoint GetCellBary(index iCell) { return cellBary[iCell]; }
-
-        real GetCellVol(index iCell) { return volumeLocal[iCell]; }
-        real GetFaceArea(index iFace) { return faceArea[iFace]; }
-
-        real GetCellJacobiDet(index iCell, rowsize iG) { return cellIntJacobiDet(iCell, iG); }
-        real GetFaceJacobiDet(index iFace, rowsize iG) { return faceIntJacobiDet(iFace, iG); }
-
-        real GetCellMaxLenScale(index iCell) { return cellMajorHBox[iCell].maxCoeff() * 2; }
 
         auto GetCellRecMatAInv(index iCell)
         {
@@ -521,7 +233,7 @@ namespace DNDS::CFV
         {
             if (iFace >= 0)
             {
-                maxDiff = std::min(maxDiff, faceAtr[iFace].NDIFF);
+                maxDiff = std::min(maxDiff, GetFaceAtr(iFace).NDIFF);
                 if (if2c < 0)
                     if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
                 if (settings.cacheDiffBase && maxDiff <= settings.cacheDiffBaseSize)
@@ -547,14 +259,14 @@ namespace DNDS::CFV
                     // Actual computing:
                     ///@todo //!!!!TODO: take care of periodic case
                     MatrixXR dbv;
-                    dbv.resize(maxDiff, cellAtr[iCell].NDOF);
+                    dbv.resize(maxDiff, GetCellAtr(iCell).NDOF);
                     FDiffBaseValue(dbv, GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, iG), iCell, iFace, iG, 0);
                     return dbv(std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, Eigen::last));
                 }
             }
             else
             {
-                maxDiff = std::min(maxDiff, cellAtr[iCell].NDIFF);
+                maxDiff = std::min(maxDiff, GetCellAtr(iCell).NDIFF);
                 if (settings.cacheDiffBase && maxDiff <= settings.cacheDiffBaseSize)
                 {
                     if (iG >= 0)
@@ -571,7 +283,7 @@ namespace DNDS::CFV
                 else
                 {
                     MatrixXR dbv;
-                    dbv.resize(maxDiff, cellAtr[iCell].NDOF);
+                    dbv.resize(maxDiff, GetCellAtr(iCell).NDOF);
                     FDiffBaseValue(dbv, GetCellQuadraturePPhys(iCell, iG), iCell, -1, iG, 0);
                     return dbv(std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, Eigen::last));
                 }
@@ -804,8 +516,9 @@ namespace DNDS::CFV
                     if constexpr (dim == 3)
                         areaL = std::sqrt(areaL);
                     // real tw = 1. / std::max({1.0, areaL / (faceLOrig + 0.001 * areaL)});
-                    real tw = 1. / std::min({1.0, faceLOrig / (areaL + 0.001 * faceLOrig)});
+                    // real tw = 1. / std::min({1.0, faceLOrig / (areaL + 0.001 * faceLOrig)});
                     // std::cout << tw << std::endl;
+                    real tw = 1.0;
 
                     coordTrans = Geom::NormBuildLocalBaseV<3>(norm).transpose() * faceL;
                     coordTrans({1, 2}, Eigen::all) *= tw * settings.functionalSettings.tanWeightScale;
@@ -919,11 +632,6 @@ namespace DNDS::CFV
             static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
             auto lens = this->cellMajorHBox[iCell](Seq012);
             return (lens.maxCoeff() + verySmallReal) / (lens.minCoeff() + verySmallReal);
-        }
-
-        int GetCellOrder(index iCell)
-        {
-            return cellAtr[iCell].Order;
         }
 
         template <int nVarsFixed = 1>

@@ -366,7 +366,7 @@ namespace DNDS::Euler
         //                     { return BCHandler.GetNameFormID(i); }, BCHandler.GetAllNames());
 
         DNDS_MAKE_SSP(vfv, mpi, mesh);
-        vfv->settings.ParseFromJson(config.vfvSettings);
+        vfv->parseSettings(config.vfvSettings);
         if (vfv->SetAxisSymmetric(config.others.axisSymmetric) && mpi.rank == 0)
             log() << "EulerSolver === Using Axis Symmetric" << std::endl;
         TEval::InitializeFV(mesh, vfv, pBCHandler);

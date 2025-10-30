@@ -20,6 +20,7 @@ ${DNDS_EXTERNAL_LIBS}
 )
 
 set(CPPS
+FiniteVolume.cpp
 VariationalReconstruction.cpp
 ModelEvaluator.cpp
 )

@@ -14,6 +14,7 @@
 #include "Geom/BaseFunction.hpp"
 #include "Limiters.hpp"
 #include "DNDS/JsonUtil.hpp"
+#include "FiniteVolumeSettings.hpp"
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
 // #undef __DNDS_REALLY_COMPILING__
 // #endif
@@ -26,12 +27,11 @@ namespace DNDS::CFV
      * and stores then during computation.
      *
      */
-    struct VRSettings
+    struct VRSettings : public FiniteVolumeSettings
     {
         using json = nlohmann::ordered_json;
+        using t_base = FiniteVolumeSettings;
 
-        int maxOrder{3};            /// @brief polynomial degree of reconstruction
-        int intOrder{5};            /// @brief integration degree globally set @note this is actually reduced somewhat
         int intOrderVR{-1};         /// @brief integration degree for VR matrices, <0 means using intOrder
         bool cacheDiffBase = false; /// @brief if cache the base function values on each of the quadrature points
         uint8_t cacheDiffBaseSize = UINT8_MAX;
@@ -47,8 +47,6 @@ namespace DNDS::CFV
         int subs2ndOrderGGScheme = 1; /// @brief 1: gauss rule using distance for interpolation; 0: no interpolation
         real svdTolerance = 0;        /// @brief tolerance used in svd
 
-        bool ignoreMeshGeometryDeficiency = false;
-        int nIterCellSmoothScale = 15;
         real bcWeight = 1;
 
         struct BaseSettings
@@ -146,7 +144,7 @@ namespace DNDS::CFV
         // {
         // }
 
-        VRSettings(int dim)
+        VRSettings(int dim) : FiniteVolumeSettings(dim)
         {
             cacheDiffBaseSize = uint8_t(dim + 1);
         }
@@ -157,8 +155,8 @@ namespace DNDS::CFV
          */
         void WriteIntoJson(json &jsonSetting) const
         {
-            jsonSetting["maxOrder"] = maxOrder;
-            jsonSetting["intOrder"] = intOrder;
+            t_base::WriteIntoJson(jsonSetting);
+
             jsonSetting["intOrderVR"] = intOrderVR;
 
             jsonSetting["cacheDiffBase"] = cacheDiffBase;
@@ -172,8 +170,7 @@ namespace DNDS::CFV
             jsonSetting["limiterBiwayAlter"] = limiterBiwayAlter;
             jsonSetting["subs2ndOrder"] = subs2ndOrder;
             jsonSetting["subs2ndOrderGGScheme"] = subs2ndOrderGGScheme;
-            jsonSetting["ignoreMeshGeometryDeficiency"] = ignoreMeshGeometryDeficiency;
-            jsonSetting["nIterCellSmoothScale"] = nIterCellSmoothScale;
+            
 
             jsonSetting["svdTolerance"] = svdTolerance;
 
@@ -189,8 +186,8 @@ namespace DNDS::CFV
          */
         void ParseFromJson(const json &jsonSetting)
         {
-            maxOrder = jsonSetting["maxOrder"]; ///@todo //TODO: update to better
-            intOrder = jsonSetting["intOrder"];
+            t_base::ParseFromJson(jsonSetting);
+
             intOrderVR = jsonSetting["intOrderVR"];
             cacheDiffBase = jsonSetting["cacheDiffBase"];
             cacheDiffBaseSize = jsonSetting["cacheDiffBaseSize"];
@@ -203,8 +200,7 @@ namespace DNDS::CFV
             limiterBiwayAlter = jsonSetting["limiterBiwayAlter"];
             subs2ndOrder = jsonSetting["subs2ndOrder"];
             subs2ndOrderGGScheme = jsonSetting["subs2ndOrderGGScheme"];
-            ignoreMeshGeometryDeficiency = jsonSetting["ignoreMeshGeometryDeficiency"];
-            nIterCellSmoothScale = jsonSetting["nIterCellSmoothScale"];
+            
 
             svdTolerance = jsonSetting["svdTolerance"];
 
@@ -223,8 +219,8 @@ namespace DNDS::CFV
             s.WriteIntoJson(j);
         }
 
-        bool intOrderVRIsSame() { return intOrderVR == intOrder || intOrderVR < 0; }
-        int intOrderVRValue() { return intOrderVR < 0 ? intOrder : intOrderVR; }
+        [[nodiscard]] bool intOrderVRIsSame() const { return intOrderVR == intOrder || intOrderVR < 0; }
+        [[nodiscard]] int intOrderVRValue() const { return intOrderVR < 0 ? intOrder : intOrderVR; }
     };
 
     NLOHMANN_JSON_SERIALIZE_ENUM(

@@ -761,6 +761,11 @@ namespace DNDS::Geom::Elem
             return std::make_tuple(pParam, w);
         }
 
+        [[nodiscard]] real GetWeight(int iG) const
+        {
+            return std::get<1>(GetQuadraturePointInfo(iG));
+        }
+
         [[nodiscard]] t_index GetNumPoints() const { return int_scheme; }
     };
 
@@ -1052,5 +1057,47 @@ namespace DNDS::Geom::Elem
         else
             DNDS_assert(false);
         return ret;
+    }
+
+    template <int dim>
+    real CellJacobianDet(const Geom::tSmallCoords &coordsCell, const Geom::Elem::tD01Nj &DiNj)
+    {
+        using namespace Geom;
+        real JDet{0};
+        tJacobi J = Elem::ShapeJacobianCoordD01Nj(coordsCell, DiNj);
+        if constexpr (dim == 2)
+            JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+        else
+            JDet = J.fullPivLu().determinant();
+        return JDet;
+    }
+
+    inline real CellJacobianDet(int dim, const Geom::tSmallCoords &coordsCell, const Geom::Elem::tD01Nj &DiNj)
+    {
+        if (dim == 2)
+            return CellJacobianDet<2>(coordsCell, DiNj);
+        else
+            return CellJacobianDet<3>(coordsCell, DiNj);
+    }
+
+    template <int dim>
+    real FaceJacobianDet(const Geom::tSmallCoords &coords, const Geom::Elem::tD01Nj &DiNj)
+    {
+        using namespace Geom;
+        real JDet{0};
+        tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
+        if constexpr (dim == 2)
+            JDet = J(Eigen::all, 0).stableNorm();
+        else
+            JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+        return JDet;
+    }
+
+    inline real FaceJacobianDet(int dim, const Geom::tSmallCoords &coords, const Geom::Elem::tD01Nj &DiNj)
+    {
+        if (dim == 2)
+            return FaceJacobianDet<2>(coords, DiNj);
+        else
+            return FaceJacobianDet<3>(coords, DiNj);
     }
 }

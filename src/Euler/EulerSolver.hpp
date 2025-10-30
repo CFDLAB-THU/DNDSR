@@ -738,7 +738,7 @@ namespace DNDS::Euler
             /***********************************************************/
             // if these objects are existent, extract settings from them
             if (vfv)
-                config.vfvSettings = vfv->settings;
+                config.vfvSettings = vfv->getSettings();
             if (pEval)
                 pEval->settings.ReadWriteJSON(config.eulerSettings, nVars, false);
             if (pBCHandler)
