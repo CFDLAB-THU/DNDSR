@@ -45,6 +45,19 @@ namespace DNDS::CFV
             pybind11_ArrayEigenUniMatrixBatchPair_get_class<DynamicSize, DynamicSize>(m_dnds);
     }
 
+    using tPy_RecAtr = py::class_<RecAtr>;
+    inline void pybind11_define_RecAtr(py::module_ &m)
+    {
+        auto RecAtr_ = tPy_RecAtr(m, "RecAtr");
+        RecAtr_.def(py::init());
+        RecAtr_
+            .def_readwrite("intOrder", &RecAtr::intOrder)
+            .def_readwrite("NDIFF", &RecAtr::NDIFF)
+            .def_readwrite("NDOF", &RecAtr::NDOF)
+            .def_readwrite("Order", &RecAtr::Order)
+            .def_readwrite("relax", &RecAtr::relax);
+    }
+
     inline void pybind11_define_RecAtrArrayPair_and_alias(py::module_ &m)
     {
         pybind11_Array_define<RecAtr>(m);
@@ -77,6 +90,7 @@ namespace DNDS::CFV
 
         pybind11_define_tVVecPair_alias(m, m_dnds);
         pybind11_define_tMatsPair_alias(m, m_dnds);
+        pybind11_define_RecAtr(m);
         pybind11_define_RecAtrArrayPair_and_alias(m);
     }
 }

@@ -10,6 +10,7 @@ namespace py = pybind11;
 #include "SerializerJSON.hpp"
 
 #include "SerializerFactory.hpp"
+#include <pybind11/stl.h>
 
 namespace DNDS::Serializer
 {

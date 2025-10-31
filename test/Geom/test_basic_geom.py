@@ -22,10 +22,48 @@ def test_mesh0():
             os.path.dirname(__file__), "..", "..", "data", "mesh", "NACA0012_H2.cgns"
         ),
         mpi,
-        2
+        2,
     )
 
+    # mesh, reader, name2Id = create_mesh_from_CGNS(
+    #     os.path.join(
+    #         os.path.dirname(__file__), "..", "..", "data", "mesh", "UP3D_128.cgns"
+    #     ),
+    #     mpi,
+    #     3,
+    # )
+
+    n2idmap = name2Id.n2id_map
+    id2nmap = {k: v for v, k in n2idmap.items()}
+
+    def name_is_wall(name: str):
+        name = name.capitalize()
+        if "WALL" in name:
+            return True
+        if "bc-4".capitalize() in name:
+            return True
+
+    def id_is_wall(id: int):
+        # print(id2nmap[id])
+        if id in id2nmap and name_is_wall(id2nmap[id]):
+            return True
+        return False
+
+    wallDistOptions = Geom.UnstructuredMesh.WallDistOptions()
+    wallDistOptions.method = 1
+    wallDistOptions.subdivide_quad = 5
+    wallDistOptions.verbose = 10
+    wallDistOptions.wallDistExecution = 4
+    mesh.BuildNodeWallDist(id_is_wall, wallDistOptions)
+
     meshBnd, readerBnd = create_bnd_mesh(mesh)
+
+    mesh_bytes = mesh.getArrayBytes()
+    mesh_nCell = mesh.NumCellGlobal()
+
+    if mpi.rank == 0:
+        print(f"mesh  num  cell: {mesh_nCell}")
+        print(f"mesh size total: {mesh_bytes / (1024 * 1024):.4g} MB")
 
     # fig, ax = plt.subplots(figsize=(16, 16), dpi=320)
     # xymaxs = np.array([-1e100, -1e100], dtype=np.double)

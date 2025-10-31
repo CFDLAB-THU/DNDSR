@@ -5,6 +5,7 @@
 #include "Mesh.hpp"
 #include <pybind11_json/pybind11_json.hpp>
 #include <pybind11/eigen.h>
+#include <pybind11/functional.h>
 
 namespace DNDS::Geom
 {
@@ -105,6 +106,9 @@ namespace DNDS::Geom
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildBisectO1FormO2)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(RecreatePeriodicNodes)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildVTKConnectivity);
+
+        UnstructuredMesh_
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(getArrayBytes);
 #undef DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER
 #undef DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC
 
@@ -129,6 +133,18 @@ namespace DNDS::Geom
                  py::arg("iCell"), py::arg("iFace"))
             .def("CellIsFaceBack", &UnstructuredMesh::CellIsFaceBack,
                  py::arg("iCell"), py::arg("iFace"));
+
+        auto WallDistOptions_ = py::class_<UnstructuredMesh::WallDistOptions>(UnstructuredMesh_, "WallDistOptions");
+        WallDistOptions_.def(py::init());
+        WallDistOptions_
+            .def_readwrite("method", &UnstructuredMesh::WallDistOptions::method)
+            .def_readwrite("verbose", &UnstructuredMesh::WallDistOptions::verbose)
+            .def_readwrite("wallDistExecution", &UnstructuredMesh::WallDistOptions::wallDistExecution)
+            .def_readwrite("minWallDist", &UnstructuredMesh::WallDistOptions::minWallDist)
+            .def_readwrite("subdivide_quad", &UnstructuredMesh::WallDistOptions::subdivide_quad);
+
+        UnstructuredMesh_
+            .def("BuildNodeWallDist", &UnstructuredMesh::BuildNodeWallDist, py::arg("fBndIsWall"), py::arg("options") = UnstructuredMesh::WallDistOptions{});
     }
 
     using tPy_UnstructuredMeshSerialRW = py::class_<UnstructuredMeshSerialRW, ssp<UnstructuredMeshSerialRW>>;

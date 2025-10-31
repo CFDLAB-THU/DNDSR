@@ -74,7 +74,7 @@ namespace DNDS::CFV
                     defaultSettings.WriteIntoJson(defaultJson);
                     nlohmann::json settings_json = settings;
                     defaultJson.merge_patch(settings_json);
-                    self.settings.ParseFromJson(defaultJson); },
+                    self.parseSettings(defaultJson); },
                 py::arg("Seq123"));
         VariationalReconstruction_
             .def(

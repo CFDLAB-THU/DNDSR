@@ -154,8 +154,10 @@ namespace DNDS::CFV
                 volIntCholeskyL.at(iCell).resizeLike(MBiBj),
                     volIntCholeskyL.at(iCell) = MBiBj.llt().matrixL();
         }
+
         /******************************/
         // *face's weight and cache
+
         this->MakePairDefaultOnFace(faceWeight, settings.maxOrder + 1);
         this->MakePairDefaultOnFace(faceAlignedScales);
         this->MakePairDefaultOnFace(faceMajorCoordScale, 3, 3);

@@ -1,4 +1,5 @@
 #include "ModelEvaluator_bind.hpp"
+#include <pybind11/eigen.h>
 
 namespace DNDS::CFV
 {

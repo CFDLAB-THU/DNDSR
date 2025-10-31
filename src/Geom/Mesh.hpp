@@ -8,6 +8,7 @@
 #include "PeriodicInfo.hpp"
 #include "RadialBasisFunction.hpp"
 #include "Solver/Direct.hpp"
+#include "DNDS/ObjectUtils.hpp"
 
 namespace DNDS::Geom
 {
@@ -120,9 +121,31 @@ namespace DNDS::Geom
         tPbiPair cell2nodePbi;
         tPbiPair bnd2nodePbi;
 
+        auto device_array_list_primary()
+        {
+            return std::make_tuple(
+                DNDS_MAKE_1_MEMBER_REF(coords),
+                DNDS_MAKE_1_MEMBER_REF(cell2node),
+                DNDS_MAKE_1_MEMBER_REF(bnd2node),
+                DNDS_MAKE_1_MEMBER_REF(bnd2cell),
+                DNDS_MAKE_1_MEMBER_REF(cell2cell),
+                DNDS_MAKE_1_MEMBER_REF(cellElemInfo),
+                DNDS_MAKE_1_MEMBER_REF(bndElemInfo),
+                DNDS_MAKE_1_MEMBER_REF(cell2nodePbi),
+                DNDS_MAKE_1_MEMBER_REF(bnd2nodePbi),
+                MemberRef{coords, "_"});
+        }
+
         /// inverse relations
         tAdjPair node2cell;
         tAdjPair node2bnd;
+
+        auto device_array_list_N2CB()
+        {
+            return std::make_tuple(
+                DNDS_MAKE_1_MEMBER_REF(node2cell),
+                DNDS_MAKE_1_MEMBER_REF(node2bnd));
+        }
 
         /// interpolated
         // *! currently assume all these are Adj_PointToLocal
@@ -135,7 +158,22 @@ namespace DNDS::Geom
         /// periodic only, after interpolated
         tPbiPair face2nodePbi;
 
-        /// consturct on demand
+        auto device_array_list_facial()
+        {
+            return std::make_tuple(
+                DNDS_MAKE_1_MEMBER_REF(face2cell),
+                DNDS_MAKE_1_MEMBER_REF(face2node),
+                DNDS_MAKE_1_MEMBER_REF(face2nodePbi),
+                DNDS_MAKE_1_MEMBER_REF(faceElemInfo));
+        }
+
+        auto device_array_list_C2F()
+        {
+            return std::make_tuple(
+                DNDS_MAKE_1_MEMBER_REF(cell2face));
+        }
+
+        /// constructed on demand
         tAdjPair cell2cellFace;
 
         /// parent built
@@ -184,6 +222,9 @@ namespace DNDS::Geom
         tLocalMatStruct cell2cellFaceVLocalParts;
 
         std::vector<index> localPartitionStarts;
+
+        /// wall dist:
+        tCoordPair nodeWallDist;
 
         UnstructuredMesh(const DNDS::MPIInfo &n_mpi, int n_dim)
             : mpi(n_mpi), dim(n_dim) {}
@@ -696,6 +737,49 @@ namespace DNDS::Geom
         }
 
         void PrintMeshCGNS(std::string fname, const t_FBCID_2_Name &fbcid2name, const std::vector<std::string> &allNames);
+
+        struct WallDistOptions
+        {
+            int subdivide_quad = 1;
+            int method = 0;
+            int wallDistExecution = 0;
+            real minWallDist = 1e-10;
+            int verbose = 0;
+            WallDistOptions() {} //? why = default is not working
+        };
+        void BuildNodeWallDist(const std::function<bool(Geom::t_index)> &fBndIsWall, WallDistOptions options = WallDistOptions{});
+
+        void to_host()
+        {
+            for_each_member_list(this->device_array_list_primary(), [&](auto &v)
+                                 { v.ref.to_host(); });
+        }
+
+        index getArrayBytes()
+        {
+            index bytes = 0;
+            auto acuumulate_bytes_arr = [&](auto &v)
+            {
+                if (v.ref.father)
+                    bytes += v.ref.father->DataSizeBytes();
+                if (v.ref.son)
+                    bytes += v.ref.son->DataSizeBytes();
+            };
+            for_each_member_list(
+                this->device_array_list_primary(),
+                acuumulate_bytes_arr);
+            for_each_member_list(
+                this->device_array_list_facial(),
+                acuumulate_bytes_arr);
+            for_each_member_list(
+                this->device_array_list_C2F(),
+                acuumulate_bytes_arr);
+            for_each_member_list(
+                this->device_array_list_N2CB(),
+                acuumulate_bytes_arr);
+            MPI::AllreduceOneIndex(bytes, MPI_SUM, mpi);
+            return bytes;
+        }
     };
 
 }
