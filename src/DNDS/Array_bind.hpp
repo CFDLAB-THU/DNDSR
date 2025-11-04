@@ -195,6 +195,11 @@ namespace DNDS // Array
                  {
                      self(std::get<0>(index_), std::get<1>(index_)) = value;
                  });
+
+        Array_
+            .def("to_device", [](TArray &self, const std::string &backend)
+                 { self.to_device(device_backend_name_to_enum(backend)); }, py::arg("backend"))
+            .def("to_host", &TArray::to_host);
     }
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
@@ -306,6 +311,11 @@ namespace DNDS // ParArrayPair
         if constexpr (TPair::t_arr::GetDataLayoutStatic() == CSR)
             Pair_
                 .def("CompressBoth", &TPair::CompressBoth);
+
+        Pair_
+            .def("to_device", [](TPair &self, const std::string &backend)
+                 { self.to_device(device_backend_name_to_enum(backend)); }, py::arg("backend"))
+            .def("to_host", &TPair::to_host);
     }
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>

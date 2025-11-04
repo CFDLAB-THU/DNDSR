@@ -167,6 +167,11 @@ namespace DNDS
                 {
                     return pybind11_ArrayEigenMatrixBatch_setitem(self, index_, row);
                 });
+
+        ArrayEigenMatrixBatch_
+            .def("to_device", [](TArrayEigenMatrixBatch &self, const std::string &backend)
+                 { self.to_device(device_backend_name_to_enum(backend)); }, py::arg("backend"))
+            .def("to_host", &TArrayEigenMatrixBatch::to_host);
     }
 }
 

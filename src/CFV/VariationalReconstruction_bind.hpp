@@ -6,6 +6,7 @@
 #include <pybind11_json/pybind11_json.hpp>
 #include <pybind11/eigen.h>
 
+#include "FiniteVolume_bind.hpp"
 #include "VariationalReconstruction.hpp"
 
 namespace DNDS::CFV
@@ -17,7 +18,8 @@ namespace DNDS::CFV
     // static const int dim = 2;
     void pybind11_VariationalReconstruction_define(py::module_ &m)
     {
-        auto VariationalReconstruction_ = tPy_VariationalReconstruction<dim>(m, fmt::format("VariationalReconstruction_{}", dim).c_str());
+        auto VariationalReconstruction_ = tPy_VariationalReconstruction<dim>(m, fmt::format("VariationalReconstruction_{}", dim).c_str(),
+                                                                             tPy_FiniteVolume{m.attr("FiniteVolume")});
         using T = VariationalReconstruction<dim>;
         VariationalReconstruction_
             .def(py::init([](MPIInfo &mpi, ssp<Geom::UnstructuredMesh> mesh)
@@ -75,18 +77,11 @@ namespace DNDS::CFV
                     nlohmann::json settings_json = settings;
                     defaultJson.merge_patch(settings_json);
                     self.parseSettings(defaultJson); },
-                py::arg("Seq123"));
+                py::arg("settings"));
         VariationalReconstruction_
             .def(
                 "GetCellBary", &T::GetCellBary, py::arg("iCell"));
 
-#define DNDS_CFV_VR_PYBIND11_DEFINE_BuildUDof(nVarsFixed)                                         \
-    VariationalReconstruction_.def(                                                               \
-        ("BuildUDof_" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                                \
-        [](T &self, tUDof<nVarsFixed> &u, int nVars, bool buildSon, bool buildTrans)              \
-        { self.BuildUDof(u, nVars, buildSon, buildTrans); },                                      \
-        py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true, py::arg("buildTrans") = true, \
-        DNDS_PYBIND11_OSTREAM_GUARD)
 #define DNDS_CFV_VR_PYBIND11_DEFINE_BuildURec(nVarsFixed)                                         \
     VariationalReconstruction_.def(                                                               \
         ("BuildURec_" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                                \
@@ -101,9 +96,16 @@ namespace DNDS::CFV
         { self.BuildUGrad(u, nVars, buildSon, buildTrans); },                                     \
         py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true, py::arg("buildTrans") = true, \
         DNDS_PYBIND11_OSTREAM_GUARD)
+        
+        // #define DNDS_CFV_VR_PYBIND11_DEFINE_BuildCalls(nVarsFixed)  \
+        //     {                                                       \
+        //         DNDS_CFV_VR_PYBIND11_DEFINE_BuildUDof(nVarsFixed);  \
+        //         DNDS_CFV_VR_PYBIND11_DEFINE_BuildURec(nVarsFixed);  \
+        //         DNDS_CFV_VR_PYBIND11_DEFINE_BuildUGrad(nVarsFixed); \
+        //     }
+
 #define DNDS_CFV_VR_PYBIND11_DEFINE_BuildCalls(nVarsFixed)  \
     {                                                       \
-        DNDS_CFV_VR_PYBIND11_DEFINE_BuildUDof(nVarsFixed);  \
         DNDS_CFV_VR_PYBIND11_DEFINE_BuildURec(nVarsFixed);  \
         DNDS_CFV_VR_PYBIND11_DEFINE_BuildUGrad(nVarsFixed); \
     }

@@ -22,8 +22,8 @@ namespace DNDS::CFV
     {
         using json = nlohmann::ordered_json;
 
-        int maxOrder{3}; /// @brief polynomial degree of reconstruction
-        int intOrder{5}; /// @brief integration degree globally set @note this is actually reduced somewhat
+        int maxOrder{1}; /// @brief polynomial degree of reconstruction
+        int intOrder{1}; /// @brief integration degree globally set @note this is actually reduced somewhat
         bool ignoreMeshGeometryDeficiency = false;
 
         int nIterCellSmoothScale = 15;

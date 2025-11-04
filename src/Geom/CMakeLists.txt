@@ -21,6 +21,7 @@ message(STATUS "DNDS_PCH_TARGETS: ${DNDS_PCH_TARGETS}")
 
 set(CPPS
 Elements.cpp
+PeriodicInfo.cpp
 Mesh.cpp
 Mesh_Plts.cpp
 Mesh_Serial_BuildCell2Cell.cpp
@@ -29,6 +30,10 @@ Mesh_Serial_Partition.cpp
 Mesh_Elevation.cpp
 Mesh_Elevation_SmoothSolver.cpp
 )
+
+if (DNDS_USE_CUDA)
+list(APPEND CPPS Mesh.cu PeriodicInfo.cu)
+endif()
 
 dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS}"
     OFF ON ON)  # SHARED,FAST, EXCLUDE

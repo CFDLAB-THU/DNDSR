@@ -21,9 +21,14 @@ ${DNDS_EXTERNAL_LIBS}
 
 set(CPPS
 FiniteVolume.cpp
+VRDefines.cpp
 VariationalReconstruction.cpp
 ModelEvaluator.cpp
+test_FiniteVolume.cpp
 )
+if (DNDS_USE_CUDA)
+list(APPEND CPPS VRDefines.cu test_FiniteVolume.cu)
+endif()
 
 file(GLOB EXPLICIT_INST_CPP_FILES "_explicit_instantiation/*.cpp")
 
@@ -43,6 +48,7 @@ install(TARGETS ${LIBNAME}_shared
 
 set(CPPS_BIND
 cfv_pybind11.cpp
+FiniteVolume_bind.cpp
 ModelEvaluator_bind.cpp
 VariationalReconstruction_bind.cpp
 )

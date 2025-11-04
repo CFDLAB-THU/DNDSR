@@ -145,6 +145,11 @@ namespace DNDS::Geom
 
         UnstructuredMesh_
             .def("BuildNodeWallDist", &UnstructuredMesh::BuildNodeWallDist, py::arg("fBndIsWall"), py::arg("options") = UnstructuredMesh::WallDistOptions{});
+
+        UnstructuredMesh_
+            .def("to_device", [](UnstructuredMesh &self, const std::string &backend)
+                 { self.to_device(device_backend_name_to_enum(backend)); }, py::arg("backend"))
+            .def("to_host", &UnstructuredMesh::to_host);
     }
 
     using tPy_UnstructuredMeshSerialRW = py::class_<UnstructuredMeshSerialRW, ssp<UnstructuredMeshSerialRW>>;

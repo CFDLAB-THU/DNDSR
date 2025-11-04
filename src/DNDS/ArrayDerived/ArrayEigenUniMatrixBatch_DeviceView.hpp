@@ -26,6 +26,8 @@ namespace DNDS
         using t_base = ArrayDeviceView<B, real, NonUniformSize>;
         using t_base::t_base;
 
+        using t_base_const = const ArrayDeviceView<B, real, NonUniformSize>;
+
         using t_EigenMatrix = Eigen::Matrix<real, _n_row, _n_col,
                                             Eigen::AutoAlign |
                                                 ((_n_row == 1 && _n_col != 1) ? Eigen ::RowMajor : (_n_col == 1 && _n_row != 1) ? Eigen ::ColMajor // ColMajor except for row-vector
@@ -39,6 +41,10 @@ namespace DNDS
         int _m_size = this->Rows() * this->Cols(); //! extra data!
 
     public:
+        using t_self = ArrayEigenUniMatrixBatchDeviceView<B, _n_row, _n_col>;
+
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayEigenUniMatrixBatchDeviceView, t_self)
+
         DNDS_DEVICE_CALLABLE ArrayEigenUniMatrixBatchDeviceView(const t_base &base_view,
                                                                 int n_row_dynamic, int n_col_dynamic, int n_m_size)
             : t_base(base_view), _row_dynamic(n_row_dynamic), _col_dynamic(n_col_dynamic), _m_size(n_m_size) {}
@@ -69,14 +75,14 @@ namespace DNDS
         {
             DNDS_assert(j >= 0 && j < this->RowSize(i));
             // if constexpr (_n_row >= 0 && _n_col >= 0)
-            return {this->t_base::operator[](i) + MSize() * j, Rows(), Cols()};
+            return {t_base::operator[](i) + MSize() * j, Rows(), Cols()};
         }
 
         DNDS_DEVICE_CALLABLE t_EigenMap_const operator()(index i, rowsize j) const
         {
             DNDS_assert(j >= 0 && j < this->RowSize(i));
             // if constexpr (_n_row >= 0 && _n_col >= 0)
-            return {this->t_base::operator[](i) + MSize() * j, Rows(), Cols()};
+            return {static_cast<const t_base &>(*this).operator[](i) + MSize() * j, Rows(), Cols()};
         }
     };
 }

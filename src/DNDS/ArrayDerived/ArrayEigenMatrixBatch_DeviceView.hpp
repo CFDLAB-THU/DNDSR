@@ -154,6 +154,10 @@ namespace DNDS
         using t_matrix = MatrixBatch::t_matrix;
         using t_map = MatrixBatch::t_map;
 
+        using t_self = ArrayEigenMatrixBatchDeviceView<B>;
+
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayEigenMatrixBatchDeviceView, t_self)
+
         DNDS_DEVICE_CALLABLE ArrayEigenMatrixBatchDeviceView(const t_base &base_view) : t_base(base_view) {}
 
         DNDS_DEVICE_CALLABLE MatrixBatch operator[](index i) // todo: add const version

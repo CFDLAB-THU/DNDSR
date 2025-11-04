@@ -9,84 +9,10 @@
 #include "RadialBasisFunction.hpp"
 #include "Solver/Direct.hpp"
 #include "DNDS/ObjectUtils.hpp"
+#include "Mesh_DeviceView.hpp"
 
 namespace DNDS::Geom
 {
-    static const t_index INTERNAL_ZONE = -1;
-    struct ElemInfo
-    {
-        t_index type = static_cast<t_index>(Elem::UnknownElem);
-        /// @brief positive for BVnum, 0 for internal Elems, Negative for ?
-        t_index zone = INTERNAL_ZONE;
-
-        [[nodiscard]] Elem::ElemType getElemType() const
-        {
-            return static_cast<Elem::ElemType>(type);
-        }
-
-        void setElemType(Elem::ElemType t)
-        {
-            type = static_cast<t_index>(t);
-        }
-
-        // bool ZoneIsInternal()
-        // {
-        //     return zone == INTERNAL_ZONE;
-        // }
-        // bool ZoneIsIndexed()
-        // {
-        //     return zone >= 0;
-        // }
-
-        static MPI_Datatype CommType()
-        {
-            static_assert(sizeof(ElemInfo) <= (4ULL * 2));
-            return MPI_INT32_T;
-        }
-        static int CommMult() { return 2; }
-        static std::string pybind11_name() { return "ElemInfo"; }
-    };
-
-    using tAdjPair = DNDS::ArrayAdjacencyPair<DNDS::NonUniformSize>;
-    using tAdj = decltype(tAdjPair::father);
-    using tPbiPair = ArrayPair<ArrayNodePeriodicBits<DNDS::NonUniformSize>>;
-    using tPbi = decltype(tPbiPair::father);
-    using tAdj1Pair = DNDS::ArrayAdjacencyPair<1>;
-    using tAdj1 = decltype(tAdj1Pair::father);
-    using tAdj2Pair = DNDS::ArrayAdjacencyPair<2>;
-    using tAdj2 = decltype(tAdj2Pair::father);
-    using tAdj3Pair = DNDS::ArrayAdjacencyPair<3>;
-    using tAdj3 = decltype(tAdj3Pair::father);
-    using tAdj4Pair = DNDS::ArrayAdjacencyPair<4>;
-    using tAdj4 = decltype(tAdj4Pair::father);
-    using tAdj8Pair = DNDS::ArrayAdjacencyPair<8>;
-    using tAdj8 = decltype(tAdj8Pair::father);
-    using tCoordPair = DNDS::ArrayPair<DNDS::ArrayEigenVector<3>>;
-    using tCoord = decltype(tCoordPair::father);
-    using tElemInfoArrayPair = DNDS::ArrayPair<DNDS::ParArray<ElemInfo>>;
-    using tElemInfoArray = DNDS::ssp<DNDS::ParArray<ElemInfo>>;
-    using tIndPair = DNDS::ArrayPair<DNDS::ArrayIndex>;
-    using tInd = decltype(tIndPair::father);
-
-    using tFGetName = std::function<std::string(int)>;
-    using tFGetData = std::function<DNDS::real(int, DNDS::index)>;
-    using tFGetVecData = std::function<DNDS::real(int, DNDS::index, DNDS::rowsize)>;
-
-    enum MeshAdjState
-    {
-        Adj_Unknown = 0,
-        Adj_PointToLocal,
-        Adj_PointToGlobal,
-    };
-
-    enum MeshElevationState
-    {
-        Elevation_Untouched = 0,
-        Elevation_O1O2,
-    };
-
-    struct UnstructuredMesh;
-
     struct UnstructuredMesh
     {
         MPI_int mRank{0};
@@ -114,9 +40,9 @@ namespace DNDS::Geom
         tAdjPair cell2cell;
         tElemInfoArrayPair cellElemInfo;
         tElemInfoArrayPair bndElemInfo;
-        tAdj1Pair cell2cellOrig;
-        tAdj1Pair node2nodeOrig;
-        tAdj1Pair bnd2bndOrig;
+        tAdj1Pair cell2cellOrig; // no device
+        tAdj1Pair node2nodeOrig; // no device
+        tAdj1Pair bnd2bndOrig;   // no device
         /// periodic only, after reader
         tPbiPair cell2nodePbi;
         tPbiPair bnd2nodePbi;
@@ -132,8 +58,7 @@ namespace DNDS::Geom
                 DNDS_MAKE_1_MEMBER_REF(cellElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(bndElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(cell2nodePbi),
-                DNDS_MAKE_1_MEMBER_REF(bnd2nodePbi),
-                MemberRef{coords, "_"});
+                DNDS_MAKE_1_MEMBER_REF(bnd2nodePbi));
         }
 
         /// inverse relations
@@ -148,13 +73,12 @@ namespace DNDS::Geom
         }
 
         /// interpolated
-        // *! currently assume all these are Adj_PointToLocal
         tAdjPair cell2face;
         tAdjPair face2node;
         tAdj2Pair face2cell;
         tElemInfoArrayPair faceElemInfo;
-        std::vector<index> bnd2face;
-        std::unordered_map<index, index> face2bnd;
+        std::vector<index> bnd2face;               // no device
+        std::unordered_map<index, index> face2bnd; // no device
         /// periodic only, after interpolated
         tPbiPair face2nodePbi;
 
@@ -658,6 +582,20 @@ namespace DNDS::Geom
             return periodicInfo.GetCoordByBits(coords[face2node(iFace, if2n)], face2nodePbi(iFace, if2n));
         }
 
+        tPoint GetCoordWallDistOnCell(index iCell, rowsize ic2n)
+        {
+            if (!isPeriodic)
+                return nodeWallDist[cell2node(iCell, ic2n)];
+            return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[cell2node(iCell, ic2n)], cell2nodePbi(iCell, ic2n));
+        }
+
+        tPoint GetCoordWallDistOnFace(index iFace, rowsize if2n)
+        {
+            if (!isPeriodic)
+                return nodeWallDist[face2node(iFace, if2n)];
+            return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[face2node(iFace, if2n)], face2nodePbi(iFace, if2n));
+        }
+
         bool CellIsFaceBack(index iCell, index iFace) const
         {
             DNDS_assert(face2cell(iFace, 0) == iCell || face2cell(iFace, 1) == iCell);
@@ -749,10 +687,41 @@ namespace DNDS::Geom
         };
         void BuildNodeWallDist(const std::function<bool(Geom::t_index)> &fBndIsWall, WallDistOptions options = WallDistOptions{});
 
+        template <class F>
+        void op_on_device_arrays(F &&f)
+        {
+            for_each_member_list(this->device_array_list_primary(), f);
+            if (adjFacialState)
+                for_each_member_list(this->device_array_list_facial(), f);
+            if (adjC2FState)
+                for_each_member_list(this->device_array_list_C2F(), f);
+            if (adjN2CBState)
+                for_each_member_list(this->device_array_list_N2CB(), f);
+        }
+
         void to_host()
         {
-            for_each_member_list(this->device_array_list_primary(), [&](auto &v)
-                                 { v.ref.to_host(); });
+            auto arr_op = [&](auto &v)
+            { v.ref.to_host(); };
+            op_on_device_arrays(arr_op);
+        }
+
+        void to_device(DeviceBackend backend)
+        {
+            auto arr_op = [&](auto &v)
+            { v.ref.to_device(backend); };
+            op_on_device_arrays(arr_op);
+            // coords.to_device(backend);
+            // cell2node.to_device(backend);
+        }
+
+        template <DeviceBackend B>
+        using t_deviceView = UnstructuredMeshDeviceView<B>;
+
+        template <DeviceBackend B>
+        auto deviceView()
+        {
+            return t_deviceView<B>(*this, UnInitIndex);
         }
 
         index getArrayBytes()
@@ -761,9 +730,9 @@ namespace DNDS::Geom
             auto acuumulate_bytes_arr = [&](auto &v)
             {
                 if (v.ref.father)
-                    bytes += v.ref.father->DataSizeBytes();
+                    bytes += v.ref.father->FullSizeBytes();
                 if (v.ref.son)
-                    bytes += v.ref.son->DataSizeBytes();
+                    bytes += v.ref.son->FullSizeBytes();
             };
             for_each_member_list(
                 this->device_array_list_primary(),

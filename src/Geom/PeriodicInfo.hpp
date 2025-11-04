@@ -17,23 +17,24 @@ namespace DNDS::Geom
         void setP1True() { __v |= 0x01U; }
         void setP2True() { __v |= 0x02U; }
         void setP3True() { __v |= 0x04U; }
-        uint8_t operator^(const NodePeriodicBits &r) const
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(NodePeriodicBits, NodePeriodicBits)
+        DNDS_DEVICE_CALLABLE uint8_t operator^(const NodePeriodicBits &r) const
         {
             return uint8_t(__v ^ r.__v);
         }
-        NodePeriodicBits operator&(const NodePeriodicBits &r) const
+        DNDS_DEVICE_CALLABLE NodePeriodicBits operator&(const NodePeriodicBits &r) const
         {
             return NodePeriodicBits{uint8_t(__v & r.__v)};
         }
-        operator uint8_t() const
+        DNDS_DEVICE_CALLABLE operator uint8_t() const
         {
             return uint8_t{__v};
         }
-        operator bool() const
+        DNDS_DEVICE_CALLABLE operator bool() const
         {
             return bool(__v);
         }
-        bool operator==(const NodePeriodicBits &r) const
+        DNDS_DEVICE_CALLABLE bool operator==(const NodePeriodicBits &r) const
         {
             return uint8_t(r) == uint8_t(*this);
         }
@@ -50,6 +51,18 @@ namespace DNDS::Geom
     static const NodePeriodicBits nodePB1{0x01U};
     static const NodePeriodicBits nodePB2{0x02U};
     static const NodePeriodicBits nodePB3{0x04U};
+
+}
+namespace DNDS
+{
+    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(Geom::NodePeriodicBits, extern)
+    DNDS_DEVICE_STORAGE_INST(Geom::NodePeriodicBits, DeviceBackend::Host, extern)
+#ifdef DNDS_USE_CUDA
+    DNDS_DEVICE_STORAGE_INST(Geom::NodePeriodicBits, DeviceBackend::CUDA, extern)
+#endif
+}
+namespace DNDS::Geom
+{
 
     struct NodeIndexPBI
     {
@@ -165,7 +178,7 @@ namespace DNDS::Geom
         std::array<tGPoint, 4> rotation;
         std::array<tPoint, 4> translation;
         std::array<tPoint, 4> rotationCenter;
-        Periodicity()
+        DNDS_DEVICE_CALLABLE Periodicity()
         {
             for (auto &r : rotation)
                 r.setIdentity();
@@ -219,7 +232,7 @@ namespace DNDS::Geom
             serializerP->GoToPath(cwd);
         }
 
-        [[nodiscard]] tPoint TransCoord(const tPoint &c, t_index id) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] tPoint TransCoord(const tPoint &c, t_index id) const
         {
             DNDS_assert(FaceIDIsPeriodic(id));
             t_index i{0};
@@ -230,7 +243,7 @@ namespace DNDS::Geom
             return rotation.at(i) * (c - rotationCenter.at(i)) + rotationCenter.at(i) + translation.at(i);
         }
 
-        [[nodiscard]] tPoint TransCoordBack(const tPoint &c, t_index id) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] tPoint TransCoordBack(const tPoint &c, t_index id) const
         {
             DNDS_assert(FaceIDIsPeriodic(id));
             t_index i{0};
@@ -244,7 +257,7 @@ namespace DNDS::Geom
         ///@todo //TODO: add support for cartesian tensor transformation
 
         template <int dim, int nVec>
-        Eigen::Matrix<real, dim, nVec> TransVector(const Eigen::Matrix<real, dim, nVec> &v, t_index id)
+        DNDS_DEVICE_CALLABLE Eigen::Matrix<real, dim, nVec> TransVector(const Eigen::Matrix<real, dim, nVec> &v, t_index id)
         {
             DNDS_assert(FaceIDIsPeriodic(id));
             t_index i{0};
@@ -259,7 +272,7 @@ namespace DNDS::Geom
         }
 
         template <int dim, int nVec>
-        Eigen::Matrix<real, dim, nVec> TransVectorBack(const Eigen::Matrix<real, dim, nVec> &v, t_index id)
+        DNDS_DEVICE_CALLABLE Eigen::Matrix<real, dim, nVec> TransVectorBack(const Eigen::Matrix<real, dim, nVec> &v, t_index id)
         {
             DNDS_assert(FaceIDIsPeriodic(id));
             t_index i{0};
@@ -274,7 +287,7 @@ namespace DNDS::Geom
         }
 
         template <int dim>
-        Eigen::Matrix<real, dim, dim> TransMat(const Eigen::Matrix<real, dim, dim> &m, t_index id)
+        DNDS_DEVICE_CALLABLE Eigen::Matrix<real, dim, dim> TransMat(const Eigen::Matrix<real, dim, dim> &m, t_index id)
         {
             DNDS_assert(FaceIDIsPeriodic(id));
             t_index i{0};
@@ -289,7 +302,7 @@ namespace DNDS::Geom
         }
 
         template <int dim>
-        Eigen::Matrix<real, dim, dim> TransMatBack(const Eigen::Matrix<real, dim, dim> &m, t_index id)
+        DNDS_DEVICE_CALLABLE Eigen::Matrix<real, dim, dim> TransMatBack(const Eigen::Matrix<real, dim, dim> &m, t_index id)
         {
             DNDS_assert(FaceIDIsPeriodic(id));
             t_index i{0};
@@ -303,7 +316,7 @@ namespace DNDS::Geom
                 return rotation.at(i)({0, 1}, {0, 1}).transpose() * m * rotation.at(i)({0, 1}, {0, 1});
         }
 
-        [[nodiscard]] tPoint GetCoordByBits(const tPoint &c, const NodePeriodicBits &bits) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] tPoint GetCoordByBits(const tPoint &c, const NodePeriodicBits &bits) const
         {
             if (!bool(bits))
                 return c;
@@ -318,7 +331,7 @@ namespace DNDS::Geom
         }
 
         template <int dim, int nVec>
-        auto GetVectorByBits(const Eigen::Matrix<real, dim, nVec> &v, const NodePeriodicBits &bits)
+        DNDS_DEVICE_CALLABLE auto GetVectorByBits(const Eigen::Matrix<real, dim, nVec> &v, const NodePeriodicBits &bits)
         {
             if (!bool(bits))
                 return v;
@@ -332,7 +345,7 @@ namespace DNDS::Geom
             return ret;
         }
 
-        [[nodiscard]] tPoint GetCoordBackByBits(const tPoint &c, const NodePeriodicBits &bits) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] tPoint GetCoordBackByBits(const tPoint &c, const NodePeriodicBits &bits) const
         {
             if (!bool(bits))
                 return c;
@@ -347,7 +360,7 @@ namespace DNDS::Geom
         }
 
         template <int dim, int nVec>
-        auto GetVectorBackByBits(const Eigen::Matrix<real, dim, nVec> &v, const NodePeriodicBits &bits)
+        DNDS_DEVICE_CALLABLE auto GetVectorBackByBits(const Eigen::Matrix<real, dim, nVec> &v, const NodePeriodicBits &bits)
         {
             if (!bool(bits))
                 return v;

@@ -41,9 +41,9 @@ namespace DNDS::CFV
     struct RecAtr
     {
         real relax = UnInitReal;
-        uint8_t Order = -1;
-        uint8_t NDOF = -1;
-        uint8_t NDIFF = -1;
+        uint8_t Order = static_cast<uint8_t>(-1);
+        uint8_t NDOF = static_cast<uint8_t>(-1);
+        uint8_t NDIFF = static_cast<uint8_t>(-1);
         uint8_t intOrder = 1;
 
         static MPI_Datatype CommType()
@@ -58,4 +58,13 @@ namespace DNDS::CFV
 
     using tRecAtrPair = DNDS::ArrayPair<DNDS::ParArray<RecAtr, 1>>;
     using tRecAtr = decltype(tRecAtrPair::father);
+}
+
+namespace DNDS
+{
+    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(CFV::RecAtr, extern)
+    DNDS_DEVICE_STORAGE_INST(CFV::RecAtr, DeviceBackend::Host, extern)
+#ifdef DNDS_USE_CUDA
+    DNDS_DEVICE_STORAGE_INST(CFV::RecAtr, DeviceBackend::CUDA, extern)
+#endif
 }

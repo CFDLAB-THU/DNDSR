@@ -150,6 +150,11 @@ namespace DNDS
                 {
                     return pybind11_ArrayEigenMatrix_setitem(self, index_, row);
                 });
+
+        ArrayEigenMatrix_
+            .def("to_device", [](TArrayEigenMatrix &self, const std::string &backend)
+                 { self.to_device(device_backend_name_to_enum(backend)); }, py::arg("backend"))
+            .def("to_host", &TArrayEigenMatrix::to_host);
     }
 
     template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,

@@ -103,12 +103,10 @@ def create_mesh_from_CGNS(
             if mpi.rank == 0:
                 print(
                     str.format(
-                        (
-                            "Mesh Direct Bisect {} done, nCell [{}], nNode [{}]",
-                            iter,
-                            nCell,
-                            nNode,
-                        )
+                        "Mesh Direct Bisect {} done, nCell [{}], nNode [{}]",
+                        iter,
+                        nCell,
+                        nNode,
                     )
                 )
     else:

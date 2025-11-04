@@ -268,6 +268,11 @@ namespace DNDS
                     return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenUniMatrixBatch_setitem_row(ar, iC, row); });
                 });
+
+        Pair_
+            .def("to_device", [](TPair &self, const std::string &backend)
+                 { self.to_device(device_backend_name_to_enum(backend)); }, py::arg("backend"))
+            .def("to_host", &TPair::to_host);
     }
 
     template <int _n_row, int _n_col>

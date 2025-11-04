@@ -40,6 +40,14 @@ namespace DNDS
         rowsize _mat_nRow_dynamic = 0; //! extra data
 
     public:
+        size_t FullSizeBytes() const
+        {
+            size_t b = this->t_base::FullSizeBytes();
+            if (_mat_nRows)
+                b += _mat_nRows->size() * sizeof(rowsize);
+            return b;
+        }
+
         void Resize(index nSize, rowsize nSizeRowDynamic, rowsize nSizeColDynamic)
         {
             if constexpr (_mat_ni >= 0)
@@ -231,7 +239,8 @@ namespace DNDS
             auto base_view = t_base::template deviceView<B>();
             return t_deviceView<B>(base_view,
                                    // do more delicate dispatching for extensions?
-                                   B == DeviceBackend::Host ? _mat_nRows->data() : _mat_nRows->dataDevice(),
+                                   _mat_nRows ? (B == DeviceBackend::Host ? _mat_nRows->data() : _mat_nRows->dataDevice())
+                                              : nullptr,
                                    _mat_nRow_dynamic);
         }
 
@@ -240,7 +249,8 @@ namespace DNDS
         void to_device(DeviceBackend backend)
         {
             this->t_base::to_device(backend);
-            _mat_nRows->to_device(backend);
+            if (_mat_nRows)
+                _mat_nRows->to_device(backend);
         }
     };
 }

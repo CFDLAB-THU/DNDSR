@@ -696,7 +696,7 @@ namespace DNDS::Geom::Elem
         ParamSpace ps = UnknownPSpace;
         t_index int_scheme = 0;
 
-        Quadrature(Element n_elem = Element{UnknownElem}, int n_int_order = 0)
+        DNDS_DEVICE_CALLABLE Quadrature(Element n_elem = Element{UnknownElem}, int n_int_order = 0)
             : elem(n_elem), int_order(n_int_order), ps(elem.GetParamSpace())
         {
             int_scheme = GetQuadratureScheme(ps, int_order);
@@ -706,7 +706,7 @@ namespace DNDS::Geom::Elem
          * @param f  f(TAcc& inc, int iG, tPoint pParam, tD01Nj D01Nj)
          */
         template <class TAcc, class TFunc>
-        void Integration(TAcc &buf, TFunc &&f)
+        DNDS_DEVICE_CALLABLE void Integration(TAcc &buf, TFunc &&f)
         {
             for (t_index iG = 0; iG < int_scheme; iG++)
             {
@@ -723,7 +723,7 @@ namespace DNDS::Geom::Elem
          * @param f  f(TAcc& inc, int iG)
          */
         template <class TAcc, class TFunc>
-        std::enable_if_t<std::is_invocable_v<TFunc, TAcc &, int>> IntegrationSimple(TAcc &buf, TFunc &&f)
+        DNDS_DEVICE_CALLABLE std::enable_if_t<std::is_invocable_v<TFunc, TAcc &, int>> IntegrationSimple(TAcc &buf, TFunc &&f)
         {
             for (t_index iG = 0; iG < int_scheme; iG++)
             {
@@ -740,7 +740,7 @@ namespace DNDS::Geom::Elem
          * @param f  f(TAcc& inc, int iG, real w)
          */
         template <class TAcc, class TFunc>
-        std::enable_if_t<std::is_invocable_v<TFunc, TAcc &, int, real>> IntegrationSimple(TAcc &buf, TFunc &&f)
+        DNDS_DEVICE_CALLABLE std::enable_if_t<std::is_invocable_v<TFunc, TAcc &, int, real>> IntegrationSimple(TAcc &buf, TFunc &&f)
         {
             for (t_index iG = 0; iG < int_scheme; iG++)
             {
@@ -753,7 +753,7 @@ namespace DNDS::Geom::Elem
             }
         }
 
-        [[nodiscard]] auto GetQuadraturePointInfo(int iG) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] auto GetQuadraturePointInfo(int iG) const
         {
             tPoint pParam{0, 0, 0};
             t_real w;
@@ -761,12 +761,12 @@ namespace DNDS::Geom::Elem
             return std::make_tuple(pParam, w);
         }
 
-        [[nodiscard]] real GetWeight(int iG) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] real GetWeight(int iG) const
         {
             return std::get<1>(GetQuadraturePointInfo(iG));
         }
 
-        [[nodiscard]] t_index GetNumPoints() const { return int_scheme; }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] t_index GetNumPoints() const { return int_scheme; }
     };
 
     inline auto GetQuadPatches(Quadrature &q)

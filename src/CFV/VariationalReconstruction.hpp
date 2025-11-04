@@ -724,28 +724,6 @@ namespace DNDS::CFV
             return ret;
         }
 
-        template <int nVarsFixed = 1>
-        void BuildUDof(tUDof<nVarsFixed> &u, int nVars, bool buildSon = true, bool buildTrans = true)
-        {
-            DNDS_MAKE_SSP(u.father, mpi);
-            DNDS_MAKE_SSP(u.son, mpi);
-            u.father->Resize(mesh->NumCell(), nVars, 1);
-            if (buildSon)
-                u.son->Resize(mesh->NumCellGhost(), nVars, 1);
-            if (buildTrans)
-            {
-                DNDS_assert(buildSon);
-                u.TransAttach();
-                u.trans.BorrowGGIndexing(mesh->cell2node.trans);
-                u.trans.createMPITypes();
-                u.trans.initPersistentPull();
-                u.trans.initPersistentPush();
-            }
-
-            for (index iCell = 0; iCell < u.Size(); iCell++)
-                u[iCell].setZero();
-        }
-
         template <int nVarsFixed>
         void BuildURec(tURec<nVarsFixed> &u, int nVars, bool buildSon = true, bool buildTrans = true)
         {

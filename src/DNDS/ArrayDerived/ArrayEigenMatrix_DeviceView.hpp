@@ -37,6 +37,9 @@ namespace DNDS
                                        __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
                                        _align>;
         // using t_base::t_base;
+        using t_self = ArrayEigenMatrixDeviceView<B, _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>;
+
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayEigenMatrixDeviceView, t_self)
 
         DNDS_DEVICE_CALLABLE ArrayEigenMatrixDeviceView(const t_base &base_view,
                                                         rowsize *n_mat_nRows, rowsize n_mat_nRow_dynamic)

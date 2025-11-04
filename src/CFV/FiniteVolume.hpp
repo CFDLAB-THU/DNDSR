@@ -3,6 +3,8 @@
 #include "VRDefines.hpp"
 #include "Geom/DiffTensors.hpp"
 
+#include "FiniteVolume_DeviceView.hpp"
+
 namespace DNDS::CFV
 {
     class FiniteVolume
@@ -47,6 +49,29 @@ namespace DNDS::CFV
         t3MatPair cellMajorCoord;    /// @brief constructed using ConstructMetrics()
         t3MatPair cellInertia;       /// @brief constructed using ConstructMetrics()
         tScalarPair cellSmoothScale; /// @brief constructed using ConstructMetrics()
+
+        auto device_array_list()
+        {
+            return std::make_tuple(
+                DNDS_MAKE_1_MEMBER_REF(volumeLocal),
+                DNDS_MAKE_1_MEMBER_REF(faceArea),
+                DNDS_MAKE_1_MEMBER_REF(cellAtr),
+                DNDS_MAKE_1_MEMBER_REF(faceAtr),
+                DNDS_MAKE_1_MEMBER_REF(cellIntJacobiDet),
+                DNDS_MAKE_1_MEMBER_REF(faceIntJacobiDet),
+                DNDS_MAKE_1_MEMBER_REF(faceUnitNorm),
+                DNDS_MAKE_1_MEMBER_REF(faceMeanNorm),
+                DNDS_MAKE_1_MEMBER_REF(cellBary),
+                DNDS_MAKE_1_MEMBER_REF(faceCent),
+                DNDS_MAKE_1_MEMBER_REF(cellCent),
+                DNDS_MAKE_1_MEMBER_REF(cellIntPPhysics),
+                DNDS_MAKE_1_MEMBER_REF(faceIntPPhysics),
+                DNDS_MAKE_1_MEMBER_REF(cellAlignedHBox),
+                DNDS_MAKE_1_MEMBER_REF(cellMajorHBox),
+                DNDS_MAKE_1_MEMBER_REF(cellMajorCoord),
+                DNDS_MAKE_1_MEMBER_REF(cellInertia),
+                DNDS_MAKE_1_MEMBER_REF(cellSmoothScale));
+        }
 
         Geom::Base::CFVPeriodicity periodicity;
 
@@ -123,6 +148,51 @@ namespace DNDS::CFV
 
         void ConstructCellSmoothScale();
 
+        template <int nVarsFixed = 1>
+        void BuildUDof(tUDof<nVarsFixed> &u, int nVars, bool buildSon = true, bool buildTrans = true)
+        {
+            DNDS_MAKE_SSP(u.father, mpi);
+            DNDS_MAKE_SSP(u.son, mpi);
+            u.father->Resize(mesh->NumCell(), nVars, 1);
+            if (buildSon)
+                u.son->Resize(mesh->NumCellGhost(), nVars, 1);
+            if (buildTrans)
+            {
+                DNDS_assert(buildSon);
+                u.TransAttach();
+                u.trans.BorrowGGIndexing(mesh->cell2node.trans);
+                u.trans.createMPITypes();
+                u.trans.initPersistentPull();
+                u.trans.initPersistentPush();
+            }
+
+            for (index iCell = 0; iCell < u.Size(); iCell++)
+                u[iCell].setZero();
+        }
+
+        template <int nVarsFixed, int dim>
+        void BuildUGradD(tUGrad<nVarsFixed, dim> &u, int nVars, bool buildSon = true, bool buildTrans = true)
+        {
+            using namespace Geom::Base;
+            DNDS_MAKE_SSP(u.father, mpi);
+            DNDS_MAKE_SSP(u.son, mpi);
+            u.father->Resize(mesh->NumCell(), dim, nVars);
+            if (buildSon)
+                u.son->Resize(mesh->NumCellGhost(), dim, nVars);
+            if (buildTrans)
+            {
+                DNDS_assert(buildSon);
+                u.TransAttach();
+                u.trans.BorrowGGIndexing(mesh->cell2node.trans);
+                u.trans.createMPITypes();
+                u.trans.initPersistentPull();
+                u.trans.initPersistentPush();
+            }
+
+            for (index iCell = 0; iCell < u.Size(); iCell++)
+                u[iCell].setZero();
+        }
+
         RecAtr &GetCellAtr(index iCell)
         {
             return cellAtr(iCell, 0);
@@ -146,8 +216,15 @@ namespace DNDS::CFV
                 return Geom::Base::GetNDof<3>(settings.maxOrder);
         }
 
-        real GetCellVol(index iCell) { return volumeLocal[iCell][0]; }
-        real GetFaceArea(index iFace) { return faceArea[iFace][0]; }
+        real GetCellVol(index iCell) const { return volumeLocal[iCell][0]; }
+        real GetFaceArea(index iFace) const { return faceArea[iFace][0]; }
+
+        real GetCellSmoothScaleRatio(index iCell) const
+        {
+            return cellSmoothScale(iCell, 0);
+        }
+
+        real GetGlobalVol() const { return volGlobal; }
 
         real GetCellJacobiDet(index iCell, rowsize iG) { return cellIntJacobiDet(iCell, iG); }
         real GetFaceJacobiDet(index iFace, rowsize iG) { return faceIntJacobiDet(iFace, iG); }
@@ -199,13 +276,6 @@ namespace DNDS::CFV
             else
                 return faceMeanNorm[iFace];
         }
-
-        real GetCellSmoothScaleRatio(index iCell) const
-        {
-            return cellSmoothScale(iCell, 0);
-        }
-
-        real GetGlobalVol() const { return volGlobal; }
 
         Geom::tPoint GetFaceNormFromCell(index iFace, index iCell, rowsize if2c, int iG)
         {
@@ -344,6 +414,58 @@ namespace DNDS::CFV
         }
 
         real GetCellMaxLenScale(index iCell) { return cellMajorHBox[iCell].maxCoeff() * 2; }
+
+        index getArrayBytes()
+        {
+            index bytes = 0;
+            auto acuumulate_bytes_arr = [&](auto &v)
+            {
+                if (v.ref.father)
+                    bytes += v.ref.father->FullSizeBytes();
+                if (v.ref.son)
+                    bytes += v.ref.son->FullSizeBytes();
+            };
+            for_each_member_list(
+                this->device_array_list(),
+                acuumulate_bytes_arr);
+            MPI::AllreduceOneIndex(bytes, MPI_SUM, mpi);
+            return bytes;
+        }
+
+        void to_host()
+        {
+            auto op = [&](auto &v)
+            {
+                v.ref.to_host();
+            };
+            for_each_member_list(
+                this->device_array_list(),
+                op);
+        }
+
+        void to_device(DeviceBackend B)
+        {
+            auto op = [&](auto &v)
+            {
+                // std::cout << v.name << "\n";
+                v.ref.to_device(B);
+            };
+            for_each_member_list(
+                this->device_array_list(),
+                op);
+        }
+
+        template <DeviceBackend B>
+        using t_deviceView = FiniteVolumeDeviceView<B>;
+
+        template <DeviceBackend B>
+        friend class FiniteVolumeDeviceView;
+
+        template <DeviceBackend B>
+        t_deviceView<B> deviceView()
+        {
+            return {*this, UnInitIndex};
+        }
     };
 
 }

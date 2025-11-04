@@ -105,6 +105,11 @@ namespace DNDS
                 {
                     return pybind11_ArrayEigenVector_setitem(self, index_, row);
                 });
+
+        ArrayEigenVector_
+            .def("to_device", [](TArrayEigenVector &self, const std::string &backend)
+                 { self.to_device(device_backend_name_to_enum(backend)); }, py::arg("backend"))
+            .def("to_host", &TArrayEigenVector::to_host);
     }
 
     template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>

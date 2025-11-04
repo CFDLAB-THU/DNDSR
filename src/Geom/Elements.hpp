@@ -89,9 +89,9 @@ namespace DNDS::Geom::Elem
         return ret;
     }
 
-    const auto Dim_Order_NVNNNF = __Get_Dim_Order_NVNNNF();
+    DNDS_CONSTANT const auto Dim_Order_NVNNNF = __Get_Dim_Order_NVNNNF();
 
-    inline constexpr ParamSpace ElemType_to_ParamSpace(const ElemType t)
+    DNDS_DEVICE_CALLABLE constexpr ParamSpace ElemType_to_ParamSpace(const ElemType t)
     {
         if (t == Line2 || t == Line3)
             return LineSpace;
@@ -110,7 +110,7 @@ namespace DNDS::Geom::Elem
         return UnknownPSpace;
     }
 
-    inline constexpr ElemType GetFaceType(ElemType t_v, t_index iFace)
+    DNDS_DEVICE_CALLABLE constexpr ElemType GetFaceType(ElemType t_v, t_index iFace)
     {
         if (t_v == Tri3)
             return Line2;
@@ -155,7 +155,7 @@ namespace DNDS::Geom::Elem
         return UnknownElem;
     }
 
-    inline constexpr std::array<std::array<std::array<t_index, 10>, 6>, ElemType_NUM>
+    DNDS_DEVICE_CALLABLE constexpr std::array<std::array<std::array<t_index, 10>, 6>, ElemType_NUM>
     __Get_FaceNodeList()
     {
         auto ret = std::array<std::array<std::array<t_index, 10>, 6>, ElemType_NUM>{};
@@ -251,7 +251,7 @@ namespace DNDS::Geom::Elem
     }
     const auto FaceNodeList = __Get_FaceNodeList();
 
-    inline constexpr auto
+    DNDS_DEVICE_CALLABLE constexpr auto
     __Get_ElemElevationSpan_O1O2List()
     {
         auto ret = std::array<std::array<std::array<t_index, 28>, 28>, ElemType_NUM>{};
@@ -339,7 +339,7 @@ namespace DNDS::Geom::Elem
     }
     const auto ElemElevationSpan_O1O2List = __Get_ElemElevationSpan_O1O2List();
 
-    inline constexpr auto
+    DNDS_DEVICE_CALLABLE constexpr auto
     __Get_ElemO2BisectElementList()
     {
         auto ret = std::array<std::array<std::array<t_index, 28>, 28>, ElemType_NUM>{};
@@ -448,7 +448,7 @@ namespace DNDS::Geom::Elem
     }
     const auto ElemO2BisectElementList = __Get_ElemO2BisectElementList();
 
-    constexpr t_real ParamSpaceVol(ParamSpace ps)
+    DNDS_DEVICE_CALLABLE constexpr t_real ParamSpaceVol(ParamSpace ps)
     {
         if (ps == LineSpace)
             return 2;
@@ -467,7 +467,7 @@ namespace DNDS::Geom::Elem
         return 0;
     }
 
-    constexpr inline int GetElemElevation_O1O2_NumNode(ElemType t)
+    DNDS_DEVICE_CALLABLE constexpr int GetElemElevation_O1O2_NumNode(ElemType t)
     {
         switch (t)
         {
@@ -491,7 +491,7 @@ namespace DNDS::Geom::Elem
         return -1;
     }
 
-    constexpr inline ElemType GetElemElevation_O1O2_NodeSpanType(ElemType t, t_index ine)
+    DNDS_DEVICE_CALLABLE constexpr ElemType GetElemElevation_O1O2_NodeSpanType(ElemType t, t_index ine)
     {
         switch (t)
         {
@@ -529,7 +529,7 @@ namespace DNDS::Geom::Elem
         return UnknownElem;
     }
 
-    constexpr inline ElemType GetElemElevation_O1O2_ElevatedType(ElemType t)
+    DNDS_DEVICE_CALLABLE constexpr ElemType GetElemElevation_O1O2_ElevatedType(ElemType t)
     {
         switch (t)
         {
@@ -553,7 +553,7 @@ namespace DNDS::Geom::Elem
         return UnknownElem;
     }
 
-    constexpr inline ElemType GetElemO1(ParamSpace ps)
+    DNDS_DEVICE_CALLABLE constexpr ElemType GetElemO1(ParamSpace ps)
     {
         if (ps == LineSpace)
             return Line2;
@@ -572,7 +572,7 @@ namespace DNDS::Geom::Elem
         return UnknownElem;
     }
 
-    inline t_index GetO2ElemBisectNum(ElemType t)
+    DNDS_DEVICE_CALLABLE constexpr t_index GetO2ElemBisectNum(ElemType t)
     {
         if (t == Line3)
             return 2;
@@ -585,7 +585,7 @@ namespace DNDS::Geom::Elem
         return 0;
     }
 
-    inline ElemType GetO2ElemBisectElem(ElemType t, t_index i)
+    DNDS_DEVICE_CALLABLE constexpr ElemType GetO2ElemBisectElem(ElemType t, t_index i)
     {
         if (t == Line3)
             return Line2;
@@ -609,7 +609,7 @@ namespace DNDS::Geom::Elem
         return UnknownElem;
     }
 
-    static constexpr inline real __iipow(real x, int y)
+    DNDS_DEVICE_CALLABLE static constexpr real __iipow(real x, int y)
     {
         if (y == 0)
             return 1.;
@@ -636,7 +636,7 @@ namespace DNDS::Geom::Elem
      * @param v result value
      */
     template <int diffOrder, class TPoint, class TArray>
-    void ShapeFunc_DiNj(ElemType t, const TPoint &p, TArray &&v)
+    DNDS_DEVICE_CALLABLE void ShapeFunc_DiNj(ElemType t, const TPoint &p, TArray &&v)
     {
         static_assert(diffOrder == 0 || diffOrder == 1 || diffOrder == 2 || diffOrder == 3);
         t_real xi = p[0];
@@ -2187,47 +2187,49 @@ namespace DNDS::Geom::Elem
     {
         ElemType type = UnknownElem;
 
-        [[nodiscard]] constexpr ParamSpace GetParamSpace() const
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(Element, Element)
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] constexpr ParamSpace GetParamSpace() const
         {
             return ElemType_to_ParamSpace(type);
         }
 
-        [[nodiscard]] constexpr t_index GetDim() const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] constexpr t_index GetDim() const
         {
             return Dim_Order_NVNNNF[type][0];
         }
 
-        [[nodiscard]] constexpr t_index GetOrder() const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] constexpr t_index GetOrder() const
         {
             return Dim_Order_NVNNNF[type][1];
         }
 
-        [[nodiscard]] constexpr t_index GetNumVertices() const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] constexpr t_index GetNumVertices() const
         {
             return Dim_Order_NVNNNF[type][2];
         }
 
-        [[nodiscard]] constexpr t_index GetNumNodes() const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] constexpr t_index GetNumNodes() const
         {
             return Dim_Order_NVNNNF[type][3];
         }
 
-        [[nodiscard]] constexpr t_index GetNumFaces() const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] constexpr t_index GetNumFaces() const
         {
             return Dim_Order_NVNNNF[type][4];
         }
 
-        [[nodiscard]] constexpr t_index GetNumElev_O1O2() const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] constexpr t_index GetNumElev_O1O2() const
         {
             return GetElemElevation_O1O2_NumNode(type);
         }
 
-        [[nodiscard]] t_index GetO2NumBisect() const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] t_index GetO2NumBisect() const
         {
             return GetO2ElemBisectNum(type);
         }
 
-        [[nodiscard]] constexpr Element ObtainFace(t_index iFace) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] constexpr Element ObtainFace(t_index iFace) const
         {
             DNDS_assert(iFace < this->GetNumFaces());
             return Element{GetFaceType(type, iFace)};
@@ -2291,7 +2293,7 @@ namespace DNDS::Geom::Elem
         /**
          * @warning Nj resized within
          */
-        void GetNj(const tPoint &pParam, tNj &Nj) const
+        DNDS_DEVICE_CALLABLE void GetNj(const tPoint &pParam, tNj &Nj) const
         {
             Nj.setZero(1, this->GetNumNodes());
             ShapeFunc_DiNj<0>(type, pParam, Nj);
@@ -2300,7 +2302,7 @@ namespace DNDS::Geom::Elem
         /**
          * @warning D1Nj resized within
          */
-        void GetD1Nj(const tPoint &pParam, tD1Nj &D1Nj) const
+        DNDS_DEVICE_CALLABLE void GetD1Nj(const tPoint &pParam, tD1Nj &D1Nj) const
         {
             D1Nj.setZero(3, this->GetNumNodes());
             ShapeFunc_DiNj<1>(type, pParam, D1Nj);

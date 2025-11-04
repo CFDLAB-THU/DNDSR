@@ -1,7 +1,9 @@
 
 #include "VRDefines_bind.hpp"
+#include "FiniteVolume_bind.hpp"
 #include "VariationalReconstruction_bind.hpp"
 #include "ModelEvaluator_bind.hpp"
+#include "test_FiniteVolume_bind.hpp"
 
 PYBIND11_MODULE(cfv_pybind11, m)
 {
@@ -15,8 +17,15 @@ PYBIND11_MODULE(cfv_pybind11, m)
 
     pybind11_VRDefines_define(m, m_dnds);
 
+    pybind11_FiniteVolume_define(m);
+
     pybind11_VariationalReconstruction_define<2>(m);
     pybind11_VariationalReconstruction_define<3>(m);
 
     pybind11_ModelEvaluator_define(m);
+
+    pybind11_test_FiniteVolume_define<DNDS::DeviceBackend::Host>(m);
+#ifdef DNDS_USE_CUDA
+    pybind11_test_FiniteVolume_define<DNDS::DeviceBackend::CUDA>(m);
+#endif
 }

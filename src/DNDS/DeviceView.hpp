@@ -46,6 +46,9 @@ namespace DNDS
         using t_base = ArrayView<T, _row_size, _row_max, _align>;
         using t_base::t_base;
 
+        using self_type = ArrayDeviceView<
+            DeviceBackend::CUDA, T, _row_size, _row_max, _align>;
+
         static DeviceBackend backend() { return DeviceBackend::CUDA; }
 
         DNDS_DEVICE_CALLABLE T &operator()(index iRow, rowsize iCol = 0)
@@ -61,6 +64,11 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE T *operator[](index iRow)
         {
             return this->get_rowstart_pointer_compressed(iRow);
+        }
+
+        DNDS_DEVICE_CALLABLE const T *operator[](index iRow) const
+        {
+            return static_cast<const T *>(const_cast<self_type *>(this)->operator[](iRow));
         }
     };
 #endif

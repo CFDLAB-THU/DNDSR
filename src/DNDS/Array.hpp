@@ -2,21 +2,21 @@
 #include <cassert>
 #include <memory>
 #ifndef DNDS_ARRAY_HPP
-#define DNDS_ARRAY_HPP
+#    define DNDS_ARRAY_HPP
 
-#include <vector>
-#include <iostream>
-#include <typeinfo>
-#include <utility>
+#    include <vector>
+#    include <iostream>
+#    include <typeinfo>
+#    include <utility>
 
-#include <fmt/core.h>
+#    include <fmt/core.h>
 
-#include "Defines.hpp"
-#include "ArrayBasic.hpp"
-#include "DeviceStorage.hpp"
-#include "DeviceView.hpp"
-#include "SerializerBase.hpp"
-#include "SerializerJSON.hpp"
+#    include "Defines.hpp"
+#    include "ArrayBasic.hpp"
+#    include "DeviceStorage.hpp"
+#    include "DeviceView.hpp"
+#    include "SerializerBase.hpp"
+#    include "SerializerJSON.hpp"
 
 namespace DNDS
 {
@@ -505,18 +505,28 @@ namespace DNDS
             return _data.data();
         }
 
-        size_t DataSize()
+        size_t DataSize() const
         {
             if (this->Size() == 0)
                 return 0;
             if constexpr (_dataLayout == CSR)
-                DNDS_assert_info(this->IfCompressed(), "CSR must be compressed to get data pointer");
+                DNDS_assert_info(this->IfCompressed(), "CSR must be compressed to get DataSize()");
             return _data.size();
         }
 
-        size_t DataSizeBytes()
+        size_t DataSizeBytes() const
         {
             return this->DataSize() * sizeof_T;
+        }
+
+        size_t FullSizeBytes() const
+        {
+            size_t b = this->DataSize() * sizeof_T;
+            if (_pRowStart)
+                b += _pRowStart->size() * sizeof(index);
+            if (_pRowSizes)
+                b += _pRowSizes->size() * sizeof(rowsize);
+            return b;
         }
 
         std::size_t hash()
@@ -777,7 +787,10 @@ namespace DNDS
         }
 
         template <DeviceBackend B>
-        auto deviceView()
+        using t_deviceView = ArrayDeviceView<B, T, _row_size, _row_max, _align>;
+
+        template <DeviceBackend B>
+        t_deviceView<B> deviceView()
         {
             DNDS_assert_info((this->deviceBackend == B &&
                               B != DeviceBackend::Unknown) ||

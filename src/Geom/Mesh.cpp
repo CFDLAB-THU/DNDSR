@@ -9,7 +9,16 @@
 #include <filesystem>
 #include <fmt/core.h>
 #include "DNDS/EigenPCH.hpp"
+#include "Geom/Mesh_DeviceView.hpp"
 #include "SerialAdjReordering.hpp"
+
+#include "DNDS/DeviceStorage.hxx"
+
+namespace DNDS
+{
+    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(Geom::ElemInfo, )
+    DNDS_DEVICE_STORAGE_INST(Geom::ElemInfo, DeviceBackend::Host, )
+}
 
 namespace DNDS::Geom
 {
@@ -1196,7 +1205,7 @@ namespace DNDS::Geom
         /**********************************/
         // convert face2cell ptrs and face2node ptrs global to local
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (DNDS::index iFace = 0; iFace < face2cell.Size(); iFace++)
         {
@@ -1233,7 +1242,7 @@ namespace DNDS::Geom
         /**********************************/
         // convert face2cell ptrs and face2node ptrs to global
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (DNDS::index iFace = 0; iFace < face2cell.Size(); iFace++)
         {
@@ -1272,7 +1281,7 @@ namespace DNDS::Geom
         };
 
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (DNDS::index iCell = 0; iCell < cell2face.Size(); iCell++)
         {
@@ -1308,7 +1317,7 @@ namespace DNDS::Geom
         };
 
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (DNDS::index iCell = 0; iCell < cell2face.Size(); iCell++)
         {
@@ -1348,14 +1357,14 @@ namespace DNDS::Geom
         DNDS_assert_info(bndElemInfo.trans.pLGhostMapping, "trans of bndElemInfo needed but not built");
         /**********************************/
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (index iNode = 0; iNode < node2cell.Size(); iNode++)
             for (index &iCell : node2cell[iNode])
                 iCell = CellIndexLocal2Global(iCell);
 
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (index iNode = 0; iNode < node2bnd.Size(); iNode++)
             for (index &iBnd : node2bnd[iNode])
@@ -1375,14 +1384,14 @@ namespace DNDS::Geom
         /**********************************/
 // todo: ensure using dist omp settings not single!
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (index iNode = 0; iNode < node2cell.Size(); iNode++)
             for (index &iCell : node2cell[iNode])
                 iCell = CellIndexGlobal2Local(iCell);
 
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (index iNode = 0; iNode < node2bnd.Size(); iNode++)
             for (index &iBnd : node2bnd[iNode])
@@ -1701,7 +1710,7 @@ namespace DNDS::Geom
 
         MPI::Barrier(mpi.comm);
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (DNDS::index iCell = 0; iCell < cell2face.Size(); iCell++) // convert face indices pointers
         {
@@ -1821,7 +1830,7 @@ namespace DNDS::Geom
         /**********************************/
         // tend to unattended cell2face with pointing to ghost
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (DNDS::index iFace = 0; iFace < face2cell.son->Size(); iFace++) // face2cell points to local now
         {

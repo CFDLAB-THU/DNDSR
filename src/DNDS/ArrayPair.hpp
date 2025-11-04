@@ -20,6 +20,10 @@ namespace DNDS
         t_arrayDeviceView father;
         t_arrayDeviceView son;
 
+        using t_self = ArrayPairDeviceView<B, TArray>;
+
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayPairDeviceView, t_self)
+
         DNDS_DEVICE_CALLABLE ArrayPairDeviceView(const t_arrayDeviceView &n_father, const t_arrayDeviceView &n_son)
             : father(n_father), son(n_son) {}
 

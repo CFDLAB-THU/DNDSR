@@ -432,7 +432,7 @@ namespace DNDS::Geom::Base
         CFVPeriodicity(const tBase &vBase) : tBase(vBase) {} // copy from tBase
 
         template <int dim, class TU>
-        void TransDiValueInplace(TU &u, Geom::t_index id)
+        DNDS_DEVICE_CALLABLE void TransDiValueInplace(TU &u, Geom::t_index id)
         {
             using namespace Geom;
             DNDS_assert(FaceIDIsPeriodic(id));
@@ -445,7 +445,7 @@ namespace DNDS::Geom::Base
         }
 
         template <int dim, class TU>
-        void TransDiValueBackInplace(TU &u, Geom::t_index id)
+        DNDS_DEVICE_CALLABLE void TransDiValueBackInplace(TU &u, Geom::t_index id)
         {
             using namespace Geom;
             DNDS_assert(FaceIDIsPeriodic(id));

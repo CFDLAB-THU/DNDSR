@@ -17,21 +17,21 @@ def test_mesh0():
     mpi = DNDS.MPIInfo()
     mpi.setWorld()
 
-    mesh, reader, name2Id = create_mesh_from_CGNS(
-        os.path.join(
-            os.path.dirname(__file__), "..", "..", "data", "mesh", "NACA0012_H2.cgns"
-        ),
-        mpi,
-        2,
-    )
-
     # mesh, reader, name2Id = create_mesh_from_CGNS(
     #     os.path.join(
-    #         os.path.dirname(__file__), "..", "..", "data", "mesh", "UP3D_128.cgns"
+    #         os.path.dirname(__file__), "..", "..", "data", "mesh", "NACA0012_H2.cgns"
     #     ),
     #     mpi,
-    #     3,
+    #     2,
     # )
+
+    mesh, reader, name2Id = create_mesh_from_CGNS(
+        os.path.join(
+            os.path.dirname(__file__), "..", "..", "data", "mesh", "UP3D_128.cgns"
+        ),
+        mpi,
+        3,
+    )
 
     n2idmap = name2Id.n2id_map
     id2nmap = {k: v for v, k in n2idmap.items()}
@@ -64,6 +64,12 @@ def test_mesh0():
     if mpi.rank == 0:
         print(f"mesh  num  cell: {mesh_nCell}")
         print(f"mesh size total: {mesh_bytes / (1024 * 1024):.4g} MB")
+    
+    
+    mesh.coords.to_device("CUDA")
+    mesh.to_device("CUDA")
+    while True:
+        pass
 
     # fig, ax = plt.subplots(figsize=(16, 16), dpi=320)
     # xymaxs = np.array([-1e100, -1e100], dtype=np.double)

@@ -104,6 +104,11 @@ namespace DNDS
                 {
                     return pybind11_ArrayAdjacency_setitem(self, index_, row);
                 });
+
+        ArrayAdjacency_
+            .def("to_device", [](TArrayAdjacency &self, const std::string &backend)
+                 { self.to_device(device_backend_name_to_enum(backend)); }, py::arg("backend"))
+            .def("to_host", &TArrayAdjacency::to_host);
     }
 
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>

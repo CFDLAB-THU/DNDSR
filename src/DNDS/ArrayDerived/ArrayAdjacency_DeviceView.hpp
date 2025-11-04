@@ -14,6 +14,10 @@ namespace DNDS
         using t_base = ArrayDeviceView<B, index, _row_size, _row_max, _align>;
         using t_base::t_base;
 
+        using t_self = ArrayAdjacencyDeviceView<B, _row_size, _row_max, _align>;
+
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayAdjacencyDeviceView, t_self)
+
         DNDS_DEVICE_CALLABLE ArrayAdjacencyDeviceView(const t_base &base_view) : t_base(base_view) {};
 
         DNDS_DEVICE_CALLABLE AdjacencyRow operator[](index i)

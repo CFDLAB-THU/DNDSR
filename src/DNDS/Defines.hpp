@@ -98,12 +98,12 @@ namespace DNDS
 
     using t_indexerPair = std::tuple<index, index>;
 
-    const index indexMin = INT64_MIN;
+    DNDS_CONSTANT const index indexMin = INT64_MIN;
 
-    const real UnInitReal = std::acos(-1) * 1e299 * std::sqrt(-1.0);
-    const index UnInitIndex = INT64_MIN;
+    DNDS_CONSTANT const real UnInitReal = NAN;
+    DNDS_CONSTANT const index UnInitIndex = INT64_MIN;
     static_assert(UnInitIndex < 0);
-    const rowsize UnInitRowsize = INT32_MIN;
+    DNDS_CONSTANT const rowsize UnInitRowsize = INT32_MIN;
     static_assert(UnInitRowsize < 0);
 
     inline bool IsUnInitReal(real v)
@@ -112,12 +112,12 @@ namespace DNDS
         return std::isnan(v);
     }
 
-    const real veryLargeReal = 3e200;
-    const real largeReal = 3e10;
-    const real verySmallReal = 1e-200;
-    const real smallReal = 1e-10;
-
-    const real pi = std::acos(-1);
+    DNDS_CONSTANT const real veryLargeReal = 3e200;
+    DNDS_CONSTANT const real largeReal = 3e10;
+    DNDS_CONSTANT const real verySmallReal = 1e-200;
+    DNDS_CONSTANT const real smallReal = 1e-10;
+#define DNDS_E_PI 3.1415926535897932384626433832795028841971693993751058209749445923078164062
+    DNDS_CONSTANT const real pi = DNDS_E_PI;
 
     using tDiFj = Eigen::Matrix<real, -1, -1, Eigen::RowMajor>;
 
@@ -132,8 +132,8 @@ namespace DNDS
 
 namespace DNDS
 {
-    const rowsize DynamicSize = -1;
-    const rowsize NonUniformSize = -2;
+    DNDS_CONSTANT const rowsize DynamicSize = -1;
+    DNDS_CONSTANT const rowsize NonUniformSize = -2;
     static_assert(DynamicSize != NonUniformSize, "DynamicSize, NonUniformSize definition conflict");
 
     constexpr int RowSize_To_EigenSize(rowsize rs)
