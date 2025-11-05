@@ -1,5 +1,6 @@
 #pragma once
 #include "FiniteVolume.hpp"
+#include "DNDS/JsonUtil.hpp"
 
 namespace DNDS::CFV
 {
@@ -36,10 +37,10 @@ namespace DNDS::CFV
                     // printf("GetFaceNormFromCell %g\n", fv.GetFaceNormFromCell(iFace, iCell, if2c, -1).norm());
                     // printf("u[iCellOther](iE) %g\n", u[iCellOther](iE));
                     // printf("u[iCell](iE) %g\n", u[iCell](iE));
-                    // for (int i = 0; i < 3; i++)
-                    //     grad(i, iE) += norm(i) * (u[iCellOther](iE) - u[iCell](iE));
-                    //! grad({0, 1, 2}, iE) does not work on CUDA!!
-                    grad.col(iE) += norm * (uOther[iE] - uI[iE]);
+                    for (int i = 0; i < 3; i++)
+                        grad(i, iE) += norm(i) * (uOther(iE) - uI(iE));
+                    // //! grad({0, 1, 2}, iE) does not work on CUDA!!
+                    // grad.col(iE) += norm * (uOther[iE] - uI[iE]);
                 }
             }
             else
@@ -56,17 +57,19 @@ namespace DNDS::CFV
     template <DeviceBackend B>
     void finiteVolumeCellOpTest_run(FiniteVolume::t_deviceView<B> &fv,
                                     tUDof<DynamicSize>::t_deviceView<B> &u,
-                                    tUGrad<DynamicSize, 3>::t_deviceView<B> &u_grad);
+                                    tUGrad<DynamicSize, 3>::t_deviceView<B> &u_grad,
+                                    const t_jsonconfig &settings);
     template <DeviceBackend B>
     void finiteVolumeCellOpTest_main(
         FiniteVolume &fv,
         tUDof<DynamicSize> &u,
-        tUGrad<DynamicSize, 3> &u_grad)
+        tUGrad<DynamicSize, 3> &u_grad,
+        const t_jsonconfig &settings)
     {
         auto u_view = u.deviceView<B>();
         auto u_grad_view = u_grad.deviceView<B>();
         auto fv_view = fv.deviceView<B>();
 
-        finiteVolumeCellOpTest_run<B>(fv_view, u_view, u_grad_view);
+        finiteVolumeCellOpTest_run<B>(fv_view, u_view, u_grad_view, settings);
     }
 }

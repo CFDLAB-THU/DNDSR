@@ -27,10 +27,10 @@ namespace DNDS
     }
 
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign> // ! shared ptr
-    using tPy_ArrayAdjacency = py::class_<ArrayAdjacency<_row_size, _row_max, _align>, ssp<ArrayAdjacency<_row_size, _row_max, _align>>>;
+    using tPy_ArrayAdjacency = py_class_ssp<ArrayAdjacency<_row_size, _row_max, _align>>;
 
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    using tPy_ArrayAdjacencyPair = py::class_<ArrayAdjacencyPair<_row_size, _row_max, _align>>; // ! unique ptr
+    using tPy_ArrayAdjacencyPair = py_class_ssp<ArrayAdjacencyPair<_row_size, _row_max, _align>>; // ! shared ptr
 }
 
 namespace DNDS

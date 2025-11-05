@@ -173,6 +173,7 @@ namespace DNDS
 
         [[nodiscard]] index Size() const
         {
+            DNDS_assert(father && son);
             return father->Size() + son->Size();
         }
 

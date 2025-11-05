@@ -7,6 +7,7 @@
 #include "ArrayDerived/ArrayEigenMatrixBatch_bind.hpp"
 #include "ArrayDerived/ArrayEigenUniMatrixBatch_bind.hpp"
 #include "ArrayDerived/ArrayEigenVector_bind.hpp"
+#include "ArrayDOF_bind.hpp"
 
 #include "Serializer_bind.hpp"
 
@@ -31,6 +32,8 @@ PYBIND11_MODULE(dnds_pybind11, m)
     DNDS::pybind11_bind_ArrayEigenUniMatrixBatch_All(m);
 
     DNDS::pybind11_bind_ArrayEigenVector_All(m);
+
+    DNDS::pybind11_bind_ArrayDOF_All(m);
 
     DNDS::Serializer::pybind11_bind_Serializer(m);
 }

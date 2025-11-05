@@ -298,7 +298,7 @@ namespace DNDS // ParArrayPair
     {
         Pair_
             .def(py::init([]()
-                          { return std::make_unique<TPair>(); }));
+                          { return std::make_shared<TPair>(); }));
         Pair_
             .def_readwrite("father", &TPair::father)
             .def_readwrite("son", &TPair::son);
@@ -554,6 +554,7 @@ namespace DNDS
     pybind11_bind_Array_All_X_declare(5);
     pybind11_bind_Array_All_X_declare(6);
     pybind11_bind_Array_All_X_declare(7);
+    //definitions are offloaded to Array_bind_offset/*.cpp
 
     inline void pybind11_bind_Array_Offsets(py::module_ m)
     {

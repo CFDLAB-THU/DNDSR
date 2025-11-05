@@ -39,8 +39,13 @@ SerializerH5.cpp
 ExprtkWrapper.cpp
 )
 
+file(GLOB ARRAYDOF_OP_SOURCES "ArrayDOF_inst/*.cpp")
+list(APPEND CPPS ${ARRAYDOF_OP_SOURCES})
+
 if (DNDS_USE_CUDA)
-list(APPEND CPPS DeviceStorage_CUDA.cu)
+    list(APPEND CPPS DeviceStorage_CUDA.cu)
+    file(GLOB ARRAYDOF_OP_SOURCES_CUDA "ArrayDOF_inst/*.cu")
+    list(APPEND CPPS ${ARRAYDOF_OP_SOURCES_CUDA})
 endif()
 
 message(STATUS "DNDS_PCH_TARGETS ${DNDS_PCH_TARGETS}")
@@ -75,6 +80,7 @@ ArrayDerived/ArrayAdjacency_bind.cpp
 ArrayDerived/ArrayEigenMatrix_bind.cpp
 ArrayDerived/ArrayEigenUniMatrixBatch_bind.cpp
 ArrayDerived/ArrayEigenVector_bind.cpp
+ArrayDOF_bind.cpp
 Serializer_bind.cpp
 )
 
@@ -84,6 +90,10 @@ file(GLOB ARRAYEIGENMATRIX_COLS_SOURCES "ArrayDerived/ArrayEigenMatrix_bind_cols
 list(APPEND CPPS_BIND ${ARRAYEIGENMATRIX_COLS_SOURCES})
 file(GLOB ARRAYEIGENUNIMATRIXBATCH_COLS_SOURCES "ArrayDerived/ArrayEigenUniMatrixBatch_bind_cols/*.cpp")
 list(APPEND CPPS_BIND ${ARRAYEIGENUNIMATRIXBATCH_COLS_SOURCES})
+
+file(GLOB ARRAYDOF_COLS_SOURCES "ArrayDOF_bind_cols/*.cpp")
+list(APPEND CPPS_BIND ${ARRAYDOF_COLS_SOURCES})
+
 
 dnds_add_py_module(${LIBNAME}_pybind11 "${CPPS_BIND}" "${LIBNAME}_shared;${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
     ON ON ON)  # SHARED,FAST, EXCLUDE

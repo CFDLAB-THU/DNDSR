@@ -1,8 +1,10 @@
 #pragma once
 
-
 #ifdef DNDS_USE_CUDA
-#include <thrust/device_malloc_allocator.h>
+#    include <thrust/device_malloc_allocator.h>
+#    include <thrust/device_malloc.h>
+#    include <thrust/device_free.h>
+#    include <thrust/copy.h>
 
 namespace DNDS::CUDA
 {
@@ -13,7 +15,9 @@ namespace DNDS::CUDA
         DeviceObject(const T &host)
         {
             dev = thrust::device_malloc<T>(1);
-            cudaMemcpy(dev.get(), &host, sizeof(T), cudaMemcpyHostToDevice);
+            // cudaMemcpy(dev.get(), &host, sizeof(T), cudaMemcpyHostToDevice);
+            cudaMemcpy(thrust::raw_pointer_cast(dev), &host, sizeof(T), cudaMemcpyHostToDevice);
+            // thrust::copy(&host, (&host) + 1, dev);
         }
         ~DeviceObject() { thrust::device_free(dev); }
         T *get() { return dev.get(); }

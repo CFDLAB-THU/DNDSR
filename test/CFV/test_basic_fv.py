@@ -62,7 +62,7 @@ def test_basic():
             "translation1": [3, 0, 0],
             "translation2": [0, 3, 0],
         },
-        meshDirectBisect=2,
+        meshDirectBisect=1,
     )
 
     meshBnd, readerBnd = create_bnd_mesh(mesh)
@@ -117,13 +117,20 @@ def test_basic():
     u = CFV.tUDof_D()
     grad_u = CFV.tUGrad_3xD()
 
-    fv.BuildUDof_D(u, 5)
-    fv.BuildUGrad_3xD(grad_u, 5)
+    nvars = 5
 
-    print("HEREA")
+    fv.BuildUDof_D(u, nvars)
+    fv.BuildUGrad_3xD(grad_u, nvars)
+
+    for iCell in range(mesh.NumCell()):
+        x = fv.GetCellBary(iCell)
+        ui = np.array(u[iCell], copy=False)
+        ui[:] = x[0] + np.sin(x[1] * np.pi)
+    u.trans.startPersistentPull()
+    u.trans.waitPersistentPull()
+
     u.to_device("CUDA")
     grad_u.to_device("CUDA")
-    print("HEREB")
 
     def test_CUDA():
         CFV.finiteVolumeCellOpTest_main_CUDA(fv, u, grad_u)
@@ -131,12 +138,14 @@ def test_basic():
     def test_Host():
         CFV.finiteVolumeCellOpTest_main_Host(fv, u, grad_u)
 
-    executions, total_time, avg_time = time_function_until_limit(test_Host, 10.0, 100000)
+    executions, total_time, avg_time = time_function_until_limit(test_Host, 1.0, 100000)
     print("--- HOST ---")
     print(f"[{executions}] times, avg [{avg_time:.4g}] s")
-    executions, total_time, avg_time = time_function_until_limit(test_CUDA, 10.0, 100000)
+    avg_time_host = avg_time
+    executions, total_time, avg_time = time_function_until_limit(test_CUDA, 1.0, 100000)
     print("--- CUDA ---")
     print(f"[{executions}] times, avg [{avg_time:.4g}] s")
+    print(f" -- acc [{avg_time_host / avg_time:.4g}]")
 
 
 if __name__ == "__main__":

@@ -27,10 +27,10 @@ namespace DNDS
     }
 
     template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign> // ! shared ptr
-    using tPy_ArrayEigenVector = py::class_<ArrayEigenVector<_vec_size, _row_max, _align>, ssp<ArrayEigenVector<_vec_size, _row_max, _align>>>;
+    using tPy_ArrayEigenVector = py_class_ssp<ArrayEigenVector<_vec_size, _row_max, _align>>;
 
-    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign> // ! unique ptr
-    using tPy_ArrayEigenVectorPair = py::class_<ArrayEigenVectorPair<_vec_size, _row_max, _align>>;
+    template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign> // ! shared ptr
+    using tPy_ArrayEigenVectorPair = py_class_ssp<ArrayEigenVectorPair<_vec_size, _row_max, _align>>;
 }
 
 namespace DNDS

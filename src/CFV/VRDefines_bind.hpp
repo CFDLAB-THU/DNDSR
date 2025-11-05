@@ -6,6 +6,7 @@
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch_bind.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenVector_bind.hpp"
 #include "VRDefines.hpp"
+#include "DNDS/ArrayDOF_bind.hpp"
 
 namespace DNDS::CFV
 {
@@ -14,23 +15,23 @@ namespace DNDS::CFV
     inline void pybind11_define_tURec_alias(py::module_ &m, py::module_ &m_dnds)
     {
         m.attr(("tURec_" + RowSize_To_PySnippet(nVarsFixed)).c_str()) =
-            pybind11_ArrayEigenMatrixPair_get_class<DynamicSize, nVarsFixed>(m_dnds);
+            pybind11_ArrayDOF_get_class<DynamicSize, nVarsFixed>(m_dnds);
     }
 
     template <int nVarsFixed>
     inline void pybind11_define_tUDof_alias(py::module_ &m, py::module_ &m_dnds)
     {
         m.attr(("tUDof_" + RowSize_To_PySnippet(nVarsFixed)).c_str()) =
-            pybind11_ArrayEigenMatrixPair_get_class<nVarsFixed, 1>(m_dnds);
+            pybind11_ArrayDOF_get_class<nVarsFixed, 1>(m_dnds);
     }
 
     template <int nVarsFixed>
     inline void pybind11_define_tUGrad_alias(py::module_ &m, py::module_ &m_dnds)
     {
         m.attr(("tUGrad_2x" + RowSize_To_PySnippet(nVarsFixed)).c_str()) =
-            pybind11_ArrayEigenMatrixPair_get_class<2, nVarsFixed>(m_dnds);
+            pybind11_ArrayDOF_get_class<2, nVarsFixed>(m_dnds);
         m.attr(("tUGrad_3x" + RowSize_To_PySnippet(nVarsFixed)).c_str()) =
-            pybind11_ArrayEigenMatrixPair_get_class<3, nVarsFixed>(m_dnds);
+            pybind11_ArrayDOF_get_class<3, nVarsFixed>(m_dnds);
     }
 
     inline void pybind11_define_tVVecPair_alias(py::module_ &m, py::module_ &m_dnds)

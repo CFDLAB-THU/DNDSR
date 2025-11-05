@@ -7,6 +7,11 @@
 
 namespace DNDS
 {
+    using t_jsonconfig = nlohmann::ordered_json;
+}
+
+namespace DNDS
+{
 
     inline Eigen::VectorXd JsonGetEigenVector(const nlohmann::json &arr)
     {

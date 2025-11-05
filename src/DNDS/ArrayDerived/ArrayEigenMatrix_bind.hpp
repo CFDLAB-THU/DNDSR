@@ -34,11 +34,11 @@ namespace DNDS
 
     template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
               rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign> // ! shared ptr
-    using tPy_ArrayEigenMatrix = py::class_<ArrayEigenMatrix<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>, ssp<ArrayEigenMatrix<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>>>;
+    using tPy_ArrayEigenMatrix = py_class_ssp<ArrayEigenMatrix<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>>;
 
     template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
-              rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign> // ! unique ptr
-    using tPy_ArrayEigenMatrixPair = py::class_<ArrayEigenMatrixPair<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>>;
+              rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign> // ! shared ptr
+    using tPy_ArrayEigenMatrixPair = py_class_ssp<ArrayEigenMatrixPair<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>>;
 }
 
 namespace DNDS
@@ -264,6 +264,7 @@ namespace DNDS
     extern template void pybind11_callBindArrayEigenMatrixs_rowsizes<7>(py::module_ &m);
     extern template void pybind11_callBindArrayEigenMatrixs_rowsizes<8>(py::module_ &m);
     extern template void pybind11_callBindArrayEigenMatrixs_rowsizes<DynamicSize>(py::module_ &m);
+    extern template void pybind11_callBindArrayEigenMatrixs_rowsizes<NonUniformSize>(py::module_ &m);
 
     void pybind11_bind_ArrayEigenMatrix_All(py::module_ &m);
 }

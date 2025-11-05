@@ -806,6 +806,11 @@ namespace DNDS
                 _pRowStart ? _pRowStart->dataDevice() : nullptr,
                 _pRowSizes ? _pRowSizes->dataDevice() : nullptr);
         }
+
+        [[nodiscard]] DeviceBackend device() const
+        {
+            return this->deviceBackend;
+        }
     };
 
 }

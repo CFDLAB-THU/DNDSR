@@ -6,6 +6,7 @@
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenMatrix.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenVector.hpp"
+#include "DNDS/ArrayDOF.hpp"
 
 namespace DNDS::CFV
 {
@@ -27,17 +28,6 @@ namespace DNDS::CFV
     using tVMatPair = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<DynamicSize, DynamicSize>>;
     using tVMat = decltype(tVMatPair::father);
 
-    // Corresponds to mean/rec dofs
-    template <int nVarsFixed>
-    using tURec = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<DynamicSize, nVarsFixed>>;
-    template <int nVarsFixed>
-    using tUDof = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<nVarsFixed, 1>>;
-    template <int nVarsFixed, int gDim>
-    using tUGrad = DNDS::ArrayPair<DNDS::ArrayEigenMatrix<gDim, nVarsFixed>>;
-
-    using tScalarPair = DNDS::ArrayPair<DNDS::ArrayEigenVector<1>>;
-    using tScalar = decltype(tScalarPair::father);
-
     struct RecAtr
     {
         real relax = UnInitReal;
@@ -58,6 +48,22 @@ namespace DNDS::CFV
 
     using tRecAtrPair = DNDS::ArrayPair<DNDS::ParArray<RecAtr, 1>>;
     using tRecAtr = decltype(tRecAtrPair::father);
+}
+
+namespace DNDS::CFV
+{
+    // Corresponds to mean/rec dofs
+    template <int nVarsFixed>
+    using tURec = ArrayDof<DynamicSize, nVarsFixed>;
+
+    template <int nVarsFixed>
+    using tUDof = ArrayDof<nVarsFixed, 1>;
+
+    template <int nVarsFixed, int gDim>
+    using tUGrad = ArrayDof<gDim, nVarsFixed>;
+
+    using tScalarPair = DNDS::ArrayPair<DNDS::ArrayEigenVector<1>>;
+    using tScalar = decltype(tScalarPair::father);
 }
 
 namespace DNDS
