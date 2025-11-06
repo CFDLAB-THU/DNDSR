@@ -17,23 +17,26 @@ namespace DNDS
         return DNDS_ROWSIZE_MIN;
     }
 
-    template <DeviceBackend B, int _n_row, int _n_col>
-    class ArrayEigenUniMatrixBatchDeviceView : public ArrayDeviceView<B, real, NonUniformSize>
+    template <DeviceBackend B, class real_T, int _n_row, int _n_col>
+    class ArrayEigenUniMatrixBatchDeviceView : public ArrayDeviceView<B, real_T, NonUniformSize>
     {
         static_assert(_n_row >= 0 || _n_row == Eigen::Dynamic, "invalid _n_row");
         static_assert(_n_col >= 0 || _n_col == Eigen::Dynamic, "invalid _n_col");
 
-        using t_base = ArrayDeviceView<B, real, NonUniformSize>;
+        using t_base = ArrayDeviceView<B, real_T, NonUniformSize>;
         using t_base::t_base;
 
-        using t_base_const = const ArrayDeviceView<B, real, NonUniformSize>;
+        using t_base_const = const ArrayDeviceView<B, real_T, NonUniformSize>;
 
-        using t_EigenMatrix = Eigen::Matrix<real, _n_row, _n_col,
+        using t_EigenMatrix = Eigen::Matrix<std::remove_cv_t<real_T>, _n_row, _n_col,
                                             Eigen::AutoAlign |
                                                 ((_n_row == 1 && _n_col != 1) ? Eigen ::RowMajor : (_n_col == 1 && _n_row != 1) ? Eigen ::ColMajor // ColMajor except for row-vector
                                                                                                                                 : Eigen ::ColMajor)>;
-        using t_EigenMap = Eigen::Map<t_EigenMatrix, Eigen::Unaligned>;             // default no buffer align and stride
         using t_EigenMap_const = Eigen::Map<const t_EigenMatrix, Eigen::Unaligned>; // default no buffer align and stride
+        using t_EigenMap =
+            std::conditional_t<std::is_const_v<real_T>,
+                               t_EigenMap_const,
+                               Eigen::Map<t_EigenMatrix, Eigen::Unaligned>>; // default no buffer align and stride
 
     private:
         int _row_dynamic = _n_row > 0 ? _n_row : 0;
@@ -41,7 +44,7 @@ namespace DNDS
         int _m_size = this->Rows() * this->Cols(); //! extra data!
 
     public:
-        using t_self = ArrayEigenUniMatrixBatchDeviceView<B, _n_row, _n_col>;
+        using t_self = ArrayEigenUniMatrixBatchDeviceView<B, real_T, _n_row, _n_col>;
 
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayEigenUniMatrixBatchDeviceView, t_self)
 

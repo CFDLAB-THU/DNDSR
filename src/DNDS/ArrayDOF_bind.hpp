@@ -87,8 +87,12 @@ namespace DNDS
                  { self.addTo(R, alpha); }, py::arg("R"), py::arg("alpha"))
             .def("norm2", [](TArr &self)
                  { return self.norm2(); })
+            .def("norm2", [](TArr &self, TArr &R)
+                 { return self.norm2(R); })
             .def("componentWiseNorm1", [](TArr &self)
                  { return self.componentWiseNorm1(); })
+            .def("componentWiseNorm1", [](TArr &self, TArr &R)
+                 { return self.componentWiseNorm1(R); })
             .def("dot", [](TArr &self, const TArr &R)
                  { return self.dot(R); }, py::arg("R"));
     }

@@ -3,10 +3,14 @@
 #include "../DeviceView.hpp"
 #include "DNDS/Defines.hpp"
 #include "DNDS/DeviceStorage.hpp"
+#include "Eigen/src/Core/Matrix.h"
+#include "Eigen/src/Core/util/Constants.h"
 #include <cstddef>
+#include <type_traits>
 
 namespace DNDS
 {
+    template <class real_T = real>
     class MatrixBatch
     {
     public:
@@ -35,8 +39,12 @@ namespace DNDS
         };
         static_assert(sizeof(UInt32PairIn64) == 8 && sizeof(UInt16QuadIn64) == 8);
 
-        using t_matrix = MatrixXR;
-        using t_map = Eigen::Map<t_matrix, Eigen::Unaligned>;
+        using t_matrix = Eigen::Matrix<std::remove_cv_t<real_T>, Eigen::Dynamic, Eigen::Dynamic>;
+        using t_map_const = Eigen::Map<const t_matrix, Eigen::Unaligned>;
+        using t_map =
+            std::conditional_t<std::is_const_v<real_T>,
+                               t_map_const,
+                               Eigen::Map<t_matrix, Eigen::Unaligned>>;
 
         template <class t_matrices_elem>
         static rowsize getBufSize(const std::vector<t_matrices_elem> &matrices)
@@ -54,19 +62,19 @@ namespace DNDS
         }
 
     private:
-        real *_buf;
+        real_T *_buf;
         rowsize _buf_size;
-        static_assert(sizeof(real) == 8 || sizeof(real) == 4);
+        static_assert(sizeof(real_T) == 8 || sizeof(real_T) == 4);
         static const ptrdiff_t n_real_in_64 = 8 / sizeof(real);
 
-        DNDS_DEVICE_CALLABLE real *get_kth_64_meta_block(rowsize k) { return _buf + (k + 1) * n_real_in_64; }
-        DNDS_DEVICE_CALLABLE [[nodiscard]] const real *get_kth_64_meta_block(rowsize k) const
+        DNDS_DEVICE_CALLABLE real_T *get_kth_64_meta_block(rowsize k) { return _buf + (k + 1) * n_real_in_64; }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] const real_T *get_kth_64_meta_block(rowsize k) const
         {
             return (const_cast<MatrixBatch *>(this))->get_kth_64_meta_block(k);
         }
 
     public:
-        DNDS_DEVICE_CALLABLE MatrixBatch(real *n_buf, rowsize new_size) : _buf(n_buf), _buf_size(new_size)
+        DNDS_DEVICE_CALLABLE MatrixBatch(real_T *n_buf, rowsize new_size) : _buf(n_buf), _buf_size(new_size)
         {
         }
 
@@ -133,8 +141,18 @@ namespace DNDS
                 curOffset += matrices[i].size();
             }
         }
+        DNDS_DEVICE_CALLABLE t_map
+        operator[](rowsize k)
+        {
+            DNDS_assert(k < this->Size());
+            auto n_row = getNRow(k);
+            auto n_col = getNCol(k);
+            auto offset = getOffset(k);
+            return {_buf + offset, n_row, n_col};
+        }
 
-        DNDS_DEVICE_CALLABLE t_map operator[](rowsize k) // todo: add const version
+        DNDS_DEVICE_CALLABLE t_map_const
+        operator[](rowsize k) const
         {
             DNDS_assert(k < this->Size());
             auto n_row = getNRow(k);
@@ -144,23 +162,29 @@ namespace DNDS
         }
     };
 
-    template <DeviceBackend B>
-    class ArrayEigenMatrixBatchDeviceView : public ArrayDeviceView<B, real, NonUniformSize>
+    template <DeviceBackend B, class real_T>
+    class ArrayEigenMatrixBatchDeviceView : public ArrayDeviceView<B, real_T, NonUniformSize>
     {
     public:
-        using t_base = ArrayDeviceView<B, real, NonUniformSize>;
+        using t_base = ArrayDeviceView<B, real_T, NonUniformSize>;
         using t_base::t_base;
 
-        using t_matrix = MatrixBatch::t_matrix;
-        using t_map = MatrixBatch::t_map;
+        using t_matrix = typename MatrixBatch<real_T>::t_matrix;
+        using t_map = typename MatrixBatch<real_T>::t_map;
+        using t_map_const = typename MatrixBatch<real_T>::t_map_const;
 
-        using t_self = ArrayEigenMatrixBatchDeviceView<B>;
+        using t_self = ArrayEigenMatrixBatchDeviceView<B, real_T>;
 
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayEigenMatrixBatchDeviceView, t_self)
 
         DNDS_DEVICE_CALLABLE ArrayEigenMatrixBatchDeviceView(const t_base &base_view) : t_base(base_view) {}
 
-        DNDS_DEVICE_CALLABLE MatrixBatch operator[](index i) // todo: add const version
+        DNDS_DEVICE_CALLABLE MatrixBatch<real_T> operator[](index i)
+        {
+            return {this->t_base::operator[](i), this->RowSize(i)};
+        }
+
+        DNDS_DEVICE_CALLABLE MatrixBatch<const real_T> operator[](index i) const
         {
             return {this->t_base::operator[](i), this->RowSize(i)};
         }
@@ -171,6 +195,11 @@ namespace DNDS
         }
 
         DNDS_DEVICE_CALLABLE t_map operator()(index i, rowsize j)
+        {
+            return this->operator[](i)[j];
+        }
+
+        DNDS_DEVICE_CALLABLE t_map_const operator()(index i, rowsize j) const
         {
             return this->operator[](i)[j];
         }

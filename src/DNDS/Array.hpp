@@ -790,6 +790,9 @@ namespace DNDS
         using t_deviceView = ArrayDeviceView<B, T, _row_size, _row_max, _align>;
 
         template <DeviceBackend B>
+        using t_deviceViewConst = ArrayDeviceView<B, const T, _row_size, _row_max, _align>;
+
+        template <DeviceBackend B>
         t_deviceView<B> deviceView()
         {
             DNDS_assert_info((this->deviceBackend == B &&
@@ -798,6 +801,24 @@ namespace DNDS
                              "not on this device");
 
             return ArrayDeviceView_build<B, T, _row_size, _row_max, _align>(
+                _size, _data.data(), _data.size(),
+                _pRowStart ? _pRowStart->data() : nullptr, _pRowStart ? _pRowStart->size() : 0,
+                _pRowSizes ? _pRowSizes->data() : nullptr, _pRowSizes ? _pRowSizes->size() : 0,
+                _row_size_dynamic,
+                _data.dataDevice(),
+                _pRowStart ? _pRowStart->dataDevice() : nullptr,
+                _pRowSizes ? _pRowSizes->dataDevice() : nullptr);
+        }
+
+        template <DeviceBackend B>
+        t_deviceViewConst<B> deviceView() const
+        {
+            DNDS_assert_info((this->deviceBackend == B &&
+                              B != DeviceBackend::Unknown) ||
+                                 (B == DeviceBackend::Host),
+                             "not on this device");
+
+            return ArrayDeviceView_build<B, const T, _row_size, _row_max, _align>(
                 _size, _data.data(), _data.size(),
                 _pRowStart ? _pRowStart->data() : nullptr, _pRowStart ? _pRowStart->size() : 0,
                 _pRowSizes ? _pRowSizes->data() : nullptr, _pRowSizes ? _pRowSizes->size() : 0,

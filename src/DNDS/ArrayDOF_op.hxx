@@ -32,6 +32,7 @@ namespace DNDS
     void ArrayDofOp<DeviceBackend::Host, n_m, n_n>::operator_plus_assign(t_self &self, const t_self &R)
     {
         DNDS_assert(self.father && self.son);
+        DNDS_assert(R.father && R.son);
         index iTop = self.Size();
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
@@ -68,6 +69,7 @@ namespace DNDS
     void ArrayDofOp<DeviceBackend::Host, n_m, n_n>::operator_minus_assign(t_self &self, const t_self &R)
     {
         DNDS_assert(self.father && self.son);
+        DNDS_assert(R.father && R.son);
         index iTop = self.Size();
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
@@ -94,6 +96,7 @@ namespace DNDS
     void ArrayDofOp<DeviceBackend::Host, n_m, n_n>::operator_mult_assign_scalar_arr(t_self &self, const ArrayDof<1, 1> &R)
     {
         DNDS_assert(self.father && self.son);
+        DNDS_assert(R.father && R.son);
         index iTop = self.Size();
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
@@ -118,6 +121,7 @@ namespace DNDS
     void ArrayDofOp<DeviceBackend::Host, n_m, n_n>::operator_mult_assign(t_self &self, const t_self &R)
     {
         DNDS_assert(self.father && self.son);
+        DNDS_assert(R.father && R.son);
         index iTop = self.Size();
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
@@ -130,6 +134,7 @@ namespace DNDS
     void ArrayDofOp<DeviceBackend::Host, n_m, n_n>::operator_div_assign(t_self &self, const t_self &R)
     {
         DNDS_assert(self.father && self.son);
+        DNDS_assert(R.father && R.son);
         index iTop = self.Size();
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
@@ -142,6 +147,7 @@ namespace DNDS
     void ArrayDofOp<DeviceBackend::Host, n_m, n_n>::operator_assign(t_self &self, const t_self &R)
     {
         DNDS_assert(self.father && self.son);
+        DNDS_assert(R.father && R.son);
         // TODO: OMP
         // for (index i = 0; i < this->Size(); i++)
         //     this->operator[](i) = R.operator[](i);
@@ -179,6 +185,7 @@ namespace DNDS
     void ArrayDofOp<DeviceBackend::Host, n_m, n_n>::addTo(t_self &self, const t_self &R, real r)
     {
         DNDS_assert(self.father && self.son);
+        DNDS_assert(R.father && R.son);
         // for (index i = 0; i < this->Size(); i++)
         //     this->operator[](i) += R.operator[](i) * r;
         DNDS_assert(R.father->RawDataVector().size() == self.father->RawDataVector().size());
@@ -216,13 +223,32 @@ namespace DNDS
     }
 
     template <int n_m, int n_n>
+    real ArrayDofOp<DeviceBackend::Host, n_m, n_n>::norm2(t_self &self, const t_self &R)
+    {
+        DNDS_assert(self.father && self.son);
+        real sqrSum{0}, sqrSumAll{0};
+        index iTop = self.father->Size();
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(static) reduction(+ : sqrSum)
+#endif
+        for (index i = 0; i < iTop; i++) //*note that only father is included
+            sqrSum += (self.father->operator[](i) - R.father->operator[](i)).squaredNorm();
+        MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_SUM, self.father->getMPI().comm);
+        // std::cout << "norm2is " << std::scientific << sqrSumAll << std::endl;
+        return std::sqrt(sqrSumAll);
+    }
+
+    template <int n_m, int n_n>
     typename ArrayDofOp<DeviceBackend::Host, n_m, n_n>::t_element_mat
     ArrayDofOp<DeviceBackend::Host, n_m, n_n>::componentWiseNorm1(t_self &self)
     {
         DNDS_assert(self.father && self.son);
         t_element_mat minLocal, min;
         //! let it fail if size not compatible
-        minLocal.resize(self.father->MatRowSize(0), self.father->MatColSize(0));
+        if (self.father->Size() || (n_m >= 0 && n_n >= 0))
+            minLocal.resize(self.father->MatRowSize(0), self.father->MatColSize(0));
+        else if (self.son->Size())
+            minLocal.resize(self.son->MatRowSize(0), self.son->MatColSize(0));
         minLocal.setConstant(0);
         min = minLocal;
         index iTop = self.father->Size();
@@ -237,9 +263,34 @@ namespace DNDS
     }
 
     template <int n_m, int n_n>
+    typename ArrayDofOp<DeviceBackend::Host, n_m, n_n>::t_element_mat
+    ArrayDofOp<DeviceBackend::Host, n_m, n_n>::componentWiseNorm1(t_self &self, const t_self &R)
+    {
+        DNDS_assert(self.father && self.son);
+        t_element_mat minLocal, min;
+        //! let it fail if size not compatible
+        if (self.father->Size() || (n_m >= 0 && n_n >= 0))
+            minLocal.resize(self.father->MatRowSize(0), self.father->MatColSize(0));
+        else if (self.son->Size())
+            minLocal.resize(self.son->MatRowSize(0), self.son->MatColSize(0));
+        minLocal.setConstant(0);
+        min = minLocal;
+        index iTop = self.father->Size();
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp declare reduction(EigenVecAdd:t_element_mat : omp_out += omp_in) initializer(omp_priv = omp_orig)
+#    pragma omp parallel for schedule(static) reduction(EigenVecAdd : minLocal)
+#endif
+        for (index i = 0; i < iTop; i++) //*note that only father is included
+            minLocal += ((self.operator[](i) - R.operator[](i)).array().abs()).matrix();
+        MPI::Allreduce(minLocal.data(), min.data(), minLocal.size(), DNDS_MPI_REAL, MPI_SUM, self.father->getMPI().comm);
+        return min;
+    }
+
+    template <int n_m, int n_n>
     real ArrayDofOp<DeviceBackend::Host, n_m, n_n>::dot(t_self &self, const t_self &R)
     {
         DNDS_assert(self.father && self.son);
+        DNDS_assert(R.father && R.son);
         real sqrSum{0}, sqrSumAll;
         index iTop = self.father->Size();
 #if defined(DNDS_DIST_MT_USE_OMP)

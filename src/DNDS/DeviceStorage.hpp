@@ -217,6 +217,11 @@ namespace DNDS
             return deviceStorage ? reinterpret_cast<T *>(deviceStorage->raw_ptr()) : nullptr;
         }
 
+        const T *dataDevice() const
+        {
+            return deviceStorage ? reinterpret_cast<const T *>(deviceStorage->raw_ptr()) : nullptr;
+        }
+
         host_device_vector &operator=(const host_device_vector<T> &R)
         {
             this->t_base::operator=(R);

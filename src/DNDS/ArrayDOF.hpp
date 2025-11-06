@@ -19,6 +19,17 @@ namespace DNDS
         ArrayDofDeviceView(t_base &&base_view) : t_base(base_view) {}
     };
 
+    template <DeviceBackend B, int n_m, int n_n>
+    class ArrayDofDeviceViewConst : public ArrayPairDeviceViewConst<B, ArrayEigenMatrix<n_m, n_n>>
+    {
+    public:
+        using t_base = ArrayPairDeviceViewConst<B, ArrayEigenMatrix<n_m, n_n>>;
+        using t_base::t_base;
+
+        ArrayDofDeviceViewConst(const t_base &base_view) : t_base(base_view) {}
+        ArrayDofDeviceViewConst(t_base &&base_view) : t_base(base_view) {}
+    };
+
     template <int n_m, int n_n>
     class ArrayDof;
 
@@ -26,22 +37,24 @@ namespace DNDS
     class ArrayDofOp;
 
 #define DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n)
-#define DNDS_ARRAY_DOF_OP_FUNC_LIST(B, n_m, n_n, spec)                                                                                     \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) setConstant(t_self &self, real R);                                            \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) setConstant(t_self &self, const Eigen::Ref<const t_element_mat> &R);          \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_plus_assign(t_self &self, const t_self &R);                          \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_plus_assign(t_self &self, real R);                                   \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_plus_assign(t_self &self, const Eigen::Ref<const t_element_mat> &R); \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_minus_assign(t_self &self, const t_self &R);                         \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_mult_assign(t_self &self, real R);                                   \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_mult_assign_scalar_arr(t_self &self, const ArrayDof<1, 1> &R);       \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_mult_assign(t_self &self, const Eigen::Ref<const t_element_mat> &R); \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_mult_assign(t_self &self, const t_self &R);                          \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_div_assign(t_self &self, const t_self &R);                           \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_assign(t_self &self, const t_self &R);                               \
-    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) addTo(t_self &self, const t_self &R, real r);                                 \
-    spec real DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) norm2(t_self &self);                                                          \
-    spec ArrayDofOp<B, n_m, n_n>::t_element_mat DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) componentWiseNorm1(t_self &self);           \
+#define DNDS_ARRAY_DOF_OP_FUNC_LIST(B, n_m, n_n, spec)                                                                                            \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) setConstant(t_self &self, real R);                                                   \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) setConstant(t_self &self, const Eigen::Ref<const t_element_mat> &R);                 \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_plus_assign(t_self &self, const t_self &R);                                 \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_plus_assign(t_self &self, real R);                                          \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_plus_assign(t_self &self, const Eigen::Ref<const t_element_mat> &R);        \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_minus_assign(t_self &self, const t_self &R);                                \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_mult_assign(t_self &self, real R);                                          \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_mult_assign_scalar_arr(t_self &self, const ArrayDof<1, 1> &R);              \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_mult_assign(t_self &self, const Eigen::Ref<const t_element_mat> &R);        \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_mult_assign(t_self &self, const t_self &R);                                 \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_div_assign(t_self &self, const t_self &R);                                  \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) operator_assign(t_self &self, const t_self &R);                                      \
+    spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) addTo(t_self &self, const t_self &R, real r);                                        \
+    spec real DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) norm2(t_self &self);                                                                 \
+    spec real DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) norm2(t_self &self, const t_self &R);                                                \
+    spec ArrayDofOp<B, n_m, n_n>::t_element_mat DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) componentWiseNorm1(t_self &self);                  \
+    spec ArrayDofOp<B, n_m, n_n>::t_element_mat DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) componentWiseNorm1(t_self &self, const t_self &R); \
     spec real DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) dot(t_self &self, const t_self &R);
 
     template <int n_m, int n_n>
@@ -97,9 +110,17 @@ namespace DNDS
 
         template <DeviceBackend B>
         using t_deviceView = ArrayDofDeviceView<B, n_m, n_n>;
+        template <DeviceBackend B>
+        using t_deviceViewConst = ArrayDofDeviceViewConst<B, n_m, n_n>;
 
         template <DeviceBackend B>
         t_deviceView<B> deviceView()
+        {
+            return {t_base::template deviceView<B>()};
+        }
+
+        template <DeviceBackend B>
+        t_deviceViewConst<B> deviceView() const
         {
             return {t_base::template deviceView<B>()};
         }
@@ -186,9 +207,19 @@ namespace DNDS
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), norm2(*this));
         }
 
+        real norm2(const t_self &R)
+        {
+            DNDS_ARRAY_OP_SWITCHER(this->father->device(), norm2(*this, R));
+        }
+
         t_element_mat componentWiseNorm1()
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), componentWiseNorm1(*this));
+        }
+
+        t_element_mat componentWiseNorm1(const t_self &R)
+        {
+            DNDS_ARRAY_OP_SWITCHER(this->father->device(), componentWiseNorm1(*this, R));
         }
 
         real dot(const t_self &R)

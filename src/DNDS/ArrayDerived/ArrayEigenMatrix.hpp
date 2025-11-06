@@ -231,7 +231,9 @@ namespace DNDS
         }
 
         template <DeviceBackend B>
-        using t_deviceView = ArrayEigenMatrixDeviceView<B, _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>;
+        using t_deviceView = ArrayEigenMatrixDeviceView<B, real, _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>;
+        template <DeviceBackend B>
+        using t_deviceViewConst = ArrayEigenMatrixDeviceView<B, const real, _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>;
 
         template <DeviceBackend B>
         auto deviceView()
@@ -242,6 +244,17 @@ namespace DNDS
                                    _mat_nRows ? (B == DeviceBackend::Host ? _mat_nRows->data() : _mat_nRows->dataDevice())
                                               : nullptr,
                                    _mat_nRow_dynamic);
+        }
+
+        template <DeviceBackend B>
+        auto deviceView() const
+        {
+            auto base_view = t_base::template deviceView<B>();
+            return t_deviceViewConst<B>(base_view,
+                                        // do more delicate dispatching for extensions?
+                                        _mat_nRows ? (B == DeviceBackend::Host ? _mat_nRows->data() : _mat_nRows->dataDevice())
+                                                   : nullptr,
+                                        _mat_nRow_dynamic);
         }
 
         using t_base::to_host; // we only copy primary data back (no structure modification allowed from device)

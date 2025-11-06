@@ -12,8 +12,72 @@
 #include <fmt/format.h>
 namespace DNDS
 {
+
+    template <class Derived>
+    struct ArrayPairDeviceView_Base
+    {
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index Size() const
+        {
+            auto dThis = static_cast<const Derived *>(this);
+            return dThis->father.Size() + dThis->son.Size();
+        }
+
+        DNDS_DEVICE_CALLABLE auto RowSize() const
+        {
+            auto dThis = static_cast<const Derived *>(this);
+            return dThis->father.RowSize();
+        }
+
+        DNDS_DEVICE_CALLABLE auto RowSize(index i) const
+        {
+            auto dThis = static_cast<const Derived *>(this);
+            if (i >= 0 && i < dThis->father.Size())
+                return dThis->father.RowSize(i);
+            else
+                return dThis->son.RowSize(i - dThis->father.Size());
+        }
+
+        DNDS_DEVICE_CALLABLE auto operator[](index i) const
+        {
+            auto dThis = static_cast<const Derived *>(this);
+            if (i >= 0 && i < dThis->father.Size())
+                return dThis->father.operator[](i);
+            else
+                return dThis->son.operator[](i - dThis->father.Size());
+        }
+
+        DNDS_DEVICE_CALLABLE auto operator[](index i)
+        {
+            auto dThis = static_cast<Derived *>(this);
+            if (i >= 0 && i < dThis->father.Size())
+                return dThis->father.operator[](i);
+            else
+                return dThis->son.operator[](i - dThis->father.Size());
+        }
+
+        template <class... TOthers>
+        DNDS_DEVICE_CALLABLE auto operator()(index i, TOthers... aOthers)
+        {
+            auto dThis = static_cast<Derived *>(this);
+            if (i >= 0 && i < dThis->father.Size())
+                return dThis->father.operator()(i, aOthers...);
+            else
+                return dThis->son.operator()(i - dThis->father.Size(), aOthers...);
+        }
+
+        template <class... TOthers>
+        DNDS_DEVICE_CALLABLE auto operator()(index i, TOthers... aOthers) const
+        {
+            auto dThis = static_cast<const Derived *>(this);
+            if (i >= 0 && i < dThis->father.Size())
+                return dThis->father.operator()(i, aOthers...);
+            else
+                return dThis->son.operator()(i - dThis->father.Size(), aOthers...);
+        }
+    };
+
     template <DeviceBackend B, class TArray = ParArray<real, 1>>
-    struct ArrayPairDeviceView
+    struct ArrayPairDeviceView : public ArrayPairDeviceView_Base<ArrayPairDeviceView<B, TArray>>
     {
         using t_arrayDeviceView = typename TArray::template t_deviceView<B>;
 
@@ -26,58 +90,22 @@ namespace DNDS
 
         DNDS_DEVICE_CALLABLE ArrayPairDeviceView(const t_arrayDeviceView &n_father, const t_arrayDeviceView &n_son)
             : father(n_father), son(n_son) {}
+    };
 
-        DNDS_DEVICE_CALLABLE [[nodiscard]] index Size() const
-        {
-            return father.Size() + son.Size();
-        }
+    template <DeviceBackend B, class TArray = ParArray<real, 1>>
+    struct ArrayPairDeviceViewConst : public ArrayPairDeviceView_Base<ArrayPairDeviceViewConst<B, TArray>>
+    {
+        using t_arrayDeviceView = typename TArray::template t_deviceViewConst<B>; //! the only difference from non-const
 
-        DNDS_DEVICE_CALLABLE auto RowSize() const
-        {
-            return father.RowSize();
-        }
+        t_arrayDeviceView father;
+        t_arrayDeviceView son;
 
-        DNDS_DEVICE_CALLABLE auto RowSize(index i) const
-        {
-            if (i >= 0 && i < father.Size())
-                return father.RowSize(i);
-            else
-                return son.RowSize(i - father.Size());
-        }
+        using t_self = ArrayPairDeviceViewConst<B, TArray>;
 
-        DNDS_DEVICE_CALLABLE auto operator[](index i) const
-        {
-            if (i >= 0 && i < father.Size())
-                return father.operator[](i);
-            else
-                return son.operator[](i - father.Size());
-        }
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayPairDeviceViewConst, t_self)
 
-        DNDS_DEVICE_CALLABLE auto operator[](index i)
-        {
-            if (i >= 0 && i < father.Size())
-                return father.operator[](i);
-            else
-                return son.operator[](i - father.Size());
-        }
-
-        template <class... TOthers>
-        DNDS_DEVICE_CALLABLE auto operator()(index i, TOthers... aOthers)
-        {
-            if (i >= 0 && i < father.Size())
-                return father.operator()(i, aOthers...);
-            else
-                return son.operator()(i - father.Size(), aOthers...);
-        }
-
-        template <class... TOthers>
-        DNDS_DEVICE_CALLABLE auto operator()(index i, TOthers... aOthers) const
-        {
-            if (i >= 0 && i < father.Size())
-                return father.operator()(i, aOthers...);
-            else
-                return son.operator()(i - father.Size(), aOthers...);
-        }
+        DNDS_DEVICE_CALLABLE ArrayPairDeviceViewConst(const t_arrayDeviceView &n_father, const t_arrayDeviceView &n_son)
+            : father(n_father), son(n_son) {}
     };
 
     template <class TArray = ParArray<real, 1>>
@@ -301,12 +329,24 @@ namespace DNDS
         using t_deviceView = ArrayPairDeviceView<B, TArray>;
 
         template <DeviceBackend B>
+        using t_deviceViewConst = ArrayPairDeviceViewConst<B, TArray>;
+
+        template <DeviceBackend B>
         auto deviceView()
         {
             DNDS_assert_info(father && son, "need both father and son to exist for device view");
             return t_deviceView<B>{
                 father->template deviceView<B>(),
                 son->template deviceView<B>()};
+        }
+
+        template <DeviceBackend B>
+        auto deviceView() const
+        {
+            DNDS_assert_info(father && son, "need both father and son to exist for device view");
+            return t_deviceViewConst<B>{
+                std::as_const(*father).template deviceView<B>(),
+                std::as_const(*son).template deviceView<B>()};
         }
 
         void to_device(DeviceBackend backend)

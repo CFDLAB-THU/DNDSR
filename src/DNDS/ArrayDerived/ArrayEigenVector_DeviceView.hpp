@@ -7,23 +7,26 @@
 
 namespace DNDS
 {
-    template <DeviceBackend B, rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
-    class ArrayEigenVectorDeviceView : public ArrayDeviceView<B, real, _vec_size, _row_max, _align>
+    template <DeviceBackend B, class real_T, rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
+    class ArrayEigenVectorDeviceView : public ArrayDeviceView<B, real_T, _vec_size, _row_max, _align>
     {
     public:
-        using t_base = ArrayDeviceView<B, real, _vec_size, _row_max, _align>;
+        using t_base = ArrayDeviceView<B, real_T, _vec_size, _row_max, _align>;
         using t_base::t_base;
 
-        using t_self = ArrayEigenVectorDeviceView<B, _vec_size, _row_max, _align>;
+        using t_self = ArrayEigenVectorDeviceView<B, real_T, _vec_size, _row_max, _align>;
 
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayEigenVectorDeviceView, t_self)
 
         DNDS_DEVICE_CALLABLE ArrayEigenVectorDeviceView(const t_base &base_view) : t_base(base_view) {};
 
-        using t_EigenVector = Eigen::Matrix<real, RowSize_To_EigenSize(_vec_size), 1,
+        using t_EigenVector = Eigen::Matrix<std::remove_cv_t<real_T>, RowSize_To_EigenSize(_vec_size), 1,
                                             Eigen::DontAlign | Eigen::ColMajor, RowSize_To_EigenSize(_row_max), 1>;
-        using t_EigenMap = Eigen::Map<t_EigenVector, Eigen::Unaligned>;             // default no buffer align and stride
         using t_EigenMap_Const = Eigen::Map<const t_EigenVector, Eigen::Unaligned>; // default no buffer align and stride
+        using t_EigenMap =
+            std::conditional_t<std::is_const_v<real_T>,
+                               t_EigenMap_Const,
+                               Eigen::Map<t_EigenVector, Eigen::Unaligned>>; // default no buffer align and stride
 
         DNDS_DEVICE_CALLABLE t_EigenMap operator[](index i)
         {

@@ -14,8 +14,8 @@ namespace DNDS
         using t_base = ParArray<real, NonUniformSize>;
         using t_base::t_base;
 
-        using t_matrix = MatrixBatch::t_matrix;
-        using t_map = MatrixBatch::t_map;
+        using t_matrix = typename MatrixBatch<real>::t_matrix;
+        using t_map = typename MatrixBatch<real>::t_map;
 
     private:
         using t_base::ResizeRow;
@@ -24,12 +24,12 @@ namespace DNDS
         template <class t_matrices_elem>
         void InitializeWriteRow(index i, const std::vector<t_matrices_elem> &matrices)
         {
-            this->ResizeRow(i, MatrixBatch::getBufSize(matrices));
+            this->ResizeRow(i, MatrixBatch<real>::getBufSize(matrices));
             MatrixBatch batch(this->t_base::operator[](i), this->RowSize(i));
             batch.CompressIn(matrices);
         }
 
-        MatrixBatch operator[](index i) // todo: add const version
+        MatrixBatch<real> operator[](index i) // todo: add const version
         {
             return {this->t_base::operator[](i), this->RowSize(i)};
         }
@@ -48,12 +48,21 @@ namespace DNDS
         using t_base::WriteSerializer; //! because no extra data than Array<>
 
         template <DeviceBackend B>
-        using t_deviceView = ArrayEigenMatrixBatchDeviceView<B>;
+        using t_deviceView = ArrayEigenMatrixBatchDeviceView<B, real>;
+
+        template <DeviceBackend B>
+        using t_deviceViewConst = ArrayEigenMatrixBatchDeviceView<B, const real>;
 
         template <DeviceBackend B>
         auto deviceView()
         {
             return t_deviceView<B>{this->t_base::template deviceView<B>()}; // CTOR
+        }
+
+        template <DeviceBackend B>
+        auto deviceView() const
+        {
+            return t_deviceViewConst<B>{this->t_base::template deviceView<B>()}; // CTOR
         }
 
         using t_base::to_device;

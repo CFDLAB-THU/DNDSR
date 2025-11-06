@@ -3,9 +3,10 @@
 
 namespace DNDS
 {
+    template <typename index_T = index>
     class AdjacencyRow // instead of std::vector<index> for building on raw buffer as a "mapping" object
     {
-        index *__p_indices;
+        index_T *__p_indices;
         rowsize __Row_size;
 
     public:
@@ -15,15 +16,15 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE AdjacencyRow() = default;
         DNDS_DEVICE_CALLABLE AdjacencyRow(const AdjacencyRow &) = default;
         DNDS_DEVICE_CALLABLE ~AdjacencyRow() = default;
-        DNDS_DEVICE_CALLABLE AdjacencyRow(index *ptr, rowsize siz) : __p_indices(ptr), __Row_size(siz) {} // default actually
+        DNDS_DEVICE_CALLABLE AdjacencyRow(index_T *ptr, rowsize siz) : __p_indices(ptr), __Row_size(siz) {} // default actually
 
-        DNDS_DEVICE_CALLABLE index &operator[](rowsize j)
+        DNDS_DEVICE_CALLABLE index_T &operator[](rowsize j)
         {
             DNDS_assert(j >= 0 && j < __Row_size);
             return __p_indices[j];
         }
 
-        DNDS_DEVICE_CALLABLE index operator[](rowsize j) const
+        DNDS_DEVICE_CALLABLE index_T operator[](rowsize j) const
         {
             DNDS_assert(j >= 0 && j < __Row_size);
             return __p_indices[j];
@@ -46,10 +47,10 @@ namespace DNDS
             std::copy(r.cbegin(), r.cend(), __p_indices);
         }
 
-        DNDS_DEVICE_CALLABLE index *begin() { return __p_indices; }
-        DNDS_DEVICE_CALLABLE index *end() { return __p_indices + __Row_size; } // past-end
-        DNDS_DEVICE_CALLABLE index *cbegin() const { return __p_indices; }
-        DNDS_DEVICE_CALLABLE index *cend() const { return __p_indices + __Row_size; } // past-end
+        DNDS_DEVICE_CALLABLE index_T *begin() { return __p_indices; }
+        DNDS_DEVICE_CALLABLE index_T *end() { return __p_indices + __Row_size; } // past-end
+        DNDS_DEVICE_CALLABLE index_T *cbegin() const { return __p_indices; }
+        DNDS_DEVICE_CALLABLE index_T *cend() const { return __p_indices + __Row_size; } // past-end
         DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize size() const { return __Row_size; }
     };
 }

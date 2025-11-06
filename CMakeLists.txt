@@ -571,6 +571,7 @@ if(UNIX OR MINGW)
     add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=177>) # declared but never referenced
     add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=2417>)
     add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+    add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>)
 
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
         if (DNDS_USE_OMP)

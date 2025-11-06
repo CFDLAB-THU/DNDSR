@@ -76,12 +76,12 @@ namespace DNDS
     template <DeviceBackend B, class T, rowsize _row_size, rowsize _row_max, rowsize _align>
     auto ArrayDeviceView_build(
         index n_size, T *n_data, index n_data_size,
-        index *n_rowstart, index n_rowstart_size,
-        rowsize *n_rowsizes, index n_rowsizes_size,
+        const index *n_rowstart, index n_rowstart_size,
+        const rowsize *n_rowsizes, index n_rowsizes_size,
         index n_row_size_dynamic,
         T *n_data_device,
-        index *n_rowstart_device,
-        rowsize *n_rowsizes_device)
+        const index *n_rowstart_device,
+        const rowsize *n_rowsizes_device)
     {
         DNDS_assert(B != DeviceBackend::Unknown);
         DNDS_assert_info(B != DeviceBackend::Custom1, "unimplemented");

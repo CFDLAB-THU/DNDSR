@@ -121,31 +121,52 @@ def test_basic():
 
     fv.BuildUDof_D(u, nvars)
     fv.BuildUGrad_3xD(grad_u, nvars)
-
-    for iCell in range(mesh.NumCell()):
-        x = fv.GetCellBary(iCell)
-        ui = np.array(u[iCell], copy=False)
-        ui[:] = x[0] + np.sin(x[1] * np.pi)
+    u.setConstant(1.23)
+    # for iCell in range(mesh.NumCell()):
+    #     x = fv.GetCellBary(iCell)
+    #     ui = np.array(u[iCell], copy=False)
+    #     ui[:] = x[0] + np.sin(x[1] * np.pi)
     u.trans.startPersistentPull()
     u.trans.waitPersistentPull()
 
-    u.to_device("CUDA")
-    grad_u.to_device("CUDA")
-
     def test_CUDA():
-        CFV.finiteVolumeCellOpTest_main_CUDA(fv, u, grad_u)
+        CFV.finiteVolumeCellOpTest_main_CUDA(
+            fv,
+            u,
+            grad_u,
+            {"threadsPerBlock": 32},
+        )
 
     def test_Host():
         CFV.finiteVolumeCellOpTest_main_Host(fv, u, grad_u)
 
-    executions, total_time, avg_time = time_function_until_limit(test_Host, 1.0, 100000)
-    print("--- HOST ---")
-    print(f"[{executions}] times, avg [{avg_time:.4g}] s")
+    grad_u.setConstant(0)
+    if mpi.rank == 0:
+        print(f"norm: {grad_u.norm2()}")
+    executions, total_time, avg_time = time_function_until_limit(test_Host, 5.0, 100000)
+    if mpi.rank == 0:
+        print("--- HOST ---")
+        print(f"[{executions}] times, avg [{avg_time:.4g}] s")
+        print(f"norm: {grad_u.norm2()}")
     avg_time_host = avg_time
-    executions, total_time, avg_time = time_function_until_limit(test_CUDA, 1.0, 100000)
-    print("--- CUDA ---")
-    print(f"[{executions}] times, avg [{avg_time:.4g}] s")
-    print(f" -- acc [{avg_time_host / avg_time:.4g}]")
+
+    grad_u.setConstant(0)
+    grad_u_norm2 = grad_u.norm2()
+    print(f"norm: {grad_u_norm2}")
+
+    u.to_device("CUDA")
+    grad_u.to_device("CUDA")
+    executions, total_time, avg_time = time_function_until_limit(test_CUDA, 5.0, 100000)
+    if mpi.rank == 0:
+        print("--- CUDA ---")
+        print(f"[{executions}] times, avg [{avg_time:.4g}] s")
+    
+    # grad_u.to_host()
+    grad_u.setConstant(1.0)
+    grad_u_norm = grad_u.norm2()
+    if mpi.rank == 0:
+        print(f"norm: {grad_u_norm}")
+        print(f" -- acc [{avg_time_host / avg_time:.4g}]")
 
 
 if __name__ == "__main__":

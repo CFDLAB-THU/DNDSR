@@ -82,7 +82,7 @@ namespace DNDS
     public:
         auto view()
         {
-            return ArrayEigenUniMatrixBatchDeviceView<DeviceBackend::Host, _n_row, _n_col>{
+            return ArrayEigenUniMatrixBatchDeviceView<DeviceBackend::Host, real, _n_row, _n_col>{
                 t_base::view(), _row_dynamic, _col_dynamic, _m_size};
         }
 
@@ -182,10 +182,19 @@ namespace DNDS
         }
 
         template <DeviceBackend B>
-        using t_deviceView = ArrayEigenUniMatrixBatchDeviceView<B, _n_row, _n_col>;
+        using t_deviceView = ArrayEigenUniMatrixBatchDeviceView<B, real, _n_row, _n_col>;
+
+        template <DeviceBackend B>
+        using t_deviceViewConst = ArrayEigenUniMatrixBatchDeviceView<B, const real, _n_row, _n_col>;
 
         template <DeviceBackend B>
         auto deviceView()
+        {
+            return t_deviceView<B>{t_base::template deviceView<B>(), _row_dynamic, _col_dynamic, _m_size};
+        }
+
+        template <DeviceBackend B>
+        auto deviceView() const
         {
             return t_deviceView<B>{t_base::template deviceView<B>(), _row_dynamic, _col_dynamic, _m_size};
         }

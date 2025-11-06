@@ -186,9 +186,9 @@ namespace DNDS
         index _size;
         T *_data = nullptr;
         index _data_size = 0;
-        index *_rowstart = nullptr;
+        const index *_rowstart = nullptr;
         index _rowstart_size = 0;
-        rowsize *_rowsizes = nullptr;
+        const rowsize *_rowsizes = nullptr;
         index _rowsizes_size = 0;
 
         index _row_size_dynamic = 0;
@@ -202,8 +202,8 @@ namespace DNDS
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayView, self_type)
 
         DNDS_DEVICE_CALLABLE ArrayView(index n_size, T *n_data, index n_data_size,
-                                       index *n_rowstart, index n_rowstart_size,
-                                       rowsize *n_rowsizes, index n_rowsizes_size,
+                                       const index *n_rowstart, index n_rowstart_size,
+                                       const rowsize *n_rowsizes, index n_rowsizes_size,
                                        index n_row_size_dynamic,
                                        bool n_isCompressed, t_dataUncompressed *n_p_dataUncompressed)
             : _size(n_size),
@@ -420,6 +420,22 @@ namespace DNDS
         const T *operator[](index iRow) const
         {
             return static_cast<const T *>(const_cast<self_type *>(this)->operator[](iRow));
+        }
+
+        DNDS_DEVICE_CALLABLE T *data()
+        {
+            if constexpr (_dataLayout == CSR)
+                DNDS_HD_assert_infof(this->_isCompressed, "CSR must be compressed to get data pointer");
+            return get_rowstart_pointer_compressed(0);
+        }
+
+        DNDS_DEVICE_CALLABLE size_t DataSize() const
+        {
+            if (this->Size() == 0)
+                return 0;
+            if constexpr (_dataLayout == CSR)
+                DNDS_HD_assert_infof(this->_isCompressed, "CSR must be compressed to get DataSize()");
+            return _data_size;
         }
     };
 }

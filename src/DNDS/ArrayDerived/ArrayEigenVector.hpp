@@ -10,11 +10,13 @@ namespace DNDS
     class ArrayEigenVector : public ParArray<real, _vec_size, _row_max, _align>
     {
     public:
-        template <DeviceBackend B>
-        using t_deviceView = ArrayEigenVectorDeviceView<B, _vec_size, _row_max, _align>;
-
         using t_base = ParArray<real, _vec_size, _row_max, _align>;
         using t_base::t_base;
+
+        template <DeviceBackend B>
+        using t_deviceView = ArrayEigenVectorDeviceView<B, real, _vec_size, _row_max, _align>;
+        template <DeviceBackend B>
+        using t_deviceViewConst = ArrayEigenVectorDeviceView<B, const real, _vec_size, _row_max, _align>;
 
         using t_EigenVector = typename t_deviceView<DeviceBackend::Host>::t_EigenVector;
         using t_EigenMap = typename t_deviceView<DeviceBackend::Host>::t_EigenMap;
@@ -39,7 +41,13 @@ namespace DNDS
         template <DeviceBackend B>
         auto deviceView()
         {
-            return t_deviceView<B>{t_base::template deviceView<B>()};
+            return t_deviceView<B>{this->t_base::template deviceView<B>()};
+        }
+
+        template <DeviceBackend B>
+        auto deviceView() const
+        {
+            return t_deviceViewConst<B>{this->t_base::template deviceView<B>()};
         }
     };
 }
