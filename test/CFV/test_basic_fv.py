@@ -9,7 +9,13 @@ import time
 
 
 def time_function_until_limit(
-    func, time_limit=1.0, max_executions=None, *args, **kwargs
+    func,
+    time_limit=1.0,
+    max_executions=None,
+    iter_pack=1,
+    report=None,
+    *args,
+    **kwargs,
 ):
     if time_limit <= 0:
         raise ValueError("time_limit must be positive")
@@ -19,17 +25,24 @@ def time_function_until_limit(
     executions = 0
     start_time = time.perf_counter()
 
+    reportTime = 1
+
     while True:
         # Check if we've hit the max executions
         if max_executions is not None and executions >= max_executions:
             break
 
         # Execute the function
-        func(*args, **kwargs)
-        executions += 1
+        for _ in range(iter_pack):
+            func(*args, **kwargs)
+        executions += iter_pack
 
         # Check elapsed time
         elapsed = time.perf_counter() - start_time
+        if elapsed >= reportTime:
+            reportTime += 1
+            if report is not None:
+                report(elapsed, executions)
         if elapsed >= time_limit:
             break
 
@@ -111,9 +124,6 @@ def test_basic():
         print(f"Bytes     : {nB:.4g} MB")
         print(f"Bytes mesh: {nBMesh:.4g} MB")
 
-    mesh.to_device("CUDA")
-    fv.to_device("CUDA")
-
     u = CFV.tUDof_D()
     grad_u = CFV.tUGrad_3xD()
 
@@ -122,10 +132,10 @@ def test_basic():
     fv.BuildUDof_D(u, nvars)
     fv.BuildUGrad_3xD(grad_u, nvars)
     u.setConstant(1.23)
-    # for iCell in range(mesh.NumCell()):
-    #     x = fv.GetCellBary(iCell)
-    #     ui = np.array(u[iCell], copy=False)
-    #     ui[:] = x[0] + np.sin(x[1] * np.pi)
+    for iCell in range(mesh.NumCell()):
+        x = fv.GetCellBary(iCell)
+        ui = np.array(u[iCell], copy=False)
+        ui[:] = x[0] + np.sin(x[1] * np.pi)
     u.trans.startPersistentPull()
     u.trans.waitPersistentPull()
 
@@ -140,13 +150,21 @@ def test_basic():
     def test_Host():
         CFV.finiteVolumeCellOpTest_main_Host(fv, u, grad_u)
 
+    print("AAA0")
     grad_u.setConstant(0)
+    print("AAA1")
     if mpi.rank == 0:
         print(f"norm: {grad_u.norm2()}")
-    executions, total_time, avg_time = time_function_until_limit(test_Host, 5.0, 100000)
+    executions, total_time, avg_time = time_function_until_limit(
+        test_Host,
+        5.0,
+        100000,
+        iter_pack=10,
+        report=lambda t, n: print(f" Host iter [{n:8}] time [{t:10.4e}]"),
+    )
     if mpi.rank == 0:
         print("--- HOST ---")
-        print(f"[{executions}] times, avg [{avg_time:.4g}] s")
+        print(f"[{executions}] times, avg [{avg_time:8.04e}] s")
         print(f"norm: {grad_u.norm2()}")
     avg_time_host = avg_time
 
@@ -154,15 +172,22 @@ def test_basic():
     grad_u_norm2 = grad_u.norm2()
     print(f"norm: {grad_u_norm2}")
 
+    mesh.to_device("CUDA")
+    fv.to_device("CUDA")
     u.to_device("CUDA")
     grad_u.to_device("CUDA")
-    executions, total_time, avg_time = time_function_until_limit(test_CUDA, 5.0, 100000)
+    executions, total_time, avg_time = time_function_until_limit(
+        test_CUDA,
+        5.0,
+        100000,
+    iter_pack=10,
+        report=lambda t, n: print(f" CUDA iter [{n:8}] time [{t:8.04e}]"),
+    )
     if mpi.rank == 0:
         print("--- CUDA ---")
         print(f"[{executions}] times, avg [{avg_time:.4g}] s")
-    
+
     # grad_u.to_host()
-    grad_u.setConstant(1.0)
     grad_u_norm = grad_u.norm2()
     if mpi.rank == 0:
         print(f"norm: {grad_u_norm}")

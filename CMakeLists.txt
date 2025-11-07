@@ -177,6 +177,7 @@ endif()
 if(DNDS_USE_CUDA)
     set(CMAKE_CUDA_STANDARD 17) 
     set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+    # set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
     enable_language(CUDA)
     add_compile_definitions(DNDS_USE_CUDA)
 
@@ -187,7 +188,7 @@ if(DNDS_USE_CUDA)
         message(FATAL_ERROR "CUDA toolkit required but not found")
     endif()
     # !
-    set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE} -O2 -Xcompiler=-O3" )
+    set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE} -Xcompiler=-O3" )
 endif()
 
 if(DNDS_USE_FULL_TEMPLATE_TRACE)
@@ -474,7 +475,8 @@ message(DEBUG "DNDS_EXTERNAL_LIBS_REAL:  ${DNDS_EXTERNAL_LIBS_REAL}")
 
 list(APPEND DNDS_EXTERNAL_LIBS fmt::fmt)
 if (DNDS_USE_CUDA)
-    list(APPEND DNDS_EXTERNAL_LIBS CUDA::cudart)
+    #! don't do this, could cause linking both shared/static cudart
+    # list(APPEND DNDS_EXTERNAL_LIBS CUDA::cudart)
 endif()
 
 if(DNDS_EXTERNAL_INCLUDE_SUPERLU)
@@ -782,10 +784,15 @@ cgal_AABBTest
 mpi_test
 )
 
+set(DNDS_APPS_EXTERNAL_CU
+cuda_test
+)
+
 set(DNDS_APPS_DNDS
 array_Test
 arrayTrans_test
 arrayDerived_test
+arrayDOF_test
 serializerJSON_Test
 serializerH5_Test
 stdPowerTest
@@ -795,6 +802,7 @@ objectPool_test
 set(DNDS_APPS_DNDS_CU
 array_cuda_Test
 array_cuda_Bench
+arrayDOF_test_cuda
 )
 
 set(DNDS_APPS_Geom
@@ -881,7 +889,10 @@ endfunction(ADD_EXE_APP)
 ## Mind That the TOPOLOGICAL ORDER should be obeyed!
 ADD_EXE_APP("${DNDS_APPS_EXTERNAL}" "app/external" ";" ON cpp)
 ADD_EXE_APP("${DNDS_APPS_DNDS}" "app/DNDS" "dnds;" ON cpp)
-ADD_EXE_APP("${DNDS_APPS_DNDS_CU}" "app/DNDS" "dnds;" ON cu)
+if(DNDS_USE_CUDA)
+    ADD_EXE_APP("${DNDS_APPS_EXTERNAL_CU}" "app/external" ";" ON cu)
+    ADD_EXE_APP("${DNDS_APPS_DNDS_CU}" "app/DNDS" "dnds;" ON cu)
+endif()
 ADD_EXE_APP("${DNDS_APPS_Solver}" "app/Solver" "dnds;" ON cpp)
 ADD_EXE_APP("${DNDS_APPS_Geom}" "app/Geom" "geom;dnds;" ON cpp)
 ADD_EXE_APP("${DNDS_APPS_CFV}" "app/CFV" "cfv;geom;dnds;" ON cpp)

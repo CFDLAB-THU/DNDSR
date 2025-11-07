@@ -7,6 +7,7 @@
 #include <thrust/transform.h>
 #include <thrust/execution_policy.h>
 #include <thrust/iterator/zip_iterator.h>
+#include <thrust/device_vector.h>
 
 namespace DNDS
 {
@@ -432,13 +433,13 @@ namespace DNDS
         thrust::device_ptr<real> d_self_son(self_view.son.data());
         index self_son_d_size = size_t_to_signed<index>(self_view.son.DataSize());
 
-        std::cout << "HERE BOONORM " << std::endl;
-        std::cout << d_self_father << std::endl;
-        std::cout << d_self_father + 1 << std::endl;
-        std::cout << self_father_d_size << std::endl;
-        double v{-1};
-        thrust::copy_n(d_self_father + self_father_d_size - 1, 1, &v);
-        std::cout << v << std::endl;
+        // std::cout << "HERE BOONORM " << std::endl;
+        // std::cout << d_self_father << std::endl;
+        // std::cout << d_self_father + 1 << std::endl;
+        // std::cout << self_father_d_size << std::endl;
+        // double v{-1};
+        // thrust::copy_n(d_self_father + self_father_d_size - 1, 1, &v);
+        // std::cout << v << std::endl;
 
         sqrSum = thrust::transform_reduce(
             d_self_father, d_self_father + self_father_d_size,

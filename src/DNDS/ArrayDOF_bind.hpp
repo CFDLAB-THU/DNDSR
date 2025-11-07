@@ -57,28 +57,28 @@ namespace DNDS
                  { self.setConstant(R); }, py::arg("R"));
         Arr_
             .def("__iadd__", [](TArr &self, const TArr &R)
-                 { self += R; }, py::arg("R"))
+                 { self += R;return self; }, py::arg("R"))
             .def("__iadd__", [](TArr &self, real R)
-                 { self += R; }, py::arg("R"));
+                 { self += R;return self; }, py::arg("R"));
         Arr_.def("__isub__", [](TArr &self, const TArr &R)
-                 { self -= R; }, py::arg("R"));
+                 { self -= R;return self; }, py::arg("R"));
         Arr_
             .def("__imul__", [](TArr &self, real R)
-                 { self *= R; }, py::arg("R"))
+                 { self *= R;return self; }, py::arg("R"))
             .def("__imul__", [](TArr &self, const Eigen::Ref<const t_element_mat> &R)
-                 { self *= R; }, py::arg("R"))
+                 { self *= R;return self; }, py::arg("R"))
             .def("__imul__", [](TArr &self, const TArr &R)
-                 { self *= R; }, py::arg("R"));
+                 { self *= R;return self; }, py::arg("R"));
 
         if constexpr (!(n_m == 1 && n_n == 1))
         {
             Arr_
                 .def("__imul__", [](TArr &self, ArrayDof<1, 1> &R)
-                     { self *= R; }, py::arg("R"));
+                     { self *= R; return self; }, py::arg("R"));
         }
         Arr_
             .def("__div__", [](TArr &self, const TArr &R)
-                 { self /= R; }, py::arg("R"));
+                 { self /= R;return self; }, py::arg("R"));
 
         Arr_
             .def("assign_value", [](TArr &self, const TArr &R)
