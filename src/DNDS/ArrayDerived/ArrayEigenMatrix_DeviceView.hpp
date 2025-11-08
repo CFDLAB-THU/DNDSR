@@ -28,9 +28,6 @@ namespace DNDS
                                                               __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
                                                               _align>
     {
-        const rowsize *_mat_nRows = nullptr;
-        rowsize _mat_nRow_dynamic = 0;
-
     public:
         using t_base = ArrayDeviceView<B, real_T,
                                        __OneMatGetRowSize<_mat_ni, _mat_nj>(),
@@ -39,11 +36,22 @@ namespace DNDS
         // using t_base::t_base;
         using t_self = ArrayEigenMatrixDeviceView<B, real_T, _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>;
 
+    protected:
+        std::conditional_t<_mat_ni == DynamicSize, rowsize, EmptyNoDefault> _mat_nRow_dynamic = 0;
+        std::conditional_t<_mat_ni == NonUniformSize, const rowsize *, EmptyNoDefault> _mat_nRows = nullptr;
+
+    public:
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayEigenMatrixDeviceView, t_self)
 
         DNDS_DEVICE_CALLABLE ArrayEigenMatrixDeviceView(const t_base &base_view,
                                                         const rowsize *n_mat_nRows, rowsize n_mat_nRow_dynamic)
-            : t_base(base_view), _mat_nRows(n_mat_nRows), _mat_nRow_dynamic(n_mat_nRow_dynamic) {};
+            : t_base(base_view), _mat_nRows(n_mat_nRows), _mat_nRow_dynamic(n_mat_nRow_dynamic)
+        {
+            if constexpr (_mat_ni != NonUniformSize)
+                DNDS_HD_assert(n_mat_nRows == nullptr);
+            if constexpr (_mat_ni != DynamicSize)
+                DNDS_HD_assert(n_mat_nRow_dynamic == 0);
+        }
 
         using t_EigenMatrix = Eigen::Matrix<std::remove_cv_t<real_T>, RowSize_To_EigenSize(_mat_ni), RowSize_To_EigenSize(_mat_nj)>;
         using t_EigenMap_const = Eigen::Map<const t_EigenMatrix, Eigen::Unaligned>; // default no buffer align and stride

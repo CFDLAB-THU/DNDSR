@@ -171,6 +171,7 @@ def test_basic():
     grad_u.setConstant(0)
     grad_u_norm2 = grad_u.norm2()
     print(f"norm: {grad_u_norm2}")
+    print(grad_u.componentWiseNorm1())
 
     mesh.to_device("CUDA")
     fv.to_device("CUDA")

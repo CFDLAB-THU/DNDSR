@@ -245,7 +245,7 @@ namespace DNDS
         DNDS_assert(self.father && self.son);
         t_element_mat minLocal, min;
         //! let it fail if size not compatible
-        if (self.father->Size() || (n_m >= 0 && n_n >= 0))
+        if (self.father->Size() || (n_m >= 0 && n_n >= 0) || (self.son->Size() == 0))
             minLocal.resize(self.father->MatRowSize(0), self.father->MatColSize(0));
         else if (self.son->Size())
             minLocal.resize(self.son->MatRowSize(0), self.son->MatColSize(0));

@@ -162,6 +162,26 @@ namespace DNDS
         }
     };
 
+    struct Empty
+    {
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(Empty, Empty)
+        template <class T>
+        DNDS_DEVICE_CALLABLE Empty &operator=(T v) { return *this; };
+        template <class T>
+        DNDS_DEVICE_CALLABLE Empty(T v) {}
+    };
+
+    struct EmptyNoDefault
+    {
+        DNDS_DEVICE_CALLABLE EmptyNoDefault(EmptyNoDefault &&v) = default;
+        DNDS_DEVICE_CALLABLE EmptyNoDefault(const EmptyNoDefault &v) = default;
+        DNDS_DEVICE_CALLABLE EmptyNoDefault &operator=(const EmptyNoDefault &) = default;
+        template <class T>
+        DNDS_DEVICE_CALLABLE EmptyNoDefault &operator=(T v) { return *this; };
+        template <class T>
+        DNDS_DEVICE_CALLABLE EmptyNoDefault(T v) {}
+    };
+
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ArrayView : public ArrayLayout<T, _row_size, _row_max, _align>
     {
@@ -186,17 +206,17 @@ namespace DNDS
         index _size;
         T *_data = nullptr;
         index _data_size = 0;
-        const index *_rowstart = nullptr;
-        index _rowstart_size = 0;
-        const rowsize *_rowsizes = nullptr;
-        index _rowsizes_size = 0;
-
-        index _row_size_dynamic = 0;
+        std::conditional_t<_dataLayout == CSR, const index *,
+                           std::conditional_t<_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax,
+                                              const rowsize *, EmptyNoDefault>>
+            _rowstart_or_rowsize = nullptr;
 
         bool _isCompressed = true;
+        std::conditional_t<_dataLayout == TABLE_Max || _dataLayout == TABLE_Fixed, rowsize, EmptyNoDefault>
+            _row_size_dynamic = 0;
 
         using t_dataUncompressed = std::vector<std::vector<T>>;
-        t_dataUncompressed *_p_dataUncompressed;
+        std::conditional_t<_dataLayout == CSR, t_dataUncompressed *, EmptyNoDefault> _p_dataUncompressed = nullptr;
 
     public:
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayView, self_type)
@@ -204,15 +224,41 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE ArrayView(index n_size, T *n_data, index n_data_size,
                                        const index *n_rowstart, index n_rowstart_size,
                                        const rowsize *n_rowsizes, index n_rowsizes_size,
-                                       index n_row_size_dynamic,
+                                       rowsize n_row_size_dynamic,
                                        bool n_isCompressed, t_dataUncompressed *n_p_dataUncompressed)
             : _size(n_size),
               _data(n_data), _data_size(n_data_size),
-              _rowstart(n_rowstart), _rowstart_size(n_rowstart_size),
-              _rowsizes(n_rowsizes), _rowsizes_size(n_rowsizes_size),
+              _isCompressed(n_isCompressed),
               _row_size_dynamic(n_row_size_dynamic),
-              _isCompressed(n_isCompressed), _p_dataUncompressed(n_p_dataUncompressed)
+              _p_dataUncompressed(n_p_dataUncompressed)
         {
+            if (_dataLayout != CSR || isCompressed())
+                DNDS_HD_assert(n_p_dataUncompressed == nullptr);
+
+            if (!(_dataLayout == TABLE_Max || _dataLayout == TABLE_Fixed))
+                DNDS_HD_assert(n_row_size_dynamic == 0);
+            if constexpr (_dataLayout == CSR)
+            {
+                _rowstart_or_rowsize = n_rowstart;
+                DNDS_HD_assert(n_rowsizes == nullptr);
+                if (_rowstart_or_rowsize)
+                    DNDS_HD_assert(n_rowstart_size == _size + 1);
+            }
+            if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
+            {
+                _rowstart_or_rowsize = n_rowsizes;
+                DNDS_HD_assert(n_rowstart == nullptr);
+                DNDS_HD_assert(n_rowsizes_size == _size);
+                DNDS_HD_assert(n_rowsizes);
+            }
+        }
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] bool isCompressed() const
+        {
+            if constexpr (_dataLayout == CSR)
+                return _isCompressed;
+            else
+                return true;
         }
 
         DNDS_DEVICE_CALLABLE [[nodiscard]] index Size() const { return _size; }
@@ -235,7 +281,7 @@ namespace DNDS
         // to be device-callable
         DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize RowSize_Compressed(index iRow) const
         {
-            DNDS_HD_assert(_isCompressed);
+            DNDS_HD_assert(isCompressed());
             if constexpr (_dataLayout == TABLE_Fixed)
                 return _row_size_dynamic;
             else if constexpr (_dataLayout == TABLE_StaticFixed)
@@ -243,18 +289,18 @@ namespace DNDS
             DNDS_HD_assert_infof(iRow < _size && iRow >= 0, "query position out of range");
             if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax) // TABLE with Max
             {
-                DNDS_HD_assert_infof(_rowsizes, "_rowsizes invalid"); // TABLE with Max must have a RowSizes
-                DNDS_HD_assert_infof(iRow >= 0 && iRow < _rowsizes_size,
-                                     "iRow invalid: %lld / %lld", iRow, _rowsizes_size);
-                return _rowsizes[iRow]; //! unsafe
+                DNDS_HD_assert_infof(_rowstart_or_rowsize, "_rowsizes invalid"); // TABLE with Max must have a RowSizes
+                DNDS_HD_assert_infof(iRow >= 0 && iRow < _size,
+                                     "iRow invalid: %lld / %lld", iRow, _size);
+                return _rowstart_or_rowsize[iRow]; //! unsafe
             }
             else if constexpr (_dataLayout == CSR)
             {
-                DNDS_HD_assert_infof(_rowstart, "_rowstart invalid");
-                DNDS_HD_assert_infof(iRow >= 0 && iRow + 1 < _rowstart_size,
-                                     "iRow invalid: %lld / %lld", iRow, _rowstart_size);
-                index pDiff = _rowstart[iRow + 1] - _rowstart[iRow]; //! unsafe
-                DNDS_HD_assert(pDiff < INT32_MAX);                   // overflow
+                DNDS_HD_assert_infof(_rowstart_or_rowsize, "_rowstart invalid");
+                DNDS_HD_assert_infof(iRow >= 0 && iRow + 1 < _size + 1,
+                                     "iRow invalid: %lld / %lld", iRow, _size);
+                index pDiff = _rowstart_or_rowsize[iRow + 1] - _rowstart_or_rowsize[iRow]; //! unsafe
+                DNDS_HD_assert(pDiff < INT32_MAX);                                         // overflow
                 return static_cast<rowsize>(pDiff);
             }
         }
@@ -265,10 +311,11 @@ namespace DNDS
         {
             if constexpr (_dataLayout == CSR)
             {
-                if (_isCompressed)
+                if (isCompressed())
                     return this->RowSize_Compressed(iRow);
                 else
                 {
+                    DNDS_HD_assert(_p_dataUncompressed);
                     auto rs_cur = (*_p_dataUncompressed).at(iRow).size(); //! unsafe
                     return static_cast<rowsize>(rs_cur);
                 }
@@ -309,7 +356,7 @@ namespace DNDS
     protected:
         DNDS_DEVICE_CALLABLE const T &at_compressed(index iRow, rowsize iCol) const
         {
-            DNDS_HD_assert(_isCompressed);
+            DNDS_HD_assert(isCompressed());
             DNDS_HD_assert_infof(iRow < _size && iRow >= 0,
                                  "query position i[%lld] out of range [0, %lld)",
                                  iRow, _size);
@@ -327,9 +374,9 @@ namespace DNDS
                 pos = iRow * _row_size_dynamic + iCol;
             else if constexpr (_dataLayout == CSR)
             {
-                DNDS_HD_assert_infof(0 <= iRow && iRow + 1 < _rowstart_size,
-                                     "iRow invalid, %lld / %lld", iRow, _rowstart_size);
-                pos = _rowstart[iRow] + iCol; //! unsafe
+                DNDS_HD_assert_infof(0 <= iRow && iRow + 1 < _size + 1,
+                                     "iRow invalid, %lld / %lld", iRow, _size);
+                pos = _rowstart_or_rowsize[iRow] + iCol; //! unsafe
             }
             else
                 DNDS_HD_assert_infof(false, "invalid call");
@@ -344,7 +391,7 @@ namespace DNDS
         {
             if constexpr (_dataLayout == CSR)
             {
-                if (_isCompressed)
+                if (isCompressed())
                     return this->at_compressed(iRow, iCol);
                 else
                     return (*_p_dataUncompressed).at(iRow).at(iCol); //! unsafe
@@ -366,7 +413,7 @@ namespace DNDS
     protected:
         DNDS_DEVICE_CALLABLE T *get_rowstart_pointer_compressed(index iRow)
         {
-            DNDS_HD_assert(_isCompressed);
+            DNDS_HD_assert(isCompressed());
             DNDS_HD_assert_infof(iRow <= _size && iRow >= 0, "query position i out of range");
             if constexpr (_dataLayout == TABLE_StaticFixed)
                 return _data + iRow * rs;
@@ -378,9 +425,9 @@ namespace DNDS
                 return _data + iRow * _row_size_dynamic;
             else if constexpr (_dataLayout == CSR)
             {
-                DNDS_HD_assert_infof(0 <= iRow && iRow < _rowstart_size,
-                                     "iRow invalid, %lld / %lld", iRow, _rowstart_size);
-                return _data + _rowstart[iRow]; //! unsafe
+                DNDS_HD_assert_infof(0 <= iRow && iRow < _size + 1,
+                                     "iRow invalid, %lld / %lld", iRow, _size);
+                return _data + _rowstart_or_rowsize[iRow]; //! unsafe
             }
             else
             {
@@ -400,7 +447,7 @@ namespace DNDS
         {
             if constexpr (_dataLayout == CSR)
             {
-                if (_isCompressed)
+                if (isCompressed())
                     return this->get_rowstart_pointer_compressed(iRow);
                 else if (_size == 0)
                 {
@@ -425,7 +472,7 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE T *data()
         {
             if constexpr (_dataLayout == CSR)
-                DNDS_HD_assert_infof(this->_isCompressed, "CSR must be compressed to get data pointer");
+                DNDS_HD_assert_infof(this->isCompressed(), "CSR must be compressed to get data pointer");
             return get_rowstart_pointer_compressed(0);
         }
 
@@ -434,8 +481,144 @@ namespace DNDS
             if (this->Size() == 0)
                 return 0;
             if constexpr (_dataLayout == CSR)
-                DNDS_HD_assert_infof(this->_isCompressed, "CSR must be compressed to get DataSize()");
+                DNDS_HD_assert_infof(this->isCompressed(), "CSR must be compressed to get DataSize()");
             return _data_size;
         }
+
+        DNDS_DEVICE_CALLABLE bool operator==(const self_type &R) const
+        {
+            return R._data == _data;
+        }
+
+        class RowView
+        {
+            T *ptr = nullptr;
+            rowsize row_size = 0;
+
+        public:
+            // DNDS_DEVICE_TRIVIAL_COPY_DEFINE(AdjacencyRow, AdjacencyRow)
+
+            DNDS_DEVICE_CALLABLE RowView() = default;
+            DNDS_DEVICE_CALLABLE RowView(const RowView &) = default;
+            DNDS_DEVICE_CALLABLE ~RowView() = default;
+            DNDS_DEVICE_CALLABLE RowView(T *n_ptr, rowsize siz) : ptr(n_ptr), row_size(siz) {} // default actually
+
+            DNDS_DEVICE_CALLABLE T &operator[](rowsize j)
+            {
+                DNDS_assert(j >= 0 && j < row_size);
+                return ptr[j];
+            }
+
+            DNDS_DEVICE_CALLABLE T operator[](rowsize j) const
+            {
+                DNDS_assert(j >= 0 && j < row_size);
+                return ptr[j];
+            }
+
+            operator std::vector<T>() const // copies to a new std::vector<index>
+            {
+                return {ptr, ptr + row_size};
+            }
+
+            void operator=(const std::vector<index> &r)
+            {
+                DNDS_assert(row_size == r.size());
+                std::copy(r.begin(), r.end(), ptr);
+            }
+
+            DNDS_DEVICE_CALLABLE void assign_value(const RowView &r)
+            {
+                DNDS_assert(row_size == r.size());
+                std::copy(r.cbegin(), r.cend(), ptr);
+            }
+
+            DNDS_DEVICE_CALLABLE T *begin() { return ptr; }
+            DNDS_DEVICE_CALLABLE T *end() { return ptr + row_size; } // past-end
+            DNDS_DEVICE_CALLABLE T *cbegin() const { return ptr; }
+            DNDS_DEVICE_CALLABLE T *cend() const { return ptr + row_size; } // past-end
+            DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize size() const { return row_size; }
+        };
     };
+
+    template <class Derived>
+    class ArrayIteratorBase
+    {
+    protected:
+        index iRow = UnInitIndex;
+
+    public:
+        using difference_type = std::ptrdiff_t;
+        auto getView() const
+        {
+            auto dthis = static_cast<const Derived *>(this);
+            return dthis->getView();
+        }
+
+        ArrayIteratorBase(index n_iRow) : iRow(n_iRow)
+        {
+            auto dthis = static_cast<Derived *>(this);
+            DNDS_HD_assert(iRow >= -1 && iRow <= getView().Size());
+        }
+
+        DNDS_DEVICE_CALLABLE index RowSize() const { return getView().RowSize(iRow); }
+
+        DNDS_DEVICE_CALLABLE Derived &operator++()
+        {
+            auto dthis = static_cast<Derived *>(this);
+            iRow = std::min(iRow + 1, getView().Size());
+            return *this;
+        }
+
+        DNDS_DEVICE_CALLABLE Derived operator++(int)
+        {
+            auto tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        DNDS_DEVICE_CALLABLE Derived &operator--()
+        {
+            iRow = std::max(iRow - 1, index(-1));
+            return *this;
+        }
+
+        DNDS_DEVICE_CALLABLE Derived operator--(int)
+        {
+            auto tmp = *this;
+            --(*this);
+            return tmp;
+        }
+
+        DNDS_DEVICE_CALLABLE Derived &operator+=(difference_type n)
+        {
+            iRow = std::min(iRow + n, getView().Size());
+            return *this;
+        }
+
+        DNDS_DEVICE_CALLABLE Derived &operator-=(difference_type n)
+        {
+            iRow = std::max(iRow - n, index(-1));
+            return *this;
+        }
+
+        DNDS_DEVICE_CALLABLE Derived operator+(difference_type n) const
+        {
+            return Derived{getView(), std::min(iRow + n, getView().Size())};
+        }
+
+        DNDS_DEVICE_CALLABLE Derived operator-(difference_type n) const
+        {
+            return Derived{getView(), std::max(iRow - n, index(-1))};
+        }
+
+        DNDS_DEVICE_CALLABLE difference_type operator-(const Derived &R) const { return R.iRow - iRow; }
+
+        DNDS_DEVICE_CALLABLE bool operator==(const Derived &R) const { return ((R.getView()) == (this->getView())) && (R.iRow == this->iRow); }
+        DNDS_DEVICE_CALLABLE bool operator!=(const Derived &R) const { return !((*this) == R); }
+        DNDS_DEVICE_CALLABLE bool operator<(const Derived &R) const { return ((R.getView()) == (this->getView())) && (this->iRow < R.iRow); }
+        DNDS_DEVICE_CALLABLE bool operator>=(const Derived &R) const { return ((R.getView()) == (this->getView())) && (this->iRow >= R.iRow); }
+        DNDS_DEVICE_CALLABLE bool operator>(const Derived &R) const { return ((R.getView()) == (this->getView())) && (this->iRow > R.iRow); }
+        DNDS_DEVICE_CALLABLE bool operator<=(const Derived &R) const { return ((R.getView()) == (this->getView())) && (this->iRow <= R.iRow); }
+    };
+
 }

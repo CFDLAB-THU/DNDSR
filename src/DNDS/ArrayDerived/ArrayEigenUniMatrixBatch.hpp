@@ -201,5 +201,71 @@ namespace DNDS
 
         using t_base::to_device;
         using t_base::to_host;
+
+        template <DeviceBackend B>
+        class UniMatrixRowView
+        {
+        protected:
+            t_deviceView<B> view; // todo: optimize so that no need to store whole arrayview?
+            index iRow;
+            rowsize row_size;
+
+        public:
+            DNDS_DEVICE_CALLABLE UniMatrixRowView(const t_deviceView<B> &n_view, index n_iRow, rowsize n_row_size)
+                : view(n_view), iRow(n_iRow), row_size(n_row_size)
+            {
+            }
+
+            DNDS_DEVICE_CALLABLE t_EigenMap operator[](rowsize j)
+            {
+                DNDS_assert(j >= 0 && j < row_size);
+                return view.operator()(iRow, j);
+            }
+
+            DNDS_DEVICE_CALLABLE t_EigenMap_const operator[](rowsize j) const
+            {
+                DNDS_assert(j >= 0 && j < row_size);
+                return view.operator()(iRow, j);
+            }
+        };
+
+        template <DeviceBackend B>
+        class iterator : public ArrayIteratorBase<iterator<B>>
+        {
+        public:
+            using view_type = t_deviceView<B>;
+            using t_base_iter = ArrayIteratorBase<iterator<B>>;
+            using typename t_base_iter::difference_type;
+            using reference = UniMatrixRowView<B>;
+            using iterator_category = std::random_access_iterator_tag;
+
+        protected:
+            view_type view;
+
+        public:
+            auto getView() const { return view; }
+            DNDS_DEVICE_CALLABLE iterator(const iterator &) = default;
+            DNDS_DEVICE_CALLABLE ~iterator() = default;
+            DNDS_DEVICE_CALLABLE iterator(const view_type &n_view, index n_iRow) : view(n_view), t_base_iter(n_iRow)
+            {
+            }
+
+            DNDS_DEVICE_CALLABLE reference operator*()
+            {
+                return {view, this->iRow, this->RowSize(this->iRow)};
+            }
+        };
+
+        template <DeviceBackend B>
+        iterator<B> begin()
+        {
+            return {deviceView<B>(), 0};
+        }
+
+        template <DeviceBackend B>
+        iterator<B> end()
+        {
+            return {deviceView<B>(), this->Size()};
+        }
     };
 }

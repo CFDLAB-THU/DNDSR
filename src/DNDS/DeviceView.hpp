@@ -31,6 +31,7 @@ namespace DNDS
     public:
         using t_base = ArrayView<T, _row_size, _row_max, _align>;
         using t_base::t_base;
+        using typename t_base::RowView;
 
         static DeviceBackend backend() { return DeviceBackend::Host; }
         // everything uses inherited
@@ -45,6 +46,7 @@ namespace DNDS
     public:
         using t_base = ArrayView<T, _row_size, _row_max, _align>;
         using t_base::t_base;
+        using typename t_base::RowView;
 
         using self_type = ArrayDeviceView<
             DeviceBackend::CUDA, T, _row_size, _row_max, _align>;
@@ -78,7 +80,7 @@ namespace DNDS
         index n_size, T *n_data, index n_data_size,
         const index *n_rowstart, index n_rowstart_size,
         const rowsize *n_rowsizes, index n_rowsizes_size,
-        index n_row_size_dynamic,
+        rowsize n_row_size_dynamic,
         T *n_data_device,
         const index *n_rowstart_device,
         const rowsize *n_rowsizes_device)

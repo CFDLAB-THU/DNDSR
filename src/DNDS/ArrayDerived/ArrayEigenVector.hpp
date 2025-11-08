@@ -49,5 +49,41 @@ namespace DNDS
         {
             return t_deviceViewConst<B>{this->t_base::template deviceView<B>()};
         }
+
+        template <DeviceBackend B>
+        class iterator : public ArrayIteratorBase<iterator<B>>
+        {
+        public:
+            using view_type = t_deviceView<B>;
+            using t_base_iter = ArrayIteratorBase<iterator<B>>;
+            using typename t_base_iter::difference_type;
+            using reference = t_EigenMap;
+            using iterator_category = std::random_access_iterator_tag;
+
+        protected:
+            view_type view;
+
+        public:
+            auto getView() const { return view; }
+            DNDS_DEVICE_CALLABLE iterator(const iterator &) = default;
+            DNDS_DEVICE_CALLABLE ~iterator() = default;
+            DNDS_DEVICE_CALLABLE explicit iterator(const view_type &n_view, index n_iRow) : view(n_view), t_base_iter(n_iRow)
+            {
+            }
+
+            DNDS_DEVICE_CALLABLE reference operator*() { return view.operator[](this->iRow); }
+        };
+
+        template <DeviceBackend B>
+        iterator<B> begin()
+        {
+            return {deviceView<B>(), 0};
+        }
+
+        template <DeviceBackend B>
+        iterator<B> end()
+        {
+            return {deviceView<B>(), this->Size()};
+        }
     };
 }

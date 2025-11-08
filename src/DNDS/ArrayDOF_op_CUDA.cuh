@@ -510,13 +510,22 @@ namespace DNDS
         minLocal.resize(self.father->MatRowSize(0), self.father->MatColSize(0));
         minLocal.setConstant(0);
         min = minLocal;
-        index iTop = self.father->Size();
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp declare reduction(EigenVecAdd:t_element_mat : omp_out += omp_in) initializer(omp_priv = omp_orig)
-#    pragma omp parallel for schedule(static) reduction(EigenVecAdd : minLocal)
-#endif
-        for (index i = 0; i < iTop; i++) //*note that only father is included
-            minLocal += (self.operator[](i).array().abs()).matrix();
+
+        DNDS_assert(self.father && self.son);
+        DNDS_assert(self.father->device() == DeviceBackend::CUDA);
+        DNDS_assert(self.son->device() == DeviceBackend::CUDA);
+        ArrayDofDeviceView<DeviceBackend::CUDA, n_m, n_n> self_view = self.template deviceView<DeviceBackend::CUDA>();
+        if (self.Size() == 0)
+            return min;
+
+        thrust::device_ptr<real> d_self_father(self_view.father.data());
+        index self_father_d_size = size_t_to_signed<index>(self_view.father.DataSize());
+        thrust::device_ptr<real> d_self_son(self_view.son.data());
+        index self_son_d_size = size_t_to_signed<index>(self_view.son.DataSize());
+
+        auto self_father_begin = self.father->template begin<DeviceBackend::CUDA>();
+        auto self_father_end = self.father->template end<DeviceBackend::CUDA>();
+
         MPI::Allreduce(minLocal.data(), min.data(), minLocal.size(), DNDS_MPI_REAL, MPI_SUM, self.father->getMPI().comm);
         return min;
     }

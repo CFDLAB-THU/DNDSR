@@ -7,6 +7,9 @@
 namespace DNDS::CFV
 {
     static const DeviceBackend B = DeviceBackend::CUDA;
+    static const auto size_of_fv_view = sizeof(Geom::tAdjPair::t_deviceView<DeviceBackend::CUDA>);
+
+    
     DNDS_GLOBAL void finiteVolumeCellOpTest_run_CUDA_kernel(
         FiniteVolume::t_deviceView<B> *fv,
         tUDof<DynamicSize>::t_deviceView<B> *u,
