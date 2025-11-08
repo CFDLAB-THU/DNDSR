@@ -84,7 +84,7 @@ namespace DNDS
                 return _mat_nj;
             if constexpr (_mat_nj == NonUniformSize)
                 return this->t_base::RowSize(iMat) / this->MatRowSize(iMat);
-            if constexpr (_mat_ni == DynamicSize)
+            if constexpr (_mat_nj == DynamicSize)
                 return this->t_base::RowSize(iMat) / this->MatRowSize(iMat);
             return UnInitRowsize; // invalid branch
         }
