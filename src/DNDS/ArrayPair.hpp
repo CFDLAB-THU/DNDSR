@@ -113,6 +113,8 @@ namespace DNDS
     {
         using t_self = ArrayPair<TArray>;
         using t_arr = TArray;
+        static constexpr bool IsCSR() { return t_arr::IsCSR(); }
+
         ssp<TArray> father;
         ssp<TArray> son;
         using TTrans = typename ArrayTransformerType<TArray>::Type;

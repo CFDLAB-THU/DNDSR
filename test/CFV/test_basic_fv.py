@@ -3,7 +3,7 @@ from DNDSR.Geom.utils import *
 import numpy as np
 import json
 import time
-
+import pprint
 
 import time
 
@@ -75,7 +75,7 @@ def test_basic():
             "translation1": [3, 0, 0],
             "translation2": [0, 3, 0],
         },
-        meshDirectBisect=1,
+        meshDirectBisect=2,
     )
 
     meshBnd, readerBnd = create_bnd_mesh(mesh)
@@ -125,12 +125,16 @@ def test_basic():
         print(f"Bytes mesh: {nBMesh:.4g} MB")
 
     u = CFV.tUDof_D()
-    grad_u = CFV.tUGrad_3xD()
+    grad_u_arrs = [CFV.tUGrad_3xD() for _ in range(2)];
+    grad_u, grad_u1 = grad_u_arrs
 
     nvars = 5
+    test_time = 4.0
+    max_iter = 1000 * 1000 * 1000
 
     fv.BuildUDof_D(u, nvars)
-    fv.BuildUGrad_3xD(grad_u, nvars)
+    for arr in grad_u_arrs:
+        fv.BuildUGrad_3xD(arr, nvars)
     u.setConstant(1.23)
     for iCell in range(mesh.NumCell()):
         x = fv.GetCellBary(iCell)
@@ -144,7 +148,10 @@ def test_basic():
             fv,
             u,
             grad_u,
-            {"threadsPerBlock": 32},
+            {
+                "threadsPerBlock": 256,
+                "method": "pervar",
+            },
         )
 
     def test_Host():
@@ -153,45 +160,51 @@ def test_basic():
     print("AAA0")
     grad_u.setConstant(0)
     print("AAA1")
+    grad_u_norm2 = grad_u.norm2()
     if mpi.rank == 0:
-        print(f"norm: {grad_u.norm2()}")
+        print(f"norm: {grad_u_norm2}")
     executions, total_time, avg_time = time_function_until_limit(
         test_Host,
-        5.0,
-        100000,
-        iter_pack=10,
+        test_time,
+        max_iter,
+        iter_pack=100,
         report=lambda t, n: print(f" Host iter [{n:8}] time [{t:10.4e}]"),
     )
+    grad_u_norm2 = grad_u.norm2()
+    grad_u_cnorm1 = grad_u.componentWiseNorm1()
     if mpi.rank == 0:
         print("--- HOST ---")
         print(f"[{executions}] times, avg [{avg_time:8.04e}] s")
         print(f"norm: {grad_u.norm2()}")
     avg_time_host = avg_time
 
+    grad_u1.assign_value(grad_u)
     grad_u.setConstant(0)
-    grad_u_norm2 = grad_u.norm2()
-    print(f"norm: {grad_u_norm2}")
-    print(grad_u.componentWiseNorm1())
 
     mesh.to_device("CUDA")
     fv.to_device("CUDA")
     u.to_device("CUDA")
     grad_u.to_device("CUDA")
+    grad_u1.to_device("CUDA")
+
     executions, total_time, avg_time = time_function_until_limit(
         test_CUDA,
-        5.0,
-        100000,
-    iter_pack=10,
+        test_time,
+        max_iter,
+        iter_pack=100,
         report=lambda t, n: print(f" CUDA iter [{n:8}] time [{t:8.04e}]"),
     )
+    # grad_u.to_host()
+    grad_u_norm = grad_u.norm2()
+    grad_u_cnorm1 = grad_u.componentWiseNorm1()
+    grad_u1 *= np.ones((3, nvars))
+    grad_u_err_norm = grad_u.norm2(grad_u1)
+    grad_u_err_cnorm1 = grad_u.componentWiseNorm1(grad_u1)
     if mpi.rank == 0:
         print("--- CUDA ---")
         print(f"[{executions}] times, avg [{avg_time:.4g}] s")
-
-    # grad_u.to_host()
-    grad_u_norm = grad_u.norm2()
-    if mpi.rank == 0:
-        print(f"norm: {grad_u_norm}")
+        print(f"norm: {grad_u_norm}, diff_norm: {grad_u_err_norm:.4e}")
+        pprint.pprint(grad_u_err_cnorm1.tolist())
         print(f" -- acc [{avg_time_host / avg_time:.4g}]")
 
 

@@ -63,6 +63,8 @@ namespace DNDS
 
         using t_View = ArrayView<T, _row_size, _row_max, _align>;
 
+        static constexpr bool IsCSR() { return isCSR; }
+
     public:
         //* compressed data
         using t_Data = host_device_vector<value_type>;

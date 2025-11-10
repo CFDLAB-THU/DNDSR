@@ -6,6 +6,7 @@
 #include <fmt/core.h>
 #include <fmt/ostream.h>
 #include <fmt/format.h>
+#include "DeviceStorage.hpp"
 
 namespace DNDS
 {
@@ -161,3 +162,157 @@ struct fmt::formatter<T, Char,
         return fmt::format_to(ctx.out(), "{}", buf);
     }
 };
+
+namespace DNDS
+{
+
+    template <DeviceBackend B, typename t_scalar, int M, int N>
+    class EigenMatrixView
+    {
+    public:
+        static_assert(M >= 0 || M == Eigen::Dynamic, "M needs to be a valid eigen size");
+        static_assert(N >= 0 || N == Eigen::Dynamic, "N needs to be a valid eigen size");
+        using t_matrix = Eigen::Matrix<std::remove_cv_t<t_scalar>, M, N>;
+        using t_map_const = Eigen::Map<const t_matrix>;
+        using t_map = std::conditional_t<std::is_const_v<t_scalar>,
+                                         t_map_const, Eigen::Map<t_matrix>>;
+        using t_self = EigenMatrixView<B, t_scalar, M, N>;
+
+    protected:
+        t_scalar *ptr = nullptr;
+        std::conditional_t<M >= 0, EmptyNoDefault, rowsize> M_dynamic = 0;
+        std::conditional_t<N >= 0, EmptyNoDefault, rowsize> N_dynamic = 0;
+
+    public:
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(EigenMatrixView, t_self)
+
+        DNDS_DEVICE_CALLABLE EigenMatrixView(t_scalar *n_ptr, rowsize m, rowsize n)
+            : ptr(n_ptr), M_dynamic(m), N_dynamic(n)
+        {
+        }
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] t_scalar *data() const
+        {
+            return ptr;
+        }
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize rows() const
+        {
+            if constexpr (M >= 0)
+                return M;
+            else
+                return M_dynamic;
+        }
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize cols() const
+        {
+            if constexpr (N >= 0)
+                return N;
+            else
+                return N_dynamic;
+        }
+
+        DNDS_DEVICE_CALLABLE t_map map()
+        {
+            return {ptr, rows(), cols()};
+        }
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] t_map_const map() const
+        {
+            return {ptr, rows(), cols()};
+        }
+    };
+
+    static_assert(std::is_trivially_copyable_v<EigenMatrixView<DeviceBackend::Host, real, Eigen::Dynamic, Eigen::Dynamic>>);
+
+    template <typename t_scalar, int M, int N>
+    class HostDeviceEigenMatrix
+    {
+    public:
+        using t_matrix = Eigen::Matrix<t_scalar, M, N>;
+        using t_map = Eigen::Map<t_matrix>;
+
+    protected:
+        rowsize M_dynamic = 0;
+        rowsize N_dynamic = 0;
+        host_device_vector<t_scalar> h_data;
+
+    public:
+        HostDeviceEigenMatrix()
+        {
+            h_data.resize(this->size());
+        }
+
+        rowsize rows() const
+        {
+            if constexpr (M >= 0)
+                return M;
+            else
+                return M_dynamic;
+        }
+
+        rowsize cols() const
+        {
+            if constexpr (N >= 0)
+                return N;
+            else
+                return N_dynamic;
+        }
+
+        rowsize size() const
+        {
+            return rows() * cols();
+        }
+
+        void resize(int m, int n)
+        {
+            if constexpr (M >= 0)
+                DNDS_assert(M == m);
+            else
+                M_dynamic = m;
+            if constexpr (N >= 0)
+                DNDS_assert(N == n);
+            else
+                N_dynamic = n;
+            h_data.resize(this->size());
+        }
+
+        t_map map()
+        {
+            return {h_data.data(), this->rows(), this->cols()};
+        }
+
+        template <DeviceBackend B>
+        using t_deviceView = EigenMatrixView<B, t_scalar, M, N>;
+
+        void to_host()
+        {
+            h_data.to_host();
+        }
+
+        void to_device(DeviceBackend B)
+        {
+            h_data.to_device(B);
+        }
+
+        template <DeviceBackend B>
+        t_deviceView<B> deviceView()
+        {
+            DNDS_assert_info(h_data.device() == B || (h_data.device() == DeviceBackend::Unknown && B == DeviceBackend::Host),
+                             "data not on this backend");
+            switch (B)
+            {
+            case DeviceBackend::Unknown:
+            case DeviceBackend::Host:
+                return t_deviceView<B>{h_data.data(), rows(), cols()};
+#ifdef DNDS_USE_CUDA
+            case DeviceBackend::CUDA:
+                return t_deviceView<B>{h_data.dataDevice(), rows(), cols()};
+#endif
+            default:
+                DNDS_assert_info(false, std::string("this device not implemented -- ") + device_backend_name(B));
+                return t_deviceView<B>{h_data.dataDevice(), rows(), cols()};
+            }
+        }
+    };
+}

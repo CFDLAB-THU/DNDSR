@@ -68,7 +68,16 @@ namespace DNDS
 #define DNDS_DEVICE_TRIVIAL_COPY_DEFINE(T, T_Self)               \
     DNDS_DEVICE_CALLABLE T() = default;                          \
     DNDS_DEVICE_CALLABLE T(const T_Self &) = default;            \
+    DNDS_DEVICE_CALLABLE T(T_Self &&) = default;                 \
     DNDS_DEVICE_CALLABLE T &operator=(const T_Self &) = default; \
+    DNDS_DEVICE_CALLABLE T &operator=(T_Self &&) = default;      \
+    DNDS_DEVICE_CALLABLE ~T() = default;
+
+#define DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(T, T_Self) \
+    DNDS_DEVICE_CALLABLE T(const T_Self &) = default;            \
+    DNDS_DEVICE_CALLABLE T(T_Self &&) = default;                 \
+    DNDS_DEVICE_CALLABLE T &operator=(const T_Self &) = default; \
+    DNDS_DEVICE_CALLABLE T &operator=(T_Self &&) = default;      \
     DNDS_DEVICE_CALLABLE ~T() = default;
 
 /***************/
@@ -599,7 +608,40 @@ namespace DNDS::TermColor
     constexpr std::string_view Hidden = "\033[8m";
 
 }
+/*
 
+
+
+
+
+
+
+
+
+*/
+
+namespace DNDS
+{
+    struct Empty
+    {
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(Empty, Empty)
+        template <class T>
+        DNDS_DEVICE_CALLABLE Empty &operator=(T v) { return *this; };
+        template <class T>
+        DNDS_DEVICE_CALLABLE Empty(T v) {}
+    };
+
+    struct EmptyNoDefault
+    {
+        DNDS_DEVICE_CALLABLE EmptyNoDefault(EmptyNoDefault &&v) = default;
+        DNDS_DEVICE_CALLABLE EmptyNoDefault(const EmptyNoDefault &v) = default;
+        DNDS_DEVICE_CALLABLE EmptyNoDefault &operator=(const EmptyNoDefault &) = default;
+        template <class T>
+        DNDS_DEVICE_CALLABLE EmptyNoDefault &operator=(T v) { return *this; };
+        template <class T>
+        DNDS_DEVICE_CALLABLE EmptyNoDefault(T v) {}
+    };
+}
 /*
 
 

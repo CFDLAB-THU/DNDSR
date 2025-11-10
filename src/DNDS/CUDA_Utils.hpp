@@ -1,10 +1,16 @@
 #pragma once
 
+#include "Defines.hpp"
+#include "ArrayBasic.hpp"
+
 #ifdef DNDS_USE_CUDA
 #    include <thrust/device_malloc_allocator.h>
 #    include <thrust/device_malloc.h>
 #    include <thrust/device_free.h>
 #    include <thrust/copy.h>
+#    include <thrust/host_vector.h>
+#    include <thrust/device_vector.h>
+#    include <Eigen/Dense>
 
 namespace DNDS::CUDA
 {

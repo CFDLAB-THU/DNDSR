@@ -266,28 +266,43 @@ namespace DNDS
                 _mat_nRows->to_device(backend);
         }
 
-        template <DeviceBackend B>
+        template <DeviceBackend B, bool is_const = false>
         class iterator : public ArrayIteratorBase<iterator<B>>
         {
         public:
-            using view_type = t_deviceView<B>;
+            using view_type = std::conditional_t<is_const, t_deviceViewConst<B>, t_deviceView<B>>;
             using t_base_iter = ArrayIteratorBase<iterator<B>>;
             using typename t_base_iter::difference_type;
-            using reference = t_EigenMap;
-            using iterator_category = std::random_access_iterator_tag;
+            using typename t_base_iter::pointer;
+
+            using value_type = typename view_type::t_EigenView;
+            using reference = typename view_type::t_EigenView;
+            static_assert(std::is_signed_v<typename iterator::difference_type>);
 
         protected:
             view_type view;
 
         public:
-            auto getView() const { return view; }
-            DNDS_DEVICE_CALLABLE iterator(const iterator &) = default;
-            DNDS_DEVICE_CALLABLE ~iterator() = default;
-            DNDS_DEVICE_CALLABLE iterator(const view_type &n_view, index n_iRow) : view(n_view), t_base_iter(n_iRow)
+            DNDS_DEVICE_CALLABLE auto getView() const { return view; }
+
+            DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(iterator, iterator)
+
+            DNDS_DEVICE_CALLABLE iterator(const view_type &n_view, index n_iRow) : t_base_iter(n_iRow), view(n_view)
             {
+                DNDS_HD_assert(this->iRow >= -1 && this->iRow <= getView().Size());
             }
 
-            DNDS_DEVICE_CALLABLE reference operator*() { return view.operator[](this->iRow); }
+            DNDS_DEVICE_CALLABLE reference operator*() { return view.MatView(this->iRow); }
+
+            DNDS_DEVICE_CALLABLE reference operator*() const { return const_cast<iterator *>(this)->view.MatView(this->iRow); }
+
+            // DNDS_DEVICE_CALLABLE reference operator[](index n) { return view.MatView(this->iRow + n); }
+
+            // DNDS_DEVICE_CALLABLE reference operator[](index n) const { return const_cast<iterator *>(this)->view.MatView(this->iRow + n); }
+            std::string to_string()
+            {
+                return fmt::format("ArrayEigenMatrix::iterator<> iRow[{}] Size[{}]", this->iRow, this->view.Size());
+            }
         };
 
         template <DeviceBackend B>

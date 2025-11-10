@@ -162,26 +162,6 @@ namespace DNDS
         }
     };
 
-    struct Empty
-    {
-        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(Empty, Empty)
-        template <class T>
-        DNDS_DEVICE_CALLABLE Empty &operator=(T v) { return *this; };
-        template <class T>
-        DNDS_DEVICE_CALLABLE Empty(T v) {}
-    };
-
-    struct EmptyNoDefault
-    {
-        DNDS_DEVICE_CALLABLE EmptyNoDefault(EmptyNoDefault &&v) = default;
-        DNDS_DEVICE_CALLABLE EmptyNoDefault(const EmptyNoDefault &v) = default;
-        DNDS_DEVICE_CALLABLE EmptyNoDefault &operator=(const EmptyNoDefault &) = default;
-        template <class T>
-        DNDS_DEVICE_CALLABLE EmptyNoDefault &operator=(T v) { return *this; };
-        template <class T>
-        DNDS_DEVICE_CALLABLE EmptyNoDefault(T v) {}
-    };
-
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ArrayView : public ArrayLayout<T, _row_size, _row_max, _align>
     {
@@ -548,23 +528,27 @@ namespace DNDS
 
     public:
         using difference_type = std::ptrdiff_t;
-        auto getView() const
+        using iterator_category = std::random_access_iterator_tag;
+        using reference = void;
+        using pointer = void;
+        using value = void;
+
+        DNDS_DEVICE_CALLABLE auto getView() const
         {
             auto dthis = static_cast<const Derived *>(this);
             return dthis->getView();
         }
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(ArrayIteratorBase, ArrayIteratorBase)
 
-        ArrayIteratorBase(index n_iRow) : iRow(n_iRow)
+        DNDS_DEVICE_CALLABLE ArrayIteratorBase(index n_iRow) : iRow(n_iRow)
         {
-            auto dthis = static_cast<Derived *>(this);
-            DNDS_HD_assert(iRow >= -1 && iRow <= getView().Size());
+            // DNDS_HD_assert(iRow >= -1 && iRow <= getView().Size()); //! view in derived class is uninitialized here!
         }
 
         DNDS_DEVICE_CALLABLE index RowSize() const { return getView().RowSize(iRow); }
 
         DNDS_DEVICE_CALLABLE Derived &operator++()
         {
-            auto dthis = static_cast<Derived *>(this);
             iRow = std::min(iRow + 1, getView().Size());
             return *this;
         }
@@ -591,27 +575,27 @@ namespace DNDS
 
         DNDS_DEVICE_CALLABLE Derived &operator+=(difference_type n)
         {
-            iRow = std::min(iRow + n, getView().Size());
+            iRow = std::clamp(iRow + n, index(-1), getView().Size());
             return *this;
         }
 
         DNDS_DEVICE_CALLABLE Derived &operator-=(difference_type n)
         {
-            iRow = std::max(iRow - n, index(-1));
+            iRow = std::clamp(iRow - n, index(-1), getView().Size());
             return *this;
         }
 
         DNDS_DEVICE_CALLABLE Derived operator+(difference_type n) const
         {
-            return Derived{getView(), std::min(iRow + n, getView().Size())};
+            return Derived{getView(), std::clamp(iRow + n, index(-1), getView().Size())};
         }
 
         DNDS_DEVICE_CALLABLE Derived operator-(difference_type n) const
         {
-            return Derived{getView(), std::max(iRow - n, index(-1))};
+            return Derived{getView(), std::clamp(iRow - n, index(-1), getView().Size())};
         }
 
-        DNDS_DEVICE_CALLABLE difference_type operator-(const Derived &R) const { return R.iRow - iRow; }
+        DNDS_DEVICE_CALLABLE difference_type operator-(const Derived &R) const { return iRow - R.iRow; }
 
         DNDS_DEVICE_CALLABLE bool operator==(const Derived &R) const { return ((R.getView()) == (this->getView())) && (R.iRow == this->iRow); }
         DNDS_DEVICE_CALLABLE bool operator!=(const Derived &R) const { return !((*this) == R); }
@@ -619,6 +603,9 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE bool operator>=(const Derived &R) const { return ((R.getView()) == (this->getView())) && (this->iRow >= R.iRow); }
         DNDS_DEVICE_CALLABLE bool operator>(const Derived &R) const { return ((R.getView()) == (this->getView())) && (this->iRow > R.iRow); }
         DNDS_DEVICE_CALLABLE bool operator<=(const Derived &R) const { return ((R.getView()) == (this->getView())) && (this->iRow <= R.iRow); }
+
+        DNDS_DEVICE_CALLABLE auto operator[](difference_type n) { return (this->operator+(n)).operator*(); }
+        DNDS_DEVICE_CALLABLE auto operator[](difference_type n) const { return (this->operator+(n)).operator*(); }
     };
 
 }

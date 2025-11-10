@@ -59,6 +59,8 @@ namespace DNDS
             .def("__iadd__", [](TArr &self, const TArr &R)
                  { self += R;return self; }, py::arg("R"))
             .def("__iadd__", [](TArr &self, real R)
+                 { self += R;return self; }, py::arg("R"))
+            .def("__iadd__", [](TArr &self, const Eigen::Ref<const t_element_mat> &R)
                  { self += R;return self; }, py::arg("R"));
         Arr_.def("__isub__", [](TArr &self, const TArr &R)
                  { self -= R;return self; }, py::arg("R"));

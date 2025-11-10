@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../DeviceView.hpp"
+#include "../EigenUtil.hpp"
 
 namespace DNDS
 {
@@ -45,7 +46,7 @@ namespace DNDS
 
         DNDS_DEVICE_CALLABLE ArrayEigenMatrixDeviceView(const t_base &base_view,
                                                         const rowsize *n_mat_nRows, rowsize n_mat_nRow_dynamic)
-            : t_base(base_view), _mat_nRows(n_mat_nRows), _mat_nRow_dynamic(n_mat_nRow_dynamic)
+            : t_base(base_view), _mat_nRow_dynamic(n_mat_nRow_dynamic), _mat_nRows(n_mat_nRows)
         {
             if constexpr (_mat_ni != NonUniformSize)
                 DNDS_HD_assert(n_mat_nRows == nullptr);
@@ -58,40 +59,71 @@ namespace DNDS
         using t_EigenMap = std::conditional_t<std::is_const_v<real_T>,
                                               t_EigenMap_const,
                                               Eigen::Map<t_EigenMatrix, Eigen::Unaligned>>; // default no buffer align and stride
+        using t_EigenView = EigenMatrixView<B, real_T, RowSize_To_EigenSize(_mat_ni), RowSize_To_EigenSize(_mat_nj)>;
+        using t_EigenView_const = EigenMatrixView<B, const real_T, RowSize_To_EigenSize(_mat_ni), RowSize_To_EigenSize(_mat_nj)>;
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize MatRowSize(index iMat = 0) const
+        {
+            if constexpr (_mat_ni >= 0)
+                return _mat_ni;
+            if constexpr (_mat_ni == NonUniformSize)
+            {
+                DNDS_HD_assert(iMat >= 0 && iMat < this->Size());
+                return _mat_nRows[iMat];
+            }
+            if constexpr (_mat_ni == DynamicSize)
+                return _mat_nRow_dynamic;
+            return UnInitRowsize; // invalid branch
+        }
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize MatColSize(index iMat = 0) const
+        {
+            if constexpr (_mat_nj >= 0)
+                return _mat_nj;
+            if constexpr (_mat_nj == NonUniformSize)
+                return this->t_base::RowSize(iMat) / this->MatRowSize(iMat);
+            if constexpr (_mat_nj == DynamicSize)
+                return this->t_base::RowSize(iMat) / this->MatRowSize(iMat);
+            return UnInitRowsize; // invalid branch
+        }
 
         DNDS_DEVICE_CALLABLE void operator()(index i, rowsize j)
         {
             // just don't call
         }
 
-        DNDS_DEVICE_CALLABLE t_EigenMap operator[](index i)
-        {
-            DNDS_HD_assert_infof(i >= 0 && i < this->Size(), "invalid index %lld / %lld", i, this->Size());
-            rowsize c_nRow;
-            if constexpr (_mat_ni == NonUniformSize)
-                c_nRow = _mat_nRows[i];
-            else if constexpr (_mat_ni == DynamicSize)
-                c_nRow = _mat_nRow_dynamic;
-            else
-                c_nRow = _mat_ni;
-            // std::cout << c_nRow << "  " << t_base::RowSize(i) << std::endl;
+#define DNDS_ARRAYEIGENMATRIXVIEW_GETTER_PREREQ                                                              \
+    DNDS_HD_assert_infof(iRow >= 0 && iRow < this->Size(), "invalid index %lld / %lld", iRow, this->Size()); \
+    rowsize c_nRow;                                                                                          \
+    if constexpr (_mat_ni == NonUniformSize)                                                                 \
+        c_nRow = _mat_nRows[iRow];                                                                           \
+    else if constexpr (_mat_ni == DynamicSize)                                                               \
+        c_nRow = _mat_nRow_dynamic;                                                                          \
+    else                                                                                                     \
+        c_nRow = _mat_ni;
 
-            return {t_base::operator[](i), c_nRow, t_base::RowSize(i) / c_nRow}; // need static dispatch?
+        DNDS_DEVICE_CALLABLE t_EigenMap operator[](index iRow)
+        {
+            DNDS_ARRAYEIGENMATRIXVIEW_GETTER_PREREQ
+            return {t_base::operator[](iRow), c_nRow, t_base::RowSize(iRow) / c_nRow}; // need static dispatch?
         }
 
-        DNDS_DEVICE_CALLABLE t_EigenMap_const operator[](index i) const
+        DNDS_DEVICE_CALLABLE t_EigenMap_const operator[](index iRow) const
         {
-            DNDS_HD_assert_infof(i >= 0 && i < this->Size(), "invalid index %lld / %lld", i, this->Size());
-            rowsize c_nRow;
-            if constexpr (_mat_ni == NonUniformSize)
-                c_nRow = _mat_nRows[i];
-            else if constexpr (_mat_ni == DynamicSize)
-                c_nRow = _mat_nRow_dynamic;
-            else
-                c_nRow = _mat_ni;
-            // std::cout << c_nRow << "  " << t_base::RowSize(i) << std::endl;
+            DNDS_ARRAYEIGENMATRIXVIEW_GETTER_PREREQ
+            return {t_base::operator[](iRow), c_nRow, t_base::RowSize(iRow) / c_nRow}; // need static dispatch?
+        }
 
-            return {t_base::operator[](i), c_nRow, t_base::RowSize(i) / c_nRow}; // need static dispatch?
+        DNDS_DEVICE_CALLABLE t_EigenView MatView(index iRow)
+        {
+            DNDS_ARRAYEIGENMATRIXVIEW_GETTER_PREREQ
+            return {t_base::operator[](iRow), c_nRow, t_base::RowSize(iRow) / c_nRow}; // need static dispatch?
+        }
+
+        DNDS_DEVICE_CALLABLE t_EigenView MatView(index iRow) const
+        {
+            DNDS_ARRAYEIGENMATRIXVIEW_GETTER_PREREQ
+            return {t_base::operator[](iRow), c_nRow, t_base::RowSize(iRow) / c_nRow}; // need static dispatch?
         }
     };
 }

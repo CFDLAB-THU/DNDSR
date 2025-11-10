@@ -233,5 +233,10 @@ namespace DNDS
         {
             this->deviceStorage = R.deviceStorage ? R.deviceStorage->clone() : null_supDeviceStorageBase<T>();
         }
+
+        DeviceBackend device()
+        {
+            return deviceStorage ? deviceStorage->backend() : DeviceBackend::Unknown;
+        }
     };
 }
