@@ -33,6 +33,7 @@ namespace DNDS::CFV
         using t_base = FiniteVolumeSettings;
 
         int intOrderVR{-1};         /// @brief integration degree for VR matrices, <0 means using intOrder
+        int intOrderVRBC{-2};       /// @brief integration degree for VR matrices on BC faces, -1 means using int Order, < -1 means using intOrderVRValue() (the same as intOrderVR)
         bool cacheDiffBase = false; /// @brief if cache the base function values on each of the quadrature points
         uint8_t cacheDiffBaseSize = UINT8_MAX;
 
@@ -162,6 +163,7 @@ namespace DNDS::CFV
             t_base::WriteIntoJson(jsonSetting);
 
             jsonSetting["intOrderVR"] = intOrderVR;
+            jsonSetting["intOrderVRBC"] = intOrderVRBC;
 
             jsonSetting["cacheDiffBase"] = cacheDiffBase;
             jsonSetting["cacheDiffBaseSize"] = cacheDiffBaseSize;
@@ -192,6 +194,8 @@ namespace DNDS::CFV
             t_base::ParseFromJson(jsonSetting);
 
             intOrderVR = jsonSetting["intOrderVR"];
+            intOrderVRBC = jsonSetting["intOrderVRBC"];
+
             cacheDiffBase = jsonSetting["cacheDiffBase"];
             cacheDiffBaseSize = jsonSetting["cacheDiffBaseSize"];
             jacobiRelax = jsonSetting["jacobiRelax"];
@@ -223,6 +227,23 @@ namespace DNDS::CFV
 
         [[nodiscard]] bool intOrderVRIsSame() const { return intOrderVR == intOrder || intOrderVR < 0; }
         [[nodiscard]] int intOrderVRValue() const { return intOrderVR < 0 ? intOrder : intOrderVR; }
+
+        [[nodiscard]] bool intOrderVRBCIsSame() const
+        {
+            if (intOrderVRBC >= 0)
+                return intOrderVRBC == intOrder;
+            if (intOrderVRBC == -1)
+                return true;
+            return intOrderVRIsSame();
+        }
+        [[nodiscard]] int intOrderVRBCValue() const
+        {
+            if (intOrderVRBC >= 0)
+                return intOrderVRBC;
+            if (intOrderVRBC == -1)
+                return intOrder;
+            return intOrderVRValue();
+        }
     };
 
     NLOHMANN_JSON_SERIALIZE_ENUM(

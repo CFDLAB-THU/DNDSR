@@ -471,7 +471,7 @@ namespace DNDS::CFV
         // faceAlignedScales.trans.pullOnce(); //!err: need adding comm preparation first
         // faceMajorCoordScale.trans.pullOnce(); //!err: need adding comm preparation first
 
-        if (!settings.intOrderVRIsSame())
+        if (!settings.intOrderVRBCIsSame())
         {
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -486,7 +486,7 @@ namespace DNDS::CFV
                     {
                         DNDS_assert(FaceIDIsExternalBC(faceID));
                         DNDS_assert(bndVRCaches.count(iFace) == 0);
-                        auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                        auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRBCValue());
                         bndVRCaches[iFace].reserve(qFace.GetNumPoints());
                         tSmallCoords coords;
                         mesh->GetCoordsOnFace(iFace, coords);
@@ -570,10 +570,13 @@ namespace DNDS::CFV
             for (int ic2f = 0; ic2f < mesh->cell2face.RowSize(iCell); ic2f++)
             {
                 index iFace = mesh->cell2face(iCell, ic2f);
+                index iCellOther = CellFaceOther(iCell, iFace);
                 auto qFace = this->GetFaceQuad(iFace);
-                auto qFaceVR = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                auto qFaceVR = Quadrature(mesh->GetFaceElement(iFace), iCellOther == UnInitIndex ? settings.intOrderVRBCValue()
+                                                                                                 : settings.intOrderVRValue());
+                bool cur_face_intOrderVRIsSame = qFace.int_order == qFaceVR.int_order;
                 tSmallCoords coords;
-                if (!settings.intOrderVRIsSame())
+                if (!cur_face_intOrderVRIsSame)
                     mesh->GetCoordsOnFace(iFace, coords);
                 qFaceVR.Integration(
                     A,
@@ -581,7 +584,7 @@ namespace DNDS::CFV
                     {
                         decltype(A) DiffI;
                         real JDet{0};
-                        if (settings.intOrderVRIsSame())
+                        if (cur_face_intOrderVRIsSame)
                         {
                             DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, EigenAll);
                             JDet = this->GetFaceJacobiDet(iFace, iG);
@@ -671,12 +674,15 @@ namespace DNDS::CFV
             for (int ic2f = 0; ic2f < mesh->cell2face.RowSize(iCell); ic2f++)
             {
                 index iFace = mesh->cell2face(iCell, ic2f);
+                index iCellOther = this->CellFaceOther(iCell, iFace);
                 auto qFace = this->GetFaceQuad(iFace);
-                auto qFaceVR = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                auto qFaceVR = Quadrature(mesh->GetFaceElement(iFace),
+                                          iCellOther == UnInitIndex ? settings.intOrderVRBCValue()
+                                                                    : settings.intOrderVRValue());
+                bool cur_face_intOrderVRIsSame = qFace.int_order == qFaceVR.int_order;
                 tSmallCoords coords;
-                if (!settings.intOrderVRIsSame())
+                if (!cur_face_intOrderVRIsSame)
                     mesh->GetCoordsOnFace(iFace, coords);
-                index iCellOther = CellFaceOther(iCell, iFace);
                 int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
                 auto faceID = mesh->GetFaceZone(iFace);
                 if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)))
@@ -695,7 +701,7 @@ namespace DNDS::CFV
                         decltype(B) DiffI;
                         decltype(B) DiffJ;
                         real JDet{0};
-                        if (settings.intOrderVRIsSame())
+                        if (cur_face_intOrderVRIsSame)
                         {
                             JDet = this->GetFaceJacobiDet(iFace, iG);
                             DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, EigenAll);
@@ -772,11 +778,15 @@ namespace DNDS::CFV
             for (int ic2f = 0; ic2f < mesh->cell2face.RowSize(iCell); ic2f++)
             {
                 index iFace = mesh->cell2face(iCell, ic2f);
+                index iCellOther = this->CellFaceOther(iCell, iFace);
                 int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
                 auto qFace = this->GetFaceQuad(iFace);
-                auto qFaceVR = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                auto qFaceVR = Quadrature(mesh->GetFaceElement(iFace),
+                                          iCellOther == UnInitIndex ? settings.intOrderVRBCValue()
+                                                                    : settings.intOrderVRValue());
+                bool cur_face_intOrderVRIsSame = qFace.int_order == qFaceVR.int_order;
                 tSmallCoords coords;
-                if (!settings.intOrderVRIsSame())
+                if (!cur_face_intOrderVRIsSame)
                     mesh->GetCoordsOnFace(iFace, coords);
                 VectorXR b;
                 b.setZero(GetCellAtr(iCell).NDOF - 1, 1);
@@ -786,7 +796,7 @@ namespace DNDS::CFV
                     {
                         Eigen::RowVector<real, Eigen::Dynamic> DiffI;
                         real JDet{0};
-                        if (settings.intOrderVRIsSame())
+                        if (cur_face_intOrderVRIsSame)
                         {
                             JDet = this->GetFaceJacobiDet(iFace, iG);
                             DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);

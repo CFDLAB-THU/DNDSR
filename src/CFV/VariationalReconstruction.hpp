@@ -541,8 +541,10 @@ namespace DNDS::CFV
                         DNDS_assert_info(mesh->nodeWallDist.father && mesh->nodeWallDist.father->Size() == mesh->NumNode(), "must build mesh's nodeWallDist before this");
                         real meanAR = GetCellAR(mesh->face2cell(iFace, 0));
                         real wd = 0.0;
+                        real h_min_LR = GetCellNodeMinLenScale(mesh->face2cell(iFace, 0));
                         if (mesh->face2cell(iFace, 1) != UnInitIndex)
                         {
+                            h_min_LR = std::min(h_min_LR, GetCellNodeMinLenScale(mesh->face2cell(iFace, 1)));
                             meanAR = 0.5 * (meanAR + GetCellAR(mesh->face2cell(iFace, 1)));
                             norm.setZero();
                             real wdDiv = 0.0;
@@ -561,8 +563,23 @@ namespace DNDS::CFV
                         tw = 1.0;
                         nw = 1. / meanAR;
                         // WallDist V1:
+                        auto f_dhInterp = [](real d)
+                        {
+                            real d0 = 1e-6;
+                            real d1 = 1;
+                            real h0 = 1e-6;
+                            real h1 = 1;
+                            real a = std::log(h1 / h0) / (d1 - d0);
+                            d = std::max(d, d0);
+                            real ret = h0 * std::exp(a * (d - d0));
+                            // ret = std::min(ret, h1);
+                            return ret;
+                        };
+                        real h_reference = f_dhInterp(wd);
+                        h_reference = std::max(h_min_LR, h_reference);
+                        // std::cout << wd << ", " << h_reference << std::endl;
                         tw = 1.0;
-                        nw = 1. / meanAR;
+                        nw = std::min(1.0, h_reference / faceL);
                     }
 
                     coordTrans = Geom::NormBuildLocalBaseV<3>(norm).transpose() * faceL;

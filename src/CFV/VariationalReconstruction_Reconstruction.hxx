@@ -31,7 +31,7 @@ namespace DNDS
             DNDS_assert(FaceIDIsExternalBC(faceID));
 
             auto qFace = this->GetFaceQuad(iFace);
-            if (settings.intOrderVRIsSame() || settings.functionalSettings.greenGauss1Weight != 0)
+            if (settings.intOrderVRBCIsSame() || settings.functionalSettings.greenGauss1Weight != 0)
                 qFace.IntegrationSimple(
                     BCC,
                     [&](auto &vInc, int iG)
@@ -50,7 +50,7 @@ namespace DNDS
                                 this->GetFaceNorm(iFace, iG),
                                 this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
                         Eigen::RowVector<real, nVarsFixed> uIncBV = (uBV - u[iCell]).transpose();
-                        if (settings.intOrderVRIsSame())
+                        if (settings.intOrderVRBCIsSame())
                             vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
                         else
                             vInc.resizeLike(BCC), vInc.setZero();
@@ -65,9 +65,9 @@ namespace DNDS
                         vInc *= this->GetFaceJacobiDet(iFace, iG);
                         // std::cout << faceWeight[iFace].transpose() << std::endl;
                     });
-            if (!settings.intOrderVRIsSame())
+            if (!settings.intOrderVRBCIsSame())
             {
-                auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRBCValue());
                 tSmallCoords coords;
                 mesh->GetCoordsOnFace(iFace, coords);
                 qFace.Integration(
@@ -113,7 +113,7 @@ namespace DNDS
             DNDS_assert(FaceIDIsExternalBC(faceID));
 
             auto qFace = this->GetFaceQuad(iFace);
-            if (settings.intOrderVRIsSame() || settings.functionalSettings.greenGauss1Weight != 0)
+            if (settings.intOrderVRBCIsSame() || settings.functionalSettings.greenGauss1Weight != 0)
                 qFace.IntegrationSimple(
                     BCC,
                     [&](auto &vInc, int iG)
@@ -130,7 +130,7 @@ namespace DNDS
                                 this->GetFaceNorm(iFace, iG),
                                 this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
                         Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();
-                        if (settings.intOrderVRIsSame())
+                        if (settings.intOrderVRBCIsSame())
                             vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
                         else
                             vInc.resizeLike(BCC), vInc.setZero();
@@ -144,9 +144,9 @@ namespace DNDS
                         }
                         vInc *= this->GetFaceJacobiDet(iFace, iG);
                     });
-            if (!settings.intOrderVRIsSame())
+            if (!settings.intOrderVRBCIsSame())
             {
-                auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRBCValue());
                 tSmallCoords coords;
                 mesh->GetCoordsOnFace(iFace, coords);
                 qFace.Integration(

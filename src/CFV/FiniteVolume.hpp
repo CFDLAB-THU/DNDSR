@@ -421,6 +421,23 @@ namespace DNDS::CFV
                 return cellMajorHBox[iCell].maxCoeff() * 2;
         }
 
+        real GetCellNodeMinLenScale(index iCell)
+        {
+            Geom::tSmallCoords coords;
+            mesh->GetCoordsOnCell(iCell, coords);
+            auto e = mesh->GetCellElement(iCell);
+            Geom::tSmallCoords coordsV = coords(EigenAll, Eigen::seq(0, e.GetNumVertices() - 1));
+
+            real ret = veryLargeReal;
+            for (int i = 0; i < e.GetNumVertices(); i++)
+                for (int j = 0; j < i; j++)
+                {
+                    real d = (coordsV(EigenAll, i) - coordsV(EigenAll, j)).norm();
+                    ret = std::min(ret, d);
+                }
+            return ret;
+        }
+
         index getArrayBytes()
         {
             index bytes = 0;
