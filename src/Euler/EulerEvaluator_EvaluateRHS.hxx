@@ -19,8 +19,7 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
+        template <>)
     void EulerEvaluator<model>::EvaluateRHS(
         ArrayDOFV<nVarsFixed> &rhs,
         JacobianDiagBlock<nVarsFixed> &JSource,
@@ -126,8 +125,8 @@ namespace DNDS::Euler
         double t0 = MPI_Wtime();
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
-#pragma omp parallel for schedule(runtime) reduction(TUAdd : fluxWallSumLocal)
+#    pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
+#    pragma omp parallel for schedule(runtime) reduction(TUAdd : fluxWallSumLocal)
 #endif
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
@@ -223,15 +222,15 @@ namespace DNDS::Euler
                     GradULxy.setZero(), GradURxy.setZero();
 
                     if (direct2ndRec && !direct2ndRec1stConv)
-                        GradULxy(SeqG012, Eigen::all) = uGradBuf[f2c[0]];
+                        GradULxy(SeqG012, EigenAll) = uGradBuf[f2c[0]];
                     else if (!direct2ndRec1stConv)
                     {
                         if constexpr (gDim == 2)
-                            GradULxy({0, 1}, Eigen::all) =
+                            GradULxy({0, 1}, EigenAll) =
                                 vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iGQ, std::array<int, 2>{1, 2}, 3) *
                                 uRecUnlim[f2c[0]] * IF_NOT_NOREC; // 2d here
                         else
-                            GradULxy({0, 1, 2}, Eigen::all) =
+                            GradULxy({0, 1, 2}, EigenAll) =
                                 vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iGQ, std::array<int, 3>{1, 2, 3}, 4) *
                                 uRecUnlim[f2c[0]] * IF_NOT_NOREC; // 3d here
                     }
@@ -271,15 +270,15 @@ namespace DNDS::Euler
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
 
                         if (direct2ndRec && !direct2ndRec1stConv)
-                            GradURxy(SeqG012, Eigen::all) = uGradBuf[f2c[1]];
+                            GradURxy(SeqG012, EigenAll) = uGradBuf[f2c[1]];
                         else if (!direct2ndRec1stConv)
                         {
                             if constexpr (gDim == 2)
-                                GradURxy({0, 1}, Eigen::all) =
+                                GradURxy({0, 1}, EigenAll) =
                                     vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iGQ, std::array<int, 2>{1, 2}, 3) *
                                     uRecUnlim[f2c[1]] * IF_NOT_NOREC; // 2d here
                             else
-                                GradURxy({0, 1, 2}, Eigen::all) =
+                                GradURxy({0, 1, 2}, EigenAll) =
                                     vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iGQ, std::array<int, 3>{1, 2, 3}, 4) *
                                     uRecUnlim[f2c[1]] * IF_NOT_NOREC; // 3d here
                         }
@@ -440,15 +439,15 @@ namespace DNDS::Euler
                     }
 
                     auto seqC = Eigen::seq(iG * dim, iG * dim + dim - 1);
-                    ULxyV(Eigen::all, iG) = ULxy;
-                    URxyV(Eigen::all, iG) = URxy;
+                    ULxyV(EigenAll, iG) = ULxy;
+                    URxyV(EigenAll, iG) = URxy;
                     if (!ignoreVis)
                     {
-                        DiffUxyV(seqC, Eigen::all) = GradUMeanXy;
-                        DiffUxyPrimV(seqC, Eigen::all) = GradUMeanXyPrim;
+                        DiffUxyV(seqC, EigenAll) = GradUMeanXy;
+                        DiffUxyPrimV(seqC, EigenAll) = GradUMeanXyPrim;
                     }
-                    unitNormV(Eigen::all, iG) = unitNorm;
-                    vgXYV(Eigen::all, iG) = GetFaceVGrid(iFace, iGQ);
+                    unitNormV(EigenAll, iG) = unitNorm;
+                    vgXYV(EigenAll, iG) = GetFaceVGrid(iFace, iGQ);
                 });
             TReal_Batch lam0V, lam123V, lam4V;
 
@@ -481,7 +480,7 @@ namespace DNDS::Euler
                 [&](decltype(fluxEs) &finc, int iG)
                 {
                     finc.resizeLike(fluxEs);
-                    finc(Eigen::all, 0) = fincC(Eigen::all, iG);
+                    finc(EigenAll, 0) = fincC(EigenAll, iG);
                     finc *= (direct2ndRec ? vfv->GetFaceArea(iFace) / vfv->GetFaceParamArea(iFace) : vfv->GetFaceJacobiDet(iFace, iG)); // !don't forget this
                 });
 
@@ -505,11 +504,11 @@ namespace DNDS::Euler
             }
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-            faceFluxBuf.at(iFace) = fluxEs(Eigen::all, 0);
+            faceFluxBuf.at(iFace) = fluxEs(EigenAll, 0);
 #else
             // ! original code why alphaFace not used?
-            TU fluxIncL = fluxEs(Eigen::all, 0);
-            TU fluxIncR = -fluxEs(Eigen::all, 0);
+            TU fluxIncL = fluxEs(EigenAll, 0);
+            TU fluxIncR = -fluxEs(EigenAll, 0);
 
             this->UFromFace2Cell(fluxIncL, iFace, f2c[0], 0);
             if (f2c[1] != UnInitIndex)
@@ -526,7 +525,7 @@ namespace DNDS::Euler
             if (settings.useSourceGradFixGG)
 #if defined(DNDS_DIST_MT_USE_OMP)
 // todo: save face value to buffer
-#pragma omp critical
+#    pragma omp critical
 #endif
             {
                 TDiffU faceGradFixL{faceGradFix}, faceGradFixR{faceGradFix};
@@ -541,15 +540,15 @@ namespace DNDS::Euler
                 if (f2c[1] == UnInitIndex)
                 {
                     DNDS_assert(mesh->face2bnd.find(iFace) != mesh->face2bnd.end());
-                    fluxBnd.at(mesh->face2bnd[iFace]) = fluxEs(Eigen::all, 0) / vfv->GetFaceArea(iFace);
+                    fluxBnd.at(mesh->face2bnd[iFace]) = fluxEs(EigenAll, 0) / vfv->GetFaceArea(iFace);
                     TVec fluxBndForceTInt;
                     fluxBndForceTInt.setZero();
                     gFace.IntegrationSimple(
                         fluxBndForceTInt,
                         [&](decltype(fluxBndForceTInt) &finc, int iG)
                         {
-                            TU fcur = fincC(Eigen::all, iG);
-                            TVec ncur = unitNormV(Eigen::all, iG);
+                            TU fcur = fincC(EigenAll, iG);
+                            TVec ncur = unitNormV(EigenAll, iG);
                             finc = fcur(Seq123);
                             finc -= ncur * (ncur.dot(finc));
                             finc *= (direct2ndRec ? vfv->GetFaceArea(iFace) / vfv->GetFaceParamArea(iFace) : vfv->GetFaceJacobiDet(iFace, iG)); // !don't forget this
@@ -563,7 +562,7 @@ namespace DNDS::Euler
                     faceBCType == EulerBCType::BCWallIsothermal ||
                     (faceBCType == EulerBCType::BCWallInvis && settings.idealGasProperty.muGas < 1e-99))
                 {
-                    fluxWallSumLocal -= fluxEs(Eigen::all, 0);
+                    fluxWallSumLocal -= fluxEs(EigenAll, 0);
                     if (iFace >= mesh->NumFace())
                         DNDS_assert(false);
                 }
@@ -571,12 +570,12 @@ namespace DNDS::Euler
             // integrations
             if (!dontUpdateIntegration)
 #if defined(DNDS_DIST_MT_USE_OMP) // todo: use reduction
-#pragma omp critical
+#    pragma omp critical
 #endif
             {
                 if (pBCHandler->GetFlagFromIDSoft(mesh->GetFaceZone(iFace), "integrationOpt") == 1)
                 {
-                    bndIntegrations.at(mesh->GetFaceZone(iFace)).Add(-fluxEs(Eigen::all, 0), vfv->GetFaceArea(iFace));
+                    bndIntegrations.at(mesh->GetFaceZone(iFace)).Add(-fluxEs(EigenAll, 0), vfv->GetFaceArea(iFace));
                 }
                 if (pBCHandler->GetFlagFromIDSoft(mesh->GetFaceZone(iFace), "integrationOpt") == 2)
                 {
@@ -599,7 +598,7 @@ namespace DNDS::Euler
         }
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
         for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
             for (index iCell = mesh->LocalPartStart(iPart); iCell < mesh->LocalPartEnd(iPart); iCell++)
             {
@@ -633,7 +632,7 @@ namespace DNDS::Euler
         {
             JSource.clearValues();
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(guided)
+#    pragma omp parallel for schedule(guided)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -683,15 +682,15 @@ namespace DNDS::Euler
                         GradU.setZero();
                         PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
                         if (direct2ndRec) // should use limited version here or not?
-                            GradU(SeqG012, Eigen::all) = uGradBufNoLim[iCell];
+                            GradU(SeqG012, EigenAll) = uGradBufNoLim[iCell];
                         else
                         {
                             if constexpr (gDim == 2)
-                                GradU({0, 1}, Eigen::all) =
+                                GradU({0, 1}, EigenAll) =
                                     vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 2>{1, 2}, 3) *
                                     uRecUnlim[iCell] * IF_NOT_NOREC; // 2d specific
                             else
-                                GradU({0, 1, 2}, Eigen::all) =
+                                GradU({0, 1, 2}, EigenAll) =
                                     vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 3>{1, 2, 3}, 4) *
                                     uRecUnlim[iCell] * IF_NOT_NOREC; // 3d specific
                             if (settings.useSourceGradFixGG)
@@ -699,9 +698,9 @@ namespace DNDS::Euler
                             if (settings.ransSource2nd)
                             {
                                 if constexpr (model == NS_SA || model == NS_SA_3D)
-                                    GradU(Eigen::all, I4 + 1) = cellGrad2nd(Eigen::all, I4 + 1);
+                                    GradU(EigenAll, I4 + 1) = cellGrad2nd(EigenAll, I4 + 1);
                                 if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
-                                    GradU(Eigen::all, {I4 + 1, I4 + 2}) = cellGrad2nd(Eigen::all, {I4 + 1, I4 + 2});
+                                    GradU(EigenAll, {I4 + 1, I4 + 2}) = cellGrad2nd(EigenAll, {I4 + 1, I4 + 2});
                             }
                         }
 
@@ -720,7 +719,7 @@ namespace DNDS::Euler
 
                         finc.resizeLike(sourceV);
                         TJacobianU jac;
-                        finc(Eigen::all, 0) =
+                        finc(EigenAll, 0) =
                             source(
                                 ULxy,
                                 GradU,
@@ -733,9 +732,9 @@ namespace DNDS::Euler
                                 vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
                                 iCell, iGQ, JSource.isBlock() ? 2 : 1);
                         if (JSource.isBlock())
-                            finc(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last)) = jac;
+                            finc(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast)) = jac;
                         else
-                            finc(Eigen::all, 1) = sourceJDiag;
+                            finc(EigenAll, 1) = sourceJDiag;
 
                         finc *= direct2ndRec ? vfv->GetCellVol(iCell) / vfv->GetCellParamVol(iCell) : vfv->GetCellJacobiDet(iCell, iG); //! don't forget this
                         if (finc.hasNaN() || (!finc.allFinite()))
@@ -747,11 +746,11 @@ namespace DNDS::Euler
                         }
                     });
                 sourceV *= cellRHSAlpha[iCell](0) / vfv->GetCellVol(iCell); // becomes mean value
-                rhs[iCell] += sourceV(Eigen::all, 0);
+                rhs[iCell] += sourceV(EigenAll, 0);
                 if (JSource.isBlock())
-                    JSource.getBlock(iCell) = sourceV(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                    JSource.getBlock(iCell) = sourceV(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast));
                 else
-                    JSource.getDiag(iCell) = sourceV(Eigen::all, 1);
+                    JSource.getDiag(iCell) = sourceV(EigenAll, 1);
 
                 // if (iCell == 18195)
                 // {

@@ -407,6 +407,18 @@ namespace DNDS
 
 }
 
+namespace DNDS
+{
+#if EIGEN_MAJOR_VERSION >= 5
+    static const auto EigenAll = Eigen::placeholders::all;
+    static const auto EigenLast = Eigen::placeholders::last;
+#else
+    static const auto EigenAll = Eigen::all;
+    static const auto EigenLast = Eigen::last;
+#endif
+
+}
+
 /*-----------------------------------------*/
 // some meta-programming utilities
 namespace DNDS::Meta
@@ -458,6 +470,7 @@ namespace DNDS::Meta
      *
      * @tparam T
      */
+
     template <class T>
     struct is_fixed_data_real_eigen_matrix
     {

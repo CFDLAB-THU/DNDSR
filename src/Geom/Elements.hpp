@@ -2319,8 +2319,8 @@ namespace DNDS::Geom::Elem
             this->GetD1Nj(pParam, D1Nj);
 
             D01Nj.resize(4, this->GetNumNodes());
-            D01Nj(0, Eigen::all) = Nj;
-            D01Nj({1, 2, 3}, Eigen::all) = D1Nj;
+            D01Nj(0, EigenAll) = Nj;
+            D01Nj({1, 2, 3}, EigenAll) = D1Nj;
         }
         /**
          * @warning DiNj resized within
@@ -2338,25 +2338,25 @@ namespace DNDS::Geom::Elem
                             type, pParam,
                             DiNj(
                                 Eigen::seq(Base::ndiffSizC2D.at(2), Base::ndiffSizC2D.at(3) - 1),
-                                Eigen::all));
+                                EigenAll));
                     if (maxOrder == 2)
                         ShapeFunc_DiNj<2>(
                             type, pParam,
                             DiNj(
                                 Eigen::seq(Base::ndiffSizC2D.at(1), Base::ndiffSizC2D.at(2) - 1),
-                                Eigen::all));
+                                EigenAll));
                     if (maxOrder == 1)
                         ShapeFunc_DiNj<1>(
                             type, pParam,
                             DiNj(
                                 Eigen::seq(Base::ndiffSizC2D.at(0), Base::ndiffSizC2D.at(1) - 1),
-                                Eigen::all));
+                                EigenAll));
                     if (maxOrder == 0)
                         ShapeFunc_DiNj<0>(
                             type, pParam,
                             DiNj(
                                 0,
-                                Eigen::all));
+                                EigenAll));
                 }
             }
             else if (this->GetDim() == 3)
@@ -2370,25 +2370,25 @@ namespace DNDS::Geom::Elem
                             type, pParam,
                             DiNj(
                                 Eigen::seq(Base::ndiffSizC.at(2), Base::ndiffSizC.at(3) - 1),
-                                Eigen::all));
+                                EigenAll));
                     if (maxOrder == 2)
                         ShapeFunc_DiNj<2>(
                             type, pParam,
                             DiNj(
                                 Eigen::seq(Base::ndiffSizC.at(1), Base::ndiffSizC.at(2) - 1),
-                                Eigen::all));
+                                EigenAll));
                     if (maxOrder == 1)
                         ShapeFunc_DiNj<1>(
                             type, pParam,
                             DiNj(
                                 Eigen::seq(Base::ndiffSizC.at(0), Base::ndiffSizC.at(1) - 1),
-                                Eigen::all));
+                                EigenAll));
                     if (maxOrder == 0)
                         ShapeFunc_DiNj<0>(
                             type, pParam,
                             DiNj(
                                 0,
-                                Eigen::all));
+                                EigenAll));
                 }
             }
             else if (this->GetDim() == 1)
@@ -2402,25 +2402,25 @@ namespace DNDS::Geom::Elem
                             type, pParam,
                             DiNj(
                                 3,
-                                Eigen::all));
+                                EigenAll));
                     if (maxOrder == 2)
                         ShapeFunc_DiNj<2>(
                             type, pParam,
                             DiNj(
                                 2,
-                                Eigen::all));
+                                EigenAll));
                     if (maxOrder == 1)
                         ShapeFunc_DiNj<1>(
                             type, pParam,
                             DiNj(
                                 1,
-                                Eigen::all));
+                                EigenAll));
                     if (maxOrder == 0)
                         ShapeFunc_DiNj<0>(
                             type, pParam,
                             DiNj(
                                 0,
-                                Eigen::all));
+                                EigenAll));
                 }
             }
         }
@@ -2466,13 +2466,13 @@ namespace DNDS::Geom::Elem
     template <class tCoordsIn>
     tJacobi ShapeJacobianCoordD01Nj(const tCoordsIn &cs, Eigen::Ref<const tD01Nj> DiNj)
     {
-        return cs * DiNj({1, 2, 3}, Eigen::all).transpose();
+        return cs * DiNj({1, 2, 3}, EigenAll).transpose();
     }
 
     template <class tCoordsIn>
     tPoint PPhysicsCoordD01Nj(const tCoordsIn &cs, Eigen::Ref<const tD01Nj> DiNj)
     {
-        return cs * DiNj(0, Eigen::all).transpose();
+        return cs * DiNj(0, EigenAll).transpose();
     }
 
     template <int dim>
@@ -2480,9 +2480,9 @@ namespace DNDS::Geom::Elem
     {
         static_assert(dim == 2 || dim == 3);
         if constexpr (dim == 2)
-            return J(Eigen::all, 0).stableNorm();
+            return J(EigenAll, 0).stableNorm();
         else
-            return J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+            return J(EigenAll, 0).cross(J(EigenAll, 1)).stableNorm();
     }
 
     // TODO: add a integration-based counterpart
@@ -2490,7 +2490,7 @@ namespace DNDS::Geom::Elem
     {
         tPoint c = coords.rowwise().mean();
         tSmallCoords coordsC = coords.colwise() - c;
-        tPoint ve0 = coordsC(Eigen::all, 1) - coordsC(Eigen::all, 0);
+        tPoint ve0 = coordsC(EigenAll, 1) - coordsC(EigenAll, 0);
         tJacobi inertia = coordsC * coordsC.transpose();
         real cond01 = HardEigen::Eigen3x3RealSymEigenDecompositionGetCond01(inertia); // ratio of 2 largest eigenvalues
         if (cond01 < 1 + 1e-6)
@@ -2511,9 +2511,9 @@ namespace DNDS::Geom::Elem
         case Tet10:
         {
             Eigen::Vector<real, 3> lengths{
-                (coords(Eigen::all, 5 - 1) - coords(Eigen::all, 10 - 1)).norm(),
-                (coords(Eigen::all, 6 - 1) - coords(Eigen::all, 8 - 1)).norm(),
-                (coords(Eigen::all, 7 - 1) - coords(Eigen::all, 9 - 1)).norm(),
+                (coords(EigenAll, 5 - 1) - coords(EigenAll, 10 - 1)).norm(),
+                (coords(EigenAll, 6 - 1) - coords(EigenAll, 8 - 1)).norm(),
+                (coords(EigenAll, 7 - 1) - coords(EigenAll, 9 - 1)).norm(),
             };
             Eigen::Index iMin{-1};
             real minLen = lengths.minCoeff(&iMin);
@@ -2523,8 +2523,8 @@ namespace DNDS::Geom::Elem
         case Pyramid14:
         {
             Eigen::Vector<real, 2> lengths{
-                (coords(Eigen::all, 10 - 1) - coords(Eigen::all, 12 - 1)).norm(),
-                (coords(Eigen::all, 11 - 1) - coords(Eigen::all, 13 - 1)).norm(),
+                (coords(EigenAll, 10 - 1) - coords(EigenAll, 12 - 1)).norm(),
+                (coords(EigenAll, 11 - 1) - coords(EigenAll, 13 - 1)).norm(),
             };
             Eigen::Index iMin{-1};
             real minLen = lengths.minCoeff(&iMin);

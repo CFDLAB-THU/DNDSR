@@ -13,6 +13,11 @@ namespace DNDS::CFV
 
         FiniteVolumeSettings settings;
 
+        int getDim()
+        {
+            return mesh.dim;
+        }
+
     protected:
         real volGlobal{0};
         tScalarPair::t_deviceView<B> volumeLocal;
@@ -42,7 +47,6 @@ namespace DNDS::CFV
             DNDS_COPY_MEMBER(fv, settings);
 
             DNDS_COPY_MEMBER(fv, volGlobal);
-
 
             DNDS_COPY_MEMBER_VIEW(fv, volumeLocal);
             DNDS_COPY_MEMBER_VIEW(fv, faceArea);
@@ -259,6 +263,13 @@ namespace DNDS::CFV
                 return cellCent[iCell];
         }
 
-        DNDS_DEVICE_CALLABLE real GetCellMaxLenScale(index iCell) { return cellMajorHBox[iCell].maxCoeff() * 2; }
+        DNDS_DEVICE_CALLABLE real GetCellMaxLenScale(index iCell)
+        {
+            auto hb = cellMajorHBox[iCell];
+            real ret = std::max(hb[0], hb[1]);
+            if (this->getDim() == 3)
+                ret = std::max(ret, hb[2]);
+            return ret * 2;
+        }
     };
 }

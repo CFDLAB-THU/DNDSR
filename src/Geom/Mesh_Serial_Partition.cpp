@@ -25,13 +25,13 @@ namespace DNDS::Geom
 
         std::vector<_METIS::idx_t> vtxdist(mesh->getMPI().size + 1);
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (DNDS::MPI_int r = 0; r <= mesh->getMPI().size; r++)
             vtxdist[r] = _METIS::indexToIdx(cell2cellSerialFacial->pLGlobalMapping->ROffsets().at(r));
         std::vector<_METIS::idx_t> xadj(cell2cellSerialFacial->Size() + 1);
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (DNDS::index iCell = 0; iCell < xadj.size(); iCell++)
             xadj[iCell] = _METIS::indexToIdx(cell2cellSerialFacial->rowPtr(iCell) - cell2cellSerialFacial->rowPtr(0));
@@ -39,7 +39,7 @@ namespace DNDS::Geom
         std::vector<_METIS::idx_t> adjncyWeights;
         DNDS_assert(cell2cellSerialFacial->DataSize() == xadj.back());
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (DNDS::index iAdj = 0; iAdj < xadj.back(); iAdj++)
             adjncy[iAdj] = _METIS::indexToIdx(cell2cellSerialFacial->data()[iAdj]);
@@ -71,12 +71,12 @@ namespace DNDS::Geom
                             if (cell2nodeSerial->operator[](iCell)[i] == iN)
                                 faceFoundC2F.push_back(i);
                     DNDS_assert(faceFoundC2F.size() == faceFound.size());
-                    tSmallCoords coordsF = coordsC(Eigen::all, faceFoundC2F);
+                    tSmallCoords coordsF = coordsC(EigenAll, faceFoundC2F);
                     real maxDist{0};
                     for (int i = 0; i < coordsF.cols(); i++)
                         for (int j = 0; j < coordsF.cols(); j++)
                             if (i != j)
-                                maxDist = std::max(maxDist, (coordsF(Eigen::all, i) - coordsF(Eigen::all, j)).norm());
+                                maxDist = std::max(maxDist, (coordsF(EigenAll, i) - coordsF(EigenAll, j)).norm());
                     adjncyWeightsR.push_back(maxDist);
                     maxDistMax = std::max(maxDist, maxDistMax);
                 }

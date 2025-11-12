@@ -197,7 +197,7 @@ namespace DNDS
             {
                 // simple gauss rule
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
@@ -255,7 +255,7 @@ namespace DNDS
                                      2 * faceCent(Seq012))
                                         .transpose();
                                 mGG(dim + ic2f, dim + ic2f) = 2;
-                                bGG(dim + ic2f, Eigen::all) = uOther + u[iCell].transpose();
+                                bGG(dim + ic2f, EigenAll) = uOther + u[iCell].transpose();
                             }
                         }
                         else
@@ -282,7 +282,7 @@ namespace DNDS
                                                            2 * faceCent(Seq012))
                                                               .transpose();
                                 mGG(dim + ic2f, dim + ic2f) = 2;
-                                bGG(dim + ic2f, Eigen::all) = (uBV + u[iCell]).transpose();
+                                bGG(dim + ic2f, EigenAll) = (uBV + u[iCell]).transpose();
                             }
                         }
                     }
@@ -298,7 +298,7 @@ namespace DNDS
                         auto mGGLU = mGG.fullPivLu();
                         DNDS_assert(mGGLU.isInvertible());
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> xGG = mGGLU.solve(bGG);
-                        grad = xGG(Seq012, Eigen::all).transpose();
+                        grad = xGG(Seq012, EigenAll).transpose();
                     }
 
                     // tPoint cellBary = GetCellBary(iCell);
@@ -319,7 +319,7 @@ namespace DNDS
             else if (method == 2) //! warning, periodic not implemented here
             {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
@@ -339,9 +339,9 @@ namespace DNDS
 
                         if (iCellOther != UnInitIndex)
                         {
-                            dcs(ic2f, Eigen::all) = (GetOtherCellBaryFromCell(iCell, iCellOther, iFace) - GetCellBary(iCell))(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>))
-                                                        .transpose();
-                            dus(ic2f, Eigen::all) = (u[iCellOther] - u[iCell]).transpose();
+                            dcs(ic2f, EigenAll) = (GetOtherCellBaryFromCell(iCell, iCellOther, iFace) - GetCellBary(iCell))(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>))
+                                                      .transpose();
+                            dus(ic2f, EigenAll) = (u[iCellOther] - u[iCell]).transpose();
                         }
                         else
                         {
@@ -357,9 +357,9 @@ namespace DNDS
                                     u[iCell], iCell, iFace, -1,
                                     this->GetFaceNorm(iFace, -1),
                                     this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1), faceID);
-                            dus(ic2f, Eigen::all) = (uBV - u[iCell]).transpose();
+                            dus(ic2f, EigenAll) = (uBV - u[iCell]).transpose();
 
-                            dcs(ic2f, Eigen::all) =
+                            dcs(ic2f, EigenAll) =
                                 ((GetCellBary(iCell) - GetFaceQuadraturePPhys(iFace, -1)).dot(GetFaceNorm(iFace, -1)) * (-2.) * GetFaceNorm(iFace, -1))(
                                     Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>))
                                     .transpose();
@@ -367,7 +367,7 @@ namespace DNDS
                     }
                     // Eigen::MatrixXd m;
                     // m.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve()
-                    auto svd = dcs.bdcSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
+                    auto svd = dcs.template bdcSvd<Eigen::ComputeFullU | Eigen::ComputeFullV>();
                     grad = svd.solve(dus).transpose();
                     uRec[iCell] = grad.transpose();
                 }
@@ -421,7 +421,7 @@ namespace DNDS
             //     for (rowsize ic2f = 0; ic2f < c2f.size(); ic2f++)
             //     {
             //         index iFace = c2f[ic2f];
-            //         uFaceInc(Eigen::all, ic2f) =
+            //         uFaceInc(EigenAll, ic2f) =
             //             uGrad[iCell].transpose() *
             //             (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellQuadraturePPhys(iCell, -1))(Seq012);
             //         index iCellOther = mesh->CellFaceOther(iCell, iFace);
@@ -450,7 +450,7 @@ namespace DNDS
             // }
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
 
@@ -466,19 +466,19 @@ namespace DNDS
 
                 Eigen::Matrix<real, dim, dim> d1bv;
                 d1bv = this->GetIntPointDiffBaseValue(
-                    iCell, -1, -1, -1, Seq123, dim + 1)(Eigen::all, Seq012);
+                    iCell, -1, -1, -1, Seq123, dim + 1)(EigenAll, Seq012);
                 auto lud1bv = d1bv.partialPivLu();
                 if (lud1bv.rcond() > 1e9)
                     std::cout << "Large Cond " << lud1bv.rcond() << std::endl;
                 if (mask.size() == 0)
                 {
                     uRec[iCell].setZero();
-                    uRec[iCell](Seq012, Eigen::all) = lud1bv.solve(grad.transpose());
+                    uRec[iCell](Seq012, EigenAll) = lud1bv.solve(grad.transpose());
                 }
                 else
                 {
-                    uRec[iCell](Eigen::all, mask).setZero();
-                    uRec[iCell](Seq012, mask) = lud1bv.solve(grad.transpose())(Eigen::all, mask);
+                    uRec[iCell](EigenAll, mask).setZero();
+                    uRec[iCell](Seq012, mask) = lud1bv.solve(grad.transpose())(EigenAll, mask);
                 }
 
                 // std::cout << " g " << std::endl;
@@ -525,7 +525,7 @@ namespace DNDS
             //             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
                 for (index iCell = mesh->LocalPartStart(iPart); iCell < mesh->LocalPartEnd(iPart); iCell++)
@@ -618,13 +618,13 @@ namespace DNDS
             {
                 if (putIntoNew && settings.SORInstead)
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
                     for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                         uRecNew[iCell].swap(uRec[iCell]);
                 if ((!putIntoNew) && (!settings.SORInstead))
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
                     for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                         uRec[iCell].swap(uRecNew[iCell]);
@@ -649,14 +649,14 @@ namespace DNDS
             if (settings.maxOrder == 1 && settings.subs2ndOrder != 0)
             {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                     uRecNew[iCell].setZero();
                 return;
             }
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {

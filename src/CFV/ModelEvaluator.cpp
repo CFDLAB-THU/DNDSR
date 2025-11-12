@@ -11,6 +11,7 @@ namespace DNDS::CFV
         int cnvars = u.father->MatRowSize();
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
         static const auto SeqG012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
+        static const auto SeqG123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
 
         bool direct2ndRec = options.direct2ndRec;
         bool direct2ndRec1stConv = options.direct2ndRec1stConv;
@@ -54,10 +55,10 @@ namespace DNDS::CFV
                     GradULxy.setZero(dim, cnvars), GradURxy.setZero(dim, cnvars);
 
                     if (direct2ndRec && !direct2ndRec1stConv)
-                        GradULxy(SeqG012, Eigen::all) = uGradBuf[f2c[0]];
+                        GradULxy(SeqG012, EigenAll) = uGradBuf[f2c[0]];
                     else if (!direct2ndRec1stConv)
-                        GradULxy({0, 1}, Eigen::all) =
-                            vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iGQ, std::array<int, 2>{1, 2}, 3) *
+                        GradULxy(SeqG012, EigenAll) =
+                            vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, iGQ, SeqG123, 3) *
                             uRec[f2c[0]];
 
                     real minVol = vfv->GetCellVol(f2c[0]);
@@ -73,10 +74,10 @@ namespace DNDS::CFV
                                         .transpose();
 
                         if (direct2ndRec && !direct2ndRec1stConv)
-                            GradURxy(SeqG012, Eigen::all) = uGradBuf[f2c[1]];
+                            GradURxy(SeqG012, EigenAll) = uGradBuf[f2c[1]];
                         else if (!direct2ndRec1stConv)
-                            GradURxy({0, 1}, Eigen::all) =
-                                vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iGQ, std::array<int, 2>{1, 2}, 3) *
+                            GradURxy(SeqG012, EigenAll) =
+                                vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iGQ, SeqG123, 3) *
                                 uRec[f2c[1]];
                         distBary = (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace) - vfv->GetCellBary(f2c[0])).norm();
                         minVol = std::min(minVol, vfv->GetCellVol(f2c[1]));

@@ -108,11 +108,11 @@ namespace DNDS::CFV
             SetPeriodicTransformations(
                 [mesh = mesh, Seq123](auto u, Geom::t_index id)
                 {
-                    u(Eigen::all, Seq123) = mesh->periodicInfo.TransVector<pDim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
+                    u(EigenAll, Seq123) = mesh->periodicInfo.TransVector<pDim, Eigen::Dynamic>(u(EigenAll, Seq123).transpose(), id).transpose();
                 },
                 [mesh = mesh, Seq123](auto u, Geom::t_index id)
                 {
-                    u(Eigen::all, Seq123) = mesh->periodicInfo.TransVectorBack<pDim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
+                    u(EigenAll, Seq123) = mesh->periodicInfo.TransVectorBack<pDim, Eigen::Dynamic>(u(EigenAll, Seq123).transpose(), id).transpose();
                 });
         }
 
@@ -213,7 +213,7 @@ namespace DNDS::CFV
             if (flag == 0)
             {
                 auto baseMoment = cellBaseMoment[iCell];
-                DiBj(0, Eigen::all) -= baseMoment.transpose();
+                DiBj(0, EigenAll) -= baseMoment.transpose();
             }
         }
 
@@ -228,7 +228,7 @@ namespace DNDS::CFV
         MatrixXR
         GetIntPointDiffBaseValue(
             index iCell, index iFace, rowsize if2c, int iG,
-            TList &&diffList = Eigen::all,
+            TList &&diffList = EigenAll,
             uint8_t maxDiff = UINT8_MAX)
         {
             if (iFace >= 0)
@@ -243,7 +243,7 @@ namespace DNDS::CFV
                     if (iG >= 0)
                     {
                         return faceDiffBaseCache(iFace, iG + (faceDiffBaseCache.RowSize(iFace) / 2) * if2c)(
-                            std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, Eigen::last));
+                            std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, EigenLast));
                     }
                     else
                     {
@@ -261,7 +261,7 @@ namespace DNDS::CFV
                     MatrixXR dbv;
                     dbv.resize(maxDiff, GetCellAtr(iCell).NDOF);
                     FDiffBaseValue(dbv, GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, iG), iCell, iFace, iG, 0);
-                    return dbv(std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, Eigen::last));
+                    return dbv(std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, EigenLast));
                 }
             }
             else
@@ -272,12 +272,12 @@ namespace DNDS::CFV
                     if (iG >= 0)
                     {
                         return cellDiffBaseCache(iCell, iG)(
-                            std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, Eigen::last));
+                            std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, EigenLast));
                     }
                     else
                     {
                         return cellDiffBaseCacheCent[iCell](
-                            std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, Eigen::last));
+                            std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, EigenLast));
                     }
                 }
                 else
@@ -285,7 +285,7 @@ namespace DNDS::CFV
                     MatrixXR dbv;
                     dbv.resize(maxDiff, GetCellAtr(iCell).NDOF);
                     FDiffBaseValue(dbv, GetCellQuadraturePPhys(iCell, iG), iCell, -1, iG, 0);
-                    return dbv(std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, Eigen::last));
+                    return dbv(std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, EigenLast));
                 }
             }
         }
@@ -300,9 +300,9 @@ namespace DNDS::CFV
                 if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
             int maxNDOFM1 = matrixSecondary[iFace].cols() / 2;
             return matrixSecondary[iFace](
-                Eigen::all, Eigen::seq(
-                                if2c * maxNDOFM1 + 0,
-                                if2c * maxNDOFM1 + maxNDOFM1 - 1));
+                EigenAll, Eigen::seq(
+                              if2c * maxNDOFM1 + 0,
+                              if2c * maxNDOFM1 + maxNDOFM1 - 1));
         }
 
         template <class TDiffIDerived, class TDiffJDerived>
@@ -328,6 +328,7 @@ namespace DNDS::CFV
                 faceLV = faceAlignedScales[iFace];
                 break;
             case VRSettings::FunctionalSettings::ScaleType::MeanAACBB:
+            case VRSettings::FunctionalSettings::ScaleType::CellMax:
                 faceLV = faceAlignedScales[iFace];
                 break;
             default:
@@ -339,9 +340,19 @@ namespace DNDS::CFV
             real faceL = 0;
             if (settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::ScaleType::MeanAACBB)
                 faceL = std::sqrt(faceLV(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>)).array().square().mean());
-            if (settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::ScaleType::BaryDiff)
+            if (settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::ScaleType::BaryDiff ||
+                settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::ScaleType::CellMax)
                 faceL = faceLV(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>)).norm();
             real faceLOrig = faceL;
+            if (settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::ScaleType::CellMax)
+            {
+                faceL = this->GetCellMaxLenScale(mesh->face2cell(iFace, 0)) * 0.5;
+                if (mesh->face2cell(iFace, 1) != UnInitIndex)
+                    faceL = std::max(faceL, this->GetCellMaxLenScale(mesh->face2cell(iFace, 1)));
+            }
+            // CellMax option is the same as BaryDiff in terms of faceLOrig (being the Bary Dist)
+            // CellMax only uses another faceL
+
             faceL *= settings.functionalSettings.scaleMultiplier;
 
             // std::cout << DiffI.transpose() << "\n"
@@ -449,11 +460,13 @@ namespace DNDS::CFV
                 TMatCopy DiffJ_Norm = DiffJ;
                 tGPoint coordTrans = faceMajorCoordScale[iFace].transpose() *
                                      settings.functionalSettings.scaleMultiplier;
+                if constexpr (dim == 2)
+                    coordTrans(2, 2) = 1;
                 {
                     // tPoint norm = this->GetFaceNorm(iFace, -1);
                     // real normScale = (coordTrans * norm).norm();
-                    // coordTrans(0, Eigen::all) = norm.transpose() * faceL;
-                    // coordTrans({1, 2}, Eigen::all).setZero();
+                    // coordTrans(0, EigenAll) = norm.transpose() * faceL;
+                    // coordTrans({1, 2}, EigenAll).setZero();
                 }
                 {
                     // coordTrans = Geom::NormBuildLocalBaseV<3>(norm).transpose() * faceL;
@@ -480,9 +493,9 @@ namespace DNDS::CFV
                     //     tPoint normCos = (cellMajorCoordTrans * norm).array().abs();
                     //     tPoint pNorm;
                     //     if (normCos(0) < normCos(1))
-                    //         pNorm = cellMajorCoordTrans(1, Eigen::all).transpose();
+                    //         pNorm = cellMajorCoordTrans(1, EigenAll).transpose();
                     //     else
-                    //         pNorm = cellMajorCoordTrans(0, Eigen::all).transpose();
+                    //         pNorm = cellMajorCoordTrans(0, EigenAll).transpose();
                     //     return pNorm;
                     // };
                     // tPoint pNormL = getCellFaceMajorPNorm(iCellL);
@@ -495,13 +508,23 @@ namespace DNDS::CFV
                     // ConvertDiffsLinMap<dim>(DiffI_Norm, getProjection(pNormL));
                     // ConvertDiffsLinMap<dim>(DiffJ_Norm, getProjection(pNormR));
 
-                    // coordTrans(0, Eigen::all) = norm.transpose() * faceL;
-                    // coordTrans({1, 2}, Eigen::all).setZero();
+                    // coordTrans(0, EigenAll) = norm.transpose() * faceL;
+                    // coordTrans({1, 2}, EigenAll).setZero();
                 }
                 if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::Norm ||
-                    settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::CentDiff)
+                    settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::CentDiff ||
+                    settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::WallDist)
                 {
                     tPoint norm = this->GetFaceNorm(iFace, -1);
+                    real areaL = this->GetFaceArea(iFace);
+                    if constexpr (dim == 3)
+                        areaL = std::sqrt(areaL);
+                    real tw = 1. / std::min({1.0, faceLOrig / (areaL + 0.001 * faceLOrig)});
+                    real nw = 1;
+                    // real tw = 1. / std::max({1.0, areaL / (faceLOrig + 0.001 * areaL)});
+
+                    // std::cout << tw << std::endl;
+                    // real tw = 1.0;
                     if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::CentDiff)
                     {
                         if (mesh->face2cell(iFace, 1) != UnInitIndex)
@@ -512,16 +535,75 @@ namespace DNDS::CFV
                             norm.normalize();
                         }
                     }
+                    else if (
+                        settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::WallDist)
+                    {
+                        DNDS_assert_info(mesh->nodeWallDist.father && mesh->nodeWallDist.father->Size() == mesh->NumNode(), "must build mesh's nodeWallDist before this");
+                        real meanAR = GetCellAR(mesh->face2cell(iFace, 0));
+                        real wd = 0.0;
+                        if (mesh->face2cell(iFace, 1) != UnInitIndex)
+                        {
+                            meanAR = 0.5 * (meanAR + GetCellAR(mesh->face2cell(iFace, 1)));
+                            norm.setZero();
+                            real wdDiv = 0.0;
+                            for (int if2n = 0; if2n < mesh->face2node[iFace].size(); if2n++)
+                            {
+                                auto d = mesh->GetCoordWallDistOnFace(iFace, 0);
+                                norm += d;
+                                wd += d.norm();
+                                wdDiv += 1.0;
+                            }
+                            wd /= wdDiv;
+                            norm.stableNormalize();
+                        }
+                        // else: norm stays face norm, wd is 0.0
+                        // original WallDist ani
+                        tw = 1.0;
+                        nw = 1. / meanAR;
+                        // WallDist V1:
+                        tw = 1.0;
+                        nw = 1. / meanAR;
+                    }
+
+                    coordTrans = Geom::NormBuildLocalBaseV<3>(norm).transpose() * faceL;
+                    coordTrans(0, EigenAll) *= nw;
+                    coordTrans({1, 2}, EigenAll) *= tw * settings.functionalSettings.tanWeightScale;
+                }
+                else if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBBNorm)
+                {
+                    // same as norm but using InertiaCoordBB for tan
+                    tPoint norm = this->GetFaceNorm(iFace, -1);
                     real areaL = this->GetFaceArea(iFace);
                     if constexpr (dim == 3)
                         areaL = std::sqrt(areaL);
-                    // real tw = 1. / std::max({1.0, areaL / (faceLOrig + 0.001 * areaL)});
                     // real tw = 1. / std::min({1.0, faceLOrig / (areaL + 0.001 * faceLOrig)});
-                    // std::cout << tw << std::endl;
-                    real tw = 1.0;
+                    real nw = 1;
 
-                    coordTrans = Geom::NormBuildLocalBaseV<3>(norm).transpose() * faceL;
-                    coordTrans({1, 2}, Eigen::all) *= tw * settings.functionalSettings.tanWeightScale;
+                    tGPoint coordTransN = coordTrans.rowwise().normalized();
+                    tPoint near_norm = (coordTransN * norm).array().abs();
+                    int iMax = -1;
+                    real maxCos = near_norm.maxCoeff(&iMax);
+                    tGPoint coordTrans_new = coordTrans;
+
+                    coordTrans_new(iMax, EigenAll) = norm.transpose() * (faceL * nw);
+                    tGPoint coordTrans_newN = coordTrans_new.rowwise().normalized();
+
+                    tPoint axis_ev = coordTrans_newN.eigenvalues().array().abs();
+                    real axis_cond = axis_ev.maxCoeff() / axis_ev.minCoeff(); // valid for 2-d as 0,0,1 is also normalized
+                    if (axis_cond < 10.0)
+                        coordTrans = coordTrans_new;
+
+                    // std::cout << near_norm.transpose() << " --- " << axis_cond << "\n";
+                }
+                else if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBBSym)
+                {
+                    tGPoint coordTransN = coordTrans.rowwise().normalized(); // supposed to be a unitary matrix
+                    // std::cout << coordTransN.transpose() * coordTransN << "\n\n";
+                    coordTrans = coordTransN.transpose() * coordTrans;
+                }
+                else if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBB ||
+                         settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::InertiaCoord)
+                {
                 }
 
                 // std::cout << "face " << iFace << std::endl;
@@ -704,14 +786,14 @@ namespace DNDS::CFV
             case 2:
             {
                 toOrtho();
-                ret(Eigen::seq(degree2Start, Eigen::last), Eigen::all) *= 0.0;
+                ret(Eigen::seq(degree2Start, EigenLast), EigenAll) *= 0.0;
                 toOrigin();
             }
             break;
             case 3:
             {
                 toOrtho();
-                ret(Eigen::seq(degree3Start, Eigen::last), Eigen::all) *= 0.0;
+                ret(Eigen::seq(degree3Start, EigenLast), EigenAll) *= 0.0;
                 toOrigin();
             }
             break;

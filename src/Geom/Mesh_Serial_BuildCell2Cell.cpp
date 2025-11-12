@@ -32,7 +32,7 @@ namespace DNDS::Geom
             {
                 coordBnd.resize(3, bnd2nodeSerial->RowSize(iBnd));
                 for (rowsize ib2n = 0; ib2n < bnd2nodeSerial->RowSize(iBnd); ib2n++)
-                    coordBnd(Eigen::all, ib2n) = coordSerial->operator[]((*bnd2nodeSerial)(iBnd, ib2n));
+                    coordBnd(EigenAll, ib2n) = coordSerial->operator[]((*bnd2nodeSerial)(iBnd, ib2n));
             }
             tPoint faceCent = coordBnd.rowwise().mean();
 
@@ -86,7 +86,7 @@ namespace DNDS::Geom
             {
                 coordBnd.resize(3, bnd2nodeSerial->RowSize(iBnd));
                 for (rowsize ib2n = 0; ib2n < bnd2nodeSerial->RowSize(iBnd); ib2n++)
-                    coordBnd(Eigen::all, ib2n) = coordSerial->operator[]((*bnd2nodeSerial)(iBnd, ib2n));
+                    coordBnd(EigenAll, ib2n) = coordSerial->operator[]((*bnd2nodeSerial)(iBnd, ib2n));
             }
             tPoint faceCent = coordBnd.rowwise().mean();
 
@@ -134,7 +134,7 @@ namespace DNDS::Geom
                 {
                     coordBndOther.resize(3, bnd2nodeSerial->RowSize(donorIBnd));
                     for (rowsize ib2n = 0; ib2n < bnd2nodeSerial->RowSize(donorIBnd); ib2n++)
-                        coordBndOther(Eigen::all, ib2n) = // put onto main's data
+                        coordBndOther(EigenAll, ib2n) = // put onto main's data
                             coordSerial->operator[]((*bnd2nodeSerial)(donorIBnd, ib2n));
                 }
                 DNDS_assert(coordBndOther.cols() == coordBnd.cols());
@@ -145,8 +145,8 @@ namespace DNDS::Geom
                     rowsize jb2nMin = 0;
                     for (rowsize jb2n = 0; jb2n < coordBnd.cols(); jb2n++)
                     {
-                        real dist = (coordBndOther(Eigen::all, jb2n) -
-                                     mesh->periodicInfo.TransCoord(coordBnd(Eigen::all, ib2n), faceID))
+                        real dist = (coordBndOther(EigenAll, jb2n) -
+                                     mesh->periodicInfo.TransCoord(coordBnd(EigenAll, ib2n), faceID))
                                         .squaredNorm();
                         if (dist < minDist)
                         {
@@ -364,7 +364,7 @@ namespace DNDS::Geom
         index nCells = cell2nodeSerial->Size();
         index nCellsDone = 0;
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (DNDS::index iCell = 0; iCell < cell2nodeSerial->Size(); iCell++)
         {
@@ -385,7 +385,7 @@ namespace DNDS::Geom
             //                                    /****/
 #ifdef DNDS_USE_OMP
             // #pragma omp single
-#pragma omp critical
+#    pragma omp critical
 #endif
             {
                 if (nCellsDone % (nCells / 1000 + 1) == 0)
@@ -449,7 +449,7 @@ namespace DNDS::Geom
             for (auto iCellOther : c_neighbors)
                 (*cell2cellSerial)(iCell, ic2c++) = iCellOther;
 #ifdef DNDS_USE_OMP
-#pragma omp atomic
+#    pragma omp atomic
 #endif
             nCellsDone++;
         }
@@ -464,12 +464,12 @@ namespace DNDS::Geom
         cell2cellSerialFacial->Resize(cell2cellSerial->Size(), 6);
         nCellsDone = 0;
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (index iCell = 0; iCell < cell2cellSerial->Size(); iCell++)
         {
 #ifdef DNDS_USE_OMP
-#pragma omp critical
+#    pragma omp critical
 #endif
             {
                 if (nCellsDone % (nCells / 1000 + 1) == 0)
@@ -507,7 +507,7 @@ namespace DNDS::Geom
             (*cell2cellSerialFacial).ResizeRow(iCell, facialNeighbors.size());
             (*cell2cellSerialFacial)[iCell] = facialNeighbors;
 #ifdef DNDS_USE_OMP
-#pragma omp atomic
+#    pragma omp atomic
 #endif
             nCellsDone++;
         }

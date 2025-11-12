@@ -214,6 +214,17 @@ namespace DNDS::Euler
                 DNDS_assert(false);
         }
 
+        if (config.dataIOControl.meshBuildWallDist)
+        {
+            mesh->BuildNodeWallDist(
+                [pBCHandler = pBCHandler](Geom::t_index id)
+                {
+                    auto euler_bc_type = pBCHandler->GetTypeFromID(id);
+                    return static_cast<bool>(euler_bc_type == Euler::BCWall || euler_bc_type == Euler::BCWallIsothermal);
+                },
+                config.dataIOControl.meshWallDistOptions);
+        }
+
         if (config.dataIOControl.outPltMode == 0)
         {
             mesh->AdjLocal2GlobalPrimary();

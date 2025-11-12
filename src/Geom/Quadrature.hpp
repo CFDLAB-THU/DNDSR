@@ -1066,7 +1066,7 @@ namespace DNDS::Geom::Elem
         real JDet{0};
         tJacobi J = Elem::ShapeJacobianCoordD01Nj(coordsCell, DiNj);
         if constexpr (dim == 2)
-            JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+            JDet = J(EigenAll, 0).cross(J(EigenAll, 1)).stableNorm();
         else
             JDet = J.fullPivLu().determinant();
         return JDet;
@@ -1087,9 +1087,9 @@ namespace DNDS::Geom::Elem
         real JDet{0};
         tJacobi J = Elem::ShapeJacobianCoordD01Nj(coords, DiNj);
         if constexpr (dim == 2)
-            JDet = J(Eigen::all, 0).stableNorm();
+            JDet = J(EigenAll, 0).stableNorm();
         else
-            JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+            JDet = J(EigenAll, 0).cross(J(EigenAll, 1)).stableNorm();
         return JDet;
     }
 

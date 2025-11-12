@@ -74,12 +74,12 @@ namespace DNDS::Euler
                 [mesh](auto u, Geom::t_index id) //! important caveat! using & captures mesh shared_ptr as reference, lost if inbound pointer is destoried!!
                 {
                     DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-                    u(Eigen::all, Seq123) = mesh->periodicInfo.TransVector<dim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
+                    u(EigenAll, Seq123) = mesh->periodicInfo.TransVector<dim, Eigen::Dynamic>(u(EigenAll, Seq123).transpose(), id).transpose();
                 },
                 [mesh](auto u, Geom::t_index id)
                 {
                     DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-                    u(Eigen::all, Seq123) = mesh->periodicInfo.TransVectorBack<dim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
+                    u(EigenAll, Seq123) = mesh->periodicInfo.TransVectorBack<dim, Eigen::Dynamic>(u(EigenAll, Seq123).transpose(), id).transpose();
                 });
 
             vfv->ConstructMetrics();
@@ -599,14 +599,14 @@ namespace DNDS::Euler
             if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID) && !reverse) ||
                 (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID) && reverse))
             {
-                u(Seq012, Eigen::all) = mesh->periodicInfo.TransVectorBack<dim, nVarsFixed>(u(Seq012, Eigen::all), faceID);
-                u(Eigen::all, Seq123) = mesh->periodicInfo.TransVectorBack<dim, dim>(u(Eigen::all, Seq123).transpose(), faceID).transpose();
+                u(Seq012, EigenAll) = mesh->periodicInfo.TransVectorBack<dim, nVarsFixed>(u(Seq012, EigenAll), faceID);
+                u(EigenAll, Seq123) = mesh->periodicInfo.TransVectorBack<dim, dim>(u(EigenAll, Seq123).transpose(), faceID).transpose();
             }
             if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID) && !reverse) ||
                 (if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID) && reverse))
             {
-                u(Seq012, Eigen::all) = mesh->periodicInfo.TransVector<dim, nVarsFixed>(u(Seq012, Eigen::all), faceID);
-                u(Eigen::all, Seq123) = mesh->periodicInfo.TransVector<dim, dim>(u(Eigen::all, Seq123).transpose(), faceID).transpose();
+                u(Seq012, EigenAll) = mesh->periodicInfo.TransVector<dim, nVarsFixed>(u(Seq012, EigenAll), faceID);
+                u(EigenAll, Seq123) = mesh->periodicInfo.TransVector<dim, dim>(u(EigenAll, Seq123).transpose(), faceID).transpose();
             }
         }
 
@@ -789,8 +789,8 @@ namespace DNDS::Euler
             J.resize(nVars, nVars);
             J.setIdentity();
             for (int i = 0; i < nVars; i++)
-                J(Eigen::all, i) = fluxJacobian0_Right_Times_du(
-                    U, UOther, n, vg, btype, J(Eigen::all, i),
+                J(EigenAll, i) = fluxJacobian0_Right_Times_du(
+                    U, UOther, n, vg, btype, J(EigenAll, i),
                     lambdaMain, lambdaC, lambdaVis, lambda0, lambda123, lambda4,
                     useRoeTerm, incFsign, omitF);
             // TODO: for eulerEX, use scalar for SeqI52Last part

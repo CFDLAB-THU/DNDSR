@@ -31,7 +31,7 @@ namespace DNDS::Euler
         JDiag.clearValues();
         int cnvars = nVars;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -82,14 +82,14 @@ namespace DNDS::Euler
                     JBC.setIdentity();
                     for (int i = 0; i < nVars; i++)
                     {
-                        TU VE = JBC(Eigen::all, i);
-                        JBC(Eigen::all, i) = this->generateBoundaryValue(VE, u[iCell], iCell, iFace, -1,
-                                                                         unitNorm,
-                                                                         Geom::NormBuildLocalBaseV<dim>(unitNorm),
-                                                                         vfv->GetFaceQuadraturePPhys(iFace, -1),
-                                                                         t,
-                                                                         mesh->GetFaceZone(iFace),
-                                                                         false, 0, /*linMode=*/1);
+                        TU VE = JBC(EigenAll, i);
+                        JBC(EigenAll, i) = this->generateBoundaryValue(VE, u[iCell], iCell, iFace, -1,
+                                                                       unitNorm,
+                                                                       Geom::NormBuildLocalBaseV<dim>(unitNorm),
+                                                                       vfv->GetFaceQuadraturePPhys(iFace, -1),
+                                                                       t,
+                                                                       mesh->GetFaceZone(iFace),
+                                                                       false, 0, /*linMode=*/1);
                     }
                     TJacobianU jacIJ = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
                         uj, u[iCell],
@@ -156,7 +156,7 @@ namespace DNDS::Euler
         };
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
         for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
             for (index iScan = mesh->LocalPartStart(iPart); iScan < mesh->LocalPartEnd(iPart); iScan++)
@@ -253,7 +253,7 @@ namespace DNDS::Euler
         int cnvars = nVars;
         jacLU.setZero();
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
         for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
             for (index iScan = mesh->LocalPartStart(iPart); iScan < mesh->LocalPartEnd(iPart); iScan++)
@@ -293,14 +293,14 @@ namespace DNDS::Euler
                         mesh->CellOtherCellPeriodicHandle(
                             iFace, iCellAtFace,
                             [&]()
-                            { jacIJ(Eigen::all, Seq123) =
+                            { jacIJ(EigenAll, Seq123) =
                                   mesh->periodicInfo.TransVectorBack<dim, nVarsFixed>(
-                                                        jacIJ(Eigen::all, Seq123).transpose(), faceID)
+                                                        jacIJ(EigenAll, Seq123).transpose(), faceID)
                                       .transpose(); },
                             [&]()
-                            { jacIJ(Eigen::all, Seq123) =
+                            { jacIJ(EigenAll, Seq123) =
                                   mesh->periodicInfo.TransVector<dim, nVarsFixed>(
-                                                        jacIJ(Eigen::all, Seq123).transpose(), faceID)
+                                                        jacIJ(EigenAll, Seq123).transpose(), faceID)
                                       .transpose(); });
                         jacLU.LDU(iCell, symLU->cell2cellFaceVLocal2FullRowPos[iCell][iC2CInLocal]) =
                             (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacIJ;
@@ -589,8 +589,8 @@ namespace DNDS::Euler
 #endif
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
-#pragma omp parallel for schedule(static) reduction(TUAdd : sumInc)
+#    pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
+#    pragma omp parallel for schedule(static) reduction(TUAdd : sumInc)
         for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
             cellOp(mesh->LocalPartStart(iPart), mesh->LocalPartEnd(iPart));
 #endif
@@ -621,8 +621,8 @@ namespace DNDS::Euler
         index nCellDist = mesh->NumCell();
         sumInc.setZero(cnvars);
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
-#pragma omp parallel for schedule(static) reduction(TUAdd : sumInc)
+#    pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
+#    pragma omp parallel for schedule(static) reduction(TUAdd : sumInc)
 #endif
         for (index iScan = 0; iScan < nCellDist; iScan++)
         {
@@ -734,7 +734,7 @@ namespace DNDS::Euler
         else
             bBuf.setConstant(0.0);
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
         for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
             for (index iScan = mesh->LocalPartStart(iPart); iScan < mesh->LocalPartEnd(iPart); iScan++)
@@ -812,7 +812,7 @@ namespace DNDS::Euler
         if (model == EulerModel::NS_SA || model == NS_SA_3D)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (int iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -831,7 +831,7 @@ namespace DNDS::Euler
             if (settings.ransModel == RANSModel::RANS_KOSST ||
                 settings.ransModel == RANSModel::RANS_KOWilcox)
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (int iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
@@ -865,7 +865,7 @@ namespace DNDS::Euler
             DNDS_assert(model == NS || model == NS_2D || model == NS_3D);
             if constexpr (model == NS || model == NS_2D)
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
@@ -886,7 +886,7 @@ namespace DNDS::Euler
                 }
             else if constexpr (model == NS_3D)
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
@@ -909,7 +909,7 @@ namespace DNDS::Euler
             DNDS_assert(model == NS || model == NS_2D || model == NS_EX);
             if constexpr (model == NS || model == NS_2D || model == NS_EX)
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
@@ -941,7 +941,7 @@ namespace DNDS::Euler
             DNDS_assert(model == NS || model == NS_2D);
             if constexpr (model == NS || model == NS_2D)
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
@@ -967,7 +967,7 @@ namespace DNDS::Euler
             if constexpr (model == NS_3D)
             {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
@@ -1011,7 +1011,7 @@ namespace DNDS::Euler
         case 3001: // for nol problem
             DNDS_assert(model == NS_3D);
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -1058,7 +1058,7 @@ namespace DNDS::Euler
         if (settings.frameConstRotation.enabled)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (int iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -1072,7 +1072,7 @@ namespace DNDS::Euler
         for (auto &i : settings.boxInitializers)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -1090,7 +1090,7 @@ namespace DNDS::Euler
         for (auto &i : settings.planeInitializers)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -1114,7 +1114,7 @@ namespace DNDS::Euler
             exprtkEval.AddVector("UPrim", nVars);
             exprtkEval.Compile(exprStr);
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -1184,7 +1184,7 @@ namespace DNDS::Euler
     void EulerEvaluator<model>::MeanValueCons2Prim(ArrayDOFV<nVarsFixed> &u, ArrayDOFV<nVarsFixed> &w)
     {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
         for (index iCell = 0; iCell < u.Size(); iCell++)
         {
@@ -1199,7 +1199,7 @@ namespace DNDS::Euler
     void EulerEvaluator<model>::MeanValuePrim2Cons(ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &u)
     {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
         for (index iCell = 0; iCell < w.Size(); iCell++)
         {
@@ -1220,8 +1220,8 @@ namespace DNDS::Euler
             resc.setZero(nVars);
             real rescBase{0};
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
-#pragma omp parallel for schedule(static) reduction(TUAdd : resc)
+#    pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
+#    pragma omp parallel for schedule(static) reduction(TUAdd : resc)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -1249,8 +1249,8 @@ namespace DNDS::Euler
             resc.resizeLike(rhs[0]);
             resc.setZero();
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp declare reduction(TUAdd:TU : omp_out = omp_out.array().max(omp_in.array())) initializer(omp_priv = omp_orig)
-#pragma omp parallel for schedule(static) reduction(TUAdd : resc)
+#    pragma omp declare reduction(TUAdd:TU : omp_out = omp_out.array().max(omp_in.array())) initializer(omp_priv = omp_orig)
+#    pragma omp parallel for schedule(static) reduction(TUAdd : resc)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 resc = resc.array().max(rhs[iCell].array().abs()).matrix();
@@ -1292,8 +1292,8 @@ namespace DNDS::Euler
         resc.setZero(nVars);
         resc.setP(P);
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp declare reduction(TUAdd : TU_P_Reduction<TU> : omp_out.reduce(omp_in)) initializer(omp_priv = omp_orig)
-#pragma omp parallel for schedule(static) reduction(TUAdd : resc)
+#    pragma omp declare reduction(TUAdd : TU_P_Reduction<TU> : omp_out.reduce(omp_in)) initializer(omp_priv = omp_orig)
+#    pragma omp parallel for schedule(static) reduction(TUAdd : resc)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -1341,7 +1341,7 @@ namespace DNDS::Euler
         bool disable_shock_limiter = flags & LIMITER_UGRAD_Disable_Shock_Limiter;
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -1359,7 +1359,7 @@ namespace DNDS::Euler
             for (rowsize ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 index iFace = c2f[ic2f];
-                uFaceInc(Eigen::all, ic2f) =
+                uFaceInc(EigenAll, ic2f) =
                     uGrad[iCell].transpose() *
                     (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellQuadraturePPhys(iCell, -1))(SeqG012);
                 index iCellOther = mesh->CellFaceOther(iCell, iFace);
@@ -1370,7 +1370,7 @@ namespace DNDS::Euler
                     eOtherMin = std::min(eOtherMin, fEInternal(u[iCellOther]));
                     eOtherMax = std::max(eOtherMax, fEInternal(u[iCellOther]));
                     // ! adding bary value if the other cell exists
-                    // uFaceInc(Eigen::all, ic2f + c2f.size()) =
+                    // uFaceInc(EigenAll, ic2f + c2f.size()) =
                     // uGrad[iCell].transpose() *
                     //  (vfv->GetOtherCellBaryFromCell(iCell, iCellOther, -1) - vfv->GetCellQuadraturePPhys(iCell, -1))(SeqG012);
                 }
@@ -1403,8 +1403,8 @@ namespace DNDS::Euler
             for (int j = 0; j < uFaceAlpha0.cols(); j++)
                 DNDS_assert(uFaceAlpha0(0, j) > 0);
             real minEFace =
-                (uFaceAlpha0(I4, Eigen::all).array() -
-                 0.5 * uFaceAlpha0(Seq123, Eigen::all).colwise().squaredNorm().array() / (uFaceAlpha0(0, Eigen::all).array() + verySmallReal))
+                (uFaceAlpha0(I4, EigenAll).array() -
+                 0.5 * uFaceAlpha0(Seq123, EigenAll).colwise().squaredNorm().array() / (uFaceAlpha0(0, EigenAll).array() + verySmallReal))
                     .minCoeff();
             real eC = fEInternal(u[iCell]);
             real deltaEFaceMin = minEFace - eC;
@@ -1413,7 +1413,7 @@ namespace DNDS::Euler
                 alphaPP_E = std::min(alphaPP_E, std::abs(eC * (1 - E_lb_eps)) / (verySmallReal - deltaEFaceMin));
             if (alphaPP_E < 1.0)
                 alphaPP_E *= safetyRatio;
-            uGradNew[iCell](Eigen::all, Seq01234) *= alphaPP_E;
+            uGradNew[iCell](EigenAll, Seq01234) *= alphaPP_E;
         }
     }
 
@@ -1438,7 +1438,7 @@ namespace DNDS::Euler
             real rhoMin = veryLargeReal;
             real pMin = veryLargeReal;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime) reduction(min : rhoMin, pMin)
+#    pragma omp parallel for schedule(runtime) reduction(min : rhoMin, pMin)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -1456,7 +1456,7 @@ namespace DNDS::Euler
         index nLimLocal = 0;
         real minBetaLocal = 1;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime) reduction(+ : nLimLocal) reduction(min : minBetaLocal)
+#    pragma omp parallel for schedule(runtime) reduction(+ : nLimLocal) reduction(min : minBetaLocal)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -1472,14 +1472,14 @@ namespace DNDS::Euler
             if (restrictOnVolPoints)
             {
                 for (int iG = 0; iG < gCell.GetNumPoints(); iG++)
-                    quadBase(iG, Eigen::all) = vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iG, 0, 1);
+                    quadBase(iG, EigenAll) = vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iG, 0, 1);
                 nPoint += gCell.GetNumPoints();
             }
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 auto gFace = vfv->GetFaceQuad(c2f[ic2f]);
                 for (int iG = 0; iG < gFace.GetNumPoints(); iG++)
-                    quadBase(nPoint + iG, Eigen::all) = vfv->GetIntPointDiffBaseValue(iCell, c2f[ic2f], -1, iG, 0, 1);
+                    quadBase(nPoint + iG, EigenAll) = vfv->GetIntPointDiffBaseValue(iCell, c2f[ic2f], -1, iG, 0, 1);
                 nPoint += gFace.GetNumPoints();
             }
             /***********/
@@ -1495,17 +1495,17 @@ namespace DNDS::Euler
             auto checkRecBaseGood = [&]()
             {
                 recBase = (quadBase * uRecBase).rowwise() + u[iCell].transpose();
-                if (recBase(Eigen::all, 0).minCoeff() < rhoEps) // TODO: add relaxation to eps values
+                if (recBase(EigenAll, 0).minCoeff() < rhoEps) // TODO: add relaxation to eps values
                     return false;
                 if constexpr (model == NS_SA || model == NS_SA_3D)
-                    if (recBase(Eigen::all, I4 + 1).minCoeff() < rhoEps)
+                    if (recBase(EigenAll, I4 + 1).minCoeff() < rhoEps)
                         return false;
                 if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
-                    if (recBase(Eigen::all, I4 + 1).minCoeff() < rhoEps || recBase(Eigen::all, I4 + 2).minCoeff() < rhoEps)
+                    if (recBase(EigenAll, I4 + 1).minCoeff() < rhoEps || recBase(EigenAll, I4 + 2).minCoeff() < rhoEps)
                         return false;
                 Eigen::Vector<real, Eigen::Dynamic> ek =
-                    0.5 * (recBase(Eigen::all, Seq123).array().square().rowwise().sum()) / recBase(Eigen::all, 0).array();
-                Eigen::Vector<real, Eigen::Dynamic> eInternalS = (recBase(Eigen::all, I4) - ek);
+                    0.5 * (recBase(EigenAll, Seq123).array().square().rowwise().sum()) / recBase(EigenAll, 0).array();
+                Eigen::Vector<real, Eigen::Dynamic> eInternalS = (recBase(EigenAll, I4) - ek);
                 if (eInternalS.minCoeff() < pEps)
                     return false;
                 return true;
@@ -1528,7 +1528,7 @@ namespace DNDS::Euler
 
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed>
                 recInc = quadBase * (uRec[iCell] - uRecBase);
-            Eigen::Vector<real, Eigen::Dynamic> rhoS = recInc(Eigen::all, 0) + recBase(Eigen::all, 0);
+            Eigen::Vector<real, Eigen::Dynamic> rhoS = recInc(EigenAll, 0) + recBase(EigenAll, 0);
             Eigen::Index rhoMinIdx;
             real rhoMin = rhoS.minCoeff(&rhoMinIdx);
             real theta1 = 1;
@@ -1540,7 +1540,7 @@ namespace DNDS::Euler
             if constexpr (model == NS_SA || model == NS_SA_3D)
             {
                 static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
-                Eigen::Vector<real, Eigen::Dynamic> v1S = recInc(Eigen::all, I4 + 1) + recBase(Eigen::all, I4 + 1);
+                Eigen::Vector<real, Eigen::Dynamic> v1S = recInc(EigenAll, I4 + 1) + recBase(EigenAll, I4 + 1);
                 real v1Min = v1S.minCoeff();
                 if (v1Min < v1Eps)
                     for (int iG = 0; iG < rhoS.size(); iG++)
@@ -1555,8 +1555,8 @@ namespace DNDS::Euler
                 real thetaC = 1;
                 static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
                 static real v2Eps = smallReal * settings.refUPrim(I4 + 2);
-                Eigen::Vector<real, Eigen::Dynamic> v1S = recInc(Eigen::all, I4 + 1) + recBase(Eigen::all, I4 + 1);
-                Eigen::Vector<real, Eigen::Dynamic> v2S = recInc(Eigen::all, I4 + 2) + recBase(Eigen::all, I4 + 2);
+                Eigen::Vector<real, Eigen::Dynamic> v1S = recInc(EigenAll, I4 + 1) + recBase(EigenAll, I4 + 1);
+                Eigen::Vector<real, Eigen::Dynamic> v2S = recInc(EigenAll, I4 + 2) + recBase(EigenAll, I4 + 2);
                 real v1Min = v1S.minCoeff();
                 real v2Min = v2S.minCoeff();
                 if (v1Min < v1Eps)
@@ -1570,19 +1570,19 @@ namespace DNDS::Euler
                 // theta1 = std::min(theta1, thetaC);
                 if (thetaC < 1) // 2eq's pp not disturbing main flow
                 {
-                    uRec[iCell](Eigen::all, {I4 + 1, I4 + 2}) *= thetaC * 0.9;
+                    uRec[iCell](EigenAll, {I4 + 1, I4 + 2}) *= thetaC * 0.9;
                 }
             }
 
             if constexpr (model == NS_SA or model == NS_SA_3D or model == NS_2EQ or model == NS_2EQ_3D)
-                recInc(Eigen::all, Seq01234) *= theta1; // to leave SA unchanged
+                recInc(EigenAll, Seq01234) *= theta1; // to leave SA unchanged
             else
                 recInc *= theta1;
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed>
                 recVRhoG = recInc + recBase;
 
-            Eigen::Vector<real, Eigen::Dynamic> ek = 0.5 * (recVRhoG(Eigen::all, Seq123).array().square().rowwise().sum()) / recVRhoG(Eigen::all, 0).array();
-            Eigen::Vector<real, Eigen::Dynamic> eInternalS = recVRhoG(Eigen::all, I4) - ek;
+            Eigen::Vector<real, Eigen::Dynamic> ek = 0.5 * (recVRhoG(EigenAll, Seq123).array().square().rowwise().sum()) / recVRhoG(EigenAll, 0).array();
+            Eigen::Vector<real, Eigen::Dynamic> eInternalS = recVRhoG(EigenAll, I4) - ek;
             real thetaP = 1.0;
 
             if (pCent <= 2 * pEps)
@@ -1593,7 +1593,7 @@ namespace DNDS::Euler
                     if (eInternalS(iG) < 2 * pEps / (gamma - 1))
                     {
                         real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
-                            recBase(iG, Eigen::all).transpose(), recInc(iG, Eigen::all).transpose(),
+                            recBase(iG, EigenAll).transpose(), recInc(iG, EigenAll).transpose(),
                             pEps);
                         thetaP = std::min(thetaP, thetaThis);
                     }
@@ -1623,8 +1623,8 @@ namespace DNDS::Euler
             // validation:
             recInc = quadBase * uRec[iCell];
             recVRhoG = recInc.rowwise() + u[iCell].transpose();
-            ek = 0.5 * (recVRhoG(Eigen::all, Seq123).array().square().rowwise().sum()) / recVRhoG(Eigen::all, 0).array();
-            eInternalS = (recVRhoG(Eigen::all, I4) - ek);
+            ek = 0.5 * (recVRhoG(EigenAll, Seq123).array().square().rowwise().sum()) / recVRhoG(EigenAll, 0).array();
+            eInternalS = (recVRhoG(EigenAll, I4) - ek);
             for (int iG = 0; iG < eInternalS.size(); iG++)
             {
                 if (eInternalS(iG) < pEps)
@@ -1654,7 +1654,7 @@ namespace DNDS::Euler
             rhoEps *= 0, pEps *= 0;
         bool ret{true};
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -1672,7 +1672,7 @@ namespace DNDS::Euler
                                 " eps={}, value={}",
                                 rhoEps, u[iCell](0)));
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp critical
+#    pragma omp critical
 #endif
                 ret = false;
             }
@@ -1689,7 +1689,7 @@ namespace DNDS::Euler
                                 " eps={}, value={}",
                                 pEps / (gamma - 1), rhoEi));
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp critical
+#    pragma omp critical
 #endif
                 ret = false;
             }
@@ -1723,7 +1723,7 @@ namespace DNDS::Euler
         index nLimLocal = 0;
         real alphaMinLocal = 1;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime) reduction(+ : nLimLocal) reduction(min : alphaMinLocal)
+#    pragma omp parallel for schedule(runtime) reduction(+ : nLimLocal) reduction(min : alphaMinLocal)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -1795,7 +1795,7 @@ namespace DNDS::Euler
         MPI::Allreduce(&alphaMinLocal, &alphaMin, 1, DNDS_MPI_REAL, MPI_MIN, u.father->getMPI().comm);
         if (flag & EvaluateCellRHSAlpha_MIN_IF_NOT_ONE)
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -1804,7 +1804,7 @@ namespace DNDS::Euler
             }
         if (flag & EvaluateCellRHSAlpha_MIN_ALL)
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 cellRHSAlpha[iCell](0) = alphaMin;
@@ -1902,7 +1902,7 @@ namespace DNDS::Euler
     {
         real smootherCentWeight = 1;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -1954,7 +1954,7 @@ namespace DNDS::Euler
                         mesh->GetCoordsOnFace(iFace, coo);
                         for (int ic = 0; ic < coo.cols(); ic++)
                         {
-                            real r = settings.frameConstRotation.rVec(coo(Eigen::all, ic)).norm();
+                            real r = settings.frameConstRotation.rVec(coo(EigenAll, ic)).norm();
                             RMin = std::min(r, RMin);
                             RMax = std::max(r, RMax);
                         }
@@ -2001,7 +2001,7 @@ namespace DNDS::Euler
             mesh->GetCoordsOnFace(iFace, coo);
             for (int ic = 0; ic < coo.cols(); ic++)
             {
-                real r = settings.frameConstRotation.rVec(coo(Eigen::all, ic)).norm();
+                real r = settings.frameConstRotation.rVec(coo(EigenAll, ic)).norm();
                 RMin = std::min(r, RMin);
                 RMax = std::max(r, RMax);
             }
@@ -2050,7 +2050,7 @@ namespace DNDS::Euler
                     auto vExtra = pBCHandler->GetValueExtraFromID(v.first);
                     int showMethod = vExtra.size() >= 4 ? vExtra(3) : 0;
                     if (showMethod)
-                        log() << fmt::format("EulerEvaluator<model>::updateBCProfilesPressureRadialEq: p rise: [{:.3e}]", v.second.v(I4, Eigen::last))
+                        log() << fmt::format("EulerEvaluator<model>::updateBCProfilesPressureRadialEq: p rise: [{:.3e}]", v.second.v(I4, EigenLast))
                               << std::endl;
                 }
             }

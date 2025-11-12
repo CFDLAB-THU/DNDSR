@@ -6,8 +6,8 @@
 #define CGAL_DISABLE_ROUNDING_MATH_CHECK // for valgrind
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/AABB_tree.h>
-#include <CGAL/AABB_traits.h>
-#include <CGAL/AABB_triangle_primitive.h>
+#include <CGAL/AABB_traits_3.h>
+#include <CGAL/AABB_triangle_primitive_3.h>
 #undef CGAL_DISABLE_ROUNDING_MATH_CHECK
 
 namespace DNDS::Euler
@@ -43,9 +43,9 @@ namespace DNDS::Euler
                             mesh->GetCoordsOnFace(iFace, coords);
                             Eigen::Matrix<real, 3, 3> tri;
                             mesh->GetCoordsOnFace(iFace, coords);
-                            tri(Eigen::all, 0) = coords(Eigen::all, 0);
-                            tri(Eigen::all, 1) = coords(Eigen::all, 1);
-                            tri(Eigen::all, 2) = coords(Eigen::all, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
+                            tri(EigenAll, 0) = coords(EigenAll, 0);
+                            tri(EigenAll, 1) = coords(EigenAll, 1);
+                            tri(EigenAll, 2) = coords(EigenAll, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
                             Triangles.push_back(tri);
                         }
                         else if (elem.type == Geom::Elem::ElemType::Tri3 || elem.type == Geom::Elem::ElemType::Tri6) //! TODO
@@ -53,9 +53,9 @@ namespace DNDS::Euler
                             Geom::tSmallCoords coords;
                             mesh->GetCoordsOnFace(iFace, coords);
                             Eigen::Matrix<real, 3, 3> tri;
-                            tri(Eigen::all, 0) = coords(Eigen::all, 0);
-                            tri(Eigen::all, 1) = coords(Eigen::all, 1);
-                            tri(Eigen::all, 2) = coords(Eigen::all, 2);
+                            tri(EigenAll, 0) = coords(EigenAll, 0);
+                            tri(EigenAll, 1) = coords(EigenAll, 1);
+                            tri(EigenAll, 2) = coords(EigenAll, 2);
                             Triangles.push_back(tri);
                         }
                         else if (elem.type == Geom::Elem::ElemType::Quad4 || elem.type == Geom::Elem::ElemType::Quad9)
@@ -63,13 +63,13 @@ namespace DNDS::Euler
                             Geom::tSmallCoords coords;
                             mesh->GetCoordsOnFace(iFace, coords);
                             Eigen::Matrix<real, 3, 3> tri;
-                            tri(Eigen::all, 0) = coords(Eigen::all, 0);
-                            tri(Eigen::all, 1) = coords(Eigen::all, 1);
-                            tri(Eigen::all, 2) = coords(Eigen::all, 2);
+                            tri(EigenAll, 0) = coords(EigenAll, 0);
+                            tri(EigenAll, 1) = coords(EigenAll, 1);
+                            tri(EigenAll, 2) = coords(EigenAll, 2);
                             Triangles.push_back(tri);
-                            tri(Eigen::all, 0) = coords(Eigen::all, 0);
-                            tri(Eigen::all, 1) = coords(Eigen::all, 2);
-                            tri(Eigen::all, 2) = coords(Eigen::all, 3);
+                            tri(EigenAll, 0) = coords(EigenAll, 0);
+                            tri(EigenAll, 1) = coords(EigenAll, 2);
+                            tri(EigenAll, 2) = coords(EigenAll, 3);
                             Triangles.push_back(tri);
                         }
                         else
@@ -87,11 +87,11 @@ namespace DNDS::Euler
                             mesh->GetCoordsOnFace(iFace, coords);
                             for (int iV = 0; iV < 3; iV++)
                                 if (qPatch[iV] > 0)
-                                    tri(Eigen::all, iV) = coords(Eigen::all, qPatch[iV] - 1);
+                                    tri(EigenAll, iV) = coords(EigenAll, qPatch[iV] - 1);
                                 else if (qPatch[iV] < 0)
-                                    tri(Eigen::all, iV) = vfv->GetFaceQuadraturePPhys(iFace, -qPatch[iV] - 1);
+                                    tri(EigenAll, iV) = vfv->GetFaceQuadraturePPhys(iFace, -qPatch[iV] - 1);
                                 else
-                                    tri(Eigen::all, iV) = coords(Eigen::all, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
+                                    tri(EigenAll, iV) = coords(EigenAll, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
                             Triangles.push_back(tri);
                         }
                     }
@@ -126,8 +126,8 @@ namespace DNDS::Euler
                 typedef K::Point_3 Point;
                 typedef K::Triangle_3 Triangle;
                 typedef std::vector<Triangle>::iterator Iterator;
-                typedef CGAL::AABB_triangle_primitive<K, Iterator> Primitive;
-                typedef CGAL::AABB_traits<K, Primitive> AABB_triangle_traits;
+                typedef CGAL::AABB_triangle_primitive_3<K, Iterator> Primitive;
+                typedef CGAL::AABB_traits_3<K, Primitive> AABB_triangle_traits;
                 typedef CGAL::AABB_tree<AABB_triangle_traits> Tree;
 
                 std::vector<Triangle> triangles;
@@ -209,8 +209,8 @@ namespace DNDS::Euler
             typedef K::Point_3 Point;
             typedef K::Triangle_3 Triangle;
             typedef std::vector<Triangle>::iterator Iterator;
-            typedef CGAL::AABB_triangle_primitive<K, Iterator> Primitive;
-            typedef CGAL::AABB_traits<K, Primitive> AABB_triangle_traits;
+            typedef CGAL::AABB_triangle_primitive_3<K, Iterator> Primitive;
+            typedef CGAL::AABB_traits_3<K, Primitive> AABB_triangle_traits;
             typedef CGAL::AABB_tree<AABB_triangle_traits> Tree;
             std::vector<Triangle> triangles;
             triangles.reserve(mesh->NumBnd() * 8 + 8);
@@ -231,11 +231,11 @@ namespace DNDS::Euler
                             mesh->GetCoordsOnFace(iFace, coords);
                             for (int iV = 0; iV < 3; iV++)
                                 if (qPatch[iV] > 0)
-                                    tri(Eigen::all, iV) = coords(Eigen::all, qPatch[iV] - 1);
+                                    tri(EigenAll, iV) = coords(EigenAll, qPatch[iV] - 1);
                                 else if (qPatch[iV] < 0)
-                                    tri(Eigen::all, iV) = vfv->GetFaceQuadraturePPhys(iFace, -qPatch[iV] - 1);
+                                    tri(EigenAll, iV) = vfv->GetFaceQuadraturePPhys(iFace, -qPatch[iV] - 1);
                                 else
-                                    tri(Eigen::all, iV) = coords(Eigen::all, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
+                                    tri(EigenAll, iV) = coords(EigenAll, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
 
                             Point p0(tri(0, 0), tri(1, 0), tri(2, 0));
                             Point p1(tri(0, 1), tri(1, 1), tri(2, 1));
@@ -854,7 +854,7 @@ namespace DNDS::Euler
             uGradBufNoLim.trans.waitPersistentPull();
         }
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
@@ -886,26 +886,26 @@ namespace DNDS::Euler
             GradULxy.resize(Eigen::NoChange, nVars);
             GradURxy.resize(Eigen::NoChange, nVars);
             GradULxy.setZero(), GradURxy.setZero();
-            GradULxy(SeqG012, Eigen::all) = uGradBuf[f2c[0]];
+            GradULxy(SeqG012, EigenAll) = uGradBuf[f2c[0]];
             // if constexpr (gDim == 2)
-            //     GradULxy({0, 1}, Eigen::all) =
+            //     GradULxy({0, 1}, EigenAll) =
             //         vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, -1, std::array<int, 2>{1, 2}, 3) *
             //         uRec[f2c[0]]; // 2d here
             // else
-            //     GradULxy({0, 1, 2}, Eigen::all) =
+            //     GradULxy({0, 1, 2}, EigenAll) =
             //         vfv->GetIntPointDiffBaseValue(f2c[0], iFace, 0, -1, std::array<int, 3>{1, 2, 3}, 4) *
             //         uRec[f2c[0]]; // 3d here
             this->DiffUFromCell2Face(GradULxy, iFace, f2c[0], 0);
             GradURxy = GradULxy;
             if (f2c[1] != UnInitIndex)
             {
-                GradURxy(SeqG012, Eigen::all) = uGradBuf[f2c[1]];
+                GradURxy(SeqG012, EigenAll) = uGradBuf[f2c[1]];
                 // if constexpr (gDim == 2)
-                //     GradURxy({0, 1}, Eigen::all) =
+                //     GradURxy({0, 1}, EigenAll) =
                 //         vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, -1, std::array<int, 2>{1, 2}, 3) *
                 //         uRec[f2c[1]]; // 2d here
                 // else
-                //     GradURxy({0, 1, 2}, Eigen::all) =
+                //     GradURxy({0, 1, 2}, EigenAll) =
                 //         vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, -1, std::array<int, 3>{1, 2, 3}, 4) *
                 //         uRec[f2c[1]]; // 3d here
                 this->DiffUFromCell2Face(GradURxy, iFace, f2c[1], 1);
@@ -997,7 +997,7 @@ namespace DNDS::Euler
         }
         real dtMin = veryLargeReal;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime) reduction(min : dtMin)
+#    pragma omp parallel for schedule(runtime) reduction(min : dtMin)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -1123,11 +1123,11 @@ namespace DNDS::Euler
         {
             real pMean, asqrMean, Hmean;
             real gamma = settings.idealGasProperty.gamma;
-            TU UMeanXYC = UMeanXy(Eigen::all, iB);
+            TU UMeanXYC = UMeanXy(EigenAll, iB);
             auto seqC = Eigen::seq(iB * dim, iB * dim + dim - 1);
-            TDiffU DiffUxyC = DiffUxy(seqC, Eigen::all);
-            TDiffU DiffUxyPrimC = DiffUxyPrim(seqC, Eigen::all);
-            TVec uNormC = unitNorm(Eigen::all, iB);
+            TDiffU DiffUxyC = DiffUxy(seqC, EigenAll);
+            TDiffU DiffUxyPrimC = DiffUxyPrim(seqC, EigenAll);
+            TVec uNormC = unitNorm(EigenAll, iB);
             Gas::IdealGasThermal(UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm(),
                                     gamma, pMean, asqrMean, Hmean);
             DNDS_assert_info(pMean > 0, fmt::format("{}, {}, {}", UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm()));
@@ -1161,7 +1161,7 @@ namespace DNDS::Euler
                 {
                     VisFlux *= 0.0;
                 }
-                visFluxV(Eigen::all, iB) = VisFlux;
+                visFluxV(EigenAll, iB) = VisFlux;
             }
 #endif
             if (!isfinite(pMean) || !isfinite(pMean) || !isfinite(pMean))
@@ -1228,9 +1228,9 @@ namespace DNDS::Euler
             else
                 for (int iB = 0; iB < nB; iB++)
                 {
-                    RSWrapper_XY(rsType, ULxy(Eigen::all, iB), URxy(Eigen::all, iB), ULMeanXy, URMeanXy,
-                                 vgXY(Eigen::all, iB), unitNorm(Eigen::all, iB),
-                                 settings.idealGasProperty.gamma, finc(Eigen::all, iB), dLambda, fixScale,
+                    RSWrapper_XY(rsType, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
+                                 vgXY(EigenAll, iB), unitNorm(EigenAll, iB),
+                                 settings.idealGasProperty.gamma, finc(EigenAll, iB), dLambda, fixScale,
                                  lam0V(iB), lam123V(iB), lam4V(iB));
                 }
         };
@@ -1316,9 +1316,9 @@ namespace DNDS::Euler
                 else
                     for (int iB = 0; iB < nB; iB++)
                     {
-                        RSWrapper_XY(rsTypeAux, ULxy(Eigen::all, iB), URxy(Eigen::all, iB), ULMeanXy, URMeanXy,
-                                     vgXY(Eigen::all, iB), N1,
-                                     settings.idealGasProperty.gamma, F1(Eigen::all, iB), dLambda, fixScale,
+                        RSWrapper_XY(rsTypeAux, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
+                                     vgXY(EigenAll, iB), N1,
+                                     settings.idealGasProperty.gamma, F1(EigenAll, iB), dLambda, fixScale,
                                      lam0V1(iB), lam123V1(iB), lam4V1(iB));
                     }
 
@@ -1338,9 +1338,9 @@ namespace DNDS::Euler
                 else
                     for (int iB = 0; iB < nB; iB++)
                     {
-                        RSWrapper_XY(rsType, ULxy(Eigen::all, iB), URxy(Eigen::all, iB), ULMeanXy, URMeanXy,
-                                     vgXY(Eigen::all, iB), N2(Eigen::all, iB),
-                                     settings.idealGasProperty.gamma, finc(Eigen::all, iB), dLambda, fixScale,
+                        RSWrapper_XY(rsType, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
+                                     vgXY(EigenAll, iB), N2(EigenAll, iB),
+                                     settings.idealGasProperty.gamma, finc(EigenAll, iB), dLambda, fixScale,
                                      lam0V(iB), lam123V(iB), lam4V(iB));
                     }
 
@@ -1372,11 +1372,11 @@ namespace DNDS::Euler
             Eigen::RowVector<real, -1> lambdaFaceCC = lam123V; //! using velo instead of velo + a
             if (settings.ransEigScheme == 1)
                 lambdaFaceCC = lambdaFaceCC.array().max(lam0V.array()).max(lam4V.array());
-            auto vnR = ((URxy(Seq123, Eigen::all).array().rowwise() / URxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
-            auto vnL = ((ULxy(Seq123, Eigen::all).array().rowwise() / ULxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
-            finc(I4 + 1, Eigen::all) =
-                ((vnL * ULxy(I4 + 1, Eigen::all).array() + vnR * URxy(I4 + 1, Eigen::all).array()) -
-                 (URxy(I4 + 1, Eigen::all).array() - ULxy(I4 + 1, Eigen::all).array()) * lambdaFaceCC.array()) *
+            auto vnR = ((URxy(Seq123, EigenAll).array().rowwise() / URxy(0, EigenAll).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
+            auto vnL = ((ULxy(Seq123, EigenAll).array().rowwise() / ULxy(0, EigenAll).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
+            finc(I4 + 1, EigenAll) =
+                ((vnL * ULxy(I4 + 1, EigenAll).array() + vnR * URxy(I4 + 1, EigenAll).array()) -
+                 (URxy(I4 + 1, EigenAll).array() - ULxy(I4 + 1, EigenAll).array()) * lambdaFaceCC.array()) *
                 0.5;
         }
         if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
@@ -1384,18 +1384,18 @@ namespace DNDS::Euler
             Eigen::RowVector<real, -1> lambdaFaceCC = lam123V; //! using velo instead of velo + a
             if (settings.ransEigScheme == 1)
                 lambdaFaceCC = lambdaFaceCC.array().max(lam0V.array()).max(lam4V.array());
-            auto vnR = ((URxy(Seq123, Eigen::all).array().rowwise() / URxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
-            auto vnL = ((ULxy(Seq123, Eigen::all).array().rowwise() / ULxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
-            finc(I4 + 1, Eigen::all) =
-                ((vnL * ULxy(I4 + 1, Eigen::all).array() + vnR * URxy(I4 + 1, Eigen::all).array()) -
-                 (URxy(I4 + 1, Eigen::all).array() - ULxy(I4 + 1, Eigen::all).array()) * lambdaFaceCC.array()) *
+            auto vnR = ((URxy(Seq123, EigenAll).array().rowwise() / URxy(0, EigenAll).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
+            auto vnL = ((ULxy(Seq123, EigenAll).array().rowwise() / ULxy(0, EigenAll).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
+            finc(I4 + 1, EigenAll) =
+                ((vnL * ULxy(I4 + 1, EigenAll).array() + vnR * URxy(I4 + 1, EigenAll).array()) -
+                 (URxy(I4 + 1, EigenAll).array() - ULxy(I4 + 1, EigenAll).array()) * lambdaFaceCC.array()) *
                 0.5;
-            finc(I4 + 2, Eigen::all) =
-                ((vnL * ULxy(I4 + 2, Eigen::all).array() + vnR * URxy(I4 + 2, Eigen::all).array()) -
-                 (URxy(I4 + 2, Eigen::all).array() - ULxy(I4 + 2, Eigen::all).array()) * lambdaFaceCC.array()) *
+            finc(I4 + 2, EigenAll) =
+                ((vnL * ULxy(I4 + 2, EigenAll).array() + vnR * URxy(I4 + 2, EigenAll).array()) -
+                 (URxy(I4 + 2, EigenAll).array() - ULxy(I4 + 2, EigenAll).array()) * lambdaFaceCC.array()) *
                 0.5;
-            finc(1, Eigen::all).array() += UMeanXy(I4 + 1, Eigen::all).array() * (2. / 3.); //! k's normal stress
-            finc(I4, Eigen::all).array() += UMeanXy(I4 + 1, Eigen::all).array() * (2. / 3.) * UMeanXy(1, Eigen::all).array() / UMeanXy(0, Eigen::all).array();
+            finc(1, EigenAll).array() += UMeanXy(I4 + 1, EigenAll).array() * (2. / 3.); //! k's normal stress
+            finc(I4, EigenAll).array() += UMeanXy(I4 + 1, EigenAll).array() * (2. / 3.) * UMeanXy(1, EigenAll).array() / UMeanXy(0, EigenAll).array();
         }
         if constexpr (model == NS_EX || model == NS_EX_3D)
         {
@@ -1403,11 +1403,11 @@ namespace DNDS::Euler
             Eigen::RowVector<real, -1> lambdaFaceCC = lam123V; //! using velo instead of velo + a
             if (settings.ransEigScheme == 1)
                 lambdaFaceCC = lambdaFaceCC.array().max(lam0V.array()).max(lam4V.array());
-            auto vnR = ((URxy(Seq123, Eigen::all).array().rowwise() / URxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
-            auto vnL = ((ULxy(Seq123, Eigen::all).array().rowwise() / ULxy(0, Eigen::all).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
-            finc(SeqI52Last, Eigen::all) =
-                ((vnL * ULxy(SeqI52Last, Eigen::all).array() + vnR * URxy(SeqI52Last, Eigen::all).array()) -
-                 (URxy(SeqI52Last, Eigen::all).array() - ULxy(SeqI52Last, Eigen::all).array()) * lambdaFaceCC.array()) *
+            auto vnR = ((URxy(Seq123, EigenAll).array().rowwise() / URxy(0, EigenAll).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
+            auto vnL = ((ULxy(Seq123, EigenAll).array().rowwise() / ULxy(0, EigenAll).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
+            finc(SeqI52Last, EigenAll) =
+                ((vnL * ULxy(SeqI52Last, EigenAll).array() + vnR * URxy(SeqI52Last, EigenAll).array()) -
+                 (URxy(SeqI52Last, EigenAll).array() - ULxy(SeqI52Last, EigenAll).array()) * lambdaFaceCC.array()) *
                 0.5;
         }
 
@@ -2287,11 +2287,11 @@ namespace DNDS::Euler
                 GradU.resize(Eigen::NoChange, nVars);
                 GradU.setZero();
                 if constexpr (gDim == 2)
-                    GradU({0, 1}, Eigen::all) =
+                    GradU({0, 1}, EigenAll) =
                         vfv->GetIntPointDiffBaseValue(iCell, -1, -1, -1, std::array<int, 2>{1, 2}, 3) *
                         uRec[iCell]; // 2d specific
                 else
-                    GradU({0, 1, 2}, Eigen::all) =
+                    GradU({0, 1, 2}, EigenAll) =
                         vfv->GetIntPointDiffBaseValue(iCell, -1, -1, -1, std::array<int, 3>{1, 2, 3}, 4) *
                         uRec[iCell]; // 3d specific
                 real pMean, asqrMean, Hmean;

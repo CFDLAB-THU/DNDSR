@@ -447,7 +447,7 @@ namespace DNDS::Euler
                     UC(Seq123) = normBase.transpose() * UC(Seq123);
 
                     auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, eval.settings.idealGasProperty.gamma);
-                    M(Eigen::all, Seq123) *= normBase.transpose();
+                    M(EigenAll, Seq123) *= normBase.transpose();
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
                     ret.setIdentity();
@@ -465,7 +465,7 @@ namespace DNDS::Euler
                     UC(Seq123) = normBase.transpose() * UC(Seq123);
 
                     auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, eval.settings.idealGasProperty.gamma);
-                    M(Seq123, Eigen::all) = normBase * M(Seq123, Eigen::all);
+                    M(Seq123, EigenAll) = normBase * M(Seq123, EigenAll);
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
                     ret.setIdentity();
@@ -607,7 +607,7 @@ namespace DNDS::Euler
             if (getNVars(model) > (I4 + 1) && iter <= config.others.nFreezePassiveInner)
             {
                 for (int i = 0; i < crhs.Size(); i++)
-                    crhs[i](Eigen::seq(I4 + 1, Eigen::last)).setZero();
+                    crhs[i](Eigen::seq(I4 + 1, EigenLast)).setZero();
                 // if (mpi.rank == 0)
                 //     std::cout << "Freezing all passive" << std::endl;
             }
@@ -961,7 +961,7 @@ namespace DNDS::Euler
             if (getNVars(model) > I4 + 1 && iter <= config.others.nFreezePassiveInner)
             {
                 for (int i = 0; i < cres.Size(); i++)
-                    cxInc[i](Eigen::seq(I4 + 1, Eigen::last)).setZero();
+                    cxInc[i](Eigen::seq(I4 + 1, EigenLast)).setZero();
                 // if (mpi.rank == 0)
                 //     std::cout << "Freezing all passive" << std::endl;
             }
@@ -1090,7 +1090,7 @@ namespace DNDS::Euler
             if (getNVars(model) > I4 + 1 && iter <= config.others.nFreezePassiveInner)
             {
                 for (int i = 0; i < crhs.Size(); i++)
-                    cxInc[i](Eigen::seq(I4 + 1, Eigen::last)).setZero();
+                    cxInc[i](Eigen::seq(I4 + 1, EigenLast)).setZero();
                 // if (mpi.rank == 0)
                 //     std::cout << "Freezing all passive" << std::endl;
             }

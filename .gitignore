@@ -40,3 +40,4 @@ newSrc*
 *.ipynb_*
 # temporary compile_commands.json for clangd generated with compile db
 /compile_commands.json
+/DNDSR

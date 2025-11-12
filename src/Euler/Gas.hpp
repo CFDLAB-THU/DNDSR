@@ -184,9 +184,9 @@ namespace DNDS::Euler::Gas
     template <int dim = 3, typename TU, typename TF, class TVec, class TVecVG, class TP>
     inline void GasInviscidFlux_Batch(const TU &U, const TVec &velo, const TVecVG &vg, TP &&p, TF &F)
     {
-        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) = U(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all).array().rowwise() * (velo(0, Eigen::all) - vg(0, Eigen::all)).array(); // note that additional flux are unattended!
-        F(1, Eigen::all).array() += p.array();
-        F(dim + 1, Eigen::all).array() += velo(0, Eigen::all).array() * p.array();
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll) = U(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll).array().rowwise() * (velo(0, EigenAll) - vg(0, EigenAll)).array(); // note that additional flux are unattended!
+        F(1, EigenAll).array() += p.array();
+        F(dim + 1, EigenAll).array() += velo(0, EigenAll).array() * p.array();
         // original form: F(dim + 1) += (velo(0) - vg(0)) * p + vg(0) * p;
     }
 
@@ -195,9 +195,9 @@ namespace DNDS::Euler::Gas
     {
         auto vn = (velo.array() * n.array()).colwise().sum();
         auto vgn = (vg.array() * n.array()).colwise().sum();
-        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) = U(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all).array().rowwise() * (vn - vgn).array(); // note that additional flux are unattended!
-        F(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), Eigen::all).array() += n.array().rowwise() * p.array();
-        F(dim + 1, Eigen::all).array() += vn * p.array();
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll) = U(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll).array().rowwise() * (vn - vgn).array(); // note that additional flux are unattended!
+        F(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), EigenAll).array() += n.array().rowwise() * p.array();
+        F(dim + 1, EigenAll).array() += vn * p.array();
         // original form: F(dim + 1) += (velo(0) - vg(0)) * p + vg(0) * p;
     }
 
@@ -230,7 +230,7 @@ namespace DNDS::Euler::Gas
             dU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) * vn +
             U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) * dvn + unitNorm * dp;
         F(dim + 1) = (dU(dim + 1) + dp) * vn + (U(dim + 1) + p) * dvn;
-        static const auto SeqI52Last = Eigen::seq(Eigen::fix<dim + 2>, Eigen::last);
+        static const auto SeqI52Last = Eigen::seq(Eigen::fix<dim + 2>, EigenLast);
         if constexpr (U.RowsAtCompileTime == Eigen::Dynamic || U.RowsAtCompileTime > dim + 2)
             F(SeqI52Last) = dU(SeqI52Last) * vn + U(SeqI52Last) * dvn;
         F -= dU * vg.dot(unitNorm);
@@ -362,7 +362,7 @@ namespace DNDS::Euler::Gas
             }
             real div = SP - SM;
             div += signP(div) * verySmallReal;
-            // F = (SP * FL - SM * FR) / div + (SP * SM / div) * (UR - UL - dfix * ReVRoe(Eigen::all, {1, 2, 3}) * alpha({1, 2, 3}));
+            // F = (SP * FL - SM * FR) / div + (SP * SM / div) * (UR - UL - dfix * ReVRoe(EigenAll, {1, 2, 3}) * alpha({1, 2, 3}));
             F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) =
                 (SP * FL - SM * FR) / div +
                 (SP * SM / div) *
@@ -780,10 +780,10 @@ namespace DNDS::Euler::Gas
         UOut(Seq123) = veloRoe * UOut(0);
         real pRoe = asqrRoe * UOut(0) / gamma;
         UOut(I4) = pRoe / (gamma - 1) + 0.5 * vsqrRoe * UOut(0);
-        UOut(Eigen::seq(I4 + 1, Eigen::last)) =
+        UOut(Eigen::seq(I4 + 1, EigenLast)) =
             UOut(0) / (sqrtRhoLm + sqrtRhoRm) *
-            (UL(Eigen::seq(I4 + 1, Eigen::last)) / sqrtRhoLm +
-             UR(Eigen::seq(I4 + 1, Eigen::last)) / sqrtRhoRm);
+            (UL(Eigen::seq(I4 + 1, EigenLast)) / sqrtRhoLm +
+             UR(Eigen::seq(I4 + 1, EigenLast)) / sqrtRhoRm);
     }
 
     template <int dim = 3, typename TDU, typename TDF, typename TVecV, typename TVecN>
@@ -792,7 +792,7 @@ namespace DNDS::Euler::Gas
                          real lam0, real lam123, real lam4, real gamma,
                          TDF &incF)
     {
-        static const auto SeqI52Last = Eigen::seq(Eigen::fix<dim + 2>, Eigen::last);
+        static const auto SeqI52Last = Eigen::seq(Eigen::fix<dim + 2>, EigenLast);
         using TVec = Eigen::Vector<real, dim>;
         real veloRoeN = veloRoe.dot(n);
 
@@ -849,8 +849,8 @@ namespace DNDS::Euler::Gas
                 dumpInfo();
                 DNDS_assert(false);
             }
-        TVec_Batch veloL = (UL(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), Eigen::all).array().rowwise() / UL(0, Eigen::all).array()).matrix();
-        TVec_Batch veloR = (UR(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), Eigen::all).array().rowwise() / UR(0, Eigen::all).array()).matrix();
+        TVec_Batch veloL = (UL(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), EigenAll).array().rowwise() / UL(0, EigenAll).array()).matrix();
+        TVec_Batch veloR = (UR(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), EigenAll).array().rowwise() / UR(0, EigenAll).array()).matrix();
         TVec veloLm = (ULm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / ULm(0)).matrix();
         TVec veloRm = (URm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / URm(0)).matrix();
 
@@ -859,8 +859,8 @@ namespace DNDS::Euler::Gas
         for (int iB = 0; iB < nB; iB++)
         {
             real asqrL, asqrR, HL, HR;
-            real vsqrL = veloL(Eigen::all, iB).squaredNorm();
-            real vsqrR = veloR(Eigen::all, iB).squaredNorm();
+            real vsqrL = veloL(EigenAll, iB).squaredNorm();
+            real vsqrR = veloR(EigenAll, iB).squaredNorm();
             IdealGasThermal(UL(dim + 1, iB), UL(0, iB), vsqrL, gamma, pL(iB), asqrL, HL);
             IdealGasThermal(UR(dim + 1, iB), UR(0, iB), vsqrR, gamma, pR(iB), asqrR, HR);
         }
@@ -907,9 +907,9 @@ namespace DNDS::Euler::Gas
             // *vanilla Lax
             // lam0 = lam123 = lam4 = std::max({lam0, lam123, lam4});
             lam0 = lam123 = lam4 = std::max(std::abs(veloLm0) + std::sqrt(asqrLm), std::abs(veloRm0) + std::sqrt(asqrRm));
-            F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) =
+            F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll) =
                 (FL + FR) * 0.5 -
-                0.5 * lam0 * (UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) - UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all));
+                0.5 * lam0 * (UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll) - UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll));
             return; //* early exit
         }
         else
@@ -920,23 +920,23 @@ namespace DNDS::Euler::Gas
                                         lam0, lam123, lam4);
 
         TU5_Batch incU =
-            UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) -
-            UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all); //! not using m, for this is accuracy-limited!
+            UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll) -
+            UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll); //! not using m, for this is accuracy-limited!
         TReal_Batch incU123N =
-            (incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), Eigen::all).array() * n.array()).colwise().sum();
-        TVec_Batch alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), Eigen::all) - veloRoe * incU(0, Eigen::all);
+            (incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), EigenAll).array() * n.array()).colwise().sum();
+        TVec_Batch alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), EigenAll) - veloRoe * incU(0, EigenAll);
         TVec_Batch alpha23VT = alpha23V.array() - n.array().rowwise() * (alpha23V.array() * n.array()).colwise().sum();
         TReal_Batch incU4b =
-            incU(dim + 1, Eigen::all) -
+            incU(dim + 1, EigenAll) -
             veloRoe.transpose() * alpha23VT;
         TReal_Batch alpha1 =
             (gamma - 1) / asqrRoe *
-            (incU(0, Eigen::all) * (HRoe - veloRoeN * veloRoeN) +
+            (incU(0, EigenAll) * (HRoe - veloRoeN * veloRoeN) +
              veloRoeN * incU123N - incU4b);
         TReal_Batch alpha0 =
-            (incU(0, Eigen::all) * (veloRoeN + aRoe) - incU123N - aRoe * alpha1) / (2 * aRoe);
+            (incU(0, EigenAll) * (veloRoeN + aRoe) - incU123N - aRoe * alpha1) / (2 * aRoe);
         TReal_Batch alpha4 =
-            incU(0, Eigen::all) - (alpha0 + alpha1);
+            incU(0, EigenAll) - (alpha0 + alpha1);
 
         alpha0 *= lam0;
         alpha1 *= lam123;
@@ -945,18 +945,18 @@ namespace DNDS::Euler::Gas
 
         TU5_Batch incF;
         incF.resize(Eigen::NoChange, UL.cols());
-        incF(0, Eigen::all) = alpha0 + alpha1 + alpha4;
-        incF(dim + 1, Eigen::all) = (HRoe - veloRoeN * aRoe) * alpha0 + 0.5 * vsqrRoe * alpha1 +
-                                    (HRoe + veloRoeN * aRoe) * alpha4 + veloRoe.transpose() * alpha23VT;
-        incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), Eigen::all) =
+        incF(0, EigenAll) = alpha0 + alpha1 + alpha4;
+        incF(dim + 1, EigenAll) = (HRoe - veloRoeN * aRoe) * alpha0 + 0.5 * vsqrRoe * alpha1 +
+                                  (HRoe + veloRoeN * aRoe) * alpha4 + veloRoe.transpose() * alpha23VT;
+        incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), EigenAll) =
             ((-aRoe * n).array().colwise() + veloRoe.array()).rowwise() * alpha0.array() +
             ((aRoe * n).array().colwise() + veloRoe.array()).rowwise() * alpha4.array() +
             alpha23VT.array() +
             (veloRoe * alpha1).array();
-        // incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), Eigen::all) =
+        // incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), EigenAll) =
         //     (veloRoe.array() - (aRoe * n).array().colwise()) * alpha0 * (veloRoe.array() + (aRoe * n).array().colwise()) * alpha4;
 
-        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), Eigen::all) = (FL + FR) * 0.5 - 0.5 * incF;
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll) = (FL + FR) * 0.5 - 0.5 * incF;
     }
 
     template <int dim = 3,
@@ -1154,8 +1154,8 @@ namespace DNDS::Euler::Gas
                                  0.5 *
                                      (GradU(Seq012, Seq123) * velo +
                                       GradUPrim(Seq012, Seq123) * Eigen::Vector<real, dim>(U(Seq123))));
-        GradUPrim(Seq012, Eigen::seq(Eigen::fix<I4 + 1>, Eigen::last)) -= GradU(Seq012, 0) * U(Eigen::seq(Eigen::fix<I4 + 1>, Eigen::last)).transpose() / U(0);
-        GradUPrim(Seq012, Eigen::seq(Eigen::fix<I4 + 1>, Eigen::last)) /= U(0);
+        GradUPrim(Seq012, Eigen::seq(Eigen::fix<I4 + 1>, EigenLast)) -= GradU(Seq012, 0) * U(Eigen::seq(Eigen::fix<I4 + 1>, EigenLast)).transpose() / U(0);
+        GradUPrim(Seq012, Eigen::seq(Eigen::fix<I4 + 1>, EigenLast)) /= U(0);
     }
 
     template <int dim, typename TU, typename TGradU>

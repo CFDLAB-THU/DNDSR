@@ -42,14 +42,14 @@ namespace DNDS::CFV
                             uRecVal(nDiff, nVarsSee), uRecValL(nDiff, nVarsSee), uRecValR(nDiff, nVarsSee), uRecValJump(nDiff, nVarsSee);
                         uRecVal.setZero(), uRecValJump.setZero();
                         uRecValL = this->GetIntPointDiffBaseValue(iCell, iFace, -1, -1, Eigen::seq(0, nDiff - 1)) *
-                                   uRec[iCell](Eigen::all, varsSee);
-                        uRecValL(0, Eigen::all) += u[iCell](varsSee).transpose();
+                                   uRec[iCell](EigenAll, varsSee);
+                        uRecValL(0, EigenAll) += u[iCell](varsSee).transpose();
 
                         if (iCellOther != UnInitIndex)
                         {
                             uRecValR = this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, -1, Eigen::seq(0, nDiff - 1)) *
-                                       uRec[iCellOther](Eigen::all, varsSee);
-                            uRecValR(0, Eigen::all) += u[iCellOther](varsSee).transpose();
+                                       uRec[iCellOther](EigenAll, varsSee);
+                            uRecValR(0, EigenAll) += u[iCellOther](varsSee).transpose();
                             uRecVal = (uRecValL + uRecValR) * 0.5;
                             uRecValJump = (uRecValL - uRecValR) * 0.5;
                         }
@@ -58,8 +58,8 @@ namespace DNDS::CFV
                         IJI = FFaceFunctional(uRecValJump, uRecValJump, iFace, iCell, iCellOther);
                         ISI = FFaceFunctional(uRecVal, uRecVal, iFace, iCell, iCellOther);
 
-                        finc(Eigen::all, 0) = IJI.diagonal();
-                        finc(Eigen::all, 1) = ISI.diagonal();
+                        finc(EigenAll, 0) = IJI.diagonal();
+                        finc(EigenAll, 1) = ISI.diagonal();
 
                         finc *= GetFaceArea(iFace); // don't forget this
 
@@ -72,7 +72,7 @@ namespace DNDS::CFV
                         //     std::cout << ISI << std::endl;
                         //     std::cout << uRec[iCell] << std::endl;
                         //     std::cout << uRec[iCellOther] << std::endl;
-                        //     std::cout << this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, ig, Eigen::all) << std::endl;
+                        //     std::cout << this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, ig, EigenAll) << std::endl;
                         // }
                     });
                 IJIISIsum += IJIISI;
@@ -83,8 +83,8 @@ namespace DNDS::CFV
                 // }
             }
             Eigen::Vector<real, nVarsSee> smoothIndicator =
-                (IJIISIsum(Eigen::all, 0).array() /
-                 (IJIISIsum(Eigen::all, 1).array() + verySmallReal))
+                (IJIISIsum(EigenAll, 0).array() /
+                 (IJIISIsum(EigenAll, 1).array() + verySmallReal))
                     .matrix();
             real sImax = smoothIndicator.array().abs().maxCoeff();
             si(iCell, 0) = std::sqrt(sImax) * sqr(settings.maxOrder);
@@ -143,14 +143,14 @@ namespace DNDS::CFV
                         uRecVal.setZero(1, nVars), uRecValJump.setZero(1, nVars);
                         uRecValL = this->GetIntPointDiffBaseValue(iCell, iFace, -1, -1, std::array<int, 1>{0}, 1) *
                                    uRec[iCell];
-                        uRecValL(0, Eigen::all) += u[iCell].transpose();
+                        uRecValL(0, EigenAll) += u[iCell].transpose();
                         FPost(uRecValL);
 
                         if (iCellOther != UnInitIndex)
                         {
                             uRecValR = this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, -1, std::array<int, 1>{0}, 1) *
                                        uRec[iCellOther];
-                            uRecValR(0, Eigen::all) += u[iCellOther].transpose();
+                            uRecValR(0, EigenAll) += u[iCellOther].transpose();
                             FPost(uRecValR);
                             uRecVal = (uRecValL + uRecValR) * 0.5;
                             uRecValJump = (uRecValL - uRecValR) * 0.5;
@@ -158,16 +158,16 @@ namespace DNDS::CFV
 
                         for (int i = 0; i < nVars; i++)
                         {
-                            finc(i, 0) = FFaceFunctional(uRecValJump(Eigen::all, {i}), uRecValJump(Eigen::all, {i}), iFace, iCell, iCellOther)(0, 0);
-                            finc(i, 1) = FFaceFunctional(uRecVal(Eigen::all, {i}), uRecVal(Eigen::all, {i}), iFace, iCell, iCellOther)(0, 0);
+                            finc(i, 0) = FFaceFunctional(uRecValJump(EigenAll, {i}), uRecValJump(EigenAll, {i}), iFace, iCell, iCellOther)(0, 0);
+                            finc(i, 1) = FFaceFunctional(uRecVal(EigenAll, {i}), uRecVal(EigenAll, {i}), iFace, iCell, iCellOther)(0, 0);
                         }
                         finc *= GetFaceArea(iFace); // don't forget this
                     });
                 IJIISIsum += IJIISI;
             }
             Eigen::Vector<real, nVarsFixed> smoothIndicator =
-                (IJIISIsum(Eigen::all, 0).array() /
-                 (IJIISIsum(Eigen::all, 1).array() + verySmallReal))
+                (IJIISIsum(EigenAll, 0).array() /
+                 (IJIISIsum(EigenAll, 1).array() + verySmallReal))
                     .matrix();
             smoothIndicator.array() *= varsSee.array();
             real sImax = smoothIndicator.array().abs().maxCoeff();
@@ -264,7 +264,7 @@ namespace DNDS::CFV
                         Eigen::seq(
                             LimStart,
                             LimEnd),
-                        Eigen::all);
+                        EigenAll);
                 uOthers.reserve(maxNeighbour);
                 uOthers.push_back(uC); // using uC centered
                 // DNDS_MPI_InsertCheck(mpi, "HereAAC");
@@ -294,17 +294,17 @@ namespace DNDS::CFV
 
                         // std::cout << "A"<<std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOF>
-                            uOtherOther = uRec[iCellOther](Eigen::seq(0, NRecDOFLim - 1), Eigen::all);
+                            uOtherOther = uRec[iCellOther](Eigen::seq(0, NRecDOFLim - 1), EigenAll);
 
                         if (LimEnd < uOtherOther.rows() - 1) // successive SR
-                            uOtherOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::all) =
+                            uOtherOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), EigenAll) =
                                 matrixSecondaryOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::seq(LimEnd + 1, NRecDOFLim - 1)) *
-                                uFaces[ic2f](Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::all);
+                                uFaces[ic2f](Eigen::seq(LimEnd + 1, NRecDOFLim - 1), EigenAll);
 
                         // std::cout << "B" << std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uOtherIn =
-                                matrixSecondary(Eigen::seq(LimStart, LimEnd), Eigen::all) * uOtherOther;
+                                matrixSecondary(Eigen::seq(LimStart, LimEnd), EigenAll) * uOtherOther;
 
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uThisIn =
@@ -345,7 +345,7 @@ namespace DNDS::CFV
                         // to phys space
                         uLimOutArray = (FMI(uL, uR, unitNorm, uLimOutArray.matrix())).array();
 
-                        uFaces[ic2f](Eigen::seq(LimStart, LimEnd), Eigen::all) = uLimOutArray.matrix();
+                        uFaces[ic2f](Eigen::seq(LimStart, LimEnd), EigenAll) = uLimOutArray.matrix();
                         uOthers.push_back(uLimOutArray);
                     }
                     else
@@ -365,7 +365,7 @@ namespace DNDS::CFV
                     Eigen::seq(
                         LimStart,
                         LimEnd),
-                    Eigen::all) = uLimOutArray.matrix();
+                    EigenAll) = uLimOutArray.matrix();
             }
         }
         uRecNew.trans.startPersistentPull();
@@ -472,7 +472,7 @@ namespace DNDS::CFV
                         Eigen::seq(
                             LimStart,
                             LimEnd),
-                        Eigen::all);
+                        EigenAll);
                 uOthers.reserve(maxNeighbour);
                 uOthers.push_back(uC); // using uC centered
                 // DNDS_MPI_InsertCheck(mpi, "HereAAC");
@@ -502,17 +502,17 @@ namespace DNDS::CFV
 
                         // std::cout << "A"<<std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOF>
-                            uOtherOther = uRecBuf[iCellOther](Eigen::seq(0, NRecDOFLim - 1), Eigen::all);
+                            uOtherOther = uRecBuf[iCellOther](Eigen::seq(0, NRecDOFLim - 1), EigenAll);
 
                         // if (LimEnd < uOtherOther.rows() - 1) // successive SR
-                        //     uOtherOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::all) =
+                        //     uOtherOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), EigenAll) =
                         //         matrixSecondaryOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::seq(LimEnd + 1, NRecDOFLim - 1)) *
-                        //         uFaces[ic2f](Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::all);
+                        //         uFaces[ic2f](Eigen::seq(LimEnd + 1, NRecDOFLim - 1), EigenAll);
 
                         // std::cout << "B" << std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uOtherIn =
-                                matrixSecondary(Eigen::seq(LimStart, LimEnd), Eigen::all) * uOtherOther;
+                                matrixSecondary(Eigen::seq(LimStart, LimEnd), EigenAll) * uOtherOther;
 
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uThisIn =
@@ -554,7 +554,7 @@ namespace DNDS::CFV
                         // to phys space
                         uLimOutArray = FMI(uL, uR, unitNorm, uLimOutArray.matrix()).array();
 
-                        // uFaces[ic2f](Eigen::seq(LimStart, LimEnd), Eigen::all) = uLimOutArray.matrix();
+                        // uFaces[ic2f](Eigen::seq(LimStart, LimEnd), EigenAll) = uLimOutArray.matrix();
                         uOthers.push_back(uLimOutArray);
                     }
                     else
@@ -575,7 +575,7 @@ namespace DNDS::CFV
                     Eigen::seq(
                         LimStart,
                         LimEnd),
-                    Eigen::all) = uLimOutArray.matrix();
+                    EigenAll) = uLimOutArray.matrix();
             }
             uRecNew.trans.startPersistentPull();
             uRecNew.trans.waitPersistentPull();

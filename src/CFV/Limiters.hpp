@@ -33,21 +33,21 @@ namespace DNDS::CFV
             {
             case 2:
                 thetaNorm =
-                    theta(0, Eigen::all).pow(2) +
-                    theta(1, Eigen::all).pow(2);
+                    theta(0, EigenAll).pow(2) +
+                    theta(1, EigenAll).pow(2);
                 break;
             case 3:
                 thetaNorm =
-                    theta(0, Eigen::all).pow(2) +
-                    theta(1, Eigen::all).pow(2) * 0.5 +
-                    theta(2, Eigen::all).pow(2);
+                    theta(0, EigenAll).pow(2) +
+                    theta(1, EigenAll).pow(2) * 0.5 +
+                    theta(2, EigenAll).pow(2);
                 break;
             case 4:
                 thetaNorm =
-                    theta(0, Eigen::all).pow(2) +
-                    theta(1, Eigen::all).pow(2) * (1. / 3.) +
-                    theta(2, Eigen::all).pow(2) * (1. / 3.) +
-                    theta(3, Eigen::all).pow(2);
+                    theta(0, EigenAll).pow(2) +
+                    theta(1, EigenAll).pow(2) * (1. / 3.) +
+                    theta(2, EigenAll).pow(2) * (1. / 3.) +
+                    theta(3, EigenAll).pow(2);
                 break;
 
             default:
@@ -74,21 +74,21 @@ namespace DNDS::CFV
         //     {
         //     case 2:
         //         uDotuOut =
-        //             uOthers[iOther](0, Eigen::all) * uOut(0, Eigen::all) +
-        //             uOthers[iOther](1, Eigen::all) * uOut(1, Eigen::all);
+        //             uOthers[iOther](0, EigenAll) * uOut(0, EigenAll) +
+        //             uOthers[iOther](1, EigenAll) * uOut(1, EigenAll);
         //         break;
         //     case 3:
         //         uDotuOut =
-        //             uOthers[iOther](0, Eigen::all) * uOut(0, Eigen::all) +
-        //             uOthers[iOther](1, Eigen::all) * uOut(1, Eigen::all) * 0.5 +
-        //             uOthers[iOther](2, Eigen::all) * uOut(2, Eigen::all);
+        //             uOthers[iOther](0, EigenAll) * uOut(0, EigenAll) +
+        //             uOthers[iOther](1, EigenAll) * uOut(1, EigenAll) * 0.5 +
+        //             uOthers[iOther](2, EigenAll) * uOut(2, EigenAll);
         //         break;
         //     case 4:
         //         uDotuOut =
-        //             uOthers[iOther](0, Eigen::all) * uOut(0, Eigen::all) +
-        //             uOthers[iOther](1, Eigen::all) * uOut(1, Eigen::all) * (1. / 3.) +
-        //             uOthers[iOther](2, Eigen::all) * uOut(2, Eigen::all) * (1. / 3.) +
-        //             uOthers[iOther](3, Eigen::all) * uOut(3, Eigen::all);
+        //             uOthers[iOther](0, EigenAll) * uOut(0, EigenAll) +
+        //             uOthers[iOther](1, EigenAll) * uOut(1, EigenAll) * (1. / 3.) +
+        //             uOthers[iOther](2, EigenAll) * uOut(2, EigenAll) * (1. / 3.) +
+        //             uOthers[iOther](3, EigenAll) * uOut(3, EigenAll);
         //         break;
 
         //     default:
@@ -135,45 +135,45 @@ namespace DNDS::CFV
             {
             case 2:
                 thetaNorm =
-                    theta(0, Eigen::all).pow(2) +
-                    theta(1, Eigen::all).pow(2);
+                    theta(0, EigenAll).pow(2) +
+                    theta(1, EigenAll).pow(2);
                 thetaMinNormNorm =
-                    thetaMinNorm(0, Eigen::all).pow(2) +
-                    thetaMinNorm(1, Eigen::all).pow(2);
+                    thetaMinNorm(0, EigenAll).pow(2) +
+                    thetaMinNorm(1, EigenAll).pow(2);
                 theta0DotTheta =
-                    theta(0, Eigen::all) * theta0(0, Eigen::all) +
-                    theta(1, Eigen::all) * theta0(1, Eigen::all);
+                    theta(0, EigenAll) * theta0(0, EigenAll) +
+                    theta(1, EigenAll) * theta0(1, EigenAll);
                 break;
             case 3:
                 thetaNorm =
-                    theta(0, Eigen::all).pow(2) +
-                    theta(1, Eigen::all).pow(2) * 0.5 +
-                    theta(2, Eigen::all).pow(2);
+                    theta(0, EigenAll).pow(2) +
+                    theta(1, EigenAll).pow(2) * 0.5 +
+                    theta(2, EigenAll).pow(2);
                 thetaMinNormNorm =
-                    thetaMinNorm(0, Eigen::all).pow(2) +
-                    thetaMinNorm(1, Eigen::all).pow(2) * 0.5 +
-                    thetaMinNorm(2, Eigen::all).pow(2);
+                    thetaMinNorm(0, EigenAll).pow(2) +
+                    thetaMinNorm(1, EigenAll).pow(2) * 0.5 +
+                    thetaMinNorm(2, EigenAll).pow(2);
                 theta0DotTheta =
-                    theta(0, Eigen::all) * theta0(0, Eigen::all) +
-                    theta(1, Eigen::all) * theta0(1, Eigen::all) * 0.5 +
-                    theta(2, Eigen::all) * theta0(2, Eigen::all);
+                    theta(0, EigenAll) * theta0(0, EigenAll) +
+                    theta(1, EigenAll) * theta0(1, EigenAll) * 0.5 +
+                    theta(2, EigenAll) * theta0(2, EigenAll);
                 break;
             case 4:
                 thetaNorm =
-                    theta(0, Eigen::all).pow(2) +
-                    theta(1, Eigen::all).pow(2) * (1. / 3.) +
-                    theta(2, Eigen::all).pow(2) * (1. / 3.) +
-                    theta(3, Eigen::all).pow(2);
+                    theta(0, EigenAll).pow(2) +
+                    theta(1, EigenAll).pow(2) * (1. / 3.) +
+                    theta(2, EigenAll).pow(2) * (1. / 3.) +
+                    theta(3, EigenAll).pow(2);
                 thetaMinNormNorm =
-                    thetaMinNorm(0, Eigen::all).pow(2) +
-                    thetaMinNorm(1, Eigen::all).pow(2) * (1. / 3.) +
-                    thetaMinNorm(2, Eigen::all).pow(2) * (1. / 3.) +
-                    thetaMinNorm(3, Eigen::all).pow(2);
+                    thetaMinNorm(0, EigenAll).pow(2) +
+                    thetaMinNorm(1, EigenAll).pow(2) * (1. / 3.) +
+                    thetaMinNorm(2, EigenAll).pow(2) * (1. / 3.) +
+                    thetaMinNorm(3, EigenAll).pow(2);
                 theta0DotTheta =
-                    theta(0, Eigen::all) * theta0(0, Eigen::all) +
-                    theta(1, Eigen::all) * theta0(1, Eigen::all) * (1. / 3.) +
-                    theta(2, Eigen::all) * theta0(2, Eigen::all) * (1. / 3.) +
-                    theta(3, Eigen::all) * theta0(3, Eigen::all);
+                    theta(0, EigenAll) * theta0(0, EigenAll) +
+                    theta(1, EigenAll) * theta0(1, EigenAll) * (1. / 3.) +
+                    theta(2, EigenAll) * theta0(2, EigenAll) * (1. / 3.) +
+                    theta(3, EigenAll) * theta0(3, EigenAll);
                 break;
 
             default:
@@ -192,33 +192,33 @@ namespace DNDS::CFV
         {
         case 2:
             thetaNorm =
-                theta0(0, Eigen::all).pow(2) +
-                theta0(1, Eigen::all).pow(2);
+                theta0(0, EigenAll).pow(2) +
+                theta0(1, EigenAll).pow(2);
             thetaMinNormNorm =
-                thetaMinNorm(0, Eigen::all).pow(2) +
-                thetaMinNorm(1, Eigen::all).pow(2);
+                thetaMinNorm(0, EigenAll).pow(2) +
+                thetaMinNorm(1, EigenAll).pow(2);
             break;
         case 3:
             thetaNorm =
-                theta0(0, Eigen::all).pow(2) +
-                theta0(1, Eigen::all).pow(2) * 0.5 +
-                theta0(2, Eigen::all).pow(2);
+                theta0(0, EigenAll).pow(2) +
+                theta0(1, EigenAll).pow(2) * 0.5 +
+                theta0(2, EigenAll).pow(2);
             thetaMinNormNorm =
-                thetaMinNorm(0, Eigen::all).pow(2) +
-                thetaMinNorm(1, Eigen::all).pow(2) * 0.5 +
-                thetaMinNorm(2, Eigen::all).pow(2);
+                thetaMinNorm(0, EigenAll).pow(2) +
+                thetaMinNorm(1, EigenAll).pow(2) * 0.5 +
+                thetaMinNorm(2, EigenAll).pow(2);
             break;
         case 4:
             thetaNorm =
-                theta0(0, Eigen::all).pow(2) +
-                theta0(1, Eigen::all).pow(2) * (1. / 3.) +
-                theta0(2, Eigen::all).pow(2) * (1. / 3.) +
-                theta0(3, Eigen::all).pow(2);
+                theta0(0, EigenAll).pow(2) +
+                theta0(1, EigenAll).pow(2) * (1. / 3.) +
+                theta0(2, EigenAll).pow(2) * (1. / 3.) +
+                theta0(3, EigenAll).pow(2);
             thetaMinNormNorm =
-                thetaMinNorm(0, Eigen::all).pow(2) +
-                thetaMinNorm(1, Eigen::all).pow(2) * (1. / 3.) +
-                thetaMinNorm(2, Eigen::all).pow(2) * (1. / 3.) +
-                thetaMinNorm(3, Eigen::all).pow(2);
+                thetaMinNorm(0, EigenAll).pow(2) +
+                thetaMinNorm(1, EigenAll).pow(2) * (1. / 3.) +
+                thetaMinNorm(2, EigenAll).pow(2) * (1. / 3.) +
+                thetaMinNorm(3, EigenAll).pow(2);
             break;
         default:
             DNDS_assert(false);
@@ -513,33 +513,33 @@ namespace DNDS::CFV
             {
             case 2:
                 u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square();
+                    theta1(0, EigenAll).square() +
+                    theta1(1, EigenAll).square();
                 u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square();
+                    theta2(0, EigenAll).square() +
+                    theta2(1, EigenAll).square();
                 break;
             case 3:
                 u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() * 0.5 +
-                    theta1(2, Eigen::all).square();
+                    theta1(0, EigenAll).square() +
+                    theta1(1, EigenAll).square() * 0.5 +
+                    theta1(2, EigenAll).square();
                 u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() * 0.5 +
-                    theta2(2, Eigen::all).square();
+                    theta2(0, EigenAll).square() +
+                    theta2(1, EigenAll).square() * 0.5 +
+                    theta2(2, EigenAll).square();
                 break;
             case 4:
                 u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() * (1. / 3.) +
-                    theta1(2, Eigen::all).square() * (1. / 3.) +
-                    theta1(3, Eigen::all).square();
+                    theta1(0, EigenAll).square() +
+                    theta1(1, EigenAll).square() * (1. / 3.) +
+                    theta1(2, EigenAll).square() * (1. / 3.) +
+                    theta1(3, EigenAll).square();
                 u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() * (1. / 3.) +
-                    theta2(2, Eigen::all).square() * (1. / 3.) +
-                    theta2(3, Eigen::all).square();
+                    theta2(0, EigenAll).square() +
+                    theta2(1, EigenAll).square() * (1. / 3.) +
+                    theta2(2, EigenAll).square() * (1. / 3.) +
+                    theta2(3, EigenAll).square();
                 break;
 
             default:
@@ -553,53 +553,53 @@ namespace DNDS::CFV
             {
             case 3:
                 u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() +
-                    theta1(2, Eigen::all).square();
+                    theta1(0, EigenAll).square() +
+                    theta1(1, EigenAll).square() +
+                    theta1(2, EigenAll).square();
                 u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() +
-                    theta2(2, Eigen::all).square();
+                    theta2(0, EigenAll).square() +
+                    theta2(1, EigenAll).square() +
+                    theta2(2, EigenAll).square();
                 break;
             case 6:
                 u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() +
-                    theta1(2, Eigen::all).square() +
-                    theta1(3, Eigen::all).square() * 0.5 +
-                    theta1(4, Eigen::all).square() * 0.5 +
-                    theta1(5, Eigen::all).square() * 0.5;
+                    theta1(0, EigenAll).square() +
+                    theta1(1, EigenAll).square() +
+                    theta1(2, EigenAll).square() +
+                    theta1(3, EigenAll).square() * 0.5 +
+                    theta1(4, EigenAll).square() * 0.5 +
+                    theta1(5, EigenAll).square() * 0.5;
                 u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() +
-                    theta2(2, Eigen::all).square() +
-                    theta2(3, Eigen::all).square() * 0.5 +
-                    theta2(4, Eigen::all).square() * 0.5 +
-                    theta2(5, Eigen::all).square() * 0.5;
+                    theta2(0, EigenAll).square() +
+                    theta2(1, EigenAll).square() +
+                    theta2(2, EigenAll).square() +
+                    theta2(3, EigenAll).square() * 0.5 +
+                    theta2(4, EigenAll).square() * 0.5 +
+                    theta2(5, EigenAll).square() * 0.5;
                 break;
             case 10:
                 u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() +
-                    theta1(2, Eigen::all).square() +
-                    theta1(3, Eigen::all).square() * (1. / 3.) +
-                    theta1(4, Eigen::all).square() * (1. / 3.) +
-                    theta1(5, Eigen::all).square() * (1. / 3.) +
-                    theta1(6, Eigen::all).square() * (1. / 3.) +
-                    theta1(7, Eigen::all).square() * (1. / 3.) +
-                    theta1(8, Eigen::all).square() * (1. / 3.) +
-                    theta1(9, Eigen::all).square() * (1. / 6.);
+                    theta1(0, EigenAll).square() +
+                    theta1(1, EigenAll).square() +
+                    theta1(2, EigenAll).square() +
+                    theta1(3, EigenAll).square() * (1. / 3.) +
+                    theta1(4, EigenAll).square() * (1. / 3.) +
+                    theta1(5, EigenAll).square() * (1. / 3.) +
+                    theta1(6, EigenAll).square() * (1. / 3.) +
+                    theta1(7, EigenAll).square() * (1. / 3.) +
+                    theta1(8, EigenAll).square() * (1. / 3.) +
+                    theta1(9, EigenAll).square() * (1. / 6.);
                 u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() +
-                    theta2(2, Eigen::all).square() +
-                    theta2(3, Eigen::all).square() * (1. / 3.) +
-                    theta2(4, Eigen::all).square() * (1. / 3.) +
-                    theta2(5, Eigen::all).square() * (1. / 3.) +
-                    theta2(6, Eigen::all).square() * (1. / 3.) +
-                    theta2(7, Eigen::all).square() * (1. / 3.) +
-                    theta2(8, Eigen::all).square() * (1. / 3.) +
-                    theta2(9, Eigen::all).square() * (1. / 6.);
+                    theta2(0, EigenAll).square() +
+                    theta2(1, EigenAll).square() +
+                    theta2(2, EigenAll).square() +
+                    theta2(3, EigenAll).square() * (1. / 3.) +
+                    theta2(4, EigenAll).square() * (1. / 3.) +
+                    theta2(5, EigenAll).square() * (1. / 3.) +
+                    theta2(6, EigenAll).square() * (1. / 3.) +
+                    theta2(7, EigenAll).square() * (1. / 3.) +
+                    theta2(8, EigenAll).square() * (1. / 3.) +
+                    theta2(9, EigenAll).square() * (1. / 6.);
                 break;
 
             default:
@@ -636,33 +636,33 @@ namespace DNDS::CFV
             {
             case 2:
                 u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square();
+                    theta1(0, EigenAll).square() +
+                    theta1(1, EigenAll).square();
                 u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square();
+                    theta2(0, EigenAll).square() +
+                    theta2(1, EigenAll).square();
                 break;
             case 3:
                 u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() * 0.5 +
-                    theta1(2, Eigen::all).square();
+                    theta1(0, EigenAll).square() +
+                    theta1(1, EigenAll).square() * 0.5 +
+                    theta1(2, EigenAll).square();
                 u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() * 0.5 +
-                    theta2(2, Eigen::all).square();
+                    theta2(0, EigenAll).square() +
+                    theta2(1, EigenAll).square() * 0.5 +
+                    theta2(2, EigenAll).square();
                 break;
             case 4:
                 u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() * (1. / 3.) +
-                    theta1(2, Eigen::all).square() * (1. / 3.) +
-                    theta1(3, Eigen::all).square();
+                    theta1(0, EigenAll).square() +
+                    theta1(1, EigenAll).square() * (1. / 3.) +
+                    theta1(2, EigenAll).square() * (1. / 3.) +
+                    theta1(3, EigenAll).square();
                 u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() * (1. / 3.) +
-                    theta2(2, Eigen::all).square() * (1. / 3.) +
-                    theta2(3, Eigen::all).square();
+                    theta2(0, EigenAll).square() +
+                    theta2(1, EigenAll).square() * (1. / 3.) +
+                    theta2(2, EigenAll).square() * (1. / 3.) +
+                    theta2(3, EigenAll).square();
                 break;
 
             default:
@@ -676,53 +676,53 @@ namespace DNDS::CFV
             {
             case 3:
                 u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() +
-                    theta1(2, Eigen::all).square();
+                    theta1(0, EigenAll).square() +
+                    theta1(1, EigenAll).square() +
+                    theta1(2, EigenAll).square();
                 u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() +
-                    theta2(2, Eigen::all).square();
+                    theta2(0, EigenAll).square() +
+                    theta2(1, EigenAll).square() +
+                    theta2(2, EigenAll).square();
                 break;
             case 6:
                 u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() +
-                    theta1(2, Eigen::all).square() +
-                    theta1(3, Eigen::all).square() * 0.5 +
-                    theta1(4, Eigen::all).square() * 0.5 +
-                    theta1(5, Eigen::all).square() * 0.5;
+                    theta1(0, EigenAll).square() +
+                    theta1(1, EigenAll).square() +
+                    theta1(2, EigenAll).square() +
+                    theta1(3, EigenAll).square() * 0.5 +
+                    theta1(4, EigenAll).square() * 0.5 +
+                    theta1(5, EigenAll).square() * 0.5;
                 u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() +
-                    theta2(2, Eigen::all).square() +
-                    theta2(3, Eigen::all).square() * 0.5 +
-                    theta2(4, Eigen::all).square() * 0.5 +
-                    theta2(5, Eigen::all).square() * 0.5;
+                    theta2(0, EigenAll).square() +
+                    theta2(1, EigenAll).square() +
+                    theta2(2, EigenAll).square() +
+                    theta2(3, EigenAll).square() * 0.5 +
+                    theta2(4, EigenAll).square() * 0.5 +
+                    theta2(5, EigenAll).square() * 0.5;
                 break;
             case 10:
                 u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() +
-                    theta1(2, Eigen::all).square() +
-                    theta1(3, Eigen::all).square() * (1. / 3.) +
-                    theta1(4, Eigen::all).square() * (1. / 3.) +
-                    theta1(5, Eigen::all).square() * (1. / 3.) +
-                    theta1(6, Eigen::all).square() * (1. / 3.) +
-                    theta1(7, Eigen::all).square() * (1. / 3.) +
-                    theta1(8, Eigen::all).square() * (1. / 3.) +
-                    theta1(9, Eigen::all).square() * (1. / 6.);
+                    theta1(0, EigenAll).square() +
+                    theta1(1, EigenAll).square() +
+                    theta1(2, EigenAll).square() +
+                    theta1(3, EigenAll).square() * (1. / 3.) +
+                    theta1(4, EigenAll).square() * (1. / 3.) +
+                    theta1(5, EigenAll).square() * (1. / 3.) +
+                    theta1(6, EigenAll).square() * (1. / 3.) +
+                    theta1(7, EigenAll).square() * (1. / 3.) +
+                    theta1(8, EigenAll).square() * (1. / 3.) +
+                    theta1(9, EigenAll).square() * (1. / 6.);
                 u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() +
-                    theta2(2, Eigen::all).square() +
-                    theta2(3, Eigen::all).square() * (1. / 3.) +
-                    theta2(4, Eigen::all).square() * (1. / 3.) +
-                    theta2(5, Eigen::all).square() * (1. / 3.) +
-                    theta2(6, Eigen::all).square() * (1. / 3.) +
-                    theta2(7, Eigen::all).square() * (1. / 3.) +
-                    theta2(8, Eigen::all).square() * (1. / 3.) +
-                    theta2(9, Eigen::all).square() * (1. / 6.);
+                    theta2(0, EigenAll).square() +
+                    theta2(1, EigenAll).square() +
+                    theta2(2, EigenAll).square() +
+                    theta2(3, EigenAll).square() * (1. / 3.) +
+                    theta2(4, EigenAll).square() * (1. / 3.) +
+                    theta2(5, EigenAll).square() * (1. / 3.) +
+                    theta2(6, EigenAll).square() * (1. / 3.) +
+                    theta2(7, EigenAll).square() * (1. / 3.) +
+                    theta2(8, EigenAll).square() * (1. / 3.) +
+                    theta2(9, EigenAll).square() * (1. / 6.);
                 break;
 
             default:

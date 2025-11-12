@@ -503,7 +503,7 @@ namespace DNDS::Euler
                 real cinInvervalR = std::min(rV, cR);
                 real cinInvervalLenRel = std::max(cinInvervalR - cinIntervalL, 0.0) / (rV - lV);
                 div[i] += divV * cinInvervalLenRel;
-                v(Eigen::all, i) += vmean * divV * cinInvervalLenRel;
+                v(EigenAll, i) += vmean * divV * cinInvervalLenRel;
             }
         }
 
@@ -519,7 +519,7 @@ namespace DNDS::Euler
         Eigen::Vector<real, nVarsFixed> Get(index i) const
         {
             DNDS_assert(i < Size());
-            return v(Eigen::all, i) / (div(i) + verySmallReal);
+            return v(EigenAll, i) / (div(i) + verySmallReal);
         }
 
         Eigen::Vector<real, nVarsFixed> GetPlain(real v) const

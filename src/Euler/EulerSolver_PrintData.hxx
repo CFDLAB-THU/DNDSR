@@ -125,7 +125,7 @@ namespace DNDS::Euler
                             // std::cout << uRecNew[iCell].rows() << std::endl;
                             vfv->FDiffBaseValue(DiBj, pPhy, iCell, -2, -2);
 
-                            TU vRec = (DiBj(Eigen::all, Eigen::seq(1, Eigen::last)) * (config.limiterControl.useLimiter ? uRecNew[iCell] : uRec[iCell])).transpose() +
+                            TU vRec = (DiBj(EigenAll, Eigen::seq(1, EigenLast)) * (config.limiterControl.useLimiter ? uRecNew[iCell] : uRec[iCell])).transpose() +
                                       uOut[iCell];
                             if (mesh->isPeriodic) // transform velocity to node reference frame
                                 vRec(Seq123) = mesh->periodicInfo.GetVectorBackByBits<dim, 1>(vRec(Seq123), mesh->cell2nodePbi(iCell, ic2n));

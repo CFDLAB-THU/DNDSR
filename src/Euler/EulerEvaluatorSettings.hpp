@@ -88,9 +88,9 @@ namespace DNDS::Euler
             {
                 Geom::tPoint rn = rVec(r).normalized();
                 Geom::tGPoint ret;
-                ret(Eigen::all, 0) = rn;
-                ret(Eigen::all, 2) = axis;
-                ret(Eigen::all, 1) = axis.cross(rn);
+                ret(EigenAll, 0) = rn;
+                ret(EigenAll, 2) = axis;
+                ret(EigenAll, 1) = axis.cross(rn);
                 return ret;
             }
             DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(

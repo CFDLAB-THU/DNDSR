@@ -14,12 +14,12 @@ namespace DNDS::Geom
     {
         auto operator[](Eigen::Index i)
         {
-            return tSmallCoords::operator()(Eigen::all, i);
+            return tSmallCoords::operator()(EigenAll, i);
         }
 
         auto operator[](Eigen::Index i) const
         {
-            return tSmallCoords::operator()(Eigen::all, i);
+            return tSmallCoords::operator()(EigenAll, i);
         }
     };
 
@@ -78,14 +78,14 @@ namespace DNDS::Geom
         if constexpr (d == 2)
         {
             DNDS_assert_info(J(2, 0) == 0, "Must be a line in x-y plane");
-            DNDS_assert_info(J(Eigen::all, 1).norm() == 0, "Must be a line in x-y plane");
-            DNDS_assert_info(J(Eigen::all, 2).norm() == 0, "Must be a line in x-y plane");
+            DNDS_assert_info(J(EigenAll, 1).norm() == 0, "Must be a line in x-y plane");
+            DNDS_assert_info(J(EigenAll, 2).norm() == 0, "Must be a line in x-y plane");
             return tPoint{J(1, 0), -J(0, 0), 0};
         }
         if constexpr (d == 3)
         {
-            DNDS_assert_info(J(Eigen::all, 2).norm() == 0, "Must be a face");
-            return J(Eigen::all, 0).cross(J(Eigen::all, 1));
+            DNDS_assert_info(J(EigenAll, 2).norm() == 0, "Must be a face");
+            return J(EigenAll, 0).cross(J(EigenAll, 1));
         }
     }
 

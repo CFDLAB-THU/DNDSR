@@ -66,6 +66,7 @@ namespace DNDS::CFV
                 UnknownScale = -1,
                 MeanAACBB = 0,
                 BaryDiff = 1,
+                CellMax = 2,
             } scaleType = ScaleType::BaryDiff;
 
             real scaleMultiplier = 1.0;
@@ -106,6 +107,9 @@ namespace DNDS::CFV
                 InertiaCoordBB = 1,
                 Norm = 2,
                 CentDiff = 3,
+                WallDist = 4,
+                InertiaCoordBBNorm = 5,
+                InertiaCoordBBSym = 6,
             } anisotropicType = AnisotropicType::InertiaCoord;
 
             real inertiaWeightPower = 1.0;
@@ -170,7 +174,6 @@ namespace DNDS::CFV
             jsonSetting["limiterBiwayAlter"] = limiterBiwayAlter;
             jsonSetting["subs2ndOrder"] = subs2ndOrder;
             jsonSetting["subs2ndOrderGGScheme"] = subs2ndOrderGGScheme;
-            
 
             jsonSetting["svdTolerance"] = svdTolerance;
 
@@ -200,7 +203,6 @@ namespace DNDS::CFV
             limiterBiwayAlter = jsonSetting["limiterBiwayAlter"];
             subs2ndOrder = jsonSetting["subs2ndOrder"];
             subs2ndOrderGGScheme = jsonSetting["subs2ndOrderGGScheme"];
-            
 
             svdTolerance = jsonSetting["svdTolerance"];
 
@@ -227,7 +229,8 @@ namespace DNDS::CFV
         VRSettings::FunctionalSettings::ScaleType,
         {{VRSettings::FunctionalSettings::ScaleType::UnknownScale, nullptr},
          {VRSettings::FunctionalSettings::ScaleType::MeanAACBB, "MeanAACBB"},
-         {VRSettings::FunctionalSettings::ScaleType::BaryDiff, "BaryDiff"}})
+         {VRSettings::FunctionalSettings::ScaleType::BaryDiff, "BaryDiff"},
+         {VRSettings::FunctionalSettings::ScaleType::CellMax, "CellMax"}})
 
     NLOHMANN_JSON_SERIALIZE_ENUM(
         VRSettings::FunctionalSettings::DirWeightScheme,
@@ -250,7 +253,10 @@ namespace DNDS::CFV
             {VRSettings::FunctionalSettings::AnisotropicType::UnknownAnisotropic, nullptr},
             {VRSettings::FunctionalSettings::AnisotropicType::InertiaCoord, "InertiaCoord"},
             {VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBB, "InertiaCoordBB"},
+            {VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBBNorm, "InertiaCoordBBNorm"},
+            {VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBBSym, "InertiaCoordBBSym"},
             {VRSettings::FunctionalSettings::AnisotropicType::Norm, "Norm"},
             {VRSettings::FunctionalSettings::AnisotropicType::CentDiff, "CentDiff"},
+            {VRSettings::FunctionalSettings::AnisotropicType::WallDist, "WallDist"},
         })
 }

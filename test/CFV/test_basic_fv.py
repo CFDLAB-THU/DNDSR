@@ -17,6 +17,8 @@ def time_function_until_limit(
     *args,
     **kwargs,
 ):
+    import math
+
     if time_limit <= 0:
         raise ValueError("time_limit must be positive")
     if max_executions is not None and max_executions <= 0:
@@ -40,7 +42,7 @@ def time_function_until_limit(
         # Check elapsed time
         elapsed = time.perf_counter() - start_time
         if elapsed >= reportTime:
-            reportTime += 1
+            reportTime = math.floor(elapsed / 1) * 1 + 1
             if report is not None:
                 report(elapsed, executions)
         if elapsed >= time_limit:
@@ -75,14 +77,14 @@ def test_basic():
             "translation1": [3, 0, 0],
             "translation2": [0, 3, 0],
         },
-        meshDirectBisect=2,
+        meshDirectBisect=3,
     )
 
     meshBnd, readerBnd = create_bnd_mesh(mesh)
 
     fv = CFV.FiniteVolume(mpi, mesh)
     settings = fv.GetSettings()
-    settings["intOrder"] = 5
+    settings["intOrder"] = 3
     settings["maxOrder"] = 3
     fv.ParseSettings(settings)
     if mpi.rank == 0:
@@ -125,11 +127,11 @@ def test_basic():
         print(f"Bytes mesh: {nBMesh:.4g} MB")
 
     u = CFV.tUDof_D()
-    grad_u_arrs = [CFV.tUGrad_3xD() for _ in range(2)];
+    grad_u_arrs = [CFV.tUGrad_3xD() for _ in range(2)]
     grad_u, grad_u1 = grad_u_arrs
 
     nvars = 5
-    test_time = 4.0
+    test_time = 10.0
     max_iter = 1000 * 1000 * 1000
 
     fv.BuildUDof_D(u, nvars)
@@ -202,10 +204,12 @@ def test_basic():
     grad_u_err_cnorm1 = grad_u.componentWiseNorm1(grad_u1)
     if mpi.rank == 0:
         print("--- CUDA ---")
-        print(f"[{executions}] times, avg [{avg_time:.4g}] s")
+        print(f"[{executions}] times, avg [{avg_time:8.4e}] s")
         print(f"norm: {grad_u_norm}, diff_norm: {grad_u_err_norm:.4e}")
         pprint.pprint(grad_u_err_cnorm1.tolist())
         print(f" -- acc [{avg_time_host / avg_time:.4g}]")
+
+    print(input("type anything: "))
 
 
 if __name__ == "__main__":

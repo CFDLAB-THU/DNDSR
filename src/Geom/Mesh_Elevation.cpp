@@ -14,7 +14,7 @@
 
 #include "DNDS/EigenPCH.hpp"
 #ifdef DNDS_USE_SUPERLU
-#include <superlu_ddefs.h>
+#    include <superlu_ddefs.h>
 #endif
 
 namespace DNDS::Geom
@@ -1016,7 +1016,7 @@ namespace DNDS::Geom
                 eFaceO1.ExtractElevNodeSpanNodes(iElev, f2n, spanO2Node); // should use O1f2n, but O2f2n is equivalent
                 eFaceO1.ExtractElevNodeSpanNodes(iElev, coordsF, coordsSpan);
                 eFaceO1.ExtractElevNodeSpanNodes(iElev, f2nVecSeq, spanO2if2n);
-                tPoint cooUnsmooth = coordsF(Eigen::all, if2n);
+                tPoint cooUnsmooth = coordsF(EigenAll, if2n);
 
                 std::vector<tPoint> edges;
                 if (spanO2Node.size() == 2)
@@ -1063,8 +1063,8 @@ namespace DNDS::Geom
                         if (std::max(sinValMax, sinValFFMax * 0) > std::sin(pi / 180. * elevationInfo.MaxIncludedAngle))
                             continue;
                         nAdd[iN] += 1.;
-                        // norms(Eigen::all, iN) += normN * 1.;
-                        norms(Eigen::all, iN) += normN.stableNormalized();
+                        // norms(EigenAll, iN) += normN * 1.;
+                        norms(EigenAll, iN) += normN.stableNormalized();
 
                         // std::cout << fmt::format("iFace {}, if2n {}, iN {}, iNorm{}, sinValMax {}; ====",
                         // iFace, if2n, iN, iNorm, sinValMax) << normN.transpose() << std::endl;
@@ -1075,7 +1075,7 @@ namespace DNDS::Geom
                 for (int iN = 0; iN < spanO2Node.size(); iN++)
                 {
                     if (nAdd[iN] < 0.1) // no found, then no mov
-                        norms(Eigen::all, iN).setZero();
+                        norms(EigenAll, iN).setZero();
                     // DNDS_assert(nAdd[iN] > 0.1);
                 }
 
@@ -1084,7 +1084,7 @@ namespace DNDS::Geom
                 if (spanO2Node.size() == 2)
                 {
                     cooSmooth = HermiteInterpolateMidPointOnLine2WithNorm(
-                        coordsSpan[0], coordsSpan[1], norms(Eigen::all, 0), norms(Eigen::all, 1));
+                        coordsSpan[0], coordsSpan[1], norms(EigenAll, 0), norms(EigenAll, 1));
                     cooInc = cooSmooth - cooUnsmooth;
                 }
                 else // definitely is spanO2Node.size() == 4
@@ -1107,7 +1107,7 @@ namespace DNDS::Geom
 
                     cooSmooth = HermiteInterpolateMidPointOnQuad4WithNorm(
                         coordsSpan[0], coordsSpan[1], coordsSpan[2], coordsSpan[3],
-                        norms(Eigen::all, 0), norms(Eigen::all, 1), norms(Eigen::all, 2), norms(Eigen::all, 3));
+                        norms(EigenAll, 0), norms(EigenAll, 1), norms(EigenAll, 2), norms(EigenAll, 3));
 
                     cooInc = cooSmooth - cooUnsmooth;
                 }

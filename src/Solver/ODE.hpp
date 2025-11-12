@@ -190,7 +190,7 @@ namespace DNDS::ODE
                     0.1446368660269822, -0.2239319076133447, 0.4492950415863626, 0.25, 0, 0,
                     0.09825878328356477, -0.5915442428196704, 0.8101210205756877, 0.283164405707806, 0.25, 0,
                     0.1579162951616714, 0, 0.1867589405240008, 0.6805652953093346, -0.2752405309950067, 0.25;
-                butcherB = butcherA(Eigen::last, Eigen::all);
+                butcherB = butcherA(EigenLast, EigenAll);
                 butcherC << 0, 0.5, 0.332, 0.62, 0.849999966747388, 1;
             }
             else if (schemeCode == 2) // esdirk3
@@ -208,7 +208,7 @@ namespace DNDS::ODE
                     real(2746238789719) / real(10658868560708), real(-640167445237) / real(6845629431997), alphaC, 0,
                     real(1471266399579) / real(7840856788654), real(-4482444167858) / real(7529755066697), real(11266239266428) / real(11593286722821), alphaC;
 
-                butcherB = butcherA(Eigen::last, Eigen::all);
+                butcherB = butcherA(EigenLast, EigenAll);
                 butcherC = butcherA.rowwise().sum();
                 butcherC(0) = 0;
                 butcherC(3) = 1;
@@ -222,7 +222,7 @@ namespace DNDS::ODE
                 butcherB.resize(nInnerStage);
                 butcherA << verySmallReal, 0,
                     0.5, 0.5;
-                butcherB = butcherA(Eigen::last, Eigen::all);
+                butcherB = butcherA(EigenLast, EigenAll);
                 butcherC << 0, 1;
             }
             else if (schemeCode == 4) // esdirk2
@@ -241,7 +241,7 @@ namespace DNDS::ODE
                     gamma, gamma, 0,
                     1 - b2 - gamma, b2, gamma;
 
-                butcherB = butcherA(Eigen::last, Eigen::all);
+                butcherB = butcherA(EigenLast, EigenAll);
                 butcherC = butcherA.rowwise().sum();
                 butcherC(0) = 0;
                 butcherC(2) = 1;

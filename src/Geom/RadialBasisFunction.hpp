@@ -44,7 +44,7 @@ namespace DNDS::Geom::RBF
         RiXj.resize(cent.cols(), xs.cols());
         for (int iC = 0; iC < cent.cols(); iC++)
         {
-            RiXj(iC, Eigen::all) = (xs.colwise() - cent(Eigen::all, iC)).colwise().norm();
+            RiXj(iC, EigenAll) = (xs.colwise() - cent(EigenAll, iC)).colwise().norm();
         }
         return RiXj.array().maxCoeff();
     }
@@ -99,7 +99,7 @@ namespace DNDS::Geom::RBF
         RiXj.resize(cent.cols(), xs.cols());
         for (int iC = 0; iC < cent.cols(); iC++)
         {
-            RiXj(iC, Eigen::all) = (xs.colwise() - cent(Eigen::all, iC)).colwise().norm() * (1. / R);
+            RiXj(iC, EigenAll) = (xs.colwise() - cent(EigenAll, iC)).colwise().norm() * (1. / R);
         }
         // MatrixXR NiXj = (1 + RiXj.array().square()).inverse();
         return FRBFBasis(RiXj, kernel);
@@ -111,8 +111,8 @@ namespace DNDS::Geom::RBF
     {
         MatrixXR PT;
         PT.resize(4, xs.cols());
-        PT(0, Eigen::all).setConstant(1);
-        PT({1, 2, 3}, Eigen::all) = xs;
+        PT(0, EigenAll).setConstant(1);
+        PT({1, 2, 3}, EigenAll) = xs;
         MatrixXR M = RBFCPC2(xs, xs, R, kernel);
         MatrixXR A;
         A.setZero(xs.cols() + 4, xs.cols() + 4);

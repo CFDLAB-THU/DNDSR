@@ -311,7 +311,7 @@ namespace DNDS::Geom
             {
                 index iNode = c2n[i];
                 DNDS_HD_assert(adjPrimaryState == Adj_PointToLocal);
-                cs(Eigen::all, i) = coords[iNode];
+                cs(EigenAll, i) = coords[iNode];
             }
         }
 
@@ -326,7 +326,7 @@ namespace DNDS::Geom
             {
                 index iNode = c2n[i];
                 DNDS_HD_assert(adjPrimaryState == Adj_PointToLocal);
-                cs(Eigen::all, i) = coo[iNode];
+                cs(EigenAll, i) = coo[iNode];
             }
         }
 
@@ -341,7 +341,7 @@ namespace DNDS::Geom
             {
                 index iNode = c2n[i];
                 DNDS_HD_assert(adjPrimaryState == Adj_PointToLocal);
-                cs(Eigen::all, i) = periodicInfo.GetCoordByBits(coords[iNode], c2nPbi[i]);
+                cs(EigenAll, i) = periodicInfo.GetCoordByBits(coords[iNode], c2nPbi[i]);
             }
         }
 
@@ -356,7 +356,7 @@ namespace DNDS::Geom
             {
                 index iNode = c2n[i];
                 DNDS_HD_assert(adjPrimaryState == Adj_PointToLocal);
-                cs(Eigen::all, i) = periodicInfo.GetCoordByBits(coo[iNode], c2nPbi[i]);
+                cs(EigenAll, i) = periodicInfo.GetCoordByBits(coo[iNode], c2nPbi[i]);
             }
         }
 

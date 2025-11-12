@@ -313,7 +313,7 @@ namespace DNDS::Euler::RANS
         real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
         real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
         real nuPhy = muf / rho;
-        real CDKW = std::max(2 * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1)), 1e-10);
+        real CDKW = std::max(2 * rho * sigO2 / omegaaa * diffKO(EigenAll, 0).dot(diffKO(EigenAll, 1)), 1e-10);
         real F1 = std::tanh(std::pow(
             std::min(std::max(std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa)),
                      4 * rho * sigO2 * k / (CDKW * sqr(d))),
@@ -378,7 +378,7 @@ namespace DNDS::Euler::RANS
         real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
         real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
         real nuPhy = muf / rho;
-        real CDKW = std::max(2 * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1)), 1e-10);
+        real CDKW = std::max(2 * rho * sigO2 / omegaaa * diffKO(EigenAll, 0).dot(diffKO(EigenAll, 1)), 1e-10);
         real F1 = std::tanh(std::pow(
             std::min(std::max(std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa)),
                      4 * rho * sigO2 * k / (CDKW * sqr(d))),
@@ -415,9 +415,9 @@ namespace DNDS::Euler::RANS
         {
             source(I4 + 1) = PkTilde - betaStar * rho * k * omegaaa;
             source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
-                             2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));
+                             2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(EigenAll, 0).dot(diffKO(EigenAll, 1));
             // source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
-            //                  2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));
+            //                  2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(EigenAll, 0).dot(diffKO(EigenAll, 1));
         }
         else
         {
@@ -553,7 +553,7 @@ namespace DNDS::Euler::RANS
 #else
         real beta = 0.075;
 #endif
-        real crossDiff = diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));
+        real crossDiff = diffKO(EigenAll, 0).dot(diffKO(EigenAll, 1));
 #if KW_WILCOX_VER == 0 || KW_WILCOX_VER == 2
         real SigD = 0;
 #else

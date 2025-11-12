@@ -413,7 +413,13 @@ namespace DNDS::CFV
                 return cellCent[iCell];
         }
 
-        real GetCellMaxLenScale(index iCell) { return cellMajorHBox[iCell].maxCoeff() * 2; }
+        real GetCellMaxLenScale(index iCell)
+        {
+            if (this->getDim() == 2)
+                return cellMajorHBox[iCell]({0, 1}).maxCoeff() * 2;
+            else
+                return cellMajorHBox[iCell].maxCoeff() * 2;
+        }
 
         index getArrayBytes()
         {

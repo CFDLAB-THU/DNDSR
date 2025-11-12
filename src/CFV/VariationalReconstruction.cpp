@@ -226,7 +226,7 @@ namespace DNDS::CFV
                             this->FDiffBaseValue(dbv, this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1), iCell, iFace, -1, 0);
                             int maxNDOF = GetNDof<dim>(settings.maxOrder);
                             faceDiffBaseCacheCent[iFace](
-                                Eigen::all,
+                                EigenAll,
                                 Eigen::seq(if2c * maxNDOF,
                                            if2c * maxNDOF + maxNDOF - 1)) = dbv;
                         }
@@ -305,7 +305,9 @@ namespace DNDS::CFV
             else
                 faceCoord({0, 1}, {0, 1}) = HardEigen::Eigen2x2RealSymEigenDecomposition(faceInertiaC({0, 1}, {0, 1}));
             faceMajorCoordScale[iFace] = faceCoord;
-            if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBB)
+            if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBB ||
+                settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBBNorm ||
+                settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBBSym)
             {
                 Geom::tGPoint faceCoordNorm = faceCoord.colwise().normalized();
                 tSmallCoords coordsL, coordsR;
@@ -319,12 +321,22 @@ namespace DNDS::CFV
 
                 faceMajorCoordScale[iFace] = faceCoordNorm * faceCoordBB.asDiagonal();
             }
-            // std::cout << "Face scale: ";
-            // std::cout << faceCent[iFace] << std::endl;
-            // std::cout << faceInertiaC << std::endl;
-            // std::cout
-            //     << faceCoord << "\n"
-            //     << std::endl;
+            real AR2 = faceMajorCoordScale[iFace].col(0).norm() / faceMajorCoordScale[iFace].col(1).norm();
+            // if (std::abs(std::log10(AR2)) > 2.0)
+            // {
+            //     std::cout
+            //         << "Face scale: ";
+            //     std::cout << this->GetFaceNorm(iFace, -1).transpose() << "\n\n";
+            //     std::cout << faceCent[iFace].transpose() << "\n\n";
+            //     std::cout << faceInertiaC << std::endl;
+
+            //     faceCoord = faceMajorCoordScale[iFace];
+            //     faceCoord.colwise().normalize();
+            //     std::cout << faceCoord << "\n\n";
+            //     std::cout
+            //         << faceMajorCoordScale[iFace] << "\n"
+            //         << std::endl;
+            // }
             if (settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::ScaleType::BaryDiff)
             {
                 faceAlignedScales[iFace] = faceBaryDiffV;
@@ -490,7 +502,7 @@ namespace DNDS::CFV
                                 RowVectorXR dbv, dbvD;
                                 dbvD.resize(1, GetCellAtr(iCell).NDOF);
                                 this->FDiffBaseValue(dbvD, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
-                                dbv = dbvD(0, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                                dbv = dbvD(0, Eigen::seq(Eigen::fix<1>, EigenLast));
                                 BndVRPointCache cacheEntry;
                                 cacheEntry.D0Bj = dbv;
                                 cacheEntry.JDet = JDet;
@@ -571,7 +583,7 @@ namespace DNDS::CFV
                         real JDet{0};
                         if (settings.intOrderVRIsSame())
                         {
-                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, Eigen::all);
+                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, EigenAll);
                             JDet = this->GetFaceJacobiDet(iFace, iG);
                         }
                         else
@@ -581,7 +593,7 @@ namespace DNDS::CFV
                             MatrixXR dbv;
                             dbv.resize(GetFaceAtr(iFace).NDIFF, GetCellAtr(iCell).NDOF);
                             this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
-                            DiffI = dbv(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                            DiffI = dbv(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast));
                         }
                         vInc = this->FFaceFunctional(DiffI, DiffI, iFace, iCell, iCell);
                         vInc *= JDet;
@@ -686,8 +698,8 @@ namespace DNDS::CFV
                         if (settings.intOrderVRIsSame())
                         {
                             JDet = this->GetFaceJacobiDet(iFace, iG);
-                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, Eigen::all);
-                            DiffJ = this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, iG, Eigen::all);
+                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, EigenAll);
+                            DiffJ = this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, iG, EigenAll);
                         }
                         else
                         {
@@ -699,8 +711,8 @@ namespace DNDS::CFV
                             this->FDiffBaseValue(dbvI, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
                             this->FDiffBaseValue(dbvJ, this->GetFacePointFromCell(iFace, iCellOther, -1, pPhy), iCellOther, iFace, -2, 0);
 
-                            DiffI = dbvI(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
-                            DiffJ = dbvJ(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                            DiffI = dbvI(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast));
+                            DiffJ = dbvJ(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast));
                         }
                         if (mesh->isPeriodic)
                         {
@@ -786,7 +798,7 @@ namespace DNDS::CFV
                             MatrixXR dbv;
                             dbv.resize(1, GetCellAtr(iCell).NDOF);
                             this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
-                            DiffI = dbv(Eigen::all, Eigen::seq(Eigen::fix<1>, Eigen::last));
+                            DiffI = dbv(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast));
                         }
                         vInc = this->FFaceFunctional(DiffI, Eigen::MatrixXd::Ones(1, 1), iFace, iCell, iCell);
                         vInc *= JDet;
@@ -877,21 +889,21 @@ namespace DNDS::CFV
             if (iCellR == UnInitIndex) // only for faces with two
                 continue;
             // get dbv from 1st derivative to last
-            MatrixXR DiffI = this->GetIntPointDiffBaseValue(iCellL, iFace, 0, -1, Eigen::seq(1, Eigen::last));
-            MatrixXR DiffJ = this->GetIntPointDiffBaseValue(iCellR, iFace, 1, -1, Eigen::seq(1, Eigen::last));
+            MatrixXR DiffI = this->GetIntPointDiffBaseValue(iCellL, iFace, 0, -1, Eigen::seq(1, EigenLast));
+            MatrixXR DiffJ = this->GetIntPointDiffBaseValue(iCellR, iFace, 1, -1, Eigen::seq(1, EigenLast));
             MatrixXR M2_L2R, M2_R2L;
             HardEigen::EigenLeastSquareSolve(DiffI, DiffJ, M2_R2L);
             HardEigen::EigenLeastSquareSolve(DiffJ, DiffI, M2_L2R);
             // TODO: cleanse M2s' lower triangle
             int maxNDOFM1 = matrixSecondary[iFace].cols() / 2;
             matrixSecondary[iFace](
-                Eigen::all, Eigen::seq(
-                                0 * maxNDOFM1 + 0,
-                                0 * maxNDOFM1 + maxNDOFM1 - 1)) = M2_R2L;
+                EigenAll, Eigen::seq(
+                              0 * maxNDOFM1 + 0,
+                              0 * maxNDOFM1 + maxNDOFM1 - 1)) = M2_R2L;
             matrixSecondary[iFace](
-                Eigen::all, Eigen::seq(
-                                1 * maxNDOFM1 + 0,
-                                1 * maxNDOFM1 + maxNDOFM1 - 1)) = M2_L2R;
+                EigenAll, Eigen::seq(
+                              1 * maxNDOFM1 + 0,
+                              1 * maxNDOFM1 + maxNDOFM1 - 1)) = M2_L2R;
             // std::cout << "DiffI\n"
             //           << DiffI << std::endl;
             // std::cout << "DiffJ\n"

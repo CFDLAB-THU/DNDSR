@@ -1621,7 +1621,7 @@ namespace DNDS::Geom
         /* ************************** */
         // Here implements direct search method
         using TriArray = ArrayEigenMatrix<3, 3>;
-        auto mesh = this;
+        auto *mesh = this;
         ssp<TriArray> TrianglesLocal, TrianglesFull;
         DNDS_MAKE_SSP(TrianglesLocal, mesh->getMPI());
         DNDS_MAKE_SSP(TrianglesFull, mesh->getMPI());
@@ -1635,6 +1635,7 @@ namespace DNDS::Geom
 
         for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
         {
+            // skip if not wall
             if (!fBndIsWall(mesh->GetBndZone(iBnd)))
                 continue;
 
@@ -1642,6 +1643,7 @@ namespace DNDS::Geom
             auto elem = mesh->GetFaceElement(iFace);
             auto quad = Geom::Elem::Quadrature{elem, options.subdivide_quad};
 
+            // set all wall dist on wall nodes to be exactly 0.0
             for (auto iNode : mesh->bnd2node[iBnd])
                 if (iNode < mesh->NumNode()) // && iNode >= 0; guaranteed for we assume all NumBnd() bnd faces have valid local position
                 {
@@ -1657,9 +1659,9 @@ namespace DNDS::Geom
                     mesh->GetCoordsOnFace(iFace, coords);
                     Eigen::Matrix<real, 3, 3> tri;
                     mesh->GetCoordsOnFace(iFace, coords);
-                    tri(Eigen::all, 0) = coords(Eigen::all, 0);
-                    tri(Eigen::all, 1) = coords(Eigen::all, 1);
-                    tri(Eigen::all, 2) = coords(Eigen::all, 1) + Geom::tPoint{0., 0., 1.0};
+                    tri(EigenAll, 0) = coords(EigenAll, 0);
+                    tri(EigenAll, 1) = coords(EigenAll, 1);
+                    tri(EigenAll, 2) = coords(EigenAll, 1) + Geom::tPoint{0., 0., 1.0};
                     Triangles.push_back(tri);
                 }
                 else if (elem.type == Geom::Elem::ElemType::Tri3 || elem.type == Geom::Elem::ElemType::Tri6) //! TODO
@@ -1667,9 +1669,9 @@ namespace DNDS::Geom
                     Geom::tSmallCoords coords;
                     mesh->GetCoordsOnFace(iFace, coords);
                     Eigen::Matrix<real, 3, 3> tri;
-                    tri(Eigen::all, 0) = coords(Eigen::all, 0);
-                    tri(Eigen::all, 1) = coords(Eigen::all, 1);
-                    tri(Eigen::all, 2) = coords(Eigen::all, 2);
+                    tri(EigenAll, 0) = coords(EigenAll, 0);
+                    tri(EigenAll, 1) = coords(EigenAll, 1);
+                    tri(EigenAll, 2) = coords(EigenAll, 2);
                     Triangles.push_back(tri);
                 }
                 else if (elem.type == Geom::Elem::ElemType::Quad4 || elem.type == Geom::Elem::ElemType::Quad9)
@@ -1677,13 +1679,13 @@ namespace DNDS::Geom
                     Geom::tSmallCoords coords;
                     mesh->GetCoordsOnFace(iFace, coords);
                     Eigen::Matrix<real, 3, 3> tri;
-                    tri(Eigen::all, 0) = coords(Eigen::all, 0);
-                    tri(Eigen::all, 1) = coords(Eigen::all, 1);
-                    tri(Eigen::all, 2) = coords(Eigen::all, 2);
+                    tri(EigenAll, 0) = coords(EigenAll, 0);
+                    tri(EigenAll, 1) = coords(EigenAll, 1);
+                    tri(EigenAll, 2) = coords(EigenAll, 2);
                     Triangles.push_back(tri);
-                    tri(Eigen::all, 0) = coords(Eigen::all, 0);
-                    tri(Eigen::all, 1) = coords(Eigen::all, 2);
-                    tri(Eigen::all, 2) = coords(Eigen::all, 3);
+                    tri(EigenAll, 0) = coords(EigenAll, 0);
+                    tri(EigenAll, 1) = coords(EigenAll, 2);
+                    tri(EigenAll, 2) = coords(EigenAll, 3);
                     Triangles.push_back(tri);
                 }
                 else
@@ -1713,11 +1715,11 @@ namespace DNDS::Geom
 
                     for (int iV = 0; iV < 3; iV++)
                         if (qPatch[iV] > 0)
-                            tri(Eigen::all, iV) = coords(Eigen::all, qPatch[iV] - 1);
+                            tri(EigenAll, iV) = coords(EigenAll, qPatch[iV] - 1);
                         else if (qPatch[iV] < 0)
-                            tri(Eigen::all, iV) = faceQuadraturePPhysics.at(-qPatch[iV] - 1);
+                            tri(EigenAll, iV) = faceQuadraturePPhysics.at(-qPatch[iV] - 1);
                         else
-                            tri(Eigen::all, iV) = coords(Eigen::all, 1) + Geom::tPoint{0., 0., 1.0};
+                            tri(EigenAll, iV) = coords(EigenAll, 1) + Geom::tPoint{0., 0., 1.0};
                     Triangles.push_back(tri);
                 }
             }
@@ -1779,6 +1781,7 @@ namespace DNDS::Geom
                 // search
                 for (index iNode = 0; iNode < mesh->NumNode(); iNode++)
                 {
+                    // skip already on-wall data
                     if (nodeWallDist[iNode].squaredNorm() == 0.0)
                         continue;
                     // std::cout << "iCell " << iCell << std::endl;

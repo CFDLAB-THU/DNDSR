@@ -315,6 +315,8 @@ namespace DNDS::Euler
 
                 int meshDirectBisect = 0;
                 int meshReorderCells = 0; // 0: natural; 1: reorder
+                int meshBuildWallDist = 0;
+                Geom::UnstructuredMesh::WallDistOptions meshWallDistOptions;
 
                 int meshFormat = 0;
                 Geom::UnstructuredMeshSerialRW::PartitionOptions meshPartitionOptions;
@@ -373,6 +375,8 @@ namespace DNDS::Euler
                     meshElevationBoundaryMode,
                     meshDirectBisect,
                     meshReorderCells,
+                    meshBuildWallDist,
+                    meshWallDistOptions,
                     meshFormat,
                     meshPartitionOptions,
                     meshFile,
@@ -701,6 +705,7 @@ namespace DNDS::Euler
                     }
                 }
                 config.ReadWriteJson(gSetting, nVars, read);
+                // create from json the pBCHandler
                 DNDS_MAKE_SSP(pBCHandler, nVars);
                 from_json(config.bcSettings, *pBCHandler);
                 gSetting["bcSettings"] = *pBCHandler;

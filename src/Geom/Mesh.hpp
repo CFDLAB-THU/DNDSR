@@ -492,7 +492,7 @@ namespace DNDS::Geom
                 index iNode = c2n[i];
                 if (adjPrimaryState == Adj_PointToGlobal)
                     iNode = NodeIndexGlobal2Local(iNode), DNDS_assert_info(iNode >= 0, "iNode not found in main/ghost pair");
-                cs(Eigen::all, i) = coords[iNode];
+                cs(EigenAll, i) = coords[iNode];
             }
         }
 
@@ -508,7 +508,7 @@ namespace DNDS::Geom
                 index iNode = c2n[i];
                 if (adjPrimaryState == Adj_PointToGlobal)
                     iNode = NodeIndexGlobal2Local(iNode), DNDS_assert_info(iNode >= 0, "iNode not found in main/ghost pair");
-                cs(Eigen::all, i) = coo[iNode];
+                cs(EigenAll, i) = coo[iNode];
             }
         }
 
@@ -524,7 +524,7 @@ namespace DNDS::Geom
                 index iNode = c2n[i];
                 if (adjPrimaryState == Adj_PointToGlobal)
                     iNode = NodeIndexGlobal2Local(iNode), DNDS_assert_info(iNode >= 0, "iNode not found in main/ghost pair");
-                cs(Eigen::all, i) = periodicInfo.GetCoordByBits(coords[iNode], c2nPbi[i]);
+                cs(EigenAll, i) = periodicInfo.GetCoordByBits(coords[iNode], c2nPbi[i]);
             }
         }
 
@@ -540,7 +540,7 @@ namespace DNDS::Geom
                 index iNode = c2n[i];
                 if (adjPrimaryState == Adj_PointToGlobal)
                     iNode = NodeIndexGlobal2Local(iNode), DNDS_assert_info(iNode >= 0, "iNode not found in main/ghost pair");
-                cs(Eigen::all, i) = periodicInfo.GetCoordByBits(coo[iNode], c2nPbi[i]);
+                cs(EigenAll, i) = periodicInfo.GetCoordByBits(coo[iNode], c2nPbi[i]);
             }
         }
 
@@ -684,6 +684,13 @@ namespace DNDS::Geom
             real minWallDist = 1e-10;
             int verbose = 0;
             WallDistOptions() {} //? why = default is not working
+            DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
+                WallDistOptions,
+                subdivide_quad,
+                method,
+                wallDistExecution,
+                minWallDist,
+                verbose)
         };
         void BuildNodeWallDist(const std::function<bool(Geom::t_index)> &fBndIsWall, WallDistOptions options = WallDistOptions{});
 
@@ -845,7 +852,7 @@ namespace DNDS::Geom
             for (rowsize i = 0; i < c2n.size(); i++)
             {
                 index iNode = c2n[i];
-                cs(Eigen::all, i) = coo->operator[](iNode);
+                cs(EigenAll, i) = coo->operator[](iNode);
             }
         }
 
@@ -859,7 +866,7 @@ namespace DNDS::Geom
             for (rowsize i = 0; i < c2n.size(); i++)
             {
                 index iNode = c2n[i];
-                cs(Eigen::all, i) = mesh->periodicInfo.GetCoordByBits(coo->operator[](iNode), c2nPbi[i]);
+                cs(EigenAll, i) = mesh->periodicInfo.GetCoordByBits(coo->operator[](iNode), c2nPbi[i]);
             }
         }
         /**
