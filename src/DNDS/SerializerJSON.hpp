@@ -41,8 +41,8 @@ namespace DNDS::Serializer
         void WriteIndexVector(const std::string &name, const std::vector<index> &v, ArrayGlobalOffset offset) override;
         void WriteRowsizeVector(const std::string &name, const std::vector<rowsize> &v, ArrayGlobalOffset offset) override;
         void WriteRealVector(const std::string &name, const std::vector<real> &v, ArrayGlobalOffset offset) override;
-        void WriteSharedIndexVector(const std::string &name, const ssp<std::vector<index>> &v, ArrayGlobalOffset offset) override;
-        void WriteSharedRowsizeVector(const std::string &name, const ssp<std::vector<rowsize>> &v, ArrayGlobalOffset offset) override;
+        void WriteSharedIndexVector(const std::string &name, const ssp<host_device_vector<index>> &v, ArrayGlobalOffset offset) override;
+        void WriteSharedRowsizeVector(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset) override;
 
         void WriteUint8Array(const std::string &name, const uint8_t *data, index size, ArrayGlobalOffset offset) override;
 
@@ -59,8 +59,8 @@ namespace DNDS::Serializer
         void ReadIndexVector(const std::string &name, std::vector<index> &v, ArrayGlobalOffset &offset) override;
         void ReadRowsizeVector(const std::string &name, std::vector<rowsize> &v, ArrayGlobalOffset &offset) override;
         void ReadRealVector(const std::string &name, std::vector<real> &v, ArrayGlobalOffset &offset) override;
-        void ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> v, ArrayGlobalOffset &offset) override;
-        void ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> v, ArrayGlobalOffset &offset) override;
+        void ReadSharedIndexVector(const std::string &name, ssp<host_device_vector<index>> &v, ArrayGlobalOffset &offset) override;
+        void ReadSharedRowsizeVector(const std::string &name, ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset &offset) override;
 
         void ReadUint8Array(const std::string &name, uint8_t *data, index &size, ArrayGlobalOffset &offset) override;
 

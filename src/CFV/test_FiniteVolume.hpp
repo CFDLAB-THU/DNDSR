@@ -35,7 +35,7 @@ namespace DNDS::CFV
                           ((if2c ? -1.0 : 1.0) * fv.GetFaceArea(iFace));
             auto uOther = u[iCellOther];
             auto uI = u[iCell];
-
+#ifdef DNDS_USE_CUDA
             if constexpr (B == DeviceBackend::CUDA)
             {
                 // printf("if2c %d\n", if2c);
@@ -56,6 +56,7 @@ namespace DNDS::CFV
                     }
             }
             else
+#endif
             {
                 if constexpr (iVarOne)
                     gradResultOne += norm * (uOther(iVar) - uI(iVar));

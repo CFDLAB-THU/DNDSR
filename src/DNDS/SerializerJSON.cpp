@@ -134,7 +134,7 @@ namespace DNDS::Serializer
         auto cPointer = nlohmann::json::json_pointer(cP);
         jObj[cPointer][name] = v;
     }
-    void SerializerJSON::WriteSharedIndexVector(const std::string &name, const ssp<std::vector<index>> &v, ArrayGlobalOffset offset)
+    void SerializerJSON::WriteSharedIndexVector(const std::string &name, const ssp<host_device_vector<index>> &v, ArrayGlobalOffset offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         if (ptr_2_pth.count(v.get()))
@@ -145,7 +145,7 @@ namespace DNDS::Serializer
             ptr_2_pth[v.get()] = cP + "/" + name;
         }
     }
-    void SerializerJSON::WriteSharedRowsizeVector(const std::string &name, const ssp<std::vector<rowsize>> &v, ArrayGlobalOffset offset)
+    void SerializerJSON::WriteSharedRowsizeVector(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
         if (ptr_2_pth.count(v.get()))
@@ -202,10 +202,10 @@ namespace DNDS::Serializer
         DNDS_assert(jObj[cPointer][name].is_string());
         v = jObj[cPointer][name].get<std::remove_reference_t<decltype(v)>>();
     }
-    void SerializerJSON::ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> v, ArrayGlobalOffset &offset)
+    void SerializerJSON::ReadSharedIndexVector(const std::string &name, ssp<host_device_vector<index>> &v, ArrayGlobalOffset &offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
-        using tValue = std::vector<index>;
+        using tValue = host_device_vector<index>;
         std::string refPath;
         if (jObj[cPointer][name].is_object() && !jObj[cPointer][name].is_array())
         {
@@ -229,10 +229,10 @@ namespace DNDS::Serializer
         }
         offset = ArrayGlobalOffset_Unknown;
     }
-    void SerializerJSON::ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> v, ArrayGlobalOffset &offset)
+    void SerializerJSON::ReadSharedRowsizeVector(const std::string &name, ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset &offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
-        using tValue = std::vector<rowsize>;
+        using tValue = host_device_vector<rowsize>;
         std::string refPath;
         if (jObj[cPointer][name].is_object() && !jObj[cPointer][name].is_array())
         {

@@ -3,6 +3,7 @@
 #include "Defines.hpp"
 #include "MPI.hpp"
 #include <set>
+#include "DeviceStorage.hpp"
 
 namespace DNDS::Serializer
 {
@@ -81,7 +82,7 @@ namespace DNDS::Serializer
     {
 
     public:
-        virtual ~SerializerBase() = default;
+        virtual ~SerializerBase(); // define in CPP
         virtual void OpenFile(const std::string &fName, bool read) = 0;
         virtual void CloseFile() = 0;
         virtual void CreatePath(const std::string &p) = 0;
@@ -98,8 +99,8 @@ namespace DNDS::Serializer
         virtual void WriteIndexVector(const std::string &name, const std::vector<index> &v, ArrayGlobalOffset offset) = 0;
         virtual void WriteRowsizeVector(const std::string &name, const std::vector<rowsize> &v, ArrayGlobalOffset offset) = 0;
         virtual void WriteRealVector(const std::string &name, const std::vector<real> &v, ArrayGlobalOffset offset) = 0;
-        virtual void WriteSharedIndexVector(const std::string &name, const ssp<std::vector<index>> &v, ArrayGlobalOffset offset) = 0;
-        virtual void WriteSharedRowsizeVector(const std::string &name, const ssp<std::vector<rowsize>> &v, ArrayGlobalOffset offset) = 0;
+        virtual void WriteSharedIndexVector(const std::string &name, const ssp<host_device_vector<index>> &v, ArrayGlobalOffset offset) = 0;
+        virtual void WriteSharedRowsizeVector(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset) = 0;
         virtual void WriteUint8Array(const std::string &name, const uint8_t *data, index size, ArrayGlobalOffset offset) = 0;
 
         /**
@@ -109,11 +110,11 @@ namespace DNDS::Serializer
          * @param v
          */
         virtual void WriteIndexVectorPerRank(const std::string &name, const std::vector<index> &v) = 0;
-        // virtual void WriteIndexVectorParallel(const std::string &name, const std::vector<index> &v, ArrayGlobalOffset offset) = 0;
-        // virtual void WriteRowsizeVectorParallel(const std::string &name, const std::vector<rowsize> &v, ArrayGlobalOffset offset) = 0;
-        // virtual void WriteRealVectorParallel(const std::string &name, const std::vector<real> &v, ArrayGlobalOffset offset) = 0;
-        // virtual void WriteSharedIndexVectorParallel(const std::string &name, const ssp<std::vector<index>> &v, ArrayGlobalOffset offset) = 0;
-        // virtual void WriteSharedRowsizeVectorParallel(const std::string &name, const ssp<std::vector<rowsize>> &v, ArrayGlobalOffset offset) = 0;
+        // virtual void WriteIndexVectorParallel(const std::string &name, const host_device_vector<index> &v, ArrayGlobalOffset offset) = 0;
+        // virtual void WriteRowsizeVectorParallel(const std::string &name, const host_device_vector<rowsize> &v, ArrayGlobalOffset offset) = 0;
+        // virtual void WriteRealVectorParallel(const std::string &name, const host_device_vector<real> &v, ArrayGlobalOffset offset) = 0;
+        // virtual void WriteSharedIndexVectorParallel(const std::string &name, const ssp<host_device_vector<index>> &v, ArrayGlobalOffset offset) = 0;
+        // virtual void WriteSharedRowsizeVectorParallel(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset) = 0;
         // virtual void WriteUint8ArrayParallel(const std::string &name, const uint8_t *data, index size, ArrayGlobalOffset offset) = 0;
 
         virtual void ReadInt(const std::string &name, int &v) = 0;
@@ -124,19 +125,19 @@ namespace DNDS::Serializer
         virtual void ReadIndexVector(const std::string &name, std::vector<index> &v, ArrayGlobalOffset &offset) = 0;
         virtual void ReadRowsizeVector(const std::string &name, std::vector<rowsize> &v, ArrayGlobalOffset &offset) = 0;
         virtual void ReadRealVector(const std::string &name, std::vector<real> &v, ArrayGlobalOffset &offset) = 0;
-        virtual void ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> v, ArrayGlobalOffset &offset) = 0;
-        virtual void ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> v, ArrayGlobalOffset &offset) = 0;
+        virtual void ReadSharedIndexVector(const std::string &name, ssp<host_device_vector<index>> &v, ArrayGlobalOffset &offset) = 0;
+        virtual void ReadSharedRowsizeVector(const std::string &name, ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset &offset) = 0;
         /**
          * @brief
          * @param data if data == nullptr, only get the size not reading any data
          */
         virtual void ReadUint8Array(const std::string &name, uint8_t *data, index &size, ArrayGlobalOffset &offset) = 0;
 
-        // virtual void ReadIndexVectorParallel(const std::string &name, const std::vector<index> &v, ArrayGlobalOffset offset) = 0;
-        // virtual void ReadRowsizeVectorParallel(const std::string &name, const std::vector<rowsize> &v, ArrayGlobalOffset offset) = 0;
-        // virtual void ReadRealVectorParallel(const std::string &name, const std::vector<real> &v, ArrayGlobalOffset offset) = 0;
-        // virtual void ReadSharedIndexVectorParallel(const std::string &name, const ssp<std::vector<index>> v, ArrayGlobalOffset offset) = 0;
-        // virtual void ReadSharedRowsizeVectorParallel(const std::string &name, const ssp<std::vector<rowsize>> v, ArrayGlobalOffset offset) = 0;
+        // virtual void ReadIndexVectorParallel(const std::string &name, const host_device_vector<index> &v, ArrayGlobalOffset offset) = 0;
+        // virtual void ReadRowsizeVectorParallel(const std::string &name, const host_device_vector<rowsize> &v, ArrayGlobalOffset offset) = 0;
+        // virtual void ReadRealVectorParallel(const std::string &name, const host_device_vector<real> &v, ArrayGlobalOffset offset) = 0;
+        // virtual void ReadSharedIndexVectorParallel(const std::string &name, const ssp<host_device_vector<index>> v, ArrayGlobalOffset offset) = 0;
+        // virtual void ReadSharedRowsizeVectorParallel(const std::string &name, const ssp<host_device_vector<rowsize>> v, ArrayGlobalOffset offset) = 0;
         // virtual void ReadUint8ArrayParallel(const std::string &name, const uint8_t *data, index size, ArrayGlobalOffset offset) = 0;
     };
 

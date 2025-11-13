@@ -2009,10 +2009,10 @@ namespace DNDS::Geom
         auto *mesh = this;
         DNDS_MAKE_SSP(mesh->coords.father, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->coords.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cellElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cellElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bndElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bndElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
+        DNDS_MAKE_SSP(mesh->cellElemInfo.father, mesh->getMPI());
+        DNDS_MAKE_SSP(mesh->cellElemInfo.son, mesh->getMPI());
+        DNDS_MAKE_SSP(mesh->bndElemInfo.father, mesh->getMPI());
+        DNDS_MAKE_SSP(mesh->bndElemInfo.son, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->cell2node.father, mesh->getMPI());
         DNDS_MAKE_SSP(mesh->cell2node.son, mesh->getMPI());
         if (isPeriodic)

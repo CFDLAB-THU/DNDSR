@@ -34,6 +34,7 @@ Defines.cpp
 DeviceStorage.cpp
 Profiling.cpp
 HardEigen.cpp
+SerializerBase.cpp
 SerializerJSON.cpp
 SerializerH5.cpp
 ExprtkWrapper.cpp

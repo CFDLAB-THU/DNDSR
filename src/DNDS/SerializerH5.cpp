@@ -479,7 +479,7 @@ namespace DNDS::Serializer
     {
         WriteAttributeScalar<std::string>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
-    void SerializerH5::WriteSharedIndexVector(const std::string &name, const ssp<std::vector<index>> &v, ArrayGlobalOffset offset)
+    void SerializerH5::WriteSharedIndexVector(const std::string &name, const ssp<host_device_vector<index>> &v, ArrayGlobalOffset offset)
     {
         index CanNotShare = ptr_2_pth.count(v.get()) ? 0 : 1;
         MPI::AllreduceOneIndex(CanNotShare, MPI_MAX, MPIInfo{commDup, mpi.rank, mpi.size});
@@ -491,7 +491,7 @@ namespace DNDS::Serializer
             ptr_2_pth[v.get()] = cP + "/" + name;
         }
     }
-    void SerializerH5::WriteSharedRowsizeVector(const std::string &name, const ssp<std::vector<rowsize>> &v, ArrayGlobalOffset offset)
+    void SerializerH5::WriteSharedRowsizeVector(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset)
     {
         index CanNotShare = ptr_2_pth.count(v.get()) ? 0 : 1;
         MPI::AllreduceOneIndex(CanNotShare, MPI_MAX, MPIInfo{commDup, mpi.rank, mpi.size});
@@ -821,9 +821,9 @@ namespace DNDS::Serializer
     {
         ReadAttributeScalar<std::string>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
-    void SerializerH5::ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> v, ArrayGlobalOffset &offset)
+    void SerializerH5::ReadSharedIndexVector(const std::string &name, ssp<host_device_vector<index>> &v, ArrayGlobalOffset &offset)
     {
-        using tValue = std::vector<index>;
+        using tValue = host_device_vector<index>;
         herr_t herr;
         std::string refPath;
         hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
@@ -854,9 +854,9 @@ namespace DNDS::Serializer
             ReadDataVector<index>(refPath, v->data(), size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
         }
     }
-    void SerializerH5::ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> v, ArrayGlobalOffset &offset)
+    void SerializerH5::ReadSharedRowsizeVector(const std::string &name, ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset &offset)
     {
-        using tValue = std::vector<rowsize>;
+        using tValue = host_device_vector<rowsize>;
         herr_t herr;
         std::string refPath;
         hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
