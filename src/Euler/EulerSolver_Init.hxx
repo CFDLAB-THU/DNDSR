@@ -135,14 +135,13 @@ namespace DNDS::Euler
             // }
             // else
             //     DNDS_assert_info(false, "serializer is invalid");
-            auto [meshOutNameMod, meshPartPath] = config.dataIOControl.meshPartitionedWriter.ModifyFilePath(meshOutName, mpi, "part_%d", true);
-
+            auto [meshOutNameMod, meshPartPath] = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).ModifyFilePath(meshOutName, mpi, "part_%d", true);
             Serializer::SerializerBaseSSP serializerP = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).BuildSerializer(mpi);
 
             if (mpi.rank == 0)
                 log() << "EulerSolver === to read via [" << config.dataIOControl.meshPartitionedReaderType << "]" << std::endl;
 
-            serializerP->OpenFile(meshPartPath, true);
+            serializerP->OpenFile(meshOutNameMod, true);
             mesh->ReadSerialize(serializerP, "meshPart");
             serializerP->CloseFile();
 
@@ -261,7 +260,7 @@ namespace DNDS::Euler
 
             Serializer::SerializerBaseSSP serializerP = config.dataIOControl.meshPartitionedWriter.BuildSerializer(mpi);
 
-            serializerP->OpenFile(meshPartPath, false);
+            serializerP->OpenFile(meshOutNameMod, false);
             mesh->AdjLocal2GlobalPrimary();
             mesh->WriteSerialize(serializerP, "meshPart");
             mesh->AdjGlobal2LocalPrimary();

@@ -1566,7 +1566,7 @@ namespace DNDS::Euler
             auto sourceCaller = [&](int mode)
             {
                 RANS::GetSource_SA<dim>(UMeanXy, DiffUxy, settings.idealGasProperty.muGas, muf,
-                                        gamma, std::min(d, vfv->GetCellMaxLenScale(iCell) * settings.SADESScale), retInc,
+                                        gamma, d, vfv->GetCellMaxLenScale(iCell) * settings.SADESScale, retInc,
                                         settings.ransSARotCorrection, mode);
             };
 

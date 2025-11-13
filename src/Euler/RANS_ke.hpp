@@ -592,26 +592,28 @@ namespace DNDS::Euler::RANS
     }
 
     template <int dim, class TU, class TDiffU, class TSource>
-    void GetSource_SA(TU &&UMeanXy, TDiffU &&DiffUxy, real muRef, real mufPhy, real gamma, real d, TSource &source, int rotCor, int mode)
+    void GetSource_SA(TU &&UMeanXy, TDiffU &&DiffUxy, real muRef, real mufPhy, real gamma,
+                      real d,
+                      real lLES, TSource &source, int rotCor, int mode)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
         static const auto I4 = dim + 1;
 
-        real cb1 = 0.1355;
-        real cb2 = 0.622;
-        real sigma = 2. / 3.;
-        real cnu1 = 7.1;
-        real cnu2 = 0.7;
-        real cnu3 = 0.9;
-        real cw2 = 0.3;
-        real cw3 = 2;
-        real kappa = 0.41;
-        real rlim = 10;
-        real cw1 = cb1 / sqr(kappa) + (1 + cb2) / sigma;
+        static const real cb1 = 0.1355;
+        static const real cb2 = 0.622;
+        static const real sigma = 2. / 3.;
+        static const real cnu1 = 7.1;
+        static const real cnu2 = 0.7;
+        static const real cnu3 = 0.9;
+        static const real cw2 = 0.3;
+        static const real cw3 = 2;
+        static const real kappa = 0.41;
+        static const real rlim = 10;
+        static const real cw1 = cb1 / sqr(kappa) + (1 + cb2) / sigma;
 
-        real ct3 = 1.2;
-        real ct4 = 0.5;
+        static const real ct3 = 1.2;
+        static const real ct4 = 0.5;
 
         real nuh = UMeanXy(I4 + 1) * muRef / UMeanXy(0);
 
@@ -636,9 +638,16 @@ namespace DNDS::Euler::RANS
 #endif
         real S = Omega.norm() * std::sqrt(2);         // is omega's magnitude
         real SS = (diffU + diffU.transpose()).norm(); // is sqrt(2) * strainrate's norm
+        real diffUNorm = diffU.norm();
+        // DDES shield
+        real rd = nuh / (sqr(kappa) * sqr(d) * std::max(1e-10, diffUNorm));
+        real fd = 1. - std::tanh(cube(8 * rd));
+        real lDES = d - fd * std::max(0., d - lLES);
+        // DDES
+
         real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;
 
-        real Sh;
+        real Sh = 0.;
 
         { // Lee, K., Wilson, M., and Vahdati, M. (April 16, 2018). "Validation of a Numerical Model for Predicting Stalled Flows in a Low-Speed Fan—Part I: Modification of Spalart–Allmaras Turbulence Model." ASME. J. Turbomach. May 2018; 140(5): 051008.
           // real betaSCor = 1;
@@ -665,6 +674,7 @@ namespace DNDS::Euler::RANS
 #endif
             Sh = S + Sbar;
 
+        // here r is used for fw, we use real d instead of lDES
         real r = std::min(nuh / (Sh * sqr(kappa * d) + verySmallReal), rlim);
         real g = r + cw2 * (std::pow(r, 6) - r);
         real fw = g * std::pow((1 + std::pow(cw3, 6)) / (std::pow(g, 6) + std::pow(cw3, 6)), 1. / 6.);
@@ -679,12 +689,12 @@ namespace DNDS::Euler::RANS
         // }
 
 #ifdef USE_NS_SA_NEGATIVE_MODEL
-        real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / d); //! modified >>
-        real P = cb1 * (1 - ft2) * Sh * nuh;                         //! modified >>
+        real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / lDES); //! modified >>
+        real P = cb1 * (1 - ft2) * Sh * nuh;                            //! modified >>
         if (rotCor)
             P = cb1 * (1 - ft2) * (Sh + cRot * std::min(0., SS - S)) * nuh;
 #else
-        real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / d);
+        real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / lDES);
         real P = cb1 * (1 - ft2) * Sh * nuh;
         if (rotCor)
             P = cb1 * (1 - ft2) * (Sh + cRot * std::min(0., SS - S)) * nuh;
@@ -696,7 +706,7 @@ namespace DNDS::Euler::RANS
             real cn1 = 16;
             real Chi = UMeanXy(I4 + 1) * muRef / mufPhy;
             fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
-            D = -cw1 * sqr(nuh / d);
+            D = -cw1 * sqr(nuh / lDES);
             P = cb1 * (1 - ct3) * S * nuh;
             if (rotCor)
                 P = cb1 * (1 - ct3) * std::abs(S + cRot * std::min(0., SS - S)) * nuh;
