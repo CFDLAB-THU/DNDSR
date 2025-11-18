@@ -184,6 +184,7 @@ namespace DNDS::CFV
     template <DeviceBackend B, int nVarsFixed>
     struct finiteVolumeCellOpTest_Fixed_entry;
 
+#ifdef DNDS_USE_CUDA
     template <int nVarsFixed>
     struct finiteVolumeCellOpTest_Fixed_entry<DeviceBackend::CUDA, nVarsFixed>
     {
@@ -194,6 +195,7 @@ namespace DNDS::CFV
                  int nIter,
                  const t_jsonconfig &settings);
     };
+#endif
 
     template <int nVarsFixed>
     struct finiteVolumeCellOpTest_Fixed_entry<DeviceBackend::Host, nVarsFixed>
@@ -288,7 +290,7 @@ namespace DNDS::CFV
 
     template <DeviceBackend B, int nVarsFixed>
     struct finiteVolumeCellOpTest_SOA_ver0_entry;
-
+#ifdef DNDS_USE_CUDA
     template <int nVarsFixed>
     struct finiteVolumeCellOpTest_SOA_ver0_entry<DeviceBackend::CUDA, nVarsFixed>
     {
@@ -299,6 +301,7 @@ namespace DNDS::CFV
                  int nIter,
                  const t_jsonconfig &settings);
     };
+#endif
 
     template <int nVarsFixed>
     struct finiteVolumeCellOpTest_SOA_ver0_entry<DeviceBackend::Host, nVarsFixed>
