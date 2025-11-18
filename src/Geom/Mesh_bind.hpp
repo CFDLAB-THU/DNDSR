@@ -9,7 +9,7 @@
 
 namespace DNDS::Geom
 {
-    using tPy_ElemInfo = py::class_<ElemInfo>;
+    using tPy_ElemInfo = py_class_ssp<ElemInfo>;
 
     inline void pybind11_ElemInfo_define(py::module_ &m)
     {
@@ -28,7 +28,7 @@ namespace DNDS::Geom
         pybind11_ParArrayPair_define<ElemInfo>(m);
     }
 
-    using tPy_UnstructuredMesh = py::class_<UnstructuredMesh, ssp<UnstructuredMesh>>;
+    using tPy_UnstructuredMesh = py_class_ssp<UnstructuredMesh>;
 
     inline void pybind11_UnstructuredMesh_define(py::module_ &m)
     {
@@ -134,7 +134,7 @@ namespace DNDS::Geom
             .def("CellIsFaceBack", &UnstructuredMesh::CellIsFaceBack,
                  py::arg("iCell"), py::arg("iFace"));
 
-        auto WallDistOptions_ = py::class_<UnstructuredMesh::WallDistOptions>(UnstructuredMesh_, "WallDistOptions");
+        auto WallDistOptions_ = py_class_ssp<UnstructuredMesh::WallDistOptions>(UnstructuredMesh_, "WallDistOptions");
         WallDistOptions_.def(py::init());
         WallDistOptions_
             .def_readwrite("method", &UnstructuredMesh::WallDistOptions::method)
@@ -152,7 +152,7 @@ namespace DNDS::Geom
             .def("to_host", &UnstructuredMesh::to_host);
     }
 
-    using tPy_UnstructuredMeshSerialRW = py::class_<UnstructuredMeshSerialRW, ssp<UnstructuredMeshSerialRW>>;
+    using tPy_UnstructuredMeshSerialRW = py_class_ssp<UnstructuredMeshSerialRW>;
 
     inline void pybind11_UnstructuredMeshSerialRW_define(py::module_ &m)
     {

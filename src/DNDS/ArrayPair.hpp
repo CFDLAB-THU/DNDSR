@@ -8,6 +8,7 @@
 #include "ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
 #include "DNDS/Defines.hpp"
 #include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Errors.hpp"
 #include "DeviceView.hpp"
 #include <fmt/format.h>
 namespace DNDS
@@ -119,6 +120,22 @@ namespace DNDS
         ssp<TArray> son;
         using TTrans = typename ArrayTransformerType<TArray>::Type;
         TTrans trans;
+
+        void clone(const t_self &R)
+        {
+            DNDS_assert(R.father && R.son);
+            //! rely on TArray's copy ctor!
+            DNDS_MAKE_SSP(father, *(R.father)); // call TArray copy ctor
+            DNDS_MAKE_SSP(son, *(R.son));       // call TArray copy ctor
+            DNDS_assert(father->getMPI().comm == son->getMPI().comm);
+            //! rely on TTrans's copy assignment!
+            trans = R.trans;
+            //! if R.trans already attached, then self trans attach self arrays
+            if (R.trans.father)
+                trans.father = father;
+            if (R.trans.son)
+                trans.son = son;
+        }
 
         decltype(father->operator[](index(0))) operator[](index i) const
         {

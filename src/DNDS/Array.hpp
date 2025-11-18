@@ -96,8 +96,6 @@ namespace DNDS
     public:
         // default constructor using default:
         Array() = default;
-        // copy constructor using default;
-        Array(const self_type &R) = default;
 
         // TODO: constructors
         // TODO: A indexer-copying build method:
@@ -565,9 +563,8 @@ namespace DNDS
         static constexpr DataLayout GetDataLayoutStatic() { return _dataLayout; }
         constexpr DataLayout GetDataLayout() { return _dataLayout; }
 
-        void CopyData(const self_type &R)
+        void clone(const self_type &R)
         {
-            // this->operator=(R); // currently ok!
             this->_size = R._size;
             this->_data = R._data;
             this->_pRowSizes = R._pRowSizes;
@@ -576,7 +573,26 @@ namespace DNDS
             this->_row_size_dynamic = R._row_size_dynamic;
 
             this->deviceBackend = R.deviceBackend;
+        }
+
+        void CopyData(const self_type &R)
+        {
+            this->clone(R);
             // non-trivial copy call: unique_ptr
+        }
+
+        self_type &operator=(const self_type &R)
+        {
+            if (this == &R)
+                return *this;
+            this->clone(R);
+            return *this;
+        }
+
+        // copy constructor
+        Array(const self_type &R)
+        {
+            this->clone(R);
         }
 
         // TODO: SwapData on device?
@@ -800,7 +816,7 @@ namespace DNDS
             DNDS_assert_info((this->deviceBackend == B &&
                               B != DeviceBackend::Unknown) ||
                                  (B == DeviceBackend::Host),
-                             "not on this device");
+                             "not on this device: " + std::string(device_backend_name(B)));
 
             return ArrayDeviceView_build<B, T, _row_size, _row_max, _align>(
                 _size, _data.data(), _data.size(),

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Array.hpp"
+#include "DNDS/Errors.hpp"
 #include "IndexMapping.hpp"
 #include "Profiling.hpp"
 
@@ -14,6 +15,7 @@ namespace DNDS
     {
     public:
         using TArray = Array<T, _row_size, _row_max, _align>;
+        using t_self = ParArray<T, _row_size, _row_max, _align>;
         using t_pArray = ssp<TArray>;
         static const DataLayout _dataLayout = TArray::_dataLayout;
 
@@ -22,6 +24,18 @@ namespace DNDS
         t_pLGlobalMapping pLGlobalMapping;
         MPIInfo mpi;
         using t_pRowSizes = typename TArray::t_pRowSizes;
+
+    public:
+        // default copy
+        ParArray(const t_self &R) = default;
+        t_self &operator=(const t_self &R) = default;
+
+        // operator= handled automatically
+
+        void clone(const t_self &R)
+        {
+            this->operator=(R);
+        }
 
     public: //! use this with caution
         using TArray::ReadSerializer;
@@ -170,6 +184,7 @@ namespace DNDS
         ssp<tMPI_typePairVec> pPullTypeVec;
 
         // ** comm aux info: comm running structures **
+        // TODO: make these aux info (sized) shared and thread-safe
         ssp<MPIReqHolder> PushReqVec;
         ssp<MPIReqHolder> PullReqVec;
         MPI_int nRecvPushReq{-1};
@@ -179,15 +194,68 @@ namespace DNDS
         MPI_Aint pushSendSize;
         MPI_Aint pullSendSize;
 
-        tMPI_intVec pushingSizes;
-        tMPI_AintVec pushingDisps;
-        std::vector<index> pushingIndexLocal;
-
-        std::vector<std::vector<T>> inSituBuffer;
+        tMPI_intVec pushingSizes;                 // currently only temp in CreateMPITypes()
+        tMPI_AintVec pushingDisps;                // currently only temp in CreateMPITypes()
+        std::vector<index> pushingIndexLocal;     // for InSituPack strategy
+        std::vector<std::vector<T>> inSituBuffer; // for InSituPack strategy
 
         /*********************************/
         /*          MEMBER               */
         /*********************************/
+
+        TSelf &operator=(const TSelf &R)
+        {
+            if (this == &R)
+                return *this;
+            // must have commTypeCurrent copied as a result of createMPITypes()
+            commTypeCurrent = R.commTypeCurrent;
+
+            mpi = R.mpi;
+            pLGhostMapping = R.pLGhostMapping;
+            father = R.father;
+            son = R.son;
+
+            pLGlobalMapping = R.pLGlobalMapping;
+
+            // these are shared as results of createMPITypes()
+            pPushTypeVec = R.pPushTypeVec;
+            pPullTypeVec = R.pPushTypeVec;
+
+            // ** comm aux info: comm running structures **
+            // PushReqVec;
+            // PullReqVec;
+            // nRecvPushReq{-1};
+            // nRecvPullReq{-1};
+            // PushStatVec;
+            // PullStatVec;
+            // pushSendSize;
+            // pullSendSize;
+            // ! check comm aux info status and correctly duplicate them
+            // ! cannot share because point to different data
+            if (R.PullReqVec)
+                this->initPersistentPull();
+            if (R.PushReqVec)
+                this->initPersistentPush();
+
+            // these are createMPITypes() temporaries,
+            // TODO: maybe remove from member?
+            // pushingSizes;
+            // inSituBuffer;
+
+            // comm aux info but created in createMPITypes()
+            // TODO (remove from createMPITypes() maybe?)
+            pushingIndexLocal = R.pushingIndexLocal;
+            inSituBuffer = R.inSituBuffer;
+            return *this;
+        }
+
+        ArrayTransformer() = default;
+
+        ArrayTransformer(const TSelf &R)
+        {
+            // initial-safe operator= call
+            this->operator=(R);
+        }
 
         void setFatherSon(const t_pArray &n_father, const t_pArray &n_son)
         {

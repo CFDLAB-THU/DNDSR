@@ -49,7 +49,12 @@ namespace DNDS
             .def(py::init([]()
                           { return std::make_shared<TArr>(); }));
         // use inherited pair methods
-
+        Arr_
+            .def("clone", [](TArr &self)
+                 {
+                     auto new_pair = std::make_shared<TArr>();
+                     new_pair->clone(self); 
+                     return new_pair; });
         Arr_
             .def("setConstant", [](TArr &self, real R)
                  { self.setConstant(R); }, py::arg("R"))

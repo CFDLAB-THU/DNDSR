@@ -12,7 +12,7 @@ namespace DNDS
                                                    py::scoped_estream_redirect>()
 
     template <class T>
-    using py_class_ssp = py::class_<T, ssp<T>>;
+    using py_class_ssp = py::classh<T>;
 
     template <class T>
     bool py_buffer_contains_T(const py::buffer_info &info)

@@ -201,7 +201,9 @@ namespace DNDS
 
         void to_device(DeviceBackend backend = DeviceBackend::Host)
         {
-            if (!deviceStorage || deviceStorage->bytes() != this->size() * sizeof(T))
+            if (!deviceStorage ||
+                deviceStorage->bytes() != this->size() * sizeof(T) || // size change
+                deviceStorage->backend() != backend)                  // backend change
                 deviceStorage = device_storage_create<T>(backend, this->size());
             deviceStorage->copy_host_to_device(this->data(), this->size() * sizeof(T));
         }
@@ -224,6 +226,8 @@ namespace DNDS
 
         host_device_vector &operator=(const host_device_vector<T> &R)
         {
+            if (this == &R)
+                return *this;
             this->t_base::operator=(R);
             this->deviceStorage = R.deviceStorage ? R.deviceStorage->clone() : null_supDeviceStorageBase<T>();
             return *this;

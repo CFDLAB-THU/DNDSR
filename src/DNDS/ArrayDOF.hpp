@@ -135,6 +135,13 @@ namespace DNDS
 
         using t_element_mat = Eigen::Matrix<real, RowSize_To_EigenSize(n_m), RowSize_To_EigenSize(n_n)>;
 
+        void clone(const t_self &R)
+        {
+            // ! no using operator= here
+            this->t_base::clone(R);
+            // no extra data
+        }
+
         void setConstant(real R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), setConstant(*this, R));

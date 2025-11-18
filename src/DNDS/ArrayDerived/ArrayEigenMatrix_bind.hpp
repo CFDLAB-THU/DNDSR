@@ -124,6 +124,13 @@ namespace DNDS
             .def(py::init<const MPIInfo &>(), py::arg("nmpi"))
             .def("Resize", [](TArrayEigenMatrix &self, index nSize, rowsize md, rowsize nd)
                  { return self.Resize(nSize, md, nd); }, py::arg("size"), py::arg("m_size"), py::arg("n_size"));
+
+        ArrayEigenMatrix_
+            .def("clone", [](TArrayEigenMatrix &self)
+                 {
+                auto arr = std::make_shared<TArrayEigenMatrix>(self);
+                return arr; });
+                
         ArrayEigenMatrix_
             .def("MatRowSize", [](const TArrayEigenMatrix &self, index iMat)
                  { return self.MatRowSize(iMat); }, py::arg("iMat") = 0)

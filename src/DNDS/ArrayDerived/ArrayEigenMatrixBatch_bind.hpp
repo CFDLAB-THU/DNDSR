@@ -145,7 +145,11 @@ namespace DNDS
                     return pybind11_ArrayEigenMatrixBatch_setitem_row(self, i, matList);
                 },
                 py::arg("i"), py::arg("matList"));
-
+        ArrayEigenMatrixBatch_
+            .def("clone", [](TArrayEigenMatrixBatch &self)
+                 {
+                auto arr = std::make_shared<TArrayEigenMatrixBatch>(self);
+                return arr; });
         ArrayEigenMatrixBatch_
             .def(
                 "__getitem__",

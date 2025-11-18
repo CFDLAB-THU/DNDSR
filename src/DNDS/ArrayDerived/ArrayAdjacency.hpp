@@ -12,9 +12,19 @@ namespace DNDS
     class ArrayAdjacency : public ParArray<index, _row_size, _row_max, _align>
     {
     public:
-        using t_this = ArrayAdjacency<_row_size, _row_max, _align>;
+        using t_self = ArrayAdjacency<_row_size, _row_max, _align>;
         using t_base = ParArray<index, _row_size, _row_max, _align>;
         using t_base::t_base;
+
+        // default copy
+        ArrayAdjacency(const t_self &R) = default;
+        t_self &operator=(const t_self &R) = default;
+        // operator= handled automatically
+
+        void clone(const t_self &R)
+        {
+            this->operator=(R);
+        }
 
         AdjacencyRow<index> operator[](index i)
         {
@@ -27,7 +37,7 @@ namespace DNDS
 
         AdjacencyRow<const index> operator[](index i) const
         {
-            return const_cast<t_this *>(this)->operator[](i);
+            return const_cast<t_self *>(this)->operator[](i);
         }
 
         index *rowPtr(index i) { return t_base::operator[](i); }

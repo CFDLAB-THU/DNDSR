@@ -132,7 +132,11 @@ namespace DNDS
         // using TArrayEigenUniMatrixBatch = ArrayEigenUniMatrixBatch<3, 3>;
         // auto ArrayEigenUniMatrixBatch_ = pybind11_ArrayEigenUniMatrixBatch_declare<3, 3>(m);
         // // helper
-
+        ArrayEigenUniMatrixBatch_
+            .def("clone", [](TArrayEigenUniMatrixBatch &self)
+                 {
+                auto arr = std::make_shared<TArrayEigenUniMatrixBatch>(self);
+                return arr; });
         ArrayEigenUniMatrixBatch_
             // we only bind the non-default ctor here
             .def(py::init<const MPIInfo &>(), py::arg("nmpi"))

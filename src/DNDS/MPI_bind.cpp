@@ -9,7 +9,7 @@ namespace DNDS
 {
     void pybind11_MPIInfo(py::module_ &m)
     {
-        py::class_<MPIInfo>(m, "MPIInfo")
+        py_class_ssp<MPIInfo>(m, "MPIInfo")
             .def(py::init<>())
             .def(py::init([](uintptr_t pComm)
                           { return std::make_unique<MPIInfo>(MPI_Comm(pComm)); }))

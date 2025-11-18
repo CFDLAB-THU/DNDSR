@@ -8,7 +8,7 @@
 namespace DNDS::Geom
 {
 
-    using tPy_AutoAppendName2ID = py::class_<AutoAppendName2ID, ssp<AutoAppendName2ID>>;
+    using tPy_AutoAppendName2ID = py_class_ssp<AutoAppendName2ID>;
 
     inline void pybind11_AutoAppendName2ID_define(py::module_ &m)
     {

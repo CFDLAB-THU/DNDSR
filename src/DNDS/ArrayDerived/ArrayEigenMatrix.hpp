@@ -18,6 +18,7 @@ namespace DNDS
     public:
         static const rowsize _row_size = __OneMatGetRowSize<_mat_ni, _mat_nj>();
         static const rowsize _row_size_max = __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>();
+        using t_self = ArrayEigenMatrix<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>;
         using t_base = ParArray<real,
                                 __OneMatGetRowSize<_mat_ni, _mat_nj>(),
                                 __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
@@ -46,6 +47,16 @@ namespace DNDS
             if (_mat_nRows)
                 b += _mat_nRows->size() * sizeof(rowsize);
             return b;
+        }
+
+        // default copy
+        ArrayEigenMatrix(const t_self &R) = default;
+        t_self &operator=(const t_self &R) = default;
+        // operator= handled automatically
+
+        void clone(const t_self &R)
+        {
+            this->operator=(R);
         }
 
         void Resize(index nSize, rowsize nSizeRowDynamic, rowsize nSizeColDynamic)
