@@ -1,7 +1,9 @@
 #pragma once
 #include "DNDS/Defines.hpp"
+#include "DNDS/DeviceStorage.hpp"
 #include "DNDS/EigenUtil.hpp"
 #include "CFV/VRDefines.hpp"
+#include "DNDS/Errors.hpp"
 
 namespace DNDS::Euler
 {
@@ -22,244 +24,90 @@ namespace DNDS::Euler
     {
     public:
         using t_self = ArrayDOFV<nVarsFixed>;
+        using t_base = CFV::tUDof<nVarsFixed>;
+        using t_element_mat = typename t_base::t_element_mat;
+
         void setConstant(real R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i).setConstant(R);
+            this->t_base::setConstant(R);
         }
-        template <class TR>
-        void setConstant(const TR &R)
+        void setConstant(const Eigen::Ref<const t_element_mat> &R )
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) = R;
+            this->t_base::setConstant(R);
         }
         void operator+=(const t_self &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) += R.operator[](i);
+            this->t_base::operator+=(R);
         }
         void operator-=(const t_self &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) -= R.operator[](i);
+            this->t_base::operator-=(R);
         }
         void operator*=(real R)
         {
-            if (R == 1.)
-                return;
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) *= R;
+            this->t_base::operator*=(R);
         }
         void operator=(const t_self &R)
         {
-            // TODO: OMP
-            // for (index i = 0; i < this->Size(); i++)
-            //     this->operator[](i) = R.operator[](i);
-            DNDS_assert(R.father->RawDataVector().size() == this->father->RawDataVector().size());
-            DNDS_assert(R.son->RawDataVector().size() == this->son->RawDataVector().size());
-
-            // #if defined(DNDS_DIST_MT_USE_OMP)
-            //             {
-            //                 size_t part_size = R.father->RawDataVector().size() / omp_get_max_threads();
-            // #pragma omp parallel for schedule(static)
-            //                 for (int iT = 0; iT < omp_get_max_threads(); iT++)
-            //                     std::copy(R.father->RawDataVector().begin() + part_size * iT,
-            //                               (iT == omp_get_max_threads() - 1)
-            //                                   ? R.father->RawDataVector().end()
-            //                                   : R.father->RawDataVector().begin() + part_size * (iT + 1),
-            //                               this->father->RawDataVector().begin() + part_size * iT);
-            //             }
-            //             {
-            //                 size_t part_size = R.son->RawDataVector().size() / omp_get_max_threads();
-            // #pragma omp parallel for schedule(static)
-            //                 for (int iT = 0; iT < omp_get_max_threads(); iT++)
-            //                     std::copy(R.son->RawDataVector().begin() + part_size * iT,
-            //                               (iT == omp_get_max_threads() - 1)
-            //                                   ? R.son->RawDataVector().end()
-            //                                   : R.son->RawDataVector().begin() + part_size * (iT + 1),
-            //                               this->son->RawDataVector().begin() + part_size * iT);
-            //             }
-            // #else
-            std::copy(R.father->RawDataVector().begin(), R.father->RawDataVector().end(), this->father->RawDataVector().begin());
-            std::copy(R.son->RawDataVector().begin(), R.son->RawDataVector().end(), this->son->RawDataVector().begin());
-            // #endif
+            this->t_base::operator=(R);
         }
 
         void addTo(const t_self &R, real r)
         {
-            // for (index i = 0; i < this->Size(); i++)
-            //     this->operator[](i) += R.operator[](i) * r;
-            DNDS_assert(R.father->RawDataVector().size() == this->father->RawDataVector().size());
-            auto &RVF = R.father->RawDataVector();
-            auto &TVF = this->father->RawDataVector();
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (size_t i = 0; i < RVF.size(); i++)
-                TVF[i] += r * RVF[i];
-            DNDS_assert(R.son->RawDataVector().size() == this->son->RawDataVector().size());
-            auto &RVS = R.son->RawDataVector();
-            auto &TVS = this->son->RawDataVector();
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (size_t i = 0; i < RVS.size(); i++)
-                TVS[i] += r * RVS[i];
+            this->t_base::addTo(R, r);
         }
 
         void operator*=(const std::vector<real> &R)
         {
             DNDS_assert(R.size() >= this->father->Size());
+            DNDS_assert(this->father->device() == DeviceBackend::Host ||
+                        this->father->device() == DeviceBackend::Unknown);
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
 #endif
             for (index i = 0; i < this->father->Size(); i++)
                 this->operator[](i) *= R[i];
         }
-
-        void operator*=(const std::conditional_t<nVarsFixed == 1, ArrayDOFV<2>, ArrayDOFV<1>> &R)
+        template <int nVarsFixed_T = nVarsFixed>
+        std::enable_if_t<!(nVarsFixed_T == 1)>
+        operator*=(const ArrayDOFV<1> &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i).array() *= R[i](0);
+            this->t_base::operator*=(R);
         }
 
         void operator+=(const Eigen::Vector<real, nVarsFixed> &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) += R;
+            this->t_base::operator+=(R);
         }
 
         void operator+=(real R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i).array() += R;
+            this->t_base::operator+=(R);
         }
 
         void operator*=(const Eigen::Vector<real, nVarsFixed> &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i).array() *= R.array();
+            this->t_base::operator*=(R);
         }
 
         void operator*=(const t_self &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i).array() *= R.operator[](i).array();
+            this->t_base::operator*=(R);
         }
 
         void operator/=(const t_self &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i).array() /= R.operator[](i).array();
-        }
-
-        void setAbs()
-        {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i).array() = this->operator[](i).array().abs();
-        }
-
-        template <class TR>
-        void setMaxWith(TR R)
-        {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i).array() = this->operator[](i).array().max(R);
-        }
-
-        template <class TR>
-        void setMinWith(TR R)
-        {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i).array() = this->operator[](i).array().min(R);
-        }
-
-        Eigen::Vector<real, nVarsFixed> normInc()
-        {
-            Eigen::Vector<real, nVarsFixed> ret, retAll;
-            ret.resize(this->RowSize());
-            retAll.resize(this->RowSize());
-            ret.setZero();
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp declare reduction(EigenVecAdd : Eigen::Vector<real, nVarsFixed> : omp_out += omp_in) initializer(omp_priv = omp_orig)
-#    pragma omp parallel for schedule(static) reduction(EigenVecAdd : ret)
-#endif
-            for (index i = 0; i < this->father->Size(); i++) //*note that only father is included
-            {
-                ret += this->operator[](i).array().abs();
-            }
-            MPI::Allreduce(ret.data(), retAll.data(), this->RowSize(), DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
-            return retAll;
+            this->t_base::operator/=(R);
         }
 
         real norm2()
         {
-            real sqrSum{0}, sqrSumAll{0};
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static) reduction(+ : sqrSum)
-#endif
-            for (index i = 0; i < this->father->Size(); i++) //*note that only father is included
-                sqrSum += this->operator[](i).squaredNorm();
-            MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
-            // std::cout << "norm2is " << std::scientific << sqrSumAll << std::endl;
-            return std::sqrt(sqrSumAll);
+            return this->t_base::norm2();
         }
 
         Eigen::Vector<real, nVarsFixed> componentWiseNorm1()
         {
-            Eigen::Vector<real, nVarsFixed> minLocal, min;
-            minLocal.resize(this->RowSize());
-            minLocal.setConstant(0);
-            min = minLocal;
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp declare reduction(EigenVecAdd : Eigen::Vector<real, nVarsFixed> : omp_out += omp_in) initializer(omp_priv = omp_orig)
-#    pragma omp parallel for schedule(static) reduction(EigenVecAdd : minLocal)
-#endif
-            for (index i = 0; i < this->father->Size(); i++) //*note that only father is included
-                minLocal += (this->operator[](i).array().abs()).matrix();
-            MPI::Allreduce(minLocal.data(), min.data(), minLocal.size(), DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
-            return min;
+            return this->t_base::componentWiseNorm1();
         }
 
         Eigen::Vector<real, nVarsFixed> min()
@@ -280,19 +128,14 @@ namespace DNDS::Euler
 
         real dot(const t_self &R)
         {
-            real sqrSum{0}, sqrSumAll;
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static) reduction(+ : sqrSum)
-#endif
-            for (index i = 0; i < this->father->Size(); i++) //*note that only father is included
-                sqrSum += this->operator[](i).dot(R.operator[](i));
-            MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
-            return sqrSumAll;
+            return this->t_base::dot(R);
         }
 
         template <class TMultL, class TMultR>
         real dot(const t_self &R, TMultL &&mL, TMultR &&mR)
         {
+            DNDS_assert(this->father->device() == DeviceBackend::Host ||
+                        this->father->device() == DeviceBackend::Unknown);
             real sqrSum{0}, sqrSumAll;
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static) reduction(+ : sqrSum)
@@ -302,6 +145,18 @@ namespace DNDS::Euler
             MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
             return sqrSumAll;
         }
+
+        template <class TR>
+        void setMaxWith(TR R)
+        {
+            DNDS_assert(this->father->device() == DeviceBackend::Host ||
+                        this->father->device() == DeviceBackend::Unknown);
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(static)
+#endif
+            for (index i = 0; i < this->Size(); i++)
+                this->operator[](i).array() = this->operator[](i).array().max(R);
+        }
     };
 
     ///@todo://TODO add operators
@@ -310,17 +165,16 @@ namespace DNDS::Euler
     {
     public:
         using t_self = ArrayRECV<nVarsFixed>;
+        using t_base = CFV::tURec<nVarsFixed>;
         void setConstant(real R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i).setConstant(R);
+            this->t_base::setConstant(R);
         }
         template <class TR>
         void setConstant(const TR &R)
         {
+            DNDS_assert(this->father->device() == DeviceBackend::Host ||
+                        this->father->device() == DeviceBackend::Unknown);
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
 #endif
@@ -329,30 +183,20 @@ namespace DNDS::Euler
         }
         void operator+=(const t_self &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) += R.operator[](i);
+            this->t_base::operator+=(R);
         }
         void operator-=(const t_self &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) -= R.operator[](i);
+            this->t_base::operator-=(R);
         }
         void operator*=(real R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) *= R;
+            this->t_base::operator*=(R);
         }
         void operator*=(const std::vector<real> &R)
         {
+            DNDS_assert(this->father->device() == DeviceBackend::Host ||
+                        this->father->device() == DeviceBackend::Unknown);
             DNDS_assert(R.size() >= this->father->Size());
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
@@ -362,14 +206,12 @@ namespace DNDS::Euler
         }
         void operator*=(const ArrayDOFV<1> &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) *= R[i](0);
+            this->t_base::operator*=(R);
         }
         void operator*=(const Eigen::Array<real, 1, nVarsFixed> &R)
         {
+            DNDS_assert(this->father->device() == DeviceBackend::Host ||
+                        this->father->device() == DeviceBackend::Unknown);
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
 #endif
@@ -378,17 +220,13 @@ namespace DNDS::Euler
         }
         void operator=(const t_self &R)
         {
-            // todo: OMP
-            //  for (index i = 0; i < this->Size(); i++)
-            //      this->operator[](i) = R.operator[](i);
-            DNDS_assert(R.father->RawDataVector().size() == this->father->RawDataVector().size());
-            std::copy(R.father->RawDataVector().begin(), R.father->RawDataVector().end(), this->father->RawDataVector().begin());
-            DNDS_assert(R.son->RawDataVector().size() == this->son->RawDataVector().size());
-            std::copy(R.son->RawDataVector().begin(), R.son->RawDataVector().end(), this->son->RawDataVector().begin());
+            this->t_base::operator=(R);
         }
 
         void addTo(const t_self &R, const Eigen::Array<real, 1, nVarsFixed> &r)
         {
+            DNDS_assert(this->father->device() == DeviceBackend::Host ||
+                        this->father->device() == DeviceBackend::Unknown);
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
 #endif
@@ -398,53 +236,23 @@ namespace DNDS::Euler
 
         void addTo(const t_self &R, real r)
         {
-            // for (index i = 0; i < this->Size(); i++)
-            //     this->operator[](i) += R.operator[](i) * r;
-            DNDS_assert(R.father->RawDataVector().size() == this->father->RawDataVector().size());
-            auto &RVF = R.father->RawDataVector();
-            auto &TVF = this->father->RawDataVector();
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (size_t i = 0; i < RVF.size(); i++)
-                TVF[i] += r * RVF[i];
-            DNDS_assert(R.son->RawDataVector().size() == this->son->RawDataVector().size());
-            auto &RVS = R.son->RawDataVector();
-            auto &TVS = this->son->RawDataVector();
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (size_t i = 0; i < RVS.size(); i++)
-                TVS[i] += r * RVS[i];
+            this->t_base::addTo(R, r);
         }
 
         real norm2()
         {
-            real sqrSum{0}, sqrSumAll{0};
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static) reduction(+ : sqrSum)
-#endif
-            for (index i = 0; i < this->father->Size(); i++) //*note that only father is included
-                sqrSum += this->operator[](i).squaredNorm();
-            MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
-            // std::cout << "norm2is " << std::scientific << sqrSumAll << std::endl;
-            return std::sqrt(sqrSumAll);
+            return this->t_base::norm2();
         }
 
         real dot(const t_self &R)
         {
-            real sqrSum{0}, sqrSumAll;
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static) reduction(+ : sqrSum)
-#endif
-            for (index i = 0; i < this->father->Size(); i++) //*note that only father is included
-                sqrSum += (this->operator[](i).array() * R.operator[](i).array()).sum();
-            MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
-            return sqrSumAll;
+            return this->t_base::dot(R);
         }
 
         auto dotV(const t_self &R)
         {
+            DNDS_assert(this->father->device() == DeviceBackend::Host ||
+                        this->father->device() == DeviceBackend::Unknown);
             Eigen::RowVector<real, nVarsFixed> sqrSum, sqrSumAll;
             sqrSum.resize(this->father->MatColSize());
             sqrSumAll.resizeLike(sqrSum);
@@ -465,17 +273,16 @@ namespace DNDS::Euler
     {
     public:
         using t_self = ArrayGRADV<nVarsFixed, gDim>;
+        using t_base = CFV::tUGrad<nVarsFixed, gDim>;
         void setConstant(real R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i).setConstant(R);
+            this->t_base::setConstant(R);
         }
         template <class TR>
         void setConstant(const TR &R)
         {
+            DNDS_assert(this->father->device() == DeviceBackend::Host ||
+                        this->father->device() == DeviceBackend::Unknown);
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
 #endif
@@ -485,27 +292,15 @@ namespace DNDS::Euler
 
         void operator+=(t_self &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) += R.operator[](i);
+            this->t_base::operator+=(R);
         }
         void operator-=(t_self &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) -= R.operator[](i);
+            this->t_base::operator-=(R);
         }
         void operator*=(real R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) *= R;
+            this->t_base::operator*=(R);
         }
         void operator*=(std::vector<real> &R)
         {
@@ -518,14 +313,12 @@ namespace DNDS::Euler
         }
         void operator*=(ArrayDOFV<1> &R)
         {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(static)
-#endif
-            for (index i = 0; i < this->Size(); i++)
-                this->operator[](i) *= R[i](0);
+            this->t_base::operator*=(R);
         }
         void operator*=(const Eigen::Array<real, 1, nVarsFixed> &R)
         {
+            DNDS_assert(this->father->device() == DeviceBackend::Host ||
+                        this->father->device() == DeviceBackend::Unknown);
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
 #endif
@@ -534,13 +327,7 @@ namespace DNDS::Euler
         }
         void operator=(t_self &R)
         {
-            // todo: omp
-            // for (index i = 0; i < this->Size(); i++)
-            //     this->operator[](i) = R.operator[](i);
-            DNDS_assert(R.father->RawDataVector().size() == this->father->RawDataVector().size());
-            std::copy(R.father->RawDataVector().begin(), R.father->RawDataVector().end(), this->father->RawDataVector().begin());
-            DNDS_assert(R.son->RawDataVector().size() == this->son->RawDataVector().size());
-            std::copy(R.son->RawDataVector().begin(), R.son->RawDataVector().end(), this->son->RawDataVector().begin());
+            this->t_base::operator=(R);
         }
     };
 

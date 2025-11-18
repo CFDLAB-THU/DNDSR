@@ -1,3 +1,4 @@
+#define DNDS_NDEBUG
 #include "test_FiniteVolume.hpp"
 
 namespace DNDS::CFV

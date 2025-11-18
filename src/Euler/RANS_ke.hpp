@@ -12,6 +12,8 @@
 #define KW_SST_PROD_LIMITS 1
 #define KW_SST_PROD_OMEGA_VERSION 1
 
+#define SA_USE_FT2_TERM 0
+
 namespace DNDS::Euler::RANS
 {
     template <int dim, class TU, class TDiffU>
@@ -612,8 +614,13 @@ namespace DNDS::Euler::RANS
         static const real rlim = 10;
         static const real cw1 = cb1 / sqr(kappa) + (1 + cb2) / sigma;
 
+#if SA_USE_FT2_TERM
         static const real ct3 = 1.2;
         static const real ct4 = 0.5;
+#else
+        static const real ct3 = 0.0;
+        static const real ct4 = 0.0;
+#endif
 
         real nuh = UMeanXy(I4 + 1) * muRef / UMeanXy(0);
 
@@ -643,6 +650,8 @@ namespace DNDS::Euler::RANS
         real rd = nuh / (sqr(kappa) * sqr(d) * std::max(1e-10, diffUNorm));
         real fd = 1. - std::tanh(cube(8 * rd));
         real lDES = d - fd * std::max(0., d - lLES);
+        // if (d < 0.01)
+        //     std::cout << d << " " << lDES << " " << lLES << std::endl;
         // DDES
 
         real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;

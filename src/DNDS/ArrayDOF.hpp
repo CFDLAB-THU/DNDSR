@@ -172,7 +172,7 @@ namespace DNDS
 
         template <int n_m_T = n_m>
         std::enable_if_t<!(n_m_T == 1 && n_n == 1)>
-        operator*=(ArrayDof<1, 1> &R)
+        operator*=(const ArrayDof<1, 1> &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_mult_assign_scalar_arr(*this, R));
         }

@@ -171,7 +171,7 @@ namespace DNDS::Euler
                     if (item.count("value"))
                     {
                         bcValue = item["value"];
-                        std::cout << bcValue.transpose() << std::endl;
+                        // std::cout << bcValue.transpose() << std::endl;
                         DNDS_assert_info(bcValue.size() == bc.nVars, fmt::format("[{}] bc value dim not right", bcName));
                     }
                     else
