@@ -12,7 +12,7 @@
 #define KW_SST_PROD_LIMITS 1
 #define KW_SST_PROD_OMEGA_VERSION 1
 
-#define SA_USE_FT2_TERM 0
+#define SA_USE_FT2_TERM 1
 
 namespace DNDS::Euler::RANS
 {
