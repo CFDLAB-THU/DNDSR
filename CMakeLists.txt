@@ -841,7 +841,7 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/src/DNDS)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/Geom)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/CFV)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/Euler)
-
+add_subdirectory(${CMAKE_SOURCE_DIR}/src/EulerP)
 
 if (NOT SKBUILD_PROJECT_NAME) # do not create links for SCIKIT-BUILD build
     install(CODE "file(CREATE_LINK ${CMAKE_INSTALL_PREFIX}/DNDSR/bin ${CMAKE_SOURCE_DIR}/src/bin SYMBOLIC)" COMPONENT py)

@@ -56,11 +56,13 @@ namespace DNDS
 #if defined(DNDS_USE_CUDA)
 #    define DNDS_DEVICE_CALLABLE __host__ __device__
 #    define DNDS_DEVICE __device__
+#    define DNDS_HOST __host__
 #    define DNDS_GLOBAL __global__
 #    define DNDS_CONSTANT __constant__
 #else
 #    define DNDS_DEVICE_CALLABLE
 #    define DNDS_DEVICE
+#    define DNDS_HOST
 #    define DNDS_GLOBAL
 #    define DNDS_CONSTANT
 #endif

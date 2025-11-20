@@ -191,6 +191,21 @@ namespace DNDS
         }
     }
 
+    template <DeviceBackend B, typename T, typename TSize = size_t>
+    class vector_DeviceView
+    {
+        T *_data = nullptr;
+        TSize _size = 0;
+
+    public:
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(vector_DeviceView, vector_DeviceView)
+        DNDS_DEVICE_CALLABLE vector_DeviceView(T *n_data, TSize n_size) : _data(n_data), _size(n_size) {}
+
+        DNDS_DEVICE_CALLABLE T operator[](TSize i) const { return _data[i]; }
+        DNDS_DEVICE_CALLABLE T &operator[](TSize i) { return _data[i]; }
+        DNDS_DEVICE_CALLABLE TSize size() const { return _size; }
+    };
+
     template <typename T>
     struct host_device_vector : public std::vector<T>
     {
@@ -198,6 +213,20 @@ namespace DNDS
         using t_base::t_base;
 
         t_supDeviceStorageBase deviceStorage = null_supDeviceStorageBase<T>();
+
+        DNDS_HOST host_device_vector<T> &operator=(const std::vector<T> &v)
+        {
+            this->t_base::operator=(v);
+            return *this;
+        }
+
+        // DNDS_HOST explicit operator std::vector<T>() const
+        // {
+        //     std::vector<T> ret;
+        //     ret.resize(this->size());
+        //     std::copy(this->begin(), this->end(), ret.begin());
+        //     return ret;
+        // }
 
         void to_device(DeviceBackend backend = DeviceBackend::Host)
         {
@@ -217,6 +246,19 @@ namespace DNDS
         T *dataDevice()
         {
             return deviceStorage ? reinterpret_cast<T *>(deviceStorage->raw_ptr()) : nullptr;
+        }
+
+        template <DeviceBackend B, typename TSize = size_t>
+        using t_deviceView = vector_DeviceView<B, T, TSize>;
+        template <DeviceBackend B, typename TSize = size_t>
+        t_deviceView<B, TSize> deviceView()
+        {
+            DNDS_assert_info(this->device() == B || (B == DeviceBackend::Host || B == DeviceBackend::Unknown),
+                             "not on this device: " + std::string(device_backend_name(B)));
+            if constexpr (B == DeviceBackend::Host || B == DeviceBackend::Unknown)
+                return t_deviceView<B, TSize>(this->data(), this->size());
+            else
+                return t_deviceView<B, TSize>(this->dataDevice(), this->size());
         }
 
         const T *dataDevice() const

@@ -4,6 +4,7 @@
 #define JSON_ASSERT DNDS_assert
 #include <nlohmann/json.hpp>
 #include "EigenUtil.hpp"
+#include "DeviceStorage.hpp"
 
 namespace DNDS
 {
@@ -85,6 +86,12 @@ namespace DNDS
 #define DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(Type, ...)                                                                                                   \
     friend void to_json(nlohmann::ordered_json &nlohmann_json_j, const Type &nlohmann_json_t) { NLOHMANN_JSON_EXPAND(NLOHMANN_JSON_PASTE(NLOHMANN_JSON_TO, __VA_ARGS__)) } \
     friend void from_json(const nlohmann::ordered_json &nlohmann_json_j, Type &nlohmann_json_t) { NLOHMANN_JSON_EXPAND(NLOHMANN_JSON_PASTE(NLOHMANN_JSON_FROM, __VA_ARGS__)) }
+
+#define DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_AND_UNORDERED_JSON(Type, ...)                                                                                         \
+    friend void to_json(nlohmann::ordered_json &nlohmann_json_j, const Type &nlohmann_json_t) { NLOHMANN_JSON_EXPAND(NLOHMANN_JSON_PASTE(NLOHMANN_JSON_TO, __VA_ARGS__)) }     \
+    friend void from_json(const nlohmann::ordered_json &nlohmann_json_j, Type &nlohmann_json_t) { NLOHMANN_JSON_EXPAND(NLOHMANN_JSON_PASTE(NLOHMANN_JSON_FROM, __VA_ARGS__)) } \
+    friend void to_json(nlohmann::json &nlohmann_json_j, const Type &nlohmann_json_t) { NLOHMANN_JSON_EXPAND(NLOHMANN_JSON_PASTE(NLOHMANN_JSON_TO, __VA_ARGS__)) }             \
+    friend void from_json(const nlohmann::json &nlohmann_json_j, Type &nlohmann_json_t) { NLOHMANN_JSON_EXPAND(NLOHMANN_JSON_PASTE(NLOHMANN_JSON_FROM, __VA_ARGS__)) }
 }
 
 namespace Eigen // why doesn't work?
@@ -127,5 +134,20 @@ namespace Eigen // why doesn't work?
     inline void from_json(const nlohmann::ordered_json &j, Vector3d &v)
     {
         v = DNDS::JsonGetEigenVector(j);
+    }
+}
+
+namespace DNDS
+{
+    inline void to_json(nlohmann::ordered_json &j, const host_device_vector<real> &v)
+    {
+        std::vector<real> v_vec = (std::vector<real>)(v);
+        j = v_vec;
+    }
+
+    inline void from_json(const nlohmann::ordered_json &j, host_device_vector<real> &v)
+    {
+        std::vector<real> v_vec = j;
+        v = v_vec;
     }
 }
