@@ -57,7 +57,7 @@ namespace DNDS
         }
 
         template <class... TOthers>
-        DNDS_DEVICE_CALLABLE auto operator()(index i, TOthers... aOthers)
+        DNDS_DEVICE_CALLABLE decltype(auto) operator()(index i, TOthers... aOthers)
         {
             auto dThis = static_cast<Derived *>(this);
             if (i >= 0 && i < dThis->father.Size())
@@ -67,7 +67,7 @@ namespace DNDS
         }
 
         template <class... TOthers>
-        DNDS_DEVICE_CALLABLE auto operator()(index i, TOthers... aOthers) const
+        DNDS_DEVICE_CALLABLE decltype(auto) operator()(index i, TOthers... aOthers) const
         {
             auto dThis = static_cast<const Derived *>(this);
             if (i >= 0 && i < dThis->father.Size())

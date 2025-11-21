@@ -1,4 +1,5 @@
 #pragma once
+#include "DNDS/DeviceStorage.hpp"
 #include "Elements.hpp"
 #include "DNDS/Array.hpp"
 #include "DNDS/ArrayDerived/ArrayAdjacency.hpp"
@@ -21,9 +22,9 @@ namespace DNDS::Geom
         bool isPeriodic{false};
         // state of: cell2node, cell2cell, bnd2node (only for non-bnd mesh object), bnd2cell (only for non-bnd mesh object)
         MeshAdjState adjPrimaryState{Adj_Unknown};
-        // state of: face2cell, face2node
+        // state of: face2cell, face2node, face2bnd
         MeshAdjState adjFacialState{Adj_Unknown};
-        // state of: cell2face
+        // state of: cell2face, bnd2face
         MeshAdjState adjC2FState{Adj_Unknown};
         // state of: node2cell, node2bnd
         MeshAdjState adjN2CBState{Adj_Unknown};
@@ -77,8 +78,11 @@ namespace DNDS::Geom
         tAdjPair face2node;
         tAdj2Pair face2cell;
         tElemInfoArrayPair faceElemInfo;
-        std::vector<index> bnd2face;               // no device
-        std::unordered_map<index, index> face2bnd; // no device
+        tAdj1Pair bnd2face;
+        tAdj1Pair face2bnd;
+
+        std::vector<index> bnd2faceV;               // no device
+        std::unordered_map<index, index> face2bndM; // no device
         /// periodic only, after interpolated
         tPbiPair face2nodePbi;
 
@@ -720,6 +724,39 @@ namespace DNDS::Geom
             op_on_device_arrays(arr_op);
             // coords.to_device(backend);
             // cell2node.to_device(backend);
+        }
+
+        DeviceBackend device()
+        {
+            DeviceBackend B = DeviceBackend::Unknown;
+            auto getB = [&B](auto &v)
+            {
+                if (v.ref.father)
+                    B = v.ref.father->device();
+            };
+            op_on_device_arrays(getB);
+
+            auto check_B_consistency = [&B](auto &v)
+            {
+                if (v.ref.father)
+                    DNDS_assert_info(
+                        B == v.ref.father->device(),
+                        fmt::format("member [{}.father] expected to be on device {} but on {}",
+                                    v.name,
+                                    device_backend_name(B),
+                                    device_backend_name(v.ref.father->device())));
+                if (v.ref.son)
+                    DNDS_assert_info(
+                        B == v.ref.son->device(),
+                        fmt::format("member [{}.son] expected to be on device {} but on {}",
+                                    v.name,
+                                    device_backend_name(B),
+                                    device_backend_name(v.ref.son->device())));
+            };
+
+            op_on_device_arrays(check_B_consistency);
+
+            return B;
         }
 
         template <DeviceBackend B>

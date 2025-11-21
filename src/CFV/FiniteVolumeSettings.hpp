@@ -32,7 +32,9 @@ namespace DNDS::CFV
         // {
         // }
 
-        FiniteVolumeSettings(int dim)
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(FiniteVolumeSettings, FiniteVolumeSettings)
+
+        DNDS_DEVICE_CALLABLE FiniteVolumeSettings(int dim)
         {
         }
 
@@ -40,7 +42,7 @@ namespace DNDS::CFV
          * @brief write any data into jsonSetting member
          *
          */
-        void WriteIntoJson(json &jsonSetting) const
+        DNDS_HOST void WriteIntoJson(json &jsonSetting) const
         {
             jsonSetting["maxOrder"] = maxOrder;
             jsonSetting["intOrder"] = intOrder;
@@ -52,19 +54,19 @@ namespace DNDS::CFV
          * @brief read any data from jsonSetting member
          *
          */
-        void ParseFromJson(const json &jsonSetting)
+        DNDS_HOST void ParseFromJson(const json &jsonSetting)
         {
             maxOrder = jsonSetting["maxOrder"]; ///@todo //TODO: update to better
             intOrder = jsonSetting["intOrder"];
             ignoreMeshGeometryDeficiency = jsonSetting["ignoreMeshGeometryDeficiency"];
             nIterCellSmoothScale = jsonSetting["nIterCellSmoothScale"];
         }
-        friend void from_json(const json &j, FiniteVolumeSettings &s)
+        DNDS_HOST friend void from_json(const json &j, FiniteVolumeSettings &s)
         {
             s.ParseFromJson(j);
         }
 
-        friend void to_json(json &j, const FiniteVolumeSettings &s)
+        DNDS_HOST friend void to_json(json &j, const FiniteVolumeSettings &s)
         {
             s.WriteIntoJson(j);
         }

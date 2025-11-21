@@ -32,7 +32,7 @@ namespace DNDS::Euler
                 if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall ||
                     pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWallIsothermal)
                 {
-                    index iFace = mesh->bnd2face[iBnd];
+                    index iFace = mesh->bnd2faceV[iBnd];
                     auto elem = mesh->GetFaceElement(iFace);
                     auto quad = vfv->GetFaceQuad(iFace);
                     if (settings.wallDistScheme == 0 || settings.wallDistScheme == 20)
@@ -219,7 +219,7 @@ namespace DNDS::Euler
                 if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall ||
                     pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWallIsothermal)
                 {
-                    index iFace = mesh->bnd2face[iBnd];
+                    index iFace = mesh->bnd2faceV[iBnd];
                     auto elem = mesh->GetFaceElement(iFace);
                     auto quad = vfv->GetFaceQuad(iFace);
                     {

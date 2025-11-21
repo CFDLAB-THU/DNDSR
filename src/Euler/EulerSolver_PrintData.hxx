@@ -482,7 +482,7 @@ namespace DNDS::Euler
                     // recu = EulerEvaluator::CompressRecPart(uOut[iCell], recu);
                     index iBnd = meshBnd->cell2parentCell.at(iB);
                     index iCell = mesh->bnd2cell[iBnd][0];
-                    index iFace = mesh->bnd2face.at(iBnd);
+                    index iFace = mesh->bnd2faceV.at(iBnd);
                     if (iFace == -1)
                     {
                         DNDS_assert(mesh->isPeriodic);                              // only internal bnd is valid, periodic bnd should be omitted

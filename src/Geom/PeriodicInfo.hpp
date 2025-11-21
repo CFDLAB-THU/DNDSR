@@ -175,19 +175,20 @@ namespace DNDS::Geom
 
     struct Periodicity
     {
-        std::array<tGPoint, 4> rotation;
-        std::array<tPoint, 4> translation;
-        std::array<tPoint, 4> rotationCenter;
+        std::array<tGPointPortable, 4> rotation;
+        std::array<tPointPortable, 4> translation;
+        std::array<tPointPortable, 4> rotationCenter;
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(Periodicity, Periodicity)
         DNDS_DEVICE_CALLABLE Periodicity()
         {
             for (auto &r : rotation)
-                r.setIdentity();
+                r.map().setIdentity();
             for (auto &r : rotationCenter)
-                r.setZero();
-            translation[0].setZero();
-            translation[1] = tPoint{1, 0, 0};
-            translation[2] = tPoint{0, 1, 0};
-            translation[3] = tPoint{0, 0, 1};
+                r.map().setZero();
+            translation[0].map().setZero();
+            translation[1].map() = tPoint{1, 0, 0};
+            translation[2].map() = tPoint{0, 1, 0};
+            translation[3].map() = tPoint{0, 0, 1};
 
             //     translation[1] = tPoint{0, 0, 0};
             //     rotation[1] << 0, 1, 0,
@@ -195,7 +196,7 @@ namespace DNDS::Geom
             //         0, 0, 1;
         }
 
-        void WriteSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name)
+        DNDS_HOST void WriteSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name)
         {
             auto cwd = serializerP->GetCurrentPath();
             serializerP->CreatePath(name);
@@ -203,15 +204,15 @@ namespace DNDS::Geom
 
             for (int i = 1; i <= 3; i++)
             {
-                serializerP->WriteRealVector("rotation" + std::to_string(i), Geom::JacobiToSTDVector(rotation.at(i)), Serializer::ArrayGlobalOffset_One);
-                serializerP->WriteRealVector("rotationCenter" + std::to_string(i), Geom::VectorToSTDVector(rotationCenter.at(i)), Serializer::ArrayGlobalOffset_One);
-                serializerP->WriteRealVector("translation" + std::to_string(i), Geom::VectorToSTDVector(translation.at(i)), Serializer::ArrayGlobalOffset_One);
+                serializerP->WriteRealVector("rotation" + std::to_string(i), Geom::JacobiToSTDVector(rotation.at(i).map()), Serializer::ArrayGlobalOffset_One);
+                serializerP->WriteRealVector("rotationCenter" + std::to_string(i), Geom::VectorToSTDVector(rotationCenter.at(i).map()), Serializer::ArrayGlobalOffset_One);
+                serializerP->WriteRealVector("translation" + std::to_string(i), Geom::VectorToSTDVector(translation.at(i).map()), Serializer::ArrayGlobalOffset_One);
             }
 
             serializerP->GoToPath(cwd);
         }
 
-        void ReadSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name)
+        DNDS_HOST void ReadSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name)
         {
             auto cwd = serializerP->GetCurrentPath();
             // serializerP->CreatePath(name); // * no create
@@ -224,9 +225,9 @@ namespace DNDS::Geom
                 serializerP->ReadRealVector("rotation" + std::to_string(i), rotRead, offsetV);
                 serializerP->ReadRealVector("rotationCenter" + std::to_string(i), rotCRead, offsetV);
                 serializerP->ReadRealVector("translation" + std::to_string(i), transRead, offsetV);
-                rotation.at(i) = Geom::STDVectorToJacobi(rotRead);
-                rotationCenter.at(i) = Geom::STDVectorToVector(rotCRead);
-                translation.at(i) = Geom::STDVectorToVector(transRead);
+                rotation.at(i).map() = Geom::STDVectorToJacobi(rotRead);
+                rotationCenter.at(i).map() = Geom::STDVectorToVector(rotCRead);
+                translation.at(i).map() = Geom::STDVectorToVector(transRead);
             }
 
             serializerP->GoToPath(cwd);
@@ -240,7 +241,7 @@ namespace DNDS::Geom
                 i = -id - 3;
             else
                 i = -id;
-            return rotation.at(i) * (c - rotationCenter.at(i)) + rotationCenter.at(i) + translation.at(i);
+            return rotation.at(i).map() * (c - rotationCenter.at(i).map()) + rotationCenter.at(i).map() + translation.at(i).map();
         }
 
         DNDS_DEVICE_CALLABLE [[nodiscard]] tPoint TransCoordBack(const tPoint &c, t_index id) const
@@ -251,7 +252,7 @@ namespace DNDS::Geom
                 i = -id - 3;
             else
                 i = -id;
-            return rotation.at(i).transpose() * ((c - translation.at(i)) - rotationCenter.at(i)) + rotationCenter.at(i);
+            return rotation.at(i).map().transpose() * ((c - translation.at(i).map()) - rotationCenter.at(i).map()) + rotationCenter.at(i).map();
         }
 
         ///@todo //TODO: add support for cartesian tensor transformation
@@ -266,9 +267,9 @@ namespace DNDS::Geom
             else
                 i = -id;
             if constexpr (dim == 3)
-                return rotation.at(i) * v;
+                return rotation.at(i).map() * v;
             else
-                return rotation.at(i)({0, 1}, {0, 1}) * v;
+                return rotation.at(i).map()({0, 1}, {0, 1}) * v;
         }
 
         template <int dim, int nVec>
@@ -281,9 +282,9 @@ namespace DNDS::Geom
             else
                 i = -id;
             if constexpr (dim == 3)
-                return rotation.at(i).transpose() * v;
+                return rotation.at(i).map().transpose() * v;
             else
-                return rotation.at(i)({0, 1}, {0, 1}).transpose() * v;
+                return rotation.at(i).map()({0, 1}, {0, 1}).transpose() * v;
         }
 
         template <int dim>
@@ -296,9 +297,9 @@ namespace DNDS::Geom
             else
                 i = -id;
             if constexpr (dim == 3)
-                return rotation.at(i) * m * rotation.at(i).transpose();
+                return rotation.at(i).map() * m * rotation.at(i).map().transpose();
             else
-                return rotation.at(i)({0, 1}, {0, 1}) * m * rotation.at(i)({0, 1}, {0, 1}).transpose();
+                return rotation.at(i).map()({0, 1}, {0, 1}) * m * rotation.at(i).map()({0, 1}, {0, 1}).transpose();
         }
 
         template <int dim>
@@ -311,9 +312,9 @@ namespace DNDS::Geom
             else
                 i = -id;
             if constexpr (dim == 3)
-                return rotation.at(i).transpose() * m * rotation.at(i);
+                return rotation.at(i).map().transpose() * m * rotation.at(i).map();
             else
-                return rotation.at(i)({0, 1}, {0, 1}).transpose() * m * rotation.at(i)({0, 1}, {0, 1});
+                return rotation.at(i).map()({0, 1}, {0, 1}).transpose() * m * rotation.at(i).map()({0, 1}, {0, 1});
         }
 
         DNDS_DEVICE_CALLABLE [[nodiscard]] tPoint GetCoordByBits(const tPoint &c, const NodePeriodicBits &bits) const

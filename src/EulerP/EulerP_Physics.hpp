@@ -1,4 +1,6 @@
 #pragma once
+#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Errors.hpp"
 #include "EulerP.hpp"
 #include "DNDS/JsonUtil.hpp"
 
@@ -20,7 +22,7 @@ namespace DNDS::EulerP
     template <DeviceBackend B>
     struct PhysicsDeviceView
     {
-        vector_DeviceView<B, int32_t> reference_values;
+        vector_DeviceView<B, real, int32_t> reference_values;
         PhysicsParams params;
 
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(PhysicsDeviceView, PhysicsDeviceView)
@@ -45,12 +47,19 @@ namespace DNDS::EulerP
             reference_values.to_device(B);
         }
 
+        DeviceBackend device()
+        {
+            return reference_values.device();
+        }
+
         template <DeviceBackend B>
         using t_deviceView = PhysicsDeviceView<B>;
 
         template <DeviceBackend B>
         t_deviceView<B> deviceView()
         {
+            DNDS_assert(reference_values.device() == B ||
+                        (B == DeviceBackend::Host && reference_values.device() == DeviceBackend::Unknown));
             return t_deviceView<B>{
                 reference_values.deviceView<B, int32_t>(),
                 params};

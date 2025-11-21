@@ -113,9 +113,20 @@ namespace DNDS
                 DNDS_assert_info(false, "Invalid call");
         }
 
-        void operator()(index i, rowsize j)
+        std::conditional_t<_mat_ni == 1 && _mat_nj == 1,
+                           real &, void>
+        operator()(index iRow)
         {
-            // just don't call
+            if constexpr (_mat_ni == 1 && _mat_nj == 1)
+                return *t_base::operator[](iRow);
+        }
+
+        std::conditional_t<_mat_ni == 1 && _mat_nj == 1,
+                           real, void>
+        operator()(index iRow) const
+        {
+            if constexpr (_mat_ni == 1 && _mat_nj == 1)
+                return *t_base::operator[](iRow);
         }
 
         t_EigenMap

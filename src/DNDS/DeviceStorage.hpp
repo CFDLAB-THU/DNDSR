@@ -209,6 +209,8 @@ namespace DNDS
     template <typename T>
     struct host_device_vector : public std::vector<T>
     {
+        static_assert(std::is_trivially_copyable_v<T>,
+                      "host_device_vector elements must be trivially_copyable");
         using t_base = std::vector<T>;
         using t_base::t_base;
 

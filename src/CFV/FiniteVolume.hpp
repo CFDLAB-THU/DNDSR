@@ -1,4 +1,6 @@
 #pragma once
+#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Errors.hpp"
 #include "FiniteVolumeSettings.hpp"
 #include "VRDefines.hpp"
 #include "Geom/DiffTensors.hpp"
@@ -478,6 +480,43 @@ namespace DNDS::CFV
                 op);
         }
 
+        DeviceBackend device()
+        {
+            DeviceBackend B = DeviceBackend::Unknown;
+            auto getB = [&B](auto &v)
+            {
+                if (v.ref.father)
+                    B = v.ref.father->device();
+            };
+            for_each_member_list(
+                this->device_array_list(),
+                getB);
+
+            auto check_B_consistency = [&B](auto &v)
+            {
+                if (v.ref.father)
+                    DNDS_assert_info(
+                        B == v.ref.father->device(),
+                        fmt::format("member [{}.father] expected to be on device {} but on {}",
+                                    v.name,
+                                    device_backend_name(B),
+                                    device_backend_name(v.ref.father->device())));
+                if (v.ref.son)
+                    DNDS_assert_info(
+                        B == v.ref.son->device(),
+                        fmt::format("member [{}.son] expected to be on device {} but on {}",
+                                    v.name,
+                                    device_backend_name(B),
+                                    device_backend_name(v.ref.son->device())));
+            };
+
+            for_each_member_list(
+                this->device_array_list(),
+                check_B_consistency);
+
+            return B;
+        }
+
         template <DeviceBackend B>
         using t_deviceView = FiniteVolumeDeviceView<B>;
 
@@ -487,6 +526,8 @@ namespace DNDS::CFV
         template <DeviceBackend B>
         t_deviceView<B> deviceView()
         {
+            DeviceBackend B_mesh = mesh->device();
+            DNDS_assert(B_mesh == B);
             return {*this, UnInitIndex};
         }
     };

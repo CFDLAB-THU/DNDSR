@@ -639,21 +639,21 @@ namespace DNDS::Geom
         const tPoint &eulerAngles3)
     {
         auto mesh = this;
-        mesh->periodicInfo.translation[1] = translation1;
-        mesh->periodicInfo.translation[2] = translation2;
-        mesh->periodicInfo.translation[3] = translation3;
-        mesh->periodicInfo.rotationCenter[1] = rotationCenter1;
-        mesh->periodicInfo.rotationCenter[2] = rotationCenter2;
-        mesh->periodicInfo.rotationCenter[3] = rotationCenter3;
-        mesh->periodicInfo.rotation[1] =
+        mesh->periodicInfo.translation[1].map() = translation1;
+        mesh->periodicInfo.translation[2].map() = translation2;
+        mesh->periodicInfo.translation[3].map() = translation3;
+        mesh->periodicInfo.rotationCenter[1].map() = rotationCenter1;
+        mesh->periodicInfo.rotationCenter[2].map() = rotationCenter2;
+        mesh->periodicInfo.rotationCenter[3].map() = rotationCenter3;
+        mesh->periodicInfo.rotation[1].map() =
             Geom::RotZ(eulerAngles1[2]) *
             Geom::RotY(eulerAngles1[1]) *
             Geom::RotX(eulerAngles1[0]);
-        mesh->periodicInfo.rotation[2] =
+        mesh->periodicInfo.rotation[2].map() =
             Geom::RotZ(eulerAngles2[2]) *
             Geom::RotY(eulerAngles2[1]) *
             Geom::RotX(eulerAngles2[0]);
-        mesh->periodicInfo.rotation[3] =
+        mesh->periodicInfo.rotation[3].map() =
             Geom::RotZ(eulerAngles3[2]) *
             Geom::RotY(eulerAngles3[1]) *
             Geom::RotX(eulerAngles3[0]);
@@ -1257,6 +1257,8 @@ namespace DNDS::Geom
                 if (iCell != UnInitIndex) // is not a bnd
                     iCell = cell2node.trans.pLGhostMapping->operator()(-1, iCell);
             }
+            index &iBnd = face2bnd(iFace);
+            iBnd = this->BndIndexGlobal2Local(iBnd);
         }
         // MPI::Barrier(mpi.comm);
         /**********************************/
@@ -1272,6 +1274,7 @@ namespace DNDS::Geom
 
         auto FaceIndexLocal2Global = [&](DNDS::index &iF)
         {
+            DNDS_assert(face2node.trans.pLGhostMapping);
             if (iF == UnInitIndex)
                 return;
             if (iF < 0) // mapping to un-found in father-son
@@ -1291,6 +1294,9 @@ namespace DNDS::Geom
                 FaceIndexLocal2Global(iFace);
             }
         }
+        for (index iBnd = 0; iBnd < bnd2face.Size(); iBnd++)
+            for (auto &iFace : bnd2face[iBnd])
+                FaceIndexLocal2Global(iFace);
         // MPI::Barrier(mpi.comm);
         /**********************************/
         adjC2FState = Adj_PointToGlobal;
@@ -1305,6 +1311,7 @@ namespace DNDS::Geom
 
         auto FaceIndexGlobal2Local = [&](DNDS::index &iF)
         {
+            DNDS_assert(face2node.trans.pLGhostMapping);
             if (iF == UnInitIndex)
                 return;
             DNDS::MPI_int rank;
@@ -1327,6 +1334,9 @@ namespace DNDS::Geom
                 FaceIndexGlobal2Local(iFace);
             }
         }
+        for (index iBnd = 0; iBnd < bnd2face.Size(); iBnd++)
+            for (auto &iFace : bnd2face[iBnd])
+                FaceIndexGlobal2Local(iFace);
         /**********************************/
         adjC2FState = Adj_PointToLocal;
     }
@@ -1520,11 +1530,13 @@ namespace DNDS::Geom
         DNDS_MAKE_SSP(face2node.son, mpi);
         if (isPeriodic)
         {
-            DNDS_MAKE_SSP(face2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
-            DNDS_MAKE_SSP(face2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
+            DNDS_MAKE_SSP(face2nodePbi.father, mpi);
+            DNDS_MAKE_SSP(face2nodePbi.son, mpi);
         }
-        DNDS_MAKE_SSP(faceElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(faceElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        DNDS_MAKE_SSP(faceElemInfo.father, mpi);
+        DNDS_MAKE_SSP(faceElemInfo.son, mpi);
+        DNDS_MAKE_SSP(face2bnd.father, mpi);
+        DNDS_MAKE_SSP(bnd2face.father, mpi);
 
         cell2face.father->Resize(cell2cell.father->Size()); //!
         cell2face.son->Resize(cell2cell.son->Size());
@@ -1735,8 +1747,8 @@ namespace DNDS::Geom
          * - case 1: both side cells are in the same proc
          * - case 2: other side cell is not in the same proc
          */
-        bnd2face.resize(bndElemInfo.father->Size(), -1); // this mapping only uses main (father) part
-        face2bnd.reserve(bndElemInfo.father->Size());
+        bnd2faceV.resize(bndElemInfo.father->Size(), -1); // this mapping only uses main (father) part
+        face2bndM.reserve(bndElemInfo.father->Size());
         std::unordered_map<index, index> iFace2iBnd;
         for (DNDS::index iBnd = 0; iBnd < bndElemInfo.father->Size(); iBnd++)
         {
@@ -1771,8 +1783,8 @@ namespace DNDS::Geom
                     // if is periodic, then only gets the bnd info of the main cell's bnd;
                     // if is external bc, then must be non-ghost face
                     faceElemInfo(iFace, 0) = bndElemInfo(iBnd, 0);
-                    bnd2face[iBnd] = iFace;
-                    face2bnd[iFace] = iBnd;
+                    bnd2faceV[iBnd] = iFace;
+                    face2bndM[iFace] = iBnd;
                     DNDS_assert_info(FaceIDIsExternalBC(faceID) ||
                                          FaceIDIsPeriodic(faceID),
                                      "bnd elem should have a BC id not interior");
@@ -1780,6 +1792,13 @@ namespace DNDS::Geom
             }
             DNDS_assert(nFound > 0 || (FaceIDIsPeriodic(faceID) && nFound == 0)); // periodic could miss the face
         }
+
+        face2bnd.father->Resize(face2node.father->Size());
+        for (index iFace = 0; iFace < face2bnd.father->Size(); iFace++)
+            face2bnd.father->operator()(iFace) = face2bndM.count(iFace) ? face2bndM[iFace] : UnInitIndex;
+        bnd2face.father->Resize(bnd2node.father->Size());
+        for (index iBnd = 0; iBnd < this->NumBnd(); iBnd++)
+            bnd2face.father->operator()(iBnd) = bnd2faceV.at(iBnd);
 
         /**********************************/
         // alter face2node and face2cell to point to global
@@ -1803,6 +1822,7 @@ namespace DNDS::Geom
         if (isPeriodic)
             face2nodePbi.TransAttach();
         faceElemInfo.TransAttach();
+        face2bnd.TransAttach();
 
         face2cell.trans.createFatherGlobalMapping();
         face2cell.trans.createGhostMapping(faceSendLocalsIdx, faceSendLocalsStarts);
@@ -1810,18 +1830,21 @@ namespace DNDS::Geom
         if (isPeriodic)
             face2nodePbi.trans.BorrowGGIndexing(face2cell.trans);
         faceElemInfo.trans.BorrowGGIndexing(face2cell.trans);
+        face2bnd.trans.BorrowGGIndexing(face2cell.trans);
 
         face2cell.trans.createMPITypes();
         face2node.trans.createMPITypes();
         if (isPeriodic)
             face2nodePbi.trans.createMPITypes();
         faceElemInfo.trans.createMPITypes();
+        face2bnd.trans.createMPITypes();
 
         face2cell.trans.pullOnce();
         face2node.trans.pullOnce();
         if (isPeriodic)
             face2nodePbi.trans.pullOnce();
         faceElemInfo.trans.pullOnce();
+        face2bnd.trans.pullOnce();
 
         this->AdjGlobal2LocalFacial();
         // alter face2node and face2cell to point to local
@@ -1872,6 +1895,10 @@ namespace DNDS::Geom
         cell2face.trans.BorrowGGIndexing(cell2node.trans);
         cell2face.trans.createMPITypes();
         cell2face.trans.pullOnce();
+        bnd2face.TransAttach();
+        bnd2face.trans.BorrowGGIndexing(bnd2node.trans);
+        bnd2face.trans.createMPITypes();
+        bnd2face.trans.pullOnce();
         this->AdjGlobal2LocalC2F();
 
         for (DNDS::index iFace = 0; iFace < faceElemInfo.Size(); iFace++)
@@ -2241,18 +2268,18 @@ namespace DNDS::Geom
 
             for (rowsize ib2n = 0; ib2n < bnd2node.RowSize(iB); ib2n++)
             {
-                if (bnd2face.at(iB) < 0) // where bnd has not a face!
+                if (bnd2faceV.at(iB) < 0) // where bnd has not a face!
                     bMesh.cell2node[nBndCellUse][ib2n] = node2bndNode.at(bnd2node[iB][ib2n]);
                 else
-                    bMesh.cell2node[nBndCellUse][ib2n] = node2bndNode.at(face2node[bnd2face.at(iB)][ib2n]); //* respect the face ordering if possible // this can be omitted if all bnds used are not periodic
+                    bMesh.cell2node[nBndCellUse][ib2n] = node2bndNode.at(face2node[bnd2faceV.at(iB)][ib2n]); //* respect the face ordering if possible // this can be omitted if all bnds used are not periodic
                 DNDS_assert(node2bndNode.at(bnd2node[iB][ib2n]) >= 0);
                 if (isPeriodic)
                 {
-                    if (bnd2face.at(iB) < 0)                                              // where bnd has not a face!
+                    if (bnd2faceV.at(iB) < 0)                                             // where bnd has not a face!
                         bMesh.cell2nodePbi[nBndCellUse][ib2n] = Geom::NodePeriodicBits{}; // a invalid value
                     else
                     {
-                        bMesh.cell2nodePbi[nBndCellUse][ib2n] = face2nodePbi[bnd2face.at(iB)][ib2n];
+                        bMesh.cell2nodePbi[nBndCellUse][ib2n] = face2nodePbi[bnd2faceV.at(iB)][ib2n];
                     }
                 }
             }

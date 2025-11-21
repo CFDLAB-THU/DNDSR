@@ -114,6 +114,22 @@ namespace DNDS
             return {t_base::operator[](iRow), c_nRow, t_base::RowSize(iRow) / c_nRow}; // need static dispatch?
         }
 
+        DNDS_DEVICE_CALLABLE std::conditional_t<_mat_ni == 1 && _mat_nj == 1,
+                                                real &, void>
+        operator()(index iRow)
+        {
+            if constexpr (_mat_ni == 1 && _mat_nj == 1)
+                return *t_base::operator[](iRow);
+        }
+
+        DNDS_DEVICE_CALLABLE std::conditional_t<_mat_ni == 1 && _mat_nj == 1,
+                                                real, void>
+        operator()(index iRow) const
+        {
+            if constexpr (_mat_ni == 1 && _mat_nj == 1)
+                return *t_base::operator[](iRow);
+        }
+
         DNDS_DEVICE_CALLABLE t_EigenView MatView(index iRow)
         {
             DNDS_ARRAYEIGENMATRIXVIEW_GETTER_PREREQ

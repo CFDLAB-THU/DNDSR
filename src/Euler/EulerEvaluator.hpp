@@ -899,7 +899,7 @@ namespace DNDS::Euler
                 v.second.Reset();
             for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
             {
-                index iFace = mesh->bnd2face.at(iBnd);
+                index iFace = mesh->bnd2faceV.at(iBnd);
                 if (iFace < 0) // remember that some iBnd do not have iFace (for periodic case)
                     continue;
                 auto f2c = mesh->face2cell[iFace];

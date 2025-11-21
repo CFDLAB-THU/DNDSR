@@ -15,4 +15,6 @@ namespace DNDS::EulerP
 
     using TUVec = ArrayDof<3, 1>;
     using TUVecGrad = ArrayDof<3, 3>;
+
+    static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<nVarsFlow - 1>);
 }

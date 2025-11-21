@@ -1,7 +1,9 @@
 #pragma once
 
+#include "DNDS/Errors.hpp"
 #include "Defines.hpp"
 #include "ArrayBasic.hpp"
+#include <type_traits>
 
 #ifdef DNDS_USE_CUDA
 #    include <thrust/device_malloc_allocator.h>
@@ -17,6 +19,7 @@ namespace DNDS::CUDA
     template <typename T>
     struct DeviceObject
     {
+        static_assert(std::is_trivially_copyable_v<T>);
         thrust::device_ptr<T> dev;
         DeviceObject(const T &host)
         {
