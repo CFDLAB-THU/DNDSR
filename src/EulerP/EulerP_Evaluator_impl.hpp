@@ -218,8 +218,8 @@ namespace DNDS::EulerP
             vector_DeviceView<B, TUScalar::t_deviceView<B>> fluxScalarFF;
             // out added
             TUDof::t_deviceView<B> rhs;
-            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> rhsScalar_v;
-            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> rhsScalar;
+            deviceViewVector<TUScalar::t_deviceView<B>, B> rhsScalar_v;
+            vector_DeviceView<B, TUScalar::t_deviceView<B>> rhsScalar;
 
             Flux2nd_Arg(Evaluator &self_, Evaluator::Flux2nd_Arg &arg)
                 : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF(),

@@ -9,6 +9,8 @@
 #include "EulerP_BC.hpp"
 #include "EulerP_Physics.hpp"
 #include <vector>
+#include "DNDS/DeviceStorageHelper.hpp"
+#include "DNDS/ObjectUtils.hpp"
 
 namespace DNDS::EulerP
 {
@@ -230,7 +232,7 @@ namespace DNDS::EulerP
             bool includeSon = true,
             DeviceBackend B = DeviceBackend::Unknown)
         {
-            std::string emit_info = fmt::format("{}", name);
+            std::string emit_info = fmt::format("{} varloc {} check failure", name, varloc);
             DNDS_assert_info(u, emit_info);
             DNDS_assert_info(u->father, emit_info);
             if (includeSon)
@@ -238,7 +240,10 @@ namespace DNDS::EulerP
             DNDS_assert_info(u->father->device() == B, emit_info);
             if (includeSon)
                 DNDS_assert_info(u->son->device() == B, emit_info);
-            if (varloc == 0)
+            if (varloc == -1)
+            {
+            }
+            else if (varloc == 0)
             {
                 DNDS_assert_info(u->father->Size() == fv->mesh->NumCell(), emit_info);
                 if (includeSon)
@@ -257,36 +262,292 @@ namespace DNDS::EulerP
                     DNDS_assert_info(u->son->Size() == fv->mesh->NumNodeGhost(), emit_info);
             }
             else
-                DNDS_assert_info(false, "varloc is 0 or 1 or 2");
+                DNDS_assert_info(false, "varloc should be -1, 0, 1 or 2");
         }
 
-        void RecGradient(const ssp<TUDof> &u,
-                         const ssp<TUGrad> &uGrad,
-                         const std::vector<ssp<TUScalar>> &uScalar,
-                         const std::vector<ssp<TUScalarGrad>> &uScalarGrad);
+        struct RecGradient_Arg
+        {
+            ssp<TUDof> u;
+            ssp<TUGrad> uGrad;
+            // out
+            std::vector<ssp<TUScalar>> uScalar;
+            std::vector<ssp<TUScalarGrad>> uScalarGrad;
 
-        template <DeviceBackend B>
-        void RecGradient_impl(const ssp<TUDof> &u,
-                              const ssp<TUGrad> &uGrad,
-                              const std::vector<ssp<TUScalar>> &uScalar,
-                              const std::vector<ssp<TUScalarGrad>> &uScalarGrad);
+            auto member_list()
+            {
+                return std::make_tuple(
+                    DNDS_MAKE_1_MEMBER_REF(u),
+                    DNDS_MAKE_1_MEMBER_REF(uGrad),
+                    DNDS_MAKE_1_MEMBER_REF(uScalar),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarGrad));
+            }
 
-        void EstEigenDt(const ssp<TUDof> &u,
-                        const ssp<TUGrad> &uGrad,
-                        const std::vector<ssp<TUScalar>> &uScalar,
-                        const std::vector<ssp<TUScalarGrad>> &uScalarGrad,
-                        const ssp<TUScalar> &faceLamEst,
-                        const ssp<TUScalar> &faceLamVisEst,
-                        const ssp<TUScalar> &dt);
+            void Validate(Evaluator &self)
+            {
+                DeviceBackend B = self.device();
+                self.checkValidUDof(u, "u", 0, true, B);
+                self.checkValidUDof(uGrad, "uGrad", 0, true, B);
+                for (size_t i = 0; i < uScalar.size(); i++)
+                    self.checkValidUDof(uScalar[i], "uScalar_" + std::to_string(i), 0, true, B);
+                for (size_t i = 0; i < uScalarGrad.size(); i++)
+                    self.checkValidUDof(uScalarGrad[i], "uScalarGrad_" + std::to_string(i), 0, true, B);
+            }
+        };
 
-        void RHS2nd(const ssp<TUDof> &u,
-                    const ssp<TUGrad> &uGrad,
-                    const std::vector<ssp<TUScalar>> &uScalar,
-                    const std::vector<ssp<TUScalarGrad>> &uScalarGrad,
-                    const ssp<TUScalar> &faceLamEst,
-                    const ssp<TUScalar> &faceLamVisEst,
-                    const ssp<TUDof> &rhs,
-                    const ssp<TUDof> &flux_face,
-                    const ssp<TUDof> &source);
+        void RecGradient(RecGradient_Arg &arg);
+
+        struct Cons2PrimMu_Arg
+        {
+            ssp<TUDof> u;
+            ssp<TUGrad> uGrad;
+            std::vector<ssp<TUScalar>> uScalar;
+            std::vector<ssp<TUScalarGrad>> uScalarGrad;
+            // out
+            ssp<TUDof> uPrim;
+            ssp<TUGrad> uGradPrim;
+            std::vector<ssp<TUScalar>> uScalarPrim;
+            std::vector<ssp<TUScalarGrad>> uScalarGradPrim;
+            ssp<TUScalar> p;
+            ssp<TUScalar> T;
+            ssp<TUScalar> a;
+            ssp<TUScalar> mu;
+            std::vector<ssp<TUScalar>> muComp;
+
+            auto member_list()
+            {
+                return std::make_tuple(
+                    DNDS_MAKE_1_MEMBER_REF(u),
+                    DNDS_MAKE_1_MEMBER_REF(uGrad),
+                    DNDS_MAKE_1_MEMBER_REF(uScalar),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarGrad),
+                    DNDS_MAKE_1_MEMBER_REF(uPrim),
+                    DNDS_MAKE_1_MEMBER_REF(uGradPrim),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarPrim),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarGradPrim),
+                    DNDS_MAKE_1_MEMBER_REF(p),
+                    DNDS_MAKE_1_MEMBER_REF(T),
+                    DNDS_MAKE_1_MEMBER_REF(a),
+                    DNDS_MAKE_1_MEMBER_REF(mu),
+                    DNDS_MAKE_1_MEMBER_REF(muComp));
+            }
+
+            void Validate(Evaluator &self)
+            {
+                DeviceBackend B = self.device();
+                using namespace std::string_literals;
+                int varloc = -1;
+
+                auto validate_member = [&](auto &v)
+                {
+                    if constexpr (is_ssp_v<remove_cvref_t<decltype(v.ref)>>)
+                    {
+                        self.checkValidUDof(v.ref, v.name,
+                                            varloc, true, B);
+                    }
+                    else
+                    {
+                        for (size_t i = 0; i < v.ref.size(); i++)
+                            self.checkValidUDof(v.ref[i], v.name + "_"s + std::to_string(i),
+                                                varloc, true, B);
+                    }
+                };
+                for_each_member_list(
+                    this->member_list(),
+                    validate_member);
+            }
+        };
+
+        void Cons2PrimMu(Cons2PrimMu_Arg &arg);
+
+        struct EstEigenDt_Arg
+        {
+            ssp<TUDof> u;
+            ssp<TUScalar> muCell;
+            ssp<TUScalar> aCell;
+            ssp<TUScalarGrad> faceLamEst;
+            ssp<TUScalar> faceLamVisEst;
+            ssp<TUScalar> deltaLamFace;
+            ssp<TUScalar> deltaLamCell;
+            ssp<TUScalar> dt;
+
+            auto member_list()
+            {
+                return std::make_tuple(
+                    DNDS_MAKE_1_MEMBER_REF(u),
+                    DNDS_MAKE_1_MEMBER_REF(muCell),
+                    DNDS_MAKE_1_MEMBER_REF(aCell),
+                    DNDS_MAKE_1_MEMBER_REF(faceLamEst),
+                    DNDS_MAKE_1_MEMBER_REF(faceLamVisEst),
+                    DNDS_MAKE_1_MEMBER_REF(deltaLamFace),
+                    DNDS_MAKE_1_MEMBER_REF(deltaLamCell),
+                    DNDS_MAKE_1_MEMBER_REF(dt));
+            }
+
+            void Validate(Evaluator &self)
+            {
+                DeviceBackend B = self.device();
+
+                auto validate_member = [&](auto &v)
+                {
+                    int varloc = 0;
+                    if (std::set<std::string>{
+                            "faceLamEst",
+                            "faceLamVisEst",
+                            "deltaLamFace",
+                        }
+                            .count(v.name))
+                        varloc = 1;
+                    self.checkValidUDof(v.ref, v.name,
+                                        varloc, true, B);
+                };
+                for_each_member_list(
+                    this->member_list(),
+                    validate_member);
+            }
+        };
+
+        void EstEigenDt(EstEigenDt_Arg &arg);
+
+        struct Rec2nd_Arg
+        {
+            ssp<TUDof> u;
+            ssp<TUGrad> uGrad;
+            std::vector<ssp<TUScalar>> uScalar;
+            std::vector<ssp<TUScalarGrad>> uScalarGrad;
+            // out
+            ssp<TUDof> uFL;
+            ssp<TUDof> uFR;
+            ssp<TUGrad> uGradFL;
+            ssp<TUGrad> uGradFR;
+            std::vector<ssp<TUScalar>> uScalarFL;
+            std::vector<ssp<TUScalar>> uScalarFR;
+            std::vector<ssp<TUScalarGrad>> uScalarGradFL;
+            std::vector<ssp<TUScalarGrad>> uScalarGradFR;
+
+            auto member_list()
+            {
+                return std::make_tuple(
+                    DNDS_MAKE_1_MEMBER_REF(u),
+                    DNDS_MAKE_1_MEMBER_REF(uGrad),
+                    DNDS_MAKE_1_MEMBER_REF(uScalar),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarGrad),
+                    // out
+                    DNDS_MAKE_1_MEMBER_REF(uFL),
+                    DNDS_MAKE_1_MEMBER_REF(uFR),
+                    DNDS_MAKE_1_MEMBER_REF(uGradFL),
+                    DNDS_MAKE_1_MEMBER_REF(uGradFR),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarFL),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarFR),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarGradFL),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarGradFR));
+            }
+
+            void Validate(Evaluator &self)
+            {
+                DeviceBackend B = self.device();
+                using namespace std::string_literals;
+
+                auto validate_member = [&](auto &v)
+                {
+                    int varloc = 0;
+                    std::string name = v.name;
+                    auto name_last2 = name.substr(name.size() - 2, 2);
+                    if (name_last2 == "FL" || name_last2 == "FR")
+                        varloc = 1;
+                    if constexpr (is_ssp_v<remove_cvref_t<decltype(v.ref)>>)
+                        self.checkValidUDof(v.ref, v.name,
+                                            varloc, true, B);
+
+                    else
+
+                        for (size_t i = 0; i < v.ref.size(); i++)
+                            self.checkValidUDof(v.ref[i], v.name + "_"s + std::to_string(i),
+                                                varloc, true, B);
+                };
+                for_each_member_list(
+                    this->member_list(),
+                    validate_member);
+            }
+        };
+
+        void Rec2nd(Rec2nd_Arg &arg);
+
+        // consider upgrading this to directly correspond to quad_point?
+        struct Flux2nd_Arg
+        {
+            ssp<TUDof> uFL;
+            ssp<TUDof> uFR;
+            ssp<TUGrad> uGradFL;
+            ssp<TUGrad> uGradFR;
+            std::vector<ssp<TUScalar>> uScalarFL;
+            std::vector<ssp<TUScalar>> uScalarFR;
+            std::vector<ssp<TUScalarGrad>> uScalarGradFL;
+            std::vector<ssp<TUScalarGrad>> uScalarGradFR;
+            ssp<TUScalar> muFF;
+            std::vector<ssp<TUScalar>> muCompFF;
+            ssp<TUScalar> deltaLamFaceFF;
+            // out
+            ssp<TUDof> fluxFF;
+            std::vector<ssp<TUScalar>> fluxScalarFF;
+            // out added
+            ssp<TUDof> rhs;
+            std::vector<ssp<TUScalar>> rhsScalar;
+
+            auto member_list()
+            {
+                return std::make_tuple(
+                    DNDS_MAKE_1_MEMBER_REF(uFL),
+                    DNDS_MAKE_1_MEMBER_REF(uFR),
+                    DNDS_MAKE_1_MEMBER_REF(uGradFL),
+                    DNDS_MAKE_1_MEMBER_REF(uGradFR),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarFL),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarFR),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarGradFL),
+                    DNDS_MAKE_1_MEMBER_REF(uScalarGradFR),
+                    DNDS_MAKE_1_MEMBER_REF(muFF),
+                    DNDS_MAKE_1_MEMBER_REF(muCompFF),
+                    DNDS_MAKE_1_MEMBER_REF(deltaLamFaceFF),
+                    // out
+                    DNDS_MAKE_1_MEMBER_REF(fluxFF),
+                    DNDS_MAKE_1_MEMBER_REF(fluxScalarFF),
+                    // out added
+                    DNDS_MAKE_1_MEMBER_REF(rhs),
+                    DNDS_MAKE_1_MEMBER_REF(rhsScalar));
+            }
+
+            void Validate(Evaluator &self)
+            {
+                DeviceBackend B = self.device();
+                using namespace std::string_literals;
+
+                auto validate_member = [&](auto &v)
+                {
+                    int varloc = 0;
+                    std::string name = v.name;
+                    auto name_last2 = name.substr(name.size() - 2, 2);
+                    if (name_last2 == "FL" || name_last2 == "FR" || name_last2 == "FF")
+                        varloc = 1;
+                    if constexpr (is_ssp_v<remove_cvref_t<decltype(v.ref)>>)
+                        self.checkValidUDof(v.ref, v.name,
+                                            varloc, true, B);
+
+                    else
+
+                        for (size_t i = 0; i < v.ref.size(); i++)
+                            self.checkValidUDof(v.ref[i], v.name + "_"s + std::to_string(i),
+                                                varloc, true, B);
+                };
+                for_each_member_list(
+                    this->member_list(),
+                    validate_member);
+            }
+        };
+
+        void Flux2nd(Flux2nd_Arg &arg);
     };
+
+    /********************************************************************************** */
+
+    /********************************************************************************** */
+
 }

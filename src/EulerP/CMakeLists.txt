@@ -21,6 +21,7 @@ ${DNDS_EXTERNAL_LIBS}
 
 set(CPPS
 EulerP_Evaluator.cpp
+EulerP_Evaluator_impl.cpp
 )
 if (DNDS_USE_CUDA)
 # list(APPEND CPPS VRDefines.cu test_FiniteVolume.cu)

@@ -162,7 +162,7 @@ namespace DNDS::EulerP
             uOtherMin = -uOtherMin.array() / (uIIncMin.array().abs() + verySmallReal);
             uOtherMax = uOtherMax.array().max(0.0).min(1.0);
             uOtherMin = uOtherMin.array().max(0.0).min(1.0);
-            grad.array().rowwise() *= uOtherMax.array().min(uOtherMin.array());
+            grad.array().rowwise() *= (uOtherMax.array().min(uOtherMin.array())).transpose();
         }
 
         // for scalars

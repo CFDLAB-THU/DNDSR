@@ -5,6 +5,7 @@
 #include "ArrayDerived/ArrayEigenVector.hpp"
 
 #include "ArrayPair.hpp"
+#include "DNDS/Defines.hpp"
 
 namespace DNDS
 {
@@ -15,8 +16,10 @@ namespace DNDS
         using t_base = ArrayPairDeviceView<B, ArrayEigenMatrix<n_m, n_n>>;
         using t_base::t_base;
 
-        ArrayDofDeviceView(const t_base &base_view) : t_base(base_view) {}
-        ArrayDofDeviceView(t_base &&base_view) : t_base(base_view) {}
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(ArrayDofDeviceView, ArrayDofDeviceView)
+
+        DNDS_DEVICE_CALLABLE ArrayDofDeviceView(const t_base &base_view) : t_base(base_view) {}
+        DNDS_DEVICE_CALLABLE ArrayDofDeviceView(t_base &&base_view) : t_base(base_view) {}
     };
 
     template <DeviceBackend B, int n_m, int n_n>
