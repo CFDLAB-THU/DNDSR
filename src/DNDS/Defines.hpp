@@ -105,6 +105,22 @@ namespace DNDS
     template <typename T>
     using ssp = std::shared_ptr<T>;
 
+    template <typename T>
+    struct is_ssp : std::false_type
+    {
+    };
+
+    template <typename T>
+    struct is_ssp<ssp<T>> : std::true_type
+    {
+    };
+
+    template <typename T>
+    inline constexpr bool is_ssp_v = is_ssp<T>::value;
+
+    template <typename T>
+    using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+
     using t_RowsizeVec = std::vector<rowsize>;
     using t_IndexVec = std::vector<index>;
     using t_pIndexVec = ssp<t_IndexVec>;

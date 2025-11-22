@@ -129,6 +129,22 @@ namespace DNDS
                 return *t_base::operator[](iRow);
         }
 
+        std::conditional_t<_mat_ni == 1 || _mat_nj == 1,
+                           real &, void>
+        operator()(index iRow, rowsize j)
+        {
+            if constexpr (_mat_ni == 1 || _mat_nj == 1)
+                return t_base::operator()(iRow, j);
+        }
+
+        std::conditional_t<_mat_ni == 1 || _mat_nj == 1,
+                           real, void>
+        operator()(index iRow, rowsize j) const
+        {
+            if constexpr (_mat_ni == 1 || _mat_nj == 1)
+                return t_base::operator()(iRow, j);
+        }
+
         t_EigenMap
         operator[](index i)
         {

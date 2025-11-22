@@ -87,11 +87,6 @@ namespace DNDS
             return UnInitRowsize; // invalid branch
         }
 
-        DNDS_DEVICE_CALLABLE void operator()(index i, rowsize j)
-        {
-            // just don't call
-        }
-
 #define DNDS_ARRAYEIGENMATRIXVIEW_GETTER_PREREQ                                                              \
     DNDS_HD_assert_infof(iRow >= 0 && iRow < this->Size(), "invalid index %lld / %lld", iRow, this->Size()); \
     rowsize c_nRow;                                                                                          \
@@ -128,6 +123,22 @@ namespace DNDS
         {
             if constexpr (_mat_ni == 1 && _mat_nj == 1)
                 return *t_base::operator[](iRow);
+        }
+
+        DNDS_DEVICE_CALLABLE std::conditional_t<_mat_ni == 1 || _mat_nj == 1,
+                                                real &, void>
+        operator()(index iRow, rowsize j)
+        {
+            if constexpr (_mat_ni == 1 || _mat_nj == 1)
+                return t_base::operator()(iRow, j);
+        }
+
+        DNDS_DEVICE_CALLABLE std::conditional_t<_mat_ni == 1 || _mat_nj == 1,
+                                                real, void>
+        operator()(index iRow, rowsize j) const
+        {
+            if constexpr (_mat_ni == 1 || _mat_nj == 1)
+                return t_base::operator()(iRow, j);
         }
 
         DNDS_DEVICE_CALLABLE t_EigenView MatView(index iRow)

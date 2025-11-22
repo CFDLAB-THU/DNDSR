@@ -649,9 +649,15 @@ namespace DNDS::Euler::RANS
         // DDES shield
         real rd = nuh / (sqr(kappa) * sqr(d) * std::max(1e-10, diffUNorm));
         real fd = 1. - std::tanh(cube(8 * rd));
+        // lLES = std::max(0.1 * 0.65, lLES); // DDES behaves non-2D if z-length is fixed
         real lDES = d - fd * std::max(0., d - lLES);
-        // if (d < 0.01)
+        // if (d > 1.0 && d < 1.1)
+        // {
+        //     std::cout << "---" << "\n";
+        //     std::cout << diffU << "\n";
+        //     std::cout << nuh << ", " << rd << ", " << fd << "\n";
         //     std::cout << d << " " << lDES << " " << lLES << std::endl;
+        // }
         // DDES
 
         real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;

@@ -1,3 +1,4 @@
+#pragma once
 #include "DeviceStorage.hpp"
 #include <type_traits>
 

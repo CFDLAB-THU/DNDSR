@@ -498,11 +498,17 @@ namespace DNDS
             return static_cast<const T *>(const_cast<self_type *>(this)->operator[](iRow));
         }
 
-        T *data()
+        T *data(DeviceBackend B = DeviceBackend::Unknown)
         {
             if constexpr (_dataLayout == CSR)
                 DNDS_assert_info(this->IfCompressed(), "CSR must be compressed to get data pointer");
-            return _data.data();
+            if (B == DeviceBackend::Unknown)
+                return _data.data();
+            else
+            {
+                DNDS_assert(_data.device() == B);
+                return _data.dataDevice();
+            }
         }
 
         size_t DataSize() const

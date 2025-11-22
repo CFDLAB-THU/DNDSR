@@ -1,9 +1,11 @@
 #pragma once
 
 #include "Array.hpp"
+#include "DNDS/DeviceStorage.hpp"
 #include "DNDS/Errors.hpp"
 #include "IndexMapping.hpp"
 #include "Profiling.hpp"
+#include <utility>
 
 namespace DNDS
 {
@@ -187,6 +189,8 @@ namespace DNDS
         // TODO: make these aux info (sized) shared and thread-safe
         ssp<MPIReqHolder> PushReqVec;
         ssp<MPIReqHolder> PullReqVec;
+        DeviceBackend pushDevice = DeviceBackend::Unknown;
+        DeviceBackend pullDevice = DeviceBackend::Unknown;
         MPI_int nRecvPushReq{-1};
         MPI_int nRecvPullReq{-1};
         tMPI_statVec PushStatVec;
@@ -224,6 +228,8 @@ namespace DNDS
             // ** comm aux info: comm running structures **
             // PushReqVec;
             // PullReqVec;
+            // pushDevice;
+            // pullDevice;
             // nRecvPushReq{-1};
             // nRecvPullReq{-1};
             // PushStatVec;
@@ -539,6 +545,43 @@ namespace DNDS
         }
         /******************************************************************************************************************************/
 
+        auto getFatherSonData(DeviceBackend B)
+        {
+            T *fatherData = nullptr;
+            T *sonData = nullptr;
+            if (B == DeviceBackend::Unknown)
+            {
+                fatherData = father->data();
+                sonData = son->data();
+            }
+            else
+            {
+                DNDS_assert(B == father->device());
+                DNDS_assert(B == son->device());
+                switch (B)
+                {
+                case DeviceBackend::Host:
+                {
+                    fatherData = father->data(B);
+                    sonData = son->data(B);
+                }
+#ifdef DNDS_USE_CUDA
+                case DeviceBackend::CUDA:
+                {
+                    //! we assume CUDA-aware MPI here
+                    fatherData = father->data(B);
+                    sonData = son->data(B);
+                }
+#endif
+                default:
+                {
+                    DNDS_assert(false);
+                }
+                }
+            }
+            return std::make_pair(fatherData, sonData);
+        }
+
         /******************************************************************************************************************************/
         /**
          * \brief when established push and pull types, init persistent-nonblocked-nonbuffered MPI reqs
@@ -546,10 +589,12 @@ namespace DNDS
          * \post PushReqVec established
          * \warning after init, raw buffers of data for both father and son/ghost should remain static
          */
-        void initPersistentPush() // collective;
+        void initPersistentPush(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
             if (commTypeCurrent == MPI::CommStrategy::HIndexed)
             {
+                pushDevice = B;
+                auto [fatherData, sonData] = getFatherSonData(B);
                 // DNDS_assert(pPullTypeVec && pPushTypeVec);
                 DNDS_assert(pPullTypeVec.use_count() > 0 && pPushTypeVec.use_count() > 0);
                 pushSendSize = 0;
@@ -563,7 +608,7 @@ namespace DNDS
                     auto dtypeInfo = (*pPushTypeVec)[ip];
                     MPI_int rankOther = dtypeInfo.first;
                     MPI_int tag = rankOther + mpi.rank;
-                    MPI_Recv_init(father->data(), 1, dtypeInfo.second, rankOther, tag, mpi.comm, PushReqVec->data() + pPullTypeVec->size() + ip);
+                    MPI_Recv_init(fatherData, 1, dtypeInfo.second, rankOther, tag, mpi.comm, PushReqVec->data() + pPullTypeVec->size() + ip);
                     // cascade from father
                     nRecvPushReq++;
                 }
@@ -579,7 +624,7 @@ namespace DNDS
 #else
                     MPI_Bsend_init
 #endif
-                        (son->data(), 1, dtypeInfo.second, rankOther, tag, mpi.comm, PushReqVec->data() + ip);
+                        (sonData, 1, dtypeInfo.second, rankOther, tag, mpi.comm, PushReqVec->data() + ip);
 
                     // cascade from father
 
@@ -613,10 +658,12 @@ namespace DNDS
          * \post PullReqVec established
          * \warning after init, raw buffers of data for both father and son/ghost should remain static
          */
-        void initPersistentPull() // collective;
+        void initPersistentPull(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
             if (commTypeCurrent == MPI::CommStrategy::HIndexed)
             {
+                pullDevice = B;
+                auto [fatherData, sonData] = getFatherSonData(B);
                 // DNDS_assert(pPullTypeVec && pPushTypeVec);
                 DNDS_assert(pPullTypeVec.use_count() > 0 && pPushTypeVec.use_count() > 0);
                 auto nReqs = pPullTypeVec->size() + pPushTypeVec->size();
@@ -631,7 +678,7 @@ namespace DNDS
                     MPI_int rankOther = dtypeInfo.first;
                     MPI_int tag = rankOther + mpi.rank; //! receives a lot of messages, this distinguishes them
                     // std::cout << mpi.rank << " Recv " << rankOther << std::endl;
-                    MPI_Recv_init(son->data(), 1, dtypeInfo.second, rankOther, tag, mpi.comm, PullReqVec->data() + ip);
+                    MPI_Recv_init(sonData, 1, dtypeInfo.second, rankOther, tag, mpi.comm, PullReqVec->data() + ip);
                     nRecvPullReq++;
                     // std::cout << *(real *)(dataGhost.data() + 8 * 0) << std::endl;
                     // cascade from father
@@ -648,7 +695,7 @@ namespace DNDS
 #else
                     MPI_Bsend_init
 #endif
-                        (father->data(), 1, dtypeInfo.second, rankOther, tag, mpi.comm, PullReqVec->data() + pPullTypeVec->size() + ip);
+                        (fatherData, 1, dtypeInfo.second, rankOther, tag, mpi.comm, PullReqVec->data() + pPullTypeVec->size() + ip);
                     // std::cout << *(real *)(data.data() + 8 * 1) << std::endl;
                     // cascade from father
 
@@ -675,8 +722,10 @@ namespace DNDS
         }
         /******************************************************************************************************************************/
 
-        void __InSituPackStartPush()
+        void __InSituPackStartPush(DeviceBackend B)
         {
+            if (B != DeviceBackend::Unknown)
+                DNDS_assert_info(false, "in-situ pack not yet implemented for device");
             nRecvPushReq = 0;
             for (MPI_int r = 0; r < mpi.size; r++)
             {
@@ -723,10 +772,11 @@ namespace DNDS
             }
         }
 
-        void startPersistentPush() // collective;
+        void startPersistentPush(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
             if (commTypeCurrent == MPI::CommStrategy::HIndexed)
             {
+                DNDS_assert(B == pushDevice);
                 // req already ready
                 DNDS_assert(nRecvPushReq <= PushReqVec->size());
                 if (!PushReqVec->empty())
@@ -740,7 +790,7 @@ namespace DNDS
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
-                __InSituPackStartPush();
+                __InSituPackStartPush(B);
             }
             else
             {
@@ -754,8 +804,10 @@ namespace DNDS
             PerformanceTimer::Instance().StopTimer(PerformanceTimer::TimerType::Comm);
         }
 
-        void __InSituPackStartPull()
+        void __InSituPackStartPull(DeviceBackend B)
         {
+            if (B != DeviceBackend::Unknown)
+                DNDS_assert_info(false, "in-situ pack not yet implemented for device");
             nRecvPullReq = 0;
             for (MPI_int r = 0; r < mpi.size; r++)
             {
@@ -816,11 +868,12 @@ namespace DNDS
             }
         }
 
-        void startPersistentPull() // collective;
+        void startPersistentPull(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
             PerformanceTimer::Instance().StartTimer(PerformanceTimer::TimerType::Comm);
             if (commTypeCurrent == MPI::CommStrategy::HIndexed)
             {
+                DNDS_assert(B == pullDevice);
                 DNDS_assert(nRecvPullReq <= PullReqVec->size());
                 // req already ready
                 if (!PullReqVec->empty())
@@ -834,7 +887,7 @@ namespace DNDS
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
-                __InSituPackStartPull();
+                __InSituPackStartPull(B);
             }
             else
             {
@@ -847,7 +900,7 @@ namespace DNDS
             PerformanceTimer::Instance().StopTimer(PerformanceTimer::TimerType::Comm);
         }
 
-        void waitPersistentPush() // collective;
+        void waitPersistentPush(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
             if (MPI::CommStrategy::Instance().GetUseStrongSyncWait())
                 MPI::Barrier(mpi.comm);
@@ -878,6 +931,8 @@ namespace DNDS
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
+                if (B != DeviceBackend::Unknown)
+                    DNDS_assert_info(false, "in-situ pack not yet implemented for device");
                 if (!PushReqVec->empty())
                     MPI::WaitallAuto(PushReqVec->size(), PushReqVec->data(), PushStatVec.data());
                 auto bufferVec = inSituBuffer.begin();
@@ -917,7 +972,7 @@ namespace DNDS
             if (MPI::CommStrategy::Instance().GetUseStrongSyncWait())
                 MPI::Barrier(mpi.comm);
         }
-        void waitPersistentPull() // collective;
+        void waitPersistentPull(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
             PerformanceTimer::Instance().StartTimer(PerformanceTimer::TimerType::Comm);
             PullStatVec.resize(PullReqVec->size());
@@ -951,6 +1006,8 @@ namespace DNDS
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
+                if (B != DeviceBackend::Unknown)
+                    DNDS_assert_info(false, "in-situ pack not yet implemented for device");
                 if (!PullReqVec->empty())
                     MPI::WaitallAuto(PullReqVec->size(), PullReqVec->data(), PullStatVec.data());
                 // std::cout << "waiting DONE" << std::endl;

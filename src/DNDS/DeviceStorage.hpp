@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DNDS/Errors.hpp"
 #include "Defines.hpp"
 #include <cstddef>
 #include <memory>
@@ -201,8 +202,15 @@ namespace DNDS
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(vector_DeviceView, vector_DeviceView)
         DNDS_DEVICE_CALLABLE vector_DeviceView(T *n_data, TSize n_size) : _data(n_data), _size(n_size) {}
 
-        DNDS_DEVICE_CALLABLE T operator[](TSize i) const { return _data[i]; }
-        DNDS_DEVICE_CALLABLE T &operator[](TSize i) { return _data[i]; }
+        DNDS_DEVICE_CALLABLE T operator[](TSize i) const
+        {
+            DNDS_HD_assert(i >= 0 && i < _size);
+            return _data[i];
+        }
+        DNDS_DEVICE_CALLABLE T &operator[](TSize i) {
+            DNDS_HD_assert(i >= 0 && i < _size);
+            return _data[i];
+        }
         DNDS_DEVICE_CALLABLE TSize size() const { return _size; }
     };
 

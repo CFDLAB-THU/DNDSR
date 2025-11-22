@@ -634,6 +634,23 @@ namespace DNDS::Euler::Gas
                 lam123 = (sqr(lam123) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
             //*HY
         }
+        else if constexpr (eigScheme == 8) // H-cor + Harten-Yee-fix
+        {
+            lam0 = std::max(lam0, dLambda * scaleHFix);
+            lam4 = std::max(lam4, dLambda * scaleHFix);
+            lam123 = std::max(lam123, dLambda * scaleHFix);
+
+            //*HY
+            real thresholdHartenYee = scaleHartenYee * (VAve + aAve);
+            real thresholdHartenYeeS = sqr(thresholdHartenYee);
+            if (lam0 < thresholdHartenYee)
+                lam0 = (sqr(lam0) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            if (lam4 < thresholdHartenYee)
+                lam4 = (sqr(lam4) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            if (lam123 < thresholdHartenYee)
+                lam123 = (sqr(lam123) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            //*HY
+        }
         else
         {
             DNDS_assert(false);
