@@ -3,6 +3,7 @@
 #include "DNDS/Defines_bind.hpp"
 #include "DNDS/Array_bind.hpp"
 #include "Mesh.hpp"
+#include <pybind11/pybind11.h>
 #include <pybind11_json/pybind11_json.hpp>
 #include <pybind11/eigen.h>
 #include <pybind11/functional.h>
@@ -26,6 +27,17 @@ namespace DNDS::Geom
         pybind11_ParArray_define<ElemInfo>(m);
         pybind11_ArrayTransformer_define<ParArray<ElemInfo>>(m);
         pybind11_ParArrayPair_define<ElemInfo>(m);
+    }
+
+    inline void pybind11_MeshLocDefine(py::module_ &m)
+    {
+#define DNDS_PY_ENUM_CLASS_MeshLoc_ADD(v) value(#v, MeshLoc::v)
+        py::enum_<MeshLoc>(m, "MeshLoc")
+            .DNDS_PY_ENUM_CLASS_MeshLoc_ADD(Unknown)
+            .DNDS_PY_ENUM_CLASS_MeshLoc_ADD(Node)
+            .DNDS_PY_ENUM_CLASS_MeshLoc_ADD(Face)
+            .DNDS_PY_ENUM_CLASS_MeshLoc_ADD(Cell);
+#undef DNDS_PY_ENUM_CLASS_MeshLoc_ADD
     }
 
     using tPy_UnstructuredMesh = py_class_ssp<UnstructuredMesh>;

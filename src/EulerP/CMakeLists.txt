@@ -20,11 +20,12 @@ ${DNDS_EXTERNAL_LIBS}
 )
 
 set(CPPS
+EulerP_BC.cpp
 EulerP_Evaluator.cpp
 EulerP_Evaluator_impl.cpp
 )
 if (DNDS_USE_CUDA)
-# list(APPEND CPPS VRDefines.cu test_FiniteVolume.cu)
+  list(APPEND CPPS EulerP_BC.cu)
 endif()
 
 # file(GLOB EXPLICIT_INST_CPP_FILES "_explicit_instantiation/*.cpp")
@@ -35,6 +36,13 @@ dnds_add_lib(eulerP        "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
 
 dnds_add_lib(eulerP_shared "${CPPS}" "${LINKS_SHARED}" "${DNDS_PCH_TARGETS_FAST}"
             ON ON ON) # SHARED, FAST, EXCLUDE
+
+install(TARGETS eulerP_shared
+    LIBRARY DESTINATION "DNDSR/lib"
+    ARCHIVE DESTINATION "DNDSR/lib"
+    COMPONENT py
+)
+
 
 set(CPPS_BIND
 eulerP_pybind11.cpp

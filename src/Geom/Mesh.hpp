@@ -14,6 +14,14 @@
 
 namespace DNDS::Geom
 {
+    enum class MeshLoc : uint8_t
+    {
+        Unknown = 0,
+        Node = 1,
+        Face = 3,
+        Cell = 4
+    };
+
     struct UnstructuredMesh
     {
         MPI_int mRank{0};

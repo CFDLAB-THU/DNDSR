@@ -699,8 +699,8 @@ namespace DNDS::Euler::Gas
         TVec veloRoe = (sqrtRhoLm * veloLm + sqrtRhoRm * veloRm) / (sqrtRhoLm + sqrtRhoRm);
         real vsqrRoe = veloRoe.squaredNorm();
         real HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
-        real asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
-        real rhoRoe = sqrtRhoLm * sqrtRhoRm;
+            real asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
+            real rhoRoe = sqrtRhoLm * sqrtRhoRm;
 
         Eigen::Vector<real, dim + 2> FL, FR;
         GasInviscidFlux_XY<dim>(UL, veloL, vg, n, pL, FL);

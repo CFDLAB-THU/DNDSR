@@ -565,6 +565,7 @@ namespace DNDS
                     fatherData = father->data(B);
                     sonData = son->data(B);
                 }
+                break;
 #ifdef DNDS_USE_CUDA
                 case DeviceBackend::CUDA:
                 {
@@ -572,6 +573,7 @@ namespace DNDS
                     fatherData = father->data(B);
                     sonData = son->data(B);
                 }
+                break;
 #endif
                 default:
                 {

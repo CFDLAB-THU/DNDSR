@@ -24,6 +24,7 @@ namespace DNDS::EulerP
             .DNDS_PY_ENUM_CLASS_BCType_ADD(OutP)
             .DNDS_PY_ENUM_CLASS_BCType_ADD(Special)
             .DNDS_PY_ENUM_CLASS_BCType_ADD(Unknown);
+#undef DNDS_PY_ENUM_CLASS_BCType_ADD
     }
 
     inline void pybind11_BCInput_define(py::module_ &m)

@@ -4,6 +4,7 @@
 #include "Defines.hpp"
 #include <cstddef>
 #include <memory>
+#include <type_traits>
 
 // #ifdef DNDS_USE_CUDA
 // #include <thrust/host_vector.h>
@@ -195,11 +196,14 @@ namespace DNDS
     template <DeviceBackend B, typename T, typename TSize = size_t>
     class vector_DeviceView
     {
+        static_assert(std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>,
+                      "host_device_vector elements must be trivially_copyable and default_constructible");
+
         T *_data = nullptr;
         TSize _size = 0;
 
     public:
-        DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(vector_DeviceView, vector_DeviceView)
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(vector_DeviceView, vector_DeviceView)
         DNDS_DEVICE_CALLABLE vector_DeviceView(T *n_data, TSize n_size) : _data(n_data), _size(n_size) {}
 
         DNDS_DEVICE_CALLABLE T operator[](TSize i) const
@@ -207,7 +211,8 @@ namespace DNDS
             DNDS_HD_assert(i >= 0 && i < _size);
             return _data[i];
         }
-        DNDS_DEVICE_CALLABLE T &operator[](TSize i) {
+        DNDS_DEVICE_CALLABLE T &operator[](TSize i)
+        {
             DNDS_HD_assert(i >= 0 && i < _size);
             return _data[i];
         }
@@ -217,8 +222,8 @@ namespace DNDS
     template <typename T>
     struct host_device_vector : public std::vector<T>
     {
-        static_assert(std::is_trivially_copyable_v<T>,
-                      "host_device_vector elements must be trivially_copyable");
+        static_assert(std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>,
+                      "host_device_vector elements must be trivially_copyable and default_constructible");
         using t_base = std::vector<T>;
         using t_base::t_base;
 

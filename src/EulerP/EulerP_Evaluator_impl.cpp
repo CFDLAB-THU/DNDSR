@@ -1,5 +1,8 @@
 #include "DNDS/Defines.hpp"
 #include "DNDS/DeviceStorage.hpp"
+#include "EulerP/EulerP.hpp"
+#include "EulerP/EulerP_Physics.hpp"
+#include "Geom/BoundaryCondition.hpp"
 #include "EulerP_Evaluator_impl.hpp"
 
 namespace DNDS::EulerP
@@ -7,8 +10,7 @@ namespace DNDS::EulerP
     static constexpr DeviceBackend B = DeviceBackend::Host;
 
     template <>
-    void Evaluator_impl<B>::RecGradient_GGRec(
-        RecGradient_Arg &arg)
+    void Evaluator_impl<B>::RecGradient_GGRec(RecGradient_Arg &arg)
     {
         using namespace Geom;
 
@@ -33,25 +35,32 @@ namespace DNDS::EulerP
 
         /*********************** */
         // bc handling
-        VectorXR fullUOther;
-        VectorXR fullU;
-        fullU.resize(nVars);
-        fullUOther.resize(nVars);
         for (index iBnd = 0; iBnd < mesh.NumBnd(); iBnd++)
         {
             index iFace = mesh.bnd2face(iBnd, 0);
             index iCell = mesh.bnd2cell(iBnd, 0);
-            fullU(Seq01234) = u[iCell];
-            for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
-                fullU(iVarS + nVarsFlow) = uScalar[iVarS](iCell);
+            if (Geom::FaceIDIsInternal(mesh.GetFaceZone(iFace)))
+                continue;
+            auto uI = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return u(iCell, i);
+                else
+                    return uScalar[i - nVarsFlow](iCell);
+            };
+            auto uOut = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return faceBCBuffer(iFace, i);
+                else
+                    return faceBCScalarBuffer[i - nVarsFlow](iFace);
+            };
+
             auto bc = bcHandler.id2bc(mesh.GetFaceZone(iFace));
-            bc.apply(fullU.data(), fullUOther.data(), nVars,
-                     fv.GetFaceQuadraturePPhys(iFace, -1).data(),
-                     fv.GetFaceNorm(iFace, -1).data(),
+            bc.apply(uI, uOut, nVars,
+                     fv.GetFaceQuadraturePPhys(iFace, -1),
+                     fv.GetFaceNorm(iFace, -1),
                      phy);
-            faceBCBuffer[iCell] = fullUOther(Seq01234);
-            for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
-                faceBCScalarBuffer[iVarS](iFace) = fullUOther(iVarS + nVarsFlow);
         }
 
         /*********************** */
@@ -134,9 +143,9 @@ namespace DNDS::EulerP
             TU uOtherMax;
             TU uOtherMin;
 
-            uIIncMax.setConstant(verySmallReal);
+            uIIncMax.setConstant(-veryLargeReal);
             uIIncMin.setConstant(veryLargeReal);
-            uOtherMax.setConstant(verySmallReal);
+            uOtherMax.setConstant(-veryLargeReal);
             uOtherMin.setConstant(veryLargeReal);
 
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
@@ -167,62 +176,203 @@ namespace DNDS::EulerP
 
         // for scalars
 
-        VectorXR uIIncMax;
-        uIIncMax.resize(nVarsScalar);
-        VectorXR uIIncMin;
-        uIIncMin.resize(nVarsScalar);
-
-        VectorXR uOtherMax;
-        uOtherMax.resize(nVarsScalar);
-        VectorXR uOtherMin;
-        uOtherMin.resize(nVarsScalar);
-
-        VectorXR uI;
-        uI.resize(nVarsScalar);
-
 #if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(runtime) firstprivate(uIIncMax, uIIncMin, uOtherMax, uOtherMin, uI)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh.NumCell(); iCell++)
         {
             auto c2f = mesh.cell2face[iCell];
-            for (int iVar = 0; iVar < nVarsScalar; iVar++)
-                uI[iVar] = uScalar[iVar].father(iCell);
-            uIIncMax.setConstant(verySmallReal);
-            uIIncMin.setConstant(veryLargeReal);
-            uOtherMax.setConstant(verySmallReal);
-            uOtherMin.setConstant(veryLargeReal);
+            TU uI;
+            TU uIIncMax;
+            TU uIIncMin;
 
-            for (auto iFace : c2f)
+            TU uOtherMax;
+            TU uOtherMin;
+
+            constexpr int bufSize = nVarsFlow; // todo: use another bufsize
+            for (int iVar = 0; iVar < nVarsScalar; iVar += bufSize)
             {
-                index iCellOther = mesh.CellFaceOther(iCell, iFace);
-                tPoint p = (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) -
-                            fv.GetCellQuadraturePPhys(iCell, -1));
-                for (int iVar = 0; iVar < nVarsScalar; iVar++)
+                int nCur = std::min(nVarsScalar - iVar, bufSize);
+                for (int iVarS = 0; iVarS < nCur; iVarS++)
+                    uI(iVarS) = u[iVar + iVarS](iCell);
+                uIIncMax.setConstant(-veryLargeReal);
+                uIIncMin.setConstant(veryLargeReal);
+                uOtherMax.setConstant(-veryLargeReal);
+                uOtherMin.setConstant(veryLargeReal);
+                for (auto iFace : c2f)
                 {
-                    real uIncPoint = uScalarGrad[iVar].father[iCell].dot(p);
-                    uIIncMax[iVar] = std::max(uIIncMax[iVar], uIncPoint);
-                    uIIncMin[iVar] = std::max(uIIncMin[iVar], uIncPoint);
-                }
-                if (iCellOther != UnInitIndex)
-                {
-                    for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
+                    index iCellOther = mesh.CellFaceOther(iCell, iFace);
+                    tPoint p = (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) -
+                                fv.GetCellQuadraturePPhys(iCell, -1));
+                    for (int iVarS = 0; iVarS < nCur; iVarS++)
                     {
-                        real uIncPoint = uScalar[iVarS](iCellOther);
-                        uOtherMax[iVarS] = std::max(uIIncMax[iVarS], uIncPoint);
-                        uOtherMin[iVarS] = std::min(uIIncMin[iVarS], uIncPoint);
+                        real uIncPoint = uScalarGrad[iVar + iVarS].father[iCell].dot(p);
+                        uIIncMax[iVarS] = std::max(uIIncMax[iVarS], uIncPoint);
+                        uIIncMin[iVarS] = std::max(uIIncMin[iVarS], uIncPoint);
+                    }
+                    if (iCellOther != UnInitIndex)
+                    {
+                        for (int iVarS = 0; iVarS < nCur; iVarS++)
+                        {
+                            real uIncPoint = uScalar[iVar + iVarS](iCellOther);
+                            uOtherMax[iVarS] = std::max(uIIncMax[iVarS], uIncPoint);
+                            uOtherMin[iVarS] = std::min(uIIncMin[iVarS], uIncPoint);
+                        }
                     }
                 }
+                uOtherMax -= uI;
+                uOtherMin -= uI;
+                uOtherMax = uOtherMax.array() / (uIIncMax.array().abs() + verySmallReal);
+                uOtherMin = -uOtherMin.array() / (uIIncMin.array().abs() + verySmallReal);
+                uOtherMax = uOtherMax.array().max(0.0).min(1.0);
+                uOtherMin = uOtherMin.array().max(0.0).min(1.0);
+                for (int iVarS = 0; iVarS < nCur; iVarS++)
+                    uScalarGrad[iVar + iVarS].father[iCell] *= std::min(uOtherMax[iVarS], uOtherMin[iVarS]);
             }
+        }
+    }
 
-            uOtherMax -= uI;
-            uOtherMin -= uI;
-            uOtherMax = uOtherMax.array() / (uIIncMax.array().abs() + verySmallReal);
-            uOtherMin = -uOtherMin.array() / (uIIncMin.array().abs() + verySmallReal);
-            uOtherMax = uOtherMax.array().max(0.0).min(1.0);
-            uOtherMin = uOtherMin.array().max(0.0).min(1.0);
-            for (int iVar = 0; iVar < nVarsScalar; iVar++)
-                uScalarGrad[iVar].father[iCell] *= std::min(uOtherMax[iVar], uOtherMin[iVar]);
+    template <>
+    void Evaluator_impl<B>::Cons2PrimMu(Cons2PrimMu_Arg &arg)
+    {
+        using namespace Geom;
+
+        DNDS_EULERP_IMPL_ARG_GET_REF(self_view)
+        DNDS_EULERP_IMPL_ARG_GET_REF(u)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uGrad)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalar)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarGrad)
+        //
+        DNDS_EULERP_IMPL_ARG_GET_REF(uPrim)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uGradPrim)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarPrim)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarGradPrim)
+        DNDS_EULERP_IMPL_ARG_GET_REF(p)
+        DNDS_EULERP_IMPL_ARG_GET_REF(T)
+        DNDS_EULERP_IMPL_ARG_GET_REF(a)
+        DNDS_EULERP_IMPL_ARG_GET_REF(gamma)
+        DNDS_EULERP_IMPL_ARG_GET_REF(mu)
+        DNDS_EULERP_IMPL_ARG_GET_REF(muComp)
+
+        int nVarsScalar = uScalar.size();
+        int nVars = nVarsFlow + nVarsScalar;
+
+        auto &mesh = self_view.fv.mesh;
+        auto &fv = self_view.fv;
+        auto &bcHandler = self_view.bcHandler;
+        auto &phy = self_view.physics;
+
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(runtime)
+#endif
+        for (index iPt = 0; iPt < u.Size(); iPt++)
+        {
+            // uI(Seq01234) = u[iPt];
+            // for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
+            //     uI[nVarsFlow + iVarS] = uScalar[iVarS](iPt);
+
+            // gradI(EigenAll, Seq01234) = u[iPt];
+            // for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
+            //     gradI(EigenAll, nVarsFlow + iVarS) = uScalarGrad[iVarS][iPt];
+            auto uConsI = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return u(iPt, i);
+                else
+                    return uScalar[i - nVarsFlow](iPt);
+            };
+            auto uPrimI = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return uPrim(iPt, i);
+                else
+                    return uScalarPrim[i - nVarsFlow](iPt);
+            };
+            auto diffUConsI = [&] DNDS_DEVICE_CALLABLE(int d, int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return uGrad[iPt](d, i);
+                else
+                    return uScalarGrad[i - nVarsFlow](iPt, d);
+            };
+            auto diffUPrimI = [&] DNDS_DEVICE_CALLABLE(int d, int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return uGradPrim[iPt](d, i);
+                else
+                    return uScalarGradPrim[i - nVarsFlow](iPt, d);
+            };
+            phy.Cons2Prim(uConsI, uPrimI, nVars);
+            phy.Cons2PrimDiff(uConsI, uPrimI,
+                              diffUConsI, diffUPrimI, nVars);
+
+            real TT = phy.Prim2Temperature(uPrimI, nVars);
+            real pp = phy.Prim2Pressure(uPrimI, nVars, TT);
+            auto [gammaG, aa] = phy.Prim2GammaAcousticSpeed(uPrimI, nVars, pp);
+            real muTot = phy.getMuTot(uPrimI, diffUPrimI, nVars, pp, TT);
+
+            T(iPt) = TT;
+            p(iPt) = pp;
+            a(iPt) = aa;
+            gamma(iPt) = gammaG;
+            mu(iPt) = muTot;
+            // TODO: tend to muComp!!
+        }
+    }
+
+    template <>
+    void Evaluator_impl<B>::Cons2Prim(Cons2Prim_Arg &arg)
+    {
+        using namespace Geom;
+
+        DNDS_EULERP_IMPL_ARG_GET_REF(self_view)
+        DNDS_EULERP_IMPL_ARG_GET_REF(u)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalar)
+        //
+        DNDS_EULERP_IMPL_ARG_GET_REF(uPrim)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarPrim)
+        DNDS_EULERP_IMPL_ARG_GET_REF(p)
+        DNDS_EULERP_IMPL_ARG_GET_REF(T)
+        DNDS_EULERP_IMPL_ARG_GET_REF(a)
+        DNDS_EULERP_IMPL_ARG_GET_REF(gamma)
+
+        int nVarsScalar = uScalar.size();
+        int nVars = nVarsFlow + nVarsScalar;
+
+        auto &mesh = self_view.fv.mesh;
+        auto &fv = self_view.fv;
+        auto &bcHandler = self_view.bcHandler;
+        auto &phy = self_view.physics;
+
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(runtime)
+#endif
+        for (index iPt = 0; iPt < u.Size(); iPt++)
+        {
+            auto uConsI = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return u(iPt, i);
+                else
+                    return uScalar[i - nVarsFlow](iPt);
+            };
+            auto uPrimI = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return uPrim(iPt, i);
+                else
+                    return uScalarPrim[i - nVarsFlow](iPt);
+            };
+            phy.Cons2Prim(uConsI, uPrimI, nVars);
+
+            real TT = phy.Prim2Temperature(uPrimI, nVars);
+            real pp = phy.Prim2Pressure(uPrimI, nVars, TT);
+            auto [gammaG, aa] = phy.Prim2GammaAcousticSpeed(uPrimI, nVars, pp);
+
+            T(iPt) = TT;
+            p(iPt) = pp;
+            a(iPt) = aa;
+            gamma(iPt) = gammaG;
         }
     }
 
@@ -331,6 +481,241 @@ namespace DNDS::EulerP
             dt(iCell) = fv.GetCellVol(iCell) * fv.GetCellSmoothScaleRatio(iCell) /
                         (lambdaCellC + verySmallReal);
             deltaLamCell(iCell) = dLambdaCellC;
+        }
+    }
+
+    template <>
+    void Evaluator_impl<B>::RecFace2nd(RecFace2nd_Arg &arg)
+    {
+        using namespace Geom;
+        DNDS_EULERP_IMPL_ARG_GET_REF(self)
+        DNDS_EULERP_IMPL_ARG_GET_REF(self_view)
+
+        DNDS_EULERP_IMPL_ARG_GET_REF(u)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uGrad)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalar)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarGrad)
+
+        DNDS_EULERP_IMPL_ARG_GET_REF(uFL)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uFR)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uGradFF)
+
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarFL)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarFR)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarGradFF)
+
+        auto &mesh = self_view.fv.mesh;
+        auto &fv = self_view.fv;
+        auto &bcHandler = self_view.bcHandler;
+        auto &phy = self_view.physics;
+
+        int nVarsScalar = uScalar.size();
+        int nVars = nVarsScalar + nVarsFlow;
+
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(runtime)
+#endif
+        for (index iFace = 0; iFace < mesh.NumFaceProc(); iFace++)
+        {
+            index iCellL = mesh.face2cell(iFace, 0);
+            index iCellR = mesh.face2cell(iFace, 1);
+            if ((0 > iCellL || iCellL >= mesh.NumCell()) &&
+                (0 > iCellR || iCellR >= mesh.NumCell()) && iCellR != UnInitIndex)
+            {
+                //?
+                continue; // skip if either side is not needed
+            }
+            tPoint xrel_L = (fv.GetFaceQuadraturePPhys(iFace, -1) -
+                             fv.GetCellQuadraturePPhys(iCellL, -1));
+            tPoint xrel_R;
+            tPoint faceNorm = fv.GetFaceNorm(iFace, -1);
+            real faceLScale = veryLargeReal;
+            if (iCellR != UnInitIndex)
+            {
+                // relative to cellR!
+                xrel_R = (fv.GetFaceQuadraturePPhysFromCell(iFace, iCellR, 1, -1) -
+                          fv.GetCellQuadraturePPhys(iCellR, -1));
+                faceLScale = (fv.GetOtherCellBaryFromCell(iCellL, iCellR, iFace) - fv.GetCellBary(iCellL)).norm();
+            }
+
+            uFL[iFace].noalias() = u[iCellL] + uGrad[iCellL].transpose() * xrel_L;
+            uGradFF[iFace] = uGrad[iCellL];
+            if (iCellR != UnInitIndex)
+            {
+                uFR[iFace].noalias() = u[iCellR] + uGrad[iCellR].transpose() * xrel_R;
+                uGradFF[iFace].noalias() += uGrad[iCellR];
+                uGradFF[iFace] *= 0.5;
+                uGradFF[iFace].noalias() += faceNorm * (uFR[iFace] - uFL[iFace]).transpose() * (1. / faceLScale);
+            }
+
+            for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
+            {
+                uScalarFL[iVarS](iFace) = uScalarGrad[iVarS][iCellL].dot(xrel_L);
+                uScalarGradFF[iVarS][iFace] = uScalarGrad[iVarS][iCellL];
+                if (iCellR != UnInitIndex)
+                {
+                    uScalarFR[iVarS](iFace) = uScalarGrad[iVarS][iCellL].dot(xrel_L);
+                    uScalarGradFF[iVarS][iFace].noalias() += uScalarGrad[iVarS][iCellR];
+                    uScalarGradFF[iVarS][iFace] *= 0.5;
+                    uScalarGradFF[iVarS][iFace].noalias() += faceNorm * (uScalarFR[iVarS](iFace) - uScalarFL[iVarS](iFace)) * (1. / faceLScale);
+                }
+            }
+
+            auto uL = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return uFL(iFace, i);
+                else
+                    return uScalarFL[i - nVarsFlow](iFace);
+            };
+            auto uR = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return uFR(iFace, i);
+                else
+                    return uScalarFR[i - nVarsFlow](iFace);
+            };
+            if (iCellR == UnInitIndex)
+            {
+                auto bc = bcHandler.id2bc(mesh.GetFaceZone(iFace));
+                bc.apply(uL, uR, nVars,
+                         fv.GetFaceQuadraturePPhys(iFace, -1),
+                         fv.GetFaceNorm(iFace, -1),
+                         phy);
+            }
+            // TODO: periodic handling of vectors from cell to face
+        }
+    }
+
+    template <>
+    void Evaluator_impl<B>::Flux2nd(Flux2nd_Arg &arg)
+    {
+        using namespace Geom;
+        DNDS_EULERP_IMPL_ARG_GET_REF(self)
+        DNDS_EULERP_IMPL_ARG_GET_REF(self_view)
+
+        DNDS_EULERP_IMPL_ARG_GET_REF(u)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uGrad)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalar)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarGrad)
+
+        DNDS_EULERP_IMPL_ARG_GET_REF(uPrim)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uGradPrim)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarPrim)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarGradPrim)
+        DNDS_EULERP_IMPL_ARG_GET_REF(p)
+        DNDS_EULERP_IMPL_ARG_GET_REF(T)
+        DNDS_EULERP_IMPL_ARG_GET_REF(a)
+        DNDS_EULERP_IMPL_ARG_GET_REF(gamma)
+        DNDS_EULERP_IMPL_ARG_GET_REF(mu)
+        DNDS_EULERP_IMPL_ARG_GET_REF(muComp)
+
+        DNDS_EULERP_IMPL_ARG_GET_REF(uFL)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uFR)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uGradFF)
+
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarFL)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarFR)
+        DNDS_EULERP_IMPL_ARG_GET_REF(uScalarGradFF)
+
+        DNDS_EULERP_IMPL_ARG_GET_REF(pFL)
+        DNDS_EULERP_IMPL_ARG_GET_REF(pFR)
+        DNDS_EULERP_IMPL_ARG_GET_REF(deltaLamFaceFF)
+
+        DNDS_EULERP_IMPL_ARG_GET_REF(fluxFF)
+        DNDS_EULERP_IMPL_ARG_GET_REF(fluxScalarFF)
+        DNDS_EULERP_IMPL_ARG_GET_REF(rhs)
+        DNDS_EULERP_IMPL_ARG_GET_REF(rhsScalar)
+
+        auto &mesh = self_view.fv.mesh;
+        auto &fv = self_view.fv;
+        auto &bcHandler = self_view.bcHandler;
+        auto &phy = self_view.physics;
+
+        int nVarsScalar = uScalarFL.size();
+        int nVars = nVarsScalar + nVarsFlow;
+
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(runtime)
+#endif
+        for (index iFace = 0; iFace < mesh.NumFaceProc(); iFace++)
+        {
+            index iCellL = mesh.face2cell(iFace, 0);
+            index iCellR = mesh.face2cell(iFace, 1);
+            if ((0 > iCellL || iCellL >= mesh.NumCell()) &&
+                (0 > iCellR || iCellR >= mesh.NumCell()) && iCellR != UnInitIndex)
+            {
+                //?
+                // continue; // skip if either side is not needed
+            }
+            tPoint n = fv.GetFaceNorm(iFace, -1);
+
+            auto uLm = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return u(iCellL, i);
+                else
+                    return uScalar[i - nVarsFlow](iCellL);
+            };
+            auto uRm = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return u(iCellR, i);
+                else
+                    return uScalar[i - nVarsFlow](iCellR);
+            };
+            auto uLmPrim = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return uPrim(iCellL, i);
+                else
+                    return uScalarPrim[i - nVarsFlow](iCellL);
+            };
+            index iCellRVis = iCellR == UnInitIndex ? iCellL : iCellR;
+            auto uRmPrim = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+            {
+                if (i < nVarsFlow)
+                    return uPrim(iCellRVis, i);
+                else
+                    return uScalarPrim[i - nVarsFlow](iCellRVis);
+            };
+            tPoint veloRoe;
+            real vsqrRoe{0}, HRoe{0}, rhoRoe{0}, aSqrRoe{0};
+
+            RoeAverageNS(uLm, uRm, uLmPrim, uRmPrim, nVars, p(iCellL), p(iCellRVis),
+                         phy, veloRoe, vsqrRoe, HRoe, rhoRoe, aSqrRoe);
+            real veloRoeN = veloRoe.dot(n);
+            real aRoe = std::sqrt(std::abs(aSqrRoe));
+            real lam0 = std::abs(veloRoeN - aRoe);
+            real lam123 = std::abs(veloRoeN);
+            real lam4 = std::abs(veloRoeN + aRoe);
+
+            TU UL = uFL[iFace];
+            TU UR = uFR[iFace];
+            TU FFlow;
+            FFlow.setZero();
+            RoeFluxFlow(UL, UR,
+                        pFL(iFace), pFR(iFace), veloRoe,
+                        vsqrRoe, 0.0 /* vgn = 0 for now*/,
+                        n, aSqrRoe, aRoe,
+                        HRoe, phy, lam0, lam123, lam4, FFlow);
+
+            fluxFF[iFace] = FFlow;
+            // TODO: scalar's flux
+            // TODO: viscous flux
+        }
+
+        // #if defined(DNDS_DIST_MT_USE_OMP)
+        // #    pragma omp parallel for schedule(runtime)
+        // #endif
+        for (index iCell = 0; iCell < mesh.NumCell(); iCell++)
+        {
+            auto c2f = mesh.cell2face.father[iCell];
+            for (auto iFace : c2f)
+            {
+                int face_sign = mesh.CellIsFaceBack(iCell, iFace) ? 1 : -1;
+                rhs[iCell] -= fluxFF[iFace] * fv.GetFaceArea(iFace) / fv.GetCellVol(iCell) * face_sign;
+            }
         }
     }
 }

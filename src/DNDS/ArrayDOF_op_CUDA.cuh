@@ -2,6 +2,8 @@
 
 #include "ArrayDOF.hpp"
 #include "DNDS/Defines.hpp"
+#include "DNDS/Errors.hpp"
+#include "mpi.h"
 
 #include <thrust/device_ptr.h>
 #include <thrust/transform.h>
@@ -679,7 +681,56 @@ namespace DNDS
             thrust::plus<real>());
 
         MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_SUM, self.father->getMPI().comm);
+        return std::sqrt(sqrSumAll);
+    }
+
+    template <int n_m, int n_n>
+    real ArrayDofOp<DeviceBackend::CUDA, n_m, n_n>::reduction(t_self &self, const std::string &op)
+    {
+        real sqrSum{0}, sqrSumAll{0};
+
+        DNDS_assert(self.father && self.son);
+        DNDS_assert(self.father->device() == DeviceBackend::CUDA);
+        DNDS_assert(self.son->device() == DeviceBackend::CUDA);
+        ArrayDofDeviceView<DeviceBackend::CUDA, n_m, n_n> self_view = self.template deviceView<DeviceBackend::CUDA>();
+
+        thrust::device_ptr<real> d_self_father(self_view.father.data());
+        index self_father_d_size = size_t_to_signed<index>(self_view.father.DataSize());
+        thrust::device_ptr<real> d_self_son(self_view.son.data());
+        index self_son_d_size = size_t_to_signed<index>(self_view.son.DataSize());
+
+        auto execute = [&](real init, auto binary_op)
+        {
+            sqrSum = thrust::reduce(
+                d_self_father, d_self_father + self_father_d_size,
+                init,
+                binary_op);
+        };
+
+        MPI_Op mpi_op = MPI_OP_NULL;
+        if (op == "min")
+        {
+            mpi_op = MPI_MIN;
+            execute(veryLargeReal, [] DNDS_DEVICE_CALLABLE(real a, real b)
+                    { return std::min(a, b); });
+        }
+        else if (op == "max")
+        {
+            mpi_op = MPI_MAX;
+            execute(-veryLargeReal, [] DNDS_DEVICE_CALLABLE(real a, real b)
+                    { return std::max(a, b); });
+        }
+        else if (op == "sum")
+        {
+            mpi_op = MPI_SUM;
+            execute(0.0, thrust::plus<real>());
+        }
+        else
+            DNDS_assert_info(false, op);
+
+        MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, mpi_op, self.father->getMPI().comm);
         // std::cout << "norm2is " << std::scientific << sqrSumAll << std::endl;
+        return std::sqrt(sqrSumAll);
         return std::sqrt(sqrSumAll);
     }
 

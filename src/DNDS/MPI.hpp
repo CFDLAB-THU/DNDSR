@@ -13,8 +13,8 @@ DISABLE_WARNING_UNUSED_VALUE
 DISABLE_WARNING_POP
 
 #ifdef NDEBUG
-#define NDEBUG_DISABLED
-#undef NDEBUG
+#    define NDEBUG_DISABLED
+#    undef NDEBUG
 #endif
 
 namespace DNDS
@@ -323,12 +323,12 @@ namespace DNDS::Debug
 void __DNDS_assert_false_info_mpi(const char *expr, const char *file, int line, const std::string &info, const DNDS::MPIInfo &mpi);
 
 #ifdef DNDS_NDEBUG
-#define DNDS_assert_info_mpi(expr, mpi, info) (void(0))
+#    define DNDS_assert_info_mpi(expr, mpi, info) (void(0))
 #else
-#define DNDS_assert_info_mpi(expr, mpi, info) \
-    ((static_cast<bool>(expr))                \
-         ? void(0)                            \
-         : __DNDS_assert_false_info_mpi(#expr, __FILE__, __LINE__, info, mpi))
+#    define DNDS_assert_info_mpi(expr, mpi, info) \
+        ((static_cast<bool>(expr))                \
+             ? void(0)                            \
+             : __DNDS_assert_false_info_mpi(#expr, __FILE__, __LINE__, info, mpi))
 #endif
 
 namespace DNDS // TODO: get a concurrency header
@@ -490,16 +490,12 @@ namespace DNDS::MPI
 
     inline void AllreduceOneReal(real &v, MPI_Op op, const MPIInfo &mpi)
     {
-        real vR{0};
-        Allreduce(&v, &vR, 1, DNDS_MPI_REAL, op, mpi.comm);
-        v = vR;
+        Allreduce(MPI_IN_PLACE, &v, 1, DNDS_MPI_REAL, op, mpi.comm);
     }
 
     inline void AllreduceOneIndex(index &v, MPI_Op op, const MPIInfo &mpi)
     {
-        index vR{0};
-        Allreduce(&v, &vR, 1, DNDS_MPI_INDEX, op, mpi.comm);
-        v = vR;
+        Allreduce(MPI_IN_PLACE, &v, 1, DNDS_MPI_INDEX, op, mpi.comm);
     }
 
 }
@@ -573,6 +569,6 @@ namespace DNDS
 }
 
 #ifdef NDEBUG_DISABLED
-#define NDEBUG
-#undef NDEBUG_DISABLED
+#    define NDEBUG
+#    undef NDEBUG_DISABLED
 #endif

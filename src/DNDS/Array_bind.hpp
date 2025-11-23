@@ -4,6 +4,7 @@
 #include "ArrayTransformer.hpp"
 #include "ArrayPair.hpp"
 #include "DNDS/Defines.hpp"
+#include "DNDS/DeviceStorage.hpp"
 #include "Defines_bind.hpp"
 
 #include <pybind11/numpy.h>
@@ -464,12 +465,12 @@ namespace DNDS // ArrayTransformer
                 py::arg("other"));
 
         ArrayTransformer_
-            .def("initPersistentPull", &TArrayTransformer::initPersistentPull)
-            .def("initPersistentPush", &TArrayTransformer::initPersistentPush)
-            .def("startPersistentPull", &TArrayTransformer::startPersistentPull)
-            .def("startPersistentPush", &TArrayTransformer::startPersistentPush)
-            .def("waitPersistentPull", &TArrayTransformer::waitPersistentPull)
-            .def("waitPersistentPush", &TArrayTransformer::waitPersistentPush)
+            .def("initPersistentPull", &TArrayTransformer::initPersistentPull, py::arg("backend") = DeviceBackend::Unknown)
+            .def("initPersistentPush", &TArrayTransformer::initPersistentPush, py::arg("backend") = DeviceBackend::Unknown)
+            .def("startPersistentPull", &TArrayTransformer::startPersistentPull, py::arg("backend") = DeviceBackend::Unknown)
+            .def("startPersistentPush", &TArrayTransformer::startPersistentPush, py::arg("backend") = DeviceBackend::Unknown)
+            .def("waitPersistentPull", &TArrayTransformer::waitPersistentPull, py::arg("backend") = DeviceBackend::Unknown)
+            .def("waitPersistentPush", &TArrayTransformer::waitPersistentPush, py::arg("backend") = DeviceBackend::Unknown)
             .def("clearPersistentPull", &TArrayTransformer::clearPersistentPull)
             .def("clearPersistentPush", &TArrayTransformer::clearPersistentPush)
             .def("pullOnce", &TArrayTransformer::pullOnce)

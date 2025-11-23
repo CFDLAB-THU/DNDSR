@@ -45,14 +45,18 @@ namespace DNDS::EulerP
     template <DeviceBackend B, BCType T>
     struct BCFunc_Impl;
 
+#define DNDS_EULERP_BC_INTERFACE_APPLY                   \
+    template <class tU, class tUOut, class tx, class tn> \
+    DNDS_DEVICE_CALLABLE static void apply(              \
+        tU &&U, tUOut &&UOut, int32_t uSiz,              \
+        tx &&x, tn &&n,                                  \
+        Geom::t_index id,                                \
+        BCStorageVecDeviceView<B> value, PhysicsDeviceView<B> &phy)
+
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::Far>
     {
-        DNDS_DEVICE_CALLABLE static void apply(
-            real *U, real *UOut, int32_t uSiz,
-            real *x, real *n,
-            Geom::t_index id,
-            BCStorageVecDeviceView<B> value, PhysicsDeviceView<B> &phy)
+        DNDS_EULERP_BC_INTERFACE_APPLY
         {
             DNDS_HD_assert(false); // TODO
         }
@@ -61,11 +65,7 @@ namespace DNDS::EulerP
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::Wall>
     {
-        DNDS_DEVICE_CALLABLE static void apply(
-            real *U, real *UOut, int32_t uSiz,
-            real *x, real *n,
-            Geom::t_index id,
-            BCStorageVecDeviceView<B> value, PhysicsDeviceView<B> &phy)
+        DNDS_EULERP_BC_INTERFACE_APPLY
         {
             DNDS_HD_assert(false); // TODO
         }
@@ -74,11 +74,7 @@ namespace DNDS::EulerP
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::WallIsothermal>
     {
-        DNDS_DEVICE_CALLABLE static void apply(
-            real *U, real *UOut, int32_t uSiz,
-            real *x, real *n,
-            Geom::t_index id,
-            BCStorageVecDeviceView<B> value, PhysicsDeviceView<B> &phy)
+        DNDS_EULERP_BC_INTERFACE_APPLY
         {
             DNDS_HD_assert(false); // TODO
         }
@@ -87,11 +83,7 @@ namespace DNDS::EulerP
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::Out>
     {
-        DNDS_DEVICE_CALLABLE static void apply(
-            real *U, real *UOut, int32_t uSiz,
-            real *x, real *n,
-            Geom::t_index id,
-            BCStorageVecDeviceView<B> value, PhysicsDeviceView<B> &phy)
+        DNDS_EULERP_BC_INTERFACE_APPLY
         {
             DNDS_HD_assert(false); // TODO
         }
@@ -100,11 +92,7 @@ namespace DNDS::EulerP
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::OutP>
     {
-        DNDS_DEVICE_CALLABLE static void apply(
-            real *U, real *UOut, int32_t uSiz,
-            real *x, real *n,
-            Geom::t_index id,
-            BCStorageVecDeviceView<B> value, PhysicsDeviceView<B> &phy)
+        DNDS_EULERP_BC_INTERFACE_APPLY
         {
             DNDS_HD_assert(false); // TODO
         }
@@ -113,11 +101,7 @@ namespace DNDS::EulerP
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::InPsTs>
     {
-        DNDS_DEVICE_CALLABLE static void apply(
-            real *U, real *UOut, int32_t uSiz,
-            real *x, real *n,
-            Geom::t_index id,
-            BCStorageVecDeviceView<B> value, PhysicsDeviceView<B> &phy)
+        DNDS_EULERP_BC_INTERFACE_APPLY
         {
             DNDS_HD_assert(false); // TODO
         }
@@ -126,11 +110,7 @@ namespace DNDS::EulerP
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::Sym>
     {
-        DNDS_DEVICE_CALLABLE static void apply(
-            real *U, real *UOut, int32_t uSiz,
-            real *x, real *n,
-            Geom::t_index id,
-            BCStorageVecDeviceView<B> value, PhysicsDeviceView<B> &phy)
+        DNDS_EULERP_BC_INTERFACE_APPLY
         {
             DNDS_HD_assert(false); // TODO
         }
@@ -139,11 +119,7 @@ namespace DNDS::EulerP
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::Special>
     {
-        DNDS_DEVICE_CALLABLE static void apply(
-            real *U, real *UOut, int32_t uSiz,
-            real *x, real *n,
-            Geom::t_index id,
-            BCStorageVecDeviceView<B> value, PhysicsDeviceView<B> &phy)
+        DNDS_EULERP_BC_INTERFACE_APPLY
         {
             DNDS_HD_assert(false); // TODO
         }
@@ -152,11 +128,7 @@ namespace DNDS::EulerP
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::In>
     {
-        DNDS_DEVICE_CALLABLE static void apply(
-            real *U, real *UOut, int32_t uSiz,
-            real *x, real *n,
-            Geom::t_index id,
-            BCStorageVecDeviceView<B> value, PhysicsDeviceView<B> &phy)
+        DNDS_EULERP_BC_INTERFACE_APPLY
         {
             DNDS_HD_assert(false); // TODO
         }
@@ -165,11 +137,7 @@ namespace DNDS::EulerP
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::WallInvis>
     {
-        DNDS_DEVICE_CALLABLE static void apply(
-            real *U, real *UOut, int32_t uSiz,
-            real *x, real *n,
-            Geom::t_index id,
-            BCStorageVecDeviceView<B> value, PhysicsDeviceView<B> &phy)
+        DNDS_EULERP_BC_INTERFACE_APPLY
         {
             DNDS_HD_assert(false); // TODO
         }
@@ -183,7 +151,7 @@ namespace DNDS::EulerP
         BCType type = BCType::Unknown;
 
     public:
-        DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(BC_DeviceView, BC_DeviceView)
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(BC_DeviceView, BC_DeviceView)
 
         DNDS_DEVICE_CALLABLE BC_DeviceView(
             BCStorageVecDeviceView<B> n_values,
@@ -196,15 +164,17 @@ namespace DNDS::EulerP
         DNDS_DEVICE_CALLABLE int32_t getNValues() const { return values.size(); }
         DNDS_DEVICE_CALLABLE real value(int32_t i) const { return values[i]; }
 
-        DNDS_DEVICE_CALLABLE void apply(real *U, real *UOut, int32_t uSiz,
-                                        real *x, real *n,
+        template <class tU, class tUOut, class tx, class tn>
+        DNDS_DEVICE_CALLABLE void apply(tU &&U, tUOut &&UOut, int32_t uSiz,
+                                        tx &&x, tn &&n,
                                         PhysicsDeviceView<B> &phy)
         {
 #define DNDS_EULERP_CASE_BC_APPLY(type)                                    \
     case type:                                                             \
     {                                                                      \
         BCFunc_Impl<B, type>::apply(U, UOut, uSiz, x, n, id, values, phy); \
-    }
+    }                                                                      \
+    break;
             switch (type)
             {
                 DNDS_EULERP_CASE_BC_APPLY(BCType::Far);
@@ -278,7 +248,7 @@ namespace DNDS::EulerP
 
         DNDS_DEVICE_CALLABLE BC_DeviceView<B> &id2bc(Geom::t_index id)
         {
-            DNDS_HD_assert(id < bcs.size());
+            DNDS_HD_assert(id < bcs.size() && id >= 0);
             return bcs[id];
         }
     };
@@ -411,4 +381,14 @@ namespace DNDS::EulerP
             return t_deviceView<B>{std::move(bcs_device_view)};
         }
     };
+}
+
+namespace DNDS
+{
+    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(EulerP::BC_DeviceView<DeviceBackend::Host>, extern)
+    DNDS_DEVICE_STORAGE_INST(EulerP::BC_DeviceView<DeviceBackend::Host>, DeviceBackend::Host, extern)
+#ifdef DNDS_USE_CUDA
+    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(EulerP::BC_DeviceView<DeviceBackend::CUDA>, extern)
+    DNDS_DEVICE_STORAGE_INST(EulerP::BC_DeviceView<DeviceBackend::CUDA>, DeviceBackend::CUDA, extern)
+#endif
 }

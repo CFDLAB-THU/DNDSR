@@ -17,6 +17,11 @@ namespace DNDS::EulerP
              { return arg.member.at(i)->template deviceView<B>(); }), \
         member((member_v).deviceView())
 
+#define DNDS_EULERP_IMPL_ARG_CTOR_COPY_SSPARR(member)  \
+    {                                                  \
+        member = arg.member->template deviceView<B>(); \
+    }
+
     template <DeviceBackend B>
     struct Evaluator_impl
     {
@@ -79,6 +84,7 @@ namespace DNDS::EulerP
             TUScalar::t_deviceView<B> p;
             TUScalar::t_deviceView<B> T;
             TUScalar::t_deviceView<B> a;
+            TUScalar::t_deviceView<B> gamma;
             TUScalar::t_deviceView<B> mu;
             deviceViewVector<TUScalar::t_deviceView<B>, B> muComp_v;
             vector_DeviceView<B, TUScalar::t_deviceView<B>> muComp;
@@ -98,6 +104,7 @@ namespace DNDS::EulerP
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(p),
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(T),
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(a),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(gamma),
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(mu),
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(muComp, muComp_v)
             {
@@ -105,6 +112,42 @@ namespace DNDS::EulerP
         };
 
         static void Cons2PrimMu(Cons2PrimMu_Arg &arg);
+
+        struct Cons2Prim_Arg
+        {
+            Evaluator &self;
+            Evaluator::t_deviceView<B> this_v; //! must keep this alive
+            EvaluatorDeviceView<B> self_view;
+
+            TUDof::t_deviceView<B> u;
+            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalar_v;
+            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalar;
+            // out
+            TUDof::t_deviceView<B> uPrim;
+            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalarPrim_v;
+            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarPrim;
+            TUScalar::t_deviceView<B> p;
+            TUScalar::t_deviceView<B> T;
+            TUScalar::t_deviceView<B> a;
+            TUScalar::t_deviceView<B> gamma;
+
+            Cons2Prim_Arg(Evaluator &self_, Evaluator::Cons2Prim_Arg &arg)
+                : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF(),
+                  //
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(u),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalar, uScalar_v),
+                  // out
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uPrim),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarPrim, uScalarPrim_v),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(p),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(T),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(a),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(gamma)
+            {
+            }
+        };
+
+        static void Cons2Prim(Cons2Prim_Arg &arg);
 
         struct EstEigenDt_Arg
         {
@@ -140,7 +183,7 @@ namespace DNDS::EulerP
 
         static void EstEigenDt_FaceLam2CellDt(EstEigenDt_Arg &arg);
 
-        struct Rec2nd_Arg
+        struct RecFace2nd_Arg
         {
             Evaluator &self;
             Evaluator::t_deviceView<B> this_v; //! must keep this alive
@@ -155,18 +198,15 @@ namespace DNDS::EulerP
             // out
             TUDof::t_deviceView<B> uFL;
             TUDof::t_deviceView<B> uFR;
-            TUGrad::t_deviceView<B> uGradFL;
-            TUGrad::t_deviceView<B> uGradFR;
+            TUGrad::t_deviceView<B> uGradFF;
             deviceViewVector<TUScalar::t_deviceView<B>, B> uScalarFL_v;
             vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarFL;
             deviceViewVector<TUScalar::t_deviceView<B>, B> uScalarFR_v;
             vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarFR;
-            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGradFL_v;
-            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradFL;
-            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGradFR_v;
-            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradFR;
+            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGradFF_v;
+            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradFF;
 
-            Rec2nd_Arg(Evaluator &self_, Evaluator::Rec2nd_Arg &arg)
+            RecFace2nd_Arg(Evaluator &self_, Evaluator::RecFace2nd_Arg &arg)
                 : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF(),
                   //
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(u),
@@ -176,17 +216,15 @@ namespace DNDS::EulerP
                   // out
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uFL),
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uFR),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGradFL),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGradFR),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGradFF),
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarFL, uScalarFL_v),
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarFR, uScalarFR_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGradFL, uScalarGradFL_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGradFR, uScalarGradFR_v)
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGradFF, uScalarGradFF_v)
             {
             }
         };
 
-        static void Rec2nd(Rec2nd_Arg &arg);
+        static void RecFace2nd(RecFace2nd_Arg &arg);
 
         struct Flux2nd_Arg
         {
@@ -194,22 +232,40 @@ namespace DNDS::EulerP
             Evaluator::t_deviceView<B> this_v; //! must keep this alive
             EvaluatorDeviceView<B> self_view;
 
+            TUDof::t_deviceView<B> u;
+            TUGrad::t_deviceView<B> uGrad;
+            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalar_v;
+            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalar;
+            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGrad_v;
+            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGrad;
+
+            TUDof::t_deviceView<B> uPrim;
+            TUGrad::t_deviceView<B> uGradPrim;
+            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalarPrim_v;
+            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarPrim;
+            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGradPrim_v;
+            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradPrim;
+            TUScalar::t_deviceView<B> p;
+            TUScalar::t_deviceView<B> T;
+            TUScalar::t_deviceView<B> a;
+            TUScalar::t_deviceView<B> gamma;
+            TUScalar::t_deviceView<B> mu;
+            deviceViewVector<TUScalar::t_deviceView<B>, B> muComp_v;
+            vector_DeviceView<B, TUScalar::t_deviceView<B>> muComp;
+
             TUDof::t_deviceView<B> uFL;
             TUDof::t_deviceView<B> uFR;
-            TUGrad::t_deviceView<B> uGradFL;
-            TUGrad::t_deviceView<B> uGradFR;
+            TUGrad::t_deviceView<B> uGradFF;
             deviceViewVector<TUScalar::t_deviceView<B>, B> uScalarFL_v;
             vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarFL;
             deviceViewVector<TUScalar::t_deviceView<B>, B> uScalarFR_v;
             vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarFR;
-            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGradFL_v;
-            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradFL;
-            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGradFR_v;
-            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradFR;
+            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGradFF_v;
+            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradFF;
 
-            TUScalar::t_deviceView<B> muFF;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> muCompFF_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> muCompFF;
+            TUScalar::t_deviceView<B> pFL;
+            TUScalar::t_deviceView<B> pFR;
+
             TUScalar::t_deviceView<B> deltaLamFaceFF;
 
             // out
@@ -224,16 +280,31 @@ namespace DNDS::EulerP
             Flux2nd_Arg(Evaluator &self_, Evaluator::Flux2nd_Arg &arg)
                 : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF(),
                   //
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(u),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGrad),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalar, uScalar_v),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGrad, uScalarGrad_v),
+
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uPrim),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGradPrim),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarPrim, uScalarPrim_v),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGradPrim, uScalarGradPrim_v),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(p),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(T),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(a),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(gamma),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(mu),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(muComp, muComp_v),
+                  //
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uFL),
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uFR),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGradFL),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGradFR),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGradFF),
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarFL, uScalarFL_v),
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarFR, uScalarFR_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGradFL, uScalarGradFL_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGradFR, uScalarGradFR_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(muFF),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(muCompFF, muCompFF_v),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGradFF, uScalarGradFF_v),
+
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(pFL),
+                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(pFR),
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(deltaLamFaceFF),
                   // out
                   DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(fluxFF),

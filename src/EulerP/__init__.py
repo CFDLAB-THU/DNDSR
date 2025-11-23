@@ -37,7 +37,7 @@ def _pre_import():
         CDLL(os.path.join(DNDSR_lib_dir, "libdnds_shared.so"))
         CDLL(os.path.join(DNDSR_lib_dir, "libgeom_shared.so"))
         CDLL(os.path.join(DNDSR_lib_dir, "libcfv_shared.so"))
-        print("HERE")
+        CDLL(os.path.join(DNDSR_lib_dir, "libeulerP_shared.so"))
         pass
 
     elif os.name == "nt":

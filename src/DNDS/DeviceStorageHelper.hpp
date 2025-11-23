@@ -7,8 +7,8 @@ namespace DNDS
     template <class TView, DeviceBackend B>
     struct deviceViewVector
     {
-        static_assert(std::is_trivially_copyable_v<TView>,
-                      "the view must be trivially copyable");
+        static_assert(std::is_trivially_copyable_v<TView> && std::is_default_constructible_v<TView>,
+                      "view elements must be trivially_copyable and default_constructible");
         host_device_vector<TView> views;
 
         template <class TGetView>

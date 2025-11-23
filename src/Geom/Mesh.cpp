@@ -1536,7 +1536,9 @@ namespace DNDS::Geom
         DNDS_MAKE_SSP(faceElemInfo.father, mpi);
         DNDS_MAKE_SSP(faceElemInfo.son, mpi);
         DNDS_MAKE_SSP(face2bnd.father, mpi);
+        DNDS_MAKE_SSP(face2bnd.son, mpi);
         DNDS_MAKE_SSP(bnd2face.father, mpi);
+        DNDS_MAKE_SSP(bnd2face.son, mpi);
 
         cell2face.father->Resize(cell2cell.father->Size()); //!
         cell2face.son->Resize(cell2cell.son->Size());
