@@ -112,6 +112,23 @@ namespace DNDS::EulerP
                 U(i) = UPrim(i) * rho;
         }
 
+        template <class tU>
+        DNDS_DEVICE_CALLABLE real Cons2EInternal(
+            tU &&U, int nVars) const
+        {
+            real rho = U(0);
+            real rvSqr = 0.0;
+#ifdef __CUDA_ARCH__
+#    pragma unroll
+#endif
+            for (int i = 1; i < nVarsFlow - 1; i++)
+                rvSqr += sqr(U(i));
+            rvSqr /= rho;
+            real E = U(I4);
+            real e = (E - 0.5 * rvSqr);
+            return e;
+        }
+
         template <class tUPrim>
         DNDS_DEVICE_CALLABLE real Prim2Pressure(
             tUPrim &&UPrim, int nVars, real T) const
@@ -207,78 +224,5 @@ namespace DNDS::EulerP
         for (int d = 0; d < 3; d++)
             F(d + 1) += p * n(d);
         F(I4) += vn * p;
-    }
-
-    template <DeviceBackend B, class TUL, class TUR, class TULPrim, class TURPrim>
-    DNDS_DEVICE_CALLABLE void RoeAverageNS(TUL &&UL, TUR &&UR,
-                                           TULPrim &&ULPrim, TURPrim &&URPrim,
-                                           int nVars,
-                                           real pL, real pR,
-                                           PhysicsDeviceView<B> &phy,
-                                           Geom::tPoint &veloRoe,
-                                           real &vsqrRoe,
-                                           real &HRoe,
-                                           real &rhoRoe,
-                                           real &aSqrRoe)
-    {
-        real sqrtRhoLm = std::sqrt(UL(0));
-        real sqrtRhoRm = std::sqrt(UR(0));
-        real HLm = phy.Pressure2Enthalpy(UL, nVars, pL);
-        real HRm = phy.Pressure2Enthalpy(UR, nVars, pR);
-
-        for (int d = 0; d < 3; d++)
-            veloRoe(d) = (sqrtRhoLm * ULPrim(d) + sqrtRhoRm * URPrim(d)) / (sqrtRhoLm + sqrtRhoRm);
-        vsqrRoe = veloRoe.squaredNorm();
-        HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
-        // TODO: be more generic here!!! (phy.gamma - 1) is for perfect gas
-        aSqrRoe = (phy.params.gamma - 1) * (HRoe - 0.5 * vsqrRoe);
-        rhoRoe = sqrtRhoLm * sqrtRhoRm;
-    }
-
-    template <DeviceBackend B>
-    DNDS_DEVICE_CALLABLE void RoeFluxFlow(const TU &UL, const TU &UR,
-                                          real pL, real pR,
-                                          const Geom::tPoint &veloRoe,
-                                          real vsqrRoe,
-                                          real vgn, const Geom::tPoint &n,
-                                          real asqrRoe, real aRoe, real HRoe,
-                                          PhysicsDeviceView<B> &phy,
-                                          real lam0, real lam123, real lam4,
-                                          TU &F)
-    {
-        using TVec = Geom::tPoint;
-        TU incU = UR - UL;
-        real vnL = UL(Seq123).dot(n) / UL(0);
-        real vnR = UR(Seq123).dot(n) / UR(0);
-        real incU123N = incU(Seq123).dot(n);
-        real veloRoeN = veloRoe.dot(n);
-
-        TVec alpha23V = incU(Seq123) - incU(0) * veloRoe;
-        TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
-        real incU4b = incU(I4) - alpha23VT.dot(veloRoe);
-        real alpha1 = (phy.params.gamma - 1) / asqrRoe * // TODO: be more generic here!!! (phy.gamma - 1) is for perfect gas
-                      (incU(0) * (HRoe - veloRoeN * veloRoeN) +
-                       veloRoeN * incU123N - incU4b);
-        real alpha0 = (incU(0) * (veloRoeN + aRoe) - incU123N - aRoe * alpha1) / (2 * aRoe);
-        real alpha4 = incU(0) - (alpha0 + alpha1);
-
-        alpha0 *= lam0;
-        alpha1 *= lam123;
-        alpha23VT *= lam123;
-        alpha4 *= lam4; // here becomes alpha_i * lam_i
-
-        GasInviscidFlux_XY(UL, nVarsFlow, vnL, vgn, n, pL, F);
-        GasInviscidFlux_XY(UR, nVarsFlow, vnR, vgn, n, pR, F);
-
-        F(0) -= alpha0 + alpha1 + alpha4;
-        F(I4) -= (HRoe - veloRoeN * aRoe) * alpha0 + 0.5 * vsqrRoe * alpha1 +
-                 (HRoe + veloRoeN * aRoe) * alpha4 + alpha23VT.dot(veloRoe);
-        for (int d = 0; d < 3; d++)
-            F(d + 1) -=
-                (veloRoe(d) - aRoe * n(d)) * alpha0 + (veloRoe(d) + aRoe * n(d)) * alpha4 +
-                veloRoe(d) * alpha1 + alpha23VT(d);
-
-        for (int i = 0; i < nVarsFlow; i++)
-            F(i) *= 0.5;
     }
 }

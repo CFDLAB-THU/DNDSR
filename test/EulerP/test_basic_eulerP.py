@@ -2,6 +2,9 @@ from DNDSR import DNDS, Geom, CFV, EulerP
 import json
 from DNDSR.Geom.utils import *
 import numpy as np
+import debugpy
+
+from DNDSR.DNDS.Debug_Py import MPIDebugHold
 
 
 def get_fv(mpi):
@@ -29,6 +32,7 @@ def get_fv(mpi):
         meshDirectBisect=0,
     )
     meshBnd, readerBnd = create_bnd_mesh(mesh)
+
     fv = CFV.FiniteVolume(mpi, mesh)
     settings = fv.GetSettings()
     settings["intOrder"] = 3
@@ -107,21 +111,26 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo):
     data["u"] = u
     data["uGrad"] = gU
 
-    RecGradient_Arg = eval.RecGradient_Arg()
-
     u.setConstant(np.array([1, 0, 0, 0, 2.5]).reshape(-1, 1))
     for iCell in range(mesh.NumCell()):
         x = fv.GetCellBary(iCell)
         if np.linalg.norm(np.array([0.5, 0.5, 0]) - x, 2) < 0.25:
             u[iCell] = np.array([1, 4, 0, 0, 10.5], dtype=np.float64).reshape(-1, 1)
+            
+        # uu = 1
+        # vv = 1
+        # r = 1 + 0.1 * np.cos(x[0] * 2 * np.pi) * np.cos(x[1] * 2 * np.pi)
+        # u[iCell] = np.array(
+        #     [r, r * uu, r * vv, 0, 2.5 + 0.5 * r * (uu**2 + vv**2)], dtype=np.float64
+        # ).reshape(-1, 1)
     data["uGrad"].setConstant(100.0)
+    RecGradient_Arg = eval.RecGradient_Arg()
     RecGradient_Arg.u = data["u"]
     RecGradient_Arg.uGrad = data["uGrad"]
     RecGradient_Arg.uScalar = []
     RecGradient_Arg.uScalarGrad = []
 
     eval.RecGradient(RecGradient_Arg)
-    Cons2PrimMu_Arg = eval.Cons2PrimMu_Arg()
 
     data["p"] = s.clone()
     data["T"] = s.clone()
@@ -132,6 +141,7 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo):
     data["uPrim"] = u.clone()
     data["uGradPrim"] = gU.clone()
 
+    Cons2PrimMu_Arg = eval.Cons2PrimMu_Arg()
     Cons2PrimMu_Arg.p = data["p"]
     Cons2PrimMu_Arg.T = data["T"]
     Cons2PrimMu_Arg.a = data["a"]
@@ -259,21 +269,14 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo):
             data["u"][iCell], copy=False
         )[1]
         np.array(cell_out2[iCell], copy=False)[:] = np.array(
-            data["rhs"][iCell], copy=False
-        )[1]
+            data["uGrad"][iCell], copy=False
+        )[0, 1]
 
     eval.PrintDataVTKHDF(
         "test_0",
         "test",
         [cell_out, cell_out1, cell_out2, data["p"]],
         ["cell_out", "cell_out1", "cell_out2", "p"],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-        0.0,
     )
 
     # for iCell in range(mesh.NumCell()):
@@ -286,4 +289,10 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo):
 if __name__ == "__main__":
     mpi = DNDS.MPIInfo()
     mpi.setWorld()
+
+    ## debug py
+
+    # MPIDebugHold()
+
+    # DNDS.Debug.MPIDebugHold(mpi)
     test_basic_eulerP(mpi)

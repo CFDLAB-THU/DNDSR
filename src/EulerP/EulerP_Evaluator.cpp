@@ -13,6 +13,7 @@ namespace DNDS::EulerP
     {
         DeviceBackend B = this->device();
         arg.Validate(*this);
+        arg.WaitAllPull();
 
         // DNDS_assert(u_face_bufferL.father);
         // DNDS_assert(uScalar_face_bufferL.size() >= uScalar.size());
@@ -31,19 +32,7 @@ namespace DNDS::EulerP
 
             Evaluator_impl<B>::RecGradient_GGRec(impl_arg);
 
-            arg.uGrad->trans.startPersistentPull();
-            for (auto &uSG : arg.uScalarGrad)
-                uSG->trans.startPersistentPull();
-
-            arg.uGrad->trans.waitPersistentPull();
-            for (auto &uSG : arg.uScalarGrad)
-                uSG->trans.waitPersistentPull();
-
             Evaluator_impl<B>::RecGradient_BarthLimiter(impl_arg);
-
-            arg.u->trans.startPersistentPull();
-            for (auto &uS : arg.uScalar)
-                uS->trans.startPersistentPull();
         }
         else
             DNDS_assert(false);
@@ -53,6 +42,7 @@ namespace DNDS::EulerP
     {
         DeviceBackend B = this->device();
         arg.Validate(*this);
+        arg.WaitAllPull();
 
         auto execute = [&](auto b = std::integral_constant<DeviceBackend, DeviceBackend::Host>())
         {
@@ -71,15 +61,15 @@ namespace DNDS::EulerP
             Evaluator_impl<B>::Cons2PrimMu(impl_arg);
 
             // todo: conditionally disable comm
-            arg.uPrim->trans.startPersistentPull();
-            for (auto &uS : arg.uScalarPrim)
-                uS->trans.startPersistentPull();
-            arg.p->trans.startPersistentPull();
-            arg.T->trans.startPersistentPull();
-            arg.a->trans.startPersistentPull();
-            arg.mu->trans.startPersistentPull();
-            for (auto &uS : arg.muComp)
-                uS->trans.startPersistentPull();
+            // arg.uPrim->trans.startPersistentPull();
+            // for (auto &uS : arg.uScalarPrim)
+            //     uS->trans.startPersistentPull();
+            // arg.p->trans.startPersistentPull();
+            // arg.T->trans.startPersistentPull();
+            // arg.a->trans.startPersistentPull();
+            // arg.mu->trans.startPersistentPull();
+            // for (auto &uS : arg.muComp)
+            //     uS->trans.startPersistentPull();
         };
 
         if (B == DeviceBackend::Host || B == DeviceBackend::Unknown)
@@ -94,6 +84,7 @@ namespace DNDS::EulerP
     {
         DeviceBackend B = this->device();
         arg.Validate(*this);
+        arg.WaitAllPull();
 
         auto execute = [&](auto b)
         {
@@ -109,12 +100,12 @@ namespace DNDS::EulerP
             Evaluator_impl<B>::Cons2Prim(impl_arg);
 
             // todo: conditionally disable comm
-            arg.uPrim->trans.startPersistentPull();
-            for (auto &uS : arg.uScalarPrim)
-                uS->trans.startPersistentPull();
-            arg.p->trans.startPersistentPull();
-            arg.T->trans.startPersistentPull();
-            arg.a->trans.startPersistentPull();
+            // arg.uPrim->trans.startPersistentPull();
+            // for (auto &uS : arg.uScalarPrim)
+            //     uS->trans.startPersistentPull();
+            // arg.p->trans.startPersistentPull();
+            // arg.T->trans.startPersistentPull();
+            // arg.a->trans.startPersistentPull();
         };
 
         if (B == DeviceBackend::Host || B == DeviceBackend::Unknown)
@@ -129,16 +120,13 @@ namespace DNDS::EulerP
     {
         DeviceBackend B = this->device();
         arg.Validate(*this);
+        arg.WaitAllPull();
 
         auto execute = [&](auto b = std::integral_constant<DeviceBackend, DeviceBackend::Host>())
         {
             constexpr DeviceBackend B = decltype(b)::value;
 
             typename Evaluator_impl<B>::EstEigenDt_Arg impl_arg(*this, arg);
-
-            arg.u->trans.waitPersistentPull();
-            arg.muCell->trans.waitPersistentPull();
-            arg.aCell->trans.waitPersistentPull();
 
             Evaluator_impl<B>::EstEigenDt_GetFaceLam(impl_arg);
 
@@ -152,9 +140,6 @@ namespace DNDS::EulerP
             // deltaLamFace->trans.waitPersistentPull();
 
             Evaluator_impl<B>::EstEigenDt_FaceLam2CellDt(impl_arg);
-
-            arg.deltaLamCell->trans.startPersistentPull();
-            arg.dt->trans.startPersistentPull();
         };
 
         if (B == DeviceBackend::Host || B == DeviceBackend::Unknown)
@@ -169,18 +154,12 @@ namespace DNDS::EulerP
     {
         DeviceBackend B = this->device();
         arg.Validate(*this);
+        arg.WaitAllPull();
         auto execute = [&](auto b = std::integral_constant<DeviceBackend, DeviceBackend::Host>())
         {
             constexpr DeviceBackend B = decltype(b)::value;
 
             typename Evaluator_impl<B>::RecFace2nd_Arg impl_arg(*this, arg);
-
-            arg.u->trans.waitPersistentPull();
-            for (auto &uS : arg.uScalar)
-                uS->trans.waitPersistentPull();
-            arg.uGrad->trans.waitPersistentPull();
-            for (auto &uS : arg.uScalarGrad)
-                uS->trans.waitPersistentPull();
 
             Evaluator_impl<B>::RecFace2nd(impl_arg);
         };
@@ -198,6 +177,7 @@ namespace DNDS::EulerP
         DeviceBackend B = this->device();
         arg.Validate(*this);
         PrepareFaceBuffer(arg.uScalar.size());
+        arg.WaitAllPull();
 
         auto execute = [&](auto b = std::integral_constant<DeviceBackend, DeviceBackend::Host>())
         {
@@ -205,18 +185,24 @@ namespace DNDS::EulerP
 
             typename Evaluator_impl<B>::Flux2nd_Arg impl_arg(*this, arg);
 
-            arg.rhs->trans.waitPersistentPull();
+            for (auto &uS : arg.uScalar)
+                uS->trans.waitPersistentPull();
+            for (auto &uS : arg.uScalarPrim)
+                uS->trans.waitPersistentPull();
+            for (auto &uS : arg.uScalarGrad)
+                uS->trans.waitPersistentPull();
+            for (auto &uS : arg.uScalarGradPrim)
+                uS->trans.waitPersistentPull();
 
             Evaluator_impl<B>::Flux2nd(impl_arg);
 
-            arg.rhs->trans.startPersistentPull();
-            for (auto &uS : arg.rhsScalar)
-                uS->trans.startPersistentPull();
+            // arg.rhs->trans.startPersistentPull();
+            // for (auto &uS : arg.rhsScalar)
+            //     uS->trans.startPersistentPull();
         };
 
         if (B == DeviceBackend::Host || B == DeviceBackend::Unknown)
         {
-
             execute(std::integral_constant<DeviceBackend, DeviceBackend::Host>());
         }
         else

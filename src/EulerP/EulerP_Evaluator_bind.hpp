@@ -3,6 +3,7 @@
 #include "DNDS/Defines_bind.hpp"
 #include "DNDS/ObjectUtils.hpp"
 #include "EulerP_Evaluator.hpp"
+#include <pybind11/pytypes.h>
 
 namespace DNDS::EulerP
 {
@@ -22,15 +23,17 @@ namespace DNDS::EulerP
         T_
             .def("PrintDataVTKHDF", &T::PrintDataVTKHDF,
                  py::arg("fname"), py::arg("series_name"),
-                 py::arg("arrCellCentScalar"),
-                 py::arg("arrCellCentScalar_names"),
-                 py::arg("arrCellCentVec"),
-                 py::arg("arrCellCentVec_names"),
-                 py::arg("arrNodeScalar"),
-                 py::arg("arrNodeScalar_names"),
-                 py::arg("arrNodeVec"),
-                 py::arg("arrNodeVec_names"),
-                 py::arg("t"));
+                 py::arg("arrCellCentScalar") = py::list(),
+                 py::arg("arrCellCentScalar_names") = py::list(),
+                 py::arg("arrCellCentVec") = py::list(),
+                 py::arg("arrCellCentVec_names") = py::list(),
+                 py::arg("arrNodeScalar") = py::list(),
+                 py::arg("arrNodeScalar_names") = py::list(),
+                 py::arg("arrNodeVec") = py::list(),
+                 py::arg("arrNodeVec_names") = py::list(),
+                 py::arg("uPrimCell") = py::none(),
+                 py::arg("uPrimNode") = py::none(),
+                 py::arg("t") = 0.0);
 
 #define DNDS_EULERP_EVALUATOR_BIND_STANDARD_PACKED_API(func, func_arg)                    \
                                                                                           \

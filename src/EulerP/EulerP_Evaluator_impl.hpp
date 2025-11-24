@@ -153,31 +153,37 @@ namespace DNDS::EulerP
             Evaluator::t_deviceView<B> this_v; //! must keep this alive
             EvaluatorDeviceView<B> self_view;
 
-            TUDof::t_deviceView<B> u;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalar_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalar;
+            struct Portable
+            {
+                TUDof::t_deviceView<B> u;
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalar;
+                TUDof::t_deviceView<B> uPrim;
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarPrim;
+
+                TUScalar::t_deviceView<B> p;
+                TUScalar::t_deviceView<B> T;
+                TUScalar::t_deviceView<B> a;
+                TUScalar::t_deviceView<B> gamma;
+            } portable;
+            static_assert(std::is_trivially_copyable_v<Portable>);
+
+            t_Scalar_deviceViewVector_sup uScalar_v;
             // out
-            TUDof::t_deviceView<B> uPrim;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalarPrim_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarPrim;
-            TUScalar::t_deviceView<B> p;
-            TUScalar::t_deviceView<B> T;
-            TUScalar::t_deviceView<B> a;
-            TUScalar::t_deviceView<B> gamma;
+            t_Scalar_deviceViewVector_sup uScalarPrim_v;
 
             Cons2Prim_Arg(Evaluator &self_, Evaluator::Cons2Prim_Arg &arg)
-                : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF(),
-                  //
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(u),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalar, uScalar_v),
-                  // out
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uPrim),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarPrim, uScalarPrim_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(p),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(T),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(a),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(gamma)
+                : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF()
             {
+                //
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(u)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalar, uScalar_v)
+                // out
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uPrim)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalarPrim, uScalarPrim_v)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(p)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(T)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(a)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(gamma)
             }
         };
 
@@ -189,27 +195,31 @@ namespace DNDS::EulerP
             Evaluator::t_deviceView<B> this_v; //! must keep this alive
             EvaluatorDeviceView<B> self_view;
 
-            TUDof::t_deviceView<B> u;
-            TUScalar::t_deviceView<B> muCell;
-            TUScalar::t_deviceView<B> aCell;
-            TUScalarGrad::t_deviceView<B> faceLamEst;
-            TUScalar::t_deviceView<B> faceLamVisEst;
-            TUScalar::t_deviceView<B> deltaLamFace;
-            TUScalar::t_deviceView<B> deltaLamCell;
-            TUScalar::t_deviceView<B> dt;
+            struct Portable
+            {
+                TUDof::t_deviceView<B> u;
+                TUScalar::t_deviceView<B> muCell;
+                TUScalar::t_deviceView<B> aCell;
+                TUScalarGrad::t_deviceView<B> faceLamEst;
+                TUScalar::t_deviceView<B> faceLamVisEst;
+                TUScalar::t_deviceView<B> deltaLamFace;
+                TUScalar::t_deviceView<B> deltaLamCell;
+                TUScalar::t_deviceView<B> dt;
+            } portable;
+            static_assert(std::is_trivially_copyable_v<Portable>);
 
             EstEigenDt_Arg(Evaluator &self_, Evaluator::EstEigenDt_Arg &arg)
-                : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF(),
-                  //
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(u),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(muCell),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(aCell),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(faceLamEst),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(faceLamVisEst),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(deltaLamFace),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(deltaLamCell),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(dt)
+                : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF()
             {
+                //
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(u)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(muCell)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(aCell)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(faceLamEst)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(faceLamVisEst)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(deltaLamFace)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(deltaLamCell)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(dt)
             }
         };
 
@@ -223,38 +233,44 @@ namespace DNDS::EulerP
             Evaluator::t_deviceView<B> this_v; //! must keep this alive
             EvaluatorDeviceView<B> self_view;
 
-            TUDof::t_deviceView<B> u;
-            TUGrad::t_deviceView<B> uGrad;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalar_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalar;
-            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGrad_v;
-            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGrad;
-            // out
-            TUDof::t_deviceView<B> uFL;
-            TUDof::t_deviceView<B> uFR;
-            TUGrad::t_deviceView<B> uGradFF;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalarFL_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarFL;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalarFR_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarFR;
-            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGradFF_v;
-            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradFF;
+            struct Portable
+            {
+                TUDof::t_deviceView<B> u;
+                TUGrad::t_deviceView<B> uGrad;
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalar;
+                vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGrad;
+
+                // out
+                TUDof::t_deviceView<B> uFL;
+                TUDof::t_deviceView<B> uFR;
+                TUGrad::t_deviceView<B> uGradFF;
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarFL;
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarFR;
+                vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradFF;
+            } portable;
+            static_assert(std::is_trivially_copyable_v<Portable>);
+
+            t_Scalar_deviceViewVector_sup uScalar_v;
+            t_ScalarGrad_deviceViewVector_sup uScalarGrad_v;
+            t_Scalar_deviceViewVector_sup uScalarFL_v;
+            t_Scalar_deviceViewVector_sup uScalarFR_v;
+            t_ScalarGrad_deviceViewVector_sup uScalarGradFF_v;
 
             RecFace2nd_Arg(Evaluator &self_, Evaluator::RecFace2nd_Arg &arg)
-                : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF(),
-                  //
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(u),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGrad),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalar, uScalar_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGrad, uScalarGrad_v),
-                  // out
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uFL),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uFR),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGradFF),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarFL, uScalarFL_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarFR, uScalarFR_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGradFF, uScalarGradFF_v)
+                : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF()
             {
+                //
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(u)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uGrad)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalar, uScalar_v)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalarGrad, uScalarGrad_v)
+                // out
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uFL)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uFR)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uGradFF)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalarFL, uScalarFL_v)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalarFR, uScalarFR_v)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalarGradFF, uScalarGradFF_v)
             }
         };
 
@@ -266,86 +282,95 @@ namespace DNDS::EulerP
             Evaluator::t_deviceView<B> this_v; //! must keep this alive
             EvaluatorDeviceView<B> self_view;
 
-            TUDof::t_deviceView<B> u;
-            TUGrad::t_deviceView<B> uGrad;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalar_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalar;
-            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGrad_v;
-            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGrad;
+            struct Portable
+            {
+                TUDof::t_deviceView<B> u;
+                TUGrad::t_deviceView<B> uGrad;
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalar;
+                vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGrad;
 
-            TUDof::t_deviceView<B> uPrim;
-            TUGrad::t_deviceView<B> uGradPrim;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalarPrim_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarPrim;
-            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGradPrim_v;
-            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradPrim;
-            TUScalar::t_deviceView<B> p;
-            TUScalar::t_deviceView<B> T;
-            TUScalar::t_deviceView<B> a;
-            TUScalar::t_deviceView<B> gamma;
-            TUScalar::t_deviceView<B> mu;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> muComp_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> muComp;
+                TUDof::t_deviceView<B> uPrim;
+                TUGrad::t_deviceView<B> uGradPrim;
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarPrim;
+                vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradPrim;
+                TUScalar::t_deviceView<B> p;
+                TUScalar::t_deviceView<B> T;
+                TUScalar::t_deviceView<B> a;
+                TUScalar::t_deviceView<B> gamma;
+                TUScalar::t_deviceView<B> mu;
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> muComp;
 
-            TUDof::t_deviceView<B> uFL;
-            TUDof::t_deviceView<B> uFR;
-            TUGrad::t_deviceView<B> uGradFF;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalarFL_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarFL;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> uScalarFR_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarFR;
-            deviceViewVector<TUScalarGrad::t_deviceView<B>, B> uScalarGradFF_v;
-            vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradFF;
+                TUDof::t_deviceView<B> uFL;
+                TUDof::t_deviceView<B> uFR;
+                TUGrad::t_deviceView<B> uGradFF;
 
-            TUScalar::t_deviceView<B> pFL;
-            TUScalar::t_deviceView<B> pFR;
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarFL;
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarFR;
+                vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradFF;
 
-            TUScalar::t_deviceView<B> deltaLamFaceFF;
+                TUScalar::t_deviceView<B> pFL;
+                TUScalar::t_deviceView<B> pFR;
+                TUScalar::t_deviceView<B> deltaLamFaceFF;
 
-            // out
-            TUDof::t_deviceView<B> fluxFF;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> fluxScalarFF_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> fluxScalarFF;
-            // out added
-            TUDof::t_deviceView<B> rhs;
-            deviceViewVector<TUScalar::t_deviceView<B>, B> rhsScalar_v;
-            vector_DeviceView<B, TUScalar::t_deviceView<B>> rhsScalar;
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> fluxScalarFF;
+
+                // out
+                TUDof::t_deviceView<B> fluxFF;
+                // out added
+                TUDof::t_deviceView<B> rhs;
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> rhsScalar;
+            } portable;
+            static_assert(std::is_trivially_copyable_v<Portable>);
+
+            t_Scalar_deviceViewVector_sup uScalar_v;
+            t_ScalarGrad_deviceViewVector_sup uScalarGrad_v;
+
+            t_Scalar_deviceViewVector_sup uScalarPrim_v;
+            t_ScalarGrad_deviceViewVector_sup uScalarGradPrim_v;
+            t_Scalar_deviceViewVector_sup muComp_v;
+
+            t_Scalar_deviceViewVector_sup uScalarFL_v;
+            t_Scalar_deviceViewVector_sup uScalarFR_v;
+            t_ScalarGrad_deviceViewVector_sup uScalarGradFF_v;
+
+            t_Scalar_deviceViewVector_sup fluxScalarFF_v;
+            t_Scalar_deviceViewVector_sup rhsScalar_v;
 
             Flux2nd_Arg(Evaluator &self_, Evaluator::Flux2nd_Arg &arg)
-                : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF(),
-                  //
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(u),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGrad),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalar, uScalar_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGrad, uScalarGrad_v),
-
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uPrim),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGradPrim),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarPrim, uScalarPrim_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGradPrim, uScalarGradPrim_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(p),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(T),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(a),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(gamma),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(mu),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(muComp, muComp_v),
-                  //
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uFL),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uFR),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(uGradFF),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarFL, uScalarFL_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarFR, uScalarFR_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(uScalarGradFF, uScalarGradFF_v),
-
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(pFL),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(pFR),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(deltaLamFaceFF),
-                  // out
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(fluxFF),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(fluxScalarFF, fluxScalarFF_v),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_SSPARR(rhs),
-                  DNDS_EULERP_IMPL_ARG_CTOR_INIT_VECSSPARR(rhsScalar, rhsScalar_v)
+                : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF()
             {
+                //
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(u)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uGrad)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalar, uScalar_v)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalarGrad, uScalarGrad_v)
+
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uPrim)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uGradPrim)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalarPrim, uScalarPrim_v)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalarGradPrim, uScalarGradPrim_v)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(p)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(T)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(a)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(gamma)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(mu)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(muComp, muComp_v)
+                //
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uFL)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uFR)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uGradFF)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalarFL, uScalarFL_v)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalarFR, uScalarFR_v)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalarGradFF, uScalarGradFF_v)
+
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(pFL)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(pFR)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(deltaLamFaceFF)
+                // out
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(fluxFF)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(fluxScalarFF, fluxScalarFF_v)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(rhs)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(rhsScalar, rhsScalar_v)
             }
         };
 
