@@ -223,7 +223,7 @@ namespace DNDS
 
             // these are shared as results of createMPITypes()
             pPushTypeVec = R.pPushTypeVec;
-            pPullTypeVec = R.pPushTypeVec;
+            pPullTypeVec = R.pPullTypeVec;
 
             // ** comm aux info: comm running structures **
             // PushReqVec;

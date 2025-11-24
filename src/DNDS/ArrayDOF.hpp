@@ -17,7 +17,7 @@ namespace DNDS
         using t_base = ArrayPairDeviceView<B, ArrayEigenMatrix<n_m, n_n>>;
         using t_base::t_base;
 
-        DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(ArrayDofDeviceView, ArrayDofDeviceView)
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayDofDeviceView, ArrayDofDeviceView)
 
         DNDS_DEVICE_CALLABLE ArrayDofDeviceView(const t_base &base_view) : t_base(base_view) {}
         DNDS_DEVICE_CALLABLE ArrayDofDeviceView(t_base &&base_view) : t_base(base_view) {}
@@ -30,8 +30,10 @@ namespace DNDS
         using t_base = ArrayPairDeviceViewConst<B, ArrayEigenMatrix<n_m, n_n>>;
         using t_base::t_base;
 
-        ArrayDofDeviceViewConst(const t_base &base_view) : t_base(base_view) {}
-        ArrayDofDeviceViewConst(t_base &&base_view) : t_base(base_view) {}
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayDofDeviceViewConst, ArrayDofDeviceViewConst)
+        
+        DNDS_DEVICE_CALLABLE ArrayDofDeviceViewConst(const t_base &base_view) : t_base(base_view) {}
+        DNDS_DEVICE_CALLABLE ArrayDofDeviceViewConst(t_base &&base_view) : t_base(base_view) {}
     };
 
     template <int n_m, int n_n>
