@@ -16,8 +16,8 @@
 
 namespace DNDS
 {
-    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(Geom::ElemInfo, )
-    DNDS_DEVICE_STORAGE_INST(Geom::ElemInfo, DeviceBackend::Host, )
+    // DNDS_DEVICE_STORAGE_BASE_DELETER_INST(Geom::ElemInfo, )
+    // DNDS_DEVICE_STORAGE_INST(Geom::ElemInfo, DeviceBackend::Host, )
 }
 
 namespace DNDS::Geom

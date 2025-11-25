@@ -12,7 +12,7 @@ namespace DNDS::EulerP
         EvaluatorDeviceView<B> &self_view,
         typename Evaluator_impl<B>::RecGradient_Arg::Portable &arg,
         index iBnd,
-        int nVars)
+        int nVars, int nVarsScalar)
     {
         using namespace Geom;
         auto &mesh = self_view.fv.mesh;
@@ -33,14 +33,14 @@ namespace DNDS::EulerP
         index iFace = mesh.bnd2face(iBnd, 0);
         index iCell = mesh.bnd2cell(iBnd, 0);
 
-        auto uI = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+        auto uI = [u, uScalar, iCell] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return u(iCell, i);
             else
                 return uScalar[i - nVarsFlow](iCell);
         };
-        auto uOut = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+        auto uOut = [faceBCBuffer, faceBCScalarBuffer, iFace] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return faceBCBuffer(iFace, i);
@@ -59,8 +59,8 @@ namespace DNDS::EulerP
         EvaluatorDeviceView<DeviceBackend::Host> &self_view,
         typename Evaluator_impl<DeviceBackend::Host>::RecGradient_Arg::Portable &arg,
         index iBnd,
-        int nVars);
-        
+        int nVars, int nVarsScalar);
+
     template <DeviceBackend B = DeviceBackend::Host>
     DNDS_DEVICE_CALLABLE void RecGradient_GGRec_Kernel_GG(
         EvaluatorDeviceView<B> &self_view,
@@ -181,7 +181,7 @@ namespace DNDS::EulerP
         // grad.array().rowwise() *= (uOtherMax.array().min(uOtherMin.array())).transpose();
         real alphaB = std::min(uOtherMax(0), uOtherMin(0));
         // alphaB = std::min({alphaB, uOtherMax(I4), uOtherMin(I4)});
-        // alphaB = std::min({alphaB, uOtherMax(Seq123).norm(), uOtherMin(Seq123).norm()});
+        // alphaB = std::min({alphaB, U123(uOtherMax).norm(), U123(uOtherMin).norm()});
 
         grad *= alphaB;
 
@@ -329,28 +329,28 @@ namespace DNDS::EulerP
         // gradI(EigenAll, Seq01234) = u[iPt];
         // for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
         //     gradI(EigenAll, nVarsFlow + iVarS) = uScalarGrad[iVarS][iPt];
-        auto uConsI = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+        auto uConsI = [u, uScalar, iPt] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return u(iPt, i);
             else
                 return uScalar[i - nVarsFlow](iPt);
         };
-        auto uPrimI = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+        auto uPrimI = [uPrim, uScalarPrim, iPt] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return uPrim(iPt, i);
             else
                 return uScalarPrim[i - nVarsFlow](iPt);
         };
-        auto diffUConsI = [&] DNDS_DEVICE_CALLABLE(int d, int i) -> real &
+        auto diffUConsI = [uGrad, uScalarGrad, iPt] DNDS_DEVICE_CALLABLE(int d, int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return uGrad[iPt](d, i);
             else
                 return uScalarGrad[i - nVarsFlow](iPt, d);
         };
-        auto diffUPrimI = [&] DNDS_DEVICE_CALLABLE(int d, int i) -> real &
+        auto diffUPrimI = [uGradPrim, uScalarGradPrim, iPt] DNDS_DEVICE_CALLABLE(int d, int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return uGradPrim[iPt](d, i);
@@ -403,14 +403,14 @@ namespace DNDS::EulerP
         DNDS_EULERP_IMPL_ARG_GET_REF(a)
         DNDS_EULERP_IMPL_ARG_GET_REF(gamma)
 
-        auto uConsI = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+        auto uConsI = [u, uScalar, iPt] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return u(iPt, i);
             else
                 return uScalar[i - nVarsFlow](iPt);
         };
-        auto uPrimI = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+        auto uPrimI = [uPrim, uScalarPrim, iPt] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return uPrim(iPt, i);
@@ -472,8 +472,8 @@ namespace DNDS::EulerP
         tPoint nFace = fv.GetFaceNorm(iFace, -1);
         real volL = fv.GetCellVol(iCellL);
         real volR = volL;
-        real vnL = uL(Seq123).dot(nFace) / uL[0];
-        real vnR = uR(Seq123).dot(nFace) / uR[0];
+        real vnL = U123(uL).dot(nFace) / uL[0];
+        real vnR = U123(uR).dot(nFace) / uR[0];
         real aL = aCell(iCellL);
         real aR = aL;
         real muFace = muCell(iCellL);
@@ -619,14 +619,14 @@ namespace DNDS::EulerP
             }
         }
 
-        auto uL = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+        auto uL = [uFL, uScalarFL, iFace] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return uFL(iFace, i);
             else
                 return uScalarFL[i - nVarsFlow](iFace);
         };
-        auto uR = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+        auto uR = [uFR, uScalarFR, iFace] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return uFR(iFace, i);
@@ -708,28 +708,28 @@ namespace DNDS::EulerP
         tPoint n = fv.GetFaceNorm(iFace, -1);
 
         index iCellRR = iCellR == UnInitIndex ? iCellL : iCellR;
-        auto uLm = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+        auto uLm = [u, uScalar, iCellL] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return u(iCellL, i);
             else
                 return uScalar[i - nVarsFlow](iCellL);
         };
-        auto uRm = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+        auto uRm = [u, uScalar, iCellRR] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return u(iCellRR, i);
             else
                 return uScalar[i - nVarsFlow](iCellRR);
         };
-        auto uLmPrim = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+        auto uLmPrim = [uPrim, uScalarPrim, iCellL] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return uPrim(iCellL, i);
             else
                 return uScalarPrim[i - nVarsFlow](iCellL);
         };
-        auto uRmPrim = [&] DNDS_DEVICE_CALLABLE(int i) -> real &
+        auto uRmPrim = [uPrim, uScalarPrim, iCellRR] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return uPrim(iCellRR, i);
@@ -747,8 +747,8 @@ namespace DNDS::EulerP
         real lam123 = std::abs(veloRoeN);
         real lam4 = std::abs(veloRoeN + aRoe);
 
-        tPoint vL = uPrim[iCellL](Seq123);
-        tPoint vR = uPrim[iCellRR](Seq123);
+        tPoint vL = U123(uPrim[iCellL]);
+        tPoint vR = U123(uPrim[iCellRR]);
         real aL = a(iCellL);
         real aR = a(iCellRR);
         real pL = p(iCellL);

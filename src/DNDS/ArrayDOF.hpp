@@ -31,7 +31,7 @@ namespace DNDS
         using t_base::t_base;
 
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayDofDeviceViewConst, ArrayDofDeviceViewConst)
-        
+
         DNDS_DEVICE_CALLABLE ArrayDofDeviceViewConst(const t_base &base_view) : t_base(base_view) {}
         DNDS_DEVICE_CALLABLE ArrayDofDeviceViewConst(t_base &&base_view) : t_base(base_view) {}
     };
@@ -304,6 +304,7 @@ namespace DNDS
 
 namespace DNDS
 {
+    /*
 #define DNDS_ARRAYDOF_DEVICEVIEW(B, n_m, n_n) ArrayDof<n_m, n_n>::template t_deviceView<B>
 
 #define DNDS_ARRAYDOF_DEVICEVIEW_INST_DELETER_AND_FACTORY(B, n_m, n_n, ext)           \
@@ -345,4 +346,5 @@ namespace DNDS
     DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, DynamicSize - 1, extern)
     DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, NonUniformSize - 1, extern)
 #endif
+*/
 }

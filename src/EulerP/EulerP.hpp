@@ -1,5 +1,6 @@
 #pragma once
 #include "DNDS/ArrayDOF.hpp"
+#include "DNDS/Defines.hpp"
 #include "Eigen/Core"
 
 namespace DNDS::EulerP
@@ -26,7 +27,15 @@ namespace DNDS::EulerP
     using TUVec = ArrayDof<3, 1>;
     using TUVecGrad = ArrayDof<3, 3>;
 
-    static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<nVarsFlow - 1>);
-    static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<nVarsFlow - 2>);
-    static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<nVarsFlow - 3>);
+    template <class TU>
+    DNDS_DEVICE_CALLABLE DNDS_FORCEINLINE auto U123(TU &&v)
+    {
+        return v.template block<3, 1>(1, 0);
+    }
+
+    template <class TU>
+    DNDS_DEVICE_CALLABLE DNDS_FORCEINLINE auto U012(TU &&v)
+    {
+        return v.template block<3, 1>(0, 0);
+    }
 }

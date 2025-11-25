@@ -4,5 +4,5 @@
 namespace DNDS
 {
     DNDS_ARRAY_DOF_OP_FUNC_SEQ_INST(DeviceBackend::Host, 0, template)
-    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, 0, )
+    // DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, 0, )
 }

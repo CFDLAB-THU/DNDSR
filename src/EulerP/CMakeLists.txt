@@ -25,7 +25,10 @@ EulerP_Evaluator.cpp
 EulerP_Evaluator_impl.cpp
 )
 if (DNDS_USE_CUDA)
-  list(APPEND CPPS EulerP_BC.cu)
+    list(APPEND CPPS
+        EulerP_BC.cu
+        EulerP_Evaluator_impl.cu
+    )
 endif()
 
 # file(GLOB EXPLICIT_INST_CPP_FILES "_explicit_instantiation/*.cpp")

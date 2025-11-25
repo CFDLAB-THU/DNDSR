@@ -4,7 +4,7 @@ from DNDSR.Geom.utils import *
 import numpy as np
 
 from DNDSR.EulerP.EulerP_Solver import Solver
-
+import cProfile
 
 def test_solver(
     mpi: DNDS.MPIInfo,
@@ -36,6 +36,7 @@ def test_solver(
     mesh = solver.mesh
     fv = solver.fv
     u.setConstant(np.array([1, 0, 0, 0, 2.5]).reshape(-1, 1))
+
     for iCell in range(mesh.NumCell()):
         x = fv.GetCellBary(iCell)
         if np.linalg.norm(np.array([0.5, 0.5, 0]) - x, np.inf) < 0.25:
@@ -50,6 +51,7 @@ def test_solver(
         # u[iCell] = np.array(
         #     [r, r * uu, r * vv, 0, 2.5 + 0.5 * r * (uu**2 + vv**2)], dtype=np.float64
         # ).reshape(-1, 1)
+
     u.trans.startPersistentPull()
     u.trans.waitPersistentPull()
 
@@ -58,8 +60,10 @@ def test_solver(
     data = solver.data
 
     tInt = 0.01
-    nInt = 40
+    nInt = 10
     t = 0
+    pr = cProfile.Profile()
+    pr.enable()
     for II in range(1, nInt + 1):
         solver.IntegrateDt_ExplicitInterval(t, t + tInt, CFL=0.01)
         t += tInt
@@ -71,6 +75,8 @@ def test_solver(
             uPrimCell=data["uPrim"],
             t=t,
         )
+    pr.disable()
+    pr.dump_stats(f"profile_rank_{mpi.rank}.prof")
 
 
 if __name__ == "__main__":

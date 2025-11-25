@@ -100,13 +100,15 @@ namespace DNDS::Geom
                 DNDS_MAKE_1_MEMBER_REF(face2cell),
                 DNDS_MAKE_1_MEMBER_REF(face2node),
                 DNDS_MAKE_1_MEMBER_REF(face2nodePbi),
-                DNDS_MAKE_1_MEMBER_REF(faceElemInfo));
+                DNDS_MAKE_1_MEMBER_REF(faceElemInfo),
+                DNDS_MAKE_1_MEMBER_REF(face2bnd));
         }
 
         auto device_array_list_C2F()
         {
             return std::make_tuple(
-                DNDS_MAKE_1_MEMBER_REF(cell2face));
+                DNDS_MAKE_1_MEMBER_REF(cell2face),
+                DNDS_MAKE_1_MEMBER_REF(bnd2face));
         }
 
         /// constructed on demand

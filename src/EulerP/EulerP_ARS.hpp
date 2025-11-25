@@ -69,12 +69,12 @@ namespace DNDS::EulerP
     {
         using TVec = Geom::tPoint;
         TU incU = UR - UL;
-        real vnL = UL(Seq123).dot(n) / UL(0);
-        real vnR = UR(Seq123).dot(n) / UR(0);
-        real incU123N = incU(Seq123).dot(n);
+        real vnL = U123(UL).dot(n) / UL(0);
+        real vnR = U123(UR).dot(n) / UR(0);
+        real incU123N = U123(incU).dot(n);
         real veloRoeN = veloRoe.dot(n);
 
-        TVec alpha23V = incU(Seq123) - incU(0) * veloRoe;
+        TVec alpha23V = U123(incU) - incU(0) * veloRoe;
         TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
         real incU4b = incU(I4) - alpha23VT.dot(veloRoe);
         real alpha1 = (phy.params.gamma - 1) / asqrRoe * // TODO: be more generic here!!! (phy.gamma - 1) is for perfect gas

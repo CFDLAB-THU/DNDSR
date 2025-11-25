@@ -3,5 +3,5 @@
 
 namespace DNDS
 {
-    DNDS_DEVICE_STORAGE_INST(Geom::NodePeriodicBits, DeviceBackend::CUDA, )
+    // DNDS_DEVICE_STORAGE_INST(Geom::NodePeriodicBits, DeviceBackend::CUDA, )
 }

@@ -18,7 +18,7 @@ namespace DNDS
             .DNDS_PY_ENUM_CLASS_DeviceBackend_ADD(Custom1);
 
         DeviceBackend_
-            .def(py::init([](const std::string &name)
+            .def(py::init([](const std::string &name) -> DeviceBackend
                           { return device_backend_name_to_enum(name); }));
     }
 }

@@ -706,8 +706,11 @@ namespace DNDS
 
 #if defined(_MSC_VER)
 #    define DNDS_RESTRICT __restrict
+#    define DNDS_FORCEINLINE __forceinline
 #elif defined(__GNUC__) || defined(__clang__)
 #    define DNDS_RESTRICT __restrict__
+#    define DNDS_FORCEINLINE inline __attribute__((always_inline))
 #else
 #    define DNDS_RESTRICT
+#    define DNDS_FORCEINLINE
 #endif

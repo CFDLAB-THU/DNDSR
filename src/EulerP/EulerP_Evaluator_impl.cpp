@@ -1,8 +1,6 @@
 #include "DNDS/Defines.hpp"
 #include "DNDS/DeviceStorage.hpp"
 #include "EulerP/EulerP.hpp"
-#include "EulerP/EulerP_Physics.hpp"
-#include "Geom/BoundaryCondition.hpp"
 #include "EulerP_Evaluator_impl.hpp"
 #include "EulerP_Evaluator_impl_common.hxx"
 
@@ -39,7 +37,7 @@ namespace DNDS::EulerP
         // bc handling
         for (index iBnd = 0; iBnd < mesh.NumBnd(); iBnd++)
         {
-            RecGradient_GGRec_Kernel_BndVal(self_view, arg.portable, iBnd, nVars);
+            RecGradient_GGRec_Kernel_BndVal(self_view, arg.portable, iBnd, nVars, nVarsScalar);
         }
 
         /*********************** */

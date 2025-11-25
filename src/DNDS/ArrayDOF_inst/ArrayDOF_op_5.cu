@@ -5,5 +5,5 @@
 namespace DNDS
 {
     DNDS_ARRAY_DOF_OP_FUNC_SEQ_INST(DeviceBackend::CUDA, 4, template)
-    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, 4, )
+    // DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, 4, )
 }

@@ -13,7 +13,7 @@ templates = {
 namespace DNDS
 {{
     DNDS_ARRAY_DOF_OP_FUNC_SEQ_INST(DeviceBackend::Host, {offset}, template)
-    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, {offset}, )
+    // DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, {offset}, )
 }}
     """,
     (
@@ -27,7 +27,7 @@ namespace DNDS
 namespace DNDS
 {{
     DNDS_ARRAY_DOF_OP_FUNC_SEQ_INST(DeviceBackend::CUDA, {offset}, template)
-    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, {offset}, )
+    // DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, {offset}, )
 }}
     """,
 }

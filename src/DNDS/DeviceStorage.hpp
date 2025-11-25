@@ -3,6 +3,7 @@
 #include "DNDS/Errors.hpp"
 #include "Defines.hpp"
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <type_traits>
 
@@ -66,24 +67,14 @@ namespace DNDS
     }
 
     class DeviceStorageBase;
-    template <typename T>
     void deviceStorageBase_deleter(DeviceStorageBase *p); // safe deleter to maintain cross-DLL safety
-#define DNDS_DEVICE_STORAGE_BASE_DELETER_INST(T, ext) \
-    ext template void deviceStorageBase_deleter<T>(DeviceStorageBase * p);
-
-    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(int, extern)
-    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(double, extern)
-    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(rowsize, extern)
-    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(real, extern)
-    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(index, extern)
 
     using t_supDeviceStorageBase = std::unique_ptr<DeviceStorageBase, std::function<void(DeviceStorageBase *)>>;
     using t_sspDeviceStorageBase = std::shared_ptr<DeviceStorageBase>;
 
-    template <typename T>
-    t_supDeviceStorageBase null_supDeviceStorageBase()
+    inline t_supDeviceStorageBase null_supDeviceStorageBase()
     {
-        return {nullptr, deviceStorageBase_deleter<T>};
+        return {nullptr, deviceStorageBase_deleter};
     }
 
     class DeviceStorageBase
@@ -104,83 +95,69 @@ namespace DNDS
         virtual ~DeviceStorageBase();
     };
 
-    template <typename T, DeviceBackend B>
+    template <DeviceBackend B>
     class DeviceStorage;
 
-    template <typename T, DeviceBackend B>
+    template <DeviceBackend B>
     struct device_storage_factory
     {
-        static t_supDeviceStorageBase device_storage_create_unique(DeviceBackend backend, size_t n_elem);
-        static t_sspDeviceStorageBase device_storage_create_shared(DeviceBackend backend, size_t n_elem);
+        static t_supDeviceStorageBase device_storage_create_unique(DeviceBackend backend, size_t n_bytes);
+        static t_sspDeviceStorageBase device_storage_create_shared(DeviceBackend backend, size_t n_bytes);
     };
 
-    template <typename T>
-    struct device_storage_factory<T, DeviceBackend::Host>
+    template <>
+    struct device_storage_factory<DeviceBackend::Host>
     {
-        static t_supDeviceStorageBase device_storage_create_unique(DeviceBackend backend, size_t n_elem);
-        static t_sspDeviceStorageBase device_storage_create_shared(DeviceBackend backend, size_t n_elem);
+        static t_supDeviceStorageBase device_storage_create_unique(DeviceBackend backend, size_t n_bytes);
+        static t_sspDeviceStorageBase device_storage_create_shared(DeviceBackend backend, size_t n_bytes);
     };
-
-#define DNDS_DEVICE_STORAGE_INST(T, B, ext)                                                                                               \
-    ext template t_supDeviceStorageBase device_storage_factory<T, B>::device_storage_create_unique(DeviceBackend backend, size_t n_elem); \
-    ext template t_sspDeviceStorageBase device_storage_factory<T, B>::device_storage_create_shared(DeviceBackend backend, size_t n_elem);
-
-    DNDS_DEVICE_STORAGE_INST(int, DeviceBackend::Host, extern)
-    DNDS_DEVICE_STORAGE_INST(double, DeviceBackend::Host, extern)
-    DNDS_DEVICE_STORAGE_INST(rowsize, DeviceBackend::Host, extern)
-    DNDS_DEVICE_STORAGE_INST(real, DeviceBackend::Host, extern)
-    DNDS_DEVICE_STORAGE_INST(index, DeviceBackend::Host, extern)
-
+/*
+    #define DNDS_DEVICE_STORAGE_INST(T, B, ext)                                                                                               \
+         ext template t_supDeviceStorageBase device_storage_factory<T, B>::device_storage_create_unique(DeviceBackend backend, size_t n_bytes); \
+        ext template t_sspDeviceStorageBase device_storage_factory<T, B>::device_storage_create_shared(DeviceBackend backend, size_t n_bytes);
+*/
 #ifdef DNDS_USE_CUDA
-    template <typename T>
-    struct device_storage_factory<T, DeviceBackend::CUDA>
+    template <>
+    struct device_storage_factory<DeviceBackend::CUDA>
     {
-        static t_supDeviceStorageBase device_storage_create_unique(DeviceBackend backend, size_t n_elem);
-        static t_sspDeviceStorageBase device_storage_create_shared(DeviceBackend backend, size_t n_elem);
+        static t_supDeviceStorageBase device_storage_create_unique(DeviceBackend backend, size_t n_bytes);
+        static t_sspDeviceStorageBase device_storage_create_shared(DeviceBackend backend, size_t n_bytes);
     };
-    // this is helper to extern-declare or instantiate the implementation of CUDA storage of array element T
-    DNDS_DEVICE_STORAGE_INST(int, DeviceBackend::CUDA, extern)
-    DNDS_DEVICE_STORAGE_INST(double, DeviceBackend::CUDA, extern)
-    DNDS_DEVICE_STORAGE_INST(rowsize, DeviceBackend::CUDA, extern)
-    DNDS_DEVICE_STORAGE_INST(real, DeviceBackend::CUDA, extern)
-    DNDS_DEVICE_STORAGE_INST(index, DeviceBackend::CUDA, extern)
 
 #endif
 
-    template <typename T>
-    t_supDeviceStorageBase device_storage_create(DeviceBackend backend, size_t n_elem)
+    inline t_supDeviceStorageBase device_storage_create(DeviceBackend backend, size_t n_bytes)
     {
         switch (backend)
         {
         case DeviceBackend::Host:
             // return std::make_unique<DeviceStorage<T, DeviceBackend::Host>>(n_elem);
-            return device_storage_factory<T, DeviceBackend::Host>::device_storage_create_unique(backend, n_elem);
+            return device_storage_factory<DeviceBackend::Host>::device_storage_create_unique(backend, n_bytes);
 #ifdef DNDS_USE_CUDA
         case DeviceBackend::CUDA:
-            return device_storage_factory<T, DeviceBackend::CUDA>::device_storage_create_unique(backend, n_elem);
+            return device_storage_factory<DeviceBackend::CUDA>::device_storage_create_unique(backend, n_bytes);
 #endif
         case DNDS::DeviceBackend::Custom1:
         {
             DNDS_assert_info(false, "not implemented");
-            return null_supDeviceStorageBase<T>();
+            return null_supDeviceStorageBase();
         case DeviceBackend::Unknown:
         default:
-            return null_supDeviceStorageBase<T>();
+            return null_supDeviceStorageBase();
         }
         }
     }
 
-    template <typename T>
-    t_sspDeviceStorageBase device_storage_create_shared(DeviceBackend backend, size_t n_elem)
+    inline t_sspDeviceStorageBase device_storage_create_shared(DeviceBackend backend, size_t n_bytes)
     {
         switch (backend)
         {
 
         case DeviceBackend::Host:
-            return device_storage_factory<T, DeviceBackend::Host>::device_storage_create_shared(backend, n_elem);
+            return device_storage_factory<DeviceBackend::Host>::device_storage_create_shared(backend, n_bytes);
 #ifdef DNDS_USE_CUDA
         case DeviceBackend::CUDA:
-            return device_storage_factory<T, DeviceBackend::CUDA>::device_storage_create_shared(backend, n_elem);
+            return device_storage_factory<DeviceBackend::CUDA>::device_storage_create_shared(backend, n_bytes);
 #endif
         case DNDS::DeviceBackend::Custom1:
         {
@@ -193,7 +170,7 @@ namespace DNDS
         }
     }
 
-    template <DeviceBackend B, typename T, typename TSize = size_t>
+    template <DeviceBackend B, typename T, typename TSize = int64_t>
     class vector_DeviceView
     {
         static_assert(std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>,
@@ -227,7 +204,7 @@ namespace DNDS
         using t_base = std::vector<T>;
         using t_base::t_base;
 
-        t_supDeviceStorageBase deviceStorage = null_supDeviceStorageBase<T>();
+        t_supDeviceStorageBase deviceStorage = null_supDeviceStorageBase();
 
         DNDS_HOST host_device_vector<T> &operator=(const std::vector<T> &v)
         {
@@ -245,10 +222,11 @@ namespace DNDS
 
         void to_device(DeviceBackend backend = DeviceBackend::Host)
         {
+            DNDS_assert_info(DeviceBackend::Unknown != backend, "cannot to_device to Unknown");
             if (!deviceStorage ||
                 deviceStorage->bytes() != this->size() * sizeof(T) || // size change
                 deviceStorage->backend() != backend)                  // backend change
-                deviceStorage = device_storage_create<T>(backend, this->size());
+                deviceStorage = device_storage_create(backend, this->size() * sizeof(T));
             deviceStorage->copy_host_to_device(this->data(), this->size() * sizeof(T));
         }
 
@@ -263,9 +241,9 @@ namespace DNDS
             return deviceStorage ? reinterpret_cast<T *>(deviceStorage->raw_ptr()) : nullptr;
         }
 
-        template <DeviceBackend B, typename TSize = size_t>
+        template <DeviceBackend B, typename TSize = int64_t>
         using t_deviceView = vector_DeviceView<B, T, TSize>;
-        template <DeviceBackend B, typename TSize = size_t>
+        template <DeviceBackend B, typename TSize = int64_t>
         t_deviceView<B, TSize> deviceView()
         {
             DNDS_assert_info(this->device() == B || (B == DeviceBackend::Host || B == DeviceBackend::Unknown),
@@ -286,13 +264,13 @@ namespace DNDS
             if (this == &R)
                 return *this;
             this->t_base::operator=(R);
-            this->deviceStorage = R.deviceStorage ? R.deviceStorage->clone() : null_supDeviceStorageBase<T>();
+            this->deviceStorage = R.deviceStorage ? R.deviceStorage->clone() : null_supDeviceStorageBase();
             return *this;
         }
 
         host_device_vector(const host_device_vector<T> &R) : t_base(R)
         {
-            this->deviceStorage = R.deviceStorage ? R.deviceStorage->clone() : null_supDeviceStorageBase<T>();
+            this->deviceStorage = R.deviceStorage ? R.deviceStorage->clone() : null_supDeviceStorageBase();
         }
 
         DeviceBackend device()

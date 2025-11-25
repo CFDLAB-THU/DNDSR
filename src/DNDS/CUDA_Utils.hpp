@@ -3,6 +3,10 @@
 #include "DNDS/Errors.hpp"
 #include "Defines.hpp"
 #include "ArrayBasic.hpp"
+#include <cstdint>
+#include <limits>
+#include <string>
+#include <tuple>
 #include <type_traits>
 
 #ifdef DNDS_USE_CUDA
@@ -13,6 +17,8 @@
 #    include <thrust/host_vector.h>
 #    include <thrust/device_vector.h>
 #    include <Eigen/Dense>
+
+#    define DNDS_CUDA_1D_TID_GLOBAL_INDEX ((index)blockIdx.x * (index)blockDim.x + (index)threadIdx.x)
 
 namespace DNDS::CUDA
 {
@@ -32,8 +38,21 @@ namespace DNDS::CUDA
         T *get() { return dev.get(); }
     };
 
+#    define DNDS_CUDA_DEVICE_VIEW_COPY_OBJ(obj) \
+        auto obj##_device_copy = ::DNDS::CUDA::DeviceObject<std::remove_cv_t<std::remove_reference_t<decltype(obj)>>>(obj);
 #    define DNDS_CUDA_DEVICE_VIEW_TMP_COPY(obj) \
         ::DNDS::CUDA::DeviceObject<std::remove_cv_t<std::remove_reference_t<decltype(obj)>>>(obj).get()
+
+    inline auto calckernelSizeSimple(index total_threads, uint32_t threadsPerBlock)
+    {
+        index result = index(total_threads + threadsPerBlock - 1) / index(threadsPerBlock);
+        uint32_t blocksPerGrid = 0;
+        if (result > 0 && result <= std::numeric_limits<uint32_t>::max())
+            blocksPerGrid = result;
+        else
+            DNDS_assert_info(false, "too many blocks: " + std::to_string(result));
+        return std::make_tuple(blocksPerGrid, threadsPerBlock);
+    }
 }
 
 #endif

@@ -53,11 +53,11 @@ namespace DNDS::Geom
 }
 namespace DNDS
 {
-    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(Geom::ElemInfo, extern)
-    DNDS_DEVICE_STORAGE_INST(Geom::ElemInfo, DeviceBackend::Host, extern)
-#ifdef DNDS_USE_CUDA
-    DNDS_DEVICE_STORAGE_INST(Geom::ElemInfo, DeviceBackend::CUDA, extern)
-#endif
+//     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(Geom::ElemInfo, extern)
+//     DNDS_DEVICE_STORAGE_INST(Geom::ElemInfo, DeviceBackend::Host, extern)
+// #ifdef DNDS_USE_CUDA
+//     DNDS_DEVICE_STORAGE_INST(Geom::ElemInfo, DeviceBackend::CUDA, extern)
+// #endif
 }
 namespace DNDS::Geom
 {
@@ -244,6 +244,8 @@ namespace DNDS::Geom
             DNDS_COPY_MEMBER(mesh, adjC2FState);
             DNDS_COPY_MEMBER(mesh, adjN2CBState);
             // DNDS_COPY_MEMBER(mesh, adjC2CFaceState);
+
+            
 
             if (adjPrimaryState)
                 create_view_primary(mesh);
