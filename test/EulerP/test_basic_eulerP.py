@@ -116,21 +116,36 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo):
         x = fv.GetCellBary(iCell)
         if np.linalg.norm(np.array([0.5, 0.5, 0]) - x, 2) < 0.25:
             u[iCell] = np.array([1, 4, 0, 0, 10.5], dtype=np.float64).reshape(-1, 1)
-            
-        # uu = 1
-        # vv = 1
-        # r = 1 + 0.1 * np.cos(x[0] * 2 * np.pi) * np.cos(x[1] * 2 * np.pi)
-        # u[iCell] = np.array(
-        #     [r, r * uu, r * vv, 0, 2.5 + 0.5 * r * (uu**2 + vv**2)], dtype=np.float64
-        # ).reshape(-1, 1)
+
+        uu = 1
+        vv = 1
+        r = 1 + 0.1 * np.cos(x[0] * 2 * np.pi) * np.cos(x[1] * 2 * np.pi)
+        u[iCell] = np.array(
+            [r, r * uu, r * vv, 0, 2.5 + 0.5 * r * (uu**2 + vv**2)], dtype=np.float64
+        ).reshape(-1, 1)
+
+    # mesh.to_device("CUDA")
+    # fv.to_device("CUDA")
+    # eval.to_device("CUDA")
+    # eval_device = eval.device()
+    # print(eval_device)
+    # for n, a in data.items():
+    #     a.to_device("CUDA")
+        
     data["uGrad"].setConstant(100.0)
+    print(data["uGrad"].norm2())
     RecGradient_Arg = eval.RecGradient_Arg()
     RecGradient_Arg.u = data["u"]
     RecGradient_Arg.uGrad = data["uGrad"]
     RecGradient_Arg.uScalar = []
     RecGradient_Arg.uScalarGrad = []
-
+    
+    print("EREE")
     eval.RecGradient(RecGradient_Arg)
+
+    uGrad_norm = data["uGrad"].norm2()
+    print(f"uGrad_norm, {uGrad_norm}")
+    return
 
     data["p"] = s.clone()
     data["T"] = s.clone()

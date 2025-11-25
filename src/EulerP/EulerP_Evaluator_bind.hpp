@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DNDS/Defines_bind.hpp"
+#include "DNDS/DeviceStorage.hpp"
 #include "DNDS/ObjectUtils.hpp"
 #include "EulerP_Evaluator.hpp"
 #include <pybind11/pytypes.h>
@@ -19,6 +20,13 @@ namespace DNDS::EulerP
             .def_readwrite("fv", &T::fv)
             .def_readwrite("bcHandler", &T::bcHandler)
             .def_readwrite("physics", &T::physics);
+        T_
+            .def("to_host", &T::to_host);
+        T_
+            .def("to_device", [](T &self, const std::string &B)
+                 { self.to_device(device_backend_name_to_enum(B)); });
+        T_
+            .def("device", &T::device);
 
         T_
             .def("PrintDataVTKHDF", &T::PrintDataVTKHDF,

@@ -38,6 +38,7 @@ namespace DNDS::EulerP
     class Evaluator
     {
     public:
+        using t_self = Evaluator;
         using t_fv = ssp<CFV::FiniteVolume>;
         t_fv fv;
         using t_bcHandler = ssp<BCHandler>;
@@ -63,11 +64,15 @@ namespace DNDS::EulerP
                 DNDS_MAKE_SSP(u.son, fv->mesh->getMPI());
             if (u.son->Size() != fv->mesh->NumFaceGhost())
                 u.son->Resize(fv->mesh->NumFaceGhost(), nVarsFlow, 1);
+            auto B = fv->device();
+            if (B != DeviceBackend::Unknown)
+                u.to_device(B);
         }
 
         void BuildFaceBufferDofScalar(TUScalar &u)
         {
             // TODO: upgrade to matching face quad instead
+            DNDS_assert(fv);
             if (!u.father)
                 DNDS_MAKE_SSP(u.father, fv->mesh->getMPI());
             if (u.father->Size() != fv->mesh->NumFace())
@@ -77,6 +82,9 @@ namespace DNDS::EulerP
                 DNDS_MAKE_SSP(u.son, fv->mesh->getMPI());
             if (u.son->Size() != fv->mesh->NumFaceGhost())
                 u.son->Resize(fv->mesh->NumFaceGhost(), 1, 1);
+            auto B = fv->device();
+            if (B != DeviceBackend::Unknown)
+                u.to_device(B);
         }
 
         void PrepareFaceBuffer(int nVarsScalar)
@@ -90,6 +98,15 @@ namespace DNDS::EulerP
                 BuildFaceBufferDofScalar(uS);
             for (auto &uS : uScalar_face_bufferR)
                 BuildFaceBufferDofScalar(uS);
+        }
+
+        static auto device_array_list_Buffer()
+        {
+            return std::make_tuple(
+                DNDS_MAKE_1_MEMBER_PTR_SELF(u_face_bufferL),
+                DNDS_MAKE_1_MEMBER_PTR_SELF(u_face_bufferR),
+                DNDS_MAKE_1_MEMBER_PTR_SELF(uScalar_face_bufferL),
+                DNDS_MAKE_1_MEMBER_PTR_SELF(uScalar_face_bufferR));
         }
 
         Evaluator(
@@ -267,6 +284,13 @@ namespace DNDS::EulerP
             fv->to_host();
             bcHandler->to_host();
             physics->to_host();
+
+            u_face_bufferL.to_host();
+            u_face_bufferR.to_host();
+            for (auto &a : uScalar_face_bufferL)
+                a.to_host();
+            for (auto &a : uScalar_face_bufferR)
+                a.to_host();
         }
 
         void to_device(DeviceBackend B)
@@ -274,6 +298,12 @@ namespace DNDS::EulerP
             fv->to_device(B);
             bcHandler->to_device(B);
             physics->to_device(B);
+            u_face_bufferL.to_device(B);
+            u_face_bufferR.to_device(B);
+            for (auto &a : uScalar_face_bufferL)
+                a.to_device(B);
+            for (auto &a : uScalar_face_bufferR)
+                a.to_device(B);
         }
 
         /****************************** */

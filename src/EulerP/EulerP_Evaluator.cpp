@@ -32,7 +32,20 @@ namespace DNDS::EulerP
 
             Evaluator_impl<B>::RecGradient_GGRec(impl_arg);
 
-            Evaluator_impl<B>::RecGradient_BarthLimiter(impl_arg);
+            // Evaluator_impl<B>::RecGradient_BarthLimiter(impl_arg);
+        }
+        else if (B == DeviceBackend::CUDA)
+        {
+            constexpr DeviceBackend B = DeviceBackend::CUDA;
+            Evaluator_impl<B>::RecGradient_Arg impl_arg(*this, arg);
+
+            arg.u->trans.waitPersistentPull();
+            for (auto &uS : arg.uScalar)
+                uS->trans.waitPersistentPull();
+
+            Evaluator_impl<B>::RecGradient_GGRec(impl_arg);
+
+            // Evaluator_impl<B>::RecGradient_BarthLimiter(impl_arg);
         }
         else
             DNDS_assert(false);
@@ -51,12 +64,12 @@ namespace DNDS::EulerP
             typename Evaluator_impl<B>::Cons2PrimMu_Arg impl_arg(*this, arg);
 
             // todo: conditionally disable comm
-            arg.u->trans.waitPersistentPull();
-            for (auto &uS : arg.uScalar)
-                uS->trans.waitPersistentPull();
-            arg.uGrad->trans.waitPersistentPull();
-            for (auto &uS : arg.uScalarGrad)
-                uS->trans.waitPersistentPull();
+            // arg.u->trans.waitPersistentPull();
+            // for (auto &uS : arg.uScalar)
+            //     uS->trans.waitPersistentPull();
+            // arg.uGrad->trans.waitPersistentPull();
+            // for (auto &uS : arg.uScalarGrad)
+            //     uS->trans.waitPersistentPull();
 
             Evaluator_impl<B>::Cons2PrimMu(impl_arg);
 
@@ -93,9 +106,9 @@ namespace DNDS::EulerP
             typename Evaluator_impl<B>::Cons2Prim_Arg impl_arg(*this, arg);
 
             // todo: conditionally disable comm
-            arg.u->trans.waitPersistentPull();
-            for (auto &uS : arg.uScalar)
-                uS->trans.waitPersistentPull();
+            // arg.u->trans.waitPersistentPull();
+            // for (auto &uS : arg.uScalar)
+            //     uS->trans.waitPersistentPull();
 
             Evaluator_impl<B>::Cons2Prim(impl_arg);
 

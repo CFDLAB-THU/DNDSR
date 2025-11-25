@@ -385,10 +385,10 @@ namespace DNDS::EulerP
 
 namespace DNDS
 {
-    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(EulerP::BC_DeviceView<DeviceBackend::Host>, extern)
-    DNDS_DEVICE_STORAGE_INST(EulerP::BC_DeviceView<DeviceBackend::Host>, DeviceBackend::Host, extern)
-#ifdef DNDS_USE_CUDA
-    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(EulerP::BC_DeviceView<DeviceBackend::CUDA>, extern)
-    DNDS_DEVICE_STORAGE_INST(EulerP::BC_DeviceView<DeviceBackend::CUDA>, DeviceBackend::CUDA, extern)
-#endif
+//     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(EulerP::BC_DeviceView<DeviceBackend::Host>, extern)
+//     DNDS_DEVICE_STORAGE_INST(EulerP::BC_DeviceView<DeviceBackend::Host>, DeviceBackend::Host, extern)
+// #ifdef DNDS_USE_CUDA
+//     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(EulerP::BC_DeviceView<DeviceBackend::CUDA>, extern)
+//     DNDS_DEVICE_STORAGE_INST(EulerP::BC_DeviceView<DeviceBackend::CUDA>, DeviceBackend::CUDA, extern)
+// #endif
 }
