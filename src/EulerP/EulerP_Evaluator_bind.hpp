@@ -15,6 +15,10 @@ namespace DNDS::EulerP
             m, "Evaluator");
 
         T_.def(py::init<T::t_fv, T::t_bcHandler, T::t_physics>());
+        T_.def("setConfig", [](T &self, const nlohmann::json &c)
+               { self.set_config(c); });
+        T_.def("getConfig", [](T &self) -> nlohmann::json
+               { return self.get_config(); });
 
         T_
             .def_readwrite("fv", &T::fv)

@@ -6,6 +6,7 @@
 #include "IndexMapping.hpp"
 #include "Profiling.hpp"
 #include <utility>
+#include "VectorUtils.hpp"
 
 namespace DNDS
 {
@@ -93,11 +94,11 @@ namespace DNDS
 
         void AssertDataType()
         {
-            DNDS_assert(dataType != MPI_DATATYPE_NULL);
+            DNDS_check_throw(dataType != MPI_DATATYPE_NULL);
             MPI_Aint lb;
             MPI_Aint extent;
             MPI_Type_get_extent(dataType, &lb, &extent);
-            DNDS_assert(lb == 0 && extent * typeMult == sizeof(T));
+            DNDS_check_throw(lb == 0 && extent * typeMult == sizeof(T));
         }
 
         /**
@@ -110,7 +111,7 @@ namespace DNDS
          */
         bool AssertConsistent()
         {
-            DNDS_assert(mpi.comm != MPI_COMM_NULL);
+            DNDS_check_throw(mpi.comm != MPI_COMM_NULL);
             MPI::Barrier(mpi.comm); // must be globally existent
             if constexpr (_dataLayout == TABLE_Max ||
                           _dataLayout == TABLE_Fixed) // must have the same dynamic size
@@ -121,13 +122,13 @@ namespace DNDS
                 static_assert(sizeof(MPI_int) == sizeof(rowsize));
                 MPI::Allgather(&rowsizeC, 1, MPI_INT, uniformSizes.data(), 1, MPI_INT, mpi.comm);
                 for (auto i : uniformSizes)
-                    DNDS_assert_info(i == rowsizeC, "sizes not uniform across procs");
+                    DNDS_check_throw_info(i == rowsizeC, "sizes not uniform across procs");
             }
 
             std::vector<MPI_int> uniform_typeMult(mpi.size);
             MPI::Allgather(&typeMult, 1, MPI_INT, uniform_typeMult.data(), 1, MPI_INT, mpi.comm);
             for (auto i : uniform_typeMult)
-                DNDS_assert_info(i == typeMult, "typeMults not uniform across procs");
+                DNDS_check_throw_info(i == typeMult, "typeMults not uniform across procs");
 
             return true; // currently all errors aborts inside
         }
@@ -135,7 +136,7 @@ namespace DNDS
         /// @warning must collectively call
         void createGlobalMapping() // collective;
         {
-            DNDS_assert_info(mpi.comm != MPI_COMM_NULL, "MPI unset");
+            DNDS_check_throw_info(mpi.comm != MPI_COMM_NULL, "MPI unset");
             // phase1.1: create localGlobal mapping (broadcast)
             pLGlobalMapping = std::make_shared<GlobalOffsetsMapping>();
             pLGlobalMapping->setMPIAlignBcast(mpi, this->Size());
@@ -265,15 +266,15 @@ namespace DNDS
 
         void setFatherSon(const t_pArray &n_father, const t_pArray &n_son)
         {
-            DNDS_assert(n_father && n_son);
+            DNDS_check_throw(n_father && n_son);
             father = n_father;
             son = n_son;
             mpi = father->getMPI();
-            DNDS_assert_info(son->getMPI() == father->getMPI(), "MPI inconsistent between father & son");
-            DNDS_assert_info(father->getDataType() == son->getDataType(), "MPI datatype inconsistent between father & son");
-            DNDS_assert_info(father->getTypeMult() == son->getTypeMult(), "MPI datatype multiplication inconsistent between father & son");
-            DNDS_assert_info(father->getDataType() != MPI_DATATYPE_NULL, "MPI datatype invalid");
-            DNDS_assert_info(father->getTypeMult() > 0, "MPI datatype multiplication invalid");
+            DNDS_check_throw_info(son->getMPI() == father->getMPI(), "MPI inconsistent between father & son");
+            DNDS_check_throw_info(father->getDataType() == son->getDataType(), "MPI datatype inconsistent between father & son");
+            DNDS_check_throw_info(father->getTypeMult() == son->getTypeMult(), "MPI datatype multiplication inconsistent between father & son");
+            DNDS_check_throw_info(father->getDataType() != MPI_DATATYPE_NULL, "MPI datatype invalid");
+            DNDS_check_throw_info(father->getTypeMult() > 0, "MPI datatype multiplication invalid");
             pLGhostMapping.reset();
             pLGlobalMapping.reset();
             pLGlobalMapping = father->pLGlobalMapping;
@@ -282,11 +283,11 @@ namespace DNDS
         template <class TRArrayTrans>
         void BorrowGGIndexing(const TRArrayTrans &RArrayTrans)
         {
-            // DNDS_assert(father && Rarray.father); // Rarray's father is not visible...
-            // DNDS_assert(father->obtainTotalSize() == Rarray.father->obtainTotalSize());
-            DNDS_assert(RArrayTrans.father && father);
-            DNDS_assert(RArrayTrans.pLGhostMapping && RArrayTrans.pLGlobalMapping);
-            DNDS_assert(RArrayTrans.father->Size() == father->Size());
+            // DNDS_check_throw(father && Rarray.father); // Rarray's father is not visible...
+            // DNDS_check_throw(father->obtainTotalSize() == Rarray.father->obtainTotalSize());
+            DNDS_check_throw(RArrayTrans.father && father);
+            DNDS_check_throw(RArrayTrans.pLGhostMapping && RArrayTrans.pLGlobalMapping);
+            DNDS_check_throw(RArrayTrans.father->Size() == father->Size());
             pLGhostMapping = RArrayTrans.pLGhostMapping;
             pLGlobalMapping = RArrayTrans.pLGlobalMapping;
             father->pLGlobalMapping = RArrayTrans.pLGlobalMapping;
@@ -307,8 +308,8 @@ namespace DNDS
         template <class TPullSet>
         void createGhostMapping(TPullSet &&pullingIndexGlobal) // collective;
         {
-            DNDS_assert(bool(father) && bool(son));
-            DNDS_assert_info(bool(father->pLGlobalMapping), "Father needs to createGlobalMapping");
+            DNDS_check_throw(bool(father) && bool(son));
+            DNDS_check_throw_info(bool(father->pLGlobalMapping), "Father needs to createGlobalMapping");
             pLGlobalMapping = father->pLGlobalMapping;
             // phase1.2: count how many to pull and allocate the localGhost mapping, fill the mapping
             // counting could overflow
@@ -329,8 +330,8 @@ namespace DNDS
         template <class TPushSet, class TPushStart>
         void createGhostMapping(TPushSet &&pushingIndexLocal, TPushStart &&pushStarts) // collective;
         {
-            DNDS_assert(bool(father) && bool(son));
-            DNDS_assert_info(bool(father->pLGlobalMapping), "Father needs to createGlobalMapping");
+            DNDS_check_throw(bool(father) && bool(son));
+            DNDS_check_throw_info(bool(father->pLGlobalMapping), "Father needs to createGlobalMapping");
             pLGlobalMapping = father->pLGlobalMapping;
             // phase1.2: calculate over pushing
             // counting could overflow
@@ -350,8 +351,8 @@ namespace DNDS
          */
         void createMPITypes() // collective;
         {
-            DNDS_assert(bool(father) && bool(son));
-            DNDS_assert(pLGlobalMapping && pLGhostMapping);
+            DNDS_check_throw(bool(father) && bool(son));
+            DNDS_check_throw(pLGlobalMapping && pLGhostMapping);
             commTypeCurrent = MPI::CommStrategy::Instance().GetArrayStrategy();
             if (commTypeCurrent == MPI::CommStrategy::HIndexed)
                 father->Compress(); //! assure CSR is in compressed form
@@ -367,7 +368,7 @@ namespace DNDS
 
             pushingDisps.resize(nSend); // pushing disps in bytes
 
-            DNDS_assert(nSend < DNDS_INDEX_MAX);
+            DNDS_check_throw(nSend < DNDS_INDEX_MAX);
             auto fatherDataStart = father->operator[](0);
             if (commTypeCurrent == MPI::CommStrategy::InSituPack)
                 pushingIndexLocal.resize(nSend);
@@ -376,7 +377,7 @@ namespace DNDS
                 MPI_int rank = -1;
                 index loc = -1;
                 bool found = pLGhostMapping->search(pLGhostMapping->pushingIndexGlobal[i], rank, loc);
-                DNDS_assert_info(found && rank == -1, "must be at local main");                  // must be at local main
+                DNDS_check_throw_info(found && rank == -1, "must be at local main");             // must be at local main
                 pushingDisps[i] = (father->operator[](loc) - father->operator[](0)) * sizeof(T); //* in bytes
                 if constexpr (_dataLayout == CSR)
                     pushingSizes[i] = father->RowSizeField(loc) * father->getTypeMult();
@@ -398,7 +399,7 @@ namespace DNDS
             {
                 auto &LGhostMapping = *pLGhostMapping;
                 index ghostArraySiz = LGhostMapping.ghostStart[LGhostMapping.ghostStart.size() - 1];
-                DNDS_assert(mpi.size == LGhostMapping.ghostStart.size() - 1);
+                DNDS_check_throw(mpi.size == LGhostMapping.ghostStart.size() - 1);
                 if constexpr (_dataLayout == TABLE_StaticFixed)
                 {
                     son->Resize(ghostArraySiz);
@@ -472,10 +473,8 @@ namespace DNDS
                     // push
                     MPI_int pushNumber = pLGhostMapping->pushIndexSizes[r];
                     // std::cout << "PN" << pushNumber << std::endl;
-                    MPI_Aint *pPushDisps;
-                    MPI_int *pPushSizes;
-                    pPushDisps = pushingDisps.data() + pLGhostMapping->pushIndexStarts[r];
-                    pPushSizes = pushingSizes.data() + pLGhostMapping->pushIndexStarts[r];
+                    MPI_Aint *pPushDisps = pushingDisps.data() + pLGhostMapping->pushIndexStarts[r];
+                    MPI_int *pPushSizes = pushingSizes.data() + pLGhostMapping->pushIndexStarts[r];
                     index sumPushSizes = 0; // using upgraded integer
                     for (MPI_int i = 0; i < pushNumber; i++)
                         sumPushSizes += pPushSizes[i];
@@ -494,8 +493,12 @@ namespace DNDS
                         // std::cout << "=== PUSH TYPE : " << mpi.rank << " from " << r << std::endl;
 
                         MPI_Datatype dtype;
-
-                        MPI_Type_create_hindexed(pushNumber, pPushSizes, pPushDisps, father->getDataType(), &dtype);
+                        int sizeof_T = MPI_UNDEFINED;
+                        MPI_Type_size(father->getDataType(), &sizeof_T);
+                        DNDS_check_throw(sizeof_T != MPI_UNDEFINED);
+                        auto [n_number, new_Sizes, new_Disps] =
+                            optimize_hindexed_layout(pushNumber, pPushSizes, pPushDisps, sizeof_T);
+                        MPI_Type_create_hindexed(n_number, new_Sizes.data(), new_Disps.data(), father->getDataType(), &dtype);
                         // MPI_Type_create_hindexed(PushDispsMPI.size(), PushSizesMPI.data(), PushDispsMPI.data(), father->getDataType(), &dtype);
 
                         MPI_Type_commit(&dtype);
@@ -512,7 +515,7 @@ namespace DNDS
                     auto gStartPtr = son->operator[](index(0));
                     auto ghostSpan = gRPtr - gLPtr;
                     auto ghostStart = gLPtr - gStartPtr;
-                    DNDS_assert(ghostSpan < INT_MAX && ghostStart < INT_MAX);
+                    DNDS_check_throw(ghostSpan < INT_MAX && ghostStart < INT_MAX);
                     pullSizes[0] = MPI_int(ghostSpan) * father->getTypeMult();
                     pullDisp[0] = ghostStart * sizeof(T);
                     if (pullSizes[0] > 0)
@@ -540,7 +543,7 @@ namespace DNDS
             }
             else
             {
-                DNDS_assert(false);
+                DNDS_check_throw(false);
             }
         }
         /******************************************************************************************************************************/
@@ -556,8 +559,8 @@ namespace DNDS
             }
             else
             {
-                DNDS_assert(B == father->device());
-                DNDS_assert(B == son->device());
+                DNDS_check_throw(B == father->device());
+                DNDS_check_throw(B == son->device());
                 switch (B)
                 {
                 case DeviceBackend::Host:
@@ -569,7 +572,8 @@ namespace DNDS
 #ifdef DNDS_USE_CUDA
                 case DeviceBackend::CUDA:
                 {
-                    //! we assume CUDA-aware MPI here
+                    //!
+                    DNDS_check_throw_info(MPI::isCudaAware(), "we require CUDA-aware MPI here");
                     fatherData = father->data(B);
                     sonData = son->data(B);
                 }
@@ -577,7 +581,7 @@ namespace DNDS
 #endif
                 default:
                 {
-                    DNDS_assert(false);
+                    DNDS_check_throw(false);
                 }
                 }
             }
@@ -597,11 +601,11 @@ namespace DNDS
             {
                 pushDevice = B;
                 auto [fatherData, sonData] = getFatherSonData(B);
-                // DNDS_assert(pPullTypeVec && pPushTypeVec);
-                DNDS_assert(pPullTypeVec.use_count() > 0 && pPushTypeVec.use_count() > 0);
+                // DNDS_check_throw(pPullTypeVec && pPushTypeVec);
+                DNDS_check_throw(pPullTypeVec.use_count() > 0 && pPushTypeVec.use_count() > 0);
                 pushSendSize = 0;
                 auto nReqs = pPullTypeVec->size() + pPushTypeVec->size();
-                // DNDS_assert(nReqs > 0);
+                // DNDS_check_throw(nReqs > 0);
                 PushReqVec = MPIReqHolder::create();
                 PushReqVec->resize(nReqs, (MPI_REQUEST_NULL)), PushStatVec.resize(nReqs);
                 nRecvPushReq = 0;
@@ -634,7 +638,7 @@ namespace DNDS
                     // MPI_Aint csize;
                     // MPI_Pack_external_size(1, dtypeInfo.second, mpi.comm, &csize);
                     // csize += MPI_BSEND_OVERHEAD;
-                    // DNDS_assert(MAX_MPI_Aint - pushSendSize >= csize && csize > 0);
+                    // DNDS_check_throw(MAX_MPI_Aint - pushSendSize >= csize && csize > 0);
                     // pushSendSize += csize * 2;
                 }
 #ifdef ARRAY_COMM_USE_BUFFERED_SEND
@@ -648,7 +652,7 @@ namespace DNDS
             }
             else
             {
-                DNDS_assert(false);
+                DNDS_check_throw(false);
             }
         }
         /******************************************************************************************************************************/
@@ -666,11 +670,11 @@ namespace DNDS
             {
                 pullDevice = B;
                 auto [fatherData, sonData] = getFatherSonData(B);
-                // DNDS_assert(pPullTypeVec && pPushTypeVec);
-                DNDS_assert(pPullTypeVec.use_count() > 0 && pPushTypeVec.use_count() > 0);
+                // DNDS_check_throw(pPullTypeVec && pPushTypeVec);
+                DNDS_check_throw(pPullTypeVec.use_count() > 0 && pPushTypeVec.use_count() > 0);
                 auto nReqs = pPullTypeVec->size() + pPushTypeVec->size();
                 pullSendSize = 0;
-                // DNDS_assert(nReqs > 0);
+                // DNDS_check_throw(nReqs > 0);
                 PullReqVec = MPIReqHolder::create();
                 PullReqVec->resize(nReqs, (MPI_REQUEST_NULL)), PullStatVec.resize(nReqs);
                 nRecvPullReq = 0;
@@ -705,7 +709,7 @@ namespace DNDS
                     // MPI_Aint csize;
                     // MPI_Pack_external_size(1, dtypeInfo.second, mpi.comm, &csize);
                     // csize += MPI_BSEND_OVERHEAD * 8;
-                    // DNDS_assert(MAX_MPI_Aint - pullSendSize >= csize && csize > 0);
+                    // DNDS_check_throw(MAX_MPI_Aint - pullSendSize >= csize && csize > 0);
                     // pullSendSize += csize * 2;
                 }
 #ifdef ARRAY_COMM_USE_BUFFERED_SEND
@@ -719,7 +723,7 @@ namespace DNDS
             }
             else
             {
-                DNDS_assert(false);
+                DNDS_check_throw(false);
             }
         }
         /******************************************************************************************************************************/
@@ -727,7 +731,7 @@ namespace DNDS
         void __InSituPackStartPush(DeviceBackend B)
         {
             if (B != DeviceBackend::Unknown)
-                DNDS_assert_info(false, "in-situ pack not yet implemented for device");
+                DNDS_check_throw_info(false, "in-situ pack not yet implemented for device");
             nRecvPushReq = 0;
             for (MPI_int r = 0; r < mpi.size; r++)
             {
@@ -778,9 +782,9 @@ namespace DNDS
         {
             if (commTypeCurrent == MPI::CommStrategy::HIndexed)
             {
-                DNDS_assert(B == pushDevice);
+                DNDS_check_throw(B == pushDevice);
                 // req already ready
-                DNDS_assert(nRecvPushReq <= PushReqVec->size());
+                DNDS_check_throw(nRecvPushReq <= PushReqVec->size());
                 if (!PushReqVec->empty())
                 {
                     if (MPI::CommStrategy::Instance().GetUseAsyncOneByOne())
@@ -796,7 +800,7 @@ namespace DNDS
             }
             else
             {
-                DNDS_assert(false);
+                DNDS_check_throw(false);
             }
             PerformanceTimer::Instance().StartTimer(PerformanceTimer::TimerType::Comm);
 #ifdef ARRAY_COMM_USE_BUFFERED_SEND
@@ -809,7 +813,7 @@ namespace DNDS
         void __InSituPackStartPull(DeviceBackend B)
         {
             if (B != DeviceBackend::Unknown)
-                DNDS_assert_info(false, "in-situ pack not yet implemented for device");
+                DNDS_check_throw_info(false, "in-situ pack not yet implemented for device");
             nRecvPullReq = 0;
             for (MPI_int r = 0; r < mpi.size; r++)
             {
@@ -875,8 +879,8 @@ namespace DNDS
             PerformanceTimer::Instance().StartTimer(PerformanceTimer::TimerType::Comm);
             if (commTypeCurrent == MPI::CommStrategy::HIndexed)
             {
-                DNDS_assert(B == pullDevice);
-                DNDS_assert(nRecvPullReq <= PullReqVec->size());
+                DNDS_check_throw(B == pullDevice);
+                DNDS_check_throw(nRecvPullReq <= PullReqVec->size());
                 // req already ready
                 if (!PullReqVec->empty())
                 {
@@ -893,7 +897,7 @@ namespace DNDS
             }
             else
             {
-                DNDS_assert(false);
+                DNDS_check_throw(false);
             }
 #ifdef ARRAY_COMM_USE_BUFFERED_SEND
             MPIBufferHandler::Instance().claim(pullSendSize, mpi.rank);
@@ -916,7 +920,7 @@ namespace DNDS
                 // data alright
                 if (!PushReqVec->empty())
                 {
-                    DNDS_assert(nRecvPushReq <= PushReqVec->size());
+                    DNDS_check_throw(nRecvPushReq <= PushReqVec->size());
                     if (MPI::CommStrategy::Instance().GetUseAsyncOneByOne())
                     {
                         MPI_Startall(nRecvPushReq, PushReqVec->data());
@@ -934,14 +938,14 @@ namespace DNDS
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
                 if (B != DeviceBackend::Unknown)
-                    DNDS_assert_info(false, "in-situ pack not yet implemented for device");
+                    DNDS_check_throw_info(false, "in-situ pack not yet implemented for device");
                 if (!PushReqVec->empty())
                     MPI::WaitallAuto(PushReqVec->size(), PushReqVec->data(), PushStatVec.data());
                 auto bufferVec = inSituBuffer.begin();
                 for (MPI_int r = 0; r < mpi.size; r++)
                 {
                     // push
-                    DNDS_assert(bufferVec < inSituBuffer.end());
+                    DNDS_check_throw(bufferVec < inSituBuffer.end());
                     MPI_int pushNumber = pLGhostMapping->pushIndexSizes[r];
                     // std::cout << "PN" << pushNumber << std::endl;
                     if (pushNumber > 0)
@@ -968,7 +972,7 @@ namespace DNDS
             }
             else
             {
-                DNDS_assert(false);
+                DNDS_check_throw(false);
             }
             PerformanceTimer::Instance().StopTimer(PerformanceTimer::TimerType::Comm);
             if (MPI::CommStrategy::Instance().GetUseStrongSyncWait())
@@ -987,7 +991,7 @@ namespace DNDS
                 // data alright
                 if (!PullReqVec->empty())
                 {
-                    DNDS_assert(nRecvPullReq <= PullReqVec->size());
+                    DNDS_check_throw(nRecvPullReq <= PullReqVec->size());
                     if (MPI::CommStrategy::Instance().GetUseAsyncOneByOne())
                     {
                         MPI_Startall(nRecvPullReq, PullReqVec->data());
@@ -1009,7 +1013,7 @@ namespace DNDS
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
                 if (B != DeviceBackend::Unknown)
-                    DNDS_assert_info(false, "in-situ pack not yet implemented for device");
+                    DNDS_check_throw_info(false, "in-situ pack not yet implemented for device");
                 if (!PullReqVec->empty())
                     MPI::WaitallAuto(PullReqVec->size(), PullReqVec->data(), PullStatVec.data());
                 // std::cout << "waiting DONE" << std::endl;
@@ -1018,7 +1022,7 @@ namespace DNDS
             }
             else
             {
-                DNDS_assert(false);
+                DNDS_check_throw(false);
             }
             PerformanceTimer::Instance().StopTimer(PerformanceTimer::TimerType::Comm);
         }

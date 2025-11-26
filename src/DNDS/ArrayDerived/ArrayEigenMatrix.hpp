@@ -62,13 +62,13 @@ namespace DNDS
         void Resize(index nSize, rowsize nSizeRowDynamic, rowsize nSizeColDynamic)
         {
             if constexpr (_mat_ni >= 0)
-                DNDS_assert(nSizeRowDynamic == _mat_ni);
+                DNDS_check_throw(nSizeRowDynamic == _mat_ni);
             if constexpr (_mat_nj >= 0)
-                DNDS_assert(nSizeColDynamic == _mat_nj);
+                DNDS_check_throw(nSizeColDynamic == _mat_nj);
             if constexpr (_mat_ni_max >= 0)
-                DNDS_assert(nSizeRowDynamic <= _mat_ni_max);
+                DNDS_check_throw(nSizeRowDynamic <= _mat_ni_max);
             if constexpr (_mat_nj_max >= 0)
-                DNDS_assert(nSizeColDynamic <= _mat_nj_max);
+                DNDS_check_throw(nSizeColDynamic <= _mat_nj_max);
 
             if constexpr (_mat_ni == NonUniformSize)
                 DNDS_MAKE_SSP(_mat_nRows, nSize, nSizeRowDynamic);
@@ -110,7 +110,7 @@ namespace DNDS
             if constexpr (_mat_ni == NonUniformSize)
                 this->t_base::ResizeRow(iMat, nSizeRow * nSizeCol), (*_mat_nRows)[iMat] = nSizeRow;
             else if constexpr (_mat_ni == DynamicSize)
-                DNDS_assert_info(false, "Invalid call");
+                DNDS_check_throw_info(false, "Invalid call");
         }
 
         std::conditional_t<_mat_ni == 1 && _mat_nj == 1,
@@ -185,7 +185,7 @@ namespace DNDS
         static std::tuple<int, int, int, int> GetDerivedArraySignatureInts(const std::string &v)
         { // TODO: check here!
             auto strings = splitSStringClean(v, '_');
-            DNDS_assert(strings.size() == 5 || strings.size() == 6);
+            DNDS_check_throw(strings.size() == 5 || strings.size() == 6);
             auto sz = strings.size();
             return std::make_tuple(std::stoi(strings[sz - 4]), std::stoi(strings[sz - 3]), std::stoi(strings[sz - 2]), std::stoi(strings[sz - 1]));
         }
@@ -239,8 +239,8 @@ namespace DNDS
             std::string readDerivedType;
             serializerP->ReadString("DerivedType", readDerivedType);
             auto [v_mat_ni, v_mat_nj, v_mat_ni_max, v_mat_nj_max] = GetDerivedArraySignatureInts(readDerivedType);
-            DNDS_assert_info(readDerivedType == this->GetDerivedArraySignature() || SignatureIsCompatible(readDerivedType),
-                             readDerivedType + ", i am: " + this->GetDerivedArraySignature() + fmt::format(" {} {} {} {}", v_mat_ni, v_mat_nj, v_mat_ni_max, v_mat_nj_max));
+            DNDS_check_throw_info(readDerivedType == this->GetDerivedArraySignature() || SignatureIsCompatible(readDerivedType),
+                                  readDerivedType + ", i am: " + this->GetDerivedArraySignature() + fmt::format(" {} {} {} {}", v_mat_ni, v_mat_nj, v_mat_ni_max, v_mat_nj_max));
             serializerP->ReadInt("mat_nRow_dynamic", _mat_nRow_dynamic);
             if (_mat_ni == DynamicSize && v_mat_ni >= 0)
                 _mat_nRow_dynamic = v_mat_ni;
@@ -255,7 +255,7 @@ namespace DNDS
                     serializerP->ReadSharedRowsizeVector("mat_nRows", v_mat_nRows, offset);
                     int c_mat_nRow_dynamic = v_mat_nRows->size() ? 0 : v_mat_nRows->at(0);
                     for (auto i = 0; i < v_mat_nRows->size(); ++i)
-                        DNDS_assert(v_mat_nRows->operator[](i) == c_mat_nRow_dynamic);
+                        DNDS_check_throw(v_mat_nRows->operator[](i) == c_mat_nRow_dynamic);
                     _mat_nRow_dynamic = c_mat_nRow_dynamic;
                 }
             }

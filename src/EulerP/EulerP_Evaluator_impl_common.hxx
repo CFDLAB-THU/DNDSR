@@ -4,6 +4,7 @@
 #include "EulerP/EulerP.hpp"
 #include "EulerP_ARS.hpp"
 #include "EulerP_Evaluator_impl.hpp"
+#include "Geom/Geometric.hpp"
 
 namespace DNDS::EulerP
 {
@@ -141,14 +142,18 @@ namespace DNDS::EulerP
         auto c2f = mesh.cell2face[iCell];
         TU uI = u[iCell];
         auto grad = uGrad.father[iCell];
-        TU uIIncMax;
-        TU uIIncMin;
 
-        TU uOtherMax = uI;
-        TU uOtherMin = uI;
+        tPoint uI_mag;
+        uI_mag << uI(0), uI(I4), U123(uI).norm();
+        tPoint uIIncMax;
+        tPoint uIIncMin;
 
-        uIIncMax.setConstant(-veryLargeReal);
-        uIIncMin.setConstant(veryLargeReal);
+        tPoint uOtherMax = uI_mag;
+        tPoint uOtherMin = uI_mag;
+
+        // we use 0.0 here to avoid invert situation
+        uIIncMax.setConstant(0.0);
+        uIIncMin.setConstant(0.0);
 
         real EInternalI = phy.Cons2EInternal(uI, nVarsFlow);
         real EInternalMin = EInternalI;
@@ -160,30 +165,34 @@ namespace DNDS::EulerP
             TU uIncPoint = grad.transpose() *
                            (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) -
                             fv.GetCellQuadraturePPhys(iCell, -1));
-            uIIncMax = uIIncMax.array().max(uIncPoint.array());
-            uIIncMin = uIIncMin.array().min(uIncPoint.array());
+            tPoint uIncPoint_mag;
+            uIncPoint_mag << uIncPoint(0), uIncPoint(I4), U123(uIncPoint).norm();
+            uIIncMax = uIIncMax.array().max(uIncPoint_mag.array());
+            uIIncMin = uIIncMin.array().min(uIncPoint_mag.array());
+
             if (iCellOther != UnInitIndex)
             {
                 uIncPoint = u[iCellOther];
-                uOtherMax = uOtherMax.array().max(uIncPoint.array());
-                uOtherMin = uOtherMin.array().min(uIncPoint.array());
+                uIncPoint_mag << uIncPoint(0), uIncPoint(I4), U123(uIncPoint).norm();
+                uOtherMax = uOtherMax.array().max(uIncPoint_mag.array());
+                uOtherMin = uOtherMin.array().min(uIncPoint_mag.array());
                 real EOther = phy.Cons2EInternal(uIncPoint, nVarsFlow);
                 EInternalMin = std::min(EOther, EInternalMin);
             }
         }
 
-        uOtherMax -= uI;
-        uOtherMin -= uI;
+        uOtherMax -= uI_mag;
+        uOtherMin -= uI_mag;
         uOtherMax = (uOtherMax.array().abs()) / (uIIncMax.array().abs() + verySmallReal);
         uOtherMin = (uOtherMin.array().abs()) / (uIIncMin.array().abs() + verySmallReal);
-        uOtherMax = uOtherMax.array().max(0.0).min(1.0);
+        uOtherMin = uOtherMin.array().min(uOtherMax.array());
         uOtherMin = uOtherMin.array().max(0.0).min(1.0);
         // grad.array().rowwise() *= (uOtherMax.array().min(uOtherMin.array())).transpose();
-        real alphaB = std::min(uOtherMax(0), uOtherMin(0));
-        // alphaB = std::min({alphaB, uOtherMax(I4), uOtherMin(I4)});
-        // alphaB = std::min({alphaB, U123(uOtherMax).norm(), U123(uOtherMin).norm()});
-
-        grad *= alphaB;
+        // grad *= uOtherMin(0.0);
+        grad.col(0) *= uOtherMin(0);
+        grad.col(I4) *= uOtherMin(1);
+        for (int i = 1; i < 1 + 3; i++)
+            grad.col(i) *= uOtherMin(2);
 
         // use the new grad for EInternal reconstruction!
         real EInternalPointMin = EInternalI;
@@ -199,7 +208,7 @@ namespace DNDS::EulerP
             EInternalPointMin = std::min(EOther, EInternalPointMin);
         }
         real alphaE =
-            (EInternalI - EInternalMin) / std::max(EInternalI - EInternalPointMin, verySmallReal);
+            (EInternalI - EInternalMin * 0.1) / std::max(EInternalI - EInternalPointMin, verySmallReal);
         grad *= std::clamp(alphaE, 0., 1.);
 
         // for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
@@ -252,8 +261,9 @@ namespace DNDS::EulerP
             int nCur = std::min(nVarsScalar - iVar, bufSize);
             for (int iVarS = 0; iVarS < nCur; iVarS++)
                 uI(iVarS) = uScalar[iVar + iVarS](iCell);
-            uIIncMax.setConstant(-veryLargeReal);
-            uIIncMin.setConstant(veryLargeReal);
+            // we use 0.0 here to avoid invert situation
+            uIIncMax.setConstant(-0.0);
+            uIIncMin.setConstant(0.0);
             uOtherMax = uOtherMin = uI;
 
             for (auto iFace : c2f)

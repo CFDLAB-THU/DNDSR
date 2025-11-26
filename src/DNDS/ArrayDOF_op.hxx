@@ -248,7 +248,7 @@ namespace DNDS
         index iTop = self.father->DataSize();
         if (op == "min")
         {
-            sqrSum = sqrSumAll = veryLargeReal;
+            sqrSum = sqrSumAll = std::numeric_limits<real>::max();
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static) reduction(min : sqrSum)
 #endif
@@ -258,7 +258,7 @@ namespace DNDS
         }
         else if (op == "max")
         {
-            sqrSum = sqrSumAll = -veryLargeReal;
+            sqrSum = sqrSumAll = std::numeric_limits<real>::lowest();
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static) reduction(max : sqrSum)
 #endif
@@ -279,7 +279,7 @@ namespace DNDS
         else
             DNDS_assert_info(false, op);
         // std::cout << "norm2is " << std::scientific << sqrSumAll << std::endl;
-        return std::sqrt(sqrSumAll);
+        return sqrSumAll;
     }
 
     template <int n_m, int n_n>

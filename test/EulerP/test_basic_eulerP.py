@@ -29,7 +29,7 @@ def get_fv(mpi):
             "translation1": [1, 0, 0],
             "translation2": [0, 1, 0],
         },
-        meshDirectBisect=0,
+        meshDirectBisect=4,
     )
     meshBnd, readerBnd = create_bnd_mesh(mesh)
 
@@ -70,7 +70,8 @@ def get_fv(mpi):
     return mesh, reader, name2Id, meshBnd, readerBnd, fv
 
 
-def test_basic_eulerP(mpi: DNDS.MPIInfo):
+def test_basic_eulerP(mpi: DNDS.MPIInfo, isCuda=False):
+
     mesh, reader, name2Id, meshBnd, readerBnd, fv = get_fv(mpi)
     print(name2Id.n2id_map)
     print(name2Id.n2id_map is name2Id.n2id_map)
@@ -107,6 +108,31 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo):
     gS = CFV.tUGrad_3x1()
     fv.BuildUGrad_3x1(gS, 1)
 
+    uf = CFV.tUDof_5()
+    fv.BuildUDof_5(uf, 5, varloc=Geom.MeshLoc.Face)
+    gUf = CFV.tUGrad_3x5()
+    fv.BuildUGrad_3x5(gUf, 5, varloc=Geom.MeshLoc.Face)
+    sf = CFV.tUDof_1()
+    fv.BuildUDof_1(sf, 1, varloc=Geom.MeshLoc.Face)
+    gSf = CFV.tUGrad_3x1()
+    fv.BuildUGrad_3x1(gSf, 1, varloc=Geom.MeshLoc.Face)
+    if isCuda:
+        mesh.to_device("CUDA")
+        fv.to_device("CUDA")
+        eval.to_device("CUDA")
+        eval_device = eval.device()
+        print(eval_device)
+
+        u.to_device("CUDA")
+        gU.to_device("CUDA")
+        s.to_device("CUDA")
+        gS.to_device("CUDA")
+
+        uf.to_device("CUDA")
+        gUf.to_device("CUDA")
+        sf.to_device("CUDA")
+        gSf.to_device("CUDA")
+
     data = {}
     data["u"] = u
     data["uGrad"] = gU
@@ -123,15 +149,10 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo):
         u[iCell] = np.array(
             [r, r * uu, r * vv, 0, 2.5 + 0.5 * r * (uu**2 + vv**2)], dtype=np.float64
         ).reshape(-1, 1)
+    if isCuda:
+        u.to_device("CUDA")
+    print(u.father)
 
-    # mesh.to_device("CUDA")
-    # fv.to_device("CUDA")
-    # eval.to_device("CUDA")
-    # eval_device = eval.device()
-    # print(eval_device)
-    # for n, a in data.items():
-    #     a.to_device("CUDA")
-        
     data["uGrad"].setConstant(100.0)
     print(data["uGrad"].norm2())
     RecGradient_Arg = eval.RecGradient_Arg()
@@ -139,13 +160,7 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo):
     RecGradient_Arg.uGrad = data["uGrad"]
     RecGradient_Arg.uScalar = []
     RecGradient_Arg.uScalarGrad = []
-    
-    print("EREE")
     eval.RecGradient(RecGradient_Arg)
-
-    uGrad_norm = data["uGrad"].norm2()
-    print(f"uGrad_norm, {uGrad_norm}")
-    return
 
     data["p"] = s.clone()
     data["T"] = s.clone()
@@ -169,15 +184,6 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo):
     Cons2PrimMu_Arg.uGradPrim = data["uGradPrim"]
 
     eval.Cons2PrimMu(Cons2PrimMu_Arg)
-
-    uf = CFV.tUDof_5()
-    fv.BuildUDof_5(uf, 5, varloc=Geom.MeshLoc.Face)
-    gUf = CFV.tUGrad_3x5()
-    fv.BuildUGrad_3x5(gUf, 5, varloc=Geom.MeshLoc.Face)
-    sf = CFV.tUDof_1()
-    fv.BuildUDof_1(sf, 1, varloc=Geom.MeshLoc.Face)
-    gSf = CFV.tUGrad_3x1()
-    fv.BuildUGrad_3x1(gSf, 1, varloc=Geom.MeshLoc.Face)
 
     data["deltaLamCell"] = s.clone()
     data["dt"] = s.clone()
@@ -272,6 +278,17 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo):
     data["rhs"].setConstant(0.0)
     eval.Flux2nd(Flux2nd_Arg)
 
+    check_norm = data["p"].norm2()
+    print(f"p norm, {check_norm}")
+    check_norm = data["p"].min()
+    print(f"p min, {check_norm}")
+
+    data["p"].to_host()
+    check_norm = data["p"].min()
+    print(f"p min, {check_norm}")
+
+    for n, a in data.items():
+        a.to_host()
     cell_out = s.clone()
     cell_out1 = s.clone()
     cell_out2 = s.clone()
@@ -310,4 +327,4 @@ if __name__ == "__main__":
     # MPIDebugHold()
 
     # DNDS.Debug.MPIDebugHold(mpi)
-    test_basic_eulerP(mpi)
+    test_basic_eulerP(mpi, isCuda=True)

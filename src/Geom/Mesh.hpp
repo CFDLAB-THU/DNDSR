@@ -442,7 +442,7 @@ namespace DNDS::Geom
          * \warning RecreatePeriodicNodes and BuildVTKConnectivity results are invalid after this;
          * \warning bnd mesh's cell2parentCell is invalid after this
          */
-        void ReorderLocalCells(int nParts = 1);
+        void ReorderLocalCells(int nParts = 1, int nPartsInner = 1);
 
         int NLocalParts() const { return localPartitionStarts.size() ? localPartitionStarts.size() - 1 : 1; }
         index LocalPartStart(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart) : 0; }

@@ -38,4 +38,41 @@ namespace DNDS::EulerP
     {
         return v.template block<3, 1>(0, 0);
     }
+
+    template <class TDerived>
+    class EvaluatorArgBase
+    {
+    public:
+        void WaitAllPull(DeviceBackend B)
+        {
+            auto *dThis = static_cast<TDerived *>(this);
+
+            auto wait_all = [&](std::string name, auto &v)
+            {
+                auto do_wait = [B, name](auto &vv)
+                {
+                    DNDS_check_throw_info(vv->father && vv->son, name + " needs father and son");
+                    //! this assertion should be provided by ArrayTransformer
+                    DNDS_check_throw_info(vv->trans.father.get() == vv->father.get(), name + " needs father == trans.father");
+                    DNDS_check_throw_info(vv->trans.son.get() == vv->son.get(), name + " needs son == trans.son");
+                    DNDS_check_throw_info(vv->father->device() == B,
+                                          name +
+                                              " father on " + device_backend_name(vv->father->device()) +
+                                              " wait on " + device_backend_name(B));
+                    DNDS_check_throw_info(vv->son->device() == B,
+                                          name +
+                                              " son on " + device_backend_name(vv->father->device()) +
+                                              " wait on " + device_backend_name(B));
+
+                    vv->trans.waitPersistentPull(B);
+                };
+                if constexpr (is_ssp_v<remove_cvref_t<decltype(v)>>)
+                    do_wait(v);
+                else
+                    for (size_t i = 0; i < v.size(); i++)
+                        do_wait(v[i]);
+            };
+            for_each_member_ptr_list(*dThis, TDerived::member_list(), wait_all);
+        }
+    };
 }

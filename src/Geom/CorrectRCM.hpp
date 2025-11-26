@@ -1,19 +1,19 @@
 #pragma once
 
 #ifndef __CORRECTRCM_H
-#define __CORRECTRCM_H
+#    define __CORRECTRCM_H
 
-#include <iostream>
-#include <map>
-#include <set>
-#include <unordered_set>
-#include <exception>
-#include <cstdint>
-#include <vector>
-#include <utility>
-#include <algorithm>
-#include <type_traits>
-#include <optional>
+#    include <iostream>
+#    include <map>
+#    include <set>
+#    include <unordered_set>
+#    include <exception>
+#    include <cstdint>
+#    include <vector>
+#    include <utility>
+#    include <algorithm>
+#    include <type_traits>
+#    include <optional>
 
 namespace CorrectRCM
 {
@@ -52,7 +52,7 @@ namespace CorrectRCM
             edgesDirected.reserve(2 * nVertices);
             for (index i = 0; i < nVertices; i++)
             {
-                auto adj = GraphAdjFunctor(i);
+                auto adj = GetAdj(i);
                 for (auto j : adj)
                 {
                     if (i == j)
@@ -111,7 +111,7 @@ namespace CorrectRCM
                 {
                     FNode(i, iLayer);
                     auto nextLayerQueueSiz0 = nextLayerQueue.size();
-                    for (auto j : GraphAdjFunctor(i))
+                    for (auto j : GetAdj(i))
                     {
                         if (layer.at(j) == -1)
                             nextLayerQueue.push_back(j), layer.at(j) = iLayer + 1;

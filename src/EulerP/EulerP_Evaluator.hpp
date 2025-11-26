@@ -35,6 +35,24 @@ namespace DNDS::EulerP
             t_physics n_physics) : fv(n_fv), bcHandler(n_bcHandler), physics(n_physics) {}
     };
 
+    class EvaluatorConfig
+    {
+        t_jsonconfig config_data;
+
+    public:
+        EvaluatorConfig();
+
+        void valid_patch_keys(const t_jsonconfig &config_in);
+
+        void merge_patch(const t_jsonconfig &config_in)
+        {
+            valid_patch_keys(config_in);
+            config_data.merge_patch(config_in);
+        }
+
+        const t_jsonconfig &config() const { return config_data; }
+    };
+
     class Evaluator
     {
     public:
@@ -45,6 +63,18 @@ namespace DNDS::EulerP
         t_bcHandler bcHandler;
         using t_physics = ssp<Physics>;
         t_physics physics;
+
+        using t_config = EvaluatorConfig;
+
+        t_config config;
+
+        const t_jsonconfig &get_config() { return config.config(); }
+
+        template <typename Tc>
+        void set_config(Tc &&config_in)
+        {
+            config.merge_patch(config_in);
+        }
 
         // internal buffers
         TUDof u_face_bufferL;
@@ -72,7 +102,7 @@ namespace DNDS::EulerP
         void BuildFaceBufferDofScalar(TUScalar &u)
         {
             // TODO: upgrade to matching face quad instead
-            DNDS_assert(fv);
+            DNDS_check_throw(fv);
             if (!u.father)
                 DNDS_MAKE_SSP(u.father, fv->mesh->getMPI());
             if (u.father->Size() != fv->mesh->NumFace())
@@ -112,7 +142,9 @@ namespace DNDS::EulerP
         Evaluator(
             t_fv n_fv,
             t_bcHandler n_bcHandler,
-            t_physics n_physics) : fv(n_fv), bcHandler(n_bcHandler), physics(n_physics) {}
+            t_physics n_physics) : fv(n_fv), bcHandler(n_bcHandler), physics(n_physics)
+        {
+        }
 
         void PrintDataVTKHDF(std::string fname, std::string series_name,
                              std::vector<ssp<TUScalar>> &arrCellCentScalar,
@@ -129,10 +161,10 @@ namespace DNDS::EulerP
         {
             MPI_Comm commDup = MPI_COMM_NULL;
             MPI_Comm_dup(fv->mesh->getMPI().comm, &commDup);
-            DNDS_assert(arrCellCentScalar_names_in.size() == arrCellCentScalar.size());
-            DNDS_assert(arrCellCentVec_names_in.size() == arrCellCentVec.size());
-            DNDS_assert(arrNodeScalar_names_in.size() == arrNodeScalar.size());
-            DNDS_assert(arrNodeVec_names_in.size() == arrNodeVec.size());
+            DNDS_check_throw(arrCellCentScalar_names_in.size() == arrCellCentScalar.size());
+            DNDS_check_throw(arrCellCentVec_names_in.size() == arrCellCentVec.size());
+            DNDS_check_throw(arrNodeScalar_names_in.size() == arrNodeScalar.size());
+            DNDS_check_throw(arrNodeVec_names_in.size() == arrNodeVec.size());
             std::vector<std::string> arrCellCentScalar_names;
             std::vector<std::string> arrCellCentVec_names;
             std::vector<std::string> arrNodeScalar_names;
@@ -168,23 +200,23 @@ namespace DNDS::EulerP
 
             for (auto &arr : arrCellCentScalar)
             {
-                DNDS_assert(arr->father);
-                DNDS_assert(arr->father->Size() == fv->mesh->NumCell());
+                DNDS_check_throw(arr->father);
+                DNDS_check_throw(arr->father->Size() == fv->mesh->NumCell());
             }
             for (auto &arr : arrCellCentVec)
             {
-                DNDS_assert(arr->father);
-                DNDS_assert(arr->father->Size() == fv->mesh->NumCell());
+                DNDS_check_throw(arr->father);
+                DNDS_check_throw(arr->father->Size() == fv->mesh->NumCell());
             }
             for (auto &arr : arrNodeScalar)
             {
-                DNDS_assert(arr->father);
-                DNDS_assert(arr->father->Size() == fv->mesh->NumNode());
+                DNDS_check_throw(arr->father);
+                DNDS_check_throw(arr->father->Size() == fv->mesh->NumNode());
             }
             for (auto &arr : arrNodeVec)
             {
-                DNDS_assert(arr->father);
-                DNDS_assert(arr->father->Size() == fv->mesh->NumNode());
+                DNDS_check_throw(arr->father);
+                DNDS_check_throw(arr->father->Size() == fv->mesh->NumNode());
             }
 
             fv->mesh->PrintParallelVTKHDFDataArray(
@@ -237,9 +269,9 @@ namespace DNDS::EulerP
             DeviceBackend B_mesh = fv->mesh->device();
             DeviceBackend B_bcHandler = bcHandler->device();
             DeviceBackend B_physics = physics->device();
-            DNDS_assert(B == B_mesh);
-            DNDS_assert(B == B_bcHandler);
-            DNDS_assert(B == B_physics);
+            DNDS_check_throw(B == B_mesh);
+            DNDS_check_throw(B == B_bcHandler);
+            DNDS_check_throw(B == B_physics);
 
             return B;
         }
@@ -269,9 +301,9 @@ namespace DNDS::EulerP
         t_deviceView<B> deviceView()
         {
             DeviceBackend B_fv = fv->device();
-            DNDS_assert_info(B_fv == B || (B == DeviceBackend::Host && B_fv == DeviceBackend::Unknown),
-                             fmt::format("B_fv is  {} ", device_backend_name(B_fv)) +
-                                 fmt::format("B is  {} ", device_backend_name(B)));
+            DNDS_check_throw_info(B_fv == B || (B == DeviceBackend::Host && B_fv == DeviceBackend::Unknown),
+                                  fmt::format("B_fv is  {} ", device_backend_name(B_fv)) +
+                                      fmt::format("B is  {} ", device_backend_name(B)));
 
             return t_deviceView<B>{
                 fv,
@@ -321,39 +353,39 @@ namespace DNDS::EulerP
             if (optional && !u)
                 return;
 
-            DNDS_assert_info(u, emit_info);
-            DNDS_assert_info(u->father, emit_info);
+            DNDS_check_throw_info(u, emit_info);
+            DNDS_check_throw_info(u->father, emit_info);
             if (includeSon)
-                DNDS_assert_info(u->son, emit_info);
-            DNDS_assert_info(u->father->device() == B, emit_info);
+                DNDS_check_throw_info(u->son, emit_info);
+            DNDS_check_throw_info(u->father->device() == B, emit_info);
             if (includeSon)
-                DNDS_assert_info(u->son->device() == B, emit_info);
+                DNDS_check_throw_info(u->son->device() == B, emit_info);
             if (varloc == -1)
             {
             }
             else if (varloc == 0)
             {
-                DNDS_assert_info(u->father->Size() == fv->mesh->NumCell(), emit_info);
+                DNDS_check_throw_info(u->father->Size() == fv->mesh->NumCell(), emit_info);
                 if (includeSon)
-                    DNDS_assert_info(u->son->Size() == fv->mesh->NumCellGhost(), emit_info);
+                    DNDS_check_throw_info(u->son->Size() == fv->mesh->NumCellGhost(), emit_info);
             }
             else if (varloc == 1)
             {
-                DNDS_assert_info(u->father->Size() == fv->mesh->NumFace(), emit_info);
+                DNDS_check_throw_info(u->father->Size() == fv->mesh->NumFace(), emit_info);
                 if (includeSon)
-                    DNDS_assert_info(u->son->Size() == fv->mesh->NumFaceGhost(), emit_info);
+                    DNDS_check_throw_info(u->son->Size() == fv->mesh->NumFaceGhost(), emit_info);
             }
             else if (varloc == 2)
             {
-                DNDS_assert_info(u->father->Size() == fv->mesh->NumNode(), emit_info);
+                DNDS_check_throw_info(u->father->Size() == fv->mesh->NumNode(), emit_info);
                 if (includeSon)
-                    DNDS_assert_info(u->son->Size() == fv->mesh->NumNodeGhost(), emit_info);
+                    DNDS_check_throw_info(u->son->Size() == fv->mesh->NumNodeGhost(), emit_info);
             }
             else
-                DNDS_assert_info(false, "varloc should be -1, 0, 1 or 2");
+                DNDS_check_throw_info(false, "varloc should be -1, 0, 1 or 2");
         }
 
-        struct RecGradient_Arg
+        struct RecGradient_Arg : public EvaluatorArgBase<RecGradient_Arg>
         {
             ssp<TUDof> u;
             ssp<TUGrad> uGrad;
@@ -371,18 +403,6 @@ namespace DNDS::EulerP
                     DNDS_MAKE_1_MEMBER_PTR_SELF(uScalar),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(uScalarGrad));
             }
-            void WaitAllPull()
-            {
-                auto wait_all = [&](std::string name, auto &v)
-                {
-                    if constexpr (is_ssp_v<remove_cvref_t<decltype(v)>>)
-                        v->trans.waitPersistentPull();
-                    else
-                        for (size_t i = 0; i < v.size(); i++)
-                            v[i]->trans.waitPersistentPull();
-                };
-                for_each_member_ptr_list(*this, t_self::member_list(), wait_all);
-            }
             void Validate(Evaluator &self)
             {
                 DeviceBackend B = self.device();
@@ -397,7 +417,7 @@ namespace DNDS::EulerP
 
         void RecGradient(RecGradient_Arg &arg);
 
-        struct Cons2PrimMu_Arg
+        struct Cons2PrimMu_Arg : public EvaluatorArgBase<Cons2PrimMu_Arg>
         {
             using t_self = Cons2PrimMu_Arg;
 
@@ -435,23 +455,13 @@ namespace DNDS::EulerP
                     DNDS_MAKE_1_MEMBER_PTR_SELF(mu),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(muComp));
             }
-            void WaitAllPull()
-            {
-                auto wait_all = [&](std::string name, auto &v)
-                {
-                    if constexpr (is_ssp_v<remove_cvref_t<decltype(v)>>)
-                        v->trans.waitPersistentPull();
-                    else
-                        for (size_t i = 0; i < v.size(); i++)
-                            v[i]->trans.waitPersistentPull();
-                };
-                for_each_member_ptr_list(*this, t_self::member_list(), wait_all);
-            }
+
             void Validate(Evaluator &self)
             {
                 DeviceBackend B = self.device();
                 using namespace std::string_literals;
                 int varloc = -1;
+                // TODO: improve to check if all sizes are compatible (varloc = -1 does not check size now)
 
                 auto validate_member = [&](std::string name, auto &v)
                 {
@@ -475,7 +485,7 @@ namespace DNDS::EulerP
 
         void Cons2PrimMu(Cons2PrimMu_Arg &arg);
 
-        struct Cons2Prim_Arg
+        struct Cons2Prim_Arg : public EvaluatorArgBase<Cons2Prim_Arg>
         {
             using t_self = Cons2Prim_Arg;
 
@@ -500,18 +510,6 @@ namespace DNDS::EulerP
                     DNDS_MAKE_1_MEMBER_PTR_SELF(T),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(a),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(gamma));
-            }
-            void WaitAllPull()
-            {
-                auto wait_all = [&](std::string name, auto &v)
-                {
-                    if constexpr (is_ssp_v<remove_cvref_t<decltype(v)>>)
-                        v->trans.waitPersistentPull();
-                    else
-                        for (size_t i = 0; i < v.size(); i++)
-                            v[i]->trans.waitPersistentPull();
-                };
-                for_each_member_ptr_list(*this, t_self::member_list(), wait_all);
             }
             void Validate(Evaluator &self)
             {
@@ -541,7 +539,7 @@ namespace DNDS::EulerP
 
         void Cons2Prim(Cons2Prim_Arg &arg);
 
-        struct EstEigenDt_Arg
+        struct EstEigenDt_Arg : public EvaluatorArgBase<EstEigenDt_Arg>
         {
             using t_self = EstEigenDt_Arg;
             ssp<TUDof> u;
@@ -564,18 +562,6 @@ namespace DNDS::EulerP
                     DNDS_MAKE_1_MEMBER_PTR_SELF(deltaLamFace),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(deltaLamCell),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(dt));
-            }
-            void WaitAllPull()
-            {
-                auto wait_all = [&](std::string name, auto &v)
-                {
-                    if constexpr (is_ssp_v<remove_cvref_t<decltype(v)>>)
-                        v->trans.waitPersistentPull();
-                    else
-                        for (size_t i = 0; i < v.size(); i++)
-                            v[i]->trans.waitPersistentPull();
-                };
-                for_each_member_ptr_list(*this, t_self::member_list(), wait_all);
             }
             void Validate(Evaluator &self)
             {
@@ -601,7 +587,7 @@ namespace DNDS::EulerP
 
         void EstEigenDt(EstEigenDt_Arg &arg);
 
-        struct RecFace2nd_Arg
+        struct RecFace2nd_Arg : public EvaluatorArgBase<RecFace2nd_Arg>
         {
             using t_self = RecFace2nd_Arg;
             ssp<TUDof> u;
@@ -630,18 +616,6 @@ namespace DNDS::EulerP
                     DNDS_MAKE_1_MEMBER_PTR_SELF(uScalarFL),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(uScalarFR),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(uScalarGradFF));
-            }
-            void WaitAllPull()
-            {
-                auto wait_all = [&](std::string name, auto &v)
-                {
-                    if constexpr (is_ssp_v<remove_cvref_t<decltype(v)>>)
-                        v->trans.waitPersistentPull();
-                    else
-                        for (size_t i = 0; i < v.size(); i++)
-                            v[i]->trans.waitPersistentPull();
-                };
-                for_each_member_ptr_list(*this, t_self::member_list(), wait_all);
             }
             void Validate(Evaluator &self)
             {
@@ -672,7 +646,7 @@ namespace DNDS::EulerP
 
         void RecFace2nd(RecFace2nd_Arg &arg);
 
-        struct Flux2nd_Arg
+        struct Flux2nd_Arg : public EvaluatorArgBase<Flux2nd_Arg>
         {
             using t_self = Flux2nd_Arg;
             ssp<TUDof> u;
@@ -744,20 +718,6 @@ namespace DNDS::EulerP
                     DNDS_MAKE_1_MEMBER_PTR_SELF(rhs),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(rhsScalar));
             }
-
-            void WaitAllPull()
-            {
-                auto wait_all = [&](std::string name, auto &v)
-                {
-                    if constexpr (is_ssp_v<remove_cvref_t<decltype(v)>>)
-                        v->trans.waitPersistentPull();
-                    else
-                        for (size_t i = 0; i < v.size(); i++)
-                            v[i]->trans.waitPersistentPull();
-                };
-                for_each_member_ptr_list(*this, t_self::member_list(), wait_all);
-            }
-
             void Validate(Evaluator &self)
             {
                 DeviceBackend B = self.device();

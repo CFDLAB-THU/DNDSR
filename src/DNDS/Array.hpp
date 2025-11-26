@@ -220,7 +220,7 @@ namespace DNDS
             {
                 index rsI = _pRowStart->at(i);
                 index rsIP = rsI + static_cast<index>(_dataUncompressed.at(i).size());
-                DNDS_assert(rsIP >= rsI);
+                DNDS_check_throw(rsIP >= rsI);
                 _pRowStart->at(i + 1) = rsIP;
             }
             _data.resize(_pRowStart->at(_size));
@@ -233,7 +233,7 @@ namespace DNDS
                 // _data.push_back(data)
                 memcpy(_data.data() + _pRowStart->at(i), _dataUncompressed[i].data(),
                        sizeof(T) * _dataUncompressed[i].size());
-                DNDS_assert(_pRowStart->at(i) + _dataUncompressed[i].size() <= _data.size());
+                DNDS_check_throw(_pRowStart->at(i) + _dataUncompressed[i].size() <= _data.size());
                 //! any better way?
             }
             _dataUncompressed.clear();
@@ -253,7 +253,7 @@ namespace DNDS
         t_Data &RawDataVector()
         {
             if constexpr (_dataLayout == CSR)
-                DNDS_assert(IfCompressed());
+                DNDS_check_throw(IfCompressed());
             return _data;
         }
 
@@ -273,7 +273,7 @@ namespace DNDS
         {
             if constexpr (_dataLayout == CSR) // to un compressed
             {
-                DNDS_assert_info(!IfCompressed(), "Need to decompress before auto resizing");
+                DNDS_check_throw_info(!IfCompressed(), "Need to decompress before auto resizing");
                 _size = nSize;
                 // _dataUncompressed.resize(nSize, typename decltype(_dataUncompressed)::value_type(nRow_size_dynamic));
                 // _dataUncompressed.resize(nSize);
@@ -285,9 +285,9 @@ namespace DNDS
                 if constexpr (_dataLayout == TABLE_Fixed || _dataLayout == TABLE_Max)
                     _data.resize(nSize * nRow_size_dynamic), _row_size_dynamic = nRow_size_dynamic;
                 else if constexpr (_dataLayout == TABLE_StaticFixed)
-                    _data.resize(nSize * rs), DNDS_assert(nRow_size_dynamic == rs);
+                    _data.resize(nSize * rs), DNDS_check_throw(nRow_size_dynamic == rs);
                 else if constexpr (_dataLayout == TABLE_StaticMax)
-                    _data.resize(nSize * rm), DNDS_assert(nRow_size_dynamic == rm);
+                    _data.resize(nSize * rm), DNDS_check_throw(nRow_size_dynamic == rm);
 
                 if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
                 {
@@ -304,7 +304,7 @@ namespace DNDS
         {
             if constexpr (_dataLayout == CSR)
             {
-                DNDS_assert_info(!IfCompressed(), "Need to decompress before auto resizing");
+                DNDS_check_throw_info(!IfCompressed(), "Need to decompress before auto resizing");
                 _size = nSize;
                 _dataUncompressed.resize(nSize);
             }
@@ -329,7 +329,7 @@ namespace DNDS
                                   _dataLayout == TABLE_StaticFixed ||
                                   _dataLayout == TABLE_StaticMax,
                               "Resize(index nSize) is invalid call");
-                DNDS_assert_info(false, "invalid call");
+                DNDS_check_throw_info(false, "invalid call");
             }
         }
 
@@ -361,16 +361,16 @@ namespace DNDS
         {
             if constexpr (_dataLayout == CSR)
             {
-                DNDS_assert_info(!IfCompressed(), "Need to decompress before auto resizing row");
-                DNDS_assert_info(iRow < _size && iRow >= 0, "query position out of range");
+                DNDS_check_throw_info(!IfCompressed(), "Need to decompress before auto resizing row");
+                DNDS_check_throw_info(iRow < _size && iRow >= 0, "query position out of range");
                 _dataUncompressed.at(iRow).resize(nRowSize);
             }
             else if constexpr (_dataLayout == TABLE_Max ||
                                _dataLayout == TABLE_StaticMax)
             {
-                DNDS_assert(nRowSize <= (_dataLayout == TABLE_Max ? _row_size_dynamic : rm)); //_row_size_dynamic is max now
-                DNDS_assert_info(iRow < _size && iRow >= 0, "query position out of range");
-                DNDS_assert_info(_pRowSizes, "_pRowSizes invalid");
+                DNDS_check_throw(nRowSize <= (_dataLayout == TABLE_Max ? _row_size_dynamic : rm)); //_row_size_dynamic is max now
+                DNDS_check_throw_info(iRow < _size && iRow >= 0, "query position out of range");
+                DNDS_check_throw_info(_pRowSizes, "_pRowSizes invalid");
                 if (_pRowSizes.use_count() > 1) // shared
                     _pRowSizes = std::make_shared<
                         typename decltype(_pRowSizes)::element_type>(*_pRowSizes); // copy the row sizes
@@ -382,7 +382,7 @@ namespace DNDS
                                   _dataLayout == TABLE_Max ||
                                   _dataLayout == TABLE_StaticMax,
                               "invalid call");
-                DNDS_assert_info(false, "invalid call");
+                DNDS_check_throw_info(false, "invalid call");
             }
         }
 
@@ -390,13 +390,13 @@ namespace DNDS
         {
             if constexpr (_dataLayout == CSR)
             {
-                DNDS_assert_info(!IfCompressed(), "Need to decompress before auto resizing row");
-                DNDS_assert_info(iRow < _size && iRow >= 0, "query position out of range");
+                DNDS_check_throw_info(!IfCompressed(), "Need to decompress before auto resizing row");
+                DNDS_check_throw_info(iRow < _size && iRow >= 0, "query position out of range");
                 _dataUncompressed.at(iRow).reserve(nRowSize);
             }
             else
             {
-                DNDS_assert_info(false, "invalid call");
+                DNDS_check_throw_info(false, "invalid call");
                 static_assert(_dataLayout == CSR, "invalid call");
             }
         }
@@ -604,8 +604,8 @@ namespace DNDS
         // TODO: SwapData on device?
         void SwapData(self_type &R)
         {
-            DNDS_assert(R.Size() == this->Size());
-            DNDS_assert(R._data.size() == _data.size());
+            DNDS_check_throw(R.Size() == this->Size());
+            DNDS_check_throw(R._data.size() == _data.size());
             if constexpr (_dataLayout == CSR)
             {
                 if (IfCompressed())
@@ -651,7 +651,7 @@ namespace DNDS
             {
                 index bufferSize{0};
                 serializerP->ReadUint8Array("data", nullptr, bufferSize, offset);
-                DNDS_assert(bufferSize % sizeof_T == 0);
+                DNDS_check_throw(bufferSize % sizeof_T == 0);
                 _data.resize(bufferSize / sizeof_T);
                 serializerP->ReadUint8Array("data", (uint8_t *)_data.data(), bufferSize, offset);
                 offset.CheckMultipleOf(sizeof_T);
@@ -718,13 +718,13 @@ namespace DNDS
             std::string array_sigRead;
             serializerP->ReadString("array_sig", array_sigRead);
             //! TODO: parse the sizes and correctly handle dynamic reading
-            DNDS_assert_info(array_sigRead == this->GetArraySignature() || ArraySignatureIsCompatible(array_sigRead),
-                             array_sigRead + ", i am : " + this->GetArraySignature());
+            DNDS_check_throw_info(array_sigRead == this->GetArraySignature() || ArraySignatureIsCompatible(array_sigRead),
+                                  array_sigRead + ", i am : " + this->GetArraySignature());
             auto [szR, rsR, rmR, align] = ParseArraySignatureTuple(array_sigRead);
             if (_row_size != rsR)
             {
                 if (_row_size == NonUniformSize || rsR == NonUniformSize)
-                    DNDS_assert_info(false, "can't handle here");
+                    DNDS_check_throw_info(false, "can't handle here");
             }
             if (serializerP->IsPerRank())
                 serializerP->ReadIndex("size", _size);
@@ -733,16 +733,16 @@ namespace DNDS
                 std::vector<index> _size_vv;
                 Serializer::ArrayGlobalOffset offsetV = Serializer::ArrayGlobalOffset_Unknown;
                 serializerP->ReadIndexVector("size", _size_vv, offsetV);
-                DNDS_assert(_size_vv.size() == 1);
+                DNDS_check_throw(_size_vv.size() == 1);
                 _size = _size_vv.front();
             }
             serializerP->ReadInt("row_size_dynamic", _row_size_dynamic);
             if (_row_size >= 0) // TODO: fix this! need full conversion check (maybe just a casting)
             {
                 if (rsR == DynamicSize)
-                    DNDS_assert(_row_size_dynamic == _row_size), _row_size_dynamic = 0;
+                    DNDS_check_throw(_row_size_dynamic == _row_size), _row_size_dynamic = 0;
                 else if (rsR >= 0)
-                    DNDS_assert(rsR == _row_size), _row_size_dynamic = 0;
+                    DNDS_check_throw(rsR == _row_size), _row_size_dynamic = 0;
             }
             if (_row_size == DynamicSize && rsR >= 0)
                 _row_size_dynamic = rsR;
@@ -781,8 +781,7 @@ namespace DNDS
         void to_host()
         {
             if constexpr (_dataLayout == CSR)
-                DNDS_assert_info(IfCompressed(), "CSR need compressing before to_host");
-            DNDS_assert(_data.deviceStorage);
+                DNDS_check_throw_info(IfCompressed(), "CSR need compressing before to_host");
             _data.to_host();
             deviceBackend = DeviceBackend::Unknown;
         }
@@ -790,7 +789,7 @@ namespace DNDS
         void to_device(DeviceBackend backend = DeviceBackend::Host)
         {
             if constexpr (_dataLayout == CSR)
-                DNDS_assert_info(IfCompressed(), "CSR need compressing before to_device");
+                DNDS_check_throw_info(IfCompressed(), "CSR need compressing before to_device");
             _data.to_device(backend);
             if (_pRowStart)
                 _pRowStart->to_device(backend);
@@ -819,10 +818,10 @@ namespace DNDS
         template <DeviceBackend B>
         t_deviceView<B> deviceView()
         {
-            DNDS_assert_info((this->deviceBackend == B &&
-                              B != DeviceBackend::Unknown) ||
-                                 (B == DeviceBackend::Host),
-                             "not on this device: " + std::string(device_backend_name(B)));
+            DNDS_check_throw_info((this->deviceBackend == B &&
+                                   B != DeviceBackend::Unknown) ||
+                                      (B == DeviceBackend::Host),
+                                  "not on this device: " + std::string(device_backend_name(B)));
 
             return ArrayDeviceView_build<B, T, _row_size, _row_max, _align>(
                 _size, _data.data(), _data.size(),
@@ -837,10 +836,10 @@ namespace DNDS
         template <DeviceBackend B>
         t_deviceViewConst<B> deviceView() const
         {
-            DNDS_assert_info((this->deviceBackend == B &&
-                              B != DeviceBackend::Unknown) ||
-                                 (B == DeviceBackend::Host),
-                             "not on this device");
+            DNDS_check_throw_info((this->deviceBackend == B &&
+                                   B != DeviceBackend::Unknown) ||
+                                      (B == DeviceBackend::Host),
+                                  "not on this device");
 
             return ArrayDeviceView_build<B, const T, _row_size, _row_max, _align>(
                 _size, _data.data(), _data.size(),

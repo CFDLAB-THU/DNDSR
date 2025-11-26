@@ -8,17 +8,49 @@
 
 namespace DNDS::EulerP
 {
+
+    EvaluatorConfig::EvaluatorConfig()
+    {
+        auto &c = this->config_data = t_jsonconfig::object();
+        c["threadsPerBlock"] = 128;
+        c["pullAllInputArgs"] = true;
+    }
+
+    void EvaluatorConfig::valid_patch_keys(const t_jsonconfig &config_in)
+    {
+        auto validate_keys_run = [](const t_jsonconfig &user, const t_jsonconfig &def, const std::string &path, auto &&validate_keys_runF)
+        {
+            if (!user.is_object() || !def.is_object())
+                return;
+            for (const auto &item : user.items())
+            {
+                const std::string &key = item.key();
+                const t_jsonconfig &uval = item.value();
+                if (!def.contains(key))
+                    throw std::runtime_error(
+                        "Invalid configuration key at path '" + path + key + "'");
+
+                const t_jsonconfig &dval = def.at(key);
+
+                // If both sides are objects, recurse
+                if (uval.is_object() && dval.is_object())
+                    validate_keys_runF(uval, dval, path + key + ".", validate_keys_runF);
+            }
+        };
+        validate_keys_run(config_in, config_data, "", validate_keys_run);
+    }
+
     void Evaluator::RecGradient(
         RecGradient_Arg &arg)
     {
         DeviceBackend B = this->device();
         arg.Validate(*this);
-        arg.WaitAllPull();
+        arg.WaitAllPull(B);
 
-        // DNDS_assert(u_face_bufferL.father);
-        // DNDS_assert(uScalar_face_bufferL.size() >= uScalar.size());
+        // DNDS_check_throw(u_face_bufferL.father);
+        // DNDS_check_throw(uScalar_face_bufferL.size() >= uScalar.size());
         // for (int i = 0; i < uScalar.size(); i++)
-        //     DNDS_assert(uScalar_face_bufferL[i].father);
+        //     DNDS_check_throw(uScalar_face_bufferL[i].father);
         PrepareFaceBuffer(arg.uScalar.size());
 
         if (B == DeviceBackend::Host || B == DeviceBackend::Unknown)
@@ -32,8 +64,9 @@ namespace DNDS::EulerP
 
             Evaluator_impl<B>::RecGradient_GGRec(impl_arg);
 
-            // Evaluator_impl<B>::RecGradient_BarthLimiter(impl_arg);
+            Evaluator_impl<B>::RecGradient_BarthLimiter(impl_arg);
         }
+#ifdef DNDS_USE_CUDA
         else if (B == DeviceBackend::CUDA)
         {
             constexpr DeviceBackend B = DeviceBackend::CUDA;
@@ -45,17 +78,18 @@ namespace DNDS::EulerP
 
             Evaluator_impl<B>::RecGradient_GGRec(impl_arg);
 
-            // Evaluator_impl<B>::RecGradient_BarthLimiter(impl_arg);
+            Evaluator_impl<B>::RecGradient_BarthLimiter(impl_arg);
         }
+#endif
         else
-            DNDS_assert(false);
+            DNDS_check_throw(false);
     }
 
     void Evaluator::Cons2PrimMu(Cons2PrimMu_Arg &arg)
     {
         DeviceBackend B = this->device();
         arg.Validate(*this);
-        arg.WaitAllPull();
+        arg.WaitAllPull(B);
 
         auto execute = [&](auto b = std::integral_constant<DeviceBackend, DeviceBackend::Host>())
         {
@@ -89,15 +123,21 @@ namespace DNDS::EulerP
         {
             execute(std::integral_constant<DeviceBackend, DeviceBackend::Host>());
         }
+#ifdef DNDS_USE_CUDA
+        else if (B == DeviceBackend::CUDA)
+        {
+            execute(std::integral_constant<DeviceBackend, DeviceBackend::CUDA>());
+        }
+#endif
         else
-            DNDS_assert(false);
+            DNDS_check_throw(false);
     }
 
     void Evaluator::Cons2Prim(Cons2Prim_Arg &arg)
     {
         DeviceBackend B = this->device();
         arg.Validate(*this);
-        arg.WaitAllPull();
+        arg.WaitAllPull(B);
 
         auto execute = [&](auto b)
         {
@@ -125,15 +165,21 @@ namespace DNDS::EulerP
         {
             execute(std::integral_constant<DeviceBackend, DeviceBackend::Host>());
         }
+#ifdef DNDS_USE_CUDA
+        else if (B == DeviceBackend::CUDA)
+        {
+            execute(std::integral_constant<DeviceBackend, DeviceBackend::CUDA>());
+        }
+#endif
         else
-            DNDS_assert(false);
+            DNDS_check_throw(false);
     }
 
     void Evaluator::EstEigenDt(EstEigenDt_Arg &arg)
     {
         DeviceBackend B = this->device();
         arg.Validate(*this);
-        arg.WaitAllPull();
+        arg.WaitAllPull(B);
 
         auto execute = [&](auto b = std::integral_constant<DeviceBackend, DeviceBackend::Host>())
         {
@@ -159,15 +205,21 @@ namespace DNDS::EulerP
         {
             execute(std::integral_constant<DeviceBackend, DeviceBackend::Host>());
         }
+#ifdef DNDS_USE_CUDA
+        else if (B == DeviceBackend::CUDA)
+        {
+            execute(std::integral_constant<DeviceBackend, DeviceBackend::CUDA>());
+        }
+#endif
         else
-            DNDS_assert(false);
+            DNDS_check_throw(false);
     }
 
     void Evaluator::RecFace2nd(RecFace2nd_Arg &arg)
     {
         DeviceBackend B = this->device();
         arg.Validate(*this);
-        arg.WaitAllPull();
+        arg.WaitAllPull(B);
         auto execute = [&](auto b = std::integral_constant<DeviceBackend, DeviceBackend::Host>())
         {
             constexpr DeviceBackend B = decltype(b)::value;
@@ -181,8 +233,14 @@ namespace DNDS::EulerP
         {
             execute(std::integral_constant<DeviceBackend, DeviceBackend::Host>());
         }
+#ifdef DNDS_USE_CUDA
+        else if (B == DeviceBackend::CUDA)
+        {
+            execute(std::integral_constant<DeviceBackend, DeviceBackend::CUDA>());
+        }
+#endif
         else
-            DNDS_assert(false);
+            DNDS_check_throw(false);
     }
 
     void Evaluator::Flux2nd(Flux2nd_Arg &arg)
@@ -190,7 +248,7 @@ namespace DNDS::EulerP
         DeviceBackend B = this->device();
         arg.Validate(*this);
         PrepareFaceBuffer(arg.uScalar.size());
-        arg.WaitAllPull();
+        arg.WaitAllPull(B);
 
         auto execute = [&](auto b = std::integral_constant<DeviceBackend, DeviceBackend::Host>())
         {
@@ -218,7 +276,13 @@ namespace DNDS::EulerP
         {
             execute(std::integral_constant<DeviceBackend, DeviceBackend::Host>());
         }
+#ifdef DNDS_USE_CUDA
+        else if (B == DeviceBackend::CUDA)
+        {
+            execute(std::integral_constant<DeviceBackend, DeviceBackend::CUDA>());
+        }
+#endif
         else
-            DNDS_assert(false);
+            DNDS_check_throw(false);
     }
 }

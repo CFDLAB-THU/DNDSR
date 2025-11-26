@@ -21,4 +21,14 @@ namespace DNDS
             .def(py::init([](const std::string &name) -> DeviceBackend
                           { return device_backend_name_to_enum(name); }));
     }
+
+    inline void pybind11_bind_device_controls(py::module_ &m)
+    {
+        // #ifdef DNDS_USE_CUDA
+        //         m.def("cudaGetDevice", []()
+        //               {
+
+        //               });
+        // #endif
+    }
 }

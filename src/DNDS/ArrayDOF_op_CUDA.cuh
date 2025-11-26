@@ -687,7 +687,7 @@ namespace DNDS
     template <int n_m, int n_n>
     real ArrayDofOp<DeviceBackend::CUDA, n_m, n_n>::reduction(t_self &self, const std::string &op)
     {
-        real sqrSum{0}, sqrSumAll{0};
+        real sqrSum{UnInitReal}, sqrSumAll{UnInitReal};
 
         DNDS_assert(self.father && self.son);
         DNDS_assert(self.father->device() == DeviceBackend::CUDA);
@@ -711,27 +711,46 @@ namespace DNDS
         if (op == "min")
         {
             mpi_op = MPI_MIN;
-            execute(veryLargeReal, [] DNDS_DEVICE_CALLABLE(real a, real b)
-                    { return std::min(a, b); });
+            sqrSum = sqrSumAll = std::numeric_limits<real>::max();
+            // std::cout << sqrSum << std::endl;
+            // thrust::fill_n(d_self_father, self_father_d_size, 1.0);
+            // sqrSum = thrust::reduce(
+            //     d_self_father, d_self_father + self_father_d_size,
+            //     sqrSumAll,
+            //     [] DNDS_DEVICE_CALLABLE(real a, real b)
+            //     { return a < b ? a : b; });
+            // auto v = thrust::min_element(thrust::device, d_self_father, d_self_father + self_father_d_size);
+            // double vv;
+            // thrust::copy(v, v + 1, &vv);
+            // std::cout << vv << ", " << sqrSum << "," << self_father_d_size << std::endl;
+            // thrust::host_vector<real> h_vec(self_father_d_size);
+            // thrust::copy_n(d_self_father, self_father_d_size, h_vec.begin());
+
+            auto result = thrust::min_element(thrust::device, d_self_father, d_self_father + self_father_d_size);
+            thrust::copy_n(result, 1, &sqrSum);
         }
         else if (op == "max")
         {
             mpi_op = MPI_MAX;
-            execute(-veryLargeReal, [] DNDS_DEVICE_CALLABLE(real a, real b)
-                    { return std::max(a, b); });
+            sqrSum = sqrSumAll = std::numeric_limits<real>::lowest();
+            // execute(sqrSumAll, [] DNDS_DEVICE_CALLABLE(real a, real b)
+            //         { return thrust::max(a, b); });
+            auto result = thrust::max_element(thrust::device, d_self_father, d_self_father + self_father_d_size);
+            thrust::copy_n(result, 1, &sqrSum);
         }
         else if (op == "sum")
         {
             mpi_op = MPI_SUM;
-            execute(0.0, thrust::plus<real>());
+            sqrSum = sqrSumAll = 0.0;
+            execute(sqrSumAll, thrust::plus<real>());
+            // thrust::max_element()
         }
         else
             DNDS_assert_info(false, op);
 
         MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, mpi_op, self.father->getMPI().comm);
         // std::cout << "norm2is " << std::scientific << sqrSumAll << std::endl;
-        return std::sqrt(sqrSumAll);
-        return std::sqrt(sqrSumAll);
+        return sqrSumAll;
     }
 
     template <typename TFTrans, typename TF, int block_size_max = 256>

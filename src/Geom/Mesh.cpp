@@ -2307,72 +2307,86 @@ namespace DNDS::Geom
                 control.getILUCode());
     }
 
-    void UnstructuredMesh::ReorderLocalCells(int nParts)
+    void UnstructuredMesh::ReorderLocalCells(int nParts, int nPartsInner)
     {
         DNDS_assert(this->adjPrimaryState == Adj_PointToLocal);
         auto cell2cellFaceV = this->GetCell2CellFaceVLocal();
         index bwOld{0}, bwNew{0};
-        std::vector<index> cellOld2New;
-        if (nParts <= 1)
-        {
-            auto [cellNew2Old_, cellOld2New_] = ReorderSerialAdj_CorrectRCM(cell2cellFaceV, bwOld, bwNew);
-            cellOld2New = std::move(cellOld2New_);
-            localPartitionStarts.resize(2);
-            localPartitionStarts[0] = 0;
-            localPartitionStarts[1] = this->NumCell();
-        }
-        else
-        {
-            auto partition_local = PartitionSerialAdj_Metis(cell2cellFaceV, nParts);
+        std::vector<index> cellOld2New(NumCell(), -1);
+        DNDS_check_throw(int64_t(nParts) * int64_t(nPartsInner) < std::numeric_limits<int>::max());
+        nPartsInner = std::max(nPartsInner, 1);
 
-            std::vector<std::vector<index>> partsOldiCells(nParts);
-            for (index iCell = 0; iCell < this->NumCell(); iCell++)
+        std::vector<index> cellNew2Old(NumCell());
+        for (index i = 0; i < cellNew2Old.size(); i++)
+            cellNew2Old[i] = i;
+        this->localPartitionStarts = ReorderSerialAdj_PartitionMetisC(
+            cell2cellFaceV.begin(),
+            cell2cellFaceV.end(),
+            cellNew2Old.begin(),
+            cellNew2Old.end(), nParts, 0, nPartsInner <= 1, bwOld, bwNew);
+        if (nPartsInner > 1)
+        {
+            for (int iPart = 0; iPart < localPartitionStarts.size() - 1; iPart++)
             {
-                auto iP = partition_local.at(iCell);
-                DNDS_assert(0 <= iP and iP < nParts);
-                partsOldiCells.at(iP).push_back(iCell);
+                index bwOldC{0}, bwNewC{0};
+                index offset = localPartitionStarts[iPart];
+                index offsetN = localPartitionStarts[iPart + 1];
+                auto inner_parts_start = ReorderSerialAdj_PartitionMetisC(
+                    cell2cellFaceV.begin() + offset,
+                    cell2cellFaceV.begin() + offsetN,
+                    cellNew2Old.begin() + offset,
+                    cellNew2Old.begin() + offsetN, nPartsInner, offset, true, bwOldC, bwNewC);
+                bwOld = std::max(bwOld, bwOldC);
+                bwNew = std::max(bwNew, bwNewC);
             }
-            localPartitionStarts.resize(nParts + 1);
-            localPartitionStarts[0] = 0;
-            for (int iPart = 0; iPart < nParts; iPart++)
-                localPartitionStarts[iPart + 1] = localPartitionStarts[iPart] + partsOldiCells.at(iPart).size();
-            std::vector<index> partsCellOld2New(nParts);
-            partsCellOld2New.resize(this->NumCell(), UnInitIndex);
-            for (int iPart = 0; iPart < nParts; iPart++)
-            {
-                for (index iCellNew = 0; iCellNew < partsOldiCells[iPart].size(); iCellNew++)
-                    partsCellOld2New.at(partsOldiCells[iPart][iCellNew]) = iCellNew;
-            }
-            cellOld2New.resize(this->NumCell(), UnInitIndex);
-            for (int iPart = 0; iPart < nParts; iPart++)
-            {
-                tLocalMatStruct cell2cellFaceV_part(localPartitionStarts[iPart + 1] - localPartitionStarts[iPart]);
-                for (index iCellN = 0; iCellN < cell2cellFaceV_part.size(); iCellN++)
-                {
-                    auto row = cell2cellFaceV[partsOldiCells[iPart].at(iCellN)];
-                    std::vector<index> row_in_part;
-                    std::copy_if(row.begin(), row.end(), std::back_inserter(row_in_part), [&](index v)
-                                 { return partition_local.at(v) == iPart; });
-                    for (auto &v : row_in_part)
-                        v = partsCellOld2New.at(v);
-                    cell2cellFaceV_part[iCellN] = std::move(row_in_part);
-                }
-                index bwOld_part{0}, bwNew_part{0};
-                auto [cellNewNew2New_, cellNew2NewNew_] = ReorderSerialAdj_CorrectRCM(cell2cellFaceV_part, bwOld_part, bwNew_part);
-                bwOld = std::max(bwOld, bwOld_part);
-                bwNew = std::max(bwNew, bwNew_part);
-                for (index iCellN = 0; iCellN < cell2cellFaceV_part.size(); iCellN++)
-                    cellOld2New.at(partsOldiCells[iPart].at(iCellN)) = localPartitionStarts[iPart] + cellNew2NewNew_.at(iCellN);
-            }
-            for (auto v : cellOld2New)
-                DNDS_assert(v >= 0 and v < this->NumCell());
         }
+        // contigious sorting
+        {
+            auto cellIsNotPrivate = [&](index iCell)
+            {
+                for (auto iCellOther : this->cell2cell[iCell])
+                {
+                    if (iCellOther >= this->NumCell())
+                        return 1;
+                }
+                return 0;
+            };
+            std::vector<index> cellNew2Old_new;
+            cellNew2Old_new.reserve(NumCell());
+            for (index i = 0; i < NumCell(); i++)
+                cellOld2New[i] /*tmp storage*/ = cellIsNotPrivate(cellNew2Old[i]);
+            for (int iPart = 0; iPart < nParts; iPart++) // we have to keep the local partitions intact
+            {
+                for (index i = localPartitionStarts.at(iPart); i < localPartitionStarts.at(iPart + 1); i++)
+                    if (!cellOld2New[i])
+                        cellNew2Old_new.push_back(cellNew2Old[i]);
+                for (index i = localPartitionStarts.at(iPart); i < localPartitionStarts.at(iPart + 1); i++)
+                    if (cellOld2New[i])
+                        cellNew2Old_new.push_back(cellNew2Old[i]);
+            }
+
+            cellNew2Old = std::move(cellNew2Old_new);
+        }
+        // reverse permutation
+        std::unordered_set<index> set;
+        set.reserve(cellNew2Old.size());
+        for (index i = 0; i < NumCell(); i++)
+        {
+            DNDS_assert(set.count(cellNew2Old[i]) == 0);
+            set.insert(cellNew2Old[i]);
+            cellOld2New.at(cellNew2Old[i]) = i;
+        }
+        /****************************************************************************************** */
 
         MPI::AllreduceOneIndex(bwOld, MPI_MAX, mpi);
         MPI::AllreduceOneIndex(bwNew, MPI_MAX, mpi);
         if (mpi.rank == mRank)
-            log() << fmt::format("UnstructuredMesh === ReorderLocalCells, nPart0 [{}], got reordering, bw [{}] to [{}]", nParts, bwOld, bwNew) << std::endl;
+            log()
+                << fmt::format("UnstructuredMesh === ReorderLocalCells, nPart0 [{}], got reordering, bw [{}] to [{}]", nParts, bwOld, bwNew) << std::endl;
         tAdj1Pair cellOld2NewArr;
+        /****************************************************************************************** */
+        // Array reorderings
+
         DNDS_MAKE_SSP(cellOld2NewArr.father, mpi);
         DNDS_MAKE_SSP(cellOld2NewArr.son, mpi);
         cellOld2NewArr.father->Resize(this->NumCell());

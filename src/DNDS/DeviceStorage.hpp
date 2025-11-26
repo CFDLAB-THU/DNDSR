@@ -232,8 +232,11 @@ namespace DNDS
 
         void to_host()
         {
-            DNDS_assert(deviceStorage);
-            deviceStorage->copy_device_to_host(this->data(), this->size() * sizeof(T));
+            if (this->device() != DeviceBackend::Unknown)
+            {
+                DNDS_assert(deviceStorage);
+                deviceStorage->copy_device_to_host(this->data(), this->size() * sizeof(T));
+            }
         }
 
         T *dataDevice()

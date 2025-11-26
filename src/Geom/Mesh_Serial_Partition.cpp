@@ -385,7 +385,9 @@ namespace DNDS::Geom
             if (mpi.rank == mRank)
                 log() << "UnstructuredMesh::ObtainLocalFactFillOrdering(): start calling CorrectRCM::CuthillMcKeeOrdering" << std::endl;
             {
-                auto [New2Old, Old2New] = ReorderSerialAdj_CorrectRCM(this->cell2cellFaceVLocalParts, bandWidthOld, bandWidthNew);
+                auto [New2Old, Old2New] = ReorderSerialAdj_CorrectRCM(
+                    this->cell2cellFaceVLocalParts.begin(),
+                    this->cell2cellFaceVLocalParts.end(), bandWidthOld, bandWidthNew);
                 localFillOrderingNew2Old = std::move(New2Old);
                 localFillOrderingOld2New = std::move(Old2New);
             }

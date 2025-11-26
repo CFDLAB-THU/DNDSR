@@ -123,11 +123,11 @@ namespace DNDS
 
         void clone(const t_self &R)
         {
-            DNDS_assert(R.father && R.son);
+            DNDS_check_throw(R.father && R.son);
             //! rely on TArray's copy ctor!
             DNDS_MAKE_SSP(father, *(R.father)); // call TArray copy ctor
             DNDS_MAKE_SSP(son, *(R.son));       // call TArray copy ctor
-            DNDS_assert(father->getMPI().comm == son->getMPI().comm);
+            DNDS_check_throw(father->getMPI().comm == son->getMPI().comm);
             //! rely on TTrans's copy assignment!
             trans = R.trans;
             //! if R.trans already attached, then self trans attach self arrays
@@ -226,8 +226,8 @@ namespace DNDS
 
         void TransAttach()
         {
-            DNDS_assert_info(bool(father) && bool(son),
-                             fmt::format("father and son need to be constructed before Trans Attach. Array is {}", TArray::GetArrayName()));
+            DNDS_check_throw_info(bool(father) && bool(son),
+                                  fmt::format("father and son need to be constructed before Trans Attach. Array is {}", TArray::GetArrayName()));
             trans.setFatherSon(father, son);
         }
 
@@ -271,7 +271,7 @@ namespace DNDS
         void WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name, bool includePIG = true, bool includeSon = true)
         {
             if (includePIG)
-                DNDS_assert_info(trans.pLGlobalMapping && trans.pLGhostMapping, "pair's trans not having ghost info");
+                DNDS_check_throw_info(trans.pLGlobalMapping && trans.pLGhostMapping, "pair's trans not having ghost info");
 
             auto cwd = serializerP->GetCurrentPath();
             serializerP->CreatePath(name);
@@ -309,7 +309,7 @@ namespace DNDS
          */
         void ReadSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name, bool includePIG = true, bool includeSon = true)
         {
-            DNDS_assert(father && son);
+            DNDS_check_throw(father && son);
             this->TransAttach();
 
             auto cwd = serializerP->GetCurrentPath();
@@ -320,8 +320,8 @@ namespace DNDS
             if (serializerP->IsPerRank())
                 serializerP->ReadIndex("MPIRank", readRank);
             serializerP->ReadIndex("MPISize", readSize);
-            DNDS_assert((!serializerP->IsPerRank() || readRank == father->getMPI().rank) &&
-                        readSize == father->getMPI().size);
+            DNDS_check_throw((!serializerP->IsPerRank() || readRank == father->getMPI().rank) &&
+                             readSize == father->getMPI().size);
             auto offsetV_father = Serializer::ArrayGlobalOffset_Unknown;
             auto offsetV_son = Serializer::ArrayGlobalOffset_Unknown;
             father->ReadSerializer(serializerP, "father", offsetV_father);
@@ -353,7 +353,7 @@ namespace DNDS
         template <DeviceBackend B>
         auto deviceView()
         {
-            DNDS_assert_info(father && son, "need both father and son to exist for device view");
+            DNDS_check_throw_info(father && son, "need both father and son to exist for device view");
             return t_deviceView<B>{
                 father->template deviceView<B>(),
                 son->template deviceView<B>()};
@@ -362,7 +362,7 @@ namespace DNDS
         template <DeviceBackend B>
         auto deviceView() const
         {
-            DNDS_assert_info(father && son, "need both father and son to exist for device view");
+            DNDS_check_throw_info(father && son, "need both father and son to exist for device view");
             return t_deviceViewConst<B>{
                 std::as_const(*father).template deviceView<B>(),
                 std::as_const(*son).template deviceView<B>()};

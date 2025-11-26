@@ -12,6 +12,10 @@ DISABLE_WARNING_UNUSED_VALUE
 #include "mpi.h"
 DISABLE_WARNING_POP
 
+#ifdef OPEN_MPI
+#    include <mpi-ext.h> // Open MPI extension header
+#endif
+
 #ifdef NDEBUG
 #    define NDEBUG_DISABLED
 #    undef NDEBUG
@@ -320,15 +324,17 @@ namespace DNDS::Debug
 
 // DNDS_assert_info_mpi is used to help barrier the process before exiting if DNDS::Debug::isDebugging is set
 // remember to set a breakpoint here
-void __DNDS_assert_false_info_mpi(const char *expr, const char *file, int line, const std::string &info, const DNDS::MPIInfo &mpi);
-
+namespace DNDS
+{
+    void assert_false_info_mpi(const char *expr, const char *file, int line, const std::string &info, const DNDS::MPIInfo &mpi);
+}
 #ifdef DNDS_NDEBUG
 #    define DNDS_assert_info_mpi(expr, mpi, info) (void(0))
 #else
 #    define DNDS_assert_info_mpi(expr, mpi, info) \
         ((static_cast<bool>(expr))                \
              ? void(0)                            \
-             : __DNDS_assert_false_info_mpi(#expr, __FILE__, __LINE__, info, mpi))
+             : ::DNDS::assert_false_info_mpi(#expr, __FILE__, __LINE__, info, mpi))
 #endif
 
 namespace DNDS // TODO: get a concurrency header
@@ -551,6 +557,11 @@ namespace DNDS::MPI
         [[nodiscard]] bool GetUseAsyncOneByOne() const;
         [[nodiscard]] double GetUseLazyWait() const;
     };
+}
+
+namespace DNDS::MPI
+{
+    bool isCudaAware();
 }
 
 namespace DNDS

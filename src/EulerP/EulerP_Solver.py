@@ -8,9 +8,19 @@ import math
 
 
 class Solver:
+    _runningDevice = DNDS.DeviceBackend.Unknown
+
     def __init__(self, mpi: DNDS.MPIInfo):
         self.mpi = mpi
         pass
+
+    @property
+    def runningDevice(self):
+        return self._runningDevice
+
+    @runningDevice.setter
+    def runningDevice(self, B):
+        self._runningDevice = B
 
     def ReadMesh(self, mesh_file, dim, other_options={}):
         self.mesh, self.reader, self.name2Id = create_mesh_from_CGNS(
@@ -96,6 +106,27 @@ class Solver:
         self.bcHandler = bcHandler
         self.phys = phys
 
+    def WrapEval(self):
+        # class EvalWrapper:
+        #     def __init__(self, obj):
+        #         self._obj = obj  # object being wrapped
+
+        #     def __getattr__(self, name):
+        #         # only called if attribute is not found on the Wrapper instance
+        #         return getattr(self._obj, name)
+
+        #     def __setattr__(self, name, value):
+        #         if name == "_obj":
+        #             super().__setattr__(name, value)
+        #         else:
+        #             setattr(self._obj, name, value)
+
+        from DNDSR.DNDS.Wrapper import generate_wrapper
+
+        Wrapper = generate_wrapper(type(self.eval), init_from_obj=True)
+
+        self.eval = Wrapper(self.eval)
+
     def BuildDataArray(self):
         # TODO: handle scalars
         mpi = self.mpi
@@ -180,6 +211,29 @@ class Solver:
         data["fluxFF"] = uf.clone()
 
         self.data = data
+
+    def data_to_device(self, backend=None):
+        if backend is None:
+            return
+        for n, a in self.data.items():
+            if isinstance(a, list):
+                for aa in a:
+                    aa.to_device(backend)
+            else:
+                a.to_device(backend)
+
+    def to_device(self, backend=None):
+        if backend is None:
+            return
+        if not hasattr(self, "mesh"):
+            raise ValueError("need to initialize mesh before to_device")
+        if not hasattr(self, "fv"):
+            raise ValueError("need to initialize fv before to_device")
+        if not hasattr(self, "eval"):
+            raise ValueError("need to initialize eval before to_device")
+        self.mesh.to_device(backend)
+        self.fv.to_device(backend)
+        self.eval.to_device(backend)
 
     def LoadArg_RecGradient(self):
         data = self.data
@@ -284,15 +338,15 @@ class Solver:
 
         data = self.data
         eval.RecGradient(solver.LoadArg_RecGradient())
-        data["uGrad"].trans.startPersistentPull()
+        data["uGrad"].trans.startPersistentPull(self.runningDevice)
         if zero_grad:
             data["uGrad"].setConstant(0.0)
         eval.Cons2PrimMu(solver.LoadArg_Cons2PrimMu())
-        data["p"].trans.startPersistentPull()
-        data["T"].trans.startPersistentPull()
-        data["a"].trans.startPersistentPull()
-        data["gamma"].trans.startPersistentPull()
-        data["mu"].trans.startPersistentPull()
+        data["p"].trans.startPersistentPull(self.runningDevice)
+        data["T"].trans.startPersistentPull(self.runningDevice)
+        data["a"].trans.startPersistentPull(self.runningDevice)
+        data["gamma"].trans.startPersistentPull(self.runningDevice)
+        data["mu"].trans.startPersistentPull(self.runningDevice)
 
         # TODO: C++ side check PPCheckCons()
         pMin = data["p"].min()
@@ -300,7 +354,7 @@ class Solver:
         if pMin <= 0.0 or not math.isfinite(pMin) or not math.isfinite(aSum):
             raise RuntimeError(f"pMin is {pMin}, aSum is {aSum}, pp Failed")
         eval.EstEigenDt(solver.LoadArg_EstEigenDt())
-        data["deltaLamCell"].trans.startPersistentPull()
+        data["deltaLamCell"].trans.startPersistentPull(self.runningDevice)
         eval.RecFace2nd(solver.LoadArg_RecFace2nd())
         eval.Cons2Prim(solver.LoadArg_Cons2Prim_FX("FL"))
         eval.Cons2Prim(solver.LoadArg_Cons2Prim_FX("FR"))
@@ -312,7 +366,7 @@ class Solver:
         eval.Flux2nd(solver.LoadArg_Flux2nd())
 
     def IntegrateDt_ExplicitInterval(
-        self, tStart: float, tEnd: float, CFL: float, max_step: int = 100000
+        self, tStart: float, tEnd: float, CFL: float, step0, max_step: int = 100000
     ):
         solver = self
         eval = self.eval
@@ -323,7 +377,7 @@ class Solver:
 
         zero_grad = False
 
-        for iStep in range(1, max_step + 1):
+        for iStep in range(step0 + 1, max_step + 1):
 
             self.CalculateOneRHS(zero_grad=zero_grad)
             if_stop = False
@@ -337,7 +391,7 @@ class Solver:
             data["u0"].assign_value(data["u"])
             data["rhs1"], data["rhs"] = data["rhs"], data["rhs1"]
             data["u"].addTo(data["rhs1"], dt)
-            data["u"].trans.startPersistentPull()
+            data["u"].trans.startPersistentPull(self.runningDevice)
 
             self.CalculateOneRHS(zero_grad=zero_grad)
 
@@ -345,14 +399,14 @@ class Solver:
             data["u"].assign_value(data["u0"])
             data["u"].addTo(data["rhs1"], dt * 0.25)
             data["u"].addTo(data["rhs2"], dt * 0.25)
-            data["u"].trans.startPersistentPull()
+            data["u"].trans.startPersistentPull(self.runningDevice)
 
             self.CalculateOneRHS(zero_grad=zero_grad)
             data["u"].assign_value(data["u0"])
             data["u"].addTo(data["rhs1"], dt * 1.0 / 6)
             data["u"].addTo(data["rhs2"], dt * 1.0 / 6)
             data["u"].addTo(data["rhs"], dt * 4.0 / 6)
-            data["u"].trans.startPersistentPull()
+            data["u"].trans.startPersistentPull(self.runningDevice)
 
             rhsNorm = data["rhs1"].componentWiseNorm1()
 
@@ -368,4 +422,5 @@ class Solver:
                 print(uGradN)
 
             if if_stop:
-                break
+                return iStep, t
+        return max_step, t

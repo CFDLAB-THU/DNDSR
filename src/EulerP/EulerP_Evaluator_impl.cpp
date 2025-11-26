@@ -30,8 +30,8 @@ namespace DNDS::EulerP
         auto &bcHandler = self_view.bcHandler;
         auto &phy = self_view.physics;
 
-        DNDS_assert(faceBCBuffer.father.data());
-        DNDS_assert(faceBCBuffer.father.Size() >= mesh.NumFace());
+        DNDS_check_throw(faceBCBuffer.father.data());
+        DNDS_check_throw(faceBCBuffer.father.Size() >= mesh.NumFace());
 
         /*********************** */
         // bc handling
@@ -99,20 +99,7 @@ namespace DNDS::EulerP
 
         DNDS_EULERP_IMPL_ARG_GET_REF(self_view)
         DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(u)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uGrad)
         DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalar)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalarGrad)
-        //
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uPrim)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uGradPrim)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalarPrim)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalarGradPrim)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(p)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(T)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(a)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(gamma)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(mu)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(muComp)
 
         int nVarsScalar = uScalar.size();
         int nVars = nVarsFlow + nVarsScalar;
@@ -139,13 +126,6 @@ namespace DNDS::EulerP
         DNDS_EULERP_IMPL_ARG_GET_REF(self_view)
         DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(u)
         DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalar)
-        //
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uPrim)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalarPrim)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(p)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(T)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(a)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(gamma)
 
         int nVarsScalar = uScalar.size();
         int nVars = nVarsFlow + nVarsScalar;
@@ -252,38 +232,7 @@ namespace DNDS::EulerP
         DNDS_EULERP_IMPL_ARG_GET_REF(self)
         DNDS_EULERP_IMPL_ARG_GET_REF(self_view)
 
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(u)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uGrad)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalar)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalarGrad)
-
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uPrim)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uGradPrim)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalarPrim)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalarGradPrim)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(p)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(T)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(a)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(gamma)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(mu)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(muComp)
-
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uFL)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uFR)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uGradFF)
-
         DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalarFL)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalarFR)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(uScalarGradFF)
-
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(pFL)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(pFR)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(deltaLamFaceFF)
-
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(fluxFF)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(fluxScalarFF)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(rhs)
-        DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(rhsScalar)
 
         auto &mesh = self_view.fv.mesh;
         auto &fv = self_view.fv;

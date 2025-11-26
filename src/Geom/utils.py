@@ -26,6 +26,7 @@ def create_mesh_from_CGNS(
     dim: int = 2,
     periodic_tolerance: float = 1e-9,
     inner_process_parts: int = 1,
+    second_level_parts: int = 1,
     periodic_geometry={
         "translation1": [1, 0, 0],
         "rotationCenter1": [0, 0, 0],
