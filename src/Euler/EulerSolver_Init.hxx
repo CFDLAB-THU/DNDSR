@@ -154,7 +154,7 @@ namespace DNDS::Euler
         OMP::set_full_parallel_OMP();
         if (config.dataIOControl.meshReorderCells == 1)
 #ifdef DNDS_USE_OMP
-            mesh->ReorderLocalCells(get_env_DNDS_DIST_OMP_NUM_THREADS());
+            mesh->ReorderLocalCells(std::max(get_env_DNDS_DIST_OMP_NUM_THREADS(), 1));
 #else
             mesh->ReorderLocalCells(); // do this early so that faces are natural to cell
 #endif

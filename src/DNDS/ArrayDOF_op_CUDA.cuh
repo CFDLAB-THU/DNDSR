@@ -675,7 +675,7 @@ namespace DNDS
                 thrust::make_tuple(d_self_father + self_father_d_size, d_R_father + R_father_d_size)),
             [] DNDS_DEVICE_CALLABLE(const thrust::tuple<real, real> &v)
             {
-                return sqr(v.get<0>() - v.get<1>());
+                return sqr(thrust::get<0>(v) - thrust::get<1>(v));
             },
             0.0,
             thrust::plus<real>());
@@ -1011,7 +1011,7 @@ namespace DNDS
                 thrust::make_tuple(d_self_father + self_father_d_size, d_R_father + R_father_d_size)),
             [] DNDS_DEVICE_CALLABLE(const thrust::tuple<real, real> &v)
             {
-                return v.get<0>() * v.get<1>();
+                return thrust::get<0>(v) * thrust::get<1>(v);
             },
             0.0,
             thrust::plus<real>());

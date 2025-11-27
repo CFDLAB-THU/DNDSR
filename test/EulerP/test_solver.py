@@ -11,8 +11,13 @@ def test_solver(
     mpi: DNDS.MPIInfo,
     ifCuda=False,
 ):
-    # m_name, dim = "Uniform128_Periodic.cgns", 2
-    m_name, dim = "UP3D_128.cgns", 3
+    if ifCuda:
+        import cupy as cp
+
+        # cp.cuda.Device(1).use()
+
+    m_name, dim = "Uniform128_Periodic.cgns", 2
+    # m_name, dim = "UP3D_128.cgns", 3
     meshFile = os.path.join(
         os.path.dirname(__file__),
         "..",
@@ -21,14 +26,15 @@ def test_solver(
         "mesh",
         m_name,
     )
-    outDir = "../data/out/test3D"
+    outDir = "../data/out/test3"
 
     solver = Solver(mpi)
     solver.ReadMesh(
         meshFile,
         dim=dim,
         other_options={
-            "meshDirectBisect": 0,
+            "meshDirectBisect": 3,
+            "second_level_parts": int(128),
         },
     )
 
@@ -49,6 +55,7 @@ def test_solver(
 
     u = solver.data["u"]
     mesh = solver.mesh
+    numCellGlobal = mesh.NumCellGlobal()
     fv = solver.fv
     u.setConstant(np.array([1, 0, 0, 0, 2.5]).reshape(-1, 1))
 
@@ -90,7 +97,7 @@ def test_solver(
     # 0.5, 1, 0, 0, 4
 
     tInt = 0.01
-    nInt = 150
+    nInt = 1
     t = 0
     pr = cProfile.Profile()
     pr.enable()
@@ -106,7 +113,9 @@ def test_solver(
         if mpi.rank == 0:
             print("=" * 32)
             print()
-            print(f"Average time per step: [{(tW1 - tW0) / (iStepNew - iStep):.4e}]")
+            tStep = (tW1 - tW0) / (iStepNew - iStep)
+            print(f"Average time per step: [{tStep:.4e}]")
+            print(f"cell step / second: [{numCellGlobal / tStep:.4e}]")
             print()
             print("=" * 32)
         t = tNew

@@ -108,8 +108,6 @@ namespace DNDS::Geom
         else
             part_start[1] = n_elem;
 
-        std::cout << "here " << ind_offset << std::endl;
-
         bwOldM = 0, bwNewM = 0;
         if (!do_rcm)
             return part_start;

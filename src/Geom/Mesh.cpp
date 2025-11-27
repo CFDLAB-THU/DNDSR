@@ -2314,10 +2314,11 @@ namespace DNDS::Geom
         index bwOld{0}, bwNew{0};
         std::vector<index> cellOld2New(NumCell(), -1);
         DNDS_check_throw(int64_t(nParts) * int64_t(nPartsInner) < std::numeric_limits<int>::max());
+        nParts = std::max(nParts, 1);
         nPartsInner = std::max(nPartsInner, 1);
 
         std::vector<index> cellNew2Old(NumCell());
-        for (index i = 0; i < cellNew2Old.size(); i++)
+        for (index i = 0; i < NumCell(); i++)
             cellNew2Old[i] = i;
         this->localPartitionStarts = ReorderSerialAdj_PartitionMetisC(
             cell2cellFaceV.begin(),
@@ -2355,17 +2356,20 @@ namespace DNDS::Geom
             cellNew2Old_new.reserve(NumCell());
             for (index i = 0; i < NumCell(); i++)
                 cellOld2New[i] /*tmp storage*/ = cellIsNotPrivate(cellNew2Old[i]);
-            for (int iPart = 0; iPart < nParts; iPart++) // we have to keep the local partitions intact
+            for (int iPart = 0; iPart < this->NLocalParts(); iPart++) // we have to keep the local partitions intact
             {
-                for (index i = localPartitionStarts.at(iPart); i < localPartitionStarts.at(iPart + 1); i++)
+                for (index i = this->LocalPartStart(iPart); i < this->LocalPartEnd(iPart); i++)
                     if (!cellOld2New[i])
                         cellNew2Old_new.push_back(cellNew2Old[i]);
-                for (index i = localPartitionStarts.at(iPart); i < localPartitionStarts.at(iPart + 1); i++)
+                for (index i = this->LocalPartStart(iPart); i < this->LocalPartEnd(iPart); i++)
                     if (cellOld2New[i])
                         cellNew2Old_new.push_back(cellNew2Old[i]);
             }
 
             cellNew2Old = std::move(cellNew2Old_new);
+            DNDS_assert(cellNew2Old.size() == this->NumCell());
+            for (auto v : cellNew2Old)
+                DNDS_assert(v < NumCell() && v >= 0);
         }
         // reverse permutation
         std::unordered_set<index> set;

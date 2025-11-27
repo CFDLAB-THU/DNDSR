@@ -1615,7 +1615,7 @@ namespace DNDS::Euler
             auto sourceCaller = [&](int mode)
             {
                 if (settings.ransModel == RANSModel::RANS_KOSST)
-                    RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, retInc, mode);
+                    RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, vfv->GetCellMaxLenScale(iCell) * settings.SADESScale, retInc, mode);
                 else if (settings.ransModel == RANSModel::RANS_KOWilcox)
                     RANS::GetSource_KOWilcox<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, retInc, mode);
                 else if (settings.ransModel == RANSModel::RANS_RKE)

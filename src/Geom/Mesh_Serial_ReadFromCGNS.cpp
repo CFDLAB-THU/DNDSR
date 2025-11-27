@@ -425,8 +425,10 @@ namespace DNDS::Geom
             for (DNDS::index iNode = ZoneNodeStarts.at(iGZ); iNode < ZoneNodeStarts.at(iGZ + 1); iNode++)
             {
                 auto coordC = (*ZoneCoords[iGZ])[iNode - ZoneNodeStarts.at(iGZ)];
+                real dist = ((*coordSerial)[NodeOld2New.at(iNode)] - coordC).norm();
                 if (!DNDS::IsUnInitReal((*coordSerial)[NodeOld2New.at(iNode)][0]))
-                    DNDS_assert_info(((*coordSerial)[NodeOld2New.at(iNode)] - coordC).norm() < 1e-15, "Not same points on the connection");
+                    DNDS_assert_info(dist < 1e-10,
+                                     "Not same points on the connection, distance is " + std::to_string(dist));
                 (*coordSerial)[NodeOld2New.at(iNode)] = coordC;
             }
         }

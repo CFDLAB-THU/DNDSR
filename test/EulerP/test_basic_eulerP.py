@@ -30,6 +30,7 @@ def get_fv(mpi):
             "translation2": [0, 1, 0],
         },
         meshDirectBisect=4,
+        second_level_parts=16,
     )
     meshBnd, readerBnd = create_bnd_mesh(mesh)
 
@@ -300,6 +301,7 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo, isCuda=False):
         np.array(cell_out1[iCell], copy=False)[:] = np.array(
             data["u"][iCell], copy=False
         )[1]
+        np.array(cell_out1[iCell], copy=False)[:] = iCell
         np.array(cell_out2[iCell], copy=False)[:] = np.array(
             data["uGrad"][iCell], copy=False
         )[0, 1]
@@ -327,4 +329,4 @@ if __name__ == "__main__":
     # MPIDebugHold()
 
     # DNDS.Debug.MPIDebugHold(mpi)
-    test_basic_eulerP(mpi, isCuda=True)
+    test_basic_eulerP(mpi, isCuda=False)

@@ -140,7 +140,7 @@ def create_mesh_from_CGNS(
         mesh.AdjGlobal2LocalPrimary()
         mesh.AdjGlobal2LocalN2CB()
 
-    mesh.ReorderLocalCells(nParts=inner_process_parts)
+    mesh.ReorderLocalCells(nParts=inner_process_parts, nPartsInner=second_level_parts)
 
     mesh.InterpolateFace()
     mesh.AssertOnFaces()

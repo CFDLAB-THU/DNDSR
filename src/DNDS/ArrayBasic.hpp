@@ -283,6 +283,7 @@ namespace DNDS
                 DNDS_HD_assert(pDiff < INT32_MAX);                                         // overflow
                 return static_cast<rowsize>(pDiff);
             }
+            return UnInitRowsize;
         }
 
     public:
@@ -311,6 +312,7 @@ namespace DNDS
                 return _dataLayout == TABLE_Max ? _row_size_dynamic : rm;
             else
                 DNDS_HD_assert_infof(false, "invalid call");
+            return UnInitRowsize;
         }
 
         // to be device-callable
@@ -322,6 +324,7 @@ namespace DNDS
                 return this->RowSize();
             else
                 DNDS_HD_assert_infof(false, "invalid call");
+            return UnInitRowsize;
         }
 
         // to be device-callable
@@ -331,6 +334,7 @@ namespace DNDS
                 return this->RowSize(iRow);
             else
                 DNDS_HD_assert_infof(false, "invalid call");
+            return UnInitRowsize;
         }
 
     protected:

@@ -346,7 +346,7 @@ namespace DNDS::Euler::RANS
     }
 
     template <int dim, class TU, class TDiffU, class TSource>
-    void GetSource_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, TSource &source, int mode)
+    void GetSource_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, real lLES, TSource &source, int mode)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -386,6 +386,8 @@ namespace DNDS::Euler::RANS
                      4 * rho * sigO2 * k / (CDKW * sqr(d))),
             4));
         real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
+        real lRANS = std::sqrt(k) / (betaStar * omegaaa);
+        real FDES = std::max(1.0, lRANS / (lLES + verySmallReal) * (1 - F2));
         // F2 = 0;
         real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho; // use S/OmegaMag for SST: S: CFD++, OmegaMag: Turbulence Modeling Validation, Testing, and Developmen
 #if KW_SST_LIMIT_MUT == 1
@@ -415,7 +417,7 @@ namespace DNDS::Euler::RANS
 #endif
         if (mode == 0)
         {
-            source(I4 + 1) = PkTilde - betaStar * rho * k * omegaaa;
+            source(I4 + 1) = PkTilde - betaStar * rho * k * omegaaa * FDES;
             source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
                              2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(EigenAll, 0).dot(diffKO(EigenAll, 1));
             // source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
@@ -423,7 +425,7 @@ namespace DNDS::Euler::RANS
         }
         else
         {
-            source(I4 + 1) = betaStar * omegaaa;
+            source(I4 + 1) = betaStar * omegaaa * FDES;
             source(I4 + 2) = 2 * beta * omegaaa;
         }
     }
