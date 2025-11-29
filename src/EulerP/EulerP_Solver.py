@@ -408,18 +408,19 @@ class Solver:
             data["u"].addTo(data["rhs"], dt * 4.0 / 6)
             data["u"].trans.startPersistentPull(self.runningDevice)
 
-            rhsNorm = data["rhs1"].componentWiseNorm1()
-
             t = tNext
-            pMax = data["p"].max()
-            pMin = data["p"].min()
-            uGradN = data["uGrad"].norm2()
-            if mpi.rank == 0:
-                print(
-                    f"Step [{iStep}], t [{t:.4e}] dt [{dt:.4e}] pRange [{pMax:.2e},{pMin:.2e}]"
-                    + f" rhs: [{','.join([f'{v:8.2e}' for v in rhsNorm.tolist()])}]"
-                )
-                print(uGradN)
+
+            if iStep % 1 == 0 or if_stop:
+                rhsNorm = data["rhs1"].componentWiseNorm1()
+                pMax = data["p"].max()
+                pMin = data["p"].min()
+                uGradN = data["uGrad"].norm2()
+                if mpi.rank == 0:
+                    print(
+                        f"Step [{iStep}], t [{t:.4e}] dt [{dt:.4e}] pRange [{pMax:.2e},{pMin:.2e}]"
+                        + f" rhs: [{','.join([f'{v:8.2e}' for v in rhsNorm.tolist()])}]"
+                    )
+                    print(uGradN)
 
             if if_stop:
                 return iStep, t

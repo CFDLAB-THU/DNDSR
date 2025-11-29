@@ -96,8 +96,9 @@ def test_solver(
 
     # 0.5, 1, 0, 0, 4
 
-    tInt = 0.01
-    nInt = 1
+    tInt = 0.01 * 1e0
+    nInt = 10
+    CFL = 0.5 * 1
     t = 0
     pr = cProfile.Profile()
     pr.enable()
@@ -107,7 +108,7 @@ def test_solver(
     for II in range(1, nInt + 1):
         tW0 = time.perf_counter()
         iStepNew, tNew = solver.IntegrateDt_ExplicitInterval(
-            t, t + tInt, CFL=0.5, step0=iStep, max_step=iStep + 100000
+            t, t + tInt, CFL=CFL, step0=iStep, max_step=iStep + 100000
         )
         tW1 = time.perf_counter()
         if mpi.rank == 0:
