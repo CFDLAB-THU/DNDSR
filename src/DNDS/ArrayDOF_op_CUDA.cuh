@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ArrayDOF.hpp"
+// #include "DNDS/CUDA_Utils.hpp"
 #include "DNDS/Defines.hpp"
 #include "DNDS/Errors.hpp"
 #include "mpi.h"
@@ -693,11 +694,15 @@ namespace DNDS
         DNDS_assert(self.father->device() == DeviceBackend::CUDA);
         DNDS_assert(self.son->device() == DeviceBackend::CUDA);
         ArrayDofDeviceView<DeviceBackend::CUDA, n_m, n_n> self_view = self.template deviceView<DeviceBackend::CUDA>();
-
+        // int device_id;
+        // DNDS_CUDA_CHECKED(cudaGetDevice(&device_id));
+        // std::cout
+        //     << "device_id " << device_id << std::endl;
         thrust::device_ptr<real> d_self_father(self_view.father.data());
         index self_father_d_size = size_t_to_signed<index>(self_view.father.DataSize());
         thrust::device_ptr<real> d_self_son(self_view.son.data());
         index self_son_d_size = size_t_to_signed<index>(self_view.son.DataSize());
+        // std::cout << "got device_ptr" << std::endl;
 
         auto execute = [&](real init, auto binary_op)
         {

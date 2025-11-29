@@ -1,6 +1,5 @@
 #pragma once
 
-#include "DNDS/Errors.hpp"
 #include "Defines.hpp"
 #include "ArrayBasic.hpp"
 #include <cstdint>
@@ -19,6 +18,7 @@
 #    include <thrust/device_vector.h>
 #    include <Eigen/Dense>
 #    include <sstream>
+#    include <cuda.h>
 
 #    define DNDS_CUDA_1D_TID_GLOBAL_INDEX ((index)blockIdx.x * (index)blockDim.x + (index)threadIdx.x)
 
@@ -33,6 +33,22 @@
                    << " (" << _err << ") at " << __FILE__ << ":" << __LINE__ \
                    << " in " << #expr << std::endl;                          \
                 DNDS_check_throw_info(_err != cudaSuccess, ss.str());        \
+            }                                                                \
+        } while (0)
+
+#    define DNDS_CUDA_DRIVER_CHECKED(expr)                                   \
+        do                                                                   \
+        {                                                                    \
+            CUresult _err = (expr);                                          \
+            if (_err)                                                        \
+            {                                                                \
+                const char *errStr;                                          \
+                cuGetErrorString(_err, &errStr);                             \
+                std::stringstream ss;                                        \
+                ss << "CUDA Driver Error: " << errStr                        \
+                   << " (" << _err << ") at " << __FILE__ << ":" << __LINE__ \
+                   << " in " << #expr << std::endl;                          \
+                DNDS_check_throw_info(_err, ss.str());                       \
             }                                                                \
         } while (0)
 
