@@ -78,7 +78,7 @@ def arguments_to_json(arguments):
         need_quoting = has_space or has_simple_quote
         if need_quoting:
             cmd_line += r'\"'
-        cmd_line += argument.replace("\\", r'\\\\').replace(r'"', r'\\\"')
+        cmd_line += argument.replace("\\", '\\\\').replace('"', '\\\"')
         if need_quoting:
             cmd_line += r'\"'
     return cmd_line + '"'
