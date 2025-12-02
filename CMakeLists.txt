@@ -178,7 +178,11 @@ endif()
 if(DNDS_USE_CUDA)
     set(CMAKE_CUDA_STANDARD 17) 
     set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
-    # set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
+    set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
+    # ! disable --options-file for nvcc
+    set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_OBJECTS 0)
+    set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES 0)
+    set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_LIBRARIES 0)
     enable_language(CUDA)
     add_compile_definitions(DNDS_USE_CUDA)
 
@@ -477,7 +481,7 @@ message(DEBUG "DNDS_EXTERNAL_LIBS_REAL:  ${DNDS_EXTERNAL_LIBS_REAL}")
 list(APPEND DNDS_EXTERNAL_LIBS fmt::fmt)
 if (DNDS_USE_CUDA)
     #! don't do this, could cause linking both shared/static cudart
-    # list(APPEND DNDS_EXTERNAL_LIBS CUDA::cudart)
+    list(APPEND DNDS_EXTERNAL_LIBS CUDA::cuda_driver)
 endif()
 
 if(DNDS_EXTERNAL_INCLUDE_SUPERLU)

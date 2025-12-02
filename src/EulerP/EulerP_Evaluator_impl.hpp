@@ -299,6 +299,7 @@ namespace DNDS::EulerP
                 TUScalar::t_deviceView<B> gamma;
                 TUScalar::t_deviceView<B> mu;
                 vector_DeviceView<B, TUScalar::t_deviceView<B>> muComp;
+                TUScalar::t_deviceView<B> deltaLamCell;
 
                 TUDof::t_deviceView<B> uFL;
                 TUDof::t_deviceView<B> uFR;
@@ -310,7 +311,6 @@ namespace DNDS::EulerP
 
                 TUScalar::t_deviceView<B> pFL;
                 TUScalar::t_deviceView<B> pFR;
-                TUScalar::t_deviceView<B> deltaLamFaceFF;
 
                 vector_DeviceView<B, TUScalar::t_deviceView<B>> fluxScalarFF;
 
@@ -355,6 +355,7 @@ namespace DNDS::EulerP
                 DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(gamma)
                 DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(mu)
                 DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(muComp, muComp_v)
+                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(deltaLamCell)
                 //
                 DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uFL)
                 DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(uFR)
@@ -365,7 +366,6 @@ namespace DNDS::EulerP
 
                 DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(pFL)
                 DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(pFR)
-                DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(deltaLamFaceFF)
                 // out
                 DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_SSPARR(fluxFF)
                 DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(fluxScalarFF, fluxScalarFF_v)

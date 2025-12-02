@@ -567,6 +567,7 @@ namespace DNDS::EulerP
             ssp<TUScalar> mu;
             std::vector<ssp<TUScalar>> muComp;
             ssp<TUScalar> gamma;
+            ssp<TUScalar> deltaLamCell;
 
             ssp<TUDof> uFL;
             ssp<TUDof> uFR;
@@ -578,7 +579,6 @@ namespace DNDS::EulerP
             ssp<TUScalar> pFL;
             ssp<TUScalar> pFR;
 
-            ssp<TUScalar> deltaLamFaceFF;
             // out
             ssp<TUDof> fluxFF;
             std::vector<ssp<TUScalar>> fluxScalarFF;
@@ -600,9 +600,10 @@ namespace DNDS::EulerP
                     DNDS_MAKE_1_MEMBER_PTR_SELF(p),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(T),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(a),
+                    DNDS_MAKE_1_MEMBER_PTR_SELF(gamma),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(mu),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(muComp),
-                    DNDS_MAKE_1_MEMBER_PTR_SELF(gamma),
+                    DNDS_MAKE_1_MEMBER_PTR_SELF(deltaLamCell),
 
                     DNDS_MAKE_1_MEMBER_PTR_SELF(uFL),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(uFR),
@@ -613,8 +614,6 @@ namespace DNDS::EulerP
 
                     DNDS_MAKE_1_MEMBER_PTR_SELF(pFL),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(pFR),
-
-                    DNDS_MAKE_1_MEMBER_PTR_SELF(deltaLamFaceFF),
                     // out
                     DNDS_MAKE_1_MEMBER_PTR_SELF(fluxFF),
                     DNDS_MAKE_1_MEMBER_PTR_SELF(fluxScalarFF),

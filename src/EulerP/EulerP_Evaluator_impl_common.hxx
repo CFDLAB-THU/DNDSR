@@ -689,6 +689,7 @@ namespace DNDS::EulerP
         DNDS_EULERP_IMPL_ARG_GET_REF(gamma)
         DNDS_EULERP_IMPL_ARG_GET_REF(mu)
         DNDS_EULERP_IMPL_ARG_GET_REF(muComp)
+        DNDS_EULERP_IMPL_ARG_GET_REF(deltaLamCell)
 
         DNDS_EULERP_IMPL_ARG_GET_REF(uFL)
         DNDS_EULERP_IMPL_ARG_GET_REF(uFR)
@@ -700,7 +701,6 @@ namespace DNDS::EulerP
 
         DNDS_EULERP_IMPL_ARG_GET_REF(pFL)
         DNDS_EULERP_IMPL_ARG_GET_REF(pFR)
-        DNDS_EULERP_IMPL_ARG_GET_REF(deltaLamFaceFF)
 
         DNDS_EULERP_IMPL_ARG_GET_REF(fluxFF)
         DNDS_EULERP_IMPL_ARG_GET_REF(fluxScalarFF)
@@ -768,7 +768,8 @@ namespace DNDS::EulerP
 
         RoeEigenValueFixer(
             aRoe, aRoe, veloRoeN, veloRoeN,
-            deltaLamFaceFF(iFace), 1.0, lam0, lam123, lam4);
+            std::max(deltaLamCell(iCellL), deltaLamCell(iCellRR)),
+            1.0, lam0, lam123, lam4);
 
         real lamm = std::max(aL + std::abs(vL.dot(n)), aR + std::abs(vR.dot(n)));
         // lam0 = lam123 = lam4 = lamm;

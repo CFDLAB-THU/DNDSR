@@ -5,6 +5,9 @@
 #include "EulerP_Evaluator_impl.hpp"
 #include "EulerP_Evaluator_impl_common.hxx"
 #include "DNDS/CUDA_Utils.hpp"
+#include "cuda_runtime.h"
+
+#define DNDS_EULERP_SERIALIZE_CUDA_EXECUTION
 
 namespace DNDS::EulerP
 {
@@ -71,6 +74,8 @@ namespace DNDS::EulerP
             CUDA_Simple_PointWise_Call_RecGradient_GGRec_Kernel_GG<<<blocksPerGrid, threadsPerBlock>>>(
                 self_view_device_copy.get(), arg.portable, nVars, nVarsScalar, 0, mesh.NumCell());
         }
+        if (arg.self.get_config()["serializeCUDAExecution"])
+            cudaDeviceSynchronize();
     }
 
     template <>
@@ -112,6 +117,8 @@ namespace DNDS::EulerP
             CUDA_Simple_PointWise_Call_RecGradient_BarthLimiter_Kernel_ScalarPart<<<blocksPerGrid, threadsPerBlock>>>(
                 self_view_device_copy.get(), arg.portable, nVars, nVarsScalar, 0, mesh.NumCell());
         }
+        if (arg.self.get_config()["serializeCUDAExecution"])
+            cudaDeviceSynchronize();
     }
 
     DNDS_EULERP_DEFINE_CUDA_SIMPLE_POINTWISE_KERNEL(Cons2PrimMu_Kernel, Evaluator_impl<B>::Cons2PrimMu_Arg::Portable)
@@ -141,6 +148,8 @@ namespace DNDS::EulerP
             CUDA_Simple_PointWise_Call_Cons2PrimMu_Kernel<<<blocksPerGrid, threadsPerBlock>>>(
                 self_view_device_copy.get(), arg.portable, nVars, nVarsScalar, 0, u.Size());
         }
+        if (arg.self.get_config()["serializeCUDAExecution"])
+            cudaDeviceSynchronize();
     }
 
     DNDS_EULERP_DEFINE_CUDA_SIMPLE_POINTWISE_KERNEL(Cons2Prim_Kernel, Evaluator_impl<B>::Cons2Prim_Arg::Portable)
@@ -170,6 +179,8 @@ namespace DNDS::EulerP
             CUDA_Simple_PointWise_Call_Cons2Prim_Kernel<<<blocksPerGrid, threadsPerBlock>>>(
                 self_view_device_copy.get(), arg.portable, nVars, nVarsScalar, 0, u.Size());
         }
+        if (arg.self.get_config()["serializeCUDAExecution"])
+            cudaDeviceSynchronize();
     }
 
     DNDS_EULERP_DEFINE_CUDA_SIMPLE_POINTWISE_KERNEL(EstEigenDt_GetFaceLam_Kernel, Evaluator_impl<B>::EstEigenDt_Arg::Portable)
@@ -205,6 +216,8 @@ namespace DNDS::EulerP
             CUDA_Simple_PointWise_Call_EstEigenDt_GetFaceLam_Kernel<<<blocksPerGrid, threadsPerBlock>>>(
                 self_view_device_copy.get(), arg.portable, nVars, nVarsScalar, 0, mesh.NumFaceProc());
         }
+        if (arg.self.get_config()["serializeCUDAExecution"])
+            cudaDeviceSynchronize();
     }
 
     template <>
@@ -230,6 +243,8 @@ namespace DNDS::EulerP
             CUDA_Simple_PointWise_Call_EstEigenDt_FaceLam2CellDt_Kernel<<<blocksPerGrid, threadsPerBlock>>>(
                 self_view_device_copy.get(), arg.portable, nVars, nVarsScalar, 0, mesh.NumCell());
         }
+        if (arg.self.get_config()["serializeCUDAExecution"])
+            cudaDeviceSynchronize();
     }
 
     DNDS_EULERP_DEFINE_CUDA_SIMPLE_POINTWISE_KERNEL(RecFace2nd_Kernel, Evaluator_impl<B>::RecFace2nd_Arg::Portable)
@@ -259,6 +274,8 @@ namespace DNDS::EulerP
             CUDA_Simple_PointWise_Call_RecFace2nd_Kernel<<<blocksPerGrid, threadsPerBlock>>>(
                 self_view_device_copy.get(), arg.portable, nVars, nVarsScalar, 0, mesh.NumFaceProc());
         }
+        if (arg.self.get_config()["serializeCUDAExecution"])
+            cudaDeviceSynchronize();
     }
 
     DNDS_EULERP_DEFINE_CUDA_SIMPLE_POINTWISE_KERNEL(Flux2nd_Kernel_FluxFace, Evaluator_impl<B>::Flux2nd_Arg::Portable)
@@ -295,5 +312,7 @@ namespace DNDS::EulerP
             CUDA_Simple_PointWise_Call_Flux2nd_Kernel_Face2Cell<<<blocksPerGrid, threadsPerBlock>>>(
                 self_view_device_copy.get(), arg.portable, nVars, nVarsScalar, 0, mesh.NumCell());
         }
+        if (arg.self.get_config()["serializeCUDAExecution"])
+            cudaDeviceSynchronize();
     }
 }

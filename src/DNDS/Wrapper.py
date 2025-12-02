@@ -74,10 +74,26 @@ def is_settable(cls, name):
 #                 property(make_prop_getter(name), make_prop_setter(name)),
 #             )
 
+
 #     return Wrapper
 
 
+def iter_all_methods(cls):
+    seen = set()
+    for base in cls.__mro__:
+        for name, attr in base.__dict__.items():
+            if name not in seen:
+                seen.add(name)
+                yield name, attr, base
+
+
+_generate_wrapper_cache = {}
+
+
 def generate_wrapper(pyclass: type, init_from_obj=False):
+
+    if (pyclass, init_from_obj) in _generate_wrapper_cache:
+        return _generate_wrapper_cache[(pyclass, init_from_obj)]
 
     if not init_from_obj:
 
@@ -93,11 +109,27 @@ def generate_wrapper(pyclass: type, init_from_obj=False):
 
     namespace = {}
 
-    for name, attr in pyclass.__dict__.items():
+    allowed_dunders = {
+        "__add__",
+        "__iadd__",
+        "__sub__",
+        "__isub__",
+        "__mul__",
+        "__imul__",
+        "__div__",
+        "__idiv__",
+        "__call__",
+        "__getitem__",
+        "__setitem__",
+    }
 
-        # skip all dunders
+    for name, attr, base in iter_all_methods(pyclass):
+        # print(pyclass, " name ", name, " attr ", attr, " base ", base)
+        # skip some dunders
         if name.startswith("__") and name.endswith("__"):
-            continue
+            if name not in allowed_dunders:
+                # print("skip")
+                continue
 
         # callable = method
         if callable(attr):
@@ -116,7 +148,7 @@ def generate_wrapper(pyclass: type, init_from_obj=False):
             continue
 
         # property
-        descriptor = pyclass.__dict__.get(name)
+        descriptor = attr
         if isinstance(descriptor, property):
             # generate getter
             src_get = textwrap.dedent(
@@ -146,6 +178,7 @@ def generate_wrapper(pyclass: type, init_from_obj=False):
             setattr(Wrapper, name, prop)
             continue
 
+    _generate_wrapper_cache[(pyclass, init_from_obj)] = Wrapper
     return Wrapper
 
 

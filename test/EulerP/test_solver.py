@@ -12,9 +12,10 @@ def test_solver(
     ifCuda=False,
 ):
     if ifCuda:
-        import cupy as cp
+        # import cupy as cp
 
         # cp.cuda.Device(1).use()
+        pass
 
     m_name, dim = "Uniform128_Periodic.cgns", 2
     # m_name, dim = "UP3D_128.cgns", 3
@@ -44,9 +45,11 @@ def test_solver(
     solver.BuildEval()
     solver.WrapEval()
     solver.BuildDataArray()
+    solver.WrapData()
     solver.eval.setConfig(
         {
-            "threadsPerBlock": 32,
+            "threadsPerBlock": 128,
+            "serializeCUDAExecution": True,
         }
     )
     data = solver.data
@@ -97,7 +100,7 @@ def test_solver(
     # 0.5, 1, 0, 0, 4
 
     tInt = 0.01 * 1e0
-    nInt = 10
+    nInt = 1
     CFL = 0.5 * 1
     t = 0
     pr = cProfile.Profile()
@@ -145,6 +148,7 @@ if __name__ == "__main__":
     ifCuda = True
     if ifCuda:
         import cupy as cp
+        from cupy.cuda import runtime as curuntime
 
         device_count = cp.cuda.runtime.getDeviceCount()
         print(f"{mpi.rank}, nGPU={device_count}")
@@ -152,5 +156,7 @@ if __name__ == "__main__":
         if mpi.size > device_count:
             raise RuntimeError("too many ranks on this machine")
         cp.cuda.Device(mpi.rank).use()
+        curuntime.deviceSynchronize()
+        pass
 
     test_solver(mpi, ifCuda=ifCuda)

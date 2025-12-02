@@ -14,6 +14,7 @@ namespace DNDS::EulerP
         auto &c = this->config_data = t_jsonconfig::object();
         c["threadsPerBlock"] = 128;
         c["pullAllInputArgs"] = true;
+        c["serializeCUDAExecution"] = false;
     }
 
     void EvaluatorConfig::valid_patch_keys(const t_jsonconfig &config_in)

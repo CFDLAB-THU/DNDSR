@@ -3,14 +3,19 @@
 
 CompileFlags:
   Add: [
-    -std=c++17,
-    # -U__DNDS_REALLY_COMPILING__,
-   ]
+      -std=c++17,
+      # -U__DNDS_REALLY_COMPILING__,
+    ]
   Remove: [
       -flto*,
       --generate-code=*, # for CUDA
       -forward-unknown-to-host-compiler, # for CUDA
       --expt-relaxed-constexpr, # for CUDA
+      -ccbin=g++-11,
+      -Xcompiler=-O3,
+      --extended-lambda,
+      --Werror,
+      -rdc=true,
     ]
 
 # -I/home/harry/anaconda3/include/python3.9,

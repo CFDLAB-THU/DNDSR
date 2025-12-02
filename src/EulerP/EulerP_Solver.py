@@ -5,6 +5,7 @@ from DNDSR.Geom.utils import *
 import numpy as np
 import pprint
 import math
+import copy
 
 
 class Solver:
@@ -222,6 +223,49 @@ class Solver:
             else:
                 a.to_device(backend)
 
+    def WrapData(self):
+        from DNDSR.DNDS.Wrapper import generate_wrapper
+
+        class _WrappedView:
+            def __init__(self, dict):
+                self._dict = dict
+
+            def __getitem__(self, key):
+                return self._dict.get_wrapped(key)
+
+        class WrappedDict(dict):
+            def __init__(self):
+                super().__init__()
+
+            def __getitem__(self, key):
+                return super().__getitem__(key)[0]
+
+            def __setitem__(self, key, val):
+                if isinstance(val, list):
+                    val_wrapped = []
+                    for i in range(len(val)):
+                        val_wrapped.append(generate_wrapper(type(val[i]), True)(val[i]))
+                else:  # TODO check types here
+                    val_wrapped = generate_wrapper(type(val), True)(val)
+                return super().__setitem__(key, (val, val_wrapped))
+
+            def get_wrapped(self, key):
+                return super().__getitem__(key)[1]
+
+            def items(self):
+                for k, v in super().items():
+                    yield k, v[0]
+
+            def Wrapped(self):
+                return _WrappedView(self)
+
+        data = self.data
+        self.data = WrappedDict()
+        self.data.update(data)
+
+        for n, a in data.items():
+            self.data[n] = a
+
     def to_device(self, backend=None):
         if backend is None:
             return
@@ -313,8 +357,9 @@ class Solver:
         arg.p = data["p"]
         arg.T = data["T"]
         arg.a = data["a"]
-        arg.mu = data["mu"]
         arg.gamma = data["gamma"]
+        arg.mu = data["mu"]
+        arg.deltaLamCell = data["deltaLamCell"]
 
         arg.uFL = data["uFL"]
         arg.uFR = data["uFR"]
@@ -322,7 +367,6 @@ class Solver:
         arg.pFR = data["pFR"]
 
         arg.uGradFF = data["uGradFF"]
-        arg.deltaLamFaceFF = data["deltaLamFace"]
 
         arg.fluxFF = data["fluxFF"]
         arg.rhs = data["rhs"]
@@ -336,8 +380,13 @@ class Solver:
         eval = self.eval
         mpi = self.mpi
 
-        data = self.data
+        # data = self.data
+        data = (
+            self.data.Wrapped()
+        )  #!caution, the wrapped objects cannot be put into pybind11 fields
         eval.RecGradient(solver.LoadArg_RecGradient())
+        # print(data["p"].min())
+        # _ = input()
         data["uGrad"].trans.startPersistentPull(self.runningDevice)
         if zero_grad:
             data["uGrad"].setConstant(0.0)
