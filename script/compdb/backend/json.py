@@ -45,9 +45,19 @@ class JSONCompilationDatabase(CompilationDatabaseInterface):
         else:
             # PERFORMANCE: I think shlex is inherently slow,
             # something performing better may be necessary
-            arguments = shlex.split(d['command'])
-        return CompileCommand(d['directory'], d['file'], arguments,
-                              d.get('output'))
+            arguments = shlex.split(d["command"])
+            if "directory" not in d:
+                raise ValueError("compile options need a 'directory' entry")
+            for i in range(len(arguments)):
+                if arguments[i] == "--options-file" and i + 1 < len(arguments):
+                    rsp_file = arguments[i + 1]
+                    rsp_file = os.path.join(d["directory"], rsp_file)
+                    if os.path.isfile(rsp_file):
+                        with open(rsp_file) as f:
+                            lines = f.readlines()
+                        for line in lines:
+                            arguments.extend(line.split())
+        return CompileCommand(d["directory"], d["file"], arguments, d.get("output"))
 
     @property
     def _data(self):

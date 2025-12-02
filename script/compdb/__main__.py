@@ -4,7 +4,7 @@ import os
 import sys
 
 # allow invokation of the style 'python /path/to/compdb'
-if __package__ == '':
+if __package__ == "" or __package__ is None:
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from compdb.cli import main  # noqa: E402
