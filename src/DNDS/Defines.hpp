@@ -4,6 +4,7 @@
 #include "Errors.hpp"
 #include "EigenPCH.hpp"
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <vector>
@@ -601,6 +602,26 @@ namespace DNDS
             {
                 for (size_t i = 0; i < v.size() * sizeof(T); i++)
                     r = r ^ std::hash<uint8_t>{}(((uint8_t *)(v.data()))[i]);
+            }
+            return r;
+        }
+
+        template <class TBegin, class TEnd>
+        std::size_t operator()(TBegin &&begin, TEnd &&end) const noexcept
+        {
+            std::size_t r = 0;
+            ptrdiff_t size = end - begin;
+            if constexpr (Meta::has_std_hash<T>::value)
+                for (ptrdiff_t i = 0; i < size; i++)
+                    r = r ^ std::hash<T>{}(begin[i]);
+            else if constexpr (Meta::is_std_vector<T>::value)
+                for (ptrdiff_t i = 0; i < size; i++)
+                    r = r ^ vector_hash<typename T::value_type>{}(begin[i]);
+            else
+            {
+                auto *start = reinterpret_cast<uint8_t *>(&(*begin));
+                for (size_t i = 0; i < size * sizeof(T); i++)
+                    r = r ^ std::hash<uint8_t>{}(start[i]);
             }
             return r;
         }

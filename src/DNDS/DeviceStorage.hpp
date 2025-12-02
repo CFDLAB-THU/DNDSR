@@ -80,16 +80,12 @@ namespace DNDS
     class DeviceStorageBase
     {
     public:
-        virtual void *raw_ptr() = 0;
-        virtual void copy_host_to_device(void *host_ptr, size_t n_bytes) = 0;
-        virtual void copy_device_to_host(void *host_ptr, size_t n_bytes) = 0;
+        virtual uint8_t *raw_ptr() = 0;
+        virtual void copy_host_to_device(uint8_t *host_ptr, size_t n_bytes) = 0;
+        virtual void copy_device_to_host(uint8_t *host_ptr, size_t n_bytes) = 0;
+        virtual void copy_to_device(uint8_t *device_ptr_dst, size_t n_bytes) = 0;
         //! =0 is a definition and all virtual functions must be defined to have vtable
         //! never omit =0 or use {}
-        virtual t_supDeviceStorageBase clone() = 0;
-        t_sspDeviceStorageBase shared_clone()
-        {
-            return t_sspDeviceStorageBase(clone().release());
-        }
         [[nodiscard]] virtual size_t bytes() const = 0;
         [[nodiscard]] virtual DeviceBackend backend() const = 0;
         virtual ~DeviceStorageBase();
@@ -141,144 +137,10 @@ namespace DNDS
         {
             DNDS_assert_info(false, "not implemented");
             return null_supDeviceStorageBase();
+        }
         case DeviceBackend::Unknown:
         default:
             return null_supDeviceStorageBase();
         }
-        }
     }
-
-    inline t_sspDeviceStorageBase device_storage_create_shared(DeviceBackend backend, size_t n_bytes)
-    {
-        switch (backend)
-        {
-
-        case DeviceBackend::Host:
-            return device_storage_factory<DeviceBackend::Host>::device_storage_create_shared(backend, n_bytes);
-#ifdef DNDS_USE_CUDA
-        case DeviceBackend::CUDA:
-            return device_storage_factory<DeviceBackend::CUDA>::device_storage_create_shared(backend, n_bytes);
-#endif
-        case DNDS::DeviceBackend::Custom1:
-        {
-            DNDS_assert_info(false, "not implemented");
-            return nullptr;
-        }
-        case DeviceBackend::Unknown:
-        default:
-            return nullptr;
-        }
-    }
-
-    template <DeviceBackend B, typename T, typename TSize = int64_t>
-    class vector_DeviceView
-    {
-        static_assert(std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>,
-                      "host_device_vector elements must be trivially_copyable and default_constructible");
-
-        T *_data = nullptr;
-        TSize _size = 0;
-
-    public:
-        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(vector_DeviceView, vector_DeviceView)
-        DNDS_DEVICE_CALLABLE vector_DeviceView(T *n_data, TSize n_size) : _data(n_data), _size(n_size) {}
-
-        DNDS_DEVICE_CALLABLE T operator[](TSize i) const
-        {
-            DNDS_HD_assert(i >= 0 && i < _size);
-            return _data[i];
-        }
-        DNDS_DEVICE_CALLABLE T &operator[](TSize i)
-        {
-            DNDS_HD_assert(i >= 0 && i < _size);
-            return _data[i];
-        }
-        DNDS_DEVICE_CALLABLE TSize size() const { return _size; }
-    };
-
-    template <typename T>
-    struct host_device_vector : public std::vector<T>
-    {
-        static_assert(std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>,
-                      "host_device_vector elements must be trivially_copyable and default_constructible");
-        using t_base = std::vector<T>;
-        using t_base::t_base;
-
-        t_supDeviceStorageBase deviceStorage = null_supDeviceStorageBase();
-
-        DNDS_HOST host_device_vector<T> &operator=(const std::vector<T> &v)
-        {
-            this->t_base::operator=(v);
-            return *this;
-        }
-
-        // DNDS_HOST explicit operator std::vector<T>() const
-        // {
-        //     std::vector<T> ret;
-        //     ret.resize(this->size());
-        //     std::copy(this->begin(), this->end(), ret.begin());
-        //     return ret;
-        // }
-
-        void to_device(DeviceBackend backend = DeviceBackend::Host)
-        {
-            DNDS_assert_info(DeviceBackend::Unknown != backend, "cannot to_device to Unknown");
-            if (!deviceStorage ||
-                deviceStorage->bytes() != this->size() * sizeof(T) || // size change
-                deviceStorage->backend() != backend)                  // backend change
-                deviceStorage = device_storage_create(backend, this->size() * sizeof(T));
-            deviceStorage->copy_host_to_device(this->data(), this->size() * sizeof(T));
-        }
-
-        void to_host()
-        {
-            if (this->device() != DeviceBackend::Unknown)
-            {
-                DNDS_assert(deviceStorage);
-                deviceStorage->copy_device_to_host(this->data(), this->size() * sizeof(T));
-            }
-        }
-
-        T *dataDevice()
-        {
-            return deviceStorage ? reinterpret_cast<T *>(deviceStorage->raw_ptr()) : nullptr;
-        }
-
-        template <DeviceBackend B, typename TSize = int64_t>
-        using t_deviceView = vector_DeviceView<B, T, TSize>;
-        template <DeviceBackend B, typename TSize = int64_t>
-        t_deviceView<B, TSize> deviceView()
-        {
-            DNDS_assert_info(this->device() == B || (B == DeviceBackend::Host || B == DeviceBackend::Unknown),
-                             "not on this device: " + std::string(device_backend_name(B)));
-            if constexpr (B == DeviceBackend::Host || B == DeviceBackend::Unknown)
-                return t_deviceView<B, TSize>(this->data(), this->size());
-            else
-                return t_deviceView<B, TSize>(this->dataDevice(), this->size());
-        }
-
-        const T *dataDevice() const
-        {
-            return deviceStorage ? reinterpret_cast<const T *>(deviceStorage->raw_ptr()) : nullptr;
-        }
-
-        host_device_vector &operator=(const host_device_vector<T> &R)
-        {
-            if (this == &R)
-                return *this;
-            this->t_base::operator=(R);
-            this->deviceStorage = R.deviceStorage ? R.deviceStorage->clone() : null_supDeviceStorageBase();
-            return *this;
-        }
-
-        host_device_vector(const host_device_vector<T> &R) : t_base(R)
-        {
-            this->deviceStorage = R.deviceStorage ? R.deviceStorage->clone() : null_supDeviceStorageBase();
-        }
-
-        DeviceBackend device()
-        {
-            return deviceStorage ? deviceStorage->backend() : DeviceBackend::Unknown;
-        }
-    };
 }

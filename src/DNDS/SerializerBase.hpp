@@ -4,6 +4,7 @@
 #include "MPI.hpp"
 #include <set>
 #include "DeviceStorage.hpp"
+#include "Vector.hpp"
 
 namespace DNDS::Serializer
 {

@@ -369,12 +369,13 @@ namespace DNDS::EulerP
         t_deviceView<B> deviceView()
         {
             host_device_vector<BC_DeviceView<B>> bcs_device_view;
-            bcs_device_view.reserve(bcs.size());
+            bcs_device_view.resize(bcs.size());
+            index i = 0;
             for (auto &bc : bcs)
             {
                 DNDS_assert(bc.device() == B ||
                             (B == DeviceBackend::Host && bc.device() == DeviceBackend::Unknown));
-                bcs_device_view.emplace_back(bc.template deviceView<B>());
+                bcs_device_view[i++] = bc.template deviceView<B>();
             }
             bcs_device_view.to_device(B);
 
@@ -385,10 +386,10 @@ namespace DNDS::EulerP
 
 namespace DNDS
 {
-//     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(EulerP::BC_DeviceView<DeviceBackend::Host>, extern)
-//     DNDS_DEVICE_STORAGE_INST(EulerP::BC_DeviceView<DeviceBackend::Host>, DeviceBackend::Host, extern)
-// #ifdef DNDS_USE_CUDA
-//     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(EulerP::BC_DeviceView<DeviceBackend::CUDA>, extern)
-//     DNDS_DEVICE_STORAGE_INST(EulerP::BC_DeviceView<DeviceBackend::CUDA>, DeviceBackend::CUDA, extern)
-// #endif
+    //     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(EulerP::BC_DeviceView<DeviceBackend::Host>, extern)
+    //     DNDS_DEVICE_STORAGE_INST(EulerP::BC_DeviceView<DeviceBackend::Host>, DeviceBackend::Host, extern)
+    // #ifdef DNDS_USE_CUDA
+    //     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(EulerP::BC_DeviceView<DeviceBackend::CUDA>, extern)
+    //     DNDS_DEVICE_STORAGE_INST(EulerP::BC_DeviceView<DeviceBackend::CUDA>, DeviceBackend::CUDA, extern)
+    // #endif
 }

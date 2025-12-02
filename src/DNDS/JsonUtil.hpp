@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include "EigenUtil.hpp"
 #include "DeviceStorage.hpp"
+#include "Vector.hpp"
 
 namespace DNDS
 {

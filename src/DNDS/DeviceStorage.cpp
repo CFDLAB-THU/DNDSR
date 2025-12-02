@@ -40,13 +40,13 @@ namespace DNDS
         {
         }
 
-        void *raw_ptr() override
+        uint8_t *raw_ptr() override
         {
             // return reinterpret_cast<void *>(data.data());
             // ! point-back design:
-            return reinterpret_cast<void *>(data);
+            return data;
         }
-        void copy_host_to_device(void *host_ptr, size_t n_bytes) override
+        void copy_host_to_device(uint8_t *host_ptr, size_t n_bytes) override
         {
             DNDS_assert_info(n_bytes == bytes(), "bytes size mismatch");
             auto *host_T_ptr = reinterpret_cast<uint8_t *>(host_ptr);
@@ -54,7 +54,7 @@ namespace DNDS
             // ! point-back design:
             data = host_T_ptr;
         }
-        void copy_device_to_host(void *host_ptr, size_t n_bytes) override
+        void copy_device_to_host(uint8_t *host_ptr, size_t n_bytes) override
         {
             DNDS_assert_info(n_bytes == bytes(), "bytes size mismatch");
             auto *host_T_ptr = reinterpret_cast<uint8_t *>(host_ptr);
@@ -62,11 +62,14 @@ namespace DNDS
             // ! point-back design:
             // do nothing
         }
-        t_supDeviceStorageBase clone() override
+        void copy_to_device(uint8_t *device_ptr_dst, size_t n_bytes) override
         {
-            // return std::make_unique<self_type>(*this); // copy CTOR
-            return {new self_type(*this), deviceStorageBase_deleter};
+            DNDS_assert_info(n_bytes == bytes(), "bytes size mismatch");
+            auto *device_T_ptr_dst = reinterpret_cast<uint8_t *>(device_ptr_dst);
+            // ! point-back design:
+            // do nothing
         }
+
         [[nodiscard]] size_t bytes() const override
         {
             // return data.size() * sizeof(T);

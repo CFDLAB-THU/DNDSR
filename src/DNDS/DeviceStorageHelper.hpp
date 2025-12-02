@@ -1,6 +1,7 @@
 #pragma once
 #include "DeviceStorage.hpp"
 #include <type_traits>
+#include "Vector.hpp"
 
 namespace DNDS
 {
@@ -14,9 +15,9 @@ namespace DNDS
         template <class TGetView>
         deviceViewVector(int32_t nViews, TGetView &&GetView)
         {
-            views.reserve(nViews);
+            views.resize(nViews);
             for (int32_t i = 0; i < nViews; i++)
-                views.emplace_back(GetView(i));
+                views[i] = GetView(i);
             views.to_device(B);
         }
 

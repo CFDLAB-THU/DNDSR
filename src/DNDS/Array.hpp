@@ -17,6 +17,7 @@
 #    include "DeviceView.hpp"
 #    include "SerializerBase.hpp"
 #    include "SerializerJSON.hpp"
+#    include "Vector.hpp"
 
 namespace DNDS
 {
@@ -541,17 +542,17 @@ namespace DNDS
             if constexpr (_dataLayout == CSR)
             {
                 if (IfCompressed())
-                    hashData = vector_hash<T>()(_data);
+                    hashData = vector_hash<T>()(_data.begin(), _data.end());
                 else
                     hashData = vector_hash<std::vector<T>>()(_dataUncompressed);
             }
             else
-                hashData = vector_hash<T>()(_data);
+                hashData = vector_hash<T>()(_data.begin(), _data.end());
             std::size_t hashSize = 0;
             if (_pRowSizes)
-                hashSize = vector_hash<rowsize>()(*_pRowSizes);
+                hashSize = vector_hash<rowsize>()(_pRowSizes->begin(), _pRowSizes->end());
             if (_pRowStart)
-                hashSize = vector_hash<index>()(*_pRowStart);
+                hashSize = vector_hash<index>()(_pRowSizes->begin(), _pRowSizes->end());
             return array_hash<std::size_t, 3>()(std::array<std::size_t, 3>{std::size_t(_size), hashSize, hashData});
         }
 
@@ -633,11 +634,16 @@ namespace DNDS
             auto treatAsBytes = [&]()
             { serializerP->WriteUint8Array("data", (uint8_t *)_data.data(), _data.size() * sizeof_T, offset * sizeof_T); };
             if constexpr (std::is_same_v<T, index>)
-                serializerP->WriteIndexVector("data", _data, offset);
+            {
+                // TODO: OPTIMIZE serializer pass a range
+                serializerP->WriteIndexVector("data", std::vector<index>(_data), offset);
+            }
             else if constexpr (std::is_same_v<T, real>)
             {
                 if (!std::dynamic_pointer_cast<Serializer::SerializerJSON>(serializerP))
-                    serializerP->WriteRealVector("data", _data, offset);
+                { // TODO: OPTIMIZE serializer pass a range
+                    serializerP->WriteRealVector("data", std::vector<real>(_data), offset);
+                }
                 else
                     treatAsBytes();
             }
@@ -659,11 +665,19 @@ namespace DNDS
             };
 
             if constexpr (std::is_same_v<T, index>)
-                serializerP->ReadIndexVector("data", _data, offset);
+            { // TODO: OPTIMIZE host_device_vector accept rvalue std::vector
+                std::vector<index> data_tmp;
+                serializerP->ReadIndexVector("data", data_tmp, offset);
+                _data = data_tmp;
+            }
             else if constexpr (std::is_same_v<T, real>)
             {
                 if (!std::dynamic_pointer_cast<Serializer::SerializerJSON>(serializerP))
-                    serializerP->ReadRealVector("data", _data, offset);
+                { // TODO: OPTIMIZE host_device_vector accept rvalue std::vector
+                    std::vector<real> data_tmp;
+                    serializerP->ReadRealVector("data", data_tmp, offset);
+                    _data = data_tmp;
+                }
                 else
                     treatAsBytes();
             }
@@ -795,16 +809,16 @@ namespace DNDS
                 _pRowStart->to_device(backend);
             if (_pRowSizes)
                 _pRowSizes->to_device(backend);
-            deviceBackend = _data.deviceStorage->backend();
+            deviceBackend = _data.device();
         }
 
         void clear_device()
         {
-            _data.deviceStorage.reset();
+            _data.clear_device();
             if (_pRowStart)
-                _pRowStart->deviceStorage.reset();
+                _pRowStart->clear_device();
             if (_pRowSizes)
-                _pRowSizes->deviceStorage.reset();
+                _pRowSizes->clear_device();
 
             deviceBackend = DeviceBackend::Unknown;
         }

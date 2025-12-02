@@ -84,7 +84,7 @@ namespace DNDS
                      { self *= R; return self; }, py::arg("R"));
         }
         Arr_
-            .def("__div__", [](TArr &self, const TArr &R)
+            .def("__idiv__", [](TArr &self, const TArr &R)
                  { self /= R;return self; }, py::arg("R"));
 
         Arr_
