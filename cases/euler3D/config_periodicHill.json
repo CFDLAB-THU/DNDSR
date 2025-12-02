@@ -44,8 +44,8 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshFile": "../data/mesh/PeriodicHill_RANS3D.cgns",
-        "outPltName": "../data/out/PeriodicHill_RANS3D.dir/periodic_hill_test3D_DES_Rawstart2_C06",
+        "meshFile": "../data/mesh/PeriodicHill_RANS3D_S.cgns",
+        "outPltName": "../data/out/PeriodicHill_RANS3D_NSTest_S.dir/periodic_hill_test3D_Rawstart0",
         "outPltMode": 0,
         "readMeshMode": 1,
         "meshDirectBisect": 0,
@@ -232,7 +232,7 @@
         "riemannSolverType": "Roe_M6",
         "uRecBetaCompressPower": 1,
         "wallDistScheme": 1,
-        "wallDistExection": 5,
+        "wallDistExection": 0,
         "wallDistRefineMax": 0.01,
         "wallDistIter": 1000,
         "wallDistLinSolver": 0,
@@ -241,7 +241,7 @@
         "ransUseQCR": 0,
         "ransSARotCorrection": 1,
         "ransForce2nd": 1,
-        "SADESScale": 0.6, //!
+        "SADESScale": 0.7, //!
         "usePrimGradInVisFlux": 0,
         "nCentralSmoothStep": 0,
         "centralSmoothEps": 0.5,
@@ -250,13 +250,36 @@
             0.0,
             0.0
         ],
+        "Comment": {
+            "M0.15": [
+                1,
+                1,
+                0,
+                0,
+                79.8650793650794,
+                1.3,
+                {
+                    "Rgas": 0.116221972344982
+                }
+            ],
+            "M0.8": [
+                1,
+                1,
+                0,
+                0,
+                2.971576866040534,
+                1.3,
+                {
+                    "Rgas": 0.003338277043445
+                }
+            ]
+        },
         "farFieldStaticValue": [
             1,
             1.0,
             0.0,
             0,
-            45.14285714285715,
-            1.3
+            45.14285714285715
         ],
         "boxInitializers": [
             {
@@ -271,17 +294,7 @@
                     0.0,
                     0.0,
                     0,
-                    44.6428571428572,
-                    1.3
-                ]
-            }
-        ],
-        "exprtkInitializers": [
-            {
-                "exprs": [
-                    "inRegion := 1; ",
-                    "UPrim[1] += cos(x[2] / 2.25 * pi * 2 ) * 0.1; ",
-                    "0"
+                    44.6428571428572
                 ]
             }
         ],
@@ -303,8 +316,7 @@
                 0,
                 0,
                 0,
-                0,
-                1.3
+                0
             ]
         },
         {
@@ -315,8 +327,7 @@
                 0,
                 0,
                 0,
-                0,
-                1.3
+                0
             ]
         }
     ],

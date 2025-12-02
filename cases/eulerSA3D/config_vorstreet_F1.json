@@ -1,8 +1,8 @@
 {
     "timeMarchControl": {
         // "dtImplicit": 0.005,
-        // "dtImplicit": 0.10,
         "dtImplicit": 0.05,
+        // "dtImplicit": 0.02,
         "nTimeStep": 20000,
         // "steadyQuit": true,
         // "odeCode": 0,
@@ -27,6 +27,7 @@
         "rhsFPPMode": 2,
         "rhsFPPScale": 5e-1,
         "useRestart": true,
+        "partitionMeshOnly": false,
         "_tail": 0
     },
     "convergenceControl": {
@@ -69,31 +70,35 @@
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 0,
         "nCFLRampLength": 100,
-        "CFLRampEnd": 100.0,
+        "CFLRampEnd": 50.0,
         "useLocalDt": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshReorderCells": true,
-        "meshFile": "../data/mesh/CylinderB1_L8U2.cgns",
+        "meshFile": "../data/mesh/CylinderB1F1_L4.cgns",
         // "outPltName": "../data/out/CylinderB1_L8_RANSTest/CylinderB1_L8_Rawstart2_PdT5_RM8",
-        "outPltName": "../data/out/CylinderB1_L8U2_RANSTest/CylinderB1_L8U2_Rawstart2_PdT05_restart1",
+        "outPltName": "../data/out/CylinderB1F1_L4_RANSTest/CylinderB1F1_L4_Rawstart2_res1_GG010",
         "outPltMode": 0,
-        "readMeshMode": 0,
-        "outPltTecplotFormat": true,
+        "readMeshMode": 1,
+        // "outPltTecplotFormat": true,
         "outPltVTKFormat": false,
-        // "outPltVTKHDFFormat": true,
-        "hdfDeflateLevel": 5,
+        "outPltVTKHDFFormat": true,
+        "hdfDeflateLevel": 2,
         "hdfChunkSize": 32768,
         "outAtPointData": true,
         "outAtCellData": true,
         "restartWriter": {
             "type": "H5",
             "hdfDeflateLevel": 5,
-            "hdfChunkSize": 32768,
-            "jsonBinaryDeflateLevel": 5,
-            "jsonUseCodecOnUInt8": true
+            "hdfChunkSize": 32768
+        },
+        "meshPartitionedReaderType": "H5",
+        "meshPartitionedWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 5,
+            "hdfChunkSize": 32768
         },
         // we specify the mesh partition to ensure it being consisent
         "meshPartitionOptions": {
@@ -108,7 +113,7 @@
         "PeriodicTranslation1": [
             0,
             0,
-            8
+            4
         ]
     },
     "implicitReconstructionControl": {
@@ -140,6 +145,7 @@
         "normWBAP": false,
         "cacheDiffBase": true,
         "subs2ndOrder": 1,
+        "subs2ndOrderGGScheme": 0,
         "baseSettings": {
             "localOrientation": false,
             "anisotropicLengths": false
@@ -252,6 +258,6 @@
         "odeCodePrev": -1,
         // "lastRestartFile": "../data/outCylinderB1/CylinderB1_T0Starter/out_bdf2__10000_p8.restart.dnds.h5"
         // "lastRestartFile": "../data/outCylinderB1/CylinderB1_T0Starter/out_bdf2_u2r2Refine__10000_p8.restart.dnds.h5"
-        "lastRestartFile": "../data/out/CylinderB1_L8_RANSTest/CylinderB1_L8_Rawstart2_PdT10_RM8_LCT4_D01__2000_p224.restart.dnds.h5"
+        "lastRestartFile": "../data/out/CylinderB1F1_L4_RANSTest/CylinderB1F1_L4_Rawstart2_res1__13000_p896.restart.dnds.h5"
     }
 }

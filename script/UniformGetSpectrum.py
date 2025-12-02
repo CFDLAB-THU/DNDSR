@@ -83,7 +83,7 @@ EKs[:, 2] = ek2
 #     print(f"ind i [{i}] done")
 print("Ek spectrum result: ")
 EkResults = 0.5 * np.sum(EKs, axis=1)
-print(EkResults)
+print(EkResults.tolist())
 np.savetxt(oName + ".txt", EkResults)
 
 

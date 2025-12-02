@@ -3,11 +3,11 @@
         // "dtImplicit": 0.005,
         // "dtImplicit": 0.10,
         "dtImplicit": 0.05,
-        "nTimeStep": 20000,
+        "nTimeStep": 50000,
         // "steadyQuit": true,
         // "odeCode": 0,
-        "odeCode": 202, // esdirk3
-        // "odeCode": 204, // esdirk2
+        // "odeCode": 202, // esdirk3
+        "odeCode": 204, // esdirk2
         // "odeCode": 1,
         // "odeCode": 0,
         // "odeCode": 411,
@@ -26,7 +26,7 @@
         // "odeSetting3": 1.333,
         "rhsFPPMode": 2,
         "rhsFPPScale": 5e-1,
-        "useRestart": true,
+        "useRestart": false,
         "_tail": 0
     },
     "convergenceControl": {
@@ -50,7 +50,7 @@
         "consoleOutputMode": 1,
         "consoleOutputEveryFix": 1,
         "nDataOutC": 100,
-        "nDataOut": 1000,
+        "nDataOut": 200,
         "nDataOutCInternal": 20000,
         "nDataOutInternal": 1000000000,
         "nRestartOutC": 100,
@@ -65,11 +65,11 @@
         "dataOutAtInit": true
     },
     "implicitCFLControl": {
-        "CFL": 10,
+        "CFL": 1.0e1,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 0,
         "nCFLRampLength": 100,
-        "CFLRampEnd": 100.0,
+        "CFLRampEnd": 10.0,
         "useLocalDt": true
     },
     "dataIOControl": {
@@ -78,7 +78,7 @@
         "meshReorderCells": true,
         "meshFile": "../data/mesh/CylinderB1_L8U2.cgns",
         // "outPltName": "../data/out/CylinderB1_L8_RANSTest/CylinderB1_L8_Rawstart2_PdT5_RM8",
-        "outPltName": "../data/out/CylinderB1_L8U2_RANSTest/CylinderB1_L8U2_Rawstart2_PdT05_restart1",
+        "outPltName": "../data/out/CylinderB1_L8U2_RANSTest/CylinderB1_L8U2_Rawstart2_SST",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -91,9 +91,7 @@
         "restartWriter": {
             "type": "H5",
             "hdfDeflateLevel": 5,
-            "hdfChunkSize": 32768,
-            "jsonBinaryDeflateLevel": 5,
-            "jsonUseCodecOnUInt8": true
+            "hdfChunkSize": 32768
         },
         // we specify the mesh partition to ensure it being consisent
         "meshPartitionOptions": {
@@ -196,7 +194,9 @@
         "rsMeanValueEig": 1,
         "nCentralSmoothStep": 0,
         "SADESScale": 0.65,
-        "ransForce2nd": 1,
+        "ransForce2nd": 0,
+        "ransModel": "RANS_KOSST",
+        "RANSBottomLimit": 1e-2,
         "constMassForce": [
             0.0,
             0.0,
@@ -208,7 +208,8 @@
             0,
             0,
             179.0714285714286,
-            1.3
+            1e-4,
+            3
         ],
         "idealGasProperty": {
             "gamma": 1.4,
