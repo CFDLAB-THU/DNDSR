@@ -27,7 +27,7 @@ def test_solver(
         "mesh",
         m_name,
     )
-    outDir = "../data/out/test3"
+    outDir = "../data/out/test4"
 
     solver = Solver(mpi)
     solver.ReadMesh(
@@ -100,7 +100,7 @@ def test_solver(
     # 0.5, 1, 0, 0, 4
 
     tInt = 0.01 * 1e0
-    nInt = 1
+    nInt = 150
     CFL = 0.5 * 1
     t = 0
     pr = cProfile.Profile()
@@ -156,7 +156,7 @@ if __name__ == "__main__":
         if mpi.size > device_count:
             raise RuntimeError("too many ranks on this machine")
         cp.cuda.Device(mpi.rank).use()
-        curuntime.deviceSynchronize()
+        # curuntime.deviceSynchronize()
         pass
 
     test_solver(mpi, ifCuda=ifCuda)

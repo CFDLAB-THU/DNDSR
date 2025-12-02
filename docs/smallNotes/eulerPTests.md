@@ -1,5 +1,7 @@
 # EulerP Tests
 
+The machine: 2xIntel(R) Xeon(R) Gold 6326 CPU @ 2.90GHz, 2xNVIDIA A100 80GB PCIe, **no p2p GPU access**.
+
 ## Periodic shock box
 
 Test solver. 2nd order + Barth limiter + SSPRK3, CFL=0.5
@@ -28,3 +30,75 @@ Using 16 OMP thread x 2 ranks performs nearly the same as (slightly worse than) 
 
 **NSYS results**
 ![cProfile_GPU](https://harryzhou2000.github.io/resources-0/eulerPtests/periodicBox1024/nsys_1rank.png)
+
+HUGE RX (host to device memcpy), 6-8GB/s why?
+
+GPU occupancy (nvtop): ~60-70%!
+
+Problem: unintended to_device() calls in initializing (rechecking) face buffer.
+
+### Fixing extra to_device
+
+**Fixed:**
+
+| Machine      | Performance (CI/s) | Power estimated ( by software) (W)                   | Efficiency (MCI/kJ) |
+| ------------ | ------------------ | ---------------------------------------------------- | ------------------- |
+| 1 A100       | 22.7M              | 195 (GPU) +  165 (CPU Package) + 20 (RAM)   = 380    | 59.7 MCI/kJ         |
+| 2 A100       | 39.8M              | 180 (GPU) * 2 +  170 (CPU Package) + 20 (RAM)  = 550 | 72.3 MCI/kJ         |
+| 32 CPU cores | 4.2M               | 360 (GPU)  (CPU Package) + 45 (RAM)  = 405           | 10.37 MCI/kJ        |
+
+GPU occupancy (nvtop): ~90%, RX/TX several MB/s
+
+2 GPU v.s. 1 GPU: 88% strong scaling efficiency.
+
+### Optimized RecGradient and RecFace2nd
+
+Primary optimization: local cache.
+
+When only optimize RecGradient, consider the effect of using shared shuffle write or not:
+
+Shared write (to 3x5 gradient) vs. direct write:
+
+- total:              36.4MCI/s vs. 35.8MCI/s
+- RecGradient: 2677 Iter, 8.79s vs/ 9.99s
+
+Around 10% improvement.
+
+**Pitfall**
+
+If we use a buffer write function using `__shared__` +  `__syncthreads()` inside, you might want:
+
+```
+int tid_global = blockDim.x * blockIdx.x + threadIdx.x; 
+if (tid_global >= max) 
+{ 
+  write_data(dummy_data); 
+  return; 
+} 
+do_calculation.... 
+write_data(real_data);
+```
+
+To handle OOB threads. If write_data is templated or inlined, the `__shared__` buffer **could diverge**.
+
+Safe pattern:
+
+```
+int tid_global = blockDim.x * blockIdx.x + threadIdx.x; 
+t_buffer real_data;
+if (tid_global <> max) 
+{ 
+  do_calculation.... 
+} 
+write_data(real_data);
+```
+
+When both of RecGradient and RecFace2nd are optimized, performance:
+
+| Machine      | Performance (CI/s) | Power estimated ( by software) (W)                   | Efficiency (MCI/kJ) |
+| ------------ | ------------------ | ---------------------------------------------------- | ------------------- |
+| 1 A100       | 58.1M              | 237 (GPU) +  170 (CPU Package) + 21 (RAM)   = 428    | 136 MCI/kJ          |
+| 2 A100       | 84.5M              | 185 (GPU) * 2 +  175 (CPU Package) + 21 (RAM)  = 566 | 149 MCI/kJ          |
+| 32 CPU cores | 4.2M               | 360 (GPU)  (CPU Package) + 45 (RAM)  = 405           | 10.37 MCI/kJ        |
+
+Occupancy: 86\% 1 GPU / 71\% 2 GPU

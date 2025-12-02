@@ -114,7 +114,7 @@ def register_update_dropdown_options(app: Dash, args: argparse.Namespace):
     )
     def update_dropdown_options(file_dropdown_value):
         try:
-            df = pd.read_csv(file_dropdown_value)
+            df = pd.read_csv(file_dropdown_value, nrows=10)
             options = [{"label": col, "value": col} for col in df.columns]
             print(f"New Column Options:\n {df.columns}")
             return options
@@ -217,6 +217,7 @@ def register_update_graph(app: Dash, args: argparse.Namespace):
             if not selected_file:
                 return px.line(title="Main log not selected")
             df = pd.read_csv(selected_file)
+            df = df.tail(100000)
             # fig = px.line(
             #     title=f"Plot of {selected_column}",
             #     log_y=("Log Y" in checklist_0),
@@ -243,6 +244,7 @@ def register_update_graph(app: Dash, args: argparse.Namespace):
             if selected_file_1:
                 try:
                     df1 = pd.read_csv(selected_file_1)
+                    df1 = df1.tail(100000)
                 except:
                     df1 = None
             if df1 is not None and selected_column and selected_column in df1.columns:

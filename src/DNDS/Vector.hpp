@@ -168,10 +168,12 @@ namespace DNDS
     };
 
     template <typename T>
-    class host_device_vector : public data_vector_base<T, host_device_vector<T>>
+    class host_device_vector_r1 : public data_vector_base<T, host_device_vector_r1<T>>
     {
         static_assert(std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>,
                       "host_device_vector elements must be trivially_copyable and default_constructible");
+        using t_self = host_device_vector_r1<T>;
+        using t_base = data_vector_base<T, host_device_vector_r1<T>>;
 
         std::unique_ptr<DeviceHostSingleAllocationBase> host_data = std::make_unique<DeviceHostSingleAllocationDirect>();
         std::unique_ptr<DeviceHostSingleAllocationBase> device_data = std::make_unique<DeviceHostSingleAllocationDirect>();
@@ -190,28 +192,28 @@ namespace DNDS
         }
 
     public:
-        DNDS_HOST host_device_vector() = default;
+        DNDS_HOST host_device_vector_r1() = default;
 
-        DNDS_HOST host_device_vector(size_t n)
+        DNDS_HOST host_device_vector_r1(size_t n)
         {
             this->resize(n);
         }
 
         template <class TFill>
-        DNDS_HOST host_device_vector(size_t n, TFill &&val)
+        DNDS_HOST host_device_vector_r1(size_t n, TFill &&val)
         {
             this->resize(n, std::forward<TFill>(val));
         }
 
         // TODO: OPTIMIZE: support RVALUE reference of std::vector<T> HOW?
-        DNDS_HOST host_device_vector<T> &operator=(const std::vector<T> &v)
+        DNDS_HOST t_self &operator=(const std::vector<T> &v)
         {
             this->resize(v.size());
             std::copy(v.begin(), v.end(), host_ptr);
             return *this;
         }
 
-        DNDS_HOST host_device_vector(const std::vector<T> &v)
+        DNDS_HOST host_device_vector_r1(const std::vector<T> &v)
         {
             this->operator=(v);
         }
@@ -311,7 +313,7 @@ namespace DNDS
                 return t_deviceView<B, TSize>(this->dataDevice(), this->size());
         }
 
-        host_device_vector &operator=(const host_device_vector<T> &R)
+        t_self &operator=(const t_self &R)
         {
             if (this == &R)
                 return *this;
@@ -327,7 +329,7 @@ namespace DNDS
             return *this;
         }
 
-        host_device_vector(const host_device_vector<T> &R)
+        host_device_vector_r1(const t_self &R)
         {
             this->size_ = R.size();
             this->host_data = R.host_data->clone();
@@ -345,7 +347,7 @@ namespace DNDS
             return device_data ? device_data->device() : DeviceBackend::Unknown;
         }
 
-        DNDS_HOST void swap(host_device_vector<T> &R) noexcept
+        DNDS_HOST void swap(t_self &R) noexcept
         {
             R.device_data.swap(device_data);
             std::swap(R.device_ptr, device_ptr);
@@ -354,4 +356,119 @@ namespace DNDS
             std::swap(R.size_, size_);
         }
     };
+
+    template <typename T>
+    struct host_device_vector_r0 : public std::vector<T>
+    {
+        static_assert(std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>,
+                      "host_device_vector elements must be trivially_copyable and default_constructible");
+        using t_base = std::vector<T>;
+        using t_base::t_base;
+        using t_self = host_device_vector_r0<T>;
+
+        t_supDeviceStorageBase deviceStorage = null_supDeviceStorageBase();
+
+        DNDS_HOST host_device_vector_r0(const std::vector<T> &v) : t_base(v) {}
+
+        DNDS_HOST t_self &operator=(const std::vector<T> &v)
+        {
+            this->t_base::operator=(v);
+            return *this;
+        }
+
+        // DNDS_HOST explicit operator std::vector<T>() const
+        // {
+        //     std::vector<T> ret;
+        //     ret.resize(this->size());
+        //     std::copy(this->begin(), this->end(), ret.begin());
+        //     return ret;
+        // }
+
+        void to_device(DeviceBackend backend = DeviceBackend::Host)
+        {
+            DNDS_assert_info(DeviceBackend::Unknown != backend, "cannot to_device to Unknown");
+            if (!deviceStorage ||
+                deviceStorage->bytes() != this->size() * sizeof(T) || // size change
+                deviceStorage->backend() != backend)                  // backend change
+                deviceStorage = device_storage_create(backend, this->size() * sizeof(T));
+            deviceStorage->copy_host_to_device(reinterpret_cast<uint8_t *>(this->data()), this->size() * sizeof(T));
+        }
+
+        void to_host()
+        {
+            if (this->device() != DeviceBackend::Unknown)
+            {
+                DNDS_assert(deviceStorage);
+                deviceStorage->copy_device_to_host(reinterpret_cast<uint8_t *>(this->data()), this->size() * sizeof(T));
+            }
+        }
+
+        T *dataDevice()
+        {
+            return deviceStorage ? reinterpret_cast<T *>(deviceStorage->raw_ptr()) : nullptr;
+        }
+
+        template <DeviceBackend B, typename TSize = int64_t>
+        using t_deviceView = vector_DeviceView<B, T, TSize>;
+        template <DeviceBackend B, typename TSize = int64_t>
+        t_deviceView<B, TSize> deviceView()
+        {
+            DNDS_assert_info(this->device() == B || (B == DeviceBackend::Host || B == DeviceBackend::Unknown),
+                             "not on this device: " + std::string(device_backend_name(B)));
+            if constexpr (B == DeviceBackend::Host || B == DeviceBackend::Unknown)
+                return t_deviceView<B, TSize>(this->data(), this->size());
+            else
+                return t_deviceView<B, TSize>(this->dataDevice(), this->size());
+        }
+
+        const T *dataDevice() const
+        {
+            return deviceStorage ? reinterpret_cast<const T *>(deviceStorage->raw_ptr()) : nullptr;
+        }
+
+        t_self &operator=(const t_self &R)
+        {
+            if (this == &R)
+                return *this;
+            this->t_base::operator=(R);
+            this->deviceStorage = R.deviceStorage ? device_storage_create(R.deviceStorage->backend(), R.deviceStorage->bytes()) : null_supDeviceStorageBase();
+            if (deviceStorage)
+            {
+                R.deviceStorage->copy_to_device(this->deviceStorage->raw_ptr(), this->deviceStorage->bytes());
+                if (deviceStorage->backend() == DeviceBackend::Host)
+                    this->to_device(DeviceBackend::Host);
+            }
+            return *this;
+        }
+
+        host_device_vector_r0(const t_self &R) : t_base(R)
+        {
+            this->deviceStorage = R.deviceStorage ? device_storage_create(R.deviceStorage->backend(), R.deviceStorage->bytes()) : null_supDeviceStorageBase();
+            if (deviceStorage)
+            {
+                R.deviceStorage->copy_to_device(this->deviceStorage->raw_ptr(), this->deviceStorage->bytes());
+                if (deviceStorage->backend() == DeviceBackend::Host)
+                    this->to_device(DeviceBackend::Host);
+            }
+        }
+
+        DeviceBackend device()
+        {
+            return deviceStorage ? deviceStorage->backend() : DeviceBackend::Unknown;
+        }
+
+        void clear_device()
+        {
+            deviceStorage.reset();
+        }
+
+        void swap(t_self &R) noexcept
+        {
+            R.swap(*this);
+            R.deviceStorage.swap(this->deviceStorage);
+        }
+    };
+
+    template <class T>
+    using host_device_vector = host_device_vector_r1<T>;
 }

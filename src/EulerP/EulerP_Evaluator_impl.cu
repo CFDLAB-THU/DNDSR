@@ -20,9 +20,7 @@ namespace DNDS::EulerP
         index lo, index up)                                             \
     {                                                                   \
         index tid_g = DNDS_CUDA_1D_TID_GLOBAL_INDEX;                    \
-        if (tid_g >= (up - lo))                                         \
-            return;                                                     \
-        FNAME(*self_view, arg, lo + tid_g, nVars, nVarsScalar);         \
+        FNAME(*self_view, arg, lo + tid_g, up, nVars, nVarsScalar);     \
     }
 
     DNDS_EULERP_DEFINE_CUDA_SIMPLE_POINTWISE_KERNEL(RecGradient_GGRec_Kernel_BndVal, Evaluator_impl<B>::RecGradient_Arg::Portable)

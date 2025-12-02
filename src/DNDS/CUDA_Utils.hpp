@@ -54,6 +54,39 @@
 
 namespace DNDS::CUDA
 {
+
+    template <int _ = 1>
+    DNDS_FORCEINLINE DNDS_DEVICE_CALLABLE void sync_threads()
+    {
+#    ifdef __CUDA_ARCH__
+        __syncthreads();
+#    else
+        static_assert(_ == 0 && _ == 1, "not allowed");
+#    endif
+    }
+
+    template <int _ = 1>
+    DNDS_FORCEINLINE DNDS_DEVICE_CALLABLE uint32_t tid_x()
+    {
+#    ifdef __CUDA_ARCH__
+        return threadIdx.x;
+#    else
+        static_assert(_ == 0 && _ == 1, "not allowed");
+        return -1;
+#    endif
+    }
+
+    template <int _ = 1>
+    DNDS_FORCEINLINE DNDS_DEVICE_CALLABLE uint32_t bDim_x()
+    {
+#    ifdef __CUDA_ARCH__
+        return blockDim.x;
+#    else
+        static_assert(_ == 0 && _ == 1, "not allowed");
+        return -1;
+#    endif
+    }
+
     template <typename T>
     struct DeviceObject
     {

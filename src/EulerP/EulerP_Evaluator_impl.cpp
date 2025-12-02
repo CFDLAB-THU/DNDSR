@@ -37,7 +37,7 @@ namespace DNDS::EulerP
         // bc handling
         for (index iBnd = 0; iBnd < mesh.NumBnd(); iBnd++)
         {
-            RecGradient_GGRec_Kernel_BndVal(self_view, arg.portable, iBnd, nVars, nVarsScalar);
+            RecGradient_GGRec_Kernel_BndVal(self_view, arg.portable, iBnd, mesh.NumBnd(), nVars, nVarsScalar);
         }
 
         /*********************** */
@@ -47,7 +47,7 @@ namespace DNDS::EulerP
 #endif
         for (index iCell = 0; iCell < mesh.NumCell(); iCell++)
         {
-            RecGradient_GGRec_Kernel_GG(self_view, arg.portable, iCell, nVars, nVarsScalar);
+            RecGradient_GGRec_Kernel_GG(self_view, arg.portable, iCell, mesh.NumCell(), nVars, nVarsScalar);
         }
     }
 
@@ -78,7 +78,7 @@ namespace DNDS::EulerP
 #endif
         for (index iCell = 0; iCell < mesh.NumCell(); iCell++)
         {
-            RecGradient_BarthLimiter_Kernel_FlowPart(self_view, arg.portable, iCell, nVars, nVarsScalar);
+            RecGradient_BarthLimiter_Kernel_FlowPart(self_view, arg.portable, iCell, mesh.NumCell(), nVars, nVarsScalar);
         }
 
         // for scalars
@@ -88,7 +88,7 @@ namespace DNDS::EulerP
 #endif
         for (index iCell = 0; iCell < mesh.NumCell(); iCell++)
         {
-            RecGradient_BarthLimiter_Kernel_ScalarPart(self_view, arg.portable, iCell, nVars, nVarsScalar);
+            RecGradient_BarthLimiter_Kernel_ScalarPart(self_view, arg.portable, iCell, mesh.NumCell(), nVars, nVarsScalar);
         }
     }
 
@@ -114,7 +114,7 @@ namespace DNDS::EulerP
 #endif
         for (index iPt = 0; iPt < u.Size(); iPt++)
         {
-            Cons2PrimMu_Kernel(self_view, arg.portable, iPt, nVars, nVarsScalar);
+            Cons2PrimMu_Kernel(self_view, arg.portable, iPt, u.Size(), nVars, nVarsScalar);
         }
     }
 
@@ -140,7 +140,7 @@ namespace DNDS::EulerP
 #endif
         for (index iPt = 0; iPt < u.Size(); iPt++)
         {
-            Cons2Prim_Kernel(self_view, arg.portable, iPt, nVars, nVarsScalar);
+            Cons2Prim_Kernel(self_view, arg.portable, iPt, u.Size(), nVars, nVarsScalar);
         }
     }
 
@@ -172,7 +172,7 @@ namespace DNDS::EulerP
 #endif
         for (index iFace = 0; iFace < mesh.NumFaceProc(); iFace++)
         {
-            EstEigenDt_GetFaceLam_Kernel(self_view, arg.portable, iFace, nVars, nVarsScalar);
+            EstEigenDt_GetFaceLam_Kernel(self_view, arg.portable, iFace, mesh.NumFaceProc(), nVars, nVarsScalar);
         }
     }
 
@@ -195,7 +195,7 @@ namespace DNDS::EulerP
 #endif
         for (index iCell = 0; iCell < mesh.NumCell(); iCell++)
         {
-            EstEigenDt_FaceLam2CellDt_Kernel(self_view, arg.portable, iCell, nVars, nVarsScalar);
+            EstEigenDt_FaceLam2CellDt_Kernel(self_view, arg.portable, iCell, mesh.NumCell(), nVars, nVarsScalar);
         }
     }
 
@@ -221,7 +221,7 @@ namespace DNDS::EulerP
 #endif
         for (index iFace = 0; iFace < mesh.NumFaceProc(); iFace++)
         {
-            RecFace2nd_Kernel(self_view, arg.portable, iFace, nVars, nVarsScalar);
+            RecFace2nd_Kernel(self_view, arg.portable, iFace, mesh.NumFaceProc(), nVars, nVarsScalar);
         }
     }
 
@@ -247,7 +247,7 @@ namespace DNDS::EulerP
 #endif
         for (index iFace = 0; iFace < mesh.NumFaceProc(); iFace++)
         {
-            Flux2nd_Kernel_FluxFace(self_view, arg.portable, iFace, nVars, nVarsScalar);
+            Flux2nd_Kernel_FluxFace(self_view, arg.portable, iFace, mesh.NumFaceProc(), nVars, nVarsScalar);
         }
 
 #if defined(DNDS_DIST_MT_USE_OMP)
@@ -255,7 +255,7 @@ namespace DNDS::EulerP
 #endif
         for (index iCell = 0; iCell < mesh.NumCell(); iCell++)
         {
-            Flux2nd_Kernel_Face2Cell(self_view, arg.portable, iCell, nVars, nVarsScalar);
+            Flux2nd_Kernel_Face2Cell(self_view, arg.portable, iCell, mesh.NumCell(), nVars, nVarsScalar);
         }
     }
 }

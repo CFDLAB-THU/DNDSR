@@ -291,14 +291,31 @@ namespace DNDS
 
                     if (method == 11)
                     {
-                        // std::cout << mGG << std::endl;
-                        // std::cout << bGG << std::endl;
-                        // DNDS_assert(false);
+
                         // auto mGGLU = mGG.colPivHouseholderQr();
                         auto mGGLU = mGG.fullPivLu();
                         DNDS_assert(mGGLU.isInvertible());
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> xGG = mGGLU.solve(bGG);
                         grad = xGG(Seq012, EigenAll).transpose();
+
+                        if (mesh->GetCellElement(iCell).type == Elem::Pyramid5)
+                        {
+                            std::cout << "pyramid5\n";
+                            std::cout << mGG << std::endl;
+                            std::cout << bGG << std::endl;
+                            auto svd = mGG.bdcSvd();
+                            std::cout << svd.singularValues().transpose() << std::endl;
+                            std::cout << svd.singularValues().maxCoeff() / svd.singularValues().minCoeff() << std::endl;
+                        }
+                        if (mesh->GetCellElement(iCell).type == Elem::Tet4)
+                        {
+                            std::cout << "Tet4\n";
+                            std::cout << mGG << std::endl;
+                            std::cout << bGG << std::endl;
+                            auto svd = mGG.bdcSvd();
+                            std::cout << svd.singularValues().transpose() << std::endl;
+                            std::cout << svd.singularValues().maxCoeff() / svd.singularValues().minCoeff() << std::endl;
+                        }
                     }
 
                     // tPoint cellBary = GetCellBary(iCell);
