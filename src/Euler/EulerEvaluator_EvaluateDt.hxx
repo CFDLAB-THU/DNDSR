@@ -1563,10 +1563,19 @@ namespace DNDS::Euler
             real d = std::min(dWallC, std::pow(veryLargeReal, 1. / 6.));
             TU retInc;
             retInc.setZero(UMeanXy.size());
+
+            //! DES mesh lengths should be cached!
+            real hMax = vfv->GetCellMaxLenScale(iCell);
+            real cWall = 0.15;
+            real lLES = hMax * settings.SADESScale;
+            //! missing hWallNormal!
+            lLES = std::min(lLES, std::max({d * cWall, hMax * cWall}));
             auto sourceCaller = [&](int mode)
             {
                 RANS::GetSource_SA<dim>(UMeanXy, DiffUxy, settings.idealGasProperty.muGas, muf,
-                                        gamma, d, vfv->GetCellMaxLenScale(iCell) * settings.SADESScale, retInc,
+                                        gamma,
+                                        d, lLES, hMax,
+                                        retInc,
                                         settings.ransSARotCorrection, mode);
             };
 

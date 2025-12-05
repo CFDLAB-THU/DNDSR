@@ -488,7 +488,7 @@ namespace DNDS::Euler
                 if (Chi < 10)
                     Chi = 0.05 * std::log(1 + std::exp(20 * Chi));
 #endif
-                real Chi3 = std::pow(Chi, 3);
+                real Chi3 = cube(Chi);
                 real fnu1 = Chi3 / (Chi3 + std::pow(cnu1, 3));
                 muTur = muf * std::max((Chi * fnu1), 0.0);
             }
