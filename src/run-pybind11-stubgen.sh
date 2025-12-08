@@ -54,6 +54,18 @@ for file in pybind11-stubgen-out/DNDSR/CFV/_internal/cfv_pybind11/*.pyi; do
     echo "$file -> $dest"
 done
 
+### EulerP
+
+pybind11-stubgen DNDSR.EulerP -o pybind11-stubgen-out || exit 1
+
+# cat pybind11-stubgen-out/EulerP
+
+for file in pybind11-stubgen-out/DNDSR/EulerP/_internal/eulerP_pybind11/*.pyi; do
+    dest=pybind11-stubgen-out/DNDSR/EulerP/$(basename "$file")
+    cat "$file" >> $dest
+    echo "$file -> $dest"
+done
+
 ### copy
 
 cp -rv pybind11-stubgen-out/DNDSR/* .

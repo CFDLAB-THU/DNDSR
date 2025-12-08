@@ -224,7 +224,9 @@ namespace DNDS::Serializer
         else
         {
             DNDS_assert(jObj[nlohmann::json::json_pointer(refPath)].is_array());
-            v = std::make_shared<tValue>(jObj[nlohmann::json::json_pointer(refPath)].get<tValue>()); // vector's copy constructor
+            // TODO: OPTIMIZE into direct read from json
+            auto v_temp = jObj[nlohmann::json::json_pointer(refPath)].get<std::vector<index>>();
+            v = std::make_shared<tValue>(v_temp); // vector's copy constructor
             pth_2_ssp[refPath] = &v;
         }
         offset = ArrayGlobalOffset_Unknown;
@@ -251,7 +253,9 @@ namespace DNDS::Serializer
         else
         {
             DNDS_assert(jObj[nlohmann::json::json_pointer(refPath)].is_array());
-            v = std::make_shared<tValue>(jObj[nlohmann::json::json_pointer(refPath)].get<tValue>()); // vector's copy constructor
+            // TODO: OPTIMIZE into direct read from json
+            auto v_temp = jObj[nlohmann::json::json_pointer(refPath)].get<std::vector<rowsize>>();
+            v = std::make_shared<tValue>(v_temp); // vector's copy constructor
             pth_2_ssp[refPath] = &v;
         }
         offset = ArrayGlobalOffset_Unknown;

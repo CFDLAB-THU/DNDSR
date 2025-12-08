@@ -104,6 +104,11 @@ namespace DNDS
                 {
                     return pybind11_ArrayAdjacency_setitem(self, index_, row);
                 });
+        ArrayAdjacency_
+            .def("clone", [](TArrayAdjacency &self)
+                 {
+                auto arr = std::make_shared<TArrayAdjacency>(self);
+                return arr; });
 
         ArrayAdjacency_
             .def("to_device", [](TArrayAdjacency &self, const std::string &backend)

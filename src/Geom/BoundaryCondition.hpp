@@ -77,22 +77,22 @@ namespace DNDS::Geom
         return BC_ID_NULL;
     };
 
-    inline bool FaceIDIsExternalBC(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsExternalBC(t_index id)
     {
         return id > 0;
     }
 
-    inline bool FaceIDIsInternal(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsInternal(t_index id)
     {
         return id <= 0;
     }
 
-    inline bool FaceIDIsTrueInternal(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsTrueInternal(t_index id)
     {
         return id == 0;
     }
 
-    inline bool FaceIDIsPeriodic(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsPeriodic(t_index id)
     {
         return id == BC_ID_PERIODIC_1 ||
                id == BC_ID_PERIODIC_2 ||
@@ -102,32 +102,32 @@ namespace DNDS::Geom
                id == BC_ID_PERIODIC_3_DONOR;
     }
 
-    inline bool FaceIDIsPeriodic1(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsPeriodic1(t_index id)
     {
         return id == BC_ID_PERIODIC_1 ||
                id == BC_ID_PERIODIC_1_DONOR;
     }
 
-    inline bool FaceIDIsPeriodic2(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsPeriodic2(t_index id)
     {
         return id == BC_ID_PERIODIC_2 ||
                id == BC_ID_PERIODIC_2_DONOR;
     }
 
-    inline bool FaceIDIsPeriodic3(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsPeriodic3(t_index id)
     {
         return id == BC_ID_PERIODIC_3 ||
                id == BC_ID_PERIODIC_3_DONOR;
     }
 
-    inline bool FaceIDIsPeriodicMain(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsPeriodicMain(t_index id)
     {
         return id == BC_ID_PERIODIC_1 ||
                id == BC_ID_PERIODIC_2 ||
                id == BC_ID_PERIODIC_3;
     }
 
-    inline bool FaceIDIsPeriodicDonor(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsPeriodicDonor(t_index id)
     {
         return id == BC_ID_PERIODIC_1_DONOR ||
                id == BC_ID_PERIODIC_2_DONOR ||

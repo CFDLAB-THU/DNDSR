@@ -25,7 +25,15 @@ PYBIND11_MODULE(cfv_pybind11, m)
     pybind11_ModelEvaluator_define(m);
 
     pybind11_test_FiniteVolume_define<DNDS::DeviceBackend::Host>(m);
+    pybind11_test_FiniteVolume_define_Fixed<DNDS::DeviceBackend::Host, 1>(m);
+    pybind11_test_FiniteVolume_define_Fixed<DNDS::DeviceBackend::Host, 5>(m);
+    pybind11_test_FiniteVolume_define_SOA_ver0<DNDS::DeviceBackend::Host, 1>(m);
+    pybind11_test_FiniteVolume_define_SOA_ver0<DNDS::DeviceBackend::Host, 5>(m);
 #ifdef DNDS_USE_CUDA
     pybind11_test_FiniteVolume_define<DNDS::DeviceBackend::CUDA>(m);
+    pybind11_test_FiniteVolume_define_Fixed<DNDS::DeviceBackend::CUDA, 1>(m);
+    pybind11_test_FiniteVolume_define_Fixed<DNDS::DeviceBackend::CUDA, 5>(m);
+    pybind11_test_FiniteVolume_define_SOA_ver0<DNDS::DeviceBackend::CUDA, 1>(m);
+    pybind11_test_FiniteVolume_define_SOA_ver0<DNDS::DeviceBackend::CUDA, 5>(m);
 #endif
 }

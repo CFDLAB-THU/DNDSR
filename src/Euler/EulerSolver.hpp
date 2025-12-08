@@ -858,12 +858,18 @@ namespace DNDS::Euler
                 else
                     FillLogValue(v_map, name, 0.), realNames.push_back(name);
 
-            std::string logErrFileName = config.dataIOControl.getOutLogName() + "_" + output_stamp + ".log";
-            std::filesystem::path outFile{logErrFileName};
-            std::filesystem::create_directories(outFile.parent_path() / ".");
-            auto pOs = std::make_unique<std::ofstream>(logErrFileName);
-            DNDS_assert_info(*pOs, "logErr file [" + logErrFileName + "] did not open");
-            return std::make_tuple(std::make_unique<DNDS::CsvLog>(realNames, std::move(pOs)), v_map);
+            // std::string logErrFileName = config.dataIOControl.getOutLogName() + "_" + output_stamp + ".log";
+            // std::filesystem::path outFile{logErrFileName};
+            // std::filesystem::create_directories(outFile.parent_path() / ".");
+            // auto pOs = std::make_unique<std::ofstream>(logErrFileName);
+            // DNDS_assert_info(*pOs, "logErr file [" + logErrFileName + "] did not open");
+
+            return std::make_tuple(std::make_unique<DNDS::CsvLog>(
+                                       realNames,
+                                       config.dataIOControl.getOutLogName() + "_" + output_stamp,
+                                       ".log",
+                                       100000),
+                                   v_map);
         }
 
         void RunImplicitEuler();

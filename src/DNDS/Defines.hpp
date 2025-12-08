@@ -4,6 +4,7 @@
 #include "Errors.hpp"
 #include "EigenPCH.hpp"
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <vector>
@@ -56,11 +57,13 @@ namespace DNDS
 #if defined(DNDS_USE_CUDA)
 #    define DNDS_DEVICE_CALLABLE __host__ __device__
 #    define DNDS_DEVICE __device__
+#    define DNDS_HOST __host__
 #    define DNDS_GLOBAL __global__
 #    define DNDS_CONSTANT __constant__
 #else
 #    define DNDS_DEVICE_CALLABLE
 #    define DNDS_DEVICE
+#    define DNDS_HOST
 #    define DNDS_GLOBAL
 #    define DNDS_CONSTANT
 #endif
@@ -102,6 +105,22 @@ namespace DNDS
 
     template <typename T>
     using ssp = std::shared_ptr<T>;
+
+    template <typename T>
+    struct is_ssp : std::false_type
+    {
+    };
+
+    template <typename T>
+    struct is_ssp<ssp<T>> : std::true_type
+    {
+    };
+
+    template <typename T>
+    inline constexpr bool is_ssp_v = is_ssp<T>::value;
+
+    template <typename T>
+    using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
 
     using t_RowsizeVec = std::vector<rowsize>;
     using t_IndexVec = std::vector<index>;
@@ -586,6 +605,26 @@ namespace DNDS
             }
             return r;
         }
+
+        template <class TBegin, class TEnd>
+        std::size_t operator()(TBegin &&begin, TEnd &&end) const noexcept
+        {
+            std::size_t r = 0;
+            ptrdiff_t size = end - begin;
+            if constexpr (Meta::has_std_hash<T>::value)
+                for (ptrdiff_t i = 0; i < size; i++)
+                    r = r ^ std::hash<T>{}(begin[i]);
+            else if constexpr (Meta::is_std_vector<T>::value)
+                for (ptrdiff_t i = 0; i < size; i++)
+                    r = r ^ vector_hash<typename T::value_type>{}(begin[i]);
+            else
+            {
+                auto *start = reinterpret_cast<uint8_t *>(&(*begin));
+                for (size_t i = 0; i < size * sizeof(T); i++)
+                    r = r ^ std::hash<uint8_t>{}(start[i]);
+            }
+            return r;
+        }
     };
 
     template <typename T, std::size_t s>
@@ -688,8 +727,11 @@ namespace DNDS
 
 #if defined(_MSC_VER)
 #    define DNDS_RESTRICT __restrict
+#    define DNDS_FORCEINLINE __forceinline
 #elif defined(__GNUC__) || defined(__clang__)
 #    define DNDS_RESTRICT __restrict__
+#    define DNDS_FORCEINLINE inline __attribute__((always_inline))
 #else
 #    define DNDS_RESTRICT
+#    define DNDS_FORCEINLINE
 #endif

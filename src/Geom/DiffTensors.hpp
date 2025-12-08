@@ -449,7 +449,7 @@ namespace DNDS::Geom::Base
                 i = -id - 3;
             else
                 i = -id;
-            ConvertDiffsLinMap<dim>(u, rotation[i]);
+            ConvertDiffsLinMap<dim>(u, rotation[i].map());
         }
 
         template <int dim, class TU>
@@ -462,7 +462,7 @@ namespace DNDS::Geom::Base
                 i = -id - 3;
             else
                 i = -id;
-            ConvertDiffsLinMap<dim>(u, rotation[i].transpose());
+            ConvertDiffsLinMap<dim>(u, rotation[i].map().transpose());
         }
     };
 

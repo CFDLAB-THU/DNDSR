@@ -9,9 +9,11 @@ templates = {
     ): """
 #include "../ArrayDOF.hpp"
 #include "../ArrayDOF_op.hxx"
+#include "DNDS/DeviceStorage.hxx"
 namespace DNDS
 {{
     DNDS_ARRAY_DOF_OP_FUNC_SEQ_INST(DeviceBackend::Host, {offset}, template)
+    // DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, {offset}, )
 }}
     """,
     (
@@ -20,9 +22,12 @@ namespace DNDS
     ): """
 #include "../ArrayDOF.hpp"
 #include "../ArrayDOF_op_CUDA.cuh"
+#include "DNDS/DeviceStorage.hxx"
+#include "DNDS/DeviceStorage_CUDA.cuh"
 namespace DNDS
 {{
     DNDS_ARRAY_DOF_OP_FUNC_SEQ_INST(DeviceBackend::CUDA, {offset}, template)
+    // DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, {offset}, )
 }}
     """,
 }

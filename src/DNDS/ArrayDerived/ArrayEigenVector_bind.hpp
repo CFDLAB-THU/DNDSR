@@ -88,7 +88,11 @@ namespace DNDS
         // using TArrayEigenVector = ArrayEigenVector<1>;
         // auto ArrayEigenVector_ = pybind11_ArrayEigenVector_declare<1>(m);
         // // helper
-
+        ArrayEigenVector_
+            .def("clone", [](TArrayEigenVector &self)
+                 {
+                auto arr = std::make_shared<TArrayEigenVector>(self);
+                return arr; });
         ArrayEigenVector_
             // we only bind the non-default ctor here
             .def(py::init<const MPIInfo &>(), py::arg("nmpi"))

@@ -8,19 +8,19 @@
 // #include <cpptrace.hpp>
 
 #if defined(linux) || defined(_UNIX) || defined(__linux__)
-#include <unistd.h>
-#include <sys/ioctl.h>
-#define _isatty isatty
+#    include <unistd.h>
+#    include <sys/ioctl.h>
+#    define _isatty isatty
 #endif
 #if defined(_WIN32) || defined(__WINDOWS_)
-#define NOMINMAX
-#include <io.h>
-#include <windows.h>
+#    define NOMINMAX
+#    include <io.h>
+#    include <windows.h>
 #endif
 
 extern "C" void DNDS_signal_handler(int signal)
 {
-    std::cerr << __DNDS_getTraceString() << "\n";
+    std::cerr << ::DNDS::getTraceString() << "\n";
     std::cerr << "Signal " + std::to_string(signal) << std::endl;
     std::signal(signal, SIG_DFL);
     std::raise(signal);
@@ -154,7 +154,7 @@ namespace DNDS
 
 /********************************/
 // workaround for cpp trace
-std::string __DNDS_getTraceString()
+std::string DNDS::getTraceString()
 {
     std::stringstream ss;
     ss << boost::stacktrace::stacktrace();

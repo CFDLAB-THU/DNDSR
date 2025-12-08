@@ -3,6 +3,8 @@
 #include "Array.hpp"
 #include "ArrayTransformer.hpp"
 #include "ArrayPair.hpp"
+#include "DNDS/Defines.hpp"
+#include "DNDS/DeviceStorage.hpp"
 #include "Defines_bind.hpp"
 
 #include <pybind11/numpy.h>
@@ -52,10 +54,10 @@ namespace DNDS
     }
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign> // ! shared pointer managing
-    using tPy_Array = py::class_<Array<T, _row_size, _row_max, _align>, ssp<Array<T, _row_size, _row_max, _align>>>;
+    using tPy_Array = py_class_ssp<Array<T, _row_size, _row_max, _align>>;
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign> // ! shared pointer managing
-    using tPy_ParArray = py::class_<ParArray<T, _row_size, _row_max, _align>, ssp<ParArray<T, _row_size, _row_max, _align>>>;
+    using tPy_ParArray = py_class_ssp<ParArray<T, _row_size, _row_max, _align>>;
 
     template <class TArray>
     // using tPy_ArrayTransformer = py::class_<ArrayTransformerType_t<TArray>>; // ! unique ptr
@@ -100,6 +102,12 @@ namespace DNDS // Array
         Array_
             .def(py::init<>())
             .def("Size", &TArray::Size);
+        Array_
+            .def("clone", [](TArray &self)
+                 {
+                auto arr = std::make_shared<TArray>();
+                arr->clone(self);
+                return arr; });
         if constexpr (TArray::GetDataLayoutStatic() == CSR)
             Array_
                 .def("Compress", &TArray::Compress)
@@ -199,7 +207,8 @@ namespace DNDS // Array
         Array_
             .def("to_device", [](TArray &self, const std::string &backend)
                  { self.to_device(device_backend_name_to_enum(backend)); }, py::arg("backend"))
-            .def("to_host", &TArray::to_host);
+            .def("to_host", &TArray::to_host)
+            .def("device", &TArray::device);
     }
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
@@ -261,6 +270,13 @@ namespace DNDS // ParArray
                  { return self.pLGlobalMapping; })
             .def("getTrans", [m](TParArray &self)
                  { return py::type{m.attr(pybind11_ArrayTransformer_name<TParArray>().c_str())}; });
+
+        ParArray_
+            .def("clone", [](TParArray &self)
+                 {
+                auto arr = std::make_shared<TParArray>(self.mpi);
+                arr->clone(self);
+                return arr; });
     }
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
@@ -304,6 +320,14 @@ namespace DNDS // ParArrayPair
             .def_readwrite("son", &TPair::son);
         Pair_
             .def_readonly("trans", &TPair::trans, py::return_value_policy::reference_internal);
+        Pair_
+            .def("clone",
+                 [&](TPair &self)
+                 {
+                     auto new_pair = std::make_shared<TPair>();
+                     new_pair->clone(self);
+                     return new_pair;
+                 });
         Pair_
             .def("TransAttach", &TPair::TransAttach)
             .def("hash", &TPair::hash)
@@ -442,12 +466,12 @@ namespace DNDS // ArrayTransformer
                 py::arg("other"));
 
         ArrayTransformer_
-            .def("initPersistentPull", &TArrayTransformer::initPersistentPull)
-            .def("initPersistentPush", &TArrayTransformer::initPersistentPush)
-            .def("startPersistentPull", &TArrayTransformer::startPersistentPull)
-            .def("startPersistentPush", &TArrayTransformer::startPersistentPush)
-            .def("waitPersistentPull", &TArrayTransformer::waitPersistentPull)
-            .def("waitPersistentPush", &TArrayTransformer::waitPersistentPush)
+            .def("initPersistentPull", &TArrayTransformer::initPersistentPull, py::arg("backend") = DeviceBackend::Unknown)
+            .def("initPersistentPush", &TArrayTransformer::initPersistentPush, py::arg("backend") = DeviceBackend::Unknown)
+            .def("startPersistentPull", &TArrayTransformer::startPersistentPull, py::arg("backend") = DeviceBackend::Unknown)
+            .def("startPersistentPush", &TArrayTransformer::startPersistentPush, py::arg("backend") = DeviceBackend::Unknown)
+            .def("waitPersistentPull", &TArrayTransformer::waitPersistentPull, py::arg("backend") = DeviceBackend::Unknown)
+            .def("waitPersistentPush", &TArrayTransformer::waitPersistentPush, py::arg("backend") = DeviceBackend::Unknown)
             .def("clearPersistentPull", &TArrayTransformer::clearPersistentPull)
             .def("clearPersistentPush", &TArrayTransformer::clearPersistentPush)
             .def("pullOnce", &TArrayTransformer::pullOnce)
@@ -554,7 +578,7 @@ namespace DNDS
     pybind11_bind_Array_All_X_declare(5);
     pybind11_bind_Array_All_X_declare(6);
     pybind11_bind_Array_All_X_declare(7);
-    //definitions are offloaded to Array_bind_offset/*.cpp
+    // definitions are offloaded to Array_bind_offset/*.cpp
 
     inline void pybind11_bind_Array_Offsets(py::module_ m)
     {

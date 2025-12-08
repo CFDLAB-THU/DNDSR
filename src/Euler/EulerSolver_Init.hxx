@@ -29,21 +29,21 @@ namespace DNDS::Euler
         DNDS_MAKE_SSP(readerBnd, meshBnd, 0);
         DNDS_assert(config.dataIOControl.readMeshMode == 0 || config.dataIOControl.readMeshMode == 1);
         DNDS_assert(config.dataIOControl.outPltMode == 0 || config.dataIOControl.outPltMode == 1);
-        mesh->periodicInfo.translation[1] = config.boundaryDefinition.PeriodicTranslation1;
-        mesh->periodicInfo.translation[2] = config.boundaryDefinition.PeriodicTranslation2;
-        mesh->periodicInfo.translation[3] = config.boundaryDefinition.PeriodicTranslation3;
-        mesh->periodicInfo.rotationCenter[1] = config.boundaryDefinition.PeriodicRotationCent1;
-        mesh->periodicInfo.rotationCenter[2] = config.boundaryDefinition.PeriodicRotationCent2;
-        mesh->periodicInfo.rotationCenter[3] = config.boundaryDefinition.PeriodicRotationCent3;
-        mesh->periodicInfo.rotation[1] =
+        mesh->periodicInfo.translation[1].map() = config.boundaryDefinition.PeriodicTranslation1;
+        mesh->periodicInfo.translation[2].map() = config.boundaryDefinition.PeriodicTranslation2;
+        mesh->periodicInfo.translation[3].map() = config.boundaryDefinition.PeriodicTranslation3;
+        mesh->periodicInfo.rotationCenter[1].map() = config.boundaryDefinition.PeriodicRotationCent1;
+        mesh->periodicInfo.rotationCenter[2].map() = config.boundaryDefinition.PeriodicRotationCent2;
+        mesh->periodicInfo.rotationCenter[3].map() = config.boundaryDefinition.PeriodicRotationCent3;
+        mesh->periodicInfo.rotation[1].map() =
             Geom::RotZ(config.boundaryDefinition.PeriodicRotationEulerAngles1[2]) *
             Geom::RotY(config.boundaryDefinition.PeriodicRotationEulerAngles1[1]) *
             Geom::RotX(config.boundaryDefinition.PeriodicRotationEulerAngles1[0]);
-        mesh->periodicInfo.rotation[2] =
+        mesh->periodicInfo.rotation[2].map() =
             Geom::RotZ(config.boundaryDefinition.PeriodicRotationEulerAngles2[2]) *
             Geom::RotY(config.boundaryDefinition.PeriodicRotationEulerAngles2[1]) *
             Geom::RotX(config.boundaryDefinition.PeriodicRotationEulerAngles2[0]);
-        mesh->periodicInfo.rotation[3] =
+        mesh->periodicInfo.rotation[3].map() =
             Geom::RotZ(config.boundaryDefinition.PeriodicRotationEulerAngles3[2]) *
             Geom::RotY(config.boundaryDefinition.PeriodicRotationEulerAngles3[1]) *
             Geom::RotX(config.boundaryDefinition.PeriodicRotationEulerAngles3[0]);
@@ -154,7 +154,7 @@ namespace DNDS::Euler
         OMP::set_full_parallel_OMP();
         if (config.dataIOControl.meshReorderCells == 1)
 #ifdef DNDS_USE_OMP
-            mesh->ReorderLocalCells(get_env_DNDS_DIST_OMP_NUM_THREADS());
+            mesh->ReorderLocalCells(std::max(get_env_DNDS_DIST_OMP_NUM_THREADS(), 1));
 #else
             mesh->ReorderLocalCells(); // do this early so that faces are natural to cell
 #endif
@@ -292,11 +292,11 @@ namespace DNDS::Euler
                 { return Rz * p; });
 
             for (auto &r : mesh->periodicInfo.rotation)
-                r = Rz * r * Rz.transpose();
+                r.map() = Rz * r.map() * Rz.transpose();
             for (auto &p : mesh->periodicInfo.rotationCenter)
-                p = Rz * p;
+                p.map() = Rz * p.map();
             for (auto &p : mesh->periodicInfo.translation)
-                p = Rz * p;
+                p.map() = Rz * p.map();
             // @todo  //! todo: alter the rotation and translation in  periodicInfo mesh->periodicInfo
         }
         if (config.dataIOControl.meshScale != 1.0)
@@ -310,9 +310,9 @@ namespace DNDS::Euler
                 { return p * scale; });
 
             for (auto &i : mesh->periodicInfo.translation)
-                i *= scale;
+                i.map() *= scale;
             for (auto &i : mesh->periodicInfo.rotationCenter)
-                i *= scale;
+                i.map() *= scale;
         }
         if (config.dataIOControl.rectifyNearPlane)
         {
@@ -336,7 +336,7 @@ namespace DNDS::Euler
         { //* symBnd's rectifying: !  altering mesh
             for (index iB = 0; iB < mesh->NumBnd(); iB++)
             {
-                index iFace = mesh->bnd2face.at(iB);
+                index iFace = mesh->bnd2faceV.at(iB);
                 auto bndID = mesh->bndElemInfo(iB, 0).zone;
                 EulerBCType bndType = pBCHandler->GetTypeFromID(bndID);
                 if (bndType == BCSym)

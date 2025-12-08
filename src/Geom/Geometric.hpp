@@ -9,6 +9,44 @@ namespace DNDS::Geom
     using tPoint = Eigen::Vector3d;
     using tJacobi = Eigen::Matrix3d;
     using tGPoint = Eigen::Matrix3d;
+    using tPointMap = Eigen::Map<tPoint, Eigen::Unaligned>;
+    using tPointConstMap = Eigen::Map<const tPoint, Eigen::Unaligned>;
+    using tGPointMap = Eigen::Map<tGPoint, Eigen::Unaligned>;
+    using tGPointConstMap = Eigen::Map<const tGPoint, Eigen::Unaligned>;
+
+    struct tPointPortable
+    {
+        std::array<real, 3> d;
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(tPointPortable, tPointPortable)
+        DNDS_DEVICE_CALLABLE auto map()
+        {
+            return tPointMap{d.data()};
+        }
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] auto map() const
+        {
+            return tPointConstMap{d.data()};
+        }
+    };
+
+    struct tGPointPortable
+    {
+        std::array<real, 9> d;
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(tGPointPortable, tGPointPortable)
+        DNDS_DEVICE_CALLABLE auto map()
+        {
+            return tGPointMap{d.data()};
+        }
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] auto map() const
+        {
+            return tGPointConstMap{d.data()};
+        }
+    };
+
+    static_assert(std::is_trivially_copyable_v<tPointPortable>);
+    static_assert(std::is_trivially_copyable_v<tGPointPortable>);
+
     using tSmallCoords = Eigen::Matrix<real, 3, Eigen::Dynamic>;
     struct SmallCoordsAsVector : public tSmallCoords
     {

@@ -53,11 +53,11 @@ namespace DNDS::Geom
 }
 namespace DNDS
 {
-    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(Geom::ElemInfo, extern)
-    DNDS_DEVICE_STORAGE_INST(Geom::ElemInfo, DeviceBackend::Host, extern)
-#ifdef DNDS_USE_CUDA
-    DNDS_DEVICE_STORAGE_INST(Geom::ElemInfo, DeviceBackend::CUDA, extern)
-#endif
+//     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(Geom::ElemInfo, extern)
+//     DNDS_DEVICE_STORAGE_INST(Geom::ElemInfo, DeviceBackend::Host, extern)
+// #ifdef DNDS_USE_CUDA
+//     DNDS_DEVICE_STORAGE_INST(Geom::ElemInfo, DeviceBackend::CUDA, extern)
+// #endif
 }
 namespace DNDS::Geom
 {
@@ -111,9 +111,9 @@ namespace DNDS::Geom
         int dim = -1;
         bool isPeriodic{false};
         MeshAdjState adjPrimaryState{Adj_Unknown};
-        // state of: face2cell, face2node
+        // state of: face2cell, face2node, face2bnd
         MeshAdjState adjFacialState{Adj_Unknown};
-        // state of: cell2face
+        // state of: cell2face, bnd2face
         MeshAdjState adjC2FState{Adj_Unknown};
         // state of: node2cell, node2bnd
         MeshAdjState adjN2CBState{Adj_Unknown};
@@ -190,40 +190,46 @@ namespace DNDS::Geom
         tAdjPair::t_deviceView<B> face2node;
         tAdj2Pair::t_deviceView<B> face2cell;
         tElemInfoArrayPair::t_deviceView<B> faceElemInfo;
-        // std::vector<index> bnd2face; // no device
-        // std::unordered_map<index, index> face2bnd; // no device
+        tAdj1Pair::t_deviceView<B> face2bnd;
+        tAdj1Pair::t_deviceView<B> bnd2face;
+        // std::vector<index> bnd2faceV; // no device
+        // std::unordered_map<index, index> face2bndM; // no device
         /// periodic only, after interpolated
         tPbiPair::t_deviceView<B> face2nodePbi;
 
-        auto device_array_list_facial()
+        DNDS_HOST auto device_array_list_facial()
         {
             return std::make_tuple(
                 DNDS_MAKE_1_MEMBER_REF(face2cell),
                 DNDS_MAKE_1_MEMBER_REF(face2node),
                 DNDS_MAKE_1_MEMBER_REF(face2nodePbi),
-                DNDS_MAKE_1_MEMBER_REF(faceElemInfo));
+                DNDS_MAKE_1_MEMBER_REF(faceElemInfo),
+                DNDS_MAKE_1_MEMBER_REF(face2bnd));
         }
 
         template <class TMain>
-        void create_view_facial(TMain &&m_obj)
+        DNDS_HOST void create_view_facial(TMain &&m_obj)
         {
             DNDS_COPY_MEMBER_VIEW(m_obj, face2cell);
             DNDS_COPY_MEMBER_VIEW(m_obj, face2node);
             if (isPeriodic)
                 DNDS_COPY_MEMBER_VIEW(m_obj, face2nodePbi);
             DNDS_COPY_MEMBER_VIEW(m_obj, faceElemInfo);
+            DNDS_COPY_MEMBER_VIEW(m_obj, face2bnd);
         }
 
-        auto device_array_list_C2F()
+        DNDS_HOST auto device_array_list_C2F()
         {
             return std::make_tuple(
-                DNDS_MAKE_1_MEMBER_REF(cell2face));
+                DNDS_MAKE_1_MEMBER_REF(cell2face),
+                DNDS_MAKE_1_MEMBER_REF(bnd2face));
         }
 
         template <class TMain>
-        void create_view_C2F(TMain &&m_obj)
+        DNDS_HOST void create_view_C2F(TMain &&m_obj)
         {
             DNDS_COPY_MEMBER_VIEW(m_obj, cell2face);
+            DNDS_COPY_MEMBER_VIEW(m_obj, bnd2face);
         }
 
         template <class TMain>
@@ -239,6 +245,8 @@ namespace DNDS::Geom
             DNDS_COPY_MEMBER(mesh, adjN2CBState);
             // DNDS_COPY_MEMBER(mesh, adjC2CFaceState);
 
+            
+
             if (adjPrimaryState)
                 create_view_primary(mesh);
             if (adjFacialState)
@@ -246,6 +254,8 @@ namespace DNDS::Geom
             if (adjC2FState)
                 create_view_C2F(mesh);
         }
+
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(UnstructuredMeshDeviceView, UnstructuredMeshDeviceView)
 
         DNDS_DEVICE_CALLABLE index NumNode() const { return coords.father.Size(); }
         DNDS_DEVICE_CALLABLE index NumCell() const { return cell2node.father.Size(); }

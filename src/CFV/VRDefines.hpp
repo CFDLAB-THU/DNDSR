@@ -68,9 +68,9 @@ namespace DNDS::CFV
 
 namespace DNDS
 {
-    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(CFV::RecAtr, extern)
-    DNDS_DEVICE_STORAGE_INST(CFV::RecAtr, DeviceBackend::Host, extern)
-#ifdef DNDS_USE_CUDA
-    DNDS_DEVICE_STORAGE_INST(CFV::RecAtr, DeviceBackend::CUDA, extern)
-#endif
+//     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(CFV::RecAtr, extern)
+//     DNDS_DEVICE_STORAGE_INST(CFV::RecAtr, DeviceBackend::Host, extern)
+// #ifdef DNDS_USE_CUDA
+//     DNDS_DEVICE_STORAGE_INST(CFV::RecAtr, DeviceBackend::CUDA, extern)
+// #endif
 }

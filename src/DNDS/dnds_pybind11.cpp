@@ -1,5 +1,7 @@
 
+#include "DNDS/DeviceStorage_bind.hpp"
 #include "MPI_bind.hpp"
+#include "DeviceStorage_bind.hpp"
 #include "IndexMapping_bind.hpp"
 #include "Array_bind.hpp"
 #include "ArrayDerived/ArrayAdjacency_bind.hpp"
@@ -14,6 +16,8 @@
 PYBIND11_MODULE(dnds_pybind11, m)
 {
     DNDS::pybind11_bind_defines(m);
+
+    DNDS::pybind11_bind_deviceStorage(m);
 
     DNDS::pybind11_bind_MPI_All(m);
 

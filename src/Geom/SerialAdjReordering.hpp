@@ -17,10 +17,10 @@ namespace DNDS::Geom
 {
 
     inline auto PartitionSerialAdj_Metis(
-        const tLocalMatStruct &mat, int nPart,
+        tLocalMatStruct::const_iterator mat_begin, tLocalMatStruct::const_iterator mat_end, int nPart,
         std::string metisType = "KWAY", int metisNcuts = 3, int metisUfactor = 5, int metisSeed = 0)
     {
-        _METIS::idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat.size()));
+        _METIS::idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat_end - mat_begin));
         _METIS::idx_t nCon{1}, options[METIS_NOPTIONS];
         _METIS::METIS_SetDefaultOptions(options);
         {
@@ -40,7 +40,7 @@ namespace DNDS::Geom
             // options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME | _METIS::METIS_DBG_IPART;
             // options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME;
         }
-        const std::vector<std::vector<index>> &cell2cellFaceV = mat;
+        auto &cell2cellFaceV = mat_begin;
         std::vector<_METIS::idx_t> adjncy, xadj, perm, iPerm;
         xadj.resize(nCell + 1);
         xadj[0] = 0;
@@ -175,10 +175,82 @@ namespace DNDS::Geom
         return {localFillOrderingNew2Old, localFillOrderingOld2New};
     }
 
-    inline std::pair<std::vector<index>, std::vector<index>> ReorderSerialAdj_CorrectRCM(const tLocalMatStruct &mat, index &bandWidthOld, index &bandWidthNew)
+    template <class T>
+    class OffsetIterator
+    {
+        const T *ptr_;
+        T offset_;
+
+    public:
+        using iterator_category = std::input_iterator_tag;
+        using value_type = T;
+        using difference_type = std::ptrdiff_t;
+        using pointer = const T *;
+        using reference = T; // NOT a real reference! It's a temporary.
+
+        OffsetIterator(const T *p, T off) : ptr_(p), offset_(off) {}
+
+        // Dereference returns a transformed VALUE
+        T operator*() const
+        {
+            return *ptr_ + offset_;
+        }
+
+        // Iterator movement
+        OffsetIterator &operator++()
+        {
+            ++ptr_;
+            return *this;
+        }
+
+        OffsetIterator operator++(int)
+        {
+            OffsetIterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        // Comparison
+        bool operator==(const OffsetIterator &other) const
+        {
+            return ptr_ == other.ptr_;
+        }
+
+        bool operator!=(const OffsetIterator &other) const
+        {
+            return !(*this == other);
+        }
+    };
+    // Proxy wrapper class
+    template <class T>
+    class OffsetRange
+    {
+        const T *begin_;
+        const T *end_;
+        T offset_;
+
+    public:
+        // Constructor from a sub-range of a vector
+        OffsetRange(typename std::vector<T>::const_iterator b, typename std::vector<T>::const_iterator e, T offset)
+            : begin_(std::addressof(*b)), end_(std::addressof(*e)), offset_(offset) {}
+
+        // Support for full vector
+        explicit OffsetRange(const std::vector<const T> &vec, T offset)
+            : begin_(vec.data()), end_(vec.data() + vec.size()), offset_(offset) {}
+
+        OffsetIterator<T> begin() const { return {begin_, offset_}; }
+        OffsetIterator<T> end() const { return {end_, offset_}; }
+        ptrdiff_t size() const { return end_ - begin_; }
+    };
+
+    inline std::pair<std::vector<index>, std::vector<index>> ReorderSerialAdj_CorrectRCM(
+        tLocalMatStruct::const_iterator mat_begin, tLocalMatStruct::const_iterator mat_end,
+        index &bandWidthOld, index &bandWidthNew,
+        index offset = 0)
     {
         std::vector<index> localFillOrderingNew2Old, localFillOrderingOld2New;
         bandWidthOld = 0;
+
         // for (index iCell = 0; iCell < this->NumCell(); ++iCell)
         // {
         //     cell2cellFaceVLocal[iCell].resize(4);
@@ -189,16 +261,20 @@ namespace DNDS::Geom
         //     cell2cellFaceVLocal[iCell][3] = x + mod(y + 1, 20) * 20;
         // }
 
-        const std::vector<std::vector<index>> &cell2cellFaceV = mat;
-        for (index iCell = 0; iCell < size_t_to_signed<index>(mat.size()); iCell++)
-            for (auto iCOther : cell2cellFaceV[iCell])
-                bandWidthOld = std::max(bandWidthOld, std::abs(iCell - iCOther));
+        index mat_size = mat_end - mat_begin;
+        // std::cout << "HHH " << offset << "," << mat_size << std::endl;
+        for (index iCell = 0; iCell < size_t_to_signed<index>(mat_size); iCell++)
+            for (auto iCOther : mat_begin[iCell])
+                bandWidthOld = std::max(bandWidthOld, std::abs(iCell + offset - iCOther));
 
-        localFillOrderingNew2Old.resize(mat.size(), 0);
-        localFillOrderingOld2New.resize(mat.size(), 0);
-        auto graphFunctor = [&](index i) -> const t_IndexVec &
-        { return cell2cellFaceV.at(i); }; // todo: need improvement in CorrectRCM: can pass a temporary functor and store
-        auto graph = CorrectRCM::UndirectedGraphProxy(graphFunctor, size_t_to_signed<int64_t>(mat.size()));
+        localFillOrderingNew2Old.resize(mat_size, 0);
+        localFillOrderingOld2New.resize(mat_size, 0);
+        auto graphFunctor = [&](index i)
+        {
+            DNDS_assert(i >= 0 && i < mat_size);
+            return OffsetRange<index>(mat_begin[i].cbegin(), mat_begin[i].cend(), -offset); // mind that OffsetRange adds the offset
+        }; // todo: need improvement in CorrectRCM: can pass a temporary functor and store
+        auto graph = CorrectRCM::UndirectedGraphProxy(graphFunctor, size_t_to_signed<int64_t>(mat_size));
         int ret = graph.CheckAdj();
         CorrectRCM::CuthillMcKeeOrdering(
             graph,
@@ -213,18 +289,27 @@ namespace DNDS::Geom
         std::unordered_set<index>
             __checkOrder;
         for (auto v : localFillOrderingOld2New)
-            DNDS_assert(v < size_t_to_signed<index>(mat.size()) && v >= 0), __checkOrder.insert(v);
-        DNDS_assert_info(__checkOrder.size() == localFillOrderingOld2New.size(), "The output of CorrectRCM::CuthillMcKeeOrdering is invalid!");
+            DNDS_assert(v < size_t_to_signed<index>(mat_size) && v >= 0), __checkOrder.insert(v);
+        DNDS_check_throw_info(__checkOrder.size() == localFillOrderingOld2New.size(), "The output of CorrectRCM::CuthillMcKeeOrdering is invalid!");
 
-        for (index iCell = 0; iCell < size_t_to_signed<index>(mat.size()); iCell++)
+        for (index iCell = 0; iCell < size_t_to_signed<index>(mat_size); iCell++)
             localFillOrderingNew2Old[localFillOrderingOld2New[iCell]] = iCell;
         for (auto v : localFillOrderingNew2Old)
-            DNDS_assert(v < size_t_to_signed<index>(mat.size()) && v >= 0);
+            DNDS_assert(v < size_t_to_signed<index>(mat_size) && v >= 0);
         bandWidthNew = 0;
-        for (index iCell = 0; iCell < size_t_to_signed<index>(mat.size()); iCell++)
-            for (auto iCOther : cell2cellFaceV[iCell])
-                bandWidthNew = std::max(bandWidthNew, std::abs(localFillOrderingOld2New[iCell] - localFillOrderingOld2New[iCOther]));
+        for (index iCell = 0; iCell < size_t_to_signed<index>(mat_size); iCell++)
+            for (auto iCOther : mat_begin[iCell])
+                bandWidthNew = std::max(bandWidthNew, std::abs(localFillOrderingOld2New[iCell] - localFillOrderingOld2New.at(iCOther - offset)));
 
         return {localFillOrderingNew2Old, localFillOrderingOld2New};
     }
+
+    std::vector<index> ReorderSerialAdj_PartitionMetisC(
+        tLocalMatStruct::iterator mat_begin, tLocalMatStruct::iterator mat_end,
+        std::vector<index>::iterator i_new2old_begin, std::vector<index>::iterator i_new2old_end,
+        int nParts,
+        index ind_offset,
+        bool do_rcm,
+        index &bwOldM, index &bwNewM);
+
 }

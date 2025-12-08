@@ -5,7 +5,7 @@
 
 namespace DNDS
 {
-    static const rowsize NoAlign = -1;
+    static const rowsize NoAlign = -1024;
 
     enum DataLayout
     {
@@ -44,7 +44,9 @@ namespace DNDS
         return std::is_trivially_copyable_v<T> || Meta::is_fixed_data_real_eigen_matrix_v<T>;
     }
 
-    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size,
+              // rowsize _depth_size = 1,
+              rowsize _align = NoAlign>
     class ArrayLayout
     {
     public:
@@ -52,10 +54,14 @@ namespace DNDS
         static const rowsize al = _align;
         static const rowsize rs = _row_size;
         static const rowsize rm = _row_max;
+        // static const rowsize ds = _depth_size;
         static const size_t sizeof_T = sizeof(value_type);
 
         static_assert(sizeof_T <= (1024ULL * 1024ULL * 1024ULL), "Row size larger than 1G");
         static_assert(array_comp_acceptable<T>(), "Do not put in a non trivially copyable type ");
+        static_assert(rs >= 0 || rs == DynamicSize || rs == NonUniformSize);
+        static_assert(rm >= 0 || rm == DynamicSize || rm == NonUniformSize);
+        // static_assert(ds >= 1 || ds == DynamicSize);
 
         static_assert(al == NoAlign || al >= 1, "Align bad");
 
@@ -118,7 +124,8 @@ namespace DNDS
                 Layout = "TABLE_StaticMax";
             if constexpr (_dataLayout == TABLE_Max)
                 Layout = "TABLE_Max";
-            return Layout + "__" + std::to_string(sizeof_T) + "_" + std::to_string(_row_size) +
+            return Layout + "__" + std::to_string(sizeof_T) +
+                   "_" + std::to_string(_row_size) +
                    "_" + std::to_string(_row_max) +
                    "_" + std::to_string(_align);
         }
@@ -136,8 +143,10 @@ namespace DNDS
                 Layout = "TABLE_StaticMax";
             if constexpr (_dataLayout == TABLE_Max)
                 Layout = "TABLE_Max";
-            return Layout + "__" + std::to_string(sizeof_T) + "_" + std::to_string(-1) +
-                   "_" + std::to_string(-1) +
+            return Layout + "__" + std::to_string(sizeof_T) +
+                   "_" + std::to_string(DynamicSize) +
+                   "_" + std::to_string(DynamicSize) +
+                   //    "_" + std::to_string(DynamicSize) +
                    "_" + std::to_string(_align);
         }
 
@@ -162,12 +171,20 @@ namespace DNDS
         }
     };
 
-    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    class ArrayView : public ArrayLayout<T, _row_size, _row_max, _align>
+    template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size,
+              // rowsize _depth_size = 1,
+              rowsize _align = NoAlign>
+    class ArrayView : public ArrayLayout<T, _row_size, _row_max,
+                                         // _depth_size,
+                                         _align>
     {
     protected:
-        using self_type = ArrayView<T, _row_size, _row_max, _align>;
-        using t_Layout = ArrayLayout<T, _row_size, _row_max, _align>;
+        using self_type = ArrayView<T, _row_size, _row_max,
+                                    // _depth_size,
+                                    _align>;
+        using t_Layout = ArrayLayout<T, _row_size, _row_max,
+                                     //  _depth_size,
+                                     _align>;
         using t_Layout::al,
             t_Layout::rs,
             t_Layout::rm,
@@ -283,6 +300,7 @@ namespace DNDS
                 DNDS_HD_assert(pDiff < INT32_MAX);                                         // overflow
                 return static_cast<rowsize>(pDiff);
             }
+            return UnInitRowsize;
         }
 
     public:
@@ -311,6 +329,7 @@ namespace DNDS
                 return _dataLayout == TABLE_Max ? _row_size_dynamic : rm;
             else
                 DNDS_HD_assert_infof(false, "invalid call");
+            return UnInitRowsize;
         }
 
         // to be device-callable
@@ -322,6 +341,7 @@ namespace DNDS
                 return this->RowSize();
             else
                 DNDS_HD_assert_infof(false, "invalid call");
+            return UnInitRowsize;
         }
 
         // to be device-callable
@@ -331,6 +351,7 @@ namespace DNDS
                 return this->RowSize(iRow);
             else
                 DNDS_HD_assert_infof(false, "invalid call");
+            return UnInitRowsize;
         }
 
     protected:

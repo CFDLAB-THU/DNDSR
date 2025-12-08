@@ -13,7 +13,10 @@ namespace DNDS::CFV
 
         FiniteVolumeSettings settings;
 
-        int getDim()
+        static_assert(std::is_trivially_copyable_v<FiniteVolumeSettings>);
+        static_assert(std::is_trivially_copyable_v<Geom::UnstructuredMeshDeviceView<B>>);
+
+        DNDS_DEVICE_CALLABLE int getDim()
         {
             return mesh.dim;
         }
@@ -39,7 +42,16 @@ namespace DNDS::CFV
         t3MatPair::t_deviceView<B> cellInertia;
         tScalarPair::t_deviceView<B> cellSmoothScale;
 
+        static_assert(std::is_trivially_copyable_v<tScalarPair::t_deviceView<B>>);
+        static_assert(std::is_trivially_copyable_v<tRecAtrPair::t_deviceView<B>>);
+        static_assert(std::is_trivially_copyable_v<tCoeffPair::t_deviceView<B>>);
+        static_assert(std::is_trivially_copyable_v<t3VecsPair::t_deviceView<B>>);
+        static_assert(std::is_trivially_copyable_v<t3VecPair::t_deviceView<B>>);
+        static_assert(std::is_trivially_copyable_v<t3MatPair::t_deviceView<B>>);
+
     public:
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(FiniteVolumeDeviceView, FiniteVolumeDeviceView)
+
         template <class TMain>
         FiniteVolumeDeviceView(TMain &fv, index placeholder) : mesh(fv.mesh->template deviceView<B>()), settings(fv.getDim())
         {

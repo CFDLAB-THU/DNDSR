@@ -190,7 +190,7 @@ namespace DNDS::Serializer
     static herr_t link_iterate_cb(hid_t group_id, const char *name, const H5L_info_t *info, void *op_data)
     {
         herr_t herr;
-        TraverseData *data = static_cast<TraverseData *>(op_data);
+        auto *data = static_cast<TraverseData *>(op_data);
         bool coll_on_meta = data->coll_on_meta;
         std::string full_name = data->current_path + "/" + name;
         // We only care about hard links that represent HDF5 objects
@@ -411,7 +411,8 @@ namespace DNDS::Serializer
 
         herr_t herr{0};
         hid_t dxpl_id = H5Pcreate(H5P_DATASET_XFER);
-        if ((offset.isDist() || offset == ArrayGlobalOffset_Parts) && (coll_on_data || deflateLevel > 0)) //! is this necessary?
+        //! is this necessary? seems even global-unique vector needs this if deflate is on!
+        if (((offset.isDist() || offset == ArrayGlobalOffset_Parts) && (coll_on_data)) || deflateLevel > 0)
             herr = H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE), H5CHECK_Set;
         else
             herr = H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_INDEPENDENT), H5CHECK_Set;

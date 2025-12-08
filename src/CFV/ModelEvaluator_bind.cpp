@@ -39,7 +39,7 @@ namespace DNDS::CFV
                     self.get_settings() = defaultJson;
                 });
 
-        auto EvaluateRHSOptions_ = py::class_<ModelEvaluator::EvaluateRHSOptions>(ModelEvaluator_, "EvaluateRHSOptions");
+        auto EvaluateRHSOptions_ = py::classh<ModelEvaluator::EvaluateRHSOptions>(ModelEvaluator_, "EvaluateRHSOptions");
         EvaluateRHSOptions_
             .def(py::init())
             .def_readwrite("direct2ndRec", &ModelEvaluator::EvaluateRHSOptions::direct2ndRec)

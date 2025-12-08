@@ -7,6 +7,7 @@
 #include <fmt/ostream.h>
 #include <fmt/format.h>
 #include "DeviceStorage.hpp"
+#include "Vector.hpp"
 
 namespace DNDS
 {

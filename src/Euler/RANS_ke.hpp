@@ -12,6 +12,8 @@
 #define KW_SST_PROD_LIMITS 1
 #define KW_SST_PROD_OMEGA_VERSION 1
 
+#define SA_USE_FT2_TERM 1
+
 namespace DNDS::Euler::RANS
 {
     template <int dim, class TU, class TDiffU>
@@ -344,7 +346,7 @@ namespace DNDS::Euler::RANS
     }
 
     template <int dim, class TU, class TDiffU, class TSource>
-    void GetSource_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, TSource &source, int mode)
+    void GetSource_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, real lLES, TSource &source, int mode)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -384,6 +386,8 @@ namespace DNDS::Euler::RANS
                      4 * rho * sigO2 * k / (CDKW * sqr(d))),
             4));
         real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
+        real lRANS = std::sqrt(k) / (betaStar * omegaaa);
+        real FDES = std::max(1.0, lRANS / (lLES + verySmallReal) * (1 - F2));
         // F2 = 0;
         real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho; // use S/OmegaMag for SST: S: CFD++, OmegaMag: Turbulence Modeling Validation, Testing, and Developmen
 #if KW_SST_LIMIT_MUT == 1
@@ -413,7 +417,7 @@ namespace DNDS::Euler::RANS
 #endif
         if (mode == 0)
         {
-            source(I4 + 1) = PkTilde - betaStar * rho * k * omegaaa;
+            source(I4 + 1) = PkTilde - betaStar * rho * k * omegaaa * FDES;
             source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
                              2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(EigenAll, 0).dot(diffKO(EigenAll, 1));
             // source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
@@ -421,7 +425,7 @@ namespace DNDS::Euler::RANS
         }
         else
         {
-            source(I4 + 1) = betaStar * omegaaa;
+            source(I4 + 1) = betaStar * omegaaa * FDES;
             source(I4 + 2) = 2 * beta * omegaaa;
         }
     }
@@ -594,7 +598,9 @@ namespace DNDS::Euler::RANS
     template <int dim, class TU, class TDiffU, class TSource>
     void GetSource_SA(TU &&UMeanXy, TDiffU &&DiffUxy, real muRef, real mufPhy, real gamma,
                       real d,
-                      real lLES, TSource &source, int rotCor, int mode)
+                      real lLES,
+                      real hMax,
+                      TSource &source, int rotCor, int mode)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -612,8 +618,13 @@ namespace DNDS::Euler::RANS
         static const real rlim = 10;
         static const real cw1 = cb1 / sqr(kappa) + (1 + cb2) / sigma;
 
+#if SA_USE_FT2_TERM
         static const real ct3 = 1.2;
         static const real ct4 = 0.5;
+#else
+        static const real ct3 = 0.0;
+        static const real ct4 = 0.0;
+#endif
 
         real nuh = UMeanXy(I4 + 1) * muRef / UMeanXy(0);
 
@@ -639,11 +650,6 @@ namespace DNDS::Euler::RANS
         real S = Omega.norm() * std::sqrt(2);         // is omega's magnitude
         real SS = (diffU + diffU.transpose()).norm(); // is sqrt(2) * strainrate's norm
         real diffUNorm = diffU.norm();
-        // DDES shield
-        real rd = nuh / (sqr(kappa) * sqr(d) * std::max(1e-10, diffUNorm));
-        real fd = 1. - std::tanh(cube(8 * rd));
-        real lDES = d - fd * std::max(0., d - lLES);
-        // DDES
 
         real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;
 
@@ -688,6 +694,46 @@ namespace DNDS::Euler::RANS
         // !    // need second derivatives for rotation term !(CFD++ user manual)
         // }
 
+        // DDES shield
+        real lRANS = d;
+        real fwStar = .424;
+        real nuTur = mufPhy / UMeanXy(0) * std::max((Chi * fnu1), 0.0);
+        real nufPhy = mufPhy / UMeanXy(0);
+        real rd = (nuTur + nufPhy) / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
+        real fd = 1. - std::tanh(cube(8 * rd));
+        real psiSqr = std::min(100.0, (1 - cb1 / (cw1 * sqr(kappa) * fwStar) * (ft2 + (1 - ft2) * fnu2)) /
+                                          (fnu1 * std::max(smallReal, 1 - ft2)));
+        real psi = std::sqrt(std::max(psiSqr, smallReal));
+        real lDES = lRANS - fd * std::max(0., lRANS - lLES * psi);
+
+        // IDDES switch
+
+        real alphaIDDES = 0.25 - d / hMax;
+        real fB = std::min(2 * std::exp(-9. * sqr(alphaIDDES)), 1.0);
+
+        real cl = 3.55;
+        real ct = 1.63;
+        real rdt = nuTur / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
+        real rdl = nufPhy / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
+        real ft = std::tanh(cube(sqr(ct) * rdt));
+        real fl_tmp = sqr(sqr(cl) * rdl);
+        real fl = std::tanh(sqr(sqr(fl_tmp)) * fl_tmp); // power 5
+
+        real fe1 = 2. * std::exp(-(alphaIDDES >= 0 ? 11.09 : 9.0) * sqr(alphaIDDES));
+        real fe2 = 1. - std::max(ft, fl);
+        real fe = std::max((fe1 - 1.), 0.) * psi * fe2;
+        // real lWMLES = fB * (1 + fe) * lRANS + (1 - fB) * lLES * psi;
+
+        real fdTilde = std::max(fB, std::tanh(cube(8 * rdt)));
+        real lIDDES = fdTilde * (1 + fe) * lRANS + (1 - fdTilde) * lLES * psi;
+        lIDDES = std::max(lLES * smallReal, lIDDES);
+
+        lDES = lIDDES;
+
+        // if (d < 0.01)
+        //     std::cout << d << " " << lDES << " " << lLES << std::endl;
+        // DDES
+
 #ifdef USE_NS_SA_NEGATIVE_MODEL
         real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / lDES); //! modified >>
         real P = cb1 * (1 - ft2) * Sh * nuh;                            //! modified >>
@@ -717,7 +763,7 @@ namespace DNDS::Euler::RANS
             source(I4 + 1) = UMeanXy(0) * (P - D + diffNu.squaredNorm() * cb2 / sigma) / muRef -
                              (UMeanXy(I4 + 1) * fn * muRef + mufPhy) / (UMeanXy(0) * sigma) * diffRho.dot(diffNu) / muRef;
         else
-            source(I4 + 1) = -std::min(UMeanXy(0) * (P * 0 - D * 2) / muRef / (UMeanXy(I4 + 1) + verySmallReal), -verySmallReal);
+            source(I4 + 1) = -std::min(UMeanXy(0) * (P * 0 - D * 2) / muRef / (std::abs(UMeanXy(I4 + 1)) + verySmallReal), -verySmallReal);
 
         if (!source.allFinite())
         {

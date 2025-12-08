@@ -45,3 +45,15 @@ Complicated type systems on device should be very carefully treated.
 Sometimes your CTOR/assignment for trivial copy / construction on the call chain (Base class's) or some member functions (see array iterator's getView()) are missing the `__device__` mark, that may cause the compiler to silently **default initialize** the object. Normally it would be an error emitted, but maybe in CRTP and/or relocatable-device-code this could be silently error.
 
 Always ensure full `__device__` coverage on the call chain of device side.
+
+## JIT
+
+NVCC could generate ptx code and JIT it by driver. If the driver JIT compiler is buggy, some errors could happen **SILENTLY**.
+
+Safe thing to do: use:
+
+``` bash
+cmake ... -DCMAKE_CUDA_ARCHITECTURES=native
+```
+
+##

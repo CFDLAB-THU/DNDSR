@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ArrayDOF.hpp"
+#include "DNDS/Defines.hpp"
+#include "DNDS/Errors.hpp"
 
 namespace DNDS
 {
@@ -236,6 +238,48 @@ namespace DNDS
         MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_SUM, self.father->getMPI().comm);
         // std::cout << "norm2is " << std::scientific << sqrSumAll << std::endl;
         return std::sqrt(sqrSumAll);
+    }
+
+    template <int n_m, int n_n>
+    real ArrayDofOp<DeviceBackend::Host, n_m, n_n>::reduction(t_self &self, const std::string &op)
+    {
+        DNDS_assert(self.father && self.son);
+        real sqrSum{0}, sqrSumAll{0};
+        index iTop = self.father->DataSize();
+        if (op == "min")
+        {
+            sqrSum = sqrSumAll = std::numeric_limits<real>::max();
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(static) reduction(min : sqrSum)
+#endif
+            for (index i = 0; i < iTop; i++) //*note that only father is included
+                sqrSum = std::min(sqrSum, self.father->data()[i]);
+            MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_MIN, self.father->getMPI().comm);
+        }
+        else if (op == "max")
+        {
+            sqrSum = sqrSumAll = std::numeric_limits<real>::lowest();
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(static) reduction(max : sqrSum)
+#endif
+            for (index i = 0; i < iTop; i++) //*note that only father is included
+                sqrSum = std::max(sqrSum, self.father->data()[i]);
+            MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_MAX, self.father->getMPI().comm);
+        }
+        else if (op == "sum")
+        {
+            sqrSum = sqrSumAll = 0.0;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(static) reduction(+ : sqrSum)
+#endif
+            for (index i = 0; i < iTop; i++) //*note that only father is included
+                sqrSum = sqrSum + self.father->data()[i];
+            MPI::Allreduce(&sqrSum, &sqrSumAll, 1, DNDS_MPI_REAL, MPI_SUM, self.father->getMPI().comm);
+        }
+        else
+            DNDS_assert_info(false, op);
+        // std::cout << "norm2is " << std::scientific << sqrSumAll << std::endl;
+        return sqrSumAll;
     }
 
     template <int n_m, int n_n>

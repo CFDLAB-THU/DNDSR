@@ -26,7 +26,12 @@ version = "0.0.0"
 [tool.scikit-build]
 cmake.minimum-version = "3.21"
 cmake.build-type = "Release"
-build.targets = ["dnds_pybind11", "geom_pybind11", "cfv_pybind11"]
+build.targets = [
+    "dnds_pybind11",
+    "geom_pybind11",
+    "cfv_pybind11",
+    "eulerP_pybind11",
+]
 build.verbose = true
 build-dir = "build_py"
 cmake.args = ["-G Ninja"]
@@ -39,9 +44,12 @@ sdist.include = [
 ] # append to .gitignore rules
 
 [tool.scikit-build.wheel.packages]
+# "DNDSR" = "src/DNDSR"
 "DNDSR/DNDS" = "src/DNDS"
 "DNDSR/DNDS/_internal" = "src/DNDS/_internal"
 "DNDSR/Geom" = "src/Geom"
 "DNDSR/Geom/_internal" = "src/Geom/_internal"
 "DNDSR/CFV" = "src/CFV"
 "DNDSR/CFV/_internal" = "src/CFV/_internal"
+"DNDSR/EulerP" = "src/EulerP"
+"DNDSR/EulerP/_internal" = "src/EulerP/_internal"

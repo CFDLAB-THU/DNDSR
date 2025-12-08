@@ -29,6 +29,7 @@ Mesh_Serial_ReadFromCGNS.cpp
 Mesh_Serial_Partition.cpp
 Mesh_Elevation.cpp
 Mesh_Elevation_SmoothSolver.cpp
+SerialAdjReordering.cpp
 )
 
 if (DNDS_USE_CUDA)

@@ -1639,7 +1639,7 @@ namespace DNDS::Geom
             if (!fBndIsWall(mesh->GetBndZone(iBnd)))
                 continue;
 
-            index iFace = mesh->bnd2face[iBnd];
+            index iFace = mesh->bnd2faceV[iBnd];
             auto elem = mesh->GetFaceElement(iFace);
             auto quad = Geom::Elem::Quadrature{elem, options.subdivide_quad};
 

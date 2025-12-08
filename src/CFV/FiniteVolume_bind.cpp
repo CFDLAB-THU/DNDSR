@@ -122,27 +122,30 @@ namespace DNDS::CFV
                  { self.to_device(device_backend_name_to_enum(backend)); }, py::arg("backend"))
             .def("to_host", &FiniteVolume::to_host);
 
-#define DNDS_CFV_FV_PYBIND11_DEFINE_BuildUDof(nVarsFixed)                                         \
-    FiniteVolume_.def(                                                                            \
-        ("BuildUDof_" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                                \
-        [](T &self, tUDof<nVarsFixed> &u, int nVars, bool buildSon, bool buildTrans)              \
-        { self.BuildUDof(u, nVars, buildSon, buildTrans); },                                      \
-        py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true, py::arg("buildTrans") = true, \
+#define DNDS_CFV_FV_PYBIND11_DEFINE_BuildUDof(nVarsFixed)                                                  \
+    FiniteVolume_.def(                                                                                     \
+        ("BuildUDof_" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                                         \
+        [](T &self, tUDof<nVarsFixed> &u, int nVars, bool buildSon, bool buildTrans, Geom::MeshLoc varloc) \
+        { self.BuildUDof(u, nVars, buildSon, buildTrans, varloc); },                                               \
+        py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true,                                        \
+        py::arg("buildTrans") = true, py::arg("varloc") = Geom::MeshLoc::Cell,                             \
         DNDS_PYBIND11_OSTREAM_GUARD)
 
-#define DNDS_CFV_FV_PYBIND11_DEFINE_BuildUGrad(nVarsFixed)                                            \
-    FiniteVolume_                                                                                     \
-        .def(                                                                                         \
-            ("BuildUGrad_2x" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                       \
-            [](T &self, tUGrad<nVarsFixed, 2> &u, int nVars, bool buildSon, bool buildTrans)          \
-            { self.BuildUGradD(u, nVars, buildSon, buildTrans); },                                    \
-            py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true, py::arg("buildTrans") = true, \
-            DNDS_PYBIND11_OSTREAM_GUARD)                                                              \
-        .def(                                                                                         \
-            ("BuildUGrad_3x" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                       \
-            [](T &self, tUGrad<nVarsFixed, 3> &u, int nVars, bool buildSon, bool buildTrans)          \
-            { self.BuildUGradD(u, nVars, buildSon, buildTrans); },                                    \
-            py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true, py::arg("buildTrans") = true, \
+#define DNDS_CFV_FV_PYBIND11_DEFINE_BuildUGrad(nVarsFixed)                                                         \
+    FiniteVolume_                                                                                                  \
+        .def(                                                                                                      \
+            ("BuildUGrad_2x" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                                          \
+            [](T &self, tUGrad<nVarsFixed, 2> &u, int nVars, bool buildSon, bool buildTrans, Geom::MeshLoc varloc) \
+            { self.BuildUGradD(u, nVars, buildSon, buildTrans, varloc); },                                         \
+            py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true,                                            \
+            py::arg("buildTrans") = true, py::arg("varloc") = Geom::MeshLoc::Cell,                                 \
+            DNDS_PYBIND11_OSTREAM_GUARD)                                                                           \
+        .def(                                                                                                      \
+            ("BuildUGrad_3x" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                                          \
+            [](T &self, tUGrad<nVarsFixed, 3> &u, int nVars, bool buildSon, bool buildTrans, Geom::MeshLoc varloc) \
+            { self.BuildUGradD(u, nVars, buildSon, buildTrans, varloc); },                                         \
+            py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true,                                            \
+            py::arg("buildTrans") = true, py::arg("varloc") = Geom::MeshLoc::Cell,                                 \
             DNDS_PYBIND11_OSTREAM_GUARD)
 
 #define DNDS_CFV_FV_PYBIND11_DEFINE_BuildCalls(nVarsFixed)  \

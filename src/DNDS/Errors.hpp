@@ -6,37 +6,60 @@
 
 #include <iostream>
 #include <cstdarg>
-
-std::string __DNDS_getTraceString();
-
-inline void __DNDS_assert_false(const char *expr, const char *file, int line)
+#include <sstream>
+namespace DNDS
 {
-    std::cerr << __DNDS_getTraceString() << "\n";
-    std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]" << std::endl;
-    std::abort();
+    std::string getTraceString();
+
+    inline void assert_false(const char *expr, const char *file, int line)
+    {
+        std::cerr << getTraceString() << "\n";
+        std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]" << std::endl;
+        std::abort();
+    }
+
+    inline void assert_false_info(const char *expr, const char *file, int line, const std::string &info)
+    {
+        std::cerr << getTraceString() << "\n";
+        std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n"
+                  << info << std::endl;
+        std::abort();
+    }
+
+    inline void assert_false_infof(const char *expr, const char *file, int line,
+                                   const char *info, ...)
+    {
+        va_list args;
+        va_start(args, info);
+        std::cerr << getTraceString() << "\n";
+        std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n";
+        char format_buf[1024 * 512];
+        std::vsnprintf(format_buf, sizeof(format_buf), info, args);
+        va_end(args);
+        std::cerr << format_buf << std::endl;
+        std::abort();
+    }
+
+    template <class TException = std::runtime_error>
+    void assert_false_info_throw(const char *expr, const char *file, int line, const std::string &info)
+    {
+        std::stringstream ss;
+        ss << getTraceString() << "\n";
+        ss << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n"
+           << info << std::endl;
+        throw std::runtime_error(ss.str());
+    }
 }
 
-inline void __DNDS_assert_false_info(const char *expr, const char *file, int line, const std::string &info)
-{
-    std::cerr << __DNDS_getTraceString() << "\n";
-    std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n"
-              << info << std::endl;
-    std::abort();
-}
+#define DNDS_check_throw(expr) \
+    ((static_cast<bool>(expr)) \
+         ? void(0)             \
+         : ::DNDS::assert_false_info_throw(#expr, __FILE__, __LINE__, ""))
 
-inline void __DNDS_assert_false_infof(const char *expr, const char *file, int line,
-                                      const char *info, ...)
-{
-    va_list args;
-    va_start(args, info);
-    std::cerr << __DNDS_getTraceString() << "\n";
-    std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n";
-    char format_buf[1024 * 512];
-    std::vsnprintf(format_buf, sizeof(format_buf), info, args);
-    va_end(args);
-    std::cerr << format_buf << std::endl;
-    std::abort();
-}
+#define DNDS_check_throw_info(expr, info) \
+    ((static_cast<bool>(expr))            \
+         ? void(0)                        \
+         : ::DNDS::assert_false_info_throw(#expr, __FILE__, __LINE__, info))
 
 #ifdef DNDS_NDEBUG
 #    define DNDS_assert(expr) (void(0))
@@ -46,15 +69,15 @@ inline void __DNDS_assert_false_infof(const char *expr, const char *file, int li
 #    define DNDS_assert(expr)      \
         ((static_cast<bool>(expr)) \
              ? void(0)             \
-             : __DNDS_assert_false(#expr, __FILE__, __LINE__))
+             : ::DNDS::assert_false(#expr, __FILE__, __LINE__))
 #    define DNDS_assert_info(expr, info) \
         ((static_cast<bool>(expr))       \
              ? void(0)                   \
-             : __DNDS_assert_false_info(#expr, __FILE__, __LINE__, info))
+             : ::DNDS::assert_false_info(#expr, __FILE__, __LINE__, info))
 #    define DNDS_assert_infof(expr, info, ...) \
         ((static_cast<bool>(expr))             \
              ? void(0)                         \
-             : __DNDS_assert_false_infof(#expr, __FILE__, __LINE__, info, ##__VA_ARGS__))
+             : ::DNDS::assert_false_infof(#expr, __FILE__, __LINE__, info, ##__VA_ARGS__))
 #endif
 
 #ifdef __CUDA_ARCH__

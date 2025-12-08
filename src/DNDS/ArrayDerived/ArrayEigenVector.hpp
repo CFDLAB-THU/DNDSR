@@ -10,6 +10,7 @@ namespace DNDS
     class ArrayEigenVector : public ParArray<real, _vec_size, _row_max, _align>
     {
     public:
+        using t_self = ArrayEigenVector<_vec_size, _row_max, _align>;
         using t_base = ParArray<real, _vec_size, _row_max, _align>;
         using t_base::t_base;
 
@@ -25,6 +26,16 @@ namespace DNDS
         using t_copy = t_EigenVector;
 
     public:
+        // default copy
+        ArrayEigenVector(const t_self &R) = default;
+        t_self &operator=(const t_self &R) = default;
+        // operator= handled automatically
+
+        void clone(const t_self &R)
+        {
+            this->operator=(R);
+        }
+
         t_EigenMap operator[](index i)
         {
             return {t_base::operator[](i), t_base::RowSize(i)}; // need static dispatch?

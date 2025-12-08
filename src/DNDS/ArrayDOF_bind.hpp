@@ -49,7 +49,12 @@ namespace DNDS
             .def(py::init([]()
                           { return std::make_shared<TArr>(); }));
         // use inherited pair methods
-
+        Arr_
+            .def("clone", [](TArr &self)
+                 {
+                     auto new_pair = std::make_shared<TArr>();
+                     new_pair->clone(self); 
+                     return new_pair; });
         Arr_
             .def("setConstant", [](TArr &self, real R)
                  { self.setConstant(R); }, py::arg("R"))
@@ -79,7 +84,7 @@ namespace DNDS
                      { self *= R; return self; }, py::arg("R"));
         }
         Arr_
-            .def("__div__", [](TArr &self, const TArr &R)
+            .def("__idiv__", [](TArr &self, const TArr &R)
                  { self /= R;return self; }, py::arg("R"));
 
         Arr_
@@ -91,6 +96,12 @@ namespace DNDS
                  { return self.norm2(); })
             .def("norm2", [](TArr &self, TArr &R)
                  { return self.norm2(R); })
+            .def("min", [](TArr &self)
+                 { return self.min(); })
+            .def("max", [](TArr &self)
+                 { return self.max(); })
+            .def("sum", [](TArr &self)
+                 { return self.sum(); })
             .def("componentWiseNorm1", [](TArr &self)
                  { return self.componentWiseNorm1(); })
             .def("componentWiseNorm1", [](TArr &self, TArr &R)

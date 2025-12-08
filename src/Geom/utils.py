@@ -26,6 +26,7 @@ def create_mesh_from_CGNS(
     dim: int = 2,
     periodic_tolerance: float = 1e-9,
     inner_process_parts: int = 1,
+    second_level_parts: int = 1,
     periodic_geometry={
         "translation1": [1, 0, 0],
         "rotationCenter1": [0, 0, 0],
@@ -139,7 +140,7 @@ def create_mesh_from_CGNS(
         mesh.AdjGlobal2LocalPrimary()
         mesh.AdjGlobal2LocalN2CB()
 
-    mesh.ReorderLocalCells(nParts=inner_process_parts)
+    mesh.ReorderLocalCells(nParts=inner_process_parts, nPartsInner=second_level_parts)
 
     mesh.InterpolateFace()
     mesh.AssertOnFaces()

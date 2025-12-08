@@ -46,7 +46,7 @@ namespace DNDS::CFV
             pybind11_ArrayEigenUniMatrixBatchPair_get_class<DynamicSize, DynamicSize>(m_dnds);
     }
 
-    using tPy_RecAtr = py::class_<RecAtr>;
+    using tPy_RecAtr = py::classh<RecAtr>;
     inline void pybind11_define_RecAtr(py::module_ &m)
     {
         auto RecAtr_ = tPy_RecAtr(m, "RecAtr");

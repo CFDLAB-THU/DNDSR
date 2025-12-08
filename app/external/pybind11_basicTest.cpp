@@ -23,7 +23,7 @@ namespace DNDS::Python
         m.def("MPI_Finalize", []()
               { return MPI_Finalize(); });
 
-        py::class_<DNDS::MPIInfo>(m, "MPIInfo")
+        py::classh<DNDS::MPIInfo>(m, "MPIInfo")
             .def(py::init<>())
             .def_property_readonly("comm", [](const MPIInfo &mpi)
                                    {

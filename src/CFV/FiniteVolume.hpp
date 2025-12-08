@@ -1,5 +1,8 @@
 #pragma once
+#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Errors.hpp"
 #include "FiniteVolumeSettings.hpp"
+#include "Geom/Mesh.hpp"
 #include "VRDefines.hpp"
 #include "Geom/DiffTensors.hpp"
 
@@ -149,18 +152,59 @@ namespace DNDS::CFV
         void ConstructCellSmoothScale();
 
         template <int nVarsFixed = 1>
-        void BuildUDof(tUDof<nVarsFixed> &u, int nVars, bool buildSon = true, bool buildTrans = true)
+        void BuildUDof(tUDof<nVarsFixed> &u, int nVars, bool buildSon = true, bool buildTrans = true, Geom::MeshLoc varloc = Geom::MeshLoc::Cell)
         {
             DNDS_MAKE_SSP(u.father, mpi);
             DNDS_MAKE_SSP(u.son, mpi);
-            u.father->Resize(mesh->NumCell(), nVars, 1);
+            DNDS_assert(varloc);
+            switch (varloc)
+            {
+            case Geom::MeshLoc::Cell:
+                u.father->Resize(mesh->NumCell(), nVars, 1);
+                break;
+            case Geom::MeshLoc::Node:
+                u.father->Resize(mesh->NumNode(), nVars, 1);
+                break;
+            case Geom::MeshLoc::Face:
+                u.father->Resize(mesh->NumFace(), nVars, 1);
+                break;
+            default:
+                DNDS_assert(false);
+            }
             if (buildSon)
-                u.son->Resize(mesh->NumCellGhost(), nVars, 1);
+                switch (varloc)
+                {
+                case Geom::MeshLoc::Cell:
+                    u.son->Resize(mesh->NumCellGhost(), nVars, 1);
+                    break;
+                case Geom::MeshLoc::Node:
+                    u.son->Resize(mesh->NumNodeGhost(), nVars, 1);
+                    break;
+                case Geom::MeshLoc::Face:
+                    u.son->Resize(mesh->NumFaceGhost(), nVars, 1);
+                    break;
+                default:
+                    DNDS_assert(false);
+                }
+
             if (buildTrans)
             {
                 DNDS_assert(buildSon);
                 u.TransAttach();
-                u.trans.BorrowGGIndexing(mesh->cell2node.trans);
+                switch (varloc)
+                {
+                case Geom::MeshLoc::Cell:
+                    u.trans.BorrowGGIndexing(mesh->cell2node.trans);
+                    break;
+                case Geom::MeshLoc::Node:
+                    u.trans.BorrowGGIndexing(mesh->coords.trans);
+                    break;
+                case Geom::MeshLoc::Face:
+                    u.trans.BorrowGGIndexing(mesh->face2node.trans);
+                    break;
+                default:
+                    DNDS_assert(false);
+                }
                 u.trans.createMPITypes();
                 u.trans.initPersistentPull();
                 u.trans.initPersistentPush();
@@ -171,19 +215,58 @@ namespace DNDS::CFV
         }
 
         template <int nVarsFixed, int dim>
-        void BuildUGradD(tUGrad<nVarsFixed, dim> &u, int nVars, bool buildSon = true, bool buildTrans = true)
+        void BuildUGradD(tUGrad<nVarsFixed, dim> &u, int nVars, bool buildSon = true, bool buildTrans = true, Geom::MeshLoc varloc = Geom::MeshLoc::Cell)
         {
             using namespace Geom::Base;
             DNDS_MAKE_SSP(u.father, mpi);
             DNDS_MAKE_SSP(u.son, mpi);
-            u.father->Resize(mesh->NumCell(), dim, nVars);
+            switch (varloc)
+            {
+            case Geom::MeshLoc::Cell:
+                u.father->Resize(mesh->NumCell(), dim, nVars);
+                break;
+            case Geom::MeshLoc::Node:
+                u.father->Resize(mesh->NumNode(), dim, nVars);
+                break;
+            case Geom::MeshLoc::Face:
+                u.father->Resize(mesh->NumFace(), dim, nVars);
+                break;
+            default:
+                DNDS_assert(false);
+            }
             if (buildSon)
-                u.son->Resize(mesh->NumCellGhost(), dim, nVars);
+                switch (varloc)
+                {
+                case Geom::MeshLoc::Cell:
+                    u.son->Resize(mesh->NumCellGhost(), dim, nVars);
+                    break;
+                case Geom::MeshLoc::Node:
+                    u.son->Resize(mesh->NumNodeGhost(), dim, nVars);
+                    break;
+                case Geom::MeshLoc::Face:
+                    u.son->Resize(mesh->NumFaceGhost(), dim, nVars);
+                    break;
+                default:
+                    DNDS_assert(false);
+                }
             if (buildTrans)
             {
                 DNDS_assert(buildSon);
                 u.TransAttach();
-                u.trans.BorrowGGIndexing(mesh->cell2node.trans);
+                switch (varloc)
+                {
+                case Geom::MeshLoc::Cell:
+                    u.trans.BorrowGGIndexing(mesh->cell2node.trans);
+                    break;
+                case Geom::MeshLoc::Node:
+                    u.trans.BorrowGGIndexing(mesh->coords.trans);
+                    break;
+                case Geom::MeshLoc::Face:
+                    u.trans.BorrowGGIndexing(mesh->face2node.trans);
+                    break;
+                default:
+                    DNDS_assert(false);
+                }
                 u.trans.createMPITypes();
                 u.trans.initPersistentPull();
                 u.trans.initPersistentPush();
@@ -478,6 +561,43 @@ namespace DNDS::CFV
                 op);
         }
 
+        DeviceBackend device()
+        {
+            DeviceBackend B = DeviceBackend::Unknown;
+            auto getB = [&B](auto &v)
+            {
+                if (v.ref.father)
+                    B = v.ref.father->device();
+            };
+            for_each_member_list(
+                this->device_array_list(),
+                getB);
+
+            auto check_B_consistency = [&B](auto &v)
+            {
+                if (v.ref.father)
+                    DNDS_assert_info(
+                        B == v.ref.father->device(),
+                        fmt::format("member [{}.father] expected to be on device {} but on {}",
+                                    v.name,
+                                    device_backend_name(B),
+                                    device_backend_name(v.ref.father->device())));
+                if (v.ref.son)
+                    DNDS_assert_info(
+                        B == v.ref.son->device(),
+                        fmt::format("member [{}.son] expected to be on device {} but on {}",
+                                    v.name,
+                                    device_backend_name(B),
+                                    device_backend_name(v.ref.son->device())));
+            };
+
+            for_each_member_list(
+                this->device_array_list(),
+                check_B_consistency);
+
+            return B;
+        }
+
         template <DeviceBackend B>
         using t_deviceView = FiniteVolumeDeviceView<B>;
 
@@ -487,6 +607,8 @@ namespace DNDS::CFV
         template <DeviceBackend B>
         t_deviceView<B> deviceView()
         {
+            DeviceBackend B_mesh = mesh->device();
+            DNDS_assert(B_mesh == B || (B == DeviceBackend::Host && B_mesh == DeviceBackend::Unknown));
             return {*this, UnInitIndex};
         }
     };

@@ -32,7 +32,7 @@ namespace DNDS::Euler
                 if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall ||
                     pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWallIsothermal)
                 {
-                    index iFace = mesh->bnd2face[iBnd];
+                    index iFace = mesh->bnd2faceV[iBnd];
                     auto elem = mesh->GetFaceElement(iFace);
                     auto quad = vfv->GetFaceQuad(iFace);
                     if (settings.wallDistScheme == 0 || settings.wallDistScheme == 20)
@@ -219,7 +219,7 @@ namespace DNDS::Euler
                 if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall ||
                     pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWallIsothermal)
                 {
-                    index iFace = mesh->bnd2face[iBnd];
+                    index iFace = mesh->bnd2faceV[iBnd];
                     auto elem = mesh->GetFaceElement(iFace);
                     auto quad = vfv->GetFaceQuad(iFace);
                     {
@@ -1563,10 +1563,19 @@ namespace DNDS::Euler
             real d = std::min(dWallC, std::pow(veryLargeReal, 1. / 6.));
             TU retInc;
             retInc.setZero(UMeanXy.size());
+
+            //! DES mesh lengths should be cached!
+            real hMax = vfv->GetCellMaxLenScale(iCell);
+            real cWall = 0.15;
+            real lLES = hMax * settings.SADESScale;
+            //! missing hWallNormal!
+            lLES = std::min(lLES, std::max({d * cWall, hMax * cWall}));
             auto sourceCaller = [&](int mode)
             {
                 RANS::GetSource_SA<dim>(UMeanXy, DiffUxy, settings.idealGasProperty.muGas, muf,
-                                        gamma, d, vfv->GetCellMaxLenScale(iCell) * settings.SADESScale, retInc,
+                                        gamma,
+                                        d, lLES, hMax,
+                                        retInc,
                                         settings.ransSARotCorrection, mode);
             };
 
@@ -1615,7 +1624,7 @@ namespace DNDS::Euler
             auto sourceCaller = [&](int mode)
             {
                 if (settings.ransModel == RANSModel::RANS_KOSST)
-                    RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, retInc, mode);
+                    RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, vfv->GetCellMaxLenScale(iCell) * settings.SADESScale, retInc, mode);
                 else if (settings.ransModel == RANSModel::RANS_KOWilcox)
                     RANS::GetSource_KOWilcox<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, retInc, mode);
                 else if (settings.ransModel == RANSModel::RANS_RKE)

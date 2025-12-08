@@ -539,8 +539,8 @@ namespace DNDS::Euler
             if (!dontUpdateBndFlux)
                 if (f2c[1] == UnInitIndex)
                 {
-                    DNDS_assert(mesh->face2bnd.find(iFace) != mesh->face2bnd.end());
-                    fluxBnd.at(mesh->face2bnd[iFace]) = fluxEs(EigenAll, 0) / vfv->GetFaceArea(iFace);
+                    DNDS_assert(mesh->face2bndM.find(iFace) != mesh->face2bndM.end());
+                    fluxBnd.at(mesh->face2bndM[iFace]) = fluxEs(EigenAll, 0) / vfv->GetFaceArea(iFace);
                     TVec fluxBndForceTInt;
                     fluxBndForceTInt.setZero();
                     gFace.IntegrationSimple(
@@ -553,7 +553,7 @@ namespace DNDS::Euler
                             finc -= ncur * (ncur.dot(finc));
                             finc *= (direct2ndRec ? vfv->GetFaceArea(iFace) / vfv->GetFaceParamArea(iFace) : vfv->GetFaceJacobiDet(iFace, iG)); // !don't forget this
                         });
-                    fluxBndForceT.at(mesh->face2bnd[iFace]) = fluxBndForceTInt / vfv->GetFaceArea(iFace);
+                    fluxBndForceT.at(mesh->face2bndM[iFace]) = fluxBndForceTInt / vfv->GetFaceArea(iFace);
                 }
 
             // integrate BCWall flux

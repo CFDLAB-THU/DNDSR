@@ -5,6 +5,8 @@
 #include "ArrayDerived/ArrayEigenVector.hpp"
 
 #include "ArrayPair.hpp"
+#include "DNDS/Defines.hpp"
+#include "DNDS/DeviceStorage.hpp"
 
 namespace DNDS
 {
@@ -15,8 +17,10 @@ namespace DNDS
         using t_base = ArrayPairDeviceView<B, ArrayEigenMatrix<n_m, n_n>>;
         using t_base::t_base;
 
-        ArrayDofDeviceView(const t_base &base_view) : t_base(base_view) {}
-        ArrayDofDeviceView(t_base &&base_view) : t_base(base_view) {}
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayDofDeviceView, ArrayDofDeviceView)
+
+        DNDS_DEVICE_CALLABLE ArrayDofDeviceView(const t_base &base_view) : t_base(base_view) {}
+        DNDS_DEVICE_CALLABLE ArrayDofDeviceView(t_base &&base_view) : t_base(base_view) {}
     };
 
     template <DeviceBackend B, int n_m, int n_n>
@@ -26,8 +30,10 @@ namespace DNDS
         using t_base = ArrayPairDeviceViewConst<B, ArrayEigenMatrix<n_m, n_n>>;
         using t_base::t_base;
 
-        ArrayDofDeviceViewConst(const t_base &base_view) : t_base(base_view) {}
-        ArrayDofDeviceViewConst(t_base &&base_view) : t_base(base_view) {}
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayDofDeviceViewConst, ArrayDofDeviceViewConst)
+
+        DNDS_DEVICE_CALLABLE ArrayDofDeviceViewConst(const t_base &base_view) : t_base(base_view) {}
+        DNDS_DEVICE_CALLABLE ArrayDofDeviceViewConst(t_base &&base_view) : t_base(base_view) {}
     };
 
     template <int n_m, int n_n>
@@ -53,6 +59,7 @@ namespace DNDS
     spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) addTo(t_self &self, const t_self &R, real r);                                        \
     spec real DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) norm2(t_self &self);                                                                 \
     spec real DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) norm2(t_self &self, const t_self &R);                                                \
+    spec real DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) reduction(t_self &self, const std::string &op);                                      \
     spec ArrayDofOp<B, n_m, n_n>::t_element_mat DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) componentWiseNorm1(t_self &self);                  \
     spec ArrayDofOp<B, n_m, n_n>::t_element_mat DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) componentWiseNorm1(t_self &self, const t_self &R); \
     spec real DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) dot(t_self &self, const t_self &R);
@@ -135,6 +142,13 @@ namespace DNDS
 
         using t_element_mat = Eigen::Matrix<real, RowSize_To_EigenSize(n_m), RowSize_To_EigenSize(n_n)>;
 
+        void clone(const t_self &R)
+        {
+            // ! no using operator= here
+            this->t_base::clone(R);
+            // no extra data
+        }
+
         void setConstant(real R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), setConstant(*this, R));
@@ -172,7 +186,7 @@ namespace DNDS
 
         template <int n_m_T = n_m>
         std::enable_if_t<!(n_m_T == 1 && n_n == 1)>
-        operator*=(ArrayDof<1, 1> &R)
+        operator*=(const ArrayDof<1, 1> &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_mult_assign_scalar_arr(*this, R));
         }
@@ -210,6 +224,21 @@ namespace DNDS
         real norm2(const t_self &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), norm2(*this, R));
+        }
+
+        real min()
+        {
+            DNDS_ARRAY_OP_SWITCHER(this->father->device(), reduction(*this, "min"));
+        }
+
+        real max()
+        {
+            DNDS_ARRAY_OP_SWITCHER(this->father->device(), reduction(*this, "max"));
+        }
+
+        real sum()
+        {
+            DNDS_ARRAY_OP_SWITCHER(this->father->device(), reduction(*this, "sum"));
         }
 
         t_element_mat componentWiseNorm1()
@@ -271,4 +300,51 @@ namespace DNDS
     DNDS_ARRAY_DOF_OP_FUNC_SEQ_INST(DeviceBackend::CUDA, DynamicSize - 1, extern template)
     DNDS_ARRAY_DOF_OP_FUNC_SEQ_INST(DeviceBackend::CUDA, NonUniformSize - 1, extern template)
 #endif
+}
+
+namespace DNDS
+{
+    /*
+#define DNDS_ARRAYDOF_DEVICEVIEW(B, n_m, n_n) ArrayDof<n_m, n_n>::template t_deviceView<B>
+
+#define DNDS_ARRAYDOF_DEVICEVIEW_INST_DELETER_AND_FACTORY(B, n_m, n_n, ext)           \
+    DNDS_DEVICE_STORAGE_BASE_DELETER_INST(DNDS_ARRAYDOF_DEVICEVIEW(B, n_m, n_n), ext) \
+    DNDS_DEVICE_STORAGE_INST(DNDS_ARRAYDOF_DEVICEVIEW(B, n_m, n_n), B, ext)
+
+#define DNDS_ARRAYDOF_INST_STORAGE(B, offset, ext)                                        \
+    DNDS_ARRAYDOF_DEVICEVIEW_INST_DELETER_AND_FACTORY(B, 1, 1 + (offset), ext);           \
+    DNDS_ARRAYDOF_DEVICEVIEW_INST_DELETER_AND_FACTORY(B, 2, 1 + (offset), ext);           \
+    DNDS_ARRAYDOF_DEVICEVIEW_INST_DELETER_AND_FACTORY(B, 3, 1 + (offset), ext);           \
+    DNDS_ARRAYDOF_DEVICEVIEW_INST_DELETER_AND_FACTORY(B, 4, 1 + (offset), ext);           \
+    DNDS_ARRAYDOF_DEVICEVIEW_INST_DELETER_AND_FACTORY(B, 5, 1 + (offset), ext);           \
+    DNDS_ARRAYDOF_DEVICEVIEW_INST_DELETER_AND_FACTORY(B, 6, 1 + (offset), ext);           \
+    DNDS_ARRAYDOF_DEVICEVIEW_INST_DELETER_AND_FACTORY(B, 7, 1 + (offset), ext);           \
+    DNDS_ARRAYDOF_DEVICEVIEW_INST_DELETER_AND_FACTORY(B, 8, 1 + (offset), ext);           \
+    DNDS_ARRAYDOF_DEVICEVIEW_INST_DELETER_AND_FACTORY(B, DynamicSize, 1 + (offset), ext); \
+    DNDS_ARRAYDOF_DEVICEVIEW_INST_DELETER_AND_FACTORY(B, NonUniformSize, 1 + (offset), ext);
+
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, 0, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, 1, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, 2, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, 3, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, 4, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, 5, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, 6, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, 7, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, DynamicSize - 1, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::Host, NonUniformSize - 1, extern)
+
+#ifdef DNDS_USE_CUDA
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, 0, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, 1, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, 2, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, 3, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, 4, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, 5, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, 6, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, 7, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, DynamicSize - 1, extern)
+    DNDS_ARRAYDOF_INST_STORAGE(DeviceBackend::CUDA, NonUniformSize - 1, extern)
+#endif
+*/
 }

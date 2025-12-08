@@ -12,9 +12,13 @@ DISABLE_WARNING_UNUSED_VALUE
 #include "mpi.h"
 DISABLE_WARNING_POP
 
+#ifdef OPEN_MPI
+#    include <mpi-ext.h> // Open MPI extension header
+#endif
+
 #ifdef NDEBUG
-#define NDEBUG_DISABLED
-#undef NDEBUG
+#    define NDEBUG_DISABLED
+#    undef NDEBUG
 #endif
 
 namespace DNDS
@@ -320,15 +324,17 @@ namespace DNDS::Debug
 
 // DNDS_assert_info_mpi is used to help barrier the process before exiting if DNDS::Debug::isDebugging is set
 // remember to set a breakpoint here
-void __DNDS_assert_false_info_mpi(const char *expr, const char *file, int line, const std::string &info, const DNDS::MPIInfo &mpi);
-
+namespace DNDS
+{
+    void assert_false_info_mpi(const char *expr, const char *file, int line, const std::string &info, const DNDS::MPIInfo &mpi);
+}
 #ifdef DNDS_NDEBUG
-#define DNDS_assert_info_mpi(expr, mpi, info) (void(0))
+#    define DNDS_assert_info_mpi(expr, mpi, info) (void(0))
 #else
-#define DNDS_assert_info_mpi(expr, mpi, info) \
-    ((static_cast<bool>(expr))                \
-         ? void(0)                            \
-         : __DNDS_assert_false_info_mpi(#expr, __FILE__, __LINE__, info, mpi))
+#    define DNDS_assert_info_mpi(expr, mpi, info) \
+        ((static_cast<bool>(expr))                \
+             ? void(0)                            \
+             : ::DNDS::assert_false_info_mpi(#expr, __FILE__, __LINE__, info, mpi))
 #endif
 
 namespace DNDS // TODO: get a concurrency header
@@ -490,16 +496,12 @@ namespace DNDS::MPI
 
     inline void AllreduceOneReal(real &v, MPI_Op op, const MPIInfo &mpi)
     {
-        real vR{0};
-        Allreduce(&v, &vR, 1, DNDS_MPI_REAL, op, mpi.comm);
-        v = vR;
+        Allreduce(MPI_IN_PLACE, &v, 1, DNDS_MPI_REAL, op, mpi.comm);
     }
 
     inline void AllreduceOneIndex(index &v, MPI_Op op, const MPIInfo &mpi)
     {
-        index vR{0};
-        Allreduce(&v, &vR, 1, DNDS_MPI_INDEX, op, mpi.comm);
-        v = vR;
+        Allreduce(MPI_IN_PLACE, &v, 1, DNDS_MPI_INDEX, op, mpi.comm);
     }
 
 }
@@ -557,6 +559,11 @@ namespace DNDS::MPI
     };
 }
 
+namespace DNDS::MPI
+{
+    bool isCudaAware();
+}
+
 namespace DNDS
 {
     inline void InsertCheck(const MPIInfo &mpi, const std::string &info = "",
@@ -573,6 +580,6 @@ namespace DNDS
 }
 
 #ifdef NDEBUG_DISABLED
-#define NDEBUG
-#undef NDEBUG_DISABLED
+#    define NDEBUG
+#    undef NDEBUG_DISABLED
 #endif

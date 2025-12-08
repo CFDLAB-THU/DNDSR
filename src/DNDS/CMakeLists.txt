@@ -38,6 +38,7 @@ SerializerBase.cpp
 SerializerJSON.cpp
 SerializerH5.cpp
 ExprtkWrapper.cpp
+Vector.cpp
 )
 
 file(GLOB ARRAYDOF_OP_SOURCES "ArrayDOF_inst/*.cpp")

@@ -11,6 +11,7 @@ namespace DNDS
     class ArrayEigenMatrixBatch : public ParArray<real, NonUniformSize>
     {
     public:
+        using t_self = ArrayEigenMatrixBatch;
         using t_base = ParArray<real, NonUniformSize>;
         using t_base::t_base;
 
@@ -21,6 +22,17 @@ namespace DNDS
         using t_base::ResizeRow;
 
     public:
+        // default copy
+        ArrayEigenMatrixBatch(const t_self &R) = default;
+        t_self &operator=(const t_self &R) = default;
+        // operator= handled automatically
+
+        void clone(const t_self &R)
+        {
+            this->operator=(R);
+        }
+
+
         template <class t_matrices_elem>
         void InitializeWriteRow(index i, const std::vector<t_matrices_elem> &matrices)
         {

@@ -13,6 +13,7 @@ namespace DNDS
         static_assert(_n_col >= 0 || _n_col == Eigen::Dynamic, "invalid _n_col");
 
     public:
+        using t_self = ArrayEigenUniMatrixBatch<_n_row, _n_col>;
         using t_base = ParArray<real, NonUniformSize>;
         using t_base::t_base;
 
@@ -36,6 +37,16 @@ namespace DNDS
         // void Resize(index, rowsize) = delete;
         // void ResizeRow(index iRow, rowsize nRowSize) = delete;
     public:
+        // default copy
+        ArrayEigenUniMatrixBatch(const t_self &R) = default;
+        t_self &operator=(const t_self &R) = default;
+        // operator= handled automatically
+
+        void clone(const t_self &R)
+        {
+            this->operator=(R);
+        }
+
         /**
          * @brief resizes all matrices to be used;
          * -1 means no change
