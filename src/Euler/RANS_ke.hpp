@@ -703,7 +703,9 @@ namespace DNDS::Euler::RANS
         real fd = 1. - std::tanh(cube(8 * rd));
         real psiSqr = std::min(100.0, (1 - cb1 / (cw1 * sqr(kappa) * fwStar) * (ft2 + (1 - ft2) * fnu2)) /
                                           (fnu1 * std::max(smallReal, 1 - ft2)));
-        real psi = std::sqrt(std::max(psiSqr, smallReal));
+        real psi = std::sqrt(std::max(psiSqr, 1.0));
+        //! note that psi has lower bound of 1
+        // real psi = 1.0;
         real lDES = lRANS - fd * std::max(0., lRANS - lLES * psi);
 
         // IDDES switch
