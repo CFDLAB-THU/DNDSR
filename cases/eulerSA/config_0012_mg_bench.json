@@ -9,8 +9,8 @@
         "tEnd": 3e+200
     },
     "convergenceControl": {
-        "nTimeStepInternal": 10000,
-        "rhsThresholdInternal": 5e-7,
+        "nTimeStepInternal": 40000,
+        "rhsThresholdInternal": 1e-6,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
@@ -50,7 +50,7 @@
         "outPltName": "../data/out/NACA0012_H2-MGtest_3_VRes_AOA15.dir/x-ilu-4ilu",
         "outPltMode": 0,
         "readMeshMode": 0,
-        "meshDirectBisect": 0,
+        "meshDirectBisect": 1,
         "meshReorderCells": 1,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": false,
@@ -273,7 +273,7 @@
             "CSutherland": 110.4
         },
         "cLDriverSettings": {
-            "AOAInit": 5.0,
+            "AOAInit": 15.0,
             "AOAAxis": "z",
             "CL0Axis": "y",
             "CD0Axis": "x",

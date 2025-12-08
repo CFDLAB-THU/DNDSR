@@ -2,7 +2,7 @@ from DNDSR import DNDS, Geom
 import mpi4py as pyMPI
 import scipy.spatial
 from OversetCart import OversetBG2D, OversetPart2D, DistMap
-from utils import get_mpi4py_comm_from_MPIInfo
+from GeomUtils import get_mpi4py_comm_from_MPIInfo
 import numpy as np
 import sys, os
 import time, itertools

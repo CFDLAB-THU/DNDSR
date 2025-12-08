@@ -1,7 +1,7 @@
 from OversetCart import *
 from CartUtil import *
 from CartGridField import *
-from utils import *
+from GeomUtils import *
 import scipy.spatial
 from ElemInterpolate import elem_get_interpolation_base
 from collections import defaultdict

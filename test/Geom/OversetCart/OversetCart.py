@@ -2,7 +2,7 @@ from DNDSR import DNDS, Geom
 import sys, os, math
 import mpi4py.MPI as pyMPI
 import numpy as np
-from utils import *
+from GeomUtils import *
 from CartGridField import CartGridField
 import itertools
 
