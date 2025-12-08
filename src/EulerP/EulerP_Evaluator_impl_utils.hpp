@@ -18,22 +18,30 @@ namespace DNDS::EulerP::detail
         DNDS_FORCEINLINE DNDS_DEVICE real &operator()(index iPnt, int i) { return dummy_; }
     };
 
-    template <int local_stride_fixed, int max_tid_fixed, class TFLocalAccessor, class TFGlobalAccessor>
+    template <int local_stride_fixed, int max_tid_fixed,
+              class TFLocalAccessor, class TFGlobalAccessor,
+              int bufferSize_idx, int bufferSize_val>
     DNDS_FORCEINLINE DNDS_DEVICE void CUDA_Local2GlobalAssign(
         TFLocalAccessor &&FLocalAccessor,
-        TFGlobalAccessor &&FGLobalAccessor, index iPnt, index iPntMax)
+        TFGlobalAccessor &&FGLobalAccessor,
+        CUDA::SharedBuffer<index, bufferSize_idx> &shared_buf_idx,
+        CUDA::SharedBuffer<real, bufferSize_val> &shared_buf_val,
+        index iPnt, index iPntMax)
     {
 #ifndef __CUDA_ARCH__
         static_assert(local_stride_fixed > 0 && local_stride_fixed < 0);
 #endif
         static_assert(local_stride_fixed > 0);
         static_assert(max_tid_fixed > 0);
+        static_assert(bufferSize_idx >= max_tid_fixed);
         // TODO: support dynamic sized?
 
-        const int local_stride = local_stride_fixed;
-        const int local_stride_buf = (local_stride / 2) * 2 + 1;
-        __shared__ real buf_data[local_stride_buf * max_tid_fixed];
-        __shared__ index iPntThread[max_tid_fixed];
+        constexpr int local_stride = local_stride_fixed;
+        constexpr int local_stride_buf = (local_stride / 2) * 2 + 1;
+        static_assert(bufferSize_val >= local_stride_buf * max_tid_fixed);
+
+        real *buf_data = shared_buf_val.buffer;
+        index *iPntThread = shared_buf_idx.buffer;
 
         int tid = CUDA::tid_x();
         int bDim = CUDA::bDim_x();

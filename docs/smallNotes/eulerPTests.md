@@ -102,3 +102,23 @@ When both of RecGradient and RecFace2nd are optimized, performance:
 | 32 CPU cores | 4.2M               | 360 (GPU)  (CPU Package) + 45 (RAM)  = 405           | 10.37 MCI/kJ        |
 
 Occupancy: 86\% 1 GPU / 71\% 2 GPU
+
+### Write coalescing optimized
+
+| Machine      | Performance (CI/s) | Power estimated ( by software) (W)                   | Efficiency (MCI/kJ) |
+| ------------ | ------------------ | ---------------------------------------------------- | ------------------- |
+| 1 A100       | 72.3M              | 245 (GPU) +  170 (CPU Package) + 21 (RAM)   = 436    | 166 MCI/kJ          |
+| 2 A100       | 98.2M              | 195 (GPU) * 2 +  175 (CPU Package) + 21 (RAM)  = 586 | 168 MCI/kJ          |
+| 32 CPU cores | 4.2M               | 360 (GPU)  (CPU Package) + 45 (RAM)  = 405           | 10.37 MCI/kJ        |
+
+Occupancy: 83\% 1 GPU / 66\% 2 GPU
+
+**Larger case** 256^3 (3D, more work per cell)
+
+| Machine      | Performance (CI/s) | Power estimated ( by software) (W)                   | Efficiency (MCI/kJ) |
+| ------------ | ------------------ | ---------------------------------------------------- | ------------------- |
+| 1 A100       | 60.9M              | 298 (GPU) +  170 (CPU Package) + 21 (RAM)   = 489    | 124 MCI/kJ          |
+| 2 A100       | 78.1M              | 230 (GPU) * 2 +  178 (CPU Package) + 22 (RAM)  = 660 | 118 MCI/kJ          |
+| 32 CPU cores | 3.29M              | 370 (GPU)  (CPU Package) + 45 (RAM)  = 415           | 7.93 MCI/kJ         |
+
+Occupancy: 99\% 1 GPU / 90\% 2 GPU

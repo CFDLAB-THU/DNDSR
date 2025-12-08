@@ -83,13 +83,14 @@ namespace DNDS::EulerP
 
         // for scalars
 
+        if (nVarsScalar)
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(runtime)
 #endif
-        for (index iCell = 0; iCell < mesh.NumCell(); iCell++)
-        {
-            RecGradient_BarthLimiter_Kernel_ScalarPart(self_view, arg.portable, iCell, mesh.NumCell(), nVars, nVarsScalar);
-        }
+            for (index iCell = 0; iCell < mesh.NumCell(); iCell++)
+            {
+                RecGradient_BarthLimiter_Kernel_ScalarPart(self_view, arg.portable, iCell, mesh.NumCell(), nVars, nVarsScalar);
+            }
     }
 
     template <>

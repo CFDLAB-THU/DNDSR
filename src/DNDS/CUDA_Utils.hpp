@@ -56,7 +56,7 @@ namespace DNDS::CUDA
 {
 
     template <int _ = 1>
-    DNDS_FORCEINLINE DNDS_DEVICE_CALLABLE void sync_threads()
+    DNDS_FORCEINLINE DNDS_DEVICE void sync_threads()
     {
 #    ifdef __CUDA_ARCH__
         __syncthreads();
@@ -66,7 +66,7 @@ namespace DNDS::CUDA
     }
 
     template <int _ = 1>
-    DNDS_FORCEINLINE DNDS_DEVICE_CALLABLE uint32_t tid_x()
+    DNDS_FORCEINLINE DNDS_DEVICE uint32_t tid_x()
     {
 #    ifdef __CUDA_ARCH__
         return threadIdx.x;
@@ -77,7 +77,7 @@ namespace DNDS::CUDA
     }
 
     template <int _ = 1>
-    DNDS_FORCEINLINE DNDS_DEVICE_CALLABLE uint32_t bDim_x()
+    DNDS_FORCEINLINE DNDS_DEVICE uint32_t bDim_x()
     {
 #    ifdef __CUDA_ARCH__
         return blockDim.x;
@@ -87,6 +87,32 @@ namespace DNDS::CUDA
 #    endif
     }
 
+    template <class T, int N>
+    struct SharedBuffer
+    {
+        static_assert(N >= 0);
+        T buffer[N];
+        template <class TInd>
+        DNDS_FORCEINLINE DNDS_DEVICE T &operator[](TInd &&i) { return buffer[i]; }
+    };
+
+    template <class T, int N>
+    DNDS_FORCEINLINE DNDS_DEVICE SharedBuffer<T, N> &DeclareSharedBuffer()
+    {
+#    ifdef __CUDA_ARCH__
+        __shared__ SharedBuffer<T, N> buf;
+        return buf;
+#    else
+        // static_assert(N == 0 && N == 1, "not allowed");
+        static SharedBuffer<T, N> buf;
+        return buf;
+#    endif
+    }
+
+}
+
+namespace DNDS::CUDA
+{
     template <typename T>
     struct DeviceObject
     {

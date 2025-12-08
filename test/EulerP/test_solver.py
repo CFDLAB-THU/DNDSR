@@ -17,8 +17,8 @@ def test_solver(
         # cp.cuda.Device(1).use()
         pass
 
-    m_name, dim = "Uniform128_Periodic.cgns", 2
-    # m_name, dim = "UP3D_128.cgns", 3
+    # m_name, dim = "Uniform128_Periodic.cgns", 2
+    m_name, dim = "UP3D_128.cgns", 3
     meshFile = os.path.join(
         os.path.dirname(__file__),
         "..",
@@ -27,14 +27,14 @@ def test_solver(
         "mesh",
         m_name,
     )
-    outDir = "../data/out/test4"
+    outDir = "../data/out/test5_test"
 
     solver = Solver(mpi)
     solver.ReadMesh(
         meshFile,
         dim=dim,
         other_options={
-            "meshDirectBisect": 3,
+            "meshDirectBisect": 1,
             "second_level_parts": int(128),
         },
     )
@@ -62,9 +62,11 @@ def test_solver(
     fv = solver.fv
     u.setConstant(np.array([1, 0, 0, 0, 2.5]).reshape(-1, 1))
 
+    zCent = 0.5 if dim == 3 else 0.0
+
     for iCell in range(mesh.NumCell()):
         x = fv.GetCellBary(iCell)
-        if np.linalg.norm(np.array([0.5, 0.5, 0]) - x, np.inf) < 0.25:
+        if np.linalg.norm(np.array([0.5, 0.5, zCent]) - x, np.inf) < 0.25:
             # if abs(x[0] - 0.5) < 0.25:
             v = 0.1
             uBox = [0.5, 1, 0, 0, 4]
@@ -99,8 +101,8 @@ def test_solver(
 
     # 0.5, 1, 0, 0, 4
 
-    tInt = 0.01 * 1e0
-    nInt = 150
+    tInt = 0.01 * 5
+    nInt = int(150 / 5)
     CFL = 0.5 * 1
     t = 0
     pr = cProfile.Profile()

@@ -9,7 +9,7 @@
 namespace DNDS::EulerP
 {
     template <DeviceBackend B = DeviceBackend::Host>
-    DNDS_DEVICE_CALLABLE void RecGradient_GGRec_Kernel_BndVal(
+    DNDS_DEVICE void RecGradient_GGRec_Kernel_BndVal(
         EvaluatorDeviceView<B> &self_view,
         typename Evaluator_impl<B>::RecGradient_Arg::Portable &arg,
         index iBnd, index iBndEnd,
@@ -37,14 +37,14 @@ namespace DNDS::EulerP
         index iFace = mesh.bnd2face(iBnd, 0);
         index iCell = mesh.bnd2cell(iBnd, 0);
 
-        auto uI = [u, uScalar, iCell] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
+        auto uI = [u, uScalar, iCell] DNDS_DEVICE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return u(iCell, i);
             else
                 return uScalar[i - nVarsFlow](iCell);
         };
-        auto uOut = [faceBCBuffer, faceBCScalarBuffer, iFace] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
+        auto uOut = [faceBCBuffer, faceBCScalarBuffer, iFace] DNDS_DEVICE(int i) mutable -> real &
         {
             if (i < nVarsFlow)
                 return faceBCBuffer(iFace, i);
@@ -59,14 +59,14 @@ namespace DNDS::EulerP
                  phy);
     }
     // only for intellisense hint
-    template DNDS_DEVICE_CALLABLE void RecGradient_GGRec_Kernel_BndVal<DeviceBackend::Host>(
+    template DNDS_DEVICE void RecGradient_GGRec_Kernel_BndVal<DeviceBackend::Host>(
         EvaluatorDeviceView<DeviceBackend::Host> &self_view,
         typename Evaluator_impl<DeviceBackend::Host>::RecGradient_Arg::Portable &arg,
         index iBnd, index iBndEnd,
         int nVars, int nVarsScalar);
 
     template <DeviceBackend B = DeviceBackend::Host>
-    DNDS_DEVICE_CALLABLE void RecGradient_GGRec_Kernel_GG(
+    DNDS_DEVICE void RecGradient_GGRec_Kernel_GG(
         EvaluatorDeviceView<B> &self_view,
         typename Evaluator_impl<B>::RecGradient_Arg::Portable &arg,
         index iCell, index iCellEnd,
@@ -83,6 +83,11 @@ namespace DNDS::EulerP
         DNDS_EULERP_IMPL_ARG_GET_REF(uScalarGrad)
         DNDS_EULERP_IMPL_ARG_GET_REF(faceBCBuffer)
         DNDS_EULERP_IMPL_ARG_GET_REF(faceBCScalarBuffer)
+
+#ifdef DNDS_USE_CUDA
+        __shared__ CUDA::SharedBuffer<index, 128> buf_idx;
+        __shared__ CUDA::SharedBuffer<real, 128 * (3 * nVarsFlow)> buf_val;
+#endif
 
         TDiffU grad_flow;
         grad_flow.setZero();
@@ -122,9 +127,10 @@ namespace DNDS::EulerP
                 }
             }
         }
+#ifdef DNDS_USE_CUDA
         if constexpr (B == DeviceBackend::CUDA && true)
         {
-#ifdef __CUDA_ARCH__
+#    ifdef __CUDA_ARCH__
             // using t_BufMatrix = Eigen::Matrix<real, 3, nVarsFlow * 128>;
             // __shared__ real grad_buf_data[3 * (nVarsFlow * 128)];
             // Eigen::Map<t_BufMatrix> grad_buf(grad_buf_data);
@@ -145,29 +151,31 @@ namespace DNDS::EulerP
             //     index iCellC = iCellThread[iCellInBlock];
             //     uGrad.father[iCellC](iCompSub) = grad_buf(iComp);
             // }
-#endif
+#    endif
             detail::CUDA_Local2GlobalAssign<3 * nVarsFlow, 128>(
-                [grad_flow] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
+                [grad_flow] DNDS_DEVICE(int i) mutable -> real &
                 { return grad_flow(i); },
-                [uGrad] DNDS_DEVICE_CALLABLE(index iCellC, int i) mutable -> real &
+                [uGrad] DNDS_DEVICE(index iCellC, int i) mutable -> real &
                 { return uGrad.father[iCellC](i); },
+                buf_idx, buf_val,
                 iCell, iCellEnd);
         }
         else
+#endif
         {
             if (iCell < iCellEnd)
                 uGrad.father[iCell] = grad_flow;
         }
     }
     // only for intellisense hint
-    template DNDS_DEVICE_CALLABLE void RecGradient_GGRec_Kernel_GG<DeviceBackend::Host>(
+    template DNDS_DEVICE void RecGradient_GGRec_Kernel_GG<DeviceBackend::Host>(
         EvaluatorDeviceView<DeviceBackend::Host> &self_view,
         typename Evaluator_impl<DeviceBackend::Host>::RecGradient_Arg::Portable &arg,
         index iCell, index iCellEnd,
         int nVars, int nVarsScalar);
 
     template <DeviceBackend B = DeviceBackend::Host>
-    DNDS_DEVICE_CALLABLE void RecGradient_BarthLimiter_Kernel_FlowPart(
+    DNDS_DEVICE void RecGradient_BarthLimiter_Kernel_FlowPart(
         EvaluatorDeviceView<B> &self_view,
         typename Evaluator_impl<B>::RecGradient_Arg::Portable &arg,
         index iCell, index iCellEnd,
@@ -181,104 +189,126 @@ namespace DNDS::EulerP
         DNDS_EULERP_IMPL_ARG_GET_REF(u)
         DNDS_EULERP_IMPL_ARG_GET_REF(uGrad)
 
-        if (iCell >= iCellEnd)
-            return;
+#ifdef DNDS_USE_CUDA
+        __shared__ CUDA::SharedBuffer<index, 128> buf_idx;
+        __shared__ CUDA::SharedBuffer<real, 128 * (3 * nVarsFlow)> buf_val;
+#endif
 
-        auto c2f = mesh.cell2face[iCell];
-        TU uI = u[iCell];
-        TDiffU grad = uGrad.father[iCell];
+        TDiffU grad;
 
-        tPoint uI_mag;
-        uI_mag << uI(0), uI(I4), U123(uI).norm();
-        tPoint uIIncMax;
-        tPoint uIIncMin;
-
-        tPoint uOtherMax = uI_mag;
-        tPoint uOtherMin = uI_mag;
-
-        // we use 0.0 here to avoid invert situation
-        uIIncMax.setConstant(0.0);
-        uIIncMin.setConstant(0.0);
-
-        real EInternalI = phy.Cons2EInternal(uI, nVarsFlow);
-        real EInternalMin = EInternalI;
-
-        for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+        if (iCell < iCellEnd)
         {
-            index iFace = c2f[ic2f];
-            index iCellOther = mesh.CellFaceOther(iCell, iFace);
-            TU uIncPoint = grad.transpose() *
-                           (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) -
-                            fv.GetCellQuadraturePPhys(iCell, -1));
-            tPoint uIncPoint_mag;
-            uIncPoint_mag << uIncPoint(0), uIncPoint(I4), U123(uIncPoint).norm();
-            uIIncMax = uIIncMax.array().max(uIncPoint_mag.array());
-            uIIncMin = uIIncMin.array().min(uIncPoint_mag.array());
+            auto c2f = mesh.cell2face[iCell];
+            TU uI = u[iCell];
+            grad = uGrad.father[iCell];
 
-            if (iCellOther != UnInitIndex)
+            tPoint uI_mag;
+            uI_mag << uI(0), uI(I4), U123(uI).norm();
+            tPoint uIIncMax;
+            tPoint uIIncMin;
+
+            tPoint uOtherMax = uI_mag;
+            tPoint uOtherMin = uI_mag;
+
+            // we use 0.0 here to avoid invert situation
+            uIIncMax.setConstant(0.0);
+            uIIncMin.setConstant(0.0);
+
+            real EInternalI = phy.Cons2EInternal(uI, nVarsFlow);
+            real EInternalMin = EInternalI;
+
+            for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
-                uIncPoint = u[iCellOther];
+                index iFace = c2f[ic2f];
+                index iCellOther = mesh.CellFaceOther(iCell, iFace);
+                TU uIncPoint = grad.transpose() *
+                               (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) -
+                                fv.GetCellQuadraturePPhys(iCell, -1));
+                tPoint uIncPoint_mag;
                 uIncPoint_mag << uIncPoint(0), uIncPoint(I4), U123(uIncPoint).norm();
-                uOtherMax = uOtherMax.array().max(uIncPoint_mag.array());
-                uOtherMin = uOtherMin.array().min(uIncPoint_mag.array());
-                real EOther = phy.Cons2EInternal(uIncPoint, nVarsFlow);
-                EInternalMin = std::min(EOther, EInternalMin);
+                uIIncMax = uIIncMax.array().max(uIncPoint_mag.array());
+                uIIncMin = uIIncMin.array().min(uIncPoint_mag.array());
+
+                if (iCellOther != UnInitIndex)
+                {
+                    uIncPoint = u[iCellOther];
+                    uIncPoint_mag << uIncPoint(0), uIncPoint(I4), U123(uIncPoint).norm();
+                    uOtherMax = uOtherMax.array().max(uIncPoint_mag.array());
+                    uOtherMin = uOtherMin.array().min(uIncPoint_mag.array());
+                    real EOther = phy.Cons2EInternal(uIncPoint, nVarsFlow);
+                    EInternalMin = std::min(EOther, EInternalMin);
+                }
             }
+
+            uOtherMax -= uI_mag;
+            uOtherMin -= uI_mag;
+            uOtherMax = (uOtherMax.array().abs()) / (uIIncMax.array().abs() + verySmallReal);
+            uOtherMin = (uOtherMin.array().abs()) / (uIIncMin.array().abs() + verySmallReal);
+            uOtherMin = uOtherMin.array().min(uOtherMax.array());
+            uOtherMin = uOtherMin.array().max(0.0).min(1.0);
+            // grad.array().rowwise() *= (uOtherMax.array().min(uOtherMin.array())).transpose();
+            // grad *= uOtherMin(0.0);
+            grad.col(0) *= uOtherMin(0);
+            grad.col(I4) *= uOtherMin(1);
+            for (int i = 1; i < 1 + 3; i++)
+                grad.col(i) *= uOtherMin(2);
+
+            // use the new grad for EInternal reconstruction!
+            real EInternalPointMin = EInternalI;
+            for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+            {
+                index iFace = c2f[ic2f];
+                index iCellOther = mesh.CellFaceOther(iCell, iFace);
+                TU uIncPoint = grad.transpose() *
+                               (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) -
+                                fv.GetCellQuadraturePPhys(iCell, -1));
+                uIncPoint += uI;
+                real EOther = phy.Cons2EInternal(uIncPoint, nVarsFlow);
+                EInternalPointMin = std::min(EOther, EInternalPointMin);
+            }
+            real alphaE =
+                (EInternalI - EInternalMin * 0.1) / std::max(EInternalI - EInternalPointMin, verySmallReal);
+            grad *= std::clamp(alphaE, 0., 1.);
+
+            // for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+            // {
+            //     index iFace = c2f[ic2f];
+            //     index iCellOther = mesh.CellFaceOther(iCell, iFace);
+            //     TU uIncPoint = grad.transpose() *
+            //                    (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) -
+            //                     fv.GetCellQuadraturePPhys(iCell, -1));
+            //     uIncPoint += uI;
+            //     real EOther = phy.Cons2EInternal(uIncPoint, nVarsFlow);
+            //     DNDS_HD_assert(EOther > 0);
+            // }
         }
-
-        uOtherMax -= uI_mag;
-        uOtherMin -= uI_mag;
-        uOtherMax = (uOtherMax.array().abs()) / (uIIncMax.array().abs() + verySmallReal);
-        uOtherMin = (uOtherMin.array().abs()) / (uIIncMin.array().abs() + verySmallReal);
-        uOtherMin = uOtherMin.array().min(uOtherMax.array());
-        uOtherMin = uOtherMin.array().max(0.0).min(1.0);
-        // grad.array().rowwise() *= (uOtherMax.array().min(uOtherMin.array())).transpose();
-        // grad *= uOtherMin(0.0);
-        grad.col(0) *= uOtherMin(0);
-        grad.col(I4) *= uOtherMin(1);
-        for (int i = 1; i < 1 + 3; i++)
-            grad.col(i) *= uOtherMin(2);
-
-        // use the new grad for EInternal reconstruction!
-        real EInternalPointMin = EInternalI;
-        for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+#ifdef DNDS_USE_CUDA
+        if constexpr (B == DeviceBackend::CUDA)
         {
-            index iFace = c2f[ic2f];
-            index iCellOther = mesh.CellFaceOther(iCell, iFace);
-            TU uIncPoint = grad.transpose() *
-                           (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) -
-                            fv.GetCellQuadraturePPhys(iCell, -1));
-            uIncPoint += uI;
-            real EOther = phy.Cons2EInternal(uIncPoint, nVarsFlow);
-            EInternalPointMin = std::min(EOther, EInternalPointMin);
+            detail::CUDA_Local2GlobalAssign<3 * nVarsFlow, 128>(
+                [grad] DNDS_DEVICE(int i) mutable -> real &
+                { return grad(i); },
+                [uGrad] DNDS_DEVICE(index iCellC, int i) mutable -> real &
+                { return uGrad.father[iCellC](i); },
+                buf_idx, buf_val,
+                iCell, iCellEnd);
         }
-        real alphaE =
-            (EInternalI - EInternalMin * 0.1) / std::max(EInternalI - EInternalPointMin, verySmallReal);
-        grad *= std::clamp(alphaE, 0., 1.);
-
-        // for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
-        // {
-        //     index iFace = c2f[ic2f];
-        //     index iCellOther = mesh.CellFaceOther(iCell, iFace);
-        //     TU uIncPoint = grad.transpose() *
-        //                    (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) -
-        //                     fv.GetCellQuadraturePPhys(iCell, -1));
-        //     uIncPoint += uI;
-        //     real EOther = phy.Cons2EInternal(uIncPoint, nVarsFlow);
-        //     DNDS_HD_assert(EOther > 0);
-        // }
-
-        uGrad.father[iCell] = grad;
+        else
+#endif
+        {
+            if (iCell < iCellEnd)
+                uGrad.father[iCell] = grad;
+        }
     }
     // only for intellisense hint
-    template DNDS_DEVICE_CALLABLE void RecGradient_BarthLimiter_Kernel_FlowPart<DeviceBackend::Host>(
+    template DNDS_DEVICE void RecGradient_BarthLimiter_Kernel_FlowPart<DeviceBackend::Host>(
         EvaluatorDeviceView<DeviceBackend::Host> &self_view,
         typename Evaluator_impl<DeviceBackend::Host>::RecGradient_Arg::Portable &arg,
         index iCell, index iCellEnd,
         int nVars, int nVarsScalar);
 
     template <DeviceBackend B = DeviceBackend::Host>
-    DNDS_DEVICE_CALLABLE void RecGradient_BarthLimiter_Kernel_ScalarPart(
+    DNDS_DEVICE void RecGradient_BarthLimiter_Kernel_ScalarPart(
         EvaluatorDeviceView<B> &self_view,
         typename Evaluator_impl<B>::RecGradient_Arg::Portable &arg,
         index iCell, index iCellEnd,
@@ -348,14 +378,14 @@ namespace DNDS::EulerP
         }
     }
     // only for intellisense hint
-    template DNDS_DEVICE_CALLABLE void RecGradient_BarthLimiter_Kernel_ScalarPart<DeviceBackend::Host>(
+    template DNDS_DEVICE void RecGradient_BarthLimiter_Kernel_ScalarPart<DeviceBackend::Host>(
         EvaluatorDeviceView<DeviceBackend::Host> &self_view,
         typename Evaluator_impl<DeviceBackend::Host>::RecGradient_Arg::Portable &arg,
         index iCell, index iCellEnd,
         int nVars, int nVarsScalar);
 
     template <DeviceBackend B = DeviceBackend::Host>
-    DNDS_DEVICE_CALLABLE void Cons2PrimMu_Kernel(
+    DNDS_DEVICE void Cons2PrimMu_Kernel(
         EvaluatorDeviceView<B> &self_view,
         typename Evaluator_impl<B>::Cons2PrimMu_Arg::Portable &arg,
         index iPt, index iPtEnd, int nVars, int nVarsScalar)
@@ -381,68 +411,106 @@ namespace DNDS::EulerP
         DNDS_EULERP_IMPL_ARG_GET_REF(mu)
         DNDS_EULERP_IMPL_ARG_GET_REF(muComp)
 
-        if (iPt >= iPtEnd)
-            return;
-        // uI(Seq01234) = u[iPt];
-        // for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
-        //     uI[nVarsFlow + iVarS] = uScalar[iVarS](iPt);
+#ifdef DNDS_USE_CUDA
+        __shared__ CUDA::SharedBuffer<index, 128> buf_idx;
+        __shared__ CUDA::SharedBuffer<real, 128 * (3 * nVarsFlow)> buf_val;
+#endif
 
-        // gradI(EigenAll, Seq01234) = u[iPt];
-        // for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
-        //     gradI(EigenAll, nVarsFlow + iVarS) = uScalarGrad[iVarS][iPt];
-        auto uConsI = [u, uScalar, iPt] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
+        TU uPrimC;
+        Eigen::Map<TU> uPrimCM(uPrimC.data());
+        TDiffU uGradPrimC;
+        Eigen::Map<TDiffU> uGradPrimCM(uGradPrimC.data());
+        if (iPt < iPtEnd)
         {
-            if (i < nVarsFlow)
-                return u(iPt, i);
-            else
-                return uScalar[i - nVarsFlow](iPt);
-        };
-        auto uPrimI = [uPrim, uScalarPrim, iPt] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
-        {
-            if (i < nVarsFlow)
-                return uPrim(iPt, i);
-            else
-                return uScalarPrim[i - nVarsFlow](iPt);
-        };
-        auto diffUConsI = [uGrad, uScalarGrad, iPt] DNDS_DEVICE_CALLABLE(int d, int i) mutable -> real &
-        {
-            if (i < nVarsFlow)
-                return uGrad[iPt](d, i);
-            else
-                return uScalarGrad[i - nVarsFlow](iPt, d);
-        };
-        auto diffUPrimI = [uGradPrim, uScalarGradPrim, iPt] DNDS_DEVICE_CALLABLE(int d, int i) mutable -> real &
-        {
-            if (i < nVarsFlow)
-                return uGradPrim[iPt](d, i);
-            else
-                return uScalarGradPrim[i - nVarsFlow](iPt, d);
-        };
-        phy.Cons2Prim(uConsI, uPrimI, nVars);
-        phy.Cons2PrimDiff(uConsI, uPrimI,
-                          diffUConsI, diffUPrimI, nVars);
+            // uI(Seq01234) = u[iPt];
+            // for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
+            //     uI[nVarsFlow + iVarS] = uScalar[iVarS](iPt);
 
-        real TT = phy.Prim2Temperature(uPrimI, nVars);
-        real pp = phy.Prim2Pressure(uPrimI, nVars, TT);
-        auto [gammaG, aa] = phy.Prim2GammaAcousticSpeed(uPrimI, nVars, pp);
-        real muTot = phy.getMuTot(uPrimI, diffUPrimI, nVars, pp, TT);
+            // gradI(EigenAll, Seq01234) = u[iPt];
+            // for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
+            //     gradI(EigenAll, nVarsFlow + iVarS) = uScalarGrad[iVarS][iPt];
+            auto uConsI = [u, uScalar, iPt] DNDS_DEVICE(int i) mutable -> real &
+            {
+                if (i < nVarsFlow)
+                    return u(iPt, i);
+                else
+                    return uScalar[i - nVarsFlow](iPt);
+            };
+            auto uPrimI = [uPrimCM, uScalarPrim, iPt] DNDS_DEVICE(int i) mutable -> real &
+            {
+                if (i < nVarsFlow)
+                    return uPrimCM(i);
+                else
+                    return uScalarPrim[i - nVarsFlow](iPt);
+            };
+            auto diffUConsI = [uGrad, uScalarGrad, iPt] DNDS_DEVICE(int d, int i) mutable -> real &
+            {
+                if (i < nVarsFlow)
+                    return uGrad[iPt](d, i);
+                else
+                    return uScalarGrad[i - nVarsFlow](iPt, d);
+            };
+            auto diffUPrimI = [uGradPrimCM, uScalarGradPrim, iPt] DNDS_DEVICE(int d, int i) mutable -> real &
+            {
+                if (i < nVarsFlow)
+                    return uGradPrimCM(d, i);
+                else
+                    return uScalarGradPrim[i - nVarsFlow](iPt, d);
+            };
+            phy.Cons2Prim(uConsI, uPrimI, nVars);
+            phy.Cons2PrimDiff(uConsI, uPrimI,
+                              diffUConsI, diffUPrimI, nVars);
 
-        T(iPt) = TT;
-        p(iPt) = pp;
-        a(iPt) = aa;
-        gamma(iPt) = gammaG;
-        mu(iPt) = muTot;
-        // TODO: tend to muComp!!
+            real TT = phy.Prim2Temperature(uPrimI, nVars);
+            real pp = phy.Prim2Pressure(uPrimI, nVars, TT);
+            auto [gammaG, aa] = phy.Prim2GammaAcousticSpeed(uPrimI, nVars, pp);
+            real muTot = phy.getMuTot(uPrimI, diffUPrimI, nVars, pp, TT);
+
+            T(iPt) = TT;
+            p(iPt) = pp;
+            a(iPt) = aa;
+            gamma(iPt) = gammaG;
+            mu(iPt) = muTot;
+            // TODO: tend to muComp!!
+        }
+#ifdef DNDS_USE_CUDA
+        if constexpr (B == DeviceBackend::CUDA)
+        {
+            detail::CUDA_Local2GlobalAssign<3 * nVarsFlow, 128>(
+                [uGradPrimCM] DNDS_DEVICE(int i) mutable -> real &
+                { return uGradPrimCM(i); },
+                [uGradPrim] DNDS_DEVICE(index iPtC, int i) mutable -> real &
+                { return uGradPrim[iPtC](i); },
+                buf_idx, buf_val,
+                iPt, iPtEnd);
+
+            detail::CUDA_Local2GlobalAssign<nVarsFlow, 128>(
+                [uPrimCM] DNDS_DEVICE(int i) mutable -> real &
+                { return uPrimCM(i); },
+                [uPrim] DNDS_DEVICE(index iPtC, int i) mutable -> real &
+                { return uPrim[iPtC](i); },
+                buf_idx, buf_val,
+                iPt, iPtEnd);
+        }
+        else
+#endif
+        {
+            if (iPt < iPtEnd)
+            {
+                uPrim[iPt] = uPrimC;
+                uGradPrim[iPt] = uGradPrimC;
+            }
+        }
     }
     // only for intellisense hint
-    template DNDS_DEVICE_CALLABLE void Cons2PrimMu_Kernel<DeviceBackend::Host>(
+    template DNDS_DEVICE void Cons2PrimMu_Kernel<DeviceBackend::Host>(
         EvaluatorDeviceView<DeviceBackend::Host> &self_view,
         typename Evaluator_impl<DeviceBackend::Host>::Cons2PrimMu_Arg::Portable &arg,
         index iPt, index iPtEnd,
         int nVars, int nVarsScalar);
 
     template <DeviceBackend B = DeviceBackend::Host>
-    DNDS_DEVICE_CALLABLE void Cons2Prim_Kernel(
+    DNDS_DEVICE void Cons2Prim_Kernel(
         EvaluatorDeviceView<B> &self_view,
         typename Evaluator_impl<B>::Cons2Prim_Arg::Portable &arg,
         index iPt, index iPtEnd,
@@ -464,43 +532,68 @@ namespace DNDS::EulerP
         DNDS_EULERP_IMPL_ARG_GET_REF(a)
         DNDS_EULERP_IMPL_ARG_GET_REF(gamma)
 
-        if (iPt >= iPtEnd)
-            return;
-
-        auto uConsI = [u, uScalar, iPt] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
+#ifdef DNDS_USE_CUDA
+        __shared__ CUDA::SharedBuffer<index, 128> buf_idx;
+        __shared__ CUDA::SharedBuffer<real, 128 * (1 * nVarsFlow)> buf_val;
+#endif
+        TU uPrimC;
+        Eigen::Map<TU> uPrimCM(uPrimC.data());
+        if (iPt < iPtEnd)
         {
-            if (i < nVarsFlow)
-                return u(iPt, i);
-            else
-                return uScalar[i - nVarsFlow](iPt);
-        };
-        auto uPrimI = [uPrim, uScalarPrim, iPt] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
+            auto uConsI = [u, uScalar, iPt] DNDS_DEVICE(int i) mutable -> real &
+            {
+                if (i < nVarsFlow)
+                    return u(iPt, i);
+                else
+                    return uScalar[i - nVarsFlow](iPt);
+            };
+            auto uPrimI = [uPrimCM, uScalarPrim, iPt] DNDS_DEVICE(int i) mutable -> real &
+            {
+                if (i < nVarsFlow)
+                    return uPrimCM(i);
+                else
+                    return uScalarPrim[i - nVarsFlow](iPt);
+            };
+            phy.Cons2Prim(uConsI, uPrimI, nVars);
+
+            real TT = phy.Prim2Temperature(uPrimI, nVars);
+            real pp = phy.Prim2Pressure(uPrimI, nVars, TT);
+            auto [gammaG, aa] = phy.Prim2GammaAcousticSpeed(uPrimI, nVars, pp);
+
+            T(iPt) = TT;
+            p(iPt) = pp;
+            a(iPt) = aa;
+            gamma(iPt) = gammaG;
+        }
+#ifdef DNDS_USE_CUDA
+        if constexpr (B == DeviceBackend::CUDA)
         {
-            if (i < nVarsFlow)
-                return uPrim(iPt, i);
-            else
-                return uScalarPrim[i - nVarsFlow](iPt);
-        };
-        phy.Cons2Prim(uConsI, uPrimI, nVars);
-
-        real TT = phy.Prim2Temperature(uPrimI, nVars);
-        real pp = phy.Prim2Pressure(uPrimI, nVars, TT);
-        auto [gammaG, aa] = phy.Prim2GammaAcousticSpeed(uPrimI, nVars, pp);
-
-        T(iPt) = TT;
-        p(iPt) = pp;
-        a(iPt) = aa;
-        gamma(iPt) = gammaG;
+            detail::CUDA_Local2GlobalAssign<nVarsFlow, 128>(
+                [uPrimCM] DNDS_DEVICE(int i) mutable -> real &
+                { return uPrimCM(i); },
+                [uPrim] DNDS_DEVICE(index iPtC, int i) mutable -> real &
+                { return uPrim[iPtC](i); },
+                buf_idx, buf_val,
+                iPt, iPtEnd);
+        }
+        else
+#endif
+        {
+            if (iPt < iPtEnd)
+            {
+                uPrim[iPt] = uPrimC;
+            }
+        }
     }
     // only for intellisense hint
-    template DNDS_DEVICE_CALLABLE void Cons2Prim_Kernel<DeviceBackend::Host>(
+    template DNDS_DEVICE void Cons2Prim_Kernel<DeviceBackend::Host>(
         EvaluatorDeviceView<DeviceBackend::Host> &self_view,
         typename Evaluator_impl<DeviceBackend::Host>::Cons2Prim_Arg::Portable &arg,
         index iPt, index iPtEnd,
         int nVars, int nVarsScalar);
 
     template <DeviceBackend B = DeviceBackend::Host>
-    DNDS_DEVICE_CALLABLE void EstEigenDt_GetFaceLam_Kernel(
+    DNDS_DEVICE void EstEigenDt_GetFaceLam_Kernel(
         EvaluatorDeviceView<B> &self_view,
         typename Evaluator_impl<B>::EstEigenDt_Arg::Portable &arg,
         index iFace, index iFaceEnd,
@@ -566,14 +659,14 @@ namespace DNDS::EulerP
     }
 
     // only for intellisense hint
-    template DNDS_DEVICE_CALLABLE void EstEigenDt_GetFaceLam_Kernel<DeviceBackend::Host>(
+    template DNDS_DEVICE void EstEigenDt_GetFaceLam_Kernel<DeviceBackend::Host>(
         EvaluatorDeviceView<DeviceBackend::Host> &self_view,
         typename Evaluator_impl<DeviceBackend::Host>::EstEigenDt_Arg::Portable &arg,
         index iFace, index iFaceEnd,
         int nVars, int nVarsScalar);
 
     template <DeviceBackend B = DeviceBackend::Host>
-    DNDS_DEVICE_CALLABLE void EstEigenDt_FaceLam2CellDt_Kernel(
+    DNDS_DEVICE void EstEigenDt_FaceLam2CellDt_Kernel(
         EvaluatorDeviceView<B> &self_view,
         typename Evaluator_impl<B>::EstEigenDt_Arg::Portable &arg,
         index iCell, index iCellEnd,
@@ -613,14 +706,14 @@ namespace DNDS::EulerP
     }
 
     // only for intellisense hint
-    template DNDS_DEVICE_CALLABLE void EstEigenDt_FaceLam2CellDt_Kernel<DeviceBackend::Host>(
+    template DNDS_DEVICE void EstEigenDt_FaceLam2CellDt_Kernel<DeviceBackend::Host>(
         EvaluatorDeviceView<DeviceBackend::Host> &self_view,
         typename Evaluator_impl<DeviceBackend::Host>::EstEigenDt_Arg::Portable &arg,
         index iCell, index iCellEnd,
         int nVars, int nVarsScalar);
 
     template <DeviceBackend B = DeviceBackend::Host>
-    DNDS_DEVICE_CALLABLE void RecFace2nd_Kernel(
+    DNDS_DEVICE void RecFace2nd_Kernel(
         EvaluatorDeviceView<B> &self_view,
         typename Evaluator_impl<B>::RecFace2nd_Arg::Portable &arg,
         index iFace, index iFaceEnd,
@@ -645,7 +738,13 @@ namespace DNDS::EulerP
         DNDS_EULERP_IMPL_ARG_GET_REF(uScalarFR)
         DNDS_EULERP_IMPL_ARG_GET_REF(uScalarGradFF)
 
+#ifdef DNDS_USE_CUDA
+        __shared__ CUDA::SharedBuffer<index, 128> buf_idx;
+        __shared__ CUDA::SharedBuffer<real, 128 * (3 * nVarsFlow)> buf_val;
+#endif
+
         TDiffU uGradFFC;
+        Eigen::Map<TDiffU> uGradFFCM(uGradFFC.data());
 
         if (iFace < iFaceEnd)
         {
@@ -693,14 +792,14 @@ namespace DNDS::EulerP
                 }
             }
 
-            auto uL = [uFL, uScalarFL, iFace] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
+            auto uL = [uFL, uScalarFL, iFace] DNDS_DEVICE(int i) mutable -> real &
             {
                 if (i < nVarsFlow)
                     return uFL(iFace, i);
                 else
                     return uScalarFL[i - nVarsFlow](iFace);
             };
-            auto uR = [uFR, uScalarFR, iFace] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
+            auto uR = [uFR, uScalarFR, iFace] DNDS_DEVICE(int i) mutable -> real &
             {
                 if (i < nVarsFlow)
                     return uFR(iFace, i);
@@ -717,16 +816,19 @@ namespace DNDS::EulerP
             }
             // TODO: periodic handling of vectors from cell to face
         }
+#ifdef DNDS_USE_CUDA
         if constexpr (B == DeviceBackend::CUDA)
         {
             detail::CUDA_Local2GlobalAssign<3 * nVarsFlow, 128>(
-                [uGradFFC] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
-                { return uGradFFC(i); },
-                [uGradFF] DNDS_DEVICE_CALLABLE(index iFaceC, int i) mutable -> real &
+                [uGradFFCM] DNDS_DEVICE(int i) mutable -> real &
+                { return uGradFFCM(i); },
+                [uGradFF] DNDS_DEVICE(index iFaceC, int i) mutable -> real &
                 { return uGradFF[iFaceC](i); },
+                buf_idx, buf_val,
                 iFace, iFaceEnd);
         }
         else
+#endif
         {
             if (iFace < iFaceEnd)
             {
@@ -736,14 +838,14 @@ namespace DNDS::EulerP
     }
 
     // only for intellisense hint
-    template DNDS_DEVICE_CALLABLE void RecFace2nd_Kernel<DeviceBackend::Host>(
+    template DNDS_DEVICE void RecFace2nd_Kernel<DeviceBackend::Host>(
         EvaluatorDeviceView<DeviceBackend::Host> &self_view,
         typename Evaluator_impl<DeviceBackend::Host>::RecFace2nd_Arg::Portable &arg,
         index iFace, index iFaceEnd,
         int nVars, int nVarsScalar);
 
     template <DeviceBackend B = DeviceBackend::Host>
-    DNDS_DEVICE_CALLABLE void Flux2nd_Kernel_FluxFace(
+    DNDS_DEVICE void Flux2nd_Kernel_FluxFace(
         EvaluatorDeviceView<B> &self_view,
         typename Evaluator_impl<B>::Flux2nd_Arg::Portable &arg,
         index iFace, index iFaceEnd,
@@ -785,103 +887,129 @@ namespace DNDS::EulerP
 
         DNDS_EULERP_IMPL_ARG_GET_REF(fluxFF)
         DNDS_EULERP_IMPL_ARG_GET_REF(fluxScalarFF)
-        DNDS_EULERP_IMPL_ARG_GET_REF(rhs)
-        DNDS_EULERP_IMPL_ARG_GET_REF(rhsScalar)
+        // DNDS_EULERP_IMPL_ARG_GET_REF(rhs)
+        // DNDS_EULERP_IMPL_ARG_GET_REF(rhsScalar)
 
-        if (iFace >= iFaceEnd)
-            return;
-
-        index iCellL = mesh.face2cell(iFace, 0);
-        index iCellR = mesh.face2cell(iFace, 1);
-        if ((0 > iCellL || iCellL >= mesh.NumCell()) &&
-            (0 > iCellR || iCellR >= mesh.NumCell()) && iCellR != UnInitIndex)
-        {
-            //?
-            // continue; // skip if either side is not needed
-        }
-        tPoint n = fv.GetFaceNorm(iFace, -1);
-
-        index iCellRR = iCellR == UnInitIndex ? iCellL : iCellR;
-        auto uLm = [u, uScalar, iCellL] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
-        {
-            if (i < nVarsFlow)
-                return u(iCellL, i);
-            else
-                return uScalar[i - nVarsFlow](iCellL);
-        };
-        auto uRm = [u, uScalar, iCellRR] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
-        {
-            if (i < nVarsFlow)
-                return u(iCellRR, i);
-            else
-                return uScalar[i - nVarsFlow](iCellRR);
-        };
-        auto uLmPrim = [uPrim, uScalarPrim, iCellL] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
-        {
-            if (i < nVarsFlow)
-                return uPrim(iCellL, i);
-            else
-                return uScalarPrim[i - nVarsFlow](iCellL);
-        };
-        auto uRmPrim = [uPrim, uScalarPrim, iCellRR] DNDS_DEVICE_CALLABLE(int i) mutable -> real &
-        {
-            if (i < nVarsFlow)
-                return uPrim(iCellRR, i);
-            else
-                return uScalarPrim[i - nVarsFlow](iCellRR);
-        };
-        tPoint veloRoe;
-        real vsqrRoe{0}, HRoe{0}, rhoRoe{0}, aSqrRoe{0};
-
-        RoeAverageNS(uLm, uRm, uLmPrim, uRmPrim, nVars, p(iCellL), p(iCellRR),
-                     phy, veloRoe, vsqrRoe, HRoe, rhoRoe, aSqrRoe);
-        real veloRoeN = veloRoe.dot(n);
-        real aRoe = std::sqrt(std::abs(aSqrRoe));
-        real lam0 = std::abs(veloRoeN - aRoe);
-        real lam123 = std::abs(veloRoeN);
-        real lam4 = std::abs(veloRoeN + aRoe);
-
-        tPoint vL = U123(uPrim[iCellL]);
-        tPoint vR = U123(uPrim[iCellRR]);
-        real aL = a(iCellL);
-        real aR = a(iCellRR);
-        real pL = p(iCellL);
-        real pR = p(iCellRR);
-        TU UL = uFL[iFace];
-        TU UR = uFR[iFace];
-
-        RoeEigenValueFixer(
-            aRoe, aRoe, veloRoeN, veloRoeN,
-            std::max(deltaLamCell(iCellL), deltaLamCell(iCellRR)),
-            1.0, lam0, lam123, lam4);
-
-        real lamm = std::max(aL + std::abs(vL.dot(n)), aR + std::abs(vR.dot(n)));
-        // lam0 = lam123 = lam4 = lamm;
+#ifdef DNDS_USE_CUDA
+        __shared__ CUDA::SharedBuffer<index, 128> buf_idx;
+        __shared__ CUDA::SharedBuffer<real, 128 * (1 * nVarsFlow)> buf_val;
+#endif
 
         TU FFlow;
-        FFlow.setZero();
+        Eigen::Map<TU> FFlowM(FFlow.data());
 
-        RoeFluxFlow(UL, UR,
-                    pFL(iFace), pFR(iFace), veloRoe,
-                    vsqrRoe, 0.0 /* vgn = 0 for now*/,
-                    n, aSqrRoe, aRoe,
-                    HRoe, phy, lam0, lam123, lam4, FFlow);
+        if (iFace < iFaceEnd)
+        {
+            index iCellL = mesh.face2cell(iFace, 0);
+            index iCellR = mesh.face2cell(iFace, 1);
+            if ((0 > iCellL || iCellL >= mesh.NumCell()) &&
+                (0 > iCellR || iCellR >= mesh.NumCell()) && iCellR != UnInitIndex)
+            {
+                //?
+                // continue; // skip if either side is not needed
+            }
+            tPoint n = fv.GetFaceNorm(iFace, -1);
 
-        fluxFF[iFace] = FFlow;
+            index iCellRR = iCellR == UnInitIndex ? iCellL : iCellR;
+            auto uLm = [u, uScalar, iCellL] DNDS_DEVICE(int i) mutable -> real &
+            {
+                if (i < nVarsFlow)
+                    return u(iCellL, i);
+                else
+                    return uScalar[i - nVarsFlow](iCellL);
+            };
+            auto uRm = [u, uScalar, iCellRR] DNDS_DEVICE(int i) mutable -> real &
+            {
+                if (i < nVarsFlow)
+                    return u(iCellRR, i);
+                else
+                    return uScalar[i - nVarsFlow](iCellRR);
+            };
+            auto uLmPrim = [uPrim, uScalarPrim, iCellL] DNDS_DEVICE(int i) mutable -> real &
+            {
+                if (i < nVarsFlow)
+                    return uPrim(iCellL, i);
+                else
+                    return uScalarPrim[i - nVarsFlow](iCellL);
+            };
+            auto uRmPrim = [uPrim, uScalarPrim, iCellRR] DNDS_DEVICE(int i) mutable -> real &
+            {
+                if (i < nVarsFlow)
+                    return uPrim(iCellRR, i);
+                else
+                    return uScalarPrim[i - nVarsFlow](iCellRR);
+            };
+            tPoint veloRoe;
+            real vsqrRoe{0}, HRoe{0}, rhoRoe{0}, aSqrRoe{0};
 
-        // TODO: scalar's flux
-        // TODO: viscous flux
+            RoeAverageNS(uLm, uRm, uLmPrim, uRmPrim, nVars, p(iCellL), p(iCellRR),
+                         phy, veloRoe, vsqrRoe, HRoe, rhoRoe, aSqrRoe);
+            real veloRoeN = veloRoe.dot(n);
+            real aRoe = std::sqrt(std::abs(aSqrRoe));
+            real lam0 = std::abs(veloRoeN - aRoe);
+            real lam123 = std::abs(veloRoeN);
+            real lam4 = std::abs(veloRoeN + aRoe);
+
+            tPoint vL = U123(uPrim[iCellL]);
+            tPoint vR = U123(uPrim[iCellRR]);
+            real aL = a(iCellL);
+            real aR = a(iCellRR);
+            real pL = p(iCellL);
+            real pR = p(iCellRR);
+            TU UL = uFL[iFace];
+            TU UR = uFR[iFace];
+
+            RoeEigenValueFixer(
+                aRoe, aRoe, veloRoeN, veloRoeN,
+                std::max(deltaLamCell(iCellL), deltaLamCell(iCellRR)),
+                1.0, lam0, lam123, lam4);
+
+            real lamm = std::max(aL + std::abs(vL.dot(n)), aR + std::abs(vR.dot(n)));
+            // lam0 = lam123 = lam4 = lamm;
+
+            FFlow.setZero();
+
+            RoeFluxFlow(UL, UR,
+                        pFL(iFace), pFR(iFace), veloRoe,
+                        vsqrRoe, 0.0 /* vgn = 0 for now*/,
+                        n, aSqrRoe, aRoe,
+                        HRoe, phy, lam0, lam123, lam4, FFlow);
+
+            fluxFF[iFace] = FFlow;
+
+            // TODO: scalar's flux
+            // TODO: viscous flux
+        }
+#ifdef DNDS_USE_CUDA
+        if constexpr (B == DeviceBackend::CUDA)
+        {
+            detail::CUDA_Local2GlobalAssign<1 * nVarsFlow, 128>(
+                [FFlowM] DNDS_DEVICE(int i) mutable -> real &
+                { return FFlowM(i); },
+                [fluxFF] DNDS_DEVICE(index iFaceC, int i) mutable -> real &
+                { return fluxFF[iFaceC](i); },
+                buf_idx, buf_val,
+                iFace, iFaceEnd);
+        }
+        else
+#endif
+        {
+            if (iFace < iFaceEnd)
+            {
+                fluxFF[iFace] = FFlow;
+            }
+        }
     }
 
     // only for intellisense hint
-    template DNDS_DEVICE_CALLABLE void Flux2nd_Kernel_FluxFace<DeviceBackend::Host>(
+    template DNDS_DEVICE void Flux2nd_Kernel_FluxFace<DeviceBackend::Host>(
         EvaluatorDeviceView<DeviceBackend::Host> &self_view,
         typename Evaluator_impl<DeviceBackend::Host>::Flux2nd_Arg::Portable &arg,
         index iFace, index iFaceEnd,
         int nVars, int nVarsScalar);
 
     template <DeviceBackend B = DeviceBackend::Host>
-    DNDS_DEVICE_CALLABLE void Flux2nd_Kernel_Face2Cell(
+    DNDS_DEVICE void Flux2nd_Kernel_Face2Cell(
         EvaluatorDeviceView<B> &self_view,
         typename Evaluator_impl<B>::Flux2nd_Arg::Portable &arg,
         index iCell, index iCellEnd,
@@ -898,22 +1026,50 @@ namespace DNDS::EulerP
         DNDS_EULERP_IMPL_ARG_GET_REF(rhs)
         DNDS_EULERP_IMPL_ARG_GET_REF(rhsScalar)
 
-        if (iCell >= iCellEnd)
-            return;
+#ifdef DNDS_USE_CUDA
+        __shared__ CUDA::SharedBuffer<index, 128> buf_idx;
+        __shared__ CUDA::SharedBuffer<real, 128 * (1 * nVarsFlow)> buf_val;
+#endif
 
-        auto c2f = mesh.cell2face.father[iCell];
-        for (auto iFace : c2f)
+        TU rhsC;
+        Eigen::Map<TU> rhsCM(rhsC.data());
+
+        if (iCell < iCellEnd)
         {
-            real face_sign = mesh.CellIsFaceBack(iCell, iFace) ? 1 : -1;
-            real face_coef = -fv.GetFaceArea(iFace) / fv.GetCellVol(iCell) * face_sign;
-            rhs[iCell] += fluxFF[iFace] * face_coef;
-            for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
-                rhsScalar[iVarS](iCell) += fluxScalarFF[iVarS](iFace) * face_coef;
+            rhsC = rhs[iCell];
+            auto c2f = mesh.cell2face.father[iCell];
+            for (auto iFace : c2f)
+            {
+                real face_sign = mesh.CellIsFaceBack(iCell, iFace) ? 1 : -1;
+                real face_coef = -fv.GetFaceArea(iFace) / fv.GetCellVol(iCell) * face_sign;
+                rhsC += fluxFF[iFace] * face_coef;
+                for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)
+                    rhsScalar[iVarS](iCell) += fluxScalarFF[iVarS](iFace) * face_coef;
+            }
+        }
+#ifdef DNDS_USE_CUDA
+        if constexpr (B == DeviceBackend::CUDA)
+        {
+            detail::CUDA_Local2GlobalAssign<1 * nVarsFlow, 128>(
+                [rhsCM] DNDS_DEVICE(int i) mutable -> real &
+                { return rhsCM(i); },
+                [rhs] DNDS_DEVICE(index iCellC, int i) mutable -> real &
+                { return rhs[iCellC](i); },
+                buf_idx, buf_val,
+                iCell, iCellEnd);
+        }
+        else
+#endif
+        {
+            if (iCell < iCellEnd)
+            {
+                rhs[iCell] = rhsC;
+            }
         }
     }
 
     // only for intellisense hint
-    template DNDS_DEVICE_CALLABLE void Flux2nd_Kernel_Face2Cell<DeviceBackend::Host>(
+    template DNDS_DEVICE void Flux2nd_Kernel_Face2Cell<DeviceBackend::Host>(
         EvaluatorDeviceView<DeviceBackend::Host> &self_view,
         typename Evaluator_impl<DeviceBackend::Host>::Flux2nd_Arg::Portable &arg,
         index iCell, index iCellEnd,

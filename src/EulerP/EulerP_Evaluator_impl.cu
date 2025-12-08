@@ -112,8 +112,9 @@ namespace DNDS::EulerP
         {
             auto [blocksPerGrid, threadsPerBlock] =
                 CUDA::calckernelSizeSimple(mesh.NumCell(), threadsPerBlock0);
-            CUDA_Simple_PointWise_Call_RecGradient_BarthLimiter_Kernel_ScalarPart<<<blocksPerGrid, threadsPerBlock>>>(
-                self_view_device_copy.get(), arg.portable, nVars, nVarsScalar, 0, mesh.NumCell());
+            if (nVarsScalar)
+                CUDA_Simple_PointWise_Call_RecGradient_BarthLimiter_Kernel_ScalarPart<<<blocksPerGrid, threadsPerBlock>>>(
+                    self_view_device_copy.get(), arg.portable, nVars, nVarsScalar, 0, mesh.NumCell());
         }
         if (arg.self.get_config()["serializeCUDAExecution"])
             cudaDeviceSynchronize();
