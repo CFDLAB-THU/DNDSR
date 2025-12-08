@@ -11,7 +11,7 @@ handler = GraceExit(max_attempts=5)
 
 config_name = os.path.join(dirname, "config_0012_mg_bench.json")
 
-out_base = "../data/out/NACA0012_H2-MGtest_3_VRes_AOA05.dir"
+out_base = "../data/out/NACA0012_H2-MGtest_3_VRes_AOA15_Bi1.dir"
 
 name_prefix = ""
 
@@ -19,7 +19,7 @@ name_prefix = "x1-"
 
 os.makedirs(out_base, exist_ok=True)
 
-nProc = 16
+nProc = 64
 
 opt_0 = {}
 opt_0["n_iter"] = 10000
@@ -56,7 +56,7 @@ opt_3["name_append"] = "lusgs"  # smoother
 opts = [
     opt_0,  # GMRES-ILU
     opt_1,  # ILU
-    opt_3,  # GMRES-LUSGS
+    # opt_3,  # GMRES-LUSGS
     opt_2,  # LUSGS
 ]
 
