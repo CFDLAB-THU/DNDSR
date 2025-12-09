@@ -1563,7 +1563,12 @@ namespace DNDS::Geom
                 std::sort(faceVerts.begin(), faceVerts.end());
 
                 std::vector<NodePeriodicBits> faceNodePeriodicBits;
-                std::vector<std::pair<index, NodePeriodicBits>> faceNodeNodePeriodicBits;
+                using idx_pbi_pair = std::pair<index, NodePeriodicBits>;
+                std::vector<idx_pbi_pair> faceNodeNodePeriodicBits;
+                auto idx_pbi_pair_less = [](idx_pbi_pair &L, idx_pbi_pair &R)
+                { return L.first == R.first ? uint8_t(L.second) < uint8_t(R.second) : L.first < R.first; };
+                auto idx_pbi_pair_eq = [](idx_pbi_pair &L, idx_pbi_pair &R)
+                { return L.first == R.first && uint8_t(L.second) == uint8_t(R.second); };
                 if (isPeriodic)
                 {
                     faceNodePeriodicBits.resize(eFace.GetNumNodes());
@@ -1572,8 +1577,12 @@ namespace DNDS::Geom
                     for (rowsize i = 0; i < faceNodeNodePeriodicBits.size(); i++)
                         faceNodeNodePeriodicBits[i].first = faceNodes[i], faceNodeNodePeriodicBits[i].second = faceNodePeriodicBits[i];
                     std::sort(faceNodeNodePeriodicBits.begin(), faceNodeNodePeriodicBits.end(),
-                              [](auto &L, auto &R)
-                              { return L.first < R.first; });
+                              idx_pbi_pair_less);
+                    for (int i = 1; i < faceNodeNodePeriodicBits.size(); i++)
+                    {
+                        DNDS_assert_info(!idx_pbi_pair_eq(faceNodeNodePeriodicBits[i - 1], faceNodeNodePeriodicBits[i]),
+                                         "the face has identical (periodic) nodes");
+                    }
                 }
 
                 for (auto iV : faceVerts)
@@ -1596,8 +1605,7 @@ namespace DNDS::Geom
                                         faceNodeNodePeriodicBitsOther[i].first = face2nodeV[iFOther][i],
                                         faceNodeNodePeriodicBitsOther[i].second = face2nodePbiV[iFOther][i];
                                     std::sort(faceNodeNodePeriodicBitsOther.begin(), faceNodeNodePeriodicBitsOther.end(),
-                                              [](auto &L, auto &R)
-                                              { return L.first < R.first; });
+                                              idx_pbi_pair_less);
                                     auto v0 = faceNodeNodePeriodicBits.at(0).second ^ faceNodeNodePeriodicBitsOther.at(0).second;
                                     DNDS_assert(faceNodeNodePeriodicBitsOther.size() == faceNodeNodePeriodicBits.size());
                                     bool collaborating = true;

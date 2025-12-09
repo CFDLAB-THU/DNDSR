@@ -18,6 +18,9 @@ namespace DNDS
 
         st.add_infinity();
         st.add_pi();
+        // TODO: add thread safety?
+        static exprtk::rtl::io::println<real> println;
+        st.add_function("println", println);
 
         for (auto &[k, v] : _vars)
             st.add_variable(k, v);
@@ -36,11 +39,20 @@ namespace DNDS
         _ptr_parser = static_cast<void *>(pparser);
 
         auto compile_ok = parser.compile(expr, exp);
-        DNDS_assert_info(
+        std::string error_info = parser.error() + "\n";
+        for (size_t i = 0; i < parser.error_count(); i++)
+        {
+            auto err = parser.get_error(i);
+            error_info.append(
+                fmt::format("Error [{}], at [{}]\n", i, err.token.position) +
+                fmt::format("\tType: {}\n", exprtk::parser_error::to_str(err.mode)) +
+                fmt::format("\tMsg: {}\n", err.diagnostic));
+        }
+        DNDS_check_throw_info(
             compile_ok,
             "exprtk compiling of === \n" +
                 expr +
-                "\n=== failed");
+                "\n=== failed: " + error_info);
         _compiled = true;
     }
 
