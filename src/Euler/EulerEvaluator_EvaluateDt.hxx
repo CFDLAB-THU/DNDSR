@@ -1574,7 +1574,7 @@ namespace DNDS::Euler
             {
                 RANS::GetSource_SA<dim>(UMeanXy, DiffUxy, settings.idealGasProperty.muGas, muf,
                                         gamma,
-                                        d, lLES, hMax,
+                                        d, lLES, hMax, settings.SADESMode,
                                         retInc,
                                         settings.ransSARotCorrection, mode);
             };
