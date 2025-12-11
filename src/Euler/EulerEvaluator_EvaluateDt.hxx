@@ -1115,7 +1115,7 @@ namespace DNDS::Euler
         if (f2c[1] != UnInitIndex)
             dLambda = std::max(dLambda, deltaLambdaCell[f2c[1]](0));
         real fixScale = settings.rsFixScale;
-
+        real incFScale = settings.rsIncFScale;
         /** viscous flux **/
         TU_Batch visFluxV;
         visFluxV.resizeLike(ULxy);
@@ -1195,10 +1195,10 @@ namespace DNDS::Euler
         auto RSWrapper_XY =
             [&](Gas::RiemannSolverType rsType,
                 auto &&UL, auto &&UR, auto &&ULm, auto &&URm, auto &&vg, auto &&n,
-                real gamma, auto &&finc, real dLambda, real fixScale,
+                real gamma, auto &&finc, real dLambda, real fixScale, real incFScale,
                 real &lam0, real &lam123, real &lam4)
         {
-            Gas::InviscidFlux_IdealGas_Dispatcher<dim>(rsType, UL, UR, ULm, URm, vg, n, gamma, finc, dLambda, fixScale, exitFun, lam0, lam123, lam4);
+            Gas::InviscidFlux_IdealGas_Dispatcher<dim>(rsType, UL, UR, ULm, URm, vg, n, gamma, finc, dLambda, fixScale,  incFScale,exitFun, lam0, lam123, lam4);
         };
 
         // TU_Batch finc1;
@@ -1219,7 +1219,7 @@ namespace DNDS::Euler
                 Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
                     rsType,
                     ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
-                    settings.idealGasProperty.gamma, finc, dLambda, fixScale,
+                    settings.idealGasProperty.gamma, finc, dLambda, fixScale, incFScale,
                     exitFun, lam0, lam123, lam4);
                 lam0V.setConstant(lam0);
                 lam123V.setConstant(lam123);
@@ -1230,7 +1230,7 @@ namespace DNDS::Euler
                 {
                     RSWrapper_XY(rsType, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
                                  vgXY(EigenAll, iB), unitNorm(EigenAll, iB),
-                                 settings.idealGasProperty.gamma, finc(EigenAll, iB), dLambda, fixScale,
+                                 settings.idealGasProperty.gamma, finc(EigenAll, iB), dLambda, fixScale, incFScale,
                                  lam0V(iB), lam123V(iB), lam4V(iB));
                 }
         };
@@ -1307,7 +1307,7 @@ namespace DNDS::Euler
                     Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
                         rsTypeAux,
                         ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N1B, N1,
-                        settings.idealGasProperty.gamma, F1, dLambda, fixScale,
+                        settings.idealGasProperty.gamma, F1, dLambda, fixScale, incFScale,
                         exitFun, lam0, lam123, lam4);
                     lam0V1.setConstant(lam0);
                     lam123V1.setConstant(lam123);
@@ -1318,7 +1318,7 @@ namespace DNDS::Euler
                     {
                         RSWrapper_XY(rsTypeAux, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
                                      vgXY(EigenAll, iB), N1,
-                                     settings.idealGasProperty.gamma, F1(EigenAll, iB), dLambda, fixScale,
+                                     settings.idealGasProperty.gamma, F1(EigenAll, iB), dLambda, fixScale, incFScale,
                                      lam0V1(iB), lam123V1(iB), lam4V1(iB));
                     }
 
@@ -1329,7 +1329,7 @@ namespace DNDS::Euler
                     Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
                         rsType,
                         ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N2, N2C,
-                        settings.idealGasProperty.gamma, finc, dLambda, fixScale,
+                        settings.idealGasProperty.gamma, finc, dLambda, fixScale, incFScale,
                         exitFun, lam0, lam123, lam4);
                     lam0V.setConstant(lam0);
                     lam123V.setConstant(lam123);
@@ -1340,7 +1340,7 @@ namespace DNDS::Euler
                     {
                         RSWrapper_XY(rsType, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
                                      vgXY(EigenAll, iB), N2(EigenAll, iB),
-                                     settings.idealGasProperty.gamma, finc(EigenAll, iB), dLambda, fixScale,
+                                     settings.idealGasProperty.gamma, finc(EigenAll, iB), dLambda, fixScale, incFScale,
                                      lam0V(iB), lam123V(iB), lam4V(iB));
                     }
 

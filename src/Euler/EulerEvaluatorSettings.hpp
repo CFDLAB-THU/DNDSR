@@ -40,6 +40,7 @@ namespace DNDS::Euler
         Gas::RiemannSolverType rsTypeAux = Gas::UnknownRS;
         Gas::RiemannSolverType rsTypeWall = Gas::UnknownRS;
         real rsFixScale = 1;
+        real rsIncFScale = 1;
         int rsMeanValueEig = 0;
         int rsRotateScheme = 0;
         real minWallDist = 1e-12;
@@ -245,6 +246,7 @@ namespace DNDS::Euler
             rsTypeWall = riemannSolverTypeWall;
             // std::cout << rsType << std::endl;
             __DNDS__json_to_config(rsFixScale);
+            __DNDS__json_to_config(rsIncFScale);
             __DNDS__json_to_config(rsMeanValueEig);
             __DNDS__json_to_config(rsRotateScheme);
             __DNDS__json_to_config(minWallDist);

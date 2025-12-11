@@ -666,6 +666,7 @@ namespace DNDS::Euler::Gas
                                     const TULm &ULm, const TURm &URm,
                                     const TVecVG &vg, const TVecN &n,
                                     real gamma, TF &F, real dLambda, real fixScale,
+                                    real incFScale,
                                     const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
         static const real scaleHartenYee = 0.05;
@@ -699,8 +700,8 @@ namespace DNDS::Euler::Gas
         TVec veloRoe = (sqrtRhoLm * veloLm + sqrtRhoRm * veloRm) / (sqrtRhoLm + sqrtRhoRm);
         real vsqrRoe = veloRoe.squaredNorm();
         real HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
-            real asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
-            real rhoRoe = sqrtRhoLm * sqrtRhoRm;
+        real asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
+        real rhoRoe = sqrtRhoLm * sqrtRhoRm;
 
         Eigen::Vector<real, dim + 2> FL, FR;
         GasInviscidFlux_XY<dim>(UL, veloL, vg, n, pL, FL);
@@ -765,7 +766,7 @@ namespace DNDS::Euler::Gas
             (veloRoe - aRoe * n) * alpha0 + (veloRoe + aRoe * n) * alpha4 +
             veloRoe * alpha1 + alpha23VT;
 
-        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = (FL + FR) * 0.5 - 0.5 * incF;
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = (FL + FR) * 0.5 - 0.5 * incFScale * incF;
     }
 
     template <int dim = 3, typename TUL, typename TUR, typename TVecV, typename TUOut>
@@ -849,7 +850,9 @@ namespace DNDS::Euler::Gas
                                           const TULm &ULm, const TURm &URm,
                                           const TVecVG &vg, const TVecVGm &vgm,
                                           const TVecN &n, const TVecNm &nm,
-                                          real gamma, TF &F, real dLambda, real fixScale,
+                                          real gamma, TF &F,
+                                          real dLambda, real fixScale,
+                                          real incFScale,
                                           const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
         static const real scaleHartenYee = 0.05;
@@ -973,7 +976,7 @@ namespace DNDS::Euler::Gas
         // incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), EigenAll) =
         //     (veloRoe.array() - (aRoe * n).array().colwise()) * alpha0 * (veloRoe.array() + (aRoe * n).array().colwise()) * alpha4;
 
-        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll) = (FL + FR) * 0.5 - 0.5 * incF;
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll) = (FL + FR) * 0.5 - 0.5 * incFScale * incF;
     }
 
     template <int dim = 3,
@@ -986,16 +989,17 @@ namespace DNDS::Euler::Gas
         TUL &&UL, TUR &&UR, TULm &&ULm, TURm &&URm,
         TVecVG &&vg, TVecN &&n, real gamma, TF &&F,
         real dLambda, real fixScale,
+        real incFScale,
         TFdumpInfo &&dumpInfo, real &lam0, real &lam123, real &lam4)
     {
-#define DNDS_GAS_CALL_ROE(type)                               \
-    RoeFlux_IdealGas_HartenYee<dim, type>(                    \
-        UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale, \
+#define DNDS_GAS_CALL_ROE(type)                                          \
+    RoeFlux_IdealGas_HartenYee<dim, type>(                               \
+        UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale, incFScale, \
         dumpInfo, lam0, lam123, lam4)
 
         if (type == Roe)
             RoeFlux_IdealGas_HartenYee<dim>(
-                UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale,
+                UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale, incFScale,
                 dumpInfo, lam0, lam123, lam4);
         else if (type == Roe_M1)
             DNDS_GAS_CALL_ROE(1);
@@ -1045,16 +1049,17 @@ namespace DNDS::Euler::Gas
         TVecVG &&vg, TVecVGm &&vgm,
         TVecN &&n, TVecNm &&nm,
         real gamma, TF &&F, real dLambda, real fixScale,
+        real incFScale,
         TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
-#define DNDS_GAS_CALL_ROE(type)                                        \
-    RoeFlux_IdealGas_HartenYee_Batch<dim, type>(                       \
-        UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda, fixScale, \
+#define DNDS_GAS_CALL_ROE(type)                                                   \
+    RoeFlux_IdealGas_HartenYee_Batch<dim, type>(                                  \
+        UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda, fixScale, incFScale, \
         dumpInfo, lam0, lam123, lam4)
 
         if (type == Roe)
             RoeFlux_IdealGas_HartenYee_Batch<dim>(
-                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda, fixScale,
+                UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda, fixScale, incFScale,
                 dumpInfo, lam0, lam123, lam4);
         else if (type == Roe_M1)
             DNDS_GAS_CALL_ROE(1);
