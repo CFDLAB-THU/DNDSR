@@ -640,7 +640,7 @@ namespace DNDS::Euler
                 auto gCell = direct2ndRec ? vfv->GetCellQuadO1(iCell) : vfv->GetCellQuad(iCell);
 
                 TDiffU cellGrad2nd;
-                if (settings.ransSource2nd)
+                if (settings.ransSource2nd || settings.source2nd)
                 {
                     cellGrad2nd.setZero(Eigen::NoChange, u[iCell].size());
                     TU uC = u[iCell];
