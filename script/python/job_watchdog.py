@@ -72,6 +72,8 @@ class Watcher:
                     )
                     if last_size == this_size and last_size >= 0:
                         self.stall_records[f_record] += 1
+                    else:
+                        self.stall_records[f_record] = 0
 
         self.stall_records = {
             key: self.stall_records[key]
