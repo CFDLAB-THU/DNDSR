@@ -683,6 +683,8 @@ namespace DNDS::Euler
                         PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
                         if (direct2ndRec) // should use limited version here or not?
                             GradU(SeqG012, EigenAll) = uGradBufNoLim[iCell];
+                        else if (settings.source2nd)
+                            GradU = cellGrad2nd;
                         else
                         {
                             if constexpr (gDim == 2)
