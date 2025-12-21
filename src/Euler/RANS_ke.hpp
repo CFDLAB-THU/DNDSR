@@ -653,6 +653,73 @@ namespace DNDS::Euler::RANS
         real SS = (diffU + diffU.transpose()).norm(); // is sqrt(2) * strainrate's norm
         real diffUNorm = diffU.norm();
 
+        real ft2 = ct3 * std::exp(-ct4 * sqr(Chi));
+        // {
+        //     Eigen::Matrix<real, dim, dim> sHat = 0.5 * (diffU.transpose() + diffU);
+        //     real sHatSqr = 2 * sHat.squaredNorm();
+        //     real rStar = std::sqrt(sHatSqr) / S;
+        //     real DD = 0.5 * (sHatSqr + sqr(S));
+        // !    // need second derivatives for rotation term !(CFD++ user manual)
+        // }
+
+        real lDES = d;
+        // DDES shield
+        {
+            real lRANS = d;
+            real fwStar = .424;
+            real nuTur = mufPhy / UMeanXy(0) * std::max((Chi * fnu1), 0.0);
+            real nufPhy = mufPhy / UMeanXy(0);
+            real rd = (nuTur + nufPhy) / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
+            real fd = 1. - std::tanh(cube(8 * rd));
+            real psiSqr = 0.0;
+            if (Chi <= 0)
+                psiSqr = 100.0;
+            else
+                psiSqr = std::min(100.0, (1 - cb1 / (cw1 * sqr(kappa) * fwStar) * (ft2 + (1 - ft2) * fnu2)) /
+                                             (fnu1 * std::max(smallReal, 1 - ft2)));
+            // if (psiSqr < 1.01)
+            // {
+            //     std::cout << psiSqr << "Chi " << Chi << " fnu1 " << fnu1 << " xx " << (fnu1 * std::max(smallReal, 1 - ft2)) << " xx " << cb1 / (cw1 * sqr(kappa) * fwStar) << std::endl;
+            // }
+            real psi = std::sqrt(std::max(psiSqr, 1.0));
+            //! note that psi has lower bound of 1
+            // psi = 1.0;
+            lDES = lRANS - fd * std::max(0., lRANS - lLES * psi);
+
+            // IDDES switch
+            if (DESMode == 1 || DESMode == 2)
+            {
+                real alphaIDDES = 0.25 - d / hMax;
+                real fB = std::min(2 * std::exp(-9. * sqr(alphaIDDES)), 1.0);
+
+                real cl = 3.55;
+                real ct = 1.63;
+                real rdt = nuTur / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
+                real rdl = nufPhy / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
+                real ft = std::tanh(cube(sqr(ct) * rdt));
+                real fl_tmp = sqr(sqr(cl) * rdl);
+                real fl = std::tanh(sqr(sqr(fl_tmp)) * fl_tmp); // power 5
+
+                real fe1 = 2. * std::exp(-(alphaIDDES >= 0 ? 11.09 : 9.0) * sqr(alphaIDDES));
+                real fe2 = 1. - std::max(ft, fl);
+                real fe = std::max((fe1 - 1.), 0.) * psi * fe2;
+                if (DESMode == 2)
+                {
+                    real lWMLES = fB * (1 + fe) * lRANS + (1 - fB) * lLES * psi;
+                    lDES = lWMLES;
+                }
+                else
+                {
+                    real fdTilde = std::max(fB, std::tanh(cube(8 * rdt)));
+                    real lIDDES = fdTilde * (1 + fe) * lRANS + (1 - fdTilde) * lLES * psi;
+                    lIDDES = std::max(lLES * smallReal, lIDDES);
+
+                    lDES = lIDDES;
+                }
+            }
+        }
+        d = lDES; //! super subs
+
         real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;
 
         real Sh = 0.;
@@ -681,74 +748,10 @@ namespace DNDS::Euler::RANS
         else //*negative fix
 #endif
             Sh = S + Sbar;
-
         // here r is used for fw, we use real d instead of lDES
         real r = std::min(nuh / (Sh * sqr(kappa * d) + verySmallReal), rlim);
         real g = r + cw2 * (std::pow(r, 6) - r);
         real fw = g * std::pow((1 + std::pow(cw3, 6)) / (std::pow(g, 6) + std::pow(cw3, 6)), 1. / 6.);
-
-        real ft2 = ct3 * std::exp(-ct4 * sqr(Chi));
-        // {
-        //     Eigen::Matrix<real, dim, dim> sHat = 0.5 * (diffU.transpose() + diffU);
-        //     real sHatSqr = 2 * sHat.squaredNorm();
-        //     real rStar = std::sqrt(sHatSqr) / S;
-        //     real DD = 0.5 * (sHatSqr + sqr(S));
-        // !    // need second derivatives for rotation term !(CFD++ user manual)
-        // }
-
-        // DDES shield
-        real lRANS = d;
-        real fwStar = .424;
-        real nuTur = mufPhy / UMeanXy(0) * std::max((Chi * fnu1), 0.0);
-        real nufPhy = mufPhy / UMeanXy(0);
-        real rd = (nuTur + nufPhy) / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
-        real fd = 1. - std::tanh(cube(8 * rd));
-        real psiSqr = 0.0;
-        if (Chi <= 0)
-            psiSqr = 100.0;
-        else
-            psiSqr = std::min(100.0, (1 - cb1 / (cw1 * sqr(kappa) * fwStar) * (ft2 + (1 - ft2) * fnu2)) /
-                                         (fnu1 * std::max(smallReal, 1 - ft2)));
-        // if (psiSqr < 1.01)
-        // {
-        //     std::cout << psiSqr << "Chi " << Chi << " fnu1 " << fnu1 << " xx " << (fnu1 * std::max(smallReal, 1 - ft2)) << " xx " << cb1 / (cw1 * sqr(kappa) * fwStar) << std::endl;
-        // }
-        real psi = std::sqrt(std::max(psiSqr, 1.0));
-        //! note that psi has lower bound of 1
-        psi = 1.0;
-        real lDES = lRANS - fd * std::max(0., lRANS - lLES * psi);
-
-        // IDDES switch
-        if (DESMode == 1 || DESMode == 2)
-        {
-            real alphaIDDES = 0.25 - d / hMax;
-            real fB = std::min(2 * std::exp(-9. * sqr(alphaIDDES)), 1.0);
-
-            real cl = 3.55;
-            real ct = 1.63;
-            real rdt = nuTur / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
-            real rdl = nufPhy / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
-            real ft = std::tanh(cube(sqr(ct) * rdt));
-            real fl_tmp = sqr(sqr(cl) * rdl);
-            real fl = std::tanh(sqr(sqr(fl_tmp)) * fl_tmp); // power 5
-
-            real fe1 = 2. * std::exp(-(alphaIDDES >= 0 ? 11.09 : 9.0) * sqr(alphaIDDES));
-            real fe2 = 1. - std::max(ft, fl);
-            real fe = std::max((fe1 - 1.), 0.) * psi * fe2;
-            if (DESMode == 2)
-            {
-                real lWMLES = fB * (1 + fe) * lRANS + (1 - fB) * lLES * psi;
-                lDES = lWMLES;
-            }
-            else
-            {
-                real fdTilde = std::max(fB, std::tanh(cube(8 * rdt)));
-                real lIDDES = fdTilde * (1 + fe) * lRANS + (1 - fdTilde) * lLES * psi;
-                lIDDES = std::max(lLES * smallReal, lIDDES);
-
-                lDES = lIDDES;
-            }
-        }
 
         // if (d < 0.01)
         //     std::cout << d << " " << lDES << " " << lLES << std::endl;
