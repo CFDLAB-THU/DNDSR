@@ -649,8 +649,13 @@ namespace DNDS::Euler::RANS
         if (settings.frameConstRotation.enabled)
             Omega += Geom::CrossVecToMat(settings.frameConstRotation.vOmega())(Seq012, Seq012); // to static frame rotation
 #endif
-        real S = Omega.norm() * std::sqrt(2);         // is omega's magnitude
-        real SS = (diffU + diffU.transpose()).norm(); // is sqrt(2) * strainrate's norm
+        real S = Omega.norm() * std::sqrt(2.0);                               // is omega's magnitude
+        real SS = (diffU + diffU.transpose()).norm() * (1. / std::sqrt(2.0)); // is sqrt(2) * strainrate's norm
+        if (rotCor)
+        {
+            const real CProd = 1.0;
+            S += CProd * std::min(0.0, S - SS);
+        }
         real diffUNorm = diffU.norm();
 
         real ft2 = ct3 * std::exp(-ct4 * sqr(Chi));
@@ -760,13 +765,9 @@ namespace DNDS::Euler::RANS
 #ifdef USE_NS_SA_NEGATIVE_MODEL
         real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / lDES); //! modified >>
         real P = cb1 * (1 - ft2) * Sh * nuh;                            //! modified >>
-        if (rotCor)
-            P = cb1 * (1 - ft2) * (Sh + cRot * std::min(0., SS - S)) * nuh;
 #else
         real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / lDES);
         real P = cb1 * (1 - ft2) * Sh * nuh;
-        if (rotCor)
-            P = cb1 * (1 - ft2) * (Sh + cRot * std::min(0., SS - S)) * nuh;
 #endif
         real fn = 1;
 #ifdef USE_NS_SA_NEGATIVE_MODEL
@@ -777,8 +778,6 @@ namespace DNDS::Euler::RANS
             fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
             D = -cw1 * sqr(nuh / lDES);
             P = cb1 * (1 - ct3) * S * nuh;
-            if (rotCor)
-                P = cb1 * (1 - ct3) * std::abs(S + cRot * std::min(0., SS - S)) * nuh;
         }
 #endif
 
