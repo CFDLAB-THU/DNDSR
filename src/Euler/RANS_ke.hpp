@@ -627,38 +627,38 @@ namespace DNDS::Euler::RANS
         static const real ct4 = 0.0;
 #endif
 
-        real nuh = UMeanXy(I4 + 1) * muRef / UMeanXy(0);
+        const real nuh = UMeanXy(I4 + 1) * muRef / UMeanXy(0);
 
-        real Chi = (UMeanXy(I4 + 1) * muRef / mufPhy);
-        real Chi3 = cube(Chi);
-        real fnu1 = Chi3 / (Chi3 + cube(cnu1));
-        real fnu2 = 1 - Chi / (1 + Chi * fnu1);
+        const real Chi = (UMeanXy(I4 + 1) * muRef / mufPhy);
+        const real Chi3 = cube(Chi);
+        const real fnu1 = Chi3 / (Chi3 + cube(cnu1));
+        const real fnu2 = 1 - Chi / (1 + Chi * fnu1);
 
-        // 2 is recommended but we use 1 to avoid negative production, see Diskin, Boris, Yi Liu, and Marshall C. Galbraith. "High-Fidelity CFD Verification Workshop 2024: Spalart-Allmaras QCR2000-R Turbulence Model." AIAA Scitech 2023 Forum. 2023.
-        real cRot = 1.0;
+        const Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
+        const Eigen::Matrix<real, dim, 1> diffRhoNu = DiffUxy(Seq012, {I4 + 1}) * muRef;
+        const Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
+        const Eigen::Matrix<real, dim, 1> diffNu = (diffRhoNu - nuh * diffRho) / UMeanXy(0);
+        const Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
+        const Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
 
-        Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
-        Eigen::Matrix<real, dim, 1> diffRhoNu = DiffUxy(Seq012, {I4 + 1}) * muRef;
-        Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
-        Eigen::Matrix<real, dim, 1> diffNu = (diffRhoNu - nuh * diffRho) / UMeanXy(0);
-        Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
-        Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
-
-        Eigen::Matrix<real, dim, dim> Omega = 0.5 * (diffU.transpose() - diffU);
+        const Eigen::Matrix<real, dim, dim> Omega = 0.5 * (diffU.transpose() - diffU);
 #ifndef USE_ABS_VELO_IN_ROTATION
         if (settings.frameConstRotation.enabled)
             Omega += Geom::CrossVecToMat(settings.frameConstRotation.vOmega())(Seq012, Seq012); // to static frame rotation
 #endif
-        real S = Omega.norm() * std::sqrt(2.0);                               // is omega's magnitude
-        real SS = (diffU + diffU.transpose()).norm() * (1. / std::sqrt(2.0)); // is sqrt(2) * strainrate's norm
+        const real S = Omega.norm() * std::sqrt(2.0);                               // is omega's magnitude
+        const real SS = (diffU + diffU.transpose()).norm() * (1. / std::sqrt(2.0)); // is sqrt(2) * strainrate's norm
+        real SRotCor = 0.0;
         if (rotCor)
         {
-            const real CProd = 1.0;
-            S += CProd * std::min(0.0, S - SS);
+            // 2 is recommended but we use 1 to avoid negative production, see Diskin, Boris, Yi Liu, and Marshall C. Galbraith. "High-Fidelity CFD Verification Workshop 2024: Spalart-Allmaras QCR2000-R Turbulence Model." AIAA Scitech 2023 Forum. 2023.
+            // we now use 2.0
+            const real cRot = 2.0;
+            SRotCor += cRot * std::min(0.0, S - SS);
         }
         real diffUNorm = diffU.norm();
 
-        real ft2 = ct3 * std::exp(-ct4 * sqr(Chi));
+        const real ft2 = ct3 * std::exp(-ct4 * sqr(Chi));
         // {
         //     Eigen::Matrix<real, dim, dim> sHat = 0.5 * (diffU.transpose() + diffU);
         //     real sHatSqr = 2 * sHat.squaredNorm();
@@ -694,38 +694,37 @@ namespace DNDS::Euler::RANS
             // IDDES switch
             if (DESMode == 1 || DESMode == 2)
             {
-                real alphaIDDES = 0.25 - d / hMax;
-                real fB = std::min(2 * std::exp(-9. * sqr(alphaIDDES)), 1.0);
+                const real alphaIDDES = 0.25 - d / hMax;
+                const real fB = std::min(2 * std::exp(-9. * sqr(alphaIDDES)), 1.0);
 
-                real cl = 3.55;
-                real ct = 1.63;
-                real rdt = nuTur / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
-                real rdl = nufPhy / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
-                real ft = std::tanh(cube(sqr(ct) * rdt));
-                real fl_tmp = sqr(sqr(cl) * rdl);
-                real fl = std::tanh(sqr(sqr(fl_tmp)) * fl_tmp); // power 5
+                const real cl = 3.55;
+                const real ct = 1.63;
+                const real rdt = nuTur / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
+                const real rdl = nufPhy / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
+                const real ft = std::tanh(cube(sqr(ct) * rdt));
+                const real fl_tmp = sqr(sqr(cl) * rdl);
+                const real fl = std::tanh(sqr(sqr(fl_tmp)) * fl_tmp); // power 5
 
-                real fe1 = 2. * std::exp(-(alphaIDDES >= 0 ? 11.09 : 9.0) * sqr(alphaIDDES));
-                real fe2 = 1. - std::max(ft, fl);
-                real fe = std::max((fe1 - 1.), 0.) * psi * fe2;
+                const real fe1 = 2. * std::exp(-(alphaIDDES >= 0 ? 11.09 : 9.0) * sqr(alphaIDDES));
+                const real fe2 = 1. - std::max(ft, fl);
+                const real fe = std::max((fe1 - 1.), 0.) * psi * fe2;
                 if (DESMode == 2)
                 {
-                    real lWMLES = fB * (1 + fe) * lRANS + (1 - fB) * lLES * psi;
+                    const real lWMLES = fB * (1 + fe) * lRANS + (1 - fB) * lLES * psi;
                     lDES = lWMLES;
                 }
                 else
                 {
-                    real fdTilde = std::max(fB, std::tanh(cube(8 * rdt)));
+                    const real fdTilde = std::max(fB, std::tanh(cube(8 * rdt)));
                     real lIDDES = fdTilde * (1 + fe) * lRANS + (1 - fdTilde) * lLES * psi;
                     lIDDES = std::max(lLES * smallReal, lIDDES);
-
                     lDES = lIDDES;
                 }
             }
         }
         d = lDES; //! super subs
 
-        real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;
+        const real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;
 
         real Sh = 0.;
 
@@ -754,9 +753,9 @@ namespace DNDS::Euler::RANS
 #endif
             Sh = S + Sbar;
         // here r is used for fw, we use real d instead of lDES
-        real r = std::min(nuh / (Sh * sqr(kappa * d) + verySmallReal), rlim);
-        real g = r + cw2 * (std::pow(r, 6) - r);
-        real fw = g * std::pow((1 + std::pow(cw3, 6)) / (std::pow(g, 6) + std::pow(cw3, 6)), 1. / 6.);
+        const real r = std::min(nuh / (Sh * sqr(kappa * d) + verySmallReal), rlim);
+        const real g = r + cw2 * (std::pow(r, 6) - r);
+        const real fw = g * std::pow((1 + std::pow(cw3, 6)) / (std::pow(g, 6) + std::pow(cw3, 6)), 1. / 6.);
 
         // if (d < 0.01)
         //     std::cout << d << " " << lDES << " " << lLES << std::endl;
@@ -764,10 +763,10 @@ namespace DNDS::Euler::RANS
 
 #ifdef USE_NS_SA_NEGATIVE_MODEL
         real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / lDES); //! modified >>
-        real P = cb1 * (1 - ft2) * Sh * nuh;                            //! modified >>
+        real P = cb1 * (1 - ft2) * (Sh + SRotCor) * nuh;                //! modified >>
 #else
         real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / lDES);
-        real P = cb1 * (1 - ft2) * Sh * nuh;
+        real P = cb1 * (1 - ft2) * (Sh + SRotCor) * nuh;
 #endif
         real fn = 1;
 #ifdef USE_NS_SA_NEGATIVE_MODEL
@@ -777,7 +776,7 @@ namespace DNDS::Euler::RANS
             real Chi = UMeanXy(I4 + 1) * muRef / mufPhy;
             fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
             D = -cw1 * sqr(nuh / lDES);
-            P = cb1 * (1 - ct3) * S * nuh;
+            P = cb1 * (1 - ct3) * std::abs(S + SRotCor) * nuh;
         }
 #endif
 
@@ -785,7 +784,7 @@ namespace DNDS::Euler::RANS
             source(I4 + 1) = UMeanXy(0) * (P - D + diffNu.squaredNorm() * cb2 / sigma) / muRef -
                              (UMeanXy(I4 + 1) * fn * muRef + mufPhy) / (UMeanXy(0) * sigma) * diffRho.dot(diffNu) / muRef;
         else
-            source(I4 + 1) = -std::min(UMeanXy(0) * (P * 0 - D * 2) / muRef / (std::abs(UMeanXy(I4 + 1)) + verySmallReal), -verySmallReal);
+            source(I4 + 1) = -std::min(UMeanXy(0) * (std::min(P, 0.0) * 1 - D * 2) / muRef / (std::abs(UMeanXy(I4 + 1)) + verySmallReal), -verySmallReal);
 
         if (!source.allFinite())
         {
