@@ -11,7 +11,7 @@ namespace DNDS::Geom
             DNDS::log() << "UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell" << std::endl;
         //! preset hyper config, should be optional in the future
         bool isSerial = true;
-        _METIS::idx_t nPart = mesh->getMPI().size;
+        idx_t nPart = mesh->getMPI().size;
         cnPart = nPart;
 
         //! assuming all adj point to local numbers now
@@ -23,20 +23,20 @@ namespace DNDS::Geom
         cell2cellSerialFacial->AssertConsistent();
         cell2cellSerialFacial->createGlobalMapping();
 
-        std::vector<_METIS::idx_t> vtxdist(mesh->getMPI().size + 1);
+        std::vector<idx_t> vtxdist(mesh->getMPI().size + 1);
 #ifdef DNDS_USE_OMP
 #    pragma omp parallel for
 #endif
         for (DNDS::MPI_int r = 0; r <= mesh->getMPI().size; r++)
             vtxdist[r] = _METIS::indexToIdx(cell2cellSerialFacial->pLGlobalMapping->ROffsets().at(r));
-        std::vector<_METIS::idx_t> xadj(cell2cellSerialFacial->Size() + 1);
+        std::vector<idx_t> xadj(cell2cellSerialFacial->Size() + 1);
 #ifdef DNDS_USE_OMP
 #    pragma omp parallel for
 #endif
         for (DNDS::index iCell = 0; iCell < xadj.size(); iCell++)
             xadj[iCell] = _METIS::indexToIdx(cell2cellSerialFacial->rowPtr(iCell) - cell2cellSerialFacial->rowPtr(0));
-        std::vector<_METIS::idx_t> adjncy(xadj.back());
-        std::vector<_METIS::idx_t> adjncyWeights;
+        std::vector<idx_t> adjncy(xadj.back());
+        std::vector<idx_t> adjncyWeights;
         DNDS_assert(cell2cellSerialFacial->DataSize() == xadj.back());
 #ifdef DNDS_USE_OMP
 #    pragma omp parallel for
@@ -89,43 +89,43 @@ namespace DNDS::Geom
         if (adjncy.empty())
             adjncy.resize(1, -1); //*coping with zero sized data
 
-        _METIS::idx_t nCell = _METIS::indexToIdx(cell2cellSerialFacial->Size());
-        _METIS::idx_t nCon{1}, options[METIS_NOPTIONS];
-        _METIS::METIS_SetDefaultOptions(options);
+        idx_t nCell = _METIS::indexToIdx(cell2cellSerialFacial->Size());
+        idx_t nCon{1}, options[METIS_NOPTIONS];
+        METIS_SetDefaultOptions(options);
         {
-            options[_METIS::METIS_OPTION_OBJTYPE] = _METIS::METIS_OBJTYPE_CUT;
-            options[_METIS::METIS_OPTION_CTYPE] = _METIS::METIS_CTYPE_SHEM; //? could try shem?
-            options[_METIS::METIS_OPTION_IPTYPE] = _METIS::METIS_IPTYPE_GROW;
-            options[_METIS::METIS_OPTION_RTYPE] = _METIS::METIS_RTYPE_FM;
+            options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
+            options[METIS_OPTION_CTYPE] = METIS_CTYPE_SHEM; //? could try shem?
+            options[METIS_OPTION_IPTYPE] = METIS_IPTYPE_GROW;
+            options[METIS_OPTION_RTYPE] = METIS_RTYPE_FM;
             // options[METIS_OPTION_NO2HOP] = 0; // only available in metis 5.1.0
-            options[_METIS::METIS_OPTION_NCUTS] = std::max(c_options.metisNcuts, 1);
-            options[_METIS::METIS_OPTION_NITER] = 10;
-            // options[_METIS::METIS_OPTION_UFACTOR] = 30; // load imbalance factor, fow k-way
-            options[_METIS::METIS_OPTION_UFACTOR] = c_options.metisUfactor;
-            options[_METIS::METIS_OPTION_MINCONN] = 1;
-            options[_METIS::METIS_OPTION_CONTIG] = 1;                 // ! forcing contigious partition now ? necessary?
-            options[_METIS::METIS_OPTION_SEED] = c_options.metisSeed; // ! seeding 0 for determined result
-            options[_METIS::METIS_OPTION_NUMBERING] = 0;
-            // options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME | _METIS::METIS_DBG_IPART;
-            options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME;
+            options[METIS_OPTION_NCUTS] = std::max(c_options.metisNcuts, 1);
+            options[METIS_OPTION_NITER] = 10;
+            // options[METIS_OPTION_UFACTOR] = 30; // load imbalance factor, fow k-way
+            options[METIS_OPTION_UFACTOR] = c_options.metisUfactor;
+            options[METIS_OPTION_MINCONN] = 1;
+            options[METIS_OPTION_CONTIG] = 1;                 // ! forcing contigious partition now ? necessary?
+            options[METIS_OPTION_SEED] = c_options.metisSeed; // ! seeding 0 for determined result
+            options[METIS_OPTION_NUMBERING] = 0;
+            // options[METIS_OPTION_DBGLVL] = METIS_DBG_TIME | METIS_DBG_IPART;
+            options[METIS_OPTION_DBGLVL] = METIS_DBG_TIME;
         }
-        std::vector<_METIS::idx_t> partOut(nCell);
+        std::vector<idx_t> partOut(nCell);
         if (nCell == 0)
             partOut.resize(1, -1); //*coping with zero sized data
         if (nPart > 1)
         {
             if (mesh->getMPI().size == 1 || (isSerial && mesh->getMPI().rank == mRank))
             {
-                _METIS::idx_t objval;
+                idx_t objval;
                 DNDS_assert_info(c_options.metisType == std::string("KWAY") or c_options.metisType == std::string("RB"), "metisType must be KWAY or RB!");
                 int ret = c_options.metisType == std::string("KWAY")
-                              ? _METIS::METIS_PartGraphKway(
+                              ? METIS_PartGraphKway(
                                     &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, c_options.edgeWeightMethod ? adjncyWeights.data() : NULL,
                                     &nPart, NULL, NULL, options, &objval, partOut.data())
-                              : _METIS::METIS_PartGraphRecursive(
+                              : METIS_PartGraphRecursive(
                                     &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, c_options.edgeWeightMethod ? adjncyWeights.data() : NULL,
                                     &nPart, NULL, NULL, options, &objval, partOut.data());
-                if (ret != _METIS::METIS_OK)
+                if (ret != METIS_OK)
                 {
                     DNDS::log() << "METIS returned not OK: [" << ret << "]" << std::endl;
                     DNDS_assert(false);
@@ -136,20 +136,20 @@ namespace DNDS::Geom
                 ///@todo //TODO: parmetis needs testing!
                 for (int i = 0; i < vtxdist.size() - 1; i++)
                     DNDS_assert_info(vtxdist[i + 1] - vtxdist[i] > 0, "need more than zero cells on each proc!");
-                std::vector<_METIS::real_t> tpWeights(nPart * nCon, 1.0 / nPart); //! assuming homogenous
-                _METIS::real_t ubVec[1]{1.05};
+                std::vector<real_t> tpWeights(nPart * nCon, 1.0 / nPart); //! assuming homogenous
+                real_t ubVec[1]{1.05};
                 DNDS_assert(nCon == 1);
-                _METIS::idx_t optsC[3];
-                _METIS::idx_t wgtflag{0}, numflag{0};
+                idx_t optsC[3];
+                idx_t wgtflag{0}, numflag{0};
                 optsC[0] = 1;
                 optsC[1] = 1;
                 optsC[2] = 0;
-                _METIS::idx_t objval;
-                int ret = _METIS::ParMETIS_V3_PartKway(
+                idx_t objval;
+                int ret = ParMETIS_V3_PartKway(
                     vtxdist.data(), xadj.data(), adjncy.data(), NULL, NULL, &wgtflag, &numflag,
                     &nCon, &nPart, tpWeights.data(), ubVec, optsC, &objval, partOut.data(),
                     &mesh->getMPI().comm);
-                if (ret != _METIS::METIS_OK)
+                if (ret != METIS_OK)
                 {
                     DNDS::log() << "METIS returned not OK: [" << ret << "]" << std::endl;
                     DNDS_assert(false);

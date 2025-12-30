@@ -18,6 +18,8 @@ namespace DNDS::EulerP::detail
         DNDS_FORCEINLINE DNDS_DEVICE real &operator()(index iPnt, int i) { return dummy_; }
     };
 
+#ifdef DNDS_USE_CUDA
+
     template <int local_stride_fixed, int max_tid_fixed,
               class TFLocalAccessor, class TFGlobalAccessor,
               int bufferSize_idx, int bufferSize_val>
@@ -28,9 +30,9 @@ namespace DNDS::EulerP::detail
         CUDA::SharedBuffer<real, bufferSize_val> &shared_buf_val,
         index iPnt, index iPntMax)
     {
-#ifndef __CUDA_ARCH__
+#    ifndef __CUDA_ARCH__
         static_assert(local_stride_fixed > 0 && local_stride_fixed < 0);
-#endif
+#    endif
         static_assert(local_stride_fixed > 0);
         static_assert(max_tid_fixed > 0);
         static_assert(bufferSize_idx >= max_tid_fixed);
@@ -63,4 +65,5 @@ namespace DNDS::EulerP::detail
                 FGLobalAccessor(iPntC, iCompSub) = buf_data[iCompBuf];
         }
     }
+#endif
 }

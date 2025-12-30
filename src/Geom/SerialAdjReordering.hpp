@@ -20,87 +20,87 @@ namespace DNDS::Geom
         tLocalMatStruct::const_iterator mat_begin, tLocalMatStruct::const_iterator mat_end, int nPart,
         std::string metisType = "KWAY", int metisNcuts = 3, int metisUfactor = 5, int metisSeed = 0)
     {
-        _METIS::idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat_end - mat_begin));
-        _METIS::idx_t nCon{1}, options[METIS_NOPTIONS];
-        _METIS::METIS_SetDefaultOptions(options);
+        idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat_end - mat_begin));
+        idx_t nCon{1}, options[METIS_NOPTIONS];
+        METIS_SetDefaultOptions(options);
         {
-            options[_METIS::METIS_OPTION_OBJTYPE] = _METIS::METIS_OBJTYPE_CUT;
-            options[_METIS::METIS_OPTION_CTYPE] = _METIS::METIS_CTYPE_SHEM; //? could try shem?
-            options[_METIS::METIS_OPTION_IPTYPE] = _METIS::METIS_IPTYPE_GROW;
-            options[_METIS::METIS_OPTION_RTYPE] = _METIS::METIS_RTYPE_FM;
+            options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
+            options[METIS_OPTION_CTYPE] = METIS_CTYPE_SHEM; //? could try shem?
+            options[METIS_OPTION_IPTYPE] = METIS_IPTYPE_GROW;
+            options[METIS_OPTION_RTYPE] = METIS_RTYPE_FM;
             // options[METIS_OPTION_NO2HOP] = 0; // only available in metis 5.1.0
-            options[_METIS::METIS_OPTION_NCUTS] = std::max(metisNcuts, 1);
-            options[_METIS::METIS_OPTION_NITER] = 10;
-            // options[_METIS::METIS_OPTION_UFACTOR] = 30; // load imbalance factor, fow k-way
-            options[_METIS::METIS_OPTION_UFACTOR] = metisUfactor;
-            options[_METIS::METIS_OPTION_MINCONN] = 1;
-            options[_METIS::METIS_OPTION_CONTIG] = 1;       // ! forcing contigious partition now ? necessary?
-            options[_METIS::METIS_OPTION_SEED] = metisSeed; // ! seeding 0 for determined result
-            options[_METIS::METIS_OPTION_NUMBERING] = 0;
-            // options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME | _METIS::METIS_DBG_IPART;
-            // options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME;
+            options[METIS_OPTION_NCUTS] = std::max(metisNcuts, 1);
+            options[METIS_OPTION_NITER] = 10;
+            // options[METIS_OPTION_UFACTOR] = 30; // load imbalance factor, fow k-way
+            options[METIS_OPTION_UFACTOR] = metisUfactor;
+            options[METIS_OPTION_MINCONN] = 1;
+            options[METIS_OPTION_CONTIG] = 1;       // ! forcing contigious partition now ? necessary?
+            options[METIS_OPTION_SEED] = metisSeed; // ! seeding 0 for determined result
+            options[METIS_OPTION_NUMBERING] = 0;
+            // options[METIS_OPTION_DBGLVL] = METIS_DBG_TIME | METIS_DBG_IPART;
+            // options[METIS_OPTION_DBGLVL] = METIS_DBG_TIME;
         }
         auto &cell2cellFaceV = mat_begin;
-        std::vector<_METIS::idx_t> adjncy, xadj, perm, iPerm;
+        std::vector<idx_t> adjncy, xadj, perm, iPerm;
         xadj.resize(nCell + 1);
         xadj[0] = 0;
-        for (_METIS::idx_t iC = 0; iC < nCell; iC++)
-            xadj[iC + 1] = signedIntSafeAdd<_METIS::idx_t>(xadj[iC], size_t_to_signed<_METIS::idx_t>(cell2cellFaceV[iC].size())); //! check overflow!
+        for (idx_t iC = 0; iC < nCell; iC++)
+            xadj[iC + 1] = signedIntSafeAdd<idx_t>(xadj[iC], size_t_to_signed<idx_t>(cell2cellFaceV[iC].size())); //! check overflow!
         adjncy.resize(xadj.back());
-        for (_METIS::idx_t iC = 0; iC < nCell; iC++)
+        for (idx_t iC = 0; iC < nCell; iC++)
             std::copy(cell2cellFaceV[iC].begin(), cell2cellFaceV[iC].end(), adjncy.begin() + xadj[iC]);
-        _METIS::idx_t objval;
-        std::vector<_METIS::idx_t> partOut(nCell);
+        idx_t objval;
+        std::vector<idx_t> partOut(nCell);
 
         int ret{0};
         if (metisType == "RB")
-            ret = _METIS::METIS_PartGraphRecursive(
+            ret = METIS_PartGraphRecursive(
                 &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
                 &nPart, NULL, NULL, options, &objval, partOut.data());
         else if (metisType == "KWAY")
-            ret = _METIS::METIS_PartGraphKway(
+            ret = METIS_PartGraphKway(
                 &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
                 &nPart, NULL, NULL, options, &objval, partOut.data());
 
-        DNDS_assert_info(ret == _METIS::METIS_OK, fmt::format("Metis return not ok, [{}]", ret));
+        DNDS_assert_info(ret == METIS_OK, fmt::format("Metis return not ok, [{}]", ret));
 
         return partOut;
     }
 
     inline std::pair<std::vector<index>, std::vector<index>> ReorderSerialAdj_Metis(const tLocalMatStruct &mat)
     {
-        _METIS::idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat.size()));
-        _METIS::idx_t nCon{1}, options[METIS_NOPTIONS];
-        _METIS::METIS_SetDefaultOptions(options);
+        idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat.size()));
+        idx_t nCon{1}, options[METIS_NOPTIONS];
+        METIS_SetDefaultOptions(options);
         {
-            options[_METIS::METIS_OPTION_CTYPE] = _METIS::METIS_CTYPE_SHEM;
-            options[_METIS::METIS_OPTION_RTYPE] = _METIS::METIS_RTYPE_FM;
-            options[_METIS::METIS_OPTION_IPTYPE] = _METIS::METIS_IPTYPE_EDGE;
-            options[_METIS::METIS_OPTION_RTYPE] = _METIS::METIS_RTYPE_SEP1SIDED;
-            options[_METIS::METIS_OPTION_NSEPS] = 1;
-            options[_METIS::METIS_OPTION_NITER] = 10;
-            options[_METIS::METIS_OPTION_UFACTOR] = 30;
-            options[_METIS::METIS_OPTION_COMPRESS] = 0; // do not compress
-            // options[_METIS::METIS_OPTION_CCORDER] = 0; //use default?
-            options[_METIS::METIS_OPTION_SEED] = 0;    // ! seeding 0 for determined result
-            options[_METIS::METIS_OPTION_PFACTOR] = 0; // not removing large vertices
-            options[_METIS::METIS_OPTION_NUMBERING] = 0;
-            // options[_METIS::METIS_OPTION_DBGLVL] = _METIS::METIS_DBG_TIME | _METIS::METIS_DBG_IPART;
+            options[METIS_OPTION_CTYPE] = METIS_CTYPE_SHEM;
+            options[METIS_OPTION_RTYPE] = METIS_RTYPE_FM;
+            options[METIS_OPTION_IPTYPE] = METIS_IPTYPE_EDGE;
+            options[METIS_OPTION_RTYPE] = METIS_RTYPE_SEP1SIDED;
+            options[METIS_OPTION_NSEPS] = 1;
+            options[METIS_OPTION_NITER] = 10;
+            options[METIS_OPTION_UFACTOR] = 30;
+            options[METIS_OPTION_COMPRESS] = 0; // do not compress
+            // options[METIS_OPTION_CCORDER] = 0; //use default?
+            options[METIS_OPTION_SEED] = 0;    // ! seeding 0 for determined result
+            options[METIS_OPTION_PFACTOR] = 0; // not removing large vertices
+            options[METIS_OPTION_NUMBERING] = 0;
+            // options[METIS_OPTION_DBGLVL] = METIS_DBG_TIME | METIS_DBG_IPART;
         }
         const std::vector<std::vector<index>> &cell2cellFaceV = mat;
-        std::vector<_METIS::idx_t> adjncy, xadj, perm, iPerm;
+        std::vector<idx_t> adjncy, xadj, perm, iPerm;
         xadj.resize(nCell + 1);
         xadj[0] = 0;
-        for (_METIS::idx_t iC = 0; iC < nCell; iC++)
-            xadj[iC + 1] = signedIntSafeAdd<_METIS::idx_t>(xadj[iC], size_t_to_signed<_METIS::idx_t>(cell2cellFaceV[iC].size())); //! check overflow!
+        for (idx_t iC = 0; iC < nCell; iC++)
+            xadj[iC + 1] = signedIntSafeAdd<idx_t>(xadj[iC], size_t_to_signed<idx_t>(cell2cellFaceV[iC].size())); //! check overflow!
         adjncy.resize(xadj.back());
-        for (_METIS::idx_t iC = 0; iC < nCell; iC++)
+        for (idx_t iC = 0; iC < nCell; iC++)
             std::copy(cell2cellFaceV[iC].begin(), cell2cellFaceV[iC].end(), adjncy.begin() + xadj[iC]);
         perm.resize(nCell);
         iPerm.resize(nCell);
 
-        int ret = _METIS::METIS_NodeND(&nCell, xadj.data(), adjncy.data(), NULL, options, perm.data(), iPerm.data());
-        DNDS_assert_info(ret == _METIS::METIS_OK, fmt::format("Metis return not ok, [{}]", ret));
+        int ret = METIS_NodeND(&nCell, xadj.data(), adjncy.data(), NULL, options, perm.data(), iPerm.data());
+        DNDS_assert_info(ret == METIS_OK, fmt::format("Metis return not ok, [{}]", ret));
 
         std::vector<index> localFillOrderingNew2Old, localFillOrderingOld2New;
 
