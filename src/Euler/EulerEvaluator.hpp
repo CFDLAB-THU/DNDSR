@@ -1216,6 +1216,7 @@ namespace DNDS::Euler
             }
 
             /** A intuitive fix **/
+// #define USE_NS_SA_ALLOW_NEGATIVE_MEAN
 #ifndef USE_NS_SA_ALLOW_NEGATIVE_MEAN
             if constexpr (model == NS_SA || model == NS_SA_3D)
             {

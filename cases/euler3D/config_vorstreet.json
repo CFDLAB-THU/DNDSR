@@ -32,8 +32,8 @@
     "convergenceControl": {
         // "rhsThresholdInternal": 1e-10,
         // "nTimeStepInternal": 100000,
-        // "rhsThresholdInternal": 1e-2,
         "rhsThresholdInternal": 1e-3,
+        // "rhsThresholdInternal": 1e-3,
         "nTimeStepInternal": 100,
         "nTimeStepInternalMin": 20,
         "res_base": 0.0,
@@ -69,7 +69,7 @@
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 0,
         "nCFLRampLength": 100,
-        "CFLRampEnd": 40.0,
+        "CFLRampEnd": 10.0,
         "useLocalDt": true
     },
     "dataIOControl": {
@@ -78,7 +78,7 @@
         "meshReorderCells": true,
         "meshFile": "../data/mesh/CylinderB1_L8U2.cgns",
         // "outPltName": "../data/out/CylinderB1_L8_RANSTest/CylinderB1_L8_Rawstart2_PdT5_RM8",
-        "outPltName": "../data/out/CylinderB1_L8U2_RANSTest_01/CylinderB1_L8U2_Raw4dT05_TH3R_O4_GW2",
+        "outPltName": "../data/out/CylinderB1_L8U2_ILESTest/CylinderB1_L8U2_Rawstart4_PdT05_TH3_ILES_dF02R_O4_GW2",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -194,12 +194,10 @@
         "useScalarJacobian": false,
         "riemannSolverType": "Roe_M8",
         "rsMeanValueEig": 1,
-        // "rsIncFScale": 0.2,
+        "rsIncFScale": 0.2,
         "nCentralSmoothStep": 0,
         "SADESScale": 0.65,
-        "SADESMode": 1,
-        // "ransForce2nd": 1,
-        // "source2nd": 1,
+        "ransForce2nd": 1,
         "constMassForce": [
             0.0,
             0.0,
@@ -210,8 +208,7 @@
             1,
             0,
             0,
-            179.0714285714286,
-            1.3
+            179.0714285714286
         ],
         "idealGasProperty": {
             "gamma": 1.4,

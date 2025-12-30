@@ -152,6 +152,7 @@
         "riemannSolverType": "Roe_M1",
         // "rsRotateScheme": 1,
         "rsMeanValueEig": 1,
+        "ransForce2nd": 1,
         "RANSBottomLimit": 1e-5,
         "ransModel": "RANS_KOWilcox",
         "constMassForce": [
@@ -173,8 +174,7 @@
             ],
             "rpm": -9.548888888888890
         },
-        "boxInitializers": [
-        ],
+        "boxInitializers": [],
         "farFieldStaticValue": [
             1,
             0,
