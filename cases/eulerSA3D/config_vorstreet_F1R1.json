@@ -32,8 +32,8 @@
     "convergenceControl": {
         // "rhsThresholdInternal": 1e-10,
         // "nTimeStepInternal": 100000,
-        // "rhsThresholdInternal": 1e-2,
         "rhsThresholdInternal": 1e-3,
+        // "rhsThresholdInternal": 1e-3,
         "nTimeStepInternal": 100,
         "nTimeStepInternalMin": 20,
         "res_base": 0.0,
@@ -69,16 +69,16 @@
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 0,
         "nCFLRampLength": 100,
-        "CFLRampEnd": 40.0,
+        "CFLRampEnd": 10.0,
         "useLocalDt": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshReorderCells": true,
-        "meshFile": "../data/mesh/CylinderB1_L8U2.cgns",
+        "meshFile": "../data/mesh/CylinderB1F1R1_L2.cgns",
         // "outPltName": "../data/out/CylinderB1_L8_RANSTest/CylinderB1_L8_Rawstart2_PdT5_RM8",
-        "outPltName": "../data/out/CylinderB1_L8U2_RANSTest_01/CylinderB1_L8U2_Raw4dT05_TH3R_O4_GW2",
+        "outPltName": "../data/out/CylinderB1F1R1_L2_RANSTest/CylinderB1F1R1_L2_Rawstart4_PdT05_TH3_IDDES0_O4",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -108,7 +108,7 @@
         "PeriodicTranslation1": [
             0,
             0,
-            8
+            2
         ]
     },
     "implicitReconstructionControl": {
@@ -149,7 +149,7 @@
             "scaleMultiplier": 1.0,
             "dirWeightScheme": "HQM_OPT",
             "geomWeightScheme": "HQM_SD",
-            "geomWeightPower": 0.0,
+            "geomWeightPower": 0.5,
             "geomWeightBias": 1.0,
             // "geomWeightPower": 0.0,
             "_tail": 0
@@ -194,12 +194,9 @@
         "useScalarJacobian": false,
         "riemannSolverType": "Roe_M8",
         "rsMeanValueEig": 1,
-        // "rsIncFScale": 0.2,
         "nCentralSmoothStep": 0,
         "SADESScale": 0.65,
-        "SADESMode": 1,
-        // "ransForce2nd": 1,
-        // "source2nd": 1,
+        "ransForce2nd": 1,
         "constMassForce": [
             0.0,
             0.0,
