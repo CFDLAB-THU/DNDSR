@@ -1210,6 +1210,10 @@ namespace DNDS::Euler
             eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "00000",
                                  u, uRec);
         }
+        if (config.outputControl.restartOutAtInit)
+        {
+            PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + "00000");
+        }
 
         for (step = 1; step <= config.timeMarchControl.nTimeStep; step++)
         {

@@ -1146,7 +1146,7 @@ namespace DNDS::Euler
 
                         real ret = exprtkEval.Evaluate();
 
-                        DNDS_assert_info(ret == 0.0, "return of \n" + exprStr + "\nis non-zero");
+                        DNDS_check_throw_info(ret == 0.0, "return of \n" + exprStr + "\nis non-zero");
                         allIn = allIn && exprtkEval.Var("inRegion");
                         someIn = someIn || exprtkEval.Var("inRegion");
 
@@ -1154,7 +1154,17 @@ namespace DNDS::Euler
                             for (int i = 0; i < nVars; i++)
                                 uPrimitive(i) = exprtkEval.VarVec("UPrim", i);
                         Gas::IdealGasThermalPrimitive2Conservative<dim>(uPrimitive, inc, settings.idealGasProperty.gamma);
-
+                        if (!inc.allFinite())
+                        {
+                            std::ostringstream oss0, oss1, oss2;
+                            oss0 << uPrimitive.transpose();
+                            oss1 << inc.transpose();
+                            oss2 << "x=" << pPhysics.transpose();
+                            DNDS_check_throw_info(
+                                false,
+                                fmt::format("Got invalid exprtk product:  [{}] -> [{}]\n{}\n {}\n",
+                                            oss0.str(), oss1.str(), oss2.str(), exprStr));
+                        }
                         inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
                     });
                 // if (allIn)

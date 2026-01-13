@@ -216,6 +216,7 @@ namespace DNDS::Euler
                     "fluxWall", "CL", "CD", "AoA"};
                 int nPrecisionLog = 10;
                 bool dataOutAtInit = false;
+                bool restartOutAtInit = false;
                 int nDataOut = 10000;
                 int nDataOutC = 50;
                 int nDataOutInternal = 10000;
@@ -239,7 +240,7 @@ namespace DNDS::Euler
                     consoleMainOutputFormat,
                     consoleMainOutputFormatInternal,
                     logfileOutputTitles, nPrecisionLog,
-                    dataOutAtInit,
+                    dataOutAtInit, restartOutAtInit,
                     nDataOut, nDataOutC,
                     nDataOutInternal, nDataOutCInternal,
                     nRestartOut, nRestartOutC,
