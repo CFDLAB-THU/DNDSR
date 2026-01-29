@@ -739,7 +739,7 @@ namespace DNDS::Euler::Gas
             Roe_EntropyFixer<eigScheme>(std::sqrt(asqrLm), std::sqrt(asqrRm), aRoe,
                                         veloLm0, veloRm0, veloRoe0,
                                         (veloLm - vg).norm(), (veloRm - vg).norm(), (veloRoe - vg).norm(),
-                                        dLambda, fixScale,
+                                        dLambda, fixScale, incFScale,
                                         lam0, lam123, lam4);
 
         Eigen::Vector<real, dim + 2> incU =
