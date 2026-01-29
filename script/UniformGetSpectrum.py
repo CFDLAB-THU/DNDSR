@@ -34,8 +34,11 @@ coordsIJKMin = np.min(coordsIJK)
 print(f"coordsIJKMin {coordsIJKMin}, coordsIJKMax {coordsIJKMax}")
 print(coordsIJK[0:10, :])
 coordsIJKInt = np.int64(coordsIJK)
+# End of reading VTKHDF data
 
 VeloG = np.zeros(shape=(NGrid + 1, NGrid + 1, NGrid + 1, 3), dtype=np.double)
+
+# Input velocity field
 VeloG[coordsIJKInt[:, 0], coordsIJKInt[:, 1], coordsIJKInt[:, 2], 0:3] = velo
 
 VeloGM = VeloG[0:NGrid, 0:NGrid, 0:NGrid, :]

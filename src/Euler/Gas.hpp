@@ -657,6 +657,12 @@ namespace DNDS::Euler::Gas
         }
     }
 
+    inline real incFScaleFixer(real incFScale, real dLambda, real lambdaMax)
+    {
+        const real incFScaleC = std::clamp(incFScale * 0.25 * dLambda / (lambdaMax + verySmallReal), incFScale, 1.0);
+        return incFScaleC;
+    }
+
     template <int dim = 3, int eigScheme = 0,
               typename TUL, typename TUR,
               typename TULm, typename TURm,
@@ -766,7 +772,9 @@ namespace DNDS::Euler::Gas
             (veloRoe - aRoe * n) * alpha0 + (veloRoe + aRoe * n) * alpha4 +
             veloRoe * alpha1 + alpha23VT;
 
-        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = (FL + FR) * 0.5 - 0.5 * incFScale * incF;
+        const real incFScaleC = incFScaleFixer(incFScale, dLambda, std::abs(veloRoe0) + std::abs(aRoe));
+
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = (FL + FR) * 0.5 - 0.5 * incFScaleC * incF;
     }
 
     template <int dim = 3, typename TUL, typename TUR, typename TVecV, typename TUOut>
@@ -976,7 +984,9 @@ namespace DNDS::Euler::Gas
         // incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), EigenAll) =
         //     (veloRoe.array() - (aRoe * n).array().colwise()) * alpha0 * (veloRoe.array() + (aRoe * n).array().colwise()) * alpha4;
 
-        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll) = (FL + FR) * 0.5 - 0.5 * incFScale * incF;
+        const real incFScaleC = incFScaleFixer(incFScale, dLambda, std::abs(veloRoeRN) + std::abs(aRoe));
+
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll) = (FL + FR) * 0.5 - 0.5 * incFScaleC * incF;
     }
 
     template <int dim = 3,

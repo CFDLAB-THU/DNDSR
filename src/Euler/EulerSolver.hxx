@@ -860,7 +860,8 @@ namespace DNDS::Euler
                                              betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
                                              TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration |
                                                  TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
-                                                 (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+                                                 (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags) |
+                                                 TEval::RHS_Recover_IncFScale);
                         else if (mgLevel == 2)
                             eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
                                              config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
@@ -871,7 +872,8 @@ namespace DNDS::Euler
                                                  TEval::RHS_Dont_Update_Integration |
                                                  (TEval::RHS_Ignore_Viscosity * use_1st_conv_ignore_vis) |
                                                  TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
-                                                 (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+                                                 (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags) |
+                                                 TEval::RHS_Recover_IncFScale);
                         else
                             DNDS_assert(false);
                     };

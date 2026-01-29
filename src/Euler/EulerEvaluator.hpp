@@ -261,6 +261,7 @@ namespace DNDS::Euler
         static const uint64_t RHS_Direct_2nd_Rec_1st_Conv = 0x1ull << 9;
         static const uint64_t RHS_Direct_2nd_Rec_use_limiter = 0x1ull << 10;
         static const uint64_t RHS_Direct_2nd_Rec_already_have_uGradBufNoLim = 0x1ull << 11;
+        static const uint64_t RHS_Recover_IncFScale = 0x1ull << 12;
 
         /**
          * @brief

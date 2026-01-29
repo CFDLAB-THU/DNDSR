@@ -1,5 +1,6 @@
 #pragma once
 #include "EulerEvaluator.hpp"
+#include "DNDS/CppUtils/ScopedValueAlternator.hpp"
 #include <fmt/core.h>
 
 namespace DNDS::Euler
@@ -43,15 +44,26 @@ namespace DNDS::Euler
                 v.setZero();
         nFaceReducedOrder = 0;
 
-        bool ignoreVis = flags & RHS_Ignore_Viscosity;
-        bool dontUpdateIntegration = flags & RHS_Dont_Update_Integration;
-        bool dontUpdateBndFlux = flags & RHS_Dont_Record_Bud_Flux;
-        bool direct2ndRec = flags & RHS_Direct_2nd_Rec;
-        bool direct2ndRec1stConv = flags & RHS_Direct_2nd_Rec_1st_Conv;
-        bool direct2ndUseLimiter = flags & RHS_Direct_2nd_Rec_use_limiter;
-        bool direct2ndRec_already_have_uGradBufNoLim = flags & RHS_Direct_2nd_Rec_already_have_uGradBufNoLim;
+        const bool ignoreVis = flags & RHS_Ignore_Viscosity;
+        const bool dontUpdateIntegration = flags & RHS_Dont_Update_Integration;
+        const bool dontUpdateBndFlux = flags & RHS_Dont_Record_Bud_Flux;
+        const bool direct2ndRec = flags & RHS_Direct_2nd_Rec;
+        const bool direct2ndRec1stConv = flags & RHS_Direct_2nd_Rec_1st_Conv;
+        const bool direct2ndUseLimiter = flags & RHS_Direct_2nd_Rec_use_limiter;
+        const bool direct2ndRec_already_have_uGradBufNoLim = flags & RHS_Direct_2nd_Rec_already_have_uGradBufNoLim;
+        const bool recoverIncFScale = flags & RHS_Recover_IncFScale;
+
         DNDS_assert(direct2ndRec1stConv ? direct2ndRec : true);
         auto rsType = settings.rsType;
+
+        // recover the upwind factor if using direct2ndRec
+        std::unique_ptr<ScopedValueAlternator<real>> p_rsIncFScaleAlternator;
+        if (recoverIncFScale)
+        {
+            std::cout << settings.rsIncFScale << std::endl;
+            p_rsIncFScaleAlternator = std::make_unique<ScopedValueAlternator<real>>(settings.rsIncFScale, 1.0);
+        }
+
 #ifdef USE_MG_O1_LLF_FLUX
         if (direct2ndRec)
             rsType = Gas::Roe_M2; // to LLF flux
