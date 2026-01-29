@@ -534,7 +534,7 @@ namespace DNDS::Euler::Gas
     void Roe_EntropyFixer(const real aL, const real aR, const real aAve,
                           const real uL, const real uR, const real uAve,
                           const real VL, const real VR, const real VAve, // V is magnitude of velo
-                          real dLambda, real fixScale,
+                          real dLambda, real fixScale, real incFScale,
                           real &lam0, real &lam123, real &lam4)
     {
         const real scaleHartenYee = 0.05 * fixScale;
@@ -545,16 +545,16 @@ namespace DNDS::Euler::Gas
             //*H2
             auto Flim = [=](real v, real lam, real lamL, real lamR)
             {
-                real thresH = std::max<real>({0., lam - lamL, lamR - lam}) * scaleHartenYee;
+                const real thresH = std::max<real>({0., lam - lamL, lamR - lam}) * scaleHartenYee;
                 if (v < thresH)
                     return (sqr(v) / thresH + thresH) * 0.5;
                 else
                     return v;
             };
 
-            lam0 = Flim(lam0, uAve - aAve, uL - aL, uR - aR);
-            lam123 = Flim(lam123, uAve, uL, uR);
-            lam4 = Flim(lam4, uAve + aAve, uL + aL, uR + aR);
+            lam0 = Flim(lam0 * incFScale, uAve - aAve, uL - aL, uR - aR);
+            lam123 = Flim(lam123 * incFScale, uAve, uL, uR);
+            lam4 = Flim(lam4 * incFScale, uAve + aAve, uL + aL, uR + aR);
             //*H2
 
             // lam0 = std::max(lam0, dLambda * scaleHFix);
@@ -564,12 +564,12 @@ namespace DNDS::Euler::Gas
         else if constexpr (eigScheme == 1)
         {
             //* cLLF
-            real aLm = aL;
-            real aRm = aR;
-            real veloLm0 = uL;
-            real veloRm0 = uR;
-            real uLm = signTol(veloLm0, aLm * smallReal) * std::max(std::abs(veloLm0), aLm * scaleLD);
-            real uRm = signTol(veloRm0, aRm * smallReal) * std::max(std::abs(veloRm0), aRm * scaleLD);
+            const real aLm = aL * incFScale;
+            const real aRm = aR * incFScale;
+            const real veloLm0 = uL;
+            const real veloRm0 = uR;
+            const real uLm = signTol(veloLm0, aLm * smallReal) * std::max(std::abs(veloLm0) * incFScale, aLm * scaleLD);
+            const real uRm = signTol(veloRm0, aRm * smallReal) * std::max(std::abs(veloRm0) * incFScale, aRm * scaleLD);
             lam0 = std::max(std::abs(uLm - aLm), std::abs(uRm - aRm));
             lam123 = std::max(std::abs(uLm), std::abs(uRm));
             lam4 = std::max(std::abs(uLm + aLm), std::abs(uRm + aRm));
@@ -580,10 +580,10 @@ namespace DNDS::Euler::Gas
             /**
              * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
              */
-            real LDthreshold = std::abs(uAve) / scaleLD;
-            real aRoeStar = std::min(LDthreshold, aAve);
-            lam0 = std::abs(uAve - aRoeStar);
-            lam4 = std::abs(uAve + aRoeStar);
+            const real LDthreshold = std::abs(uAve) / scaleLD;
+            const real aRoeStar = std::min(LDthreshold, aAve * incFScale);
+            lam0 = std::abs(uAve * incFScale - aRoeStar);
+            lam4 = std::abs(uAve * incFScale + aRoeStar);
         }
         else if constexpr (eigScheme == 4)
         {
@@ -592,13 +592,13 @@ namespace DNDS::Euler::Gas
              * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
              */
 #ifdef USE_SIGN_MINUS_AT_ROE_M4_FLUX
-            real uStar = signM(uAve) * std::max(aAve * scaleLD, std::abs(uAve));
+            const real uStar = signM(uAve) * std::max(aAve * scaleLD, std::abs(uAve));
 #else
-            real uStar = signTol(uAve, aAve * smallReal) * std::max(aAve * scaleLD, std::abs(uAve)); //! why signM here?
+            const real uStar = signTol(uAve, aAve * smallReal) * std::max(aAve * scaleLD, std::abs(uAve) * incFScale); //! why signM here?
 #endif
-            lam0 = std::abs(uStar - aAve);
+            lam0 = std::abs(uStar - aAve * incFScale);
             lam123 = std::abs(uStar);
-            lam4 = std::abs(uStar + aAve);
+            lam4 = std::abs(uStar + aAve * incFScale);
         }
         else if constexpr (eigScheme == 5)
         {
@@ -606,10 +606,10 @@ namespace DNDS::Euler::Gas
             /**
              * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
              */
-            real veloLm0 = uL;
-            real veloRm0 = uR;
-            real aLm = std::min(aL, std::abs(veloLm0) / scaleLD);
-            real aRm = std::min(aR, std::abs(veloRm0) / scaleLD);
+            const real veloLm0 = uL * incFScale;
+            const real veloRm0 = uR * incFScale;
+            const real aLm = std::min(aL * incFScale, std::abs(veloLm0) / scaleLD);
+            const real aRm = std::min(aR * incFScale, std::abs(veloRm0) / scaleLD);
             lam0 = std::max(std::abs(veloLm0 - aLm), std::abs(veloRm0 - aRm));
             lam123 = std::max(std::abs(veloLm0), std::abs(veloRm0));
             lam4 = std::max(std::abs(veloLm0 + aLm), std::abs(veloRm0 + aRm));
@@ -617,15 +617,18 @@ namespace DNDS::Euler::Gas
         }
         else if constexpr (eigScheme == 6) // simply H-correction
         {
-            lam0 = std::max(lam0, dLambda * scaleHFix);
-            lam4 = std::max(lam4, dLambda * scaleHFix);
-            lam123 = std::max(lam123, dLambda * scaleHFix);
+            lam0 = std::max(lam0 * incFScale, dLambda * scaleHFix);
+            lam4 = std::max(lam4 * incFScale, dLambda * scaleHFix);
+            lam123 = std::max(lam123 * incFScale, dLambda * scaleHFix);
         }
         else if constexpr (eigScheme == 7) // simply Harten-Yee-fix
         {
+            lam0 *= incFScale;
+            lam4 *= incFScale;
+            lam123 *= incFScale;
             //*HY
-            real thresholdHartenYee = scaleHartenYee * (VAve + aAve);
-            real thresholdHartenYeeS = sqr(thresholdHartenYee);
+            const real thresholdHartenYee = scaleHartenYee * (VAve + aAve);
+            const real thresholdHartenYeeS = sqr(thresholdHartenYee);
             if (lam0 < thresholdHartenYee)
                 lam0 = (sqr(lam0) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
             if (lam4 < thresholdHartenYee)
@@ -636,13 +639,13 @@ namespace DNDS::Euler::Gas
         }
         else if constexpr (eigScheme == 8) // H-cor + Harten-Yee-fix
         {
-            lam0 = std::max(lam0, dLambda * scaleHFix);
-            lam4 = std::max(lam4, dLambda * scaleHFix);
-            lam123 = std::max(lam123, dLambda * scaleHFix);
+            lam0 = std::max(lam0 * incFScale, dLambda * scaleHFix);
+            lam4 = std::max(lam4 * incFScale, dLambda * scaleHFix);
+            lam123 = std::max(lam123 * incFScale, dLambda * scaleHFix);
 
             //*HY
-            real thresholdHartenYee = scaleHartenYee * (VAve + aAve);
-            real thresholdHartenYeeS = sqr(thresholdHartenYee);
+            const real thresholdHartenYee = scaleHartenYee * (VAve + aAve);
+            const real thresholdHartenYeeS = sqr(thresholdHartenYee);
             if (lam0 < thresholdHartenYee)
                 lam0 = (sqr(lam0) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
             if (lam4 < thresholdHartenYee)
@@ -655,12 +658,6 @@ namespace DNDS::Euler::Gas
         {
             DNDS_assert(false);
         }
-    }
-
-    inline real incFScaleFixer(real incFScale, real dLambda, real lambdaMax)
-    {
-        const real incFScaleC = std::clamp(incFScale * 0.25 * dLambda / (lambdaMax + verySmallReal), incFScale, 1.0);
-        return incFScaleC;
     }
 
     template <int dim = 3, int eigScheme = 0,
@@ -772,9 +769,7 @@ namespace DNDS::Euler::Gas
             (veloRoe - aRoe * n) * alpha0 + (veloRoe + aRoe * n) * alpha4 +
             veloRoe * alpha1 + alpha23VT;
 
-        const real incFScaleC = incFScaleFixer(incFScale, dLambda, std::abs(veloRoe0) + std::abs(aRoe));
-
-        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = (FL + FR) * 0.5 - 0.5 * incFScaleC * incF;
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = (FL + FR) * 0.5 - 0.5 * incF;
     }
 
     template <int dim = 3, typename TUL, typename TUR, typename TVecV, typename TUOut>
@@ -944,7 +939,7 @@ namespace DNDS::Euler::Gas
             Roe_EntropyFixer<eigScheme>(std::sqrt(asqrLm), std::sqrt(asqrRm), aRoe,
                                         veloLm0, veloRm0, veloRoeRN,
                                         (veloLm - vgm).norm(), (veloRm - vgm).norm(), (veloRoe - vgm).norm(),
-                                        dLambda, fixScale,
+                                        dLambda, fixScale, incFScale,
                                         lam0, lam123, lam4);
 
         TU5_Batch incU =
@@ -984,9 +979,7 @@ namespace DNDS::Euler::Gas
         // incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), EigenAll) =
         //     (veloRoe.array() - (aRoe * n).array().colwise()) * alpha0 * (veloRoe.array() + (aRoe * n).array().colwise()) * alpha4;
 
-        const real incFScaleC = incFScaleFixer(incFScale, dLambda, std::abs(veloRoeRN) + std::abs(aRoe));
-
-        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll) = (FL + FR) * 0.5 - 0.5 * incFScaleC * incF;
+        F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>), EigenAll) = (FL + FR) * 0.5 - 0.5 * incF;
     }
 
     template <int dim = 3,
