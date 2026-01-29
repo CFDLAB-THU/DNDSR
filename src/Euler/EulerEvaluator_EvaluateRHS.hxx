@@ -59,10 +59,7 @@ namespace DNDS::Euler
         // recover the upwind factor if using direct2ndRec
         std::unique_ptr<ScopedValueAlternator<real>> p_rsIncFScaleAlternator;
         if (recoverIncFScale)
-        {
-            std::cout << settings.rsIncFScale << std::endl;
             p_rsIncFScaleAlternator = std::make_unique<ScopedValueAlternator<real>>(settings.rsIncFScale, 1.0);
-        }
 
 #ifdef USE_MG_O1_LLF_FLUX
         if (direct2ndRec)
