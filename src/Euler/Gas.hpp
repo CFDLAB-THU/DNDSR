@@ -540,6 +540,7 @@ namespace DNDS::Euler::Gas
         const real scaleHartenYee = 0.05 * fixScale;
         const real scaleLD = 0.2 * fixScale;
         const real scaleHFix = 0.25 * fixScale;
+        static const real incFScaleA = 1.0;
         if constexpr (eigScheme == 0)
         {
             //*H2
@@ -552,9 +553,9 @@ namespace DNDS::Euler::Gas
                     return v;
             };
 
-            lam0 = Flim(lam0 * incFScale, uAve - aAve, uL - aL, uR - aR);
+            lam0 = Flim(lam0 * incFScaleA, uAve - aAve, uL - aL, uR - aR);
             lam123 = Flim(lam123 * incFScale, uAve, uL, uR);
-            lam4 = Flim(lam4 * incFScale, uAve + aAve, uL + aL, uR + aR);
+            lam4 = Flim(lam4 * incFScaleA, uAve + aAve, uL + aL, uR + aR);
             //*H2
 
             // lam0 = std::max(lam0, dLambda * scaleHFix);
@@ -564,8 +565,8 @@ namespace DNDS::Euler::Gas
         else if constexpr (eigScheme == 1)
         {
             //* cLLF
-            const real aLm = aL * incFScale;
-            const real aRm = aR * incFScale;
+            const real aLm = aL * incFScaleA;
+            const real aRm = aR * incFScaleA;
             const real veloLm0 = uL;
             const real veloRm0 = uR;
             const real uLm = signTol(veloLm0, aLm * smallReal) * std::max(std::abs(veloLm0) * incFScale, aLm * scaleLD);
@@ -581,7 +582,7 @@ namespace DNDS::Euler::Gas
              * Nico Fleischmann, Stefan Adami, Xiangyu Y. Hu, Nikolaus A. Adams, A low dissipation method to cure the grid-aligned shock instability, 2020
              */
             const real LDthreshold = std::abs(uAve) / scaleLD;
-            const real aRoeStar = std::min(LDthreshold, aAve * incFScale);
+            const real aRoeStar = std::min(LDthreshold, aAve * incFScaleA);
             lam0 = std::abs(uAve * incFScale - aRoeStar);
             lam4 = std::abs(uAve * incFScale + aRoeStar);
         }
@@ -596,9 +597,9 @@ namespace DNDS::Euler::Gas
 #else
             const real uStar = signTol(uAve, aAve * smallReal) * std::max(aAve * scaleLD, std::abs(uAve) * incFScale); //! why signM here?
 #endif
-            lam0 = std::abs(uStar - aAve * incFScale);
+            lam0 = std::abs(uStar - aAve * incFScaleA);
             lam123 = std::abs(uStar);
-            lam4 = std::abs(uStar + aAve * incFScale);
+            lam4 = std::abs(uStar + aAve * incFScaleA);
         }
         else if constexpr (eigScheme == 5)
         {
@@ -608,8 +609,8 @@ namespace DNDS::Euler::Gas
              */
             const real veloLm0 = uL * incFScale;
             const real veloRm0 = uR * incFScale;
-            const real aLm = std::min(aL * incFScale, std::abs(veloLm0) / scaleLD);
-            const real aRm = std::min(aR * incFScale, std::abs(veloRm0) / scaleLD);
+            const real aLm = std::min(aL * incFScaleA, std::abs(veloLm0) / scaleLD);
+            const real aRm = std::min(aR * incFScaleA, std::abs(veloRm0) / scaleLD);
             lam0 = std::max(std::abs(veloLm0 - aLm), std::abs(veloRm0 - aRm));
             lam123 = std::max(std::abs(veloLm0), std::abs(veloRm0));
             lam4 = std::max(std::abs(veloLm0 + aLm), std::abs(veloRm0 + aRm));
@@ -617,15 +618,15 @@ namespace DNDS::Euler::Gas
         }
         else if constexpr (eigScheme == 6) // simply H-correction
         {
-            lam0 = std::max(lam0 * incFScale, dLambda * scaleHFix);
-            lam4 = std::max(lam4 * incFScale, dLambda * scaleHFix);
-            lam123 = std::max(lam123 * incFScale, dLambda * scaleHFix);
+            lam0 = std::max(std::abs(uAve * incFScale - aAve * incFScaleA), dLambda * scaleHFix);
+            lam4 = std::max(std::abs(uAve * incFScale + aAve * incFScaleA), dLambda * scaleHFix);
+            lam123 = std::max(std::abs(uAve * incFScale), dLambda * scaleHFix);
         }
         else if constexpr (eigScheme == 7) // simply Harten-Yee-fix
         {
-            lam0 *= incFScale;
-            lam4 *= incFScale;
-            lam123 *= incFScale;
+            lam0 *= std::abs(uAve * incFScale - aAve * incFScaleA);
+            lam4 *= std::abs(uAve * incFScale + aAve * incFScaleA);
+            lam123 *= std::abs(uAve * incFScale);
             //*HY
             const real thresholdHartenYee = scaleHartenYee * (VAve + aAve);
             const real thresholdHartenYeeS = sqr(thresholdHartenYee);
@@ -639,9 +640,9 @@ namespace DNDS::Euler::Gas
         }
         else if constexpr (eigScheme == 8) // H-cor + Harten-Yee-fix
         {
-            lam0 = std::max(lam0 * incFScale, dLambda * scaleHFix);
-            lam4 = std::max(lam4 * incFScale, dLambda * scaleHFix);
-            lam123 = std::max(lam123 * incFScale, dLambda * scaleHFix);
+            lam0 = std::max(std::abs(uAve * incFScale - aAve * incFScaleA), dLambda * scaleHFix);
+            lam4 = std::max(std::abs(uAve * incFScale + aAve * incFScaleA), dLambda * scaleHFix);
+            lam123 = std::max(std::abs(uAve * incFScale), dLambda * scaleHFix);
 
             //*HY
             const real thresholdHartenYee = scaleHartenYee * (VAve + aAve);
