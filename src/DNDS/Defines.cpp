@@ -7,7 +7,7 @@
 #include <boost/stacktrace.hpp>
 // #include <cpptrace.hpp>
 
-#if defined(linux) || defined(_UNIX) || defined(__linux__)
+#ifdef DNDS_UNIX_LIKE
 #    include <unistd.h>
 #    include <sys/ioctl.h>
 #    define _isatty isatty

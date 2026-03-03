@@ -231,7 +231,7 @@ namespace DNDS::Euler::Gas
             U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) * dvn + unitNorm * dp;
         F(dim + 1) = (dU(dim + 1) + dp) * vn + (U(dim + 1) + p) * dvn;
         static const auto SeqI52Last = Eigen::seq(Eigen::fix<dim + 2>, EigenLast);
-        if constexpr (U.RowsAtCompileTime == Eigen::Dynamic || U.RowsAtCompileTime > dim + 2)
+        if constexpr (TU::RowsAtCompileTime == Eigen::Dynamic || TU::RowsAtCompileTime > dim + 2)
             F(SeqI52Last) = dU(SeqI52Last) * vn + U(SeqI52Last) * dvn;
         F -= dU * vg.dot(unitNorm);
     }

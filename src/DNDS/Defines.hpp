@@ -20,8 +20,13 @@
 #include <locale>
 #include <csignal>
 #include <cstdarg>
+#include <cstdlib>  // must be included before fmt headers for malloc/free with libc++ _LIBCPP_REMOVE_TRANSITIVE_INCLUDES
 
 #include <fmt/core.h>
+
+#if defined(linux) || defined(_UNIX) || defined(__linux__) ||  defined(__unix__) || defined(__APPLE__)
+#     define DNDS_UNIX_LIKE
+#endif
 
 #ifdef DNDS_USE_OMP
 #    include <omp.h>
