@@ -6,8 +6,10 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include "MPI.hpp"
+#include "Profiling.hpp"
 
-#if defined(linux) || defined(_UNIX) || defined(__linux__)
+#ifdef DNDS_UNIX_LIKE
 #    include <sys/ptrace.h>
 #    include <unistd.h>
 #    include <sys/stat.h>
@@ -18,8 +20,6 @@
 #    include <process.h>
 #endif
 
-#include "MPI.hpp"
-#include "Profiling.hpp"
 
 #ifdef NDEBUG
 #    define NDEBUG_DISABLED
@@ -31,7 +31,7 @@ namespace DNDS::Debug
     bool IsDebugged()
     {
 
-#if defined(linux) || defined(_UNIX) || defined(__linux__)
+#ifdef DNDS_UNIX_LIKE
         std::ifstream fin("/proc/self/status"); // able to detect gdb
         std::string buf;
         int tpid = 0;
@@ -54,7 +54,7 @@ namespace DNDS::Debug
 
     void MPIDebugHold(const MPIInfo &mpi)
     {
-#if defined(linux) || defined(_UNIX) || defined(__linux__)
+#ifdef DNDS_UNIX_LIKE
         MPISerialDo(mpi, [&]
                     { log() << "Rank " << mpi.rank << " PID: " << getpid() << std::endl; });
 #endif
@@ -115,7 +115,7 @@ namespace DNDS
         std::array<char, 512> bufTime;
         std::array<char, 512 + 32> buf;
         int64_t pid = 0;
-#if defined(linux) || defined(_UNIX) || defined(__linux__)
+#ifdef DNDS_UNIX_LIKE
         // pid = Debug::getpid();
         pid = getpid();
 #endif
