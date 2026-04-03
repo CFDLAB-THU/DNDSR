@@ -92,14 +92,14 @@
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 1,
+        "jacobiCode": 2,
         "sgsIter": 0,
         "sgsWithRec": 0,
         "gmresCode": 0,
         "gmresScale": 2,
         "nGmresSpace": 5,
         "nGmresIter": 1,
-        "multiGridLP": 0,
+        "multiGridLP": 2,
         "multiGridLPInnerNIter": 4,
         "multiGridLPInnerNSee": 100,
         "coarseGridLinearSolverControlList": {

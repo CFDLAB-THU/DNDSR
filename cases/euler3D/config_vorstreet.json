@@ -65,7 +65,7 @@
         //     "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"
         // ],
         "dataOutAtInit": true,
-        // "restartOutAtInit": true,
+        "restartOutAtInit": true,
         "_tail": 0
     },
     "implicitCFLControl": {
@@ -98,14 +98,6 @@
             "hdfChunkSize": 32768,
             "jsonBinaryDeflateLevel": 5,
             "jsonUseCodecOnUInt8": true
-        },
-        // we specify the mesh partition to ensure it being consisent
-        "meshPartitionOptions": {
-            "metisType": "KWAY",
-            "metisUfactor": 20,
-            "metisSeed": 0,
-            "edgeWeightMethod": 0,
-            "metisNcuts": 3
         }
     },
     "boundaryDefinition": {
@@ -280,7 +272,7 @@
         "odeCodePrev": -1,
         // "lastRestartFile": "../data/outCylinderB1/CylinderB1_T0Starter/out_bdf2__10000_p8.restart.dnds.h5"
         // "lastRestartFile": "../data/outCylinderB1/CylinderB1_T0Starter/out_bdf2_u2r2Refine__10000_p8.restart.dnds.h5"
-        // "lastRestartFile": "../data/out/CylinderB1_L8U2_ILESTest/CylinderB1_L8U2_Rawstart4_PdT05_TH3_ILES_dF02R_O4_GW2__14000_p224.restart.dnds.h5"
-        "lastRestartFile": "../data/out/CylinderB1_L8U2_ILESTest/CylinderB1_L8U2_Rawstart4_PdT05_TH3_ILES_dF02R_O4_GW2__14000_p224.restart.dnds.h5.to_p64.dnds.h5"
+        "lastRestartFile": "../data/out/CylinderB1_L8U2_ILESTest/CylinderB1_L8U2_Rawstart4_PdT05_TH3_ILES_dF02R_O4_GW2__20000_p224.restart.dnds.h5"
+        // "lastRestartFile": "../data/out/CylinderB1_L8U2_ILESTest/CylinderB1_L8U2_Rawstart4_PdT05_TH3_ILES_dF02R_O4_GW2__14000_p224.restart.dnds.h5.to_p64.dnds.h5"
     }
 }

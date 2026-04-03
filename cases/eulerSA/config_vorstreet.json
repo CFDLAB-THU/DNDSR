@@ -3,7 +3,7 @@
         // "dtImplicit": 0.05,
         "dtImplicit": 0.1,
         "nTimeStep": 10000,
-        "steadyQuit": true,
+        // "steadyQuit": true,
         "odeCode": 202, // esdirk3
         // "odeCode": 1,
         // "odeCode": 0,
@@ -27,15 +27,15 @@
         "_tail": 0
     },
     "convergenceControl": {
-        "rhsThresholdInternal": 1e-10,
-        "nTimeStepInternal": 100000,
+        // "rhsThresholdInternal": 1e-10,
+        // "nTimeStepInternal": 100000,
         // "nTimeStepInternalMin": 11,
-        // "nTimeStepInternal": 2000,
-        // "rhsThresholdInternal": 1e-4,
+        "nTimeStepInternal": 100,
+        "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
         "resBaseType": 1,
-        // "useVolWiseResidual": true,
-        "useVolWiseResidual": false,
+        "useVolWiseResidual": true,
+        // "useVolWiseResidual": false,
         "mergeMultiResidual": 1,
         "normOrd": 1,
         "_tail": 0
@@ -46,7 +46,7 @@
         "consoleOutputMode": 1,
         "consoleOutputEveryFix": 1,
         "nDataOutC": 100,
-        "nDataOut": 1000,
+        "nDataOut": 100,
         "nDataOutCInternal": 200,
         "nDataOutInternal": 1000000000,
         "nRestartOutC": 100,
@@ -61,7 +61,7 @@
         "dataOutAtInit": true
     },
     "implicitCFLControl": {
-        "CFL": 50.0,
+        "CFL": 10.0,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 2147483647,
         "nCFLRampLength": 2147483647,
@@ -73,7 +73,7 @@
         "meshRotZ": 0.0,
         "meshReorderCells": true,
         "meshFile": "../data/mesh/CylinderB1.cgns",
-        "outPltName": "../data/out/CylinderB1_RANSTest/test_0",
+        "outPltName": "../data/out/CylinderB1_RANSTest/test_1",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -177,7 +177,7 @@
         "useScalarJacobian": false,
         "riemannSolverType": "Roe_M6",
         "nCentralSmoothStep": 0,
-        // "SADESScale": 0.65,
+        "SADESScale": 0.65,
         "constMassForce": [
             0.0,
             0.0,

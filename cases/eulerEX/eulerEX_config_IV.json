@@ -45,10 +45,10 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshDirectBisect": 4,
+        "meshDirectBisect": 0,
         "meshElevation": 0,
         "meshFile": "../data/mesh/IV10_10.cgns",
-        "outPltName": "../data/outUnsteady/IV10_xxx-conv",
+        "outPltName": "../data/outUnsteady/IV10_xxx-conv_callgrind",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,

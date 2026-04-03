@@ -1,9 +1,9 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 2e-2,
+        "dtImplicit": 0.125e-2,
         "nTimeStep": 100000,
         "steadyQuit": false,
-        "tEnd": 32e-2,
+        "tEnd": 1e-2,
         "odeCode": 0,
         // "odeCode": 401,
         "odeSetting1": 0.5,
@@ -38,7 +38,7 @@
         "useLocalDt": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 40,
+        "nTimeStepInternal": 4000,
         "rhsThresholdInternal": 1e-8,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -46,11 +46,11 @@
     "dataIOControl": {
         "uniqueStamps": false,
         "meshRotZ": 0.0,
-        "meshDirectBisect": 1,
+        "meshDirectBisect": 3,
         "meshElevation": 0,
         "meshReorderCells": true,
-        "meshFile": "../data/mesh/IV10_160.cgns",
-        "outPltName": "../data/outUnsteady/PP5/IV_Large/out_B4",
+        "meshFile": "../data/mesh/IV10_20.cgns",
+        "outPltName": "../data/outUnsteady/IV_MG/out_B0",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -76,7 +76,7 @@
         ]
     },
     "implicitReconstructionControl": {
-        "nInternalRecStep": 5,
+        "nInternalRecStep": 1,
         "zeroGrads": false,
         "recLinearScheme": 0,
         "nGmresSpace": 5,
@@ -116,7 +116,8 @@
         "functionalSettings": {
             "scaleType": "BaryDiff",
             // "scaleMultiplier": 0.5,
-            "dirWeightScheme": "Factorial",
+            "dirWeightScheme": "HQM_OPT",
+            // "dirWeightScheme": "Factorial",
             "geomWeightScheme": "HQM_SD",
             "geomWeightPower": 0.5,
             "geomWeightBias": 1,
@@ -129,26 +130,26 @@
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 2,
-        "sgsIter": 1,
+        "jacobiCode": 0,
+        "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
         "nGmresSpace": 5,
         "nGmresIter": 1,
         "initWithLastURecInc": false,
-        "multiGridLP": 1,
+        "multiGridLP": 0,
         "multiGridLPInnerNIter": 4,
         "coarseGridLinearSolverControlList": {
             "1": {
-                "jacobiCode": 2,
+                "jacobiCode": 0,
                 "sgsIter": 0,
                 "gmresCode": 0,
                 "gmresScale": 0,
                 "nGmresIter": 2,
                 "nSgsConsoleCheck": 100,
                 "nGmresConsoleCheck": 100,
-                "multiGridNIter": 4,
+                "multiGridNIter": 3,
                 "multiGridNIterPost": 0,
                 "centralSmoothInputResidual": 0
             }

@@ -1,6 +1,6 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 10e-6,
+        "dtImplicit": 1e-6,
         "nTimeStep": 1000000,
         "steadyQuit": false,
         "useImplicitPP": false,
@@ -8,19 +8,31 @@
         "rhsFPPScale": 1,
         "rhsFPPRelax": 0.5,
         "odeCode": 0,
+        // "odeCode": 411,
+        // "odeSetting1": 0.5,
+        // "odeSetting2": 0,
+        // "odeSetting3": 0.75,
+        // "odeSetting4": 0,
+        // "odeSettingsExtra": {
+        //     "nMG": 0,
+        //     "thetaMMG": 1,
+        //     "coefIncMidMG": 1
+        // },
         "tEnd": 1e-3,
-        "odeSetting1": 0.5,
-        "odeSetting2": 1,
         // "dtCFLLimitScale": 100,
         // "dtIncreaseLimit": 1.2,
         "useDtPPLimit": true,
-        "dtPPLimitScale": 1
+        "dtPPLimitScale": 4
     },
     "convergenceControl": {
-        "nTimeStepInternal": 40,
+        "nTimeStepInternal": 100,
         "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
-        "useVolWiseResidual": true
+        "resBaseType": 1,
+        // "useVolWiseResidual": true,
+        "useVolWiseResidual": false,
+        "mergeMultiResidual": 1,
+        "_tail": 0
     },
     "outputControl": {
         "nConsoleCheck": 1,
@@ -60,7 +72,8 @@
         "meshFile": "../data/mesh/Unifrom_2DSedov11_160_HS.cgns",
         // "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_C1.cgns",
         // "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_WallCent.cgns",
-        "outPltName": "../data/outUnsteady/PP5/Sedov/Unifrom_2DSedov11_160_HS-10",
+        // "outPltName": "../data/outUnsteady/PPHM3/Sedov/Unifrom_2DSedov11_160_HS-1_dtls4_U2R2pre0p75m0",
+        "outPltName": "../data/outUnsteady/PP5/SedovRM/Unifrom_2DSedov11_160_HS-01_RM8",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -142,7 +155,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
-        "riemannSolverType": "Roe_M2",
+        "riemannSolverType": "Roe_M8",
         "rsMeanValueEig": 1,
         "nCentralSmoothStep": 0,
         "uRecAlphaCompressPower": 1,

@@ -3,7 +3,23 @@
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
+    "inputs": [
+        {
+            "id": "debugPort",
+            "type": "promptString",
+            "description": "Enter debugpy port (e.g., 9000)",
+            "default": "9000",
+            "password": false
+        }
+    ],
     "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
         {
             "name": "Python Debugger: Current File with Arguments",
             "type": "debugpy",
@@ -23,11 +39,11 @@
             "program": "${workspaceFolder}/build/app/eulerSA.exe",
             "MIMode": "gdb",
             "setupCommands": [
-                {
-                    "description": "Insert python ",
-                    "text": "python import sys;sys.path.insert(0, '/usr/share/gcc/python');from libstdcxx.v6.printers import register_libstdcxx_printers;register_libstdcxx_printers(None)",
-                    "ignoreFailures": false
-                },
+                // {
+                //     "description": "Insert python ",
+                //     "text": "python import sys;sys.path.insert(0, '/usr/share/gcc/python');from libstdcxx.v6.printers import register_libstdcxx_printers;register_libstdcxx_printers(None)",
+                //     "ignoreFailures": false
+                // },
                 {
                     "description": "Enable pretty-printing for gdb",
                     "text": "-enable-pretty-printing",
@@ -44,8 +60,13 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/buildA/app/euler.exe",
-            "args": [],
+            "program": "${workspaceFolder}/build_ninja/app/array_cuda_Bench.exe",
+            "args": [
+                "10",
+                "10",
+                "0",
+                "5"
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
             "environment": [],
@@ -61,6 +82,37 @@
                     "description": "Set Disassembly Flavor to Intel",
                     "text": "-gdb-set disassembly-flavor intel",
                     "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "Debug pybind11 with GDB",
+            "type": "cppdbg",
+            "request": "attach",
+            // "program": "${workspaceFolder}/build/test/meshSerial_Test.exe",
+            "program": "${workspaceFolder}/venv/bin/python",
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "miDebuggerPath": "/usr/bin/gdb"
+        },
+        {
+            "name": "Debugpy Attach to MPI Rank",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": "${input:debugPort}"
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}",
+                    "remoteRoot": "/your/remote/path/if/needed" // usually not needed for local
                 }
             ]
         }

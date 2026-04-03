@@ -259,7 +259,7 @@
         "**/.vs": true
     },
     "C_Cpp.exclusionPolicy": "checkFilesAndFolders",
-    "clangd.path": "clangd-19",
+    "clangd.path": "/mnt/ssd-SATARAID5/harry/tools/clangd_21.1.0/bin/clangd",
     "C_Cpp.intelliSenseEngine": "disabled",
     // "C_Cpp.intelliSenseEngine": "Tag Parser"
     "[cpp]": {
@@ -268,5 +268,19 @@
         "editor.stickyScroll.defaultModel": "foldingProviderModel",
         "editor.suggest.insertMode": "replace",
         "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd",
+    },
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/bower_components": true,
+        "**/*.code-search": true,
+        "DNDSR": true,
+    },
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        "DNDSR": true,
     },
 }

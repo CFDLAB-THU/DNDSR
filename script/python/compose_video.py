@@ -35,9 +35,13 @@ def main():
     parser = argparse.ArgumentParser(description="Create a video from .png images.")
     parser.add_argument("base_dir", help="Base directory containing .png files")
     parser.add_argument("regex_pattern", help="Regex pattern to match .png file names")
-    parser.add_argument("output_path", help="Output video file path")
+    parser.add_argument("output_path", help="Output video file path", default=None)
     parser.add_argument("--fps", help="output fps", type=float, default=10)
     args = parser.parse_args()
+
+    output_path = args.output_path
+    if output_path is None:
+        output_path = os.path.join(args.base_dir, "out.mp4")
 
     # Step 1: Get the sorted list of .png files matching the regex
     png_files = get_png_files(args.base_dir, args.regex_pattern)
@@ -53,6 +57,7 @@ def main():
         print(f"Error reading the first image: {png_files[0]}")
         sys.exit(1)
     target_size = (first_image.shape[1], first_image.shape[0])  # (width, height)
+    print(f"=== Target size: {target_size}")
 
     for file_name in png_files:
         image_path = os.path.join(args.base_dir, file_name)
