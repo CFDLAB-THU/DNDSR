@@ -1,90 +1,130 @@
 # DNDSR
 
-DNDSR is currently being developed for implementation of Compact Finite Volume CFD programs.
+DNDSR is a C++17 / Python CFD research code implementing Compact Finite Volume
+methods with MPI parallelism and optional CUDA GPU support.
 
-The command line solver apps include:
+Solver executables:
 
-- euler, 2D N-S solver
-- euler3D, 3D N-S solver
-- eulerSA, 2D N-S solver with S-A RANS model
-- eulerSA3D, 3D version of eulerSA
-- euler2EQ, 2D N-S solver with some 2-equation RANS models
-- euler2EQ3D, 3D version of euler2EQ
+- `euler` / `euler3D` — 2D/3D Navier-Stokes
+- `eulerSA` / `eulerSA3D` — Spalart-Allmaras RANS
+- `euler2EQ` / `euler2EQ3D` — k-omega two-equation RANS
 
-## Building
+See [docs/project_structure.md](docs/project_structure.md) for the full
+directory layout, module dependencies, and build targets.
 
-### On Linux
+## Quick Start
 
-- Make sure mpi and compiler environment is available:
-  - Compiler
-    - Compiler should be GCC 9 / Clang 8 or newer
-    - C++17 support
-  - MPI
-    - `mpicc`, `mpicxx`, `mpirun` (or srun)
-    - `mpicc --version`: check the compiler wrapped by `mpicc` wrapper
-    - `mpicc -show` (for MPICH/OpenMPI) or `mpicc --showme` (for OpenMPI) to check full wrapped compiler command
-    - MPI-3 standard compatible
-  - CMake + GNU Make or Ninja
-    - CMake >= 3.21
-  - Python 3
-    - `python3-dev` needed if on Debian systems and using system python
-    - if use python modules, recommend using virtual environments (conda, venv ...)
-    - python >= 3.9 for python modules
-- First build / get your mpi dev package, zlib, HDF5, CGNS, metis and parmetis, and make them available to cmake (like via CMAKE_PREFIX for libs and PATH for executables).
-  - Recommended way: [use git submodules and build](#using-git-submodule-to-build-cfd_externals). 
-    - No need to provide extra variables to CMake or set extra environment variables if using git submodules
-  - No internet: use source tarball [cfd_externals_source.tar.gz](https://github.com/harryzhou2000/cfd_externals/releases) released
-    - extract inside `external` and `tar -zcvf` the tarball
-    - goto `external/cfd_externals` and execute the cfd_externals_build.py
-  - An optional way is to use existing system SDK for these libraries.
-    - Make sure MPI-HDF-CGNS and MPI-parmetis are all compatible.
-
-- Then get the `cfd_externals_headerOnlys` tarball [here](https://github.com/harryzhou2000/cfd_externals_headeronlys/releases) to directly get the sources of referenced repos. Extract it into `external` folder, making the path look like `external/eigen...` and so on.
-  
-- Cmake configure and build. From the project root, do:
-
-
-```bash
-mkdir build && cd build
-CC=mpicc CXX=mpicxx cmake ..
-cmake --build . -t <target> -j 8
-```
-
-to build the target. Replace `<target>` with `euler`, `eulerSA` and so on.
-
-### Using Git Submodule to build `cfd_externals`
-
-Some external libraries are adopted in DNDSR in the form of binary libraries linkages, and they are not integrated with CMake FetchContent for now.
+### 1. Clone and fetch dependencies
 
 ```bash
 git submodule update --init --recursive --depth=1
-```
-
-If every clone and checkout succeeds, move into `external/cfd_externals` and run the build script:
-
-```bash
 cd external/cfd_externals
 CC=mpicc CXX=mpicxx python cfd_externals_build.py
+cd ../..
 ```
 
-After this, all libraries are installed in `external/cfd_externals/insall`.
-
-If you have trouble cloning the submodules from github, you can package the git repos on a machine with access to github, and redirect github.com to the local directory. See instructions in [cfd_externals](https://github.com/harryzhou2000/cfd_externals?tab=readme-ov-file#redirect-to-local-repos).
-
-## Running
-
-In shell, assuming we directly run from `build`, use:
+### 2. Build C++ solvers
 
 ```bash
-app/euler.exe <configFile.json>
+# Using CMake presets (recommended)
+cmake --preset release-test
+cmake --build build -t euler -j32
+
+# Or manually
+mkdir build && cd build
+CC=mpicc CXX=mpicxx cmake .. -DDNDS_BUILD_TESTS=ON
+cmake --build . -t euler -j32
 ```
 
-for serial running, and 
+### 3. Run a solver
 
 ```bash
-mpirun -np <np> app/euler.exe <configFile.json>
+# Serial
+./build/app/euler.exe cases/your_config.json
+
+# Parallel
+mpirun -np 4 ./build/app/euler.exe cases/your_config.json
 ```
 
-for parallel running (on local machine).
+Input parameters are defined in JSONC config files.
+See [cases/euler_default_config_commented.json](cases/euler_default_config_commented.json)
+for documentation of all options.
 
-All the input/configuration/parameters are defined in the jsonc (although named .json) file <configFile.json>. The input parameters are explained in [this example input json](cases/euler_default_config_commented.json).
+### 4. Install the Python package
+
+Use the system Python (not conda) to avoid libstdc++ version conflicts:
+
+```bash
+python3.12 -m venv venv
+source venv/bin/activate
+pip install numpy scipy pytest pytest-mpi pytest-timeout mpi4py \
+            pybind11 pybind11-stubgen scikit-build-core ninja
+
+CC=mpicc CXX=mpicxx CMAKE_BUILD_PARALLEL_LEVEL=32 \
+    pip install -e . --no-build-isolation
+```
+
+> **Why system Python?** Conda/Anaconda Python embeds an RPATH to conda's
+> bundled libstdc++, which may be older than what the MPI compiler produces.
+> System Python uses the system libstdc++ and avoids this conflict.
+
+After the initial install, rebuild only the C++ bindings without re-running pip:
+
+```bash
+cmake --build build_py \
+    -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j32
+cmake --install build_py --component py
+```
+
+### 5. Run tests
+
+```bash
+# C++ unit tests (doctest, via CTest)
+cmake --build build -t dnds_unit_tests -j32
+ctest --test-dir build -R dnds_ --output-on-failure
+
+# Python tests
+pytest test/DNDS/test_basic.py -v
+```
+
+## Type Stubs
+
+After installing the Python package, generate `.pyi` type stubs for IDE
+support:
+
+```bash
+PATH="venv/bin:$PATH" bash scripts/generate-stubs.sh
+```
+
+This produces stubs in `stubs/` and copies them into `python/DNDSR/` for
+PEP 561 compliance. The stubs should be committed to git.
+
+## VS Code / Pylance Setup
+
+For Pylance to resolve `from DNDSR import DNDS` correctly, add to
+`.vscode/settings.json`:
+
+```jsonc
+{
+    "python.analysis.extraPaths": ["${workspaceFolder}/python"],
+    "python.analysis.packageIndexDepths": [
+        {"name": "DNDSR", "depth": 10, "includeAllSymbols": true}
+    ]
+}
+```
+
+Also set the Python interpreter to the project venv
+(`venv/bin/python`) via the VS Code Python extension.
+
+## Documentation
+
+- [Project Structure](docs/project_structure.md) — directory layout, module
+  dependencies, build targets.
+- [Building](docs/building.md) — full build instructions, CMake presets,
+  Python packaging.
+- [TODO](docs/TODO.md) — planned improvements.
+- Doxygen: `cmake --build build -t docs` (output in `docs/html/`).
+
+## License
+
+See [LICENSE](LICENSE).

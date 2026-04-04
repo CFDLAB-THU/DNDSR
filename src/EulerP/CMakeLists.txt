@@ -43,6 +43,12 @@ install(TARGETS eulerP_shared
     COMPONENT py
 )
 
+# Also install into the python package tree for editable installs
+install(TARGETS eulerP_shared
+    LIBRARY DESTINATION "${PROJECT_SOURCE_DIR}/python/DNDSR/_lib"
+    COMPONENT py
+)
+
 
 set(CPPS_BIND
 eulerP_pybind11.cpp
@@ -53,7 +59,7 @@ dnds_add_py_module(eulerP_pybind11 "${CPPS_BIND}" "eulerP_shared;${LINKS_SHARED}
 
 install(
   TARGETS eulerP_pybind11
-  DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/_internal"
+  DESTINATION "${PROJECT_SOURCE_DIR}/python/DNDSR/EulerP/_ext"
   RUNTIME_DEPENDENCY_SET DNDS_LIB_DEPENDENCY_XXX
   COMPONENT py
 )

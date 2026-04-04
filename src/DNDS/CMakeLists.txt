@@ -69,6 +69,12 @@ install(TARGETS ${LIBNAME}_shared
     COMPONENT py
 )
 
+# Also install into the python package tree for editable installs
+install(TARGETS ${LIBNAME}_shared
+    LIBRARY DESTINATION "${PROJECT_SOURCE_DIR}/python/DNDSR/_lib"
+    COMPONENT py
+)
+
 
 set(CPPS_BIND
 dnds_pybind11.cpp
@@ -100,7 +106,7 @@ dnds_add_py_module(${LIBNAME}_pybind11 "${CPPS_BIND}" "${LIBNAME}_shared;${LINKS
 
 install(
   TARGETS ${LIBNAME}_pybind11
-  DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/_internal"
+  DESTINATION "${PROJECT_SOURCE_DIR}/python/DNDSR/DNDS/_ext"
   RUNTIME_DEPENDENCY_SET DNDS_LIB_DEPENDENCY_XXX
   COMPONENT py
 )

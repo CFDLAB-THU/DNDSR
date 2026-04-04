@@ -30,8 +30,12 @@ function(dnds_add_lib LIBNAME CPPS LINKS PCH_TARGET SHARED FAST USE_EXCLUDE_FROM
     message(DEBUG "lib ${LIBNAME} CPPS is ${CPPS} LINKS is ${LINKS}")
     if ( SHARED )
         add_library(${LIBNAME} SHARED ${CPPS})
-        # is this proper?
-        set_target_properties(${LIBNAME} PROPERTIES INSTALL_RPATH "$ORIGIN:$ORIGIN/dndsr_external") 
+        set_target_properties(${LIBNAME} PROPERTIES
+            INSTALL_RPATH "$ORIGIN:$ORIGIN/dndsr_external"
+            BUILD_RPATH_USE_ORIGIN ON)
+        # Use RPATH (not RUNPATH) so our bundled libstdc++ takes precedence
+        # over LD_LIBRARY_PATH (e.g. from conda/anaconda environments).
+        target_link_options(${LIBNAME} PRIVATE "LINKER:--disable-new-dtags") 
     else()
         add_library(${LIBNAME} STATIC ${CPPS})
     endif()
@@ -98,7 +102,9 @@ function(dnds_add_py_module LIBNAME CPPS LINKS PCH_TARGET SHARED FAST USE_EXCLUD
         set_target_properties(${LIBNAME} PROPERTIES EXCLUDE_FROM_ALL ON)
     endif()
     
-    set_target_properties(${LIBNAME} PROPERTIES INSTALL_RPATH "$ORIGIN:$ORIGIN/dndsr_external")
+    set_target_properties(${LIBNAME} PROPERTIES
+        INSTALL_RPATH "$ORIGIN:$ORIGIN/dndsr_external:$ORIGIN/../../_lib:$ORIGIN/../../_lib/dndsr_external")
+    target_link_options(${LIBNAME} PRIVATE "LINKER:--disable-new-dtags")
     
     target_include_directories(${LIBNAME} PRIVATE ${DNDS_EXTERNAL_INCLUDES})
     target_include_directories(${LIBNAME} PRIVATE ${DNDS_INCLUDES})

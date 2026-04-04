@@ -25,6 +25,11 @@ Compact Finite Volume methods with MPI parallelism and optional CUDA GPU support
 mkdir build && cd build
 CC=mpicc CXX=mpicxx cmake ..
 
+# Or use CMake presets (see CMakePresets.json)
+cmake --preset release-test   # Release with tests enabled
+cmake --preset debug          # Debug with tests enabled
+cmake --preset cuda           # Release with CUDA and tests
+
 # Build a specific target (-j for parallel)
 cmake --build . -t euler -j 8
 # Available targets: euler, euler3D, eulerSA, eulerSA3D, euler2EQ, euler2EQ3D

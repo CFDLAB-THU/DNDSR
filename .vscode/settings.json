@@ -219,7 +219,7 @@
     "cmake.buildDirectory": "${workspaceFolder}/build-cmake-tools",
     "python.analysis.packageIndexDepths": [
         {
-            "name": "DNDS",
+            "name": "DNDSR",
             "depth": 10,
             "includeAllSymbols": true
         },
@@ -250,7 +250,7 @@
     ],
     "python.analysis.autoImportCompletions": false,
     "python.analysis.extraPaths": [
-        "${workspaceFolder}"
+        "${workspaceFolder}/python"
     ],
     "C_Cpp.errorSquiggles": "enabled",
     "C_Cpp.files.exclude": {

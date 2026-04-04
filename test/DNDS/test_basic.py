@@ -1,11 +1,5 @@
-import sys, os
-
-sys.path.append(
-    os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "src")
-)
 from DNDSR import DNDS
 
-# import DNDSR.DNDS as DNDS
 import numpy as np
 import pytest
 from numpy.random import MT19937
@@ -20,7 +14,7 @@ def mpi():
 
 
 def get_rstart_data():
-    arrayRU = DNDS.Array_d_I_I_D()
+    arrayRU = DNDS.Array_d_I_I_Unknown()
     rsize = np.linspace(3, 10, 32, dtype=np.int32)
     arrayRU.Resize(32, rsize)
     arrayRU_rstart = arrayRU.getRowStart()
@@ -100,7 +94,7 @@ def test_ParArrayPair(mpi: DNDS.MPIInfo):
 
 
 def test_arrayRU(mpi: DNDS.MPIInfo):
-    arrayRU = DNDS.Array_d_I_I_D()
+    arrayRU = DNDS.Array_d_I_I_Unknown()
 
     rsize = np.linspace(3, 10, 32, dtype=np.int32)
     arrayRU.Resize(32, rsize)

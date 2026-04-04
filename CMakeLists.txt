@@ -22,7 +22,11 @@ cmake_policy(SET CMP0082 NEW) # ensures install exec order == declare order
 
 
 
-set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/install CACHE FILEPATH "install place")
+# Only set a default CMAKE_INSTALL_PREFIX if the user has not specified one.
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH
+        "Default install location (override with -DCMAKE_INSTALL_PREFIX=...)" FORCE)
+endif()
 
 set(CMAKE_BUILD_TYPE Release CACHE STRING "Release or Debug")
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
@@ -112,6 +116,7 @@ if(UNIX)
         if(EXISTS "${LIBSTDCXX_PATH}")
             message(STATUS "Found libstdc++.so: ${LIBSTDCXX_PATH}")
             file(INSTALL "${LIBSTDCXX_PATH}" DESTINATION ${CMAKE_INSTALL_PREFIX}/DNDSR/lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
+            file(INSTALL "${LIBSTDCXX_PATH}" DESTINATION ${PROJECT_SOURCE_DIR}/python/DNDSR/_lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
             set(DNDS_STDLIB_FOUND ON)
         else()
             message(STATUS "libstdc++.so not found at: ${LIBSTDCXX_PATH}")
@@ -501,6 +506,10 @@ endforeach()
 foreach(LIB ${DNDS_EXTERNAL_LIBS})
     file(INSTALL ${LIB} DESTINATION ${CMAKE_INSTALL_PREFIX}/DNDSR/lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
 endforeach()
+# Also copy external libs into python package tree for editable installs
+foreach(LIB ${DNDS_EXTERNAL_LIBS})
+    file(INSTALL ${LIB} DESTINATION ${PROJECT_SOURCE_DIR}/python/DNDSR/_lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
+endforeach()
 
 list(REMOVE_DUPLICATES DNDS_EXTERNAL_LIBS_DIRS)
 list(REMOVE_DUPLICATES DNDS_EXTERNAL_LIBS_DIRS_REGEX)
@@ -631,6 +640,10 @@ if(UNIX OR MINGW)
         -Wall -Wno-unused-but-set-variable -Wno-unused-variable 
         $<$<NOT:$<COMPILE_LANGUAGE:CUDA>>:-Werror=return-type>
         )
+    # Force RPATH (not RUNPATH) so bundled libstdc++ takes precedence
+    # over LD_LIBRARY_PATH (e.g. from conda environments).
+    # OpenMPI's mpicxx passes --enable-new-dtags; we override it.
+    add_link_options("-Wl,--disable-new-dtags")
     add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=128>)
     add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=177>) # declared but never referenced
     add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=2417>)
@@ -912,6 +925,19 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/src/EulerP)
 if(DNDS_BUILD_TESTS)
     enable_testing()
     add_subdirectory(${CMAKE_SOURCE_DIR}/test/cpp)
+
+    # Register pytest suites in CTest (serial only; use mpirun manually for MPI tests).
+    find_program(DNDS_PYTEST_EXEC pytest)
+    if(DNDS_PYTEST_EXEC)
+        add_test(NAME pytest_DNDS
+            COMMAND ${DNDS_PYTEST_EXEC} ${CMAKE_SOURCE_DIR}/test/DNDS/ -x --timeout=120
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        set_tests_properties(pytest_DNDS PROPERTIES TIMEOUT 180 LABELS "python")
+        add_test(NAME pytest_CFV
+            COMMAND ${DNDS_PYTEST_EXEC} ${CMAKE_SOURCE_DIR}/test/CFV/ -x --timeout=120
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        set_tests_properties(pytest_CFV PROPERTIES TIMEOUT 180 LABELS "python")
+    endif()
 endif()
 
 if (NOT SKBUILD_PROJECT_NAME) # do not create links for SCIKIT-BUILD build
@@ -920,13 +946,10 @@ if (NOT SKBUILD_PROJECT_NAME) # do not create links for SCIKIT-BUILD build
 endif()
 # if (SKBUILD_PROJECT_NAME)
 # # __init__.py actively linking libdnds_shared.so, 
-# # cannot link correct libstdc++.so (links to anaconda's)
-# # why?
-# message(WARNING "skipping .pyi generation")
-# else()
-install(CODE "execute_process(COMMAND bash ${CMAKE_SOURCE_DIR}/src/run-pybind11-stubgen.sh  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)" 
-    COMPONENT py)
-# endif()
+# Stub generation is a separate manual step (not part of cmake --install).
+# Run after `pip install -e .`:
+#   ./scripts/generate-stubs.sh
+# The generated .pyi files in python/DNDSR/ should be committed to git.
 
 set(EXE_SUFFIX "")
 if (UNIX)

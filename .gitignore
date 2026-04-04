@@ -2,6 +2,7 @@
 running
 # building
 build*
+!docs/building.md
 *.exe
 *.so
 # external
