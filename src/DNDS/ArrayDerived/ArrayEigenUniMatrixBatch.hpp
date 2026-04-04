@@ -1,4 +1,13 @@
 #pragma once
+/// @file ArrayEigenUniMatrixBatch.hpp
+/// @brief Batch of uniform-sized Eigen matrices per row, with variable batch count.
+/// @par Unit Test Coverage (test_ArrayDerived.cpp, MPI np=1,2,4)
+/// - Static sizes (ArrayEigenUniMatrixBatch<2,3>) and dynamic sizes
+/// - Resize, ResizeBatch, BatchSize, Rows, Cols, MSize, Compress
+/// - Element access: operator()(i,j) returning Eigen::Map
+/// @par Not Yet Tested
+/// - GetDerivedArraySignature, WriteSerializer / ReadSerializer
+/// - Device views
 
 #include "../ArrayTransformer.hpp"
 #include "DNDS/ArrayBasic.hpp"
@@ -6,6 +15,7 @@
 
 namespace DNDS
 {
+    /// @brief Batch of uniform-sized Eigen matrices with variable batch count per row.
     template <int _n_row, int _n_col>
     class ArrayEigenUniMatrixBatch : public ParArray<real, NonUniformSize, NonUniformSize, NoAlign> // use CSR array
     {
@@ -213,6 +223,7 @@ namespace DNDS
         using t_base::to_device;
         using t_base::to_host;
 
+        /// @brief Non-owning view of one row's matrix batch in ArrayEigenUniMatrixBatch.
         template <DeviceBackend B>
         class UniMatrixRowView
         {
@@ -240,6 +251,7 @@ namespace DNDS
             }
         };
 
+        /// @brief Element iterator for ArrayEigenUniMatrixBatch, yielding UniMatrixRowView per row.
         template <DeviceBackend B>
         class iterator : public ArrayIteratorBase<iterator<B>>
         {

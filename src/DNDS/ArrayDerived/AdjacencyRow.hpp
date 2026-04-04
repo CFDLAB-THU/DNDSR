@@ -1,8 +1,12 @@
 #pragma once
+/// @file AdjacencyRow.hpp
+/// @brief Non-owning row view for adjacency arrays.
+
 #include "../Defines.hpp"
 
 namespace DNDS
 {
+    /// @brief Non-owning row view over an adjacency array's index buffer.
     template <typename index_T = index>
     class AdjacencyRow // instead of std::vector<index> for building on raw buffer as a "mapping" object
     {

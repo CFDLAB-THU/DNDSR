@@ -1,4 +1,21 @@
 #pragma once
+/// @file Array.hpp
+/// @brief Core 2D variable-length array container with five data layouts.
+/// @par Unit Test Coverage (test_Array.cpp)
+/// - All 5 layouts: TABLE_StaticFixed, TABLE_Fixed, TABLE_StaticMax, TABLE_Max, CSR
+/// - Resize, ResizeRow, Size, RowSize, RowSizeMax, GetDataLayout
+/// - Element access: operator(), operator[]
+/// - DataSize, DataSizeBytes
+/// - Compress / Decompress round-trip (CSR)
+/// - clone, CopyData, copy constructor, SwapData
+/// - WriteSerializer / ReadSerializer (JSON, 3 layouts)
+/// - GetArraySignature, ParseArraySignatureTuple, ArraySignatureIsCompatible
+/// - hash
+/// @par Not Yet Tested
+/// - ReserveRow, RawDataVector, view, FullSizeBytes, operator<<
+/// - WriteSerializer / ReadSerializer with TABLE_StaticMax, TABLE_Max
+/// - to_host / to_device / clear_device / deviceView (CUDA)
+/// - Move semantics
 #include <cassert>
 #include <memory>
 #ifndef DNDS_ARRAY_HPP

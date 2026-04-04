@@ -1,4 +1,21 @@
 #pragma once
+/// @file ArrayTransformer.hpp
+/// @brief ParArray (MPI-aware array) and ArrayTransformer (ghost/halo communication).
+/// @par Unit Test Coverage (test_ArrayTransformer.cpp, MPI np=1,2,4)
+/// - ParArray: setMPI, Resize, createGlobalMapping, globalSize, AssertConsistent
+/// - ArrayTransformer pull-based ghost: setFatherSon, createFatherGlobalMapping,
+///   createGhostMapping (pull), createMPITypes, pullOnce
+///   -- layouts: TABLE_StaticFixed, TABLE_Fixed, CSR, std::array compound type
+/// - Persistent pull: initPersistentPull, startPersistentPull, waitPersistentPull,
+///   clearPersistentPull (with father data update between pulls)
+/// - BorrowGGIndexing: second array shares ghost mapping of first
+/// - pushOnce: write to son, push back to father
+/// @par Not Yet Tested
+/// - Push-based createGhostMapping(pushingIndexLocal, pushStarts)
+/// - Persistent push (initPersistentPush, startPersistentPush, etc.)
+/// - clearMPITypes, clearGlobalMapping, clearGhostMapping (independent)
+/// - reInitPersistentPullPush
+/// - getFatherSonData(DeviceBackend), AssertDataType, setDataType
 
 #include "Array.hpp"
 #include "DNDS/DeviceStorage.hpp"
@@ -13,6 +30,7 @@ namespace DNDS
     using t_pLGlobalMapping = ssp<GlobalOffsetsMapping>;
     using t_pLGhostMapping = ssp<OffsetAscendIndexMapping>; // TODO: change to unique_ptr and modify corresponding copy constructor/assigner
 
+    /// @brief MPI-aware Array with global index mapping and ghost support.
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ParArray : public Array<T, _row_size, _row_max, _align>
     {
@@ -155,6 +173,7 @@ namespace DNDS
 
     /********************************************************************************************************/
 
+    /// @brief Manages ghost (halo) communication for a father-son ParArray pair.
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     // template <class TArray>
     class ArrayTransformer
@@ -1092,6 +1111,7 @@ namespace DNDS
         }
     };
 
+    /// @brief Type trait computing the ArrayTransformer type for a given Array type.
     template <class TArray>
     struct ArrayTransformerType
     {

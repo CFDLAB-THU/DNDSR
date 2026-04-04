@@ -16,11 +16,7 @@ if(_src STREQUAL _bin)
     "  cmake --build build")
 endif()
 
-if(UNIX OR MINGW)
-    cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
-else()
-    cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
-endif()
+cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
 
 cmake_policy(SET CMP0082 NEW) # ensures install exec order == declare order
 
@@ -44,7 +40,7 @@ enable_language(C) #! building C sub-projects
 message(STATUS "CMAKE_CXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}")
 set(DNDS_USING_CLANG_WIN OFF)
 if(WIN32)
-    if(${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang)
+    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
         set(DNDS_USING_CLANG_WIN ON)
     endif()
 endif()
@@ -147,7 +143,7 @@ endif()
 
 # need CUDA project support ?
 # manual perferences
-# set(CMAKE_CXX_STANDARD_REQUIRED 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 
 #! why?
@@ -162,6 +158,7 @@ set(DNDS_USE_OMP ON CACHE BOOL "enables openmp functionality")
 set(DNDS_USE_CUDA OFF CACHE BOOL "enables cuda functionality")
 set(DNDS_DIST_MT_USE_OMP OFF CACHE BOOL "use openmp in purely distributed code for multi-treading")
 set(DNDS_FAST_BUILD_FAST ON CACHE BOOL "don't -g on basic modules")
+set(DNDS_BUILD_TESTS OFF CACHE BOOL "build C++ unit tests (doctest)")
 set(DNDS_USE_NO_OMIT_FRAME_POINTER OFf CACHE BOOL "in fast build fast part, use -fno-omit-frame-pointer to get correct call graph in perf's fp mode")
 set(DNDS_UNSAFE_MATH_OPT OFF CACHE BOOL "use -funsafe-math-optimizations")
 set(DNDS_NATIVE_ARCH     OFF CACHE BOOL "use -march=native")
@@ -287,12 +284,6 @@ endif()
 
 
 
-
-set(CMAKE_USE_RELATIVE_PATHS ON)
-
-
-
-
 # ##########################################
 find_library(DNDS_EXTERNAL_LIB_BACKTRACE NAMES backtrace)
 # need zlibstatic first to find the static version on windows
@@ -414,7 +405,7 @@ set(FMT_PKGCONFIG_DIR "DNDSR/lib/pkgconfig")
 set(DNDS_TEMP_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
 set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "FOR FMT")
 add_subdirectory("${DNDS_EXTERNAL_INCLUDE_FMT}/.."      "${CMAKE_BINARY_DIR}/fmt")
-# set(BUILD_SHARED_LIBS ${DNDS_TEMP_BUILD_SHARED_LIBS} CACHE BOOL "set by DNDSR") #! you cannot move this out of internal
+set(BUILD_SHARED_LIBS ${DNDS_TEMP_BUILD_SHARED_LIBS} CACHE BOOL "set by DNDSR, restored after fmt" FORCE)
 set_target_properties(fmt PROPERTIES EXCLUDE_FROM_ALL OFF)
 if (UNIX OR DNDS_USING_CLANG_WIN)
     target_compile_options(fmt PRIVATE -fPIC)
@@ -623,7 +614,6 @@ if(UNIX OR MINGW)
         add_compile_options(-Wa,-mbig-obj) # too many sections
     endif()
     message(${CMAKE_CXX_COMPILER_ID})
-    add_compile_options(-std=c++17)
     if(DNDS_NATIVE_ARCH)
         add_compile_options(-march=native)
         add_compile_options(-mtune=native)
@@ -706,7 +696,6 @@ elseif(WIN32 OR MSVC)
     message(STATUS "WIN32 OR MSVC")
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
         add_compile_options(-Wall -Wno-unused-but-set-variable -Wno-unused-variable -Wno-sign-compare)
-        add_compile_options(-std=c++17 )
         add_link_options(-lshlwapi) # when hdf is compiled with msvc, needs this
         # add_compile_options(--target=x86_64-pc-windows-gnu)
         # add_link_options(--target=x86_64-pc-windows-gnu)
@@ -799,10 +788,6 @@ endif()
 
 set(DNDS_INCLUDES ${PROJECT_SOURCE_DIR}/src  CACHE INTERNAL "Project Public Includes")
 
-if (UNIX)
-add_compile_options(-Wall -Wno-unused-but-set-variable -Wno-unused-variable -Wno-sign-compare)
-endif()
-
 if (DNDS_SUPRESS_INSERT_CHECK)
     # add_compile_definitions(NINSERT)
     add_definitions(-DNINSERT)
@@ -827,6 +812,15 @@ endif()
 
 message(STATUS "DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIBS}")
 message(STATUS "DNDS_EXTERNAL_INCLUDES ${DNDS_EXTERNAL_INCLUDES}")
+
+# Create an INTERFACE library to bundle all external dependencies.
+# Targets can link against dnds_external_deps instead of manually passing
+# DNDS_EXTERNAL_LIBS and DNDS_EXTERNAL_INCLUDES.
+add_library(dnds_external_deps INTERFACE)
+target_include_directories(dnds_external_deps INTERFACE ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
+target_link_libraries(dnds_external_deps INTERFACE ${DNDS_EXTERNAL_LIBS})
+
+include("${PROJECT_SOURCE_DIR}/cmakeCommonUtils.cmake")
 
 #######################################
 #       START OF CORE TARGETS         #
@@ -913,6 +907,12 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/src/Geom)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/CFV)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/Euler)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/EulerP)
+
+# C++ unit tests (doctest)
+if(DNDS_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(${CMAKE_SOURCE_DIR}/test/cpp)
+endif()
 
 if (NOT SKBUILD_PROJECT_NAME) # do not create links for SCIKIT-BUILD build
     install(CODE "file(CREATE_LINK ${CMAKE_INSTALL_PREFIX}/DNDSR/bin ${CMAKE_SOURCE_DIR}/src/bin SYMBOLIC)" COMPONENT py)
@@ -1012,7 +1012,7 @@ if (DOXYGEN_FOUND)
 
     configure_file(${DOXYGEN_IN} ${DOXYGEN_OUT} @ONLY)
 
-    add_custom_target(docs ALL 
+    add_custom_target(docs
         COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_OUT}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT Doing Doxygen

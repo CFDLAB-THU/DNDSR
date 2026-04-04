@@ -1,4 +1,6 @@
 #pragma once
+/// @file ArrayPair.hpp
+/// @brief Father-son array pairs with device views and ghost communication.
 
 #include "ArrayTransformer.hpp"
 #include "ArrayDerived/ArrayAdjacency.hpp"
@@ -14,6 +16,7 @@
 namespace DNDS
 {
 
+    /// @brief CRTP base for device views of father-son array pairs.
     template <class Derived>
     struct ArrayPairDeviceView_Base
     {
@@ -77,6 +80,7 @@ namespace DNDS
         }
     };
 
+    /// @brief Mutable device view of a father-son array pair.
     template <DeviceBackend B, class TArray = ParArray<real, 1>>
     struct ArrayPairDeviceView : public ArrayPairDeviceView_Base<ArrayPairDeviceView<B, TArray>>
     {
@@ -93,6 +97,7 @@ namespace DNDS
             : father(n_father), son(n_son) {}
     };
 
+    /// @brief Const device view of a father-son array pair.
     template <DeviceBackend B, class TArray = ParArray<real, 1>>
     struct ArrayPairDeviceViewConst : public ArrayPairDeviceView_Base<ArrayPairDeviceViewConst<B, TArray>>
     {
@@ -109,6 +114,7 @@ namespace DNDS
             : father(n_father), son(n_son) {}
     };
 
+    /// @brief Father + son array pair with attached ArrayTransformer for ghost communication.
     template <class TArray = ParArray<real, 1>>
     struct ArrayPair
     {

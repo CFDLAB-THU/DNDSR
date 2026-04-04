@@ -1,4 +1,18 @@
 #pragma once
+/// @file MPI.hpp
+/// @brief MPI wrappers: MPIInfo, collective operations, type mapping, CommStrategy.
+/// @par Unit Test Coverage (test_MPI.cpp, MPI np=1,2,4)
+/// - MPIInfo: constructor, setWorld, operator==, field validation
+/// - MPIWorldSize, MPIWorldRank
+/// - Allreduce (MPI_SUM, MPI_MAX for real/index), AllreduceOneReal, AllreduceOneIndex
+/// - Scan (MPI_SUM), Allgather, Bcast, Barrier, Alltoall
+/// - BasicType_To_MPIIntType (scalar, std::array, Eigen::Matrix)
+/// - CommStrategy: get/set HIndexed/InSituPack
+/// @par Not Yet Tested
+/// - Alltoallv, WaitallLazy, WaitallAuto, BarrierLazy
+/// - MPIBufferHandler, MPITypePairHolder, MPIReqHolder (tested indirectly via ArrayTransformer)
+/// - MPI::ResourceRecycler, MPISerialDo, InsertCheck
+/// - Sub-communicators, CommStrategy functional impact on ArrayTransformer
 
 #include <vector>
 #include <fstream>
@@ -60,6 +74,8 @@ namespace DNDS
 
     //! here are some reasons to upgrade to C++20...
     // detect if have CommMult and CommType static methods
+
+    /// @brief SFINAE trait detecting a static `CommMult` member in T.
     template <typename T, typename = void>
     struct has_static_CommMult : std::false_type
     {
@@ -70,6 +86,7 @@ namespace DNDS
     {
     };
 
+    /// @brief SFINAE trait detecting a static `CommType` member in T.
     template <typename T, typename = void>
     struct has_static_CommType : std::false_type
     {
@@ -145,6 +162,7 @@ namespace DNDS
         //     return badReturn;
     }
 
+    /// @brief MPI communicator, rank, and size bundle.
     struct MPIInfo
     {
         MPI_Comm comm = MPI_COMM_NULL;
@@ -237,6 +255,7 @@ namespace DNDS
         using tBase = tMPI_typePairVec;
 
     private:
+        /// @brief RAII guard restricting construction to shared_ptr factory.
         struct shared_ctor_guard // make_shared needs a public ctor but give a private arg
         {
         };
@@ -280,6 +299,7 @@ namespace DNDS
         using tBase = tMPI_reqVec;
 
     private:
+        /// @brief RAII guard restricting construction to shared_ptr factory.
         struct shared_ctor_guard // make_shared needs a public ctor but give a private arg
         {
         };
@@ -401,6 +421,7 @@ namespace DNDS // TODO: get a concurrency header
 #define MPIBufferHandler_REPORT_CHANGE // for monitoring
 namespace DNDS
 {
+    /// @brief Singleton managing an MPI buffer for buffered sends.
     class MPIBufferHandler // cxx11 + thread-safe singleton
     {
     private:

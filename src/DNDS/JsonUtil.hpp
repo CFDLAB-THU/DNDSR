@@ -1,4 +1,6 @@
 #pragma once
+/// @file JsonUtil.hpp
+/// @brief JSON-to-Eigen conversion utilities and nlohmann_json helper macros.
 
 #include "Defines.hpp"
 #define JSON_ASSERT DNDS_assert

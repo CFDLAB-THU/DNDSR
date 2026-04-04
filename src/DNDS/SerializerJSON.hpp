@@ -1,4 +1,18 @@
 #pragma once
+/// @file SerializerJSON.hpp
+/// @brief Per-rank JSON serializer implementing the SerializerBase interface.
+/// @par Unit Test Coverage (test_Serializer.cpp, MPI np=1,2,4)
+/// - Scalar round-trip: WriteInt/ReadInt, WriteIndex/ReadIndex,
+///   WriteReal/ReadReal, WriteString/ReadString
+/// - Vector round-trip: WriteRealVector, WriteIndexVector, WriteRowsizeVector
+/// - uint8 array: with and without codec (base64 + zlib)
+/// - Path operations: CreatePath, GoToPath, GetCurrentPath, ListCurrentPath
+/// - Shared pointer deduplication: WriteSharedIndexVector / ReadSharedIndexVector
+/// @par Not Yet Tested
+/// - WriteSharedRowsizeVector / ReadSharedRowsizeVector
+/// - WriteIndexVectorPerRank
+/// - SetDeflateLevel impact verification
+/// - Error handling (nonexistent file, duplicate paths)
 #include "SerializerBase.hpp"
 
 #include "DNDS/JsonUtil.hpp"
@@ -7,6 +21,7 @@
 
 namespace DNDS::Serializer
 {
+    /// @brief Per-rank JSON file serializer; each MPI rank writes its own .json file.
     class SerializerJSON : public SerializerBase
     {
         std::fstream fileStream;

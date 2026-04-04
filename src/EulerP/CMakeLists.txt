@@ -1,7 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
-
 # message("source dir is ${PROJECT_SOURCE_DIR}")
-include("${PROJECT_SOURCE_DIR}/cmakeCommonUtils.cmake")
 
 set(LIBNAME euler_library)
 

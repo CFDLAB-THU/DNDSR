@@ -1,4 +1,15 @@
 #pragma once
+/// @file ArrayAdjacency.hpp
+/// @brief Adjacency array (CSR-like index storage) built on ParArray.
+/// @par Unit Test Coverage (test_ArrayDerived.cpp, MPI np=1,2,4)
+/// - Basics: Resize, ResizeRow, Compress, RowSize, operator[], rowPtr
+/// - Ghost communication: pull-based ghost exchange verifying row sizes and values
+/// - Clone independence
+/// - Fixed-size variant: ArrayAdjacency<3> (TABLE_StaticFixed)
+/// @par Not Yet Tested
+/// - ArrayIndex (ArrayAdjacency<1> subclass)
+/// - AdjacencyRow::operator= from std::vector, conversion operator
+/// - Device views
 #ifndef DNDS_ARRAY_PAIR_HPP
 #    define DNDS_ARRAY_PAIR_HPP
 #    include "DNDS/ArrayDerived/ArrayAdjacency_DeviceView.hpp"
@@ -8,6 +19,7 @@
 
 namespace DNDS
 {
+    /// @brief CSR-like index array for mesh connectivity, extending ParArray<index>.
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ArrayAdjacency : public ParArray<index, _row_size, _row_max, _align>
     {
@@ -63,6 +75,7 @@ namespace DNDS
         using t_base::to_device;
         using t_base::to_host;
 
+        /// @brief Row iterator for ArrayAdjacency, yielding AdjacencyRow per element.
         template <DeviceBackend B>
         class iterator : public ArrayIteratorBase<iterator<B>>
         {
@@ -104,6 +117,7 @@ namespace DNDS
 
 namespace DNDS
 {
+    /// @brief Single-column index array (ArrayAdjacency with fixed row size 1).
     class ArrayIndex : public ArrayAdjacency<1>
     {
     public:

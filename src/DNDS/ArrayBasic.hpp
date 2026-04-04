@@ -1,4 +1,6 @@
 #pragma once
+/// @file ArrayBasic.hpp
+/// @brief Array layout descriptors, non-owning views, row views, and iterator base.
 
 #include "Defines.hpp"
 #include "Errors.hpp"
@@ -44,6 +46,7 @@ namespace DNDS
         return std::is_trivially_copyable_v<T> || Meta::is_fixed_data_real_eigen_matrix_v<T>;
     }
 
+    /// @brief Compile-time array layout descriptor mapping template args to data layout.
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size,
               // rowsize _depth_size = 1,
               rowsize _align = NoAlign>
@@ -171,6 +174,7 @@ namespace DNDS
         }
     };
 
+    /// @brief Non-owning read-only view of an Array's data buffer.
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size,
               // rowsize _depth_size = 1,
               rowsize _align = NoAlign>
@@ -491,6 +495,7 @@ namespace DNDS
             return R._data == _data;
         }
 
+        /// @brief Non-owning view of a single row within an Array.
         class RowView
         {
             T *ptr = nullptr;
@@ -541,6 +546,7 @@ namespace DNDS
         };
     };
 
+    /// @brief CRTP iterator base for Array row traversal.
     template <class Derived>
     class ArrayIteratorBase
     {

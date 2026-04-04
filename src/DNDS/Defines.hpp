@@ -1,4 +1,6 @@
 #pragma once
+/// @file Defines.hpp
+/// @brief Core type aliases, constants, and metaprogramming utilities for the DNDS framework.
 #include "Macros.hpp"
 // #define NDEBUG
 #include "Errors.hpp"
@@ -111,6 +113,7 @@ namespace DNDS
     template <typename T>
     using ssp = std::shared_ptr<T>;
 
+    /// @brief Type trait that detects whether a type is a std::shared_ptr wrapping.
     template <typename T>
     struct is_ssp : std::false_type
     {
@@ -450,6 +453,7 @@ namespace DNDS::Meta
     template <typename T>
     inline constexpr bool always_false = false;
 
+    /// @brief Type trait that detects whether a type is a std::array.
     template <class T>
     struct is_std_array : std::false_type
     {
@@ -460,6 +464,7 @@ namespace DNDS::Meta
     {
     };
 
+    /// @brief Type trait that detects whether a type is a std::vector.
     template <class T>
     struct is_std_vector : std::false_type
     {
@@ -525,6 +530,7 @@ namespace DNDS::Meta
     template <typename T>
     inline constexpr bool is_eigen_dense_v = std::is_base_of_v<Eigen::DenseBase<T>, T>;
 
+    /// @brief Type trait that detects whether a type is an Eigen::Matrix with `real` scalar type.
     template <class T>
     struct is_real_eigen_matrix
     {
@@ -540,6 +546,7 @@ namespace DNDS::Meta
     template <class T>
     inline constexpr bool is_real_eigen_matrix_v = is_real_eigen_matrix<T>::value;
 
+    /// @brief Type trait that detects whether std::hash is specialized for a given type.
     template <typename T, typename = void>
     struct has_std_hash : std::false_type
     {
@@ -591,6 +598,7 @@ namespace DNDS
         return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
     }
 
+    /// @brief Hash functor for std::vector<T>, combining element hashes via XOR.
     template <typename T>
     struct vector_hash
     {
@@ -632,6 +640,7 @@ namespace DNDS
         }
     };
 
+    /// @brief Hash functor for std::array<T, s>, combining element hashes via XOR.
     template <typename T, std::size_t s>
     struct array_hash
     {
@@ -679,6 +688,7 @@ namespace DNDS::TermColor
 
 namespace DNDS
 {
+    /// @brief Trivially-copyable empty placeholder type that accepts any assignment.
     struct Empty
     {
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(Empty, Empty)
@@ -688,6 +698,7 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE Empty(T v) {}
     };
 
+    /// @brief Empty placeholder type without a default constructor; accepts any assignment.
     struct EmptyNoDefault
     {
         DNDS_DEVICE_CALLABLE EmptyNoDefault(EmptyNoDefault &&v) = default;

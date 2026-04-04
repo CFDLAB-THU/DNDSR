@@ -1,4 +1,7 @@
 #pragma once
+/// @file ExprtkWrapper.hpp
+/// @brief Runtime mathematical expression compiler and evaluator wrapping exprtk.
+
 #include <map>
 #include "Defines.hpp"
 
@@ -7,6 +10,7 @@ namespace DNDS
     using tExprVars = std::map<std::string, real>;
     using tExprVarVecs = std::map<std::string, Eigen::Vector<real, Eigen::Dynamic>>;
 
+    /// @brief Runtime mathematical expression compiler and evaluator (wraps exprtk).
     class ExprtkWrapperEvaluator
     {
         void *_ptr_st = nullptr;

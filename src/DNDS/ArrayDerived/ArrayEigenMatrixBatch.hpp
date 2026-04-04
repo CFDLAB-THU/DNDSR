@@ -1,4 +1,11 @@
 #pragma once
+/// @file ArrayEigenMatrixBatch.hpp
+/// @brief Batch of variable-sized Eigen matrices stored in CSR layout.
+/// @par Unit Test Coverage (test_ArrayDerived.cpp, MPI np=1,2,4)
+/// - Resize, InitializeWriteRow, Compress, BatchSize, operator()(i,j)
+/// - Ghost communication via ArrayEigenMatrixBatchPair
+/// @par Not Yet Tested
+/// - WriteSerializer / ReadSerializer, device views
 
 #include "../ArrayTransformer.hpp"
 #include "DNDS/Defines.hpp"
@@ -7,6 +14,7 @@
 
 namespace DNDS
 {
+    /// @brief Batch of variable-sized Eigen matrices stored in CSR layout.
     // has to use non uniform?
     class ArrayEigenMatrixBatch : public ParArray<real, NonUniformSize>
     {
@@ -80,6 +88,7 @@ namespace DNDS
         using t_base::to_device;
         using t_base::to_host;
 
+        /// @brief Element iterator for ArrayEigenMatrixBatch, yielding MatrixBatch per row.
         template <DeviceBackend B>
         class iterator : public ArrayIteratorBase<iterator<B>>
         {

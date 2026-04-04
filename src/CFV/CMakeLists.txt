@@ -1,7 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
-
 # message("source dir is ${PROJECT_SOURCE_DIR}")
-include("${PROJECT_SOURCE_DIR}/cmakeCommonUtils.cmake") # from father
 
 # project(CFV LANGUAGES CXX)
 
@@ -30,7 +27,7 @@ if (DNDS_USE_CUDA)
 list(APPEND CPPS VRDefines.cu test_FiniteVolume.cu)
 endif()
 
-file(GLOB EXPLICIT_INST_CPP_FILES "_explicit_instantiation/*.cpp")
+file(GLOB EXPLICIT_INST_CPP_FILES CONFIGURE_DEPENDS "_explicit_instantiation/*.cpp")
 
 list(APPEND CPPS ${EXPLICIT_INST_CPP_FILES})
 

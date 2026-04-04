@@ -1,4 +1,6 @@
 #pragma once
+/// @file ObjectPool.hpp
+/// @brief Pre-allocated object pool with RAII checkout/return semantics.
 
 // #include <unordered_set>
 #include "Defines.hpp"
@@ -9,6 +11,7 @@ namespace DNDS
     //     template <class T = int>
     //     ,
     //     using T = int;)
+    /// @brief Pre-allocated pool of reusable objects with RAII checkout.
     template <class T = int>
     class ObjectPool
     {
@@ -35,6 +38,7 @@ namespace DNDS
             return pPool->_pool.size();
         }
 
+        /// @brief RAII wrapper that returns a checked-out object to the pool on destruction.
         class ObjectPoolAllocated
         {
             uPtrResource _ptr;

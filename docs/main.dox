@@ -1,9 +1,25 @@
 
-
-
 /**
- * @page test
- * 
- * 123
- * 
+ * @mainpage DNDSR Documentation
+ *
+ * @section intro Introduction
+ *
+ * DNDSR is a C++17 / Python CFD (Computational Fluid Dynamics) research code
+ * implementing Compact Finite Volume methods with MPI parallelism and optional
+ * CUDA GPU support.
+ *
+ * @section modules Core Modules
+ *
+ * - **DNDS** — Core data structures: MPI arrays, serialization (JSON, HDF5),
+ *   profiling, CUDA device storage.
+ * - **Geom** — Unstructured mesh, CGNS I/O, partitioning (Metis/ParMetis).
+ * - **CFV** — Compact Finite Volume, variational reconstruction.
+ * - **Euler** — Compressible Navier-Stokes solvers (2D/3D, SA, k-omega RANS).
+ * - **EulerP** — Alternative evaluator with CUDA GPU support.
+ * - **Solver** — ODE integrators and Krylov solvers (GMRES, PCG).
+ *
+ * @section testing Testing
+ *
+ * See @ref dnds_unit_tests for the C++ unit test suite (doctest, CTest).
+ *
  */

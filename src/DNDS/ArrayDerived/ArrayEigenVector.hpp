@@ -1,4 +1,12 @@
 #pragma once
+/// @file ArrayEigenVector.hpp
+/// @brief Eigen-vector array: each row is an Eigen::Map over contiguous real storage.
+/// @par Unit Test Coverage (test_ArrayDerived.cpp, MPI np=1,2,4)
+/// - Static size (ArrayEigenVector<5>) and dynamic size (ArrayEigenVector<DynamicSize>)
+/// - Resize, Size, RowSize, operator[] returning Eigen::Map
+/// - Ghost communication: pull verifying vector element values
+/// @par Not Yet Tested
+/// - Device views, WriteSerializer / ReadSerializer
 
 #include "../ArrayTransformer.hpp"
 #include "ArrayEigenVector_DeviceView.hpp"
@@ -6,6 +14,7 @@
 
 namespace DNDS
 {
+    /// @brief Per-row Eigen vector array; each row is accessed as an Eigen::Map over contiguous storage.
     template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
     class ArrayEigenVector : public ParArray<real, _vec_size, _row_max, _align>
     {
@@ -61,6 +70,7 @@ namespace DNDS
             return t_deviceViewConst<B>{this->t_base::template deviceView<B>()};
         }
 
+        /// @brief Element iterator for ArrayEigenVector, yielding Eigen::Map per row.
         template <DeviceBackend B>
         class iterator : public ArrayIteratorBase<iterator<B>>
         {

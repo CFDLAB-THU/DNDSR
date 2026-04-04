@@ -1,9 +1,13 @@
 #pragma once
+/// @file Profiling.hpp
+/// @brief Wall-clock performance timer and running scalar statistics utilities.
+
 #include "Defines.hpp"
 #include "MPI.hpp"
 
 namespace DNDS
 {
+    /// @brief Singleton wall-clock timer with named categories (RHS, Comm, LinSolve, etc.).
     class PerformanceTimer // cxx11 + thread-safe singleton
     {
     public:
@@ -62,6 +66,7 @@ namespace DNDS
         void clearAllTimer();
     };
 
+    /// @brief Running mean and standard deviation accumulator (Welford's algorithm).
     class ScalarStatistics
     {
         real average = 0;

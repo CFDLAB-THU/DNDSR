@@ -1,4 +1,6 @@
 #pragma once
+/// @file Vector.hpp
+/// @brief Host-device vector types with optional GPU storage and device-side views.
 
 #include "DNDS/Errors.hpp"
 #include "DeviceStorage.hpp"
@@ -11,6 +13,7 @@
 namespace DNDS
 {
 
+    /// @brief Abstract interface for a single host-or-device memory allocation.
     class DeviceHostSingleAllocationBase
     {
     public:
@@ -27,6 +30,7 @@ namespace DNDS
         virtual std::unique_ptr<DeviceHostSingleAllocationBase> clone() = 0;
     };
 
+    /// @brief Concrete host/device allocation using std::vector (host) or DeviceStorage (device).
     class DeviceHostSingleAllocationDirect : public DeviceHostSingleAllocationBase
     {
         t_supDeviceStorageBase device_storage;
@@ -115,6 +119,7 @@ namespace DNDS
         }
     };
 
+    /// @brief Non-owning device-side view of a contiguous typed array.
     template <DeviceBackend B, typename T, typename TSize = int64_t>
     class vector_DeviceView
     {
@@ -141,6 +146,7 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE TSize size() const { return _size; }
     };
 
+    /// @brief CRTP base providing operator[] and at() for vector-like types.
     template <class T, class Derived>
     class data_vector_base
     {
@@ -167,6 +173,7 @@ namespace DNDS
         }
     };
 
+    /// @brief Primary host-device vector with separate host and optional GPU device storage.
     template <typename T>
     class host_device_vector_r1 : public data_vector_base<T, host_device_vector_r1<T>>
     {
@@ -357,6 +364,7 @@ namespace DNDS
         }
     };
 
+    /// @brief Legacy host-device vector extending std::vector<T> with optional device storage.
     template <typename T>
     struct host_device_vector_r0 : public std::vector<T>
     {

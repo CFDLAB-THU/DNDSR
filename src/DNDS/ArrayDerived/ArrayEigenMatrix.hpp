@@ -1,4 +1,15 @@
 #pragma once
+/// @file ArrayEigenMatrix.hpp
+/// @brief Eigen-matrix array: each row is an Eigen::Map<Matrix> over contiguous real storage.
+/// @par Unit Test Coverage (test_ArrayDerived.cpp, MPI np=1,2,4)
+/// - Static sizes (ArrayEigenMatrix<3,4>): Resize, Size, MatRowSize, MatColSize, operator[]
+/// - Dynamic sizes (ArrayEigenMatrix<DynamicSize,DynamicSize>): Resize with runtime dims
+/// - NonUniform row dimensions: ResizeMat per row, Compress, verify
+/// - Ghost communication via ArrayEigenMatrixPair
+/// @par Not Yet Tested
+/// - GetDerivedArraySignature, SignatureIsCompatible
+/// - WriteSerializer / ReadSerializer override
+/// - Device views
 
 #include "../ArrayTransformer.hpp"
 #include "ArrayEigenMatrix_DeviceView.hpp"
@@ -8,6 +19,7 @@
 namespace DNDS
 {
 
+    /// @brief Per-row Eigen matrix array; each row is accessed as an Eigen::Map<Matrix> over contiguous storage.
     template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
               rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
     class ArrayEigenMatrix : public ParArray<real,
@@ -304,6 +316,7 @@ namespace DNDS
                 _mat_nRows->to_device(backend);
         }
 
+        /// @brief Element iterator for ArrayEigenMatrix, yielding Eigen::Map<Matrix> per row.
         template <DeviceBackend B, bool is_const = false>
         class iterator : public ArrayIteratorBase<iterator<B>>
         {

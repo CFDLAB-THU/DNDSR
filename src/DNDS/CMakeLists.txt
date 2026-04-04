@@ -1,7 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
-
 # message("source dir is ${PROJECT_SOURCE_DIR}")
-include("${PROJECT_SOURCE_DIR}/cmakeCommonUtils.cmake") # from father
 
 # project(DNDS LANGUAGES CXX)
 
@@ -41,12 +38,12 @@ ExprtkWrapper.cpp
 Vector.cpp
 )
 
-file(GLOB ARRAYDOF_OP_SOURCES "ArrayDOF_inst/*.cpp")
+file(GLOB ARRAYDOF_OP_SOURCES CONFIGURE_DEPENDS "ArrayDOF_inst/*.cpp")
 list(APPEND CPPS ${ARRAYDOF_OP_SOURCES})
 
 if (DNDS_USE_CUDA)
     list(APPEND CPPS DeviceStorage_CUDA.cu)
-    file(GLOB ARRAYDOF_OP_SOURCES_CUDA "ArrayDOF_inst/*.cu")
+    file(GLOB ARRAYDOF_OP_SOURCES_CUDA CONFIGURE_DEPENDS "ArrayDOF_inst/*.cu")
     list(APPEND CPPS ${ARRAYDOF_OP_SOURCES_CUDA})
 endif()
 
@@ -86,14 +83,14 @@ ArrayDOF_bind.cpp
 Serializer_bind.cpp
 )
 
-file(GLOB ARRAY_BIND_OFFSET_SOURCES "Array_bind_offset/*.cpp")
+file(GLOB ARRAY_BIND_OFFSET_SOURCES CONFIGURE_DEPENDS "Array_bind_offset/*.cpp")
 list(APPEND CPPS_BIND ${ARRAY_BIND_OFFSET_SOURCES})
-file(GLOB ARRAYEIGENMATRIX_COLS_SOURCES "ArrayDerived/ArrayEigenMatrix_bind_cols/*.cpp")
+file(GLOB ARRAYEIGENMATRIX_COLS_SOURCES CONFIGURE_DEPENDS "ArrayDerived/ArrayEigenMatrix_bind_cols/*.cpp")
 list(APPEND CPPS_BIND ${ARRAYEIGENMATRIX_COLS_SOURCES})
-file(GLOB ARRAYEIGENUNIMATRIXBATCH_COLS_SOURCES "ArrayDerived/ArrayEigenUniMatrixBatch_bind_cols/*.cpp")
+file(GLOB ARRAYEIGENUNIMATRIXBATCH_COLS_SOURCES CONFIGURE_DEPENDS "ArrayDerived/ArrayEigenUniMatrixBatch_bind_cols/*.cpp")
 list(APPEND CPPS_BIND ${ARRAYEIGENUNIMATRIXBATCH_COLS_SOURCES})
 
-file(GLOB ARRAYDOF_COLS_SOURCES "ArrayDOF_bind_cols/*.cpp")
+file(GLOB ARRAYDOF_COLS_SOURCES CONFIGURE_DEPENDS "ArrayDOF_bind_cols/*.cpp")
 list(APPEND CPPS_BIND ${ARRAYDOF_COLS_SOURCES})
 
 

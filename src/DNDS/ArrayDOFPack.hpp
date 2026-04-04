@@ -1,3 +1,7 @@
+#pragma once
+/// @file ArrayDOFPack.hpp
+/// @brief Helper for constructing a single ArrayDof with father, son, and transformer.
+
 #include "ArrayDOF.hpp"
 #include "DNDS/Defines.hpp"
 #include "DNDS/MPI.hpp"
@@ -5,6 +9,7 @@
 
 namespace DNDS
 {
+    /// @brief Helper for constructing a single ArrayDof with father, son, and transformer.
     class ArrayDofSinglePack
     {
         std::vector<ArrayDof<1, 1>> arrs;

@@ -1,4 +1,6 @@
 #pragma once
+/// @file HDF5.hpp
+/// @brief HDF5 native type mappings for DNDS index, rowsize, and real types.
 
 #include "Defines.hpp"
 #include <hdf5.h>

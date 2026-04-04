@@ -1,4 +1,6 @@
 #pragma once
+/// @file DeviceStorage.hpp
+/// @brief Device memory abstraction layer with backend-specific storage and factory creation.
 
 #include "DNDS/Errors.hpp"
 #include "Defines.hpp"
@@ -14,6 +16,7 @@
 
 namespace DNDS
 {
+    /// @brief Enumerates available device backends (Host, CUDA, etc.).
     enum class DeviceBackend
     {
         Unknown = 0,
@@ -77,6 +80,7 @@ namespace DNDS
         return {nullptr, deviceStorageBase_deleter};
     }
 
+    /// @brief Abstract interface for device memory management (copy, query, lifetime).
     class DeviceStorageBase
     {
     public:
@@ -91,9 +95,11 @@ namespace DNDS
         virtual ~DeviceStorageBase();
     };
 
+    /// @brief Concrete device storage implementation, specialized per DeviceBackend.
     template <DeviceBackend B>
     class DeviceStorage;
 
+    /// @brief Factory for creating DeviceStorage instances for a given backend.
     template <DeviceBackend B>
     struct device_storage_factory
     {

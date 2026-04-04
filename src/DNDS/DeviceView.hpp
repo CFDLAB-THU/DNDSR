@@ -1,4 +1,6 @@
 #pragma once
+/// @file DeviceView.hpp
+/// @brief Non-owning device-side views of Array objects for host and CUDA backends.
 
 #include "ArrayBasic.hpp"
 #include "DNDS/Defines.hpp"
@@ -15,6 +17,7 @@ namespace DNDS
     //     virtual ~ArrayDeviceViewBase() = default;
     // };
 
+    /// @brief Non-owning device-side view of an Array, specialized per DeviceBackend.
     template <DeviceBackend B,
               class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ArrayDeviceView : public ArrayView<T, _row_size, _row_max, _align>

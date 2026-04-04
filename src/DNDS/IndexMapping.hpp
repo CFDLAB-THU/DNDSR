@@ -1,4 +1,18 @@
 #pragma once
+/// @file IndexMapping.hpp
+/// @brief Global-to-local index mapping for distributed arrays.
+/// @par Unit Test Coverage (test_IndexMapping.cpp, MPI np=1,2,4)
+/// - GlobalOffsetsMapping: setMPIAlignBcast, globalSize, RLengths, ROffsets,
+///   operator() (local-to-global), search (global-to-local, both overloads)
+///   -- uniform and non-uniform distributions
+///   -- edge cases: out-of-range, negative index, rank boundary crossing
+/// - OffsetAscendIndexMapping (pull-based): searchInMain, searchInGhost,
+///   searchInAllGhost, search, search_indexAppend, operator() (reverse mapping)
+///   -- empty ghost set edge case
+/// @par Not Yet Tested
+/// - Push-based OffsetAscendIndexMapping constructor
+/// - sort(), ghostAt(), search_indexRank
+/// - Duplicate pull indices
 
 #include <unordered_map>
 #include <algorithm>

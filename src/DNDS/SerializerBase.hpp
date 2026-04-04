@@ -1,4 +1,6 @@
 #pragma once
+/// @file SerializerBase.hpp
+/// @brief Base types and abstract interface for array serialization.
 
 #include "Defines.hpp"
 #include "MPI.hpp"
@@ -12,6 +14,7 @@ namespace DNDS::Serializer
     static const index Offset_One = -2;
     static const index Offset_Unkown = UnInitIndex;
 
+    /// @brief Describes a rank's portion of a globally-distributed array (local size + global offset).
     class ArrayGlobalOffset
     {
         index _size{0};
@@ -79,6 +82,7 @@ namespace DNDS::Serializer
     static const ArrayGlobalOffset ArrayGlobalOffset_One = ArrayGlobalOffset{0, Offset_One};
     static const ArrayGlobalOffset ArrayGlobalOffset_Parts = ArrayGlobalOffset{0, Offset_Parts};
 
+    /// @brief Abstract interface for reading/writing scalars, vectors, and byte arrays.
     class SerializerBase
     {
 

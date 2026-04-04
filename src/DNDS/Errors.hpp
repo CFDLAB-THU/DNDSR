@@ -1,4 +1,6 @@
 #pragma once
+/// @file Errors.hpp
+/// @brief Assertion and error-handling macros (DNDS_assert, DNDS_check_throw) and supporting utilities.
 
 #include "Macros.hpp"
 

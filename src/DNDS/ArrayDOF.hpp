@@ -1,4 +1,22 @@
 #pragma once
+/// @file ArrayDOF.hpp
+/// @brief Degree-of-freedom array with vector-space operations (MPI-collective).
+/// @par Unit Test Coverage (test_ArrayDOF.cpp, MPI np=1,2,4)
+/// - setConstant (scalar and Eigen::Matrix)
+/// - operator+= (scalar, ArrayDof, Eigen::Matrix), operator-=, operator*= (scalar,
+///   ArrayDof element-wise, Eigen::Matrix), operator/=
+/// - addTo(other, scale)
+/// - norm2, norm2(other) (L2 distance), dot (MPI-collective)
+/// - min, max, sum (MPI-collective reductions)
+/// - componentWiseNorm1, componentWiseNorm1(other)
+/// - operator= (value copy), clone (deep copy)
+/// - Scalar-array multiply: ArrayDof<N,1> *= ArrayDof<1,1>
+/// - Mathematical identity: dot(x,x) == norm2(x)^2
+/// @par Not Yet Tested
+/// - Multi-column DOFs (n_n > 1, i.e. matrix-valued DOFs)
+/// - Ghost communication through ArrayDof (all tests use son->Resize(0))
+/// - ArrayDofOp<DeviceBackend::CUDA>
+/// - ArrayDofSinglePack::BuildResizeFatherSon
 
 #include "ArrayDerived/ArrayEigenMatrix.hpp"
 
@@ -10,6 +28,7 @@
 
 namespace DNDS
 {
+    /// @brief Mutable device view of an ArrayDof father/son pair.
     template <DeviceBackend B, int n_m, int n_n>
     class ArrayDofDeviceView : public ArrayPairDeviceView<B, ArrayEigenMatrix<n_m, n_n>>
     {
@@ -23,6 +42,7 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE ArrayDofDeviceView(t_base &&base_view) : t_base(base_view) {}
     };
 
+    /// @brief Const device view of an ArrayDof father/son pair.
     template <DeviceBackend B, int n_m, int n_n>
     class ArrayDofDeviceViewConst : public ArrayPairDeviceViewConst<B, ArrayEigenMatrix<n_m, n_n>>
     {
@@ -64,6 +84,7 @@ namespace DNDS
     spec ArrayDofOp<B, n_m, n_n>::t_element_mat DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) componentWiseNorm1(t_self &self, const t_self &R); \
     spec real DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) dot(t_self &self, const t_self &R);
 
+    /// @brief Static dispatch class providing host-side vector-space operations for ArrayDof.
     template <int n_m, int n_n>
     class ArrayDofOp<DeviceBackend::Host, n_m, n_n>
     {
@@ -108,6 +129,7 @@ namespace DNDS
         return (t_ops<DeviceBackend::Host>::expr); \
     }
 
+    /// @brief Degree-of-freedom array with MPI-collective vector-space operations (norm, dot, etc.).
     template <int n_m, int n_n>
     class ArrayDof : public ArrayEigenMatrixPair<n_m, n_n>
     {

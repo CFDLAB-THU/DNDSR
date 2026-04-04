@@ -1,4 +1,25 @@
 #pragma once
+/// @file SerializerH5.hpp
+/// @brief MPI-parallel HDF5 serializer implementing the SerializerBase interface.
+/// @par Unit Test Coverage (test_Serializer.cpp, MPI np=1,2,4)
+/// - Scalar round-trip: WriteInt/ReadInt, WriteIndex/ReadIndex,
+///   WriteReal/ReadReal, WriteString/ReadString
+/// - Vector round-trip: WriteRealVector, WriteIndexVector with explicit
+///   ArrayGlobalOffset; ReadRealVector/ReadIndexVector with ArrayGlobalOffset_Unknown
+/// - Distributed vector: non-uniform per-rank sizes, write with explicit offset,
+///   read with both ArrayGlobalOffset_Unknown (auto-detect from ::rank_offsets)
+///   and explicit offset
+/// - uint8 distributed round-trip: two-pass read (nullptr size query, then read)
+/// - Path operations: CreatePath, GoToPath, GetCurrentPath, ListCurrentPath
+///   (groups materialized by writing content), WriteInt/ReadInt on nested paths
+/// - String round-trip: WriteString/ReadString with fixed-length HDF5 attributes
+/// @par Not Yet Tested
+/// - SetChunkAndDeflate impact, SetCollectiveRW impact
+/// - WriteSharedIndexVector / ReadSharedIndexVector (H5 deduplication)
+/// - WriteRowsizeVector / ReadRowsizeVector
+/// - WriteIndexVectorPerRank
+/// - ArrayGlobalOffset_One semantics (rank-0-only write)
+/// - ArrayGlobalOffset_Parts auto-offset
 #include "SerializerBase.hpp"
 
 #include <hdf5.h>
@@ -8,6 +29,7 @@
 
 namespace DNDS::Serializer
 {
+    /// @brief MPI-parallel HDF5 serializer; all ranks collectively read/write a single .h5 file.
     class SerializerH5 : public SerializerBase
     {
         bool reading = true;
