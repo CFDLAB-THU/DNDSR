@@ -82,8 +82,8 @@ def test_mesh0():
 
     mesh.coords.to_device("CUDA")
     mesh.to_device("CUDA")
-    while True:
-        pass
+    # while True:
+    #     pass
 
     # fig, ax = plt.subplots(figsize=(16, 16), dpi=320)
     # xymaxs = np.array([-1e100, -1e100], dtype=np.double)
