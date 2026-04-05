@@ -27,6 +27,7 @@
 #include "doctest.h"
 #include "DNDS/SerializerJSON.hpp"
 #include "DNDS/SerializerH5.hpp"
+#include "DNDS/ArrayPair.hpp"
 #include "DNDS/MPI.hpp"
 #include <filesystem>
 #include <numeric>
@@ -116,29 +117,568 @@ TEST_CASE("SerializerJSON scalar round-trip")
 
         ser.CloseFile();
     }
+}
 
-    // --- Read ---
+// ===================================================================
+// ArrayPair redistribute — same np round-trip
+// ===================================================================
+TEST_CASE("ArrayPair redistribute — same np round-trip")
+{
+    MPIInfo mpi(MPI_COMM_WORLD);
+    std::string fname = TmpH5("h5_redist");
+    FileGuard guard(fname, true);
+
+    DNDS::index nLocal = 100 + mpi.rank * 13;
+    std::vector<DNDS::index> origIndex(nLocal);
     {
-        S::SerializerJSON ser;
-        ser.OpenFile(fname, true);
-        ser.GoToPath("/test");
+        DNDS::index globalOffset = 0;
+        for (int r = 0; r < mpi.rank; r++)
+            globalOffset += 100 + r * 13;
+        for (DNDS::index i = 0; i < nLocal; i++)
+            origIndex[i] = globalOffset + (nLocal - 1 - i);
+    }
 
-        int rInt = 0;
-        DNDS::index rIdx = 0;
-        real rReal = 0.0;
-        std::string rStr;
+    {
+        using TArray = ParArray<DNDS::real, 3>;
+        using TPair = ArrayPair<TArray>;
+        TPair pair;
+        DNDS_MAKE_SSP(pair.father, mpi);
+        DNDS_MAKE_SSP(pair.son, mpi);
+        pair.father->Resize(nLocal);
+        pair.son->Resize(0);
+        for (DNDS::index i = 0; i < nLocal; i++)
+            for (DNDS::rowsize j = 0; j < 3; j++)
+                pair.father->operator()(i, j) = DNDS::real(origIndex[i]) * 10.0 + DNDS::real(j);
+        auto ser = std::make_shared<S::SerializerH5>(mpi);
+        ser->OpenFile(fname, false);
+        pair.WriteSerialize(ser, "data", origIndex, false, false);
+        ser->CloseFile();
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    {
+        using TArray = ParArray<DNDS::real, 3>;
+        using TPair = ArrayPair<TArray>;
+        TPair pair;
+        DNDS_MAKE_SSP(pair.father, mpi);
+        DNDS_MAKE_SSP(pair.son, mpi);
+        pair.father->Resize(nLocal);
+        pair.son->Resize(0);
+        auto ser = std::make_shared<S::SerializerH5>(mpi);
+        ser->OpenFile(fname, true);
+        pair.ReadSerializeRedistributed(ser, "data", origIndex);
+        ser->CloseFile();
+        for (DNDS::index i = 0; i < nLocal; i++)
+            for (DNDS::rowsize j = 0; j < 3; j++)
+                CHECK(pair.father->operator()(i, j) == doctest::Approx(DNDS::real(origIndex[i]) * 10.0 + DNDS::real(j)));
+    }
+}
 
-        ser.ReadInt("myInt", rInt);
-        ser.ReadIndex("myIdx", rIdx);
-        ser.ReadReal("myReal", rReal);
-        ser.ReadString("myStr", rStr);
+TEST_CASE("ArrayPair redistribute — shuffled partition same np")
+{
+    MPIInfo mpi(MPI_COMM_WORLD);
+    std::string fname = TmpH5("h5_redist_shuffle");
+    FileGuard guard(fname, true);
 
-        CHECK(rInt == 42);
-        CHECK(rIdx == 123456789LL);
-        CHECK(rReal == doctest::Approx(3.14));
-        CHECK(rStr == "hello");
+    DNDS::index nLocal = 50 + mpi.rank * 7;
+    DNDS::index nGlobal = 0;
+    {
+        DNDS::index tmp = nLocal;
+        MPI::Allreduce(&tmp, &nGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+    }
 
-        ser.CloseFile();
+    std::vector<DNDS::index> writeOrigIndex(nLocal);
+    {
+        DNDS::index globalOffset = 0;
+        for (int r = 0; r < mpi.rank; r++)
+            globalOffset += 50 + r * 7;
+        for (DNDS::index i = 0; i < nLocal; i++)
+            writeOrigIndex[i] = globalOffset + i;
+    }
+
+    {
+        using TArray = ParArray<DNDS::real, 2>;
+        using TPair = ArrayPair<TArray>;
+        TPair pair;
+        DNDS_MAKE_SSP(pair.father, mpi);
+        DNDS_MAKE_SSP(pair.son, mpi);
+        pair.father->Resize(nLocal);
+        pair.son->Resize(0);
+        for (DNDS::index i = 0; i < nLocal; i++)
+            for (DNDS::rowsize j = 0; j < 2; j++)
+                pair.father->operator()(i, j) = DNDS::real(writeOrigIndex[i]) * 100.0 + DNDS::real(j);
+        auto ser = std::make_shared<S::SerializerH5>(mpi);
+        ser->OpenFile(fname, false);
+        pair.WriteSerialize(ser, "data", writeOrigIndex, false, false);
+        ser->CloseFile();
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    {
+        std::vector<DNDS::index> readOrigIndex(nLocal);
+        {
+            DNDS::index globalEndOffset = nGlobal;
+            for (int r = 0; r < mpi.rank; r++)
+                globalEndOffset -= (50 + r * 7);
+            for (DNDS::index i = 0; i < nLocal; i++)
+                readOrigIndex[i] = globalEndOffset - nLocal + i;
+        }
+        using TArray = ParArray<DNDS::real, 2>;
+        using TPair = ArrayPair<TArray>;
+        TPair pair;
+        DNDS_MAKE_SSP(pair.father, mpi);
+        DNDS_MAKE_SSP(pair.son, mpi);
+        pair.father->Resize(nLocal);
+        pair.son->Resize(0);
+        auto ser = std::make_shared<S::SerializerH5>(mpi);
+        ser->OpenFile(fname, true);
+        pair.ReadSerializeRedistributed(ser, "data", readOrigIndex);
+        ser->CloseFile();
+        for (DNDS::index i = 0; i < nLocal; i++)
+            for (DNDS::rowsize j = 0; j < 2; j++)
+                CHECK(pair.father->operator()(i, j) == doctest::Approx(DNDS::real(readOrigIndex[i]) * 100.0 + DNDS::real(j)));
+    }
+}
+
+// ===================================================================
+// Parametric redistribution tests (type x layout x row-size)
+// ===================================================================
+
+template <class T>
+T MakeTestValue(DNDS::index origIdx, DNDS::rowsize col)
+{
+    return static_cast<T>(origIdx * 100 + col * 3 + 7);
+}
+
+static int g_redist_ctr = 0;
+static std::string NextTag() { return "rd_" + std::to_string(g_redist_ctr++); }
+
+static void BuildSeqOrig(std::vector<DNDS::index> &v, DNDS::index n, int rank,
+                         std::function<DNDS::index(int)> nFor)
+{
+    v.resize(n);
+    DNDS::index off = 0;
+    for (int r = 0; r < rank; r++)
+        off += nFor(r);
+    for (DNDS::index i = 0; i < n; i++)
+        v[i] = off + i;
+}
+
+static void BuildRevOrig(std::vector<DNDS::index> &v, DNDS::index n,
+                         DNDS::index nGlobal, int rank,
+                         std::function<DNDS::index(int)> nFor)
+{
+    v.resize(n);
+    DNDS::index end = nGlobal;
+    for (int r = 0; r < rank; r++)
+        end -= nFor(r);
+    for (DNDS::index i = 0; i < n; i++)
+        v[i] = end - n + i;
+}
+
+struct LayoutStaticFixed
+{
+};
+struct LayoutDynamic
+{
+};
+struct LayoutCSR
+{
+};
+
+template <class T, class Layout, DNDS::rowsize RS>
+struct RedistTag
+{
+    using type = T;
+    using layout = Layout;
+    static constexpr DNDS::rowsize rs = RS;
+};
+
+#define REDIST_TAG_STR(T, L, RS) TYPE_TO_STRING(RedistTag<T, L, RS>)
+REDIST_TAG_STR(DNDS::real, LayoutStaticFixed, 1);
+REDIST_TAG_STR(DNDS::real, LayoutStaticFixed, 3);
+REDIST_TAG_STR(DNDS::real, LayoutStaticFixed, 7);
+REDIST_TAG_STR(DNDS::real, LayoutDynamic, 1);
+REDIST_TAG_STR(DNDS::real, LayoutDynamic, 3);
+REDIST_TAG_STR(DNDS::real, LayoutDynamic, 7);
+REDIST_TAG_STR(DNDS::real, LayoutCSR, 0);
+REDIST_TAG_STR(DNDS::index, LayoutStaticFixed, 1);
+REDIST_TAG_STR(DNDS::index, LayoutStaticFixed, 3);
+REDIST_TAG_STR(DNDS::index, LayoutStaticFixed, 7);
+REDIST_TAG_STR(DNDS::index, LayoutDynamic, 1);
+REDIST_TAG_STR(DNDS::index, LayoutDynamic, 3);
+REDIST_TAG_STR(DNDS::index, LayoutDynamic, 7);
+REDIST_TAG_STR(DNDS::index, LayoutCSR, 0);
+REDIST_TAG_STR(uint16_t, LayoutStaticFixed, 1);
+REDIST_TAG_STR(uint16_t, LayoutStaticFixed, 3);
+REDIST_TAG_STR(uint16_t, LayoutStaticFixed, 7);
+REDIST_TAG_STR(uint16_t, LayoutDynamic, 1);
+REDIST_TAG_STR(uint16_t, LayoutDynamic, 3);
+REDIST_TAG_STR(uint16_t, LayoutDynamic, 7);
+REDIST_TAG_STR(uint16_t, LayoutCSR, 0);
+REDIST_TAG_STR(int32_t, LayoutStaticFixed, 1);
+REDIST_TAG_STR(int32_t, LayoutStaticFixed, 3);
+REDIST_TAG_STR(int32_t, LayoutStaticFixed, 7);
+REDIST_TAG_STR(int32_t, LayoutDynamic, 1);
+REDIST_TAG_STR(int32_t, LayoutDynamic, 3);
+REDIST_TAG_STR(int32_t, LayoutDynamic, 7);
+REDIST_TAG_STR(int32_t, LayoutCSR, 0);
+REDIST_TAG_STR(uint8_t, LayoutStaticFixed, 1);
+REDIST_TAG_STR(uint8_t, LayoutStaticFixed, 3);
+REDIST_TAG_STR(uint8_t, LayoutStaticFixed, 7);
+REDIST_TAG_STR(uint8_t, LayoutDynamic, 1);
+REDIST_TAG_STR(uint8_t, LayoutDynamic, 3);
+REDIST_TAG_STR(uint8_t, LayoutDynamic, 7);
+REDIST_TAG_STR(uint8_t, LayoutCSR, 0);
+#undef REDIST_TAG_STR
+
+#define REDIST_ALL_TAGS                                                                                                                           \
+    RedistTag<DNDS::real, LayoutStaticFixed, 1>, RedistTag<DNDS::real, LayoutStaticFixed, 3>, RedistTag<DNDS::real, LayoutStaticFixed, 7>,        \
+        RedistTag<DNDS::real, LayoutDynamic, 1>, RedistTag<DNDS::real, LayoutDynamic, 3>, RedistTag<DNDS::real, LayoutDynamic, 7>,                \
+        RedistTag<DNDS::real, LayoutCSR, 0>,                                                                                                      \
+        RedistTag<DNDS::index, LayoutStaticFixed, 1>, RedistTag<DNDS::index, LayoutStaticFixed, 3>, RedistTag<DNDS::index, LayoutStaticFixed, 7>, \
+        RedistTag<DNDS::index, LayoutDynamic, 1>, RedistTag<DNDS::index, LayoutDynamic, 3>, RedistTag<DNDS::index, LayoutDynamic, 7>,             \
+        RedistTag<DNDS::index, LayoutCSR, 0>,                                                                                                     \
+        RedistTag<uint16_t, LayoutStaticFixed, 1>, RedistTag<uint16_t, LayoutStaticFixed, 3>, RedistTag<uint16_t, LayoutStaticFixed, 7>,          \
+        RedistTag<uint16_t, LayoutDynamic, 1>, RedistTag<uint16_t, LayoutDynamic, 3>, RedistTag<uint16_t, LayoutDynamic, 7>,                      \
+        RedistTag<uint16_t, LayoutCSR, 0>,                                                                                                        \
+        RedistTag<int32_t, LayoutStaticFixed, 1>, RedistTag<int32_t, LayoutStaticFixed, 3>, RedistTag<int32_t, LayoutStaticFixed, 7>,             \
+        RedistTag<int32_t, LayoutDynamic, 1>, RedistTag<int32_t, LayoutDynamic, 3>, RedistTag<int32_t, LayoutDynamic, 7>,                         \
+        RedistTag<int32_t, LayoutCSR, 0>,                                                                                                         \
+        RedistTag<uint8_t, LayoutStaticFixed, 1>, RedistTag<uint8_t, LayoutStaticFixed, 3>, RedistTag<uint8_t, LayoutStaticFixed, 7>,             \
+        RedistTag<uint8_t, LayoutDynamic, 1>, RedistTag<uint8_t, LayoutDynamic, 3>, RedistTag<uint8_t, LayoutDynamic, 7>,                         \
+        RedistTag<uint8_t, LayoutCSR, 0>
+
+TEST_CASE_TEMPLATE("redistribute", Tag, REDIST_ALL_TAGS)
+{
+    using T = typename Tag::type;
+    using L = typename Tag::layout;
+    constexpr DNDS::rowsize RS = Tag::rs;
+
+    MPIInfo mpi(MPI_COMM_WORLD);
+
+    for (DNDS::index baseSize : {5, 30, 100})
+    {
+        CAPTURE(baseSize);
+        std::string fname = TmpH5(NextTag());
+        FileGuard guard(fname, true);
+
+        auto nLocalFor = [baseSize](int r) -> DNDS::index
+        { return baseSize + r * 9; };
+        DNDS::index nLocal = nLocalFor(mpi.rank);
+        DNDS::index nGlobal = 0;
+        {
+            DNDS::index tmp = nLocal;
+            MPI::Allreduce(&tmp, &nGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        }
+
+        auto csrRowSize = [](DNDS::index origIdx) -> DNDS::rowsize
+        { return DNDS::rowsize(1 + origIdx % 7); };
+
+        std::vector<DNDS::index> writeOrig;
+        BuildSeqOrig(writeOrig, nLocal, mpi.rank, nLocalFor);
+
+        // ---- Write ----
+        if constexpr (std::is_same_v<L, LayoutStaticFixed>)
+        {
+            using TArray = ParArray<T, RS>;
+            using TPair = ArrayPair<TArray>;
+            TPair pair;
+            DNDS_MAKE_SSP(pair.father, mpi);
+            DNDS_MAKE_SSP(pair.son, mpi);
+            pair.father->Resize(nLocal);
+            pair.son->Resize(0);
+            for (DNDS::index i = 0; i < nLocal; i++)
+                for (DNDS::rowsize j = 0; j < RS; j++)
+                    pair.father->operator()(i, j) = MakeTestValue<T>(writeOrig[i], j);
+            auto ser = std::make_shared<S::SerializerH5>(mpi);
+            ser->OpenFile(fname, false);
+            pair.WriteSerialize(ser, "data", writeOrig, false, false);
+            ser->CloseFile();
+        }
+        else if constexpr (std::is_same_v<L, LayoutDynamic>)
+        {
+            using TArray = ParArray<T, DynamicSize>;
+            using TPair = ArrayPair<TArray>;
+            TPair pair;
+            DNDS_MAKE_SSP(pair.father, mpi);
+            DNDS_MAKE_SSP(pair.son, mpi);
+            pair.father->Resize(nLocal, RS);
+            pair.son->Resize(0, RS);
+            for (DNDS::index i = 0; i < nLocal; i++)
+                for (DNDS::rowsize j = 0; j < RS; j++)
+                    pair.father->operator()(i, j) = MakeTestValue<T>(writeOrig[i], j);
+            auto ser = std::make_shared<S::SerializerH5>(mpi);
+            ser->OpenFile(fname, false);
+            pair.WriteSerialize(ser, "data", writeOrig, false, false);
+            ser->CloseFile();
+        }
+        else
+        {
+            using TArray = ParArray<T, NonUniformSize>;
+            using TPair = ArrayPair<TArray>;
+            TPair pair;
+            DNDS_MAKE_SSP(pair.father, mpi);
+            DNDS_MAKE_SSP(pair.son, mpi);
+            pair.father->Resize(nLocal);
+            pair.son->Resize(0);
+            for (DNDS::index i = 0; i < nLocal; i++)
+                pair.father->ResizeRow(i, csrRowSize(writeOrig[i]));
+            pair.father->Compress();
+            for (DNDS::index i = 0; i < nLocal; i++)
+                for (DNDS::rowsize j = 0; j < pair.father->RowSize(i); j++)
+                    pair.father->operator()(i, j) = MakeTestValue<T>(writeOrig[i], j);
+            auto ser = std::make_shared<S::SerializerH5>(mpi);
+            ser->OpenFile(fname, false);
+            pair.WriteSerialize(ser, "data", writeOrig, false, false);
+            ser->CloseFile();
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        // ---- Read with reversed partition ----
+        std::vector<DNDS::index> readOrig;
+        BuildRevOrig(readOrig, nLocal, nGlobal, mpi.rank, nLocalFor);
+
+        if constexpr (std::is_same_v<L, LayoutStaticFixed>)
+        {
+            using TArray = ParArray<T, RS>;
+            using TPair = ArrayPair<TArray>;
+            TPair pair;
+            DNDS_MAKE_SSP(pair.father, mpi);
+            DNDS_MAKE_SSP(pair.son, mpi);
+            pair.father->Resize(nLocal);
+            pair.son->Resize(0);
+            auto ser = std::make_shared<S::SerializerH5>(mpi);
+            ser->OpenFile(fname, true);
+            pair.ReadSerializeRedistributed(ser, "data", readOrig);
+            ser->CloseFile();
+            for (DNDS::index i = 0; i < nLocal; i++)
+                for (DNDS::rowsize j = 0; j < RS; j++)
+                    CHECK(pair.father->operator()(i, j) == MakeTestValue<T>(readOrig[i], j));
+        }
+        else if constexpr (std::is_same_v<L, LayoutDynamic>)
+        {
+            using TArray = ParArray<T, DynamicSize>;
+            using TPair = ArrayPair<TArray>;
+            TPair pair;
+            DNDS_MAKE_SSP(pair.father, mpi);
+            DNDS_MAKE_SSP(pair.son, mpi);
+            pair.father->Resize(nLocal, RS);
+            pair.son->Resize(0, RS);
+            auto ser = std::make_shared<S::SerializerH5>(mpi);
+            ser->OpenFile(fname, true);
+            pair.ReadSerializeRedistributed(ser, "data", readOrig);
+            ser->CloseFile();
+            for (DNDS::index i = 0; i < nLocal; i++)
+                for (DNDS::rowsize j = 0; j < RS; j++)
+                    CHECK(pair.father->operator()(i, j) == MakeTestValue<T>(readOrig[i], j));
+        }
+        else
+        {
+            using TArray = ParArray<T, NonUniformSize>;
+            using TPair = ArrayPair<TArray>;
+            TPair pair;
+            DNDS_MAKE_SSP(pair.father, mpi);
+            DNDS_MAKE_SSP(pair.son, mpi);
+            pair.father->Resize(nLocal);
+            pair.son->Resize(0);
+            auto ser = std::make_shared<S::SerializerH5>(mpi);
+            ser->OpenFile(fname, true);
+            pair.ReadSerializeRedistributed(ser, "data", readOrig);
+            ser->CloseFile();
+            for (DNDS::index i = 0; i < nLocal; i++)
+            {
+                CHECK(pair.father->RowSize(i) == csrRowSize(readOrig[i]));
+                for (DNDS::rowsize j = 0; j < csrRowSize(readOrig[i]); j++)
+                    CHECK(pair.father->operator()(i, j) == MakeTestValue<T>(readOrig[i], j));
+            }
+        }
+    } // for baseSize
+}
+
+// ===================================================================
+// Different-np redistribution test (all types, layouts, sizes)
+// ===================================================================
+// Writes data using a subset of ranks (npWrite), reads back with all ranks.
+// Reuses the same REDIST_ALL_TAGS cross-product as same-np tests.
+// Requires world np >= 3. Runtime loop over npWrite and baseSize.
+
+template <class T, class L, DNDS::rowsize RS>
+void TestDifferentNp(int npWrite, DNDS::index baseSize)
+{
+    MPIInfo worldMpi(MPI_COMM_WORLD);
+    if (worldMpi.size < 3)
+        return;
+    DNDS_assert(npWrite >= 1 && npWrite < worldMpi.size);
+
+    auto csrRowSize = [](DNDS::index origIdx) -> DNDS::rowsize
+    { return DNDS::rowsize(1 + origIdx % 7); };
+
+    std::string fname = TmpH5(NextTag());
+    FileGuard guard(fname, true);
+
+    // --- Write phase: only first npWrite ranks ---
+    DNDS::index nGlobalWrite = 0;
+    {
+        int color = (worldMpi.rank < npWrite) ? 0 : MPI_UNDEFINED;
+        MPI_Comm writeComm = MPI_COMM_NULL;
+        MPI_Comm_split(MPI_COMM_WORLD, color, worldMpi.rank, &writeComm);
+
+        // Compute nGlobalWrite on all ranks
+        for (int r = 0; r < npWrite; r++)
+            nGlobalWrite += baseSize + r * 7;
+
+        if (writeComm != MPI_COMM_NULL)
+        {
+            MPIInfo writeMpi(writeComm);
+            auto nLocalFor = [baseSize](int r) -> DNDS::index
+            { return baseSize + r * 7; };
+            DNDS::index nLocal = nLocalFor(writeMpi.rank);
+
+            std::vector<DNDS::index> writeOrig;
+            BuildSeqOrig(writeOrig, nLocal, writeMpi.rank, nLocalFor);
+
+            if constexpr (std::is_same_v<L, LayoutStaticFixed>)
+            {
+                using TArray = ParArray<T, RS>;
+                using TPair = ArrayPair<TArray>;
+                TPair pair;
+                DNDS_MAKE_SSP(pair.father, writeMpi);
+                DNDS_MAKE_SSP(pair.son, writeMpi);
+                pair.father->Resize(nLocal);
+                pair.son->Resize(0);
+                for (DNDS::index i = 0; i < nLocal; i++)
+                    for (DNDS::rowsize j = 0; j < RS; j++)
+                        pair.father->operator()(i, j) = MakeTestValue<T>(writeOrig[i], j);
+                auto ser = std::make_shared<S::SerializerH5>(writeMpi);
+                ser->OpenFile(fname, false);
+                pair.WriteSerialize(ser, "data", writeOrig, false, false);
+                ser->CloseFile();
+            }
+            else if constexpr (std::is_same_v<L, LayoutDynamic>)
+            {
+                using TArray = ParArray<T, DynamicSize>;
+                using TPair = ArrayPair<TArray>;
+                TPair pair;
+                DNDS_MAKE_SSP(pair.father, writeMpi);
+                DNDS_MAKE_SSP(pair.son, writeMpi);
+                pair.father->Resize(nLocal, RS);
+                pair.son->Resize(0, RS);
+                for (DNDS::index i = 0; i < nLocal; i++)
+                    for (DNDS::rowsize j = 0; j < RS; j++)
+                        pair.father->operator()(i, j) = MakeTestValue<T>(writeOrig[i], j);
+                auto ser = std::make_shared<S::SerializerH5>(writeMpi);
+                ser->OpenFile(fname, false);
+                pair.WriteSerialize(ser, "data", writeOrig, false, false);
+                ser->CloseFile();
+            }
+            else // CSR
+            {
+                using TArray = ParArray<T, NonUniformSize>;
+                using TPair = ArrayPair<TArray>;
+                TPair pair;
+                DNDS_MAKE_SSP(pair.father, writeMpi);
+                DNDS_MAKE_SSP(pair.son, writeMpi);
+                pair.father->Resize(nLocal);
+                pair.son->Resize(0);
+                for (DNDS::index i = 0; i < nLocal; i++)
+                    pair.father->ResizeRow(i, csrRowSize(writeOrig[i]));
+                pair.father->Compress();
+                for (DNDS::index i = 0; i < nLocal; i++)
+                    for (DNDS::rowsize j = 0; j < pair.father->RowSize(i); j++)
+                        pair.father->operator()(i, j) = MakeTestValue<T>(writeOrig[i], j);
+                auto ser = std::make_shared<S::SerializerH5>(writeMpi);
+                ser->OpenFile(fname, false);
+                pair.WriteSerialize(ser, "data", writeOrig, false, false);
+                ser->CloseFile();
+            }
+            MPI_Comm_free(&writeComm);
+        }
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    // --- Read phase: all ranks with even-split ---
+    {
+        auto [startRow, endRow] = EvenSplitRange(worldMpi.rank, worldMpi.size, nGlobalWrite);
+        DNDS::index nLocal = endRow - startRow;
+
+        std::vector<DNDS::index> readOrig(nLocal);
+        for (DNDS::index i = 0; i < nLocal; i++)
+            readOrig[i] = startRow + i;
+
+        if constexpr (std::is_same_v<L, LayoutStaticFixed>)
+        {
+            using TArray = ParArray<T, RS>;
+            using TPair = ArrayPair<TArray>;
+            TPair pair;
+            DNDS_MAKE_SSP(pair.father, worldMpi);
+            DNDS_MAKE_SSP(pair.son, worldMpi);
+            pair.father->Resize(nLocal);
+            pair.son->Resize(0);
+            auto ser = std::make_shared<S::SerializerH5>(worldMpi);
+            ser->OpenFile(fname, true);
+            pair.ReadSerializeRedistributed(ser, "data", readOrig);
+            ser->CloseFile();
+            for (DNDS::index i = 0; i < nLocal; i++)
+                for (DNDS::rowsize j = 0; j < RS; j++)
+                    CHECK(pair.father->operator()(i, j) == MakeTestValue<T>(readOrig[i], j));
+        }
+        else if constexpr (std::is_same_v<L, LayoutDynamic>)
+        {
+            using TArray = ParArray<T, DynamicSize>;
+            using TPair = ArrayPair<TArray>;
+            TPair pair;
+            DNDS_MAKE_SSP(pair.father, worldMpi);
+            DNDS_MAKE_SSP(pair.son, worldMpi);
+            pair.father->Resize(nLocal, RS);
+            pair.son->Resize(0, RS);
+            auto ser = std::make_shared<S::SerializerH5>(worldMpi);
+            ser->OpenFile(fname, true);
+            pair.ReadSerializeRedistributed(ser, "data", readOrig);
+            ser->CloseFile();
+            for (DNDS::index i = 0; i < nLocal; i++)
+                for (DNDS::rowsize j = 0; j < RS; j++)
+                    CHECK(pair.father->operator()(i, j) == MakeTestValue<T>(readOrig[i], j));
+        }
+        else // CSR
+        {
+            using TArray = ParArray<T, NonUniformSize>;
+            using TPair = ArrayPair<TArray>;
+            TPair pair;
+            DNDS_MAKE_SSP(pair.father, worldMpi);
+            DNDS_MAKE_SSP(pair.son, worldMpi);
+            pair.father->Resize(nLocal);
+            pair.son->Resize(0);
+            auto ser = std::make_shared<S::SerializerH5>(worldMpi);
+            ser->OpenFile(fname, true);
+            pair.ReadSerializeRedistributed(ser, "data", readOrig);
+            ser->CloseFile();
+            for (DNDS::index i = 0; i < nLocal; i++)
+            {
+                CHECK(pair.father->RowSize(i) == csrRowSize(readOrig[i]));
+                for (DNDS::rowsize j = 0; j < csrRowSize(readOrig[i]); j++)
+                    CHECK(pair.father->operator()(i, j) == MakeTestValue<T>(readOrig[i], j));
+            }
+        }
+    }
+}
+
+TEST_CASE_TEMPLATE("redistribute different-np", Tag, REDIST_ALL_TAGS)
+{
+    using T = typename Tag::type;
+    using L = typename Tag::layout;
+    constexpr DNDS::rowsize RS = Tag::rs;
+
+    MPIInfo mpi(MPI_COMM_WORLD);
+    if (mpi.size < 4)
+        return;
+
+    for (int npWrite : {1, 2, 3})
+    {
+        for (DNDS::index baseSize : {5, 30, 537})
+        {
+            CAPTURE(npWrite);
+            CAPTURE(baseSize);
+            TestDifferentNp<T, L, RS>(npWrite, baseSize);
+        }
     }
 }
 

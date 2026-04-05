@@ -18,6 +18,7 @@
 
 #include "DNDS/Array.hpp"
 
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <string>
@@ -561,4 +562,183 @@ TEST_CASE("Array hash")
         b(2, 1) = -1.0;
         CHECK(a.hash() != b.hash());
     }
+}
+
+// ===================================================================
+// Parametric: Array resize-write-read across types and layouts
+// ===================================================================
+
+struct LayoutStaticFixed {};
+struct LayoutDynamic {};
+struct LayoutCSR {};
+
+template <class T, class Layout, DNDS::rowsize RS>
+struct ArrayTag
+{
+    using type = T;
+    using layout = Layout;
+    static constexpr DNDS::rowsize rs = RS;
+};
+
+// ---- TYPE_TO_STRING for every tag combination ----
+#define ARRAY_TAG_STR(T, L, RS) TYPE_TO_STRING(ArrayTag<T, L, RS>)
+
+// real
+ARRAY_TAG_STR(DNDS::real, LayoutStaticFixed, 1);
+ARRAY_TAG_STR(DNDS::real, LayoutStaticFixed, 3);
+ARRAY_TAG_STR(DNDS::real, LayoutStaticFixed, 7);
+ARRAY_TAG_STR(DNDS::real, LayoutDynamic, 1);
+ARRAY_TAG_STR(DNDS::real, LayoutDynamic, 3);
+ARRAY_TAG_STR(DNDS::real, LayoutDynamic, 7);
+ARRAY_TAG_STR(DNDS::real, LayoutCSR, 0);
+// index
+ARRAY_TAG_STR(DNDS::index, LayoutStaticFixed, 1);
+ARRAY_TAG_STR(DNDS::index, LayoutStaticFixed, 3);
+ARRAY_TAG_STR(DNDS::index, LayoutStaticFixed, 7);
+ARRAY_TAG_STR(DNDS::index, LayoutDynamic, 1);
+ARRAY_TAG_STR(DNDS::index, LayoutDynamic, 3);
+ARRAY_TAG_STR(DNDS::index, LayoutDynamic, 7);
+ARRAY_TAG_STR(DNDS::index, LayoutCSR, 0);
+// uint16_t
+ARRAY_TAG_STR(uint16_t, LayoutStaticFixed, 1);
+ARRAY_TAG_STR(uint16_t, LayoutStaticFixed, 3);
+ARRAY_TAG_STR(uint16_t, LayoutStaticFixed, 7);
+ARRAY_TAG_STR(uint16_t, LayoutDynamic, 1);
+ARRAY_TAG_STR(uint16_t, LayoutDynamic, 3);
+ARRAY_TAG_STR(uint16_t, LayoutDynamic, 7);
+ARRAY_TAG_STR(uint16_t, LayoutCSR, 0);
+// int32_t
+ARRAY_TAG_STR(int32_t, LayoutStaticFixed, 1);
+ARRAY_TAG_STR(int32_t, LayoutStaticFixed, 3);
+ARRAY_TAG_STR(int32_t, LayoutStaticFixed, 7);
+ARRAY_TAG_STR(int32_t, LayoutDynamic, 1);
+ARRAY_TAG_STR(int32_t, LayoutDynamic, 3);
+ARRAY_TAG_STR(int32_t, LayoutDynamic, 7);
+ARRAY_TAG_STR(int32_t, LayoutCSR, 0);
+// uint8_t
+ARRAY_TAG_STR(uint8_t, LayoutStaticFixed, 1);
+ARRAY_TAG_STR(uint8_t, LayoutStaticFixed, 3);
+ARRAY_TAG_STR(uint8_t, LayoutStaticFixed, 7);
+ARRAY_TAG_STR(uint8_t, LayoutDynamic, 1);
+ARRAY_TAG_STR(uint8_t, LayoutDynamic, 3);
+ARRAY_TAG_STR(uint8_t, LayoutDynamic, 7);
+ARRAY_TAG_STR(uint8_t, LayoutCSR, 0);
+
+#undef ARRAY_TAG_STR
+
+// Full cross-product: 5 types x (2 fixed layouts x 3 RS + 1 CSR) = 35 cases
+#define ARRAY_ALL_TAGS                                      \
+    /* real x StaticFixed */                                \
+    ArrayTag<DNDS::real, LayoutStaticFixed, 1>,             \
+    ArrayTag<DNDS::real, LayoutStaticFixed, 3>,             \
+    ArrayTag<DNDS::real, LayoutStaticFixed, 7>,             \
+    /* real x Dynamic */                                    \
+    ArrayTag<DNDS::real, LayoutDynamic, 1>,                 \
+    ArrayTag<DNDS::real, LayoutDynamic, 3>,                 \
+    ArrayTag<DNDS::real, LayoutDynamic, 7>,                 \
+    /* real x CSR */                                        \
+    ArrayTag<DNDS::real, LayoutCSR, 0>,                     \
+    /* index */                                             \
+    ArrayTag<DNDS::index, LayoutStaticFixed, 1>,            \
+    ArrayTag<DNDS::index, LayoutStaticFixed, 3>,            \
+    ArrayTag<DNDS::index, LayoutStaticFixed, 7>,            \
+    ArrayTag<DNDS::index, LayoutDynamic, 1>,                \
+    ArrayTag<DNDS::index, LayoutDynamic, 3>,                \
+    ArrayTag<DNDS::index, LayoutDynamic, 7>,                \
+    ArrayTag<DNDS::index, LayoutCSR, 0>,                    \
+    /* uint16_t */                                          \
+    ArrayTag<uint16_t, LayoutStaticFixed, 1>,               \
+    ArrayTag<uint16_t, LayoutStaticFixed, 3>,               \
+    ArrayTag<uint16_t, LayoutStaticFixed, 7>,               \
+    ArrayTag<uint16_t, LayoutDynamic, 1>,                   \
+    ArrayTag<uint16_t, LayoutDynamic, 3>,                   \
+    ArrayTag<uint16_t, LayoutDynamic, 7>,                   \
+    ArrayTag<uint16_t, LayoutCSR, 0>,                       \
+    /* int32_t */                                           \
+    ArrayTag<int32_t, LayoutStaticFixed, 1>,                \
+    ArrayTag<int32_t, LayoutStaticFixed, 3>,                \
+    ArrayTag<int32_t, LayoutStaticFixed, 7>,                \
+    ArrayTag<int32_t, LayoutDynamic, 1>,                    \
+    ArrayTag<int32_t, LayoutDynamic, 3>,                    \
+    ArrayTag<int32_t, LayoutDynamic, 7>,                    \
+    ArrayTag<int32_t, LayoutCSR, 0>,                        \
+    /* uint8_t */                                           \
+    ArrayTag<uint8_t, LayoutStaticFixed, 1>,                \
+    ArrayTag<uint8_t, LayoutStaticFixed, 3>,                \
+    ArrayTag<uint8_t, LayoutStaticFixed, 7>,                \
+    ArrayTag<uint8_t, LayoutDynamic, 1>,                    \
+    ArrayTag<uint8_t, LayoutDynamic, 3>,                    \
+    ArrayTag<uint8_t, LayoutDynamic, 7>,                    \
+    ArrayTag<uint8_t, LayoutCSR, 0>
+
+TEST_CASE_TEMPLATE("Array resize-write-read", Tag, ARRAY_ALL_TAGS)
+{
+    using T = typename Tag::type;
+    using L = typename Tag::layout;
+    constexpr DNDS::rowsize RS = Tag::rs;
+
+    for (DNDS::index N : {1, 5, 20, 100, 500})
+    {
+        CAPTURE(N);
+
+        if constexpr (std::is_same_v<L, LayoutStaticFixed>)
+    {
+        Array<T, RS> a;
+        a.Resize(N);
+
+        REQUIRE(a.Size() == N);
+        REQUIRE(a.RowSize() == RS);
+
+        for (DNDS::index i = 0; i < a.Size(); i++)
+            for (DNDS::rowsize j = 0; j < a.RowSize(); j++)
+                a(i, j) = static_cast<T>(i * 100 + j * 3 + 7);
+
+        for (DNDS::index i = 0; i < a.Size(); i++)
+            for (DNDS::rowsize j = 0; j < a.RowSize(); j++)
+                CHECK(a(i, j) == static_cast<T>(i * 100 + j * 3 + 7));
+    }
+    else if constexpr (std::is_same_v<L, LayoutDynamic>)
+    {
+        Array<T, DynamicSize> a;
+        a.Resize(N, RS);
+
+        REQUIRE(a.Size() == N);
+        REQUIRE(a.RowSize() == RS);
+
+        for (DNDS::index i = 0; i < a.Size(); i++)
+            for (DNDS::rowsize j = 0; j < a.RowSize(); j++)
+                a(i, j) = static_cast<T>(i * 100 + j * 3 + 7);
+
+        for (DNDS::index i = 0; i < a.Size(); i++)
+            for (DNDS::rowsize j = 0; j < a.RowSize(); j++)
+                CHECK(a(i, j) == static_cast<T>(i * 100 + j * 3 + 7));
+    }
+    else // LayoutCSR
+    {
+        Array<T, NonUniformSize> a;
+
+        a.Resize(N, [](DNDS::index i) -> DNDS::rowsize
+                 { return static_cast<DNDS::rowsize>(i % 5 + 1); });
+
+        REQUIRE(a.Size() == N);
+        CHECK(a.IfCompressed());
+
+        // Verify row sizes
+        for (DNDS::index i = 0; i < a.Size(); i++)
+            CHECK(a.RowSize(i) == static_cast<DNDS::rowsize>(i % 5 + 1));
+
+        // Fill with data
+        for (DNDS::index i = 0; i < a.Size(); i++)
+            for (DNDS::rowsize j = 0; j < a.RowSize(i); j++)
+                a(i, j) = static_cast<T>(i * 100 + j * 3 + 7);
+
+        // Read back and verify
+        for (DNDS::index i = 0; i < a.Size(); i++)
+        {
+            CHECK(a.RowSize(i) == static_cast<DNDS::rowsize>(i % 5 + 1));
+            for (DNDS::rowsize j = 0; j < a.RowSize(i); j++)
+                CHECK(a(i, j) == static_cast<T>(i * 100 + j * 3 + 7));
+        }
+    }
+    } // for N
 }

@@ -161,6 +161,10 @@ namespace DNDS
          * @param pullingIndexGlobal pullingIndexGlobal must support range-based iterator
          * @param LGlobalMapping
          * @param mpi
+         *
+         * @warning pullingIndexGlobal is **sorted and deduplicated in-place**.
+         * The caller's vector element order is destroyed after this call.
+         * The resulting ghostIndex stores entries in ascending global index order.
          */
         template <class TpullSet>
         OffsetAscendIndexMapping(index nmainOffset, index nmainSize,

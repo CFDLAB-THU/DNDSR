@@ -1,18 +1,13 @@
 from DNDSR import DNDS
+import pytest
 
 
 def test():
-    import cupy as cp
+    cp = pytest.importorskip("cupy", reason="cupy not installed (requires CUDA)")
 
     cp.cuda.Device(0).use()
     mpi = DNDS.MPIInfo()
     mpi.setWorld()
-
-    # arr = DNDS.ArrayDOF_3_D()
-    # arr.father = DNDS.ArrayEigenMatrix_3xD_3xD_N(mpi)
-    # arr.son = DNDS.ArrayEigenMatrix_3xD_3xD_N(mpi)
-    # arr.father.Resize(1000000, 3, 1)
-    # arr.son.Resize(0, 3, 1)
 
     arr = DNDS.ArrayDOF_1_1()
     arr.father = DNDS.ArrayEigenMatrix_1x1_1x1_N(mpi)
@@ -25,7 +20,12 @@ def test():
     arr.setConstant(1.0)
     print(arr.norm2() ** 2)
 
-    arr.to_device("CUDA")
+    try:
+        arr.to_device("CUDA")
+    except RuntimeError as e:
+        if "Unknown" in str(e) or "cannot to_device" in str(e):
+            pytest.skip("DNDS library built without CUDA backend support")
+        raise
     arr.setConstant(-2.0)
     print(arr[0].tolist())
     arr.to_host()

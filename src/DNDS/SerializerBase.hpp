@@ -12,6 +12,7 @@ namespace DNDS::Serializer
 {
     static const index Offset_Parts = -1;
     static const index Offset_One = -2;
+    static const index Offset_EvenSplit = -3;
     static const index Offset_Unkown = UnInitIndex;
 
     /// @brief Describes a rank's portion of a globally-distributed array (local size + global offset).
@@ -81,8 +82,36 @@ namespace DNDS::Serializer
     static const ArrayGlobalOffset ArrayGlobalOffset_Unknown = ArrayGlobalOffset{0, Offset_Unkown};
     static const ArrayGlobalOffset ArrayGlobalOffset_One = ArrayGlobalOffset{0, Offset_One};
     static const ArrayGlobalOffset ArrayGlobalOffset_Parts = ArrayGlobalOffset{0, Offset_Parts};
+    /// @brief Even-split read: each rank reads ~N_global/nRanks rows starting at rank * N_global / nRanks.
+    static const ArrayGlobalOffset ArrayGlobalOffset_EvenSplit = ArrayGlobalOffset{0, Offset_EvenSplit};
 
     /// @brief Abstract interface for reading/writing scalars, vectors, and byte arrays.
+    ///
+    /// ## Collective semantics (SerializerH5)
+    ///
+    /// For the HDF5 implementation, all Read/Write vector and array methods are
+    /// **MPI-collective**: every rank must call the same method in the same order,
+    /// even if a rank reads/writes 0 elements. Failing to participate causes a
+    /// hang because HDF5 collective I/O synchronizes across the communicator.
+    ///
+    /// ## Zero-size reads
+    ///
+    /// Some ranks may legitimately have 0 elements to read (e.g., when
+    /// `nGlobal < nRanks` in an even-split read). The Read*Vector and
+    /// ReadShared*Vector implementations handle this by passing a dummy
+    /// non-null pointer to the internal HDF5 read when the output container
+    /// is empty, so that `std::vector<>::data()` returning nullptr does not
+    /// cause the rank to skip the collective H5Dread call.
+    ///
+    /// @warning **ReadUint8Array** uses an explicit two-pass pattern: the
+    /// caller first calls with `data == nullptr` to query the size, then
+    /// calls again with a buffer. When the queried size is 0, the caller
+    /// must still pass a non-null `data` pointer on the second call so
+    /// that the collective H5Dread is not skipped. Use a stack dummy:
+    /// @code
+    ///   uint8_t dummy;
+    ///   ser->ReadUint8Array(name, bufferSize == 0 ? &dummy : buf, bufferSize, offset);
+    /// @endcode
     class SerializerBase
     {
 
@@ -95,6 +124,9 @@ namespace DNDS::Serializer
         virtual bool IsPerRank() = 0;
         virtual std::string GetCurrentPath() = 0;
         virtual std::set<std::string> ListCurrentPath() = 0;
+        virtual int GetMPIRank() = 0;
+        virtual int GetMPISize() = 0;
+        virtual const MPIInfo& getMPI() = 0;
 
         virtual void WriteInt(const std::string &name, int v) = 0;
         virtual void WriteIndex(const std::string &name, index v) = 0;
@@ -127,15 +159,27 @@ namespace DNDS::Serializer
         virtual void ReadReal(const std::string &name, real &v) = 0;
         virtual void ReadString(const std::string &name, std::string &v) = 0;
 
+        /// Read methods resize the output container and populate it.
+        /// Internally these use a two-pass HDF5 pattern (size query, then data read).
+        /// Both passes are collective. When the local size is 0, a dummy non-null
+        /// pointer is passed to the second pass so the rank participates in H5Dread.
+        /// @{
         virtual void ReadIndexVector(const std::string &name, std::vector<index> &v, ArrayGlobalOffset &offset) = 0;
         virtual void ReadRowsizeVector(const std::string &name, std::vector<rowsize> &v, ArrayGlobalOffset &offset) = 0;
         virtual void ReadRealVector(const std::string &name, std::vector<real> &v, ArrayGlobalOffset &offset) = 0;
         virtual void ReadSharedIndexVector(const std::string &name, ssp<host_device_vector<index>> &v, ArrayGlobalOffset &offset) = 0;
         virtual void ReadSharedRowsizeVector(const std::string &name, ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset &offset) = 0;
-        /**
-         * @brief
-         * @param data if data == nullptr, only get the size not reading any data
-         */
+        /// @}
+
+        /// @brief Two-pass byte array read.
+        ///
+        /// Pass 1 (data == nullptr): queries the local element count into `size`
+        /// and resolves `offset`.
+        /// Pass 2 (data != nullptr): reads `size` bytes into `data`.
+        ///
+        /// @warning When `size` is 0 after pass 1, the caller **must** still pass
+        /// a non-null `data` pointer on pass 2 so the rank participates in the
+        /// collective HDF5 read. Use a stack dummy (`uint8_t dummy; ... &dummy`).
         virtual void ReadUint8Array(const std::string &name, uint8_t *data, index &size, ArrayGlobalOffset &offset) = 0;
 
         // virtual void ReadIndexVectorParallel(const std::string &name, const host_device_vector<index> &v, ArrayGlobalOffset offset) = 0;

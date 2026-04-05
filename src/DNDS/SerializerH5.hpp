@@ -13,6 +13,25 @@
 /// - Path operations: CreatePath, GoToPath, GetCurrentPath, ListCurrentPath
 ///   (groups materialized by writing content), WriteInt/ReadInt on nested paths
 /// - String round-trip: WriteString/ReadString with fixed-length HDF5 attributes
+/// @par Collective I/O and zero-size partitions
+/// All Read/Write vector and byte-array methods use MPI-collective HDF5 calls.
+/// Every rank must call them in the same order, even when its local element
+/// count is 0 (which happens when nGlobal < nRanks under EvenSplit).
+///
+/// Internally, ReadDataVector uses a two-pass pattern:
+///   - Pass 1 (buf == nullptr): queries dataset size and resolves the offset.
+///   - Pass 2 (buf != nullptr): performs the collective H5Dread.
+///
+/// When local size is 0, std::vector<>::data() / host_device_vector<>::data()
+/// may return nullptr, which would skip the H5Dread block (guarded by
+/// `if (buf != nullptr)`) and hang the other ranks. To prevent this, each
+/// Read*Vector / ReadShared*Vector caller passes a dummy stack pointer when
+/// size == 0. Callers of ReadUint8Array must do the same (see SerializerBase).
+///
+/// H5_ReadDataset and H5_WriteDataset accept nLocal == 0: the hyperslab
+/// selection with count == 0 selects nothing, so no data is transferred,
+/// but the rank still participates in the collective call.
+///
 /// @par Not Yet Tested
 /// - SetChunkAndDeflate impact, SetCollectiveRW impact
 /// - WriteSharedIndexVector / ReadSharedIndexVector (H5 deduplication)
@@ -76,6 +95,9 @@ namespace DNDS::Serializer
         bool IsPerRank() override { return false; }
         std::string GetCurrentPath() override;
         std::set<std::string> ListCurrentPath() override;
+        int GetMPIRank() override { return mpi.rank; }
+        int GetMPISize() override { return mpi.size; }
+        const MPIInfo &getMPI() override { return mpi; }
 
         void WriteInt(const std::string &name, int v) override;
         void WriteIndex(const std::string &name, index v) override;

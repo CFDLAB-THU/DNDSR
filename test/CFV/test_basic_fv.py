@@ -121,7 +121,7 @@ def get_fv(mpi):
     return mesh, reader, name2Id, meshBnd, readerBnd, fv
 
 
-def test_fv_Op(
+def _test_fv_Op(
     mpi,
     fv: CFV.FiniteVolume,
     mesh: Geom.UnstructuredMesh,
@@ -211,7 +211,7 @@ def test_fv_Op(
         print(f" -- acc [{avg_time_host / avg_time:.4g}]")
 
 
-def test_fv_Op_Fix_Run(
+def _test_fv_Op_Fix_Run(
     fv, mesh, u, grad_u, grad_u1, test_Host, test_CUDA, test_time, max_iter
 ):
 
@@ -299,7 +299,7 @@ def test_fv_Op_Fix_Run(
         print(f" -- acc [{avg_time_host / avg_time:.4g}]")
 
 
-def test_fv_Op_Fix1(
+def _test_fv_Op_Fix1(
     mpi,
     fv: CFV.FiniteVolume,
     mesh: Geom.UnstructuredMesh,
@@ -338,12 +338,12 @@ def test_fv_Op_Fix1(
     def test_Host():
         CFV.finiteVolumeCellOpTest_Fixed_main_Host_N1(fv, u, grad_u, 100)
 
-    test_fv_Op_Fix_Run(
+    _test_fv_Op_Fix_Run(
         fv, mesh, u, grad_u, grad_u1, test_Host, test_CUDA, test_time, max_iter
     )
 
 
-def test_fv_Op_Fix5(
+def _test_fv_Op_Fix5(
     mpi,
     fv: CFV.FiniteVolume,
     mesh: Geom.UnstructuredMesh,
@@ -382,12 +382,12 @@ def test_fv_Op_Fix5(
     def test_Host():
         CFV.finiteVolumeCellOpTest_Fixed_main_Host_N5(fv, u, grad_u, 100)
 
-    test_fv_Op_Fix_Run(
+    _test_fv_Op_Fix_Run(
         fv, mesh, u, grad_u, grad_u1, test_Host, test_CUDA, test_time, max_iter
     )
 
 
-def test_fv_Op_SOA_ver0_X(
+def _test_fv_Op_SOA_ver0_X(
     mpi,
     fv: CFV.FiniteVolume,
     mesh: Geom.UnstructuredMesh,
@@ -443,17 +443,17 @@ def test_fv_Op_SOA_ver0_X(
     def test_Host():
         run_host(fv, u, grad_u, 100)
 
-    test_fv_Op_Fix_Run(
+    _test_fv_Op_Fix_Run(
         fv, mesh, u, grad_u, grad_u1, test_Host, test_CUDA, test_time, max_iter
     )
 
 
-def test_basic(mpi):
+def _run_basic(mpi):
     mesh, reader, name2Id, meshBnd, readerBnd, fv = get_fv(mpi)
 
     test_time = 5.0
 
-    test_fv_Op(
+    _test_fv_Op(
         mpi,
         fv,
         mesh,
@@ -463,7 +463,7 @@ def test_basic(mpi):
 
     print("\n\nTesting Fixed")
 
-    test_fv_Op_Fix5(
+    _test_fv_Op_Fix5(
         mpi,
         fv,
         mesh,
@@ -472,7 +472,7 @@ def test_basic(mpi):
 
     print("\n\nTesting SOA ver0")
 
-    test_fv_Op_SOA_ver0_X(
+    _test_fv_Op_SOA_ver0_X(
         mpi,
         fv,
         mesh,
@@ -486,4 +486,4 @@ def test_basic(mpi):
 if __name__ == "__main__":
     mpi = DNDS.MPIInfo()
     mpi.setWorld()
-    test_basic(mpi)
+    _run_basic(mpi)

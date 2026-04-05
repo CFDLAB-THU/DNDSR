@@ -579,3 +579,113 @@ TEST_CASE("ArrayDOF dot self equals norm2 squared")
 
     CHECK(d == doctest::Approx(n2 * n2));
 }
+
+// ---------------------------------------------------------------------------
+// Parametric tests over nVars dimension
+// ---------------------------------------------------------------------------
+
+template <int M>
+struct DofTag
+{
+    static constexpr int m = M;
+};
+
+TYPE_TO_STRING(DofTag<1>);
+TYPE_TO_STRING(DofTag<3>);
+TYPE_TO_STRING(DofTag<5>);
+TYPE_TO_STRING(DofTag<DNDS::DynamicSize>);
+
+TEST_CASE_TEMPLATE("ArrayDOF parametric over nVars", T,
+                    DofTag<1>, DofTag<3>, DofTag<5>, DofTag<DNDS::DynamicSize>)
+{
+    MPIInfo mpi = worldMPI();
+    constexpr DNDS::index N = 64;
+    constexpr int M = T::m;
+
+    // For DynamicSize, rows must be provided at runtime.  Pick 4 as the
+    // runtime row count so it differs from every fixed tag.
+    constexpr DNDS::rowsize rtRows = 4;
+    const int effectiveRows = (M == DNDS::DynamicSize) ? rtRows : M;
+
+    // Helper lambda to build the dof with the right overload.
+    auto buildDof = [&]()
+    {
+        if constexpr (M == DNDS::DynamicSize)
+            return makeDof<DNDS::DynamicSize, 1>(mpi, N, rtRows, 1);
+        else
+            return makeDof<M, 1>(mpi, N);
+    };
+
+    SUBCASE("setConstant scalar")
+    {
+        auto dof = buildDof();
+        dof.setConstant(3.0);
+
+        for (DNDS::index i = 0; i < dof.father->Size(); i++)
+        {
+            auto mat = dof[i];
+            CHECK(mat.rows() == effectiveRows);
+            for (int r = 0; r < mat.rows(); r++)
+                CHECK(mat(r, 0) == doctest::Approx(3.0));
+        }
+    }
+
+    SUBCASE("+= scalar")
+    {
+        auto dof = buildDof();
+        dof.setConstant(1.0);
+        dof += 4.0;
+
+        for (DNDS::index i = 0; i < dof.father->Size(); i++)
+        {
+            auto mat = dof[i];
+            for (int r = 0; r < mat.rows(); r++)
+                CHECK(mat(r, 0) == doctest::Approx(5.0));
+        }
+    }
+
+    SUBCASE("norm2")
+    {
+        auto dof = buildDof();
+        dof.setConstant(1.0);
+
+        real n2 = dof.norm2();
+        // Each cell contributes effectiveRows * 1^2.
+        real expected = std::sqrt(static_cast<real>(effectiveRows) * N * mpi.size);
+        CHECK(n2 == doctest::Approx(expected));
+    }
+
+    SUBCASE("dot")
+    {
+        auto dof1 = buildDof();
+        auto dof2 = buildDof();
+        dof1.setConstant(2.0);
+        dof2.setConstant(3.0);
+
+        real d = dof1.dot(dof2);
+        // Each cell: effectiveRows * (2*3) = effectiveRows * 6.
+        real expected = static_cast<real>(effectiveRows) * 6.0 * N * mpi.size;
+        CHECK(d == doctest::Approx(expected));
+    }
+
+    SUBCASE("clone")
+    {
+        auto dof1 = buildDof();
+        dof1.setConstant(7.0);
+
+        ArrayDof<M, 1> dof2;
+        dof2.clone(dof1);
+
+        for (DNDS::index i = 0; i < dof2.father->Size(); i++)
+        {
+            auto mat = dof2[i];
+            CHECK(mat.rows() == effectiveRows);
+            for (int r = 0; r < mat.rows(); r++)
+                CHECK(mat(r, 0) == doctest::Approx(7.0));
+        }
+
+        // Modify original, verify clone unchanged.
+        dof1.setConstant(0.0);
+        CHECK(dof2[0](0, 0) == doctest::Approx(7.0));
+    }
+}

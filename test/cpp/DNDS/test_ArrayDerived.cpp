@@ -768,3 +768,279 @@ TEST_CASE("ArrayAdjacency fixed-size variant")
             CHECK(row[j] == i * 10 + j);
     }
 }
+
+// ===========================================================================
+// Parametric: ArrayAdjacency across row sizes
+// ===========================================================================
+// Axes: RS = {2, 5, 8, NonUniformSize}
+
+template <DNDS::rowsize RS>
+struct AdjTag
+{
+    static constexpr DNDS::rowsize rs = RS;
+};
+
+TYPE_TO_STRING(AdjTag<2>);
+TYPE_TO_STRING(AdjTag<5>);
+TYPE_TO_STRING(AdjTag<8>);
+TYPE_TO_STRING(AdjTag<NonUniformSize>);
+
+TEST_CASE_TEMPLATE("ArrayAdjacency parametric", Tag,
+                    AdjTag<2>, AdjTag<5>, AdjTag<8>, AdjTag<NonUniformSize>)
+{
+    constexpr DNDS::rowsize RS = Tag::rs;
+    MPIInfo mpi = worldMPI();
+    constexpr DNDS::index N = 25;
+
+    ArrayAdjacency<RS> adj(mpi);
+
+    if constexpr (RS == NonUniformSize)
+    {
+        adj.Resize(N);
+        for (DNDS::index i = 0; i < N; i++)
+            adj.ResizeRow(i, static_cast<DNDS::rowsize>(i % 5 + 1));
+        adj.Compress();
+    }
+    else
+    {
+        adj.Resize(N);
+    }
+
+    // Fill
+    for (DNDS::index i = 0; i < N; i++)
+        for (DNDS::rowsize j = 0; j < adj.RowSize(i); j++)
+            adj(i, j) = i * 100 + j;
+
+    SUBCASE("data round-trip")
+    {
+        for (DNDS::index i = 0; i < N; i++)
+        {
+            if constexpr (RS == NonUniformSize)
+                CHECK(adj.RowSize(i) == static_cast<DNDS::rowsize>(i % 5 + 1));
+            else
+                CHECK(adj.RowSize(i) == RS);
+            for (DNDS::rowsize j = 0; j < adj.RowSize(i); j++)
+                CHECK(adj(i, j) == i * 100 + j);
+        }
+    }
+
+    SUBCASE("ghost pull")
+    {
+        if (mpi.size < 2)
+            return;
+
+        adj.createGlobalMapping();
+        DNDS::index gOff = (*adj.pLGlobalMapping)(mpi.rank, 0);
+
+        // Re-fill with global-index encoding
+        for (DNDS::index i = 0; i < N; i++)
+            for (DNDS::rowsize j = 0; j < adj.RowSize(i); j++)
+                adj(i, j) = (gOff + i) * 100 + j;
+
+        auto father = std::make_shared<ArrayAdjacency<RS>>(adj);
+        auto son = std::make_shared<ArrayAdjacency<RS>>(mpi);
+        using TTransformer = typename ArrayTransformerType<ArrayAdjacency<RS>>::Type;
+        TTransformer trans;
+        trans.setFatherSon(father, son);
+        trans.createFatherGlobalMapping();
+        auto pullIdx = pullFirstNFromOthers(mpi, *trans.pLGlobalMapping, 3);
+        trans.createGhostMapping(std::vector<DNDS::index>(pullIdx));
+        trans.createMPITypes();
+        trans.pullOnce();
+
+        CHECK(son->Size() == static_cast<DNDS::index>(pullIdx.size()));
+        for (DNDS::index g = 0; g < son->Size(); g++)
+        {
+            DNDS::index ghostGlobal = trans.pLGhostMapping->ghostIndex[g];
+            for (DNDS::rowsize j = 0; j < son->RowSize(g); j++)
+                CHECK(son->operator()(g, j) == ghostGlobal * 100 + j);
+        }
+    }
+}
+
+// ===========================================================================
+// Parametric: ArrayEigenVector across vector sizes
+// ===========================================================================
+// Axes: vec_size = {1, 3, 7, DynamicSize}
+
+template <DNDS::rowsize VS>
+struct VecTag
+{
+    static constexpr DNDS::rowsize vs = VS;
+};
+
+TYPE_TO_STRING(VecTag<1>);
+TYPE_TO_STRING(VecTag<3>);
+TYPE_TO_STRING(VecTag<7>);
+TYPE_TO_STRING(VecTag<DynamicSize>);
+
+TEST_CASE_TEMPLATE("ArrayEigenVector parametric", Tag,
+                    VecTag<1>, VecTag<3>, VecTag<7>, VecTag<DynamicSize>)
+{
+    constexpr DNDS::rowsize VS = Tag::vs;
+    MPIInfo mpi = worldMPI();
+    constexpr DNDS::index N = 30;
+    constexpr DNDS::rowsize actualSize = (VS == DynamicSize) ? 5 : VS;
+
+    ArrayEigenVector<VS> vec(mpi);
+    if constexpr (VS == DynamicSize)
+        vec.Resize(N, actualSize);
+    else
+        vec.Resize(N);
+
+    CHECK(vec.Size() == N);
+    CHECK(vec.RowSize() == actualSize);
+
+    // Fill
+    for (DNDS::index i = 0; i < N; i++)
+    {
+        auto v = vec[i];
+        for (DNDS::rowsize j = 0; j < actualSize; j++)
+            v(j) = static_cast<DNDS::real>(i * 100 + j);
+    }
+
+    SUBCASE("data round-trip")
+    {
+        for (DNDS::index i = 0; i < N; i++)
+        {
+            auto v = vec[i];
+            CHECK(v.size() == actualSize);
+            for (DNDS::rowsize j = 0; j < actualSize; j++)
+                CHECK(v(j) == doctest::Approx(static_cast<DNDS::real>(i * 100 + j)));
+        }
+    }
+
+    SUBCASE("ghost pull")
+    {
+        if (mpi.size < 2)
+            return;
+
+        vec.createGlobalMapping();
+        DNDS::index gOff = (*vec.pLGlobalMapping)(mpi.rank, 0);
+        for (DNDS::index i = 0; i < N; i++)
+        {
+            auto v = vec[i];
+            for (DNDS::rowsize j = 0; j < actualSize; j++)
+                v(j) = static_cast<DNDS::real>((gOff + i) * 100 + j);
+        }
+
+        auto father = std::make_shared<ArrayEigenVector<VS>>(vec);
+        auto son = std::make_shared<ArrayEigenVector<VS>>(mpi);
+        using TTransformer = typename ArrayTransformerType<ArrayEigenVector<VS>>::Type;
+        TTransformer trans;
+        trans.setFatherSon(father, son);
+        trans.createFatherGlobalMapping();
+        auto pullIdx = pullFirstNFromOthers(mpi, *trans.pLGlobalMapping, 4);
+        trans.createGhostMapping(std::vector<DNDS::index>(pullIdx));
+        trans.createMPITypes();
+        trans.pullOnce();
+
+        CHECK(son->Size() == static_cast<DNDS::index>(pullIdx.size()));
+        for (DNDS::index g = 0; g < son->Size(); g++)
+        {
+            DNDS::index ghostGlobal = trans.pLGhostMapping->ghostIndex[g];
+            auto v = son->operator[](g);
+            for (DNDS::rowsize j = 0; j < actualSize; j++)
+                CHECK(v(j) == doctest::Approx(static_cast<DNDS::real>(ghostGlobal * 100 + j)));
+        }
+    }
+}
+
+// ===========================================================================
+// Parametric: ArrayEigenMatrix across matrix dimensions
+// ===========================================================================
+// Axes: (ni, nj) = {(2,3), (4,5), (1,7), (DynamicSize,DynamicSize)}
+
+template <DNDS::rowsize NI, DNDS::rowsize NJ>
+struct MatTag
+{
+    static constexpr DNDS::rowsize ni = NI;
+    static constexpr DNDS::rowsize nj = NJ;
+};
+
+TYPE_TO_STRING(MatTag<2, 3>);
+TYPE_TO_STRING(MatTag<4, 5>);
+TYPE_TO_STRING(MatTag<1, 7>);
+TYPE_TO_STRING(MatTag<DynamicSize, DynamicSize>);
+
+TEST_CASE_TEMPLATE("ArrayEigenMatrix parametric", Tag,
+                    MatTag<2, 3>, MatTag<4, 5>, MatTag<1, 7>,
+                    MatTag<DynamicSize, DynamicSize>)
+{
+    constexpr DNDS::rowsize NI = Tag::ni;
+    constexpr DNDS::rowsize NJ = Tag::nj;
+    MPIInfo mpi = worldMPI();
+    constexpr DNDS::index N = 20;
+    constexpr DNDS::rowsize actualNI = (NI == DynamicSize) ? 3 : NI;
+    constexpr DNDS::rowsize actualNJ = (NJ == DynamicSize) ? 4 : NJ;
+
+    ArrayEigenMatrix<NI, NJ> mat(mpi);
+    mat.Resize(N, actualNI, actualNJ);
+
+    CHECK(mat.Size() == N);
+    CHECK(mat.MatRowSize() == actualNI);
+    CHECK(mat.MatColSize() == actualNJ);
+
+    // Fill
+    for (DNDS::index i = 0; i < N; i++)
+    {
+        auto m = mat[i];
+        for (int r = 0; r < actualNI; r++)
+            for (int c = 0; c < actualNJ; c++)
+                m(r, c) = static_cast<DNDS::real>(i * 1000 + r * 10 + c);
+    }
+
+    SUBCASE("data round-trip")
+    {
+        for (DNDS::index i = 0; i < N; i++)
+        {
+            auto m = mat[i];
+            CHECK(m.rows() == actualNI);
+            CHECK(m.cols() == actualNJ);
+            for (int r = 0; r < actualNI; r++)
+                for (int c = 0; c < actualNJ; c++)
+                    CHECK(m(r, c) == doctest::Approx(static_cast<DNDS::real>(i * 1000 + r * 10 + c)));
+        }
+    }
+
+    SUBCASE("ghost pull")
+    {
+        if (mpi.size < 2)
+            return;
+
+        ArrayEigenMatrixPair<NI, NJ> pair;
+        DNDS_MAKE_SSP(pair.father, mpi);
+        DNDS_MAKE_SSP(pair.son, mpi);
+        pair.father->Resize(N, actualNI, actualNJ);
+        pair.son->Resize(0, actualNI, actualNJ);
+
+        pair.father->createGlobalMapping();
+        DNDS::index gOff = (*pair.father->pLGlobalMapping)(mpi.rank, 0);
+        for (DNDS::index i = 0; i < N; i++)
+        {
+            auto m = pair.father->operator[](i);
+            for (int r = 0; r < actualNI; r++)
+                for (int c = 0; c < actualNJ; c++)
+                    m(r, c) = static_cast<DNDS::real>((gOff + i) * 1000 + r * 10 + c);
+        }
+
+        pair.TransAttach();
+        pair.trans.createFatherGlobalMapping();
+
+        auto pullIdx = pullFirstNFromOthers(mpi, *pair.trans.pLGlobalMapping, 3);
+        pair.trans.createGhostMapping(std::vector<DNDS::index>(pullIdx));
+        pair.trans.createMPITypes();
+        pair.trans.pullOnce();
+
+        CHECK(pair.son->Size() == static_cast<DNDS::index>(pullIdx.size()));
+        for (DNDS::index g = 0; g < pair.son->Size(); g++)
+        {
+            DNDS::index ghostGlobal = pair.trans.pLGhostMapping->ghostIndex[g];
+            auto m = pair.son->operator[](g);
+            for (int r = 0; r < actualNI; r++)
+                for (int c = 0; c < actualNJ; c++)
+                    CHECK(m(r, c) == doctest::Approx(
+                                         static_cast<DNDS::real>(ghostGlobal * 1000 + r * 10 + c)));
+        }
+    }
+}

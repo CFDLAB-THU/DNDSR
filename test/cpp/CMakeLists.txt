@@ -5,7 +5,7 @@
 #   cmake --build . -t dnds_unit_tests -j8
 #   ctest --test-dir . -R dnds_ --output-on-failure
 #
-# MPI tests are registered with mpirun -np 2 and -np 4.
+# MPI tests are registered with mpirun -np 1, 2, 4, and 8.
 
 find_path(DNDS_EXTERNAL_INCLUDE_DOCTEST doctest.h PATHS
     "${PROJECT_SOURCE_DIR}/external/doctest"
@@ -50,17 +50,22 @@ function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
     add_test(NAME dnds_${TEST_NAME}_np1
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1
                 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(dnds_${TEST_NAME}_np1 PROPERTIES TIMEOUT 120)
+    set_tests_properties(dnds_${TEST_NAME}_np1 PROPERTIES TIMEOUT 120 PROCESSORS 1)
     # np=2
     add_test(NAME dnds_${TEST_NAME}_np2
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
                 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(dnds_${TEST_NAME}_np2 PROPERTIES TIMEOUT 120)
+    set_tests_properties(dnds_${TEST_NAME}_np2 PROPERTIES TIMEOUT 120 PROCESSORS 2)
     # np=4
     add_test(NAME dnds_${TEST_NAME}_np4
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4
                 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(dnds_${TEST_NAME}_np4 PROPERTIES TIMEOUT 180)
+    set_tests_properties(dnds_${TEST_NAME}_np4 PROPERTIES TIMEOUT 180 PROCESSORS 4)
+    # np=8
+    add_test(NAME dnds_${TEST_NAME}_np8
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 8
+                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(dnds_${TEST_NAME}_np8 PROPERTIES TIMEOUT 240 PROCESSORS 8)
 endfunction()
 
 # Aggregate target: build all unit tests

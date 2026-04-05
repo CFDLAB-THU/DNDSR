@@ -97,13 +97,13 @@ def test_basic():
     vfv.ConstructBaseAndWeight_map(bcid_2_bcweight_map)
     vfv.ConstructRecCoeff()
 
-    u = CFV.tUDof_1()
-    rhs = CFV.tUDof_1()
-    uRec, uRecNew = [CFV.tURec_1() for _ in range(2)]
+    u = CFV.tUDof_D()
+    rhs = CFV.tUDof_D()
+    uRec, uRecNew = [CFV.tURec_D() for _ in range(2)]
     for u_ in [u, rhs]:
-        vfv.BuildUDof_1(u_, 1)
+        vfv.BuildUDof_D(u_, 1)
     for uRec_ in [uRec, uRecNew]:
-        vfv.BuildURec_1(uRec_, 1)
+        vfv.BuildURec_D(uRec_, 1)
     for i in range(mesh.NumCell()):
         u_i = np.array(u[i], copy=False)
         u_i[0] = vfv.GetCellBary(i)[0]
@@ -115,7 +115,7 @@ def test_basic():
         + "\n"
         + f"{u.trans.mpi}"
     )
-    eval = CFV.ModelEvaluator(mesh, vfv, {})
+    eval = CFV.ModelEvaluator(mesh, vfv, {}, 1)
     eval.EvaluateRHS(rhs, u, uRec, 0.0)
     for i in range(mesh.NumCell()):
         print(np.array(rhs[i], copy=False))

@@ -3,6 +3,7 @@
 #include "Array.hpp"
 #include "ArrayTransformer.hpp"
 #include "ArrayPair.hpp"
+#include "SerializerBase.hpp"
 #include "DNDS/Defines.hpp"
 #include "DNDS/DeviceStorage.hpp"
 #include "Defines_bind.hpp"
@@ -340,6 +341,45 @@ namespace DNDS // ParArrayPair
             .def("to_device", [](TPair &self, const std::string &backend)
                  { self.to_device(device_backend_name_to_enum(backend)); }, py::arg("backend"))
             .def("to_host", &TPair::to_host);
+
+        // Serialization methods
+        Pair_
+            .def(
+                "WriteSerialize",
+                [](TPair &self, Serializer::SerializerBaseSSP serializerP,
+                   const std::string &name, bool includePIG, bool includeSon)
+                {
+                    self.WriteSerialize(serializerP, name, includePIG, includeSon);
+                },
+                py::arg("serializer"), py::arg("name"),
+                py::arg("includePIG") = true, py::arg("includeSon") = true)
+            .def(
+                "WriteSerialize",
+                [](TPair &self, Serializer::SerializerBaseSSP serializerP,
+                   const std::string &name, std::vector<index> origIndex,
+                   bool includePIG, bool includeSon)
+                {
+                    self.WriteSerialize(serializerP, name, origIndex, includePIG, includeSon);
+                },
+                py::arg("serializer"), py::arg("name"), py::arg("origIndex"),
+                py::arg("includePIG") = true, py::arg("includeSon") = true)
+            .def(
+                "ReadSerialize",
+                [](TPair &self, Serializer::SerializerBaseSSP serializerP,
+                   const std::string &name, bool includePIG, bool includeSon)
+                {
+                    self.ReadSerialize(serializerP, name, includePIG, includeSon);
+                },
+                py::arg("serializer"), py::arg("name"),
+                py::arg("includePIG") = true, py::arg("includeSon") = true)
+            .def(
+                "ReadSerializeRedistributed",
+                [](TPair &self, Serializer::SerializerBaseSSP serializerP,
+                   const std::string &name, std::vector<index> newOrigIndex)
+                {
+                    self.ReadSerializeRedistributed(serializerP, name, newOrigIndex);
+                },
+                py::arg("serializer"), py::arg("name"), py::arg("newOrigIndex"));
     }
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>

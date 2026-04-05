@@ -866,7 +866,19 @@ namespace DNDS::Euler
         Serializer::SerializerBaseSSP serializerP = config.dataIOControl.restartWriter.BuildSerializer(mpi);
 
         serializerP->OpenFile(fname, false);
-        u.WriteSerialize(serializerP, "u", /*PIG*/ false, /*son*/ false);
+        if (!serializerP->IsPerRank())
+        {
+            // H5 path: write with origIndex for redistribution support
+            std::vector<index> origIdx(mesh->NumCell());
+            for (index i = 0; i < mesh->NumCell(); i++)
+                origIdx[i] = mesh->cell2cellOrig(i, 0);
+            u.WriteSerialize(serializerP, "u", origIdx, /*PIG*/ false, /*son*/ false);
+        }
+        else
+        {
+            // JSON path: no redistribution support
+            u.WriteSerialize(serializerP, "u", /*PIG*/ false, /*son*/ false);
+        }
         mesh->cell2cellOrig.WriteSerialize(serializerP, "cell2cellOrig", /*PIG*/ false, /*son*/ false);
         serializerP->CloseFile();
 
@@ -953,15 +965,28 @@ namespace DNDS::Euler
             DNDS_assert_info(false, "restart file suffix not supported");
 
         serializerP->OpenFile(fname, true);
-        TDof uRead;
-        vfv->BuildUDof(uRead, nVars, false, false);
-        uRead.ReadSerialize(serializerP, "u", /*PIG*/ false, /*son*/ false);
-        DNDS_assert_info(uRead.father->Size() == u.father->Size(),
-                         fmt::format("read size not consistent: needed {}, got {}",
-                                     u.father->Size(), uRead.father->Size()));
 
-        // Doing reorder
-        paste_read_restart_with_cell_ordering(*this, u, uRead, serializerP);
+        if (!serializerP->IsPerRank())
+        {
+            // H5 path: use redistributed read (supports different np and partition layout)
+            std::vector<index> newOrigIdx(mesh->NumCell());
+            for (index i = 0; i < mesh->NumCell(); i++)
+                newOrigIdx[i] = mesh->cell2cellOrig(i, 0);
+
+            u.ReadSerializeRedistributed(serializerP, "u", newOrigIdx);
+        }
+        else
+        {
+            // JSON path: read with same-partition, reorder locally
+            TDof uRead;
+            vfv->BuildUDof(uRead, nVars, false, false);
+            uRead.ReadSerialize(serializerP, "u", /*PIG*/ false, /*son*/ false);
+            DNDS_assert_info(uRead.father->Size() == u.father->Size(),
+                             fmt::format("read size not consistent: needed {}, got {}",
+                                         u.father->Size(), uRead.father->Size()));
+            // Doing reorder
+            paste_read_restart_with_cell_ordering(*this, u, uRead, serializerP);
+        }
 
         u.trans.startPersistentPull();
         u.trans.waitPersistentPull();
@@ -997,29 +1022,63 @@ namespace DNDS::Euler
         else if (sstringHasSuffix(fname, ".dnds.h5"))
         {
             serializerP = std::make_shared<DNDS::Serializer::SerializerH5>(mpi);
-            // std::dynamic_pointer_cast<DNDS::Serializer::SerializerH5>(serializerP)
-            //     ->SetChunkAndDeflate(config.dataIOControl.restartWriterH5Chunk, config.dataIOControl.restartWriterH5Deflate);
         }
         else
             DNDS_assert_info(false, "restart file suffix not supported");
 
         serializerP->OpenFile(fname, true);
-        readBuf.ReadSerialize(serializerP, "u");
 
-        DNDS_assert_info(readBuf.father->Size() == u.father->Size(), fmt::format("{}, {}", readBuf.father->Size(), u.father->Size()));
-        DNDS_assert_info(readBuf.son->Size() == u.son->Size(), fmt::format("{}, {}", readBuf.son->Size(), u.son->Size()));
-        int iMax = std::min(u.RowSize(), readBuf.RowSize()) - 1; // could use this
-        for (auto item : dimStore)
-            DNDS_assert(item <= iMax);
-        TDof uRead;
-        vfv->BuildUDof(uRead, nVars, false, false);
-        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        if (!serializerP->IsPerRank())
         {
-            // std::cout << iCell << ": " << readBuf[iCell].transpose() << std::endl;
-            uRead[iCell](dimStore) = readBuf[iCell](dimStore);
+            // H5 path: use redistributed read (supports different np and partition layout)
+            std::vector<index> newOrigIdx(mesh->NumCell());
+            for (index i = 0; i < mesh->NumCell(); i++)
+                newOrigIdx[i] = mesh->cell2cellOrig(i, 0);
+
+            // Peek at the file to determine the stored nVars (row dimension),
+            // then pre-size readBuf so RedistributeArrayWithTransformer can copy into it.
+            {
+                auto cwd = serializerP->GetCurrentPath();
+                serializerP->GoToPath("u/father/array");
+                std::string arraySig;
+                serializerP->ReadString("array_sig", arraySig);
+                int storedRowDynamic = 0;
+                serializerP->ReadInt("row_size_dynamic", storedRowDynamic);
+                serializerP->GoToPath(cwd);
+                // ArrayDOFV<Eigen::Dynamic> stores nVars in row_size_dynamic
+                readBuf.father->Resize(mesh->NumCell(), storedRowDynamic, 1);
+                readBuf.son->Resize(0, storedRowDynamic, 1);
+            }
+
+            readBuf.ReadSerializeRedistributed(serializerP, "u", newOrigIdx);
+
+            int iMax = std::min(u.RowSize(), readBuf.RowSize()) - 1;
+            for (auto item : dimStore)
+                DNDS_assert(item <= iMax);
+
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                u[iCell](dimStore) = readBuf[iCell](dimStore);
+        }
+        else
+        {
+            // JSON path: read with same-partition, reorder locally
+            readBuf.ReadSerialize(serializerP, "u");
+
+            DNDS_assert_info(readBuf.father->Size() == u.father->Size(), fmt::format("{}, {}", readBuf.father->Size(), u.father->Size()));
+            DNDS_assert_info(readBuf.son->Size() == u.son->Size(), fmt::format("{}, {}", readBuf.son->Size(), u.son->Size()));
+            int iMax = std::min(u.RowSize(), readBuf.RowSize()) - 1;
+            for (auto item : dimStore)
+                DNDS_assert(item <= iMax);
+            TDof uRead;
+            vfv->BuildUDof(uRead, nVars, false, false);
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                uRead[iCell](dimStore) = readBuf[iCell](dimStore);
+
+            paste_read_restart_with_cell_ordering(*this, u, uRead, serializerP);
         }
 
-        paste_read_restart_with_cell_ordering(*this, u, uRead, serializerP);
+        u.trans.startPersistentPull();
+        u.trans.waitPersistentPull();
 
         serializerP->CloseFile();
         if (mpi.rank == 0)

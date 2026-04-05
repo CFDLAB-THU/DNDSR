@@ -136,6 +136,24 @@ namespace DNDS
             }
         }
 
+        /// @brief Number of T elements per row in flat storage (data stride).
+        /// For TABLE_StaticMax/TABLE_Max, this is _row_max (padded), not RowSize (used).
+        /// Not valid for CSR (variable stride per row).
+        [[nodiscard]] rowsize DataStride() const
+        {
+            if constexpr (_dataLayout == TABLE_StaticFixed)
+                return rs;
+            else if constexpr (_dataLayout == TABLE_StaticMax)
+                return rm;
+            else if constexpr (_dataLayout == TABLE_Fixed || _dataLayout == TABLE_Max)
+                return _row_size_dynamic;
+            else
+            {
+                DNDS_assert_info(false, "DataStride() not valid for CSR");
+                return -1;
+            }
+        }
+
         [[nodiscard]] rowsize RowSize(index iRow) const
         {
             if constexpr (_dataLayout == TABLE_Fixed)
@@ -543,6 +561,34 @@ namespace DNDS
             return this->DataSize() * sizeof_T;
         }
 
+        /// @brief Copy raw row data from another Array of the same type.
+        /// Works for all layouts (StaticFixed, Fixed, CSR, etc.) and is not hidden
+        /// by derived types that make operator()/operator[] private.
+        void CopyRowFrom(index dstRow, const self_type &src, index srcRow)
+        {
+            auto rs = src.RowSize(srcRow);
+            DNDS_assert(rs == this->RowSize(dstRow));
+            const T *srcPtr = const_cast<self_type &>(src)[srcRow];
+            T *dstPtr = (*this)[dstRow];
+            if constexpr (std::is_trivially_copyable_v<T>)
+                std::memcpy(dstPtr, srcPtr, rs * sizeof(T));
+            else
+                for (rowsize j = 0; j < rs; j++)
+                    dstPtr[j] = srcPtr[j];
+        }
+
+        /// @brief Set per-row sizes from a source, applying an index mapping, then compress.
+        /// For CSR layout only. rowSizeFunc(i) returns the desired row size for row i.
+        /// Not hidden by derived types that make ResizeRow private.
+        template <class TRowSizeFunc>
+        void ResizeRowsAndCompress(TRowSizeFunc &&rowSizeFunc)
+        {
+            static_assert(_dataLayout == CSR, "ResizeRowsAndCompress only for CSR");
+            for (index i = 0; i < this->Size(); i++)
+                this->ResizeRow(i, rowSizeFunc(i));
+            this->Compress();
+        }
+
         size_t FullSizeBytes() const
         {
             size_t b = this->DataSize() * sizeof_T;
@@ -672,11 +718,17 @@ namespace DNDS
         {
             auto treatAsBytes = [&]()
             {
+                if (offset.isDist())
+                {
+                    // offset is in element units; scale to byte units for uint8 read, then scale back
+                    offset = offset * index(sizeof_T);
+                }
                 index bufferSize{0};
                 serializerP->ReadUint8Array("data", nullptr, bufferSize, offset);
                 DNDS_check_throw(bufferSize % sizeof_T == 0);
                 _data.resize(bufferSize / sizeof_T);
-                serializerP->ReadUint8Array("data", (uint8_t *)_data.data(), bufferSize, offset);
+                uint8_t dummy{};
+                serializerP->ReadUint8Array("data", bufferSize == 0 ? &dummy : (uint8_t *)_data.data(), bufferSize, offset);
                 offset.CheckMultipleOf(sizeof_T);
                 offset = offset / sizeof_T;
             };
@@ -702,7 +754,29 @@ namespace DNDS
                 treatAsBytes();
         }
 
-        void WriteSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name, Serializer::ArrayGlobalOffset offset)
+        /// @brief Serialize (write) array data to a serializer.
+        ///
+        /// Writes metadata (array_sig, array_type, size, row_size_dynamic), structural
+        /// data (pRowStart for CSR, pRowSizes for TABLE_Max/StaticMax), and the flat
+        /// data buffer into a sub-path `name` under the serializer's current path.
+        ///
+        /// This method is called by ParArray::WriteSerializer. Users should call the
+        /// ParArray version, which handles MPI coordination and CSR global offsets.
+        ///
+        /// @param serializerP  Serializer instance (JSON per-rank or H5 collective).
+        /// @param name         Sub-path name under which the array is stored.
+        /// @param offset       [in] Row-level partitioning offset. Typically Parts
+        ///                     (serializer computes per-rank offsets automatically).
+        /// @param dataOffset   [in] Element-level data range for this rank.
+        ///                     - Per-rank or non-CSR: Unknown (default). Array writes
+        ///                       pRowStart in local coordinates.
+        ///                     - Collective CSR: must be isDist() = {localDataCount,
+        ///                       globalDataStart}, computed by ParArray via MPI_Scan.
+        ///                       Array skips pRowStart (ParArray writes it separately
+        ///                       in global coordinates). Asserted for collective CSR.
+        void WriteSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name,
+                             Serializer::ArrayGlobalOffset offset,
+                             Serializer::ArrayGlobalOffset dataOffset = Serializer::ArrayGlobalOffset_Unknown)
         {
             auto cwd = serializerP->GetCurrentPath();
             serializerP->CreatePath(name);
@@ -725,7 +799,18 @@ namespace DNDS
             {
                 if (!this->IfCompressed())
                     this->Compress();
-                serializerP->WriteSharedIndexVector("pRowStart", _pRowStart, offset);
+                // For collective serializers, dataOffset must be isDist() (set by ParArray).
+                // ParArray writes pRowStart in global coordinates; Array only writes for per-rank.
+                DNDS_assert_info(serializerP->IsPerRank() || dataOffset.isDist(),
+                                 "CSR collective write requires isDist dataOffset from ParArray");
+                if (dataOffset.isDist())
+                {
+                    // ParArray handles pRowStart write in global coords
+                }
+                else
+                {
+                    serializerP->WriteSharedIndexVector("pRowStart", _pRowStart, offset);
+                }
             }
             else if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
             {
@@ -740,15 +825,51 @@ namespace DNDS
             serializerP->GoToPath(cwd);
         }
 
-        void ReadSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name, Serializer::ArrayGlobalOffset &offset)
+        /// @brief Convenience overload that discards the dataOffset output.
+        /// @see ReadSerializer(SerializerBaseSSP, const std::string&, ArrayGlobalOffset&, ArrayGlobalOffset&)
+        void ReadSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name,
+                            Serializer::ArrayGlobalOffset &offset)
         {
+            Serializer::ArrayGlobalOffset dataOffset = Serializer::ArrayGlobalOffset_Unknown;
+            ReadSerializer(serializerP, name, offset, dataOffset);
+        }
+
+        /// @brief Deserialize (read) array data from a serializer.
+        ///
+        /// Reads metadata (array_sig, size, row_size_dynamic), structural data
+        /// (pRowStart for CSR, pRowSizes for TABLE_Max/StaticMax), and the flat data
+        /// buffer from a sub-path `name` under the serializer's current path.
+        ///
+        /// This method is called by ParArray::ReadSerializer. Users should call the
+        /// ParArray version, which handles EvenSplit resolution and CSR offset computation.
+        ///
+        /// Input `offset` must NOT be EvenSplit; ParArray resolves that before calling.
+        ///
+        /// @param serializerP  Serializer instance (JSON per-rank or H5 collective).
+        /// @param name         Sub-path name for this array.
+        /// @param offset       [in/out] Row-level offset.
+        ///                     - In: Unknown (same-np, serializer uses ::rank_offsets)
+        ///                       or isDist({localRows, globalRowStart}).
+        ///                     - Out: updated to the resolved row-level position after
+        ///                       reading (derived from dataOffset / DataStride for non-CSR).
+        /// @param dataOffset   [out] Element-level data offset resolved during the read.
+        ///                     - Per-rank or Unknown offset: stays Unknown.
+        ///                     - Collective isDist non-CSR: {localRows * DataStride(),
+        ///                       globalRowStart * DataStride()}.
+        ///                     - Collective CSR: {localDataCount, globalDataStart},
+        ///                       derived from the stored global pRowStart.
+        void ReadSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name,
+                            Serializer::ArrayGlobalOffset &offset,
+                            Serializer::ArrayGlobalOffset &dataOffset)
+        {
+            DNDS_assert_info(!(offset == Serializer::ArrayGlobalOffset_EvenSplit),
+                             "Array::ReadSerializer must not receive EvenSplit; ParArray should resolve it first");
+
             auto cwd = serializerP->GetCurrentPath();
-            // serializerP->CreatePath(name); //! if you create, all data will be erased
             serializerP->GoToPath(name);
 
             std::string array_sigRead;
             serializerP->ReadString("array_sig", array_sigRead);
-            //! TODO: parse the sizes and correctly handle dynamic reading
             DNDS_check_throw_info(array_sigRead == this->GetArraySignature() || ArraySignatureIsCompatible(array_sigRead),
                                   array_sigRead + ", i am : " + this->GetArraySignature());
             auto [szR, rsR, rmR, align] = ParseArraySignatureTuple(array_sigRead);
@@ -759,6 +880,8 @@ namespace DNDS
             }
             if (serializerP->IsPerRank())
                 serializerP->ReadIndex("size", _size);
+            else if (offset.isDist())
+                _size = offset.size();
             else
             {
                 std::vector<index> _size_vv;
@@ -779,28 +902,64 @@ namespace DNDS
                 _row_size_dynamic = rsR;
             if (_row_max == DynamicSize && rmR >= 0)
                 _row_size_dynamic = rmR; // TODO: fix this! need a _row_max_dynamic ?
-            // if (_size == 0) //! cannot do this, collective calls!
-            //     return;
+
+            // --- Read structural data and resolve dataOffset ---
             if constexpr (_dataLayout == CSR)
             {
-                serializerP->ReadSharedIndexVector("pRowStart", _pRowStart, offset);
-                // todo: make the data inside the file correspond to full disp? is that necessary?
+                DNDS_assert_info(serializerP->IsPerRank() || offset.isDist(),
+                                 "CSR collective read requires isDist offset from ParArray");
+                if (offset.isDist())
+                {
+                    // Global pRowStart: contiguous (nRowsGlobal+1) dataset in global data coords.
+                    auto prsOffset = Serializer::ArrayGlobalOffset{_size + 1, offset.offset()};
+                    serializerP->ReadSharedIndexVector("pRowStart", _pRowStart, prsOffset);
+                    index globalDataStart = _pRowStart->at(0);
+                    for (index i = _size; i >= 0; i--)
+                        _pRowStart->at(i) -= globalDataStart;
+                    dataOffset = Serializer::ArrayGlobalOffset{_pRowStart->at(_size), globalDataStart};
+                }
+                else
+                {
+                    // Per-rank: local pRowStart, no global offset
+                    serializerP->ReadSharedIndexVector("pRowStart", _pRowStart, offset);
+                }
             }
             else if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
             {
-                serializerP->ReadSharedRowsizeVector("pRowSizes", _pRowSizes, offset);
+                if (offset.isDist())
+                    serializerP->ReadSharedRowsizeVector("pRowSizes", _pRowSizes, offset);
+                else
+                    serializerP->ReadSharedRowsizeVector("pRowSizes", _pRowSizes, offset);
             }
-            else // fixed
+            else // TABLE_StaticFixed, TABLE_Fixed
             {
             }
-            // doing data
+
+            // --- Resolve dataOffset for all layouts ---
+            if constexpr (_dataLayout != CSR)
             {
-                Serializer::ArrayGlobalOffset offsetV = Serializer::ArrayGlobalOffset_Unknown; // todo: utilize results from input offset (non CSR) or pRowStart data
-                this->__ReadSerializerData(serializerP, offsetV);
-                if constexpr (_dataLayout == TABLE_StaticFixed || _dataLayout == TABLE_Fixed)
+                // CSR dataOffset is resolved above from pRowStart.
+                // For non-CSR, derive from row offset * DataStride.
+                if (offset.isDist())
+                    dataOffset = offset * this->DataStride();
+            }
+
+            // --- Read flat data ---
+            {
+                Serializer::ArrayGlobalOffset dataReadOffset = Serializer::ArrayGlobalOffset_Unknown;
+                if (dataOffset.isDist())
+                    dataReadOffset = dataOffset;
+                this->__ReadSerializerData(serializerP, dataReadOffset);
+                // Update dataOffset from the resolved read (e.g., Unknown -> Parts-resolved)
+                dataOffset = dataReadOffset;
+                // Update offset from dataOffset (element-level -> row-level)
+                if constexpr (_dataLayout != CSR)
                 {
-                    offsetV.CheckMultipleOf(this->RowSize());
-                    offset = offsetV / this->RowSize(); // to make sure offset in the output is valid (on the elements)
+                    if (dataOffset.isDist())
+                    {
+                        dataOffset.CheckMultipleOf(this->DataStride());
+                        offset = dataOffset / this->DataStride();
+                    }
                 }
             }
             // TODO: check data validity

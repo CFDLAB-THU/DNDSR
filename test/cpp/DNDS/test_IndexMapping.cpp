@@ -499,3 +499,131 @@ TEST_CASE("OffsetAscendIndexMapping empty ghost set")
             CHECK(mapping(-1, i) == myOffset + i);
     }
 }
+
+// ===================================================================
+// Parametric tests over local sizes
+// ===================================================================
+
+template <DNDS::index N>
+struct SizeTag
+{
+    static constexpr DNDS::index n = N;
+};
+
+TYPE_TO_STRING(SizeTag<10>);
+TYPE_TO_STRING(SizeTag<50>);
+TYPE_TO_STRING(SizeTag<200>);
+TYPE_TO_STRING(SizeTag<1000>);
+
+TEST_CASE_TEMPLATE("Parametric GlobalOffsetsMapping", Tag,
+                    SizeTag<10>, SizeTag<50>, SizeTag<200>, SizeTag<1000>)
+{
+    MPIInfo mpi = worldMPI();
+    constexpr DNDS::index nLocal = Tag::n;
+
+    GlobalOffsetsMapping gm;
+    gm.setMPIAlignBcast(mpi, nLocal);
+
+    SUBCASE("globalSize equals nLocal * size")
+    {
+        CHECK(gm.globalSize() == nLocal * mpi.size);
+    }
+
+    SUBCASE("search first element of each rank")
+    {
+        auto &offs = gm.ROffsets();
+        for (MPI_int r = 0; r < mpi.size; r++)
+        {
+            auto [found, rank, loc] = gm.search(offs[r]);
+            CHECK(found);
+            CHECK(rank == r);
+            CHECK(loc == 0);
+        }
+    }
+
+    SUBCASE("operator() returns correct global index")
+    {
+        for (MPI_int r = 0; r < mpi.size; r++)
+        {
+            CHECK(gm(r, 0) == static_cast<DNDS::index>(r) * nLocal);
+            CHECK(gm(r, nLocal - 1) == static_cast<DNDS::index>(r) * nLocal + nLocal - 1);
+        }
+    }
+}
+
+TEST_CASE_TEMPLATE("Parametric OffsetAscendIndexMapping", Tag,
+                    SizeTag<10>, SizeTag<50>, SizeTag<200>, SizeTag<1000>)
+{
+    MPIInfo mpi = worldMPI();
+    constexpr DNDS::index nLocal = Tag::n;
+
+    GlobalOffsetsMapping gm;
+    gm.setMPIAlignBcast(mpi, nLocal);
+
+    DNDS::index myOffset = gm(mpi.rank, 0);
+
+    // Pull the first 3 elements from every other rank.
+    std::vector<DNDS::index> pullIdx;
+    for (MPI_int r = 0; r < mpi.size; r++)
+    {
+        if (r == mpi.rank)
+            continue;
+        DNDS::index base = gm(r, 0);
+        for (DNDS::index i = 0; i < 3; i++)
+            pullIdx.push_back(base + i);
+    }
+
+    OffsetAscendIndexMapping mapping(myOffset, nLocal, std::move(pullIdx), gm, mpi);
+
+    SUBCASE("searchInMain finds local indices")
+    {
+        for (DNDS::index i = 0; i < nLocal; i++)
+        {
+            DNDS::index val = -1;
+            bool found = mapping.searchInMain(myOffset + i, val);
+            CHECK(found);
+            CHECK(val == i);
+        }
+    }
+
+    SUBCASE("searchInGhost finds pulled ghost indices")
+    {
+        for (MPI_int r = 0; r < mpi.size; r++)
+        {
+            if (r == mpi.rank)
+                continue;
+            DNDS::index base = gm(r, 0);
+            for (DNDS::index i = 0; i < 3; i++)
+            {
+                DNDS::index val = -1;
+                bool found = mapping.searchInGhost(base + i, r, val);
+                CHECK(found);
+                CHECK(val == i);
+            }
+        }
+    }
+
+    SUBCASE("operator() reverse mapping for main data")
+    {
+        for (DNDS::index i = 0; i < nLocal; i++)
+        {
+            DNDS::index global = mapping(-1, i);
+            CHECK(global == myOffset + i);
+        }
+    }
+
+    SUBCASE("operator() reverse mapping for ghost data")
+    {
+        for (MPI_int r = 0; r < mpi.size; r++)
+        {
+            if (r == mpi.rank)
+                continue;
+            DNDS::index base = gm(r, 0);
+            for (DNDS::index i = 0; i < 3; i++)
+            {
+                DNDS::index global = mapping(r, i);
+                CHECK(global == base + i);
+            }
+        }
+    }
+}

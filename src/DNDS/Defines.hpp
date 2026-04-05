@@ -111,6 +111,15 @@ namespace DNDS
 
     static const char *outputDelim = "\t";
 
+    /// @brief Computes an even-split range [start, end) for dividing nGlobal items among nRanks.
+    /// Used by EvenSplit serialization reads, redistribution, etc.
+    inline std::pair<index, index> EvenSplitRange(int rank, int nRanks, index nGlobal)
+    {
+        index start = index(rank) * nGlobal / index(nRanks);
+        index end = index(rank + 1) * nGlobal / index(nRanks);
+        return {start, end};
+    }
+
     template <typename T>
     using ssp = std::shared_ptr<T>;
 

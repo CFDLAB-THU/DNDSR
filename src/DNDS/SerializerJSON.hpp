@@ -35,6 +35,8 @@ namespace DNDS::Serializer
         bool useCodecOnUint8{false};
         int deflateLevel{5};
 
+        MPIInfo mpi; // NULL
+
     public:
         void SetUseCodecOnUint8(bool v) { useCodecOnUint8 = v; }
         void SetDeflateLevel(int v) { deflateLevel = v; }
@@ -47,6 +49,9 @@ namespace DNDS::Serializer
         bool IsPerRank() override { return true; }
         std::string GetCurrentPath() override;
         std::set<std::string> ListCurrentPath() override;
+        int GetMPIRank() override { return -1; }
+        int GetMPISize() override { return -1; }
+        const MPIInfo &getMPI() override { return mpi; }
 
         void WriteInt(const std::string &name, int v) override;
         void WriteIndex(const std::string &name, index v) override;

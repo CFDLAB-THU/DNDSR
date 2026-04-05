@@ -58,9 +58,145 @@ namespace DNDS
             this->operator=(R);
         }
 
-    public: //! use this with caution
-        using TArray::ReadSerializer;
-        using TArray::WriteSerializer;
+    public:
+        /// @brief Serialize (write) the parallel array with MPI-aware metadata.
+        ///
+        /// Delegates to Array::WriteSerializer for metadata, structure, and data.
+        /// Additionally for collective (H5) serializers:
+        /// - Writes `sizeGlobal` (sum of all ranks' _size) as a scalar attribute.
+        /// - For CSR: computes global data offsets via MPI_Scan and writes pRowStart
+        ///   in global data coordinates as a contiguous (nRowsGlobal+1) dataset.
+        ///   Non-last ranks write nRows entries (dropping the redundant tail),
+        ///   last rank writes nRows+1 (including the global data total).
+        ///
+        /// Asserts MPI context consistency with the serializer.
+        ///
+        /// @param serializerP  Serializer instance.
+        /// @param name         Sub-path name for this array.
+        /// @param offset       [in] Row-level partitioning (typically ArrayGlobalOffset_Parts).
+        void WriteSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name, Serializer::ArrayGlobalOffset offset)
+        {
+            if (!serializerP->IsPerRank())
+            {
+                DNDS_check_throw_info(
+                    mpi == serializerP->getMPI(),
+                    fmt::format("ParArray MPI context (rank={}, size={}) doesn't match serializer (rank={}, size={})",
+                                mpi.rank, mpi.size, serializerP->GetMPIRank(), serializerP->GetMPISize()));
+            }
+
+            // For collective CSR, compute global data offset and pass to Array
+            // so it skips its own pRowStart write.
+            Serializer::ArrayGlobalOffset dataOffset = Serializer::ArrayGlobalOffset_Unknown;
+            if constexpr (_dataLayout == CSR)
+            {
+                if (!serializerP->IsPerRank() && this->_pRowStart)
+                {
+                    index localDataCount = this->_pRowStart->at(this->_size);
+                    index globalDataEnd = 0;
+                    MPI::Scan(&localDataCount, &globalDataEnd, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+                    index globalDataStart = globalDataEnd - localDataCount;
+                    dataOffset = Serializer::ArrayGlobalOffset{localDataCount, globalDataStart};
+                }
+            }
+
+            TArray::WriteSerializer(serializerP, name, offset, dataOffset);
+
+            if (!serializerP->IsPerRank())
+            {
+                auto cwd = serializerP->GetCurrentPath();
+                serializerP->GoToPath(name);
+
+                // Write sizeGlobal
+                index sizeGlobal = 0;
+                MPI::Allreduce(&this->_size, &sizeGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+                serializerP->WriteIndex("sizeGlobal", sizeGlobal);
+
+                // For CSR, write pRowStart in global data coordinates.
+                // Non-last ranks write nRows entries; last rank writes nRows+1.
+                // Total = nRowsGlobal + 1 (no overlap, contiguous).
+                if constexpr (_dataLayout == CSR)
+                {
+                    if (dataOffset.isDist())
+                    {
+                        index globalDataStart = dataOffset.offset();
+                        index nWrite = (mpi.rank == mpi.size - 1) ? (this->_size + 1) : this->_size;
+                        auto prsGlobal = std::make_shared<host_device_vector<index>>(nWrite);
+                        for (index i = 0; i < nWrite; i++)
+                            prsGlobal->at(i) = this->_pRowStart->at(i) + globalDataStart;
+                        serializerP->WriteSharedIndexVector("pRowStart", prsGlobal,
+                                                            Serializer::ArrayGlobalOffset_Parts);
+                    }
+                }
+
+                serializerP->GoToPath(cwd);
+            }
+        }
+
+        /// @brief Deserialize (read) the parallel array with MPI-aware metadata.
+        ///
+        /// Resolves the input `offset` before delegating to Array::ReadSerializer:
+        /// - EvenSplit: reads `sizeGlobal`, computes even-split range, resolves to
+        ///   isDist({localRows, globalRowStart}).
+        /// - CSR with collective serializer: reads per-rank size, computes row offset
+        ///   via MPI_Scan, resolves to isDist. This is required because CSR pRowStart
+        ///   is stored in global coordinates.
+        /// - Otherwise: passes offset through unchanged.
+        ///
+        /// Asserts MPI context consistency with the serializer.
+        ///
+        /// @param serializerP  Serializer instance.
+        /// @param name         Sub-path name for this array.
+        /// @param offset       [in/out] Row-level offset. EvenSplit is resolved here.
+        ///                     After return, reflects the resolved row-level position.
+        void ReadSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name, Serializer::ArrayGlobalOffset &offset)
+        {
+            if (!serializerP->IsPerRank())
+            {
+                DNDS_check_throw_info(
+                    mpi == serializerP->getMPI(),
+                    fmt::format("ParArray MPI context (rank={}, size={}) doesn't match serializer (rank={}, size={})",
+                                mpi.rank, mpi.size, serializerP->GetMPIRank(), serializerP->GetMPISize()));
+            }
+
+            if (!serializerP->IsPerRank() && !offset.isDist())
+            {
+                if (offset == Serializer::ArrayGlobalOffset_EvenSplit)
+                {
+                    // Read sizeGlobal, compute even-split range
+                    auto cwd = serializerP->GetCurrentPath();
+                    serializerP->GoToPath(name);
+                    index sizeGlobal = 0;
+                    serializerP->ReadIndex("sizeGlobal", sizeGlobal);
+                    serializerP->GoToPath(cwd);
+
+                    auto [start, end] = EvenSplitRange(mpi.rank, mpi.size, sizeGlobal);
+                    offset = Serializer::ArrayGlobalOffset{end - start, start};
+                }
+                else if constexpr (_dataLayout == CSR)
+                {
+                    // For CSR with collective serializer, pRowStart is stored in global
+                    // coordinates (nRowsGlobal+1 contiguous entries). We must always
+                    // resolve to isDist offset so Array reads the correct slice.
+                    // Read this rank's _size from the per-rank size dataset, compute
+                    // row offset via MPI_Scan, then set isDist offset.
+                    auto cwd = serializerP->GetCurrentPath();
+                    serializerP->GoToPath(name);
+                    std::vector<index> _size_vv;
+                    Serializer::ArrayGlobalOffset offsetV = Serializer::ArrayGlobalOffset_Unknown;
+                    serializerP->ReadIndexVector("size", _size_vv, offsetV);
+                    DNDS_check_throw(_size_vv.size() == 1);
+                    index localSize = _size_vv.front();
+                    serializerP->GoToPath(cwd);
+
+                    index globalEnd = 0;
+                    MPI::Scan(&localSize, &globalEnd, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+                    index globalStart = globalEnd - localSize;
+                    offset = Serializer::ArrayGlobalOffset{localSize, globalStart};
+                }
+            }
+
+            TArray::ReadSerializer(serializerP, name, offset);
+        }
 
     private:
         MPI_Datatype dataType = BasicType_To_MPIIntType<T>().first;
@@ -323,6 +459,13 @@ namespace DNDS
          * pulling data indicates the data put in son (received in pulling operation)
          * pullingIndexGlobal is the global indices in son
          * pullingIndexGlobal should be mutually different, otherwise behavior undefined
+         *
+         * @warning pullingIndexGlobal is **sorted and deduplicated in-place** by
+         * OffsetAscendIndexMapping. After this call the input vector's element order
+         * is destroyed. If you need to keep the original order (e.g., for a
+         * redistribution mapping), save a copy before calling this method.
+         * The son array after pullOnce() will contain data in the sorted order
+         * of pullingIndexGlobal, NOT in the original input order.
          */
         template <class TPullSet>
         void createGhostMapping(TPullSet &&pullingIndexGlobal) // collective;

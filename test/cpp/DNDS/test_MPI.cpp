@@ -368,3 +368,72 @@ TEST_CASE("MPI Alltoall")
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Parametric Allreduce over element types
+// ---------------------------------------------------------------------------
+
+template <class T>
+struct MPITypeTag
+{
+    using type = T;
+};
+
+TYPE_TO_STRING(MPITypeTag<DNDS::real>);
+TYPE_TO_STRING(MPITypeTag<DNDS::index>);
+TYPE_TO_STRING(MPITypeTag<int32_t>);
+TYPE_TO_STRING(MPITypeTag<uint16_t>);
+
+TEST_CASE_TEMPLATE("Parametric Allreduce MPI_SUM", Tag,
+                    MPITypeTag<DNDS::real>, MPITypeTag<DNDS::index>,
+                    MPITypeTag<int32_t>, MPITypeTag<uint16_t>)
+{
+    using T = typename Tag::type;
+
+    MPIInfo mpi;
+    mpi.setWorld();
+
+    T sendVal = static_cast<T>(mpi.rank + 1);
+    T recvVal{};
+
+    auto [mpiType, mpiMult] = BasicType_To_MPIIntType<T>();
+    MPI::Allreduce(&sendVal, &recvVal, mpiMult, mpiType, MPI_SUM, mpi.comm);
+
+    // Expected: sum_{r=0}^{size-1} (r+1) = size*(size+1)/2
+    T expected = static_cast<T>(mpi.size * (mpi.size + 1) / 2);
+
+    if constexpr (std::is_floating_point_v<T>)
+        CHECK(recvVal == doctest::Approx(expected));
+    else
+        CHECK(recvVal == expected);
+}
+
+// ---------------------------------------------------------------------------
+// Parametric Allgather over element types
+// ---------------------------------------------------------------------------
+
+TEST_CASE_TEMPLATE("Parametric Allgather rank values", Tag,
+                    MPITypeTag<DNDS::real>, MPITypeTag<DNDS::index>,
+                    MPITypeTag<int32_t>, MPITypeTag<uint16_t>)
+{
+    using T = typename Tag::type;
+
+    MPIInfo mpi;
+    mpi.setWorld();
+
+    T sendVal = static_cast<T>(mpi.rank);
+    std::vector<T> recvBuf(mpi.size, T{});
+
+    auto [mpiType, mpiMult] = BasicType_To_MPIIntType<T>();
+    MPI::Allgather(&sendVal, mpiMult, mpiType,
+                    recvBuf.data(), mpiMult, mpiType, mpi.comm);
+
+    for (int i = 0; i < mpi.size; ++i)
+    {
+        T expected = static_cast<T>(i);
+        if constexpr (std::is_floating_point_v<T>)
+            CHECK(recvBuf[i] == doctest::Approx(expected));
+        else
+            CHECK(recvBuf[i] == expected);
+    }
+}

@@ -169,9 +169,7 @@ namespace DNDS
         int rank = -1;
         int size = -1;
 
-        MPIInfo()
-        {
-        }
+        MPIInfo() = default;
 
         MPIInfo(MPI_Comm ncomm)
         {
@@ -211,7 +209,7 @@ namespace DNDS
         private:
             std::unordered_map<void *, std::function<void()>> cleaners;
 
-            ResourceRecycler() {}; // implemented
+            ResourceRecycler(){}; // implemented
             ResourceRecycler(const ResourceRecycler &);
             ResourceRecycler &operator=(const ResourceRecycler &);
 
