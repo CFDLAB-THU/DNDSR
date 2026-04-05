@@ -6,13 +6,6 @@ from numpy.random import MT19937
 from numpy.random import RandomState, SeedSequence
 
 
-@pytest.fixture
-def mpi():
-    world = DNDS.MPIInfo()
-    world.setWorld()
-    yield world
-
-
 def get_rstart_data():
     arrayRU = DNDS.Array_d_I_I_N()
     rsize = np.linspace(3, 10, 32, dtype=np.int32)

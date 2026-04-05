@@ -14,6 +14,18 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 _PYTHON_DIR = str(Path(__file__).resolve().parent.parent / "python")
 if _PYTHON_DIR not in sys.path:
     sys.path.insert(0, _PYTHON_DIR)
+
+from DNDSR import DNDS  # noqa: E402
+
+
+@pytest.fixture
+def mpi():
+    """Shared MPI fixture — creates a world-scope MPIInfo."""
+    world = DNDS.MPIInfo()
+    world.setWorld()
+    yield world

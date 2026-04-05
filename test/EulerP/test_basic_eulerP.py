@@ -2,8 +2,6 @@ from DNDSR import DNDS, Geom, CFV, EulerP
 import json
 from DNDSR.Geom.utils import *
 import numpy as np
-import debugpy
-
 from DNDSR.DNDS.Debug_Py import MPIDebugHold
 
 
