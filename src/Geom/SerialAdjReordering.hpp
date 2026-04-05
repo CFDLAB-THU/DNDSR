@@ -304,12 +304,21 @@ namespace DNDS::Geom
         return {localFillOrderingNew2Old, localFillOrderingOld2New};
     }
 
+    /**
+     * @brief Partition a sub-graph and optionally RCM-reorder within each partition.
+     *
+     * When used for second-level (inner) partitioning, pass full_mat_begin / full_n_elem
+     * so that cross-sub-graph references in the full graph are updated after permutation.
+     * See implementation in SerialAdjReordering.cpp for detailed documentation.
+     */
     std::vector<index> ReorderSerialAdj_PartitionMetisC(
         tLocalMatStruct::iterator mat_begin, tLocalMatStruct::iterator mat_end,
         std::vector<index>::iterator i_new2old_begin, std::vector<index>::iterator i_new2old_end,
         int nParts,
         index ind_offset,
         bool do_rcm,
-        index &bwOldM, index &bwNewM);
+        index &bwOldM, index &bwNewM,
+        tLocalMatStruct::iterator full_mat_begin = tLocalMatStruct::iterator{},
+        index full_n_elem = 0);
 
 }

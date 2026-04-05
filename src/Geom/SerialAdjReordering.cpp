@@ -2,33 +2,79 @@
 
 namespace DNDS::Geom
 {
+    /**
+     * @brief Partition a sub-graph into nParts and optionally apply RCM reordering within each part.
+     *
+     * This function operates on the sub-range [mat_begin, mat_end), which represents
+     * n_elem rows of an adjacency graph. Adjacency entries use absolute indices
+     * (offset by ind_offset), i.e., cell i's neighbors are stored as (ind_offset + local_index).
+     *
+     * When called for second-level (inner) partitioning, the sub-range's adjacency rows
+     * may contain cross-sub-graph references pointing outside [ind_offset, ind_offset + n_elem).
+     * These arise because the first-level partitioning reindexed the full graph, and boundary
+     * cells retain edges to cells in other first-level partitions. Two problems follow:
+     *
+     *   1. Metis and the partition-adjacency builder require a self-contained local graph;
+     *      cross-sub-graph edges must be excluded from these operations.
+     *
+     *   2. When cells within this sub-range are permuted, all references to them -- including
+     *      those in other sub-ranges' rows -- must be updated to maintain the bidirectional
+     *      graph invariant. The optional full_mat_begin / full_n_elem parameters provide
+     *      access to the full graph for this cross-sub-graph fixup.
+     *
+     * The RCM section trims cross-sub-partition edges before reordering (each sub-partition
+     * only needs internal connectivity for bandwidth reduction). The RCM reindex uses
+     * (ind_offset + local_offset) as the base for correct absolute index arithmetic.
+     *
+     * @param full_mat_begin  Iterator to the start of the full graph (for cross-sub-graph
+     *                        reference updates). Pass default (empty) when this sub-range
+     *                        IS the full graph (first-level call).
+     * @param full_n_elem     Total number of rows in the full graph. 0 means no cross-sub-graph
+     *                        fixup is needed.
+     */
     std::vector<index> ReorderSerialAdj_PartitionMetisC(
         tLocalMatStruct::iterator mat_begin, tLocalMatStruct::iterator mat_end,
         std::vector<index>::iterator i_new2old_begin, std::vector<index>::iterator i_new2old_end,
         int nParts,
         index ind_offset,
         bool do_rcm,
-        index &bwOldM, index &bwNewM)
+        index &bwOldM, index &bwNewM,
+        tLocalMatStruct::iterator full_mat_begin,
+        index full_n_elem)
     {
         index n_elem = mat_end - mat_begin;
         DNDS_check_throw(i_new2old_end - i_new2old_begin == n_elem);
 
-        // std::cout << "here 0-" << ind_offset << "  " << n_elem << std::endl;
         nParts = std::max(1, nParts);
         std::vector<index> part_start(nParts + 1, 0);
 
         if (nParts > 1)
         {
-            auto partition_local = PartitionSerialAdj_Metis(mat_begin, mat_end, nParts);
-            std::vector<std::set<int>> localPartsAdjV(nParts);
+            //! Build a 0-based local-only adjacency for Metis: filter out cross-sub-graph edges
+            //! (entries outside [ind_offset, ind_offset + n_elem)) and shift to local indices.
+            //! Metis requires a self-contained graph with 0-based numbering.
+            tLocalMatStruct local_adj(n_elem);
+            for (index iC = 0; iC < n_elem; iC++)
+            {
+                for (auto iCOther : mat_begin[iC])
+                {
+                    index iLocal = iCOther - ind_offset;
+                    if (iLocal >= 0 && iLocal < n_elem)
+                        local_adj[iC].push_back(iLocal);
+                }
+            }
 
+            auto partition_local = PartitionSerialAdj_Metis(local_adj.begin(), local_adj.end(), nParts);
+
+            //! Build partition-level adjacency (which partitions neighbor which) using local_adj.
+            //! Cross-sub-graph edges are irrelevant for partition adjacency.
+            std::vector<std::set<int>> localPartsAdjV(nParts);
             for (index iC = 0; iC < n_elem; iC++)
             {
                 auto iP = partition_local.at(iC);
-
-                for (auto iCOther : mat_begin[iC])
+                for (auto iCLocal : local_adj[iC])
                 {
-                    auto iPOther = partition_local.at(iCOther - ind_offset);
+                    auto iPOther = partition_local.at(iCLocal);
                     if (iPOther != iP)
                         localPartsAdjV.at(iP).insert(iPOther);
                 }
@@ -61,6 +107,7 @@ namespace DNDS::Geom
             for (int i = 0; i < nParts; i++)
                 part_start[i + 1] = part_start[i] + n_elem_part[i];
 
+            //! Permute rows according to partition assignment; build i_old2new mapping.
             tLocalMatStruct new_mat(n_elem);
             std::vector<index> new_i_new2old(n_elem);
             std::vector<index> i_old2new(n_elem);
@@ -75,35 +122,43 @@ namespace DNDS::Geom
                 i_old2new[iC] = iNew;
                 n_elem_part[iP]++;
             }
+
+            //! Remap in-range references within the permuted sub-range rows.
+            //! Cross-sub-graph references (outside [ind_offset, ind_offset + n_elem)) are
+            //! left unchanged here; they point to cells not touched by this permutation.
             for (auto &row : new_mat)
                 for (auto &iCOther : row)
-                    iCOther = ind_offset + i_old2new.at(iCOther - ind_offset);
+                {
+                    index iLocal = iCOther - ind_offset;
+                    if (iLocal >= 0 && iLocal < n_elem)
+                        iCOther = ind_offset + i_old2new[iLocal];
+                }
 
             for (index iC = 0; iC < n_elem; iC++)
             {
-                i_new2old_begin[iC] = new_i_new2old[iC]; // which is oldest...
+                i_new2old_begin[iC] = new_i_new2old[iC]; // composing the oldest mapping
                 mat_begin[iC] = std::move(new_mat[iC]);
             }
-            // // asserting perumtation
-            // std::set<index> set;
-            // for (auto v : i_old2new)
-            // {
-            //     DNDS_assert(v < n_elem);
-            //     DNDS_assert(set.count(v) == 0);
-            //     set.insert(v);
-            // }
-            // // asserting symmetry:
-            // for (index iC = 0; iC < n_elem; iC++)
-            // {
-            //     for (auto jC : mat_begin[iC])
-            //     {
-            //         int c = 0;
-            //         for (auto kC : mat_begin[jC])
-            //             if (kC == iC)
-            //                 c++;
-            //         DNDS_assert(c == 1);
-            //     }
-            // }
+
+            //! Update cross-sub-graph references: rows OUTSIDE [mat_begin, mat_end) may
+            //! contain edges pointing into this sub-range with pre-permutation indices.
+            //! Walk the full graph and apply i_old2new to any such references.
+            if (full_n_elem > 0)
+            {
+                index sub_begin = mat_begin - full_mat_begin;
+                index sub_end = mat_end - full_mat_begin;
+                for (index iC = 0; iC < full_n_elem; iC++)
+                {
+                    if (iC >= sub_begin && iC < sub_end)
+                        continue; // already remapped above
+                    for (auto &iCOther : full_mat_begin[iC])
+                    {
+                        index iLocal = iCOther - ind_offset;
+                        if (iLocal >= 0 && iLocal < n_elem)
+                            iCOther = ind_offset + i_old2new[iLocal];
+                    }
+                }
+            }
         }
         else
             part_start[1] = n_elem;
@@ -112,17 +167,20 @@ namespace DNDS::Geom
         if (!do_rcm)
             return part_start;
 
+        //! Per-partition RCM reordering. Cross-sub-partition edges are trimmed before RCM
+        //! since bandwidth reduction only considers intra-partition connectivity.
+        //! The reindex step uses (ind_offset + local_offset) as the absolute base.
         for (int iPart = 0; iPart < nParts; iPart++)
         {
             index local_offset = part_start[iPart];
             index local_nelem = part_start[iPart + 1] - part_start[iPart];
-            //! trim the local matrix
+            //! Trim: remove edges outside [ind_offset + local_offset, ind_offset + local_offset + local_nelem)
             for (index iC = 0; iC < local_nelem; iC++)
             {
                 auto &row = mat_begin[iC + local_offset];
                 auto last = std::remove_if(row.begin(), row.end(), [&](index v)
-                                           { return (v < local_offset + ind_offset) ||
-                                                    (v >= local_offset + ind_offset + local_nelem); });
+                                            { return (v < local_offset + ind_offset) ||
+                                                     (v >= local_offset + ind_offset + local_nelem); });
                 row.erase(last, row.end());
             }
             index bwOld, bwNew;
@@ -144,11 +202,11 @@ namespace DNDS::Geom
             }
             for (auto &row : new_mat)
                 for (auto &iCOther : row)
-                    iCOther = local_offset + cOld2New_.at(iCOther - local_offset);
+                    iCOther = ind_offset + local_offset + cOld2New_.at(iCOther - ind_offset - local_offset);
 
             for (index iC = 0; iC < local_nelem; iC++)
             {
-                i_new2old_begin[iC + local_offset] = new_i_new2old[iC]; // which is oldest...
+                i_new2old_begin[iC + local_offset] = new_i_new2old[iC]; // composing the oldest mapping
                 mat_begin[iC + local_offset] = std::move(new_mat[iC]);
             }
         }

@@ -2335,6 +2335,50 @@ namespace DNDS::Geom
             cellNew2Old.end(), nParts, 0, nPartsInner <= 1, bwOld, bwNew);
         if (nPartsInner > 1)
         {
+            //! Debug assertions: verify graph invariants around inner partitioning.
+            //! - Sub-graph range check: for each first-level partition p with range
+            //!   [localPartitionStarts[p], localPartitionStarts[p+1]), every adjacency
+            //!   entry must fall within some valid partition range in [0, NumCell()).
+            //! - Bidirectional check: if edge iC->jC exists, then jC->iC must also exist.
+            //! These catch stale or corrupt cross-sub-graph references after permutations.
+            auto dbgCheckSubGraphRanges = [&](const char *tag)
+            {
+                for (int p = 0; p < static_cast<int>(localPartitionStarts.size()) - 1; p++)
+                {
+                    index pStart = localPartitionStarts[p];
+                    index pEnd = localPartitionStarts[p + 1];
+                    for (index iC = pStart; iC < pEnd; iC++)
+                        for (auto jC : cell2cellFaceV[iC])
+                            DNDS_assert_infof(
+                                jC >= 0 && jC < NumCell(),
+                                "%s: partition %d [%lld,%lld): cell %lld has neighbor %lld outside [0,%lld)",
+                                tag, p, (long long)pStart, (long long)pEnd,
+                                (long long)iC, (long long)jC, (long long)NumCell());
+                }
+            };
+            auto dbgCheckBidir = [&](const char *tag)
+            {
+                for (index iC = 0; iC < NumCell(); iC++)
+                    for (auto jC : cell2cellFaceV[iC])
+                    {
+                        bool found = false;
+                        for (auto kC : cell2cellFaceV[jC])
+                            if (kC == iC)
+                            {
+                                found = true;
+                                break;
+                            }
+                        DNDS_assert_infof(found,
+                                          "%s: edge %lld->%lld exists but reverse %lld->%lld missing",
+                                          tag, (long long)iC, (long long)jC, (long long)jC, (long long)iC);
+                    }
+            };
+
+            dbgCheckSubGraphRanges("before inner partitioning");
+            dbgCheckBidir("before inner partitioning");
+
+            //! Each inner call partitions + RCM-reorders a first-level partition's sub-range,
+            //! passing the full graph so cross-sub-graph references are updated in-place.
             for (int iPart = 0; iPart < localPartitionStarts.size() - 1; iPart++)
             {
                 index bwOldC{0}, bwNewC{0};
@@ -2344,10 +2388,15 @@ namespace DNDS::Geom
                     cell2cellFaceV.begin() + offset,
                     cell2cellFaceV.begin() + offsetN,
                     cellNew2Old.begin() + offset,
-                    cellNew2Old.begin() + offsetN, nPartsInner, offset, true, bwOldC, bwNewC);
+                    cellNew2Old.begin() + offsetN, nPartsInner, offset, true, bwOldC, bwNewC,
+                    cell2cellFaceV.begin(), NumCell());
                 bwOld = std::max(bwOld, bwOldC);
                 bwNew = std::max(bwNew, bwNewC);
+
+                dbgCheckSubGraphRanges(fmt::format("after inner part {}", iPart).c_str());
             }
+
+            dbgCheckBidir("after all inner partitioning");
         }
         // contigious sorting
         {
