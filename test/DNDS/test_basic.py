@@ -237,7 +237,7 @@ def test_ArrayEigenUniMatrixBatch(mpi: DNDS.MPIInfo):
 
     for irow in range(arr.Size()):
         arr.ResizeRow(irow, irow % 3 + 1)
-        cDat = np.concat((val0.reshape((1, 4, 5)),) * arr.BatchSize(irow), axis=0)
+        cDat = np.concatenate((val0.reshape((1, 4, 5)),) * arr.BatchSize(irow), axis=0)
         arr[irow] = cDat
     arr.Compress()
 

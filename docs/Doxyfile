@@ -830,10 +830,10 @@ WARN_LOGFILE           =
 # Note: If this tag is empty the current directory is searched.
 
 INPUT                  = \
-    @CMAKE_CURRENT_LIST_DIR@/src \
-    @CMAKE_CURRENT_LIST_DIR@/docs \
-    @CMAKE_CURRENT_LIST_DIR@/test \
-    @CMAKE_CURRENT_LIST_DIR@/README.md \
+    @PROJECT_SOURCE_DIR@/src \
+    @PROJECT_SOURCE_DIR@/docs \
+    @PROJECT_SOURCE_DIR@/test \
+    @PROJECT_SOURCE_DIR@/README.md \
     
 
 # This tag can be used to specify the character encoding of the source files
@@ -1262,11 +1262,11 @@ HTML_EXTRA_STYLESHEET  = @EXTERNAL_DOXYGEN_AWESOME@/doxygen-awesome.css
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
 HTML_EXTRA_FILES       = \ 
-    @CMAKE_CURRENT_LIST_DIR@/docs/Variational_Reconstruction.pdf \
-    @CMAKE_CURRENT_LIST_DIR@/docs/Shape_Functions.pdf \
-    # @CMAKE_CURRENT_LIST_DIR@/docs/CurrentTests.pdf \
-    @CMAKE_CURRENT_LIST_DIR@/docs/*.png \
-    @CMAKE_CURRENT_LIST_DIR@/docs/images/*.png \
+    @PROJECT_SOURCE_DIR@/docs/Variational_Reconstruction.pdf \
+    @PROJECT_SOURCE_DIR@/docs/Shape_Functions.pdf \
+    # @PROJECT_SOURCE_DIR@/docs/CurrentTests.pdf \
+    @PROJECT_SOURCE_DIR@/docs/*.png \
+    @PROJECT_SOURCE_DIR@/docs/images/*.png \
 
 # The HTML_COLORSTYLE_HUE tag controls the color of the HTML output. Doxygen
 # will adjust the colors in the style sheet and background images according to
