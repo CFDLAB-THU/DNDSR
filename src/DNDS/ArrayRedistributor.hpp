@@ -74,8 +74,10 @@ namespace DNDS
 
         const int nRanks = mpi.size;
         index nGlobal = readGlobalMapping->globalSize();
+        DNDS_assert_info(nGlobal > 0, "Redistribution requires nGlobal > 0");
         auto directoryRank = [&](index origIdx) -> int
         {
+            if (nGlobal == 0) return 0;
             return static_cast<int>(std::min(index(nRanks - 1), origIdx * index(nRanks) / nGlobal));
         };
 

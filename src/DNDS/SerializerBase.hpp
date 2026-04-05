@@ -4,6 +4,7 @@
 
 #include "Defines.hpp"
 #include "MPI.hpp"
+#include <limits>
 #include <set>
 #include "DeviceStorage.hpp"
 #include "Vector.hpp"
@@ -31,10 +32,15 @@ namespace DNDS::Serializer
         ArrayGlobalOffset operator*(index R) const
         {
             if (_offset >= 0)
+            {
+                DNDS_assert_info(R == 0 || _size <= std::numeric_limits<index>::max() / R,
+                                 "Overflow in ArrayGlobalOffset size multiplication");
+                DNDS_assert_info(R == 0 || _offset <= std::numeric_limits<index>::max() / R,
+                                 "Overflow in ArrayGlobalOffset offset multiplication");
                 return ArrayGlobalOffset{_size * R, _offset * R};
+            }
             else
                 return ArrayGlobalOffset{_size * R, _offset};
-            // todo: check on overflow in multiplication
         }
 
         ArrayGlobalOffset operator/(index R) const

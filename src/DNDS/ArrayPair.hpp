@@ -456,6 +456,7 @@ namespace DNDS
                                       fmt::format("File has no origIndex and was written with np={}, "
                                                   "but reading with np={}. Cannot redistribute.",
                                                   readSize, father->getMPI().size));
+                DNDS_check_throw_info(false, "Redistribution fallback requires same-partition read");
                 ReadSerialize(serializerP, name, /*includePIG*/ false, /*includeSon*/ false);
                 return;
             }

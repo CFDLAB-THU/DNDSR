@@ -149,8 +149,8 @@ namespace DNDS
                 return _row_size_dynamic;
             else
             {
-                DNDS_assert_info(false, "DataStride() not valid for CSR");
-                return -1;
+                DNDS_assert(false);
+                return 0;
             }
         }
 
@@ -718,19 +718,19 @@ namespace DNDS
         {
             auto treatAsBytes = [&]()
             {
-                if (offset.isDist())
+                Serializer::ArrayGlobalOffset localOffset = offset;
+                if (localOffset.isDist())
                 {
-                    // offset is in element units; scale to byte units for uint8 read, then scale back
-                    offset = offset * index(sizeof_T);
+                    localOffset = localOffset * index(sizeof_T);
                 }
                 index bufferSize{0};
-                serializerP->ReadUint8Array("data", nullptr, bufferSize, offset);
+                serializerP->ReadUint8Array("data", nullptr, bufferSize, localOffset);
                 DNDS_check_throw(bufferSize % sizeof_T == 0);
                 _data.resize(bufferSize / sizeof_T);
                 uint8_t dummy{};
-                serializerP->ReadUint8Array("data", bufferSize == 0 ? &dummy : (uint8_t *)_data.data(), bufferSize, offset);
-                offset.CheckMultipleOf(sizeof_T);
-                offset = offset / sizeof_T;
+                serializerP->ReadUint8Array("data", bufferSize == 0 ? &dummy : (uint8_t *)_data.data(), bufferSize, localOffset);
+                localOffset.CheckMultipleOf(sizeof_T);
+                offset = localOffset / sizeof_T;
             };
 
             if constexpr (std::is_same_v<T, index>)
@@ -926,10 +926,9 @@ namespace DNDS
             }
             else if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
             {
-                if (offset.isDist())
-                    serializerP->ReadSharedRowsizeVector("pRowSizes", _pRowSizes, offset);
-                else
-                    serializerP->ReadSharedRowsizeVector("pRowSizes", _pRowSizes, offset);
+                // offset may be Unknown (auto-detect from file) or isDist() (explicit from ParArray).
+                // When ParArray resolves EvenSplit, it provides explicit isDist offset here.
+                serializerP->ReadSharedRowsizeVector("pRowSizes", _pRowSizes, offset);
             }
             else // TABLE_StaticFixed, TABLE_Fixed
             {
