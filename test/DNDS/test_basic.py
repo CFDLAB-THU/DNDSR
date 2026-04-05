@@ -14,7 +14,7 @@ def mpi():
 
 
 def get_rstart_data():
-    arrayRU = DNDS.Array_d_I_I_Unknown()
+    arrayRU = DNDS.Array_d_I_I_N()
     rsize = np.linspace(3, 10, 32, dtype=np.int32)
     arrayRU.Resize(32, rsize)
     arrayRU_rstart = arrayRU.getRowStart()
@@ -94,7 +94,7 @@ def test_ParArrayPair(mpi: DNDS.MPIInfo):
 
 
 def test_arrayRU(mpi: DNDS.MPIInfo):
-    arrayRU = DNDS.Array_d_I_I_Unknown()
+    arrayRU = DNDS.Array_d_I_I_N()
 
     rsize = np.linspace(3, 10, 32, dtype=np.int32)
     arrayRU.Resize(32, rsize)

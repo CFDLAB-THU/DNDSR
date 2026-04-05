@@ -144,3 +144,73 @@ mpirun -np 4 python -m pytest test/DNDS/test_basic.py
 | **Editable install**     | `pip install -e .`                               | Builds pybind11 .so, installs into python/_ext/  |
 | **Editable C++ rebuild** | `cmake --build build_py` + `cmake --install ...` | Rebuilds only C++ bindings, updates .so in-place |
 | **Package build**        | `pip install .`                                  | Full wheel build with .so files included         |
+
+## Developer Tooling
+
+### compile_commands.json for clangd
+
+clangd needs a `compile_commands.json` at the project root for C++ code
+intelligence.  CMake generates one in the build directory; `compdb`
+post-processes it to include header-only translation units.
+
+```bash
+# Enable at configure time
+cmake -B build -DDNDS_GENERATE_COMPILE_COMMANDS=ON ...
+
+# After building, generate the processed version and symlink to project root
+cmake --build build -t process-compile-commands
+```
+
+This creates `build/compile_commands_processed.json` and symlinks it to
+`compile_commands.json` at the project root.  clangd picks it up
+automatically.
+
+Requires: `pip install compdb`
+
+### Type Stub Generation
+
+Type stubs (`.pyi`) provide IDE autocompletion and type checking for the
+pybind11 bindings.  Stubs are committed to git and only need regeneration
+when `*_pybind*.cpp` or `*_bind*.cpp` files change.
+
+**Via CMake target** (recommended during development):
+
+```bash
+# Builds all pybind11 .so, then runs pybind11-stubgen
+cmake --build build -t generate-stubs -j32
+```
+
+**Manually:**
+
+```bash
+PATH="venv/bin:$PATH" bash scripts/generate-stubs.sh
+```
+
+Both methods write raw output to `stubs/` and copy `.pyi` files into
+`python/DNDSR/` for PEP 561 compliance.  Commit the updated stubs.
+
+### Pre-commit Hook
+
+A pre-commit hook automatically regenerates stubs when pybind binding
+sources are staged:
+
+```bash
+# Install (symlink so it stays in sync with the repo)
+ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+```
+
+The hook:
+1. Checks if any `*_pybind*.cpp` or `*_bind*.cpp` files are staged.
+2. If so, runs `scripts/generate-stubs.sh`.
+3. Stages the updated `.pyi` files.
+4. If `pybind11-stubgen` is not installed or the package is not importable,
+   prints a warning and allows the commit to proceed.
+
+### All CMake Utility Targets
+
+| Target                     | Description                                           |
+|----------------------------|-------------------------------------------------------|
+| `generate-stubs`           | Regenerate `.pyi` stubs from pybind11 modules         |
+| `process-compile-commands` | Post-process `compile_commands.json` for clangd       |
+| `docs`                     | Build Doxygen HTML documentation                      |
+| `dnds_unit_tests`          | Build all C++ unit test executables                   |

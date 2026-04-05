@@ -7,7 +7,6 @@
 
 namespace DNDS
 {
-    static const rowsize NoAlign = -1024;
 
     enum DataLayout
     {
@@ -111,7 +110,7 @@ namespace DNDS
             return Layout + "__" +
                    typeid(T).name() + "_" + std::to_string(sizeof_T) + "_" + RowSize_To_PySnippet(_row_size) +
                    "_" + RowSize_To_PySnippet(_row_max) +
-                   "_" + RowSize_To_PySnippet(_align);
+                   "_" + Align_To_PySnippet(_align);
         }
 
         static std::string GetArraySignature()

@@ -259,7 +259,7 @@
         "**/.vs": true
     },
     "C_Cpp.exclusionPolicy": "checkFilesAndFolders",
-    "clangd.path": "/mnt/ssd-SATARAID5/harry/tools/clangd_21.1.0/bin/clangd",
+    "clangd.path": "clangd",
     "C_Cpp.intelliSenseEngine": "disabled",
     // "C_Cpp.intelliSenseEngine": "Tag Parser"
     "[cpp]": {

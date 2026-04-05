@@ -10,10 +10,10 @@
 # loads an older libstdc++), use the same GCC version as your Python environment:
 # CC=/usr/bin/gcc-11 CXX=/usr/bin/g++-11 CMAKE_BUILD_PARALLEL_LEVEL=32 pip install -e . --no-build-isolation
 #
-# Alternative: build C++ with 'cmake --build' and install into python/:
+# In-place (no pip install needed):
 # cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j32
 # cmake --install build --component py
-# pip install -e . --no-build-isolation  # or: add python/ to PYTHONPATH
+# PYTHONPATH=python pytest test/        # or: export PYTHONPATH=$PWD/python
 
 
 [build-system]

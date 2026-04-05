@@ -26,7 +26,7 @@ namespace DNDS
                            TName,
                            RowSize_To_PySnippet(_row_size),
                            RowSize_To_PySnippet(_row_max),
-                           RowSize_To_PySnippet(_align));
+                           Align_To_PySnippet(_align));
     }
 
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>

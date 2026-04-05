@@ -9,14 +9,14 @@ def test():
     mpi.setWorld()
 
     # arr = DNDS.ArrayDOF_3_D()
-    # arr.father = DNDS.ArrayEigenMatrix_3xD_3xD_D(mpi)
-    # arr.son = DNDS.ArrayEigenMatrix_3xD_3xD_D(mpi)
+    # arr.father = DNDS.ArrayEigenMatrix_3xD_3xD_N(mpi)
+    # arr.son = DNDS.ArrayEigenMatrix_3xD_3xD_N(mpi)
     # arr.father.Resize(1000000, 3, 1)
     # arr.son.Resize(0, 3, 1)
 
     arr = DNDS.ArrayDOF_1_1()
-    arr.father = DNDS.ArrayEigenMatrix_1x1_1x1_D(mpi)
-    arr.son = DNDS.ArrayEigenMatrix_1x1_1x1_D(mpi)
+    arr.father = DNDS.ArrayEigenMatrix_1x1_1x1_N(mpi)
+    arr.son = DNDS.ArrayEigenMatrix_1x1_1x1_N(mpi)
     arr.father.Resize(1000000, 1, 1)
     arr.son.Resize(0, 1, 1)
 

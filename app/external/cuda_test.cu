@@ -1,8 +1,10 @@
 #include <cstdint>
 #include <cassert>
 #include <thrust/device_vector.h>
-#include <thrust/transform_reduce.h>
 #include <thrust/execution_policy.h>
+#include <thrust/transform_reduce.h>
+#include <thrust/reduce.h>
+#include <thrust/functional.h>
 #include <cuda_runtime.h>
 
 namespace DNDS::cuda_test

@@ -4,8 +4,9 @@
 #include "DNDS/MPI.hpp"
 
 #include <thrust/device_vector.h>
-#include <thrust/transform_reduce.h>
 #include <thrust/execution_policy.h>
+#include <thrust/transform_reduce.h>
+#include <thrust/functional.h>
 #include "DNDS/MPI.hpp"
 
 namespace DNDS::arrayDOF_test

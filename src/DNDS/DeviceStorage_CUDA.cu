@@ -5,7 +5,10 @@
 #include <string>
 #include "CUDA_Utils.hpp"
 #include "Errors.hpp"
+#include <thrust/copy.h>
 #include <thrust/extrema.h>
+#include <thrust/device_vector.h>
+#include <thrust/device_ptr.h>
 
 namespace DNDS
 {

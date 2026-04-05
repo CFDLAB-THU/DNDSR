@@ -11,7 +11,7 @@ namespace DNDS
         return fmt::format("_{}_{}_{}",
                            RowSize_To_PySnippet(_vec_size),
                            RowSize_To_PySnippet(_row_max),
-                           RowSize_To_PySnippet(_align));
+                           Align_To_PySnippet(_align));
     }
 
     template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>

@@ -1,6 +1,7 @@
 #pragma once
 /// @file Defines.hpp
 /// @brief Core type aliases, constants, and metaprogramming utilities for the DNDS framework.
+
 #include "Macros.hpp"
 // #define NDEBUG
 #include "Errors.hpp"
@@ -22,12 +23,12 @@
 #include <locale>
 #include <csignal>
 #include <cstdarg>
-#include <cstdlib>  // must be included before fmt headers for malloc/free with libc++ _LIBCPP_REMOVE_TRANSITIVE_INCLUDES
+#include <cstdlib> // must be included before fmt headers for malloc/free with libc++ _LIBCPP_REMOVE_TRANSITIVE_INCLUDES
 
 #include <fmt/core.h>
 
-#if defined(linux) || defined(_UNIX) || defined(__linux__) ||  defined(__unix__) || defined(__APPLE__)
-#     define DNDS_UNIX_LIKE
+#if defined(linux) || defined(_UNIX) || defined(__linux__) || defined(__unix__) || defined(__APPLE__)
+#    define DNDS_UNIX_LIKE
 #endif
 
 #ifdef DNDS_USE_OMP
@@ -173,6 +174,7 @@ namespace DNDS
     DNDS_CONSTANT const rowsize DynamicSize = -1;
     DNDS_CONSTANT const rowsize NonUniformSize = -2;
     static_assert(DynamicSize != NonUniformSize, "DynamicSize, NonUniformSize definition conflict");
+    DNDS_CONSTANT const rowsize NoAlign = -1024;
 
     constexpr int RowSize_To_EigenSize(rowsize rs)
     {
@@ -191,6 +193,16 @@ namespace DNDS
         {
             return "Unknown";
         }
+    }
+
+    inline std::string Align_To_PySnippet(rowsize al)
+    {
+        if (al == NoAlign)
+            return "N";
+        else if (al < 0)
+            return "Invalid";
+        else
+            return fmt::format("{}", al);
     }
 }
 

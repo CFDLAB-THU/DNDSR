@@ -15,7 +15,7 @@ namespace DNDS
                            RowSize_To_PySnippet(_mat_nj),
                            RowSize_To_PySnippet(_mat_ni_max),
                            RowSize_To_PySnippet(_mat_nj_max),
-                           RowSize_To_PySnippet(_align));
+                           Align_To_PySnippet(_align));
     }
 
     template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,

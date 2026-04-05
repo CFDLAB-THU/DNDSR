@@ -1,12 +1,17 @@
 #!/bin/bash
 # Generate type stubs for the DNDSR Python package.
 #
-# Usage:
-#   ./scripts/generate-stubs.sh
+# This script is called automatically by `cmake --install build --component py`
+# after the pybind11 .so files are placed into python/DNDSR/.
+#
+# Manual usage (if needed):
+#   PYTHONPATH=python ./scripts/generate-stubs.sh
 #
 # Prerequisites:
 #   - pip install pybind11-stubgen
-#   - The DNDSR package must be importable (pip install -e . first)
+#   - pybind11 .so files installed into python/DNDSR/<Module>/_ext/
+#   - PYTHONPATH must include the python/ directory (set automatically
+#     when called from CMake install, or pass it explicitly)
 #
 # Output:
 #   stubs/DNDSR/           — raw pybind11-stubgen output

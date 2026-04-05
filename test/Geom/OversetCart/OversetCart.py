@@ -114,11 +114,11 @@ class OversetPart2D:
         )
         return travelling_cell
 
-    def get_holed_faces_midpt(self, cell_type_arr: DNDS.ArrayEigenVectorPair_1_1_D):
+    def get_holed_faces_midpt(self, cell_type_arr: DNDS.ArrayEigenVectorPair_1_1_N):
         """_summary_
 
         Args:
-            cell_type_arr (DNDS.ArrayEigenVectorPair_1_1_D): _description_
+            cell_type_arr (DNDS.ArrayEigenVectorPair_1_1_N): _description_
 
         Returns:
             (array, array): iFaces (local), midpt coords
@@ -149,7 +149,7 @@ class OversetPart2D:
     def print_full_mesh_type(
         self,
         iPart,
-        cell_type_arr: DNDS.ArrayEigenVectorPair_1_1_D,
+        cell_type_arr: DNDS.ArrayEigenVectorPair_1_1_N,
         no_hole=False,
         ax=None,
         highlight_iCells=set(),

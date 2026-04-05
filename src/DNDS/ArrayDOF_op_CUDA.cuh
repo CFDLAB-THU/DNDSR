@@ -7,11 +7,18 @@
 #include "mpi.h"
 
 #include <thrust/device_ptr.h>
-#include <thrust/transform.h>
-#include <thrust/execution_policy.h>
-#include <thrust/iterator/zip_iterator.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
+#include <thrust/execution_policy.h>
+#include <thrust/transform.h>
+#include <thrust/transform_reduce.h>
+#include <thrust/reduce.h>
+#include <thrust/for_each.h>
+#include <thrust/copy.h>
+#include <thrust/extrema.h>
+#include <thrust/functional.h>
+#include <thrust/iterator/zip_iterator.h>
+#include <thrust/tuple.h>
 #include <cuda_runtime.h>
 #include <cooperative_groups.h>
 #include <cub/cub.cuh>

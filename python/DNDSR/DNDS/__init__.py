@@ -97,7 +97,7 @@ def _get_array_name(
         t_name = _array_value_type_to_name(type)
         rs_name = _row_size_to_name(row_size)
         rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
-        align_name = "Unknown"
+        align_name = "N"
         className = f"{prepend}_{t_name}_{rs_name}_{rm_name}_{align_name}"
     elif prepend in {
         "ArrayAdjacency", "ArrayAdjacencyPair",
@@ -105,14 +105,14 @@ def _get_array_name(
     }:
         rs_name = _row_size_to_name(row_size)
         rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
-        align_name = "Unknown"
+        align_name = "N"
         className = f"{prepend}_{rs_name}_{rm_name}_{align_name}"
     elif prepend in {"ArrayEigenMatrix", "ArrayEigenMatrixPair"}:
         rs_name = _row_size_to_name(row_size)
         rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
         rs_name_n = _row_size_to_name(row_size_n)
         rm_name_n = rs_name_n if row_max_n is None else _row_size_to_name(row_max_n)
-        align_name = "Unknown"
+        align_name = "N"
         className = (
             f"{prepend}_{rs_name}x{rs_name_n}_{rm_name}x{rm_name_n}_{align_name}"
         )

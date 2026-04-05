@@ -39,6 +39,9 @@ srcOrig
 newSrc*
 .cache
 *.ipynb_*
+# generated stubs (regenerated at install time by cmake/DndsTooling.cmake)
+stubs/
+*.pyi
 # temporary compile_commands.json for clangd generated with compile db
 /compile_commands.json
 /DNDSR
