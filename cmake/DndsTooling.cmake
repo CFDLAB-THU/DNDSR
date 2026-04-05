@@ -6,13 +6,32 @@
 # -------------------------------------------------------------------
 if(DNDS_GENERATE_COMPILE_COMMANDS)
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-    find_program(COMpdb_EXECUTABLE compdb)
-    if(NOT COMpdb_EXECUTABLE)
-        message(WARNING "compdb not found. Install it with: pip install compdb")
+
+    # Prefer the shipped (modified) compdb under scripts/compdb/.
+    # Fall back to a system-installed compdb executable.
+    set(DNDS_COMPDB_SCRIPTS_DIR "${PROJECT_SOURCE_DIR}/scripts")
+    set(DNDS_COMPDB_FOUND OFF)
+
+    if(EXISTS "${DNDS_COMPDB_SCRIPTS_DIR}/compdb/__main__.py")
+        set(DNDS_COMPDB_FOUND ON)
+        set(DNDS_COMPDB_COMMAND
+            ${CMAKE_COMMAND} -E env "PYTHONPATH=${DNDS_COMPDB_SCRIPTS_DIR}"
+            ${Python_EXECUTABLE} -m compdb)
+        message(STATUS "Using shipped compdb: PYTHONPATH=${DNDS_COMPDB_SCRIPTS_DIR} python -m compdb")
+    else()
+        find_program(COMpdb_EXECUTABLE compdb)
+        if(COMpdb_EXECUTABLE)
+            set(DNDS_COMPDB_FOUND ON)
+            set(DNDS_COMPDB_COMMAND ${COMpdb_EXECUTABLE})
+            message(STATUS "Using system compdb: ${COMpdb_EXECUTABLE}")
+        else()
+            message(WARNING "compdb not found (neither scripts/compdb/ nor system compdb).")
+        endif()
     endif()
-    if(COMpdb_EXECUTABLE AND CMAKE_EXPORT_COMPILE_COMMANDS)
+
+    if(DNDS_COMPDB_FOUND AND CMAKE_EXPORT_COMPILE_COMMANDS)
         add_custom_target(process-compile-commands
-            COMMAND ${COMpdb_EXECUTABLE} -p ${CMAKE_BINARY_DIR} list > ${CMAKE_BINARY_DIR}/compile_commands_processed.json
+            COMMAND ${DNDS_COMPDB_COMMAND} -p ${CMAKE_BINARY_DIR} list > ${CMAKE_BINARY_DIR}/compile_commands_processed.json
             DEPENDS ${CMAKE_BINARY_DIR}/compile_commands.json
             COMMENT "Processing compile_commands.json with compdb"
             VERBATIM
