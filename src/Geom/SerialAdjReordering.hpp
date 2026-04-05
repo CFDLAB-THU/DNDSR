@@ -16,8 +16,20 @@
 namespace DNDS::Geom
 {
 
+    /**
+     * @brief Partition a (sub-)graph using Metis.
+     *
+     * Adjacency entries in [mat_begin, mat_end) are absolute indices offset by ind_offset.
+     * This function internally subtracts ind_offset and filters out cross-sub-graph
+     * references (entries outside [ind_offset, ind_offset + n_elem)) before building
+     * the 0-based CSR that Metis requires.
+     *
+     * @param ind_offset  Absolute index of the first row in this sub-graph. For a full
+     *                    graph this is 0 and no filtering occurs.
+     */
     inline auto PartitionSerialAdj_Metis(
         tLocalMatStruct::const_iterator mat_begin, tLocalMatStruct::const_iterator mat_end, int nPart,
+        index ind_offset = 0,
         std::string metisType = "KWAY", int metisNcuts = 3, int metisUfactor = 5, int metisSeed = 0)
     {
         idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat_end - mat_begin));
@@ -41,14 +53,35 @@ namespace DNDS::Geom
             // options[METIS_OPTION_DBGLVL] = METIS_DBG_TIME;
         }
         auto &cell2cellFaceV = mat_begin;
-        std::vector<idx_t> adjncy, xadj, perm, iPerm;
+
+        //! Build CSR with 0-based local indices: subtract ind_offset and skip
+        //! entries outside [ind_offset, ind_offset + nCell) (cross-sub-graph edges).
+        std::vector<idx_t> adjncy, xadj;
         xadj.resize(nCell + 1);
         xadj[0] = 0;
         for (idx_t iC = 0; iC < nCell; iC++)
-            xadj[iC + 1] = signedIntSafeAdd<idx_t>(xadj[iC], size_t_to_signed<idx_t>(cell2cellFaceV[iC].size())); //! check overflow!
+        {
+            idx_t count = 0;
+            for (auto iCOther : cell2cellFaceV[iC])
+            {
+                index iLocal = iCOther - ind_offset;
+                if (iLocal >= 0 && iLocal < nCell)
+                    count++;
+            }
+            xadj[iC + 1] = xadj[iC] + count;
+        }
         adjncy.resize(xadj.back());
         for (idx_t iC = 0; iC < nCell; iC++)
-            std::copy(cell2cellFaceV[iC].begin(), cell2cellFaceV[iC].end(), adjncy.begin() + xadj[iC]);
+        {
+            idx_t pos = xadj[iC];
+            for (auto iCOther : cell2cellFaceV[iC])
+            {
+                index iLocal = iCOther - ind_offset;
+                if (iLocal >= 0 && iLocal < nCell)
+                    adjncy[pos++] = _METIS::indexToIdx(iLocal);
+            }
+        }
+
         idx_t objval;
         std::vector<idx_t> partOut(nCell);
 

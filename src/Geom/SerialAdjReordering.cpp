@@ -50,33 +50,25 @@ namespace DNDS::Geom
 
         if (nParts > 1)
         {
-            //! Build a 0-based local-only adjacency for Metis: filter out cross-sub-graph edges
-            //! (entries outside [ind_offset, ind_offset + n_elem)) and shift to local indices.
-            //! Metis requires a self-contained graph with 0-based numbering.
-            tLocalMatStruct local_adj(n_elem);
-            for (index iC = 0; iC < n_elem; iC++)
-            {
-                for (auto iCOther : mat_begin[iC])
-                {
-                    index iLocal = iCOther - ind_offset;
-                    if (iLocal >= 0 && iLocal < n_elem)
-                        local_adj[iC].push_back(iLocal);
-                }
-            }
+            //! PartitionSerialAdj_Metis now handles the filtering and rebasing internally
+            //! via its ind_offset parameter.
+            auto partition_local = PartitionSerialAdj_Metis(mat_begin, mat_end, nParts, ind_offset);
 
-            auto partition_local = PartitionSerialAdj_Metis(local_adj.begin(), local_adj.end(), nParts);
-
-            //! Build partition-level adjacency (which partitions neighbor which) using local_adj.
-            //! Cross-sub-graph edges are irrelevant for partition adjacency.
+            //! Build partition-level adjacency (which partitions neighbor which).
+            //! Only intra-sub-graph edges matter for partition adjacency.
             std::vector<std::set<int>> localPartsAdjV(nParts);
             for (index iC = 0; iC < n_elem; iC++)
             {
                 auto iP = partition_local.at(iC);
-                for (auto iCLocal : local_adj[iC])
+                for (auto iCOther : mat_begin[iC])
                 {
-                    auto iPOther = partition_local.at(iCLocal);
-                    if (iPOther != iP)
-                        localPartsAdjV.at(iP).insert(iPOther);
+                    index iLocal = iCOther - ind_offset;
+                    if (iLocal >= 0 && iLocal < n_elem)
+                    {
+                        auto iPOther = partition_local.at(iLocal);
+                        if (iPOther != iP)
+                            localPartsAdjV.at(iP).insert(iPOther);
+                    }
                 }
             }
             tLocalMatStruct localPartsAdj;
