@@ -1114,24 +1114,19 @@ namespace DNDS::Geom
 
         /**********************************/
         // convert bnd2cell, bnd2node, cell2cell, cell2node ptrs global to local
-        for (DNDS::index iCell = 0; iCell < cell2cell.Size(); iCell++)
-            for (DNDS::rowsize j = 0; j < cell2cell.RowSize(iCell); j++)
-                cell2cell(iCell, j) = CellIndexGlobal2Local(cell2cell(iCell, j));
+        ConvertAdjEntries(cell2cell, cell2cell.Size(),
+                          [&](index v) { return CellIndexGlobal2Local(v); });
 
         for (DNDS::index iBnd = 0; iBnd < bnd2cell.Size(); iBnd++)
             for (DNDS::rowsize j = 0; j < bnd2cell.RowSize(iBnd); j++)
                 bnd2cell(iBnd, j) = CellIndexGlobal2Local(bnd2cell(iBnd, j)),
                                DNDS_assert(j == 0 ? bnd2cell(iBnd, j) >= 0 : true); // must be inside
 
-        for (DNDS::index iCell = 0; iCell < cell2node.Size(); iCell++)
-            for (DNDS::rowsize j = 0; j < cell2node.RowSize(iCell); j++)
-                cell2node(iCell, j) = NodeIndexGlobal2Local(cell2node(iCell, j)),
-                                 DNDS_assert(cell2node(iCell, j) >= 0);
+        ConvertAdjEntries(cell2node, cell2node.Size(),
+                          [&](index v) { auto r = NodeIndexGlobal2Local(v); DNDS_assert(r >= 0); return r; });
 
-        for (DNDS::index iBnd = 0; iBnd < bnd2node.Size(); iBnd++)
-            for (DNDS::rowsize j = 0; j < bnd2node.RowSize(iBnd); j++)
-                bnd2node(iBnd, j) = NodeIndexGlobal2Local(bnd2node(iBnd, j)),
-                               DNDS_assert(bnd2node(iBnd, j) >= 0);
+        ConvertAdjEntries(bnd2node, bnd2node.Size(),
+                          [&](index v) { auto r = NodeIndexGlobal2Local(v); DNDS_assert(r >= 0); return r; });
         /**********************************/
         adjPrimaryState = Adj_PointToLocal;
     }
@@ -1145,26 +1140,19 @@ namespace DNDS::Geom
 
         /**********************************/
         // convert bnd2cell, bnd2node, cell2cell, cell2node ptrs local to global
-        /**********************************/
-        // convert bnd2cell, bnd2node, cell2cell, cell2node ptrs global to local
-        for (DNDS::index iCell = 0; iCell < cell2cell.Size(); iCell++)
-            for (DNDS::rowsize j = 0; j < cell2cell.RowSize(iCell); j++)
-                cell2cell(iCell, j) = CellIndexLocal2Global(cell2cell(iCell, j));
+        ConvertAdjEntries(cell2cell, cell2cell.Size(),
+                          [&](index v) { return CellIndexLocal2Global(v); });
 
         for (DNDS::index iBnd = 0; iBnd < bnd2cell.Size(); iBnd++)
             for (DNDS::rowsize j = 0; j < bnd2cell.RowSize(iBnd); j++)
                 bnd2cell(iBnd, j) = CellIndexLocal2Global(bnd2cell(iBnd, j)),
                                DNDS_assert(j == 0 ? bnd2cell(iBnd, j) >= 0 : true); // must be inside
 
-        for (DNDS::index iCell = 0; iCell < cell2node.Size(); iCell++)
-            for (DNDS::rowsize j = 0; j < cell2node.RowSize(iCell); j++)
-                cell2node(iCell, j) = NodeIndexLocal2Global(cell2node(iCell, j)),
-                                 DNDS_assert(cell2node(iCell, j) >= 0);
+        ConvertAdjEntries(cell2node, cell2node.Size(),
+                          [&](index v) { auto r = NodeIndexLocal2Global(v); DNDS_assert(r >= 0); return r; });
 
-        for (DNDS::index iBnd = 0; iBnd < bnd2node.Size(); iBnd++)
-            for (DNDS::rowsize j = 0; j < bnd2node.RowSize(iBnd); j++)
-                bnd2node(iBnd, j) = NodeIndexLocal2Global(bnd2node(iBnd, j)),
-                               DNDS_assert(bnd2node(iBnd, j) >= 0);
+        ConvertAdjEntries(bnd2node, bnd2node.Size(),
+                          [&](index v) { auto r = NodeIndexLocal2Global(v); DNDS_assert(r >= 0); return r; });
         /**********************************/
         adjPrimaryState = Adj_PointToGlobal;
     }
@@ -1176,10 +1164,8 @@ namespace DNDS::Geom
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
         /**********************************/
         // convert cell2node ptrs global to local
-        for (DNDS::index iCell = 0; iCell < cell2node.Size(); iCell++)
-            for (DNDS::rowsize j = 0; j < cell2node.RowSize(iCell); j++)
-                cell2node(iCell, j) = NodeIndexGlobal2Local(cell2node(iCell, j)),
-                                 DNDS_assert(cell2node(iCell, j) >= 0);
+        ConvertAdjEntries(cell2node, cell2node.Size(),
+                          [&](index v) { auto r = NodeIndexGlobal2Local(v); DNDS_assert(r >= 0); return r; });
         /**********************************/
         adjPrimaryState = Adj_PointToLocal;
     }
@@ -1190,10 +1176,8 @@ namespace DNDS::Geom
         DNDS_assert(adjPrimaryState == Adj_PointToLocal);
         /**********************************/
         // convert cell2node ptrs local to global
-        for (DNDS::index iCell = 0; iCell < cell2node.Size(); iCell++)
-            for (DNDS::rowsize j = 0; j < cell2node.RowSize(iCell); j++)
-                cell2node(iCell, j) = NodeIndexLocal2Global(cell2node(iCell, j)),
-                                 DNDS_assert(cell2node(iCell, j) >= 0);
+        ConvertAdjEntries(cell2node, cell2node.Size(),
+                          [&](index v) { auto r = NodeIndexLocal2Global(v); DNDS_assert(r >= 0); return r; });
         /**********************************/
         adjPrimaryState = Adj_PointToGlobal;
     }
@@ -1493,9 +1477,8 @@ namespace DNDS::Geom
         DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
 
         /**********************************/
-        for (DNDS::index iCell = 0; iCell < cell2cellFace.Size(); iCell++)
-            for (DNDS::rowsize j = 0; j < cell2cellFace.RowSize(iCell); j++)
-                cell2cellFace(iCell, j) = CellIndexLocal2Global(cell2cellFace(iCell, j));
+        ConvertAdjEntries(cell2cellFace, cell2cellFace.Size(),
+                          [&](index v) { return CellIndexLocal2Global(v); });
         /**********************************/
 
         adjC2CFaceState = Adj_PointToGlobal;
@@ -1508,9 +1491,8 @@ namespace DNDS::Geom
         DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
 
         /**********************************/
-        for (DNDS::index iCell = 0; iCell < cell2cellFace.Size(); iCell++)
-            for (DNDS::rowsize j = 0; j < cell2cellFace.RowSize(iCell); j++)
-                cell2cellFace(iCell, j) = CellIndexGlobal2Local(cell2cellFace(iCell, j));
+        ConvertAdjEntries(cell2cellFace, cell2cellFace.Size(),
+                          [&](index v) { return CellIndexGlobal2Local(v); });
         /**********************************/
 
         adjC2CFaceState = Adj_PointToLocal;
@@ -2557,76 +2539,17 @@ namespace DNDS::Geom
         /*      reorder LHS of cell2xxx     */
         /************************************/
 
-        { // cell2node
-            tAdj cell2nodeTmp;
-            DNDS_MAKE_SSP(cell2nodeTmp, mpi);
-            cell2nodeTmp->CopyData(*cell2node.father);
-            cell2node.father->Decompress();
-            for (index iCell = 0; iCell < this->NumCell(); iCell++)
-            {
-                index iCellNew = this->CellIndexGlobal2Local_NoSon(cellOld2NewArr(iCell, 0));
-                cell2node.father->ResizeRow(iCellNew, (*cell2nodeTmp).RowSize(iCell));
-                cell2node[iCellNew] = (*cell2nodeTmp)[iCell];
-            }
-            cell2node.father->Compress();
-        }
-        { // cell2cell
-            tAdj cell2cellTmp;
-            DNDS_MAKE_SSP(cell2cellTmp, mpi);
-            cell2cellTmp->CopyData(*cell2cell.father);
-            cell2cell.father->Decompress();
-            for (index iCell = 0; iCell < this->NumCell(); iCell++)
-            {
-                index iCellNew = this->CellIndexGlobal2Local_NoSon(cellOld2NewArr(iCell, 0));
-                cell2cell.father->ResizeRow(iCellNew, (*cell2cellTmp).RowSize(iCell));
-                cell2cell[iCellNew] = (*cell2cellTmp)[iCell];
-            }
-            cell2cell.father->Compress();
-        }
-        { // cell2cellOrig
-            tAdj1 cell2cellOrigTmp;
-            DNDS_MAKE_SSP(cell2cellOrigTmp, mpi);
-            cell2cellOrigTmp->CopyData(*cell2cellOrig.father);
-            for (index iCell = 0; iCell < this->NumCell(); iCell++)
-            {
-                index iCellNew = this->CellIndexGlobal2Local_NoSon(cellOld2NewArr(iCell, 0));
-                cell2cellOrig[iCellNew] = (*cell2cellOrigTmp)[iCell];
-            }
-        }
+        auto cellOld2NewLocal = [&](index iCell) -> index
+        { return this->CellIndexGlobal2Local_NoSon(cellOld2NewArr(iCell, 0)); };
+
+        PermuteRows(cell2node, this->NumCell(), cellOld2NewLocal);
+        PermuteRows(cell2cell, this->NumCell(), cellOld2NewLocal);
+        PermuteRows(cell2cellOrig, this->NumCell(), cellOld2NewLocal);
         if (this->adjC2FState != Adj_Unknown)
-        { // cell2face
-            tAdj cell2faceTmp;
-            DNDS_MAKE_SSP(cell2faceTmp, mpi);
-            cell2faceTmp->CopyData(*cell2face.father);
-            cell2face.father->Decompress();
-            for (index iCell = 0; iCell < this->NumCell(); iCell++)
-            {
-                index iCellNew = this->CellIndexGlobal2Local_NoSon(cellOld2NewArr(iCell, 0));
-                cell2face.father->ResizeRow(iCellNew, (*cell2faceTmp).RowSize(iCell));
-                cell2face[iCellNew] = (*cell2faceTmp)[iCell];
-            }
-            cell2face.father->Compress();
-        }
+            PermuteRows(cell2face, this->NumCell(), cellOld2NewLocal);
         if (this->isPeriodic)
-        { // cell2nodePbi
-            tPbi cell2nodePbiTmp;
-            DNDS_MAKE_SSP(cell2nodePbiTmp, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
-            cell2nodePbiTmp->CopyData(*cell2nodePbi.father);
-            cell2nodePbi.father->Decompress();
-            for (index iCell = 0; iCell < this->NumCell(); iCell++)
-            {
-                index iCellNew = this->CellIndexGlobal2Local_NoSon(cellOld2NewArr(iCell, 0));
-                cell2nodePbi.father->ResizeRow(iCellNew, (*cell2nodePbiTmp).RowSize(iCell));
-                cell2nodePbi[iCellNew] = (*cell2nodePbiTmp)[iCell];
-            }
-        }
-        { // cellElemInfo
-            tElemInfoArray cellElemInfoTmp;
-            DNDS_MAKE_SSP(cellElemInfoTmp, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-            cellElemInfoTmp->CopyData(*cellElemInfo.father);
-            for (index iCell = 0; iCell < this->NumCell(); iCell++)
-                cellElemInfo(this->CellIndexGlobal2Local_NoSon(cellOld2NewArr(iCell, 0)), 0) = (*cellElemInfoTmp)(iCell, 0);
-        }
+            PermuteRows(cell2nodePbi, this->NumCell(), cellOld2NewLocal);
+        PermuteRows(cellElemInfo, this->NumCell(), cellOld2NewLocal);
 
         /************************************/
         /*     ghost        of cell2xxx     */

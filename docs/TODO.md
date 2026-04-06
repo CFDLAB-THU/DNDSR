@@ -132,10 +132,101 @@
   `QuadratureData.hpp` (raw point/weight tables, 636 lines of static data),
   `Quadrature.hpp` (class and integration logic)
 
+### UnstructuredMesh decomposition (~13,370 lines across 13 files)
+
+`UnstructuredMesh` (`Mesh.hpp:25-806`) is a god struct: ~50 data members,
+~60+ methods, and 9 `.cpp` implementation files spanning topology building,
+ghost communication, face interpolation, I/O, elevation, reordering, and
+output.  `UnstructuredMeshSerialRW` (`Mesh.hpp:821-1058`) has 16 declared-
+but-unused adjacency fields (lines 862-877) and mixes reading, partitioning,
+and serial output in a single struct.
+
+#### Phase 1: Eliminate duplication (low risk, high reward) — done
+
+- ~~**Template the 12 index conversion methods** (`Mesh.hpp`):
+  Replaced 12 identical methods (168 lines) with 4 generic templates
+  (`IndexGlobal2Local<TPair>`, `IndexLocal2Global<TPair>`,
+  `IndexLocal2Global_NoSon<TPair>`, `IndexGlobal2Local_NoSon<TPair>`)
+  plus 12 one-line named wrappers.  Zero call-site changes required~~ (done)
+- ~~**Extract `ConvertAdjEntries` helper** (`Mesh.hpp` + `Mesh.cpp`):
+  Added `ConvertAdjEntries<TAdj, TFn>(adj, nRows, fn)` template.  Applied
+  to 8 of 12 adjacency methods (Primary, PrimaryForBnd, C2CFace).  N2CB
+  methods preserved verbatim (they use `#pragma omp parallel for`).
+  Facial and C2F methods preserved (inline ghost mapping lookups)~~ (done)
+- ~~**Extract `PermuteRows` helper** (`Mesh.hpp` + `Mesh.cpp`):
+  Added `PermuteRows<TPair, TFn>(pair, nRows, old2new)` template that
+  handles both CSR (`Decompress`/`ResizeRow`/`Compress`) and fixed-size
+  arrays via `if constexpr (TPair::IsCSR())`.  Replaced 6 permutation
+  blocks (~70 lines) in `ReorderLocalCells()` with 6 one-line calls~~ (done)
+- **Dead fields** in `UnstructuredMeshSerialRW` (lines 862-877):
+  16 adjacency arrays declared "not used for now" — preserved intentionally;
+  may be used in future serial I/O paths
+
+#### Phase 2: Break up massive methods
+
+- **Split `InterpolateFace()`** (~416 lines, `Mesh.cpp:1520-1936`) into:
+  `CreateLocalFaces()` (face enumeration from cells),
+  `DeduplicateGhostFaces()` (MPI rank comparison),
+  `MapBoundariesToFaces()` (bnd-to-face matching),
+  `CommunicateGhostFaces()` (MPI ghost exchange)
+- **Split `ReorderLocalCells()`** (~370 lines, `Mesh.cpp:2318-2687`) into:
+  partition computation, permutation application (using the new
+  `PermuteArrayRows` helper), and ghost re-indexing
+- **Split `PrintSerialPartVTKDataArray()`** (~700 lines,
+  `Mesh_Plts.cpp:535-1235`) into per-format writers
+- **Split `ReadFromCGNSSerial()`** (~550 lines,
+  `Mesh_Serial_ReadFromCGNS.cpp:13-551`) into zone reading, zone assembly,
+  and interface-node deduplication
+
+#### Phase 3: Decompose into focused components
+
+- **`MeshTopology`**: adjacency arrays, state flags, state transitions
+  (the 5 `MeshAdjState` fields and their assertions)
+- **`MeshIO`**: serialization (`WriteSerialize`/`ReadSerialize`),
+  VTK/PLT/CGNS output (currently in `Mesh_Plts.cpp`), CGNS/OpenFOAM
+  reading (currently in `Mesh_Serial_ReadFromCGNS.cpp`)
+- **`MeshElevation`**: O1-to-O2 elevation, bisection, smooth solvers
+  (currently in `Mesh_Elevation.cpp` + `Mesh_Elevation_SmoothSolver.cpp`).
+  Factor shared setup (KD-tree, boundary gathering) out of the 4 smooth
+  solver variants; remove `V1Old` if deprecated
+- **`MeshReordering`**: local cell reordering, partition start tracking
+- Existing `UnstructuredMesh` becomes a thin facade holding a
+  `MeshTopology` plus coordinate data, with component access methods
+
+#### Phase 4: Fix coupling and cleanup
+
+- **Break the Geom-to-Solver dependency**: `Mesh.hpp:11` includes
+  `Solver/Direct.hpp` solely for `SerialSymLUStructure` and
+  `DirectPrecControl` used in two methods (`ObtainLocalFactFillOrdering`,
+  `ObtainSymmetricSymbolicFactorization` at lines 439-440).  Move these
+  methods to a bridge file (e.g., `Mesh_DirectPrec.cpp`) or forward-declare
+  the solver types
+- **Consolidate `__GetCoords` overloads** (`Mesh.hpp:500-611`): 4 template
+  overloads x 2 (periodic/non-periodic) can become a single template with
+  optional coordinate source and optional PBI source
+- **Replace `auto mesh = this;`** pattern (`Mesh.cpp:641, 1417, 2046`)
+  with direct member access
+- **Delete dead/commented code**: commented `InterpolateTopology`
+  (`Mesh.cpp:26-42`), dead code after `continue`
+  (`Mesh_Serial_BuildCell2Cell.cpp:416-438`), debug print blocks
+- **Standardize logging**: replace raw `std::cout`/`std::cerr` calls
+  (found in `Mesh_Serial_ReadFromCGNS.cpp`, `Mesh.cpp`) with `DNDS::log()`
+- **Fix OpenMP progress reporting**: `Mesh_Serial_BuildCell2Cell.cpp:386-404`
+  uses `#pragma omp critical` for progress output inside a parallel loop.
+  Use thread-local counters or atomic operations instead
+
+#### Phase 5: Reduce periodic branching
+
+Throughout the mesh code, `if (isPeriodic)` appears in every major method
+(25+ sites across `Mesh.cpp` and `Mesh.hpp`).  Consider extracting
+periodic-specific behavior into a policy or strategy pattern so that
+non-periodic mesh paths remain clean.
+
 ### Encapsulation
 
 - Convert `UnstructuredMesh` from `struct` (all ~30+ data members public)
   to `class` with private members and public accessor methods
+  (can be done incrementally as part of UnstructuredMesh Phase 3 above)
 - Reduce `EulerEvaluator` public surface: make internal buffers
   (`lambdaFace*`, `uGradBuf*`, `fluxWallSum`, `symLU`, etc.) private;
   expose only through accessors where needed

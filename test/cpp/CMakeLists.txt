@@ -99,6 +99,9 @@ dnds_add_mpi_test(array_derived "DNDS/test_ArrayDerived.cpp" "dnds")
 dnds_add_mpi_test(array_dof "DNDS/test_ArrayDOF.cpp" "dnds")
 dnds_add_mpi_test(index_mapping "DNDS/test_IndexMapping.cpp" "dnds")
 
+# --- Geom MPI tests ---
+dnds_add_mpi_test(mesh_index_conversion "Geom/test_MeshIndexConversion.cpp" "geom;dnds")
+
 # Add all test executables to the aggregate target
 set(DNDS_ALL_TEST_TARGETS
     geom_test_elements
@@ -109,6 +112,7 @@ set(DNDS_ALL_TEST_TARGETS
     dnds_test_array_derived
     dnds_test_array_dof
     dnds_test_index_mapping
+    dnds_test_mesh_index_conversion
 )
 foreach(T ${DNDS_ALL_TEST_TARGETS})
     add_dependencies(dnds_unit_tests ${T})

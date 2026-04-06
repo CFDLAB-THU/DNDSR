@@ -193,178 +193,174 @@ namespace DNDS::Geom
             return ret;
         }
 
+        // =================================================================
+        // Generic index conversion templates
+        // =================================================================
+        // The 4 templates below replace 12 structurally identical methods
+        // (3 entity types x 4 variants).  The old named methods are kept
+        // as thin inline wrappers so all existing call sites compile
+        // unchanged.
+
         /**
-         * \brief
-         * return normal negative:  mapping to un-found in father-son
+         * \brief Global-to-local conversion using father+son ghost mapping.
+         * \return local index, or (-1 - iGlobal) when not found in the pair.
+         *         UnInitIndex passes through unchanged.
          */
-        index NodeIndexGlobal2Local(DNDS::index iNodeOther)
+        template <class TPair>
+        index IndexGlobal2Local(TPair &pair, DNDS::index iGlobal)
         {
-            DNDS_assert(coords.trans.pLGhostMapping);
-            if (iNodeOther == UnInitIndex)
-                return iNodeOther;
+            DNDS_assert(pair.trans.pLGhostMapping);
+            if (iGlobal == UnInitIndex)
+                return iGlobal;
             DNDS::MPI_int rank;
             DNDS::index val;
-            auto result = coords.trans.pLGhostMapping->search_indexAppend(iNodeOther, rank, val);
+            auto result = pair.trans.pLGhostMapping->search_indexAppend(iGlobal, rank, val);
             if (result)
                 return val;
             else
-                return -1 - iNodeOther; // mapping to un-found in father-son
-        }
-
-        index NodeIndexLocal2Global(DNDS::index iNodeOther)
-        {
-            DNDS_assert(coords.trans.pLGhostMapping);
-            if (iNodeOther == UnInitIndex)
-                return iNodeOther;
-            if (iNodeOther < 0) // mapping to un-found in father-son
-                return -1 - iNodeOther;
-            else
-                return coords.trans.pLGhostMapping->operator()(-1, iNodeOther);
-        }
-
-        index NodeIndexLocal2Global_NoSon(index iNode)
-        {
-            DNDS_assert(coords.father->pLGlobalMapping);
-            if (iNode == UnInitIndex)
-                return UnInitIndex;
-            if (iNode < 0)
-                return -1 - iNode;
-            if (iNode >= coords.father->Size())
-                DNDS_assert_info(false, "local idx not right: " + std::to_string(iNode));
-            return coords.father->pLGlobalMapping->operator()(mpi.rank, iNode);
+                return -1 - iGlobal; // mapping to un-found in father-son
         }
 
         /**
-         * \brief
-         * return normal negative:  mapping to un-found in father
+         * \brief Local-to-global conversion using father+son ghost mapping.
+         * \return global index, or the decoded global when the local is
+         *         a negative "not-found" encoding.  UnInitIndex passes through.
          */
-        index NodeIndexGlobal2Local_NoSon(index iNode)
+        template <class TPair>
+        index IndexLocal2Global(TPair &pair, DNDS::index iLocal)
         {
-            DNDS_assert(coords.father->pLGlobalMapping);
-            if (iNode == UnInitIndex)
+            DNDS_assert(pair.trans.pLGhostMapping);
+            if (iLocal == UnInitIndex)
+                return iLocal;
+            if (iLocal < 0) // mapping to un-found in father-son
+                return -1 - iLocal;
+            else
+                return pair.trans.pLGhostMapping->operator()(-1, iLocal);
+        }
+
+        /**
+         * \brief Local-to-global conversion using only the father's global
+         *        mapping (no son / ghost layer).
+         * \return global index.  Asserts if iLocal exceeds father size.
+         *         Negative "not-found" encoding and UnInitIndex pass through.
+         */
+        template <class TPair>
+        index IndexLocal2Global_NoSon(TPair &pair, index iLocal)
+        {
+            DNDS_assert(pair.father->pLGlobalMapping);
+            if (iLocal == UnInitIndex)
                 return UnInitIndex;
-            auto [ret, rank, val] = coords.father->pLGlobalMapping->search(iNode);
-            DNDS_assert_info(ret, "search failed with input: " + std::to_string(iNode));
+            if (iLocal < 0)
+                return -1 - iLocal;
+            if (iLocal >= pair.father->Size())
+                DNDS_assert_info(false, "local idx not right: " + std::to_string(iLocal));
+            return pair.father->pLGlobalMapping->operator()(mpi.rank, iLocal);
+        }
+
+        /**
+         * \brief Global-to-local conversion using only the father's global
+         *        mapping (no son / ghost layer).
+         * \return local index if the global maps to this rank, otherwise
+         *         (-1 - iGlobal).  UnInitIndex passes through.
+         */
+        template <class TPair>
+        index IndexGlobal2Local_NoSon(TPair &pair, index iGlobal)
+        {
+            DNDS_assert(pair.father->pLGlobalMapping);
+            if (iGlobal == UnInitIndex)
+                return UnInitIndex;
+            auto [ret, rank, val] = pair.father->pLGlobalMapping->search(iGlobal);
+            DNDS_assert_info(ret, "search failed with input: " + std::to_string(iGlobal));
             if (rank == mpi.rank)
                 return val;
             else
-                return -1 - iNode;
+                return -1 - iGlobal;
         }
+
+        // =================================================================
+        // Named wrappers — Node
+        // =================================================================
+        index NodeIndexGlobal2Local(DNDS::index i) { return IndexGlobal2Local(coords, i); }
+        index NodeIndexLocal2Global(DNDS::index i) { return IndexLocal2Global(coords, i); }
+        index NodeIndexLocal2Global_NoSon(index i) { return IndexLocal2Global_NoSon(coords, i); }
+        index NodeIndexGlobal2Local_NoSon(index i) { return IndexGlobal2Local_NoSon(coords, i); }
+
+        // =================================================================
+        // Named wrappers — Cell
+        // =================================================================
+        index CellIndexGlobal2Local(DNDS::index i) { return IndexGlobal2Local(cellElemInfo, i); }
+        index CellIndexLocal2Global(DNDS::index i) { return IndexLocal2Global(cellElemInfo, i); }
+        index CellIndexLocal2Global_NoSon(index i) { return IndexLocal2Global_NoSon(cell2node, i); }
+        index CellIndexGlobal2Local_NoSon(index i) { return IndexGlobal2Local_NoSon(cell2node, i); }
+
+        // =================================================================
+        // Named wrappers — Bnd
+        // =================================================================
+        index BndIndexGlobal2Local(DNDS::index i) { return IndexGlobal2Local(bndElemInfo, i); }
+        index BndIndexLocal2Global(DNDS::index i) { return IndexLocal2Global(bndElemInfo, i); }
+        index BndIndexLocal2Global_NoSon(index i) { return IndexLocal2Global_NoSon(bnd2node, i); }
+        index BndIndexGlobal2Local_NoSon(index i) { return IndexGlobal2Local_NoSon(bnd2node, i); }
+
+        // =================================================================
+        // Adjacency bulk-conversion helper
+        // =================================================================
 
         /**
-         * \brief
-         * return normal negative:  mapping to un-found in father-son
+         * \brief Apply a conversion function to every entry of an adjacency
+         *        array's first \p nRows rows.
+         *
+         * Replaces the recurring nested-loop pattern:
+         * \code
+         *   for (index i = 0; i < nRows; i++)
+         *       for (rowsize j = 0; j < adj.RowSize(i); j++)
+         *           adj(i, j) = fn(adj(i, j));
+         * \endcode
+         *
+         * \tparam TAdj  Any type with RowSize(index) and operator()(index, rowsize).
+         * \tparam TFn   Callable  index(index).
          */
-        index CellIndexGlobal2Local(DNDS::index iCellOther)
+        template <class TAdj, class TFn>
+        static void ConvertAdjEntries(TAdj &adj, index nRows, TFn &&fn)
         {
-            DNDS_assert(cellElemInfo.trans.pLGhostMapping);
-            if (iCellOther == UnInitIndex)
-                return iCellOther;
-            DNDS::MPI_int rank;
-            DNDS::index val;
-            auto result = cellElemInfo.trans.pLGhostMapping->search_indexAppend(iCellOther, rank, val);
-            if (result)
-                return val;
-            else
-                return -1 - iCellOther; // mapping to un-found in father-son
+            for (index i = 0; i < nRows; i++)
+                for (rowsize j = 0; j < adj.RowSize(i); j++)
+                    adj(i, j) = fn(adj(i, j));
         }
 
-        index CellIndexLocal2Global(DNDS::index iCellOther)
-        {
-            DNDS_assert(cellElemInfo.trans.pLGhostMapping);
-            if (iCellOther == UnInitIndex)
-                return iCellOther;
-            if (iCellOther < 0) // mapping to un-found in father-son
-                return -1 - iCellOther;
-            else
-                return cellElemInfo.trans.pLGhostMapping->operator()(-1, iCellOther);
-        }
-
-        index CellIndexLocal2Global_NoSon(index iCell)
-        {
-            DNDS_assert(cell2node.father->pLGlobalMapping);
-            if (iCell == UnInitIndex)
-                return UnInitIndex;
-            if (iCell < 0)
-                return -1 - iCell;
-            if (iCell >= cell2node.father->Size())
-                DNDS_assert_info(false, "local idx not right: " + std::to_string(iCell));
-            return cell2node.father->pLGlobalMapping->operator()(mpi.rank, iCell);
-        }
+        // =================================================================
+        // Row-permutation helper
+        // =================================================================
 
         /**
-         * \brief
-         * return normal negative:  mapping to un-found in father
+         * \brief Permute the father rows of an ArrayPair according to a
+         *        mapping function.
+         *
+         * For each old row index \p i in [0, nRows), the row is moved to
+         * position old2new(i).  Works with both CSR (variable-row-size)
+         * and fixed-row-size array pairs: CSR pairs are Decompressed before
+         * and Compressed after the permutation; fixed-size pairs are
+         * copied directly.
+         *
+         * \tparam TPair  An ArrayPair-like type with father/son, IsCSR().
+         * \tparam TFn    Callable  index(index) returning the new row index.
          */
-        index CellIndexGlobal2Local_NoSon(index iCell)
+        template <class TPair, class TFn>
+        static void PermuteRows(TPair &pair, index nRows, TFn &&old2new)
         {
-            DNDS_assert(cell2node.father->pLGlobalMapping);
-            if (iCell == UnInitIndex)
-                return UnInitIndex;
-            auto [ret, rank, val] = cell2node.father->pLGlobalMapping->search(iCell);
-            DNDS_assert_info(ret, "search failed with input: " + std::to_string(iCell));
-            if (rank == mpi.rank)
-                return val;
-            else
-                return -1 - iCell;
-        }
-
-        /**
-         * \brief
-         * return normal negative:  mapping to un-found in father-son
-         */
-        index BndIndexGlobal2Local(DNDS::index iBnd)
-        {
-            DNDS_assert(bndElemInfo.trans.pLGhostMapping);
-            if (iBnd == UnInitIndex)
-                return iBnd;
-            DNDS::MPI_int rank;
-            DNDS::index val;
-            auto result = bndElemInfo.trans.pLGhostMapping->search_indexAppend(iBnd, rank, val);
-            if (result)
-                return val;
-            else
-                return -1 - iBnd; // mapping to un-found in father-son
-        }
-
-        index BndIndexLocal2Global(DNDS::index iBnd)
-        {
-            DNDS_assert(bndElemInfo.trans.pLGhostMapping);
-            if (iBnd == UnInitIndex)
-                return iBnd;
-            if (iBnd < 0) // mapping to un-found in father-son
-                return -1 - iBnd;
-            else
-                return bndElemInfo.trans.pLGhostMapping->operator()(-1, iBnd);
-        }
-
-        index BndIndexLocal2Global_NoSon(index iBnd)
-        {
-            DNDS_assert(bnd2node.father->pLGlobalMapping);
-            if (iBnd == UnInitIndex)
-                return UnInitIndex;
-            if (iBnd < 0)
-                return -1 - iBnd;
-            if (iBnd >= bnd2node.father->Size())
-                DNDS_assert_info(false, "local idx not right: " + std::to_string(iBnd));
-            return bnd2node.father->pLGlobalMapping->operator()(mpi.rank, iBnd);
-        }
-
-        /**
-         * \brief
-         * return normal negative:  mapping to un-found in father
-         */
-        index BndIndexGlobal2Local_NoSon(index iBnd)
-        {
-            DNDS_assert(bnd2node.father->pLGlobalMapping);
-            if (iBnd == UnInitIndex)
-                return UnInitIndex;
-            auto [ret, rank, val] = bnd2node.father->pLGlobalMapping->search(iBnd);
-            DNDS_assert_info(ret, "search failed with input: " + std::to_string(iBnd));
-            if (rank == mpi.rank)
-                return val;
-            else
-                return -1 - iBnd;
+            using TArr = typename decltype(pair.father)::element_type;
+            auto tmp = std::make_shared<TArr>(*pair.father); // deep copy via copy ctor
+            if constexpr (TPair::IsCSR())
+                pair.father->Decompress();
+            for (index i = 0; i < nRows; i++)
+            {
+                index iNew = old2new(i);
+                if constexpr (TPair::IsCSR())
+                    pair.father->ResizeRow(iNew, tmp->RowSize(i));
+                for (rowsize j = 0; j < tmp->RowSize(i); j++)
+                    pair(iNew, j) = (*tmp)(i, j);
+            }
+            if constexpr (TPair::IsCSR())
+                pair.father->Compress();
         }
 
         void SetPeriodicGeometry(

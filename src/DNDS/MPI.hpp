@@ -326,7 +326,7 @@ namespace DNDS
         {
             for (auto &i : (*this))
                 if (i != MPI_REQUEST_NULL)
-                    MPI_Request_free(&i); //, std::cout << "Free Req" << std::endl;
+                    MPI_Request_free(&i);
             this->tMPI_reqVec::clear();
         }
     };
