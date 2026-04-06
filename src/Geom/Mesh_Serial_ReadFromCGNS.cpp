@@ -10,6 +10,238 @@
 
 namespace DNDS::Geom
 {
+    // =================================================================
+    // File-local helpers for ReadFromCGNSSerial
+    // =================================================================
+    namespace
+    {
+        /**
+         * \brief Deduplicate shared nodes across CGNS zones via DFS on the
+         *        zone connectivity graph.
+         *
+         * \param[in]  ZoneCoords             Per-zone coordinate arrays.
+         * \param[in]  ZoneConnect            Per-zone connectivity point lists (1-based).
+         * \param[in]  ZoneConnectDonor       Per-zone donor point lists (1-based).
+         * \param[in]  ZoneConnectTargetIZone Per-zone target zone indices.
+         * \param[out] coordSerial            Assembled coordinate array (resized and filled).
+         * \return     NodeOld2New mapping from concatenated zone-local indices to
+         *             assembled (deduplicated) global indices, plus ZoneNodeStarts.
+         */
+        std::pair<std::vector<DNDS::index>, std::vector<DNDS::index>>
+        AssembleZoneNodes(
+            const std::vector<tCoord> &ZoneCoords,
+            const std::vector<std::vector<std::vector<cgsize_t>>> &ZoneConnect,
+            const std::vector<std::vector<std::vector<cgsize_t>>> &ZoneConnectDonor,
+            const std::vector<std::vector<int>> &ZoneConnectTargetIZone,
+            tCoord &coordSerial,
+            int dim)
+        {
+            std::vector<DNDS::index> ZoneNodeSizes(ZoneCoords.size());
+            std::vector<DNDS::index> ZoneNodeStarts(ZoneCoords.size() + 1);
+            ZoneNodeStarts[0] = 0;
+            for (size_t i = 0; i < ZoneNodeSizes.size(); i++)
+                ZoneNodeStarts[i + 1] = ZoneNodeStarts[i] + (ZoneNodeSizes[i] = ZoneCoords[i]->Size());
+
+            std::vector<DNDS::index> NodeOld2New(ZoneNodeStarts.back(), -1);
+            DNDS::index cTop = 0;
+
+            // DFS over zone connectivity graph to deduplicate shared nodes
+            std::set<int> zonesLeft;
+            for (size_t iGZ = 0; iGZ < ZoneNodeSizes.size(); iGZ++)
+                zonesLeft.insert(static_cast<int>(iGZ));
+            std::vector<int> zonesFront;
+            zonesFront.push_back(0);
+            DNDS_assert(ZoneNodeSizes.size() >= 1);
+
+            while (zonesFront.size())
+            {
+                int iGZ = zonesFront.back();
+                zonesFront.pop_back();
+                zonesLeft.erase(iGZ);
+                for (size_t iOther = 0; iOther < ZoneConnect.at(iGZ).size(); iOther++)
+                {
+                    int iGZOther = ZoneConnectTargetIZone.at(iGZ).at(iOther);
+                    if (zonesLeft.count(iGZOther))
+                    {
+                        zonesFront.push_back(iGZOther);
+                    }
+                    else
+                    {
+                        for (size_t iNode = 0; iNode < ZoneConnect.at(iGZ).at(iOther).size(); iNode++)
+                        {
+                            NodeOld2New.at(ZoneNodeStarts.at(iGZ) + ZoneConnect.at(iGZ).at(iOther).at(iNode) - 1) //! note ZoneConnect is 1-based
+                                = NodeOld2New.at(ZoneNodeStarts.at(iGZOther) + ZoneConnectDonor.at(iGZ).at(iOther).at(iNode) - 1);
+                            DNDS_assert(NodeOld2New.at(ZoneNodeStarts.at(iGZ) + ZoneConnect.at(iGZ).at(iOther).at(iNode) - 1) >= 0);
+                        }
+                    }
+                }
+                for (DNDS::index iNode = ZoneNodeStarts.at(iGZ); iNode < ZoneNodeStarts.at(iGZ + 1); iNode++)
+                {
+                    if (NodeOld2New.at(iNode) < 0)
+                    {
+                        NodeOld2New.at(iNode) = cTop;
+                        cTop++;
+                    }
+                }
+            }
+            DNDS::log() << "CGNS === Assembled Zones have NNodes " << cTop << std::endl;
+            DNDS_assert_info(zonesLeft.empty(), "Did not reach all the zones, might missing zone-connectivities");
+
+            coordSerial->Resize(cTop);
+            for (DNDS::index i = 0; i < coordSerial->Size(); i++)
+                coordSerial->operator[](i).setConstant(DNDS::UnInitReal);
+
+            for (size_t iGZ = 0; iGZ < ZoneNodeSizes.size(); iGZ++)
+            {
+                for (DNDS::index iNode = ZoneNodeStarts.at(iGZ); iNode < ZoneNodeStarts.at(static_cast<int>(iGZ) + 1); iNode++)
+                {
+                    auto coordC = (*ZoneCoords[iGZ])[iNode - ZoneNodeStarts.at(iGZ)];
+                    real dist = ((*coordSerial)[NodeOld2New.at(iNode)] - coordC).norm();
+                    if (!DNDS::IsUnInitReal((*coordSerial)[NodeOld2New.at(iNode)][0]))
+                        DNDS_assert_info(dist < 1e-10,
+                                         "Not same points on the connection, distance is " + std::to_string(dist));
+                    (*coordSerial)[NodeOld2New.at(iNode)] = coordC;
+                }
+            }
+
+            return {std::move(NodeOld2New), std::move(ZoneNodeStarts)};
+        }
+
+        /**
+         * \brief Separate zone elements into volume cells and boundary faces.
+         *
+         * Converts element node indices from zone-local to assembled global
+         * (via NodeOld2New), then fills cell2nodeSerial/cellElemInfoSerial and
+         * bnd2nodeSerial/bndElemInfoSerial.
+         */
+        void SeparateVolumeAndBoundaryElements(
+            const std::vector<tAdj> &ZoneElems,
+            const std::vector<tElemInfoArray> &ZoneElemInfos,
+            const std::vector<DNDS::index> &NodeOld2New,
+            const std::vector<DNDS::index> &ZoneNodeStarts,
+            tAdj &cell2nodeSerial,
+            tElemInfoArray &cellElemInfoSerial,
+            tAdj1 &cell2cellOrigSerial,
+            tAdj &bnd2nodeSerial,
+            tElemInfoArray &bndElemInfoSerial,
+            tAdj1 &bnd2bndOrigSerial,
+            tAdj1 &node2nodeOrigSerial,
+            tCoord &coordSerial,
+            int dim)
+        {
+            // Convert element node indices to assembled global and count
+            DNDS::index nVolElem = 0;
+            DNDS::index nBndElem = 0;
+            for (size_t iGZ = 0; iGZ < ZoneElems.size(); iGZ++)
+            {
+                for (DNDS::index iElem = 0; iElem < ZoneElems[iGZ]->Size(); iElem++)
+                {
+                    for (DNDS::rowsize j = 0; j < ZoneElems[iGZ]->RowSize(iElem); j++)
+                        ZoneElems[iGZ]->operator()(iElem, j) = NodeOld2New[ZoneNodeStarts[iGZ] + ZoneElems[iGZ]->operator()(iElem, j)];
+                    auto Elem = Elem::Element{ZoneElemInfos[iGZ]->operator()(iElem, 0).getElemType()};
+                    if (Elem.GetDim() == dim)
+                        nVolElem++;
+                    if (Elem.GetDim() == dim - 1 && !FaceIDIsTrueInternal(ZoneElemInfos[iGZ]->operator()(iElem, 0).zone))
+                        nBndElem++;
+                }
+            }
+
+            cell2nodeSerial->Resize(nVolElem);
+            bnd2nodeSerial->Resize(nBndElem);
+            cellElemInfoSerial->Resize(nVolElem);
+            cell2cellOrigSerial->Resize(nVolElem);
+            bndElemInfoSerial->Resize(nBndElem);
+            node2nodeOrigSerial->Resize(coordSerial->Size());
+            bnd2bndOrigSerial->Resize(nBndElem);
+            nVolElem = 0;
+            nBndElem = 0;
+            for (size_t iGZ = 0; iGZ < ZoneElems.size(); iGZ++)
+            {
+                for (DNDS::index iElem = 0; iElem < ZoneElems[iGZ]->Size(); iElem++)
+                {
+                    auto Elem = Elem::Element{ZoneElemInfos[iGZ]->operator()(iElem, 0).getElemType()};
+                    if (Elem.GetDim() == dim)
+                    {
+                        cell2nodeSerial->ResizeRow(nVolElem, ZoneElems[iGZ]->RowSize(iElem));
+                        for (DNDS::rowsize j = 0; j < ZoneElems[iGZ]->RowSize(iElem); j++)
+                            cell2nodeSerial->operator()(nVolElem, j) = ZoneElems[iGZ]->operator()(iElem, j);
+                        cellElemInfoSerial->operator()(nVolElem, 0) = ZoneElemInfos[iGZ]->operator()(iElem, 0);
+                        nVolElem++;
+                    }
+                    if (Elem.GetDim() == dim - 1 && !FaceIDIsTrueInternal(ZoneElemInfos[iGZ]->operator()(iElem, 0).zone))
+                    {
+                        bnd2nodeSerial->ResizeRow(nBndElem, ZoneElems[iGZ]->RowSize(iElem));
+                        for (DNDS::rowsize j = 0; j < ZoneElems[iGZ]->RowSize(iElem); j++)
+                            bnd2nodeSerial->operator()(nBndElem, j) = ZoneElems[iGZ]->operator()(iElem, j);
+                        bndElemInfoSerial->operator()(nBndElem, 0) = ZoneElemInfos[iGZ]->operator()(iElem, 0);
+                        nBndElem++;
+                    }
+                }
+            }
+            std::cout << "CGNS === Vol Elem [  " << nVolElem << "  ]"
+                      << ", "
+                      << " Bnd Elem [  " << nBndElem << "  ]" << std::endl;
+
+            bnd2nodeSerial->Compress();
+            cell2nodeSerial->Compress();
+        }
+
+        /**
+         * \brief Build bnd2cellSerial: for each boundary face, find its parent
+         *        volume cell by vertex-set inclusion.
+         *
+         * Uses node-to-boundary index for linear complexity.
+         */
+        void BuildBnd2CellSerial(
+            tAdj2 &bnd2cellSerial,
+            const tAdj &bnd2nodeSerial,
+            const tAdj &cell2nodeSerial,
+            const tElemInfoArray &cellElemInfoSerial,
+            const tElemInfoArray &bndElemInfoSerial,
+            const tCoord &coordSerial)
+        {
+            bnd2cellSerial->Resize(bnd2nodeSerial->Size());
+            for (DNDS::index iB = 0; iB < bnd2cellSerial->Size(); iB++)
+                (*bnd2cellSerial)[iB][0] = (*bnd2cellSerial)[iB][1] = DNDS::UnInitIndex;
+
+            // Build node-to-boundary index for linear complexity
+            std::vector<std::vector<DNDS::index>> node2bnd(coordSerial->Size());
+            std::vector<DNDS::rowsize> node2bndSiz(coordSerial->Size(), 0);
+            for (DNDS::index iBFace = 0; iBFace < bnd2nodeSerial->Size(); iBFace++)
+                for (DNDS::rowsize iN = 0; iN < Elem::Element{(*bndElemInfoSerial)(iBFace, 0).getElemType()}.GetNumVertices(); iN++)
+                    node2bndSiz[(*bnd2nodeSerial)(iBFace, iN)]++;
+            for (DNDS::index iNode = 0; iNode < static_cast<DNDS::index>(node2bnd.size()); iNode++)
+                node2bnd[iNode].reserve(node2bndSiz[iNode]);
+            for (DNDS::index iBFace = 0; iBFace < bnd2nodeSerial->Size(); iBFace++)
+                for (DNDS::rowsize iN = 0; iN < Elem::Element{(*bndElemInfoSerial)(iBFace, 0).getElemType()}.GetNumVertices(); iN++)
+                    node2bnd[(*bnd2nodeSerial)(iBFace, iN)].push_back(iBFace);
+
+            // Search each cell for matching boundary faces
+            for (DNDS::index iCell = 0; iCell < cell2nodeSerial->Size(); iCell++)
+            {
+                auto CellElem = Elem::Element{(*cellElemInfoSerial)[iCell]->getElemType()};
+                std::vector<DNDS::index> cell2nodeRow{(*cell2nodeSerial)[iCell].begin(), (*cell2nodeSerial)[iCell].begin() + CellElem.GetNumVertices()};
+                std::sort(cell2nodeRow.begin(), cell2nodeRow.end());
+                for (auto iNode : cell2nodeRow)
+                {
+                    for (auto iB : node2bnd[iNode])
+                    {
+                        auto BndElem = Elem::Element{(*bndElemInfoSerial)(iB, 0).getElemType()};
+                        std::vector<DNDS::index> bnd2nodeRow{(*bnd2nodeSerial)[iB].begin(), (*bnd2nodeSerial)[iB].begin() + BndElem.GetNumVertices()};
+                        std::sort(bnd2nodeRow.begin(), bnd2nodeRow.end());
+                        if (std::includes(cell2nodeRow.begin(), cell2nodeRow.end(), bnd2nodeRow.begin(), bnd2nodeRow.end()))
+                        {
+                            DNDS_assert_info(
+                                (*bnd2cellSerial)[iB][0] == DNDS::UnInitIndex || (*bnd2cellSerial)[iB][0] == iCell, "bnd2cell not untouched!");
+                            (*bnd2cellSerial)[iB][0] = iCell;
+                        }
+                    }
+                }
+            }
+            for (DNDS::index iB = 0; iB < bnd2cellSerial->Size(); iB++)
+                DNDS_assert((*bnd2cellSerial)[iB][0] != DNDS::UnInitIndex);
+        }
+    } // anonymous namespace
     void UnstructuredMeshSerialRW::
         ReadFromCGNSSerial(const std::string &fName, const t_FBCName_2_ID &FBCName_2_ID)
     {
@@ -358,183 +590,24 @@ namespace DNDS::Geom
         /***************************************************************************/
 
         /***************************************************************************/
-        // ASSEMBLE
-        int nZones = Base_Zone.size();
-        std::vector<DNDS::index> ZoneNodeSizes(ZoneCoords.size());
-        std::vector<DNDS::index> ZoneNodeStarts(ZoneCoords.size() + 1);
-        ZoneNodeStarts[0] = 0;
-        for (int i = 0; i < ZoneNodeSizes.size(); i++)
-            ZoneNodeStarts[i + 1] = ZoneNodeStarts[i] + (ZoneNodeSizes[i] = ZoneCoords[i]->Size());
-        // for (auto v : ZoneNodeStarts)
-        //     std::cout << v << std::endl;
+        // ASSEMBLE: deduplicate shared nodes across zones
+        auto [NodeOld2New, ZoneNodeStarts] = AssembleZoneNodes(
+            ZoneCoords, ZoneConnect, ZoneConnectDonor, ZoneConnectTargetIZone,
+            coordSerial, mesh->dim);
 
-        // std::vector<tPoint> PointsFull(ZoneNodeStarts.back());
-
-        std::vector<DNDS::index> NodeOld2New(ZoneNodeStarts.back(), -1);
-        DNDS::index cTop = 0;
-        // !using graph traversing to delete the 1-to-1 interface points, otherwise could omit duplication (say, a point being shared by 3 or more zones)
-
-        std::set<int> zonesLeft; //* assuming nZones < ~ 1<<20=1M  // ! a dfs:
-        for (int iGZ = 0; iGZ < ZoneNodeSizes.size(); iGZ++)
-            zonesLeft.insert(iGZ);
-        std::vector<int> zonesFront;
-        zonesFront.push_back(0); // ! a dfs, use a queue to change to bfs
-        DNDS_assert(ZoneNodeSizes.size() >= 1);
-
-        while (zonesFront.size())
-        {
-            int iGZ = zonesFront.back();
-            zonesFront.pop_back();
-            zonesLeft.erase(iGZ);
-            for (int iOther = 0; iOther < ZoneConnect.at(iGZ).size(); iOther++)
-            {
-                int iGZOther = ZoneConnectTargetIZone.at(iGZ).at(iOther);
-
-                if (zonesLeft.count(iGZOther)) // unaccounted for, then put into stack
-                {
-                    zonesFront.push_back(iGZOther);
-                }
-                else // already counted, then de-duplicate
-                {
-                    for (DNDS::index iNode = 0; iNode < ZoneConnect.at(iGZ).at(iOther).size(); iNode++)
-                    {
-                        NodeOld2New.at(ZoneNodeStarts.at(iGZ) + ZoneConnect.at(iGZ).at(iOther).at(iNode) - 1) //! note ZoneConnect is 1-based
-                            = NodeOld2New.at(ZoneNodeStarts.at(iGZOther) + ZoneConnectDonor.at(iGZ).at(iOther).at(iNode) - 1);
-                        DNDS_assert(NodeOld2New.at(ZoneNodeStarts.at(iGZ) + ZoneConnect.at(iGZ).at(iOther).at(iNode) - 1) >= 0);
-                    }
-                }
-            }
-            for (DNDS::index iNode = ZoneNodeStarts.at(iGZ); iNode < ZoneNodeStarts.at(iGZ + 1); iNode++)
-            {
-                if (NodeOld2New.at(iNode) < 0)
-                {
-                    NodeOld2New.at(iNode) = cTop;
-                    cTop++;
-                }
-            }
-        }
-        DNDS::log() << "CGNS === Assembled Zones have NNodes " << cTop << std::endl;
-        DNDS_assert_info(zonesLeft.empty(), "Did not reach all the zones, might missing zone-connectivities");
-
-        coordSerial->Resize(cTop);
-        for (DNDS::index i = 0; i < coordSerial->Size(); i++)
-            coordSerial->operator[](i).setConstant(DNDS::UnInitReal);
-
-        for (int iGZ = 0; iGZ < ZoneNodeSizes.size(); iGZ++)
-        {
-            for (DNDS::index iNode = ZoneNodeStarts.at(iGZ); iNode < ZoneNodeStarts.at(iGZ + 1); iNode++)
-            {
-                auto coordC = (*ZoneCoords[iGZ])[iNode - ZoneNodeStarts.at(iGZ)];
-                real dist = ((*coordSerial)[NodeOld2New.at(iNode)] - coordC).norm();
-                if (!DNDS::IsUnInitReal((*coordSerial)[NodeOld2New.at(iNode)][0]))
-                    DNDS_assert_info(dist < 1e-10,
-                                     "Not same points on the connection, distance is " + std::to_string(dist));
-                (*coordSerial)[NodeOld2New.at(iNode)] = coordC;
-            }
-        }
-
-        DNDS::index nVolElem = 0;
-        DNDS::index nBndElem = 0;
-        for (int iGZ = 0; iGZ < ZoneNodeSizes.size(); iGZ++)
-        {
-            for (DNDS::index iElem = 0; iElem < ZoneElems[iGZ]->Size(); iElem++)
-            {
-                for (DNDS::rowsize j = 0; j < ZoneElems[iGZ]->RowSize(iElem); j++)
-                    ZoneElems[iGZ]->operator()(iElem, j) = NodeOld2New[ZoneNodeStarts[iGZ] + ZoneElems[iGZ]->operator()(iElem, j)];
-                //* Convert to assembled index
-                auto Elem = Elem::Element{ZoneElemInfos[iGZ]->operator()(iElem, 0).getElemType()};
-                if (Elem.GetDim() == mesh->dim)
-                    nVolElem++;
-                if (Elem.GetDim() == mesh->dim - 1 && !FaceIDIsTrueInternal(ZoneElemInfos[iGZ]->operator()(iElem, 0).zone))
-                    nBndElem++;
-            }
-        }
-
-        cell2nodeSerial->Resize(nVolElem);
-        bnd2nodeSerial->Resize(nBndElem);
-        cellElemInfoSerial->Resize(nVolElem);
-        cell2cellOrigSerial->Resize(nVolElem);
-        bndElemInfoSerial->Resize(nBndElem);
-        node2nodeOrigSerial->Resize(coordSerial->Size());
-        bnd2bndOrigSerial->Resize(nBndElem);
-        nVolElem = 0;
-        nBndElem = 0;
-        for (int iGZ = 0; iGZ < ZoneNodeSizes.size(); iGZ++)
-        {
-            for (DNDS::index iElem = 0; iElem < ZoneElems[iGZ]->Size(); iElem++)
-            {
-                auto Elem = Elem::Element{ZoneElemInfos[iGZ]->operator()(iElem, 0).getElemType()};
-                if (Elem.GetDim() == mesh->dim)
-                {
-                    cell2nodeSerial->ResizeRow(nVolElem, ZoneElems[iGZ]->RowSize(iElem));
-                    for (DNDS::rowsize j = 0; j < ZoneElems[iGZ]->RowSize(iElem); j++)
-                        cell2nodeSerial->operator()(nVolElem, j) = ZoneElems[iGZ]->operator()(iElem, j);
-                    cellElemInfoSerial->operator()(nVolElem, 0) = ZoneElemInfos[iGZ]->operator()(iElem, 0);
-                    nVolElem++;
-                }
-                if (Elem.GetDim() == mesh->dim - 1 && !FaceIDIsTrueInternal(ZoneElemInfos[iGZ]->operator()(iElem, 0).zone)) //! periodic ones are also recorded
-                {
-                    bnd2nodeSerial->ResizeRow(nBndElem, ZoneElems[iGZ]->RowSize(iElem));
-                    for (DNDS::rowsize j = 0; j < ZoneElems[iGZ]->RowSize(iElem); j++)
-                        bnd2nodeSerial->operator()(nBndElem, j) = ZoneElems[iGZ]->operator()(iElem, j);
-                    bndElemInfoSerial->operator()(nBndElem, 0) = ZoneElemInfos[iGZ]->operator()(iElem, 0);
-                    nBndElem++;
-                }
-            }
-        }
-        std::cout << "CGNS === Vol Elem [  " << nVolElem << "  ]"
-                  << ", "
-                  << " Bnd Elem [  " << nBndElem << "  ]" << std::endl;
-
-        bnd2nodeSerial->Compress();
-        cell2nodeSerial->Compress();
+        // Separate volume cells and boundary faces
+        SeparateVolumeAndBoundaryElements(
+            ZoneElems, ZoneElemInfos, NodeOld2New, ZoneNodeStarts,
+            cell2nodeSerial, cellElemInfoSerial, cell2cellOrigSerial,
+            bnd2nodeSerial, bndElemInfoSerial, bnd2bndOrigSerial,
+            node2nodeOrigSerial, coordSerial, mesh->dim);
         /***************************************************************************/
 
         /***************************************************************************/
-        // Get partial inverse info: bnd2cell
-
-        bnd2cellSerial->Resize(bnd2nodeSerial->Size());
-        for (DNDS::index iB = 0; iB < bnd2cellSerial->Size(); iB++)
-            (*bnd2cellSerial)[iB][0] = (*bnd2cellSerial)[iB][1] = DNDS::UnInitIndex;
-        // get node 2 bnd (for linear complexity)
-        std::vector<std::vector<DNDS::index>> node2bnd(coordSerial->Size());
-        std::vector<DNDS::rowsize> node2bndSiz(coordSerial->Size(), 0);
-        for (DNDS::index iBFace = 0; iBFace < bnd2nodeSerial->Size(); iBFace++)
-            for (DNDS::rowsize iN = 0; iN < Elem::Element{(*bndElemInfoSerial)(iBFace, 0).getElemType()}.GetNumVertices(); iN++)
-                node2bndSiz[(*bnd2nodeSerial)(iBFace, iN)]++;
-        for (DNDS::index iNode = 0; iNode < node2bnd.size(); iNode++)
-            node2bnd[iNode].reserve(node2bndSiz[iNode]);
-        for (DNDS::index iBFace = 0; iBFace < bnd2nodeSerial->Size(); iBFace++)
-            for (DNDS::rowsize iN = 0; iN < Elem::Element{(*bndElemInfoSerial)(iBFace, 0).getElemType()}.GetNumVertices(); iN++)
-                node2bnd[(*bnd2nodeSerial)(iBFace, iN)].push_back(iBFace); // Note that only primary vertices are included for computational cost
-
-        // search cell 2 bnd
-        for (DNDS::index iCell = 0; iCell < cell2nodeSerial->Size(); iCell++)
-        {
-            auto CellElem = Elem::Element{(*cellElemInfoSerial)[iCell]->getElemType()};
-            std::vector<DNDS::index> cell2nodeRow{(*cell2nodeSerial)[iCell].begin(), (*cell2nodeSerial)[iCell].begin() + CellElem.GetNumVertices()};
-            std::sort(cell2nodeRow.begin(), cell2nodeRow.end());
-            // Note that only primary vertices are included for computational cost
-            for (auto iNode : cell2nodeRow)
-            {
-                for (auto iB : node2bnd[iNode])
-                {
-                    auto BndElem = Elem::Element{(*bndElemInfoSerial)(iB, 0).getElemType()};
-                    std::vector<DNDS::index> bnd2nodeRow{(*bnd2nodeSerial)[iB].begin(), (*bnd2nodeSerial)[iB].begin() + BndElem.GetNumVertices()};
-                    std::sort(bnd2nodeRow.begin(), bnd2nodeRow.end());
-                    if (std::includes(cell2nodeRow.begin(), cell2nodeRow.end(), bnd2nodeRow.begin(), bnd2nodeRow.end()))
-                    {
-                        // found as bnd
-                        DNDS_assert_info(
-                            (*bnd2cellSerial)[iB][0] == DNDS::UnInitIndex || (*bnd2cellSerial)[iB][0] == iCell, "bnd2cell not untouched!");
-                        // DNDS_assert((*bnd2cellSerial)[iB][0] == DNDS::UnInitIndex);
-                        (*bnd2cellSerial)[iB][0] = iCell;
-                    }
-                }
-            }
-        }
-        for (DNDS::index iB = 0; iB < bnd2cellSerial->Size(); iB++)
-            DNDS_assert((*bnd2cellSerial)[iB][0] != DNDS::UnInitIndex); // check all bnds have a cell
+        // Build bnd2cell inverse mapping
+        BuildBnd2CellSerial(
+            bnd2cellSerial, bnd2nodeSerial, cell2nodeSerial,
+            cellElemInfoSerial, bndElemInfoSerial, coordSerial);
 
         // fill in original indices
         for (DNDS::index iCell = 0; iCell < cell2cellOrigSerial->Size(); iCell++)
