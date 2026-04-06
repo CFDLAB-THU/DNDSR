@@ -513,6 +513,225 @@ namespace DNDS::Geom
         fout.close();
     }
 
+    // =================================================================
+    // File-local helpers for PrintSerialPartVTKDataArray
+    // =================================================================
+    namespace
+    {
+        /**
+         * \brief Result of VTK cell topology construction.
+         */
+        struct VTKCellTopology
+        {
+            std::vector<int64_t> connectivity;  ///< Flat node-index list for all cells
+            std::vector<int64_t> offsets;        ///< Per-cell cumulative offset into connectivity
+            std::vector<uint8_t> cellTypes;      ///< VTK cell type per cell
+        };
+
+        /**
+         * \brief Build VTK connectivity, offsets, and cell-type arrays from
+         *        the output mesh arrays.
+         *
+         * For periodic meshes, replaces periodic-boundary node references with
+         * newly created "extra" node indices, then applies node deduplication.
+         * Converts element node ordering to VTK convention.
+         *
+         * \param[in] nCell            Number of cells.
+         * \param[in] nNode            Number of original (non-extra) nodes.
+         * \param[in] cell2nodeOut     Cell-to-node adjacency.
+         * \param[in] cell2nodePbiOut  Cell-to-node periodic bits.
+         * \param[in] cellElemInfoOut  Cell element info (for element type).
+         * \param[in] nodeOld2Dedu     Old-to-deduplicated node index mapping.
+         * \param[in] isPeriodic       Whether periodic mesh handling is enabled.
+         */
+        VTKCellTopology BuildVTKCellTopology(
+            DNDS::index nCell,
+            DNDS::index nNode,
+            const tAdjPair &cell2nodeOut,
+            const tPbiPair &cell2nodePbiOut,
+            const tElemInfoArrayPair &cellElemInfoOut,
+            const std::vector<DNDS::index> &nodeOld2Dedu,
+            bool isPeriodic)
+        {
+            VTKCellTopology result;
+            result.connectivity.reserve(cell2nodeOut.father->DataSize() * 2);
+            result.offsets.resize(nCell);
+            result.cellTypes.resize(nCell);
+            DNDS::index cellEnd = 0;
+            DNDS::index nNodeExtra{0};
+            for (DNDS::index iCell = 0; iCell < nCell; iCell++)
+            {
+                auto elem = Elem::Element{cellElemInfoOut[iCell]->getElemType()};
+                std::vector<DNDS::index> c2n = cell2nodeOut[iCell];
+                if (isPeriodic) // alter the pointing
+                    for (DNDS::rowsize ic2n = 0; ic2n < c2n.size(); ic2n++)
+                        if (cell2nodePbiOut(iCell, ic2n))
+                            c2n[ic2n] = (nNodeExtra++) + nNode;
+                for (auto &v : c2n)
+                    v = nodeOld2Dedu.at(v);
+                auto vtkCell = Elem::ToVTKVertsAndData(elem, c2n);
+                result.cellTypes[iCell] = vtkCell.first;
+                for (auto in : vtkCell.second)
+                    result.connectivity.push_back(in);
+                cellEnd += vtkCell.second.size();
+                result.offsets[iCell] = cellEnd;
+            }
+            return result;
+        }
+
+        /**
+         * \brief Write the .pvtu parallel VTK master file referencing all
+         *        per-rank .vtu piece files.
+         *
+         * Only called by rank 0 (mRank) when flag==1 (parallel output).
+         */
+        void WritePVTUMasterFile(
+            const std::string &fnameIN,
+            const std::filesystem::path &outPath,
+            const std::string &endianName,
+            const std::string &seriesName,
+            double t,
+            DNDS::MPI_int nMPIRanks,
+            int arraySiz, int vecArraySiz,
+            int arraySizPoint, int vecArraySizPoint,
+            const tFGetName &names,
+            const tFGetName &vectorNames,
+            const tFGetName &namesPoint,
+            const tFGetName &vectorNamesPoint,
+            const std::string &indentV,
+            const std::string &newlineV)
+        {
+            // Replicate writeXMLEntity locally (thin wrapper for XML output)
+            auto writeXMLEntity = [&](std::ostream &out, int level, const auto &name,
+                                      const std::vector<std::pair<std::string, std::string>> &attr,
+                                      auto &&writeContent) -> void
+            {
+                for (int i = 0; i < level; i++)
+                    out << indentV;
+                out << "<" << name << " ";
+                for (const auto &a : attr)
+                    out << a.first << "=\"" << a.second << "\" ";
+                out << ">" << newlineV;
+                writeContent(out, level + 1);
+                for (int i = 0; i < level; i++)
+                    out << indentV;
+                out << "</" << name << ">" << newlineV;
+            };
+
+            std::filesystem::path foutPP{fnameIN + ".pvtu"};
+            std::ofstream foutP{foutPP};
+            DNDS_assert(foutP);
+            if (seriesName.size())
+                updateVTKSeries(seriesName + ".pvtu.series", getStringForcePath(foutPP.filename()), t);
+
+            writeXMLEntity(
+                foutP, 0, "VTKFile",
+                {{"type", "PUnstructuredGrid"},
+                 {"byte_order", endianName},
+                 {"header_type", "UInt64"}},
+                [&](auto &out, int level)
+                {
+                    writeXMLEntity(
+                        out, level, "PUnstructuredGrid",
+                        {{"GhostLevel", "0"}},
+                        [&](auto &out, int level)
+                        {
+                            {
+                                std::string namesAll;
+                                for (int i = 0; i < arraySiz; i++)
+                                    namesAll.append(names(i) + " ");
+                                std::string vectorsNameAll;
+                                for (int i = 0; i < vecArraySiz; i++)
+                                    vectorsNameAll.append(vectorNames(i) + " ");
+                                writeXMLEntity(
+                                    out, level, "PCellData",
+                                    {{"Scalars", namesAll},
+                                     {"Vectors", vectorsNameAll}},
+                                    [&](auto &out, int level)
+                                    {
+                                        for (int i = 0; i < arraySiz; i++)
+                                        {
+                                            writeXMLEntity(
+                                                out, level, "PDataArray",
+                                                {{"type", "Float64"},
+                                                 {"Name", names(i)},
+                                                 {"format", "ascii"}},
+                                                [&](auto &out, int level) {});
+                                        }
+                                        for (int i = 0; i < vecArraySiz; i++)
+                                        {
+                                            writeXMLEntity(
+                                                out, level, "PDataArray",
+                                                {{"type", "Float64"},
+                                                 {"Name", vectorNames(i)},
+                                                 {"NumberOfComponents", "3"},
+                                                 {"format", "ascii"}},
+                                                [&](auto &out, int level) {});
+                                        }
+                                    });
+                            }
+
+                            {
+                                std::string namesAll;
+                                for (int i = 0; i < arraySizPoint; i++)
+                                    namesAll.append(namesPoint(i) + " ");
+                                std::string vectorsNameAll;
+                                for (int i = 0; i < vecArraySizPoint; i++)
+                                    vectorsNameAll.append(vectorNamesPoint(i) + " ");
+                                writeXMLEntity(
+                                    out, level, "PPointData",
+                                    {{"Scalars", namesAll},
+                                     {"Vectors", vectorsNameAll}},
+                                    [&](auto &out, int level)
+                                    {
+                                        for (int i = 0; i < arraySizPoint; i++)
+                                        {
+                                            writeXMLEntity(
+                                                out, level, "PDataArray",
+                                                {{"type", "Float64"},
+                                                 {"Name", namesPoint(i)},
+                                                 {"format", "ascii"}},
+                                                [&](auto &out, int level) {});
+                                        }
+                                        for (int i = 0; i < vecArraySizPoint; i++)
+                                        {
+                                            writeXMLEntity(
+                                                out, level, "PDataArray",
+                                                {{"type", "Float64"},
+                                                 {"Name", vectorNamesPoint(i)},
+                                                 {"NumberOfComponents", "3"},
+                                                 {"format", "ascii"}},
+                                                [&](auto &out, int level) {});
+                                        }
+                                    });
+                            }
+                            writeXMLEntity(
+                                out, level, "PPoints",
+                                {},
+                                [&](auto &out, int level)
+                                {
+                                    writeXMLEntity(
+                                        out, level, "PDataArray",
+                                        {{"type", "Float64"},
+                                         {"NumberOfComponents", "3"}},
+                                        [&](auto &out, int level) {});
+                                });
+                            for (DNDS::MPI_int iRank = 0; iRank < nMPIRanks; iRank++)
+                            {
+                                char BUF[512];
+                                std::sprintf(BUF, "%04d", iRank);
+                                std::string cFileNameRelPVTU = getStringForcePath(
+                                    outPath.lexically_relative(outPath.parent_path()) / (std::string(BUF) + ".vtu"));
+                                writeXMLEntity(
+                                    out, level, "Piece",
+                                    {{"Source", cFileNameRelPVTU}},
+                                    [&](auto &out, int level) {});
+                            }
+                        });
+                });
+        }
+    } // anonymous namespace
+
     /**
      * @brief referencing https://docs.vtk.org/en/latest/design_documents/VTKFileFormats.html
      *
@@ -720,29 +939,12 @@ namespace DNDS::Geom
                 });
         };
 
-        std::vector<int64_t> cell2nodeOutData;
-        cell2nodeOutData.reserve(cell2nodeOut.father->DataSize() * 2);
-        std::vector<int64_t> cell2nodeOffsetData(nCell);
-        std::vector<uint8_t> cellTypeData(nCell);
-        index cellEnd = 0;
-        index nNodeExtra{0};
-        for (index iCell = 0; iCell < nCell; iCell++)
-        {
-            auto elem = Elem::Element{cellElemInfoOut[iCell]->getElemType()};
-            std::vector<index> c2n = cell2nodeOut[iCell];
-            if (mesh->isPeriodic) // alter the pointing
-                for (rowsize ic2n = 0; ic2n < c2n.size(); ic2n++)
-                    if (cell2nodePbiOut(iCell, ic2n))
-                        c2n[ic2n] = (nNodeExtra++) + nNode;
-            for (auto &v : c2n)
-                v = nodeOld2Dedu.at(v);
-            auto vtkCell = Elem::ToVTKVertsAndData(elem, c2n);
-            cellTypeData[iCell] = vtkCell.first;
-            for (auto in : vtkCell.second)
-                cell2nodeOutData.push_back(in);
-            cellEnd += vtkCell.second.size();
-            cell2nodeOffsetData[iCell] = cellEnd;
-        }
+        auto vtkTopo = BuildVTKCellTopology(
+            nCell, nNode, cell2nodeOut, cell2nodePbiOut,
+            cellElemInfoOut, nodeOld2Dedu, mesh->isPeriodic);
+        auto &cell2nodeOutData = vtkTopo.connectivity;
+        auto &cell2nodeOffsetData = vtkTopo.offsets;
+        auto &cellTypeData = vtkTopo.cellTypes;
 
         auto writeCells = [&](auto &out, int level)
         {
@@ -1118,119 +1320,11 @@ namespace DNDS::Geom
 
         if (mpi.rank == mRank && flag == 1)
         {
-            std::filesystem::path foutPP{fnameIN + ".pvtu"};
-            std::ofstream foutP{foutPP};
-            DNDS_assert(foutP);
-            if (seriesName.size())
-                updateVTKSeries(seriesName + ".pvtu.series", getStringForcePath(foutPP.filename()), t);
-
-            writeXMLEntity(
-                foutP, 0, "VTKFile",
-                {{"type", "PUnstructuredGrid"},
-                 {"byte_order", endianName},
-                 {"header_type", "UInt64"}}, // ! use uint64_t as base64 Header
-                [&](auto &out, int level)
-                {
-                    writeXMLEntity(
-                        out, level, "PUnstructuredGrid",
-                        {{"GhostLevel", "0"}},
-                        [&](auto &out, int level)
-                        {
-                            {
-                                std::string namesAll;
-                                for (int i = 0; i < arraySiz; i++)
-                                    namesAll.append(names(i) + " ");
-                                std::string vectorsNameAll;
-                                for (int i = 0; i < vecArraySiz; i++)
-                                    vectorsNameAll.append(vectorNames(i) + " ");
-                                writeXMLEntity(
-                                    out, level, "PCellData",
-                                    {{"Scalars", namesAll},
-                                     {"Vectors", vectorsNameAll}},
-                                    [&](auto &out, int level)
-                                    {
-                                        for (int i = 0; i < arraySiz; i++)
-                                        {
-                                            writeXMLEntity(
-                                                out, level, "PDataArray",
-                                                {{"type", "Float64"},
-                                                 {"Name", names(i)},
-                                                 {"format", "ascii"}},
-                                                [&](auto &out, int level) {});
-                                        }
-                                        for (int i = 0; i < vecArraySiz; i++)
-                                        {
-                                            writeXMLEntity(
-                                                out, level, "PDataArray",
-                                                {{"type", "Float64"},
-                                                 {"Name", vectorNames(i)},
-                                                 {"NumberOfComponents", "3"},
-                                                 {"format", "ascii"}},
-                                                [&](auto &out, int level) {});
-                                        }
-                                    });
-                            }
-
-                            {
-                                std::string namesAll;
-                                for (int i = 0; i < arraySizPoint; i++)
-                                    namesAll.append(namesPoint(i) + " ");
-                                std::string vectorsNameAll;
-                                for (int i = 0; i < vecArraySizPoint; i++)
-                                    vectorsNameAll.append(vectorNamesPoint(i) + " ");
-                                writeXMLEntity(
-                                    out, level, "PPointData",
-                                    {{"Scalars", namesAll},
-                                     {"Vectors", vectorsNameAll}},
-                                    [&](auto &out, int level)
-                                    {
-                                        for (int i = 0; i < arraySizPoint; i++)
-                                        {
-                                            writeXMLEntity(
-                                                out, level, "PDataArray",
-                                                {{"type", "Float64"},
-                                                 {"Name", namesPoint(i)},
-                                                 {"format", "ascii"}},
-                                                [&](auto &out, int level) {});
-                                        }
-                                        for (int i = 0; i < vecArraySizPoint; i++)
-                                        {
-                                            writeXMLEntity(
-                                                out, level, "PDataArray",
-                                                {{"type", "Float64"},
-                                                 {"Name", vectorNamesPoint(i)},
-                                                 {"NumberOfComponents", "3"},
-                                                 {"format", "ascii"}},
-                                                [&](auto &out, int level) {});
-                                        }
-                                    });
-                            }
-                            writeXMLEntity(
-                                out, level, "PPoints",
-                                {},
-                                [&](auto &out, int level)
-                                {
-                                    writeXMLEntity(
-                                        out, level, "PDataArray",
-                                        {{"type", "Float64"},
-                                         {"NumberOfComponents", "3"}},
-                                        [&](auto &out, int level) {});
-                                });
-                            for (MPI_int iRank = 0; iRank < mpi.size; iRank++)
-                            {
-                                char BUF[512];
-                                std::sprintf(BUF, "%04d", iRank);
-                                std::string cFileName = getStringForcePath(outPath / (std::string(BUF) + ".vtu"));
-                                std::string cFileNameRelPVTU = getStringForcePath(outPath.lexically_relative(outPath.parent_path()) / (std::string(BUF) + ".vtu"));
-                                writeXMLEntity(
-                                    out, level, "Piece",
-                                    {{"Source", cFileNameRelPVTU}},
-                                    [&](auto &out, int level) {
-
-                                    });
-                            }
-                        });
-                });
+            WritePVTUMasterFile(
+                fnameIN, outPath, endianName, seriesName, t, mpi.size,
+                arraySiz, vecArraySiz, arraySizPoint, vecArraySizPoint,
+                names, vectorNames, namesPoint, vectorNamesPoint,
+                indentV, newlineV);
         }
     }
 
