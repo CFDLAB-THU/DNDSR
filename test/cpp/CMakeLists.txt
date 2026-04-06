@@ -74,6 +74,23 @@ add_custom_target(dnds_unit_tests)
 # --- DNDS core serial tests ---
 dnds_add_unit_test(array "DNDS/test_Array.cpp" "dnds")
 
+# --- Geom serial tests ---
+set(_GEOM_ELEM_TARGET geom_test_elements)
+add_executable(${_GEOM_ELEM_TARGET} Geom/test_Elements.cpp)
+target_include_directories(${_GEOM_ELEM_TARGET} PRIVATE
+    ${DNDS_EXTERNAL_INCLUDE_DOCTEST}
+    ${DNDS_EXTERNAL_INCLUDES}
+    ${DNDS_INCLUDES})
+target_link_libraries(${_GEOM_ELEM_TARGET} PRIVATE geom dnds ${DNDS_EXTERNAL_LIBS})
+if(DNDS_USE_CCACHE)
+    set_property(TARGET ${_GEOM_ELEM_TARGET} PROPERTY CXX_COMPILER_LAUNCHER ${DNDS_CCACHE_EXEC})
+endif()
+set_target_properties(${_GEOM_ELEM_TARGET} PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    EXCLUDE_FROM_ALL ON)
+add_test(NAME geom_elements COMMAND ${_GEOM_ELEM_TARGET})
+set_tests_properties(geom_elements PROPERTIES TIMEOUT 120)
+
 # --- DNDS core MPI tests ---
 dnds_add_mpi_test(serializer "DNDS/test_Serializer.cpp" "dnds")
 dnds_add_mpi_test(mpi "DNDS/test_MPI.cpp" "dnds")
@@ -84,6 +101,7 @@ dnds_add_mpi_test(index_mapping "DNDS/test_IndexMapping.cpp" "dnds")
 
 # Add all test executables to the aggregate target
 set(DNDS_ALL_TEST_TARGETS
+    geom_test_elements
     dnds_test_array
     dnds_test_serializer
     dnds_test_mpi
