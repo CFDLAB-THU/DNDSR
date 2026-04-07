@@ -7,7 +7,6 @@
 #include "DNDS/ArrayPair.hpp"
 #include "PeriodicInfo.hpp"
 #include "RadialBasisFunction.hpp"
-#include "Solver/Direct.hpp"
 #include "DNDS/ObjectUtils.hpp"
 #include "DNDS/DeviceStorage.hpp"
 

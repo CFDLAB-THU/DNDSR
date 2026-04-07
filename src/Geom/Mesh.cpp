@@ -1,4 +1,5 @@
 #include "Mesh.hpp"
+#include "Solver/Direct.hpp"
 
 #include <cstdlib>
 #include <string>

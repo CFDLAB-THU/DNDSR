@@ -8,8 +8,13 @@
 #include "DNDS/ArrayPair.hpp"
 #include "PeriodicInfo.hpp"
 #include "RadialBasisFunction.hpp"
-#include "Solver/Direct.hpp"
 #include "DNDS/ObjectUtils.hpp"
+
+namespace DNDS::Direct
+{
+    struct SerialSymLUStructure;
+    struct DirectPrecControl;
+}
 #include "Mesh_DeviceView.hpp"
 
 namespace DNDS::Geom
