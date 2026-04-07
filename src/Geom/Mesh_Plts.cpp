@@ -133,7 +133,6 @@ namespace DNDS::Geom
                                           double t, int flag)
     {
         auto mpi = mesh->getMPI();
-        std::string fnameIn = fname;
 
         if (mpi.rank != mRank && flag == 0) //* now only operating on mRank if serial
             return;
@@ -833,22 +832,6 @@ namespace DNDS::Geom
 
         std::string indentV = "  ";
         std::string newlineV = "\n";
-
-        auto zlibCompressedSize = [&](index size)
-        {
-            return size + (size + 999) / 1000 + 12; // form vtk
-        };
-        int compressLevel = 5;
-        auto zlibCompressData = [&](uint8_t *buf, index size)
-        {
-            std::vector<uint8_t> ret(zlibCompressedSize(size));
-            uLongf retSize = ret.size();
-            auto v = compress2(ret.data(), &retSize, buf, size, compressLevel);
-            if (v != Z_OK)
-                DNDS_assert_info(false, "compression failed");
-            ret.resize(retSize);
-            return ret;
-        };
 
         auto writeXMLEntity = [&](std::ostream &out, int level, const auto &name, const std::vector<std::pair<std::string, std::string>> &attr, auto &&writeContent) -> void
         {

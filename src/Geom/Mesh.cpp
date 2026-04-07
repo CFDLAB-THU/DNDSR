@@ -639,22 +639,21 @@ namespace DNDS::Geom
         const tPoint &rotationCenter3,
         const tPoint &eulerAngles3)
     {
-        auto mesh = this;
-        mesh->periodicInfo.translation[1].map() = translation1;
-        mesh->periodicInfo.translation[2].map() = translation2;
-        mesh->periodicInfo.translation[3].map() = translation3;
-        mesh->periodicInfo.rotationCenter[1].map() = rotationCenter1;
-        mesh->periodicInfo.rotationCenter[2].map() = rotationCenter2;
-        mesh->periodicInfo.rotationCenter[3].map() = rotationCenter3;
-        mesh->periodicInfo.rotation[1].map() =
+        periodicInfo.translation[1].map() = translation1;
+        periodicInfo.translation[2].map() = translation2;
+        periodicInfo.translation[3].map() = translation3;
+        periodicInfo.rotationCenter[1].map() = rotationCenter1;
+        periodicInfo.rotationCenter[2].map() = rotationCenter2;
+        periodicInfo.rotationCenter[3].map() = rotationCenter3;
+        periodicInfo.rotation[1].map() =
             Geom::RotZ(eulerAngles1[2]) *
             Geom::RotY(eulerAngles1[1]) *
             Geom::RotX(eulerAngles1[0]);
-        mesh->periodicInfo.rotation[2].map() =
+        periodicInfo.rotation[2].map() =
             Geom::RotZ(eulerAngles2[2]) *
             Geom::RotY(eulerAngles2[1]) *
             Geom::RotX(eulerAngles2[0]);
-        mesh->periodicInfo.rotation[3].map() =
+        periodicInfo.rotation[3].map() =
             Geom::RotZ(eulerAngles3[2]) *
             Geom::RotY(eulerAngles3[1]) *
             Geom::RotX(eulerAngles3[0]);
@@ -1399,33 +1398,32 @@ namespace DNDS::Geom
 
     void UnstructuredMesh::AssertOnN2CB()
     {
-        auto mesh = this;
-        for (index iNode = mesh->NumNode(); iNode < mesh->NumNodeProc(); iNode++)
+        for (index iNode = NumNode(); iNode < NumNodeProc(); iNode++)
         {
             int nCellAdjIn = 0;
-            for (auto iCell : mesh->node2cell[iNode])
+            for (auto iCell : node2cell[iNode])
                 if (iCell >= 0)
                 {
-                    DNDS_assert(iCell < mesh->NumCellProc());
+                    DNDS_assert(iCell < NumCellProc());
                     nCellAdjIn++;
-                    for (auto iNodeOther : mesh->cell2node[iCell])
+                    for (auto iNodeOther : cell2node[iCell])
                     {
-                        DNDS_assert(iNodeOther < mesh->NumNodeProc() && iNodeOther >= 0);
+                        DNDS_assert(iNodeOther < NumNodeProc() && iNodeOther >= 0);
                     }
                 }
             DNDS_assert(nCellAdjIn);
         }
 
         std::set<index> bnd_main_nodes;
-        for (index iNode = 0; iNode < mesh->NumNode(); iNode++)
+        for (index iNode = 0; iNode < NumNode(); iNode++)
         {
-            for (auto iCell : mesh->node2cell[iNode])
+            for (auto iCell : node2cell[iNode])
             {
-                DNDS_assert(iCell < mesh->NumCellProc() && iCell >= 0);
-                for (auto iNodeOther : mesh->cell2node[iCell])
+                DNDS_assert(iCell < NumCellProc() && iCell >= 0);
+                for (auto iNodeOther : cell2node[iCell])
                 {
-                    DNDS_assert(iNodeOther < mesh->NumNodeProc() && iNodeOther >= 0);
-                    if (iNodeOther >= mesh->NumNode())
+                    DNDS_assert(iNodeOther < NumNodeProc() && iNodeOther >= 0);
+                    if (iNodeOther >= NumNode())
                         bnd_main_nodes.insert(iNode);
                 }
             }
@@ -1433,11 +1431,11 @@ namespace DNDS::Geom
         std::map<index, int> bnd_main_nodes_adj_ghost_num;
         for (index iNode : bnd_main_nodes)
             bnd_main_nodes_adj_ghost_num[iNode] = 0;
-        for (index iNode = mesh->NumNode(); iNode < mesh->NumNodeProc(); iNode++)
-            for (auto iCell : mesh->node2cell[iNode])
+        for (index iNode = NumNode(); iNode < NumNodeProc(); iNode++)
+            for (auto iCell : node2cell[iNode])
                 if (iCell >= 0)
-                    for (auto iNodeOther : mesh->cell2node[iCell])
-                        if (iNodeOther >= 0 && iNodeOther < mesh->NumNode())
+                    for (auto iNodeOther : cell2node[iCell])
+                        if (iNodeOther >= 0 && iNodeOther < NumNode())
                             bnd_main_nodes_adj_ghost_num.at(iNodeOther)++;
         for (auto [iNode, num_ghost_adj] : bnd_main_nodes_adj_ghost_num)
             DNDS_assert(num_ghost_adj);
@@ -2177,35 +2175,34 @@ namespace DNDS::Geom
         DNDS_assert((!serializerP->IsPerRank() || rankRead == mpi.rank) && sizeRead == mpi.size);
 
         // make the empty arrays
-        auto *mesh = this;
-        DNDS_MAKE_SSP(mesh->coords.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->coords.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cellElemInfo.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cellElemInfo.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bndElemInfo.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bndElemInfo.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cell2node.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cell2node.son, mesh->getMPI());
+        DNDS_MAKE_SSP(coords.father, getMPI());
+        DNDS_MAKE_SSP(coords.son, getMPI());
+        DNDS_MAKE_SSP(cellElemInfo.father, getMPI());
+        DNDS_MAKE_SSP(cellElemInfo.son, getMPI());
+        DNDS_MAKE_SSP(bndElemInfo.father, getMPI());
+        DNDS_MAKE_SSP(bndElemInfo.son, getMPI());
+        DNDS_MAKE_SSP(cell2node.father, getMPI());
+        DNDS_MAKE_SSP(cell2node.son, getMPI());
         if (isPeriodic)
         {
-            DNDS_MAKE_SSP(mesh->cell2nodePbi.father, mesh->getMPI());
-            DNDS_MAKE_SSP(mesh->cell2nodePbi.son, mesh->getMPI());
-            DNDS_MAKE_SSP(mesh->bnd2nodePbi.father, mesh->getMPI());
-            DNDS_MAKE_SSP(mesh->bnd2nodePbi.son, mesh->getMPI());
+            DNDS_MAKE_SSP(cell2nodePbi.father, getMPI());
+            DNDS_MAKE_SSP(cell2nodePbi.son, getMPI());
+            DNDS_MAKE_SSP(bnd2nodePbi.father, getMPI());
+            DNDS_MAKE_SSP(bnd2nodePbi.son, getMPI());
         }
-        // DNDS_MAKE_SSP(mesh->cell2cell.father, mesh->getMPI());
-        // DNDS_MAKE_SSP(mesh->cell2cell.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bnd2node.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bnd2node.son, mesh->getMPI());
-        // DNDS_MAKE_SSP(mesh->bnd2cell.father, mesh->getMPI());
-        // DNDS_MAKE_SSP(mesh->bnd2cell.son, mesh->getMPI());
+        // DNDS_MAKE_SSP(cell2cell.father, getMPI());
+        // DNDS_MAKE_SSP(cell2cell.son, getMPI());
+        DNDS_MAKE_SSP(bnd2node.father, getMPI());
+        DNDS_MAKE_SSP(bnd2node.son, getMPI());
+        // DNDS_MAKE_SSP(bnd2cell.father, getMPI());
+        // DNDS_MAKE_SSP(bnd2cell.son, getMPI());
 
-        DNDS_MAKE_SSP(mesh->bnd2bndOrig.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bnd2bndOrig.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cell2cellOrig.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cell2cellOrig.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->node2nodeOrig.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->node2nodeOrig.son, mesh->getMPI());
+        DNDS_MAKE_SSP(bnd2bndOrig.father, getMPI());
+        DNDS_MAKE_SSP(bnd2bndOrig.son, getMPI());
+        DNDS_MAKE_SSP(cell2cellOrig.father, getMPI());
+        DNDS_MAKE_SSP(cell2cellOrig.son, getMPI());
+        DNDS_MAKE_SSP(node2nodeOrig.father, getMPI());
+        DNDS_MAKE_SSP(node2nodeOrig.son, getMPI());
 
         coords.ReadSerialize(serializerP, "coords");
         cell2node.ReadSerialize(serializerP, "cell2node");

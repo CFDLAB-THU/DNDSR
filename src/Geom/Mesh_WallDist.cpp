@@ -14,31 +14,30 @@ namespace DNDS::Geom
         /* ************************** */
         // Here implements direct search method
         using TriArray = ArrayEigenMatrix<3, 3>;
-        auto *mesh = this;
         ssp<TriArray> TrianglesLocal, TrianglesFull;
-        DNDS_MAKE_SSP(TrianglesLocal, mesh->getMPI());
-        DNDS_MAKE_SSP(TrianglesFull, mesh->getMPI());
+        DNDS_MAKE_SSP(TrianglesLocal, getMPI());
+        DNDS_MAKE_SSP(TrianglesFull, getMPI());
         std::vector<Eigen::Matrix<real, 3, 3>> Triangles;
 
         DNDS_MAKE_SSP(nodeWallDist.father, mpi);
         DNDS_MAKE_SSP(nodeWallDist.son, mpi);
-        nodeWallDist.father->Resize(mesh->NumNode());
-        for (index iNode = 0; iNode < mesh->NumNode(); iNode++)
+        nodeWallDist.father->Resize(NumNode());
+        for (index iNode = 0; iNode < NumNode(); iNode++)
             nodeWallDist[iNode] = tPoint{std::pow(veryLargeReal, 1. / 4.), 0, 0};
 
-        for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
+        for (index iBnd = 0; iBnd < NumBnd(); iBnd++)
         {
             // skip if not wall
-            if (!fBndIsWall(mesh->GetBndZone(iBnd)))
+            if (!fBndIsWall(GetBndZone(iBnd)))
                 continue;
 
-            index iFace = mesh->bnd2faceV[iBnd];
-            auto elem = mesh->GetFaceElement(iFace);
+            index iFace = bnd2faceV[iBnd];
+            auto elem = GetFaceElement(iFace);
             auto quad = Geom::Elem::Quadrature{elem, options.subdivide_quad};
 
             // set all wall dist on wall nodes to be exactly 0.0
-            for (auto iNode : mesh->bnd2node[iBnd])
-                if (iNode < mesh->NumNode()) // && iNode >= 0; guaranteed for we assume all NumBnd() bnd faces have valid local position
+            for (auto iNode : bnd2node[iBnd])
+                if (iNode < NumNode()) // && iNode >= 0; guaranteed for we assume all NumBnd() bnd faces have valid local position
                 {
                     DNDS_assert(iNode >= 0);
                     nodeWallDist[iNode].setConstant(0.0);
@@ -49,9 +48,9 @@ namespace DNDS::Geom
                 if (elem.type == Geom::Elem::ElemType::Line2 || elem.type == Geom::Elem::ElemType::Line3) //!
                 {
                     Geom::tSmallCoords coords;
-                    mesh->GetCoordsOnFace(iFace, coords);
+                    GetCoordsOnFace(iFace, coords);
                     Eigen::Matrix<real, 3, 3> tri;
-                    mesh->GetCoordsOnFace(iFace, coords);
+                    GetCoordsOnFace(iFace, coords);
                     tri(EigenAll, 0) = coords(EigenAll, 0);
                     tri(EigenAll, 1) = coords(EigenAll, 1);
                     tri(EigenAll, 2) = coords(EigenAll, 1) + Geom::tPoint{0., 0., 1.0};
@@ -60,7 +59,7 @@ namespace DNDS::Geom
                 else if (elem.type == Geom::Elem::ElemType::Tri3 || elem.type == Geom::Elem::ElemType::Tri6) //! TODO
                 {
                     Geom::tSmallCoords coords;
-                    mesh->GetCoordsOnFace(iFace, coords);
+                    GetCoordsOnFace(iFace, coords);
                     Eigen::Matrix<real, 3, 3> tri;
                     tri(EigenAll, 0) = coords(EigenAll, 0);
                     tri(EigenAll, 1) = coords(EigenAll, 1);
@@ -70,7 +69,7 @@ namespace DNDS::Geom
                 else if (elem.type == Geom::Elem::ElemType::Quad4 || elem.type == Geom::Elem::ElemType::Quad9)
                 {
                     Geom::tSmallCoords coords;
-                    mesh->GetCoordsOnFace(iFace, coords);
+                    GetCoordsOnFace(iFace, coords);
                     Eigen::Matrix<real, 3, 3> tri;
                     tri(EigenAll, 0) = coords(EigenAll, 0);
                     tri(EigenAll, 1) = coords(EigenAll, 1);
@@ -89,7 +88,7 @@ namespace DNDS::Geom
             else if (options.method == 1)
             {
                 Geom::tSmallCoords coords;
-                mesh->GetCoordsOnFace(iFace, coords);
+                GetCoordsOnFace(iFace, coords);
                 std::vector<tPoint> faceQuadraturePPhysics;
                 faceQuadraturePPhysics.reserve(quad.GetNumPoints());
                 real v{0};
@@ -133,14 +132,14 @@ namespace DNDS::Geom
         TrianglesTransformer.createMPITypes();
         TrianglesTransformer.pullOnce();
         if (options.verbose >= 1)
-            if (mesh->coords.father->getMPI().rank == 0)
+            if (coords.father->getMPI().rank == 0)
                 log() << fmt::format("=== UnstructuredMesh::BuildNodeWallDist() with minWallDist = {:.4e}, ", options.minWallDist)
                       << " To search in " << TrianglesFull->Size() << std::endl;
 
         auto executeSearch = [&]()
         {
             if (options.verbose >= 3)
-                log() << fmt::format("Start search rank [{}]", mesh->getMPI().rank) << std::endl;
+                log() << fmt::format("Start search rank [{}]", getMPI().rank) << std::endl;
             using K = CGAL::Simple_cartesian<double>;
             // using FT = K::FT;
             // typedef K::Ray_3 Ray;
@@ -172,14 +171,14 @@ namespace DNDS::Geom
                 Tree tree(triangles.begin(), triangles.end());
                 // std::cout << "tree built" << std::endl;
                 // search
-                for (index iNode = 0; iNode < mesh->NumNode(); iNode++)
+                for (index iNode = 0; iNode < NumNode(); iNode++)
                 {
                     // skip already on-wall data
                     if (nodeWallDist[iNode].squaredNorm() == 0.0)
                         continue;
                     // std::cout << "iCell " << iCell << std::endl;
                     // std::cout << "iG " << ig << std::endl;
-                    auto p = mesh->coords[iNode];
+                    auto p = coords[iNode];
                     Point pQ(p[0], p[1], p[2]);
                     // std::cout << "pQ " << pQ << std::endl;
                     // Point closest_point = tree.closest_point(pQ);
@@ -197,29 +196,29 @@ namespace DNDS::Geom
             }
             else
             {
-                for (index iNode = 0; iNode < mesh->NumNode(); iNode++)
+                for (index iNode = 0; iNode < NumNode(); iNode++)
                 {
                     nodeWallDist[iNode] = tPoint{std::pow(veryLargeReal, 1. / 4.), 0, 0};
                 }
             }
             if (options.verbose >= 2)
-                log() << fmt::format("[{}] MinDist: ", mesh->getMPI().rank) << minDist << std::endl;
+                log() << fmt::format("[{}] MinDist: ", getMPI().rank) << minDist << std::endl;
         };
         if (options.wallDistExecution == 1)
-            MPISerialDo(mesh->getMPI(), [&]()
+            MPISerialDo(getMPI(), [&]()
                         { executeSearch(); });
         else if (options.wallDistExecution > 1)
             for (int i = 0; i < options.wallDistExecution; i++)
             {
-                if (mesh->getMPI().rank % options.wallDistExecution == i)
+                if (getMPI().rank % options.wallDistExecution == i)
                     executeSearch();
-                MPI::Barrier(mesh->getMPI().comm);
+                MPI::Barrier(getMPI().comm);
             }
         else
             executeSearch();
 
         nodeWallDist.TransAttach();
-        nodeWallDist.trans.BorrowGGIndexing(mesh->coords.trans);
+        nodeWallDist.trans.BorrowGGIndexing(coords.trans);
         nodeWallDist.trans.createMPITypes();
         nodeWallDist.trans.pullOnce();
     }
