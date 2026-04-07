@@ -162,23 +162,43 @@ and serial output in a single struct.
   16 adjacency arrays declared "not used for now" — preserved intentionally;
   may be used in future serial I/O paths
 
-#### Phase 2: Break up massive methods
+#### Phase 2: Break up massive methods — done
 
-- **Split `InterpolateFace()`** (~416 lines, `Mesh.cpp:1520-1936`) into:
-  `CreateLocalFaces()` (face enumeration from cells),
-  `DeduplicateGhostFaces()` (MPI rank comparison),
-  `MapBoundariesToFaces()` (bnd-to-face matching),
-  `CommunicateGhostFaces()` (MPI ghost exchange)
-- **Split `ReorderLocalCells()`** (~370 lines, `Mesh.cpp:2318-2687`) into:
-  partition computation, permutation application (using the new
-  `PermuteArrayRows` helper), and ghost re-indexing
-- **Split `PrintSerialPartVTKDataArray()`** (~700 lines,
-  `Mesh_Plts.cpp:535-1235`) into per-format writers
-- **Split `ReadFromCGNSSerial()`** (~550 lines,
-  `Mesh_Serial_ReadFromCGNS.cpp:13-551`) into zone reading, zone assembly,
-  and interface-node deduplication
+- ~~**Split `ReadFromCGNSSerial()`**: extracted 3 anonymous-namespace free
+  functions in `Mesh_Serial_ReadFromCGNS.cpp`: `AssembleZoneNodes()`,
+  `SeparateVolumeAndBoundaryElements()`, `BuildBnd2CellSerial()`~~ (done)
+- ~~**Split `InterpolateFace()`**: extracted 5 anonymous-namespace free
+  functions in `Mesh.cpp`: `EnumerateFacesFromCells()`, `CollectFaces()`,
+  `CompactFacesAndRemapCell2Face()`, `MatchBoundariesToFaces()`,
+  `AssignGhostFacesToCells()`~~ (done)
+- ~~**Split `ReorderLocalCells()`**: extracted `ComputeCellPermutation()`
+  anonymous-namespace helper in `Mesh.cpp`~~ (done)
+- ~~**Split `PrintSerialPartVTKDataArray()`**: extracted
+  `BuildVTKCellTopology()` and `WritePVTUMasterFile()` anonymous-namespace
+  helpers in `Mesh_Plts.cpp`~~ (done)
 
-#### Phase 3: Decompose into focused components
+#### Phase 3: Fix coupling, file organization, and cleanup — done
+
+- ~~**Move `BuildNodeWallDist`** from `Mesh_Plts.cpp` (an I/O file) to new
+  `Mesh_WallDist.cpp` — it's a geometry computation depending on CGAL, not
+  an output method~~ (done)
+- ~~**Break the Geom-to-Solver dependency**: replaced `#include
+  "Solver/Direct.hpp"` in `Mesh.hpp` and `Mesh_DeviceView.hpp` with
+  forward declarations of `Direct::SerialSymLUStructure` and
+  `Direct::DirectPrecControl`.  Full include moved to the 2 `.cpp` files
+  that need it (`Mesh.cpp`, `Mesh_Serial_Partition.cpp`)~~ (done)
+- ~~**Remove `auto mesh = this;`** indirection pattern in
+  `SetPeriodicGeometry()`, `AssertOnN2CB()`, `ReadSerialize()`, and
+  `BuildNodeWallDist()` — replaced with direct member access~~ (done)
+- ~~**Delete dead code**: removed unused `zlibCompressedSize`,
+  `zlibCompressData`, and `compressLevel` from VTK output; removed unused
+  `fnameIn` variable from PLT output~~ (done)
+- **`__GetCoords` overloads** (`Mesh.hpp`): kept as-is — the 4-overload
+  structure (2 non-periodic + 2 periodic) is the right design for
+  performance on hot paths; consolidation would add runtime branching
+  inside inner loops
+
+#### Phase 4 (future): Decompose into focused components
 
 - **`MeshTopology`**: adjacency arrays, state flags, state transitions
   (the 5 `MeshAdjState` fields and their assertions)
@@ -193,19 +213,8 @@ and serial output in a single struct.
 - Existing `UnstructuredMesh` becomes a thin facade holding a
   `MeshTopology` plus coordinate data, with component access methods
 
-#### Phase 4: Fix coupling and cleanup
+#### Phase 5 (future): Further cleanup
 
-- **Break the Geom-to-Solver dependency**: `Mesh.hpp:11` includes
-  `Solver/Direct.hpp` solely for `SerialSymLUStructure` and
-  `DirectPrecControl` used in two methods (`ObtainLocalFactFillOrdering`,
-  `ObtainSymmetricSymbolicFactorization` at lines 439-440).  Move these
-  methods to a bridge file (e.g., `Mesh_DirectPrec.cpp`) or forward-declare
-  the solver types
-- **Consolidate `__GetCoords` overloads** (`Mesh.hpp:500-611`): 4 template
-  overloads x 2 (periodic/non-periodic) can become a single template with
-  optional coordinate source and optional PBI source
-- **Replace `auto mesh = this;`** pattern (`Mesh.cpp:641, 1417, 2046`)
-  with direct member access
 - **Delete dead/commented code**: commented `InterpolateTopology`
   (`Mesh.cpp:26-42`), dead code after `continue`
   (`Mesh_Serial_BuildCell2Cell.cpp:416-438`), debug print blocks
@@ -215,7 +224,7 @@ and serial output in a single struct.
   uses `#pragma omp critical` for progress output inside a parallel loop.
   Use thread-local counters or atomic operations instead
 
-#### Phase 5: Reduce periodic branching
+#### Phase 6 (future): Reduce periodic branching
 
 Throughout the mesh code, `if (isPeriodic)` appears in every major method
 (25+ sites across `Mesh.cpp` and `Mesh.hpp`).  Consider extracting
