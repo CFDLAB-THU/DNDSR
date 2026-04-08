@@ -49,6 +49,29 @@ CC=/usr/bin/gcc CXX=/usr/bin/g++ CMAKE_BUILD_PARALLEL_LEVEL=16 pip install -e . 
 cmake --build . -t dnds_pybind11 geom_pybind11 cfv_pybind11 -j32 && cmake --install .
 ```
 
+### Using the DNDSR Python Module (from build/)
+
+To use the pybind11-based Python module from a CMake build directory:
+
+1. **Build the pybind11 targets:**
+   ```bash
+   cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j8
+   ```
+
+2. **Install the Python component** (copies `.so` files into `python/`):
+   ```bash
+   cmake --install build --component py
+   ```
+
+3. **Run with the project venv and `PYTHONPATH`:**
+   ```bash
+   source venv/bin/activate
+   PYTHONPATH=<project_root>/python python my_script.py
+   ```
+
+The `.so` files are built against the venv's Python (3.12). Always use
+`venv/bin/python`, not the system Python.
+
 ### External Dependencies
 
 ```bash

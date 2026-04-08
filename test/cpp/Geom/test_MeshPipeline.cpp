@@ -15,8 +15,8 @@
  * Mesh configurations:
  *   [0] UniformSquare_10  -- 2D, 100 quad cells, non-periodic
  *   [1] IV10_10           -- 2D, 100 quad cells, periodic (isentropic vortex)
- *   [2] NACA0012_H2       -- 2D, unstructured quad, non-periodic (airfoil)
- *   [3] Uniform32_Periodic -- 2D, 1024 quad cells, periodic
+ *   [2] NACA0012_H2       -- 2D, 20816 unstructured quad cells, non-periodic (airfoil)
+ *   [3] IV10U_10          -- 2D, 322 unstructured tri cells, periodic (isentropic vortex)
  */
 
 #define DOCTEST_CONFIG_IMPLEMENT
@@ -54,9 +54,9 @@ static const MeshConfig g_configs[] = {
     {"IV10_10", "IV10_10.cgns", 2, true,
      {10, 0, 0}, {0, 10, 0}, {0, 0, 10}, 100, -1},
     {"NACA0012_H2", "NACA0012_H2.cgns", 2, false,
-     {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, -1, -1},
-    {"Uniform32_Periodic", "Uniform32_Periodic.cgns", 2, true,
-     {1, 0, 0}, {0, 1, 0}, {0, 0, 1}, 1024, -1},
+     {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 20816, 484},
+    {"IV10U_10", "IV10U_10.cgns", 2, true,
+     {10, 0, 0}, {0, 10, 0}, {0, 0, 10}, 322, -1},
 };
 static constexpr int N_CONFIGS = sizeof(g_configs) / sizeof(g_configs[0]);
 

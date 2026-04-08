@@ -449,29 +449,29 @@ namespace DNDS::Geom
         index LocalPartStart(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart) : 0; }
         index LocalPartEnd(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart + 1) : this->NumCell(); }
 
-        index NumNode() const { return coords.father->Size(); }
-        index NumCell() const { return cell2node.father->Size(); }
-        index NumFace() const { return face2node.father->Size(); }
-        index NumBnd() const { return bnd2node.father->Size(); }
+        index NumNode() const { DNDS_check_throw_info(coords.father, "coords not initialized"); return coords.father->Size(); }
+        index NumCell() const { DNDS_check_throw_info(cell2node.father, "cell2node not initialized"); return cell2node.father->Size(); }
+        index NumFace() const { DNDS_check_throw_info(face2node.father, "face2node not initialized"); return face2node.father->Size(); }
+        index NumBnd() const { DNDS_check_throw_info(bnd2node.father, "bnd2node not initialized"); return bnd2node.father->Size(); }
 
-        index NumNodeGhost() const { return coords.son->Size(); }
-        index NumCellGhost() const { return cell2node.son->Size(); }
-        index NumFaceGhost() const { return face2node.son->Size(); }
-        index NumBndGhost() const { return bnd2node.son->Size(); }
+        index NumNodeGhost() const { DNDS_check_throw_info(coords.son, "coords not initialized"); return coords.son->Size(); }
+        index NumCellGhost() const { DNDS_check_throw_info(cell2node.son, "cell2node not initialized"); return cell2node.son->Size(); }
+        index NumFaceGhost() const { DNDS_check_throw_info(face2node.son, "face2node not initialized"); return face2node.son->Size(); }
+        index NumBndGhost() const { DNDS_check_throw_info(bnd2node.son, "bnd2node not initialized"); return bnd2node.son->Size(); }
 
-        index NumNodeProc() const { return coords.Size(); }
-        index NumCellProc() const { return cell2node.Size(); }
-        index NumFaceProc() const { return face2node.Size(); }
-        index NumBndProc() const { return bnd2node.Size(); }
+        index NumNodeProc() const { DNDS_check_throw_info(coords.father && coords.son, "coords not initialized"); return coords.Size(); }
+        index NumCellProc() const { DNDS_check_throw_info(cell2node.father && cell2node.son, "cell2node not initialized"); return cell2node.Size(); }
+        index NumFaceProc() const { DNDS_check_throw_info(face2node.father && face2node.son, "face2node not initialized"); return face2node.Size(); }
+        index NumBndProc() const { DNDS_check_throw_info(bnd2node.father && bnd2node.son, "bnd2node not initialized"); return bnd2node.Size(); }
 
         /// @warning must collectively call
-        index NumCellGlobal() { return cell2node.father->globalSize(); }
+        index NumCellGlobal() { DNDS_check_throw_info(cell2node.father, "cell2node not initialized"); return cell2node.father->globalSize(); }
         /// @warning must collectively call
-        index NumNodeGlobal() { return coords.father->globalSize(); }
+        index NumNodeGlobal() { DNDS_check_throw_info(coords.father, "coords not initialized"); return coords.father->globalSize(); }
         /// @warning must collectively call
-        index NumFaceGlobal() { return face2node.father->globalSize(); }
+        index NumFaceGlobal() { DNDS_check_throw_info(face2node.father, "face2node not initialized"); return face2node.father->globalSize(); }
         /// @warning must collectively call
-        index NumBndGlobal() { return bnd2node.father->globalSize(); }
+        index NumBndGlobal() { DNDS_check_throw_info(bnd2node.father, "bnd2node not initialized"); return bnd2node.father->globalSize(); }
 
         Elem::Element GetCellElement(index iC) { return Elem::Element{cellElemInfo(iC, 0).getElemType()}; }
         Elem::Element GetFaceElement(index iF) { return Elem::Element{faceElemInfo(iF, 0).getElemType()}; }
