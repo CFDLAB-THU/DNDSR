@@ -280,6 +280,27 @@ namespace DNDS
             serializerP->GoToPath(cwd);
         }
 
+        struct ReadSerializerMetaResult : t_base::ReadSerializerMetaResult
+        {
+            std::string derived_type;
+            rowsize mat_nRow_dynamic{0};
+        };
+
+        ReadSerializerMetaResult ReadSerializerMeta(Serializer::SerializerBaseSSP serializerP, const std::string &name)
+        {
+            auto cwd = serializerP->GetCurrentPath();
+            serializerP->GoToPath(name);
+
+            ReadSerializerMetaResult result;
+            static_cast<typename t_base::ReadSerializerMetaResult &>(result) =
+                t_base::ReadSerializerMeta(serializerP, "array");
+            serializerP->ReadString("DerivedType", result.derived_type);
+            serializerP->ReadInt("mat_nRow_dynamic", result.mat_nRow_dynamic);
+
+            serializerP->GoToPath(cwd);
+            return result;
+        }
+
         template <DeviceBackend B>
         using t_deviceView = ArrayEigenMatrixDeviceView<B, real, _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>;
         template <DeviceBackend B>

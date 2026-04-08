@@ -75,7 +75,16 @@ def _load_so(path: Path) -> None:
         # os.RTLD_DEEPBIND: prefer this library's own dependencies over
         # already-loaded ones (works around conda/anaconda providing an older
         # libstdc++ that was loaded at Python startup).
-        mode = ctypes.RTLD_GLOBAL | getattr(os, "RTLD_DEEPBIND", 0)
+        #
+        # RTLD_DEEPBIND can interfere with libraries that use dlopen and
+        # expect to share symbols (e.g., some MPI implementations).  Set
+        # the environment variable DNDSR_NO_DEEPBIND=1 to disable it for
+        # debugging.  When disabled, LD_LIBRARY_PATH and RPATH control
+        # symbol resolution as usual.
+        use_deepbind = getattr(os, "RTLD_DEEPBIND", 0)
+        if os.environ.get("DNDSR_NO_DEEPBIND", "").strip() in ("1", "true", "yes"):
+            use_deepbind = 0
+        mode = ctypes.RTLD_GLOBAL | use_deepbind
         CDLL(str(path), mode=mode)
 
 

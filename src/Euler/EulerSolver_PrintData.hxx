@@ -1038,16 +1038,10 @@ namespace DNDS::Euler
             // Peek at the file to determine the stored nVars (row dimension),
             // then pre-size readBuf so RedistributeArrayWithTransformer can copy into it.
             {
-                auto cwd = serializerP->GetCurrentPath();
-                serializerP->GoToPath("u/father/array");
-                std::string arraySig;
-                serializerP->ReadString("array_sig", arraySig);
-                int storedRowDynamic = 0;
-                serializerP->ReadInt("row_size_dynamic", storedRowDynamic);
-                serializerP->GoToPath(cwd);
+                auto meta = readBuf.father->ReadSerializerMeta(serializerP, "u/father");
                 // ArrayDOFV<Eigen::Dynamic> stores nVars in row_size_dynamic
-                readBuf.father->Resize(mesh->NumCell(), storedRowDynamic, 1);
-                readBuf.son->Resize(0, storedRowDynamic, 1);
+                readBuf.father->Resize(mesh->NumCell(), meta.row_size_dynamic, 1);
+                readBuf.son->Resize(0, meta.row_size_dynamic, 1);
             }
 
             readBuf.ReadSerializeRedistributed(serializerP, "u", newOrigIdx);

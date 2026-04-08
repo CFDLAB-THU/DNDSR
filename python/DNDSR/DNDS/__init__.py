@@ -41,6 +41,19 @@ def MPI_Context(
 
 
 def _init_mpi() -> None:
+    """Initialize MPI at import time.
+
+    Without an MPI launcher (mpirun), OpenMPI starts in singleton mode
+    (np=1), which works fine.  The real conflict is with mpi4py: it
+    calls MPI_Init during its own import, which happens *before*
+    DNDSR.DNDS if the user does ``import mpi4py`` first.  In that
+    case, our Init_thread call will detect that MPI is already
+    initialized and return without error.
+
+    If you need to control MPI initialization yourself (e.g., to use
+    mpi4py's MPI thread level), import and initialize mpi4py *before*
+    importing DNDSR.DNDS.
+    """
     err, argsNew = MPI.Init_thread(sys.argv)
     if err:
         raise RuntimeError(f"MPI.Init_thread returned error code {err}")

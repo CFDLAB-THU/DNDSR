@@ -868,6 +868,7 @@ namespace DNDS
             auto cwd = serializerP->GetCurrentPath();
             serializerP->GoToPath(name);
 
+            // --- Phase 1: Read metadata ---
             std::string array_sigRead;
             serializerP->ReadString("array_sig", array_sigRead);
             DNDS_check_throw_info(array_sigRead == this->GetArraySignature() || ArraySignatureIsCompatible(array_sigRead),
@@ -903,14 +904,78 @@ namespace DNDS
             if (_row_max == DynamicSize && rmR >= 0)
                 _row_size_dynamic = rmR; // TODO: fix this! need a _row_max_dynamic ?
 
-            // --- Read structural data and resolve dataOffset ---
+            // --- Phase 2: Read structural data and resolve dataOffset ---
+            __ReadSerializerStructuralAndResolveDataOffset(serializerP, offset, dataOffset);
+
+            // --- Phase 3: Read flat data and propagate offsets ---
+            __ReadSerializerDataAndPropagateOffset(serializerP, offset, dataOffset);
+            // TODO: check data validity
+
+            serializerP->GoToPath(cwd);
+        }
+
+        /// @brief Result type for ReadSerializerMeta.
+        ///
+        /// Derived array types can extend this struct to carry additional
+        /// metadata fields (e.g., mat_nRow_dynamic from ArrayEigenMatrix).
+        struct ReadSerializerMetaResult
+        {
+            std::string array_sig;
+            rowsize row_size_dynamic{0};
+            index size{0};
+        };
+
+        /// @brief Reads only metadata from a serialized array without reading data.
+        ///
+        /// Navigates to sub-path `name` and reads array_sig, row_size_dynamic, and
+        /// size. Does NOT read structural data (pRowStart, pRowSizes) or the flat
+        /// data buffer. The array's internal state is not modified.
+        ///
+        /// Derived types (ArrayEigenMatrix, ArrayEigenUniMatrixBatch) override this
+        /// method to also read their own extra metadata and to call the base version
+        /// with the "array" sub-path they wrap around the base Array serialization.
+        ///
+        /// @param serializerP  Serializer instance.
+        /// @param name         Sub-path name for this array.
+        /// @return Metadata: array_sig, row_size_dynamic, size (local size for
+        ///         per-rank; 0 for collective without ParArray).
+        ReadSerializerMetaResult ReadSerializerMeta(Serializer::SerializerBaseSSP serializerP, const std::string &name)
+        {
+            auto cwd = serializerP->GetCurrentPath();
+            serializerP->GoToPath(name);
+
+            ReadSerializerMetaResult result;
+            serializerP->ReadString("array_sig", result.array_sig);
+            serializerP->ReadInt("row_size_dynamic", result.row_size_dynamic);
+            if (serializerP->IsPerRank())
+                serializerP->ReadIndex("size", result.size);
+
+            serializerP->GoToPath(cwd);
+            return result;
+        }
+
+        /// @brief Reads structural data (pRowStart / pRowSizes) and resolves dataOffset.
+        ///
+        /// After metadata has been read and _size / _row_size_dynamic set, this method
+        /// reads layout-specific structural data from the serializer and computes the
+        /// element-level dataOffset from the row-level offset.
+        ///
+        /// @param serializerP  Serializer instance (already at the array's sub-path).
+        /// @param offset       [in/out] Row-level offset; updated for non-CSR if
+        ///                     dataOffset could be derived.
+        /// @param dataOffset   [out] Element-level data offset resolved from structural
+        ///                     data (CSR: from global pRowStart; non-CSR: offset * DataStride).
+        void __ReadSerializerStructuralAndResolveDataOffset(
+            const Serializer::SerializerBaseSSP &serializerP,
+            Serializer::ArrayGlobalOffset &offset,
+            Serializer::ArrayGlobalOffset &dataOffset)
+        {
             if constexpr (_dataLayout == CSR)
             {
                 DNDS_assert_info(serializerP->IsPerRank() || offset.isDist(),
                                  "CSR collective read requires isDist offset from ParArray");
                 if (offset.isDist())
                 {
-                    // Global pRowStart: contiguous (nRowsGlobal+1) dataset in global data coords.
                     auto prsOffset = Serializer::ArrayGlobalOffset{_size + 1, offset.offset()};
                     serializerP->ReadSharedIndexVector("pRowStart", _pRowStart, prsOffset);
                     index globalDataStart = _pRowStart->at(0);
@@ -920,50 +985,50 @@ namespace DNDS
                 }
                 else
                 {
-                    // Per-rank: local pRowStart, no global offset
                     serializerP->ReadSharedIndexVector("pRowStart", _pRowStart, offset);
                 }
             }
             else if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
             {
-                // offset may be Unknown (auto-detect from file) or isDist() (explicit from ParArray).
-                // When ParArray resolves EvenSplit, it provides explicit isDist offset here.
                 serializerP->ReadSharedRowsizeVector("pRowSizes", _pRowSizes, offset);
             }
             else // TABLE_StaticFixed, TABLE_Fixed
             {
             }
 
-            // --- Resolve dataOffset for all layouts ---
+            // CSR dataOffset is resolved above from pRowStart.
+            // For non-CSR, derive from row offset * DataStride.
             if constexpr (_dataLayout != CSR)
             {
-                // CSR dataOffset is resolved above from pRowStart.
-                // For non-CSR, derive from row offset * DataStride.
                 if (offset.isDist())
                     dataOffset = offset * this->DataStride();
             }
+        }
 
-            // --- Read flat data ---
+        /// @brief Reads flat data and propagates resolved offsets back to the caller.
+        ///
+        /// @param serializerP  Serializer instance (already at the array's sub-path).
+        /// @param offset       [in/out] Row-level offset; updated from dataOffset for non-CSR.
+        /// @param dataOffset   [in/out] Element-level data offset; may be updated from
+        ///                     Unknown to Parts-resolved by __ReadSerializerData.
+        void __ReadSerializerDataAndPropagateOffset(
+            const Serializer::SerializerBaseSSP &serializerP,
+            Serializer::ArrayGlobalOffset &offset,
+            Serializer::ArrayGlobalOffset &dataOffset)
+        {
+            Serializer::ArrayGlobalOffset dataReadOffset = Serializer::ArrayGlobalOffset_Unknown;
+            if (dataOffset.isDist())
+                dataReadOffset = dataOffset;
+            this->__ReadSerializerData(serializerP, dataReadOffset);
+            dataOffset = dataReadOffset;
+            if constexpr (_dataLayout != CSR)
             {
-                Serializer::ArrayGlobalOffset dataReadOffset = Serializer::ArrayGlobalOffset_Unknown;
                 if (dataOffset.isDist())
-                    dataReadOffset = dataOffset;
-                this->__ReadSerializerData(serializerP, dataReadOffset);
-                // Update dataOffset from the resolved read (e.g., Unknown -> Parts-resolved)
-                dataOffset = dataReadOffset;
-                // Update offset from dataOffset (element-level -> row-level)
-                if constexpr (_dataLayout != CSR)
                 {
-                    if (dataOffset.isDist())
-                    {
-                        dataOffset.CheckMultipleOf(this->DataStride());
-                        offset = dataOffset / this->DataStride();
-                    }
+                    dataOffset.CheckMultipleOf(this->DataStride());
+                    offset = dataOffset / this->DataStride();
                 }
             }
-            // TODO: check data validity
-
-            serializerP->GoToPath(cwd);
         }
 
     public:

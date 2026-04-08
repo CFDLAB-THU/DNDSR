@@ -46,6 +46,21 @@ namespace DNDS
     /// and the newOrigIndex for this rank, determines which global indices in the
     /// read array space need to be pulled.
     ///
+    /// Uses a 3-round MPI_Alltoallv rendezvous:
+    ///   Round 1: Send (origIdx, globalReadIdx) pairs to directory ranks.
+    ///   Round 2: Send query origIndex entries to directory ranks.
+    ///   Round 3: Directory ranks reply with resolved globalReadIdx.
+    ///
+    /// @par Memory scaling
+    /// Temporary memory per rank is O(nLocal) where nLocal is the larger of
+    /// readOrigIndex.size() and newOrigIndex.size(). Specifically:
+    ///   - 7 index vectors of size O(nLocal): sendBuf, recvBuf, querySendBuf,
+    ///     queryRecvBuf, queryReplyBuf, replyRecvBuf, pullingIndexGlobal
+    ///   - 1 unordered_map<index,index> of size O(nGlobal/nRanks) for the directory
+    ///   - Total: ~7 × nLocal × sizeof(index) + O(nGlobal/nRanks) hash table overhead
+    /// For a 100M-cell mesh with 8 ranks: ~12.5M entries × 8 B × 7 ≈ 700 MB per rank,
+    /// plus ~200 MB for the directory hash table.
+    ///
     /// @param mpi           MPI communicator info
     /// @param readOrigIndex Original indices from the even-split read (this rank's slice)
     /// @param newOrigIndex  Original indices this rank needs (from current partition)
