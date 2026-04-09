@@ -14,7 +14,7 @@ namespace DNDS::Serializer
     static const index Offset_Parts = -1;
     static const index Offset_One = -2;
     static const index Offset_EvenSplit = -3;
-    static const index Offset_Unkown = UnInitIndex;
+    static const index Offset_Unknown = UnInitIndex;
 
     /// @brief Describes a rank's portion of a globally-distributed array (local size + global offset).
     class ArrayGlobalOffset
@@ -85,7 +85,7 @@ namespace DNDS::Serializer
         }
     };
 
-    static const ArrayGlobalOffset ArrayGlobalOffset_Unknown = ArrayGlobalOffset{0, Offset_Unkown};
+    static const ArrayGlobalOffset ArrayGlobalOffset_Unknown = ArrayGlobalOffset{0, Offset_Unknown};
     static const ArrayGlobalOffset ArrayGlobalOffset_One = ArrayGlobalOffset{0, Offset_One};
     static const ArrayGlobalOffset ArrayGlobalOffset_Parts = ArrayGlobalOffset{0, Offset_Parts};
     /// @brief Even-split read: each rank reads ~N_global/nRanks rows starting at rank * N_global / nRanks.

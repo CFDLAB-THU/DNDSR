@@ -295,6 +295,22 @@ namespace DNDS
         }
     }
 
+    /// @brief Range-checked conversion from size_t to DNDS::index.
+    /// @throws std::runtime_error (via DNDS_assert_info) if value exceeds index max.
+    /// Use this for safe conversions from container sizes (e.g., std::vector::size())
+    /// to DNDS index types, avoiding sign comparison warnings and overflow bugs.
+    inline index size_to_index(size_t v)
+    {
+        return size_t_to_signed<index>(v);
+    }
+
+    /// @brief Range-checked conversion from size_t to DNDS::rowsize.
+    /// @throws std::runtime_error (via DNDS_assert_info) if value exceeds rowsize max.
+    inline rowsize size_to_rowsize(size_t v)
+    {
+        return size_t_to_signed<rowsize>(v);
+    }
+
     // Note that TtIndexVec being accumulated could overflow
     template <class TtRowsizeVec, class TtIndexVec>
     inline void AccumulateRowSize(const TtRowsizeVec &rowsizes, TtIndexVec &rowstarts)

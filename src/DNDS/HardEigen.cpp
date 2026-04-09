@@ -48,17 +48,17 @@ namespace DNDS::HardEigen
         Eigen::VectorXd svs = SVDResult.singularValues().array().abs();
         DNDS_assert_info(AI.allFinite() && !AI.hasNaN(), [&]() -> std::string
                          {
-            std::cerr << sVmin << " " << sVminInv << std::endl;
-            std::cerr << sVs.transpose() << std::endl;
-            std::cerr << svs.transpose() << std::endl;
-            std::cerr << "A \n"
-                      << std::scientific << std::setprecision(16) << A << std::endl;
-            std::cerr << "AI \n"
-                      << std::scientific << std::setprecision(16) << AI << std::endl;
-            std::cerr << "V \n"
-                      << std::scientific << std::setprecision(16) << SVDResult.matrixV() << std::endl;
-            std::cerr << "U \n"
-                      << std::scientific << std::setprecision(16) << SVDResult.matrixU() << std::endl;
+            log() << sVmin << " " << sVminInv << std::endl;
+            log() << sVs.transpose() << std::endl;
+            log() << svs.transpose() << std::endl;
+            log() << "A \n"
+                  << std::scientific << std::setprecision(16) << A << std::endl;
+            log() << "AI \n"
+                  << std::scientific << std::setprecision(16) << AI << std::endl;
+            log() << "V \n"
+                  << std::scientific << std::setprecision(16) << SVDResult.matrixV() << std::endl;
+            log() << "U \n"
+                  << std::scientific << std::setprecision(16) << SVDResult.matrixU() << std::endl;
             return "EigenLeastSquareInverse_Filtered Error info"; }());
         return svs.maxCoeff() / (svs.minCoeff() + verySmallReal);
         // std::cout << AI * A << std::endl;

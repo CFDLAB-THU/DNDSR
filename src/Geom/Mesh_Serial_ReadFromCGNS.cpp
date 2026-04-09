@@ -178,9 +178,9 @@ namespace DNDS::Geom
                     }
                 }
             }
-            std::cout << "CGNS === Vol Elem [  " << nVolElem << "  ]"
-                      << ", "
-                      << " Bnd Elem [  " << nBndElem << "  ]" << std::endl;
+            log() << "CGNS === Vol Elem [  " << nVolElem << "  ]"
+                  << ", "
+                  << " Bnd Elem [  " << nBndElem << "  ]" << std::endl;
 
             bnd2nodeSerial->Compress();
             cell2nodeSerial->Compress();
@@ -369,8 +369,12 @@ namespace DNDS::Geom
                     int nSections;
                     DNDS_CGNS_CALL_EXIT(cg_nsections(cgns_file, iBase, iZone, &nSections));
                     DNDS_assert(nSections >= 1);
-                    cgsize_t cstart = 0;
-                    cgsize_t cend = 0;
+                    // [[maybe_unused]]: These track the current section's start/end for potential
+                    // validation of section contiguity. The original assertion (cend == start - 1) was
+                    // removed because CGNS sections may have gaps. Preserved for documentation and
+                    // in case stricter validation is needed for specific file formats.
+                    [[maybe_unused]] cgsize_t cstart = 0;
+                    [[maybe_unused]] cgsize_t cend = 0;
                     cgsize_t maxend = 0;
                     //*Total size
                     for (int iSection = 1; iSection <= nSections; iSection++)
@@ -569,7 +573,7 @@ namespace DNDS::Geom
                         ZoneConnect.back().emplace_back(npts);
                         DNDS_CGNS_CALL_EXIT(cg_conn_read(cgns_file, iBase, iZone, iConn, ZoneConnect.back().back().data(), donorDT, ZoneConnectDonor.back().back().data()));
                         int iGZFound = -1;
-                        for (int iGZ = 0; iGZ < ZoneNames.size(); iGZ++) // find the donor
+                        for (size_t iGZ = 0; iGZ < ZoneNames.size(); iGZ++) // find the donor
                         {
                             if (Base_Zone.at(iGZ).first == iBase)
                             {
@@ -619,7 +623,7 @@ namespace DNDS::Geom
 
         cg_close(cgns_file);
 
-        std::cout << "CGNS === Serial Read Done" << std::endl;
+        log() << "CGNS === Serial Read Done" << std::endl;
         // Memory with DM240-120 here: 18G ; after deconstruction done: 7.5G
     }
 
@@ -674,7 +678,7 @@ namespace DNDS::Geom
         for (index iC = 0; iC < cell2nodeSerial->Size(); iC++)
         {
             cell2nodeSerial->ResizeRow(iC, ofConverter.cell2node[iC].size());
-            for (index iN = 0; iN < ofConverter.cell2node[iC].size(); iN++)
+            for (size_t iN = 0; iN < ofConverter.cell2node[iC].size(); iN++)
                 (*cell2nodeSerial)[iC][iN] = ofConverter.cell2node[iC][iN];
             cellElemInfoSerial->operator()(iC, 0) = ofConverter.cellElemInfo.at(iC);
         }
@@ -689,7 +693,7 @@ namespace DNDS::Geom
         {
             index iFaceOF = iBnd + ofReader.neighbour.size();
             bnd2nodeSerial->ResizeRow(iBnd, ofReader.faces[iFaceOF].size());
-            for (index ib2c = 0; ib2c < ofReader.faces[iFaceOF].size(); ib2c++)
+            for (size_t ib2c = 0; ib2c < ofReader.faces[iFaceOF].size(); ib2c++)
                 (*bnd2nodeSerial)[iBnd][ib2c] = ofReader.faces[iFaceOF][ib2c];
             bnd2cellSerial->operator()(iBnd, 0) = ofReader.owner.at(iFaceOF);
             bnd2cellSerial->operator()(iBnd, 1) = UnInitIndex;
@@ -718,6 +722,6 @@ namespace DNDS::Geom
 
         log() << "OpenFOAM === got num bnd: " << nBnd << std::endl;
 
-        std::cout << "OpenFOAM === Serial Read Done" << std::endl;
+        log() << "OpenFOAM === Serial Read Done" << std::endl;
     }
 }

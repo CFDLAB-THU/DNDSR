@@ -24,7 +24,24 @@ namespace DNDS
 namespace DNDS::Geom
 {
 
-    // void UnstructuredMeshSerialRW::InterpolateTopology() //!could be useful for parallel?
+    /**
+     * \brief Reserved skeleton for parallel topology interpolation.
+     *
+     * This commented-out method is preserved as a placeholder for a future generic
+     * topology management API. Currently, mesh topology (cell2face, face2cell, etc.)
+     * is constructed serially and distributed. However, a parallel interpolation
+     * capability may be needed for:
+     *   - Dynamic mesh adaptation (refinement/coarsening)
+     *   - Load balancing with topology migration
+     *   - Multi-physics coupling with different mesh partitions
+     *
+     * If implementing parallel topology construction, this skeleton provides the
+     * basic structure for building face-based adjacencies from cell2node without
+     * requiring a serial global mesh on rank 0.
+     *
+     * \todo Evaluate need for parallel topology API in Phase 5 refactoring.
+     */
+    // void UnstructuredMeshSerialRW::InterpolateTopology()
     // {
     //     // count node 2 face
     //     DNDS_MAKE_SSP(cell2faceSerial, mesh->getMPI());
@@ -37,8 +54,7 @@ namespace DNDS::Geom
 
     //     for (DNDS::index iCell = 0; iCell <cell2nodeSerial->Size(); iCell++)
     //     {
-
-    //         // TODO
+    //         // Parallel face construction logic would go here
     //     }
     // }
 
@@ -69,8 +85,8 @@ namespace DNDS::Geom
         localPush.resize(localPushStart[mpi.size]);
         localPushSizes.assign(mpi.size, 0);
         DNDS_assert(partition.size() == localPush.size());
-        for (DNDS::index i = 0; i < partition.size(); i++)
-            localPush[localPushStart[partition[i]] + (localPushSizes[partition[i]]++)] = i;
+        for (size_t i = 0; i < partition.size(); i++)
+            localPush[localPushStart[partition[i]] + (localPushSizes[partition[i]]++)] = DNDS::size_to_index(i);
     }
 
     /**
@@ -348,20 +364,20 @@ namespace DNDS::Geom
 
         {
             DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                              { std::cout << "[" << mesh->getMPI().rank << ": nCell " << mesh->cell2node.father->Size() << "] " << (((mesh->getMPI().rank + 1) % 10) ? "" : "\n") << std::flush; });
+                              { log() << "[" << mesh->getMPI().rank << ": nCell " << mesh->cell2node.father->Size() << "] " << (((mesh->getMPI().rank + 1) % 10) ? "" : "\n") << std::flush; });
             MPI::Barrier(mesh->getMPI().comm);
             if (mesh->getMPI().rank == 0)
-                std::cout << std::endl;
+                log() << std::endl;
             DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                              { std::cout << "[" << mesh->getMPI().rank << ": nNode " << mesh->coords.father->Size() << "] " << (((mesh->getMPI().rank + 1) % 10) ? "" : "\n") << std::flush; });
+                              { log() << "[" << mesh->getMPI().rank << ": nNode " << mesh->coords.father->Size() << "] " << (((mesh->getMPI().rank + 1) % 10) ? "" : "\n") << std::flush; });
             MPI::Barrier(mesh->getMPI().comm);
             if (mesh->getMPI().rank == 0)
-                std::cout << std::endl;
+                log() << std::endl;
             DNDS::MPISerialDo(mesh->getMPI(), [&]()
-                              { std::cout << "[" << mesh->getMPI().rank << ": nBnd " << mesh->bnd2node.father->Size() << "] " << (((mesh->getMPI().rank + 1) % 10) ? "" : "\n") << std::flush; });
+                              { log() << "[" << mesh->getMPI().rank << ": nBnd " << mesh->bnd2node.father->Size() << "] " << (((mesh->getMPI().rank + 1) % 10) ? "" : "\n") << std::flush; });
             MPI::Barrier(mesh->getMPI().comm);
             if (mesh->getMPI().rank == 0)
-                std::cout << std::endl;
+                log() << std::endl;
         }
         mesh->adjPrimaryState = Adj_PointToGlobal;
         if (mesh->getMPI().rank == mRank)
@@ -447,7 +463,7 @@ namespace DNDS::Geom
         // bndElemInfoSerialOutTrans.pullOnce();
         if (mesh->getMPI().rank == mRank)
         {
-            std::cout << "UnstructuredMeshSerialRW === BuildSerialOut Done " << std::endl;
+            DNDS::log() << "UnstructuredMeshSerialRW === BuildSerialOut Done " << std::endl;
         }
     }
 
@@ -588,8 +604,8 @@ namespace DNDS::Geom
         node2cellPastTrans.createMPITypes();
 
         node2cellPastTrans.pullOnce();
-        DNDS_assert(node2cell.trans.pLGhostMapping->ghostIndex.size() == node2cell.son->Size());
-        DNDS_assert(node2cell.trans.pLGhostMapping->pushingIndexGlobal.size() == node2cellPast->Size());
+        DNDS_assert(DNDS::size_to_index(node2cell.trans.pLGhostMapping->ghostIndex.size()) == node2cell.son->Size());
+        DNDS_assert(DNDS::size_to_index(node2cell.trans.pLGhostMapping->pushingIndexGlobal.size()) == node2cellPast->Size());
         // * this state of triplet: node2cell.father - node2cell.son - node2cellPast forms a "unique pushing" for the pair node2cell
         // * should be made into some standard
         for (index i = 0; i < node2cellPast->Size(); i++)
@@ -939,12 +955,12 @@ namespace DNDS::Geom
                         if (mpi.rank >= 0)
                         {
                             for (auto b : pbi0)
-                                std::cout << b << ", ";
-                            std::cout << " ---- ";
+                                DNDS::log() << b << ", ";
+                            DNDS::log() << " ---- ";
                             for (auto b : pbi1)
-                                std::cout << b << ", ";
-                            std::cout << " ---- " << bndBit;
-                            std::cout << std::endl;
+                                DNDS::log() << b << ", ";
+                            DNDS::log() << " ---- " << bndBit;
+                            DNDS::log() << std::endl;
                         }
                         DNDS_assert_info(false,
                                          match0
@@ -1573,11 +1589,11 @@ namespace DNDS::Geom
                         faceNodePeriodicBits.resize(eFace.GetNumNodes());
                         faceNodeNodePeriodicBits.resize(eFace.GetNumNodes());
                         eCell.ExtractFaceNodes(ic2f, cell2nodePbi[iCell], faceNodePeriodicBits);
-                        for (rowsize i = 0; i < faceNodeNodePeriodicBits.size(); i++)
+                        for (size_t i = 0; i < faceNodeNodePeriodicBits.size(); i++)
                             faceNodeNodePeriodicBits[i].first = faceNodes[i], faceNodeNodePeriodicBits[i].second = faceNodePeriodicBits[i];
                         std::sort(faceNodeNodePeriodicBits.begin(), faceNodeNodePeriodicBits.end(),
                                   idx_pbi_pair_less);
-                        for (int i = 1; i < faceNodeNodePeriodicBits.size(); i++)
+                        for (size_t i = 1; i < faceNodeNodePeriodicBits.size(); i++)
                         {
                             DNDS_assert_info(!idx_pbi_pair_eq(faceNodeNodePeriodicBits[i - 1], faceNodeNodePeriodicBits[i]),
                                              "the face has identical (periodic) nodes");
@@ -1600,7 +1616,7 @@ namespace DNDS::Geom
                                     if (isPeriodic)
                                     {
                                         std::vector<std::pair<index, NodePeriodicBits>> faceNodeNodePeriodicBitsOther(eFaceOther.GetNumNodes());
-                                        for (rowsize i = 0; i < faceNodeNodePeriodicBitsOther.size(); i++)
+                                        for (size_t i = 0; i < faceNodeNodePeriodicBitsOther.size(); i++)
                                             faceNodeNodePeriodicBitsOther[i].first = face2nodeV[iFOther][i],
                                             faceNodeNodePeriodicBitsOther[i].second = face2nodePbiV[iFOther][i];
                                         std::sort(faceNodeNodePeriodicBitsOther.begin(), faceNodeNodePeriodicBitsOther.end(),
@@ -1608,7 +1624,7 @@ namespace DNDS::Geom
                                         auto v0 = faceNodeNodePeriodicBits.at(0).second ^ faceNodeNodePeriodicBitsOther.at(0).second;
                                         DNDS_assert(faceNodeNodePeriodicBitsOther.size() == faceNodeNodePeriodicBits.size());
                                         bool collaborating = true;
-                                        for (rowsize i = 1; i < faceNodeNodePeriodicBitsOther.size(); i++)
+                                        for (size_t i = 1; i < faceNodeNodePeriodicBitsOther.size(); i++)
                                             if ((faceNodeNodePeriodicBits[i].second ^ faceNodeNodePeriodicBitsOther[i].second) != v0)
                                                 collaborating = false;
                                         if (collaborating)
@@ -2317,13 +2333,13 @@ namespace DNDS::Geom
                 node2bndNodeGlobalPastTrans.setFatherSon(node2bndNodeGlobal.son, node2bndNodeGlobalPast);
                 node2bndNodeGlobalPastTrans.createFatherGlobalMapping();
                 std::vector<index> pushSonSeries(node2bndNodeGlobal.son->Size());
-                for (index i = 0; i < pushSonSeries.size(); i++)
-                    pushSonSeries[i] = i;
+                for (size_t i = 0; i < pushSonSeries.size(); i++)
+                    pushSonSeries[i] = DNDS::size_to_index(i);
                 node2bndNodeGlobalPastTrans.createGhostMapping(pushSonSeries, node2bndNodeGlobal.trans.pLGhostMapping->ghostStart);
                 node2bndNodeGlobalPastTrans.createMPITypes();
                 node2bndNodeGlobalPastTrans.pullOnce();
-                DNDS_assert(node2bndNodeGlobal.trans.pLGhostMapping->ghostIndex.size() == node2bndNodeGlobal.son->Size());
-                DNDS_assert(node2bndNodeGlobal.trans.pLGhostMapping->pushingIndexGlobal.size() == node2bndNodeGlobalPast->Size());
+                DNDS_assert(DNDS::size_to_index(node2bndNodeGlobal.trans.pLGhostMapping->ghostIndex.size()) == node2bndNodeGlobal.son->Size());
+                DNDS_assert(DNDS::size_to_index(node2bndNodeGlobal.trans.pLGhostMapping->pushingIndexGlobal.size()) == node2bndNodeGlobalPast->Size());
                 for (index i = 0; i < node2bndNodeGlobalPast->Size(); i++)
                 {
                     index iNodeG = node2bndNodeGlobal.trans.pLGhostMapping->pushingIndexGlobal[i]; //?should be right
@@ -2374,7 +2390,7 @@ namespace DNDS::Geom
         for (index iN = 0; iN < node2bndNodeGlobal.Size(); iN++)
             node2bndNode.at(iN) = bMesh.NodeIndexGlobal2Local(node2bndNodeGlobal[iN]),
             DNDS_assert(node2bndNodeGlobal[iN] != UnInitIndex ? (node2bndNode.at(iN) >= 0) : true);
-        for (index iNode = 0; iNode < node2bndNode.size(); iNode++)
+        for (size_t iNode = 0; iNode < node2bndNode.size(); iNode++)
             if (node2bndNode[iNode] >= 0)
                 bMesh.node2parentNode.at(node2bndNode[iNode]) = iNode;
 

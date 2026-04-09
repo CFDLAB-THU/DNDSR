@@ -209,12 +209,12 @@ namespace DNDS::Serializer
             //     herr = H5Pset_all_coll_metadata_ops(lapl_id, true), H5CHECK_Set;
             if (H5Oget_info_by_name(group_id, name, &obj_info, H5P_DEFAULT, lapl_id) >= 0)
             {
-                std::cout << "name is " << name << ", \n"
-                          << obj_info.type << "\n"
-                          << obj_info.mtime << "\n"
-                          << obj_info.rc << "\n"
-                          << obj_info.fileno << "\n"
-                          << std::endl;
+                log() << "name is " << name << ", \n"
+                      << obj_info.type << "\n"
+                      << obj_info.mtime << "\n"
+                      << obj_info.rc << "\n"
+                      << obj_info.fileno << "\n"
+                      << std::endl;
                 switch (obj_info.type)
                 {
                 case H5O_TYPE_GROUP:
@@ -236,7 +236,7 @@ namespace DNDS::Serializer
             }
             else
             {
-                std::cerr << "Error getting object info for: " << full_name << std::endl;
+                log() << "Error getting object info for: " << full_name << std::endl;
                 H5Eprint2(H5E_DEFAULT, stderr);
             }
             herr = H5Pclose(lapl_id), H5CHECK_Close;
