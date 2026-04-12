@@ -1,12 +1,15 @@
 /**
  * @file test_MeshIndexConversion.cpp
- * @brief Doctest-based unit tests for UnstructuredMesh index conversion and
- *        adjacency Global2Local / Local2Global methods.
+ * @brief Parameterized doctest-based unit tests for UnstructuredMesh index 
+ *        conversion and adjacency Global2Local / Local2Global methods.
  *
- * Reads a real CGNS mesh (UniformSquare_10.cgns -- 100 quad cells, non-periodic),
- * partitions it with Metis, builds ghost layers through the normal
- * UnstructuredMeshSerialRW pipeline, then exercises:
+ * Tests run against 4 mesh configurations (same as test_MeshPipeline):
+ *   [0] UniformSquare_10  -- 2D, 100 quad cells, non-periodic
+ *   [1] IV10_10           -- 2D, 100 quad cells, periodic (isentropic vortex)
+ *   [2] NACA0012_H2       -- 2D, 20816 unstructured quad cells, non-periodic
+ *   [3] IV10U_10          -- 2D, 322 unstructured tri cells, periodic
  *
+ * Each mesh is partitioned with Metis, ghost layers built, then exercises:
  *   1. Per-entity index conversions (Global2Local, Local2Global, _NoSon)
  *   2. Adjacency state-machine round-trips (Primary, ForBnd)
  *   3. Round-trip stability under repeated conversions
@@ -16,12 +19,7 @@
  *
  * All meshes are pre-built in main() and destroyed together after tests.
  * This avoids an OpenMPI resource exhaustion observed when building/destroying
- * 20+ meshes in a single process at np=8 (each mesh creates dozens of MPI
- * persistent requests via ArrayTransformer; OpenMPI's shared-memory BTL
- * appears to leak internal state across request lifecycles).
- *
- *   - g_ro:       shared read-only mesh for 19 non-mutating tests
- *   - g_mut[0..2]: one per mutating adjacency test
+ * 20+ meshes in a single process at np=8.
  *
  * Run under mpirun with 1, 2, 4, and 8 ranks.
  */
@@ -41,11 +39,42 @@ using namespace DNDS::Geom;
 // types must use the fully-qualified DNDS:: prefix.  See AGENTS.md.
 
 // ---------------------------------------------------------------------------
+// Mesh configuration (shared with test_MeshPipeline)
+// ---------------------------------------------------------------------------
+struct MeshConfig
+{
+    const char *name;         ///< Human-readable label
+    const char *file;         ///< Filename relative to data/mesh/
+    int dim;                  ///< Spatial dimension
+    bool periodic;            ///< Has periodic boundaries
+    tPoint translation1;      ///< Periodic translation axis 1
+    tPoint translation2;      ///< Periodic translation axis 2
+    tPoint translation3;      ///< Periodic translation axis 3
+};
+
+static const MeshConfig g_configs[] = {
+    {"UniformSquare_10", "UniformSquare_10.cgns", 2, false,
+     {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {"IV10_10", "IV10_10.cgns", 2, true,
+     {10, 0, 0}, {0, 10, 0}, {0, 0, 10}},
+    {"NACA0012_H2", "NACA0012_H2.cgns", 2, false,
+     {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {"IV10U_10", "IV10U_10.cgns", 2, true,
+     {10, 0, 0}, {0, 10, 0}, {0, 0, 10}},
+};
+static constexpr int N_CONFIGS = sizeof(g_configs) / sizeof(g_configs[0]);
+
+// ---------------------------------------------------------------------------
 // Globals
 // ---------------------------------------------------------------------------
 static MPIInfo g_mpi;
-static ssp<UnstructuredMesh> g_ro;     ///< Read-only mesh shared across most tests.
-static ssp<UnstructuredMesh> g_mut[3]; ///< One per mutating test.
+
+/// One mesh per config for read-only tests.
+static ssp<UnstructuredMesh> g_meshes[N_CONFIGS];
+
+/// Mutable meshes for adjacency round-trip tests (built from config 0 only).
+static constexpr int N_MUT = 3;
+static ssp<UnstructuredMesh> g_mut[N_MUT];
 static int g_mutNext = 0;
 
 // ---------------------------------------------------------------------------
@@ -66,24 +95,33 @@ static std::string meshPath(const std::string &name)
     return f + "/data/mesh/" + name;
 }
 
-static ssp<UnstructuredMesh> buildMesh(int meshId)
+static ssp<UnstructuredMesh> buildMesh(int meshId, const MeshConfig &cfg)
 {
     if (g_mpi.rank == 0)
-        std::cout << "[buildMesh " << meshId << "] START" << std::endl;
+        std::cout << "[buildMesh " << meshId << " " << cfg.name << "] START" << std::endl;
 
-    auto mesh = std::make_shared<UnstructuredMesh>(g_mpi, 2);
+    auto mesh = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
     UnstructuredMeshSerialRW reader(mesh, 0);
 
-    if (g_mpi.rank == 0)
-        std::cout << "[buildMesh " << meshId << "] ReadFromCGNSSerial..." << std::endl;
-    reader.ReadFromCGNSSerial(meshPath("UniformSquare_10.cgns"));
+    if (cfg.periodic)
+    {
+        tPoint zero{0, 0, 0};
+        mesh->SetPeriodicGeometry(
+            cfg.translation1, zero, zero,
+            cfg.translation2, zero, zero,
+            cfg.translation3, zero, zero);
+    }
 
     if (g_mpi.rank == 0)
-        std::cout << "[buildMesh " << meshId << "] Deduplicate1to1Periodic..." << std::endl;
+        std::cout << "[buildMesh " << meshId << " " << cfg.name << "] ReadFromCGNSSerial..." << std::endl;
+    reader.ReadFromCGNSSerial(meshPath(cfg.file));
+
+    if (g_mpi.rank == 0)
+        std::cout << "[buildMesh " << meshId << " " << cfg.name << "] Deduplicate1to1Periodic..." << std::endl;
     reader.Deduplicate1to1Periodic(1e-8);
 
     if (g_mpi.rank == 0)
-        std::cout << "[buildMesh " << meshId << "] BuildCell2Cell..." << std::endl;
+        std::cout << "[buildMesh " << meshId << " " << cfg.name << "] BuildCell2Cell..." << std::endl;
     reader.BuildCell2Cell();
 
     UnstructuredMeshSerialRW::PartitionOptions pOpt;
@@ -93,31 +131,31 @@ static ssp<UnstructuredMesh> buildMesh(int meshId)
     pOpt.metisNcuts = 1;
 
     if (g_mpi.rank == 0)
-        std::cout << "[buildMesh " << meshId << "] MeshPartitionCell2Cell..." << std::endl;
+        std::cout << "[buildMesh " << meshId << " " << cfg.name << "] MeshPartitionCell2Cell..." << std::endl;
     reader.MeshPartitionCell2Cell(pOpt);
 
     if (g_mpi.rank == 0)
-        std::cout << "[buildMesh " << meshId << "] PartitionReorderToMeshCell2Cell..." << std::endl;
+        std::cout << "[buildMesh " << meshId << " " << cfg.name << "] PartitionReorderToMeshCell2Cell..." << std::endl;
     reader.PartitionReorderToMeshCell2Cell();
 
     if (g_mpi.rank == 0)
-        std::cout << "[buildMesh " << meshId << "] RecoverNode2CellAndNode2Bnd..." << std::endl;
+        std::cout << "[buildMesh " << meshId << " " << cfg.name << "] RecoverNode2CellAndNode2Bnd..." << std::endl;
     mesh->RecoverNode2CellAndNode2Bnd();
 
     if (g_mpi.rank == 0)
-        std::cout << "[buildMesh " << meshId << "] RecoverCell2CellAndBnd2Cell..." << std::endl;
+        std::cout << "[buildMesh " << meshId << " " << cfg.name << "] RecoverCell2CellAndBnd2Cell..." << std::endl;
     mesh->RecoverCell2CellAndBnd2Cell();
 
     if (g_mpi.rank == 0)
-        std::cout << "[buildMesh " << meshId << "] BuildGhostPrimary..." << std::endl;
+        std::cout << "[buildMesh " << meshId << " " << cfg.name << "] BuildGhostPrimary..." << std::endl;
     mesh->BuildGhostPrimary();
 
     if (g_mpi.rank == 0)
-        std::cout << "[buildMesh " << meshId << "] AdjGlobal2LocalPrimary..." << std::endl;
+        std::cout << "[buildMesh " << meshId << " " << cfg.name << "] AdjGlobal2LocalPrimary..." << std::endl;
     mesh->AdjGlobal2LocalPrimary();
 
     if (g_mpi.rank == 0)
-        std::cout << "[buildMesh " << meshId << "] DONE" << std::endl;
+        std::cout << "[buildMesh " << meshId << " " << cfg.name << "] DONE" << std::endl;
 
     return mesh;
 }
@@ -125,7 +163,7 @@ static ssp<UnstructuredMesh> buildMesh(int meshId)
 /// Return next pre-built mutable mesh (one per mutating test).
 static ssp<UnstructuredMesh> nextMut()
 {
-    DNDS_assert(g_mutNext < 3);
+    DNDS_assert(g_mutNext < N_MUT);
     return g_mut[g_mutNext++];
 }
 
@@ -143,23 +181,39 @@ static std::vector<std::vector<DNDS::index>> snapshotAdj(
 }
 
 // ---------------------------------------------------------------------------
+// Parameterized test macro
+// ---------------------------------------------------------------------------
+
+#define FOR_EACH_MESH_CONFIG(body)                    \
+    for (int _ci = 0; _ci < N_CONFIGS; _ci++)        \
+    {                                                 \
+        CAPTURE(_ci);                                 \
+        const auto &cfg = g_configs[_ci];             \
+        auto m = g_meshes[_ci];                       \
+        SUBCASE(cfg.name) { body }                    \
+    }
+
+// ---------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);
     g_mpi.setWorld();
 
-    // Pre-build: 1 read-only + 3 mutable = 4 meshes total.
-    // All built here so MPI collectives are synchronized across ranks.
-    g_ro = buildMesh(0);
-    for (int i = 0; i < 3; i++)
-        g_mut[i] = buildMesh(i + 1);
+    // Pre-build all mesh configs for read-only tests.
+    for (int i = 0; i < N_CONFIGS; i++)
+        g_meshes[i] = buildMesh(i, g_configs[i]);
+
+    // Pre-build mutable meshes from config 0 for adjacency round-trip tests.
+    for (int i = 0; i < N_MUT; i++)
+        g_mut[i] = buildMesh(N_CONFIGS + i, g_configs[0]);
 
     doctest::Context ctx;
     ctx.applyCommandLine(argc, argv);
     int res = ctx.run();
 
     // Destroy all meshes together before MPI_Finalize.
-    g_ro.reset();
+    for (auto &m : g_meshes)
+        m.reset();
     for (auto &m : g_mut)
         m.reset();
     MPI_Finalize();
@@ -167,246 +221,264 @@ int main(int argc, char **argv)
 }
 
 // ===========================================================================
-// Mesh sanity checks  (read-only)
+// Mesh sanity checks (parameterized over all configs)
 // ===========================================================================
 TEST_CASE("Mesh setup: every rank has cells and nodes")
 {
-    auto m = g_ro;
-    CHECK(m->NumCell() >= 1);
-    CHECK(m->NumNode() >= 1);
-    CHECK(m->adjPrimaryState == Adj_PointToLocal);
+    FOR_EACH_MESH_CONFIG({
+        CHECK(m->NumCell() >= 1);
+        CHECK(m->NumNode() >= 1);
+        CHECK(m->adjPrimaryState == Adj_PointToLocal);
+    })
 }
 
 TEST_CASE("Mesh setup: multi-rank produces ghosts")
 {
     if (g_mpi.size < 2)
         return;
-    auto m = g_ro;
-    CHECK(m->NumCellGhost() > 0);
-    CHECK(m->NumNodeGhost() > 0);
+    FOR_EACH_MESH_CONFIG({
+        CHECK(m->NumCellGhost() > 0);
+        CHECK(m->NumNodeGhost() > 0);
+    })
 }
 
 // ===========================================================================
-// Per-entity index conversions -- Node  (read-only)
+// Per-entity index conversions -- Node (parameterized)
 // ===========================================================================
 TEST_CASE("NodeIndex: Global2Local round-trip on father nodes")
 {
-    auto m = g_ro;
-    for (DNDS::index iNode = 0; iNode < m->NumNode(); iNode++)
-    {
-        DNDS::index g = m->NodeIndexLocal2Global(iNode);
-        CHECK(g >= 0);
-        CHECK(m->NodeIndexGlobal2Local(g) == iNode);
-    }
+    FOR_EACH_MESH_CONFIG({
+        for (DNDS::index iNode = 0; iNode < m->NumNode(); iNode++)
+        {
+            DNDS::index g = m->NodeIndexLocal2Global(iNode);
+            CHECK(g >= 0);
+            CHECK(m->NodeIndexGlobal2Local(g) == iNode);
+        }
+    })
 }
 
 TEST_CASE("NodeIndex: Global2Local round-trip on ghost nodes")
 {
     if (g_mpi.size < 2)
         return;
-    auto m = g_ro;
-    for (DNDS::index i = m->NumNode(); i < m->NumNode() + m->NumNodeGhost(); i++)
-    {
-        DNDS::index g = m->NodeIndexLocal2Global(i);
-        CHECK(g >= 0);
-        CHECK(m->NodeIndexGlobal2Local(g) == i);
-    }
+    FOR_EACH_MESH_CONFIG({
+        for (DNDS::index i = m->NumNode(); i < m->NumNode() + m->NumNodeGhost(); i++)
+        {
+            DNDS::index g = m->NodeIndexLocal2Global(i);
+            CHECK(g >= 0);
+            CHECK(m->NodeIndexGlobal2Local(g) == i);
+        }
+    })
 }
 
 TEST_CASE("NodeIndex: _NoSon round-trip on father nodes")
 {
-    auto m = g_ro;
-    for (DNDS::index iNode = 0; iNode < m->NumNode(); iNode++)
-    {
-        DNDS::index g = m->NodeIndexLocal2Global_NoSon(iNode);
-        CHECK(g >= 0);
-        CHECK(m->NodeIndexGlobal2Local_NoSon(g) == iNode);
-    }
+    FOR_EACH_MESH_CONFIG({
+        for (DNDS::index iNode = 0; iNode < m->NumNode(); iNode++)
+        {
+            DNDS::index g = m->NodeIndexLocal2Global_NoSon(iNode);
+            CHECK(g >= 0);
+            CHECK(m->NodeIndexGlobal2Local_NoSon(g) == iNode);
+        }
+    })
 }
 
 TEST_CASE("NodeIndex: _NoSon returns negative for non-local global")
 {
     if (g_mpi.size < 2)
         return;
-    auto m = g_ro;
-    MPI_int other = (g_mpi.rank + 1) % g_mpi.size;
-    DNDS::index g = (*m->coords.father->pLGlobalMapping)(other, 0);
-    CHECK(m->NodeIndexGlobal2Local_NoSon(g) < 0);
+    FOR_EACH_MESH_CONFIG({
+        MPI_int other = (g_mpi.rank + 1) % g_mpi.size;
+        DNDS::index g = (*m->coords.father->pLGlobalMapping)(other, 0);
+        CHECK(m->NodeIndexGlobal2Local_NoSon(g) < 0);
+    })
 }
 
 TEST_CASE("NodeIndex: Global2Local returns negative for unknown global")
 {
-    auto m = g_ro;
-    DNDS::index bogus = m->coords.father->globalSize() + 999;
-    DNDS::index result = m->NodeIndexGlobal2Local(bogus);
-    CHECK(result < 0);
-    CHECK(result == -1 - bogus);
+    FOR_EACH_MESH_CONFIG({
+        DNDS::index bogus = m->coords.father->globalSize() + 999;
+        DNDS::index result = m->NodeIndexGlobal2Local(bogus);
+        CHECK(result < 0);
+        CHECK(result == -1 - bogus);
+    })
 }
 
 // ===========================================================================
-// Per-entity index conversions -- Cell  (read-only)
+// Per-entity index conversions -- Cell (parameterized)
 // ===========================================================================
 TEST_CASE("CellIndex: Global2Local round-trip on father cells")
 {
-    auto m = g_ro;
-    for (DNDS::index iCell = 0; iCell < m->NumCell(); iCell++)
-    {
-        DNDS::index g = m->CellIndexLocal2Global(iCell);
-        CHECK(g >= 0);
-        CHECK(m->CellIndexGlobal2Local(g) == iCell);
-    }
+    FOR_EACH_MESH_CONFIG({
+        for (DNDS::index iCell = 0; iCell < m->NumCell(); iCell++)
+        {
+            DNDS::index g = m->CellIndexLocal2Global(iCell);
+            CHECK(g >= 0);
+            CHECK(m->CellIndexGlobal2Local(g) == iCell);
+        }
+    })
 }
 
 TEST_CASE("CellIndex: Global2Local round-trip on ghost cells")
 {
     if (g_mpi.size < 2)
         return;
-    auto m = g_ro;
-    CHECK(m->NumCellGhost() > 0);
-    for (DNDS::index i = m->NumCell(); i < m->NumCell() + m->NumCellGhost(); i++)
-    {
-        DNDS::index g = m->CellIndexLocal2Global(i);
-        CHECK(g >= 0);
-        CHECK(m->CellIndexGlobal2Local(g) == i);
-    }
+    FOR_EACH_MESH_CONFIG({
+        CHECK(m->NumCellGhost() > 0);
+        for (DNDS::index i = m->NumCell(); i < m->NumCell() + m->NumCellGhost(); i++)
+        {
+            DNDS::index g = m->CellIndexLocal2Global(i);
+            CHECK(g >= 0);
+            CHECK(m->CellIndexGlobal2Local(g) == i);
+        }
+    })
 }
 
 TEST_CASE("CellIndex: _NoSon round-trip on father cells")
 {
-    auto m = g_ro;
-    for (DNDS::index iCell = 0; iCell < m->NumCell(); iCell++)
-    {
-        DNDS::index g = m->CellIndexLocal2Global_NoSon(iCell);
-        CHECK(g >= 0);
-        CHECK(m->CellIndexGlobal2Local_NoSon(g) == iCell);
-    }
+    FOR_EACH_MESH_CONFIG({
+        for (DNDS::index iCell = 0; iCell < m->NumCell(); iCell++)
+        {
+            DNDS::index g = m->CellIndexLocal2Global_NoSon(iCell);
+            CHECK(g >= 0);
+            CHECK(m->CellIndexGlobal2Local_NoSon(g) == iCell);
+        }
+    })
 }
 
 TEST_CASE("CellIndex: _NoSon returns negative for non-local global")
 {
     if (g_mpi.size < 2)
         return;
-    auto m = g_ro;
-    MPI_int other = (g_mpi.rank + 1) % g_mpi.size;
-    DNDS::index g = (*m->cell2node.father->pLGlobalMapping)(other, 0);
-    CHECK(m->CellIndexGlobal2Local_NoSon(g) < 0);
+    FOR_EACH_MESH_CONFIG({
+        MPI_int other = (g_mpi.rank + 1) % g_mpi.size;
+        DNDS::index g = (*m->cell2node.father->pLGlobalMapping)(other, 0);
+        CHECK(m->CellIndexGlobal2Local_NoSon(g) < 0);
+    })
 }
 
 // ===========================================================================
-// Per-entity index conversions -- Bnd  (read-only)
+// Per-entity index conversions -- Bnd (parameterized)
 // ===========================================================================
 TEST_CASE("BndIndex: Global2Local round-trip on father bnds")
 {
-    auto m = g_ro;
-    for (DNDS::index iBnd = 0; iBnd < m->NumBnd(); iBnd++)
-    {
-        DNDS::index g = m->BndIndexLocal2Global(iBnd);
-        CHECK(g >= 0);
-        CHECK(m->BndIndexGlobal2Local(g) == iBnd);
-    }
+    FOR_EACH_MESH_CONFIG({
+        for (DNDS::index iBnd = 0; iBnd < m->NumBnd(); iBnd++)
+        {
+            DNDS::index g = m->BndIndexLocal2Global(iBnd);
+            CHECK(g >= 0);
+            CHECK(m->BndIndexGlobal2Local(g) == iBnd);
+        }
+    })
 }
 
 TEST_CASE("BndIndex: _NoSon round-trip on father bnds")
 {
-    auto m = g_ro;
-    for (DNDS::index iBnd = 0; iBnd < m->NumBnd(); iBnd++)
-    {
-        DNDS::index g = m->BndIndexLocal2Global_NoSon(iBnd);
-        CHECK(g >= 0);
-        CHECK(m->BndIndexGlobal2Local_NoSon(g) == iBnd);
-    }
+    FOR_EACH_MESH_CONFIG({
+        for (DNDS::index iBnd = 0; iBnd < m->NumBnd(); iBnd++)
+        {
+            DNDS::index g = m->BndIndexLocal2Global_NoSon(iBnd);
+            CHECK(g >= 0);
+            CHECK(m->BndIndexGlobal2Local_NoSon(g) == iBnd);
+        }
+    })
 }
 
 // ===========================================================================
-// UnInitIndex pass-through and special encodings  (read-only)
+// UnInitIndex pass-through and special encodings (parameterized)
 // ===========================================================================
 TEST_CASE("UnInitIndex pass-through for all 12 conversion methods")
 {
-    auto m = g_ro;
+    FOR_EACH_MESH_CONFIG({
+        CHECK(m->NodeIndexGlobal2Local(UnInitIndex) == UnInitIndex);
+        CHECK(m->CellIndexGlobal2Local(UnInitIndex) == UnInitIndex);
+        CHECK(m->BndIndexGlobal2Local(UnInitIndex) == UnInitIndex);
 
-    CHECK(m->NodeIndexGlobal2Local(UnInitIndex) == UnInitIndex);
-    CHECK(m->CellIndexGlobal2Local(UnInitIndex) == UnInitIndex);
-    CHECK(m->BndIndexGlobal2Local(UnInitIndex) == UnInitIndex);
+        CHECK(m->NodeIndexLocal2Global(UnInitIndex) == UnInitIndex);
+        CHECK(m->CellIndexLocal2Global(UnInitIndex) == UnInitIndex);
+        CHECK(m->BndIndexLocal2Global(UnInitIndex) == UnInitIndex);
 
-    CHECK(m->NodeIndexLocal2Global(UnInitIndex) == UnInitIndex);
-    CHECK(m->CellIndexLocal2Global(UnInitIndex) == UnInitIndex);
-    CHECK(m->BndIndexLocal2Global(UnInitIndex) == UnInitIndex);
+        CHECK(m->NodeIndexLocal2Global_NoSon(UnInitIndex) == UnInitIndex);
+        CHECK(m->CellIndexLocal2Global_NoSon(UnInitIndex) == UnInitIndex);
+        CHECK(m->BndIndexLocal2Global_NoSon(UnInitIndex) == UnInitIndex);
 
-    CHECK(m->NodeIndexLocal2Global_NoSon(UnInitIndex) == UnInitIndex);
-    CHECK(m->CellIndexLocal2Global_NoSon(UnInitIndex) == UnInitIndex);
-    CHECK(m->BndIndexLocal2Global_NoSon(UnInitIndex) == UnInitIndex);
-
-    CHECK(m->NodeIndexGlobal2Local_NoSon(UnInitIndex) == UnInitIndex);
-    CHECK(m->CellIndexGlobal2Local_NoSon(UnInitIndex) == UnInitIndex);
-    CHECK(m->BndIndexGlobal2Local_NoSon(UnInitIndex) == UnInitIndex);
+        CHECK(m->NodeIndexGlobal2Local_NoSon(UnInitIndex) == UnInitIndex);
+        CHECK(m->CellIndexGlobal2Local_NoSon(UnInitIndex) == UnInitIndex);
+        CHECK(m->BndIndexGlobal2Local_NoSon(UnInitIndex) == UnInitIndex);
+    })
 }
 
 TEST_CASE("Local2Global: negative local index decodes via -1-x encoding")
 {
-    auto m = g_ro;
-    DNDS::index fakeGlobal = 42;
-    DNDS::index neg = -1 - fakeGlobal;
+    FOR_EACH_MESH_CONFIG({
+        DNDS::index fakeGlobal = 42;
+        DNDS::index neg = -1 - fakeGlobal;
 
-    CHECK(m->NodeIndexLocal2Global(neg) == fakeGlobal);
-    CHECK(m->CellIndexLocal2Global(neg) == fakeGlobal);
-    CHECK(m->BndIndexLocal2Global(neg) == fakeGlobal);
+        CHECK(m->NodeIndexLocal2Global(neg) == fakeGlobal);
+        CHECK(m->CellIndexLocal2Global(neg) == fakeGlobal);
+        CHECK(m->BndIndexLocal2Global(neg) == fakeGlobal);
+    })
 }
 
 // ===========================================================================
-// Local index range validity  (read-only)
+// Local index range validity (parameterized)
 // ===========================================================================
 TEST_CASE("AdjPrimary: cell2node local indices are in valid range")
 {
-    auto m = g_ro;
-    REQUIRE(m->adjPrimaryState == Adj_PointToLocal);
-    DNDS::index totalNodes = m->NumNode() + m->NumNodeGhost();
-    for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
-        for (DNDS::rowsize j = 0; j < m->cell2node.RowSize(iC); j++)
-        {
-            DNDS::index iNode = m->cell2node(iC, j);
-            CHECK(iNode >= 0);
-            CHECK(iNode < totalNodes);
-        }
+    FOR_EACH_MESH_CONFIG({
+        REQUIRE(m->adjPrimaryState == Adj_PointToLocal);
+        DNDS::index totalNodes = m->NumNode() + m->NumNodeGhost();
+        for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
+            for (DNDS::rowsize j = 0; j < m->cell2node.RowSize(iC); j++)
+            {
+                DNDS::index iNode = m->cell2node(iC, j);
+                CHECK(iNode >= 0);
+                CHECK(iNode < totalNodes);
+            }
+    })
 }
 
 TEST_CASE("AdjPrimary: cell2cell local entries are valid or not-found")
 {
-    auto m = g_ro;
-    REQUIRE(m->adjPrimaryState == Adj_PointToLocal);
-    DNDS::index totalCells = m->NumCell() + m->NumCellGhost();
-    for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
-        for (DNDS::rowsize j = 0; j < m->cell2cell.RowSize(iC); j++)
-        {
-            DNDS::index n = m->cell2cell(iC, j);
-            if (n >= 0)
-                CHECK(n < totalCells);
-        }
+    FOR_EACH_MESH_CONFIG({
+        REQUIRE(m->adjPrimaryState == Adj_PointToLocal);
+        DNDS::index totalCells = m->NumCell() + m->NumCellGhost();
+        for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
+            for (DNDS::rowsize j = 0; j < m->cell2cell.RowSize(iC); j++)
+            {
+                DNDS::index n = m->cell2cell(iC, j);
+                if (n >= 0)
+                    CHECK(n < totalCells);
+            }
+    })
 }
 
 TEST_CASE("AdjPrimary: bnd2cell owner cell is a local father cell")
 {
-    auto m = g_ro;
-    REQUIRE(m->adjPrimaryState == Adj_PointToLocal);
-    for (DNDS::index ib = 0; ib < m->NumBnd(); ib++)
-    {
-        DNDS::index owner = m->bnd2cell(ib, 0);
-        CHECK(owner >= 0);
-        CHECK(owner < m->NumCell());
-    }
+    FOR_EACH_MESH_CONFIG({
+        REQUIRE(m->adjPrimaryState == Adj_PointToLocal);
+        for (DNDS::index ib = 0; ib < m->NumBnd(); ib++)
+        {
+            DNDS::index owner = m->bnd2cell(ib, 0);
+            CHECK(owner >= 0);
+            CHECK(owner < m->NumCell());
+        }
+    })
 }
 
 TEST_CASE("AdjPrimary: bnd2node local indices are in valid range")
 {
-    auto m = g_ro;
-    REQUIRE(m->adjPrimaryState == Adj_PointToLocal);
-    DNDS::index totalNodes = m->NumNode() + m->NumNodeGhost();
-    for (DNDS::index ib = 0; ib < m->NumBnd(); ib++)
-        for (DNDS::rowsize j = 0; j < m->bnd2node.RowSize(ib); j++)
-        {
-            DNDS::index iNode = m->bnd2node(ib, j);
-            CHECK(iNode >= 0);
-            CHECK(iNode < totalNodes);
-        }
+    FOR_EACH_MESH_CONFIG({
+        REQUIRE(m->adjPrimaryState == Adj_PointToLocal);
+        DNDS::index totalNodes = m->NumNode() + m->NumNodeGhost();
+        for (DNDS::index ib = 0; ib < m->NumBnd(); ib++)
+            for (DNDS::rowsize j = 0; j < m->bnd2node.RowSize(ib); j++)
+            {
+                DNDS::index iNode = m->bnd2node(ib, j);
+                CHECK(iNode >= 0);
+                CHECK(iNode < totalNodes);
+            }
+    })
 }
 
 // ===========================================================================
