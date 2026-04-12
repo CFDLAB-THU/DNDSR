@@ -61,6 +61,8 @@ static const MeshConfig g_configs[] = {
      {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
     {"IV10U_10", "IV10U_10.cgns", 2, true,
      {10, 0, 0}, {0, 10, 0}, {0, 0, 10}},
+    {"Ball2", "Ball2.cgns", 3, false,
+     {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},  // 3D mixed-element mesh (Ball2 is np=8 only)
 };
 static constexpr int N_CONFIGS = sizeof(g_configs) / sizeof(g_configs[0]);
 
@@ -71,11 +73,6 @@ static MPIInfo g_mpi;
 
 /// One mesh per config for read-only tests.
 static ssp<UnstructuredMesh> g_meshes[N_CONFIGS];
-
-/// Mutable meshes for adjacency round-trip tests (built from config 0 only).
-static constexpr int N_MUT = 3;
-static ssp<UnstructuredMesh> g_mut[N_MUT];
-static int g_mutNext = 0;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -160,13 +157,6 @@ static ssp<UnstructuredMesh> buildMesh(int meshId, const MeshConfig &cfg)
     return mesh;
 }
 
-/// Return next pre-built mutable mesh (one per mutating test).
-static ssp<UnstructuredMesh> nextMut()
-{
-    DNDS_assert(g_mutNext < N_MUT);
-    return g_mut[g_mutNext++];
-}
-
 static std::vector<std::vector<DNDS::index>> snapshotAdj(
     const tAdjPair &adj, DNDS::index nRows)
 {
@@ -184,13 +174,15 @@ static std::vector<std::vector<DNDS::index>> snapshotAdj(
 // Parameterized test macro
 // ---------------------------------------------------------------------------
 
-#define FOR_EACH_MESH_CONFIG(body)                    \
-    for (int _ci = 0; _ci < N_CONFIGS; _ci++)        \
-    {                                                 \
-        CAPTURE(_ci);                                 \
-        const auto &cfg = g_configs[_ci];             \
-        auto m = g_meshes[_ci];                       \
-        SUBCASE(cfg.name) { body }                    \
+#define FOR_EACH_MESH_CONFIG(body)                                        \
+    for (int _ci = 0; _ci < N_CONFIGS; _ci++)                            \
+    {                                                                     \
+        /* Ball2 (index 4) is only tested with np=8 */                   \
+        if (_ci == 4 && g_mpi.size != 8) continue;                       \
+        CAPTURE(_ci);                                                     \
+        const auto &cfg = g_configs[_ci];                                \
+        auto m = g_meshes[_ci];                                           \
+        SUBCASE(cfg.name) { body }                                        \
     }
 
 // ---------------------------------------------------------------------------
@@ -201,11 +193,12 @@ int main(int argc, char **argv)
 
     // Pre-build all mesh configs for read-only tests.
     for (int i = 0; i < N_CONFIGS; i++)
+    {
+        // Skip Ball2 (index 4) for np < 8 to avoid timeout
+        if (i == 4 && g_mpi.size != 8)
+            continue;
         g_meshes[i] = buildMesh(i, g_configs[i]);
-
-    // Pre-build mutable meshes from config 0 for adjacency round-trip tests.
-    for (int i = 0; i < N_MUT; i++)
-        g_mut[i] = buildMesh(N_CONFIGS + i, g_configs[0]);
+    }
 
     doctest::Context ctx;
     ctx.applyCommandLine(argc, argv);
@@ -213,8 +206,6 @@ int main(int argc, char **argv)
 
     // Destroy all meshes together before MPI_Finalize.
     for (auto &m : g_meshes)
-        m.reset();
-    for (auto &m : g_mut)
         m.reset();
     MPI_Finalize();
     return res;
@@ -240,6 +231,107 @@ TEST_CASE("Mesh setup: multi-rank produces ghosts")
         CHECK(m->NumCellGhost() > 0);
         CHECK(m->NumNodeGhost() > 0);
     })
+}
+
+TEST_CASE("Mesh setup: periodic state matches configuration")
+{
+    FOR_EACH_MESH_CONFIG({
+        // cfg.periodic indicates if the mesh was configured as periodic
+        // After Deduplicate1to1Periodic, isPeriodic should match
+        CHECK(m->isPeriodic == cfg.periodic);
+    })
+}
+
+TEST_CASE("Ball2: mixed 3D element types")
+{
+    // This test only runs for Ball2 (index 4) with np=8
+    if (g_mpi.size != 8)
+        return;
+
+    auto m = g_meshes[4]; // Ball2 is index 4
+    DNDS_assert(m != nullptr);
+
+    // Count element types locally
+    std::map<Elem::ElemType, int> typeCounts;
+    for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
+    {
+        auto elem = m->GetCellElement(iC);
+        typeCounts[elem.type]++;
+    }
+
+    // Gather all unique element types from all ranks
+    std::vector<int> localTypes;
+    for (const auto& [type, count] : typeCounts)
+        localTypes.push_back(static_cast<int>(type));
+
+    int nLocalTypes = localTypes.size();
+    std::vector<int> allRankSizes(g_mpi.size);
+    MPI_Gather(&nLocalTypes, 1, MPI_INT, allRankSizes.data(), 1, MPI_INT, 0, g_mpi.comm);
+
+    std::vector<int> allTypes;
+    std::vector<int> displs;
+    int totalTypes = 0;
+
+    if (g_mpi.rank == 0)
+    {
+        displs.resize(g_mpi.size);
+        for (int i = 0; i < g_mpi.size; i++)
+        {
+            displs[i] = totalTypes;
+            totalTypes += allRankSizes[i];
+        }
+        allTypes.resize(totalTypes);
+    }
+
+    MPI_Gatherv(localTypes.data(), nLocalTypes, MPI_INT,
+                allTypes.data(), allRankSizes.data(), displs.data(), MPI_INT, 0, g_mpi.comm);
+
+    // Build set of unique types (on rank 0)
+    std::set<Elem::ElemType> uniqueTypes;
+    if (g_mpi.rank == 0)
+    {
+        for (int typeInt : allTypes)
+            uniqueTypes.insert(static_cast<Elem::ElemType>(typeInt));
+    }
+
+    // Broadcast unique types to all ranks
+    int nUnique = uniqueTypes.size();
+    MPI_Bcast(&nUnique, 1, MPI_INT, 0, g_mpi.comm);
+    std::vector<int> uniqueTypesVec;
+    if (g_mpi.rank == 0)
+    {
+        for (auto type : uniqueTypes)
+            uniqueTypesVec.push_back(static_cast<int>(type));
+    }
+    uniqueTypesVec.resize(nUnique);
+    MPI_Bcast(uniqueTypesVec.data(), nUnique, MPI_INT, 0, g_mpi.comm);
+
+    // All ranks iterate over the same types in the same order
+    std::map<Elem::ElemType, int> globalCounts;
+    for (int typeInt : uniqueTypesVec)
+    {
+        Elem::ElemType type = static_cast<Elem::ElemType>(typeInt);
+        int localCount = typeCounts.count(type) ? typeCounts[type] : 0;
+        int globalCount;
+        MPI_Reduce(&localCount, &globalCount, 1, MPI_INT, MPI_SUM, 0, g_mpi.comm);
+        if (g_mpi.rank == 0)
+            globalCounts[type] = globalCount;
+    }
+
+    if (g_mpi.rank == 0)
+    {
+        std::cout << "\nBall2 element type counts:" << std::endl;
+        for (const auto& [type, count] : globalCounts)
+        {
+            std::cout << "  Type " << static_cast<int>(type) << ": " << count << std::endl;
+        }
+
+        // Verify expected total
+        int total = 0;
+        for (const auto& [type, count] : globalCounts)
+            total += count;
+        CHECK(total == 958994);
+    }
 }
 
 // ===========================================================================
@@ -482,74 +574,76 @@ TEST_CASE("AdjPrimary: bnd2node local indices are in valid range")
 }
 
 // ===========================================================================
-// Adjacency state machine -- each gets its own pre-built mesh via nextMut()
+// Adjacency state machine -- parameterized over all configs
 // ===========================================================================
 TEST_CASE("AdjPrimary: Local2Global then Global2Local is identity")
 {
-    auto m = nextMut();
-    REQUIRE(m->adjPrimaryState == Adj_PointToLocal);
+    FOR_EACH_MESH_CONFIG({
+        REQUIRE(m->adjPrimaryState == Adj_PointToLocal);
 
-    auto c2nSnap = snapshotAdj(m->cell2node, m->NumCell());
-    auto c2cSnap = snapshotAdj(m->cell2cell, m->NumCell());
+        auto c2nSnap = snapshotAdj(m->cell2node, m->NumCell());
+        auto c2cSnap = snapshotAdj(m->cell2cell, m->NumCell());
 
-    m->AdjLocal2GlobalPrimary();
-    CHECK(m->adjPrimaryState == Adj_PointToGlobal);
+        m->AdjLocal2GlobalPrimary();
+        CHECK(m->adjPrimaryState == Adj_PointToGlobal);
 
-    for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
-        for (DNDS::rowsize j = 0; j < m->cell2node.RowSize(iC); j++)
+        for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
+            for (DNDS::rowsize j = 0; j < m->cell2node.RowSize(iC); j++)
+            {
+                DNDS::index gNode = m->cell2node(iC, j);
+                CHECK(gNode >= 0);
+                CHECK(gNode < m->coords.father->globalSize());
+            }
+
+        m->AdjGlobal2LocalPrimary();
+        CHECK(m->adjPrimaryState == Adj_PointToLocal);
+
+        for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
         {
-            DNDS::index gNode = m->cell2node(iC, j);
-            CHECK(gNode >= 0);
-            // globalSize() is now non-collective (cached), safe to call in loops
-            CHECK(gNode < m->coords.father->globalSize());
+            REQUIRE(static_cast<DNDS::rowsize>(c2nSnap[iC].size()) == m->cell2node.RowSize(iC));
+            for (DNDS::rowsize j = 0; j < m->cell2node.RowSize(iC); j++)
+                CHECK(m->cell2node(iC, j) == c2nSnap[iC][j]);
+            REQUIRE(static_cast<DNDS::rowsize>(c2cSnap[iC].size()) == m->cell2cell.RowSize(iC));
+            for (DNDS::rowsize j = 0; j < m->cell2cell.RowSize(iC); j++)
+                CHECK(m->cell2cell(iC, j) == c2cSnap[iC][j]);
         }
-
-    m->AdjGlobal2LocalPrimary();
-    CHECK(m->adjPrimaryState == Adj_PointToLocal);
-
-    for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
-    {
-        REQUIRE(static_cast<DNDS::rowsize>(c2nSnap[iC].size()) == m->cell2node.RowSize(iC));
-        for (DNDS::rowsize j = 0; j < m->cell2node.RowSize(iC); j++)
-            CHECK(m->cell2node(iC, j) == c2nSnap[iC][j]);
-        REQUIRE(static_cast<DNDS::rowsize>(c2cSnap[iC].size()) == m->cell2cell.RowSize(iC));
-        for (DNDS::rowsize j = 0; j < m->cell2cell.RowSize(iC); j++)
-            CHECK(m->cell2cell(iC, j) == c2cSnap[iC][j]);
-    }
+    })
 }
 
 TEST_CASE("AdjPrimary: three consecutive round-trips are stable")
 {
-    auto m = nextMut();
-    auto snap = snapshotAdj(m->cell2node, m->NumCell());
+    FOR_EACH_MESH_CONFIG({
+        auto snap = snapshotAdj(m->cell2node, m->NumCell());
 
-    for (int trip = 0; trip < 3; trip++)
-    {
-        m->AdjLocal2GlobalPrimary();
-        CHECK(m->adjPrimaryState == Adj_PointToGlobal);
-        m->AdjGlobal2LocalPrimary();
-        CHECK(m->adjPrimaryState == Adj_PointToLocal);
-    }
+        for (int trip = 0; trip < 3; trip++)
+        {
+            m->AdjLocal2GlobalPrimary();
+            CHECK(m->adjPrimaryState == Adj_PointToGlobal);
+            m->AdjGlobal2LocalPrimary();
+            CHECK(m->adjPrimaryState == Adj_PointToLocal);
+        }
 
-    for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
-        for (DNDS::rowsize j = 0; j < m->cell2node.RowSize(iC); j++)
-            CHECK(m->cell2node(iC, j) == snap[iC][j]);
+        for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
+            for (DNDS::rowsize j = 0; j < m->cell2node.RowSize(iC); j++)
+                CHECK(m->cell2node(iC, j) == snap[iC][j]);
+    })
 }
 
 TEST_CASE("AdjPrimaryForBnd: round-trip on cell2node only")
 {
-    auto m = nextMut();
-    REQUIRE(m->adjPrimaryState == Adj_PointToLocal);
+    FOR_EACH_MESH_CONFIG({
+        REQUIRE(m->adjPrimaryState == Adj_PointToLocal);
 
-    auto snap = snapshotAdj(m->cell2node, m->NumCell());
+        auto snap = snapshotAdj(m->cell2node, m->NumCell());
 
-    m->AdjLocal2GlobalPrimaryForBnd();
-    CHECK(m->adjPrimaryState == Adj_PointToGlobal);
+        m->AdjLocal2GlobalPrimaryForBnd();
+        CHECK(m->adjPrimaryState == Adj_PointToGlobal);
 
-    m->AdjGlobal2LocalPrimaryForBnd();
-    CHECK(m->adjPrimaryState == Adj_PointToLocal);
+        m->AdjGlobal2LocalPrimaryForBnd();
+        CHECK(m->adjPrimaryState == Adj_PointToLocal);
 
-    for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
-        for (DNDS::rowsize j = 0; j < m->cell2node.RowSize(iC); j++)
-            CHECK(m->cell2node(iC, j) == snap[iC][j]);
+        for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
+            for (DNDS::rowsize j = 0; j < m->cell2node.RowSize(iC); j++)
+                CHECK(m->cell2node(iC, j) == snap[iC][j]);
+    })
 }

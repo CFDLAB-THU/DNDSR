@@ -136,6 +136,36 @@ Available test targets: `dnds_test_array`, `dnds_test_mpi`, `dnds_test_array_tra
 `DNDS::index`, `DNDS::real`, and `DNDS::rowsize` in declarations to avoid ambiguity
 with POSIX `index()` from `<strings.h>` (pulled in by doctest).
 
+### Python Geom Module
+
+The Python `DNDSR.Geom` module provides mesh reading and manipulation capabilities.
+See the detailed guide at `docs/python_geom_mesh_reader.md`.
+
+**Quick Example:**
+```python
+from DNDSR.Geom.utils import create_mesh_from_CGNS
+from DNDSR import DNDS
+
+mpi = DNDS.MPIInfo()
+mpi.setWorld()
+
+# Read mesh with elevation and bisection
+mesh, reader, name2ID = create_mesh_from_CGNS(
+    meshFile="data/mesh/UniformSquare_10.cgns",
+    mpi=mpi,
+    dim=2,
+    meshElevation="O2",         # Elevate O1→O2
+    meshDirectBisect=1,         # Bisect once
+)
+```
+
+**Key Features:**
+- CGNS mesh reading (`ReadFromCGNSSerial`)
+- Order elevation: Quad4→Quad9, Hex8→Hex27, etc. (`BuildO2FromO1Elevation`)
+- Mesh bisection for h-refinement (`BuildBisectO1FormO2`)
+- Boundary mesh extraction (`create_bnd_mesh`)
+- VTK output generation
+
 ## Formatting and Linting
 
 ### C++ — clang-format (config in `src/.clang-format`)
