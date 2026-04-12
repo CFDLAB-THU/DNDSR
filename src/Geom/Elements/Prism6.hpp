@@ -6,13 +6,15 @@
 #include "DNDS/Defines.hpp"
 #include "Geom/Geometric.hpp"
 #include "Geom/ElemEnum.hpp"
+#include "Geom/ElementTraitsBase.hpp"
 
 namespace DNDS::Geom::Elem
 {
 
-    // Forward declaration (primary template is in Elements.hpp)
+    // Forward declaration (primary template is in ElementTraitsBase.hpp)
     template <ElemType> struct ShapeFuncImpl;
 
+    // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Prism6>
     {
@@ -89,6 +91,142 @@ namespace DNDS::Geom::Elem
             t_real zt = p[2];
             // all zero
         }
+    };
+    // <GEN_SHAPE_FUNCS_END>
+
+
+    /**
+     * @brief Element traits for 6-node linear prism (Prism6)
+     *
+     * Prism6 is a 3D prismatic element combining triangular and quadrilateral faces.
+     * Commonly used for:
+     * - Boundary layer meshes
+     * - Extruded 2D meshes
+     * - Regions with strong anisotropy
+     *
+     * Geometry:
+     * - Reference prism: triangle base extruded along z-axis from -1 to +1
+     * - 6 nodes at the vertices (3 on bottom, 3 on top)
+     * - Parametric space volume = 1.0
+     *
+     * Faces:
+     * - 2 triangular faces (top and bottom)
+     * - 3 quadrilateral faces (sides)
+     */
+    template <>
+    struct ElementTraits<Prism6>
+    {
+        // ============================================================
+        // Core Element Identification
+        // ============================================================
+
+        static constexpr ElemType elemType = Prism6;
+        static constexpr int dim = 3;
+        static constexpr int order = 1;
+        static constexpr int numVertices = 6;
+        static constexpr int numNodes = 6;
+        static constexpr int numFaces = 5;
+        static constexpr ParamSpace paramSpace = PrismSpace;
+        static constexpr t_real paramSpaceVol = 1.0;
+
+        // ============================================================
+        // Geometry Definition
+        // ============================================================
+
+        /**
+         * @brief Standard coordinates of nodes in parametric space
+         *
+         * Reference prism: triangular base (xi, eta) with zeta in [-1, 1]
+         * Nodes 0-2: bottom triangle (zeta = -1)
+         * Nodes 3-5: top triangle (zeta = +1)
+         */
+        static constexpr std::array<t_real, 3 * 6> standardCoords = {
+            0, 0, -1,   // Node 0: bottom corner
+            1, 0, -1,   // Node 1: bottom corner
+            0, 1, -1,   // Node 2: bottom corner
+            0, 0,  1,   // Node 3: top corner
+            1, 0,  1,   // Node 4: top corner
+            0, 1,  1};  // Node 5: top corner
+
+        // ============================================================
+        // Face/Edge Definitions
+        // ============================================================
+
+        /**
+         * @brief Get the element type of a face
+         * @param iFace Face index (0-2 are quads, 3-4 are triangles)
+         * @return Quad4 for side faces, Tri3 for cap faces
+         */
+        static constexpr ElemType GetFaceType(t_index iFace)
+        {
+            return iFace < 3 ? Quad4 : Tri3;
+        }
+
+        /**
+         * @brief Node indices for each face
+         *
+         * Face 0: nodes 0-1-4-3 (side, quadrilateral)
+         * Face 1: nodes 1-2-5-4 (side, quadrilateral)
+         * Face 2: nodes 2-0-3-5 (side, quadrilateral)
+         * Face 3: nodes 0-2-1 (bottom, triangle)
+         * Face 4: nodes 3-4-5 (top, triangle)
+         */
+        static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{
+            {0, 1, 4, 3},    // Face 0: side quad
+            {1, 2, 5, 4},    // Face 1: side quad
+            {2, 0, 3, 5},    // Face 2: side quad
+            {0, 2, 1},       // Face 3: bottom triangle
+            {3, 4, 5}}};     // Face 4: top triangle
+
+        // ============================================================
+        // Order Elevation (P-Refinement)
+        // ============================================================
+
+        /**
+         * @brief Element type after order elevation (O1 -> O2)
+         * Prism6 elevates to Prism18 (18-node quadratic prism)
+         */
+        static constexpr ElemType elevatedType = Prism18;
+
+        /// @brief Number of additional nodes created during elevation
+        static constexpr int numElevNodes = 12;
+
+        /**
+         * @brief Elevation spans define new node connections
+         *
+         * Elevation creates 12 new nodes:
+         *   Spans 0-2: bottom triangle edge midpoints
+         *   Spans 3-5: vertical edge midpoints
+         *   Spans 6-8: top triangle edge midpoints
+         *   Spans 9-11: side face centers
+         */
+        static constexpr std::array<tElevSpan, 12> elevSpans = {{
+            {0, 1}, {1, 2}, {2, 0},           // Bottom triangle edges
+            {0, 3}, {1, 4}, {2, 5},           // Vertical edges
+            {3, 4}, {4, 5}, {5, 3},           // Top triangle edges
+            {0, 1, 4, 3}, {1, 2, 5, 4}, {2, 0, 3, 5}}}; // Side face centers
+
+        /// @brief Element type of each elevation span
+        static constexpr std::array<ElemType, 12> elevNodeSpanTypes = {
+            Line2, Line2, Line2,    // Bottom edges
+            Line2, Line2, Line2,    // Vertical edges
+            Line2, Line2, Line2,    // Top edges
+            Quad4, Quad4, Quad4};   // Side face centers
+
+        // ============================================================
+        // VTK/Visualization Support
+        // ============================================================
+
+        /// @brief VTK cell type identifier (13 = VTK_WEDGE)
+        static constexpr int vtkCellType = 13;
+
+        /**
+         * @brief VTK node ordering map
+         *
+         * VTK uses the same ordering as DNDS for Prism6:
+         *   VTK nodes 0-5 = nodes 0-5
+         */
+        static constexpr std::array<int, 6> vtkNodeOrder = {0, 1, 2, 3, 4, 5};
     };
 
 } // namespace DNDS::Geom::Elem

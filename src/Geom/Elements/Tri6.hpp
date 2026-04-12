@@ -6,13 +6,15 @@
 #include "DNDS/Defines.hpp"
 #include "Geom/Geometric.hpp"
 #include "Geom/ElemEnum.hpp"
+#include "Geom/ElementTraitsBase.hpp"
 
 namespace DNDS::Geom::Elem
 {
 
-    // Forward declaration (primary template is in Elements.hpp)
+    // Forward declaration (primary template is in ElementTraitsBase.hpp)
     template <ElemType> struct ShapeFuncImpl;
 
+    // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Tri6>
     {
@@ -79,5 +81,133 @@ namespace DNDS::Geom::Elem
             // all zero
         }
     };
+    // <GEN_SHAPE_FUNCS_END>
+
+
+    /**
+     * @brief Element traits for 6-node quadratic triangle (Tri6)
+     *
+     * Tri6 is a high-order 2D triangular element with:
+     * - 3 corner nodes (vertices)
+     * - 3 edge mid-nodes
+     *
+     * Used for high-order finite element methods and curved boundary representation.
+     */
+    template <>
+    struct ElementTraits<Tri6>
+    {
+        // ============================================================
+        // Core Element Identification
+        // ============================================================
+
+        static constexpr ElemType elemType = Tri6;
+        static constexpr int dim = 2;
+        static constexpr int order = 2;
+        static constexpr int numVertices = 3;
+        static constexpr int numNodes = 6;
+        static constexpr int numFaces = 3;
+        static constexpr ParamSpace paramSpace = TriSpace;
+        static constexpr t_real paramSpaceVol = 0.5;
+
+        // ============================================================
+        // Geometry Definition
+        // ============================================================
+
+        /**
+         * @brief Standard coordinates of nodes in parametric space
+         *
+         * Reference triangle with nodes:
+         * Nodes 0-2: vertices (same as Tri3)
+         * Nodes 3-5: edge midpoints
+         */
+        static constexpr std::array<t_real, 3 * 6> standardCoords = {
+            0,   0,   0,   // Node 0: vertex
+            1,   0,   0,   // Node 1: vertex
+            0,   1,   0,   // Node 2: vertex
+            0.5, 0,   0,   // Node 3: edge 0-1 midpoint
+            0.5, 0.5, 0,   // Node 4: edge 1-2 midpoint
+            0,   0.5, 0};  // Node 5: edge 2-0 midpoint
+
+        // ============================================================
+        // Face/Edge Definitions
+        // ============================================================
+
+        /**
+         * @brief Get the element type of a face (edge)
+         * @return Line3 (all edges are quadratic lines with 3 nodes)
+         */
+        static constexpr ElemType GetFaceType(t_index /*iFace*/) { return Line3; }
+
+        /**
+         * @brief Node indices for each face (edge)
+         *
+         * Each edge has 3 nodes: 2 vertices + 1 midpoint
+         * Edge 0: nodes 0-1-3
+         * Edge 1: nodes 1-2-4
+         * Edge 2: nodes 2-0-5
+         */
+        static constexpr std::array<std::array<t_index, 10>, 3> faceNodes = {{
+            {0, 1, 3},     // Edge 0: bottom
+            {1, 2, 4},     // Edge 1: hypotenuse
+            {2, 0, 5}}};   // Edge 2: left
+
+        // ============================================================
+        // Order Elevation (P-Refinement)
+        // ============================================================
+
+        /// @brief Element type after order elevation (O2 has no higher elevation defined)
+        static constexpr ElemType elevatedType = UnknownElem;
+
+        /// @brief Number of additional nodes created during elevation (none for O2)
+        static constexpr int numElevNodes = 0;
+
+        // ============================================================
+        // Bisection (Adaptive Refinement)
+        // ============================================================
+
+        /// @brief Number of sub-elements created when bisecting (4 Tri3 elements)
+        static constexpr int numBisect = 4;
+
+        /// @brief Number of bisection variants (only 1 way to uniformly bisect)
+        static constexpr int numBisectVariants = 1;
+
+        /**
+         * @brief Get the element type of a sub-element after bisection
+         * @return Tri3 (all sub-elements are linear triangles)
+         */
+        static constexpr ElemType GetBisectElemType(t_index /*i*/) { return Tri3; }
+
+        /**
+         * @brief Node indices for each sub-element created by bisection
+         *
+         * Bisecting creates 4 sub-triangles by connecting edge midpoints:
+         *   Sub-element 0: corner at node 0
+         *   Sub-element 1: corner at node 1
+         *   Sub-element 2: corner at node 2
+         *   Sub-element 3: center triangle
+         */
+        static constexpr std::array<tBisectSub, 4> bisectElements = {{
+            {0, 3, 5},     // Corner triangle at vertex 0
+            {3, 1, 4},     // Corner triangle at vertex 1
+            {5, 3, 4},     // Center triangle
+            {5, 4, 2}}};   // Corner triangle at vertex 2
+
+        // ============================================================
+        // VTK/Visualization Support
+        // ============================================================
+
+        /// @brief VTK cell type identifier (22 = VTK_QUADRATIC_TRIANGLE)
+        static constexpr int vtkCellType = 22;
+
+        /**
+         * @brief VTK node ordering map
+         *
+         * VTK uses the same ordering as DNDS for Tri6:
+         *   VTK nodes 0-2 = corner nodes 0-2
+         *   VTK nodes 3-5 = edge mid-nodes 3-5
+         */
+        static constexpr std::array<int, 6> vtkNodeOrder = {0, 1, 2, 3, 4, 5};
+    };
 
 } // namespace DNDS::Geom::Elem
+

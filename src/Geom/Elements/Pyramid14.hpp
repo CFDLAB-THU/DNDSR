@@ -6,13 +6,15 @@
 #include "DNDS/Defines.hpp"
 #include "Geom/Geometric.hpp"
 #include "Geom/ElemEnum.hpp"
+#include "Geom/ElementTraitsBase.hpp"
 
 namespace DNDS::Geom::Elem
 {
 
-    // Forward declaration (primary template is in Elements.hpp)
+    // Forward declaration (primary template is in ElementTraitsBase.hpp)
     template <ElemType> struct ShapeFuncImpl;
 
+    // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Pyramid14>
     {
@@ -651,6 +653,174 @@ namespace DNDS::Geom::Elem
             v(9, 12) = _t157;
             v(9, 13) = _t134*_t74*(1 - _t54);
         }
+    };
+    // <GEN_SHAPE_FUNCS_END>
+
+
+    /**
+     * @brief Element traits for 14-node quadratic pyramid (Pyramid14)
+     *
+     * Pyramid14 is a high-order 3D pyramidal element with:
+     * - 5 corner nodes (4 base + 1 apex)
+     * - 8 edge mid-nodes
+     * - 1 base face center node
+     *
+     * Used for high-order finite element methods with pyramidal elements.
+     */
+    template <>
+    struct ElementTraits<Pyramid14>
+    {
+        // ============================================================
+        // Core Element Identification
+        // ============================================================
+
+        static constexpr ElemType elemType = Pyramid14;
+        static constexpr int dim = 3;
+        static constexpr int order = 2;
+        static constexpr int numVertices = 5;
+        static constexpr int numNodes = 14;
+        static constexpr int numFaces = 5;
+        static constexpr ParamSpace paramSpace = PyramidSpace;
+        static constexpr t_real paramSpaceVol = 4.0 / 3.0;
+
+        // ============================================================
+        // Geometry Definition
+        // ============================================================
+
+        /**
+         * @brief Standard coordinates of nodes in parametric space
+         *
+         * Nodes 0-4: vertices (same as Pyramid5)
+         * Nodes 5-8: base edge midpoints
+         * Nodes 9-12: lateral edge midpoints
+         * Node 13: base face center
+         */
+        static constexpr std::array<t_real, 3 * 14> standardCoords = {
+            // Vertices (0-4)
+            -1, -1, 0,     1, -1, 0,     1,  1, 0,    -1,  1, 0,     0,  0, 1,
+            // Base edge mids (5-8)
+             0, -1, 0,     1,  0, 0,     0,  1, 0,    -1,  0, 0,
+            // Lateral edge mids (9-12)
+            -0.5, -0.5, 0.5,   0.5, -0.5, 0.5,   0.5, 0.5, 0.5,   -0.5, 0.5, 0.5,
+            // Base face center (13)
+             0,  0, 0};
+
+        // ============================================================
+        // Face/Edge Definitions
+        // ============================================================
+
+        /**
+         * @brief Get the element type of a face
+         * @param iFace Face index (0 is base, 1-4 are sides)
+         * @return Quad9 for base, Tri6 for sides
+         */
+        static constexpr ElemType GetFaceType(t_index iFace)
+        {
+            return iFace < 1 ? Quad9 : Tri6;
+        }
+
+        /**
+         * @brief Node indices for each face
+         *
+         * Base face has 9 nodes (4 vertices + 4 edge mids + 1 center)
+         * Side faces have 6 nodes (3 vertices + 3 edge mids)
+         */
+        static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{
+            {0, 3, 2, 1, 8, 7, 6, 5, 13},     // Face 0: base (biquad)
+            {0, 1, 4, 5, 10, 9},              // Face 1: side triangle
+            {1, 2, 4, 6, 11, 10},             // Face 2: side triangle
+            {2, 3, 4, 7, 12, 11},             // Face 3: side triangle
+            {3, 0, 4, 8, 9, 12}}};            // Face 4: side triangle
+
+        // ============================================================
+        // Order Elevation (P-Refinement)
+        // ============================================================
+
+        /// @brief Element type after order elevation (O2 has no higher elevation defined)
+        static constexpr ElemType elevatedType = UnknownElem;
+
+        /// @brief Number of additional nodes created during elevation (none for O2)
+        static constexpr int numElevNodes = 0;
+
+        // ============================================================
+        // Bisection (Adaptive Refinement)
+        // ============================================================
+
+        /// @brief Number of sub-elements created when bisecting (12 sub-elements)
+        static constexpr int numBisect = 12;
+
+        /**
+         * @brief Number of bisection variants (2 different diagonal choices)
+         *
+         * The base can be bisected using different internal diagonal patterns,
+         * resulting in different sub-element configurations.
+         */
+        static constexpr int numBisectVariants = 2;
+
+        /**
+         * @brief Get the element type of a sub-element after bisection
+         * @param i Sub-element index (first 4 are Pyramid5, remaining 8 are Tet4)
+         * @return Pyramid5 for corner elements, Tet4 for internal elements
+         */
+        static constexpr ElemType GetBisectElemType(t_index i)
+        {
+            return i < 4 ? Pyramid5 : Tet4;
+        }
+
+        /**
+         * @brief Node indices for each sub-element created by bisection
+         *
+         * 2 variants x 12 sub-elements = 24 entries total.
+         * Each variant produces 4 corner pyramids and 8 internal tetrahedra.
+         */
+        static constexpr std::array<tBisectSub, 24> bisectElements = {{
+            // Variant 0
+            {0, 5, 13, 8, 9},
+            {5, 1, 6, 13, 10},
+            {8, 13, 7, 3, 12},
+            {13, 6, 2, 7, 11},
+            {12, 9, 8, 13},
+            {9, 10, 5, 13},
+            {10, 11, 6, 13},
+            {11, 12, 7, 13},
+            {9, 11, 12, 4},
+            {9, 10, 11, 4},
+            {9, 11, 10, 13},
+            {9, 12, 11, 13},
+            // Variant 1
+            {0, 5, 13, 8, 9},
+            {5, 1, 6, 13, 10},
+            {8, 13, 7, 3, 12},
+            {13, 6, 2, 7, 11},
+            {12, 9, 8, 13},
+            {9, 10, 5, 13},
+            {10, 11, 6, 13},
+            {11, 12, 7, 13},
+            {10, 12, 9, 4},
+            {10, 11, 12, 4},
+            {10, 12, 11, 13},
+            {10, 9, 12, 13}}};
+
+        // ============================================================
+        // VTK/Visualization Support
+        // ============================================================
+
+        /// @brief VTK cell type identifier (27 = VTK_TRIQUADRATIC_PYRAMID)
+        static constexpr int vtkCellType = 27;
+
+        /**
+         * @brief VTK node ordering map
+         *
+         * VTK uses 13 nodes for quadratic pyramid:
+         *   VTK nodes 0-4 = vertices 0-4
+         *   VTK nodes 5-8 = base edge mids 5-8
+         *   VTK nodes 9-12 = lateral edge mids 9-12
+         * Note: Base face center node 13 is not included in VTK ordering
+         */
+        static constexpr std::array<int, 13> vtkNodeOrder = {
+            0, 1, 2, 3, 4,       // Vertices
+            5, 6, 7, 8,          // Base edges
+            9, 10, 11, 12};      // Lateral edges
     };
 
 } // namespace DNDS::Geom::Elem

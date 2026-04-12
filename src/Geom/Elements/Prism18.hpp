@@ -6,13 +6,15 @@
 #include "DNDS/Defines.hpp"
 #include "Geom/Geometric.hpp"
 #include "Geom/ElemEnum.hpp"
+#include "Geom/ElementTraitsBase.hpp"
 
 namespace DNDS::Geom::Elem
 {
 
-    // Forward declaration (primary template is in Elements.hpp)
+    // Forward declaration (primary template is in ElementTraitsBase.hpp)
     template <ElemType> struct ShapeFuncImpl;
 
+    // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Prism18>
     {
@@ -392,6 +394,158 @@ namespace DNDS::Geom::Elem
             v(9, 16) = _t5;
             v(9, 17) = _t3;
         }
+    };
+    // <GEN_SHAPE_FUNCS_END>
+
+
+    /**
+     * @brief Element traits for 18-node quadratic prism (Prism18)
+     *
+     * Prism18 is a high-order 3D prismatic element with:
+     * - 6 corner nodes (vertices)
+     * - 9 edge mid-nodes
+     * - 3 face center nodes (on quadrilateral faces)
+     *
+     * Used for high-order finite element methods with prismatic elements.
+     */
+    template <>
+    struct ElementTraits<Prism18>
+    {
+        // ============================================================
+        // Core Element Identification
+        // ============================================================
+
+        static constexpr ElemType elemType = Prism18;
+        static constexpr int dim = 3;
+        static constexpr int order = 2;
+        static constexpr int numVertices = 6;
+        static constexpr int numNodes = 18;
+        static constexpr int numFaces = 5;
+        static constexpr ParamSpace paramSpace = PrismSpace;
+        static constexpr t_real paramSpaceVol = 1.0;
+
+        // ============================================================
+        // Geometry Definition
+        // ============================================================
+
+        /**
+         * @brief Standard coordinates of nodes in parametric space
+         *
+         * Nodes 0-5: vertices (same as Prism6)
+         * Nodes 6-8: bottom triangle edge midpoints
+         * Nodes 9-11: vertical edge midpoints
+         * Nodes 12-14: top triangle edge midpoints
+         * Nodes 15-17: side quadrilateral face centers
+         */
+        static constexpr std::array<t_real, 3 * 18> standardCoords = {
+            // Vertices (0-5)
+            0, 0, -1,   1, 0, -1,   0, 1, -1,
+            0, 0,  1,   1, 0,  1,   0, 1,  1,
+            // Bottom edge mids (6-8)
+            0.5, 0,   -1,   0.5, 0.5, -1,   0,   0.5, -1,
+            // Vertical edge mids (9-11)
+            0,   0,    0,   1,   0,    0,   0,   1,    0,
+            // Top edge mids (12-14)
+            0.5, 0,    1,   0.5, 0.5,  1,   0,   0.5,  1,
+            // Side face centers (15-17)
+            0.5, 0,    0,   0.5, 0.5,  0,   0,   0.5,  0};
+
+        // ============================================================
+        // Face/Edge Definitions
+        // ============================================================
+
+        /**
+         * @brief Get the element type of a face
+         * @param iFace Face index (0-2 are quads, 3-4 are triangles)
+         * @return Quad9 for side faces, Tri6 for cap faces
+         */
+        static constexpr ElemType GetFaceType(t_index iFace)
+        {
+            return iFace < 3 ? Quad9 : Tri6;
+        }
+
+        /**
+         * @brief Node indices for each face
+         *
+         * Quadrilateral faces have 9 nodes (4 vertices + 4 edge mids + 1 center)
+         * Triangular faces have 6 nodes (3 vertices + 3 edge mids)
+         */
+        static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{
+            {0, 1, 4, 3, 6, 10, 12, 9, 15},     // Face 0: side quad
+            {1, 2, 5, 4, 7, 11, 13, 10, 16},    // Face 1: side quad
+            {2, 0, 3, 5, 8, 9, 14, 11, 17},     // Face 2: side quad
+            {0, 2, 1, 8, 7, 6},                 // Face 3: bottom triangle
+            {3, 4, 5, 9, 10, 11}}};             // Face 4: top triangle
+
+        // ============================================================
+        // Order Elevation (P-Refinement)
+        // ============================================================
+
+        /// @brief Element type after order elevation (O2 has no higher elevation defined)
+        static constexpr ElemType elevatedType = UnknownElem;
+
+        /// @brief Number of additional nodes created during elevation (none for O2)
+        static constexpr int numElevNodes = 0;
+
+        // ============================================================
+        // Bisection (Adaptive Refinement)
+        // ============================================================
+
+        /**
+         * @brief O2 bisection: 8 sub-prisms created from one Prism18
+         *
+         * Bisection splits the prism by connecting mid-edge nodes,
+         * creating 8 smaller linear prisms (Prism6 elements).
+         */
+        static constexpr int numBisect = 8;
+
+        /// @brief Number of bisection variants (1 standard bisection pattern)
+        static constexpr int numBisectVariants = 1;
+
+        /**
+         * @brief Get the element type of a sub-element after bisection
+         * @return Prism6 (all sub-elements are linear prisms)
+         */
+        static constexpr ElemType GetBisectElemType(t_index /*i*/) { return Prism6; }
+
+        /**
+         * @brief Sub-element connectivity after bisection
+         *
+         * Each row defines one sub-prism using parent node indices.
+         * The 8 sub-prisms fill the volume of the original element.
+         */
+        static constexpr std::array<tBisectSub, 8> bisectElements = {{
+            {0, 6, 8, 9, 15, 17},      // Sub-prism 0: near vertex 0
+            {6, 1, 7, 15, 10, 16},     // Sub-prism 1: near vertex 1
+            {8, 6, 7, 17, 15, 16},     // Sub-prism 2: bottom center
+            {8, 7, 2, 17, 16, 11},     // Sub-prism 3: near vertex 2
+            {9, 15, 17, 3, 12, 14},    // Sub-prism 4: near vertex 3
+            {15, 10, 16, 12, 4, 13},   // Sub-prism 5: near vertex 4
+            {17, 15, 16, 14, 12, 13},  // Sub-prism 6: top center
+            {17, 16, 11, 14, 13, 5}}}; // Sub-prism 7: near vertex 5
+
+        // ============================================================
+        // VTK/Visualization Support
+        // ============================================================
+
+        /// @brief VTK cell type identifier (26 = VTK_BIQUADRATIC_QUADRATIC_WEDGE)
+        static constexpr int vtkCellType = 26;
+
+        /**
+         * @brief VTK node ordering map
+         *
+         * VTK has non-trivial node reordering for Prism18:
+         *   VTK nodes 0-5 = vertices 0-5
+         *   VTK nodes 6-8 = bottom triangle edge mids 6-8
+         *   VTK nodes 9-11 = top triangle edge mids 12-14 (note: reordered!)
+         *   VTK nodes 12-14 = vertical edge mids 9-11 (note: reordered!)
+         * Note: Face center nodes 15-17 are not included in VTK ordering
+         */
+        static constexpr std::array<int, 15> vtkNodeOrder = {
+            0, 1, 2, 3, 4, 5,       // Vertices
+            6, 7, 8,                // Bottom edges
+            12, 13, 14,             // Top edges (reordered)
+            9, 10, 11};             // Vertical edges (reordered)
     };
 
 } // namespace DNDS::Geom::Elem

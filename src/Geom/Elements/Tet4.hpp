@@ -6,13 +6,15 @@
 #include "DNDS/Defines.hpp"
 #include "Geom/Geometric.hpp"
 #include "Geom/ElemEnum.hpp"
+#include "Geom/ElementTraitsBase.hpp"
 
 namespace DNDS::Geom::Elem
 {
 
-    // Forward declaration (primary template is in Elements.hpp)
+    // Forward declaration (primary template is in ElementTraitsBase.hpp)
     template <ElemType> struct ShapeFuncImpl;
 
+    // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Tet4>
     {
@@ -59,6 +61,132 @@ namespace DNDS::Geom::Elem
             t_real zt = p[2];
             // all zero
         }
+    };
+    // <GEN_SHAPE_FUNCS_END>
+
+
+    /**
+     * @brief Element traits for 4-node linear tetrahedron (Tet4)
+     *
+     * Tet4 is the simplest 3D element, commonly used for:
+     * - Unstructured tetrahedral meshes
+     * - Automatic mesh generation
+     * - Complex geometry representation
+     *
+     * Geometry:
+     * - Reference tetrahedron with vertices at (0,0,0), (1,0,0), (0,1,0), (0,0,1)
+     * - Parametric space volume = 1/6
+     *
+     * Faces:
+     * - 4 triangular faces, each is a Tri3 element
+     */
+    template <>
+    struct ElementTraits<Tet4>
+    {
+        // ============================================================
+        // Core Element Identification
+        // ============================================================
+
+        static constexpr ElemType elemType = Tet4;
+        static constexpr int dim = 3;
+        static constexpr int order = 1;
+        static constexpr int numVertices = 4;
+        static constexpr int numNodes = 4;
+        static constexpr int numFaces = 4;
+        static constexpr ParamSpace paramSpace = TetSpace;
+        static constexpr t_real paramSpaceVol = 1.0 / 6.0;
+
+        // ============================================================
+        // Geometry Definition
+        // ============================================================
+
+        /**
+         * @brief Standard coordinates of nodes in parametric space
+         *
+         * Reference tetrahedron with nodes at:
+         * Node 0: (0, 0, 0) - origin
+         * Node 1: (1, 0, 0) - on x-axis
+         * Node 2: (0, 1, 0) - on y-axis
+         * Node 3: (0, 0, 1) - on z-axis
+         */
+        static constexpr std::array<t_real, 3 * 4> standardCoords = {
+            0, 0, 0,   // Node 0: origin
+            1, 0, 0,   // Node 1: x-axis
+            0, 1, 0,   // Node 2: y-axis
+            0, 0, 1};  // Node 3: z-axis
+
+        // ============================================================
+        // Face/Edge Definitions
+        // ============================================================
+
+        /**
+         * @brief Get the element type of a face
+         * @return Tri3 (all faces of tet are triangles)
+         */
+        static constexpr ElemType GetFaceType(t_index /*iFace*/) { return Tri3; }
+
+        /**
+         * @brief Node indices for each face (triangular face)
+         *
+         * Face 0: nodes 0-2-1 (bottom face, z=0)
+         * Face 1: nodes 0-1-3 (side face, y=0)
+         * Face 2: nodes 1-2-3 (side face, x=0 is opposite)
+         * Face 3: nodes 2-0-3 (side face, x=0)
+         *
+         * Note: Node ordering follows right-hand rule for outward normals.
+         */
+        static constexpr std::array<std::array<t_index, 10>, 4> faceNodes = {{
+            {0, 2, 1},     // Face 0: bottom (z=0 plane)
+            {0, 1, 3},     // Face 1: side (y=0 plane)
+            {1, 2, 3},     // Face 2: side (diagonal)
+            {2, 0, 3}}};   // Face 3: side (x=0 plane)
+
+        // ============================================================
+        // Order Elevation (P-Refinement)
+        // ============================================================
+
+        /**
+         * @brief Element type after order elevation (O1 -> O2)
+         * Tet4 elevates to Tet10 (10-node quadratic tetrahedron)
+         */
+        static constexpr ElemType elevatedType = Tet10;
+
+        /// @brief Number of additional nodes created during elevation (6 edge midpoints)
+        static constexpr int numElevNodes = 6;
+
+        /**
+         * @brief Elevation spans define edge midpoints
+         *
+         * Each new node is at the midpoint of an edge:
+         *   Span 0-2: edges of base triangle
+         *   Span 3-5: edges connecting apex to base vertices
+         */
+        static constexpr std::array<tElevSpan, 6> elevSpans = {{
+            {0, 1},     // Edge 0-1 midpoint
+            {1, 2},     // Edge 1-2 midpoint
+            {2, 0},     // Edge 2-0 midpoint
+            {0, 3},     // Edge 0-3 midpoint
+            {1, 3},     // Edge 1-3 midpoint
+            {2, 3}}};   // Edge 2-3 midpoint
+
+        /// @brief Element type of each elevation span (all are Line2 edges)
+        static constexpr std::array<ElemType, 6> elevNodeSpanTypes = {
+            Line2, Line2, Line2, Line2, Line2, Line2};
+
+        // ============================================================
+        // VTK/Visualization Support
+        // ============================================================
+
+        /// @brief VTK cell type identifier (10 = VTK_TETRA)
+        static constexpr int vtkCellType = 10;
+
+        /**
+         * @brief VTK node ordering map
+         *
+         * VTK uses the same ordering as DNDS for Tet4:
+         *   VTK node 0 = DNDS node 0, VTK node 1 = DNDS node 1, etc.
+         */
+        static constexpr std::array<int, 4> vtkNodeOrder = {0, 1, 2, 3};
     };
 
 } // namespace DNDS::Geom::Elem

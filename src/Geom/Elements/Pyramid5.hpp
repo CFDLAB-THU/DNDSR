@@ -6,13 +6,15 @@
 #include "DNDS/Defines.hpp"
 #include "Geom/Geometric.hpp"
 #include "Geom/ElemEnum.hpp"
+#include "Geom/ElementTraitsBase.hpp"
 
 namespace DNDS::Geom::Elem
 {
 
-    // Forward declaration (primary template is in Elements.hpp)
+    // Forward declaration (primary template is in ElementTraitsBase.hpp)
     template <ElemType> struct ShapeFuncImpl;
 
+    // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Pyramid5>
     {
@@ -158,6 +160,136 @@ namespace DNDS::Geom::Elem
             v(9, 2) = _t12;
             v(9, 3) = _t13;
         }
+    };
+    // <GEN_SHAPE_FUNCS_END>
+
+
+    /**
+     * @brief Element traits for 5-node linear pyramid (Pyramid5)
+     *
+     * Pyramid5 is a 3D pyramidal element with a quadrilateral base and triangular sides,
+     * commonly used for:
+     * - Transition between hexahedral and tetrahedral meshes
+     * - Octree-based mesh refinement
+     * - Adaptive meshing with hanging nodes
+     *
+     * Geometry:
+     * - Reference pyramid: square base at z=0, apex at z=1
+     * - 5 nodes: 4 at base corners, 1 at apex
+     * - Parametric space volume = 4/3
+     *
+     * Faces:
+     * - 1 quadrilateral base face
+     * - 4 triangular side faces
+     */
+    template <>
+    struct ElementTraits<Pyramid5>
+    {
+        // ============================================================
+        // Core Element Identification
+        // ============================================================
+
+        static constexpr ElemType elemType = Pyramid5;
+        static constexpr int dim = 3;
+        static constexpr int order = 1;
+        static constexpr int numVertices = 5;
+        static constexpr int numNodes = 5;
+        static constexpr int numFaces = 5;
+        static constexpr ParamSpace paramSpace = PyramidSpace;
+        static constexpr t_real paramSpaceVol = 4.0 / 3.0;
+
+        // ============================================================
+        // Geometry Definition
+        // ============================================================
+
+        /**
+         * @brief Standard coordinates of nodes in parametric space
+         *
+         * Reference pyramid: square base [-1,1]x[-1,1] at z=0, apex at (0,0,1)
+         * Nodes 0-3: base corners (counter-clockwise)
+         * Node 4: apex
+         */
+        static constexpr std::array<t_real, 3 * 5> standardCoords = {
+            -1, -1, 0,   // Node 0: base corner
+             1, -1, 0,   // Node 1: base corner
+             1,  1, 0,   // Node 2: base corner
+            -1,  1, 0,   // Node 3: base corner
+             0,  0, 1};  // Node 4: apex
+
+        // ============================================================
+        // Face/Edge Definitions
+        // ============================================================
+
+        /**
+         * @brief Get the element type of a face
+         * @param iFace Face index (0 is base, 1-4 are sides)
+         * @return Quad4 for base, Tri3 for sides
+         */
+        static constexpr ElemType GetFaceType(t_index iFace)
+        {
+            return iFace < 1 ? Quad4 : Tri3;
+        }
+
+        /**
+         * @brief Node indices for each face
+         *
+         * Face 0: nodes 0-3-2-1 (base, quadrilateral)
+         * Faces 1-4: triangular side faces
+         */
+        static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{
+            {0, 3, 2, 1},    // Face 0: base (quad)
+            {0, 1, 4},       // Face 1: side triangle
+            {1, 2, 4},       // Face 2: side triangle
+            {2, 3, 4},       // Face 3: side triangle
+            {3, 0, 4}}};     // Face 4: side triangle
+
+        // ============================================================
+        // Order Elevation (P-Refinement)
+        // ============================================================
+
+        /**
+         * @brief Element type after order elevation (O1 -> O2)
+         * Pyramid5 elevates to Pyramid14 (14-node quadratic pyramid)
+         */
+        static constexpr ElemType elevatedType = Pyramid14;
+
+        /// @brief Number of additional nodes created during elevation
+        static constexpr int numElevNodes = 9;
+
+        /**
+         * @brief Elevation spans define new node connections
+         *
+         * Elevation creates 9 new nodes:
+         *   Spans 0-3: base edge midpoints (4 edges)
+         *   Spans 4-7: lateral edge midpoints (4 edges)
+         *   Span 8: base face center
+         */
+        static constexpr std::array<tElevSpan, 9> elevSpans = {{
+            {0, 1}, {1, 2}, {2, 3}, {3, 0},     // Base edges
+            {0, 4}, {1, 4}, {2, 4}, {3, 4},     // Lateral edges
+            {0, 3, 2, 1}}};                     // Base face center
+
+        /// @brief Element type of each elevation span
+        static constexpr std::array<ElemType, 9> elevNodeSpanTypes = {
+            Line2, Line2, Line2, Line2,    // Base edges
+            Line2, Line2, Line2, Line2,    // Lateral edges
+            Quad4};                        // Base face center
+
+        // ============================================================
+        // VTK/Visualization Support
+        // ============================================================
+
+        /// @brief VTK cell type identifier (14 = VTK_PYRAMID)
+        static constexpr int vtkCellType = 14;
+
+        /**
+         * @brief VTK node ordering map
+         *
+         * VTK uses the same ordering as DNDS for Pyramid5:
+         *   VTK nodes 0-3 = base corners 0-3
+         *   VTK node 4 = apex
+         */
+        static constexpr std::array<int, 5> vtkNodeOrder = {0, 1, 2, 3, 4};
     };
 
 } // namespace DNDS::Geom::Elem

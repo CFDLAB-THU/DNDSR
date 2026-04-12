@@ -6,13 +6,15 @@
 #include "DNDS/Defines.hpp"
 #include "Geom/Geometric.hpp"
 #include "Geom/ElemEnum.hpp"
+#include "Geom/ElementTraitsBase.hpp"
 
 namespace DNDS::Geom::Elem
 {
 
-    // Forward declaration (primary template is in Elements.hpp)
+    // Forward declaration (primary template is in ElementTraitsBase.hpp)
     template <ElemType> struct ShapeFuncImpl;
 
+    // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Hex8>
     {
@@ -156,6 +158,151 @@ namespace DNDS::Geom::Elem
             v(9, 6) = (0.125);
             v(9, 7) = (-0.125);
         }
+    };
+    // <GEN_SHAPE_FUNCS_END>
+
+
+    /**
+     * @brief Element traits for 8-node trilinear hexahedron (Hex8)
+     *
+     * Hex8 is the simplest 3D hexahedral element, commonly used for:
+     * - Structured hexahedral meshes
+     * - Boundary-fitted grids
+     * - Isoparametric mapping of complex geometries
+     *
+     * Geometry:
+     * - Reference hex: xi, eta, zeta in [-1, 1]
+     * - 8 nodes at the corners of the reference cube
+     * - Parametric space volume = 8.0
+     *
+     * Faces:
+     * - 6 faces, each is a Quad4 element
+     */
+    template <>
+    struct ElementTraits<Hex8>
+    {
+        // ============================================================
+        // Core Element Identification
+        // ============================================================
+
+        static constexpr ElemType elemType = Hex8;
+        static constexpr int dim = 3;
+        static constexpr int order = 1;
+        static constexpr int numVertices = 8;
+        static constexpr int numNodes = 8;
+        static constexpr int numFaces = 6;
+        static constexpr ParamSpace paramSpace = HexSpace;
+        static constexpr t_real paramSpaceVol = 8.0;
+
+        // ============================================================
+        // Geometry Definition
+        // ============================================================
+
+        /**
+         * @brief Standard coordinates of nodes in parametric space
+         *
+         * Reference cube [-1,1]^3 with nodes at corners.
+         * Standard ordering: bottom face (z=-1) counter-clockwise,
+         * then top face (z=+1) counter-clockwise.
+         *
+         * Node 0-3: bottom face (z = -1)
+         * Node 4-7: top face (z = +1)
+         */
+        static constexpr std::array<t_real, 3 * 8> standardCoords = {
+            -1, -1, -1,   // Node 0: bottom-back-left
+             1, -1, -1,   // Node 1: bottom-back-right
+             1,  1, -1,   // Node 2: bottom-front-right
+            -1,  1, -1,   // Node 3: bottom-front-left
+            -1, -1,  1,   // Node 4: top-back-left
+             1, -1,  1,   // Node 5: top-back-right
+             1,  1,  1,   // Node 6: top-front-right
+            -1,  1,  1};  // Node 7: top-front-left
+
+        // ============================================================
+        // Face/Edge Definitions
+        // ============================================================
+
+        /**
+         * @brief Get the element type of a face
+         * @return Quad4 (all faces of hex are bilinear quads)
+         */
+        static constexpr ElemType GetFaceType(t_index /*iFace*/) { return Quad4; }
+
+        /**
+         * @brief Node indices for each face (bilinear quad)
+         *
+         * Face 0: bottom face (z=-1, nodes 0-3-2-1) - note reversed for outward normal
+         * Face 1: back face (y=-1, nodes 0-1-5-4)
+         * Face 2: right face (x=+1, nodes 1-2-6-5)
+         * Face 3: front face (y=+1, nodes 2-3-7-6)
+         * Face 4: left face (x=-1, nodes 3-0-4-7)
+         * Face 5: top face (z=+1, nodes 4-5-6-7)
+         */
+        static constexpr std::array<std::array<t_index, 10>, 6> faceNodes = {{
+            {0, 3, 2, 1},    // Face 0: bottom (z=-1)
+            {0, 1, 5, 4},    // Face 1: back (y=-1)
+            {1, 2, 6, 5},    // Face 2: right (x=+1)
+            {2, 3, 7, 6},    // Face 3: front (y=+1)
+            {0, 4, 7, 3},    // Face 4: left (x=-1)
+            {4, 5, 6, 7}}};  // Face 5: top (z=+1)
+
+        // ============================================================
+        // Order Elevation (P-Refinement)
+        // ============================================================
+
+        /**
+         * @brief Element type after order elevation (O1 -> O2)
+         * Hex8 elevates to Hex27 (27-node triquadratic hex)
+         */
+        static constexpr ElemType elevatedType = Hex27;
+
+        /// @brief Number of additional nodes created during elevation
+        static constexpr int numElevNodes = 19;
+
+        /**
+         * @brief Elevation spans define new node connections
+         *
+         * Elevation creates 19 new nodes:
+         *   Spans 0-11: edge midpoints (12 edges)
+         *   Spans 12-17: face centers (6 faces)
+         *   Span 18: body center (all 8 vertices)
+         */
+        static constexpr std::array<tElevSpan, 19> elevSpans = {{
+            // Bottom face edges
+            {0, 1}, {1, 2}, {2, 3}, {3, 0},
+            // Vertical edges
+            {0, 4}, {1, 5}, {2, 6}, {3, 7},
+            // Top face edges
+            {4, 5}, {5, 6}, {6, 7}, {7, 4},
+            // Face centers
+            {0, 3, 2, 1}, {0, 1, 5, 4},
+            {1, 2, 6, 5}, {2, 3, 7, 6},
+            {0, 4, 7, 3}, {4, 5, 6, 7},
+            // Body center
+            {0, 1, 2, 3, 4, 5, 6, 7}}};
+
+        /// @brief Element type of each elevation span
+        static constexpr std::array<ElemType, 19> elevNodeSpanTypes = {
+            Line2, Line2, Line2, Line2,    // Bottom edges
+            Line2, Line2, Line2, Line2,    // Vertical edges
+            Line2, Line2, Line2, Line2,    // Top edges
+            Quad4, Quad4, Quad4, Quad4, Quad4, Quad4,  // Face centers
+            Hex8};                          // Body center
+
+        // ============================================================
+        // VTK/Visualization Support
+        // ============================================================
+
+        /// @brief VTK cell type identifier (12 = VTK_HEXAHEDRON)
+        static constexpr int vtkCellType = 12;
+
+        /**
+         * @brief VTK node ordering map
+         *
+         * VTK uses the same ordering as DNDS for Hex8:
+         *   VTK nodes 0-7 = corner nodes 0-7
+         */
+        static constexpr std::array<int, 8> vtkNodeOrder = {0, 1, 2, 3, 4, 5, 6, 7};
     };
 
 } // namespace DNDS::Geom::Elem

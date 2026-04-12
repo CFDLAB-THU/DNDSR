@@ -6,13 +6,15 @@
 #include "DNDS/Defines.hpp"
 #include "Geom/Geometric.hpp"
 #include "Geom/ElemEnum.hpp"
+#include "Geom/ElementTraitsBase.hpp"
 
 namespace DNDS::Geom::Elem
 {
 
-    // Forward declaration (primary template is in Elements.hpp)
+    // Forward declaration (primary template is in ElementTraitsBase.hpp)
     template <ElemType> struct ShapeFuncImpl;
 
+    // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Hex27>
     {
@@ -899,6 +901,152 @@ namespace DNDS::Geom::Elem
             v(9, 25) = _t52*_t84;
             v(9, 26) = -8*_t119;
         }
+    };
+    // <GEN_SHAPE_FUNCS_END>
+
+
+    /**
+     * @brief Element traits for 27-node triquadratic hexahedron (Hex27)
+     *
+     * Hex27 is a high-order 3D hexahedral element with:
+     * - 8 corner nodes (vertices)
+     * - 12 edge mid-nodes
+     * - 6 face center nodes
+     * - 1 body center node
+     *
+     * Used for high-order finite element and spectral element methods.
+     */
+    template <>
+    struct ElementTraits<Hex27>
+    {
+        // ============================================================
+        // Core Element Identification
+        // ============================================================
+
+        static constexpr ElemType elemType = Hex27;
+        static constexpr int dim = 3;
+        static constexpr int order = 2;
+        static constexpr int numVertices = 8;
+        static constexpr int numNodes = 27;
+        static constexpr int numFaces = 6;
+        static constexpr ParamSpace paramSpace = HexSpace;
+        static constexpr t_real paramSpaceVol = 8.0;
+
+        // ============================================================
+        // Geometry Definition
+        // ============================================================
+
+        /**
+         * @brief Standard coordinates of nodes in parametric space
+         *
+         * Reference cube [-1,1]^3 with nodes:
+         * Nodes 0-7: corners (same as Hex8)
+         * Nodes 8-19: edge midpoints
+         * Nodes 20-25: face centers
+         * Node 26: body center
+         */
+        static constexpr std::array<t_real, 3 * 27> standardCoords = {
+            // Corner nodes (0-7)
+            -1, -1, -1,    1, -1, -1,    1,  1, -1,   -1,  1, -1,
+            -1, -1,  1,    1, -1,  1,    1,  1,  1,   -1,  1,  1,
+            // Edge midpoints (8-19)
+             0, -1, -1,    1,  0, -1,    0,  1, -1,   -1,  0, -1,
+            -1, -1,  0,    1, -1,  0,    1,  1,  0,   -1,  1,  0,
+             0, -1,  1,    1,  0,  1,    0,  1,  1,   -1,  0,  1,
+            // Face centers (20-25)
+             0,  0, -1,    0, -1,  0,    1,  0,  0,    0,  1,  0,
+            -1,  0,  0,    0,  0,  1,
+            // Body center (26)
+             0,  0,  0};
+
+        // ============================================================
+        // Face/Edge Definitions
+        // ============================================================
+
+        /**
+         * @brief Get the element type of a face
+         * @return Quad9 (all faces are 9-node biquadratic quads)
+         */
+        static constexpr ElemType GetFaceType(t_index /*iFace*/) { return Quad9; }
+
+        /**
+         * @brief Node indices for each face (biquadratic quad)
+         *
+         * Each face has 9 nodes: 4 vertices + 4 edge mids + 1 face center
+         */
+        static constexpr std::array<std::array<t_index, 10>, 6> faceNodes = {{
+            {0, 3, 2, 1, 11, 10, 9, 8, 20},     // Face 0: bottom (z=-1)
+            {0, 1, 5, 4, 8, 13, 16, 12, 21},    // Face 1: back (y=-1)
+            {1, 2, 6, 5, 9, 14, 17, 13, 22},    // Face 2: right (x=+1)
+            {2, 3, 7, 6, 10, 15, 18, 14, 23},   // Face 3: front (y=+1)
+            {0, 4, 7, 3, 12, 19, 15, 11, 24},   // Face 4: left (x=-1)
+            {4, 5, 6, 7, 16, 17, 18, 19, 25}}}; // Face 5: top (z=+1)
+
+        // ============================================================
+        // Order Elevation (P-Refinement)
+        // ============================================================
+
+        /// @brief Element type after order elevation (O2 has no higher elevation defined)
+        static constexpr ElemType elevatedType = UnknownElem;
+
+        /// @brief Number of additional nodes created during elevation (none for O2)
+        static constexpr int numElevNodes = 0;
+
+        // ============================================================
+        // Bisection (Adaptive Refinement)
+        // ============================================================
+
+        /// @brief Number of sub-elements created when bisecting (8 Hex8 elements)
+        static constexpr int numBisect = 8;
+
+        /// @brief Number of bisection variants (only 1 way to uniformly bisect)
+        static constexpr int numBisectVariants = 1;
+
+        /**
+         * @brief Get the element type of a sub-element after bisection
+         * @return Hex8 (all sub-elements are trilinear hexes)
+         */
+        static constexpr ElemType GetBisectElemType(t_index /*i*/) { return Hex8; }
+
+        /**
+         * @brief Node indices for each sub-element created by bisection
+         *
+         * Bisecting creates 8 sub-hexes meeting at the body center node 26.
+         * Each sub-hex uses corners, edge mids, face centers, and body center.
+         */
+        static constexpr std::array<tBisectSub, 8> bisectElements = {{
+            {0, 8, 20, 11, 12, 21, 26, 24},     // Sub-hex: corner 0 octant
+            {8, 1, 9, 20, 21, 13, 22, 26},     // Sub-hex: corner 1 octant
+            {11, 20, 10, 3, 24, 26, 23, 15},   // Sub-hex: corner 3 octant
+            {20, 9, 2, 10, 26, 22, 14, 23},    // Sub-hex: corner 2 octant
+            {12, 21, 26, 24, 4, 16, 25, 19},   // Sub-hex: corner 4 octant
+            {21, 13, 22, 26, 16, 5, 17, 25},   // Sub-hex: corner 5 octant
+            {24, 26, 23, 15, 19, 25, 18, 7},   // Sub-hex: corner 7 octant
+            {26, 22, 14, 23, 25, 17, 6, 18}}}; // Sub-hex: corner 6 octant
+
+        // ============================================================
+        // VTK/Visualization Support
+        // ============================================================
+
+        /// @brief VTK cell type identifier (25 = VTK_TRIQUADRATIC_HEXAHEDRON)
+        static constexpr int vtkCellType = 25;
+
+        /**
+         * @brief VTK node ordering map
+         *
+         * VTK has non-trivial node reordering for Hex27:
+         *   VTK nodes 0-7 = corner nodes 0-7
+         *   VTK nodes 8-11 = bottom face edge mids 8-11
+         *   VTK nodes 12-15 = top face edge mids 16-19
+         *   VTK nodes 16-19 = vertical edge mids 12-15
+         *   VTK nodes 20-25 = face centers 21-26 (reordered!)
+         * Note: Only 20 nodes used by VTK (excludes some face centers)
+         */
+        static constexpr std::array<int, 20> vtkNodeOrder = {
+            0, 1, 2, 3, 4, 5, 6, 7,       // Corners
+            8, 9, 10, 11,                 // Bottom edges
+            16, 17, 18, 19,               // Top edges (note: reordered)
+            12, 13, 14, 15};              // Vertical edges
     };
 
 } // namespace DNDS::Geom::Elem

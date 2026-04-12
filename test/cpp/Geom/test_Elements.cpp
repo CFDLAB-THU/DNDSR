@@ -1,12 +1,21 @@
 /**
  * @file test_Elements.cpp
- * @brief Doctest-based unit tests for the auto-generated per-element
- *        shape functions (ShapeFuncImpl<T>).
+ * @brief Comprehensive doctest-based unit tests for element traits and shape functions.
  *
- * Tests:
- *   1. Partition of unity:  sum_j N_j(p) == 1 at random interior points.
- *   2. Nodal interpolation: N_i(node_j) == delta_ij at reference nodes.
- *   3. First derivative consistency: dN/dxi finite-difference vs analytic.
+ * Tests cover:
+ *   A. ElementTraits data integrity:
+ *      1. Basic identification fields (elemType, dim, order, etc.)
+ *      2. Standard coordinates consistency
+ *      3. Face definitions (GetFaceType, faceNodes)
+ *      4. Order elevation (elevatedType, elevSpans, elevNodeSpanTypes)
+ *      5. Bisection refinement (numBisect, bisectElements)
+ *      6. VTK compatibility (vtkCellType, vtkNodeOrder)
+ *
+ *   B. Shape function correctness:
+ *      1. Partition of unity: sum_j N_j(p) == 1
+ *      2. Nodal interpolation: N_i(node_j) == delta_ij
+ *      3. First derivative consistency (FD vs analytic)
+ *      4. Second derivative consistency (FD of D1)
  *
  * This is a serial test (no MPI required).
  */
@@ -20,6 +29,7 @@
 #include <random>
 #include <array>
 #include <iostream>
+#include <set>
 
 using namespace DNDS::Geom;
 using namespace DNDS::Geom::Elem;
@@ -97,9 +107,383 @@ static constexpr ElemType AllTypes[] = {
     Tet4, Tet10, Hex8, Hex27, Prism6, Prism18,
     Pyramid5, Pyramid14};
 
+// 2D element types that have faces
+static constexpr ElemType Elem2DWithFaces[] = {
+    Tri3, Tri6, Quad4, Quad9};
+
+// 3D element types that have faces
+static constexpr ElemType Elem3DWithFaces[] = {
+    Tet4, Tet10, Hex8, Hex27, Prism6, Prism18, Pyramid5, Pyramid14};
+
+// O1 element types
+static constexpr ElemType O1Types[] = {
+    Line2, Tri3, Quad4, Tet4, Hex8, Prism6, Pyramid5};
+
+// O2 element types
+static constexpr ElemType O2Types[] = {
+    Line3, Tri6, Quad9, Tet10, Hex27, Prism18, Pyramid14};
+
 // ===================================================================
-// Test: Partition of unity — sum_j N_j(p) == 1
+// Part A: ElementTraits Data Integrity Tests
 // ===================================================================
+
+TEST_CASE("ElementTraits: basic identification fields are consistent")
+{
+    for (auto t : AllTypes)
+    {
+        Element e{t};
+        CAPTURE(t);
+        
+        // Basic sanity checks
+        CHECK(e.GetDim() >= 1);
+        CHECK(e.GetDim() <= 3);
+        CHECK(e.GetNumNodes() >= e.GetNumVertices());
+        CHECK(e.GetNumVertices() >= 2);  // At least a line
+        
+        // Order should be 1 or 2 for supported elements
+        CHECK((e.GetOrder() == 1 || e.GetOrder() == 2));
+        
+        // ParamSpace volume should be positive (accessed via helper)
+        CHECK(ParamSpaceVolume(e.GetParamSpace()) > 0);
+    }
+}
+
+TEST_CASE("ElementTraits: standard coordinates have correct dimensions")
+{
+    for (auto t : AllTypes)
+    {
+        auto coords = NodeCoords(t);
+        Element e{t};
+        CAPTURE(t);
+        
+        // Should have 3 rows (x, y, z)
+        CHECK(coords.rows() == 3);
+        
+        // Should have numNodes columns
+        CHECK(coords.cols() == e.GetNumNodes());
+        
+        // For 1D elements, y and z should be zero
+        if (e.GetDim() == 1)
+        {
+            for (DNDS::index i = 0; i < e.GetNumNodes(); i++)
+            {
+                CHECK(coords(1, i) == doctest::Approx(0.0));
+                CHECK(coords(2, i) == doctest::Approx(0.0));
+            }
+        }
+        
+        // For 2D elements, z should be zero
+        if (e.GetDim() == 2)
+        {
+            for (DNDS::index i = 0; i < e.GetNumNodes(); i++)
+            {
+                CHECK(coords(2, i) == doctest::Approx(0.0));
+            }
+        }
+    }
+}
+
+TEST_CASE("ElementTraits: face definitions are consistent for 2D elements")
+{
+    for (auto t : Elem2DWithFaces)
+    {
+        Element e{t};
+        CAPTURE(t);
+        
+        int numFaces = e.GetNumFaces();
+        CHECK(numFaces > 0);
+        
+        for (int iFace = 0; iFace < numFaces; iFace++)
+        {
+            Element faceElem = e.ObtainFace(iFace);
+            
+            // Face should have consistent dimensionality
+            CHECK(faceElem.GetDim() == e.GetDim() - 1);
+            
+            // Face should be a line element
+            CHECK(faceElem.GetDim() == 1);
+        }
+    }
+}
+
+TEST_CASE("ElementTraits: face definitions are consistent for 3D elements")
+{
+    for (auto t : Elem3DWithFaces)
+    {
+        Element e{t};
+        CAPTURE(t);
+        
+        int numFaces = e.GetNumFaces();
+        CHECK(numFaces > 0);
+        
+        for (int iFace = 0; iFace < numFaces; iFace++)
+        {
+            Element faceElem = e.ObtainFace(iFace);
+            
+            // Face should have consistent dimensionality
+            CHECK(faceElem.GetDim() == e.GetDim() - 1);
+            
+            // Face should be a 2D element
+            CHECK(faceElem.GetDim() == 2);
+        }
+    }
+}
+
+TEST_CASE("ElementTraits: ExtractFaceNodes works correctly")
+{
+    // Test Tri3 face extraction
+    {
+        Element e{Tri3};
+        std::vector<DNDS::index> nodes = {0, 1, 2};  // 3 nodes
+        std::array<DNDS::index, 2> faceNodes;
+        
+        // Edge 0: should extract nodes 0 and 1
+        e.ExtractFaceNodes(0, nodes, faceNodes);
+        CHECK(faceNodes[0] == 0);
+        CHECK(faceNodes[1] == 1);
+        
+        // Edge 1: should extract nodes 1 and 2
+        e.ExtractFaceNodes(1, nodes, faceNodes);
+        CHECK(faceNodes[0] == 1);
+        CHECK(faceNodes[1] == 2);
+        
+        // Edge 2: should extract nodes 2 and 0
+        e.ExtractFaceNodes(2, nodes, faceNodes);
+        CHECK(faceNodes[0] == 2);
+        CHECK(faceNodes[1] == 0);
+    }
+    
+    // Test Quad4 face extraction
+    {
+        Element e{Quad4};
+        std::vector<DNDS::index> nodes = {0, 1, 2, 3};  // 4 nodes
+        std::array<DNDS::index, 2> faceNodes;
+        
+        // Each face should have 2 nodes
+        for (int i = 0; i < 4; i++)
+        {
+            e.ExtractFaceNodes(i, nodes, faceNodes);
+            // Just verify indices are valid
+            CHECK(faceNodes[0] < 4);
+            CHECK(faceNodes[1] < 4);
+        }
+    }
+}
+
+TEST_CASE("ElementTraits: order elevation data is consistent for O1 elements")
+{
+    // O1 elements should elevate to O2
+    for (auto t : O1Types)
+    {
+        Element e{t};
+        CAPTURE(t);
+        
+        Element elevated = e.ObtainElevatedElem();
+        
+        // Elevated element should exist
+        CHECK(elevated.type != UnknownElem);
+        
+        // Elevated element should have more nodes
+        CHECK(elevated.GetNumNodes() > e.GetNumNodes());
+        
+        // Elevated element should have same dimension
+        CHECK(elevated.GetDim() == e.GetDim());
+        
+        // Should have elevation nodes defined
+        CHECK(e.GetNumElev_O1O2() > 0);
+    }
+}
+
+TEST_CASE("ElementTraits: order elevation data for specific elements")
+{
+    // Line2 -> Line3
+    {
+        Element e{Line2};
+        CHECK(e.ObtainElevatedElem().type == Line3);
+        CHECK(e.GetNumElev_O1O2() == 1);  // One edge midpoint
+        
+        // Check elevation span type
+        Element spanElem = e.ObtainElevNodeSpan(0);
+        CHECK(spanElem.type == Line2);  // Edge span
+    }
+    
+    // Tri3 -> Tri6
+    {
+        Element e{Tri3};
+        CHECK(e.ObtainElevatedElem().type == Tri6);
+        CHECK(e.GetNumElev_O1O2() == 3);  // Three edge midpoints
+    }
+    
+    // Quad4 -> Quad9
+    {
+        Element e{Quad4};
+        CHECK(e.ObtainElevatedElem().type == Quad9);
+        CHECK(e.GetNumElev_O1O2() == 5);  // 4 edges + 1 face center
+    }
+    
+    // Hex8 -> Hex27
+    {
+        Element e{Hex8};
+        CHECK(e.ObtainElevatedElem().type == Hex27);
+        CHECK(e.GetNumElev_O1O2() == 19);  // 12 edges + 6 faces + 1 center
+    }
+}
+
+TEST_CASE("ElementTraits: O2 elements do not have further elevation")
+{
+    // O2 elements should not have elevation defined
+    for (auto t : O2Types)
+    {
+        Element e{t};
+        CAPTURE(t);
+        
+        Element elevated = e.ObtainElevatedElem();
+        CHECK(elevated.type == UnknownElem);
+        CHECK(e.GetNumElev_O1O2() == 0);
+    }
+}
+
+TEST_CASE("ElementTraits: ExtractElevNodeSpanNodes works correctly")
+{
+    // Test Tri3 elevation spans
+    {
+        Element e{Tri3};
+        std::vector<DNDS::index> nodes = {0, 1, 2};  // Parent nodes
+        std::array<DNDS::index, 2> spanNodes;
+        
+        // Each elevation span should connect 2 parent nodes
+        for (int i = 0; i < e.GetNumElev_O1O2(); i++)
+        {
+            e.ExtractElevNodeSpanNodes(i, nodes, spanNodes);
+            CHECK(spanNodes[0] < 3);  // References valid parent node
+            CHECK(spanNodes[1] < 3);
+        }
+    }
+}
+
+TEST_CASE("ElementTraits: bisection data is valid for O2 elements")
+{
+    // Line3 bisection
+    {
+        Element e{Line3};
+        CHECK(e.GetO2NumBisect() == 2);
+        
+        // Each sub-element should be Line2
+        for (int i = 0; i < e.GetO2NumBisect(); i++)
+        {
+            CHECK(e.ObtainO2BisectElem(i).type == Line2);
+        }
+    }
+    
+    // Tri6 bisection
+    {
+        Element e{Tri6};
+        CHECK(e.GetO2NumBisect() == 4);  // 4 sub-triangles
+        for (int i = 0; i < e.GetO2NumBisect(); i++)
+        {
+            CHECK(e.ObtainO2BisectElem(i).type == Tri3);
+        }
+    }
+    
+    // Tet10 bisection
+    {
+        Element e{Tet10};
+        CHECK(e.GetO2NumBisect() == 8);  // 8 sub-tets
+        for (int i = 0; i < e.GetO2NumBisect(); i++)
+        {
+            CHECK(e.ObtainO2BisectElem(i).type == Tet4);
+        }
+    }
+    
+    // Hex27 bisection
+    {
+        Element e{Hex27};
+        CHECK(e.GetO2NumBisect() == 8);  // 8 sub-hexes
+        for (int i = 0; i < e.GetO2NumBisect(); i++)
+        {
+            CHECK(e.ObtainO2BisectElem(i).type == Hex8);
+        }
+    }
+    
+    // Prism18 bisection
+    {
+        Element e{Prism18};
+        CHECK(e.GetO2NumBisect() == 8);  // 8 sub-prisms
+        for (int i = 0; i < e.GetO2NumBisect(); i++)
+        {
+            CHECK(e.ObtainO2BisectElem(i).type == Prism6);
+        }
+    }
+}
+
+TEST_CASE("ElementTraits: VTK conversion works correctly")
+{
+    // Test VTK conversion for each element type
+    for (auto t : AllTypes)
+    {
+        Element e{t};
+        CAPTURE(t);
+        
+        // Create dummy node data
+        std::vector<t_real> nodes(e.GetNumNodes());
+        for (int i = 0; i < e.GetNumNodes(); i++)
+            nodes[i] = static_cast<t_real>(i);
+        
+        // Convert to VTK
+        auto [vtkCellType, vtkNodes] = ToVTKVertsAndData(e, nodes);
+        
+        // VTK cell type should be valid
+        CHECK(vtkCellType > 0);
+        
+        // VTK nodes should have correct size
+        CHECK(vtkNodes.size() <= e.GetNumNodes());
+        CHECK(vtkNodes.size() > 0);
+    }
+}
+
+TEST_CASE("ElementTraits: VTK node order is a valid permutation for simple elements")
+{
+    // Test VTK node ordering produces valid permutations
+    DispatchElementType(Line2, [](auto traits) {
+        std::set<int> seen;
+        for (size_t i = 0; i < 2; i++)
+            seen.insert(traits.vtkNodeOrder[i]);
+        CHECK(seen.size() == 2);  // All unique
+        CHECK(*seen.begin() == 0);
+        CHECK(*seen.rbegin() == 1);
+    });
+    
+    DispatchElementType(Line3, [](auto traits) {
+        std::set<int> seen;
+        for (size_t i = 0; i < 3; i++)
+            seen.insert(traits.vtkNodeOrder[i]);
+        CHECK(seen.size() == 3);  // All unique
+        // VTK uses different ordering: 0, 2, 1 (midpoint last)
+        CHECK(traits.vtkNodeOrder[0] == 0);
+        CHECK(traits.vtkNodeOrder[1] == 2);
+        CHECK(traits.vtkNodeOrder[2] == 1);
+    });
+    
+    DispatchElementType(Tri6, [](auto traits) {
+        std::set<int> seen;
+        for (size_t i = 0; i < 6; i++)
+            seen.insert(traits.vtkNodeOrder[i]);
+        CHECK(seen.size() == 6);  // All unique
+    });
+    
+    DispatchElementType(Hex8, [](auto traits) {
+        std::set<int> seen;
+        for (size_t i = 0; i < 8; i++)
+            seen.insert(traits.vtkNodeOrder[i]);
+        CHECK(seen.size() == 8);  // All unique
+        CHECK(traits.vtkCellType == 12);  // VTK_HEXAHEDRON
+    });
+}
+
+// ===================================================================
+// Part B: Shape Function Tests
+// ===================================================================
+
 TEST_CASE("Shape functions: partition of unity")
 {
     constexpr int nTrials = 10;
@@ -121,9 +505,6 @@ TEST_CASE("Shape functions: partition of unity")
     }
 }
 
-// ===================================================================
-// Test: Nodal interpolation — N_i(node_j) == delta_ij
-// ===================================================================
 TEST_CASE("Shape functions: nodal interpolation (Kronecker delta)")
 {
     for (auto t : AllTypes)
@@ -150,9 +531,6 @@ TEST_CASE("Shape functions: nodal interpolation (Kronecker delta)")
     }
 }
 
-// ===================================================================
-// Test: First derivative via finite difference
-// ===================================================================
 TEST_CASE("Shape functions: D1 derivatives vs finite difference")
 {
     constexpr int nTrials = 5;
@@ -198,9 +576,6 @@ TEST_CASE("Shape functions: D1 derivatives vs finite difference")
     }
 }
 
-// ===================================================================
-// Test: Second derivative via finite difference of first derivative
-// ===================================================================
 TEST_CASE("Shape functions: D2 derivatives vs finite difference of D1")
 {
     constexpr t_real h = 1e-6;
@@ -219,9 +594,7 @@ TEST_CASE("Shape functions: D2 derivatives vs finite difference of D1")
         tDiNj DiNj;
         e.GetDiNj(p, DiNj, 2);
 
-        // D2 rows: dim==1 -> 1 row; dim==2 -> 3 rows; dim==3 -> 6 rows
-        // We only test the pure second derivatives (d^2/dxi^2, d^2/det^2, ...)
-        // by finite-differencing D1.
+        // Test pure second derivatives (d^2/dxi_d^2)
         for (int d = 0; d < dim; d++)
         {
             tPoint pp = p, pm = p;
@@ -235,40 +608,45 @@ TEST_CASE("Shape functions: D2 derivatives vs finite difference of D1")
             for (DNDS::index j = 0; j < nn; j++)
             {
                 t_real fd_d2 = (D1p(d, j) - D1m(d, j)) / (2 * h);
-                // Row index for d^2/dxi_d^2 in the DiNj layout:
-                // dim==1: diffOrder2 row 0 = d^2/dxi^2, but overall offset = ndiffSizC2D[1]=2 (for 2D) or ndiffSizC[1]=4 (for 3D)
-                // Actually we need the row offsets from the DiNj layout.
-                // The DiNj matrix is stacked: rows [0] = Nj, [1..dim] = D1,
-                // then D2 rows follow.
-                // For dim==2: offsets are ndiffSizC2D = {1, 3, 6, 10}, so
-                //   diffOrder 0: 1 row (row 0)
-                //   diffOrder 1: 2 rows (rows 1,2)
-                //   diffOrder 2: 3 rows (rows 3,4,5)
-                //   d^2/dxi^2 = row 3, d^2/dxidet = row 4, d^2/det^2 = row 5
-                // For dim==3: ndiffSizC = {1, 4, 10, 20}
-                //   d^2/dxi^2 = row 4, d^2/det^2 = row 5, d^2/dzt^2 = row 6
-                //   d^2/dxidet = row 7, d^2/detdzt = row 8, d^2/dxidzt = row 9
-                // For dim==1: ndiffSizC for 1D is {1,2,3,4} conceptually
-                //   but actually the DiNj for 1D is built with ndiffSizC2D
-                //   (since the code uses dim==2 layout for 2D elements).
 
-                // Simpler: the DiNj row for d^2/dxi_d^2 is:
-                // For dim==1: row offset for D2 = 1(D0) + 1(D1) = 2, then row 2 = d^2/dxi^2
-                // For dim==2: row offset for D2 = 1 + 2 = 3, pure diags at rows 3 (d=0), 5 (d=1)
-                // For dim==3: row offset for D2 = 1 + 3 = 4, pure diags at rows 4 (d=0), 5 (d=1), 6 (d=2)
-
+                // Row index for d^2/dxi_d^2 in the DiNj layout
                 DNDS::index row;
                 if (dim == 1)
                     row = 2; // d^2/dxi^2
                 else if (dim == 2)
                     row = 3 + (d == 0 ? 0 : 2); // row 3=d2/dxi2, row 5=d2/det2
                 else
-                    row = 4 + d; // row 4=d2/dxi2, row 5=d2/det2, row 6=d2/dzt2
+                    row = 4 + d; // rows 4,5,6 for d2/dxi2, d2/det2, d2/dzt2
 
                 t_real an = DiNj(row, j);
                 CAPTURE(d);
                 CAPTURE(j);
                 CHECK(an == doctest::Approx(fd_d2).epsilon(tol));
+            }
+        }
+    }
+}
+
+TEST_CASE("Shape functions: all derivatives are finite")
+{
+    // Verify shape function derivatives don't produce NaN or Inf
+    std::mt19937 rng(789);
+    
+    for (auto t : AllTypes)
+    {
+        Element e{t};
+        auto p = RandomInteriorPoint(t, rng);
+        CAPTURE(t);
+        
+        tDiNj DiNj;
+        e.GetDiNj(p, DiNj, 3);
+        
+        // Check all entries are finite
+        for (DNDS::index i = 0; i < DiNj.rows(); i++)
+        {
+            for (DNDS::index j = 0; j < DiNj.cols(); j++)
+            {
+                CHECK(std::isfinite(DiNj(i, j)));
             }
         }
     }

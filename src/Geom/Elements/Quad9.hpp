@@ -6,13 +6,15 @@
 #include "DNDS/Defines.hpp"
 #include "Geom/Geometric.hpp"
 #include "Geom/ElemEnum.hpp"
+#include "Geom/ElementTraitsBase.hpp"
 
 namespace DNDS::Geom::Elem
 {
 
-    // Forward declaration (primary template is in Elements.hpp)
+    // Forward declaration (primary template is in ElementTraitsBase.hpp)
     template <ElemType> struct ShapeFuncImpl;
 
+    // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Quad9>
     {
@@ -174,6 +176,140 @@ namespace DNDS::Geom::Elem
             v(2, 7) = 1 - _t6;
             v(2, 8) = 4*xi;
         }
+    };
+    // <GEN_SHAPE_FUNCS_END>
+
+
+    /**
+     * @brief Element traits for 9-node biquadratic quadrilateral (Quad9)
+     *
+     * Quad9 is a high-order 2D quadrilateral element with:
+     * - 4 corner nodes (vertices)
+     * - 4 edge mid-nodes
+     * - 1 interior node at the center
+     *
+     * Used for high-order finite element and spectral element methods.
+     */
+    template <>
+    struct ElementTraits<Quad9>
+    {
+        // ============================================================
+        // Core Element Identification
+        // ============================================================
+
+        static constexpr ElemType elemType = Quad9;
+        static constexpr int dim = 2;
+        static constexpr int order = 2;
+        static constexpr int numVertices = 4;
+        static constexpr int numNodes = 9;
+        static constexpr int numFaces = 4;
+        static constexpr ParamSpace paramSpace = QuadSpace;
+        static constexpr t_real paramSpaceVol = 4.0;
+
+        // ============================================================
+        // Geometry Definition
+        // ============================================================
+
+        /**
+         * @brief Standard coordinates of nodes in parametric space
+         *
+         * Reference square [-1,1] x [-1,1] with nodes:
+         * Nodes 0-3: corners (same as Quad4)
+         * Nodes 4-7: edge midpoints
+         * Node 8: center (0, 0)
+         */
+        static constexpr std::array<t_real, 3 * 9> standardCoords = {
+            -1, -1, 0,   // Node 0: bottom-left corner
+             1, -1, 0,   // Node 1: bottom-right corner
+             1,  1, 0,   // Node 2: top-right corner
+            -1,  1, 0,   // Node 3: top-left corner
+             0, -1, 0,   // Node 4: bottom edge midpoint
+             1,  0, 0,   // Node 5: right edge midpoint
+             0,  1, 0,   // Node 6: top edge midpoint
+            -1,  0, 0,   // Node 7: left edge midpoint
+             0,  0, 0};  // Node 8: center
+
+        // ============================================================
+        // Face/Edge Definitions
+        // ============================================================
+
+        /**
+         * @brief Get the element type of a face (edge)
+         * @return Line3 (all edges are quadratic lines with 3 nodes)
+         */
+        static constexpr ElemType GetFaceType(t_index /*iFace*/) { return Line3; }
+
+        /**
+         * @brief Node indices for each face (edge)
+         *
+         * Each edge has 3 nodes: 2 vertices + 1 midpoint
+         * Edge 0: nodes 0-1-4 (bottom)
+         * Edge 1: nodes 1-2-5 (right)
+         * Edge 2: nodes 2-3-6 (top)
+         * Edge 3: nodes 3-0-7 (left)
+         */
+        static constexpr std::array<std::array<t_index, 10>, 4> faceNodes = {{
+            {0, 1, 4},     // Edge 0: bottom
+            {1, 2, 5},     // Edge 1: right
+            {2, 3, 6},     // Edge 2: top
+            {3, 0, 7}}};   // Edge 3: left
+
+        // ============================================================
+        // Order Elevation (P-Refinement)
+        // ============================================================
+
+        /// @brief Element type after order elevation (O2 has no higher elevation defined)
+        static constexpr ElemType elevatedType = UnknownElem;
+
+        /// @brief Number of additional nodes created during elevation (none for O2)
+        static constexpr int numElevNodes = 0;
+
+        // ============================================================
+        // Bisection (Adaptive Refinement)
+        // ============================================================
+
+        /// @brief Number of sub-elements created when bisecting (4 Quad4 elements)
+        static constexpr int numBisect = 4;
+
+        /// @brief Number of bisection variants (only 1 way to uniformly bisect)
+        static constexpr int numBisectVariants = 1;
+
+        /**
+         * @brief Get the element type of a sub-element after bisection
+         * @return Quad4 (all sub-elements are bilinear quads)
+         */
+        static constexpr ElemType GetBisectElemType(t_index /*i*/) { return Quad4; }
+
+        /**
+         * @brief Node indices for each sub-element created by bisection
+         *
+         * Bisecting creates 4 sub-quads meeting at the center node 8:
+         *   Sub-element 0: bottom-left quad
+         *   Sub-element 1: bottom-right quad
+         *   Sub-element 2: top-left quad
+         *   Sub-element 3: top-right quad
+         */
+        static constexpr std::array<tBisectSub, 4> bisectElements = {{
+            {0, 4, 8, 7},    // Bottom-left sub-quad
+            {4, 1, 5, 8},    // Bottom-right sub-quad
+            {7, 8, 6, 3},    // Top-left sub-quad
+            {8, 5, 2, 6}}};  // Top-right sub-quad
+
+        // ============================================================
+        // VTK/Visualization Support
+        // ============================================================
+
+        /// @brief VTK cell type identifier (23 = VTK_QUADRATIC_QUAD)
+        static constexpr int vtkCellType = 23;
+
+        /**
+         * @brief VTK node ordering map
+         *
+         * VTK uses 8 nodes for quadratic quad (excludes interior node 8):
+         *   VTK nodes 0-3 = corner nodes 0-3
+         *   VTK nodes 4-7 = edge mid-nodes 4-7
+         */
+        static constexpr std::array<int, 8> vtkNodeOrder = {0, 1, 2, 3, 4, 5, 6, 7};
     };
 
 } // namespace DNDS::Geom::Elem
