@@ -428,6 +428,7 @@ TEST_CASE("AdjPrimary: Local2Global then Global2Local is identity")
         {
             DNDS::index gNode = m->cell2node(iC, j);
             CHECK(gNode >= 0);
+            // globalSize() is now non-collective (cached), safe to call in loops
             CHECK(gNode < m->coords.father->globalSize());
         }
 

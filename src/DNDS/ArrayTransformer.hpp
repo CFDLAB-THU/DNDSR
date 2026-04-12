@@ -296,13 +296,23 @@ namespace DNDS
             pLGlobalMapping->setMPIAlignBcast(mpi, this->Size());
         }
 
-        /// @warning must collectively call
-        index globalSize()
+        /**
+         * @brief Returns the total global size (sum of sizes across all ranks).
+         *
+         * @note This method was previously collective (using MPI_Allreduce) but is now
+         *       non-collective. It requires that the global mapping has been created
+         *       first (which is done via the collective createGlobalMapping() method
+         *       on the underlying ParArray).
+         *
+         * @pre createGlobalMapping() must have been called on the underlying array.
+         * @return index The global size (cached from global mapping).
+         */
+        [[nodiscard]] index globalSize() const
         {
-            index gSize = 0;
-            index cSize = this->Size();
-            MPI::Allreduce(&cSize, &gSize, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
-            return gSize;
+            DNDS_assert_info(pLGlobalMapping, 
+                "globalSize() requires global mapping. "
+                "Ensure createGlobalMapping() was called first (typically via ArrayPair operations).");
+            return pLGlobalMapping->globalSize();
         }
     };
     /********************************************************************************************************/
