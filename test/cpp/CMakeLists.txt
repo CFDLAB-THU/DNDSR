@@ -166,11 +166,13 @@ endforeach()
 # Geom tests
 # ===================================================================
 geom_add_unit_test(elements "Geom/test_Elements.cpp" "geom;dnds")
+geom_add_unit_test(quadrature "Geom/test_Quadrature.cpp" "geom;dnds")
 geom_add_mpi_test(mesh_index_conversion "Geom/test_MeshIndexConversion.cpp" "geom;dnds")
 geom_add_mpi_test(mesh_pipeline "Geom/test_MeshPipeline.cpp" "geom;dnds")
 
 set(GEOM_TEST_TARGETS
     geom_test_elements
+    geom_test_quadrature
     geom_test_mesh_index_conversion
     geom_test_mesh_pipeline
 )
