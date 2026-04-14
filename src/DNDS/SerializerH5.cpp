@@ -129,8 +129,7 @@ namespace DNDS::Serializer
     void SerializerH5::CloseFileNonVirtual()
     {
         cPathSplit.clear();
-        ptr_2_pth.clear();
-        pth_2_ssp.clear();
+        dedupClear();
         cP.clear();
 
         if (H5I_INVALID_HID != h5file)
@@ -482,26 +481,28 @@ namespace DNDS::Serializer
     }
     void SerializerH5::WriteSharedIndexVector(const std::string &name, const ssp<host_device_vector<index>> &v, ArrayGlobalOffset offset)
     {
-        index CanNotShare = ptr_2_pth.count(v.get()) ? 0 : 1;
+        std::string refPath;
+        index CanNotShare = dedupLookup(v, refPath) ? 0 : 1;
         MPI::AllreduceOneIndex(CanNotShare, MPI_MAX, MPIInfo{commDup, mpi.rank, mpi.size});
         if (!CanNotShare)
-            this->WriteString(name + "::ref", ptr_2_pth[v.get()]);
+            this->WriteString(name + "::ref", refPath);
         else
         {
             WriteDataVector<index>(name, v->data(), v->size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup, collectiveMetadataRW, collectiveDataRW);
-            ptr_2_pth[v.get()] = cP + "/" + name;
+            dedupRegister(v, cP + "/" + name);
         }
     }
     void SerializerH5::WriteSharedRowsizeVector(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset)
     {
-        index CanNotShare = ptr_2_pth.count(v.get()) ? 0 : 1;
+        std::string refPath;
+        index CanNotShare = dedupLookup(v, refPath) ? 0 : 1;
         MPI::AllreduceOneIndex(CanNotShare, MPI_MAX, MPIInfo{commDup, mpi.rank, mpi.size});
         if (!CanNotShare)
-            this->WriteString(name + "::ref", ptr_2_pth[v.get()]);
+            this->WriteString(name + "::ref", refPath);
         else
         {
             WriteDataVector<rowsize>(name, v->data(), v->size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup, collectiveMetadataRW, collectiveDataRW);
-            ptr_2_pth[v.get()] = cP + "/" + name;
+            dedupRegister(v, cP + "/" + name);
         }
     }
 

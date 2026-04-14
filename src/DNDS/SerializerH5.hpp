@@ -54,8 +54,7 @@ namespace DNDS::Serializer
         bool reading = true;
         std::vector<std::string> cPathSplit;
         std::string cP; // current path
-        std::map<void *, std::string> ptr_2_pth;
-        std::map<std::string, void *> pth_2_ssp;
+        // ptr_2_pth and pth_2_ssp are inherited from SerializerBase
 
         MPIInfo mpi;
         MPI_Comm commDup{MPI_COMM_NULL};

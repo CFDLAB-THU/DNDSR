@@ -56,8 +56,7 @@ namespace DNDS::Serializer
             fileStream << jObj;
         fileStream.close();
         cPathSplit.clear();
-        ptr_2_pth.clear();
-        pth_2_ssp.clear();
+        dedupClear();
         jObj.clear();
     }
     void SerializerJSON::CreatePath(const std::string &p)
@@ -137,23 +136,25 @@ namespace DNDS::Serializer
     void SerializerJSON::WriteSharedIndexVector(const std::string &name, const ssp<host_device_vector<index>> &v, ArrayGlobalOffset offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
-        if (ptr_2_pth.count(v.get()))
-            jObj[cPointer][name]["ref"] = ptr_2_pth[v.get()];
+        std::string refPath;
+        if (dedupLookup(v, refPath))
+            jObj[cPointer][name]["ref"] = refPath;
         else
         {
             jObj[cPointer][name] = *v;
-            ptr_2_pth[v.get()] = cP + "/" + name;
+            dedupRegister(v, cP + "/" + name);
         }
     }
     void SerializerJSON::WriteSharedRowsizeVector(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
-        if (ptr_2_pth.count(v.get()))
-            jObj[cPointer][name]["ref"] = ptr_2_pth[v.get()];
+        std::string refPath;
+        if (dedupLookup(v, refPath))
+            jObj[cPointer][name]["ref"] = refPath;
         else
         {
             jObj[cPointer][name] = *v;
-            ptr_2_pth[v.get()] = cP + "/" + name;
+            dedupRegister(v, cP + "/" + name);
         }
     }
 

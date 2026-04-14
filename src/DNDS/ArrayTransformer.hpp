@@ -89,6 +89,8 @@ namespace DNDS
             Serializer::ArrayGlobalOffset dataOffset = Serializer::ArrayGlobalOffset_Unknown;
             if constexpr (_dataLayout == CSR)
             {
+                if (!this->IfCompressed())
+                    this->Compress();
                 if (!serializerP->IsPerRank() && this->_pRowStart)
                 {
                     index localDataCount = this->_pRowStart->at(this->_size);

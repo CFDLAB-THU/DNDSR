@@ -120,6 +120,41 @@ namespace DNDS::Serializer
     /// @endcode
     class SerializerBase
     {
+    protected:
+        /// Shared-pointer deduplication map: raw pointer -> (kept-alive shared_ptr, H5/JSON path).
+        /// By storing the shared_ptr itself we prevent the pointed-to memory from being
+        /// freed and its address reused, which would cause false dedup hits.
+        std::map<void *, std::pair<std::shared_ptr<void>, std::string>> ptr_2_pth;
+
+        /// Reverse map for read-side dedup: path -> raw pointer to the ssp local variable.
+        std::map<std::string, void *> pth_2_ssp;
+
+        /// Check if a shared pointer was already written; if so return its path.
+        template <class T>
+        bool dedupLookup(const ssp<T> &v, std::string &outPath)
+        {
+            auto it = ptr_2_pth.find(v.get());
+            if (it != ptr_2_pth.end())
+            {
+                outPath = it->second.second;
+                return true;
+            }
+            return false;
+        }
+
+        /// Register a shared pointer after writing its data.
+        template <class T>
+        void dedupRegister(const ssp<T> &v, const std::string &path)
+        {
+            ptr_2_pth[v.get()] = {std::static_pointer_cast<void>(v), path};
+        }
+
+        /// Clear all dedup state (call on CloseFile).
+        void dedupClear()
+        {
+            ptr_2_pth.clear();
+            pth_2_ssp.clear();
+        }
 
     public:
         virtual ~SerializerBase(); // define in CPP
