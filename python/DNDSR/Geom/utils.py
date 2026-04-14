@@ -110,7 +110,7 @@ def create_mesh_from_CGNS(
                         nNode,
                     )
                 )
-    else:
+    elif readMeshMode == "Parallel":
         meshOutName = (
             meshFile
             + "_part_"
@@ -118,12 +118,6 @@ def create_mesh_from_CGNS(
             + ("_elevated" if meshElevation == "O2" else "")
             + (f"_bisect{meshDirectBisect}" if meshDirectBisect > 0 else "")
         )
-        # if parallelMeshFormat == "JSON":
-        #     meshOutName += ".dir"
-        #     outPath = os.path.join(meshOutName, parallelPartNameFormat % (mpi.rank))
-        # elif parallelMeshFormat == "H5":
-        #     meshOutName += ".dnds.h5"
-        #     outPath = meshOutName
         meshOutNameMod, meshPartPath = serializerFactory.ModifyFilePath(
             meshOutName, mpi, "part_%d", True
         )
@@ -139,6 +133,42 @@ def create_mesh_from_CGNS(
         mesh.BuildGhostPrimary()
         mesh.AdjGlobal2LocalPrimary()
         mesh.AdjGlobal2LocalN2CB()
+    elif readMeshMode == "Distributed":
+        # Read from H5 with even-split distribution + ParMetis repartition.
+        # Works with any number of MPI ranks, regardless of how the file was written.
+        meshOutName = (
+            meshFile
+            + "_part_"
+            + f"{mpi.size}"
+            + ("_elevated" if meshElevation == "O2" else "")
+            + (f"_bisect{meshDirectBisect}" if meshDirectBisect > 0 else "")
+        )
+        meshOutNameMod, meshPartPath = serializerFactory.ModifyFilePath(
+            meshOutName, mpi, "part_%d", True
+        )
+        serializer = serializerFactory.BuildSerializer(mpi)
+        if mpi.rank == 0:
+            print(f"Mesh reader: distributed read via [{serializerFactory.to_dict()['type']}]")
+        serializer.OpenFile(meshPartPath, True)
+        mesh.ReadSerializeAndDistribute(
+            serializer,
+            "meshPart",
+            {
+                "metisType": "KWAY",
+                "metisUfactor": 5,
+                "metisSeed": 0,
+                "metisNcuts": 3,
+            },
+        )
+        serializer.CloseFile()
+
+        mesh.RecoverNode2CellAndNode2Bnd()
+        mesh.RecoverCell2CellAndBnd2Cell()
+        mesh.BuildGhostPrimary()
+        mesh.AdjGlobal2LocalPrimary()
+        mesh.AdjGlobal2LocalN2CB()
+    else:
+        raise ValueError(f"Unknown readMeshMode: {readMeshMode}")
 
     mesh.ReorderLocalCells(nParts=inner_process_parts, nPartsInner=second_level_parts)
 

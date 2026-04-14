@@ -1,4 +1,5 @@
 #include "Mesh.hpp"
+#include "Mesh_PartitionHelpers.hpp"
 #include "Solver/Direct.hpp"
 
 #include <cstdlib>
@@ -62,177 +63,9 @@ namespace DNDS::Geom
     /*******************************************************************************************************************/
     /*******************************************************************************************************************/
 
-    /**
-     * Used for generating pushing data structure
-     *  @todo: //TODO test on parallel re-distributing
-     */
-    // for one-shot usage, partition data corresponds to mpi
-
-    template <class TPartitionIdx>
-    void Partition2LocalIdx(
-        const std::vector<TPartitionIdx> &partition,
-        std::vector<DNDS::index> &localPush,
-        std::vector<DNDS::index> &localPushStart, const DNDS::MPIInfo &mpi)
-    {
-        // localPushStart.resize(mpi.size);
-        std::vector<DNDS::index> localPushSizes(mpi.size, 0);
-        for (auto r : partition)
-        {
-            DNDS_assert(r < mpi.size);
-            localPushSizes[r]++;
-        }
-        DNDS::AccumulateRowSize(localPushSizes, localPushStart);
-        localPush.resize(localPushStart[mpi.size]);
-        localPushSizes.assign(mpi.size, 0);
-        DNDS_assert(partition.size() == localPush.size());
-        for (size_t i = 0; i < partition.size(); i++)
-            localPush[localPushStart[partition[i]] + (localPushSizes[partition[i]]++)] = DNDS::size_to_index(i);
-    }
-
-    /**
-     * Serial2Global is used for converting adj data to point to reordered global
-     * @todo: //TODO: get fully serial version
-     *  @todo: //TODO test on parallel re-distributing
-     */
-    template <class TPartitionIdx>
-    void Partition2Serial2Global(
-        const std::vector<TPartitionIdx> &partition,
-        std::vector<DNDS::index> &serial2Global, const DNDS::MPIInfo &mpi, DNDS::MPI_int nPart)
-    {
-        serial2Global.resize(partition.size());
-        /****************************************/
-        std::vector<DNDS::index> numberAtLocal(nPart, 0);
-        for (auto r : partition)
-            numberAtLocal[r]++;
-        std::vector<DNDS::index> numberTotal(nPart), numberPrev(nPart);
-        MPI::Allreduce(numberAtLocal.data(), numberTotal.data(), nPart, DNDS::DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
-        MPI::Scan(numberAtLocal.data(), numberPrev.data(), nPart, DNDS::DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
-        std::vector<DNDS::index> numberTotalPlc(nPart + 1);
-        numberTotalPlc[0] = 0;
-        for (DNDS::MPI_int r = 0; r < nPart; r++)
-            numberTotalPlc[r + 1] = numberTotalPlc[r] + numberTotal[r], numberPrev[r] -= numberAtLocal[r];
-        // 2 things here: accumulate total and subtract local from prev
-        /****************************************/
-        numberAtLocal.assign(numberAtLocal.size(), 0);
-        DNDS::index iFill = 0;
-        for (auto r : partition)
-            serial2Global[iFill++] = (numberAtLocal[r]++) + numberTotalPlc[r] + numberPrev[r];
-    }
-
-    /**
-     * In this section, Serial means un-reordered index, i-e
-     * pointing to the *serial data, cell2node then pointing to the
-     * cell2node global indices:
-     * 0 1; 2 3
-     *
-     * Global means the re-ordered data's global indices
-     * if partition ==
-     * 0 1; 0 1
-     * then Serial 2 Global is:
-     * 0 2; 1 3
-     *
-     * if in proc 0, a cell refers to node 2, then must be seen in JSG ghost, gets global output == 1
-     *
-     * comm complexity: same as data comm
-     * @todo: //TODO test on parallel re-distributing
-     * @todo: //TODO: fully serial emulator
-     */
-
-    template <class TAdj = tAdj1>
-    void ConvertAdjSerial2Global(TAdj &arraySerialAdj,
-                                 const std::vector<DNDS::index> &partitionJSerial2Global,
-                                 const DNDS::MPIInfo &mpi)
-    {
-        // IndexArray JSG(IndexArray::tContext(partitionJSerial2Global.size()), mpi);
-        // forEachInArray(
-        //     JSG, [&](IndexArray::tComponent &e, index i)
-        //     { e[0] = partitionJSerial2Global[i]; });
-        // JSGGhost.createGlobalMapping();
-        tAdj1 JSG, JSGGhost;
-        DNDS_MAKE_SSP(JSG, mpi);
-        DNDS_MAKE_SSP(JSGGhost, mpi);
-        JSG->Resize(partitionJSerial2Global.size());
-        for (DNDS::index i = 0; i < JSG->Size(); i++)
-            (*JSG)(i, 0) = partitionJSerial2Global[i];
-        JSG->createGlobalMapping();
-        std::vector<DNDS::index> ghostJSerialQuery;
-
-        // get ghost
-        DNDS::index nGhost = 0;
-        for (DNDS::index i = 0; i < arraySerialAdj->Size(); i++)
-        {
-            for (DNDS::rowsize j = 0; j < arraySerialAdj->RowSize(i); j++)
-            {
-                DNDS::index v = (*arraySerialAdj)(i, j);
-                if (v == DNDS::UnInitIndex)
-                    break;
-                DNDS::MPI_int rank = -1;
-                DNDS::index val = -1;
-                if (!JSG->pLGlobalMapping->search(v, rank, val))
-                    DNDS_assert_info(false, "search failed");
-                if (rank != mpi.rank) //! excluding self
-                    nGhost++;
-            }
-        }
-        ghostJSerialQuery.reserve(nGhost);
-        for (DNDS::index i = 0; i < arraySerialAdj->Size(); i++)
-        {
-            for (DNDS::rowsize j = 0; j < arraySerialAdj->RowSize(i); j++)
-            {
-                DNDS::index v = (*arraySerialAdj)(i, j);
-                if (v == DNDS::UnInitIndex)
-                    break;
-                DNDS::MPI_int rank = -1;
-                DNDS::index val = -1;
-                bool ret = JSG->pLGlobalMapping->search(v, rank, val);
-                DNDS_assert_info(ret, "search failed");
-                if (rank != mpi.rank) //! excluding self
-                    ghostJSerialQuery.push_back(v);
-            }
-        }
-        // PrintVec(ghostJSerialQuery, std::cout);
-        typename DNDS::ArrayTransformerType<tAdj1::element_type>::Type JSGTrans;
-        JSGTrans.setFatherSon(JSG, JSGGhost);
-        JSGTrans.createGhostMapping(ghostJSerialQuery);
-        JSGTrans.createMPITypes();
-        JSGTrans.pullOnce();
-
-        for (DNDS::index i = 0; i < arraySerialAdj->Size(); i++)
-        {
-            for (DNDS::rowsize j = 0; j < arraySerialAdj->RowSize(i); j++)
-            {
-                DNDS::index &v = (*arraySerialAdj)(i, j);
-                if (v == DNDS::UnInitIndex)
-                    break;
-                DNDS::MPI_int rank = -1;
-                DNDS::index val = -1;
-                if (!JSGTrans.pLGhostMapping->search(v, rank, val))
-                    DNDS_assert_info(false, "search failed");
-                if (rank == -1)
-                    v = (*JSG)(val, 0);
-                else
-                    v = (*JSGGhost)(val, 0);
-            }
-        }
-    }
-
-    /**
-     * @todo: //TODO: fully serial emulator
-     */
-    template <class TArr = tAdj1>
-    void TransferDataSerial2Global(TArr &arraySerial,
-                                   TArr &arrayDist,
-                                   const std::vector<DNDS::index> &pushIndex,
-                                   const std::vector<DNDS::index> &pushIndexStart,
-                                   const DNDS::MPIInfo &mpi)
-    {
-        typename DNDS::ArrayTransformerType<typename TArr::element_type>::Type trans;
-        trans.setFatherSon(arraySerial, arrayDist);
-        trans.createFatherGlobalMapping();
-        trans.createGhostMapping(pushIndex, pushIndexStart);
-        trans.createMPITypes();
-        trans.pullOnce();
-    }
+    // Partition2LocalIdx, Partition2Serial2Global, ConvertAdjSerial2Global,
+    // TransferDataSerial2Global are now in Mesh_PartitionHelpers.hpp
+    // so they can be shared with Mesh_ReadSerializeDistributed.cpp.
 
     //! inefficient, use Partition2Serial2Global ! only used for convenient comparison
     void PushInfo2Serial2Global(std::vector<DNDS::index> &serial2Global,
@@ -816,6 +649,7 @@ namespace DNDS::Geom
                 std::swap(cellRecCur, cellRecCurNew);
                 initDone = true;
             }
+
             if (isPeriodic) // do additional check to avoid 2-layer-periodic problem
             {
                 std::set<index> cellRecCurOld;
@@ -1117,6 +951,38 @@ namespace DNDS::Geom
                 bnd2nodePbi.trans.pullOnce();
             bndElemInfo.trans.pullOnce();
             bnd2bndOrig.trans.pullOnce();
+
+            // Ghost bnds may reference nodes not yet in the coord ghost layer.
+            // Add those nodes so that AdjGlobal2LocalPrimary can convert bnd2node.
+            // This is collective: all ranks must participate even if some have no extras.
+            {
+                std::vector<DNDS::index> extraGhostNodes;
+                for (DNDS::index iBnd = bnd2node.father->Size(); iBnd < bnd2node.Size(); iBnd++)
+                    for (DNDS::rowsize j = 0; j < bnd2node.RowSize(iBnd); j++)
+                    {
+                        auto iNode = bnd2node(iBnd, j);
+                        DNDS::MPI_int rank;
+                        DNDS::index val;
+                        if (!coords.trans.pLGhostMapping->search_indexAppend(iNode, rank, val))
+                            extraGhostNodes.push_back(iNode);
+                    }
+                DNDS::index nExtraLocal = extraGhostNodes.size();
+                DNDS::index nExtraGlobal{0};
+                MPI::Allreduce(&nExtraLocal, &nExtraGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+                if (nExtraGlobal > 0)
+                {
+                    // Rebuild coord ghost mapping with the additional nodes
+                    auto &existingGhost = coords.trans.pLGhostMapping->ghostIndex;
+                    std::vector<DNDS::index> allGhostNodes(existingGhost.begin(), existingGhost.end());
+                    allGhostNodes.insert(allGhostNodes.end(), extraGhostNodes.begin(), extraGhostNodes.end());
+                    coords.trans.createGhostMapping(allGhostNodes);
+                    node2nodeOrig.trans.BorrowGGIndexing(coords.trans);
+                    coords.trans.createMPITypes();
+                    node2nodeOrig.trans.createMPITypes();
+                    coords.trans.pullOnce();
+                    node2nodeOrig.trans.pullOnce();
+                }
+            }
         }
     }
 
@@ -1136,7 +1002,7 @@ namespace DNDS::Geom
         for (DNDS::index iBnd = 0; iBnd < bnd2cell.Size(); iBnd++)
             for (DNDS::rowsize j = 0; j < bnd2cell.RowSize(iBnd); j++)
                 bnd2cell(iBnd, j) = CellIndexGlobal2Local(bnd2cell(iBnd, j)),
-                               DNDS_assert(j == 0 ? bnd2cell(iBnd, j) >= 0 : true); // must be inside
+                               DNDS_assert(j == 0 ? (iBnd < bnd2cell.father->Size() ? bnd2cell(iBnd, j) >= 0 : true) : true); // father bnds' owner cell must be inside
 
         ConvertAdjEntries(cell2node, cell2node.Size(),
                           [&](index v) { auto r = NodeIndexGlobal2Local(v); DNDS_assert(r >= 0); return r; });

@@ -27,6 +27,8 @@ namespace DNDS::Geom
         Cell = 4
     };
 
+    struct PartitionOptions; // forward declaration; defined after UnstructuredMesh
+
     struct UnstructuredMesh
     {
         MPI_int mRank{0};
@@ -657,6 +659,38 @@ namespace DNDS::Geom
         void WriteSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name);
         void ReadSerialize(Serializer::SerializerBaseSSP serializerP, const std::string &name);
 
+        /**
+         * @brief Reads mesh from an H5 serializer using even-split distribution, then
+         * repartitions via ParMetis for locality.
+         *
+         * @details
+         * This method enables reading a mesh written with any number of MPI ranks
+         * into any number of MPI ranks, without requiring the original partition.
+         *
+         * Flow:
+         * 1. Even-split read of all primary arrays (coords, cell2node, cellElemInfo,
+         *    bnd2node, bndElemInfo, cell2nodePbi, bnd2nodePbi, origIndex arrays).
+         * 2. Build distributed node2cell and cell2cell (node-neighbor) using existing
+         *    RecoverNode2CellAndNode2Bnd() + RecoverCell2CellAndBnd2Cell().
+         * 3. Filter cell2cell to facial neighbors only (shared O1 vertices >= dim).
+         * 4. Call ParMETIS_V3_PartKway on the distributed facial graph.
+         * 5. Redistribute cells, nodes, and boundaries to the new partition
+         *    via ArrayTransformer push-based transfer.
+         * 6. Set adjPrimaryState = Adj_PointToGlobal.
+         *
+         * After return, the caller should proceed with the standard rebuild sequence:
+         *   RecoverNode2CellAndNode2Bnd -> RecoverCell2CellAndBnd2Cell ->
+         *   BuildGhostPrimary -> AdjGlobal2LocalPrimary -> ...
+         *
+         * @param serializerP  H5 serializer (must be collective / non-per-rank)
+         * @param name         Path name in the serializer hierarchy
+         * @param partitionOptions  ParMetis partitioning options
+         */
+        void ReadSerializeAndDistribute(
+            Serializer::SerializerBaseSSP serializerP,
+            const std::string &name,
+            const PartitionOptions &partitionOptions);
+
         template <class TFTrans>
         void TransformCoords(TFTrans &&FTrans)
         {
@@ -819,8 +853,26 @@ namespace DNDS::Geom
         SerialOutput,
     };
 
+    struct PartitionOptions
+    {
+        std::string metisType = "KWAY";
+        int metisUfactor = 20;
+        int metisSeed = 0;
+        int edgeWeightMethod = 0; // 0:no weight 1: faceSize weight
+        int metisNcuts = 3;
+        DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
+            PartitionOptions,
+            metisType,
+            metisUfactor,
+            metisSeed,
+            edgeWeightMethod,
+            metisNcuts)
+    };
+
     struct UnstructuredMeshSerialRW
     {
+        using PartitionOptions = Geom::PartitionOptions; // backward compatibility alias
+
     private:
         int ascii_precision{16};
         std::string vtuFloatEncodeMode = "ascii";
@@ -964,22 +1016,6 @@ namespace DNDS::Geom
         void BuildCell2Cell(); // For cell based purpose
 
         void BuildNode2Node(); // For node based purpose //!not yet implemented
-
-        struct PartitionOptions
-        {
-            std::string metisType = "KWAY";
-            int metisUfactor = 20;
-            int metisSeed = 0;
-            int edgeWeightMethod = 0; // 0:no weight 1: faceSize weight
-            int metisNcuts = 3;
-            DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                PartitionOptions,
-                metisType,
-                metisUfactor,
-                metisSeed,
-                edgeWeightMethod,
-                metisNcuts)
-        };
 
         void MeshPartitionCell2Cell(const PartitionOptions &options);
 

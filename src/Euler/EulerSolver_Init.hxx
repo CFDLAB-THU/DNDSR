@@ -27,7 +27,7 @@ namespace DNDS::Euler
 
         DNDS_MAKE_SSP(reader, mesh, 0);
         DNDS_MAKE_SSP(readerBnd, meshBnd, 0);
-        DNDS_assert(config.dataIOControl.readMeshMode == 0 || config.dataIOControl.readMeshMode == 1);
+        DNDS_assert(config.dataIOControl.readMeshMode == 0 || config.dataIOControl.readMeshMode == 1 || config.dataIOControl.readMeshMode == 2);
         DNDS_assert(config.dataIOControl.outPltMode == 0 || config.dataIOControl.outPltMode == 1);
         mesh->periodicInfo.translation[1].map() = config.boundaryDefinition.PeriodicTranslation1;
         mesh->periodicInfo.translation[2].map() = config.boundaryDefinition.PeriodicTranslation2;
@@ -115,26 +115,12 @@ namespace DNDS::Euler
                 }
             }
         }
-        else
+        else if (config.dataIOControl.readMeshMode == 1)
         {
             using namespace std::literals;
-            std::filesystem::path meshPath{config.dataIOControl.meshFile};
             std::string meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
                                       (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) +
                                       (config.dataIOControl.meshDirectBisect > 0 ? "_bisect" + std::to_string(config.dataIOControl.meshDirectBisect) : ""s);
-            // std::string meshPartPath;
-            // if (config.dataIOControl.meshPartitionedReaderType == "JSON")
-            // {
-            //     std::filesystem::path meshOutDir{meshOutName + ".dir"};
-            //     // std::filesystem::create_directories(meshOutDir); // reading not writing
-            //     meshPartPath = getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
-            // }
-            // else if (config.dataIOControl.meshPartitionedReaderType == "H5")
-            // {
-            //     meshPartPath = meshOutName + ".dnds.h5";
-            // }
-            // else
-            //     DNDS_assert_info(false, "serializer is invalid");
             auto [meshOutNameMod, meshPartPath] = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).ModifyFilePath(meshOutName, mpi, "part_%d", true);
             Serializer::SerializerBaseSSP serializerP = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).BuildSerializer(mpi);
 
@@ -143,6 +129,30 @@ namespace DNDS::Euler
 
             serializerP->OpenFile(meshOutNameMod, true);
             mesh->ReadSerialize(serializerP, "meshPart");
+            serializerP->CloseFile();
+
+            mesh->RecoverNode2CellAndNode2Bnd();
+            mesh->RecoverCell2CellAndBnd2Cell();
+            mesh->BuildGhostPrimary();
+            mesh->AdjGlobal2LocalPrimary();
+            mesh->AdjGlobal2LocalN2CB();
+        }
+        else if (config.dataIOControl.readMeshMode == 2)
+        {
+            // Distributed read: even-split H5 read + ParMetis repartition.
+            // Works with any number of MPI ranks.
+            using namespace std::literals;
+            std::string meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
+                                      (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) +
+                                      (config.dataIOControl.meshDirectBisect > 0 ? "_bisect" + std::to_string(config.dataIOControl.meshDirectBisect) : ""s);
+            auto [meshOutNameMod, meshPartPath] = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).ModifyFilePath(meshOutName, mpi, "part_%d", true);
+            Serializer::SerializerBaseSSP serializerP = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).BuildSerializer(mpi);
+
+            if (mpi.rank == 0)
+                log() << "EulerSolver === distributed read via [" << config.dataIOControl.meshPartitionedReaderType << "]" << std::endl;
+
+            serializerP->OpenFile(meshOutNameMod, true);
+            mesh->ReadSerializeAndDistribute(serializerP, "meshPart", config.dataIOControl.meshPartitionOptions);
             serializerP->CloseFile();
 
             mesh->RecoverNode2CellAndNode2Bnd();

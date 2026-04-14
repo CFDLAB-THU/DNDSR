@@ -127,7 +127,24 @@ namespace DNDS::Geom
         UnstructuredMesh_
             .def("ReorderLocalCells", &UnstructuredMesh::ReorderLocalCells, py::arg("nParts") = 1, py::arg("nPartsInner") = 1)
             .def("ReadSerialize", &UnstructuredMesh::ReadSerialize, py::arg("serializer"), py::arg("name"))
-            .def("WriteSerialize", &UnstructuredMesh::WriteSerialize, py::arg("serializer"), py::arg("name"));
+            .def("WriteSerialize", &UnstructuredMesh::WriteSerialize, py::arg("serializer"), py::arg("name"))
+            .def(
+                "ReadSerializeAndDistribute",
+                [](UnstructuredMesh &self, Serializer::SerializerBaseSSP serializer,
+                   const std::string &name, py::object options_in)
+                {
+                    auto options_full = PartitionOptions();
+                    auto json_options_full = nlohmann::ordered_json(options_full);
+                    if (!options_in.is_none())
+                    {
+                        auto json_options_in = nlohmann::json(options_in);
+                        json_options_full.merge_patch(json_options_in);
+                    }
+                    self.ReadSerializeAndDistribute(
+                        serializer, name,
+                        json_options_full.template get<PartitionOptions>());
+                },
+                py::arg("serializer"), py::arg("name"), py::arg("partitionOptions") = py::none());
 
         UnstructuredMesh_.def("SetPeriodicGeometry", &UnstructuredMesh::SetPeriodicGeometry,
                               py::arg("translation1") = Geom::tPoint{1, 0, 0},
