@@ -390,6 +390,8 @@ namespace DNDS::Geom
         for (index iBnd = 0; iBnd < bnd2node.father->Size(); iBnd++)
         {
             index iOwnerCell = bnd2cell(iBnd, 0);
+            DNDS_assert_info(iOwnerCell != UnInitIndex,
+                             fmt::format("bnd {} has no owner cell after RecoverCell2CellAndBnd2Cell", iBnd));
             MPI_int ownerRank;
             index ownerVal;
             bool foundOwner = cellPartArr->pLGlobalMapping->search(iOwnerCell, ownerRank, ownerVal);
