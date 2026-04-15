@@ -2216,6 +2216,13 @@ namespace DNDS::Geom
         bMesh.cell2node.TransAttach();
         bMesh.cell2node.trans.createGhostMapping(std::vector<int>{}); // now bnd mesh has no valid cell2cell and ghost cells
 
+        // Ensure global mappings exist on all arrays that BuildSerialOut
+        // (and other consumers) may query via globalSize().  The ghost
+        // mappings were already set up for coords/node2nodeOrig above;
+        // cellElemInfo and cell2cellOrig only need the global mapping.
+        bMesh.cellElemInfo.father->createGlobalMapping();
+        bMesh.cell2cellOrig.father->createGlobalMapping();
+
         bMesh.adjPrimaryState = Adj_PointToLocal;
         if (mpi.rank == mRank)
             log() << "UnstructuredMesh === ConstructBndMesh Done" << std::endl;
