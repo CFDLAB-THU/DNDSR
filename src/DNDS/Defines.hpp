@@ -173,8 +173,66 @@ namespace DNDS
     using VectorXR = Eigen::Vector<real, Eigen::Dynamic>;
     using RowVectorXR = Eigen::RowVector<real, Eigen::Dynamic>;
 
-/// TODO: change to template:
+/// @deprecated Use make_ssp<T>() or make_ssp<T>(ObjName{...}, ...) instead.
 #define DNDS_MAKE_SSP(ssp, ...) (ssp = std::make_shared<typename decltype(ssp)::element_type>(__VA_ARGS__))
+
+    /// @brief Mixin base class providing a runtime instance name for tracing/debugging.
+    ///
+    /// Array and its subclasses inherit this to carry a human-readable name
+    /// (e.g., "coords", "cell2node") that appears in assertion messages.
+    /// Zero overhead when no name is set (empty string).
+    /// NOT added to device-callable types (ArrayView, ArrayLayout).
+    class ObjectNaming
+    {
+        std::string _objectName;
+
+    public:
+        ObjectNaming() = default;
+        ObjectNaming(const ObjectNaming &) = default;
+        ObjectNaming(ObjectNaming &&) = default;
+        ObjectNaming &operator=(const ObjectNaming &) = default;
+        ObjectNaming &operator=(ObjectNaming &&) = default;
+        ~ObjectNaming() = default;
+
+        void setObjectName(const std::string &name) { _objectName = name; }
+        [[nodiscard]] const std::string &getObjectName() const { return _objectName; }
+
+        /// Returns "name(sig)" if name is set, or just "sig" otherwise.
+        /// Callers pass the type signature (e.g., GetArrayName()) as `sig`.
+        [[nodiscard]] std::string getObjectIdentity(const std::string &sig) const
+        {
+            if (_objectName.empty())
+                return sig;
+            return fmt::format("{}({})", _objectName, sig);
+        }
+    };
+
+    /// @brief Tag type for naming objects created via make_ssp.
+    ///
+    /// Usage: `auto p = make_ssp<ParArray<index>>(ObjName{"cell2node"}, mpi);`
+    struct ObjName
+    {
+        std::string name;
+    };
+
+    /// @brief Type-safe replacement for DNDS_MAKE_SSP. Creates ssp<T> with forwarded args.
+    template <typename T, typename... Args>
+    ssp<T> make_ssp(Args &&...args)
+    {
+        return std::make_shared<T>(std::forward<Args>(args)...);
+    }
+
+    /// @brief Named variant of make_ssp. If T inherits ObjectNaming, sets the name.
+    ///
+    /// Usage: `auto p = make_ssp<ParArray<index>>(ObjName{"cell2node"}, mpi);`
+    template <typename T, typename... Args>
+    ssp<T> make_ssp(ObjName objName, Args &&...args)
+    {
+        auto p = std::make_shared<T>(std::forward<Args>(args)...);
+        if constexpr (std::is_base_of_v<ObjectNaming, T>)
+            p->setObjectName(objName.name);
+        return p;
+    }
 
 } // namespace DNDS
 

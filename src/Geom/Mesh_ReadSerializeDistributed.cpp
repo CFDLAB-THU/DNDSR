@@ -199,8 +199,7 @@ namespace DNDS::Geom
         // cell2cell.father + son are populated. For each local cell's
         // neighbor, get its vertex set via cell2node (father or son) and
         // check intersection size.
-        tAdj cell2cellFacialTmp;
-        DNDS_MAKE_SSP(cell2cellFacialTmp, mpi);
+        auto cell2cellFacialTmp = make_ssp<tAdj::element_type>(ObjName{"cell2cellFacialTmp"}, mpi);
         cell2cellFacialTmp->Resize(cell2cell.father->Size(), 6);
 
         for (index iCell = 0; iCell < cell2cell.father->Size(); iCell++)
@@ -360,9 +359,8 @@ namespace DNDS::Geom
         //
         // Strategy: create a tAdj1 array holding cellPartition as global data,
         // pull ghosts for the owner cells needed by our bnds, then look up.
-        tAdj1 cellPartArr, cellPartArrGhost;
-        DNDS_MAKE_SSP(cellPartArr, mpi);
-        DNDS_MAKE_SSP(cellPartArrGhost, mpi);
+        auto cellPartArr = make_ssp<tAdj1::element_type>(ObjName{"cellPartArr"}, mpi);
+        auto cellPartArrGhost = make_ssp<tAdj1::element_type>(ObjName{"cellPartArrGhost"}, mpi);
         cellPartArr->Resize(cell2node.father->Size());
         for (index i = 0; i < cellPartArr->Size(); i++)
             (*cellPartArr)(i, 0) = static_cast<index>(cellPartition.at(i));
@@ -450,23 +448,15 @@ namespace DNDS::Geom
         auto node2nodeOrigOld = node2nodeOrig.father;
         auto bnd2bndOrigOld = bnd2bndOrig.father;
 
-        DNDS_MAKE_SSP(coords.father, mpi);
-        DNDS_MAKE_SSP(coords.son, mpi);
-        DNDS_MAKE_SSP(cell2node.father, mpi);
-        DNDS_MAKE_SSP(cell2node.son, mpi);
-        DNDS_MAKE_SSP(cellElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(cellElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(bnd2node.father, mpi);
-        DNDS_MAKE_SSP(bnd2node.son, mpi);
+        coords.InitPair("coords", mpi);
+        cell2node.InitPair("cell2node", mpi);
+        cellElemInfo.InitPair("cellElemInfo", ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        bnd2node.InitPair("bnd2node", mpi);
         // bnd2cell is not serialized; rebuilt by caller's RecoverCell2CellAndBnd2Cell
-        DNDS_MAKE_SSP(bndElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(bndElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(cell2cellOrig.father, mpi);
-        DNDS_MAKE_SSP(cell2cellOrig.son, mpi);
-        DNDS_MAKE_SSP(node2nodeOrig.father, mpi);
-        DNDS_MAKE_SSP(node2nodeOrig.son, mpi);
-        DNDS_MAKE_SSP(bnd2bndOrig.father, mpi);
-        DNDS_MAKE_SSP(bnd2bndOrig.son, mpi);
+        bndElemInfo.InitPair("bndElemInfo", ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        cell2cellOrig.InitPair("cell2cellOrig", mpi);
+        node2nodeOrig.InitPair("node2nodeOrig", mpi);
+        bnd2bndOrig.InitPair("bnd2bndOrig", mpi);
 
         TransferDataSerial2Global(coordsOld, coords.father, node_push, node_pushStart, mpi);
         TransferDataSerial2Global(node2nodeOrigOld, node2nodeOrig.father, node_push, node_pushStart, mpi);
@@ -484,10 +474,8 @@ namespace DNDS::Geom
         {
             auto cell2nodePbiOld = cell2nodePbi.father;
             auto bnd2nodePbiOld = bnd2nodePbi.father;
-            DNDS_MAKE_SSP(cell2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
-            DNDS_MAKE_SSP(cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
-            DNDS_MAKE_SSP(bnd2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
-            DNDS_MAKE_SSP(bnd2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
+            cell2nodePbi.InitPair("cell2nodePbi", NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
+            bnd2nodePbi.InitPair("bnd2nodePbi", NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
             TransferDataSerial2Global(cell2nodePbiOld, cell2nodePbi.father, cell_push, cell_pushStart, mpi);
             TransferDataSerial2Global(bnd2nodePbiOld, bnd2nodePbi.father, bnd_push, bnd_pushStart, mpi);
         }

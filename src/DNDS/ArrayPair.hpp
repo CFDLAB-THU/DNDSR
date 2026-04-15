@@ -132,8 +132,8 @@ namespace DNDS
         {
             DNDS_check_throw(R.father && R.son);
             //! rely on TArray's copy ctor!
-            DNDS_MAKE_SSP(father, *(R.father)); // call TArray copy ctor
-            DNDS_MAKE_SSP(son, *(R.son));       // call TArray copy ctor
+            father = make_ssp<TArray>(*(R.father)); // call TArray copy ctor
+            son = make_ssp<TArray>(*(R.son));       // call TArray copy ctor
             DNDS_check_throw(father->getMPI().comm == son->getMPI().comm);
             //! rely on TTrans's copy assignment!
             trans = R.trans;
@@ -234,8 +234,56 @@ namespace DNDS
         void TransAttach()
         {
             DNDS_check_throw_info(bool(father) && bool(son),
-                                  fmt::format("father and son need to be constructed before Trans Attach. Array is {}", TArray::GetArrayName()));
+                                  fmt::format("father and son need to be constructed before Trans Attach. Array is {}",
+                                              father ? father->getObjectIdentity(TArray::GetArrayName()) : TArray::GetArrayName()));
             trans.setFatherSon(father, son);
+        }
+
+        /// @brief Allocate both father and son arrays, forwarding all args to TArray constructor.
+        ///
+        /// Replaces the common two-line DNDS_MAKE_SSP(pair.father, ...) +
+        /// DNDS_MAKE_SSP(pair.son, ...) pattern.
+        ///
+        /// The name tag is set on both arrays as "name.father" / "name.son".
+        /// Constructor args are forwarded as-is to TArray (same order as ParArray
+        /// constructors, e.g., `(mpi)` or `(dataType, commMult, mpi)`).
+        ///
+        /// Usage:
+        ///   pair.InitPair("cell2node", mpi);
+        ///   pair.InitPair("cellElemInfo", ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        template <typename... Args>
+        void InitPair(const std::string &name, Args &&...args)
+        {
+            father = make_ssp<TArray>(ObjName{name + ".father"}, std::forward<Args>(args)...);
+            son = make_ssp<TArray>(ObjName{name + ".son"}, std::forward<Args>(args)...);
+        }
+
+        /// @brief Attach, borrow ghost indexing from a primary pair, create MPI types, and pull once.
+        ///
+        /// Replaces the 4-line sequence:
+        ///   this->TransAttach();
+        ///   this->trans.BorrowGGIndexing(primary.trans);
+        ///   this->trans.createMPITypes();
+        ///   this->trans.pullOnce();
+        template <class TPrimaryPair>
+        void BorrowAndPull(TPrimaryPair &primary)
+        {
+            this->TransAttach();
+            this->trans.BorrowGGIndexing(primary.trans);
+            this->trans.createMPITypes();
+            this->trans.pullOnce();
+        }
+
+        /// @brief Attach, borrow ghost indexing from a primary pair, and create MPI types (no pull).
+        ///
+        /// Useful when you need to set up communication but defer the pull
+        /// (e.g., for persistent communication patterns).
+        template <class TPrimaryPair>
+        void BorrowSetup(TPrimaryPair &primary)
+        {
+            this->TransAttach();
+            this->trans.BorrowGGIndexing(primary.trans);
+            this->trans.createMPITypes();
         }
 
         void CompressBoth()
@@ -473,8 +521,7 @@ namespace DNDS
             {
                 // Same np: we can read normally (rank slices match), then redistribute locally
                 t_self readPair;
-                DNDS_MAKE_SSP(readPair.father, mpi);
-                DNDS_MAKE_SSP(readPair.son, mpi);
+                readPair.InitPair("readPair", mpi);
                 readPair.ReadSerialize(serializerP, name, /*includePIG*/ false, /*includeSon*/ false);
 
                 // Read origIndex from the file

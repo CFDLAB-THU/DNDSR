@@ -75,8 +75,7 @@ namespace DNDS::Geom
                                 const DNDS::MPIInfo &mpi)
     {
         tIndPair Serial2Global;
-        DNDS_MAKE_SSP(Serial2Global.father, mpi);
-        DNDS_MAKE_SSP(Serial2Global.son, mpi);
+        Serial2Global.InitPair("Serial2Global", mpi);
         Serial2Global.father->Resize(localSize);
         Serial2Global.TransAttach();
         Serial2Global.trans.createFatherGlobalMapping();
@@ -137,37 +136,20 @@ namespace DNDS::Geom
         ConvertAdjSerial2Global(bnd2nodeSerial, node_Serial2Global, mesh->getMPI());
         ConvertAdjSerial2Global(bnd2cellSerial, cell_Serial2Global, mesh->getMPI());
 
-        DNDS_MAKE_SSP(mesh->coords.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->coords.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cellElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cellElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bndElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bndElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cell2node.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cell2node.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cell2cellOrig.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->cell2cellOrig.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->node2nodeOrig.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->node2nodeOrig.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bnd2bndOrig.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bnd2bndOrig.son, mesh->getMPI());
+        mesh->coords.InitPair("coords", mesh->getMPI());
+        mesh->cellElemInfo.InitPair("cellElemInfo", ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
+        mesh->bndElemInfo.InitPair("bndElemInfo", ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
+        mesh->cell2node.InitPair("cell2node", mesh->getMPI());
+        mesh->cell2cellOrig.InitPair("cell2cellOrig", mesh->getMPI());
+        mesh->node2nodeOrig.InitPair("node2nodeOrig", mesh->getMPI());
+        mesh->bnd2bndOrig.InitPair("bnd2bndOrig", mesh->getMPI());
         if (mesh->isPeriodic)
-        {
-            DNDS_MAKE_SSP(mesh->cell2nodePbi.father, mesh->getMPI());
-            DNDS_MAKE_SSP(mesh->cell2nodePbi.son, mesh->getMPI());
-        }
+            mesh->cell2nodePbi.InitPair("cell2nodePbi", mesh->getMPI());
         // !cell2cell discarded
-        // DNDS_MAKE_SSP(mesh->cell2cell.father, mesh->getMPI());
-        // DNDS_MAKE_SSP(mesh->cell2cell.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bnd2node.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bnd2node.son, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bnd2cell.father, mesh->getMPI());
-        DNDS_MAKE_SSP(mesh->bnd2cell.son, mesh->getMPI());
+        mesh->bnd2node.InitPair("bnd2node", mesh->getMPI());
+        mesh->bnd2cell.InitPair("bnd2cell", mesh->getMPI());
         if (mesh->isPeriodic)
-        {
-            DNDS_MAKE_SSP(mesh->bnd2nodePbi.father, mesh->getMPI());
-            DNDS_MAKE_SSP(mesh->bnd2nodePbi.son, mesh->getMPI());
-        }
+            mesh->bnd2nodePbi.InitPair("bnd2nodePbi", mesh->getMPI());
 
         // coord transferring
         if (mesh->getMPI().rank == mRank)
@@ -245,14 +227,11 @@ namespace DNDS::Geom
             // for (DNDS::index i = 0; i < numBndGlobal; i++)
             //     serialPullBnd[i] = i;
         }
-        DNDS_MAKE_SSP(cell2nodeSerial, mesh->getMPI());
+        cell2nodeSerial = make_ssp<decltype(cell2nodeSerial)::element_type>(ObjName{"cell2nodeSerial"}, mesh->getMPI());
         if (mesh->isPeriodic)
-            DNDS_MAKE_SSP(cell2nodePbiSerial, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mesh->getMPI());
-        // DNDS_MAKE_SSP(bnd2nodeSerial, mesh->getMPI());
-        DNDS_MAKE_SSP(coordSerial, mesh->getMPI());
-        DNDS_MAKE_SSP(cellElemInfoSerial, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        // DNDS_MAKE_SSP(bndElemInfoSerial, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        // DNDS_MAKE_SSP(bnd2cellSerial, mesh->getMPI());// not needed yet
+            cell2nodePbiSerial = make_ssp<decltype(cell2nodePbiSerial)::element_type>(ObjName{"cell2nodePbiSerial"}, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mesh->getMPI());
+        coordSerial = make_ssp<decltype(coordSerial)::element_type>(ObjName{"coordSerial"}, mesh->getMPI());
+        cellElemInfoSerial = make_ssp<decltype(cellElemInfoSerial)::element_type>(ObjName{"cellElemInfoSerial"}, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
 
         coordSerialOutTrans.setFatherSon(mesh->coords.father, coordSerial);
         cell2nodeSerialOutTrans.setFatherSon(mesh->cell2node.father, cell2nodeSerial);
@@ -387,9 +366,8 @@ namespace DNDS::Geom
         // std::cout << "here2 " << std::endl;
 
         tAdj node2cellPast; // + node2cell * a triplet to deal with reverse inserting
-        DNDS_MAKE_SSP(node2cell.father, mpi);
-        DNDS_MAKE_SSP(node2cell.son, mpi);
-        DNDS_MAKE_SSP(node2cellPast, mpi);
+        node2cell.InitPair("node2cell", mpi);
+        node2cellPast = make_ssp<tAdj::element_type>(ObjName{"node2cellPast"}, mpi);
         //* fill into father
         node2cell.father->Resize(coords.father->Size());
         for (index iNode = 0; iNode < coords.father->Size(); iNode++)
@@ -460,8 +438,7 @@ namespace DNDS::Geom
         //     });
 
         // reset pair
-        DNDS_MAKE_SSP(node2cell.father, mpi);
-        DNDS_MAKE_SSP(node2cell.son, mpi);
+        node2cell.InitPair("node2cell", mpi);
         //* fill into father
         node2cell.father->Resize(coords.father->Size());
         for (index iNode = 0; iNode < coords.father->Size(); iNode++)
@@ -594,7 +571,7 @@ namespace DNDS::Geom
         for (auto v : ghostNodesCompactSet)
             ghostNodes.push_back(v);
         // std::cout << "RecoverCell2CellAndBnd2Cell here2" << std::endl;
-        DNDS_MAKE_SSP(node2cell.son, mpi);
+        node2cell.son = make_ssp<decltype(node2cell.son)::element_type>(ObjName{"node2cell.son"}, mpi);
         node2cell.TransAttach();
         node2cell.trans.createFatherGlobalMapping();
         node2cell.trans.createGhostMapping(ghostNodes);
@@ -610,8 +587,7 @@ namespace DNDS::Geom
             for (auto in : cell2node.father->operator[](i))
                 DNDS_assert(iNodeGlobal2LocalAppendInNode2Cell.count(in));
 
-        DNDS_MAKE_SSP(cell2cell.father, mpi);
-        DNDS_MAKE_SSP(cell2cell.son, mpi); // actual outputs need empty but constructed son
+        cell2cell.InitPair("cell2cell", mpi); // actual outputs need empty but constructed son
         cell2cell.father->Resize(cell2node.father->Size());
         for (index i = 0; i < cell2node.father->Size(); i++)
         {
@@ -630,8 +606,7 @@ namespace DNDS::Geom
                 cell2cell.father->operator()(i, ic2c++) = v;
         }
         // std::cout << "RecoverCell2CellAndBnd2Cell here2.5" << std::endl;
-        DNDS_MAKE_SSP(bnd2cell.father, mpi);
-        DNDS_MAKE_SSP(bnd2cell.son, mpi); // actual outputs need empty but constructed son
+        bnd2cell.InitPair("bnd2cell", mpi); // actual outputs need empty but constructed son
         bnd2cell.father->Resize(bnd2node.father->Size());
 
         // For periodic meshes, store per-bnd candidate cell sets from the node
@@ -686,17 +661,14 @@ namespace DNDS::Geom
                     neededCells.push_back(ic);
             }
 
-            DNDS_MAKE_SSP(cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
+            cell2nodePbi.son = make_ssp<decltype(cell2nodePbi.son)::element_type>(ObjName{"cell2nodePbi.son"}, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
             cell2nodePbi.TransAttach();
             cell2nodePbi.trans.createFatherGlobalMapping();
             cell2nodePbi.trans.createGhostMapping(neededCells); //! warning, this is not actual final official trans, just needed temporarily
             cell2nodePbi.trans.createMPITypes();
             cell2nodePbi.trans.pullOnce();
-            DNDS_MAKE_SSP(cell2node.son, mpi);
-            cell2node.TransAttach();
-            cell2node.trans.BorrowGGIndexing(cell2nodePbi.trans); //! warning, this is not actual final official trans, just needed temporarily
-            cell2node.trans.createMPITypes();
-            cell2node.trans.pullOnce();
+            cell2node.son = make_ssp<decltype(cell2node.son)::element_type>(ObjName{"cell2node.son"}, mpi);
+            cell2node.BorrowAndPull(cell2nodePbi); //! warning, this is not actual final official trans, just needed temporarily
 
             // Now do the periodic pbi filter for each bnd
             for (index i = 0; i < bnd2cell.father->Size(); i++)
@@ -860,25 +832,13 @@ namespace DNDS::Geom
             }
             cell2cell.trans.createGhostMapping(ghostCells);
 
-            cell2node.trans.BorrowGGIndexing(cell2cell.trans);
-            cell2cellOrig.trans.BorrowGGIndexing(cell2cell.trans);
-            if (isPeriodic)
-                cell2nodePbi.trans.BorrowGGIndexing(cell2cell.trans);
-            cellElemInfo.trans.BorrowGGIndexing(cell2cell.trans);
-
             cell2cell.trans.createMPITypes();
-            cell2node.trans.createMPITypes();
-            cell2cellOrig.trans.createMPITypes();
-            if (isPeriodic)
-                cell2nodePbi.trans.createMPITypes();
-            cellElemInfo.trans.createMPITypes();
-
             cell2cell.trans.pullOnce();
-            cell2node.trans.pullOnce();
-            cell2cellOrig.trans.pullOnce();
+            cell2node.BorrowAndPull(cell2cell);
+            cell2cellOrig.BorrowAndPull(cell2cell);
             if (isPeriodic)
-                cell2nodePbi.trans.pullOnce();
-            cellElemInfo.trans.pullOnce();
+                cell2nodePbi.BorrowAndPull(cell2cell);
+            cellElemInfo.BorrowAndPull(cell2cell);
         }
         // if(mpi.rank == 0)
         //     std::cout <<"XXXXXXXXXXXXXXXXXXXXXXXXX" <<std::endl;
@@ -909,13 +869,9 @@ namespace DNDS::Geom
                 }
             }
             coords.trans.createGhostMapping(ghostNodes);
-            node2nodeOrig.trans.BorrowGGIndexing(coords.trans);
-
             coords.trans.createMPITypes();
-            node2nodeOrig.trans.createMPITypes();
-
             coords.trans.pullOnce();
-            node2nodeOrig.trans.pullOnce();
+            node2nodeOrig.BorrowAndPull(coords);
         }
         // if(mpi.rank == 0)
         //     std::cout <<"XXXXXXXXXXXXXXXXXXXXXXXXX" <<std::endl;
@@ -947,26 +903,13 @@ namespace DNDS::Geom
                         ghostBnds.push_back(iBnd);
                 }
             bnd2cell.trans.createGhostMapping(ghostBnds);
-
-            bnd2node.trans.BorrowGGIndexing(bnd2cell.trans);
-            if (isPeriodic)
-                bnd2nodePbi.trans.BorrowGGIndexing(bnd2cell.trans);
-            bndElemInfo.trans.BorrowGGIndexing(bnd2cell.trans);
-            bnd2bndOrig.trans.BorrowGGIndexing(bnd2cell.trans);
-
             bnd2cell.trans.createMPITypes();
-            bnd2node.trans.createMPITypes();
-            if (isPeriodic)
-                bnd2nodePbi.trans.createMPITypes();
-            bndElemInfo.trans.createMPITypes();
-            bnd2bndOrig.trans.createMPITypes();
-
             bnd2cell.trans.pullOnce();
-            bnd2node.trans.pullOnce();
+            bnd2node.BorrowAndPull(bnd2cell);
             if (isPeriodic)
-                bnd2nodePbi.trans.pullOnce();
-            bndElemInfo.trans.pullOnce();
-            bnd2bndOrig.trans.pullOnce();
+                bnd2nodePbi.BorrowAndPull(bnd2cell);
+            bndElemInfo.BorrowAndPull(bnd2cell);
+            bnd2bndOrig.BorrowAndPull(bnd2cell);
 
             // Ghost bnds may reference nodes not yet in the coord ghost layer.
             // Add those nodes so that AdjGlobal2LocalPrimary can convert bnd2node.
@@ -1345,8 +1288,7 @@ namespace DNDS::Geom
         DNDS_assert(adjFacialState == Adj_PointToLocal);
         DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
 
-        DNDS_MAKE_SSP(cell2cellFace.father, mpi);
-        DNDS_MAKE_SSP(cell2cellFace.son, mpi);
+        cell2cellFace.InitPair("cell2cellFace", mpi);
         cell2cellFace.father->Resize(this->NumCell());
         for (index iCell = 0; iCell < this->NumCell(); iCell++)
         {
@@ -1830,23 +1772,14 @@ namespace DNDS::Geom
         DNDS_assert(adjPrimaryState == Adj_PointToLocal); // And also should have primary ghost comm
 
         // Allocate face-related array pairs
-        DNDS_MAKE_SSP(cell2face.father, mpi);
-        DNDS_MAKE_SSP(cell2face.son, mpi);
-        DNDS_MAKE_SSP(face2cell.father, mpi);
-        DNDS_MAKE_SSP(face2cell.son, mpi);
-        DNDS_MAKE_SSP(face2node.father, mpi);
-        DNDS_MAKE_SSP(face2node.son, mpi);
+        cell2face.InitPair("cell2face", mpi);
+        face2cell.InitPair("face2cell", mpi);
+        face2node.InitPair("face2node", mpi);
         if (isPeriodic)
-        {
-            DNDS_MAKE_SSP(face2nodePbi.father, mpi);
-            DNDS_MAKE_SSP(face2nodePbi.son, mpi);
-        }
-        DNDS_MAKE_SSP(faceElemInfo.father, mpi);
-        DNDS_MAKE_SSP(faceElemInfo.son, mpi);
-        DNDS_MAKE_SSP(face2bnd.father, mpi);
-        DNDS_MAKE_SSP(face2bnd.son, mpi);
-        DNDS_MAKE_SSP(bnd2face.father, mpi);
-        DNDS_MAKE_SSP(bnd2face.son, mpi);
+            face2nodePbi.InitPair("face2nodePbi", mpi);
+        faceElemInfo.InitPair("faceElemInfo", mpi);
+        face2bnd.InitPair("face2bnd", mpi);
+        bnd2face.InitPair("bnd2face", mpi);
 
         cell2face.father->Resize(cell2cell.father->Size());
         cell2face.son->Resize(cell2cell.son->Size());
@@ -1893,33 +1826,15 @@ namespace DNDS::Geom
         if (isPeriodic)
             face2nodePbi.father->Compress();
         face2cell.TransAttach();
-        face2node.TransAttach();
-        if (isPeriodic)
-            face2nodePbi.TransAttach();
-        faceElemInfo.TransAttach();
-        face2bnd.TransAttach();
-
         face2cell.trans.createFatherGlobalMapping();
         face2cell.trans.createGhostMapping(faceSendLocalsIdx, faceSendLocalsStarts);
-        face2node.trans.BorrowGGIndexing(face2cell.trans);
-        if (isPeriodic)
-            face2nodePbi.trans.BorrowGGIndexing(face2cell.trans);
-        faceElemInfo.trans.BorrowGGIndexing(face2cell.trans);
-        face2bnd.trans.BorrowGGIndexing(face2cell.trans);
-
         face2cell.trans.createMPITypes();
-        face2node.trans.createMPITypes();
-        if (isPeriodic)
-            face2nodePbi.trans.createMPITypes();
-        faceElemInfo.trans.createMPITypes();
-        face2bnd.trans.createMPITypes();
-
         face2cell.trans.pullOnce();
-        face2node.trans.pullOnce();
+        face2node.BorrowAndPull(face2cell);
         if (isPeriodic)
-            face2nodePbi.trans.pullOnce();
-        faceElemInfo.trans.pullOnce();
-        face2bnd.trans.pullOnce();
+            face2nodePbi.BorrowAndPull(face2cell);
+        faceElemInfo.BorrowAndPull(face2cell);
+        face2bnd.BorrowAndPull(face2cell);
 
         this->AdjGlobal2LocalFacial();
 
@@ -2073,34 +1988,20 @@ namespace DNDS::Geom
         DNDS_assert((!serializerP->IsPerRank() || rankRead == mpi.rank) && sizeRead == mpi.size);
 
         // make the empty arrays
-        DNDS_MAKE_SSP(coords.father, getMPI());
-        DNDS_MAKE_SSP(coords.son, getMPI());
-        DNDS_MAKE_SSP(cellElemInfo.father, getMPI());
-        DNDS_MAKE_SSP(cellElemInfo.son, getMPI());
-        DNDS_MAKE_SSP(bndElemInfo.father, getMPI());
-        DNDS_MAKE_SSP(bndElemInfo.son, getMPI());
-        DNDS_MAKE_SSP(cell2node.father, getMPI());
-        DNDS_MAKE_SSP(cell2node.son, getMPI());
+        coords.InitPair("coords", getMPI());
+        cellElemInfo.InitPair("cellElemInfo", getMPI());
+        bndElemInfo.InitPair("bndElemInfo", getMPI());
+        cell2node.InitPair("cell2node", getMPI());
         if (isPeriodic)
         {
-            DNDS_MAKE_SSP(cell2nodePbi.father, getMPI());
-            DNDS_MAKE_SSP(cell2nodePbi.son, getMPI());
-            DNDS_MAKE_SSP(bnd2nodePbi.father, getMPI());
-            DNDS_MAKE_SSP(bnd2nodePbi.son, getMPI());
+            cell2nodePbi.InitPair("cell2nodePbi", getMPI());
+            bnd2nodePbi.InitPair("bnd2nodePbi", getMPI());
         }
-        // DNDS_MAKE_SSP(cell2cell.father, getMPI());
-        // DNDS_MAKE_SSP(cell2cell.son, getMPI());
-        DNDS_MAKE_SSP(bnd2node.father, getMPI());
-        DNDS_MAKE_SSP(bnd2node.son, getMPI());
-        // DNDS_MAKE_SSP(bnd2cell.father, getMPI());
-        // DNDS_MAKE_SSP(bnd2cell.son, getMPI());
+        bnd2node.InitPair("bnd2node", getMPI());
 
-        DNDS_MAKE_SSP(bnd2bndOrig.father, getMPI());
-        DNDS_MAKE_SSP(bnd2bndOrig.son, getMPI());
-        DNDS_MAKE_SSP(cell2cellOrig.father, getMPI());
-        DNDS_MAKE_SSP(cell2cellOrig.son, getMPI());
-        DNDS_MAKE_SSP(node2nodeOrig.father, getMPI());
-        DNDS_MAKE_SSP(node2nodeOrig.son, getMPI());
+        bnd2bndOrig.InitPair("bnd2bndOrig", getMPI());
+        cell2cellOrig.InitPair("cell2cellOrig", getMPI());
+        node2nodeOrig.InitPair("node2nodeOrig", getMPI());
 
         coords.ReadSerialize(serializerP, "coords");
         cell2node.ReadSerialize(serializerP, "cell2node");
@@ -2160,41 +2061,27 @@ namespace DNDS::Geom
     void UnstructuredMesh::ConstructBndMesh(UnstructuredMesh &bMesh)
     {
         DNDS_assert(bMesh.dim == dim - 1 && bMesh.mpi == mpi);
-        DNDS_MAKE_SSP(bMesh.cell2node.father, mpi);
-        DNDS_MAKE_SSP(bMesh.cell2node.son, mpi);
-        DNDS_MAKE_SSP(bMesh.coords.father, mpi);
-        DNDS_MAKE_SSP(bMesh.coords.son, mpi);
+        bMesh.cell2node.InitPair("bMesh.cell2node", mpi);
+        bMesh.coords.InitPair("bMesh.coords", mpi);
         if (isPeriodic)
         {
             bMesh.isPeriodic = true;
             bMesh.periodicInfo = this->periodicInfo;
-            DNDS_MAKE_SSP(bMesh.cell2nodePbi.father, mpi);
-            DNDS_MAKE_SSP(bMesh.cell2nodePbi.son, mpi);
+            bMesh.cell2nodePbi.InitPair("bMesh.cell2nodePbi", mpi);
         }
-        DNDS_MAKE_SSP(bMesh.cellElemInfo.father, mpi);
-        DNDS_MAKE_SSP(bMesh.cellElemInfo.son, mpi);
-        DNDS_MAKE_SSP(bMesh.cell2cellOrig.father, mpi);
-        DNDS_MAKE_SSP(bMesh.cell2cellOrig.son, mpi);
-        DNDS_MAKE_SSP(bMesh.node2nodeOrig.father, mpi);
-        DNDS_MAKE_SSP(bMesh.node2nodeOrig.son, mpi);
+        bMesh.cellElemInfo.InitPair("bMesh.cellElemInfo", mpi);
+        bMesh.cell2cellOrig.InitPair("bMesh.cell2cellOrig", mpi);
+        bMesh.node2nodeOrig.InitPair("bMesh.node2nodeOrig", mpi);
 
-        DNDS_MAKE_SSP(bMesh.bnd2cell.father, mpi);    // which will remain 0 sized
-        DNDS_MAKE_SSP(bMesh.bnd2cell.son, mpi);       // which will remain 0 sized
-        DNDS_MAKE_SSP(bMesh.bnd2node.father, mpi);    // which will remain 0 sized
-        DNDS_MAKE_SSP(bMesh.bnd2node.son, mpi);       // which will remain 0 sized
-        DNDS_MAKE_SSP(bMesh.bndElemInfo.father, mpi); // which will remain 0 sized
-        DNDS_MAKE_SSP(bMesh.bndElemInfo.son, mpi);    // which will remain 0 sized
-        DNDS_MAKE_SSP(bMesh.bnd2bndOrig.father, mpi); // which will remain 0 sized
-        DNDS_MAKE_SSP(bMesh.bnd2bndOrig.son, mpi);    // which will remain 0 sized
+        bMesh.bnd2cell.InitPair("bMesh.bnd2cell", mpi);       // which will remain 0 sized
+        bMesh.bnd2node.InitPair("bMesh.bnd2node", mpi);       // which will remain 0 sized
+        bMesh.bndElemInfo.InitPair("bMesh.bndElemInfo", mpi);  // which will remain 0 sized
+        bMesh.bnd2bndOrig.InitPair("bMesh.bnd2bndOrig", mpi); // which will remain 0 sized
         if (isPeriodic)
-        {
-            DNDS_MAKE_SSP(bMesh.bnd2nodePbi.father, mpi); // which will remain 0 sized
-            DNDS_MAKE_SSP(bMesh.bnd2nodePbi.son, mpi);    // which will remain 0 sized
-        }
+            bMesh.bnd2nodePbi.InitPair("bMesh.bnd2nodePbi", mpi); // which will remain 0 sized
 
         tIndPair node2bndNodeGlobal;
-        DNDS_MAKE_SSP(node2bndNodeGlobal.father, mpi);
-        DNDS_MAKE_SSP(node2bndNodeGlobal.son, mpi);
+        node2bndNodeGlobal.InitPair("node2bndNodeGlobal", mpi);
 
         node2bndNodeGlobal.father->Resize(this->NumNode());
         node2bndNodeGlobal.TransAttach();
@@ -2209,8 +2096,7 @@ namespace DNDS::Geom
                     node2bndNodeGlobal[iNode]++; // now stores num-reference
 
             {
-                tInd node2bndNodeGlobalPast;
-                DNDS_MAKE_SSP(node2bndNodeGlobalPast, mpi);
+                auto node2bndNodeGlobalPast = make_ssp<tInd::element_type>(ObjName{"node2bndNodeGlobalPast"}, mpi);
                 DNDS::ArrayTransformerType<tInd::element_type>::Type node2bndNodeGlobalPastTrans;
                 node2bndNodeGlobalPastTrans.setFatherSon(node2bndNodeGlobal.son, node2bndNodeGlobalPast);
                 node2bndNodeGlobalPastTrans.createFatherGlobalMapping();
@@ -2530,8 +2416,7 @@ namespace DNDS::Geom
 
         // Section B: Build cellOld2NewArr for MPI communication of new cell indices
         tAdj1Pair cellOld2NewArr;
-        DNDS_MAKE_SSP(cellOld2NewArr.father, mpi);
-        DNDS_MAKE_SSP(cellOld2NewArr.son, mpi);
+        cellOld2NewArr.InitPair("cellOld2NewArr", mpi);
         cellOld2NewArr.father->Resize(this->NumCell());
         for (index iCell = 0; iCell < this->NumCell(); iCell++)
             (*cellOld2NewArr.father)[iCell][0] = this->CellIndexLocal2Global_NoSon(perm.cellOld2New.at(iCell)); // this is right but bad syntax

@@ -58,7 +58,7 @@ namespace DNDS
      * @tparam _align
      */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    class Array : public ArrayLayout<T, _row_size, _row_max, _align>
+    class Array : public ArrayLayout<T, _row_size, _row_max, _align>, public ObjectNaming
     {
     public:
         using self_type = Array<T, _row_size, _row_max, _align>;
@@ -114,6 +114,13 @@ namespace DNDS
     public:
         // default constructor using default:
         Array() = default;
+
+        /// @brief Named constructor: sets the object name for tracing/debugging.
+        /// Delegates to the default constructor, then sets the name.
+        explicit Array(ObjName objName)
+        {
+            this->setObjectName(std::move(objName.name));
+        }
 
         // TODO: constructors
         // TODO: A indexer-copying build method:
@@ -453,12 +460,12 @@ namespace DNDS
         {
             DNDS_assert_info(iRow < _size && iRow >= 0,
                              fmt::format(
-                                 "query position i[{}] out of range [0, {}), sig--{}",
-                                 iRow, _size, GetArrayName()));
+                                 "query position i[{}] out of range [0, {}), array: {}",
+                                 iRow, _size, this->getObjectIdentity(GetArrayName())));
             DNDS_assert_info(iCol < RowSize(iRow) && iCol >= 0,
                              fmt::format(
-                                 "query position j[{}] out of range [0, {}), sig--{}",
-                                 iCol, RowSize(iRow), GetArrayName()));
+                                 "query position j[{}] out of range [0, {}), array: {}",
+                                 iCol, RowSize(iRow), this->getObjectIdentity(GetArrayName())));
             if constexpr (_dataLayout == TABLE_StaticFixed)
                 return _data.at(iRow * rs + iCol);
             else if constexpr (_dataLayout == TABLE_StaticMax)

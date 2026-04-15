@@ -248,6 +248,21 @@ namespace DNDS
             AssertDataType();
         }
 
+        /// @brief Named constructor: sets the object name for tracing/debugging.
+        /// All existing constructor overloads are supported via perfect forwarding.
+        /// Inherited by derived classes (ArrayAdjacency, ArrayEigenVector, etc.)
+        /// through `using t_base::t_base`.
+        ///
+        /// Usage:
+        ///   ParArray<index> arr(ObjName{"cell2node"}, mpi);
+        ///   ArrayAdjacency<> adj(ObjName{"cell2cell"}, mpi);
+        template <typename... Args>
+        ParArray(ObjName objName, Args &&...args)
+            : ParArray(std::forward<Args>(args)...)
+        {
+            this->setObjectName(std::move(objName.name));
+        }
+
         void AssertDataType()
         {
             DNDS_check_throw(dataType != MPI_DATATYPE_NULL);

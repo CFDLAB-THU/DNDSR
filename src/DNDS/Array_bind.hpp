@@ -261,6 +261,11 @@ namespace DNDS // ParArray
             .def(py::init([](const MPIInfo &n_mpi)
                           { return std::make_shared<TParArray>(n_mpi); }),
                  py::arg("n_mpi"))
+            .def(py::init([](const std::string &name, const MPIInfo &n_mpi)
+                          { return make_ssp<TParArray>(ObjName{name}, n_mpi); }),
+                 py::arg("name"), py::arg("n_mpi"))
+            .def("setObjectName", &TParArray::setObjectName, py::arg("name"))
+            .def("getObjectName", &TParArray::getObjectName)
             .def("getMPI", [](const TParArray &self)
                  { return self.getMPI(); })
             .def("setMPI", [](TParArray &self, const MPIInfo &n_mpi)
@@ -330,6 +335,10 @@ namespace DNDS // ParArrayPair
                      return new_pair;
                  });
         Pair_
+            .def("InitPair",
+                 [](TPair &self, const std::string &name, const MPIInfo &mpi)
+                 { self.InitPair(name, mpi); },
+                 py::arg("name"), py::arg("mpi"))
             .def("TransAttach", &TPair::TransAttach)
             .def("hash", &TPair::hash)
             .def("Size", &TPair::Size);

@@ -91,6 +91,11 @@ namespace DNDS
         ArrayAdjacency_
             // we only bind the non-default ctor here
             .def(py::init<const MPIInfo &>(), py::arg("nmpi"))
+            .def(py::init([](const std::string &name, const MPIInfo &nmpi)
+                          { return make_ssp<TArrayAdjacency>(ObjName{name}, nmpi); }),
+                 py::arg("name"), py::arg("nmpi"))
+            .def("setObjectName", &TArrayAdjacency::setObjectName, py::arg("name"))
+            .def("getObjectName", &TArrayAdjacency::getObjectName)
             .def(
                 "__getitem__",
                 [](TArrayAdjacency &self, index index_)
