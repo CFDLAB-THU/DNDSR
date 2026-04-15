@@ -139,7 +139,9 @@ with POSIX `index()` from `<strings.h>` (pulled in by doctest).
 ### Python Geom Module
 
 The Python `DNDSR.Geom` module provides mesh reading and manipulation capabilities.
-See the detailed guide at `docs/python_geom_mesh_reader.md`.
+See the comprehensive guide at `docs/python_geom_mesh_reader.md` for full API
+details, including all parameters, read modes, and notes on which C++ methods
+are (and are not) exposed in the Python bindings.
 
 **Quick Example:**
 ```python
@@ -165,6 +167,9 @@ mesh, reader, name2ID = create_mesh_from_CGNS(
 - Mesh bisection for h-refinement (`BuildBisectO1FormO2`)
 - Boundary mesh extraction (`create_bnd_mesh`)
 - VTK output generation
+- Wall distance computation (`BuildNodeWallDist`)
+- CUDA device offloading (`to_device` / `to_host`)
+- Three read modes: Serial, Parallel, Distributed
 
 ## Formatting and Linting
 
