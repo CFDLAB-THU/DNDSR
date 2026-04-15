@@ -222,7 +222,7 @@ namespace DNDS::Euler
                 //     << fmt::format(" [{:.3e} -> {:.3e}] ", rhs0, rhs) << std::endl;
             }
 
-            DNDS_MAKE_SSP(symLU, mesh->getMPI(), mesh->NumCell());
+            symLU = std::make_shared<Direct::SerialSymLUStructure>(mesh->getMPI(), mesh->NumCell());
 
             for (auto &name : settings.cLDriverBCNames)
             {

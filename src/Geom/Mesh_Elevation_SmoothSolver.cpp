@@ -121,10 +121,8 @@ namespace DNDS::Geom
 
         tCoordPair boundInterpCoo;
         tCoordPair boundInterpVal;
-        DNDS_MAKE_SSP(boundInterpCoo.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoo.son, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.father, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.son, mpi);
+        boundInterpCoo.InitPair("ElevatedNodesSolveInternalSmooth::boundInterpCoo", mpi);
+        boundInterpVal.InitPair("ElevatedNodesSolveInternalSmooth::boundInterpVal", mpi);
 
         boundInterpCoo.father->Resize(nodesBoundInterpolated.size());
         boundInterpVal.father->Resize(nodesBoundInterpolated.size());
@@ -263,10 +261,8 @@ namespace DNDS::Geom
 
         tCoordPair boundInterpCoo;
         tCoordPair boundInterpVal;
-        DNDS_MAKE_SSP(boundInterpCoo.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoo.son, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.father, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.son, mpi);
+        boundInterpCoo.InitPair("ElevatedNodesSolveInternalSmoothV1Old::boundInterpCoo", mpi);
+        boundInterpVal.InitPair("ElevatedNodesSolveInternalSmoothV1Old::boundInterpVal", mpi);
 
         boundInterpCoo.father->Resize(nodesBoundInterpolated.size());
         boundInterpVal.father->Resize(nodesBoundInterpolated.size());
@@ -315,10 +311,8 @@ namespace DNDS::Geom
         using tScalarPair = DNDS::ArrayPair<DNDS::ParArray<real, 1>>;
         tScalarPair boundInterpR;
 
-        DNDS_MAKE_SSP(boundInterpCoef.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoef.son, mpi);
-        DNDS_MAKE_SSP(boundInterpR.father, mpi);
-        DNDS_MAKE_SSP(boundInterpR.son, mpi);
+        boundInterpCoef.InitPair("ElevatedNodesSolveInternalSmoothV1Old::boundInterpCoef", mpi);
+        boundInterpR.InitPair("ElevatedNodesSolveInternalSmoothV1Old::boundInterpR", mpi);
         boundInterpCoef.father->Resize(mpi.rank == mRank ? boundInterpGlobSize : 0);
         boundInterpR.father->Resize(mpi.rank == mRank ? boundInterpGlobSize : 0);
 
@@ -503,10 +497,8 @@ namespace DNDS::Geom
 
         tCoordPair boundInterpCoo;
         tCoordPair boundInterpVal;
-        DNDS_MAKE_SSP(boundInterpCoo.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoo.son, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.father, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.son, mpi);
+        boundInterpCoo.InitPair("ElevatedNodesSolveInternalSmoothV1::boundInterpCoo", mpi);
+        boundInterpVal.InitPair("ElevatedNodesSolveInternalSmoothV1::boundInterpVal", mpi);
 
         boundInterpCoo.father->Resize(nodesBoundInterpolated.size());
         boundInterpVal.father->Resize(nodesBoundInterpolated.size());
@@ -556,12 +548,9 @@ namespace DNDS::Geom
         using tScalarPair = DNDS::ArrayPair<DNDS::ParArray<real, 1>>;
         tScalarPair boundInterpR;
         std::cout << "HEre-2" << std::endl;
-        DNDS_MAKE_SSP(boundInterpCoef.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoef.son, mpi);
-        DNDS_MAKE_SSP(boundInterpCoefRHS.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoefRHS.son, mpi);
-        DNDS_MAKE_SSP(boundInterpR.father, mpi);
-        DNDS_MAKE_SSP(boundInterpR.son, mpi);
+        boundInterpCoef.InitPair("ElevatedNodesSolveInternalSmoothV1::boundInterpCoef", mpi);
+        boundInterpCoefRHS.InitPair("ElevatedNodesSolveInternalSmoothV1::boundInterpCoefRHS", mpi);
+        boundInterpR.InitPair("ElevatedNodesSolveInternalSmoothV1::boundInterpR", mpi);
         boundInterpCoef.father->Resize(boundInterpCoo.father->Size());
         boundInterpCoefRHS.father->Resize(boundInterpCoo.father->Size());
         boundInterpR.father->Resize(boundInterpCoo.father->Size());
@@ -756,8 +745,7 @@ namespace DNDS::Geom
                 5,
                 [&](CoordPairDOF &v)
                 {
-                    DNDS_MAKE_SSP(v.father, mpi);
-                    DNDS_MAKE_SSP(v.son, mpi);
+                    v.InitPair("ElevatedNodesSolveInternalSmoothV1::v", mpi);
                     v.father->Resize(boundInterpCoef.father->Size());
                     v.TransAttach();
                     v.trans.BorrowGGIndexing(boundInterpCoef.trans);
@@ -954,10 +942,8 @@ namespace DNDS::Geom
 
         tCoordPair boundInterpCoo;
         tCoordPair boundInterpVal;
-        DNDS_MAKE_SSP(boundInterpCoo.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoo.son, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.father, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.son, mpi);
+        boundInterpCoo.InitPair("ElevatedNodesSolveInternalSmoothV2::boundInterpCoo", mpi);
+        boundInterpVal.InitPair("ElevatedNodesSolveInternalSmoothV2::boundInterpVal", mpi);
 
         boundInterpCoo.father->Resize(nodesBoundInterpolated.size());
         boundInterpVal.father->Resize(nodesBoundInterpolated.size());
@@ -1020,8 +1006,7 @@ namespace DNDS::Geom
         CoordPairDOF dispO2, bO2, dispO2New, dispO2PrecRHS, dispO2Inc, dispO2IncLimited;
         auto initDOF = [&](CoordPairDOF &dispO2)
         {
-            DNDS_MAKE_SSP(dispO2.father, mpi);
-            DNDS_MAKE_SSP(dispO2.son, mpi);
+            dispO2.InitPair("ElevatedNodesSolveInternalSmoothV2::dispO2", mpi);
             dispO2.father->Resize(coords.father->Size()); // O1 part is unused
             dispO2.TransAttach();
             dispO2.trans.BorrowGGIndexing(coords.trans); // should be subset of coord?

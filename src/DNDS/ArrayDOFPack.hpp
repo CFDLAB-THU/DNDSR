@@ -30,8 +30,7 @@ namespace DNDS
             {
                 if (&arr == arrs.data())
                 {
-                    DNDS_MAKE_SSP(arr.father, mpi);
-                    DNDS_MAKE_SSP(arr.son, mpi);
+                    arr.InitPair("ArrayDOFPack::BuildResizeFatherSon::arr", mpi);
                     arr.father->Resize(s_father, 1, 1);
                     arr.son->Resize(s_son, 1, 1);
                     arr.TransAttach();

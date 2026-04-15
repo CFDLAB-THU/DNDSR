@@ -50,8 +50,7 @@ static ArrayDof<M, N> makeDof(const MPIInfo &mpi, DNDS::index nCells,
                                DNDS::rowsize mRow = M, DNDS::rowsize nCol = N)
 {
     ArrayDof<M, N> dof;
-    DNDS_MAKE_SSP(dof.father, mpi);
-    DNDS_MAKE_SSP(dof.son, mpi);
+    dof.InitPair("dof::arr", mpi);
     dof.father->Resize(nCells, mRow, nCol);
     dof.son->Resize(0, mRow, nCol);
     dof.TransAttach();

@@ -142,16 +142,28 @@ def _get_array_name(
     return className
 
 
+def _named_init_args(name: str | None, init_args: tuple) -> tuple:
+    """Prepend ``name`` to *init_args* when a name is supplied.
+
+    The C++ pybind11 constructors accept ``(name, mpi)`` as an overload,
+    so placing the name string first makes the named constructor fire.
+    When *name* is ``None`` the original *init_args* are returned unchanged.
+    """
+    if name is not None:
+        return (name, *init_args)
+    return init_args
+
+
 def Array(type: str, row_size: int | str, row_max: int | str = None,
-          init_args: tuple = ()):
+          init_args: tuple = (), *, name: str | None = None):
     cls = globals()[_get_array_name(type, row_size, row_max, prepend="Array")]
-    return cls(*init_args)
+    return cls(*_named_init_args(name, init_args))
 
 
 def ParArray(type: str, row_size: int | str, row_max: int | str = None,
-             init_args: tuple = ()):
+             init_args: tuple = (), *, name: str | None = None):
     cls = globals()[_get_array_name(type, row_size, row_max, prepend="ParArray")]
-    return cls(*init_args)
+    return cls(*_named_init_args(name, init_args))
 
 
 def ParArrayPair(type: str, row_size: int | str, row_max: int | str = None,
@@ -167,10 +179,10 @@ def ArrayTransformer(type: str, row_size: int | str, row_max: int | str = None,
 
 
 def ArrayAdjacency(row_size: int | str, row_max: int | str = None,
-                   init_args: tuple = ()):
+                   init_args: tuple = (), *, name: str | None = None):
     cls = globals()[_get_array_name(row_size=row_size, row_max=row_max,
                                     prepend="ArrayAdjacency")]
-    return cls(*init_args)
+    return cls(*_named_init_args(name, init_args))
 
 
 def ArrayAdjacencyPair(row_size: int | str, row_max: int | str = None,
@@ -182,11 +194,11 @@ def ArrayAdjacencyPair(row_size: int | str, row_max: int | str = None,
 
 def ArrayEigenMatrix(row_size: int | str, row_size_n: int | str,
                      row_max: int | str = None, row_max_n: int | str = None,
-                     init_args: tuple = ()):
+                     init_args: tuple = (), *, name: str | None = None):
     cls = globals()[_get_array_name(row_size=row_size, row_max=row_max,
                                     row_size_n=row_size_n, row_max_n=row_max_n,
                                     prepend="ArrayEigenMatrix")]
-    return cls(*init_args)
+    return cls(*_named_init_args(name, init_args))
 
 
 def ArrayEigenMatrixPair(row_size: int | str, row_size_n: int | str,
@@ -199,10 +211,10 @@ def ArrayEigenMatrixPair(row_size: int | str, row_size_n: int | str,
 
 
 def ArrayEigenUniMatrixBatch(row_size: int | str, row_size_n: int | str,
-                             init_args: tuple = ()):
+                             init_args: tuple = (), *, name: str | None = None):
     cls = globals()[_get_array_name(row_size=row_size, row_size_n=row_size_n,
                                     prepend="ArrayEigenUniMatrixBatch")]
-    return cls(*init_args)
+    return cls(*_named_init_args(name, init_args))
 
 
 def ArrayEigenUniMatrixBatchPair(row_size: int | str, row_size_n: int | str,
@@ -213,10 +225,10 @@ def ArrayEigenUniMatrixBatchPair(row_size: int | str, row_size_n: int | str,
 
 
 def ArrayEigenVector(row_size: int | str, row_max: int | str = None,
-                     init_args: tuple = ()):
+                     init_args: tuple = (), *, name: str | None = None):
     cls = globals()[_get_array_name(row_size=row_size, row_max=row_max,
                                     prepend="ArrayEigenVector")]
-    return cls(*init_args)
+    return cls(*_named_init_args(name, init_args))
 
 
 def ArrayEigenVectorPair(row_size: int | str, row_max: int | str = None,

@@ -142,8 +142,7 @@ TEST_CASE("ArrayPair redistribute — same np round-trip")
         using TArray = ParArray<DNDS::real, 3>;
         using TPair = ArrayPair<TArray>;
         TPair pair;
-        DNDS_MAKE_SSP(pair.father, mpi);
-        DNDS_MAKE_SSP(pair.son, mpi);
+        pair.InitPair("redist::pair", mpi);
         pair.father->Resize(nLocal);
         pair.son->Resize(0);
         for (DNDS::index i = 0; i < nLocal; i++)
@@ -159,8 +158,7 @@ TEST_CASE("ArrayPair redistribute — same np round-trip")
         using TArray = ParArray<DNDS::real, 3>;
         using TPair = ArrayPair<TArray>;
         TPair pair;
-        DNDS_MAKE_SSP(pair.father, mpi);
-        DNDS_MAKE_SSP(pair.son, mpi);
+        pair.InitPair("redist::readPair", mpi);
         pair.father->Resize(nLocal);
         pair.son->Resize(0);
         auto ser = std::make_shared<S::SerializerH5>(mpi);
@@ -199,8 +197,7 @@ TEST_CASE("ArrayPair redistribute — shuffled partition same np")
         using TArray = ParArray<DNDS::real, 2>;
         using TPair = ArrayPair<TArray>;
         TPair pair;
-        DNDS_MAKE_SSP(pair.father, mpi);
-        DNDS_MAKE_SSP(pair.son, mpi);
+        pair.InitPair("redistShuf::pair", mpi);
         pair.father->Resize(nLocal);
         pair.son->Resize(0);
         for (DNDS::index i = 0; i < nLocal; i++)
@@ -224,8 +221,7 @@ TEST_CASE("ArrayPair redistribute — shuffled partition same np")
         using TArray = ParArray<DNDS::real, 2>;
         using TPair = ArrayPair<TArray>;
         TPair pair;
-        DNDS_MAKE_SSP(pair.father, mpi);
-        DNDS_MAKE_SSP(pair.son, mpi);
+        pair.InitPair("redistShuf::readPair", mpi);
         pair.father->Resize(nLocal);
         pair.son->Resize(0);
         auto ser = std::make_shared<S::SerializerH5>(mpi);
@@ -382,8 +378,7 @@ TEST_CASE_TEMPLATE("redistribute", Tag, REDIST_ALL_TAGS)
             using TArray = ParArray<T, RS>;
             using TPair = ArrayPair<TArray>;
             TPair pair;
-            DNDS_MAKE_SSP(pair.father, mpi);
-            DNDS_MAKE_SSP(pair.son, mpi);
+            pair.InitPair("rd::wPair", mpi);
             pair.father->Resize(nLocal);
             pair.son->Resize(0);
             for (DNDS::index i = 0; i < nLocal; i++)
@@ -399,8 +394,7 @@ TEST_CASE_TEMPLATE("redistribute", Tag, REDIST_ALL_TAGS)
             using TArray = ParArray<T, DynamicSize>;
             using TPair = ArrayPair<TArray>;
             TPair pair;
-            DNDS_MAKE_SSP(pair.father, mpi);
-            DNDS_MAKE_SSP(pair.son, mpi);
+            pair.InitPair("rd::wPair", mpi);
             pair.father->Resize(nLocal, RS);
             pair.son->Resize(0, RS);
             for (DNDS::index i = 0; i < nLocal; i++)
@@ -416,8 +410,7 @@ TEST_CASE_TEMPLATE("redistribute", Tag, REDIST_ALL_TAGS)
             using TArray = ParArray<T, NonUniformSize>;
             using TPair = ArrayPair<TArray>;
             TPair pair;
-            DNDS_MAKE_SSP(pair.father, mpi);
-            DNDS_MAKE_SSP(pair.son, mpi);
+            pair.InitPair("rd::wPair", mpi);
             pair.father->Resize(nLocal);
             pair.son->Resize(0);
             for (DNDS::index i = 0; i < nLocal; i++)
@@ -442,8 +435,7 @@ TEST_CASE_TEMPLATE("redistribute", Tag, REDIST_ALL_TAGS)
             using TArray = ParArray<T, RS>;
             using TPair = ArrayPair<TArray>;
             TPair pair;
-            DNDS_MAKE_SSP(pair.father, mpi);
-            DNDS_MAKE_SSP(pair.son, mpi);
+            pair.InitPair("rd::rPair", mpi);
             pair.father->Resize(nLocal);
             pair.son->Resize(0);
             auto ser = std::make_shared<S::SerializerH5>(mpi);
@@ -459,8 +451,7 @@ TEST_CASE_TEMPLATE("redistribute", Tag, REDIST_ALL_TAGS)
             using TArray = ParArray<T, DynamicSize>;
             using TPair = ArrayPair<TArray>;
             TPair pair;
-            DNDS_MAKE_SSP(pair.father, mpi);
-            DNDS_MAKE_SSP(pair.son, mpi);
+            pair.InitPair("rd::rPair", mpi);
             pair.father->Resize(nLocal, RS);
             pair.son->Resize(0, RS);
             auto ser = std::make_shared<S::SerializerH5>(mpi);
@@ -476,8 +467,7 @@ TEST_CASE_TEMPLATE("redistribute", Tag, REDIST_ALL_TAGS)
             using TArray = ParArray<T, NonUniformSize>;
             using TPair = ArrayPair<TArray>;
             TPair pair;
-            DNDS_MAKE_SSP(pair.father, mpi);
-            DNDS_MAKE_SSP(pair.son, mpi);
+            pair.InitPair("rd::rPair", mpi);
             pair.father->Resize(nLocal);
             pair.son->Resize(0);
             auto ser = std::make_shared<S::SerializerH5>(mpi);
@@ -541,8 +531,7 @@ void TestDifferentNp(int npWrite, DNDS::index baseSize)
                 using TArray = ParArray<T, RS>;
                 using TPair = ArrayPair<TArray>;
                 TPair pair;
-                DNDS_MAKE_SSP(pair.father, writeMpi);
-                DNDS_MAKE_SSP(pair.son, writeMpi);
+                pair.InitPair("rdNp::wPair", writeMpi);
                 pair.father->Resize(nLocal);
                 pair.son->Resize(0);
                 for (DNDS::index i = 0; i < nLocal; i++)
@@ -558,8 +547,7 @@ void TestDifferentNp(int npWrite, DNDS::index baseSize)
                 using TArray = ParArray<T, DynamicSize>;
                 using TPair = ArrayPair<TArray>;
                 TPair pair;
-                DNDS_MAKE_SSP(pair.father, writeMpi);
-                DNDS_MAKE_SSP(pair.son, writeMpi);
+                pair.InitPair("rdNp::wPair", writeMpi);
                 pair.father->Resize(nLocal, RS);
                 pair.son->Resize(0, RS);
                 for (DNDS::index i = 0; i < nLocal; i++)
@@ -575,8 +563,7 @@ void TestDifferentNp(int npWrite, DNDS::index baseSize)
                 using TArray = ParArray<T, NonUniformSize>;
                 using TPair = ArrayPair<TArray>;
                 TPair pair;
-                DNDS_MAKE_SSP(pair.father, writeMpi);
-                DNDS_MAKE_SSP(pair.son, writeMpi);
+                pair.InitPair("rdNp::wPair", writeMpi);
                 pair.father->Resize(nLocal);
                 pair.son->Resize(0);
                 for (DNDS::index i = 0; i < nLocal; i++)
@@ -609,8 +596,7 @@ void TestDifferentNp(int npWrite, DNDS::index baseSize)
             using TArray = ParArray<T, RS>;
             using TPair = ArrayPair<TArray>;
             TPair pair;
-            DNDS_MAKE_SSP(pair.father, worldMpi);
-            DNDS_MAKE_SSP(pair.son, worldMpi);
+            pair.InitPair("rdNp::rPair", worldMpi);
             pair.father->Resize(nLocal);
             pair.son->Resize(0);
             auto ser = std::make_shared<S::SerializerH5>(worldMpi);
@@ -626,8 +612,7 @@ void TestDifferentNp(int npWrite, DNDS::index baseSize)
             using TArray = ParArray<T, DynamicSize>;
             using TPair = ArrayPair<TArray>;
             TPair pair;
-            DNDS_MAKE_SSP(pair.father, worldMpi);
-            DNDS_MAKE_SSP(pair.son, worldMpi);
+            pair.InitPair("rdNp::rPair", worldMpi);
             pair.father->Resize(nLocal, RS);
             pair.son->Resize(0, RS);
             auto ser = std::make_shared<S::SerializerH5>(worldMpi);
@@ -643,8 +628,7 @@ void TestDifferentNp(int npWrite, DNDS::index baseSize)
             using TArray = ParArray<T, NonUniformSize>;
             using TPair = ArrayPair<TArray>;
             TPair pair;
-            DNDS_MAKE_SSP(pair.father, worldMpi);
-            DNDS_MAKE_SSP(pair.son, worldMpi);
+            pair.InitPair("rdNp::rPair", worldMpi);
             pair.father->Resize(nLocal);
             pair.son->Resize(0);
             auto ser = std::make_shared<S::SerializerH5>(worldMpi);

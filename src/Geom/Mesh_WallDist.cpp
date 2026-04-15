@@ -15,12 +15,11 @@ namespace DNDS::Geom
         // Here implements direct search method
         using TriArray = ArrayEigenMatrix<3, 3>;
         ssp<TriArray> TrianglesLocal, TrianglesFull;
-        DNDS_MAKE_SSP(TrianglesLocal, getMPI());
-        DNDS_MAKE_SSP(TrianglesFull, getMPI());
+        TrianglesLocal = make_ssp<decltype(TrianglesLocal)::element_type>(ObjName{"BuildNodeWallDist::TrianglesLocal"}, getMPI());
+        TrianglesFull = make_ssp<decltype(TrianglesFull)::element_type>(ObjName{"BuildNodeWallDist::TrianglesFull"}, getMPI());
         std::vector<Eigen::Matrix<real, 3, 3>> Triangles;
 
-        DNDS_MAKE_SSP(nodeWallDist.father, mpi);
-        DNDS_MAKE_SSP(nodeWallDist.son, mpi);
+        nodeWallDist.InitPair("BuildNodeWallDist::nodeWallDist", mpi);
         nodeWallDist.father->Resize(NumNode());
         for (index iNode = 0; iNode < NumNode(); iNode++)
             nodeWallDist[iNode] = tPoint{std::pow(veryLargeReal, 1. / 4.), 0, 0};

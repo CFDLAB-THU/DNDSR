@@ -707,7 +707,7 @@ namespace DNDS::Euler
                 }
                 config.ReadWriteJson(gSetting, nVars, read);
                 // create from json the pBCHandler
-                DNDS_MAKE_SSP(pBCHandler, nVars);
+                pBCHandler = std::make_shared<BoundaryHandler<model>>(nVars);
                 from_json(config.bcSettings, *pBCHandler);
                 gSetting["bcSettings"] = *pBCHandler;
                 PrintConfig(true);

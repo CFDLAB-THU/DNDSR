@@ -30,10 +30,10 @@ namespace DNDS::Geom
         tAdj cell2nodeSerialDummy;
         tPbi cell2nodePbiSerialDummy;
         tElemInfoArray cellElemInfoSerialDummy;
-        DNDS_MAKE_SSP(coordSerialDummy, mesh->getMPI());
-        DNDS_MAKE_SSP(cell2nodeSerialDummy, mesh->getMPI());
-        DNDS_MAKE_SSP(cell2nodePbiSerialDummy, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mesh->getMPI());
-        DNDS_MAKE_SSP(cellElemInfoSerialDummy, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
+        coordSerialDummy = make_ssp<decltype(coordSerialDummy)::element_type>(ObjName{"GetCurrentOutputArrays::coordSerialDummy"}, mesh->getMPI());
+        cell2nodeSerialDummy = make_ssp<decltype(cell2nodeSerialDummy)::element_type>(ObjName{"GetCurrentOutputArrays::cell2nodeSerialDummy"}, mesh->getMPI());
+        cell2nodePbiSerialDummy = make_ssp<decltype(cell2nodePbiSerialDummy)::element_type>(ObjName{"GetCurrentOutputArrays::cell2nodePbiSerialDummy"}, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mesh->getMPI());
+        cellElemInfoSerialDummy = make_ssp<decltype(cellElemInfoSerialDummy)::element_type>(ObjName{"GetCurrentOutputArrays::cellElemInfoSerialDummy"}, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
 
         if (flag == 0)
         {

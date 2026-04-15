@@ -83,7 +83,7 @@ namespace DNDS
                 DNDS_check_throw(nSizeColDynamic <= _mat_nj_max);
 
             if constexpr (_mat_ni == NonUniformSize)
-                DNDS_MAKE_SSP(_mat_nRows, nSize, nSizeRowDynamic);
+                _mat_nRows = std::make_shared<host_device_vector<rowsize>>(nSize, nSizeRowDynamic);
             else if constexpr (_mat_ni == DynamicSize)
                 _mat_nRow_dynamic = nSizeRowDynamic;
 
@@ -274,7 +274,7 @@ namespace DNDS
             else // TODO: complete here!
             {
                 if constexpr (_mat_ni == NonUniformSize)
-                    DNDS_MAKE_SSP(_mat_nRows, this->Size(), v_mat_ni >= 0 ? v_mat_ni : _mat_nRow_dynamic);
+                    _mat_nRows = std::make_shared<host_device_vector<rowsize>>(this->Size(), v_mat_ni >= 0 ? v_mat_ni : _mat_nRow_dynamic);
             }
 
             serializerP->GoToPath(cwd);

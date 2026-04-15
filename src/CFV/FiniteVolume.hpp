@@ -107,8 +107,7 @@ namespace DNDS::CFV
         template <class TArrayPair, class... TOthers>
         void MakePairDefaultOnCell(TArrayPair &aPair, TOthers... others)
         {
-            DNDS_MAKE_SSP(aPair.father, mpi);
-            DNDS_MAKE_SSP(aPair.son, mpi);
+            aPair.InitPair("FV::MakePairDefaultOnCell::aPair", mpi);
             aPair.father->Resize(mesh->NumCell(), others...);
             aPair.son->Resize(mesh->NumCellGhost(), others...);
         }
@@ -124,8 +123,7 @@ namespace DNDS::CFV
         template <class TArrayPair, class... TOthers>
         void MakePairDefaultOnFace(TArrayPair &aPair, TOthers... others)
         {
-            DNDS_MAKE_SSP(aPair.father, mpi);
-            DNDS_MAKE_SSP(aPair.son, mpi);
+            aPair.InitPair("FV::MakePairDefaultOnFace::aPair", mpi);
             aPair.father->Resize(mesh->NumFace(), others...);
             aPair.son->Resize(mesh->NumFaceGhost(), others...);
         }
@@ -154,8 +152,7 @@ namespace DNDS::CFV
         template <int nVarsFixed = 1>
         void BuildUDof(tUDof<nVarsFixed> &u, int nVars, bool buildSon = true, bool buildTrans = true, Geom::MeshLoc varloc = Geom::MeshLoc::Cell)
         {
-            DNDS_MAKE_SSP(u.father, mpi);
-            DNDS_MAKE_SSP(u.son, mpi);
+            u.InitPair("FV::BuildUDof::u", mpi);
             DNDS_assert(varloc);
             switch (varloc)
             {
@@ -218,8 +215,7 @@ namespace DNDS::CFV
         void BuildUGradD(tUGrad<nVarsFixed, dim> &u, int nVars, bool buildSon = true, bool buildTrans = true, Geom::MeshLoc varloc = Geom::MeshLoc::Cell)
         {
             using namespace Geom::Base;
-            DNDS_MAKE_SSP(u.father, mpi);
-            DNDS_MAKE_SSP(u.son, mpi);
+            u.InitPair("FV::BuildUGradD::u", mpi);
             switch (varloc)
             {
             case Geom::MeshLoc::Cell:

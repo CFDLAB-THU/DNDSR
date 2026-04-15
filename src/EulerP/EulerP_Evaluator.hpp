@@ -88,12 +88,12 @@ namespace DNDS::EulerP
             DNDS_check_throw(fv);
             bool father_changed{false}, son_changed{false};
             if (!u.father)
-                DNDS_MAKE_SSP(u.father, fv->mesh->getMPI()), father_changed = true;
+                u.father = make_ssp<decltype(u.father)::element_type>(ObjName{"EulerPEvaluator::BuildFaceBufferDof::u.father"}, fv->mesh->getMPI()), father_changed = true;
             if (u.father->Size() != fv->mesh->NumFace())
                 u.father->Resize(fv->mesh->NumFace(), nVarsFlow, 1), father_changed = true;
 
             if (!u.son)
-                DNDS_MAKE_SSP(u.son, fv->mesh->getMPI()), son_changed = true;
+                u.son = make_ssp<decltype(u.son)::element_type>(ObjName{"EulerPEvaluator::BuildFaceBufferDof::u.son"}, fv->mesh->getMPI()), son_changed = true;
             if (u.son->Size() != fv->mesh->NumFaceGhost())
                 u.son->Resize(fv->mesh->NumFaceGhost(), nVarsFlow, 1), son_changed = true;
             auto B = fv->device();
@@ -109,12 +109,12 @@ namespace DNDS::EulerP
             DNDS_check_throw(fv);
             bool father_changed{false}, son_changed{false};
             if (!u.father)
-                DNDS_MAKE_SSP(u.father, fv->mesh->getMPI()), father_changed = true;
+                u.father = make_ssp<decltype(u.father)::element_type>(ObjName{"EulerPEvaluator::BuildFaceBufferDofScalar::u.father"}, fv->mesh->getMPI()), father_changed = true;
             if (u.father->Size() != fv->mesh->NumFace())
                 u.father->Resize(fv->mesh->NumFace(), 1, 1), father_changed = true;
 
             if (!u.son)
-                DNDS_MAKE_SSP(u.son, fv->mesh->getMPI()), son_changed = true;
+                u.son = make_ssp<decltype(u.son)::element_type>(ObjName{"EulerPEvaluator::BuildFaceBufferDofScalar::u.son"}, fv->mesh->getMPI()), son_changed = true;
             if (u.son->Size() != fv->mesh->NumFaceGhost())
                 u.son->Resize(fv->mesh->NumFaceGhost(), 1, 1), son_changed = true;
             auto B = fv->device();

@@ -355,8 +355,7 @@ TEST_CASE("ArrayEigenMatrix ghost communication")
 
     // Use ArrayPair which properly manages father/son/transformer
     ArrayEigenMatrixPair<matR, matC> pair;
-    DNDS_MAKE_SSP(pair.father, mpi);
-    DNDS_MAKE_SSP(pair.son, mpi);
+    pair.InitPair("matGhost::pair", mpi);
     pair.father->Resize(nLocal, matR, matC);
     pair.father->createGlobalMapping();
     DNDS::index gOff = (*pair.father->pLGlobalMapping)(mpi.rank, 0);
@@ -679,8 +678,7 @@ TEST_CASE("ArrayEigenMatrixBatch ghost communication")
 
     // Use ArrayPair for proper ghost communication
     ArrayEigenMatrixBatchPair pair;
-    DNDS_MAKE_SSP(pair.father, mpi);
-    DNDS_MAKE_SSP(pair.son, mpi);
+    pair.InitPair("batchGhost::pair", mpi);
     pair.father->Resize(nLocal);
 
     // Uniform batches: each row has 2 matrices of size 2x2
@@ -1009,8 +1007,7 @@ TEST_CASE_TEMPLATE("ArrayEigenMatrix parametric", Tag,
             return;
 
         ArrayEigenMatrixPair<NI, NJ> pair;
-        DNDS_MAKE_SSP(pair.father, mpi);
-        DNDS_MAKE_SSP(pair.son, mpi);
+        pair.InitPair("matParam::pair", mpi);
         pair.father->Resize(N, actualNI, actualNJ);
         pair.son->Resize(0, actualNI, actualNJ);
 

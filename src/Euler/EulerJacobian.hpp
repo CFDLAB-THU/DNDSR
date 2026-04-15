@@ -31,23 +31,19 @@ namespace DNDS::Euler
             _mode = mode;
             if (isBlock())
             {
-                DNDS_MAKE_SSP(_data.father, mock.father->getMPI());
-                DNDS_MAKE_SSP(_data.son, mock.father->getMPI());
+                _data.InitPair("JacobianLocalLU::SetModeAndInit::_data", mock.father->getMPI());
                 _data.father->Resize(mock.father->Size(), nVarsC, nVarsC);
                 _data.son->Resize(mock.son->Size() * 0, nVarsC, nVarsC);
-                DNDS_MAKE_SSP(_dataInvert.father, mock.father->getMPI());
-                DNDS_MAKE_SSP(_dataInvert.son, mock.father->getMPI());
+                _dataInvert.InitPair("JacobianLocalLU::SetModeAndInit::_dataInvert", mock.father->getMPI());
                 _dataInvert.father->Resize(mock.father->Size(), nVarsC, nVarsC);
                 _dataInvert.son->Resize(mock.son->Size() * 0, nVarsC, nVarsC); // ! warning, sons are set to zero sizes
             }
             else
             {
-                DNDS_MAKE_SSP(_dataDiag.father, mock.father->getMPI());
-                DNDS_MAKE_SSP(_dataDiag.son, mock.father->getMPI());
+                _dataDiag.InitPair("JacobianLocalLU::SetModeAndInit::_dataDiag", mock.father->getMPI());
                 _dataDiag.father->Resize(mock.father->Size(), nVarsC, 1);
                 _dataDiag.son->Resize(mock.son->Size() * 0, nVarsC, 1);
-                DNDS_MAKE_SSP(_dataDiagInvert.father, mock.father->getMPI());
-                DNDS_MAKE_SSP(_dataDiagInvert.son, mock.father->getMPI());
+                _dataDiagInvert.InitPair("JacobianLocalLU::SetModeAndInit::_dataDiagInvert", mock.father->getMPI());
                 _dataDiagInvert.father->Resize(mock.father->Size(), nVarsC, 1);
                 _dataDiagInvert.son->Resize(mock.son->Size() * 0, nVarsC, 1);
             }

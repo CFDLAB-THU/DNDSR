@@ -828,8 +828,7 @@ namespace DNDS::CFV
         {
             using namespace Geom::Base;
             int maxNDOF = GetNDof<dim>(settings.maxOrder);
-            DNDS_MAKE_SSP(u.father, mpi);
-            DNDS_MAKE_SSP(u.son, mpi);
+            u.InitPair("VR::BuildURec::u", mpi);
             u.father->Resize(mesh->NumCell(), maxNDOF - 1, nVars);
             if (buildSon)
                 u.son->Resize(mesh->NumCellGhost(), maxNDOF - 1, nVars);
@@ -851,8 +850,7 @@ namespace DNDS::CFV
         void BuildUGrad(tUGrad<nVarsFixed, dim> &u, int nVars, bool buildSon = true, bool buildTrans = true)
         {
             using namespace Geom::Base;
-            DNDS_MAKE_SSP(u.father, mpi);
-            DNDS_MAKE_SSP(u.son, mpi);
+            u.InitPair("VR::BuildUGrad::u", mpi);
             u.father->Resize(mesh->NumCell(), dim, nVars);
             if (buildSon)
                 u.son->Resize(mesh->NumCellGhost(), dim, nVars);
@@ -872,8 +870,7 @@ namespace DNDS::CFV
 
         void BuildScalar(tScalarPair &u, bool buildSon = true, bool buildTrans = true)
         {
-            DNDS_MAKE_SSP(u.father, mpi);
-            DNDS_MAKE_SSP(u.son, mpi);
+            u.InitPair("VR::BuildScalar::u", mpi);
             u.father->Resize(mesh->NumCell());
             if (buildSon)
                 u.son->Resize(mesh->NumCellGhost());
@@ -894,8 +891,7 @@ namespace DNDS::CFV
         template <int nVarsFixed = 1>
         void BuildUDofNode(tUDof<nVarsFixed> &u, int nVars, bool buildSon = true, bool buildTrans = true)
         {
-            DNDS_MAKE_SSP(u.father, mpi);
-            DNDS_MAKE_SSP(u.son, mpi);
+            u.InitPair("VR::BuildUDofNode::u", mpi);
             u.father->Resize(mesh->NumNode(), nVars, 1);
             if (buildSon)
                 u.son->Resize(mesh->NumNodeGhost(), nVars, 1);

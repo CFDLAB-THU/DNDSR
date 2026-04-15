@@ -202,7 +202,7 @@ namespace DNDS::Geom
             }
         /**********************************************************************************************************************/
 
-        DNDS_MAKE_SSP(cell2nodePbiSerial, mesh->getMPI());
+        cell2nodePbiSerial = make_ssp<decltype(cell2nodePbiSerial)::element_type>(ObjName{"Deduplicate1to1Periodic::cell2nodePbiSerial"}, mesh->getMPI());
         cell2nodePbiSerial->Resize(cell2nodeSerial->Size());
         for (index iCell = 0; iCell < cell2nodeSerial->Size(); iCell++)
             cell2nodePbiSerial->ResizeRow(iCell, cell2nodeSerial->RowSize(iCell));
@@ -232,7 +232,7 @@ namespace DNDS::Geom
                 }
             }
         }
-        DNDS_MAKE_SSP(bnd2nodePbiSerial, mesh->getMPI());
+        bnd2nodePbiSerial = make_ssp<decltype(bnd2nodePbiSerial)::element_type>(ObjName{"Deduplicate1to1Periodic::bnd2nodePbiSerial"}, mesh->getMPI());
         bnd2nodePbiSerial->Resize(bnd2nodeSerial->Size());
         for (index iBnd = 0; iBnd < bnd2nodeSerial->Size(); iBnd++)
             bnd2nodePbiSerial->ResizeRow(iBnd, bnd2nodeSerial->RowSize(iBnd));
@@ -316,7 +316,7 @@ namespace DNDS::Geom
         bnd2nodePbiSerial->Compress();
 
         decltype(coordSerial) coordSerialOld = coordSerial;
-        DNDS_MAKE_SSP(coordSerial, mesh->getMPI());
+        coordSerial = make_ssp<decltype(coordSerial)::element_type>(ObjName{"Deduplicate1to1Periodic::coordSerial"}, mesh->getMPI());
         coordSerial->Resize(nNodeNew);
         for (index i = 0; i < coordSerialOld->Size(); i++)
             if (iNodeOld2New[i] >= 0)
@@ -335,7 +335,7 @@ namespace DNDS::Geom
                         << fmt::format("Using OMP [{}]", omp_get_max_threads())
 #endif
                         << std::endl;
-        DNDS_MAKE_SSP(cell2cellSerial, mesh->getMPI());
+        cell2cellSerial = make_ssp<decltype(cell2cellSerial)::element_type>(ObjName{"BuildCell2Cell::cell2cellSerial"}, mesh->getMPI());
         // if (mRank != mesh->getMPI().rank)
         //     return;
         /// TODO: abstract these: invert cone (like node 2 cell -> cell 2 node) (also support operating on pair)
@@ -458,7 +458,7 @@ namespace DNDS::Geom
             log() << std::endl;
 
         /*************************************************************************************************/
-        DNDS_MAKE_SSP(cell2cellSerialFacial, mesh->getMPI());
+        cell2cellSerialFacial = make_ssp<decltype(cell2cellSerialFacial)::element_type>(ObjName{"BuildCell2Cell::cell2cellSerialFacial"}, mesh->getMPI());
         if (mesh->getMPI().rank == mRank)
             DNDS::log() << "UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2" << std::endl;
         cell2cellSerialFacial->Resize(cell2cellSerial->Size(), 6);
@@ -530,8 +530,7 @@ namespace DNDS::Geom
             return;
         }
         tAdj1Pair nodeNeedCreate;
-        DNDS_MAKE_SSP(nodeNeedCreate.father, mpi);
-        DNDS_MAKE_SSP(nodeNeedCreate.son, mpi);
+        nodeNeedCreate.InitPair("RecreatePeriodicNodes::nodeNeedCreate", mpi);
         nodeNeedCreate.TransAttach();
         nodeNeedCreate.father->Resize(coords.father->Size());
         nodeNeedCreate.trans.BorrowGGIndexing(coords.trans);
@@ -544,7 +543,7 @@ namespace DNDS::Geom
                 nodeNeedCreate(cell2node(iC, ic2n), 0) |= (0x01U << uint8_t(cell2nodePbi(iC, ic2n)));
         DNDS::ArrayTransformerType<tAdj1::element_type>::Type nodeNeedCreatePastTrans;
         tAdj1 nodeNeedCreatePast;
-        DNDS_MAKE_SSP(nodeNeedCreatePast, mpi);
+        nodeNeedCreatePast = make_ssp<decltype(nodeNeedCreatePast)::element_type>(ObjName{"RecreatePeriodicNodes::nodeNeedCreatePast"}, mpi);
         nodeNeedCreatePastTrans.setFatherSon(nodeNeedCreate.son, nodeNeedCreatePast);
         nodeNeedCreatePastTrans.createFatherGlobalMapping();
         std::vector<index> pushSonSeries(nodeNeedCreate.son->Size());
@@ -564,8 +563,7 @@ namespace DNDS::Geom
 
         index nCreatedNodes{0};
         tAdj8Pair node2recreatedNodes;
-        DNDS_MAKE_SSP(node2recreatedNodes.father, mpi);
-        DNDS_MAKE_SSP(node2recreatedNodes.son, mpi);
+        node2recreatedNodes.InitPair("RecreatePeriodicNodes::node2recreatedNodes", mpi);
         node2recreatedNodes.TransAttach();
         node2recreatedNodes.father->Resize(coords.father->Size());
         node2recreatedNodes.trans.BorrowGGIndexing(coords.trans);
@@ -584,8 +582,7 @@ namespace DNDS::Geom
         }
         // node2recreatedNodes now points to local new coords
 
-        DNDS_MAKE_SSP(coordsPeriodicRecreated.father, mpi);
-        DNDS_MAKE_SSP(coordsPeriodicRecreated.son, mpi);
+        coordsPeriodicRecreated.InitPair("RecreatePeriodicNodes::coordsPeriodicRecreated", mpi);
         coordsPeriodicRecreated.TransAttach();
         coordsPeriodicRecreated.father->Resize(nCreatedNodes + coords.father->Size());
         coordsPeriodicRecreated.trans.createFatherGlobalMapping();
@@ -611,8 +608,7 @@ namespace DNDS::Geom
                         mpi.rank, node2recreatedNodes(iN, i));
         node2recreatedNodes.trans.pullOnce(); // for cell2node query
         // std::cout << "here X2" << std::endl;
-        DNDS_MAKE_SSP(cell2nodePeriodicRecreated.father, mpi);
-        DNDS_MAKE_SSP(cell2nodePeriodicRecreated.son, mpi);
+        cell2nodePeriodicRecreated.InitPair("RecreatePeriodicNodes::cell2nodePeriodicRecreated", mpi);
         cell2nodePeriodicRecreated.TransAttach();
         cell2nodePeriodicRecreated.father->Resize(cell2node.father->Size());
         for (index iC = 0; iC < cell2node.father->Size(); iC++)

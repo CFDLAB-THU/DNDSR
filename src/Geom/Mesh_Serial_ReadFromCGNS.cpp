@@ -250,15 +250,15 @@ namespace DNDS::Geom
 
         int cgErr = CG_OK;
 
-        DNDS_MAKE_SSP(cell2nodeSerial, mesh->getMPI());
-        DNDS_MAKE_SSP(bnd2nodeSerial, mesh->getMPI());
-        DNDS_MAKE_SSP(coordSerial, mesh->getMPI());
-        DNDS_MAKE_SSP(cellElemInfoSerial, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        DNDS_MAKE_SSP(bndElemInfoSerial, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        DNDS_MAKE_SSP(bnd2cellSerial, mesh->getMPI());
-        DNDS_MAKE_SSP(cell2cellOrigSerial, mesh->getMPI());
-        DNDS_MAKE_SSP(node2nodeOrigSerial, mesh->getMPI());
-        DNDS_MAKE_SSP(bnd2bndOrigSerial, mesh->getMPI());
+        cell2nodeSerial = make_ssp<decltype(cell2nodeSerial)::element_type>(ObjName{"ReadFromCGNSSerial::cell2nodeSerial"}, mesh->getMPI());
+        bnd2nodeSerial = make_ssp<decltype(bnd2nodeSerial)::element_type>(ObjName{"ReadFromCGNSSerial::bnd2nodeSerial"}, mesh->getMPI());
+        coordSerial = make_ssp<decltype(coordSerial)::element_type>(ObjName{"ReadFromCGNSSerial::coordSerial"}, mesh->getMPI());
+        cellElemInfoSerial = make_ssp<decltype(cellElemInfoSerial)::element_type>(ObjName{"ReadFromCGNSSerial::cellElemInfoSerial"}, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
+        bndElemInfoSerial = make_ssp<decltype(bndElemInfoSerial)::element_type>(ObjName{"ReadFromCGNSSerial::bndElemInfoSerial"}, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
+        bnd2cellSerial = make_ssp<decltype(bnd2cellSerial)::element_type>(ObjName{"ReadFromCGNSSerial::bnd2cellSerial"}, mesh->getMPI());
+        cell2cellOrigSerial = make_ssp<decltype(cell2cellOrigSerial)::element_type>(ObjName{"ReadFromCGNSSerial::cell2cellOrigSerial"}, mesh->getMPI());
+        node2nodeOrigSerial = make_ssp<decltype(node2nodeOrigSerial)::element_type>(ObjName{"ReadFromCGNSSerial::node2nodeOrigSerial"}, mesh->getMPI());
+        bnd2bndOrigSerial = make_ssp<decltype(bnd2bndOrigSerial)::element_type>(ObjName{"ReadFromCGNSSerial::bnd2bndOrigSerial"}, mesh->getMPI());
 
         if (mRank != mesh->getMPI().rank) //! parallel done!!! now serial!!!
             return;
@@ -633,12 +633,12 @@ namespace DNDS::Geom
         mode = SerialReadAndDistribute;
         this->dataIsSerialIn = true;
 
-        DNDS_MAKE_SSP(cell2nodeSerial, mesh->getMPI());
-        DNDS_MAKE_SSP(bnd2nodeSerial, mesh->getMPI());
-        DNDS_MAKE_SSP(coordSerial, mesh->getMPI());
-        DNDS_MAKE_SSP(cellElemInfoSerial, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        DNDS_MAKE_SSP(bndElemInfoSerial, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-        DNDS_MAKE_SSP(bnd2cellSerial, mesh->getMPI());
+        cell2nodeSerial = make_ssp<decltype(cell2nodeSerial)::element_type>(ObjName{"ReadFromOpenFOAMAndConvertSerial::cell2nodeSerial"}, mesh->getMPI());
+        bnd2nodeSerial = make_ssp<decltype(bnd2nodeSerial)::element_type>(ObjName{"ReadFromOpenFOAMAndConvertSerial::bnd2nodeSerial"}, mesh->getMPI());
+        coordSerial = make_ssp<decltype(coordSerial)::element_type>(ObjName{"ReadFromOpenFOAMAndConvertSerial::coordSerial"}, mesh->getMPI());
+        cellElemInfoSerial = make_ssp<decltype(cellElemInfoSerial)::element_type>(ObjName{"ReadFromOpenFOAMAndConvertSerial::cellElemInfoSerial"}, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
+        bndElemInfoSerial = make_ssp<decltype(bndElemInfoSerial)::element_type>(ObjName{"ReadFromOpenFOAMAndConvertSerial::bndElemInfoSerial"}, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
+        bnd2cellSerial = make_ssp<decltype(bnd2cellSerial)::element_type>(ObjName{"ReadFromOpenFOAMAndConvertSerial::bnd2cellSerial"}, mesh->getMPI());
 
         if (mRank != mesh->getMPI().rank) //! parallel done!!! now serial!!!
             return;

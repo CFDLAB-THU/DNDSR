@@ -75,8 +75,8 @@ namespace DNDS::Geom
                                  const DNDS::MPIInfo &mpi)
     {
         tAdj1 JSG, JSGGhost;
-        DNDS_MAKE_SSP(JSG, mpi);
-        DNDS_MAKE_SSP(JSGGhost, mpi);
+        JSG = make_ssp<tAdj1::element_type>(ObjName{"ConvertAdjSerial2Global::JSG"}, mpi);
+        JSGGhost = make_ssp<tAdj1::element_type>(ObjName{"ConvertAdjSerial2Global::JSGGhost"}, mpi);
         JSG->Resize(partitionJSerial2Global.size());
         for (DNDS::index i = 0; i < JSG->Size(); i++)
             (*JSG)(i, 0) = partitionJSerial2Global[i];

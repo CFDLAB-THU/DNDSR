@@ -37,8 +37,7 @@ namespace DNDS::Geom
 
         tAdjPair cellNewNodes; // records iNode - iNodeO1
         index localNewNodeNum{0};
-        DNDS_MAKE_SSP(cellNewNodes.father, mpi);
-        DNDS_MAKE_SSP(cellNewNodes.son, mpi);
+        cellNewNodes.InitPair("BuildO2FromO1Elevation::cellNewNodes", mpi);
         cellNewNodes.father->Resize(meshO1.cell2node.father->Size());
         std::vector<Eigen::Vector<real, 3>> newCoords;
 
@@ -136,8 +135,7 @@ namespace DNDS::Geom
 
         /**********************************/
         // build each proc coordO2 from cellNewNodes
-        DNDS_MAKE_SSP(coords.father, mpi);
-        DNDS_MAKE_SSP(coords.son, mpi);
+        coords.InitPair("BuildO2FromO1Elevation::coords", mpi);
         coords.father->Resize(meshO1.coords.father->Size() + localNewNodeNum);
         for (index iC = 0; iC < meshO1.coords.father->Size(); iC++)
             coords[iC] = meshO1.coords[iC];
@@ -145,8 +143,7 @@ namespace DNDS::Geom
             coords[iC] = newCoords.at(iC - meshO1.coords.father->Size());
         coords.father->createGlobalMapping();
 
-        DNDS_MAKE_SSP(node2nodeOrig.father, mpi);
-        DNDS_MAKE_SSP(node2nodeOrig.son, mpi);
+        node2nodeOrig.InitPair("BuildO2FromO1Elevation::node2nodeOrig", mpi);
         node2nodeOrig.father->Resize(meshO1.coords.father->Size() + localNewNodeNum);
         for (index iC = 0; iC < meshO1.coords.father->Size(); iC++)
             node2nodeOrig[iC] = meshO1.node2nodeOrig[iC];
@@ -213,17 +210,13 @@ namespace DNDS::Geom
 
         /**********************************/
         // each cell obtain new global cell2node global state with cellNewNodesGlobalPair
-        DNDS_MAKE_SSP(cell2node.father, mpi);
-        DNDS_MAKE_SSP(cell2node.son, mpi);
-        DNDS_MAKE_SSP(cellElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(cellElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        cell2node.InitPair("BuildO2FromO1Elevation::cell2node", mpi);
+        cellElemInfo.InitPair("BuildO2FromO1Elevation::cellElemInfo", ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
         if (isPeriodic)
         {
-            DNDS_MAKE_SSP(cell2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), getMPI());
-            DNDS_MAKE_SSP(cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), getMPI());
+            cell2nodePbi.InitPair("BuildO2FromO1Elevation::cell2nodePbi", NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), getMPI());
         }
-        DNDS_MAKE_SSP(cell2cellOrig.father, mpi);
-        DNDS_MAKE_SSP(cell2cellOrig.son, mpi);
+        cell2cellOrig.InitPair("BuildO2FromO1Elevation::cell2cellOrig", mpi);
 
         cell2node.father->Resize(meshO1.cell2node.father->Size());
         cellElemInfo.father->Resize(meshO1.cell2node.father->Size());
@@ -347,17 +340,13 @@ namespace DNDS::Geom
         {
             //! jumped because cell2cell, bnd2cell is to be recovered mandatorily
         }
-        DNDS_MAKE_SSP(bnd2node.father, mpi);
-        DNDS_MAKE_SSP(bnd2node.son, mpi);
-        DNDS_MAKE_SSP(bndElemInfo.father, mpi);
-        DNDS_MAKE_SSP(bndElemInfo.son, mpi);
+        bnd2node.InitPair("BuildO2FromO1Elevation::bnd2node", mpi);
+        bndElemInfo.InitPair("BuildO2FromO1Elevation::bndElemInfo", mpi);
         if (isPeriodic)
         {
-            DNDS_MAKE_SSP(bnd2nodePbi.father, getMPI());
-            DNDS_MAKE_SSP(bnd2nodePbi.son, getMPI());
+            bnd2nodePbi.InitPair("BuildO2FromO1Elevation::bnd2nodePbi", getMPI());
         }
-        DNDS_MAKE_SSP(bnd2bndOrig.father, mpi);
-        DNDS_MAKE_SSP(bnd2bndOrig.son, mpi);
+        bnd2bndOrig.InitPair("BuildO2FromO1Elevation::bnd2bndOrig", mpi);
         bnd2node.father->Resize(meshO1.bnd2node.father->Size());
         bndElemInfo.father->Resize(meshO1.bnd2node.father->Size());
         if (isPeriodic)
@@ -445,7 +434,7 @@ namespace DNDS::Geom
         }
         adjPrimaryState = Adj_PointToGlobal;
 
-        DNDS_MAKE_SSP(coords.son, mpi); // delete because reconstructed later
+        coords.son = make_ssp<decltype(coords.son)::element_type>(ObjName{"BuildO2FromO1Elevation::coords.son"}, mpi); // delete because reconstructed later
 
         // this->BuildGhostPrimary();
 
@@ -495,9 +484,9 @@ namespace DNDS::Geom
         nNodeO1 = meshO2.nNodeO1;
         elevState = MeshElevationState::Elevation_Untouched;
 
-        DNDS_MAKE_SSP(coords.son, mpi);
+        coords.son = make_ssp<decltype(coords.son)::element_type>(ObjName{"BuildBisectO1FormO2::coords.son"}, mpi);
         coords.father = meshO2.coords.father; // coords are the same, taken without change
-        DNDS_MAKE_SSP(node2nodeOrig.son, mpi);
+        node2nodeOrig.son = make_ssp<decltype(node2nodeOrig.son)::element_type>(ObjName{"BuildBisectO1FormO2::node2nodeOrig.son"}, mpi);
         node2nodeOrig.father = meshO2.node2nodeOrig.father; // node2nodeOrig corresponds to coords, and is taken without change
 
         /**********************************/
@@ -552,17 +541,13 @@ namespace DNDS::Geom
             }
         }
         // std::cout << "here1" << std::endl;
-        DNDS_MAKE_SSP(cell2node.father, mpi);
-        DNDS_MAKE_SSP(cell2node.son, mpi);
-        DNDS_MAKE_SSP(cellElemInfo.father, mpi);
-        DNDS_MAKE_SSP(cellElemInfo.son, mpi);
+        cell2node.InitPair("BuildBisectO1FormO2::cell2node", mpi);
+        cellElemInfo.InitPair("BuildBisectO1FormO2::cellElemInfo", mpi);
         if (isPeriodic)
         { // we preserve a sample of detailed array constructor
-            DNDS_MAKE_SSP(cell2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
-            DNDS_MAKE_SSP(cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
+            cell2nodePbi.InitPair("BuildBisectO1FormO2::cell2nodePbi", NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
         }
-        DNDS_MAKE_SSP(cell2cellOrig.father, mpi);
-        DNDS_MAKE_SSP(cell2cellOrig.son, mpi);
+        cell2cellOrig.InitPair("BuildBisectO1FormO2::cell2cellOrig", mpi);
         cell2node.father->Resize(cell2nodeV.size());
         cellElemInfo.father->Resize(cellElemInfoV.size());
         DNDS_assert(cellElemInfoV.size() == cell2nodeV.size());
@@ -639,17 +624,13 @@ namespace DNDS::Geom
                 bndElemInfoV.push_back(eInfo);
             }
         }
-        DNDS_MAKE_SSP(bnd2node.father, mpi);
-        DNDS_MAKE_SSP(bnd2node.son, mpi);
-        DNDS_MAKE_SSP(bndElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(bndElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        bnd2node.InitPair("BuildBisectO1FormO2::bnd2node", mpi);
+        bndElemInfo.InitPair("BuildBisectO1FormO2::bndElemInfo", ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
         if (isPeriodic)
         {
-            DNDS_MAKE_SSP(bnd2nodePbi.father, mpi);
-            DNDS_MAKE_SSP(bnd2nodePbi.son, mpi);
+            bnd2nodePbi.InitPair("BuildBisectO1FormO2::bnd2nodePbi", mpi);
         }
-        DNDS_MAKE_SSP(bnd2bndOrig.father, mpi);
-        DNDS_MAKE_SSP(bnd2bndOrig.son, mpi);
+        bnd2bndOrig.InitPair("BuildBisectO1FormO2::bnd2bndOrig", mpi);
         bnd2node.father->Resize(bnd2nodeV.size());
         bndElemInfo.father->Resize(bndElemInfoV.size());
         DNDS_assert(bndElemInfoV.size() == bnd2nodeV.size());
@@ -676,10 +657,8 @@ namespace DNDS::Geom
         }
 
         //* unhandled info
-        DNDS_MAKE_SSP(bnd2cell.father, mpi);
-        DNDS_MAKE_SSP(bnd2cell.son, mpi);
-        DNDS_MAKE_SSP(cell2cell.father, mpi);
-        DNDS_MAKE_SSP(cell2cell.son, mpi);
+        bnd2cell.InitPair("BuildBisectO1FormO2::bnd2cell", mpi);
+        cell2cell.InitPair("BuildBisectO1FormO2::cell2cell", mpi);
     }
 
     static tPoint HermiteInterpolateMidPointOnLine2WithNorm(tPoint c0, tPoint c1, tPoint n0, tPoint n1)
@@ -727,8 +706,7 @@ namespace DNDS::Geom
         DNDS_assert(adjC2FState == Adj_PointToLocal);
         DNDS_assert(face2node.father);
 
-        DNDS_MAKE_SSP(coordsElevDisp.father, mpi);
-        DNDS_MAKE_SSP(coordsElevDisp.son, mpi);
+        coordsElevDisp.InitPair("ElevatedNodesGetBoundarySmooth::coordsElevDisp", mpi);
         coordsElevDisp.father->Resize(coords.father->Size());
         coordsElevDisp.TransAttach();
         coordsElevDisp.trans.BorrowGGIndexing(coords.trans);
@@ -757,10 +735,10 @@ namespace DNDS::Geom
         faceElemInfoExtended.father = faceElemInfo.father;
         if (isPeriodic)
             face2nodePbiExtended.father = face2nodePbi.father;
-        DNDS_MAKE_SSP(face2nodeExtended.son, mpi);
-        DNDS_MAKE_SSP(faceElemInfoExtended.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        face2nodeExtended.son = make_ssp<decltype(face2nodeExtended.son)::element_type>(ObjName{"ElevatedNodesGetBoundarySmooth::face2nodeExtended.son"}, mpi);
+        faceElemInfoExtended.son = make_ssp<decltype(faceElemInfoExtended.son)::element_type>(ObjName{"ElevatedNodesGetBoundarySmooth::faceElemInfoExtended.son"}, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
         if (isPeriodic)
-            DNDS_MAKE_SSP(face2nodePbiExtended.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
+            face2nodePbiExtended.son = make_ssp<decltype(face2nodePbiExtended.son)::element_type>(ObjName{"ElevatedNodesGetBoundarySmooth::face2nodePbiExtended.son"}, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
 
         this->AdjLocal2GlobalFacial();
         this->AdjLocal2GlobalC2F();
@@ -852,9 +830,8 @@ namespace DNDS::Geom
         // build nodeNormClusters
         using t3VecsPair = ArrayPair<ArrayEigenUniMatrixBatch<3, 1>>;
         t3VecsPair nodeNormClusters;
-        DNDS_MAKE_SSP(nodeNormClusters.father, mpi);
+        nodeNormClusters.InitPair("ElevatedNodesGetBoundarySmooth::nodeNormClusters", mpi);
         nodeNormClusters.father->Resize(coords.father->Size(), 3, 1);
-        DNDS_MAKE_SSP(nodeNormClusters.son, mpi);
 
         std::vector<int> nodeBndNum(coords.father->Size(), 0); //? need row-appending methods for NonUniform arrays?
         for (index iFace = 0; iFace < face2nodeExtended.Size(); iFace++)
