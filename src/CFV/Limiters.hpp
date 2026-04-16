@@ -167,11 +167,9 @@ namespace DNDS::CFV
             uUp += theta.rowwise() * thetaNorm.transpose() * exn;
         }
 
-        // std::cout << uUp << std::endl;
-        // std::cout << uDown << std::endl;
         uOut *= uUp.rowwise() / (uDown.transpose() + verySmallReal);
 
-        // // * Do cut off
+        // * Do cut off
         // for (int iOther = 0; iOther < Nother; iOther++)
         // {
         //     Eigen::ArrayXd uDotuOut;
@@ -537,8 +535,6 @@ namespace DNDS::CFV
         u2p = u2p.square();
 
         uOut = (u2.rowwise() * u1p.transpose() + n * (u1.rowwise() * u2p.transpose())).rowwise() / ((u1p + n * u2p) + verySmallReal).transpose();
-
-        // std::cout << u2 << std::endl;
     }
 
     template <int dim, int nVarsFixed, typename Tin1, typename Tin2, typename Tout>
@@ -575,8 +571,6 @@ namespace DNDS::CFV
         uOut = u1.rowwise() * replaceFactor.transpose() + u2.rowwise() * (1 - replaceFactor).transpose();
         // //! cutting
         // uOut = uOut.rowwise() * (u1u2.sign() + 1).transpose() * 0.5;
-
-        // std::cout << u2 << std::endl;
     }
 
     template <typename Tin1, typename Tin2, typename Tout>
@@ -596,19 +590,6 @@ namespace DNDS::CFV
         u2p = u2p.pow(p / 2);
 
         uOut = (u2.rowwise() * u1p.transpose() + n * (u1.rowwise() * u2p.transpose())).rowwise() / ((u1p + n * u2p) + verySmallReal).transpose();
-
-        // std::cout << u2 << std::endl;
     }
 
-    template <typename TinC, typename TinOthers, typename Tout>
-    inline void FWBAP_LE_Multiway(const TinC &uC, const TinOthers &uOthers, int Nother, Tout &uOut)
-    {
-        static const int p = 4;
-        static const real n = 100.0;
-        static const real verySmallReal_pDiP = std::pow(verySmallReal, 1.0 / p);
-        static const real eps = 5;
-
-        //! TODO:
-        // static_assert(false, "Incomplete Implementation");
-    }
 }

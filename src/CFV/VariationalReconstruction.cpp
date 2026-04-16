@@ -88,7 +88,6 @@ namespace DNDS::CFV
             {
                 baseWeight_.cellDiffBaseCache.ResizeRow(iCell, qCell.GetNumPoints());
             }
-            // std::cout << "hare" << std::endl;
             tSmallCoords coordsCell;
             mesh->GetCoordsOnCell(iCell, coordsCell);
 
@@ -106,7 +105,6 @@ namespace DNDS::CFV
                     DNDS_assert(vv(0) == 1);                          // must have 0th base
                     vInc = vv * JDet;
                 });
-            // std::cout << m << std::endl;
             baseWeight_.cellBaseMoment[iCell] = m.transpose() / m(0); // 0th must be good
             SummationNoOp noOp;
             qCell.Integration(
@@ -281,8 +279,6 @@ namespace DNDS::CFV
                 this->GetCellBary(mesh->face2cell(iFace, 0)) -
                 this->GetFaceQuadraturePPhysFromCell(iFace, mesh->face2cell(iFace, 0), 0, -1);
             faceBaryDiffR = faceBaryDiffV + faceBaryDiffL;
-            // std::cout << faceBaryDiffV.transpose() << std::endl;
-            // std::cout << faceBaryDiffV.norm() << std::endl;
             real volL, volR;
             volL = volR = std::pow(GetCellVol(mesh->face2cell(iFace, 0)) + verySmallReal, settings.functionalSettings.inertiaWeightPower);
             Geom::tGPoint cellInertiaL = cellInertia[mesh->face2cell(iFace, 0)] * volL;
@@ -322,21 +318,6 @@ namespace DNDS::CFV
                 baseWeight_.faceMajorCoordScale[iFace] = faceCoordNorm * faceCoordBB.asDiagonal();
             }
             real AR2 = baseWeight_.faceMajorCoordScale[iFace].col(0).norm() / baseWeight_.faceMajorCoordScale[iFace].col(1).norm();
-            // if (std::abs(std::log10(AR2)) > 2.0)
-            // {
-            //     std::cout
-            //         << "Face scale: ";
-            //     std::cout << this->GetFaceNorm(iFace, -1).transpose() << "\n\n";
-            //     std::cout << faceCent[iFace].transpose() << "\n\n";
-            //     std::cout << faceInertiaC << std::endl;
-
-            //     faceCoord = baseWeight_.faceMajorCoordScale[iFace];
-            //     faceCoord.colwise().normalize();
-            //     std::cout << faceCoord << "\n\n";
-            //     std::cout
-            //         << baseWeight_.faceMajorCoordScale[iFace] << "\n"
-            //         << std::endl;
-            // }
             if (settings.functionalSettings.scaleType == VRSettings::FunctionalSettings::ScaleType::BaryDiff)
             {
                 baseWeight_.faceAlignedScales[iFace] = faceBaryDiffV;
@@ -453,8 +434,7 @@ namespace DNDS::CFV
                 break;
             }
 
-            if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)) || FaceIDIsPeriodic(mesh->GetFaceZone(iFace)))
-            // if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)))
+            if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)))
             {
                 for (int iOrder = 0; iOrder <= settings.maxOrder; iOrder++)
                     wd(iOrder) *= id2faceDircWeight(mesh->GetFaceZone(iFace), iOrder) * settings.bcWeight;
@@ -466,14 +446,7 @@ namespace DNDS::CFV
         {
             baseWeight_.faceDiffBaseCache.CompressBoth();
             baseWeight_.cellDiffBaseCache.CompressBoth();
-
-            // baseWeight_.faceDiffBaseCache.trans.pullOnce(); //!err: need adding comm preparation first
-            // baseWeight_.faceDiffBaseCacheCent.trans.pullOnce(); //!err: need adding comm preparation first
         }
-
-        // baseWeight_.faceWeight.trans.pullOnce(); //!err: need adding comm preparation first
-        // baseWeight_.faceAlignedScales.trans.pullOnce(); //!err: need adding comm preparation first
-        // baseWeight_.faceMajorCoordScale.trans.pullOnce(); //!err: need adding comm preparation first
 
         if (!settings.intOrderVRBCIsSame())
         {
@@ -655,26 +628,10 @@ namespace DNDS::CFV
                             inc *= (-1) * this->GetFaceJacobiDet(iFace, iG);
                         });
                 }
-                // std::cout << "-------------\n";
-                // std::cout << AHalf_GG << std::endl;
-                // std::cout << "A\n"
-                //           << A << std::endl;
-                // std::cout << "IncA\n"
-                //           << (AHalf_GG.transpose() * AHalf_GG) << std::endl;
                 A += (AHalf_GG.transpose() * AHalf_GG) * this->GetGreenGauss1WeightOnCell(iCell);
                 c_.matrixAHalf_GG[iCell] = AHalf_GG;
             }
 
-            // if (iCell == 71)
-            // {
-            // if (std::abs(A(0, 0) - 0.2083333333) > 1e-5)
-            // {
-            //     std::cout << "=================" << std::endl;
-            //     std::cout << A << std::endl;
-            //     std::cout << cellCent[iCell] << std::endl;
-            // }
-            // std::abort();
-            // }
             //*get B
             for (int ic2f = 0; ic2f < mesh->cell2face.RowSize(iCell); ic2f++)
             {
@@ -764,12 +721,6 @@ namespace DNDS::CFV
                                    settings.functionalSettings.greenGauss1Penalty;
                             inc *= this->GetFaceJacobiDet(iFace, iG);
                         });
-                    // std::cout << " BH " << ic2f << " " << iFace << "\n"
-                    //           << BHalf_GG << std::endl;
-                    // std::cout << "B\n"
-                    //           << B << std::endl;
-                    // std::cout << "IncB\n"
-                    //           << AHalf_GG.transpose() * BHalf_GG << std::endl;
                     B += AHalf_GG.transpose() * BHalf_GG * this->GetGreenGauss1WeightOnCell(iCell);
                 }
                 if (iCellOther == iCell) //* coincide periodic
@@ -830,12 +781,6 @@ namespace DNDS::CFV
                                   (if2c ? -1 : 1);
                             inc *= settings.functionalSettings.greenGauss1Bias * this->GetFaceJacobiDet(iFace, iG);
                         });
-                    // std::cout << " bH " << ic2f << " " << iFace << "\n"
-                    //           << bHalf_GG << std::endl;
-                    // std::cout << "b\n"
-                    //           << b << std::endl;
-                    // std::cout << "Incb\n"
-                    //           << AHalf_GG.transpose() * bHalf_GG << std::endl;
                     b += AHalf_GG.transpose() * bHalf_GG * this->GetGreenGauss1WeightOnCell(iCell);
                 }
                 if (c_.needOriginalMatrix)
@@ -877,9 +822,6 @@ namespace DNDS::CFV
                 c_.matrixAAInvB(iCell, 1 + ic2f) = AInv * local_Bs.at(ic2f);
                 c_.vectorAInvB(iCell, ic2f) = AInv * local_bs.at(ic2f);
             }
-            // std::cout << "=============" << std::endl;
-            // std::cout << AInv << std::endl;
-            // std::abort();
         }
         if (c_.needOriginalMatrix)
             c_.matrixAB.CompressBoth();
@@ -919,16 +861,6 @@ namespace DNDS::CFV
                 EigenAll, Eigen::seq(
                               1 * maxNDOFM1 + 0,
                               1 * maxNDOFM1 + maxNDOFM1 - 1)) = M2_L2R;
-            // std::cout << "DiffI\n"
-            //           << DiffI << std::endl;
-            // std::cout << "DiffJ\n"
-            //           << DiffJ << std::endl;
-
-            // std::cout << "M2_R2L\n";
-            // std::cout << this->GetMatrixSecondary(-1, iFace, 0) << std::endl;
-            // std::cout << "M2_L2R\n";
-            // std::cout << this->GetMatrixSecondary(-1, iFace, 1) << std::endl;
-            // std::abort();
         }
         c_.matrixSecondary.CompressBoth();
 

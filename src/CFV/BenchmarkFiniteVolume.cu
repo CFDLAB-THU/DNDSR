@@ -16,8 +16,6 @@ namespace DNDS::CFV
     {
         index tid = blockIdx.x * blockDim.x + threadIdx.x;
         index iCell = tid;
-        // if (iCell == 0)
-        //     printf("fuck, %ld\n", fv->mesh.NumCell());
         if (iCell >= fv->mesh.NumCell())
             return;
         uint32_t nVars = u->father.MatRowSize();
@@ -119,8 +117,6 @@ namespace DNDS::CFV
     {
         index tid = blockIdx.x * blockDim.x + threadIdx.x;
         index iCell = tid;
-        // if (iCell == 0)
-        //     printf("fuck, %ld\n", fv->mesh.NumCell());
         if (iCell >= fv->mesh.NumCell())
             return;
         uint32_t nVars = u->father.MatRowSize();
@@ -236,8 +232,6 @@ namespace DNDS::CFV
     {
         index tid = blockIdx.x * blockDim.x + threadIdx.x;
         index iCell = tid;
-        // if (iCell == 0)
-        //     printf("fuck, %ld\n", fv->mesh.NumCell());
         if (iCell >= fv->mesh.NumCell())
             return;
         uint32_t nVars = nVarsFixed;

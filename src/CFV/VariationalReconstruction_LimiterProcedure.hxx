@@ -95,25 +95,8 @@ namespace DNDS::CFV
                         finc(EigenAll, 1) = ISI.diagonal();
 
                         finc *= GetFaceArea(iFace); // don't forget this
-
-                        // if (iCell == 12517)
-                        // {
-                        //     std::cout << "   === Face:   ";
-                        //     std::cout << uRecValL << std::endl;
-                        //     std::cout << uRecValR << std::endl;
-                        //     std::cout << IJI << std::endl;
-                        //     std::cout << ISI << std::endl;
-                        //     std::cout << uRec[iCell] << std::endl;
-                        //     std::cout << uRec[iCellOther] << std::endl;
-                        //     std::cout << this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, ig, EigenAll) << std::endl;
-                        // }
                     });
                 IJIISIsum += IJIISI;
-                // if (iCell == 12517)
-                // {
-                //     std::cout << "iFace " << iFace << " iCellOther " << iCellOther << std::endl;
-                //     std::cout << IJIISI << std::endl;
-                // }
             }
             Eigen::Vector<real, nVarsSee> smoothIndicator =
                 (IJIISIsum(EigenAll, 0).array() /
@@ -121,12 +104,6 @@ namespace DNDS::CFV
                     .matrix();
             real sImax = smoothIndicator.array().abs().maxCoeff();
             si(iCell, 0) = std::sqrt(sImax) * sqr(settings.maxOrder);
-            // if (iCell == 12517)
-            // {
-            //     std::cout << "SUM:\n";
-            //     std::cout << IJIISIsum << std::endl;
-            //     std::abort();
-            // }
         }
     }
 
@@ -205,12 +182,6 @@ namespace DNDS::CFV
             smoothIndicator.array() *= varsSee.array();
             real sImax = smoothIndicator.array().abs().maxCoeff();
             si(iCell, 0) = std::sqrt(sImax) * sqr(settings.maxOrder);
-            // if (iCell == 12517)
-            // {
-            //     std::cout << "SUM:\n";
-            //     std::cout << IJIISIsum << std::endl;
-            //     std::abort();
-            // }
         }
     }
 
@@ -293,7 +264,6 @@ namespace DNDS::CFV
                         const auto &matrixSecondaryOther =
                             this->GetMatrixSecondary(iCellOther, iFace, -1);
 
-                        // std::cout << "A"<<std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOF>
                             uOtherOther = uRec[iCellOther](Eigen::seq(0, NRecDOFLim - 1), EigenAll);
 
@@ -302,7 +272,6 @@ namespace DNDS::CFV
                                 matrixSecondaryOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::seq(LimEnd + 1, NRecDOFLim - 1)) *
                                 uFaces[ic2f](Eigen::seq(LimEnd + 1, NRecDOFLim - 1), EigenAll);
 
-                        // std::cout << "B" << std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uOtherIn =
                                 matrixSecondaryThis(Eigen::seq(LimStart, LimEnd), EigenAll) * uOtherOther;
@@ -452,7 +421,6 @@ namespace DNDS::CFV
                         const auto &matrixSecondaryOther =
                             this->GetMatrixSecondary(iCellOther, iFace, -1);
 
-                        // std::cout << "A"<<std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOF>
                             uOtherOther = uRecBuf[iCellOther](Eigen::seq(0, NRecDOFLim - 1), EigenAll);
 
@@ -461,7 +429,6 @@ namespace DNDS::CFV
                         //         matrixSecondaryOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::seq(LimEnd + 1, NRecDOFLim - 1)) *
                         //         uFaces[ic2f](Eigen::seq(LimEnd + 1, NRecDOFLim - 1), EigenAll);
 
-                        // std::cout << "B" << std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uOtherIn =
                                 matrixSecondaryThis(Eigen::seq(LimStart, LimEnd), EigenAll) * uOtherOther;

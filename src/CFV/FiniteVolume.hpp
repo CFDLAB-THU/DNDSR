@@ -291,10 +291,6 @@ namespace DNDS::CFV
                 if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
             if (if2c == 1 && Geom ::FaceIDIsPeriodicMain(faceID)) // I am donor
             {
-                // std::cout << iFace <<" " << iCell << " " <<if2c << std::endl;
-                // std::cout << GetFaceQuadraturePPhys(iFace, iG).transpose() << std::endl;
-                // std::cout << mesh->periodicInfo.TransCoord(GetFaceQuadraturePPhys(iFace, iG), faceID).transpose() << std::endl;
-                // std::abort();
                 return mesh->periodicInfo.TransCoord(GetFaceQuadraturePPhys(iFace, iG), faceID);
             }
             if (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) // I am main
@@ -313,10 +309,6 @@ namespace DNDS::CFV
                 if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
             if (if2c == 1 && Geom ::FaceIDIsPeriodicMain(faceID)) // I am donor
             {
-                // std::cout << iFace <<" " << iCell << " " <<if2c << std::endl;
-                // std::cout << pnt.transpose() << std::endl;
-                // std::cout << mesh->periodicInfo.TransCoord(pnt, faceID).transpose() << std::endl;
-                // std::abort();
                 return mesh->periodicInfo.TransCoord(pnt, faceID);
             }
             if (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) // I am main

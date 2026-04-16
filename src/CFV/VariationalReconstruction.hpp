@@ -343,13 +343,8 @@ namespace DNDS::CFV
                     else
                         simpleScale.setConstant(simpleScale.array().maxCoeff());
                 }
-                // std::cout << simpleScale.transpose() << std::endl;
                 tPoint pPhysicsCMajor = cellMajorCoord[iCell].transpose() * pPhysicsC;
                 tPoint pPhysicsCScaled = pPhysicsCMajor.array() / simpleScale.array();
-                // std::cout << "iCell " << iCell << "\n";
-                // std::cout << simpleScale.transpose() << "\n";
-                // std::cout << pPhysicsCMajor.transpose() << "\n";
-                // std::cout << pPhysicsCScaled.transpose() << std::endl;
                 if constexpr (dim == 2)
                     FPolynomialFill2D(DiBj, pPhysicsCScaled(0), pPhysicsCScaled(1), pPhysicsCScaled(2), simpleScale(0), simpleScale(1), simpleScale(2), DiBj.rows(), DiBj.cols());
                 else
@@ -503,13 +498,6 @@ namespace DNDS::CFV
 
             faceL *= settings.functionalSettings.scaleMultiplier;
 
-            // std::cout << DiffI.transpose() << "\n"
-            //           << DiffJ.transpose() << std::endl;
-            // std::cout << faceL << std::endl;
-            // std::cout << wgd.transpose() << std::endl;
-            // std::abort();
-            // std::cout << "old len " << std::sqrt(faceLV.array().square().mean()) << std::endl;
-
 #ifdef USE_ECCENTRIC_COMB_POW_2
             static constexpr int powV = 2;
 #else
@@ -519,10 +507,6 @@ namespace DNDS::CFV
             if (!settings.functionalSettings.useAnisotropicFunctional)
             {
                 AccumulateDiffOrderContributions<dim, powV>(DiffI, DiffJ, Conj, wgd, cnDiffs, faceL);
-
-                // std::cout << DiffI << std::endl << std::endl;
-                // std::cout << Conj << std::endl;
-                // std::abort();
             }
             else
             {
@@ -596,8 +580,6 @@ namespace DNDS::CFV
                     real tw = 1. / std::min({1.0, faceLOrig / (areaL + 0.001 * faceLOrig)});
                     real nw = 1;
                     // real tw = 1. / std::max({1.0, areaL / (faceLOrig + 0.001 * areaL)});
-
-                    // std::cout << tw << std::endl;
                     // real tw = 1.0;
                     if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::CentDiff)
                     {
@@ -683,13 +665,10 @@ namespace DNDS::CFV
                     real axis_cond = axis_ev.maxCoeff() / axis_ev.minCoeff(); // valid for 2-d as 0,0,1 is also normalized
                     if (axis_cond < 10.0)
                         coordTrans = coordTrans_new;
-
-                    // std::cout << near_norm.transpose() << " --- " << axis_cond << "\n";
                 }
                 else if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBBSym)
                 {
                     tGPoint coordTransN = coordTrans.rowwise().normalized(); // supposed to be a unitary matrix
-                    // std::cout << coordTransN.transpose() * coordTransN << "\n\n";
                     coordTrans = coordTransN.transpose() * coordTrans;
                 }
                 else if (settings.functionalSettings.anisotropicType == VRSettings::FunctionalSettings::AnisotropicType::InertiaCoordBB ||
@@ -697,8 +676,6 @@ namespace DNDS::CFV
                 {
                 }
 
-                // std::cout << "face " << iFace << std::endl;
-                // std::cout << coordTrans << std::endl;
                 ConvertDiffsLinMap<dim>(DiffI_Norm, coordTrans);
                 ConvertDiffsLinMap<dim>(DiffJ_Norm, coordTrans);
 

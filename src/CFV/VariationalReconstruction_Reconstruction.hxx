@@ -315,13 +315,6 @@ namespace DNDS
                     // DNDS_assert(vvv(0) < 1e-10);
 
                     uRec[iCell] = grad.transpose();
-
-                    // std::cout << " g " << std::endl;
-                    // std::cout << grad << std::endl;
-                    // std::cout << uRec[iCell] << std::endl;
-                    // std::cout << d1bv << std::endl;
-                    // std::cout << lud1bv.inverse() << std::endl;
-                    // std::abort();
                 }
             }
             else if (method == 2) //! warning, periodic not implemented here
@@ -486,12 +479,6 @@ namespace DNDS
                     uRec[iCell](Seq012, mask) = lud1bv.solve(grad.transpose())(EigenAll, mask);
                 }
 
-                // std::cout << " g " << std::endl;
-                // std::cout << grad << std::endl;
-                // std::cout << uRec[iCell] << std::endl;
-                // std::cout << d1bv << std::endl;
-                // std::cout << lud1bv.inverse() << std::endl;
-                // std::abort();
             }
         }
 
