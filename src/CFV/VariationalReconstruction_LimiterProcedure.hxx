@@ -4,6 +4,39 @@
 
 namespace DNDS::CFV
 {
+    /**
+     * @brief Dispatches the biway limiter function selected by limiterBiwayAlter.
+     *
+     * Consolidates the switch(limiterBiwayAlter) block that appeared identically
+     * in both DoLimiterWBAP_C and DoLimiterWBAP_3.
+     */
+    template <int dim, int nVarsFixed, typename Tin1, typename Tin2, typename Tout>
+    inline void DispatchBiwayLimiter(int limiterBiwayAlter,
+                                     const Tin1 &uThis, const Tin2 &uOther,
+                                     Tout &uOut, real n)
+    {
+        switch (limiterBiwayAlter)
+        {
+        case 0:
+            FWBAP_L2_Biway(uThis, uOther, uOut, n);
+            break;
+        case 1:
+            FMINMOD_Biway(uThis, uOther, uOut, n);
+            break;
+        case 2:
+            FWBAP_L2_Biway_PolynomialNorm<dim, nVarsFixed>(uThis, uOther, uOut, n);
+            break;
+        case 3:
+            FMEMM_Biway_PolynomialNorm<dim, nVarsFixed>(uThis, uOther, uOut, n);
+            break;
+        case 4:
+            FWBAP_L2_Cut_Biway(uThis, uOther, uOut, n);
+            break;
+        default:
+            DNDS_assert_info(false, "no such limiterBiwayAlter code!");
+        }
+    }
+
     template <int dim>
     template <int nVarsFixed, int nVarsSee>
     void VariationalReconstruction<dim>::DoCalculateSmoothIndicator(
@@ -223,39 +256,7 @@ namespace DNDS::CFV
             int cPOrder = settings.maxOrder;
             for (; cPOrder >= 1; cPOrder--)
             {
-                int LimStart, LimEnd; // End is inclusive
-                if constexpr (dim == 2)
-                    switch (cPOrder)
-                    {
-                    case 3:
-                        LimStart = 5, LimEnd = 8;
-                        break;
-                    case 2:
-                        LimStart = 2, LimEnd = 4;
-                        break;
-                    case 1:
-                        LimStart = 0, LimEnd = 1;
-                        break;
-                    default:
-                        LimStart = -200, LimEnd = -100;
-                        DNDS_assert(false);
-                    }
-                else
-                    switch (cPOrder)
-                    {
-                    case 3:
-                        LimStart = 9, LimEnd = 18;
-                        break;
-                    case 2:
-                        LimStart = 3, LimEnd = 8;
-                        break;
-                    case 1:
-                        LimStart = 0, LimEnd = 2;
-                        break;
-                    default:
-                        LimStart = -200, LimEnd = -100;
-                        DNDS_assert(false);
-                    }
+                auto [LimStart, LimEnd] = GetRecDOFRange<dim>(cPOrder);
 
                 std::vector<Eigen::Array<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>>
                     uOthers;
@@ -321,26 +322,9 @@ namespace DNDS::CFV
                             uLimOutArray;
 
                         real n = settings.WBAP_nStd;
-                        switch (settings.limiterBiwayAlter)
-                        {
-                        case 0:
-                            FWBAP_L2_Biway(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 1:
-                            FMINMOD_Biway(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 2:
-                            FWBAP_L2_Biway_PolynomialNorm<dim, nVarsFixed>(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 3:
-                            FMEMM_Biway_PolynomialNorm<dim, nVarsFixed>(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 4:
-                            FWBAP_L2_Cut_Biway(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        default:
-                            DNDS_assert_info(false, "no such limiterBiwayAlter code!");
-                        }
+                        DispatchBiwayLimiter<dim, nVarsFixed>(
+                            settings.limiterBiwayAlter,
+                            uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
 
                         // to phys space
                         uLimOutArray = (FMI(uL, uR, unitNorm, uLimOutArray.matrix())).array();
@@ -402,39 +386,7 @@ namespace DNDS::CFV
             uRecNew[iCell] = uRec[iCell];
         for (; cPOrder >= 1; cPOrder--)
         {
-            int LimStart, LimEnd; // End is inclusive
-            if constexpr (dim == 2)
-                switch (cPOrder)
-                {
-                case 3:
-                    LimStart = 5, LimEnd = 8;
-                    break;
-                case 2:
-                    LimStart = 2, LimEnd = 4;
-                    break;
-                case 1:
-                    LimStart = 0, LimEnd = 1;
-                    break;
-                default:
-                    LimStart = -200, LimEnd = -100;
-                    DNDS_assert(false);
-                }
-            else
-                switch (cPOrder)
-                {
-                case 3:
-                    LimStart = 9, LimEnd = 18;
-                    break;
-                case 2:
-                    LimStart = 3, LimEnd = 8;
-                    break;
-                case 1:
-                    LimStart = 0, LimEnd = 2;
-                    break;
-                default:
-                    LimStart = -200, LimEnd = -100;
-                    DNDS_assert(false);
-                }
+            auto [LimStart, LimEnd] = GetRecDOFRange<dim>(cPOrder);
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(runtime)
 #endif
@@ -530,26 +482,9 @@ namespace DNDS::CFV
 
                         real n = settings.WBAP_nStd;
 
-                        switch (settings.limiterBiwayAlter)
-                        {
-                        case 0:
-                            FWBAP_L2_Biway(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 1:
-                            FMINMOD_Biway(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 2:
-                            FWBAP_L2_Biway_PolynomialNorm<dim, nVarsFixed>(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 3:
-                            FMEMM_Biway_PolynomialNorm<dim, nVarsFixed>(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 4:
-                            FWBAP_L2_Cut_Biway(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        default:
-                            DNDS_assert_info(false, "no such limiterBiwayAlter code!");
-                        }
+                        DispatchBiwayLimiter<dim, nVarsFixed>(
+                            settings.limiterBiwayAlter,
+                            uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
 
                         // to phys space
                         uLimOutArray = FMI(uL, uR, unitNorm, uLimOutArray.matrix()).array();

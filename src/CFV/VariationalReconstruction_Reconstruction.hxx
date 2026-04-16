@@ -232,16 +232,7 @@ namespace DNDS
                             if (settings.subs2ndOrderGGScheme == 0)
                                 lThat = 1;
                             Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther].transpose();
-                            if (mesh->isPeriodic)
-                            {
-                                DNDS_assert(FTransPeriodic && FTransPeriodicBack);
-                                if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                                    (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                                    FTransPeriodic(uOther, faceID);
-                                if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                                    (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                                    FTransPeriodicBack(uOther, faceID);
-                            }
+                            this->ApplyPeriodicTransform(if2c, faceID, uOther);
                             Eigen::Vector<real, dim> uNorm = this->GetFaceNormFromCell(iFace, iCell, -1, -1)(Seq012) * (CellIsFaceBack(iCell, iFace) ? 1. : -1.);
                             Eigen::Matrix<real, nVarsFixed, dim> gradInc =
                                 (uOther.transpose() - u[iCell]) *
@@ -571,16 +562,7 @@ namespace DNDS
                         {
                             Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther];
                             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOther = uRec[iCellOther];
-                            if (mesh->isPeriodic)
-                            {
-                                DNDS_assert(FTransPeriodic && FTransPeriodicBack);
-                                if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                                    (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                                    FTransPeriodic(uOther, faceID), FTransPeriodic(uRecOther, faceID);
-                                if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                                    (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                                    FTransPeriodicBack(uOther, faceID), FTransPeriodicBack(uRecOther, faceID);
-                            }
+                            this->ApplyPeriodicTransform(if2c, faceID, uOther, uRecOther);
                             if (recordInc)
                             {
                                 if (uRecIsZero)
@@ -687,16 +669,7 @@ namespace DNDS
                     if (iCellOther != UnInitIndex)
                     {
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOtherDiff = uRecDiff[iCellOther];
-                        if (mesh->isPeriodic)
-                        {
-                            DNDS_assert(FTransPeriodic && FTransPeriodicBack);
-                            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                                FTransPeriodic(uRecOtherDiff, faceID);
-                            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                                FTransPeriodicBack(uRecOtherDiff, faceID);
-                        }
+                        this->ApplyPeriodicTransform(if2c, faceID, uRecOtherDiff);
                         uRecNew[iCell] -= matrixAAInvBRow[ic2f + 1] * uRecOtherDiff; // mind the sign
                     }
                     else
@@ -746,16 +719,7 @@ namespace DNDS
                     if (iCellOther != UnInitIndex)
                     {
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOtherNew = uRecNew[iCellOther];
-                        if (mesh->isPeriodic)
-                        {
-                            DNDS_assert(FTransPeriodic && FTransPeriodicBack);
-                            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                                FTransPeriodic(uRecOtherNew, faceID);
-                            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                                FTransPeriodicBack(uRecOtherNew, faceID);
-                        }
+                        this->ApplyPeriodicTransform(if2c, faceID, uRecOtherNew);
                         uRecNew[iCell] += relax * matrixAAInvBRow[ic2f + 1] * uRecOtherNew; // mind the sign
                     }
                     else

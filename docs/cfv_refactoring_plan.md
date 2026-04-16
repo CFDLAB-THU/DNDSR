@@ -100,7 +100,7 @@ cmake --build build -t cfv_test_reconstruction -j8
 ctest --test-dir build -R cfv_reconstruction --output-on-failure
 ```
 
-### Phase 1: Safety Fixes
+### Phase 1: Safety Fixes -- DONE
 
 Fix latent bugs that could cause silent incorrect results.
 
@@ -111,16 +111,29 @@ Fix latent bugs that could cause silent incorrect results.
 | 1.3 | Settings slicing (two divergent copies) | `VR.hpp:44-48` | Single settings instance; base reads via accessor |
 | 1.4 | Missing `[[fallthrough]]` annotations | `VR.cpp:386-397, 405-416` | Add annotations |
 
-### Phase 2: Code Deduplication (~760 lines removable)
+### Phase 2: Code Deduplication -- DONE (4 of 6 items; 2 skipped)
 
-| # | Duplication | Copies | Fix | Lines Saved |
+~480 lines removed. Items 2.2 and 2.3 were skipped after analysis showed the
+structural differences between the paired functions are too deep for a clean
+merge; forcing unification would reduce readability without meaningful
+maintenance benefit.
+
+| # | Duplication | Status | Fix | Lines Saved |
 |---|---|---|---|---|
-| 2.1 | Periodic transform block | 5 | Extract `ApplyPeriodicTransform()` helper | ~80 |
-| 2.2 | `DoLimiterWBAP_C` vs `DoLimiterWBAP_3` | 2 | Parameterize with sweep-order enum | ~200 |
-| 2.3 | `GetBoundaryRHS` vs `GetBoundaryRHSDiff` | 2 | Unify with optional diff parameter | ~80 |
-| 2.4 | Polynomial norm in `Limiters.hpp` | 8 | Extract `PolynomialNorm<dim>()` | ~300 |
-| 2.5 | `LimStart/LimEnd` DOF index lookup | 2 | Extract lookup function | ~60 |
-| 2.6 | Biway/multiway limiter dispatch switch | 2 | Extract dispatch helper | ~40 |
+| 2.1 | Periodic transform block (4 copies) | **Done** | `ApplyPeriodicTransform()` variadic template method | ~40 |
+| 2.2 | `DoLimiterWBAP_C` vs `DoLimiterWBAP_3` | **Skipped** | Sweep strategies differ fundamentally (successive SR vs. three-sweep) | -- |
+| 2.3 | `GetBoundaryRHS` vs `GetBoundaryRHSDiff` | **Skipped** | Diff version has different callback signature, no GG1 block, no u subtraction | -- |
+| 2.4 | Polynomial norm in `Limiters.hpp` (8 copies) | **Done** | `PolynomialSquaredNorm<dim>()` + `PolynomialDotProduct<dim>()` | ~300 |
+| 2.5 | `LimStart/LimEnd` DOF index lookup (2 copies) | **Done** | `GetRecDOFRange<dim>()` in `VRDefines.hpp` | ~60 |
+| 2.6 | Biway limiter dispatch switch (2 copies) | **Done** | `DispatchBiwayLimiter<dim, nVarsFixed>()` | ~30 |
+
+**New helpers introduced:**
+- `VRDefines.hpp`: `GetRecDOFRange<dim>(pOrder)` -- returns `{LimStart, LimEnd}` pair
+- `Limiters.hpp`: `PolynomialSquaredNorm<dim>(theta)`, `PolynomialDotProduct<dim>(t1, t2)`
+- `VariationalReconstruction.hpp`: `ApplyPeriodicTransform(if2c, faceID, data...)` -- variadic CRTP
+- `LimiterProcedure.hxx`: `DispatchBiwayLimiter<dim, nVarsFixed>(alter, u1, u2, out, n)`
+
+**Verified:** Phase 0 tests pass at np=1,2,4. Euler target compiles clean.
 
 ### Phase 3: Module Boundary Corrections
 

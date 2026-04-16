@@ -127,6 +127,31 @@ namespace DNDS::CFV
                 [](auto u, Geom::t_index id) {});
         }
 
+        /**
+         * @brief Applies the appropriate periodic transformation to one or more data matrices.
+         *
+         * Determines from `if2c` and `faceID` whether the current cell is the donor
+         * or main side of the periodic pair, and calls FTransPeriodic or
+         * FTransPeriodicBack accordingly. No-op when the mesh is not periodic.
+         *
+         * @param if2c   Face-to-cell local index (0 = back, 1 = front)
+         * @param faceID Boundary zone ID of the face
+         * @param data   One or more Eigen matrix references to transform
+         */
+        template <typename... Ts>
+        void ApplyPeriodicTransform(int if2c, Geom::t_index faceID, Ts &...data) const
+        {
+            if (!mesh->isPeriodic)
+                return;
+            DNDS_assert(FTransPeriodic && FTransPeriodicBack);
+            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
+                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
+                (FTransPeriodic(data, faceID), ...);
+            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
+                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
+                (FTransPeriodicBack(data, faceID), ...);
+        }
+
         void ConstructMetrics();
 
         using tFGetBoundaryWeight = std::function<real(Geom::t_index, int)>;
