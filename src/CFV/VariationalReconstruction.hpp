@@ -135,38 +135,77 @@ namespace DNDS::CFV
         using TFTrans = std::function<void(Eigen::Ref<MatrixXR>, Geom::t_index)>;
 
     private:
-        t3VecPair faceAlignedScales;     /// @brief constructed using ConstructBaseAndWeight()
-        t3MatPair faceMajorCoordScale;   /// @brief constructed using ConstructBaseAndWeight() //TODO
-        tVVecPair cellBaseMoment;        /// @brief constructed using ConstructBaseAndWeight()
-        tVVecPair faceWeight;            /// @brief constructed using ConstructBaseAndWeight()
-        tMatsPair cellDiffBaseCache;     /// @brief constructed using ConstructBaseAndWeight()
-        tMatsPair faceDiffBaseCache;     /// @brief constructed using ConstructBaseAndWeight()
-        tVMatPair cellDiffBaseCacheCent; /// @brief constructed using ConstructBaseAndWeight() //TODO *test
-        tVMatPair faceDiffBaseCacheCent; /// @brief constructed using ConstructBaseAndWeight() //TODO *test
-
-        struct BndVRPointCache
+        /**
+         * @brief Holds the base function moments, face weights, diff-base caches,
+         * and boundary VR point caches produced by ConstructBaseAndWeight().
+         *
+         * These members are built once and then read by FDiffBaseValue(),
+         * GetIntPointDiffBaseValue(), FFaceFunctional(), and indirectly by
+         * reconstruction and limiter methods.
+         */
+        struct VRBaseWeight
         {
-            Geom::tPoint norm;
-            Geom::tPoint PPhy;
-            real JDet;
-            RowVectorXR D0Bj;
+            t3VecPair faceAlignedScales;     /// @brief face-aligned length scales
+            t3MatPair faceMajorCoordScale;   /// @brief face major coordinate transform
+            tVVecPair cellBaseMoment;        /// @brief cell base function moments
+            tVVecPair faceWeight;            /// @brief face quadrature weights
+            tMatsPair cellDiffBaseCache;     /// @brief cached diff-base values at cell quad points
+            tMatsPair faceDiffBaseCache;     /// @brief cached diff-base values at face quad points
+            tVMatPair cellDiffBaseCacheCent; /// @brief cached diff-base values at cell centroids
+            tVMatPair faceDiffBaseCacheCent; /// @brief cached diff-base values at face centroids
+
+            struct BndVRPointCache
+            {
+                Geom::tPoint norm;
+                Geom::tPoint PPhy;
+                real JDet;
+                RowVectorXR D0Bj;
+            };
+            std::unordered_map<index, std::vector<BndVRPointCache>> bndVRCaches; /// @brief boundary face VR caches
         };
-        std::unordered_map<index, std::vector<BndVRPointCache>> bndVRCaches; /// @brief constructed using ConstructBaseAndWeight()
 
-        tMatsPair matrixAB; /// @brief constructed using ConstructRecCoeff()
-        tVecsPair vectorB;  /// @brief constructed using ConstructRecCoeff()
-        bool needOriginalMatrix = false;
-        tMatsPair matrixAAInvB;    /// @brief constructed using ConstructRecCoeff()
-        tMatsPair vectorAInvB;     /// @brief constructed using ConstructRecCoeff()
-        tVMatPair matrixSecondary; /// @brief constructed using ConstructRecCoeff(), secondary-rec matrices on each face
-        tVMatPair matrixAHalf_GG;  /// @brief constructed using ConstructRecCoeff()
+        VRBaseWeight baseWeight_;
+        using BndVRPointCache = typename VRBaseWeight::BndVRPointCache;
 
-        tVMatPair matrixA;
+        /**
+         * @brief Holds the reconstruction coefficient matrices produced by ConstructRecCoeff().
+         *
+         * Grouping these members clarifies the data-ownership boundary: VRBaseWeight
+         * members (above) are built by ConstructBaseAndWeight(), while these
+         * coefficient members are built by ConstructRecCoeff() from the base/weight data.
+         */
+        struct VRCoefficients
+        {
+            tMatsPair matrixAB;        /// @brief A and B blocks per face, used during ConstructRecCoeff
+            tVecsPair vectorB;         /// @brief B vector per cell
+            bool needOriginalMatrix = false;
+            tMatsPair matrixAAInvB;    /// @brief A^{-1}B blocks per cell (main reconstruction matrix)
+            tMatsPair vectorAInvB;     /// @brief A^{-1}b vectors per cell
+            tVMatPair matrixSecondary; /// @brief secondary-rec matrices on each face
+            tVMatPair matrixAHalf_GG;  /// @brief Green-Gauss half matrices
 
-        std::vector<Eigen::MatrixXd> volIntCholeskyL;
-        bool needVolIntCholeskyL = false;
-        std::vector<Eigen::MatrixXd> matrixACholeskyL;
-        bool needMatrixACholeskyL = false;
+            tVMatPair matrixA; /// @brief full A matrix per cell (when needOriginalMatrix)
+
+            std::vector<Eigen::MatrixXd> volIntCholeskyL;
+            bool needVolIntCholeskyL = false;
+            std::vector<Eigen::MatrixXd> matrixACholeskyL;
+            bool needMatrixACholeskyL = false;
+
+            auto GetCellRecMatAInv(index iCell)
+            {
+                return matrixAAInvB(iCell, 0);
+            }
+
+            auto GetCellRecMatAInvB(index iCell, int ic2f)
+            {
+                return matrixAAInvB(iCell, 1 + ic2f);
+            }
+
+            auto &get_matrixAAInvB() { return matrixAAInvB; }
+            auto &get_vectorAInvB() { return vectorAInvB; }
+        };
+
+        VRCoefficients coefficients_;
 
         // for periodic transformation inside scalars, eg. velocity components
         TFTrans FTransPeriodic, FTransPeriodicBack;
@@ -243,22 +282,22 @@ namespace DNDS::CFV
 
         auto GetCellRecMatAInv(index iCell)
         {
-            return matrixAAInvB(iCell, 0);
+            return coefficients_.GetCellRecMatAInv(iCell);
         }
 
         auto GetCellRecMatAInvB(index iCell, int ic2f)
         {
-            return matrixAAInvB(iCell, 1 + ic2f);
+            return coefficients_.GetCellRecMatAInvB(iCell, ic2f);
         }
 
         auto &get_matrixAAInvB()
         {
-            return matrixAAInvB;
+            return coefficients_.get_matrixAAInvB();
         }
 
         auto &get_vectorAInvB()
         {
-            return vectorAInvB;
+            return coefficients_.get_vectorAInvB();
         }
 
         /**
@@ -321,7 +360,7 @@ namespace DNDS::CFV
 
             if (flag == 0)
             {
-                auto baseMoment = cellBaseMoment[iCell];
+                auto baseMoment = baseWeight_.cellBaseMoment[iCell];
                 DiBj(0, EigenAll) -= baseMoment.transpose();
             }
         }
@@ -351,13 +390,13 @@ namespace DNDS::CFV
 
                     if (iG >= 0)
                     {
-                        return faceDiffBaseCache(iFace, iG + (faceDiffBaseCache.RowSize(iFace) / 2) * if2c)(
+                        return baseWeight_.faceDiffBaseCache(iFace, iG + (baseWeight_.faceDiffBaseCache.RowSize(iFace) / 2) * if2c)(
                             std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, EigenLast));
                     }
                     else
                     {
-                        int maxNDOF = int(faceDiffBaseCacheCent[iFace].cols()) / 2;
-                        return faceDiffBaseCacheCent[iFace](
+                        int maxNDOF = int(baseWeight_.faceDiffBaseCacheCent[iFace].cols()) / 2;
+                        return baseWeight_.faceDiffBaseCacheCent[iFace](
                             std::forward<TList>(diffList),
                             Eigen::seq(if2c * maxNDOF + 1,
                                        if2c * maxNDOF + maxNDOF - 1));
@@ -380,12 +419,12 @@ namespace DNDS::CFV
                 {
                     if (iG >= 0)
                     {
-                        return cellDiffBaseCache(iCell, iG)(
+                        return baseWeight_.cellDiffBaseCache(iCell, iG)(
                             std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, EigenLast));
                     }
                     else
                     {
-                        return cellDiffBaseCacheCent[iCell](
+                        return baseWeight_.cellDiffBaseCacheCent[iCell](
                             std::forward<TList>(diffList), Eigen::seq(Eigen::fix<1>, EigenLast));
                     }
                 }
@@ -407,8 +446,8 @@ namespace DNDS::CFV
         {
             if (if2c < 0)
                 if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
-            int maxNDOFM1 = matrixSecondary[iFace].cols() / 2;
-            return matrixSecondary[iFace](
+            int maxNDOFM1 = coefficients_.matrixSecondary[iFace].cols() / 2;
+            return coefficients_.matrixSecondary[iFace](
                 EigenAll, Eigen::seq(
                               if2c * maxNDOFM1 + 0,
                               if2c * maxNDOFM1 + maxNDOFM1 - 1));
@@ -421,7 +460,7 @@ namespace DNDS::CFV
         {
             using namespace Geom;
             using namespace Geom::Base;
-            Eigen::Vector<real, Eigen::Dynamic> wgd = faceWeight[iFace].array().square();
+            Eigen::Vector<real, Eigen::Dynamic> wgd = baseWeight_.faceWeight[iFace].array().square();
             DNDS_assert(DiffI.rows() == DiffJ.rows());
             int cnDiffs = DiffI.rows();
 
@@ -434,11 +473,11 @@ namespace DNDS::CFV
             switch (settings.functionalSettings.scaleType)
             {
             case VRSettings::FunctionalSettings::ScaleType::BaryDiff:
-                faceLV = faceAlignedScales[iFace];
+                faceLV = baseWeight_.faceAlignedScales[iFace];
                 break;
             case VRSettings::FunctionalSettings::ScaleType::MeanAACBB:
             case VRSettings::FunctionalSettings::ScaleType::CellMax:
-                faceLV = faceAlignedScales[iFace];
+                faceLV = baseWeight_.faceAlignedScales[iFace];
                 break;
             default:
                 DNDS_assert(false);
@@ -493,7 +532,7 @@ namespace DNDS::CFV
                     Eigen::MatrixBase<TDiffIDerived>::ColsAtCompileTime>;
                 TMatCopy DiffI_Norm = DiffI;
                 TMatCopy DiffJ_Norm = DiffJ;
-                tGPoint coordTrans = faceMajorCoordScale[iFace].transpose() *
+                tGPoint coordTrans = baseWeight_.faceMajorCoordScale[iFace].transpose() *
                                      settings.functionalSettings.scaleMultiplier;
                 if constexpr (dim == 2)
                     coordTrans(2, 2) = 1;
@@ -693,9 +732,9 @@ namespace DNDS::CFV
         template <int nVarsFixed = 1>
         void MatrixAMult(tURec<nVarsFixed> &uRec, tURec<nVarsFixed> &uRec1)
         {
-            DNDS_assert(matrixA.Size() == mesh->NumCellProc());
+            DNDS_assert(coefficients_.matrixA.Size() == mesh->NumCellProc());
             for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
-                uRec1[iCell] = matrixA[iCell] * uRec[iCell];
+                uRec1[iCell] = coefficients_.matrixA[iCell] * uRec[iCell];
         }
 
         template <int nVarsFixed = 1>
@@ -710,9 +749,9 @@ namespace DNDS::CFV
 
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> ret = uRec[iCell];
             if (downCastMethod == 1)
-                DNDS_assert(volIntCholeskyL.size() == mesh->cell2node.father->Size());
+                DNDS_assert(coefficients_.volIntCholeskyL.size() == mesh->cell2node.father->Size());
             if (downCastMethod == 2)
-                DNDS_assert(matrixACholeskyL.size() == mesh->cell2node.father->Size());
+                DNDS_assert(coefficients_.matrixACholeskyL.size() == mesh->cell2node.father->Size());
 
             auto toOrtho = [&]()
             {
@@ -721,10 +760,10 @@ namespace DNDS::CFV
                 case 0:
                     break;
                 case 1:
-                    volIntCholeskyL.at(iCell).triangularView<Eigen::Lower>().applyThisOnTheLeft(ret);
+                    coefficients_.volIntCholeskyL.at(iCell).template triangularView<Eigen::Lower>().applyThisOnTheLeft(ret);
                     break;
                 case 2:
-                    matrixACholeskyL.at(iCell).triangularView<Eigen::Lower>().applyThisOnTheLeft(ret);
+                    coefficients_.matrixACholeskyL.at(iCell).template triangularView<Eigen::Lower>().applyThisOnTheLeft(ret);
                     break;
                 default:
                     DNDS_assert(false);
@@ -739,10 +778,10 @@ namespace DNDS::CFV
                 case 0:
                     break;
                 case 1:
-                    ret = volIntCholeskyL.at(iCell).triangularView<Eigen::Lower>().solve(ret);
+                    ret = coefficients_.volIntCholeskyL.at(iCell).template triangularView<Eigen::Lower>().solve(ret);
                     break;
                 case 2:
-                    ret = matrixACholeskyL.at(iCell).triangularView<Eigen::Lower>().solve(ret);
+                    ret = coefficients_.matrixACholeskyL.at(iCell).template triangularView<Eigen::Lower>().solve(ret);
                     break;
                 default:
                     DNDS_assert(false);
@@ -1081,9 +1120,9 @@ namespace DNDS::CFV
             mesh->cell2cellFace.WriteSerialize(serializerP, "cell2cellFace", true);
             mesh->AdjGlobal2LocalC2CFace();
 
-            DNDS_assert(matrixAAInvB.father->Size() == mesh->NumCell());
-            DNDS_assert(matrixAAInvB.son->Size() == mesh->NumCellGhost());
-            matrixAAInvB.WriteSerialize(serializerP, "matrixAAInvB", false);
+            DNDS_assert(coefficients_.matrixAAInvB.father->Size() == mesh->NumCell());
+            DNDS_assert(coefficients_.matrixAAInvB.son->Size() == mesh->NumCellGhost());
+            coefficients_.matrixAAInvB.WriteSerialize(serializerP, "matrixAAInvB", false);
 
             serializerP->GoToPath(cwd);
         }

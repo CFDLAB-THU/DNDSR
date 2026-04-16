@@ -59,11 +59,11 @@ namespace DNDS
                         {
                             // DNDS_assert(false); // not yet implemented
                             vInc += (settings.functionalSettings.greenGauss1Bias * this->GetGreenGauss1WeightOnCell(iCell) *
-                                     this->matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
+                                     this->coefficients_.matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
                                     uIncBV;
                         }
                         vInc *= this->GetFaceJacobiDet(iFace, iG);
-                        // std::cout << faceWeight[iFace].transpose() << std::endl;
+                        // std::cout << baseWeight_.faceWeight[iFace].transpose() << std::endl;
                     });
             if (!settings.intOrderVRBCIsSame())
             {
@@ -73,7 +73,7 @@ namespace DNDS
                 qFace.Integration(
                     BCC,
                     [&](auto &vInc, int __xxx_iG, const tPoint &pParam, const Elem::tD01Nj &DiNj) { // todo: cache these for bnd: pPhy JDet norm and dbv
-                        BndVRPointCache &bndCacheEntry = bndVRCaches.at(iFace).at(__xxx_iG);
+                        BndVRPointCache &bndCacheEntry = baseWeight_.bndVRCaches.at(iFace).at(__xxx_iG);
                         auto &dbv = bndCacheEntry.D0Bj;
                         auto &np = bndCacheEntry.norm;
                         auto &JDet = bndCacheEntry.JDet;
@@ -134,12 +134,12 @@ namespace DNDS
                             vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
                         else
                             vInc.resizeLike(BCC), vInc.setZero();
-                        // std::cout << faceWeight[iFace].transpose() << std::endl;
+                        // std::cout << baseWeight_.faceWeight[iFace].transpose() << std::endl;
                         if (settings.functionalSettings.greenGauss1Weight != 0)
                         {
                             // DNDS_assert(false); // not yet implemented
                             vInc += (settings.functionalSettings.greenGauss1Bias * this->GetGreenGauss1WeightOnCell(iCell) *
-                                     this->matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
+                                     this->coefficients_.matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
                                     uIncBV;
                         }
                         vInc *= this->GetFaceJacobiDet(iFace, iG);
@@ -153,7 +153,7 @@ namespace DNDS
                     BCC,
                     [&](auto &vInc, int __xxx_iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                     {
-                        BndVRPointCache &bndCacheEntry = bndVRCaches.at(iFace).at(__xxx_iG);
+                        BndVRPointCache &bndCacheEntry = baseWeight_.bndVRCaches.at(iFace).at(__xxx_iG);
                         auto &dbv = bndCacheEntry.D0Bj;
                         auto &np = bndCacheEntry.norm;
                         auto &JDet = bndCacheEntry.JDet;
@@ -550,8 +550,8 @@ namespace DNDS
                         uRecNew[iCell] = uRec[iCell] * ((recordInc ? 0 : 1) - relax);
 
                     auto c2f = mesh->cell2face[iCell];
-                    auto matrixAAInvBRow = matrixAAInvB[iCell];
-                    auto vectorAInvBRow = vectorAInvB[iCell];
+                    auto matrixAAInvBRow = coefficients_.matrixAAInvB[iCell];
+                    auto vectorAInvBRow = coefficients_.vectorAInvB[iCell];
                     for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                     {
                         index iFace = c2f[ic2f];
@@ -659,7 +659,7 @@ namespace DNDS
                 uRecNew[iCell] = uRecDiff[iCell];
 
                 auto c2f = mesh->cell2face[iCell];
-                auto matrixAAInvBRow = matrixAAInvB[iCell];
+                auto matrixAAInvBRow = coefficients_.matrixAAInvB[iCell];
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
@@ -709,7 +709,7 @@ namespace DNDS
                 uRecNew[iCell] = (1 - relax) * uRecNew[iCell] + uRecInc[iCell];
 
                 auto c2f = mesh->cell2face[iCell];
-                auto matrixAAInvBRow = matrixAAInvB[iCell];
+                auto matrixAAInvBRow = coefficients_.matrixAAInvB[iCell];
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];

@@ -142,26 +142,32 @@ maintenance benefit.
 | 3.1 | `ModelEvaluator` (concrete physics model inside CFV) | **Deferred** | Added placement comment; actual move to `src/Model/` blocked by Python binding coupling (`CFV.ModelEvaluator`) |
 | 3.2 | `test_FiniteVolume*` (benchmark kernels with `test_` prefix) | **Done** | Renamed to `BenchmarkFiniteVolume*`; updated CMake, includes, pybind11 C++ function names; Python-visible names unchanged |
 
-### Phase 4: Extract `FFaceFunctional` (405 inline lines)
+### Phase 4: Extract `FFaceFunctional` -- DONE
 
-- **File:** `VariationalReconstruction.hpp:308-712`
-- **Action:** Move to a free function template in `VRFaceFunctional.hxx`. Replace
-  the `switch(cnDiffs)` fallthrough pattern with an `if constexpr` chain.
-  Eliminate `#define __POWV` / `#undef __POWV` macros.
+- **File:** `VariationalReconstruction.hpp`
+- **What was done:**
+  - Extracted `AccumulateDiffOrderContributions<dim, powV>()` free function template
+    that replaces 4 copies of the `switch(cnDiffs)` fallthrough pattern (~160 lines removed)
+  - Replaced `#define __POWV` / `#undef __POWV` macro with `constexpr int powV`
+  - Uses compile-time `Eigen::segment<N>()` instead of dynamic `{6,7,8,9}` initializer-list slicing
+  - Replaced `std::pow(faceL, order*2)` with integer multiplications
+  - FFaceFunctional body remains inline in `VariationalReconstruction.hpp` (moving
+    to separate `.hxx` provides no functional benefit given the above improvements)
 
-### Phase 5: Decompose `VariationalReconstruction` into Composed Sub-Objects
+### Phase 5: Decompose `VariationalReconstruction` into Composed Sub-Objects -- DONE (2 of 4 items; 2 skipped)
 
-Split the monolithic 3,538-line class into:
+Split the monolithic class's data members into two nested sub-objects:
 
-| Component | Owns | Methods Moved |
+| Component | Status | Owns |
 |---|---|---|
-| `VRBaseWeight` | `cellBaseMoment`, `faceWeight`, diff-base caches, `faceAlignedScales`, `faceMajorCoordScale`, `bndVRCaches` | `ConstructBaseAndWeight()`, `FDiffBaseValue()`, `GetIntPointDiffBaseValue()`, `FFaceFunctional()` |
-| `VRCoefficients` | `matrixAB`, `vectorB`, `matrixAAInvB`, `vectorAInvB`, `matrixSecondary`, `matrixAHalf_GG`, `matrixA`, Cholesky caches | `ConstructRecCoeff()`, `GetCellRecMatAInv()`, `GetMatrixSecondary()`, `MatrixAMult()`, `WriteSerializeRecMatrix()` |
-| `VRReconstructor` | (stateless) | `DoReconstruction2ndGrad()`, `DoReconstruction2nd()`, `DoReconstructionIter()`, `DoReconstructionIterDiff()`, `DoReconstructionIterSOR()` |
-| `VRLimiter` | (stateless) | `DoCalculateSmoothIndicator()`, `DoCalculateSmoothIndicatorV1()`, `DoLimiterWBAP_C()`, `DoLimiterWBAP_3()` |
+| `VRBaseWeight` | **Done** | `cellBaseMoment`, `faceWeight`, diff-base caches (4), `faceAlignedScales`, `faceMajorCoordScale`, `bndVRCaches` |
+| `VRCoefficients` | **Done** | `matrixAB`, `vectorB`, `matrixAAInvB`, `vectorAInvB`, `matrixSecondary`, `matrixAHalf_GG`, `matrixA`, Cholesky caches (4) |
+| `VRReconstructor` (free functions) | **Skipped** | Methods already in separate `_Reconstruction.hxx`; making free functions would require rewriting all `_explicit_instantiation/` files for no practical benefit |
+| `VRLimiter` (free functions) | **Skipped** | Same reason; already in separate `_LimiterProcedure.hxx` |
 
-`VariationalReconstruction<dim>` becomes a facade that holds and delegates to
-these components. The public API is preserved.
+`VariationalReconstruction<dim>` holds `baseWeight_` and `coefficients_` members
+and delegates through them. The public API is preserved unchanged. All methods
+continue to live on the VR class but access data through the sub-objects.
 
 ### Phase 6: Separate `FiniteVolume` Concerns
 

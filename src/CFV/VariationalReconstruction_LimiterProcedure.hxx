@@ -287,7 +287,7 @@ namespace DNDS::CFV
 
                         tPoint unitNorm = faceMeanNorm[iFace];
 
-                        const auto &matrixSecondary =
+                        const auto &matrixSecondaryThis =
                             this->GetMatrixSecondary(iCell, iFace, -1);
 
                         const auto &matrixSecondaryOther =
@@ -305,7 +305,7 @@ namespace DNDS::CFV
                         // std::cout << "B" << std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uOtherIn =
-                                matrixSecondary(Eigen::seq(LimStart, LimEnd), EigenAll) * uOtherOther;
+                                matrixSecondaryThis(Eigen::seq(LimStart, LimEnd), EigenAll) * uOtherOther;
 
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uThisIn =
@@ -446,7 +446,7 @@ namespace DNDS::CFV
 
                         tPoint unitNorm = faceMeanNorm[iFace];
 
-                        const auto &matrixSecondary =
+                        const auto &matrixSecondaryThis =
                             this->GetMatrixSecondary(iCell, iFace, -1);
 
                         const auto &matrixSecondaryOther =
@@ -464,7 +464,7 @@ namespace DNDS::CFV
                         // std::cout << "B" << std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uOtherIn =
-                                matrixSecondary(Eigen::seq(LimStart, LimEnd), EigenAll) * uOtherOther;
+                                matrixSecondaryThis(Eigen::seq(LimStart, LimEnd), EigenAll) * uOtherOther;
 
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uThisIn =
