@@ -1042,7 +1042,9 @@ namespace DNDS
         void to_host()
         {
             if constexpr (_dataLayout == CSR)
-                DNDS_check_throw_info(IfCompressed(), "CSR need compressing before to_host");
+                DNDS_check_throw_info(IfCompressed(),
+                                      fmt::format("CSR need compressing before to_host: {}",
+                                                  this->getObjectIdentity(GetArrayName())));
             _data.to_host();
             deviceBackend = DeviceBackend::Unknown;
         }
@@ -1050,7 +1052,9 @@ namespace DNDS
         void to_device(DeviceBackend backend = DeviceBackend::Host)
         {
             if constexpr (_dataLayout == CSR)
-                DNDS_check_throw_info(IfCompressed(), "CSR need compressing before to_device");
+                DNDS_check_throw_info(IfCompressed(),
+                                      fmt::format("CSR need compressing before to_device: {}",
+                                                  this->getObjectIdentity(GetArrayName())));
             _data.to_device(backend);
             if (_pRowStart)
                 _pRowStart->to_device(backend);
@@ -1082,7 +1086,10 @@ namespace DNDS
             DNDS_check_throw_info((this->deviceBackend == B &&
                                    B != DeviceBackend::Unknown) ||
                                       (B == DeviceBackend::Host),
-                                  "not on this device: " + std::string(device_backend_name(B)));
+                                  fmt::format("{}: not on device {}, currently on {}",
+                                              this->getObjectIdentity(GetArrayName()),
+                                              device_backend_name(B),
+                                              device_backend_name(this->deviceBackend)));
 
             return ArrayDeviceView_build<B, T, _row_size, _row_max, _align>(
                 _size, _data.data(), _data.size(),
@@ -1100,7 +1107,10 @@ namespace DNDS
             DNDS_check_throw_info((this->deviceBackend == B &&
                                    B != DeviceBackend::Unknown) ||
                                       (B == DeviceBackend::Host),
-                                  "not on this device");
+                                  fmt::format("{}: not on device {}, currently on {}",
+                                              this->getObjectIdentity(GetArrayName()),
+                                              device_backend_name(B),
+                                              device_backend_name(this->deviceBackend)));
 
             return ArrayDeviceView_build<B, const T, _row_size, _row_max, _align>(
                 _size, _data.data(), _data.size(),

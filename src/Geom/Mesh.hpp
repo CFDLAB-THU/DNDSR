@@ -1,5 +1,6 @@
 #pragma once
 #include "DNDS/DeviceStorage.hpp"
+#include "DNDS/DeviceTransferable.hpp"
 #include "Elements.hpp"
 #include "DNDS/Array.hpp"
 #include "DNDS/ArrayDerived/ArrayAdjacency.hpp"
@@ -29,7 +30,7 @@ namespace DNDS::Geom
 
     struct PartitionOptions; // forward declaration; defined after UnstructuredMesh
 
-    struct UnstructuredMesh
+    struct UnstructuredMesh : public DeviceTransferable<UnstructuredMesh>
     {
         MPI_int mRank{0};
         DNDS::MPIInfo mpi;
@@ -755,54 +756,14 @@ namespace DNDS::Geom
                 for_each_member_list(this->device_array_list_N2CB(), f);
         }
 
-        void to_host()
+        template <typename F>
+        void for_each_device_member(F &&f)
         {
-            auto arr_op = [&](auto &v)
-            { v.ref.to_host(); };
-            op_on_device_arrays(arr_op);
+            op_on_device_arrays(std::forward<F>(f));
         }
 
-        void to_device(DeviceBackend backend)
-        {
-            auto arr_op = [&](auto &v)
-            { v.ref.to_device(backend); };
-            op_on_device_arrays(arr_op);
-            // coords.to_device(backend);
-            // cell2node.to_device(backend);
-        }
-
-        DeviceBackend device()
-        {
-            DeviceBackend B = DeviceBackend::Unknown;
-            auto getB = [&B](auto &v)
-            {
-                if (v.ref.father)
-                    B = v.ref.father->device();
-            };
-            op_on_device_arrays(getB);
-
-            auto check_B_consistency = [&B](auto &v)
-            {
-                if (v.ref.father)
-                    DNDS_assert_info(
-                        B == v.ref.father->device(),
-                        fmt::format("member [{}.father] expected to be on device {} but on {}",
-                                    v.name,
-                                    device_backend_name(B),
-                                    device_backend_name(v.ref.father->device())));
-                if (v.ref.son)
-                    DNDS_assert_info(
-                        B == v.ref.son->device(),
-                        fmt::format("member [{}.son] expected to be on device {} but on {}",
-                                    v.name,
-                                    device_backend_name(B),
-                                    device_backend_name(v.ref.son->device())));
-            };
-
-            op_on_device_arrays(check_B_consistency);
-
-            return B;
-        }
+        // to_device(), to_host(), device() are provided by
+        // DeviceTransferable<UnstructuredMesh> via for_each_device_member().
 
         template <DeviceBackend B>
         using t_deviceView = UnstructuredMeshDeviceView<B>;

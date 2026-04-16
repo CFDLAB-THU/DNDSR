@@ -585,7 +585,9 @@ namespace DNDS
         template <DeviceBackend B>
         auto deviceView()
         {
-            DNDS_check_throw_info(father && son, "need both father and son to exist for device view");
+            DNDS_check_throw_info(father && son,
+                                  fmt::format("need both father and son to exist for device view: {}",
+                                              father ? father->getObjectIdentity(TArray::GetArrayName()) : TArray::GetArrayName()));
             return t_deviceView<B>{
                 father->template deviceView<B>(),
                 son->template deviceView<B>()};
@@ -594,7 +596,9 @@ namespace DNDS
         template <DeviceBackend B>
         auto deviceView() const
         {
-            DNDS_check_throw_info(father && son, "need both father and son to exist for device view");
+            DNDS_check_throw_info(father && son,
+                                  fmt::format("need both father and son to exist for device view: {}",
+                                              father ? father->getObjectIdentity(TArray::GetArrayName()) : TArray::GetArrayName()));
             return t_deviceViewConst<B>{
                 std::as_const(*father).template deviceView<B>(),
                 std::as_const(*son).template deviceView<B>()};

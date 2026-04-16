@@ -84,6 +84,37 @@ CC=mpicc CXX=mpicxx python cfd_externals_build.py
 
 ### Python Tests
 
+**IMPORTANT: Before running ANY Python test, you MUST build the pybind11
+shared libraries AND install them.** The Python modules load `.so` files
+from `python/DNDSR/`, which are only placed there by `cmake --install`.
+Running Python tests against stale or missing `.so` files will produce
+misleading crashes (segfaults, aborts, wrong results) that look like code
+bugs but are actually stale-binary problems. **Every time C++ source
+changes, repeat both steps before running Python tests:**
+
+```bash
+# Step 1: Build pybind11 targets
+cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j32
+
+# Step 2: Install into python/ (MANDATORY — do not skip)
+cmake --install build --component py
+
+# Step 3: Now run Python tests
+source venv/bin/activate
+PYTHONPATH=<project_root>/python pytest test/
+```
+
+If you switch git branches or checkout different commits, you MUST rebuild
+and reinstall before running Python tests. A `git checkout` changes source
+files but does NOT rebuild binaries — the installed `.so` files will be
+from the previous build and will silently produce wrong behavior.
+
+**CRITICAL: Before running ANY `git checkout`, `git switch`, `git restore`,
+or `git reset` command, ALWAYS run `git status` first.** Verify the working
+tree is clean or that all valuable changes are committed/stashed. These
+commands silently overwrite uncommitted modifications and delete untracked
+files, discarding work with no way to recover it.
+
 Tests use **pytest** with **pytest-mpi**. Test files live under `test/`.
 
 ```bash

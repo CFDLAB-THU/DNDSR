@@ -169,76 +169,38 @@ Split the monolithic class's data members into two nested sub-objects:
 and delegates through them. The public API is preserved unchanged. All methods
 continue to live on the VR class but access data through the sub-objects.
 
-### Phase 6: Separate `FiniteVolume` Concerns
+### Phase 6: Separate `FiniteVolume` Concerns -- DONE
 
 | Concern | Current State | Refactored |
 |---|---|---|
 | Geometric metrics | 18 protected array pairs + `Construct*()` | Keep in `FiniteVolume` (core responsibility) |
-| Array factory / DOF builder | `MakePairDefaultOnCell`, `BuildUDof`, etc. | Extract to free functions in `DOFFactory.hpp` |
-| Device management | `to_host()`, `to_device()`, `device()`, `deviceView()` | Extract to `DeviceTransferable<Derived>` CRTP mixin (see Phase 6a) |
+| Array factory / DOF builder | `MakePairDefaultOnCell`, `BuildUDof`, etc. | DOF logic extracted to free functions in `DOFFactory.hpp`; FV methods are thin wrappers |
+| Device management | `to_host()`, `to_device()`, `device()`, `deviceView()` | Extracted to `DeviceTransferable<Derived>` CRTP mixin (see Phase 6a) |
 
-#### Phase 6a: Unified Device Management Mixin
+**Additional improvements:**
+- `MakePairDefaultOnCell`/`MakePairDefaultOnFace` now require a `name` parameter (33 call sites updated with descriptive names like `"FV::volumeLocal"`, `"VR::matrixA"`)
+- `Array::to_device()`/`to_host()`/`deviceView()` error messages now include the array's object identity
+- `ArrayPair::deviceView()` error messages include the array's object identity
 
-**Current state:** Every composite class (`UnstructuredMesh`, `FiniteVolume`,
-`Evaluator`, `BCHandler`, `Physics`) manually implements the same four
-methods: `to_device()`, `to_host()`, `device()`, `deviceView()`. Two
-implementation patterns exist:
+#### Phase 6a: Unified Device Management Mixin -- DONE
 
-1. **Reflection-based** (Mesh, FV): `device_array_list()` + `for_each_member_list`
-2. **Manual delegation** (Evaluator, BCHandler): explicit calls per sub-object
+**Implemented:** `DNDS/DeviceTransferable.hpp` — CRTP mixin providing `to_device()`,
+`to_host()`, `device()`, `getDeviceArrayBytes()`. Derived class provides
+`for_each_device_member(F&&)`.
 
-**Proposed unified mixin:**
+**Classes migrated:**
+- `CFV::FiniteVolume` — inherits `DeviceTransferable<FiniteVolume>`, delegates via `for_each_device_member` → `device_array_list()`
+- `Geom::UnstructuredMesh` — inherits `DeviceTransferable<UnstructuredMesh>`, delegates via `for_each_device_member` → `op_on_device_arrays()` (conditional 4-group iteration preserved)
 
-```cpp
-template <typename Derived>
-class DeviceTransferable
-{
-public:
-    void to_device(DeviceBackend B)
-    {
-        static_cast<Derived*>(this)->for_each_device_member(
-            [B](auto &v) { v.ref.to_device(B); });
-    }
+**Classes skipped (documented rationale):**
+- `EulerP::Evaluator`, `BCHandler`, `Physics`, `BC` — use **manual delegation** pattern (calling `to_device` on heterogeneous sub-objects of different types: `shared_ptr<FV>`, `shared_ptr<BCHandler>`, `host_device_vector`, individual `ArrayPair`s). The mixin's tuple-based `MemberRef` iteration doesn't fit without significant restructuring. The manual delegation is appropriate here since these classes compose other `DeviceTransferable` objects.
 
-    void to_host()
-    {
-        static_cast<Derived*>(this)->for_each_device_member(
-            [](auto &v) { v.ref.to_host(); });
-    }
-
-    DeviceBackend device() const
-    {
-        DeviceBackend B = DeviceBackend::Unknown;
-        bool first = true;
-        static_cast<const Derived*>(this)->for_each_device_member(
-            [&](const auto &v) {
-                auto memberB = device_of(v.ref);
-                if (first && memberB != DeviceBackend::Unknown) {
-                    B = memberB;
-                    first = false;
-                }
-                // consistency check in debug
-                DNDS_assert(memberB == B || memberB == DeviceBackend::Unknown);
-            });
-        return B;
-    }
-
-    size_t getArrayBytes() const { /* sum via for_each_device_member */ }
-    void clear_device()         { /* clear via for_each_device_member */ }
-};
-```
-
-**The Derived class provides** a `for_each_device_member(F&&)` method that
-iterates over its device-transferable members. This works for both the
-reflection pattern (tuples) and heterogeneous composition (shared_ptrs,
-vectors).
-
-**Classes to migrate:**
-- `Geom::UnstructuredMesh` -- already uses `device_array_list()`, adapt
-- `CFV::FiniteVolume` -- same pattern
-- `EulerP::Evaluator` -- manually delegates, adapt to mixin
-- `EulerP::BCHandler`, `EulerP::Physics`, `EulerP::BC` -- simple wrappers
-- `DNDS::EigenMatrixHolder` -- standalone, adapt
+**CUDA unit tests:** `test/cpp/CFV/test_DeviceTransferable.cu` — 5 tests:
+1. `test_device_view_trivially_copyable` — compile-time `static_assert` + host view correctness
+2. `test_device_state_tracking` — `device()` returns correct backend through transfer lifecycle
+3. `test_host_device_transfer` — Host backend preserves data access
+4. `test_cuda_round_trip` — host→CUDA kernel read→host verification of cell volumes, barycenters, face areas
+5. `test_cuda_multiple_round_trips` — 3 round-trips with bitwise value stability
 
 ### Phase 7: API Hygiene and Encapsulation
 
@@ -269,7 +231,7 @@ vectors).
 | Phase 3: Module Boundaries | Low | 1 day | Phase 0 |
 | Phase 4: FFaceFunctional | Medium | 1-2 days | Phase 2 |
 | Phase 5: VR Decomposition | Medium-High | 3-5 days | Phase 4 |
-| Phase 6: FV Separation + Device Mixin | High | 4-6 days | Phase 0 |
+| Phase 6: FV Separation + Device Mixin | High | 4-6 days | Phase 0 | **DONE** |
 | Phase 7: API Hygiene | Medium | 2-3 days | Phase 5, 6 |
 | Phase 8: Cleanup | Trivial | 0.5 day | Any time |
 

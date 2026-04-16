@@ -1,17 +1,20 @@
 #pragma once
 #include "DNDS/DeviceStorage.hpp"
+#include "DNDS/DeviceTransferable.hpp"
 #include "DNDS/Errors.hpp"
 #include "FiniteVolumeSettings.hpp"
 #include "Geom/Mesh.hpp"
 #include "VRDefines.hpp"
 #include "Geom/DiffTensors.hpp"
+#include "DOFFactory.hpp"
 
 #include "FiniteVolume_DeviceView.hpp"
 
 namespace DNDS::CFV
 {
-    class FiniteVolume
+    class FiniteVolume : public DeviceTransferable<FiniteVolume>
     {
+        friend class DeviceTransferable<FiniteVolume>;
     public:
         MPI_int mRank{0};
         MPIInfo mpi;
@@ -76,6 +79,12 @@ namespace DNDS::CFV
                 DNDS_MAKE_1_MEMBER_REF(cellSmoothScale));
         }
 
+        template <typename F>
+        void for_each_device_member(F &&f)
+        {
+            for_each_member_list(device_array_list(), std::forward<F>(f));
+        }
+
         Geom::Base::CFVPeriodicity periodicity;
 
     protected:
@@ -102,12 +111,13 @@ namespace DNDS::CFV
          * @tparam TArrayPair ArrayPair's type
          * @tparam TOthers A list of additional resizing parameter types
          * @param aPair the pair to be constructed
+         * @param name descriptive name for the pair (appears in error messages)
          * @param others additional resizing parameters
          */
         template <class TArrayPair, class... TOthers>
-        void MakePairDefaultOnCell(TArrayPair &aPair, TOthers... others)
+        void MakePairDefaultOnCell(TArrayPair &aPair, const std::string &name, TOthers... others)
         {
-            aPair.InitPair("FV::MakePairDefaultOnCell::aPair", mpi);
+            aPair.InitPair(name, mpi);
             aPair.father->Resize(mesh->NumCell(), others...);
             aPair.son->Resize(mesh->NumCellGhost(), others...);
         }
@@ -118,12 +128,13 @@ namespace DNDS::CFV
          * @tparam TArrayPair ArrayPair's type
          * @tparam TOthers A list of additional resizing parameter types
          * @param aPair the pair to be constructed
+         * @param name descriptive name for the pair (appears in error messages)
          * @param others additional resizing parameters
          */
         template <class TArrayPair, class... TOthers>
-        void MakePairDefaultOnFace(TArrayPair &aPair, TOthers... others)
+        void MakePairDefaultOnFace(TArrayPair &aPair, const std::string &name, TOthers... others)
         {
-            aPair.InitPair("FV::MakePairDefaultOnFace::aPair", mpi);
+            aPair.InitPair(name, mpi);
             aPair.father->Resize(mesh->NumFace(), others...);
             aPair.son->Resize(mesh->NumFaceGhost(), others...);
         }
@@ -152,124 +163,13 @@ namespace DNDS::CFV
         template <int nVarsFixed = 1>
         void BuildUDof(tUDof<nVarsFixed> &u, int nVars, bool buildSon = true, bool buildTrans = true, Geom::MeshLoc varloc = Geom::MeshLoc::Cell)
         {
-            u.InitPair("FV::BuildUDof::u", mpi);
-            DNDS_assert(varloc);
-            switch (varloc)
-            {
-            case Geom::MeshLoc::Cell:
-                u.father->Resize(mesh->NumCell(), nVars, 1);
-                break;
-            case Geom::MeshLoc::Node:
-                u.father->Resize(mesh->NumNode(), nVars, 1);
-                break;
-            case Geom::MeshLoc::Face:
-                u.father->Resize(mesh->NumFace(), nVars, 1);
-                break;
-            default:
-                DNDS_assert(false);
-            }
-            if (buildSon)
-                switch (varloc)
-                {
-                case Geom::MeshLoc::Cell:
-                    u.son->Resize(mesh->NumCellGhost(), nVars, 1);
-                    break;
-                case Geom::MeshLoc::Node:
-                    u.son->Resize(mesh->NumNodeGhost(), nVars, 1);
-                    break;
-                case Geom::MeshLoc::Face:
-                    u.son->Resize(mesh->NumFaceGhost(), nVars, 1);
-                    break;
-                default:
-                    DNDS_assert(false);
-                }
-
-            if (buildTrans)
-            {
-                DNDS_assert(buildSon);
-                u.TransAttach();
-                switch (varloc)
-                {
-                case Geom::MeshLoc::Cell:
-                    u.trans.BorrowGGIndexing(mesh->cell2node.trans);
-                    break;
-                case Geom::MeshLoc::Node:
-                    u.trans.BorrowGGIndexing(mesh->coords.trans);
-                    break;
-                case Geom::MeshLoc::Face:
-                    u.trans.BorrowGGIndexing(mesh->face2node.trans);
-                    break;
-                default:
-                    DNDS_assert(false);
-                }
-                u.trans.createMPITypes();
-                u.trans.initPersistentPull();
-                u.trans.initPersistentPush();
-            }
-
-            for (index iCell = 0; iCell < u.Size(); iCell++)
-                u[iCell].setZero();
+            BuildUDofOnMesh(u, "FV::BuildUDof::u", mpi, mesh, nVars, buildSon, buildTrans, varloc);
         }
 
         template <int nVarsFixed, int dim>
         void BuildUGradD(tUGrad<nVarsFixed, dim> &u, int nVars, bool buildSon = true, bool buildTrans = true, Geom::MeshLoc varloc = Geom::MeshLoc::Cell)
         {
-            using namespace Geom::Base;
-            u.InitPair("FV::BuildUGradD::u", mpi);
-            switch (varloc)
-            {
-            case Geom::MeshLoc::Cell:
-                u.father->Resize(mesh->NumCell(), dim, nVars);
-                break;
-            case Geom::MeshLoc::Node:
-                u.father->Resize(mesh->NumNode(), dim, nVars);
-                break;
-            case Geom::MeshLoc::Face:
-                u.father->Resize(mesh->NumFace(), dim, nVars);
-                break;
-            default:
-                DNDS_assert(false);
-            }
-            if (buildSon)
-                switch (varloc)
-                {
-                case Geom::MeshLoc::Cell:
-                    u.son->Resize(mesh->NumCellGhost(), dim, nVars);
-                    break;
-                case Geom::MeshLoc::Node:
-                    u.son->Resize(mesh->NumNodeGhost(), dim, nVars);
-                    break;
-                case Geom::MeshLoc::Face:
-                    u.son->Resize(mesh->NumFaceGhost(), dim, nVars);
-                    break;
-                default:
-                    DNDS_assert(false);
-                }
-            if (buildTrans)
-            {
-                DNDS_assert(buildSon);
-                u.TransAttach();
-                switch (varloc)
-                {
-                case Geom::MeshLoc::Cell:
-                    u.trans.BorrowGGIndexing(mesh->cell2node.trans);
-                    break;
-                case Geom::MeshLoc::Node:
-                    u.trans.BorrowGGIndexing(mesh->coords.trans);
-                    break;
-                case Geom::MeshLoc::Face:
-                    u.trans.BorrowGGIndexing(mesh->face2node.trans);
-                    break;
-                default:
-                    DNDS_assert(false);
-                }
-                u.trans.createMPITypes();
-                u.trans.initPersistentPull();
-                u.trans.initPersistentPush();
-            }
-
-            for (index iCell = 0; iCell < u.Size(); iCell++)
-                u[iCell].setZero();
+            BuildUGradDOnMesh(u, "FV::BuildUGradD::u", mpi, mesh, nVars, buildSon, buildTrans, varloc);
         }
 
         RecAtr &GetCellAtr(index iCell)
@@ -519,80 +419,13 @@ namespace DNDS::CFV
 
         index getArrayBytes()
         {
-            index bytes = 0;
-            auto acuumulate_bytes_arr = [&](auto &v)
-            {
-                if (v.ref.father)
-                    bytes += v.ref.father->FullSizeBytes();
-                if (v.ref.son)
-                    bytes += v.ref.son->FullSizeBytes();
-            };
-            for_each_member_list(
-                this->device_array_list(),
-                acuumulate_bytes_arr);
+            index bytes = this->getDeviceArrayBytes();
             MPI::AllreduceOneIndex(bytes, MPI_SUM, mpi);
             return bytes;
         }
 
-        void to_host()
-        {
-            auto op = [&](auto &v)
-            {
-                v.ref.to_host();
-            };
-            for_each_member_list(
-                this->device_array_list(),
-                op);
-        }
-
-        void to_device(DeviceBackend B)
-        {
-            auto op = [&](auto &v)
-            {
-                // std::cout << v.name << "\n";
-                v.ref.to_device(B);
-            };
-            for_each_member_list(
-                this->device_array_list(),
-                op);
-        }
-
-        DeviceBackend device()
-        {
-            DeviceBackend B = DeviceBackend::Unknown;
-            auto getB = [&B](auto &v)
-            {
-                if (v.ref.father)
-                    B = v.ref.father->device();
-            };
-            for_each_member_list(
-                this->device_array_list(),
-                getB);
-
-            auto check_B_consistency = [&B](auto &v)
-            {
-                if (v.ref.father)
-                    DNDS_assert_info(
-                        B == v.ref.father->device(),
-                        fmt::format("member [{}.father] expected to be on device {} but on {}",
-                                    v.name,
-                                    device_backend_name(B),
-                                    device_backend_name(v.ref.father->device())));
-                if (v.ref.son)
-                    DNDS_assert_info(
-                        B == v.ref.son->device(),
-                        fmt::format("member [{}.son] expected to be on device {} but on {}",
-                                    v.name,
-                                    device_backend_name(B),
-                                    device_backend_name(v.ref.son->device())));
-            };
-
-            for_each_member_list(
-                this->device_array_list(),
-                check_B_consistency);
-
-            return B;
-        }
+        // to_device(), to_host(), device() are provided by
+        // DeviceTransferable<FiniteVolume> via for_each_device_member().
 
         template <DeviceBackend B>
         using t_deviceView = FiniteVolumeDeviceView<B>;

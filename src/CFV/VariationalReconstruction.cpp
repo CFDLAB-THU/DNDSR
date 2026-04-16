@@ -63,14 +63,14 @@ namespace DNDS::CFV
         int maxNDIFF = maxNDOF;
         /******************************/
         // *cell's moment and cache
-        this->MakePairDefaultOnCell(baseWeight_.cellBaseMoment, maxNDOF);
+        this->MakePairDefaultOnCell(baseWeight_.cellBaseMoment, "VR::cellBaseMoment", maxNDOF);
         if (settings.cacheDiffBase)
         {
             this->MakePairDefaultOnCell(
-                baseWeight_.cellDiffBaseCache,
+                baseWeight_.cellDiffBaseCache, "VR::cellDiffBaseCache",
                 std::min(maxNDIFF, static_cast<int>(settings.cacheDiffBaseSize)), maxNDOF);
             this->MakePairDefaultOnCell(
-                baseWeight_.cellDiffBaseCacheCent,
+                baseWeight_.cellDiffBaseCacheCent, "VR::cellDiffBaseCacheCent",
                 std::min(maxNDIFF, static_cast<int>(settings.cacheDiffBaseSize)), maxNDOF);
         }
         if (coefficients_.needVolIntCholeskyL)
@@ -158,16 +158,16 @@ namespace DNDS::CFV
         /******************************/
         // *face's weight and cache
 
-        this->MakePairDefaultOnFace(baseWeight_.faceWeight, settings.maxOrder + 1);
-        this->MakePairDefaultOnFace(baseWeight_.faceAlignedScales);
-        this->MakePairDefaultOnFace(baseWeight_.faceMajorCoordScale, 3, 3);
+        this->MakePairDefaultOnFace(baseWeight_.faceWeight, "VR::faceWeight", settings.maxOrder + 1);
+        this->MakePairDefaultOnFace(baseWeight_.faceAlignedScales, "VR::faceAlignedScales");
+        this->MakePairDefaultOnFace(baseWeight_.faceMajorCoordScale, "VR::faceMajorCoordScale", 3, 3);
         if (settings.cacheDiffBase)
         {
             this->MakePairDefaultOnFace(
-                baseWeight_.faceDiffBaseCache,
+                baseWeight_.faceDiffBaseCache, "VR::faceDiffBaseCache",
                 std::min(maxNDIFF, static_cast<int>(settings.cacheDiffBaseSize)), maxNDOF);
             this->MakePairDefaultOnFace(
-                baseWeight_.faceDiffBaseCacheCent,
+                baseWeight_.faceDiffBaseCacheCent, "VR::faceDiffBaseCacheCent",
                 std::min(maxNDIFF, static_cast<int>(settings.cacheDiffBaseSize)), maxNDOF * 2);
         }
 #ifdef DNDS_USE_OMP
@@ -543,14 +543,14 @@ namespace DNDS::CFV
         using namespace Geom::Base;
         int maxNDOF = GetNDof<dim>(settings.maxOrder);
         if (c_.needOriginalMatrix)
-            this->MakePairDefaultOnCell(c_.matrixAB, maxNDOF - 1, maxNDOF - 1);
-        this->MakePairDefaultOnCell(c_.matrixAAInvB, maxNDOF - 1, maxNDOF - 1);
+            this->MakePairDefaultOnCell(c_.matrixAB, "VR::matrixAB", maxNDOF - 1, maxNDOF - 1);
+        this->MakePairDefaultOnCell(c_.matrixAAInvB, "VR::matrixAAInvB", maxNDOF - 1, maxNDOF - 1);
         if (c_.needOriginalMatrix)
-            this->MakePairDefaultOnCell(c_.vectorB, maxNDOF - 1, 1);
-        this->MakePairDefaultOnCell(c_.vectorAInvB, maxNDOF - 1, 1);
+            this->MakePairDefaultOnCell(c_.vectorB, "VR::vectorB", maxNDOF - 1, 1);
+        this->MakePairDefaultOnCell(c_.vectorAInvB, "VR::vectorAInvB", maxNDOF - 1, 1);
         if (settings.functionalSettings.greenGauss1Weight != 0)
-            this->MakePairDefaultOnCell(c_.matrixAHalf_GG, dim, (maxNDOF - 1));
-        this->MakePairDefaultOnCell(c_.matrixA, (maxNDOF - 1), (maxNDOF - 1));
+            this->MakePairDefaultOnCell(c_.matrixAHalf_GG, "VR::matrixAHalf_GG", dim, (maxNDOF - 1));
+        this->MakePairDefaultOnCell(c_.matrixA, "VR::matrixA", (maxNDOF - 1), (maxNDOF - 1));
         if (c_.needMatrixACholeskyL)
             c_.matrixACholeskyL.resize(mesh->NumCellProc());
         real maxCond = 0.0;
@@ -896,7 +896,7 @@ namespace DNDS::CFV
         c_.matrixA.trans.pullOnce();
 
         // Get Secondary matrices
-        this->MakePairDefaultOnFace(c_.matrixSecondary, maxNDOF - 1, (maxNDOF - 1) * 2);
+        this->MakePairDefaultOnFace(c_.matrixSecondary, "VR::matrixSecondary", maxNDOF - 1, (maxNDOF - 1) * 2);
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
             index iCellL = mesh->face2cell(iFace, 0);

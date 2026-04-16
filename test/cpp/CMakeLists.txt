@@ -242,6 +242,35 @@ cfv_add_mpi_test(reconstruction "CFV/test_Reconstruction.cpp" "cfv;geom;dnds")
 set(CFV_TEST_TARGETS
     cfv_test_reconstruction
 )
+
+# --- CUDA CFV tests ---
+if(DNDS_USE_CUDA)
+    # helper: add a CUDA MPI test executable for CFV
+    function(cfv_add_cuda_mpi_test TEST_NAME SRC_FILE LIBS)
+        set(TARGET_NAME "cfv_test_${TEST_NAME}")
+        add_executable(${TARGET_NAME} ${SRC_FILE})
+        target_include_directories(${TARGET_NAME} PRIVATE
+            ${DNDS_EXTERNAL_INCLUDE_DOCTEST}
+            ${DNDS_EXTERNAL_INCLUDES}
+            ${DNDS_INCLUDES})
+        target_link_libraries(${TARGET_NAME} PRIVATE ${LIBS} ${DNDS_EXTERNAL_LIBS})
+        if(DNDS_USE_CCACHE)
+            set_property(TARGET ${TARGET_NAME} PROPERTY CXX_COMPILER_LAUNCHER ${DNDS_CCACHE_EXEC})
+        endif()
+        set_target_properties(${TARGET_NAME} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+            EXCLUDE_FROM_ALL ON)
+        # np=1 only for CUDA tests (single GPU)
+        add_test(NAME cfv_${TEST_NAME}_np1
+            COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1
+                    ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+        set_tests_properties(cfv_${TEST_NAME}_np1 PROPERTIES TIMEOUT 120 PROCESSORS 1)
+    endfunction()
+
+    cfv_add_cuda_mpi_test(device_transferable "CFV/test_DeviceTransferable.cu" "cfv;geom;dnds")
+    list(APPEND CFV_TEST_TARGETS cfv_test_device_transferable)
+endif()
+
 foreach(T ${CFV_TEST_TARGETS})
     add_dependencies(cfv_unit_tests ${T})
 endforeach()
