@@ -415,11 +415,8 @@ namespace DNDS
             int nVars = u.father->MatRowSize();
             auto vfv = this;
 
-            static tUGrad<nVarsFixed, dim> uGrad;
-            if (!uGrad.father || uGrad.father->Size() < mesh->NumCell() || uGrad.father->MatColSize(0) != u.father->MatRowSize())
-            {
-                this->BuildUGrad(uGrad, u.father->MatRowSize(), false, false); // no son or trans makes this fully local operation
-            }
+            tUGrad<nVarsFixed, dim> uGrad;
+            this->BuildUGrad(uGrad, u.father->MatRowSize(), false, false); // no son or trans makes this fully local operation
 
             static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>); // note this is gDim!
             static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);

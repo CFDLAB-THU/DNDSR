@@ -311,9 +311,8 @@ namespace DNDS::CFV
 
         inline real W12center(real *u, const int J, real n)
         {
-
-            real *theta = new real[J];
-            theta[0] = 1.0;
+            std::vector<real> thetaBuf(J);
+            real *theta = thetaBuf.data();
             for (int ii = 0; ii < J; ++ii)
             {
                 theta[ii] = (u[0] + signP(u[0]) * 1e-12) / (u[ii] + signP(u[ii]) * 1e-12);
@@ -327,9 +326,6 @@ namespace DNDS::CFV
                 sumLocal1 += std::pow(theta[ii], (p - 1.0));
                 sumLocal2 += std::pow(theta[ii], p);
             }
-
-            delete[] theta;
-            theta = NULL;
 
             return u[0] * sumLocal1 / (sumLocal2 + 1e-12);
         }

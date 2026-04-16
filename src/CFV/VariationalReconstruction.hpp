@@ -44,7 +44,11 @@ namespace DNDS::CFV
         void parseSettings(VRSettings::json &j)
         {
             settings.ParseFromJson(j);
-            t_base::settings = settings; //! we just slice the settings struct here
+            // Slice the FiniteVolumeSettings base portion into the base class copy.
+            // FiniteVolume methods read maxOrder, intOrder, ignoreMeshGeometryDeficiency,
+            // and nIterCellSmoothScale from its own `settings` member. This keeps
+            // them in sync. All VR-specific fields remain only in `this->settings`.
+            t_base::settings = settings;
         }
 
     public:
