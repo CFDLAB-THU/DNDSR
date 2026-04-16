@@ -1,7 +1,7 @@
 #include "CFV/VariationalReconstruction_Reconstruction.hxx"
 #include <vector>
 #define DNDS_NDEBUG
-#include "test_FiniteVolume.hpp"
+#include "BenchmarkFiniteVolume.hpp"
 
 namespace DNDS::CFV
 {

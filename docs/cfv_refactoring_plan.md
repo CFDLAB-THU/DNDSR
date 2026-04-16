@@ -135,12 +135,12 @@ maintenance benefit.
 
 **Verified:** Phase 0 tests pass at np=1,2,4. Euler target compiles clean.
 
-### Phase 3: Module Boundary Corrections
+### Phase 3: Module Boundary Corrections -- DONE (1 of 2 items; 1 deferred)
 
-| # | Item | Action |
-|---|---|---|
-| 3.1 | `ModelEvaluator` (concrete physics model inside CFV) | Move to `src/Model/` or `app/CFV/` |
-| 3.2 | `test_FiniteVolume*` (benchmark kernels with `test_` prefix) | Rename to `benchmark_*`; conditionally compile when `DNDS_BUILD_TESTS=ON` |
+| # | Item | Status | Action |
+|---|---|---|---|
+| 3.1 | `ModelEvaluator` (concrete physics model inside CFV) | **Deferred** | Added placement comment; actual move to `src/Model/` blocked by Python binding coupling (`CFV.ModelEvaluator`) |
+| 3.2 | `test_FiniteVolume*` (benchmark kernels with `test_` prefix) | **Done** | Renamed to `BenchmarkFiniteVolume*`; updated CMake, includes, pybind11 C++ function names; Python-visible names unchanged |
 
 ### Phase 4: Extract `FFaceFunctional` (405 inline lines)
 

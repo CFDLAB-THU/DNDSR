@@ -21,10 +21,10 @@ FiniteVolume.cpp
 VRDefines.cpp
 VariationalReconstruction.cpp
 ModelEvaluator.cpp
-test_FiniteVolume.cpp
+BenchmarkFiniteVolume.cpp
 )
 if (DNDS_USE_CUDA)
-list(APPEND CPPS VRDefines.cu test_FiniteVolume.cu)
+list(APPEND CPPS VRDefines.cu BenchmarkFiniteVolume.cu)
 endif()
 
 file(GLOB EXPLICIT_INST_CPP_FILES CONFIGURE_DEPENDS "_explicit_instantiation/*.cpp")

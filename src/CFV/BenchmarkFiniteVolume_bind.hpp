@@ -1,14 +1,14 @@
 #pragma once
 #include "VRDefines.hpp"
 #include "VRDefines_bind.hpp"
-#include "test_FiniteVolume.hpp"
+#include "BenchmarkFiniteVolume.hpp"
 #include <pybind11_json/pybind11_json.hpp>
 #include <string>
 
 namespace DNDS::CFV
 {
     template <DeviceBackend B>
-    void pybind11_test_FiniteVolume_define(py::module_ &m)
+    void pybind11_BenchmarkFiniteVolume_define(py::module_ &m)
     {
         m.def((std::string("finiteVolumeCellOpTest_main_") + device_backend_name(B)).c_str(),
               [](FiniteVolume &fv,
@@ -25,7 +25,7 @@ namespace DNDS::CFV
     }
 
     template <DeviceBackend B, int nVarsFixed>
-    void pybind11_test_FiniteVolume_define_Fixed(py::module_ &m)
+    void pybind11_BenchmarkFiniteVolume_define_Fixed(py::module_ &m)
     {
         m.def((std::string("finiteVolumeCellOpTest_Fixed_main_") + device_backend_name(B) + "_N" + std::to_string(nVarsFixed)).c_str(),
               [](FiniteVolume &fv,
@@ -42,7 +42,7 @@ namespace DNDS::CFV
     }
 
     template <DeviceBackend B, int nVarsFixed>
-    void pybind11_test_FiniteVolume_define_SOA_ver0(py::module_ &m)
+    void pybind11_BenchmarkFiniteVolume_define_SOA_ver0(py::module_ &m)
     {
         m.def((std::string("finiteVolumeCellOpTest_SOA_ver0_main_") + device_backend_name(B) + "_N" + std::to_string(nVarsFixed)).c_str(),
               [](FiniteVolume &fv,

@@ -1,5 +1,11 @@
 #pragma once
 
+// NOTE: ModelEvaluator is a concrete advection-diffusion test physics model.
+// It does not belong in the physics-agnostic CFV module, but is kept here for
+// now because the Python bindings (CFV.ModelEvaluator) and test code depend on
+// its current location. A future refactoring phase should move it to src/Model/
+// and decouple the pybind11 registration from cfv_pybind11.cpp.
+
 #include <nlohmann/json.hpp>
 #include <utility>
 

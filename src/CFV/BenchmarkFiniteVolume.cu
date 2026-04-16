@@ -1,5 +1,5 @@
 #define DNDS_NDEBUG_DEVICE
-#include "test_FiniteVolume.hpp"
+#include "BenchmarkFiniteVolume.hpp"
 #include <thrust/device_ptr.h>
 #include <thrust/device_malloc_allocator.h>
 #include "DNDS/CUDA_Utils.hpp"
