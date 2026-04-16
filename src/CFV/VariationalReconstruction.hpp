@@ -13,6 +13,86 @@
 namespace DNDS::CFV
 {
     /**
+     * @brief Accumulates the weighted diff-order tensor inner product into Conj
+     * across all polynomial orders present in the given diff vectors.
+     *
+     * Replaces the 4 copies of the switch(cnDiffs) fallthrough pattern
+     * in FFaceFunctional. Iterates over all (i,j) pairs and accumulates
+     * NormSymDiffOrderTensorV contributions for each polynomial order.
+     *
+     * @tparam dim       Spatial dimension (2 or 3)
+     * @tparam powV      Combinatorial power (1 unless USE_ECCENTRIC_COMB_POW_2)
+     * @param DiffI      Diff base values for left side (cnDiffs x nColsI)
+     * @param DiffJ      Diff base values for right side (cnDiffs x nColsJ)
+     * @param Conj       Output conjugation matrix (nColsI x nColsJ), accumulated into
+     * @param wgd        Squared face weight vector (one entry per order)
+     * @param cnDiffs    Number of diff rows (= total NDOF for the max order present)
+     * @param faceL      Length scale; pass 0 for anisotropic path (all faceLPow = 1)
+     */
+    template <int dim, int powV = 1, class TDiffI, class TDiffJ>
+    inline void AccumulateDiffOrderContributions(
+        const Eigen::MatrixBase<TDiffI> &DiffI,
+        const Eigen::MatrixBase<TDiffJ> &DiffJ,
+        MatrixXR &Conj,
+        const Eigen::Vector<real, Eigen::Dynamic> &wgd,
+        int cnDiffs,
+        real faceL)
+    {
+        using namespace Geom::Base;
+
+        // Each order's start index and count are compile-time constants,
+        // so segment<N>() produces fixed-size Eigen expressions (no dynamic alloc).
+        auto accumOrder = [&](auto order_tag, auto start_tag, auto count_tag, int wIdx)
+        {
+            constexpr int order = decltype(order_tag)::value;
+            constexpr int start = decltype(start_tag)::value;
+            constexpr int count = decltype(count_tag)::value;
+            // faceL^(order*2) via integer multiplication; faceL==0 means anisotropic (scale=1)
+            real faceLPow;
+            if constexpr (order == 0)
+                faceLPow = 1.0;
+            else if constexpr (order == 1)
+                faceLPow = faceL * faceL;
+            else if constexpr (order == 2)
+            {
+                real fL2 = faceL * faceL;
+                faceLPow = fL2 * fL2;
+            }
+            else // order == 3
+            {
+                real fL2 = faceL * faceL;
+                faceLPow = fL2 * fL2 * fL2;
+            }
+            real scale = wgd(wIdx) * (faceL == 0 ? 1.0 : faceLPow);
+            for (int i = 0; i < DiffI.cols(); i++)
+                for (int j = 0; j < DiffJ.cols(); j++)
+                    Conj(i, j) += NormSymDiffOrderTensorV<dim, order, powV>(
+                                      DiffI.col(i).template segment<count>(start),
+                                      DiffJ.col(j).template segment<count>(start)) *
+                                  scale;
+        };
+
+        if constexpr (dim == 2)
+        {
+            // dim=2 NDOF per order: 1, 2, 3, 4  cumulative: 1, 3, 6, 10
+            DNDS_assert(cnDiffs == 10 || cnDiffs == 6 || cnDiffs == 3 || cnDiffs == 1);
+            if (cnDiffs >= 10) accumOrder(std::integral_constant<int, 3>{}, std::integral_constant<int, 6>{}, std::integral_constant<int, 4>{}, 3);
+            if (cnDiffs >= 6)  accumOrder(std::integral_constant<int, 2>{}, std::integral_constant<int, 3>{}, std::integral_constant<int, 3>{}, 2);
+            if (cnDiffs >= 3)  accumOrder(std::integral_constant<int, 1>{}, std::integral_constant<int, 1>{}, std::integral_constant<int, 2>{}, 1);
+            accumOrder(std::integral_constant<int, 0>{}, std::integral_constant<int, 0>{}, std::integral_constant<int, 1>{}, 0);
+        }
+        else
+        {
+            // dim=3 NDOF per order: 1, 3, 6, 10  cumulative: 1, 4, 10, 20
+            DNDS_assert(cnDiffs == 20 || cnDiffs == 10 || cnDiffs == 4 || cnDiffs == 1);
+            if (cnDiffs >= 20) accumOrder(std::integral_constant<int, 3>{}, std::integral_constant<int, 10>{}, std::integral_constant<int, 10>{}, 3);
+            if (cnDiffs >= 10) accumOrder(std::integral_constant<int, 2>{}, std::integral_constant<int, 4>{},  std::integral_constant<int, 6>{},  2);
+            if (cnDiffs >= 4)  accumOrder(std::integral_constant<int, 1>{}, std::integral_constant<int, 1>{},  std::integral_constant<int, 3>{},  1);
+            accumOrder(std::integral_constant<int, 0>{}, std::integral_constant<int, 0>{}, std::integral_constant<int, 1>{}, 0);
+        }
+    }
+
+    /**
      * @brief
      * The VR class that provides any information needed in high-order CFV
      *
@@ -391,89 +471,15 @@ namespace DNDS::CFV
             // std::abort();
             // std::cout << "old len " << std::sqrt(faceLV.array().square().mean()) << std::endl;
 
+#ifdef USE_ECCENTRIC_COMB_POW_2
+            static constexpr int powV = 2;
+#else
+            static constexpr int powV = 1;
+#endif
+
             if (!settings.functionalSettings.useAnisotropicFunctional)
             {
-#ifdef USE_ECCENTRIC_COMB_POW_2
-#    define __POWV 2
-#else
-#    define __POWV 1
-#endif
-                if constexpr (dim == 2)
-                {
-                    DNDS_assert(cnDiffs == 10 || cnDiffs == 6 || cnDiffs == 3 || cnDiffs == 1);
-                    for (int i = 0; i < DiffI.cols(); i++)
-                        for (int j = 0; j < DiffJ.cols(); j++)
-                        {
-                            switch (cnDiffs)
-                            {
-                            case 10:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<2, 3, __POWV>(
-                                        DiffI({6, 7, 8, 9}, {i}),
-                                        DiffJ({6, 7, 8, 9}, {j})) *
-                                    wgd(3) * std::pow(faceL, 3 * 2);
-                            case 6:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<2, 2, __POWV>(
-                                        DiffI({3, 4, 5}, {i}),
-                                        DiffJ({3, 4, 5}, {j})) *
-                                    wgd(2) * std::pow(faceL, 2 * 2);
-                            case 3:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<2, 1, __POWV>(
-                                        DiffI({1, 2}, {i}),
-                                        DiffJ({1, 2}, {j})) *
-                                    wgd(1) * std::pow(faceL, 1 * 2);
-                            case 1:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<2, 0, __POWV>(
-                                        DiffI({0}, {i}),
-                                        DiffJ({0}, {j})) * //! i, j needed in {}!
-                                    wgd(0);
-                                break;
-                            default:
-                                DNDS_assert(false);
-                            }
-                        }
-                }
-                else
-                {
-                    DNDS_assert(cnDiffs == 20 || cnDiffs == 10 || cnDiffs == 4 || cnDiffs == 1);
-                    for (int i = 0; i < DiffI.cols(); i++)
-                        for (int j = 0; j < DiffJ.cols(); j++)
-                        {
-                            switch (cnDiffs)
-                            {
-                            case 20:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<3, 3, __POWV>(
-                                        DiffI({10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, {i}),
-                                        DiffJ({10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, {j})) *
-                                    wgd(3) * std::pow(faceL, 3 * 2);
-                            case 10:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<3, 2, __POWV>(
-                                        DiffI({4, 5, 6, 7, 8, 9}, {i}),
-                                        DiffJ({4, 5, 6, 7, 8, 9}, {j})) *
-                                    wgd(2) * std::pow(faceL, 2 * 2);
-                            case 4:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<3, 1, __POWV>(
-                                        DiffI({1, 2, 3}, {i}),
-                                        DiffJ({1, 2, 3}, {j})) *
-                                    wgd(1) * std::pow(faceL, 1 * 2);
-                            case 1:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<3, 0, __POWV>(
-                                        DiffI({0}, {i}),
-                                        DiffJ({0}, {j})) *
-                                    wgd(0);
-                                break;
-                            default:
-                                DNDS_assert(false);
-                            }
-                        }
-                }
+                AccumulateDiffOrderContributions<dim, powV>(DiffI, DiffJ, Conj, wgd, cnDiffs, faceL);
 
                 // std::cout << DiffI << std::endl << std::endl;
                 // std::cout << Conj << std::endl;
@@ -657,85 +663,7 @@ namespace DNDS::CFV
                 ConvertDiffsLinMap<dim>(DiffI_Norm, coordTrans);
                 ConvertDiffsLinMap<dim>(DiffJ_Norm, coordTrans);
 
-                if constexpr (dim == 2)
-                {
-                    DNDS_assert(cnDiffs == 10 || cnDiffs == 6 || cnDiffs == 3 || cnDiffs == 1);
-                    for (int i = 0; i < DiffI.cols(); i++)
-                        for (int j = 0; j < DiffJ.cols(); j++)
-                        {
-                            switch (cnDiffs)
-                            {
-                            case 10:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<2, 3, __POWV>(
-                                        DiffI_Norm({6, 7, 8, 9}, {i}),
-                                        DiffJ_Norm({6, 7, 8, 9}, {j})) *
-                                    wgd(3);
-                            case 6:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<2, 2, __POWV>(
-                                        DiffI_Norm({3, 4, 5}, {i}),
-                                        DiffJ_Norm({3, 4, 5}, {j})) *
-                                    wgd(2);
-                            case 3:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<2, 1, __POWV>(
-                                        DiffI_Norm({1, 2}, {i}),
-                                        DiffJ_Norm({1, 2}, {j})) *
-                                    wgd(1);
-                            case 1:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<2, 0, __POWV>(
-                                        DiffI_Norm({0}, {i}),
-                                        DiffJ_Norm({0}, {j})) * //! i, j needed in {}!
-                                    wgd(0);
-                                break;
-                            default:
-                                DNDS_assert(false);
-                            }
-                        }
-                }
-                else
-                {
-                    DNDS_assert(cnDiffs == 20 || cnDiffs == 10 || cnDiffs == 4 || cnDiffs == 1);
-                    for (int i = 0; i < DiffI.cols(); i++)
-                        for (int j = 0; j < DiffJ.cols(); j++)
-                        {
-                            switch (cnDiffs)
-                            {
-                            case 20:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<3, 3, __POWV>(
-                                        DiffI_Norm({10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, {i}),
-                                        DiffJ_Norm({10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, {j})) *
-                                    wgd(3);
-                            case 10:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<3, 2, __POWV>(
-                                        DiffI_Norm({4, 5, 6, 7, 8, 9}, {i}),
-                                        DiffJ_Norm({4, 5, 6, 7, 8, 9}, {j})) *
-                                    wgd(2);
-                            case 4:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<3, 1, __POWV>(
-                                        DiffI_Norm({1, 2, 3}, {i}),
-                                        DiffJ_Norm({1, 2, 3}, {j})) *
-                                    wgd(1);
-                            case 1:
-                                Conj(i, j) +=
-                                    NormSymDiffOrderTensorV<3, 0, __POWV>(
-                                        DiffI_Norm({0}, {i}),
-                                        DiffJ_Norm({0}, {j})) *
-                                    wgd(0);
-                                break;
-                            default:
-                                DNDS_assert(false);
-                            }
-                        }
-                }
-#ifdef __POWV
-#    undef __POWV
-#endif
+                AccumulateDiffOrderContributions<dim, powV>(DiffI_Norm, DiffJ_Norm, Conj, wgd, cnDiffs, 0);
             }
             return Conj;
         }
