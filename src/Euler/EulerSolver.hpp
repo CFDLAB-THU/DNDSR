@@ -739,7 +739,9 @@ namespace DNDS::Euler
                 config.field_section(&T::restartState,                   "restartState",                   "Restart checkpoint state");
                 config.field_section(&T::eulerSettings,                  "eulerSettings",                  "Euler evaluator physics settings");
                 config.field_section(&T::vfvSettings,                    "vfvSettings",                    "Variational reconstruction settings");
-                config.field_json(&T::bcSettings,                        "bcSettings",                     "Boundary condition settings (per-BC array)");
+                config.field_json_schema(&T::bcSettings,                  "bcSettings",
+                    "Boundary condition settings (per-BC array)",
+                    []() { return bcSettingsSchema(); });
                 DNDS_FIELD(bcNameMapping,                                "Boundary name to type mapping");
 
                 config.check("bcSettings must be a JSON array", [](const T &s)

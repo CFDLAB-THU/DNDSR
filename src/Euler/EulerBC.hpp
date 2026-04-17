@@ -46,6 +46,123 @@ namespace DNDS::Euler
         return nlohmann::json(type).get<std::string>();
     }
 
+    /// @brief Build a JSON Schema (draft-07) for the bcSettings array.
+    ///
+    /// Each BC entry is a discriminated union keyed on `"type"`.  The schema
+    /// uses `oneOf` with `"const"` on the discriminator so that IDEs can
+    /// provide type-specific autocomplete.
+    ///
+    /// There are three groups:
+    ///   - Flow BCs (BCFar, BCOut, BCOutP, BCIn, BCInPsTs):
+    ///       required: type, name, value
+    ///       optional: frameOption, anchorOption, integrationOption, valueExtra
+    ///   - Wall BCs (BCWall, BCWallInvis, BCWallIsothermal, BCSpecial):
+    ///       required: type, name
+    ///       optional: value, frameOption, integrationOption, specialOption, valueExtra
+    ///       (value is required for BCWallIsothermal)
+    ///   - Symmetry (BCSym):
+    ///       required: type, name
+    ///       optional: rectifyOption, integrationOption, valueExtra
+    inline nlohmann::ordered_json bcSettingsSchema()
+    {
+        using json = nlohmann::ordered_json;
+
+        auto numArray = []() -> json
+        {
+            json s;
+            s["type"] = "array";
+            s["items"] = json{{"type", "number"}};
+            return s;
+        };
+        auto intProp = [](const char *desc) -> json
+        {
+            return json{{"type", "integer"}, {"description", desc}, {"default", 0}};
+        };
+
+        // -- Helper: build a single variant schema for one or more BC type strings.
+        auto makeVariant = [&](std::vector<std::string> types,
+                               const char *groupDesc,
+                               json extraProps,
+                               std::vector<std::string> required) -> json
+        {
+            json s;
+            s["type"] = "object";
+            s["description"] = groupDesc;
+
+            json typeSchema;
+            if (types.size() == 1)
+                typeSchema = json{{"const", types[0]}};
+            else
+                typeSchema = json{{"enum", types}};
+            typeSchema["description"] = "Boundary condition type";
+
+            json props;
+            props["type"] = typeSchema;
+            props["name"] = json{{"type", "string"}, {"description", "Boundary zone name"}};
+            for (auto &[k, v] : extraProps.items())
+                props[k] = v;
+
+            s["properties"] = props;
+            s["required"] = required;
+            s["additionalProperties"] = false;
+            return s;
+        };
+
+        // --- Flow BCs: BCFar, BCOut, BCOutP, BCIn, BCInPsTs ---
+        auto flowTypes = std::vector<std::string>{"BCFar", "BCOut", "BCOutP", "BCIn", "BCInPsTs"};
+        json flowProps;
+        flowProps["value"] = numArray();
+        flowProps["value"]["description"] = "BC state vector (size = nVars)";
+        flowProps["frameOption"] = intProp("Reference frame option");
+        flowProps["anchorOption"] = intProp("Anchor point option");
+        flowProps["integrationOption"] = intProp("Integration option");
+        flowProps["valueExtra"] = numArray();
+        flowProps["valueExtra"]["description"] = "Extra BC values (e.g. anchor coordinates)";
+        // Emit one variant per type for best IDE discrimination.
+        json oneOf = json::array();
+        for (auto &t : flowTypes)
+        {
+            oneOf.push_back(makeVariant({t}, ("Flow BC: " + t).c_str(),
+                                        flowProps,
+                                        {"type", "name", "value"}));
+        }
+
+        // --- Wall BCs: BCWall, BCWallInvis, BCWallIsothermal, BCSpecial ---
+        json wallProps;
+        wallProps["value"] = numArray();
+        wallProps["value"]["description"] = "BC state vector (optional except for BCWallIsothermal)";
+        wallProps["frameOption"] = intProp("Reference frame option");
+        wallProps["integrationOption"] = intProp("Integration option");
+        wallProps["specialOption"] = intProp("Special BC sub-type option");
+        wallProps["valueExtra"] = numArray();
+        wallProps["valueExtra"]["description"] = "Extra BC values";
+        auto wallTypes = std::vector<std::string>{"BCWall", "BCWallInvis", "BCWallIsothermal", "BCSpecial"};
+        for (auto &t : wallTypes)
+        {
+            auto req = std::vector<std::string>{"type", "name"};
+            if (t == "BCWallIsothermal")
+                req.push_back("value"); // value is required for isothermal
+            oneOf.push_back(makeVariant({t}, ("Wall BC: " + t).c_str(),
+                                        wallProps, req));
+        }
+
+        // --- Symmetry: BCSym ---
+        json symProps;
+        symProps["rectifyOption"] = intProp("Symmetry plane rectification option");
+        symProps["integrationOption"] = intProp("Integration option");
+        symProps["valueExtra"] = numArray();
+        symProps["valueExtra"]["description"] = "Extra BC values";
+        oneOf.push_back(makeVariant({"BCSym"}, "Symmetry BC",
+                                    symProps, {"type", "name"}));
+
+        // --- Assemble array schema ---
+        json schema;
+        schema["type"] = "array";
+        schema["description"] = "Boundary condition settings (per-BC array)";
+        schema["items"] = json{{"oneOf", oneOf}};
+        return schema;
+    }
+
     template <EulerModel model>
     class BoundaryHandler
     {

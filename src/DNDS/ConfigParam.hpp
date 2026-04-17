@@ -514,6 +514,45 @@ namespace DNDS
             ConfigRegistry<T>::registerField(std::move(meta));
         }
 
+        // ---- field_json_schema(): opaque JSON blob with explicit schema ----
+
+        /// @brief Register an opaque `nlohmann::ordered_json` field with a
+        ///        user-supplied schema generator.
+        ///
+        /// Use this for heterogeneous structures (e.g. arrays of discriminated
+        /// union objects) where automatic schema inference is not possible.
+        ///
+        /// @param member       Pointer-to-member.
+        /// @param jsonKey      JSON key name.
+        /// @param desc         Human-readable description.
+        /// @param schemaFn     Callable `() -> ordered_json` returning the
+        ///                     full JSON Schema for this field.
+        /// @param tags         Optional tag objects.
+        template <typename FSchema, typename... Tags>
+        void field_json_schema(nlohmann::ordered_json T::*member,
+                               const char *jsonKey, const char *desc,
+                               FSchema &&schemaFn, Tags &&...tags)
+        {
+            FieldMeta meta;
+            meta.name = jsonKey;
+            meta.description = desc;
+            meta.typeTag = ConfigTypeTag::Json;
+            meta.readField = [member, jsonKey](const nlohmann::ordered_json &j, void *obj)
+            {
+                static_cast<T *>(obj)->*member = j.at(jsonKey);
+            };
+            meta.writeField = [member, jsonKey](nlohmann::ordered_json &j, const void *obj)
+            {
+                j[jsonKey] = static_cast<const T *>(obj)->*member;
+            };
+            meta.schemaEntry = [fn = std::forward<FSchema>(schemaFn)]() -> nlohmann::ordered_json
+            {
+                return fn();
+            };
+            detail::applyTags(meta, std::forward<Tags>(tags)...);
+            ConfigRegistry<T>::registerField(std::move(meta));
+        }
+
         // ---- check(): cross-field validation ----
 
         /// @brief Register a context-free cross-field check.
