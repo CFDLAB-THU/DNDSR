@@ -365,14 +365,14 @@ namespace DNDS::CFV
                 switch (settings.maxOrder)
                 {
                 case 3:
-                    wd[3] = settings.functionalSettings.manualDirWeights(3);
+                    wd[3] = settings.functionalSettings.manualDirWeights[3];
                     [[fallthrough]];
                 case 2:
-                    wd[2] = settings.functionalSettings.manualDirWeights(2);
+                    wd[2] = settings.functionalSettings.manualDirWeights[2];
                     [[fallthrough]];
                 case 1:
-                    wd[1] = settings.functionalSettings.manualDirWeights(1);
-                    wd[0] = settings.functionalSettings.manualDirWeights(0);
+                    wd[1] = settings.functionalSettings.manualDirWeights[1];
+                    wd[0] = settings.functionalSettings.manualDirWeights[0];
                     break;
                 default:
                     DNDS_assert(false);
@@ -386,14 +386,14 @@ namespace DNDS::CFV
                     switch (settings.maxOrder)
                     {
                     case 3:
-                        wd[3] = settings.functionalSettings.manualDirWeights(3);
+                        wd[3] = settings.functionalSettings.manualDirWeights[3];
                         [[fallthrough]];
                     case 2:
-                        wd[2] = settings.functionalSettings.manualDirWeights(2);
+                        wd[2] = settings.functionalSettings.manualDirWeights[2];
                         [[fallthrough]];
                     case 1:
-                        wd[1] = settings.functionalSettings.manualDirWeights(1);
-                        wd[0] = settings.functionalSettings.manualDirWeights(0);
+                        wd[1] = settings.functionalSettings.manualDirWeights[1];
+                        wd[0] = settings.functionalSettings.manualDirWeights[0];
                         break;
                     default:
                         DNDS_assert(false);

@@ -123,6 +123,12 @@ namespace DNDS
         static constexpr ConfigTypeTag value = ConfigTypeTag::Array;
     };
 
+    template <typename T, std::size_t N>
+    struct ConfigTypeTagOf<std::array<T, N>>
+    {
+        static constexpr ConfigTypeTag value = ConfigTypeTag::Array;
+    };
+
     template <>
     struct ConfigTypeTagOf<nlohmann::ordered_json>
     {

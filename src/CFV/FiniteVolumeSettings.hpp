@@ -6,6 +6,7 @@
 // #endif
 #include "DNDS/Defines.hpp"
 #include "DNDS/JsonUtil.hpp"
+#include "DNDS/ConfigParam.hpp"
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
 // #undef __DNDS_REALLY_COMPILING__
 // #endif
@@ -34,41 +35,32 @@ namespace DNDS::CFV
 
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(FiniteVolumeSettings, FiniteVolumeSettings)
 
+        DNDS_DEVICE_CALLABLE FiniteVolumeSettings() = default;
         DNDS_DEVICE_CALLABLE FiniteVolumeSettings(int dim)
         {
         }
 
-        /**
-         * @brief write any data into jsonSetting member
-         *
-         */
+        DNDS_DECLARE_CONFIG(FiniteVolumeSettings)
+        {
+            DNDS_FIELD(maxOrder,                      "Polynomial degree of reconstruction",
+                       DNDS::Config::range(0));
+            DNDS_FIELD(intOrder,                      "Global integration degree",
+                       DNDS::Config::range(0));
+            DNDS_FIELD(ignoreMeshGeometryDeficiency,  "Ignore mesh geometry deficiency warnings");
+            DNDS_FIELD(nIterCellSmoothScale,          "Cell smooth scale iterations",
+                       DNDS::Config::range(0));
+        }
+
+        /// @brief Backward-compatible write (used by Python bindings and VRSettings).
         DNDS_HOST void WriteIntoJson(json &jsonSetting) const
         {
-            jsonSetting["maxOrder"] = maxOrder;
-            jsonSetting["intOrder"] = intOrder;
-            jsonSetting["ignoreMeshGeometryDeficiency"] = ignoreMeshGeometryDeficiency;
-            jsonSetting["nIterCellSmoothScale"] = nIterCellSmoothScale;
+            to_json(jsonSetting, *this);
         }
 
-        /**
-         * @brief read any data from jsonSetting member
-         *
-         */
+        /// @brief Backward-compatible read (used by Python bindings and VRSettings).
         DNDS_HOST void ParseFromJson(const json &jsonSetting)
         {
-            maxOrder = jsonSetting["maxOrder"]; ///@todo //TODO: update to better
-            intOrder = jsonSetting["intOrder"];
-            ignoreMeshGeometryDeficiency = jsonSetting["ignoreMeshGeometryDeficiency"];
-            nIterCellSmoothScale = jsonSetting["nIterCellSmoothScale"];
-        }
-        DNDS_HOST friend void from_json(const json &j, FiniteVolumeSettings &s)
-        {
-            s.ParseFromJson(j);
-        }
-
-        DNDS_HOST friend void to_json(json &j, const FiniteVolumeSettings &s)
-        {
-            s.WriteIntoJson(j);
+            from_json(jsonSetting, *this);
         }
     };
 }
