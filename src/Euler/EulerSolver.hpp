@@ -536,18 +536,20 @@ namespace DNDS::Euler
                     PeriodicRotationEulerAngles3.setZero(3);
                 }
 
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    BoundaryDefinition,
-                    PeriodicTranslation1,
-                    PeriodicTranslation2,
-                    PeriodicTranslation3,
-                    PeriodicRotationCent1,
-                    PeriodicRotationCent2,
-                    PeriodicRotationCent3,
-                    PeriodicRotationEulerAngles1,
-                    PeriodicRotationEulerAngles2,
-                    PeriodicRotationEulerAngles3,
-                    periodicTolerance)
+                DNDS_DECLARE_CONFIG(BoundaryDefinition)
+                {
+                    DNDS_FIELD(PeriodicTranslation1,          "Periodic translation vector for pair 1");
+                    DNDS_FIELD(PeriodicTranslation2,          "Periodic translation vector for pair 2");
+                    DNDS_FIELD(PeriodicTranslation3,          "Periodic translation vector for pair 3");
+                    DNDS_FIELD(PeriodicRotationCent1,         "Rotation center for periodic pair 1");
+                    DNDS_FIELD(PeriodicRotationCent2,         "Rotation center for periodic pair 2");
+                    DNDS_FIELD(PeriodicRotationCent3,         "Rotation center for periodic pair 3");
+                    DNDS_FIELD(PeriodicRotationEulerAngles1,  "Rotation Euler angles (deg) for periodic pair 1");
+                    DNDS_FIELD(PeriodicRotationEulerAngles2,  "Rotation Euler angles (deg) for periodic pair 2");
+                    DNDS_FIELD(PeriodicRotationEulerAngles3,  "Rotation Euler angles (deg) for periodic pair 3");
+                    DNDS_FIELD(periodicTolerance,             "Tolerance for periodic node matching",
+                               DNDS::Config::range(0.0));
+                }
             } boundaryDefinition;
 
             struct LimiterControl
@@ -721,37 +723,43 @@ namespace DNDS::Euler
             nlohmann::ordered_json bcSettings = nlohmann::ordered_json::array();
             std::map<std::string, std::string> bcNameMapping;
 
+            DNDS_DECLARE_CONFIG(Configuration)
+            {
+                config.field_section(&T::timeMarchControl,               "timeMarchControl",               "Time marching settings");
+                config.field_section(&T::implicitReconstructionControl,   "implicitReconstructionControl",   "Implicit reconstruction settings");
+                config.field_section(&T::outputControl,                  "outputControl",                  "Output settings");
+                config.field_section(&T::implicitCFLControl,             "implicitCFLControl",             "Implicit CFL settings");
+                config.field_section(&T::convergenceControl,             "convergenceControl",             "Convergence monitoring settings");
+                config.field_section(&T::dataIOControl,                  "dataIOControl",                  "Data I/O and restart settings");
+                config.field_section(&T::boundaryDefinition,             "boundaryDefinition",             "Periodic boundary geometry");
+                config.field_section(&T::limiterControl,                 "limiterControl",                 "Slope limiter settings");
+                config.field_section(&T::linearSolverControl,            "linearSolverControl",            "Linear solver settings");
+                config.field_section(&T::timeAverageControl,             "timeAverageControl",             "Time averaging settings");
+                config.field_section(&T::others,                         "others",                         "Miscellaneous settings");
+                config.field_section(&T::restartState,                   "restartState",                   "Restart checkpoint state");
+                config.field_section(&T::eulerSettings,                  "eulerSettings",                  "Euler evaluator physics settings");
+                config.field_section(&T::vfvSettings,                    "vfvSettings",                    "Variational reconstruction settings");
+                config.field_json(&T::bcSettings,                        "bcSettings",                     "Boundary condition settings (per-BC array)");
+                DNDS_FIELD(bcNameMapping,                                "Boundary name to type mapping");
+
+                config.check("bcSettings must be a JSON array", [](const T &s)
+                {
+                    return s.bcSettings.is_array();
+                });
+            }
+
+            /// @brief Backward-compatible bidirectional JSON read/write.
+            ///
+            /// Delegates to the auto-generated from_json / to_json from
+            /// DNDS_DECLARE_CONFIG.  Kept for call-site compatibility.
             void
             ReadWriteJson(nlohmann::ordered_json &jsonObj, int nVars, bool read)
             {
-
-                __DNDS__json_to_config(timeMarchControl);
-                __DNDS__json_to_config(implicitReconstructionControl);
-                __DNDS__json_to_config(outputControl);
-                __DNDS__json_to_config(implicitCFLControl);
-                __DNDS__json_to_config(convergenceControl);
-                __DNDS__json_to_config(dataIOControl);
-                __DNDS__json_to_config(boundaryDefinition);
-                __DNDS__json_to_config(limiterControl);
-                __DNDS__json_to_config(linearSolverControl);
-                __DNDS__json_to_config(timeAverageControl);
-                __DNDS__json_to_config(others);
-                __DNDS__json_to_config(restartState);
-
-                // In-place deserialization preserves _nVars set by Configuration(nVars).
+                (void)nVars; // nVars is already stored in eulerSettings via Configuration(nVars)
                 if (read)
-                    from_json(jsonObj.at("eulerSettings"), eulerSettings);
+                    from_json(jsonObj, *this);
                 else
-                    jsonObj["eulerSettings"] = eulerSettings;
-                __DNDS__json_to_config(vfvSettings);
-                __DNDS__json_to_config(bcSettings);
-                __DNDS__json_to_config(bcNameMapping);
-                if (read)
-                {
-                    DNDS_assert(bcSettings.is_array());
-                }
-
-                // TODO: BC settings
+                    to_json(jsonObj, *this);
             }
 
             Configuration()

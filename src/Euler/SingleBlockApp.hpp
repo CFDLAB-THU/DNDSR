@@ -107,59 +107,15 @@ namespace DNDS::Euler
             std::string schemaDefaultFile = "/tmp/dnds_schema_defaults_" + std::to_string(mpi.rank) + ".json";
             solver.ConfigureFromJson(schemaDefaultFile, false);
 
-            // Build schema: for migrated sections, use ConfigRegistry; for the rest,
-            // infer type from the default JSON values.
+            // Build schema: Configuration is fully registered via DNDS_DECLARE_CONFIG,
+            // so emitSchema() produces the complete recursive schema.
             if (mpi.rank == 0)
             {
-                nlohmann::ordered_json schema;
-                schema["$schema"] = "http://json-schema.org/draft-07/schema#";
-                schema["title"] = std::string("DNDSR ") + getSingleBlockAppName(model) + " configuration";
-                schema["type"] = "object";
-                auto &props = schema["properties"] = nlohmann::ordered_json::object();
-
-                // Migrated sections emit rich schema from their registries.
                 using TConfig = typename Euler::EulerSolver<model>::Configuration;
-                props["timeMarchControl"] = TConfig::TimeMarchControl::schema("Time marching settings");
-                props["implicitReconstructionControl"] = TConfig::ImplicitReconstructionControl::schema("Implicit reconstruction settings");
-                props["outputControl"] = TConfig::OutputControl::schema("Output and logging settings");
-                props["implicitCFLControl"] = TConfig::ImplicitCFLControl::schema("Implicit CFL settings");
-                props["convergenceControl"] = TConfig::ConvergenceControl::schema("Convergence criteria");
-                props["dataIOControl"] = TConfig::DataIOControl::schema("Data I/O and mesh settings");
-                props["limiterControl"] = TConfig::LimiterControl::schema("Slope limiter settings");
-                props["linearSolverControl"] = TConfig::LinearSolverControl::schema("Linear solver settings");
-                props["restartState"] = TConfig::RestartState::schema("Restart state");
-                props["timeAverageControl"] = TConfig::TimeAverageControl::schema("Time-averaging settings");
-                props["others"] = TConfig::Others::schema("Miscellaneous settings");
-                props["eulerSettings"] = Euler::EulerEvaluatorSettings<model>::schema("Euler evaluator settings");
-                props["vfvSettings"] = CFV::VRSettings::schema("Variational reconstruction settings");
-
-                // For all other sections, read from the default JSON and infer types.
-                auto fIn = std::ifstream(schemaDefaultFile);
-                if (fIn)
-                {
-                    auto defaults = nlohmann::ordered_json::parse(fIn);
-                    for (auto &[key, val] : defaults.items())
-                    {
-                        if (props.contains(key))
-                            continue; // already handled by migrated section
-                        nlohmann::ordered_json fieldSchema;
-                        if (val.is_object())
-                            fieldSchema["type"] = "object";
-                        else if (val.is_array())
-                            fieldSchema["type"] = "array";
-                        else if (val.is_boolean())
-                            fieldSchema["type"] = "boolean";
-                        else if (val.is_number_integer())
-                            fieldSchema["type"] = "integer";
-                        else if (val.is_number_float())
-                            fieldSchema["type"] = "number";
-                        else if (val.is_string())
-                            fieldSchema["type"] = "string";
-                        fieldSchema["default"] = val;
-                        props[key] = fieldSchema;
-                    }
-                }
-
+                nlohmann::ordered_json schema = TConfig::schema(
+                    std::string("DNDSR ") + getSingleBlockAppName(model) + " configuration");
+                schema["$schema"] = "http://json-schema.org/draft-07/schema#";
+                schema["title"] = schema["description"];
                 std::cout << schema.dump(4) << std::endl;
                 std::filesystem::remove(schemaDefaultFile);
             }

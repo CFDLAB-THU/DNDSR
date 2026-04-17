@@ -135,6 +135,27 @@ namespace DNDS
         static constexpr ConfigTypeTag value = ConfigTypeTag::Json;
     };
 
+    /// Eigen matrix/vector types serialize as JSON arrays, so map them to Array.
+    /// Detection uses the `Scalar` typedef and `RowsAtCompileTime` enum that
+    /// all Eigen matrix expressions expose — no Eigen headers needed here.
+    namespace detail
+    {
+        template <typename T, typename = void>
+        struct is_eigen_type : std::false_type {};
+
+        template <typename T>
+        struct is_eigen_type<T, std::void_t<
+            typename T::Scalar,
+            decltype(static_cast<int>(T::RowsAtCompileTime)),
+            decltype(static_cast<int>(T::ColsAtCompileTime))>> : std::true_type {};
+    } // namespace detail
+
+    template <typename T>
+    struct ConfigTypeTagOf<T, std::enable_if_t<detail::is_eigen_type<T>::value>>
+    {
+        static constexpr ConfigTypeTag value = ConfigTypeTag::Array;
+    };
+
     inline std::string schemaTypeString(ConfigTypeTag tag)
     {
         switch (tag)
@@ -385,7 +406,9 @@ namespace DNDS
             meta.typeTag = ConfigTypeTag::Object;
             meta.readField = [member, jsonKey](const nlohmann::ordered_json &j, void *obj)
             {
-                static_cast<T *>(obj)->*member = j.at(jsonKey).template get<S>();
+                // In-place deserialization preserves non-serialized members
+                // (e.g. EulerEvaluatorSettings::_nVars set by the constructor).
+                from_json(j.at(jsonKey), static_cast<T *>(obj)->*member);
             };
             meta.writeField = [member, jsonKey](nlohmann::ordered_json &j, const void *obj)
             {
