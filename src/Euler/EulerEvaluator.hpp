@@ -165,9 +165,10 @@ namespace DNDS::Euler
 
         EulerEvaluatorSettings<model> settings;
 
-        EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler, const decltype(settings.jsonSettings) &nJsonSettings,
+        EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler,
+                       const EulerEvaluatorSettings<model> &nSettings,
                        int n_nVars = getNVars(model))
-            : nVars(n_nVars), axisSymmetric(Nvfv->GetAxisSymmetric()), mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->getSettings().maxOrder + 1), settings(nVars)
+            : nVars(n_nVars), axisSymmetric(Nvfv->GetAxisSymmetric()), mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->getSettings().maxOrder + 1), settings(nSettings)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             if (getNVars(model) == DynamicSize)
@@ -177,9 +178,6 @@ namespace DNDS::Euler
 
             vfv->BuildUGrad(uGradBuf, nVars);
             vfv->BuildUGrad(uGradBufNoLim, nVars);
-
-            this->settings.jsonSettings = nJsonSettings;
-            this->settings.ReadWriteJSON(settings.jsonSettings, nVars, true);
 
             if (axisSymmetric)
                 DNDS_assert_info(!settings.ignoreSourceTerm, "you have set source term, do not use ignoreSourceTerm! ");

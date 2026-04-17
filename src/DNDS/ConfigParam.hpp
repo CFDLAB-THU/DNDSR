@@ -505,6 +505,20 @@ namespace DNDS
                 });
         }
 
+        /// @brief Register a context-free cross-field check with a message string.
+        /// @param msg  Error message shown when the check fails.
+        /// @param pred Lambda `(const T&) -> bool`, returns true if the check passes.
+        template <typename F>
+        void check(const char *msg, F &&pred)
+        {
+            ConfigRegistry<T>::registerCheck(
+                [message = std::string(msg), fn = std::forward<F>(pred)](const void *obj) -> CheckResult
+                {
+                    bool ok = fn(*static_cast<const T *>(obj));
+                    return CheckResult{ok, ok ? "" : message};
+                });
+        }
+
         // ---- check_ctx(): context-aware cross-field validation ----
 
         /// @brief Register a context-aware cross-field check.
@@ -517,6 +531,16 @@ namespace DNDS
                 {
                     return fn(*static_cast<const T *>(obj), ctx);
                 });
+        }
+
+        // ---- post_read(): hook called after all fields are deserialized ----
+
+        /// @brief Register a post-read hook for recomputing derived quantities.
+        /// @param f  Lambda `(T&) -> void`, called after readFromJson completes.
+        template <typename F>
+        void post_read(F &&f)
+        {
+            ConfigRegistry<T>::registerPostReadHook(std::forward<F>(f));
         }
     };
 

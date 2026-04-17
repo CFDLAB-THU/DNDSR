@@ -121,14 +121,22 @@ namespace DNDS::CFV
             return settings;
         }
 
-        void parseSettings(VRSettings::json &j)
+        void parseSettings(const VRSettings &s)
         {
-            settings.ParseFromJson(j);
+            settings = s;
             // Slice the FiniteVolumeSettings base portion into the base class copy.
             // FiniteVolume methods read maxOrder, intOrder, ignoreMeshGeometryDeficiency,
             // and nIterCellSmoothScale from its own `settings` member. This keeps
             // them in sync. All VR-specific fields remain only in `this->settings`.
             t_base::settings = settings;
+        }
+
+        /// @brief Backward-compatible overload accepting JSON (used by Python bindings).
+        void parseSettings(VRSettings::json &j)
+        {
+            VRSettings s;
+            s.ParseFromJson(j);
+            parseSettings(s);
         }
 
     public:

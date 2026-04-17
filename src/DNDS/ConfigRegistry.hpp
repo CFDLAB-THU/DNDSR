@@ -249,6 +249,13 @@ namespace DNDS
             return cs;
         }
 
+        /// @brief Optional post-read hook called after readFromJson completes.
+        static std::function<void(T &)> &postReadHookMut()
+        {
+            static std::function<void(T &)> hook;
+            return hook;
+        }
+
     public:
         // ================================================================
         // Registration API (called by ConfigSectionBuilder during lazy init)
@@ -279,6 +286,13 @@ namespace DNDS
         {
             ctxChecksMut().push_back(std::move(check));
             return true;
+        }
+
+        /// @brief Register a post-read hook called after all fields are deserialized.
+        /// Useful for recomputing derived quantities (e.g. CpGas from gamma and Rgas).
+        static void registerPostReadHook(std::function<void(T &)> hook)
+        {
+            postReadHookMut() = std::move(hook);
         }
 
         // ================================================================
@@ -323,6 +337,9 @@ namespace DNDS
                         fmt::format("Error reading config field '{}': {}", f.name, e.what()));
                 }
             }
+            auto &hook = postReadHookMut();
+            if (hook)
+                hook(obj);
         }
 
         /// @brief Serialize all registered fields from a struct into a JSON object.

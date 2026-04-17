@@ -130,6 +130,8 @@ namespace DNDS::Euler
                 props["restartState"] = TConfig::RestartState::schema("Restart state");
                 props["timeAverageControl"] = TConfig::TimeAverageControl::schema("Time-averaging settings");
                 props["others"] = TConfig::Others::schema("Miscellaneous settings");
+                props["eulerSettings"] = Euler::EulerEvaluatorSettings<model>::schema("Euler evaluator settings");
+                props["vfvSettings"] = CFV::VRSettings::schema("Variational reconstruction settings");
 
                 // For all other sections, read from the default JSON and infer types.
                 auto fIn = std::ifstream(schemaDefaultFile);

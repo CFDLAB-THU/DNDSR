@@ -716,8 +716,8 @@ namespace DNDS::Euler
                 }
             } others;
 
-            nlohmann::ordered_json eulerSettings = nlohmann::ordered_json::object();
-            nlohmann::ordered_json vfvSettings = nlohmann::ordered_json::object();
+            EulerEvaluatorSettings<model> eulerSettings;
+            CFV::VRSettings vfvSettings;
             nlohmann::ordered_json bcSettings = nlohmann::ordered_json::array();
             std::map<std::string, std::string> bcNameMapping;
 
@@ -744,8 +744,6 @@ namespace DNDS::Euler
                 __DNDS__json_to_config(bcNameMapping);
                 if (read)
                 {
-                    DNDS_assert(eulerSettings.is_object());
-                    DNDS_assert(vfvSettings.is_object());
                     DNDS_assert(bcSettings.is_array());
                 }
 
@@ -757,9 +755,8 @@ namespace DNDS::Euler
             }
 
             Configuration(int nVars)
+                : eulerSettings(nVars), vfvSettings(gDim)
             {
-                vfvSettings = CFV::VRSettings{gDim};
-                EulerEvaluatorSettings<model>(nVars).ReadWriteJSON(eulerSettings, nVars, false);
                 bcSettings = BoundaryHandler<model>(nVars);
             }
 
@@ -900,9 +897,9 @@ namespace DNDS::Euler
             /***********************************************************/
             // if these objects are existent, extract settings from them
             if (vfv)
-                config.vfvSettings = vfv->getSettings();
+                config.vfvSettings = static_cast<const CFV::VRSettings &>(vfv->getSettings());
             if (pEval)
-                pEval->settings.ReadWriteJSON(config.eulerSettings, nVars, false);
+                config.eulerSettings = pEval->settings;
             if (pBCHandler)
                 config.bcSettings = *pBCHandler;
             /***********************************************************/
