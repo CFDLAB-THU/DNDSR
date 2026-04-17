@@ -16,15 +16,36 @@ Metis, ParMetis, ZLIB.  Optional: CUDA toolkit, SuperLU_dist.
 
 ## Building External Dependencies
 
+DNDSR requires two sets of external dependencies: binary libraries built
+from the `cfd_externals` submodule, and header-only libraries shipped as a
+tarball.
+
+### Binary libraries (HDF5, CGNS, Metis, ParMetis, ZLIB)
+
 ```bash
 git submodule update --init --recursive --depth=1
 cd external/cfd_externals
 CC=mpicc CXX=mpicxx python cfd_externals_build.py
+cd ../..
 ```
 
-This installs all C libraries into `external/cfd_externals/install/`.
-Header-only libraries (Eigen, Boost, CGAL, nlohmann_json, etc.) live
-directly under `external/`.
+This installs all binary libraries into `external/cfd_externals/install/`.
+
+### Header-only libraries (Eigen, Boost, CGAL, fmt, pybind11, ...)
+
+Download the latest release tarball from GitHub and extract it into
+the `external/` directory:
+
+```bash
+curl -L -o external/external_headeronlys.tar.gz \
+  https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/latest/download/external_headeronlys.tar.gz
+cd external
+tar -xzf external_headeronlys.tar.gz
+cd ..
+```
+
+After extraction, directories such as `external/eigen/`,
+`external/boost/`, `external/CGAL/`, etc. should exist.
 
 ## CMake Module Architecture
 

@@ -18,9 +18,19 @@ directory layout, module dependencies, and build targets.
 
 ```bash
 git submodule update --init --recursive --depth=1
+
+# Build binary external libraries (HDF5, CGNS, Metis, ParMetis, ...)
 cd external/cfd_externals
 CC=mpicc CXX=mpicxx python cfd_externals_build.py
 cd ../..
+
+# Download and extract header-only libraries (Eigen, Boost, CGAL, fmt, pybind11, ...)
+# from the GitHub release:
+curl -L -o external/external_headeronlys.tar.gz \
+  https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/latest/download/external_headeronlys.tar.gz
+cd external
+tar -xzf external_headeronlys.tar.gz
+cd ..
 ```
 
 ### 2. Build C++ solvers
