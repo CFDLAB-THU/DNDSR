@@ -54,6 +54,10 @@ namespace DNDS::Euler
             .append()
             .default_value<std::vector<std::string>>({});
         mainParser.add_argument("--debug").flag().default_value(false);
+        mainParser.add_argument("--emit-schema")
+            .help("Print JSON Schema for this solver's configuration and exit")
+            .flag()
+            .default_value(false);
 
         RegisterSignalHandler();
         GetSetVersionName(DNDS_MACRO_TO_STRING(DNDS_CURRENT_COMMIT_HASH));
@@ -85,6 +89,74 @@ namespace DNDS::Euler
             std::cerr << err.what() << std::endl;
             std::cerr << mainParser;
             std::abort();
+        }
+
+        // ---- --emit-schema: print JSON Schema and exit (no MPI, no mesh) ----
+        if (mainParser.get<bool>("--emit-schema"))
+        {
+            int nVars = getnVarsFixed(model);
+            if (nVars == DynamicSize)
+                nVars = mainParser.get<int>("field_n_variables");
+
+            // Build a default-initialized solver to get the full default config JSON.
+            // Then emit a basic JSON Schema inferred from the defaults, enriched with
+            // metadata from any sections that have been migrated to DNDS_PARAM.
+            Euler::EulerSolver<model> solver(mpi, nVars);
+
+            // Write defaults to generate the full default config
+            std::string schemaDefaultFile = "/tmp/dnds_schema_defaults_" + std::to_string(mpi.rank) + ".json";
+            solver.ConfigureFromJson(schemaDefaultFile, false);
+
+            // Build schema: for migrated sections, use ConfigRegistry; for the rest,
+            // infer type from the default JSON values.
+            if (mpi.rank == 0)
+            {
+                nlohmann::ordered_json schema;
+                schema["$schema"] = "http://json-schema.org/draft-07/schema#";
+                schema["title"] = std::string("DNDSR ") + getSingleBlockAppName(model) + " configuration";
+                schema["type"] = "object";
+                auto &props = schema["properties"] = nlohmann::ordered_json::object();
+
+                // Migrated sections emit rich schema from their registries.
+                // Use the section's static schema() if available.
+                using TConfig = typename Euler::EulerSolver<model>::Configuration;
+                props["limiterControl"] = TConfig::LimiterControl::schema("Slope limiter settings");
+                props["timeAverageControl"] = TConfig::TimeAverageControl::schema("Time-averaging settings");
+
+                // For all other sections, read from the default JSON and infer types.
+                auto fIn = std::ifstream(schemaDefaultFile);
+                if (fIn)
+                {
+                    auto defaults = nlohmann::ordered_json::parse(fIn);
+                    for (auto &[key, val] : defaults.items())
+                    {
+                        if (props.contains(key))
+                            continue; // already handled by migrated section
+                        nlohmann::ordered_json fieldSchema;
+                        if (val.is_object())
+                            fieldSchema["type"] = "object";
+                        else if (val.is_array())
+                            fieldSchema["type"] = "array";
+                        else if (val.is_boolean())
+                            fieldSchema["type"] = "boolean";
+                        else if (val.is_number_integer())
+                            fieldSchema["type"] = "integer";
+                        else if (val.is_number_float())
+                            fieldSchema["type"] = "number";
+                        else if (val.is_string())
+                            fieldSchema["type"] = "string";
+                        fieldSchema["default"] = val;
+                        props[key] = fieldSchema;
+                    }
+                }
+
+                std::cout << schema.dump(4) << std::endl;
+                std::filesystem::remove(schemaDefaultFile);
+            }
+            MPI::Barrier(mpi.comm);
+            if (mpi.rank != 0)
+                std::filesystem::remove(schemaDefaultFile);
+            return 0;
         }
 
         try

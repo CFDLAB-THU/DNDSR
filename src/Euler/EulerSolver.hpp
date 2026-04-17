@@ -12,6 +12,7 @@
 // #define __DNDS_REALLY_COMPILING__HEADER_ON__
 // #endif
 #include "DNDS/JsonUtil.hpp"
+#include "DNDS/ConfigParam.hpp"
 #include "DNDS/SerializerFactory.hpp"
 #include "DNDS/CsvLog.hpp"
 #include "DNDS/ObjectPool.hpp"
@@ -451,18 +452,24 @@ namespace DNDS::Euler
                 bool usePPRecLimiter = true;
                 bool useViscousLimited = true;
                 int smoothIndicatorProcedure = 0;
-                int limiterProcedure = 0; // 0 for V2==3WBAP, 1 for V3==CWBAP
+                int limiterProcedure = 0;
                 int nPartialLimiterStart = INT_MAX;
                 int nPartialLimiterStartLocal = INT_MAX;
                 bool preserveLimited = false;
                 bool ppRecLimiterCompressToMean = true;
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    LimiterControl,
-                    useLimiter, usePPRecLimiter, useViscousLimited,
-                    smoothIndicatorProcedure, limiterProcedure,
-                    nPartialLimiterStart, nPartialLimiterStartLocal,
-                    preserveLimited,
-                    ppRecLimiterCompressToMean)
+
+                DNDS_DECLARE_CONFIG(LimiterControl)
+                {
+                    DNDS_FIELD(useLimiter,                 "Enable slope limiter");
+                    DNDS_FIELD(usePPRecLimiter,            "Enable positivity-preserving reconstruction limiter");
+                    DNDS_FIELD(useViscousLimited,          "Apply limiter to viscous reconstruction");
+                    DNDS_FIELD(smoothIndicatorProcedure,   "Smooth indicator procedure index");
+                    DNDS_FIELD(limiterProcedure,           "Limiter variant: 0=WBAP (V2), 1=CWBAP (V3)");
+                    DNDS_FIELD(nPartialLimiterStart,       "Time step to begin partial limiting");
+                    DNDS_FIELD(nPartialLimiterStartLocal,  "Time step to begin local partial limiting");
+                    DNDS_FIELD(preserveLimited,            "Preserve limited reconstruction across steps");
+                    DNDS_FIELD(ppRecLimiterCompressToMean, "PP limiter compresses toward cell mean");
+                }
             } limiterControl;
 
             struct LinearSolverControl
@@ -541,9 +548,11 @@ namespace DNDS::Euler
             struct TimeAverageControl
             {
                 bool enabled = false;
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    TimeAverageControl,
-                    enabled)
+
+                DNDS_DECLARE_CONFIG(TimeAverageControl)
+                {
+                    DNDS_FIELD(enabled, "Enable time-averaging of solution fields");
+                }
             } timeAverageControl;
 
             struct Others
