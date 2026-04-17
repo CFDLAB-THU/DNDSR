@@ -303,40 +303,32 @@ namespace DNDS::Euler
             farFieldStaticValue(I4) = 2.5;
         }
 
-        void ReadWriteJSON(nlohmann::ordered_json &jsonObj, int nVars, bool read)
+        /// @brief Post-deserialization finalization: semantic checks and derived quantities.
+        /// Must be called after from_json (or typed copy) with the runtime nVars.
+        void finalize(int nVars)
         {
-            if (read)
-            {
-                from_json(jsonObj, *this);
+            DNDS_assert(constMassForce.size() == 3);
+            DNDS_assert(farFieldStaticValue.size() == nVars);
+            if (constMassForce.norm() || frameConstRotation.enabled ||
+                std::unordered_set<EulerModel>{NS_SA, NS_SA_3D, NS_2EQ, NS_2EQ_3D}.count(model))
+                DNDS_assert_info(!ignoreSourceTerm,
+                                "you have set source term, do not use ignoreSourceTerm! ");
+            if (frameConstRotation.enabled)
+                frameConstRotation.axis.normalize();
+            for (auto &box : boxInitializers)
+                DNDS_assert_info(box.v.size() == nVars, "box initial value dimension incorrect");
+            for (auto &plane : planeInitializers)
+                DNDS_assert_info(plane.v.size() == nVars, "plane initial value dimension incorrect");
 
-                // Post-read semantic checks not expressible as range/enum constraints
-                DNDS_assert(constMassForce.size() == 3);
-                DNDS_assert(farFieldStaticValue.size() == nVars);
-                if (constMassForce.norm() || frameConstRotation.enabled ||
-                    std::unordered_set<EulerModel>{NS_SA, NS_SA_3D, NS_2EQ, NS_2EQ_3D}.count(model))
-                    DNDS_assert_info(!ignoreSourceTerm,
-                                    "you have set source term, do not use ignoreSourceTerm! ");
-                if (frameConstRotation.enabled)
-                    frameConstRotation.axis.normalize();
-                for (auto &box : boxInitializers)
-                    DNDS_assert_info(box.v.size() == nVars, "box initial value dimension incorrect");
-                for (auto &plane : planeInitializers)
-                    DNDS_assert_info(plane.v.size() == nVars, "plane initial value dimension incorrect");
-
-                // Compute reference values
-                DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-                refU = farFieldStaticValue;
-                refUPrim = refU;
-                Gas::IdealGasThermalConservative2Primitive<dim>(refU, refUPrim, idealGasProperty.gamma);
-                DNDS_assert(refUPrim(I4) > 0 && refUPrim(0) > 0);
-                real a = std::sqrt(idealGasProperty.gamma * refUPrim(I4) / (refUPrim(0) + verySmallReal));
-                refU(Seq123).setConstant(refU(Seq123).norm() + a);
-                refUPrim(Seq123).setConstant(refUPrim(Seq123).norm());
-            }
-            else
-            {
-                to_json(jsonObj, *this);
-            }
+            // Compute reference values
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+            refU = farFieldStaticValue;
+            refUPrim = refU;
+            Gas::IdealGasThermalConservative2Primitive<dim>(refU, refUPrim, idealGasProperty.gamma);
+            DNDS_assert(refUPrim(I4) > 0 && refUPrim(0) > 0);
+            real a = std::sqrt(idealGasProperty.gamma * refUPrim(I4) / (refUPrim(0) + verySmallReal));
+            refU(Seq123).setConstant(refU(Seq123).norm() + a);
+            refUPrim(Seq123).setConstant(refUPrim(Seq123).norm());
         }
     };
 }
