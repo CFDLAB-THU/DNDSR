@@ -197,6 +197,7 @@ namespace DNDS::Euler
         // end of setting entries
         /***************************************************************************************************/
 
+        int _nVars = 0; ///< Runtime nVars, not serialized. Set by ctor, preserved across from_json.
         Eigen::Vector<real, -1> refU;
         Eigen::Vector<real, -1> refUPrim;
 
@@ -282,11 +283,14 @@ namespace DNDS::Euler
                          [](const T &s) { return !(s.useScalarJacobian && s.useRoeJacobian); });
             config.check("ransModel must not be RANS_Unknown",
                          [](const T &s) { return s.ransModel != RANS_Unknown; });
+
+            // Post-read hook: finalize derived quantities using stored _nVars
+            config.post_read([](T &s) { s.finalize(); });
         }
 
         EulerEvaluatorSettings() = default;
 
-        EulerEvaluatorSettings(int nVars)
+        EulerEvaluatorSettings(int nVars) : _nVars(nVars)
         {
             if constexpr (model == NS_SA || model == NS_SA_3D)
             {
@@ -304,9 +308,13 @@ namespace DNDS::Euler
         }
 
         /// @brief Post-deserialization finalization: semantic checks and derived quantities.
-        /// Must be called after from_json (or typed copy) with the runtime nVars.
-        void finalize(int nVars)
+        /// Uses the stored _nVars set by the constructor. Called automatically by post_read
+        /// hook after from_json, or explicitly after copy-construction.
+        void finalize()
         {
+            int nVars = _nVars;
+            if (nVars <= 0)
+                return; // skip finalize if nVars not set (e.g. schema emission default-ctor)
             DNDS_assert(constMassForce.size() == 3);
             DNDS_assert(farFieldStaticValue.size() == nVars);
             if (constMassForce.norm() || frameConstRotation.enabled ||

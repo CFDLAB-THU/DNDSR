@@ -738,7 +738,11 @@ namespace DNDS::Euler
                 __DNDS__json_to_config(others);
                 __DNDS__json_to_config(restartState);
 
-                __DNDS__json_to_config(eulerSettings);
+                // In-place deserialization preserves _nVars set by Configuration(nVars).
+                if (read)
+                    from_json(jsonObj.at("eulerSettings"), eulerSettings);
+                else
+                    jsonObj["eulerSettings"] = eulerSettings;
                 __DNDS__json_to_config(vfvSettings);
                 __DNDS__json_to_config(bcSettings);
                 __DNDS__json_to_config(bcNameMapping);

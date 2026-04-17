@@ -179,8 +179,6 @@ namespace DNDS::Euler
             vfv->BuildUGrad(uGradBuf, nVars);
             vfv->BuildUGrad(uGradBufNoLim, nVars);
 
-            this->settings.finalize(nVars);
-
             if (axisSymmetric)
                 DNDS_assert_info(!settings.ignoreSourceTerm, "you have set source term, do not use ignoreSourceTerm! ");
 
