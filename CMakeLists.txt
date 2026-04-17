@@ -80,6 +80,20 @@ include("${PROJECT_SOURCE_DIR}/cmakeCommonUtils.cmake")
 #       CORE LIBRARY TARGETS
 # ===================================================================
 
+# Euler model list (used by both src/Euler/ and the solver executables)
+set(DNDS_Euler_Models_List
+    NS=
+    NS_2D=2D 
+    NS_3D=3D
+    NS_SA=SA
+    NS_SA_3D=SA3D
+    NS_2EQ=2EQ
+    NS_2EQ_3D=2EQ3D
+    NS_EX=EX
+    NS_EX_3D=EX3D
+    CACHE INTERNAL "the Euler Model list to distinguish their explicit instantiation libraries"
+)
+
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/DNDS)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/Geom)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/CFV)
