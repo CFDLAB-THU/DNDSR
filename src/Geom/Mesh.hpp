@@ -10,6 +10,7 @@
 #include "PeriodicInfo.hpp"
 #include "RadialBasisFunction.hpp"
 #include "DNDS/ObjectUtils.hpp"
+#include "DNDS/ConfigParam.hpp"
 
 namespace DNDS::Direct
 {
@@ -734,13 +735,20 @@ namespace DNDS::Geom
             real minWallDist = 1e-10;
             int verbose = 0;
             WallDistOptions() {} //? why = default is not working
-            DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                WallDistOptions,
-                subdivide_quad,
-                method,
-                wallDistExecution,
-                minWallDist,
-                verbose)
+
+            DNDS_DECLARE_CONFIG(WallDistOptions)
+            {
+                DNDS_FIELD(subdivide_quad,    "Subdivide quads for wall distance computation",
+                           DNDS::Config::range(0));
+                DNDS_FIELD(method,            "Wall distance computation method (0: brute, 1: tree)",
+                           DNDS::Config::range(0));
+                DNDS_FIELD(wallDistExecution,  "MPI concurrency (0: all parallel, 1: serial, >1: batched N ranks)",
+                           DNDS::Config::range(0));
+                DNDS_FIELD(minWallDist,       "Minimum wall distance clamp",
+                           DNDS::Config::range(0.0));
+                DNDS_FIELD(verbose,           "Verbosity level for wall distance computation",
+                           DNDS::Config::range(0));
+            }
         };
         void BuildNodeWallDist(const std::function<bool(Geom::t_index)> &fBndIsWall, WallDistOptions options = WallDistOptions{});
 
@@ -821,13 +829,19 @@ namespace DNDS::Geom
         int metisSeed = 0;
         int edgeWeightMethod = 0; // 0:no weight 1: faceSize weight
         int metisNcuts = 3;
-        DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-            PartitionOptions,
-            metisType,
-            metisUfactor,
-            metisSeed,
-            edgeWeightMethod,
-            metisNcuts)
+
+        DNDS_DECLARE_CONFIG(PartitionOptions)
+        {
+            DNDS_FIELD(metisType,         "METIS partitioning method",
+                       DNDS::Config::enum_values({"KWAY", "RB"}));
+            DNDS_FIELD(metisUfactor,      "METIS imbalance factor (ufactor)",
+                       DNDS::Config::range(1));
+            DNDS_FIELD(metisSeed,         "METIS random seed");
+            DNDS_FIELD(edgeWeightMethod,  "Edge weight method (0: none, 1: face size)",
+                       DNDS::Config::range(0, 1));
+            DNDS_FIELD(metisNcuts,        "Number of cuts for METIS to try",
+                       DNDS::Config::range(1));
+        }
     };
 
     struct UnstructuredMeshSerialRW

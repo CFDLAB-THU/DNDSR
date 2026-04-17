@@ -1,5 +1,6 @@
 #pragma once
 #include "DNDS/DeviceStorage.hpp"
+#include "DNDS/ConfigEnum.hpp"
 #include "EulerP.hpp"
 #include "EulerP_Physics.hpp"
 #include "Geom/BoundaryCondition.hpp"
@@ -22,21 +23,20 @@ namespace DNDS::EulerP
         Special,
     };
 
-#define DNDS_JSON_ENUM_CLASS_BCType_ADD(v) {BCType::v, #v}
-
-    NLOHMANN_JSON_SERIALIZE_ENUM(
+    DNDS_DEFINE_ENUM_JSON(
         BCType,
         {
-            DNDS_JSON_ENUM_CLASS_BCType_ADD(Unknown),
-            DNDS_JSON_ENUM_CLASS_BCType_ADD(Wall),
-            DNDS_JSON_ENUM_CLASS_BCType_ADD(WallInvis),
-            DNDS_JSON_ENUM_CLASS_BCType_ADD(WallIsothermal),
-            DNDS_JSON_ENUM_CLASS_BCType_ADD(Out),
-            DNDS_JSON_ENUM_CLASS_BCType_ADD(OutP),
-            DNDS_JSON_ENUM_CLASS_BCType_ADD(In),
-            DNDS_JSON_ENUM_CLASS_BCType_ADD(InPsTs),
-            DNDS_JSON_ENUM_CLASS_BCType_ADD(Sym),
-            DNDS_JSON_ENUM_CLASS_BCType_ADD(Special),
+            {BCType::Unknown, nullptr},
+            {BCType::Far, "Far"},
+            {BCType::Wall, "Wall"},
+            {BCType::WallInvis, "WallInvis"},
+            {BCType::WallIsothermal, "WallIsothermal"},
+            {BCType::Out, "Out"},
+            {BCType::OutP, "OutP"},
+            {BCType::In, "In"},
+            {BCType::InPsTs, "InPsTs"},
+            {BCType::Sym, "Sym"},
+            {BCType::Special, "Special"},
         })
 
     template <DeviceBackend B>

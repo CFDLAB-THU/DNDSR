@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "DNDS/Defines.hpp"
+#include "DNDS/ConfigParam.hpp"
 #include "VariationalReconstruction.hpp"
 
 namespace DNDS::CFV
@@ -20,10 +21,13 @@ namespace DNDS::CFV
         real ay = 0.0;
         real sigma = 0.0;
 
-        DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-            ModelSettings,
-            ax, ay,
-            sigma)
+        DNDS_DECLARE_CONFIG(ModelSettings)
+        {
+            DNDS_FIELD(ax,    "Advection velocity x-component");
+            DNDS_FIELD(ay,    "Advection velocity y-component");
+            DNDS_FIELD(sigma, "Diffusion coefficient",
+                       DNDS::Config::range(0.0));
+        }
     };
 
     class ModelEvaluator

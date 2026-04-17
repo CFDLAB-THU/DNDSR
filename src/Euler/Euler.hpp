@@ -2,6 +2,7 @@
 #include "DNDS/Defines.hpp"
 #include "DNDS/DeviceStorage.hpp"
 #include "DNDS/EigenUtil.hpp"
+#include "DNDS/ConfigEnum.hpp"
 #include "CFV/VRDefines.hpp"
 #include "DNDS/Errors.hpp"
 
@@ -395,7 +396,7 @@ namespace DNDS::Euler
         RANS_RKE,
     };
 
-    NLOHMANN_JSON_SERIALIZE_ENUM(
+    DNDS_DEFINE_ENUM_JSON(
         RANSModel,
         {
             {RANS_Unknown, nullptr},

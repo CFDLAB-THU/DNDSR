@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "DNDS/JsonUtil.hpp"
+#include "DNDS/ConfigEnum.hpp"
 
 namespace DNDS::Euler
 {
@@ -24,7 +25,7 @@ namespace DNDS::Euler
         BCSpecial,
     };
 
-    NLOHMANN_JSON_SERIALIZE_ENUM(
+    DNDS_DEFINE_ENUM_JSON(
         EulerBCType,
         {
             {BCUnknown, nullptr},
@@ -38,7 +39,7 @@ namespace DNDS::Euler
             {BCInPsTs, "BCInPsTs"},
             {BCSym, "BCSym"},
             {BCSpecial, "BCSpecial"},
-        });
+        })
 
     inline std::string to_string(EulerBCType type)
     {

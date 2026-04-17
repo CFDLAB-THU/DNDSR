@@ -3,6 +3,7 @@
 #include "DNDS/Defines.hpp"
 #include "Geometric.hpp"
 #include "DNDS/JsonUtil.hpp"
+#include "DNDS/ConfigEnum.hpp"
 
 namespace DNDS::Geom::RBF
 {
@@ -18,16 +19,18 @@ namespace DNDS::Geom::RBF
         CPC0,
     };
 
-    NLOHMANN_JSON_SERIALIZE_ENUM(
+    DNDS_DEFINE_ENUM_JSON(
         RBFKernelType,
-        {{RBFKernelType::UnknownRBFKernel, nullptr},
-         {RBFKernelType::Distance, "Distance"},
-         {RBFKernelType::DistanceA1, "DistanceA1"},
-         {RBFKernelType::InversedDistanceA1, "InversedDistanceA1"},
-         {RBFKernelType::InversedDistanceA1Compact, "InversedDistanceA1Compact"},
-         {RBFKernelType::Gaussian, "Gaussian"},
-         {RBFKernelType::CPC2, "CPC2"},
-         {RBFKernelType::CPC0, "CPC0"}})
+        {
+            {RBFKernelType::UnknownRBFKernel, nullptr},
+            {RBFKernelType::Distance, "Distance"},
+            {RBFKernelType::DistanceA1, "DistanceA1"},
+            {RBFKernelType::InversedDistanceA1, "InversedDistanceA1"},
+            {RBFKernelType::InversedDistanceA1Compact, "InversedDistanceA1Compact"},
+            {RBFKernelType::Gaussian, "Gaussian"},
+            {RBFKernelType::CPC2, "CPC2"},
+            {RBFKernelType::CPC0, "CPC0"},
+        })
     inline bool KernelIsCompact(RBFKernelType t)
     {
         return t == CPC0 || t == CPC2 || t == InversedDistanceA1Compact;

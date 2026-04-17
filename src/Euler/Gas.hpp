@@ -2,6 +2,7 @@
 #include "DNDS/Defines.hpp"
 
 #include "DNDS/JsonUtil.hpp"
+#include "DNDS/ConfigEnum.hpp"
 #include <fmt/core.h>
 
 namespace DNDS::Euler::Gas
@@ -29,7 +30,7 @@ namespace DNDS::Euler::Gas
         Roe_M9 = 19,
     };
 
-    NLOHMANN_JSON_SERIALIZE_ENUM(
+    DNDS_DEFINE_ENUM_JSON(
         RiemannSolverType,
         {
             {UnknownRS, "UnknownRS"},
