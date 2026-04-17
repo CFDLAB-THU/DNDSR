@@ -4,6 +4,7 @@
 #include "SerializerJSON.hpp"
 #include "SerializerH5.hpp"
 #include "JsonUtil.hpp"
+#include "ConfigParam.hpp"
 
 namespace DNDS::Serializer
 {
@@ -20,12 +21,20 @@ namespace DNDS::Serializer
         SerializerFactory() = default;
         SerializerFactory(const std::string &_type) : type(_type) {}
 
-        DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-            SerializerFactory,
-            type,
-            hdfDeflateLevel, hdfChunkSize,
-            hdfCollOnMeta, hdfCollOnData,
-            jsonBinaryDeflateLevel, jsonUseCodecOnUInt8)
+        DNDS_DECLARE_CONFIG(SerializerFactory)
+        {
+            DNDS_FIELD(type,                    "Serializer backend: \"JSON\" or \"H5\"",
+                       DNDS::Config::enum_values({"JSON", "H5"}));
+            DNDS_FIELD(hdfDeflateLevel,         "HDF5 deflate compression level",
+                       DNDS::Config::range(0, 9));
+            DNDS_FIELD(hdfChunkSize,            "HDF5 chunk size (0=auto)",
+                       DNDS::Config::range(0));
+            DNDS_FIELD(hdfCollOnData,           "HDF5 collective I/O on data arrays");
+            DNDS_FIELD(hdfCollOnMeta,           "HDF5 collective I/O on metadata");
+            DNDS_FIELD(jsonBinaryDeflateLevel,  "JSON binary deflate level",
+                       DNDS::Config::range(0, 9));
+            DNDS_FIELD(jsonUseCodecOnUInt8,     "Apply codec on uint8 arrays in JSON");
+        }
 
         SerializerBaseSSP BuildSerializer(const MPIInfo &mpi)
         {

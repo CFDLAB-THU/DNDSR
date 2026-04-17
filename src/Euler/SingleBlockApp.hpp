@@ -118,10 +118,18 @@ namespace DNDS::Euler
                 auto &props = schema["properties"] = nlohmann::ordered_json::object();
 
                 // Migrated sections emit rich schema from their registries.
-                // Use the section's static schema() if available.
                 using TConfig = typename Euler::EulerSolver<model>::Configuration;
+                props["timeMarchControl"] = TConfig::TimeMarchControl::schema("Time marching settings");
+                props["implicitReconstructionControl"] = TConfig::ImplicitReconstructionControl::schema("Implicit reconstruction settings");
+                props["outputControl"] = TConfig::OutputControl::schema("Output and logging settings");
+                props["implicitCFLControl"] = TConfig::ImplicitCFLControl::schema("Implicit CFL settings");
+                props["convergenceControl"] = TConfig::ConvergenceControl::schema("Convergence criteria");
+                props["dataIOControl"] = TConfig::DataIOControl::schema("Data I/O and mesh settings");
                 props["limiterControl"] = TConfig::LimiterControl::schema("Slope limiter settings");
+                props["linearSolverControl"] = TConfig::LinearSolverControl::schema("Linear solver settings");
+                props["restartState"] = TConfig::RestartState::schema("Restart state");
                 props["timeAverageControl"] = TConfig::TimeAverageControl::schema("Time-averaging settings");
+                props["others"] = TConfig::Others::schema("Miscellaneous settings");
 
                 // For all other sections, read from the default JSON and infer types.
                 auto fIn = std::ifstream(schemaDefaultFile);

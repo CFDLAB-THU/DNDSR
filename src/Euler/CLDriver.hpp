@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DNDS/JsonUtil.hpp"
+#include "DNDS/ConfigParam.hpp"
 #include <set>
 #include "DNDS/Defines.hpp"
 #include "DNDS/MPI.hpp"
@@ -30,14 +31,38 @@ namespace DNDS::Euler
         real CLconvergeLongThreshold = 1e-4;
         bool CLconvergeLongStrictAoA = false;
 
-        DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-            CLDriverSettings,
-            AOAInit,
-            AOAAxis, CL0Axis, CD0Axis,
-            refArea, refDynamicPressure, targetCL,
-            CLIncrementRelax, thresholdTargetRatio,
-            nIterStartDrive, nIterConvergeMin, CLconvergeThreshold, CLconvergeWindow,
-            CLconvergeLongThreshold, CLconvergeLongWindow, CLconvergeLongStrictAoA)
+        DNDS_DECLARE_CONFIG(CLDriverSettings)
+        {
+            DNDS_FIELD(AOAInit,                   "Initial angle of attack (degrees)");
+            DNDS_FIELD(AOAAxis,                   "Rotation axis for AoA",
+                       DNDS::Config::enum_values({"x", "y", "z"}));
+            DNDS_FIELD(CL0Axis,                   "Lift force reference axis",
+                       DNDS::Config::enum_values({"x", "y", "z"}));
+            DNDS_FIELD(CD0Axis,                   "Drag force reference axis",
+                       DNDS::Config::enum_values({"x", "y", "z"}));
+            DNDS_FIELD(refArea,                   "Reference area for force coefficients",
+                       DNDS::Config::range(0.0));
+            DNDS_FIELD(refDynamicPressure,        "Reference dynamic pressure",
+                       DNDS::Config::range(0.0));
+            DNDS_FIELD(targetCL,                  "Target lift coefficient");
+            DNDS_FIELD(CLIncrementRelax,          "Under-relaxation for AoA increment",
+                       DNDS::Config::range(0.0, 1.0));
+            DNDS_FIELD(thresholdTargetRatio,      "Reduce CL threshold when near target",
+                       DNDS::Config::range(0.0, 1.0));
+            DNDS_FIELD(nIterStartDrive,           "Iteration to start CL driver",
+                       DNDS::Config::range(0));
+            DNDS_FIELD(nIterConvergeMin,          "Min iterations before CL convergence check",
+                       DNDS::Config::range(1));
+            DNDS_FIELD(CLconvergeThreshold,       "CL convergence window tolerance",
+                       DNDS::Config::range(0.0));
+            DNDS_FIELD(CLconvergeWindow,          "Number of samples in CL convergence window",
+                       DNDS::Config::range(2));
+            DNDS_FIELD(CLconvergeLongWindow,      "Long window for converged-at-target exit",
+                       DNDS::Config::range(1));
+            DNDS_FIELD(CLconvergeLongThreshold,   "Long-window CL tolerance",
+                       DNDS::Config::range(0.0));
+            DNDS_FIELD(CLconvergeLongStrictAoA,   "Reset long counter on AoA update");
+        }
     };
 
     class CLDriver

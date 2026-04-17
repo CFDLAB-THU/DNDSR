@@ -5,6 +5,7 @@
 // #define __DNDS_REALLY_COMPILING__HEADER_ON__
 // #endif
 #include "DNDS/JsonUtil.hpp"
+#include "DNDS/ConfigParam.hpp"
 #include "DNDS/Defines.hpp"
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
 // #undef __DNDS_REALLY_COMPILING__
@@ -19,11 +20,14 @@ namespace DNDS::Direct
         bool useDirectPrec = false;
         int32_t iluCode = 0;              // 0 for no fill, -1 for complete
         int32_t orderingCode = INT32_MIN; // INT32_MIN for auto 0 for natural, 1 for metis, 2 for MMD
-        DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-            DirectPrecControl,
-            useDirectPrec,
-            iluCode,
-            orderingCode)
+
+        DNDS_DECLARE_CONFIG(DirectPrecControl)
+        {
+            DNDS_FIELD(useDirectPrec, "Enable direct preconditioner");
+            DNDS_FIELD(iluCode,       "ILU fill level: 0=no fill, -1=complete");
+            DNDS_FIELD(orderingCode,  "Ordering: INT32_MIN=auto, 0=natural, 1=metis, 2=MMD");
+        }
+
         [[nodiscard]] int getOrderingCode() const
         {
             return orderingCode == INT32_MIN

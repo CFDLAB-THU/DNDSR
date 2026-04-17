@@ -141,16 +141,42 @@ namespace DNDS::Euler
                 bool useDtPPLimit = false;
                 real dtPPLimitRelax = 0.8;
                 real dtPPLimitScale = 1;
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    TimeMarchControl,
-                    dtImplicit, dtImplicitMin, nTimeStep,
-                    steadyQuit, useRestart,
-                    useImplicitPP, rhsFPPMode, rhsFPPScale, rhsFPPRelax, incrementPPRelax,
-                    odeCode, tEnd, odeSetting1, odeSetting2, odeSetting3, odeSetting4, odeSettingsExtra,
-                    partitionMeshOnly,
-                    dtIncreaseLimit, dtIncreaseAfterCount,
-                    dtCFLLimitScale, dtPPLimitRelax,
-                    useDtPPLimit, dtPPLimitScale)
+                DNDS_DECLARE_CONFIG(TimeMarchControl)
+                {
+                    DNDS_FIELD(dtImplicit,          "Max implicit time step; 1e100 for steady",
+                               DNDS::Config::range(0.0));
+                    DNDS_FIELD(dtImplicitMin,       "Minimum implicit time step",
+                               DNDS::Config::range(0.0));
+                    DNDS_FIELD(nTimeStep,           "Max number of time steps",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(steadyQuit,          "Quit on steady convergence");
+                    DNDS_FIELD(useRestart,          "Initialize from restart file");
+                    DNDS_FIELD(useImplicitPP,       "Use implicit positivity-preserving");
+                    DNDS_FIELD(rhsFPPMode,          "RHS flux-positivity-preserving mode");
+                    DNDS_FIELD(rhsFPPScale,         "RHS FPP scaling factor");
+                    DNDS_FIELD(rhsFPPRelax,         "RHS FPP relaxation factor",
+                               DNDS::Config::range(0.0, 1.0));
+                    DNDS_FIELD(incrementPPRelax,    "Increment PP relaxation factor",
+                               DNDS::Config::range(0.0, 1.0));
+                    DNDS_FIELD(odeCode,             "ODE integrator code");
+                    DNDS_FIELD(tEnd,                "End time for unsteady simulation");
+                    DNDS_FIELD(odeSetting1,         "ODE parameter 1");
+                    DNDS_FIELD(odeSetting2,         "ODE parameter 2");
+                    DNDS_FIELD(odeSetting3,         "ODE parameter 3");
+                    DNDS_FIELD(odeSetting4,         "ODE parameter 4");
+                    config.field_json(&T::odeSettingsExtra, "odeSettingsExtra", "Extra ODE integrator settings (opaque JSON)");
+                    DNDS_FIELD(partitionMeshOnly,   "Only partition mesh, then exit");
+                    DNDS_FIELD(dtIncreaseLimit,     "Max factor for dt increase per step",
+                               DNDS::Config::range(1.0));
+                    DNDS_FIELD(dtIncreaseAfterCount,"Steps before dt increase allowed",
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(dtCFLLimitScale,     "CFL-based dt limit scale");
+                    DNDS_FIELD(useDtPPLimit,        "Use positivity-preserving dt limiter");
+                    DNDS_FIELD(dtPPLimitRelax,      "PP dt limiter relaxation",
+                               DNDS::Config::range(0.0, 1.0));
+                    DNDS_FIELD(dtPPLimitScale,      "PP dt limiter scale",
+                               DNDS::Config::range(0.0));
+                }
                 bool timeMarchIsTwoStage()
                 {
                     return odeCode == 401 || (odeCode >= 411 && odeCode <= 413);
@@ -177,17 +203,37 @@ namespace DNDS::Euler
                 bool dampRecIncDTau = false;
                 int zeroRecForSteps = 0;
                 int zeroRecForStepsInternal = 0;
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    ImplicitReconstructionControl,
-                    useExplicit,
-                    nInternalRecStep, zeroGrads,
-                    recLinearScheme, nGmresSpace, nGmresIter, gmresRecScale,
-                    fpcgResetScheme, fpcgResetThres, fpcgResetReport, fpcgMaxPHistory,
-                    recThreshold, nRecConsolCheck,
-                    nRecMultiplyForZeroedGrad,
-                    storeRecInc, dampRecIncDTau,
-                    zeroRecForSteps,
-                    zeroRecForStepsInternal)
+                DNDS_DECLARE_CONFIG(ImplicitReconstructionControl)
+                {
+                    DNDS_FIELD(useExplicit,                "Use explicit reconstruction (no implicit)");
+                    DNDS_FIELD(nInternalRecStep,           "Number of internal reconstruction sub-steps",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(zeroGrads,                  "Zero gradients before reconstruction");
+                    DNDS_FIELD(recLinearScheme,            "Reconstruction linear solver: 0=SOR, 1=GMRES");
+                    DNDS_FIELD(nGmresSpace,                "GMRES Krylov subspace size for reconstruction",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(nGmresIter,                 "GMRES iterations for reconstruction",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(gmresRecScale,              "GMRES reconstruction scaling mode");
+                    DNDS_FIELD(fpcgResetScheme,            "FPCG reset scheme");
+                    DNDS_FIELD(fpcgResetThres,             "FPCG reset threshold",
+                               DNDS::Config::range(0.0, 1.0));
+                    DNDS_FIELD(fpcgResetReport,            "FPCG reset report frequency");
+                    DNDS_FIELD(fpcgMaxPHistory,            "FPCG max preconditioner history",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(recThreshold,               "Reconstruction convergence threshold",
+                               DNDS::Config::range(0.0));
+                    DNDS_FIELD(nRecConsolCheck,            "Console output interval for reconstruction",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(nRecMultiplyForZeroedGrad,  "Rec iteration multiplier when grad is zeroed",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(storeRecInc,                "Store reconstruction increment");
+                    DNDS_FIELD(dampRecIncDTau,             "Damp reconstruction increment by dTau");
+                    DNDS_FIELD(zeroRecForSteps,            "Zero reconstruction for N outer steps",
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(zeroRecForStepsInternal,    "Zero reconstruction for N internal steps",
+                               DNDS::Config::range(0));
+                }
             } implicitReconstructionControl;
 
             struct OutputControl
@@ -232,23 +278,40 @@ namespace DNDS::Euler
                 bool lazyCoverDataOutput = false;
                 bool useCollectiveTimer = false;
 
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    OutputControl,
-                    nConsoleCheck,
-                    nConsoleCheckInternal,
-                    consoleOutputMode,
-                    consoleOutputEveryFix,
-                    consoleMainOutputFormat,
-                    consoleMainOutputFormatInternal,
-                    logfileOutputTitles, nPrecisionLog,
-                    dataOutAtInit, restartOutAtInit,
-                    nDataOut, nDataOutC,
-                    nDataOutInternal, nDataOutCInternal,
-                    nRestartOut, nRestartOutC,
-                    nRestartOutInternal, nRestartOutCInternal,
-                    nTimeAverageOut, nTimeAverageOutC,
-                    tDataOut, lazyCoverDataOutput,
-                    useCollectiveTimer)
+                DNDS_DECLARE_CONFIG(OutputControl)
+                {
+                    DNDS_FIELD(nConsoleCheck,                    "Console output interval (outer steps)",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(nConsoleCheckInternal,            "Console output interval (internal steps)",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(consoleOutputMode,               "Console output mode: 0=basic, 1=wall force");
+                    DNDS_FIELD(consoleOutputEveryFix,            "Force console output every N fix iterations");
+                    // nPrecisionConsole intentionally not registered: was not serialized
+                    // in the original macro and existing config files lack this key.
+                    DNDS_FIELD(consoleMainOutputFormat,         "Format strings for console output lines");
+                    DNDS_FIELD(consoleMainOutputFormatInternal, "Format strings for internal-step console output");
+                    DNDS_FIELD(logfileOutputTitles,             "Column titles for CSV log file");
+                    DNDS_FIELD(nPrecisionLog,                   "Log file floating-point precision",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(dataOutAtInit,                   "Output data at initialization");
+                    DNDS_FIELD(restartOutAtInit,                "Output restart at initialization");
+                    DNDS_FIELD(nDataOut,                        "Data output interval (outer steps)",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(nDataOutC,                       "Data output interval (convergence steps)",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(nDataOutInternal,                "Data output interval (internal steps)",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(nDataOutCInternal,               "Data output interval (internal convergence)");
+                    DNDS_FIELD(nRestartOut,                     "Restart output interval (outer steps)");
+                    DNDS_FIELD(nRestartOutC,                    "Restart output interval (convergence steps)");
+                    DNDS_FIELD(nRestartOutInternal,             "Restart output interval (internal steps)");
+                    DNDS_FIELD(nRestartOutCInternal,            "Restart output interval (internal convergence)");
+                    DNDS_FIELD(nTimeAverageOut,                 "Time-average output interval (outer steps)");
+                    DNDS_FIELD(nTimeAverageOutC,                "Time-average output interval (convergence steps)");
+                    DNDS_FIELD(tDataOut,                        "Output data at simulation time interval");
+                    DNDS_FIELD(lazyCoverDataOutput,             "Overwrite previous data output files");
+                    DNDS_FIELD(useCollectiveTimer,              "Use collective MPI timer for profiling");
+                }
             } outputControl;
 
             struct ImplicitCFLControl
@@ -261,16 +324,23 @@ namespace DNDS::Euler
                 bool useLocalDt = true;
                 int nSmoothDTau = 0;
                 real RANSRelax = 1;
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    ImplicitCFLControl,
-                    CFL,
-                    nForceLocalStartStep,
-                    nCFLRampStart,
-                    nCFLRampLength,
-                    CFLRampEnd,
-                    useLocalDt,
-                    nSmoothDTau,
-                    RANSRelax)
+                DNDS_DECLARE_CONFIG(ImplicitCFLControl)
+                {
+                    DNDS_FIELD(CFL,                    "CFL number for implicit time stepping",
+                               DNDS::Config::range(0.0));
+                    DNDS_FIELD(nForceLocalStartStep,   "Step to force local time stepping",
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(nCFLRampStart,          "Step to begin CFL ramping",
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(nCFLRampLength,         "Number of steps for CFL ramp",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(CFLRampEnd,             "CFL value at end of ramp");
+                    DNDS_FIELD(useLocalDt,             "Use local (vs uniform) time step");
+                    DNDS_FIELD(nSmoothDTau,            "Smoothing passes for local dTau",
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(RANSRelax,              "RANS equation under-relaxation factor",
+                               DNDS::Config::range(0.0, 1.0));
+                }
             } implicitCFLControl;
 
             struct ConvergenceControl
@@ -286,16 +356,26 @@ namespace DNDS::Euler
                 int normOrd = 1;            // use LN norm
                 bool useVolWiseResidual = false;
                 bool useCLDriver = false;
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    ConvergenceControl,
-                    nTimeStepInternal, nTimeStepInternalMin,
-                    nAnchorUpdate, nAnchorUpdateStart,
-                    rhsThresholdInternal,
-                    res_base, resBaseType,
-                    mergeMultiResidual,
-                    normOrd,
-                    useVolWiseResidual,
-                    useCLDriver)
+                DNDS_DECLARE_CONFIG(ConvergenceControl)
+                {
+                    DNDS_FIELD(nTimeStepInternal,       "Max internal iterations per time step",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(nTimeStepInternalMin,    "Min internal iterations per time step",
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(nAnchorUpdate,           "Anchor update frequency",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(nAnchorUpdateStart,      "Step to start anchor updates",
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(rhsThresholdInternal,    "RHS convergence threshold for internal loop",
+                               DNDS::Config::range(0.0));
+                    DNDS_FIELD(res_base,                "Residual base value (0=auto)");
+                    DNDS_FIELD(resBaseType,             "Residual base type: 0=default, 1=rhs-based for unsteady");
+                    DNDS_FIELD(mergeMultiResidual,      "Merge stage residuals for multi-stage: 0=off");
+                    DNDS_FIELD(normOrd,                 "Residual norm order (1=L1, 2=L2, etc.)",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(useVolWiseResidual,      "Volume-weighted residual");
+                    DNDS_FIELD(useCLDriver,             "Enable CL-driven AoA adaptation");
+                }
             } convergenceControl;
 
             struct DataIOControl
@@ -366,42 +446,66 @@ namespace DNDS::Euler
                     return outRestartName.empty() ? outPltName : outRestartName;
                 }
 
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    DataIOControl,
-                    uniqueStamps,
-                    meshRotZ, meshScale,
-                    meshElevation, meshElevationInternalSmoother,
-                    meshElevationIter,
-                    meshElevationRBFRadius, meshElevationRBFPower,
-                    meshElevationRBFKernel, meshElevationMaxIncludedAngle, meshElevationNSearch, meshElevationRefDWall,
-                    meshElevationBoundaryMode,
-                    meshDirectBisect,
-                    meshReorderCells,
-                    meshBuildWallDist,
-                    meshWallDistOptions,
-                    meshFormat,
-                    meshPartitionOptions,
-                    meshFile,
-                    outPltName,
-                    outLogName,
-                    outRestartName,
-                    outPltMode,
-                    readMeshMode,
-                    outPltTecplotFormat,
-                    outPltVTKFormat,
-                    outPltVTKHDFFormat,
-                    outAtPointData,
-                    outAtCellData,
-                    nASCIIPrecision,
-                    vtuFloatEncodeMode,
-                    hdfChunkSize, hdfDeflateLevel, hdfCollOnMeta, hdfCollOnData,
-                    outVolumeData,
-                    outBndData,
-                    outCellScalarNames,
-                    serializerSaveURec,
-                    allowAsyncPrintData,
-                    rectifyNearPlane, rectifyNearPlaneThres,
-                    restartWriter, meshPartitionedWriter, meshPartitionedReaderType)
+                DNDS_DECLARE_CONFIG(DataIOControl)
+                {
+                    DNDS_FIELD(uniqueStamps,                "Use unique output stamps per run");
+                    DNDS_FIELD(meshRotZ,                    "Mesh rotation around Z axis (degrees)");
+                    DNDS_FIELD(meshScale,                   "Mesh coordinate scaling factor",
+                               DNDS::Config::range(0.0));
+                    DNDS_FIELD(meshElevation,               "Mesh order elevation: 0=none, 1=O1->O2");
+                    DNDS_FIELD(meshElevationInternalSmoother,"Elevation smoother: 0=local, 1=coupled");
+                    DNDS_FIELD(meshElevationIter,           "Elevation smoothing iterations");
+                    DNDS_FIELD(meshElevationNSearch,        "Elevation RBF neighbor search count",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(meshElevationRBFRadius,      "Elevation RBF support radius",
+                               DNDS::Config::range(0.0));
+                    DNDS_FIELD(meshElevationRBFPower,       "Elevation RBF power parameter");
+                    DNDS_FIELD(meshElevationRBFKernel,      "Elevation RBF kernel type");
+                    DNDS_FIELD(meshElevationMaxIncludedAngle,"Max included angle for elevation (degrees)");
+                    DNDS_FIELD(meshElevationRefDWall,       "Reference wall distance for elevation",
+                               DNDS::Config::range(0.0));
+                    DNDS_FIELD(meshElevationBoundaryMode,   "Elevation boundary: 0=wall only, 1=wall+inviscid");
+                    DNDS_FIELD(meshDirectBisect,            "Mesh bisection passes",
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(meshReorderCells,            "Reorder cells: 0=natural, 1=reorder");
+                    DNDS_FIELD(meshBuildWallDist,           "Build wall distance field: 0=no, 1=yes");
+                    DNDS_FIELD(meshWallDistOptions,         "Wall distance computation options");
+                    DNDS_FIELD(meshFormat,                  "Mesh format code");
+                    DNDS_FIELD(meshPartitionOptions,        "Mesh partitioning options");
+                    DNDS_FIELD(meshFile,                    "Input mesh file path");
+                    DNDS_FIELD(outPltName,                  "Output plot file base name");
+                    DNDS_FIELD(outLogName,                  "Output log file base name (empty=use outPltName)");
+                    DNDS_FIELD(outRestartName,              "Output restart file base name (empty=use outPltName)");
+                    DNDS_FIELD(outPltMode,                  "Output mode: 0=serial, 1=distributed");
+                    DNDS_FIELD(readMeshMode,                "Read mesh mode: 0=serial CGNS, 1=distributed JSON");
+                    DNDS_FIELD(outPltTecplotFormat,         "Output in Tecplot format");
+                    DNDS_FIELD(outPltVTKFormat,             "Output in VTK XML format");
+                    DNDS_FIELD(outPltVTKHDFFormat,          "Output in VTK HDF format");
+                    DNDS_FIELD(outAtPointData,              "Output point-interpolated data");
+                    DNDS_FIELD(outAtCellData,               "Output cell-centered data");
+                    DNDS_FIELD(nASCIIPrecision,             "ASCII output floating-point precision",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(vtuFloatEncodeMode,          "VTU float encoding: binary or ascii",
+                               DNDS::Config::enum_values({"binary", "ascii"}));
+                    DNDS_FIELD(hdfChunkSize,                "HDF5 chunk size for output",
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(hdfDeflateLevel,             "HDF5 deflate compression level",
+                               DNDS::Config::range(0, 9));
+                    DNDS_FIELD(hdfCollOnMeta,               "HDF5 collective I/O on metadata");
+                    DNDS_FIELD(hdfCollOnData,               "HDF5 collective I/O on data arrays");
+                    DNDS_FIELD(outVolumeData,               "Output volume data");
+                    DNDS_FIELD(outBndData,                  "Output boundary data");
+                    DNDS_FIELD(outCellScalarNames,          "Additional cell scalar names to output");
+                    DNDS_FIELD(serializerSaveURec,          "Save reconstruction in restart");
+                    DNDS_FIELD(allowAsyncPrintData,         "Allow asynchronous data output");
+                    DNDS_FIELD(rectifyNearPlane,            "Rectify nodes near planes: bitmask 1=x,2=y,4=z");
+                    DNDS_FIELD(rectifyNearPlaneThres,       "Threshold for near-plane rectification",
+                               DNDS::Config::range(0.0));
+                    config.field_section(&T::restartWriter,         "restartWriter",         "Restart file serializer settings");
+                    config.field_section(&T::meshPartitionedWriter, "meshPartitionedWriter", "Partitioned mesh serializer settings");
+                    DNDS_FIELD(meshPartitionedReaderType,   "Partitioned mesh reader type",
+                               DNDS::Config::enum_values({"JSON", "H5"}));
+                }
             } dataIOControl;
 
             struct BoundaryDefinition
@@ -500,28 +604,63 @@ namespace DNDS::Euler
                     int multiGridNIter = -1;
                     int multiGridNIterPost = 0;
                     int centralSmoothInputResidual = 0;
-                    DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                        CoarseGridLinearSolverControl,
-                        jacobiCode,
-                        sgsIter, gmresCode, gmresScale, nGmresIter,
-                        nSgsConsoleCheck, nGmresConsoleCheck, multiGridNIter, multiGridNIterPost,
-                        centralSmoothInputResidual)
+
+                    DNDS_DECLARE_CONFIG(CoarseGridLinearSolverControl)
+                    {
+                        DNDS_FIELD(jacobiCode,                  "Preconditioner: 0=jacobi, 1=GS, 2=ILU");
+                        DNDS_FIELD(sgsIter,                     "SGS iteration count",
+                                   DNDS::Config::range(0));
+                        DNDS_FIELD(gmresCode,                   "Linear solver: 0=LUSGS, 1=GMRES, 2=LUSGS+GMRES");
+                        DNDS_FIELD(gmresScale,                  "GMRES scaling: 0=none, 1=refU, 2=mean");
+                        DNDS_FIELD(nGmresIter,                  "GMRES iterations",
+                                   DNDS::Config::range(1));
+                        DNDS_FIELD(nSgsConsoleCheck,            "Console check interval for SGS",
+                                   DNDS::Config::range(1));
+                        DNDS_FIELD(nGmresConsoleCheck,          "Console check interval for GMRES",
+                                   DNDS::Config::range(1));
+                        DNDS_FIELD(multiGridNIter,              "Multi-grid pre-smooth iterations (-1=auto)");
+                        DNDS_FIELD(multiGridNIterPost,          "Multi-grid post-smooth iterations",
+                                   DNDS::Config::range(0));
+                        DNDS_FIELD(centralSmoothInputResidual,  "Smooth input residual on coarse grid");
+                    }
                 };
                 std::map<std::string, CoarseGridLinearSolverControl> coarseGridLinearSolverControlList{
                     {"1", CoarseGridLinearSolverControl{}},
                     {"2", CoarseGridLinearSolverControl{}},
                 };
                 Direct::DirectPrecControl directPrecControl;
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    LinearSolverControl,
-                    jacobiCode,
-                    sgsIter, sgsWithRec, gmresCode, gmresScale,
-                    nGmresSpace, nGmresIter,
-                    nSgsConsoleCheck, nGmresConsoleCheck,
-                    initWithLastURecInc,
-                    multiGridLP, multiGridLPInnerNIter, multiGridLPStartIter, multiGridLPInnerNSee,
-                    coarseGridLinearSolverControlList,
-                    directPrecControl)
+
+                DNDS_DECLARE_CONFIG(LinearSolverControl)
+                {
+                    DNDS_FIELD(jacobiCode,               "Preconditioner: 0=jacobi, 1=GS, 2=ILU");
+                    DNDS_FIELD(sgsIter,                  "SGS iteration count",
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(sgsWithRec,               "Couple SGS with reconstruction");
+                    DNDS_FIELD(gmresCode,                "Linear solver: 0=LUSGS, 1=GMRES, 2=LUSGS+GMRES");
+                    DNDS_FIELD(gmresScale,               "GMRES scaling: 0=none, 1=refU, 2=mean");
+                    DNDS_FIELD(nGmresSpace,              "GMRES Krylov subspace size",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(nGmresIter,               "GMRES outer iterations",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(nSgsConsoleCheck,          "Console check interval for SGS",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(nGmresConsoleCheck,        "Console check interval for GMRES",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(initWithLastURecInc,       "Initialize GMRES with last uRec increment");
+                    DNDS_FIELD(multiGridLP,               "Multi-grid levels (0=off)");
+                    DNDS_FIELD(multiGridLPInnerNIter,     "Multi-grid inner iterations",
+                               DNDS::Config::range(1));
+                    DNDS_FIELD(multiGridLPStartIter,      "Iteration to enable multi-grid",
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(multiGridLPInnerNSee,      "Multi-grid inner console see interval",
+                               DNDS::Config::range(1));
+                    config.template field_map_of<CoarseGridLinearSolverControl>(
+                        &T::coarseGridLinearSolverControlList,
+                        "coarseGridLinearSolverControlList",
+                        "Per-level coarse grid linear solver settings");
+                    config.field_section(&T::directPrecControl, "directPrecControl",
+                                        "Direct preconditioner settings");
+                }
             } linearSolverControl;
 
             struct RestartState
@@ -532,11 +671,15 @@ namespace DNDS::Euler
                 std::string lastRestartFile = "";
                 std::string otherRestartFile = "";
                 std::vector<int> otherRestartStoreDim;
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    RestartState,
-                    iStep, iStepInternal, odeCodePrev,
-                    lastRestartFile,
-                    otherRestartFile, otherRestartStoreDim)
+                DNDS_DECLARE_CONFIG(RestartState)
+                {
+                    DNDS_FIELD(iStep,                   "Restart step index");
+                    DNDS_FIELD(iStepInternal,           "Restart internal step index");
+                    DNDS_FIELD(odeCodePrev,             "Previous ODE code for restart");
+                    DNDS_FIELD(lastRestartFile,         "Path to last restart file");
+                    DNDS_FIELD(otherRestartFile,        "Path to alternate restart file");
+                    DNDS_FIELD(otherRestartStoreDim,    "Dimension mapping for alternate restart");
+                }
                 RestartState()
                 {
                     otherRestartStoreDim.resize(1);
@@ -561,12 +704,16 @@ namespace DNDS::Euler
                 int axisSymmetric = 0;
                 bool printRecMatrix = false;
                 Serializer::SerializerFactory recMatrixWriter;
-                DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON(
-                    Others,
-                    nFreezePassiveInner,
-                    axisSymmetric,
-                    printRecMatrix,
-                    recMatrixWriter)
+
+                DNDS_DECLARE_CONFIG(Others)
+                {
+                    DNDS_FIELD(nFreezePassiveInner,  "Freeze passive scalars for N inner steps",
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(axisSymmetric,        "Axisymmetric mode: 0=off");
+                    DNDS_FIELD(printRecMatrix,       "Print reconstruction matrix to file");
+                    config.field_section(&T::recMatrixWriter, "recMatrixWriter",
+                                        "Serializer for reconstruction matrix output");
+                }
             } others;
 
             nlohmann::ordered_json eulerSettings = nlohmann::ordered_json::object();
