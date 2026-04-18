@@ -16,6 +16,19 @@
 
 namespace DNDS::Euler::RANS
 {
+    // Spalart-Allmaras model constants used across multiple files.
+    // Canonical definitions from the SA model (Spalart & Allmaras, 1994).
+    namespace SA
+    {
+        static constexpr real cnu1 = 7.1;
+        static constexpr real cn1 = 16.0;
+        static constexpr real sigma = 2.0 / 3.0;
+    }
+
+    // Wall-omega boundary coefficient for k-omega models.
+    // Applied as: rhoOmegaWall = mu / d^2 * kWallOmegaCoeff
+    static constexpr real kWallOmegaCoeff = 800.0;
+
     template <int dim, class TU, class TDiffU>
     real GetMut_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d)
     {
@@ -609,8 +622,8 @@ namespace DNDS::Euler::RANS
 
         static const real cb1 = 0.1355;
         static const real cb2 = 0.622;
-        static const real sigma = 2. / 3.;
-        static const real cnu1 = 7.1;
+        static const real sigma = SA::sigma;
+        static const real cnu1 = SA::cnu1;
         static const real cnu2 = 0.7;
         static const real cnu3 = 0.9;
         static const real cw2 = 0.3;
@@ -772,9 +785,8 @@ namespace DNDS::Euler::RANS
 #ifdef USE_NS_SA_NEGATIVE_MODEL
         if (UMeanXy(I4 + 1) < 0)
         {
-            real cn1 = 16;
             real Chi = UMeanXy(I4 + 1) * muRef / mufPhy;
-            fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
+            fn = (SA::cn1 + std::pow(Chi, 3)) / (SA::cn1 - std::pow(Chi, 3));
             D = -cw1 * sqr(nuh / lDES);
             P = cb1 * (1 - ct3) * std::abs(S + SRotCor) * nuh;
         }

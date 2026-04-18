@@ -2,6 +2,7 @@
 #include "DNDS/Defines.hpp"
 #include "DNDS/DeviceStorage.hpp"
 #include "DNDS/Errors.hpp"
+#include "DNDS/IdealGasPhysics.hpp"
 #include "EulerP.hpp"
 #include "DNDS/JsonUtil.hpp"
 #include <cmath>
@@ -133,15 +134,16 @@ namespace DNDS::EulerP
         DNDS_DEVICE_CALLABLE real Prim2Pressure(
             tUPrim &&UPrim, int nVars, real T) const
         {
-            //! perfect gas here
-            return UPrim(I4) * (params.gamma - 1);
+            //! perfect gas here — prim[I4] stores internal energy e
+            return IdealGas::Pressure_From_InternalEnergy(UPrim(I4), params.gamma);
         }
 
         template <class tUPrim>
         DNDS_DEVICE_CALLABLE auto Prim2GammaAcousticSpeed(
             tUPrim &&UPrim, int nVars, real p) const
         {
-            return std::make_tuple(params.gamma, std::sqrt(params.gamma * p / UPrim(0)));
+            return std::make_tuple(params.gamma,
+                                   std::sqrt(IdealGas::SpeedOfSoundSqr(params.gamma, p, UPrim(0))));
         }
 
         template <class tUPrim>
@@ -157,7 +159,7 @@ namespace DNDS::EulerP
             tU &&U, int nVars, real p) const
         {
             //! perfect gas here
-            return (U(I4) + p) / U(0);
+            return IdealGas::Enthalpy(U(I4), U(0), p);
         }
 
         template <class tU>

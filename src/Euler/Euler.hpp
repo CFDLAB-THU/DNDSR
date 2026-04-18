@@ -489,6 +489,44 @@ namespace DNDS::Euler
     //         model == NS_SA);
     // } // use +/- is ok
 
+    /**
+     * @brief Compile-time traits for EulerModel variants.
+     *
+     * Replaces repeated `if constexpr (model == NS_SA || model == NS_SA_3D)` patterns
+     * with named boolean traits. All members are static constexpr.
+     *
+     * Future models (reactive, multi-species) should add traits here rather than
+     * adding new if-constexpr chains.
+     */
+    template <EulerModel model>
+    struct EulerModelTraits
+    {
+        /// Number of fixed conservative variables (Eigen::Dynamic for NS_EX).
+        static constexpr int nVarsFixed = getnVarsFixed(model);
+        /// Physics spatial dimension (2 for NS_2D, 3 for all others).
+        static constexpr int dim = getDim_Fixed(model);
+        /// Geometry (mesh) spatial dimension.
+        static constexpr int gDim = getGeomDim_Fixed(model);
+
+        /// True for Spalart-Allmaras models (NS_SA, NS_SA_3D).
+        static constexpr bool hasSA = (model == NS_SA || model == NS_SA_3D);
+        /// True for 2-equation RANS models (NS_2EQ, NS_2EQ_3D).
+        static constexpr bool has2EQ = (model == NS_2EQ || model == NS_2EQ_3D);
+        /// True for any RANS turbulence model (SA or 2-equation).
+        static constexpr bool hasRANS = hasSA || has2EQ;
+        /// Number of extra RANS transport variables (0, 1, or 2).
+        static constexpr int nRANSVars = hasSA ? 1 : (has2EQ ? 2 : 0);
+
+        /// True for extended/dynamic models (NS_EX, NS_EX_3D).
+        static constexpr bool isExtended = (model == NS_EX || model == NS_EX_3D);
+        /// True for plain NS without turbulence or extensions.
+        static constexpr bool isPlainNS = !hasRANS && !isExtended;
+        /// True for 2D geometry models.
+        static constexpr bool isGeom2D = (gDim == 2);
+        /// True for 3D geometry models.
+        static constexpr bool isGeom3D = (gDim == 3);
+    };
+
     template <int nVarsFixed, int mul>
     constexpr static inline int nvarsFixedMultiply()
     {

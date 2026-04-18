@@ -1,5 +1,6 @@
 #pragma once
 #include "DNDS/Defines.hpp"
+#include "DNDS/IdealGasPhysics.hpp"
 
 #include "DNDS/JsonUtil.hpp"
 #include "DNDS/ConfigEnum.hpp"
@@ -11,6 +12,12 @@ namespace DNDS::Euler::Gas
     using tVec2 = Eigen::Vector2d;
 
     static const int MaxBatch = 16;
+
+    // Shared constants for Riemann solver entropy fixes and low-dissipation schemes.
+    // Delegated from DNDS::IdealGas.
+    static constexpr real kScaleHartenYee = IdealGas::kScaleHartenYee;
+    static constexpr real kScaleLD = IdealGas::kScaleLD;
+    static constexpr real kScaleHFix = IdealGas::kScaleHFix;
 
     enum RiemannSolverType
     {
@@ -112,9 +119,72 @@ namespace DNDS::Euler::Gas
     inline void IdealGasThermal(
         real E, real rho, real vSqr, real gamma, real &p, real &asqr, real &H)
     {
-        p = (gamma - 1) * (E - rho * 0.5 * vSqr);
-        asqr = gamma * p / rho;
-        H = (E + p) / rho;
+        IdealGas::IdealGasThermal(E, rho, vSqr, gamma, p, asqr, H);
+    }
+
+    /**
+     * @brief Pre-computed Roe-averaged quantities shared by all Riemann solvers.
+     *
+     * Holds the Lm/Rm thermodynamic state and the Roe averages derived from them.
+     * Computed once by ComputeRoePreamble(), consumed by HLLEPFlux, HLLCFlux,
+     * and RoeFlux.
+     */
+    template <int dim>
+    struct RoePreamble
+    {
+        using TVec = Eigen::Vector<real, dim>;
+        // L/R mean-state thermodynamics
+        TVec veloLm, veloRm;
+        real asqrLm, asqrRm, pLm, pRm, HLm, HRm;
+        real vsqrLm, vsqrRm;
+        // Roe averages
+        TVec veloRoe;
+        real sqrtRhoLm, sqrtRhoRm;
+        real vsqrRoe, HRoe, asqrRoe, rhoRoe, aRoe;
+    };
+
+    /**
+     * @brief Compute Roe-averaged quantities from mean-state L/R vectors.
+     *
+     * Extracts velocities, calls IdealGasThermal for both sides, then computes
+     * the Roe-averaged velocity, enthalpy, and speed of sound.
+     *
+     * @param ULm  Left mean-state conservative vector
+     * @param URm  Right mean-state conservative vector
+     * @param gamma  Ratio of specific heats
+     * @param dumpInfo  Callable invoked before assertion on invalid asqrRoe
+     * @return RoePreamble<dim> with all fields populated
+     */
+    template <int dim = 3, typename TULm, typename TURm, typename TFdumpInfo>
+    RoePreamble<dim> ComputeRoePreamble(const TULm &ULm, const TURm &URm,
+                                        real gamma, const TFdumpInfo &dumpInfo)
+    {
+        RoePreamble<dim> rp;
+
+        rp.veloLm = (ULm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / ULm(0)).matrix();
+        rp.veloRm = (URm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / URm(0)).matrix();
+        rp.vsqrLm = rp.veloLm.squaredNorm();
+        rp.vsqrRm = rp.veloRm.squaredNorm();
+        IdealGasThermal(ULm(dim + 1), ULm(0), rp.vsqrLm, gamma, rp.pLm, rp.asqrLm, rp.HLm);
+        IdealGasThermal(URm(dim + 1), URm(0), rp.vsqrRm, gamma, rp.pRm, rp.asqrRm, rp.HRm);
+
+        rp.sqrtRhoLm = std::sqrt(ULm(0));
+        rp.sqrtRhoRm = std::sqrt(URm(0));
+
+        rp.veloRoe = (rp.sqrtRhoLm * rp.veloLm + rp.sqrtRhoRm * rp.veloRm) / (rp.sqrtRhoLm + rp.sqrtRhoRm);
+        rp.vsqrRoe = rp.veloRoe.squaredNorm();
+        rp.HRoe = (rp.sqrtRhoLm * rp.HLm + rp.sqrtRhoRm * rp.HRm) / (rp.sqrtRhoLm + rp.sqrtRhoRm);
+        rp.asqrRoe = (gamma - 1) * (rp.HRoe - 0.5 * rp.vsqrRoe);
+        rp.rhoRoe = rp.sqrtRhoLm * rp.sqrtRhoRm;
+
+        if (!(rp.asqrRoe > 0))
+        {
+            dumpInfo();
+        }
+        DNDS_assert(rp.asqrRoe > 0);
+        rp.aRoe = std::sqrt(rp.asqrRoe);
+
+        return rp;
     }
 
     template <int dim = 3, class TCons, class TPrim>
@@ -277,7 +347,6 @@ namespace DNDS::Euler::Gas
                             real gamma, TF &F, real dLambda, real fixScale,
                             const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
-        static real scaleHartenYee = 0.05;
         using TVec = Eigen::Vector<real, dim>;
 
         if (!(UL(0) > 0 && UR(0) > 0))
@@ -287,69 +356,49 @@ namespace DNDS::Euler::Gas
         DNDS_assert(UL(0) > 0 && UR(0) > 0);
         TVec veloL = (UL(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / UL(0)).matrix();
         TVec veloR = (UR(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / UR(0)).matrix();
-        TVec veloLm = (ULm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / ULm(0)).matrix();
-        TVec veloRm = (URm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / URm(0)).matrix();
 
         real asqrL, asqrR, pL, pR, HL, HR;
         real vsqrL = veloL.squaredNorm();
         real vsqrR = veloR.squaredNorm();
         IdealGasThermal(UL(dim + 1), UL(0), vsqrL, gamma, pL, asqrL, HL);
         IdealGasThermal(UR(dim + 1), UR(0), vsqrR, gamma, pR, asqrR, HR);
-        real asqrLm, asqrRm, pLm, pRm, HLm, HRm;
-        real vsqrLm = veloLm.squaredNorm();
-        real vsqrRm = veloRm.squaredNorm();
-        IdealGasThermal(ULm(dim + 1), ULm(0), vsqrLm, gamma, pLm, asqrLm, HLm);
-        IdealGasThermal(URm(dim + 1), URm(0), vsqrRm, gamma, pRm, asqrRm, HRm);
 
-        real sqrtRhoLm = std::sqrt(ULm(0));
-        real sqrtRhoRm = std::sqrt(URm(0));
-
-        TVec veloRoe = (sqrtRhoLm * veloLm + sqrtRhoRm * veloRm) / (sqrtRhoLm + sqrtRhoRm);
-        real vsqrRoe = veloRoe.squaredNorm();
-        real HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
-        real asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
-        real rhoRoe = sqrtRhoLm * sqrtRhoRm;
+        auto rp = ComputeRoePreamble<dim>(ULm, URm, gamma, dumpInfo);
 
         Eigen::Vector<real, dim + 2> FL, FR;
         GasInviscidFlux_XY<dim>(UL, veloL, vg, n, pL, FL);
         GasInviscidFlux_XY<dim>(UR, veloR, vg, n, pR, FR);
 
-        if (!(asqrRoe > 0))
-        {
-            dumpInfo();
-        }
-        DNDS_assert(asqrRoe > 0);
-        real aRoe = std::sqrt(asqrRoe);
-        real veloRoeN = veloRoe.dot(n);
+        real veloRoeN = rp.veloRoe.dot(n);
         real vgN = vg.dot(n);
         real veloRoe0 = veloRoeN - vgN;
-        lam0 = std::abs(veloRoe0 - aRoe);
+        lam0 = std::abs(veloRoe0 - rp.aRoe);
         lam123 = std::abs(veloRoe0);
-        lam4 = std::abs(veloRoe0 + aRoe);
-        real veloLm0 = (veloLm - vg).dot(n);
-        real veloRm0 = (veloRm - vg).dot(n);
+        lam4 = std::abs(veloRoe0 + rp.aRoe);
+        real veloLm0 = (rp.veloLm - vg).dot(n);
+        real veloRm0 = (rp.veloRm - vg).dot(n);
 
         Eigen::Vector<real, dim + 2> incU =
             UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) -
             UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)); //! not using m, for this is accuracy-limited!
         real incU123N = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).dot(n);
 
-        TVec alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) - incU(0) * veloRoe;
+        TVec alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) - incU(0) * rp.veloRoe;
         TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
-        real incU4b = incU(dim + 1) - alpha23VT.dot(veloRoe);
-        real alpha1 = (gamma - 1) / asqrRoe *
-                      (incU(0) * (HRoe - veloRoeN * veloRoeN) +
+        real incU4b = incU(dim + 1) - alpha23VT.dot(rp.veloRoe);
+        real alpha1 = (gamma - 1) / rp.asqrRoe *
+                      (incU(0) * (rp.HRoe - veloRoeN * veloRoeN) +
                        veloRoeN * incU123N - incU4b);
-        real alpha0 = (incU(0) * (veloRoeN + aRoe) - incU123N - aRoe * alpha1) / (2 * aRoe);
+        real alpha0 = (incU(0) * (veloRoeN + rp.aRoe) - incU123N - rp.aRoe * alpha1) / (2 * rp.aRoe);
         real alpha4 = incU(0) - (alpha0 + alpha1);
 
         // std::cout << alpha.transpose() << std::endl;
         // std::cout << std::endl;
 
-        real SL = std::min(veloRoe0 - aRoe, veloLm0 - std::sqrt(asqrL));
-        real SR = std::max(veloRoe0 + aRoe, veloRm0 + std::sqrt(asqrR));
+        real SL = std::min(veloRoe0 - rp.aRoe, veloLm0 - std::sqrt(asqrL));
+        real SR = std::max(veloRoe0 + rp.aRoe, veloRm0 + std::sqrt(asqrR));
         real UU = std::abs(veloRoe0);
-        real dfix = aRoe / (aRoe + std::max(UU, dLambda * fixScale));
+        real dfix = rp.aRoe / (rp.aRoe + std::max(UU, dLambda * fixScale));
         real SP = std::max(SR, 0.0);
         real SM = std::min(SL, 0.0);
 
@@ -358,8 +407,8 @@ namespace DNDS::Euler::Gas
             Eigen::Vector<real, dim + 2> ReV1;
             {
                 ReV1(0) = 1;
-                ReV1(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) = veloRoe;
-                ReV1(dim + 1) = vsqrRoe * 0.5;
+                ReV1(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) = rp.veloRoe;
+                ReV1(dim + 1) = rp.vsqrRoe * 0.5;
             }
             real div = SP - SM;
             div += signP(div) * verySmallReal;
@@ -381,8 +430,8 @@ namespace DNDS::Euler::Gas
             real delta3 = 0.0;
 
             lam123 = ((SP + SM) * (veloRoe0)-2.0 * (1.0 - delta1) * (SP * SM)) / (SP - SM);
-            lam4 = ((SP + SM) * (veloRoe0 + aRoe) - 2.0 * (1.0 - delta2) * (SP * SM)) / (SP - SM);
-            lam0 = ((SP + SM) * (veloRoe0 - aRoe) - 2.0 * (1.0 - delta3) * (SP * SM)) / (SP - SM);
+            lam4 = ((SP + SM) * (veloRoe0 + rp.aRoe) - 2.0 * (1.0 - delta2) * (SP * SM)) / (SP - SM);
+            lam0 = ((SP + SM) * (veloRoe0 - rp.aRoe) - 2.0 * (1.0 - delta3) * (SP * SM)) / (SP - SM);
             lam123 = std::abs(lam123);
             lam0 = std::abs(lam0);
             lam4 = std::abs(lam4);
@@ -394,11 +443,11 @@ namespace DNDS::Euler::Gas
 
             Eigen::Vector<real, dim + 2> incF;
             incF(0) = alpha0 + alpha1 + alpha4;
-            incF(dim + 1) = (HRoe - veloRoeN * aRoe) * alpha0 + 0.5 * vsqrRoe * alpha1 +
-                            (HRoe + veloRoeN * aRoe) * alpha4 + alpha23VT.dot(veloRoe);
+            incF(dim + 1) = (rp.HRoe - veloRoeN * rp.aRoe) * alpha0 + 0.5 * rp.vsqrRoe * alpha1 +
+                            (rp.HRoe + veloRoeN * rp.aRoe) * alpha4 + alpha23VT.dot(rp.veloRoe);
             incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) =
-                (veloRoe - aRoe * n) * alpha0 + (veloRoe + aRoe * n) * alpha4 +
-                veloRoe * alpha1 + alpha23VT;
+                (rp.veloRoe - rp.aRoe * n) * alpha0 + (rp.veloRoe + rp.aRoe * n) * alpha4 +
+                rp.veloRoe * alpha1 + alpha23VT;
 
             F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = (FL + FR) * 0.5 - 0.5 * incF;
         }
@@ -413,7 +462,6 @@ namespace DNDS::Euler::Gas
                                      const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
         //! warning: has accuracy issue (see IV test)
-        static real scaleHartenYee = 0.05;
         using TVec = Eigen::Vector<real, dim>;
 
         if (!(UL(0) > 0 && UR(0) > 0))
@@ -423,47 +471,27 @@ namespace DNDS::Euler::Gas
         DNDS_assert(UL(0) > 0 && UR(0) > 0);
         TVec veloL = (UL(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / UL(0)).matrix();
         TVec veloR = (UR(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / UR(0)).matrix();
-        TVec veloLm = (ULm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / ULm(0)).matrix();
-        TVec veloRm = (URm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / URm(0)).matrix();
 
         real asqrL, asqrR, pL, pR, HL, HR;
         real vsqrL = veloL.squaredNorm();
         real vsqrR = veloR.squaredNorm();
         IdealGasThermal(UL(dim + 1), UL(0), vsqrL, gamma, pL, asqrL, HL);
         IdealGasThermal(UR(dim + 1), UR(0), vsqrR, gamma, pR, asqrR, HR);
-        real asqrLm, asqrRm, pLm, pRm, HLm, HRm;
-        real vsqrLm = veloLm.squaredNorm();
-        real vsqrRm = veloRm.squaredNorm();
-        IdealGasThermal(ULm(dim + 1), ULm(0), vsqrLm, gamma, pLm, asqrLm, HLm);
-        IdealGasThermal(URm(dim + 1), URm(0), vsqrRm, gamma, pRm, asqrRm, HRm);
 
-        real sqrtRhoLm = std::sqrt(ULm(0));
-        real sqrtRhoRm = std::sqrt(URm(0));
-
-        TVec veloRoe = (sqrtRhoLm * veloLm + sqrtRhoRm * veloRm) / (sqrtRhoLm + sqrtRhoRm);
-        real vsqrRoe = veloRoe.squaredNorm();
-        real HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
-        real asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
-        real rhoRoe = sqrtRhoLm * sqrtRhoRm;
+        auto rp = ComputeRoePreamble<dim>(ULm, URm, gamma, dumpInfo);
 
         Eigen::Vector<real, dim + 2> FL, FR;
         GasInviscidFlux_XY<dim>(UL, veloL, vg, n, pL, FL);
         GasInviscidFlux_XY<dim>(UR, veloR, vg, n, pR, FR);
 
-        if (!(asqrRoe > 0))
-        {
-            dumpInfo();
-        }
-        DNDS_assert(asqrRoe > 0);
-        real aRoe = std::sqrt(asqrRoe);
-        real veloRoeN = veloRoe.dot(n);
+        real veloRoeN = rp.veloRoe.dot(n);
         real vgN = vg.dot(n);
         real veloRoe0 = veloRoeN - vgN;
-        lam0 = std::abs(veloRoe0 - aRoe);
+        lam0 = std::abs(veloRoe0 - rp.aRoe);
         lam123 = std::abs(veloRoe0);
-        lam4 = std::abs(veloRoe0 + aRoe);
-        real veloLm0 = (veloLm - vg).dot(n);
-        real veloRm0 = (veloRm - vg).dot(n);
+        lam4 = std::abs(veloRoe0 + rp.aRoe);
+        real veloLm0 = (rp.veloLm - vg).dot(n);
+        real veloRm0 = (rp.veloRm - vg).dot(n);
 
         auto HLLCq = [&](real p, real pS)
         {
@@ -472,10 +500,10 @@ namespace DNDS::Euler::Gas
                 q = 1;
             return q;
         };
-        real pS = 0.5 * (pLm + pRm) - 0.5 * (veloLm0 - veloRm0) * rhoRoe * aRoe;
+        real pS = 0.5 * (rp.pLm + rp.pRm) - 0.5 * (veloLm0 - veloRm0) * rp.rhoRoe * rp.aRoe;
         pS = std::max(0.0, pS);
-        real SL = veloLm0 - std::sqrt(asqrLm) * HLLCq(pLm, pS);
-        real SR = veloRm0 + std::sqrt(asqrRm) * HLLCq(pRm, pS);
+        real SL = veloLm0 - std::sqrt(rp.asqrLm) * HLLCq(rp.pLm, pS);
+        real SR = veloRm0 + std::sqrt(rp.asqrRm) * HLLCq(rp.pRm, pS);
 
         dLambda += verySmallReal;
         dLambda *= 2.0;
@@ -538,9 +566,9 @@ namespace DNDS::Euler::Gas
                           real dLambda, real fixScale, real incFScale,
                           real &lam0, real &lam123, real &lam4)
     {
-        const real scaleHartenYee = 0.05 * fixScale;
-        const real scaleLD = 0.2 * fixScale;
-        const real scaleHFix = 0.25 * fixScale;
+        const real scaleHartenYee = kScaleHartenYee * fixScale;
+        const real scaleLD = kScaleLD * fixScale;
+        const real scaleHFix = kScaleHFix * fixScale;
         static const real incFScaleA = 1.0;
         if constexpr (eigScheme == 0)
         {
@@ -674,8 +702,6 @@ namespace DNDS::Euler::Gas
                                     real incFScale,
                                     const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
-        static const real scaleHartenYee = 0.05;
-        static const real scaleLD = 0.2;
         using TVec = Eigen::Vector<real, dim>;
 
         if (!(UL(0) > 0 && UR(0) > 0))
@@ -685,62 +711,42 @@ namespace DNDS::Euler::Gas
         DNDS_assert(UL(0) > 0 && UR(0) > 0);
         TVec veloL = (UL(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / UL(0)).matrix();
         TVec veloR = (UR(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / UR(0)).matrix();
-        TVec veloLm = (ULm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / ULm(0)).matrix();
-        TVec veloRm = (URm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / URm(0)).matrix();
 
         real asqrL, asqrR, pL, pR, HL, HR;
         real vsqrL = veloL.squaredNorm();
         real vsqrR = veloR.squaredNorm();
         IdealGasThermal(UL(dim + 1), UL(0), vsqrL, gamma, pL, asqrL, HL);
         IdealGasThermal(UR(dim + 1), UR(0), vsqrR, gamma, pR, asqrR, HR);
-        real asqrLm, asqrRm, pLm, pRm, HLm, HRm;
-        real vsqrLm = veloLm.squaredNorm();
-        real vsqrRm = veloRm.squaredNorm();
-        IdealGasThermal(ULm(dim + 1), ULm(0), vsqrLm, gamma, pLm, asqrLm, HLm);
-        IdealGasThermal(URm(dim + 1), URm(0), vsqrRm, gamma, pRm, asqrRm, HRm);
 
-        real sqrtRhoLm = std::sqrt(ULm(0));
-        real sqrtRhoRm = std::sqrt(URm(0));
-
-        TVec veloRoe = (sqrtRhoLm * veloLm + sqrtRhoRm * veloRm) / (sqrtRhoLm + sqrtRhoRm);
-        real vsqrRoe = veloRoe.squaredNorm();
-        real HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
-        real asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
-        real rhoRoe = sqrtRhoLm * sqrtRhoRm;
+        auto rp = ComputeRoePreamble<dim>(ULm, URm, gamma, dumpInfo);
 
         Eigen::Vector<real, dim + 2> FL, FR;
         GasInviscidFlux_XY<dim>(UL, veloL, vg, n, pL, FL);
         GasInviscidFlux_XY<dim>(UR, veloR, vg, n, pR, FR);
 
-        if (!(asqrRoe > 0))
-        {
-            dumpInfo();
-        }
-        DNDS_assert(asqrRoe > 0);
-        real aRoe = std::sqrt(asqrRoe);
-        real veloRoeN = veloRoe.dot(n);
+        real veloRoeN = rp.veloRoe.dot(n);
         real vgN = vg.dot(n);
         real veloRoe0 = veloRoeN - vgN;
-        lam0 = std::abs(veloRoe0 - aRoe);
+        lam0 = std::abs(veloRoe0 - rp.aRoe);
         lam123 = std::abs(veloRoe0);
-        lam4 = std::abs(veloRoe0 + aRoe);
-        real veloLm0 = (veloLm - vg).dot(n);
-        real veloRm0 = (veloRm - vg).dot(n);
+        lam4 = std::abs(veloRoe0 + rp.aRoe);
+        real veloLm0 = (rp.veloLm - vg).dot(n);
+        real veloRm0 = (rp.veloRm - vg).dot(n);
 
         if constexpr (eigScheme == 2)
         {
             // *vanilla Lax
             // lam0 = lam123 = lam4 = std::max({lam0, lam123, lam4});
-            lam0 = lam123 = lam4 = std::max(std::abs(veloLm0) + std::sqrt(asqrLm), std::abs(veloRm0) + std::sqrt(asqrRm));
+            lam0 = lam123 = lam4 = std::max(std::abs(veloLm0) + std::sqrt(rp.asqrLm), std::abs(veloRm0) + std::sqrt(rp.asqrRm));
             F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) =
                 (FL + FR) * 0.5 -
                 0.5 * lam0 * (UR(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) - UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)));
             return; //* early exit
         }
         else
-            Roe_EntropyFixer<eigScheme>(std::sqrt(asqrLm), std::sqrt(asqrRm), aRoe,
+            Roe_EntropyFixer<eigScheme>(std::sqrt(rp.asqrLm), std::sqrt(rp.asqrRm), rp.aRoe,
                                         veloLm0, veloRm0, veloRoe0,
-                                        (veloLm - vg).norm(), (veloRm - vg).norm(), (veloRoe - vg).norm(),
+                                        (rp.veloLm - vg).norm(), (rp.veloRm - vg).norm(), (rp.veloRoe - vg).norm(),
                                         dLambda, fixScale, incFScale,
                                         lam0, lam123, lam4);
 
@@ -749,13 +755,13 @@ namespace DNDS::Euler::Gas
             UL(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)); //! not using m, for this is accuracy-limited!
         real incU123N = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).dot(n);
 
-        TVec alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) - incU(0) * veloRoe;
+        TVec alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) - incU(0) * rp.veloRoe;
         TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
-        real incU4b = incU(dim + 1) - alpha23VT.dot(veloRoe);
-        real alpha1 = (gamma - 1) / asqrRoe *
-                      (incU(0) * (HRoe - veloRoeN * veloRoeN) +
+        real incU4b = incU(dim + 1) - alpha23VT.dot(rp.veloRoe);
+        real alpha1 = (gamma - 1) / rp.asqrRoe *
+                      (incU(0) * (rp.HRoe - veloRoeN * veloRoeN) +
                        veloRoeN * incU123N - incU4b);
-        real alpha0 = (incU(0) * (veloRoeN + aRoe) - incU123N - aRoe * alpha1) / (2 * aRoe);
+        real alpha0 = (incU(0) * (veloRoeN + rp.aRoe) - incU123N - rp.aRoe * alpha1) / (2 * rp.aRoe);
         real alpha4 = incU(0) - (alpha0 + alpha1);
 
         alpha0 *= lam0;
@@ -765,11 +771,11 @@ namespace DNDS::Euler::Gas
 
         Eigen::Vector<real, dim + 2> incF;
         incF(0) = alpha0 + alpha1 + alpha4;
-        incF(dim + 1) = (HRoe - veloRoeN * aRoe) * alpha0 + 0.5 * vsqrRoe * alpha1 +
-                        (HRoe + veloRoeN * aRoe) * alpha4 + alpha23VT.dot(veloRoe);
+        incF(dim + 1) = (rp.HRoe - veloRoeN * rp.aRoe) * alpha0 + 0.5 * rp.vsqrRoe * alpha1 +
+                        (rp.HRoe + veloRoeN * rp.aRoe) * alpha4 + alpha23VT.dot(rp.veloRoe);
         incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) =
-            (veloRoe - aRoe * n) * alpha0 + (veloRoe + aRoe * n) * alpha4 +
-            veloRoe * alpha1 + alpha23VT;
+            (rp.veloRoe - rp.aRoe * n) * alpha0 + (rp.veloRoe + rp.aRoe * n) * alpha4 +
+            rp.veloRoe * alpha1 + alpha23VT;
 
         F(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>)) = (FL + FR) * 0.5 - 0.5 * incF;
     }
@@ -860,8 +866,6 @@ namespace DNDS::Euler::Gas
                                           real incFScale,
                                           const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
     {
-        static const real scaleHartenYee = 0.05;
-        static const real scaleLD = 0.2;
         using TVec = Eigen::Vector<real, dim>;
         using TVec_Batch = Eigen::Matrix<real, dim, -1, Eigen::ColMajor, dim, MaxBatch>;
         using TReal_Batch = Eigen::Matrix<real, 1, -1, Eigen::RowMajor, 1, MaxBatch>;

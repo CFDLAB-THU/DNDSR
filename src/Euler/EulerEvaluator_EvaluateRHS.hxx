@@ -708,9 +708,9 @@ namespace DNDS::Euler
                                 GradU += cellGradFix;
                             if (settings.ransSource2nd)
                             {
-                                if constexpr (model == NS_SA || model == NS_SA_3D)
+                                if constexpr (Traits::hasSA)
                                     GradU(EigenAll, I4 + 1) = cellGrad2nd(EigenAll, I4 + 1);
-                                if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+                                if constexpr (Traits::has2EQ)
                                     GradU(EigenAll, {I4 + 1, I4 + 2}) = cellGrad2nd(EigenAll, {I4 + 1, I4 + 2});
                             }
                         }

@@ -40,6 +40,7 @@ namespace DNDS::Euler
     class EulerEvaluator
     {
     public:
+        using Traits = EulerModelTraits<model>;
         static const int nVarsFixed = getnVarsFixed(model);
         static const int dim = getDim_Fixed(model);
         static const int gDim = getGeomDim_Fixed(model);
@@ -239,6 +240,27 @@ namespace DNDS::Euler
 
         void GetWallDist();
 
+    private:
+        /// Collect wall-boundary triangles for CGAL AABB queries.
+        /// @param useQuadPatches  If true, triangulate using quadrature patches (scheme 1);
+        ///                        otherwise use element vertices directly (scheme 0/20).
+        void GetWallDist_CollectTriangles(bool useQuadPatches,
+                                          std::vector<Eigen::Matrix<real, 3, 3>> &trianglesOut);
+
+        /// Wall distance via global CGAL AABB tree (wallDistScheme 0, 1, 20 first pass).
+        void GetWallDist_AABB();
+
+        /// Wall distance via batched per-rank CGAL AABB queries (wallDistScheme 2, 20 refine pass).
+        void GetWallDist_BatchedAABB();
+
+        /// Wall distance via p-Poisson equation (wallDistScheme 3).
+        void GetWallDist_Poisson();
+
+        /// Compute dWallFace from dWall (shared postprocess).
+        void GetWallDist_ComputeFaceDistances();
+
+    public:
+
         /******************************************************/
         static const uint64_t DT_No_Flags = 0x0ull;
         static const uint64_t DT_Dont_update_lambda01234 = 0x1ull << 0;
@@ -303,13 +325,10 @@ namespace DNDS::Euler
             JacobianLocalLU<nVarsFixed> &jacLU);
 
         /**
-         * @brief to use LUSGS, use LUSGSForward(..., uInc, uInc); uInc.pull; LUSGSBackward(..., uInc, uInc);
-         * the underlying logic is that for index, ghost > dist, so the forward uses no ghost,
-         * and ghost should be pulled before using backward;
-         * to use Jacobian instead of LUSGS, use LUSGSForward(..., uInc, uIncNew); LUSGSBackward(..., uInc, uIncNew); uIncNew.pull; uInc = uIncNew;
-         * \param uIncNew overwritten;
-         *
+         * @brief Deprecated: use UpdateSGS with uIncIsZero=true instead.
+         * Kept for backward compatibility. Delegates to UpdateSGS.
          */
+        [[deprecated("Use UpdateSGS with uIncIsZero=true instead")]]
         void UpdateLUSGSForward(
             real alphaDiag,
             real t,
@@ -320,10 +339,10 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &uIncNew);
 
         /**
-         * @brief
-         * \param uIncNew overwritten;
-         *
+         * @brief Deprecated: use UpdateSGS with uIncIsZero=true instead.
+         * Kept for backward compatibility. Delegates to UpdateSGS.
          */
+        [[deprecated("Use UpdateSGS with uIncIsZero=true instead")]]
         void UpdateLUSGSBackward(
             real alphaDiag,
             real t,
@@ -333,6 +352,15 @@ namespace DNDS::Euler
             JacobianDiagBlock<nVarsFixed> &JDiag,
             ArrayDOFV<nVarsFixed> &uIncNew);
 
+        /**
+         * @brief Symmetric Gauss-Seidel update for the implicit linear system.
+         *
+         * @param forward     Scan ascending (true) or descending (false).
+         * @param gsUpdate    Use Gauss-Seidel update (read from uIncNew for already-processed cells).
+         * @param uIncIsZero  If true, uInc is assumed zero for not-yet-processed cells,
+         *                    so their flux contribution is skipped (LUSGS optimisation).
+         * @param sumInc      Output: accumulated absolute increment for convergence tracking.
+         */
         void UpdateSGS(
             real alphaDiag,
             real t,
@@ -341,7 +369,8 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &uInc,
             ArrayDOFV<nVarsFixed> &uIncNew,
             JacobianDiagBlock<nVarsFixed> &JDiag,
-            bool forward, bool gsUpdate, TU &sumInc);
+            bool forward, bool gsUpdate, TU &sumInc,
+            bool uIncIsZero = false);
 
         void LUSGSMatrixSolveJacobianLU(
             real alphaDiag,
@@ -479,19 +508,18 @@ namespace DNDS::Euler
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             real muTur = 0;
-            if constexpr (model == NS_SA || model == NS_SA_3D)
+            if constexpr (Traits::hasSA)
             {
-                real cnu1 = 7.1;
                 real Chi = uMean(I4 + 1) * muRef / muf;
 #ifdef USE_NS_SA_NEGATIVE_MODEL
                 if (Chi < 10)
                     Chi = 0.05 * std::log(1 + std::exp(20 * Chi));
 #endif
                 real Chi3 = cube(Chi);
-                real fnu1 = Chi3 / (Chi3 + std::pow(cnu1, 3));
+                real fnu1 = Chi3 / (Chi3 + std::pow(RANS::SA::cnu1, 3));
                 muTur = muf * std::max((Chi * fnu1), 0.0);
             }
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            if constexpr (Traits::has2EQ)
             {
                 real mut = 0;
                 if (settings.ransModel == RANSModel::RANS_KOSST)
@@ -509,16 +537,15 @@ namespace DNDS::Euler
                                 real muRef, real mufPhy, real muTur, const TVec &uNormC, index iFace, TU &VisFlux)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            if constexpr (model == NS_SA || model == NS_SA_3D)
+            if constexpr (Traits::hasSA)
             {
-                real sigma = 2. / 3.;
-                real cn1 = 16;
+                real sigma = RANS::SA::sigma;
                 real fn = 1;
 #ifdef USE_NS_SA_NEGATIVE_MODEL
                 if (UMeanXYC(I4 + 1) < 0)
                 {
                     real Chi = UMeanXYC(I4 + 1) * muRef / mufPhy;
-                    fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
+                    fn = (RANS::SA::cn1 + std::pow(Chi, 3)) / (RANS::SA::cn1 - std::pow(Chi, 3));
                 }
 #endif
                 VisFlux(I4 + 1) = DiffUxyPrimC(Seq012, {I4 + 1}).dot(uNormC) * (mufPhy + UMeanXYC(I4 + 1) * muRef * fn) / sigma;
@@ -528,7 +555,7 @@ namespace DNDS::Euler
                 VisFlux(Seq123) -= tauPressure * uNormC;
                 VisFlux(I4) -= tauPressure * UMeanXYC(Seq123).dot(uNormC) / UMeanXYC(0);
             }
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            if constexpr (Traits::has2EQ)
             {
                 if (settings.ransModel == RANSModel::RANS_KOSST)
                     RANS::GetVisFlux_SST<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muTur, dWallFace[iFace], mufPhy, VisFlux);
@@ -685,7 +712,7 @@ namespace DNDS::Euler
 
             real un = rhoun / U(0);
 
-            if constexpr (model == NS_SA || model == NS_SA_3D)
+            if constexpr (Traits::hasSA)
             {
                 subFdU(5, 5) = un;
                 subFdU(5, 0) = -un * U(5) / U(0);
@@ -693,7 +720,7 @@ namespace DNDS::Euler
                 subFdU(5, 2) = n(1) * U(5) / U(0);
                 subFdU(5, 3) = n(2) * U(5) / U(0);
             }
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            if constexpr (Traits::has2EQ)
             {
                 subFdU(5, 5) = un;
                 subFdU(5, 0) = -un * U(5) / U(0);
@@ -954,6 +981,69 @@ namespace DNDS::Euler
             int geomMode = 0,
             int linMode = 0);
 
+    private:
+        /// @name Per-BC-type handlers (called by generateBoundaryValue)
+        /// @{
+
+        /// Characteristic-based far-field / outflow-pressure BC (BCFar, BCOutP, BCSpecial far-field).
+        TU generateBV_FarField(
+            TU &ULxy, const TU &ULMeanXy,
+            index iCell, index iFace, int iG,
+            const TVec &uNorm, const TMat &normBase,
+            const Geom::tPoint &pPhysics, real t,
+            Geom::t_index btype, bool fixUL, int geomMode);
+
+        /// Analytical / special far-field BCs (DMR, RT, IV, 2D Riemann, Noh).
+        TU generateBV_SpecialFar(
+            TU &ULxy, const TU &ULMeanXy,
+            index iCell, index iFace, int iG,
+            const TVec &uNorm, const TMat &normBase,
+            const Geom::tPoint &pPhysics, real t,
+            Geom::t_index btype);
+
+        /// Inviscid wall / symmetry BC (BCWallInvis, BCSym).
+        TU generateBV_InviscidWall(
+            TU &ULxy, const TU &ULMeanXy,
+            index iCell, index iFace, int iG,
+            const TVec &uNorm, const TMat &normBase,
+            const Geom::tPoint &pPhysics, real t,
+            Geom::t_index btype);
+
+        /// Viscous no-slip wall BC (BCWall, BCWallIsothermal), including RANS wall treatment.
+        TU generateBV_ViscousWall(
+            TU &ULxy, const TU &ULMeanXy,
+            index iCell, index iFace, int iG,
+            const TVec &uNorm, const TMat &normBase,
+            const Geom::tPoint &pPhysics, real t,
+            Geom::t_index btype, bool fixUL, int linMode);
+
+        /// Supersonic / extrapolation outflow BC (BCOut).
+        TU generateBV_Outflow(
+            TU &ULxy, const TU &ULMeanXy,
+            index iCell, index iFace, int iG,
+            const TVec &uNorm, const TMat &normBase,
+            const Geom::tPoint &pPhysics, real t,
+            Geom::t_index btype);
+
+        /// Prescribed inflow BC (BCIn).
+        TU generateBV_Inflow(
+            TU &ULxy, const TU &ULMeanXy,
+            index iCell, index iFace, int iG,
+            const TVec &uNorm, const TMat &normBase,
+            const Geom::tPoint &pPhysics, real t,
+            Geom::t_index btype);
+
+        /// Total pressure / total temperature inflow BC (BCInPsTs).
+        TU generateBV_TotalConditionInflow(
+            TU &ULxy, const TU &ULMeanXy,
+            index iCell, index iFace, int iG,
+            const TVec &uNorm, const TMat &normBase,
+            const Geom::tPoint &pPhysics, real t,
+            Geom::t_index btype);
+        /// @}
+
+    public:
+
         void PrintBCProfiles(const std::string &name, ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
         {
             this->updateBCProfiles(u, uRec);
@@ -1083,7 +1173,7 @@ namespace DNDS::Euler
             // real e = ret(I4) - eK;
             // if (e <= 0 || ret(0) <= 0)
             //     ret = umean, compressed = true;
-            // if constexpr (model == NS_SA || model == NS_SA_3D)
+            // if constexpr (Traits::hasSA)
             //     if (ret(I4 + 1) < 0)
             //         ret = umean, compressed = true;
 
@@ -1119,11 +1209,11 @@ namespace DNDS::Euler
             }
 
 #ifdef USE_NS_SA_NUT_REDUCED_ORDER
-            if constexpr (model == NS_SA || model == NS_SA_3D)
+            if constexpr (Traits::hasSA)
                 if (ret(I4 + 1) < 0)
                     ret(I4 + 1) = umean(I4 + 1), compressed = true;
 #endif
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            if constexpr (Traits::has2EQ)
             {
                 if (ret(I4 + 1) < 0)
                     ret(I4 + 1) = umean(I4 + 1), compressed = true;
@@ -1217,7 +1307,7 @@ namespace DNDS::Euler
             /** A intuitive fix **/
 // #define USE_NS_SA_ALLOW_NEGATIVE_MEAN
 #ifndef USE_NS_SA_ALLOW_NEGATIVE_MEAN
-            if constexpr (model == NS_SA || model == NS_SA_3D)
+            if constexpr (Traits::hasSA)
             {
                 if (u(I4 + 1) + ret(I4 + 1) < 0)
                 {
@@ -1233,7 +1323,7 @@ namespace DNDS::Euler
                 }
             }
 #endif
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            if constexpr (Traits::has2EQ)
             {
                 if (u(I4 + 1) + ret(I4 + 1) < 0)
                 {
@@ -1488,7 +1578,8 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &uInc,                                                                                  \
             ArrayDOFV<nVarsFixed> &uIncNew,                                                                               \
             JacobianDiagBlock<nVarsFixed> &JDiag,                                                                         \
-            bool forward, bool gsUpdate, TU &sumInc);                                                                     \
+            bool forward, bool gsUpdate, TU &sumInc,                                                                      \
+            bool uIncIsZero);                                                                     \
         ext template void EulerEvaluator<model>::UpdateSGSWithRec(                                                        \
             real alphaDiag,                                                                                               \
             real t,                                                                                                       \
@@ -1583,6 +1674,12 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
     namespace DNDS::Euler                                                                                                  \
     {                                                                                                                      \
         ext template void EulerEvaluator<model>::GetWallDist();                                                            \
+        ext template void EulerEvaluator<model>::GetWallDist_CollectTriangles(                                             \
+            bool, std::vector<Eigen::Matrix<real, 3, 3>> &);                                                               \
+        ext template void EulerEvaluator<model>::GetWallDist_AABB();                                                       \
+        ext template void EulerEvaluator<model>::GetWallDist_BatchedAABB();                                                \
+        ext template void EulerEvaluator<model>::GetWallDist_Poisson();                                                    \
+        ext template void EulerEvaluator<model>::GetWallDist_ComputeFaceDistances();                                       \
         ext template void EulerEvaluator<model>::EvaluateDt(                                                               \
             ArrayDOFV<1> &dt,                                                                                              \
             ArrayDOFV<nVarsFixed> &u,                                                                                      \
@@ -1633,6 +1730,27 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
                 Geom::t_index btype,                                                                                       \
                 bool fixUL,                                                                                                \
                 int geomMode, int linMode);                                                                                \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_FarField(                        \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
+            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                        \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_SpecialFar(                      \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
+            const Geom::tPoint &, real, Geom::t_index);                                                                   \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_InviscidWall(                    \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
+            const Geom::tPoint &, real, Geom::t_index);                                                                   \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_ViscousWall(                     \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
+            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                        \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Outflow(                         \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
+            const Geom::tPoint &, real, Geom::t_index);                                                                   \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Inflow(                          \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
+            const Geom::tPoint &, real, Geom::t_index);                                                                   \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_TotalConditionInflow(            \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
+            const Geom::tPoint &, real, Geom::t_index);                                                                   \
         ext template void EulerEvaluator<model>::InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs); \
     }
 

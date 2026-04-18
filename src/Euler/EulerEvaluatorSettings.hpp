@@ -12,6 +12,7 @@ namespace DNDS::Euler
     template <EulerModel model>
     struct EulerEvaluatorSettings
     {
+        using Traits = EulerModelTraits<model>;
         static const int nVarsFixed = getnVarsFixed(model);
         static const int dim = getDim_Fixed(model);
         static const int gDim = getGeomDim_Fixed(model);
@@ -292,11 +293,11 @@ namespace DNDS::Euler
 
         EulerEvaluatorSettings(int nVars) : _nVars(nVars)
         {
-            if constexpr (model == NS_SA || model == NS_SA_3D)
+            if constexpr (Traits::hasSA)
             {
                 ransModel = RANSModel::RANS_SA;
             }
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            if constexpr (Traits::has2EQ)
             {
                 ransModel = RANSModel::RANS_KOWilcox;
             }

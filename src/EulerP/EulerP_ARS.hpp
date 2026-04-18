@@ -7,27 +7,8 @@ namespace DNDS::EulerP
         real dLambda, real fixScale,
         real &lam0, real &lam123, real &lam4)
     {
-        const real scaleHartenYee = 0.05 * fixScale;
-        const real scaleLD = 0.2 * fixScale;
-        const real scaleHFix = 0.25 * fixScale;
-
-        real aAve = 0.5 * (aL + aR);
-        real VAve = 0.5 * (vnL + vnR);
-
-        lam0 = std::max(lam0, dLambda * scaleHFix);
-        lam4 = std::max(lam4, dLambda * scaleHFix);
-        lam123 = std::max(lam123, dLambda * scaleHFix);
-
-        //*HY
-        real thresholdHartenYee = scaleHartenYee * (VAve + aAve);
-        real thresholdHartenYeeS = sqr(thresholdHartenYee);
-        if (lam0 < thresholdHartenYee)
-            lam0 = (sqr(lam0) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
-        if (lam4 < thresholdHartenYee)
-            lam4 = (sqr(lam4) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
-        if (lam123 < thresholdHartenYee)
-            lam123 = (sqr(lam123) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
-        //*HY
+        DNDS::IdealGas::EntropyFix_HCorrHY(aL, aR, vnL, vnR, dLambda, fixScale,
+                                      lam0, lam123, lam4);
     }
 
     template <DeviceBackend B, class TUL, class TUR, class TULPrim, class TURPrim>
@@ -52,7 +33,7 @@ namespace DNDS::EulerP
         vsqrRoe = veloRoe.squaredNorm();
         HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
         // TODO: be more generic here!!! (phy.gamma - 1) is for perfect gas
-        aSqrRoe = (phy.params.gamma - 1) * (HRoe - 0.5 * vsqrRoe);
+        aSqrRoe = DNDS::IdealGas::RoeSpeedOfSoundSqr(phy.params.gamma, HRoe, vsqrRoe);
         rhoRoe = sqrtRhoLm * sqrtRhoRm;
     }
 
@@ -77,11 +58,11 @@ namespace DNDS::EulerP
         TVec alpha23V = U123(incU) - incU(0) * veloRoe;
         TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
         real incU4b = incU(I4) - alpha23VT.dot(veloRoe);
-        real alpha1 = (phy.params.gamma - 1) / asqrRoe * // TODO: be more generic here!!! (phy.gamma - 1) is for perfect gas
-                      (incU(0) * (HRoe - veloRoeN * veloRoeN) +
-                       veloRoeN * incU123N - incU4b);
-        real alpha0 = (incU(0) * (veloRoeN + aRoe) - incU123N - aRoe * alpha1) / (2 * aRoe);
-        real alpha4 = incU(0) - (alpha0 + alpha1);
+        real alpha0, alpha1, alpha4;
+        DNDS::IdealGas::RoeAlphaDecomposition(incU(0), incU123N, incU4b,
+                                               veloRoeN, HRoe, asqrRoe, aRoe,
+                                               phy.params.gamma,
+                                               alpha0, alpha1, alpha4);
 
         alpha0 *= lam0;
         alpha1 *= lam123;

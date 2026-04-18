@@ -18,428 +18,376 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
-    void EulerEvaluator<model>::GetWallDist()
+    void EulerEvaluator<model>::GetWallDist_CollectTriangles(
+        bool useQuadPatches,
+        std::vector<Eigen::Matrix<real, 3, 3>> &trianglesOut)
     {
-        if (settings.wallDistScheme == 0 || settings.wallDistScheme == 1 || settings.wallDistScheme == 20)
+        for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
         {
-            using TriArray = ArrayEigenMatrix<3, 3>;
-            ssp<TriArray> TrianglesLocal, TrianglesFull;
-            DNDS_MAKE_SSP(TrianglesLocal, mesh->getMPI());
-            DNDS_MAKE_SSP(TrianglesFull, mesh->getMPI());
-            std::vector<Eigen::Matrix<real, 3, 3>> Triangles;
-            for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
+            if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall ||
+                pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWallIsothermal)
             {
-                if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall ||
-                    pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWallIsothermal)
+                index iFace = mesh->bnd2faceV[iBnd];
+                auto elem = mesh->GetFaceElement(iFace);
+                auto quad = vfv->GetFaceQuad(iFace);
+                if (!useQuadPatches)
                 {
-                    index iFace = mesh->bnd2faceV[iBnd];
-                    auto elem = mesh->GetFaceElement(iFace);
-                    auto quad = vfv->GetFaceQuad(iFace);
-                    if (settings.wallDistScheme == 0 || settings.wallDistScheme == 20)
+                    if (elem.type == Geom::Elem::ElemType::Line2 || elem.type == Geom::Elem::ElemType::Line3)
                     {
-                        if (elem.type == Geom::Elem::ElemType::Line2 || elem.type == Geom::Elem::ElemType::Line3) //!
-                        {
-                            Geom::tSmallCoords coords;
-                            mesh->GetCoordsOnFace(iFace, coords);
-                            Eigen::Matrix<real, 3, 3> tri;
-                            mesh->GetCoordsOnFace(iFace, coords);
-                            tri(EigenAll, 0) = coords(EigenAll, 0);
-                            tri(EigenAll, 1) = coords(EigenAll, 1);
-                            tri(EigenAll, 2) = coords(EigenAll, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
-                            Triangles.push_back(tri);
-                        }
-                        else if (elem.type == Geom::Elem::ElemType::Tri3 || elem.type == Geom::Elem::ElemType::Tri6) //! TODO
-                        {
-                            Geom::tSmallCoords coords;
-                            mesh->GetCoordsOnFace(iFace, coords);
-                            Eigen::Matrix<real, 3, 3> tri;
-                            tri(EigenAll, 0) = coords(EigenAll, 0);
-                            tri(EigenAll, 1) = coords(EigenAll, 1);
-                            tri(EigenAll, 2) = coords(EigenAll, 2);
-                            Triangles.push_back(tri);
-                        }
-                        else if (elem.type == Geom::Elem::ElemType::Quad4 || elem.type == Geom::Elem::ElemType::Quad9)
-                        {
-                            Geom::tSmallCoords coords;
-                            mesh->GetCoordsOnFace(iFace, coords);
-                            Eigen::Matrix<real, 3, 3> tri;
-                            tri(EigenAll, 0) = coords(EigenAll, 0);
-                            tri(EigenAll, 1) = coords(EigenAll, 1);
-                            tri(EigenAll, 2) = coords(EigenAll, 2);
-                            Triangles.push_back(tri);
-                            tri(EigenAll, 0) = coords(EigenAll, 0);
-                            tri(EigenAll, 1) = coords(EigenAll, 2);
-                            tri(EigenAll, 2) = coords(EigenAll, 3);
-                            Triangles.push_back(tri);
-                        }
-                        else
-                        {
-                            DNDS_assert_info(false, "This elem not implemented yet for GetWallDist()");
-                        }
+                        Geom::tSmallCoords coords;
+                        mesh->GetCoordsOnFace(iFace, coords);
+                        Eigen::Matrix<real, 3, 3> tri;
+                        tri(EigenAll, 0) = coords(EigenAll, 0);
+                        tri(EigenAll, 1) = coords(EigenAll, 1);
+                        tri(EigenAll, 2) = coords(EigenAll, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
+                        trianglesOut.push_back(tri);
                     }
-                    else if (settings.wallDistScheme == 1)
+                    else if (elem.type == Geom::Elem::ElemType::Tri3 || elem.type == Geom::Elem::ElemType::Tri6)
                     {
-                        auto qPatches = Geom::Elem::GetQuadPatches(quad);
-                        for (auto &qPatch : qPatches)
-                        {
-                            Eigen::Matrix<real, 3, 3> tri;
-                            Geom::tSmallCoords coords;
-                            mesh->GetCoordsOnFace(iFace, coords);
-                            for (int iV = 0; iV < 3; iV++)
-                                if (qPatch[iV] > 0)
-                                    tri(EigenAll, iV) = coords(EigenAll, qPatch[iV] - 1);
-                                else if (qPatch[iV] < 0)
-                                    tri(EigenAll, iV) = vfv->GetFaceQuadraturePPhys(iFace, -qPatch[iV] - 1);
-                                else
-                                    tri(EigenAll, iV) = coords(EigenAll, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
-                            Triangles.push_back(tri);
-                        }
+                        Geom::tSmallCoords coords;
+                        mesh->GetCoordsOnFace(iFace, coords);
+                        Eigen::Matrix<real, 3, 3> tri;
+                        tri(EigenAll, 0) = coords(EigenAll, 0);
+                        tri(EigenAll, 1) = coords(EigenAll, 1);
+                        tri(EigenAll, 2) = coords(EigenAll, 2);
+                        trianglesOut.push_back(tri);
                     }
-                }
-            }
-            TrianglesLocal->Resize(Triangles.size(), 3, 3);
-            for (index i = 0; i < TrianglesLocal->Size(); i++)
-                (*TrianglesLocal)[i] = Triangles[i];
-            Triangles.clear();
-            ArrayTransformerType<TriArray>::Type TrianglesTransformer;
-            TrianglesTransformer.setFatherSon(TrianglesLocal, TrianglesFull);
-            TrianglesTransformer.createFatherGlobalMapping();
-
-            std::vector<index> pullingSet;
-            pullingSet.resize(TrianglesTransformer.pLGlobalMapping->globalSize());
-            for (index i = 0; i < pullingSet.size(); i++)
-                pullingSet[i] = i;
-            TrianglesTransformer.createGhostMapping(pullingSet);
-            TrianglesTransformer.createMPITypes();
-            TrianglesTransformer.pullOnce();
-            if (mesh->coords.father->getMPI().rank == 0)
-                log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() with minWallDist = {:.4e}, ", settings.minWallDist)
-                      << " To search in " << TrianglesFull->Size() << std::endl;
-
-            auto executeSearch = [&]()
-            {
-                log() << fmt::format("Start search rank [{}]", mesh->getMPI().rank) << std::endl;
-                typedef CGAL::Simple_cartesian<double> K;
-                typedef K::FT FT;
-                // typedef K::Ray_3 Ray;
-                // typedef K::Line_3 Line;
-                typedef K::Point_3 Point;
-                typedef K::Triangle_3 Triangle;
-                typedef std::vector<Triangle>::iterator Iterator;
-                typedef CGAL::AABB_triangle_primitive_3<K, Iterator> Primitive;
-                typedef CGAL::AABB_traits_3<K, Primitive> AABB_triangle_traits;
-                typedef CGAL::AABB_tree<AABB_triangle_traits> Tree;
-
-                std::vector<Triangle> triangles;
-                triangles.reserve(TrianglesFull->Size());
-
-                for (index i = 0; i < TrianglesFull->Size(); i++)
-                {
-                    Point p0((*TrianglesFull)[i](0, 0), (*TrianglesFull)[i](1, 0), (*TrianglesFull)[i](2, 0));
-                    Point p1((*TrianglesFull)[i](0, 1), (*TrianglesFull)[i](1, 1), (*TrianglesFull)[i](2, 1));
-                    Point p2((*TrianglesFull)[i](0, 2), (*TrianglesFull)[i](1, 2), (*TrianglesFull)[i](2, 2));
-                    triangles.push_back(Triangle(p0, p1, p2));
-                }
-                TrianglesLocal->Resize(0, 3, 3);
-                TrianglesFull->Resize(0, 3, 3);
-                double minDist = veryLargeReal;
-                this->dWall.resize(mesh->NumCellProc());
-
-                if (!triangles.empty())
-                {
-                    // std::cout << "tree building" << std::endl;
-                    Tree tree(triangles.begin(), triangles.end());
-
-                    // std::cout << "tree built" << std::endl;
-                    // search
-
-                    for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+                    else if (elem.type == Geom::Elem::ElemType::Quad4 || elem.type == Geom::Elem::ElemType::Quad9)
                     {
-                        // std::cout << "iCell " << iCell << std::endl;
-                        auto quadCell = vfv->GetCellQuad(iCell);
-                        dWall[iCell].resize(quadCell.GetNumPoints());
-                        for (int ig = 0; ig < quadCell.GetNumPoints(); ig++)
-                        {
-                            // std::cout << "iG " << ig << std::endl;
-                            auto p = vfv->GetCellQuadraturePPhys(iCell, ig);
-                            Point pQ(p[0], p[1], p[2]);
-                            // std::cout << "pQ " << pQ << std::endl;
-                            // Point closest_point = tree.closest_point(pQ);
-                            FT sqd = tree.squared_distance(pQ);
-                            // std::cout << "sqd" << sqd << std::endl;
-                            dWall[iCell][ig] = std::sqrt(sqd);
-                            // dWall[iCell][ig] = p(0) < 0 ? p({0, 1}).norm() : p(1); // test for plate BL
-                            if (dWall[iCell][ig] < minDist)
-                                minDist = dWall[iCell][ig];
-                            dWall[iCell][ig] = std::max(settings.minWallDist, dWall[iCell][ig]);
-                        }
+                        Geom::tSmallCoords coords;
+                        mesh->GetCoordsOnFace(iFace, coords);
+                        Eigen::Matrix<real, 3, 3> tri;
+                        tri(EigenAll, 0) = coords(EigenAll, 0);
+                        tri(EigenAll, 1) = coords(EigenAll, 1);
+                        tri(EigenAll, 2) = coords(EigenAll, 2);
+                        trianglesOut.push_back(tri);
+                        tri(EigenAll, 0) = coords(EigenAll, 0);
+                        tri(EigenAll, 1) = coords(EigenAll, 2);
+                        tri(EigenAll, 2) = coords(EigenAll, 3);
+                        trianglesOut.push_back(tri);
+                    }
+                    else
+                    {
+                        DNDS_assert_info(false, "This elem not implemented yet for GetWallDist()");
                     }
                 }
                 else
                 {
-                    for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+                    auto qPatches = Geom::Elem::GetQuadPatches(quad);
+                    for (auto &qPatch : qPatches)
                     {
-                        // std::cout << "iCell " << iCell << std::endl;
-                        auto quadCell = vfv->GetCellQuad(iCell);
-                        dWall[iCell].setConstant(quadCell.GetNumPoints(), std::pow(veryLargeReal, 1. / 4.));
+                        Eigen::Matrix<real, 3, 3> tri;
+                        Geom::tSmallCoords coords;
+                        mesh->GetCoordsOnFace(iFace, coords);
+                        for (int iV = 0; iV < 3; iV++)
+                            if (qPatch[iV] > 0)
+                                tri(EigenAll, iV) = coords(EigenAll, qPatch[iV] - 1);
+                            else if (qPatch[iV] < 0)
+                                tri(EigenAll, iV) = vfv->GetFaceQuadraturePPhys(iFace, -qPatch[iV] - 1);
+                            else
+                                tri(EigenAll, iV) = coords(EigenAll, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
+                        trianglesOut.push_back(tri);
                     }
                 }
-                log() << fmt::format("[{}] MinDist: ", mesh->getMPI().rank) << minDist << std::endl;
-            };
-            if (settings.wallDistExection == 1)
-                MPISerialDo(mesh->getMPI(), [&]()
-                            { executeSearch(); });
-            else if (settings.wallDistExection > 1)
-                for (int i = 0; i < settings.wallDistExection; i++)
-                {
-                    if (mesh->getMPI().rank % settings.wallDistExection == i)
-                        executeSearch();
-                    MPI::Barrier(mesh->getMPI().comm);
-                }
-            else
-                executeSearch();
+            }
         }
+    }
 
-        if (settings.wallDistScheme == 2 || settings.wallDistScheme == 20)
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>)
+    void EulerEvaluator<model>::GetWallDist_ComputeFaceDistances()
+    {
+        dWallFace.resize(mesh->NumFaceProc());
+        for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
+            auto f2c = mesh->face2cell[iFace];
+            real facialDist = dWall.at(f2c[0]).mean();
+            if (f2c[1] != UnInitIndex)
+                facialDist = 0.5 * (facialDist + dWall.at(f2c[1]).mean());
+            dWallFace[iFace] = facialDist;
+        }
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>)
+    void EulerEvaluator<model>::GetWallDist_AABB()
+    {
+        using TriArray = ArrayEigenMatrix<3, 3>;
+        ssp<TriArray> TrianglesLocal, TrianglesFull;
+        DNDS_MAKE_SSP(TrianglesLocal, mesh->getMPI());
+        DNDS_MAKE_SSP(TrianglesFull, mesh->getMPI());
+
+        bool useQuadPatches = (settings.wallDistScheme == 1);
+        std::vector<Eigen::Matrix<real, 3, 3>> Triangles;
+        GetWallDist_CollectTriangles(useQuadPatches, Triangles);
+
+        TrianglesLocal->Resize(Triangles.size(), 3, 3);
+        for (index i = 0; i < TrianglesLocal->Size(); i++)
+            (*TrianglesLocal)[i] = Triangles[i];
+        Triangles.clear();
+        ArrayTransformerType<TriArray>::Type TrianglesTransformer;
+        TrianglesTransformer.setFatherSon(TrianglesLocal, TrianglesFull);
+        TrianglesTransformer.createFatherGlobalMapping();
+
+        std::vector<index> pullingSet;
+        pullingSet.resize(TrianglesTransformer.pLGlobalMapping->globalSize());
+        for (index i = 0; i < pullingSet.size(); i++)
+            pullingSet[i] = i;
+        TrianglesTransformer.createGhostMapping(pullingSet);
+        TrianglesTransformer.createMPITypes();
+        TrianglesTransformer.pullOnce();
+        if (mesh->coords.father->getMPI().rank == 0)
+            log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() with minWallDist = {:.4e}, ", settings.minWallDist)
+                  << " To search in " << TrianglesFull->Size() << std::endl;
+
+        auto executeSearch = [&]()
+        {
+            log() << fmt::format("Start search rank [{}]", mesh->getMPI().rank) << std::endl;
             typedef CGAL::Simple_cartesian<double> K;
             typedef K::FT FT;
-            // typedef K::Ray_3 Ray;
-            // typedef K::Line_3 Line;
             typedef K::Point_3 Point;
             typedef K::Triangle_3 Triangle;
             typedef std::vector<Triangle>::iterator Iterator;
             typedef CGAL::AABB_triangle_primitive_3<K, Iterator> Primitive;
             typedef CGAL::AABB_traits_3<K, Primitive> AABB_triangle_traits;
             typedef CGAL::AABB_tree<AABB_triangle_traits> Tree;
+
             std::vector<Triangle> triangles;
-            triangles.reserve(mesh->NumBnd() * 8 + 8);
-            for (index iBnd = 0; iBnd < mesh->NumBnd(); iBnd++)
-            {
-                if (pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWall ||
-                    pBCHandler->GetTypeFromID(mesh->GetBndZone(iBnd)) == EulerBCType::BCWallIsothermal)
-                {
-                    index iFace = mesh->bnd2faceV[iBnd];
-                    auto elem = mesh->GetFaceElement(iFace);
-                    auto quad = vfv->GetFaceQuad(iFace);
-                    {
-                        auto qPatches = Geom::Elem::GetQuadPatches(quad);
-                        for (auto &qPatch : qPatches)
-                        {
-                            Eigen::Matrix<real, 3, 3> tri;
-                            Geom::tSmallCoords coords;
-                            mesh->GetCoordsOnFace(iFace, coords);
-                            for (int iV = 0; iV < 3; iV++)
-                                if (qPatch[iV] > 0)
-                                    tri(EigenAll, iV) = coords(EigenAll, qPatch[iV] - 1);
-                                else if (qPatch[iV] < 0)
-                                    tri(EigenAll, iV) = vfv->GetFaceQuadraturePPhys(iFace, -qPatch[iV] - 1);
-                                else
-                                    tri(EigenAll, iV) = coords(EigenAll, 1) + Geom::tPoint{0., 0., vfv->GetFaceArea(iFace)};
+            triangles.reserve(TrianglesFull->Size());
 
-                            Point p0(tri(0, 0), tri(1, 0), tri(2, 0));
-                            Point p1(tri(0, 1), tri(1, 1), tri(2, 1));
-                            Point p2(tri(0, 2), tri(1, 2), tri(2, 2));
-                            triangles.push_back(Triangle(p0, p1, p2));
-                        }
+            for (index i = 0; i < TrianglesFull->Size(); i++)
+            {
+                Point p0((*TrianglesFull)[i](0, 0), (*TrianglesFull)[i](1, 0), (*TrianglesFull)[i](2, 0));
+                Point p1((*TrianglesFull)[i](0, 1), (*TrianglesFull)[i](1, 1), (*TrianglesFull)[i](2, 1));
+                Point p2((*TrianglesFull)[i](0, 2), (*TrianglesFull)[i](1, 2), (*TrianglesFull)[i](2, 2));
+                triangles.push_back(Triangle(p0, p1, p2));
+            }
+            TrianglesLocal->Resize(0, 3, 3);
+            TrianglesFull->Resize(0, 3, 3);
+            double minDist = veryLargeReal;
+            this->dWall.resize(mesh->NumCellProc());
+
+            if (!triangles.empty())
+            {
+                Tree tree(triangles.begin(), triangles.end());
+
+                for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+                {
+                    auto quadCell = vfv->GetCellQuad(iCell);
+                    dWall[iCell].resize(quadCell.GetNumPoints());
+                    for (int ig = 0; ig < quadCell.GetNumPoints(); ig++)
+                    {
+                        auto p = vfv->GetCellQuadraturePPhys(iCell, ig);
+                        Point pQ(p[0], p[1], p[2]);
+                        FT sqd = tree.squared_distance(pQ);
+                        dWall[iCell][ig] = std::sqrt(sqd);
+                        if (dWall[iCell][ig] < minDist)
+                            minDist = dWall[iCell][ig];
+                        dWall[iCell][ig] = std::max(settings.minWallDist, dWall[iCell][ig]);
                     }
                 }
             }
-
-            if (triangles.empty())
+            else
             {
-                triangles.push_back(Triangle(
-                    Point(veryLargeReal, veryLargeReal, veryLargeReal),
-                    Point(veryLargeReal, veryLargeReal, veryLargeReal),
-                    Point(veryLargeReal, veryLargeReal, veryLargeReal)));
+                for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+                {
+                    auto quadCell = vfv->GetCellQuad(iCell);
+                    dWall[iCell].setConstant(quadCell.GetNumPoints(), std::pow(veryLargeReal, 1. / 4.));
+                }
             }
-            MPISerialDo(mesh->getMPI(),
-                        [&]()
-                        {
-                            log() << fmt::format("[{},{}] ", mesh->getMPI().rank, triangles.size());
-                            if (mesh->getMPI().rank % 10 == 0)
-                                log() << "\n";
-                            log().flush();
-                        });
-            if (mesh->getMPI().rank == 0)
-                log() << std::endl;
-            Tree tree(triangles.begin(), triangles.end());
-
-            if (settings.wallDistScheme == 2)
-                dWall.resize(mesh->NumCellProc());
-            index iCellBase = 0;
-            index nProcessed = 0;
-            int cellLoadNum = std::max(1, static_cast<int>(std::ceil(settings.wallDistCellLoadSize / real(mesh->getMPI().size))));
-            if (mesh->coords.father->getMPI().rank == 0)
-                log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() using cellLoadNum = {}, ", cellLoadNum)
-                      << std::endl;
-
-            if (settings.wallDistScheme == 20)
+            log() << fmt::format("[{}] MinDist: ", mesh->getMPI().rank) << minDist << std::endl;
+        };
+        if (settings.wallDistExection == 1)
+            MPISerialDo(mesh->getMPI(), [&]()
+                        { executeSearch(); });
+        else if (settings.wallDistExection > 1)
+            for (int i = 0; i < settings.wallDistExection; i++)
             {
-                index nRefine = 0;
-                for (auto &ds : dWall)
-                    for (auto d : ds)
-                        if (d <= settings.wallDistRefineMax)
-                            nRefine++;
-                MPI::AllreduceOneIndex(nRefine, MPI_SUM, mesh->getMPI());
-                if (mesh->coords.father->getMPI().rank == 0)
-                    log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() to refine {}, ", nRefine)
-                          << std::endl;
+                if (mesh->getMPI().rank % settings.wallDistExection == i)
+                    executeSearch();
+                MPI::Barrier(mesh->getMPI().comm);
             }
+        else
+            executeSearch();
+    }
 
-            real t0 = MPI_Wtime();
-            for (index iIter = 0;; iIter++)
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>)
+    void EulerEvaluator<model>::GetWallDist_BatchedAABB()
+    {
+        typedef CGAL::Simple_cartesian<double> K;
+        typedef K::FT FT;
+        typedef K::Point_3 Point;
+        typedef K::Triangle_3 Triangle;
+        typedef std::vector<Triangle>::iterator Iterator;
+        typedef CGAL::AABB_triangle_primitive_3<K, Iterator> Primitive;
+        typedef CGAL::AABB_traits_3<K, Primitive> AABB_triangle_traits;
+        typedef CGAL::AABB_tree<AABB_triangle_traits> Tree;
+
+        // Build local AABB tree from wall boundary triangles using quad patches.
+        std::vector<Triangle> triangles;
+        triangles.reserve(mesh->NumBnd() * 8 + 8);
+        {
+            std::vector<Eigen::Matrix<real, 3, 3>> triEigen;
+            GetWallDist_CollectTriangles(/*useQuadPatches=*/true, triEigen);
+            for (auto &tri : triEigen)
             {
-                std::vector<Geom::tPoint> pnts;
-                pnts.reserve(cellLoadNum * 64);
-                for (int iCLoad = 0; iCLoad < cellLoadNum; iCLoad++)
-                {
-                    index iCell = iCellBase + iCLoad;
-                    if (iCell < mesh->NumCellProc())
-                    {
-                        auto quadCell = vfv->GetCellQuad(iCell);
-                        for (int ig = 0; ig < quadCell.GetNumPoints(); ig++)
-                        {
-                            if (settings.wallDistScheme == 20)
-                                if (dWall[iCell][ig] > settings.wallDistRefineMax)
-                                    continue;
-                            auto p = vfv->GetCellQuadraturePPhys(iCell, ig);
-                            pnts.push_back(p);
-                        }
-                    }
-                }
-
-                using PntArray = ArrayEigenMatrix<3, 1>;
-                ssp<PntArray> PntArrayLocal, PntArrayFull;
-                DNDS_MAKE_SSP(PntArrayLocal, mesh->getMPI());
-                DNDS_MAKE_SSP(PntArrayFull, mesh->getMPI());
-                PntArrayLocal->Resize(pnts.size(), 3, 1);
-                for (size_t i = 0; i < pnts.size(); i++)
-                    (*PntArrayLocal)[i] = pnts[i];
-                ArrayTransformerType<PntArray>::Type PntTransformer;
-                PntTransformer.setFatherSon(PntArrayLocal, PntArrayFull);
-                PntTransformer.createFatherGlobalMapping();
-                std::vector<index> pullingSet;
-                pullingSet.resize(PntTransformer.pLGlobalMapping->globalSize());
-                // std::cout << "Here1 " << iIter << std::endl;
-                if (!pullingSet.size())
-                    break;
-                if (mesh->getMPI().rank == 0)
-                    log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() iter [{}], nProcessed [{}], t [{:.6g}] ",
-                                         iIter, nProcessed, MPI_Wtime() - t0)
-                          << std::endl;
-                for (index i = 0; i < pullingSet.size(); i++)
-                    pullingSet[i] = i;
-                PntTransformer.createGhostMapping(pullingSet);
-                PntTransformer.createMPITypes();
-                PntTransformer.pullOnce();
-                if (mesh->getMPI().rank == 0)
-                    log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() iter [{}], pullOnce done, t [{:.6g}] ",
-                                         iIter, MPI_Wtime() - t0)
-                          << std::endl;
-
-                std::vector<real> distQueryFull(PntArrayFull->Size(), veryLargeReal);
-                for (int iQ = 0; iQ < PntArrayFull->Size(); iQ++)
-                {
-                    Point pQ((*PntArrayFull)[iQ][0], (*PntArrayFull)[iQ][1], (*PntArrayFull)[iQ][2]);
-                    FT sqd = tree.squared_distance(pQ);
-                    distQueryFull[iQ] = std::sqrt(sqd);
-                }
-                if (mesh->getMPI().rank == 0)
-                    log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() iter [{}], query done, t [{:.6g}]  ",
-                                         iIter, MPI_Wtime() - t0)
-                          << std::endl;
-
-                std::vector<real> distQueryFullReduced(PntArrayFull->Size(), veryLargeReal);
-
-                {
-                    // index reduceBatch = 1024;
-                    // MPIReqHolder reqs;
-                    // reqs.reserve(mesh->getMPI().size + PntArrayFull->Size() / reduceBatch);
-                    // for (MPI_int i = 0; i < mesh->getMPI().size; i++)
-                    // {
-                    //     index cstart = PntTransformer.pLGhostMapping->ghostStart.at(i);
-                    //     index csize = PntTransformer.pLGhostMapping->ghostSizes.at(i);
-                    //     if (csize)
-                    //     {
-                    //         for (index ic = 0; ic < csize; ic += reduceBatch)
-                    //         {
-                    //             reqs.push_back(MPI_REQUEST_NULL);
-                    //             MPI_Ireduce(distQueryFull.data() + cstart + ic,
-                    //                         distQueryFullReduced.data() + cstart + ic,
-                    //                         std::min(csize - ic, reduceBatch), DNDS_MPI_REAL, MPI_MIN,
-                    //                         i, mesh->getMPI().comm, &reqs.back());
-                    //         }
-                    //     }
-                    // }
-                    // MPI_Waitall(reqs.size(), reqs.data(), MPI_STATUSES_IGNORE);
-                }
-
-                {
-                    // std::vector<real> distQueryFullGathered(pnts.size() * mesh->getMPI().size, veryLargeReal);
-                    // MPIReqHolder reqs;
-                    // size_t iReqCurrent = -1;
-                    // for (MPI_int i = 0; i < mesh->getMPI().size; i++)
-                    // {
-                    //     index cstart = PntTransformer.pLGhostMapping->ghostStart.at(i);
-                    //     index csize = PntTransformer.pLGhostMapping->ghostSizes.at(i);
-                    //     DNDS_assert(i == mesh->getMPI().rank ? (csize == pnts.size()) : true);
-                    //     if (csize)
-                    //     {
-                    //         reqs.push_back(MPI_REQUEST_NULL);
-                    //         MPI_Igather(distQueryFull.data() + cstart, csize, DNDS_MPI_REAL,
-                    //                     distQueryFullGathered.data(), csize, DNDS_MPI_REAL,
-                    //                     i, mesh->getMPI().comm, &reqs.back());
-                    //         if (i == mesh->getMPI().rank)
-                    //             iReqCurrent = reqs.size() - 1;
-                    //     }
-                    // }
-                    // MPI_Wait(&reqs[iReqCurrent], MPI_STATUS_IGNORE);
-                    // index curStart = PntTransformer.pLGhostMapping->ghostStart.at(mesh->getMPI().rank);
-                    // for (index iR = 0; iR < mesh->getMPI().size; iR++)
-                    //     for (index i = 0; i < pnts.size(); ++i)
-                    //         distQueryFullReduced[curStart + i] =
-                    //             std::min(distQueryFullReduced[curStart + i],
-                    //                      distQueryFullGathered[i + iR * pnts.size()]);
-                    // MPI_Waitall(reqs.size(), reqs.data(), MPI_STATUSES_IGNORE);
-                }
-
-                MPI::Allreduce(distQueryFull.data(), distQueryFullReduced.data(), distQueryFull.size(), DNDS_MPI_REAL, MPI_MIN, mesh->getMPI().comm);
-
-                if (mesh->getMPI().rank == 0)
-                    log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() iter [{}], reduce done, t [{:.6g}] ",
-                                         iIter, MPI_Wtime() - t0)
-                          << std::endl;
-                index iQLoad = 0;
-                for (int iCLoad = 0; iCLoad < cellLoadNum; iCLoad++)
-                {
-                    index iCell = iCellBase + iCLoad;
-                    if (iCell < mesh->NumCellProc())
-                    {
-                        auto quadCell = vfv->GetCellQuad(iCell);
-                        if (settings.wallDistScheme == 2)
-                            dWall[iCell].resize(quadCell.GetNumPoints());
-                        for (int ig = 0; ig < quadCell.GetNumPoints(); ig++)
-                        {
-
-                            if (settings.wallDistScheme == 20)
-                                if (dWall[iCell][ig] > settings.wallDistRefineMax)
-                                    continue;
-                            dWall[iCell][ig] = distQueryFullReduced.at(
-                                PntTransformer.pLGhostMapping->ghostStart.at(mesh->getMPI().rank) +
-                                iQLoad);
-                            iQLoad++;
-                        }
-                    }
-                }
-
-                iCellBase += cellLoadNum;
-                nProcessed += pullingSet.size();
+                Point p0(tri(0, 0), tri(1, 0), tri(2, 0));
+                Point p1(tri(0, 1), tri(1, 1), tri(2, 1));
+                Point p2(tri(0, 2), tri(1, 2), tri(2, 2));
+                triangles.push_back(Triangle(p0, p1, p2));
             }
         }
 
-        if (settings.wallDistScheme == 3)
+        if (triangles.empty())
         {
+            triangles.push_back(Triangle(
+                Point(veryLargeReal, veryLargeReal, veryLargeReal),
+                Point(veryLargeReal, veryLargeReal, veryLargeReal),
+                Point(veryLargeReal, veryLargeReal, veryLargeReal)));
+        }
+        MPISerialDo(mesh->getMPI(),
+                    [&]()
+                    {
+                        log() << fmt::format("[{},{}] ", mesh->getMPI().rank, triangles.size());
+                        if (mesh->getMPI().rank % 10 == 0)
+                            log() << "\n";
+                        log().flush();
+                    });
+        if (mesh->getMPI().rank == 0)
+            log() << std::endl;
+        Tree tree(triangles.begin(), triangles.end());
+
+        if (settings.wallDistScheme == 2)
+            dWall.resize(mesh->NumCellProc());
+        index iCellBase = 0;
+        index nProcessed = 0;
+        int cellLoadNum = std::max(1, static_cast<int>(std::ceil(settings.wallDistCellLoadSize / real(mesh->getMPI().size))));
+        if (mesh->coords.father->getMPI().rank == 0)
+            log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() using cellLoadNum = {}, ", cellLoadNum)
+                  << std::endl;
+
+        if (settings.wallDistScheme == 20)
+        {
+            index nRefine = 0;
+            for (auto &ds : dWall)
+                for (auto d : ds)
+                    if (d <= settings.wallDistRefineMax)
+                        nRefine++;
+            MPI::AllreduceOneIndex(nRefine, MPI_SUM, mesh->getMPI());
+            if (mesh->coords.father->getMPI().rank == 0)
+                log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() to refine {}, ", nRefine)
+                      << std::endl;
+        }
+
+        real t0 = MPI_Wtime();
+        for (index iIter = 0;; iIter++)
+        {
+            std::vector<Geom::tPoint> pnts;
+            pnts.reserve(cellLoadNum * 64);
+            for (int iCLoad = 0; iCLoad < cellLoadNum; iCLoad++)
+            {
+                index iCell = iCellBase + iCLoad;
+                if (iCell < mesh->NumCellProc())
+                {
+                    auto quadCell = vfv->GetCellQuad(iCell);
+                    for (int ig = 0; ig < quadCell.GetNumPoints(); ig++)
+                    {
+                        if (settings.wallDistScheme == 20)
+                            if (dWall[iCell][ig] > settings.wallDistRefineMax)
+                                continue;
+                        auto p = vfv->GetCellQuadraturePPhys(iCell, ig);
+                        pnts.push_back(p);
+                    }
+                }
+            }
+
+            using PntArray = ArrayEigenMatrix<3, 1>;
+            ssp<PntArray> PntArrayLocal, PntArrayFull;
+            DNDS_MAKE_SSP(PntArrayLocal, mesh->getMPI());
+            DNDS_MAKE_SSP(PntArrayFull, mesh->getMPI());
+            PntArrayLocal->Resize(pnts.size(), 3, 1);
+            for (size_t i = 0; i < pnts.size(); i++)
+                (*PntArrayLocal)[i] = pnts[i];
+            ArrayTransformerType<PntArray>::Type PntTransformer;
+            PntTransformer.setFatherSon(PntArrayLocal, PntArrayFull);
+            PntTransformer.createFatherGlobalMapping();
+            std::vector<index> pullingSet;
+            pullingSet.resize(PntTransformer.pLGlobalMapping->globalSize());
+            if (!pullingSet.size())
+                break;
+            if (mesh->getMPI().rank == 0)
+                log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() iter [{}], nProcessed [{}], t [{:.6g}] ",
+                                     iIter, nProcessed, MPI_Wtime() - t0)
+                      << std::endl;
+            for (index i = 0; i < pullingSet.size(); i++)
+                pullingSet[i] = i;
+            PntTransformer.createGhostMapping(pullingSet);
+            PntTransformer.createMPITypes();
+            PntTransformer.pullOnce();
+            if (mesh->getMPI().rank == 0)
+                log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() iter [{}], pullOnce done, t [{:.6g}] ",
+                                     iIter, MPI_Wtime() - t0)
+                      << std::endl;
+
+            std::vector<real> distQueryFull(PntArrayFull->Size(), veryLargeReal);
+            for (int iQ = 0; iQ < PntArrayFull->Size(); iQ++)
+            {
+                Point pQ((*PntArrayFull)[iQ][0], (*PntArrayFull)[iQ][1], (*PntArrayFull)[iQ][2]);
+                FT sqd = tree.squared_distance(pQ);
+                distQueryFull[iQ] = std::sqrt(sqd);
+            }
+            if (mesh->getMPI().rank == 0)
+                log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() iter [{}], query done, t [{:.6g}]  ",
+                                     iIter, MPI_Wtime() - t0)
+                      << std::endl;
+
+            std::vector<real> distQueryFullReduced(PntArrayFull->Size(), veryLargeReal);
+            MPI::Allreduce(distQueryFull.data(), distQueryFullReduced.data(), distQueryFull.size(), DNDS_MPI_REAL, MPI_MIN, mesh->getMPI().comm);
+
+            if (mesh->getMPI().rank == 0)
+                log() << fmt::format("=== EulerEvaluator<model>::GetWallDist() iter [{}], reduce done, t [{:.6g}] ",
+                                     iIter, MPI_Wtime() - t0)
+                      << std::endl;
+            index iQLoad = 0;
+            for (int iCLoad = 0; iCLoad < cellLoadNum; iCLoad++)
+            {
+                index iCell = iCellBase + iCLoad;
+                if (iCell < mesh->NumCellProc())
+                {
+                    auto quadCell = vfv->GetCellQuad(iCell);
+                    if (settings.wallDistScheme == 2)
+                        dWall[iCell].resize(quadCell.GetNumPoints());
+                    for (int ig = 0; ig < quadCell.GetNumPoints(); ig++)
+                    {
+                        if (settings.wallDistScheme == 20)
+                            if (dWall[iCell][ig] > settings.wallDistRefineMax)
+                                continue;
+                        dWall[iCell][ig] = distQueryFullReduced.at(
+                            PntTransformer.pLGhostMapping->ghostStart.at(mesh->getMPI().rank) +
+                            iQLoad);
+                        iQLoad++;
+                    }
+                }
+            }
+
+            iCellBase += cellLoadNum;
+            nProcessed += pullingSet.size();
+        }
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>)
+    void EulerEvaluator<model>::GetWallDist_Poisson()
+    {
             int nSweep = settings.wallDistNJacobiSweep;
             int nIter = settings.wallDistIter;
             int nIterSee = 10;
@@ -799,17 +747,21 @@ namespace DNDS::Euler
                 dWall.at(iCell).setConstant(std::max(dPhi[iCell](0), settings.minWallDist));
             if (phi.father->getMPI().rank == 0)
                 log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson min dist [{}]", minval(0)) << std::endl;
-        }
+    }
 
-        dWallFace.resize(mesh->NumFaceProc());
-        for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
-        {
-            auto f2c = mesh->face2cell[iFace];
-            real facialDist = dWall.at(f2c[0]).mean();
-            if (f2c[1] != UnInitIndex)
-                facialDist = 0.5 * (facialDist + dWall.at(f2c[1]).mean());
-            dWallFace[iFace] = facialDist;
-        }
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>)
+    void EulerEvaluator<model>::GetWallDist()
+    {
+        if (settings.wallDistScheme == 0 || settings.wallDistScheme == 1 || settings.wallDistScheme == 20)
+            GetWallDist_AABB();
+        if (settings.wallDistScheme == 2 || settings.wallDistScheme == 20)
+            GetWallDist_BatchedAABB();
+        if (settings.wallDistScheme == 3)
+            GetWallDist_Poisson();
+        GetWallDist_ComputeFaceDistances();
     }
 
     // Eigen::Vector<real, -1> EulerEvaluator::CompressRecPart(
@@ -1366,7 +1318,7 @@ namespace DNDS::Euler
                                                                                             // lam123 = std::abs(UL(1) / UL(0) + UR(1) / UR(0)) * 0.5 - vg(0); //! low fix
 #endif
 
-        if constexpr (model == NS_SA || model == NS_SA_3D)
+        if constexpr (Traits::hasSA)
         {
             // real lambdaFaceCC = sqrt(std::abs(asqrMean)) + std::abs((UL(1) / UL(0) - vg(0)) + (UR(1) / UR(0) - vg(0))) * 0.5;
             Eigen::RowVector<real, -1> lambdaFaceCC = lam123V; //! using velo instead of velo + a
@@ -1379,7 +1331,7 @@ namespace DNDS::Euler
                  (URxy(I4 + 1, EigenAll).array() - ULxy(I4 + 1, EigenAll).array()) * lambdaFaceCC.array()) *
                 0.5;
         }
-        if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+        if constexpr (Traits::has2EQ)
         {
             Eigen::RowVector<real, -1> lambdaFaceCC = lam123V; //! using velo instead of velo + a
             if (settings.ransEigScheme == 1)
@@ -1397,7 +1349,7 @@ namespace DNDS::Euler
             finc(1, EigenAll).array() += UMeanXy(I4 + 1, EigenAll).array() * (2. / 3.); //! k's normal stress
             finc(I4, EigenAll).array() += UMeanXy(I4 + 1, EigenAll).array() * (2. / 3.) * UMeanXy(1, EigenAll).array() / UMeanXy(0, EigenAll).array();
         }
-        if constexpr (model == NS_EX || model == NS_EX_3D)
+        if constexpr (Traits::isExtended)
         {
             // real lambdaFaceCC = sqrt(std::abs(asqrMean)) + std::abs((UL(1) / UL(0) - vg(0)) + (UR(1) / UR(0) - vg(0))) * 0.5;
             Eigen::RowVector<real, -1> lambdaFaceCC = lam123V; //! using velo instead of velo + a
@@ -1543,10 +1495,10 @@ namespace DNDS::Euler
             if (Mode == 2)
                 ; // not implementing axisSymmetric jacobian addition
         }
-        if constexpr (model == NS || model == NS_2D || model == NS_3D)
+        if constexpr (Traits::isPlainNS)
         {
         }
-        else if constexpr (model == NS_SA || model == NS_SA_3D)
+        else if constexpr (Traits::hasSA)
         {
 
             real pMean, asqrMean, Hmean;
@@ -1594,7 +1546,7 @@ namespace DNDS::Euler
             }
             ret += retInc;
         }
-        else if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+        else if constexpr (Traits::has2EQ)
         {
             real pMean, asqrMean, Hmean;
             real gamma = settings.idealGasProperty.gamma;
@@ -1612,7 +1564,7 @@ namespace DNDS::Euler
 
             TU UMeanXyFixed = UMeanXy;
 
-            // if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            // if constexpr (Traits::has2EQ)
             //     for (auto f : mesh->cell2face[iCell])
             //         if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(f)) == BCWall)
             //         {
@@ -1694,478 +1646,40 @@ namespace DNDS::Euler
                 bTypeEuler == EulerBCType::BCFar ||
                 bTypeEuler == EulerBCType::BCOutP)
             {
-                TU far = btype >= Geom::BC_ID_DEFAULT_MAX
-                             ? pBCHandler->GetValueFromID(btype)
-                             : TU(settings.farFieldStaticValue);
-                if (pCLDriver)
-                    far(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * far(Seq123);
-
-                if (bTypeEuler == EulerBCType::BCFar)
-                {
-                    if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
-                        far(Seq123) = (Geom::RotateAxis(-settings.frameConstRotation.vOmega() * t) * Geom::ToThreeDim<dim>(far(Seq123)))(Seq012);
-                    // std::cout << Geom::RotateAxis(settings.frameConstRotation.vOmega() * t) * Geom::RotateAxis(settings.frameConstRotation.vOmega() * t).transpose() << std::endl;
-                    // DNDS_assert(false);
-                }
-                // fmt::print("far id: {}\n", btype);
-                // std::cout << far.transpose() << std::endl;
-
-                TU ULxyStatic = ULxy;
-                if (settings.frameConstRotation.enabled) // to static frame velocity
-                    TransformURotatingFrame(ULxyStatic, pPhysics, 1);
-
-                real un = ULxy(Seq123).dot(uNorm) / ULxy(0); // using relative velo for in/out judgement
-                real gamma = settings.idealGasProperty.gamma;
-                real asqr, H, p;
-                Gas::IdealGasThermal(ULxyStatic(I4), ULxyStatic(0), (ULxyStatic(Seq123) / ULxyStatic(0)).squaredNorm(), gamma, p, asqr, H);
-
-                DNDS_assert(asqr >= 0);
-                real a = std::sqrt(asqr);
-
-                auto vg = this->GetFaceVGrid(iFace, iG, pPhysics);
-                real vgN = vg.dot(uNorm);
-
-                if (un - vgN - a > 0) // full outflow
-                {
-                    URxy = ULxyStatic;
-                }
-                else if (un - vgN > 0) //  1 sonic outflow, 1 sonic inflow, other outflow (subsonic out)
-                {
-                    TU farPrimitive, ULxyPrimitive;
-                    farPrimitive.resizeLike(ULxyStatic);
-                    ULxyPrimitive.resizeLike(URxy);
-                    Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
-                    Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
-                    if (bTypeEuler == EulerBCType::BCOutP && pBCHandler->GetFlagFromID(btype, "anchorOpt") == 1)
-                    {
-                        {
-                            TU anchorPointRel = ULxy;
-                            if (anchorRecorders.count(btype)) // if doesn't have anchor value yet, use UL as anchor
-                                anchorPointRel = anchorRecorders.at(btype).val;
-                            TU anchorPointRelPrimitive = anchorPointRel;
-                            Gas::IdealGasThermalConservative2Primitive<dim>(anchorPointRel, anchorPointRelPrimitive, gamma);
-                            // rel has correct static pressure
-                            // std::cout << "init Pressure " << farPrimitive(I4) << fmt::format("  UL {}, aP {}", ULxyPrimitive(I4), anchorPointRelPrimitive(I4)) << std::endl;
-                            farPrimitive(I4) += std::max(ULxyPrimitive(I4) - anchorPointRelPrimitive(I4), -0.95 * farPrimitive(I4));
-                            // std::cout << "anchored Pressure " << farPrimitive(I4) << std::endl;
-                        }
-                        // {
-                        //     real pInc = 0;
-                        //     if (settings.frameConstRotation.enabled && pBCHandler->GetValueExtraFromID(btype).size() >= 3)
-                        //     {
-                        //         real rRefSqr = settings.frameConstRotation.rVec(pBCHandler->GetValueExtraFromID(btype)({0, 1, 2})).squaredNorm();
-                        //         real rCurSqr = settings.frameConstRotation.rVec(pPhysics).squaredNorm();
-                        //         pInc = (rCurSqr - rRefSqr) * 0.5 * farPrimitive(0) * sqr(settings.frameConstRotation.Omega());
-                        //         pInc = std::max(pInc, -0.95 * farPrimitive(I4));
-                        //     }
-                        //     farPrimitive(I4) += pInc;
-                        // }
-                    }
-                    if (bTypeEuler == EulerBCType::BCOutP && pBCHandler->GetFlagFromID(btype, "anchorOpt") == 2)
-                    {
-                        real pInc = 0;
-                        if (profileRecorders.count(btype))
-                            pInc = profileRecorders.at(btype).GetPlain(settings.frameConstRotation.rVec(pPhysics).norm())(I4);
-                        farPrimitive(I4) += std::max(pInc, -0.95 * farPrimitive(I4));
-                    }
-                    ULxyPrimitive(I4) = farPrimitive(I4); // using far pressure
-                    Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma);
-                }
-                else if (un - vgN + a > 0) //  1 sonic outflow, 1 sonic inflow, other inflow (subsonic in)
-                {
-                    TU farPrimitive, ULxyPrimitive;
-                    farPrimitive.resizeLike(ULxyStatic);
-                    ULxyPrimitive.resizeLike(URxy);
-                    Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
-                    Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
-                    // farPrimitive(0) = ULxyPrimitive(0); // using inner density
-                    farPrimitive(I4) = ULxyPrimitive(I4); // using inner pressure
-                    Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
-                }
-                else // full inflow
-                {
-                    URxy = far;
-                }
-                if (settings.frameConstRotation.enabled) // to rotating frame velocity
-                    TransformURotatingFrame(URxy, pPhysics, -1);
-            }
-            else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_DMR_FAR) // (no rotating)
-            {
-                DNDS_assert(dim > 1);
-                URxy = settings.farFieldStaticValue;
-                real uShock = 10;
-                if constexpr (dim == 3) //* manual static dispatch
-                {
-                    if (((pPhysics(0) - uShock / std::sin(pi / 3) * t - 1. / 6.) -
-                         pPhysics(1) / std::tan(pi / 3)) > 0)
-                        URxy({0, 1, 2, 3, 4}) = Eigen::Vector<real, 5>{1.4, 0, 0, 0, 2.5};
-                    else
-                        URxy({0, 1, 2, 3, 4}) = Eigen::Vector<real, 5>{8, 57.157676649772960, -33, 0, 5.635e2};
-                }
-                else
-                {
-                    if (((pPhysics(0) - uShock / std::sin(pi / 3) * t - 1. / 6.) -
-                         pPhysics(1) / std::tan(pi / 3)) > 0)
-                        URxy({0, 1, 2, 3}) = Eigen::Vector<real, 4>{1.4, 0, 0, 2.5};
-                    else
-                        URxy({0, 1, 2, 3}) = Eigen::Vector<real, 4>{8, 57.157676649772960, -33, 5.635e2};
-                }
-            }
-            else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_RT_FAR) // (no rotating)
-            {
-                DNDS_assert(dim > 1);
-                Eigen::VectorXd far = settings.farFieldStaticValue;
-                real gamma = settings.idealGasProperty.gamma;
-                real un = ULxy(Seq123).dot(uNorm) / ULxy(0);
-                real vsqr = (ULxy(Seq123) / ULxy(0)).squaredNorm();
-                real asqr, H, p;
-                Gas::IdealGasThermal(ULxy(I4), ULxy(0), vsqr, gamma, p, asqr, H);
-
-                DNDS_assert(asqr >= 0);
-                real a = std::sqrt(asqr);
-                real v = -0.025 * a * cos(pPhysics(0) * 8 * pi);
-
-                if (pPhysics(1) < 0.5)
-                {
-
-                    real rho = 2;
-                    real p = 1;
-                    far(0) = rho;
-                    far(1) = 0;
-                    far(2) = rho * v;
-                    far(I4) = 0.5 * rho * sqr(v) + p / (gamma - 1);
-                }
-                else
-                {
-                    real rho = 1;
-                    real p = 2.5;
-                    far(0) = rho;
-                    far(1) = 0;
-                    far(2) = rho * v;
-                    far(I4) = 0.5 * rho * sqr(v) + p / (gamma - 1);
-                }
-
-                if (un - a > 0) // full outflow
-                {
-                    URxy = ULxy;
-                }
-                else if (un > 0) //  1 sonic outflow, 1 sonic inflow, other outflow (subsonic out)
-                {
-                    TU farPrimitive, ULxyPrimitive;
-                    farPrimitive.resizeLike(ULxy);
-                    ULxyPrimitive.resizeLike(URxy);
-                    Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
-                    Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma);
-                    ULxyPrimitive(I4) = farPrimitive(I4); // using far pressure
-                    Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma);
-                }
-                else if (un + a > 0) //  1 sonic outflow, 1 sonic inflow, other inflow (subsonic in)
-                {
-                    TU farPrimitive, ULxyPrimitive;
-                    farPrimitive.resizeLike(ULxy);
-                    ULxyPrimitive.resizeLike(URxy);
-                    Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
-                    Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma);
-                    // farPrimitive(0) = ULxyPrimitive(0); // using inner density
-                    farPrimitive(I4) = ULxyPrimitive(I4); // using inner pressure
-                    Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
-                }
-                else // full inflow
-                {
-                    URxy = far;
-                }
-                // URxy = far; //! override
-            }
-            else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_IV_FAR) // (no rotating)
-            {
-                real chi = 5;
-                real gamma = settings.idealGasProperty.gamma;
-                real xc = 5 + t;
-                real yc = 5 + t;
-                real r = std::sqrt(sqr(pPhysics(0) - xc) + sqr(pPhysics(1) - yc));
-                real dT = -(gamma - 1) / (8 * gamma * sqr(pi)) * sqr(chi) * std::exp(1 - sqr(r));
-                real dux = chi / 2 / pi * std::exp((1 - sqr(r)) / 2) * -(pPhysics(1) - xc);
-                real duy = chi / 2 / pi * std::exp((1 - sqr(r)) / 2) * +(pPhysics(0) - yc);
-                real T = dT + 1;
-                real ux = dux + 1;
-                real uy = duy + 1;
-                real S = 1;
-                real rho = std::pow(T / S, 1 / (gamma - 1));
-                real p = T * rho;
-
-                real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + p / (gamma - 1);
-
-                // std::cout << T << " " << rho << std::endl;
-                URxy.setZero();
-                URxy(0) = rho;
-                URxy(1) = rho * ux;
-                URxy(2) = rho * uy;
-                URxy(dim + 1) = E;
-            }
-            else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_2DRiemann_FAR) // (no rotating)
-            {
-                real gamma = settings.idealGasProperty.gamma;
-                real bdL = 0.0; // left
-                real bdR = 1.0; // right
-                real bdD = 0.0; // down
-                real bdU = 1.0; // up
-
-                real phi1 = -0.663324958071080;
-                real phi2 = -0.422115882408869;
-                real location = 0.8;
-                real p1 = location + phi1 * t;
-                real p2 = location + phi2 * t;
-                real rho, u, v, pre;
-                TU ULxyPrimitive;
-                ULxyPrimitive.resizeLike(ULxy);
-
-                Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma);
-                real rhoL = ULxyPrimitive(0);
-                real uL = ULxyPrimitive(1);
-                real vL = ULxyPrimitive(2);
-                real preL = ULxyPrimitive(I4);
-                TU farPrimitive = ULxyPrimitive;
-
-                static const real bTol = 1e-9;
-                if (std::abs(pPhysics(0) - bdL) < bTol)
-                { // left, phi2
-                    if (pPhysics(1) <= p2)
-                    { // region 3
-                        rho = 0.137992831541219;
-                        u = 1.206045378311055;
-                        v = 1.206045378311055;
-                        pre = 0.029032258064516;
-                    }
-                    else
-                    { // region 2
-                        rho = 0.532258064516129;
-                        u = 1.206045378311055;
-                        v = 0.0;
-                        pre = 0.3;
-                    }
-                }
-                else if (std::abs(pPhysics(0) - bdR) < bTol)
-                { // right, phi1
-                    if (pPhysics(1) <= p1)
-                    { // region 4
-                        // rho = 0.532258064516129;
-                        // u = 0.0;
-                        // v = 1.206045378311055;
-                        // pre = 0.3;
-                        rho = rhoL;
-                        u = -uL;
-                        v = vL;
-                        pre = preL;
-                    }
-                    else
-                    { // region 1
-                        // rho = 1.5;
-                        // u = 0.0;
-                        // v = 0.0;
-                        // pre = 1.5;
-                        rho = rhoL;
-                        u = -uL;
-                        v = vL;
-                        pre = preL;
-                    }
-                }
-                else if (std::abs(pPhysics(1) - bdU) < bTol)
-                { // up, phi1
-                    if (pPhysics(0) <= p1)
-                    { // region 2
-                        // rho = 0.532258064516129;
-                        // u = 1.206045378311055;
-                        // v = 0.0;
-                        // pre = 0.3;
-                        rho = rhoL;
-                        u = uL;
-                        v = -vL;
-                        pre = preL;
-                    }
-                    else
-                    { // region 1
-                        // rho = 1.5;
-                        // u = 0.0;
-                        // v = 0.0;
-                        // pre = 1.5;
-                        rho = rhoL;
-                        u = uL;
-                        v = -vL;
-                        pre = preL;
-                    }
-                }
-                else if (std::abs(pPhysics(1) - bdD) < bTol)
-                { // down, phi2
-                    if (pPhysics(0) <= p2)
-                    { // region 3
-                        rho = 0.137992831541219;
-                        u = 1.206045378311055;
-                        v = 1.206045378311055;
-                        pre = 0.029032258064516;
-                    }
-                    else
-                    { // region 4
-                        rho = 0.532258064516129;
-                        u = 0.0;
-                        v = 1.206045378311055;
-                        pre = 0.3;
-                    }
-                }
-                else
-                {
-                    rho = u = v = pre = std::nan("1");
-                    DNDS_assert(false); // not valid boundary pos
-                }
-                farPrimitive(0) = rho;
-                farPrimitive(1) = u, farPrimitive(2) = v;
-                farPrimitive(I4) = pre;
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
-            }
-            else if (pBCHandler->GetFlagFromID(btype, "specialOpt") == 3001) // (no rotating)
-            {
-                // 3001 for Noh problem
-                TU farPrimitive;
-                Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, settings.idealGasProperty.gamma);
-                real pInf = farPrimitive(I4);
-                real r = pPhysics.norm();
-                TVec velo = -pPhysics(Seq012) / (r + smallReal);
-                real rho = sqr(1. + t / (r + smallReal));
-                farPrimitive(0) = rho;
-                farPrimitive(Seq123) = velo;
-                farPrimitive(I4) = pInf; // warning: only valid for t < 0.768
-                // std::cout << pPhysics.transpose() << ", " << t << ", " << pInf << ", " << rho << ", " << velo.transpose() << std::endl;
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, settings.idealGasProperty.gamma);
+                URxy = generateBV_FarField(ULxy, ULMeanXy, iCell, iFace, iG,
+                                           uNorm, normBase, pPhysics, t, btype, fixUL, geomMode);
             }
             else
-                DNDS_assert_info(false, fmt::format(
-                                            "btype [{}] or bTypeEuler [{}] or specialOpt [{}] is not supported",
-                                            btype, to_string(bTypeEuler), pBCHandler->GetFlagFromIDSoft(btype, "specialOpt")));
+            {
+                URxy = generateBV_SpecialFar(ULxy, ULMeanXy, iCell, iFace, iG,
+                                             uNorm, normBase, pPhysics, t, btype);
+            }
         }
         else if (bTypeEuler == EulerBCType::BCWallInvis ||
-                 bTypeEuler == EulerBCType::BCSym) // (no rotating) no frameOpt == 1 implemneted now //TODO add
+                 bTypeEuler == EulerBCType::BCSym)
         {
-            //* linMode == 1: same
-            URxy = ULxy;
-            if (settings.frameConstRotation.enabled)
-                this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
-            URxy(Seq123) -= 2 * URxy(Seq123).dot(uNorm) * uNorm; // mirrored!
-            if (settings.frameConstRotation.enabled)
-                this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
+            URxy = generateBV_InviscidWall(ULxy, ULMeanXy, iCell, iFace, iG,
+                                           uNorm, normBase, pPhysics, t, btype);
             if (linMode == 1)
-            {
                 return URxy;
-            }
         }
         else if (bTypeEuler == EulerBCType::BCWall ||
                  bTypeEuler == EulerBCType::BCWallIsothermal)
         {
-            URxy = ULxy;
-            if (geomMode == 0 || true) // now using only the physical mode
-            {
-                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
-                    this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
-                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
-                    this->TransformURotatingFrame(URxy, pPhysics, 1);
-                URxy(Seq123) *= -1;
-                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
-                    this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
-                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
-                    this->TransformURotatingFrame(URxy, pPhysics, -1);
-            }
-            else
-            {
-                URxy(Seq123) *= -1;
-#ifdef USE_ABS_VELO_IN_ROTATION
-                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
-                    this->TransformVelocityRotatingFrame(URxy, pPhysics, 2);
-#else
-                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
-                    this->TransformVelocityRotatingFrame(URxy, pPhysics, -2);
-#endif
-            }
-
+            URxy = generateBV_ViscousWall(ULxy, ULMeanXy, iCell, iFace, iG,
+                                          uNorm, normBase, pPhysics, t, btype, fixUL, linMode);
             if (linMode == 1)
-            {
                 return URxy;
-            }
-
-            if (bTypeEuler == EulerBCType::BCWallIsothermal)
-            {
-                real temp = pBCHandler->GetValueFromID(btype)(0);
-                TU URxyPrim;
-                URxyPrim.resizeLike(ULxy);
-                Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, settings.idealGasProperty.gamma);
-                DNDS_assert_info(URxyPrim(0) > 0 && URxyPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", URxyPrim(0), URxyPrim(I4), temp));
-                // real newPressure = URxyPrim(0) * settings.idealGasProperty.Rgas * temp;
-                // URxyPrim(I4) = newPressure;
-                real newDensity = URxyPrim(I4) / temp / settings.idealGasProperty.Rgas;
-                URxyPrim(0) = newDensity;
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, settings.idealGasProperty.gamma);
-            }
-            if (model == NS_SA || model == NS_SA_3D)
-            {
-                URxy(I4 + 1) *= -1;
-#ifdef USE_FIX_ZERO_SA_NUT_AT_WALL
-                if (fixUL)
-                    ULxy(I4 + 1) = URxy(I4 + 1) = 0; //! modifing UL
-#endif
-            }
-            if (model == NS_2EQ || model == NS_2EQ_3D)
-            {
-                URxy({I4 + 1, I4 + 2}) *= -1;
-#ifdef USE_FIX_ZERO_SA_NUT_AT_WALL
-                // if (fixUL)
-                //     ULxy({I4 + 1, I4 + 2}).setZero(), URxy({I4 + 1, I4 + 2}).setZero(); //! modifing UL
-#endif
-                if (settings.ransModel == RANSModel::RANS_RKE)
-                { // BC for RealizableKe
-                    TVec v = (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellBary(iCell))(Seq012);
-                    real d1 = dWall[iCell].mean();
-                    real k1 = ULMeanXy(I4 + 1) / ULMeanXy(0);
-
-                    real pMean, asqrMean, Hmean;
-                    real gamma = settings.idealGasProperty.gamma;
-                    Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
-                                         gamma, pMean, asqrMean, Hmean);
-                    // ! refvalue:
-                    real muRef = settings.idealGasProperty.muGas;
-                    real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
-                    real mufPhy1;
-                    mufPhy1 = muEff(ULMeanXy, T);
-                    real epsWall = 2 * mufPhy1 / ULMeanXy(0) * k1 / sqr(d1);
-                    URxy(I4 + 2) = 2 * epsWall * ULxy(0) - ULxy(I4 + 2);
-                    // if (fixUL)
-                    //     ULxy(I4 + 2) = URxy(I4 + 2) = epsWall * ULxy(0);
-                }
-                if (settings.ransModel == RANSModel::RANS_KOSST ||
-                    settings.ransModel == RANSModel::RANS_KOWilcox)
-                { // BC for SST or KOWilcox
-                    real d1 = dWall[iCell].mean();
-                    // real d1 = dWall[iCell].minCoeff();
-                    real pMean, asqrMean, Hmean;
-                    real gamma = settings.idealGasProperty.gamma;
-                    Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
-                                         gamma, pMean, asqrMean, Hmean);
-                    // ! refvalue:
-                    real muRef = settings.idealGasProperty.muGas;
-                    real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
-                    real mufPhy1 = muEff(ULMeanXy, T);
-
-                    real rhoOmegaaaWall = mufPhy1 / sqr(d1) * 800;
-                    URxy(I4 + 2) = 2 * rhoOmegaaaWall - ULxy(I4 + 2);
-                    // if (fixUL)
-                    //     ULxy(I4 + 2) = URxy(I4 + 2) = rhoOmegaaaWall;
-                }
-            }
         }
         else if (bTypeEuler == EulerBCType::BCOut)
         {
+            URxy = generateBV_Outflow(ULxy, ULMeanXy, iCell, iFace, iG,
+                                      uNorm, normBase, pPhysics, t, btype);
             if (linMode == 1)
             {
                 URxy.setZero();
                 return URxy;
             }
-            URxy = ULxy;
         }
         else if (bTypeEuler == EulerBCType::BCIn)
         {
@@ -2174,16 +1688,8 @@ namespace DNDS::Euler
                 URxy.setZero();
                 return URxy;
             }
-            URxy = pBCHandler->GetValueFromID(btype);
-            if (pCLDriver)
-                URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);
-            if (bTypeEuler == EulerBCType::BCFar)
-            {
-                if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
-                    URxy(Seq123) = (Geom::RotateAxis(-settings.frameConstRotation.vOmega() * t) * Geom::ToThreeDim<dim>(URxy(Seq123)))(Seq012);
-            }
-            if (settings.frameConstRotation.enabled)
-                TransformURotatingFrame(URxy, pPhysics, -1);
+            URxy = generateBV_Inflow(ULxy, ULMeanXy, iCell, iFace, iG,
+                                     uNorm, normBase, pPhysics, t, btype);
         }
         else if (bTypeEuler == EulerBCType::BCInPsTs)
         {
@@ -2192,41 +1698,500 @@ namespace DNDS::Euler
                 URxy.setZero();
                 return URxy;
             }
-            real rvNorm = ULxy(Seq123).dot(uNorm(Seq012));
-            TU ULxyStatic = ULxy;
-            if (settings.frameConstRotation.enabled)
-                TransformURotatingFrame(ULxyStatic, pPhysics, 1);
-            TU ULxyPrimitive;
-            ULxyPrimitive.resizeLike(ULxy);
-            real gamma = settings.idealGasProperty.gamma;
-            Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
-            TVec v = ULxyStatic(Seq123).array() / ULxyStatic(0);
-            real vSqr = v.squaredNorm();
-            {
-                TU farPrimitive = pBCHandler->GetValueFromID(btype); // primitive passive scalar components like Nu
-
-                real pStag = pBCHandler->GetValueFromID(btype)(0);
-                real tStag = pBCHandler->GetValueFromID(btype)(1);
-                vSqr = std::min(vSqr, tStag * 2 * settings.idealGasProperty.CpGas * 0.95); // incase kinetic energy exceeds internal
-                real tStatic = tStag - 0.5 * vSqr / (settings.idealGasProperty.CpGas);
-                real gamma = settings.idealGasProperty.gamma;
-                real pStatic = pStag * std::pow(tStatic / tStag, gamma / (gamma - 1));
-                real rStatic = pStatic / (settings.idealGasProperty.Rgas * tStatic);
-                farPrimitive(0) = rStatic;
-                // farPrimitive(Seq123) = -uNorm * std::sqrt(vSqr);
-                farPrimitive(Seq123) = pBCHandler->GetValueFromID(btype)(Seq234).normalized() * std::sqrt(vSqr);
-                farPrimitive(I4) = pStatic;
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
-            }
-            if (pCLDriver)
-                URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);
-            if (settings.frameConstRotation.enabled)
-                TransformURotatingFrame(URxy, pPhysics, -1);
+            URxy = generateBV_TotalConditionInflow(ULxy, ULMeanXy, iCell, iFace, iG,
+                                                   uNorm, normBase, pPhysics, t, btype);
         }
         else
         {
             DNDS_assert(false);
         }
+        return URxy;
+    }
+
+    /**************************************************************************
+     * Per-BC-type handlers
+     **************************************************************************/
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>)
+    typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_FarField(
+        TU &ULxy, const TU &ULMeanXy,
+        index iCell, index iFace, int iG,
+        const TVec &uNorm, const TMat &normBase,
+        const Geom::tPoint &pPhysics, real t,
+        Geom::t_index btype, bool fixUL, int geomMode)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        auto bTypeEuler = pBCHandler->GetTypeFromID(btype);
+        TU URxy;
+        URxy.resizeLike(ULxy);
+
+        TU far = btype >= Geom::BC_ID_DEFAULT_MAX
+                     ? pBCHandler->GetValueFromID(btype)
+                     : TU(settings.farFieldStaticValue);
+        if (pCLDriver)
+            far(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * far(Seq123);
+
+        if (bTypeEuler == EulerBCType::BCFar)
+        {
+            if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
+                far(Seq123) = (Geom::RotateAxis(-settings.frameConstRotation.vOmega() * t) * Geom::ToThreeDim<dim>(far(Seq123)))(Seq012);
+        }
+
+        TU ULxyStatic = ULxy;
+        if (settings.frameConstRotation.enabled) // to static frame velocity
+            TransformURotatingFrame(ULxyStatic, pPhysics, 1);
+
+        real un = ULxy(Seq123).dot(uNorm) / ULxy(0); // using relative velo for in/out judgement
+        real gamma = settings.idealGasProperty.gamma;
+        real asqr, H, p;
+        Gas::IdealGasThermal(ULxyStatic(I4), ULxyStatic(0), (ULxyStatic(Seq123) / ULxyStatic(0)).squaredNorm(), gamma, p, asqr, H);
+
+        DNDS_assert(asqr >= 0);
+        real a = std::sqrt(asqr);
+
+        auto vg = this->GetFaceVGrid(iFace, iG, pPhysics);
+        real vgN = vg.dot(uNorm);
+
+        if (un - vgN - a > 0) // full outflow
+        {
+            URxy = ULxyStatic;
+        }
+        else if (un - vgN > 0) //  subsonic out
+        {
+            TU farPrimitive, ULxyPrimitive;
+            farPrimitive.resizeLike(ULxyStatic);
+            ULxyPrimitive.resizeLike(URxy);
+            Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
+            Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
+            if (bTypeEuler == EulerBCType::BCOutP && pBCHandler->GetFlagFromID(btype, "anchorOpt") == 1)
+            {
+                {
+                    TU anchorPointRel = ULxy;
+                    if (anchorRecorders.count(btype)) // if doesn't have anchor value yet, use UL as anchor
+                        anchorPointRel = anchorRecorders.at(btype).val;
+                    TU anchorPointRelPrimitive = anchorPointRel;
+                    Gas::IdealGasThermalConservative2Primitive<dim>(anchorPointRel, anchorPointRelPrimitive, gamma);
+                    farPrimitive(I4) += std::max(ULxyPrimitive(I4) - anchorPointRelPrimitive(I4), -0.95 * farPrimitive(I4));
+                }
+            }
+            if (bTypeEuler == EulerBCType::BCOutP && pBCHandler->GetFlagFromID(btype, "anchorOpt") == 2)
+            {
+                real pInc = 0;
+                if (profileRecorders.count(btype))
+                    pInc = profileRecorders.at(btype).GetPlain(settings.frameConstRotation.rVec(pPhysics).norm())(I4);
+                farPrimitive(I4) += std::max(pInc, -0.95 * farPrimitive(I4));
+            }
+            ULxyPrimitive(I4) = farPrimitive(I4); // using far pressure
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma);
+        }
+        else if (un - vgN + a > 0) //  subsonic in
+        {
+            TU farPrimitive, ULxyPrimitive;
+            farPrimitive.resizeLike(ULxyStatic);
+            ULxyPrimitive.resizeLike(URxy);
+            Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
+            Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
+            farPrimitive(I4) = ULxyPrimitive(I4); // using inner pressure
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
+        }
+        else // full inflow
+        {
+            URxy = far;
+        }
+        if (settings.frameConstRotation.enabled) // to rotating frame velocity
+            TransformURotatingFrame(URxy, pPhysics, -1);
+        return URxy;
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>)
+    typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_SpecialFar(
+        TU &ULxy, const TU &ULMeanXy,
+        index iCell, index iFace, int iG,
+        const TVec &uNorm, const TMat &normBase,
+        const Geom::tPoint &pPhysics, real t,
+        Geom::t_index btype)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        TU URxy;
+        URxy.resizeLike(ULxy);
+
+        if (btype == Geom::BC_ID_DEFAULT_SPECIAL_DMR_FAR) // DMR
+        {
+            DNDS_assert(dim > 1);
+            URxy = settings.farFieldStaticValue;
+            real uShock = 10;
+            if constexpr (dim == 3)
+            {
+                if (((pPhysics(0) - uShock / std::sin(pi / 3) * t - 1. / 6.) -
+                     pPhysics(1) / std::tan(pi / 3)) > 0)
+                    URxy({0, 1, 2, 3, 4}) = Eigen::Vector<real, 5>{1.4, 0, 0, 0, 2.5};
+                else
+                    URxy({0, 1, 2, 3, 4}) = Eigen::Vector<real, 5>{8, 57.157676649772960, -33, 0, 5.635e2};
+            }
+            else
+            {
+                if (((pPhysics(0) - uShock / std::sin(pi / 3) * t - 1. / 6.) -
+                     pPhysics(1) / std::tan(pi / 3)) > 0)
+                    URxy({0, 1, 2, 3}) = Eigen::Vector<real, 4>{1.4, 0, 0, 2.5};
+                else
+                    URxy({0, 1, 2, 3}) = Eigen::Vector<real, 4>{8, 57.157676649772960, -33, 5.635e2};
+            }
+        }
+        else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_RT_FAR) // Rayleigh-Taylor
+        {
+            DNDS_assert(dim > 1);
+            Eigen::VectorXd far = settings.farFieldStaticValue;
+            real gamma = settings.idealGasProperty.gamma;
+            real un = ULxy(Seq123).dot(uNorm) / ULxy(0);
+            real vsqr = (ULxy(Seq123) / ULxy(0)).squaredNorm();
+            real asqr, H, p;
+            Gas::IdealGasThermal(ULxy(I4), ULxy(0), vsqr, gamma, p, asqr, H);
+
+            DNDS_assert(asqr >= 0);
+            real a = std::sqrt(asqr);
+            real v = -0.025 * a * cos(pPhysics(0) * 8 * pi);
+
+            if (pPhysics(1) < 0.5)
+            {
+                real rho = 2;
+                real p = 1;
+                far(0) = rho;
+                far(1) = 0;
+                far(2) = rho * v;
+                far(I4) = 0.5 * rho * sqr(v) + p / (gamma - 1);
+            }
+            else
+            {
+                real rho = 1;
+                real p = 2.5;
+                far(0) = rho;
+                far(1) = 0;
+                far(2) = rho * v;
+                far(I4) = 0.5 * rho * sqr(v) + p / (gamma - 1);
+            }
+
+            if (un - a > 0)
+                URxy = ULxy;
+            else if (un > 0)
+            {
+                TU farPrimitive, ULxyPrimitive;
+                farPrimitive.resizeLike(ULxy);
+                ULxyPrimitive.resizeLike(URxy);
+                Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
+                Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma);
+                ULxyPrimitive(I4) = farPrimitive(I4);
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma);
+            }
+            else if (un + a > 0)
+            {
+                TU farPrimitive, ULxyPrimitive;
+                farPrimitive.resizeLike(ULxy);
+                ULxyPrimitive.resizeLike(URxy);
+                Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
+                Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma);
+                farPrimitive(I4) = ULxyPrimitive(I4);
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
+            }
+            else
+                URxy = far;
+        }
+        else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_IV_FAR) // Isentropic Vortex
+        {
+            real chi = 5;
+            real gamma = settings.idealGasProperty.gamma;
+            real xc = 5 + t;
+            real yc = 5 + t;
+            real r = std::sqrt(sqr(pPhysics(0) - xc) + sqr(pPhysics(1) - yc));
+            real dT = -(gamma - 1) / (8 * gamma * sqr(pi)) * sqr(chi) * std::exp(1 - sqr(r));
+            real dux = chi / 2 / pi * std::exp((1 - sqr(r)) / 2) * -(pPhysics(1) - xc);
+            real duy = chi / 2 / pi * std::exp((1 - sqr(r)) / 2) * +(pPhysics(0) - yc);
+            real T = dT + 1;
+            real ux = dux + 1;
+            real uy = duy + 1;
+            real S = 1;
+            real rho = std::pow(T / S, 1 / (gamma - 1));
+            real pVal = T * rho;
+            real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + pVal / (gamma - 1);
+
+            URxy.setZero();
+            URxy(0) = rho;
+            URxy(1) = rho * ux;
+            URxy(2) = rho * uy;
+            URxy(dim + 1) = E;
+        }
+        else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_2DRiemann_FAR) // 2D Riemann
+        {
+            real gamma = settings.idealGasProperty.gamma;
+            real bdL = 0.0, bdR = 1.0, bdD = 0.0, bdU = 1.0;
+
+            real phi1 = -0.663324958071080;
+            real phi2 = -0.422115882408869;
+            real location = 0.8;
+            real p1 = location + phi1 * t;
+            real p2 = location + phi2 * t;
+            real rho, u, v, pre;
+            TU ULxyPrimitive;
+            ULxyPrimitive.resizeLike(ULxy);
+
+            Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma);
+            real rhoL = ULxyPrimitive(0);
+            real uL = ULxyPrimitive(1);
+            real vL = ULxyPrimitive(2);
+            real preL = ULxyPrimitive(I4);
+            TU farPrimitive = ULxyPrimitive;
+
+            static const real bTol = 1e-9;
+            if (std::abs(pPhysics(0) - bdL) < bTol)
+            { // left, phi2
+                if (pPhysics(1) <= p2)
+                    rho = 0.137992831541219, u = 1.206045378311055, v = 1.206045378311055, pre = 0.029032258064516;
+                else
+                    rho = 0.532258064516129, u = 1.206045378311055, v = 0.0, pre = 0.3;
+            }
+            else if (std::abs(pPhysics(0) - bdR) < bTol)
+            { // right, phi1
+                if (pPhysics(1) <= p1)
+                    rho = rhoL, u = -uL, v = vL, pre = preL;
+                else
+                    rho = rhoL, u = -uL, v = vL, pre = preL;
+            }
+            else if (std::abs(pPhysics(1) - bdU) < bTol)
+            { // up, phi1
+                if (pPhysics(0) <= p1)
+                    rho = rhoL, u = uL, v = -vL, pre = preL;
+                else
+                    rho = rhoL, u = uL, v = -vL, pre = preL;
+            }
+            else if (std::abs(pPhysics(1) - bdD) < bTol)
+            { // down, phi2
+                if (pPhysics(0) <= p2)
+                    rho = 0.137992831541219, u = 1.206045378311055, v = 1.206045378311055, pre = 0.029032258064516;
+                else
+                    rho = 0.532258064516129, u = 0.0, v = 1.206045378311055, pre = 0.3;
+            }
+            else
+            {
+                rho = u = v = pre = std::nan("1");
+                DNDS_assert(false);
+            }
+            farPrimitive(0) = rho;
+            farPrimitive(1) = u, farPrimitive(2) = v;
+            farPrimitive(I4) = pre;
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
+        }
+        else if (pBCHandler->GetFlagFromID(btype, "specialOpt") == 3001) // Noh
+        {
+            TU farPrimitive;
+            Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, settings.idealGasProperty.gamma);
+            real pInf = farPrimitive(I4);
+            real r = pPhysics.norm();
+            TVec velo = -pPhysics(Seq012) / (r + smallReal);
+            real rho = sqr(1. + t / (r + smallReal));
+            farPrimitive(0) = rho;
+            farPrimitive(Seq123) = velo;
+            farPrimitive(I4) = pInf;
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, settings.idealGasProperty.gamma);
+        }
+        else
+            DNDS_assert_info(false, fmt::format(
+                                        "btype [{}] or bTypeEuler [{}] or specialOpt [{}] is not supported",
+                                        btype, to_string(pBCHandler->GetTypeFromID(btype)),
+                                        pBCHandler->GetFlagFromIDSoft(btype, "specialOpt")));
+        return URxy;
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>)
+    typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_InviscidWall(
+        TU &ULxy, const TU &ULMeanXy,
+        index iCell, index iFace, int iG,
+        const TVec &uNorm, const TMat &normBase,
+        const Geom::tPoint &pPhysics, real t,
+        Geom::t_index btype)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        TU URxy = ULxy;
+        if (settings.frameConstRotation.enabled)
+            this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
+        URxy(Seq123) -= 2 * URxy(Seq123).dot(uNorm) * uNorm; // mirrored!
+        if (settings.frameConstRotation.enabled)
+            this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
+        return URxy;
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>)
+    typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_ViscousWall(
+        TU &ULxy, const TU &ULMeanXy,
+        index iCell, index iFace, int iG,
+        const TVec &uNorm, const TMat &normBase,
+        const Geom::tPoint &pPhysics, real t,
+        Geom::t_index btype, bool fixUL, int linMode)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        auto bTypeEuler = pBCHandler->GetTypeFromID(btype);
+        TU URxy = ULxy;
+        if (true) // physical mode
+        {
+            if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
+                this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
+            if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
+                this->TransformURotatingFrame(URxy, pPhysics, 1);
+            URxy(Seq123) *= -1;
+            if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
+                this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
+            if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
+                this->TransformURotatingFrame(URxy, pPhysics, -1);
+        }
+
+        if (linMode == 1)
+            return URxy;
+
+        if (bTypeEuler == EulerBCType::BCWallIsothermal)
+        {
+            real temp = pBCHandler->GetValueFromID(btype)(0);
+            TU URxyPrim;
+            URxyPrim.resizeLike(ULxy);
+            Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, settings.idealGasProperty.gamma);
+            DNDS_assert_info(URxyPrim(0) > 0 && URxyPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", URxyPrim(0), URxyPrim(I4), temp));
+            real newDensity = URxyPrim(I4) / temp / settings.idealGasProperty.Rgas;
+            URxyPrim(0) = newDensity;
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, settings.idealGasProperty.gamma);
+        }
+        if constexpr (Traits::hasSA)
+        {
+            URxy(I4 + 1) *= -1;
+#ifdef USE_FIX_ZERO_SA_NUT_AT_WALL
+            if (fixUL)
+                ULxy(I4 + 1) = URxy(I4 + 1) = 0; //! modifing UL
+#endif
+        }
+        if constexpr (Traits::has2EQ)
+        {
+            URxy({I4 + 1, I4 + 2}) *= -1;
+#ifdef USE_FIX_ZERO_SA_NUT_AT_WALL
+            // if (fixUL)
+            //     ULxy({I4 + 1, I4 + 2}).setZero(), URxy({I4 + 1, I4 + 2}).setZero();
+#endif
+            if (settings.ransModel == RANSModel::RANS_RKE)
+            { // BC for RealizableKe
+                real d1 = dWall[iCell].mean();
+                real k1 = ULMeanXy(I4 + 1) / ULMeanXy(0);
+
+                real pMean, asqrMean, Hmean;
+                real gamma = settings.idealGasProperty.gamma;
+                Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
+                                     gamma, pMean, asqrMean, Hmean);
+                real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
+                real mufPhy1 = muEff(ULMeanXy, T);
+                real epsWall = 2 * mufPhy1 / ULMeanXy(0) * k1 / sqr(d1);
+                URxy(I4 + 2) = 2 * epsWall * ULxy(0) - ULxy(I4 + 2);
+            }
+            if (settings.ransModel == RANSModel::RANS_KOSST ||
+                settings.ransModel == RANSModel::RANS_KOWilcox)
+            { // BC for SST or KOWilcox
+                real d1 = dWall[iCell].mean();
+                real pMean, asqrMean, Hmean;
+                real gamma = settings.idealGasProperty.gamma;
+                Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
+                                     gamma, pMean, asqrMean, Hmean);
+                real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
+                real mufPhy1 = muEff(ULMeanXy, T);
+
+                real rhoOmegaaaWall = mufPhy1 / sqr(d1) * RANS::kWallOmegaCoeff;
+                URxy(I4 + 2) = 2 * rhoOmegaaaWall - ULxy(I4 + 2);
+            }
+        }
+        return URxy;
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>)
+    typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Outflow(
+        TU &ULxy, const TU &ULMeanXy,
+        index iCell, index iFace, int iG,
+        const TVec &uNorm, const TMat &normBase,
+        const Geom::tPoint &pPhysics, real t,
+        Geom::t_index btype)
+    {
+        return ULxy;
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>)
+    typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Inflow(
+        TU &ULxy, const TU &ULMeanXy,
+        index iCell, index iFace, int iG,
+        const TVec &uNorm, const TMat &normBase,
+        const Geom::tPoint &pPhysics, real t,
+        Geom::t_index btype)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        TU URxy = pBCHandler->GetValueFromID(btype);
+        if (pCLDriver)
+            URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);
+        // Note: removed dead code that checked bTypeEuler == BCFar (unreachable in BCIn branch)
+        if (settings.frameConstRotation.enabled)
+            TransformURotatingFrame(URxy, pPhysics, -1);
+        return URxy;
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>
+        ,
+        template <>)
+    typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_TotalConditionInflow(
+        TU &ULxy, const TU &ULMeanXy,
+        index iCell, index iFace, int iG,
+        const TVec &uNorm, const TMat &normBase,
+        const Geom::tPoint &pPhysics, real t,
+        Geom::t_index btype)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        TU URxy;
+        URxy.resizeLike(ULxy);
+
+        TU ULxyStatic = ULxy;
+        if (settings.frameConstRotation.enabled)
+            TransformURotatingFrame(ULxyStatic, pPhysics, 1);
+        TU ULxyPrimitive;
+        ULxyPrimitive.resizeLike(ULxy);
+        real gamma = settings.idealGasProperty.gamma;
+        Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
+        TVec v = ULxyStatic(Seq123).array() / ULxyStatic(0);
+        real vSqr = v.squaredNorm();
+        {
+            TU farPrimitive = pBCHandler->GetValueFromID(btype); // primitive passive scalar components like Nu
+
+            real pStag = pBCHandler->GetValueFromID(btype)(0);
+            real tStag = pBCHandler->GetValueFromID(btype)(1);
+            vSqr = std::min(vSqr, tStag * 2 * settings.idealGasProperty.CpGas * 0.95);
+            real tStatic = tStag - 0.5 * vSqr / (settings.idealGasProperty.CpGas);
+            real pStatic = pStag * std::pow(tStatic / tStag, gamma / (gamma - 1));
+            real rStatic = pStatic / (settings.idealGasProperty.Rgas * tStatic);
+            farPrimitive(0) = rStatic;
+            farPrimitive(Seq123) = pBCHandler->GetValueFromID(btype)(Seq234).normalized() * std::sqrt(vSqr);
+            farPrimitive(I4) = pStatic;
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
+        }
+        if (pCLDriver)
+            URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);
+        if (settings.frameConstRotation.enabled)
+            TransformURotatingFrame(URxy, pPhysics, -1);
         return URxy;
     }
 

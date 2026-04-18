@@ -313,7 +313,8 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixToJacobianLU -1");
     }
 
-    template <EulerModel model>
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, template <>)
     void EulerEvaluator<model>::UpdateLUSGSForward(
         real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &rhs,
@@ -322,6 +323,11 @@ namespace DNDS::Euler
         JacobianDiagBlock<nVarsFixed> &JDiag,
         ArrayDOFV<nVarsFixed> &uIncNew)
     {
+        // Deprecated: delegate to UpdateSGS with uIncIsZero.
+        // Note: callers pass uInc == uIncNew (aliased), but UpdateSGS requires
+        // uInc != uIncNew. We keep the original implementation for now to
+        // preserve this aliasing behavior. Migrate callers to use UpdateSGS
+        // with separate buffers instead.
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateLUSGSForward 1");
         int cnvars = nVars;
@@ -330,12 +336,10 @@ namespace DNDS::Euler
         for (index iScan = 0; iScan < nCellDist; iScan++)
         {
             index iCell = iScan;
-            iCell = iScan; // TODO: add rb-sor
 
             auto c2f = mesh->cell2face[iCell];
             TU uIncNewBuf(nVars);
             auto RHSI = rhs[iCell];
-            // std::cout << rhs[iCell](0) << std::endl;
             uIncNewBuf = RHSI;
 
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
@@ -348,26 +352,21 @@ namespace DNDS::Euler
                                 (iCellAtFace ? -1 : 1); // faces out
                 if (iCellOther != UnInitIndex)
                 {
-
-                    index iScanOther = iCellOther; // TODO: add rb-sor
+                    index iScanOther = iCellOther;
                     if (iScanOther < iScan)
                     {
-                        TU fInc;
                         TU uINCj = uInc[iCellOther];
                         TU uj = u[iCellOther];
                         this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
                         this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
 
-                        {
-                            fInc = fluxJacobian0_Right_Times_du(
-                                uj, u[iCell],
-                                unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                                Geom::BC_ID_INTERNAL, uINCj,
-                                lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                                iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                                // swap lambda0 and lambda4 if iCellAtFace==1
-                                settings.useRoeJacobian); //! always inner here
-                        }
+                        TU fInc = fluxJacobian0_Right_Times_du(
+                            uj, u[iCell],
+                            unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                            Geom::BC_ID_INTERNAL, uINCj,
+                            lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                            iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                            settings.useRoeJacobian);
 
                         uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
                                       (fInc);
@@ -395,10 +394,10 @@ namespace DNDS::Euler
             }
         }
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateLUSGSForward -1");
-        // exit(-1);
     }
 
-    template <EulerModel model>
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, template <>)
     void EulerEvaluator<model>::UpdateLUSGSBackward(
         real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &rhs,
@@ -407,6 +406,7 @@ namespace DNDS::Euler
         JacobianDiagBlock<nVarsFixed> &JDiag,
         ArrayDOFV<nVarsFixed> &uIncNew)
     {
+        // Deprecated: see UpdateLUSGSForward comment.
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateLUSGSBackward 1");
         int cnvars = nVars;
@@ -415,12 +415,10 @@ namespace DNDS::Euler
         for (index iScan = nCellDist - 1; iScan >= 0; iScan--)
         {
             index iCell = iScan;
-            iCell = iScan;
 
             auto c2f = mesh->cell2face[iCell];
             TU uIncNewBuf(cnvars);
-            uIncNewBuf.setZero(); // backward
-            auto RHSI = rhs[iCell];
+            uIncNewBuf.setZero();
 
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
@@ -433,25 +431,20 @@ namespace DNDS::Euler
                 if (iCellOther != UnInitIndex)
                 {
                     index iScanOther = iCellOther;
-                    if (iScanOther > iScan) // backward
+                    if (iScanOther > iScan)
                     {
-                        TU fInc;
                         TU uINCj = uInc[iCellOther];
                         TU uj = u[iCellOther];
                         this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
                         this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
 
-                        {
-
-                            fInc = fluxJacobian0_Right_Times_du(
-                                uj, u[iCell],
-                                unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
-                                Geom::BC_ID_INTERNAL, uINCj,
-                                lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                                iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                                // swap lambda0 and lambda4 if iCellAtFace==1
-                                settings.useRoeJacobian); //! always inner here
-                        }
+                        TU fInc = fluxJacobian0_Right_Times_du(
+                            uj, u[iCell],
+                            unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                            Geom::BC_ID_INTERNAL, uINCj,
+                            lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                            iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                            settings.useRoeJacobian);
 
                         uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
                                       (fInc);
@@ -472,7 +465,8 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &uInc,
         ArrayDOFV<nVarsFixed> &uIncNew,
         JacobianDiagBlock<nVarsFixed> &JDiag,
-        bool forward, bool gsUpdate, TU &sumInc)
+        bool forward, bool gsUpdate, TU &sumInc,
+        bool uIncIsZero)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "UpdateSGS 1");
@@ -514,6 +508,12 @@ namespace DNDS::Euler
                             TU fInc;
                             bool iCellOtherIsThisPart = iScanStart <= iCellOther && iCellOther < iScanEnd;
                             bool gsUseNew = gsUpdate && iCellOtherIsThisPart && (forward ? (iCellOther < iCell) : (iCellOther > iCell));
+
+                            // When uInc is known to be zero, skip flux for not-yet-processed
+                            // neighbours whose increment is still zero (LUSGS optimisation).
+                            if (uIncIsZero && !gsUseNew)
+                                continue;
+
                             TU uINCj = gsUseNew ? uIncNew[iCellOther] : uInc[iCellOther];
                             TU uj = u[iCellOther];
                             this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
@@ -849,7 +849,7 @@ namespace DNDS::Euler
                         real muRef = settings.idealGasProperty.muGas;
                         real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * u[iCell](0));
                         real mufPhy1 = muEff(u[iCell], T);
-                        real rhoOmegaaaWall = mufPhy1 / sqr(d) * 800 * 0.1;
+                        real rhoOmegaaaWall = mufPhy1 / sqr(d) * RANS::kWallOmegaCoeff * 0.1;
 
                         real rhoOmegaaaNew = std::max(rhoOmegaaaWall, u[iCell](I4 + 2));
                         real rhoOmegaaaOld = u[iCell](I4 + 2);
@@ -1507,10 +1507,10 @@ namespace DNDS::Euler
                 recBase = (quadBase * uRecBase).rowwise() + u[iCell].transpose();
                 if (recBase(EigenAll, 0).minCoeff() < rhoEps) // TODO: add relaxation to eps values
                     return false;
-                if constexpr (model == NS_SA || model == NS_SA_3D)
+                if constexpr (Traits::hasSA)
                     if (recBase(EigenAll, I4 + 1).minCoeff() < rhoEps)
                         return false;
-                if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+                if constexpr (Traits::has2EQ)
                     if (recBase(EigenAll, I4 + 1).minCoeff() < rhoEps || recBase(EigenAll, I4 + 2).minCoeff() < rhoEps)
                         return false;
                 Eigen::Vector<real, Eigen::Dynamic> ek =
@@ -1547,7 +1547,7 @@ namespace DNDS::Euler
                     if (recInc(iG, 0) < 0) // negative increment
                         theta1 = std::min(theta1, (recBase(iG, 0) - rhoEps) / (-recInc(iG, 0) + verySmallReal));
 #ifdef USE_NS_SA_NUT_REDUCED_ORDER
-            if constexpr (model == NS_SA || model == NS_SA_3D)
+            if constexpr (Traits::hasSA)
             {
                 static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
                 Eigen::Vector<real, Eigen::Dynamic> v1S = recInc(EigenAll, I4 + 1) + recBase(EigenAll, I4 + 1);
@@ -1560,7 +1560,7 @@ namespace DNDS::Euler
                                 ;
             }
 #endif
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            if constexpr (Traits::has2EQ)
             {
                 real thetaC = 1;
                 static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
@@ -1584,7 +1584,7 @@ namespace DNDS::Euler
                 }
             }
 
-            if constexpr (model == NS_SA or model == NS_SA_3D or model == NS_2EQ or model == NS_2EQ_3D)
+            if constexpr (Traits::hasRANS)
                 recInc(EigenAll, Seq01234) *= theta1; // to leave SA unchanged
             else
                 recInc *= theta1;
@@ -1745,7 +1745,7 @@ namespace DNDS::Euler
             if (inc(0) < 0) // not < rhoEps!!!
                 alphaRho = std::min(1.0, (u[iCell](0) - relaxedRho) / (-inc(0) - smallReal * inc(0)));
             DNDS_assert(alphaRho >= 0 && alphaRho <= 1);
-            if constexpr (model == NS_SA || model == NS_SA_3D)
+            if constexpr (Traits::hasSA)
             {
                 // ** ! currently do not mass - fix for SA
                 // static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
@@ -1762,7 +1762,7 @@ namespace DNDS::Euler
                 //                         (u[iCell](I4 + 1) - newu5) / (-inc(I4 + 1) - smallReal * inc(I4 + 1)));
                 // }
             }
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            if constexpr (Traits::has2EQ)
             {
                 // static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
                 // static real v2Eps = smallReal * settings.refUPrim(I4 + 2);
@@ -1885,14 +1885,14 @@ namespace DNDS::Euler
                 // DNDS_assert(cellRHSAlpha[iCell](0) == alphaMin);
                 cellRHSAlpha[iCell](0) = alphaMin;
             }
-            if constexpr (model == NS_SA || model == NS_SA_3D)
+            if constexpr (Traits::hasSA)
             {
                 // ** ! currently do not mass - fix for SA
                 // static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
                 // if (uNew(I4 + 1) < v1Eps)
                 //     cellRHSAlpha[iCell](0) = alphaMin;
             }
-            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            if constexpr (Traits::has2EQ)
             {
                 // static real v1Eps = smallReal * settings.refUPrim(I4 + 1);
                 // static real v2Eps = smallReal * settings.refUPrim(I4 + 2);
