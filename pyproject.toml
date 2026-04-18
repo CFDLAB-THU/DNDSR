@@ -29,10 +29,13 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "DNDSR"
-version = "0.0.0"
+dynamic = ["version"]
 
 
 [tool.scikit-build]
+metadata.version.provider = "version_provider"
+metadata.version.provider-path = "cmake"
+
 cmake.minimum-version = "3.21"
 cmake.build-type = "Release"
 build.targets = [

@@ -54,20 +54,30 @@ set(DNDS_GENERATE_COMPILE_COMMANDS OFF CACHE BOOL "generate proper compile_comma
 set(BUILD_SHARED_LIBS ON CACHE BOOL "set by DNDS, not used for now")
 
 # -------------------------------------------------------------------
-# Record commit hash
+# Record commit hash (uses DNDS_VERSION_COMMIT from DndsVersion.cmake)
 # -------------------------------------------------------------------
 if(DNDS_RECORD_COMMIT)
-    execute_process(COMMAND git rev-parse HEAD OUTPUT_FILE ${CMAKE_BINARY_DIR}/commitID.txt WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} TIMEOUT 120 RESULT_VARIABLE RET)
-    message(STATUS "git rev-parse returned ${RET}")
-    if(NOT RET EQUAL 0)
-        message(WARNING "git rev-parse failed")
-        set(DNDS_RECORDED_COMMIT_HASH "UNKNOWN" CACHE INTERNAL  "Project Public Current Commit Hash")
+    # Full hash for backward compat (some targets compile-define it).
+    # DndsVersion.cmake provides the short hash; get the full one too.
+    find_package(Git QUIET)
+    if(GIT_FOUND)
+        execute_process(
+            COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
+            WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+            OUTPUT_VARIABLE DNDS_RECORDED_COMMIT_HASH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+            RESULT_VARIABLE _ret
+        )
+        if(NOT _ret EQUAL 0)
+            set(DNDS_RECORDED_COMMIT_HASH "UNKNOWN")
+        endif()
     else()
-        file(READ "${CMAKE_BINARY_DIR}/commitID.txt" DNDS_RECORDED_COMMIT_HASH)
-        string(STRIP ${DNDS_RECORDED_COMMIT_HASH} DNDS_RECORDED_COMMIT_HASH)
-        set(DNDS_RECORDED_COMMIT_HASH ${DNDS_RECORDED_COMMIT_HASH} CACHE INTERNAL  "Project Public Current Commit Hash")
-        message(STATUS "current commit id: ${DNDS_RECORDED_COMMIT_HASH}")
+        set(DNDS_RECORDED_COMMIT_HASH "UNKNOWN")
     endif()
+    set(DNDS_RECORDED_COMMIT_HASH "${DNDS_RECORDED_COMMIT_HASH}" CACHE INTERNAL
+        "Project Public Current Commit Hash")
+    message(STATUS "current commit id: ${DNDS_RECORDED_COMMIT_HASH}")
 endif()
 
 # -------------------------------------------------------------------

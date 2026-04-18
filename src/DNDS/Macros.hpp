@@ -53,6 +53,10 @@ static const std::string DNDS_Defines_state =
 #    define DNDS_CURRENT_COMMIT_HASH UNKNOWN
 #endif
 
+#ifndef DNDS_VERSION_STRING
+#    define DNDS_VERSION_STRING "unknown"
+#endif
+
 #define DNDS_MACRO_TO_STRING(V) __DNDS_str(V)
 #define __DNDS_str(V) #V
 

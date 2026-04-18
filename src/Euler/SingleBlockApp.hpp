@@ -40,7 +40,7 @@ namespace DNDS::Euler
         std::string confJson = "../cases/"s + getSingleBlockAppName(model) + "_config.json";
         std::vector<std::string> overwriteKeys, overwriteValues;
 
-        argparse::ArgumentParser mainParser(getSingleBlockAppName(model), "version"s + " commit "s + DNDS_MACRO_TO_STRING(DNDS_CURRENT_COMMIT_HASH));
+        argparse::ArgumentParser mainParser(getSingleBlockAppName(model), DNDS_VERSION_STRING);
         std::string read_configPath;
         if (getnVarsFixed(model) == DynamicSize)
             mainParser.add_argument("field_n_variables").default_value<int>(5).scan<'i', int>();
@@ -60,7 +60,7 @@ namespace DNDS::Euler
             .default_value(false);
 
         RegisterSignalHandler();
-        GetSetVersionName(DNDS_MACRO_TO_STRING(DNDS_CURRENT_COMMIT_HASH));
+        GetSetVersionName(DNDS_VERSION_STRING);
 
         try
         {

@@ -30,7 +30,15 @@ endif()
 
 
 # ##########################################
-project(DNDSR LANGUAGES CXX) #! need to be in front of find_package(MPI)
+# Read the base version before project() so we can pass it.
+# DndsVersion.cmake needs PROJECT_SOURCE_DIR which is not set yet,
+# so we use CMAKE_CURRENT_SOURCE_DIR instead.
+set(PROJECT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")  # temporary, project() overrides
+include(cmake/DndsVersion.cmake)
+
+project(DNDSR
+    VERSION ${DNDS_VERSION_BASE}
+    LANGUAGES CXX) #! need to be in front of find_package(MPI)
 enable_language(C) #! building C sub-projects
 
 # Only set a default CMAKE_INSTALL_PREFIX if the user has not specified one.
