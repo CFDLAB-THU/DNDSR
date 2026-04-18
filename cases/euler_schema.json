@@ -1,0 +1,2570 @@
+{
+    "type": "object",
+    "description": "DNDSR euler configuration",
+    "properties": {
+        "timeMarchControl": {
+            "type": "object",
+            "description": "Time marching settings",
+            "properties": {
+                "dtImplicit": {
+                    "type": "number",
+                    "default": 1e+100,
+                    "description": "Max implicit time step; 1e100 for steady",
+                    "minimum": 0.0
+                },
+                "dtImplicitMin": {
+                    "type": "number",
+                    "default": 0.0,
+                    "description": "Minimum implicit time step",
+                    "minimum": 0.0
+                },
+                "nTimeStep": {
+                    "type": "integer",
+                    "default": 1000000,
+                    "description": "Max number of time steps",
+                    "minimum": 1.0
+                },
+                "steadyQuit": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Quit on steady convergence"
+                },
+                "useRestart": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Initialize from restart file"
+                },
+                "useImplicitPP": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Use implicit positivity-preserving"
+                },
+                "rhsFPPMode": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "RHS flux-positivity-preserving mode"
+                },
+                "rhsFPPScale": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "RHS FPP scaling factor"
+                },
+                "rhsFPPRelax": {
+                    "type": "number",
+                    "default": 0.9,
+                    "description": "RHS FPP relaxation factor",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "incrementPPRelax": {
+                    "type": "number",
+                    "default": 0.9,
+                    "description": "Increment PP relaxation factor",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "odeCode": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "ODE integrator code"
+                },
+                "tEnd": {
+                    "type": "number",
+                    "default": 3e+200,
+                    "description": "End time for unsteady simulation"
+                },
+                "odeSetting1": {
+                    "type": "number",
+                    "default": 0.0,
+                    "description": "ODE parameter 1"
+                },
+                "odeSetting2": {
+                    "type": "number",
+                    "default": 0.0,
+                    "description": "ODE parameter 2"
+                },
+                "odeSetting3": {
+                    "type": "number",
+                    "default": 0.0,
+                    "description": "ODE parameter 3"
+                },
+                "odeSetting4": {
+                    "type": "number",
+                    "default": 0.0,
+                    "description": "ODE parameter 4"
+                },
+                "odeSettingsExtra": {
+                    "description": "Extra ODE integrator settings (opaque JSON)"
+                },
+                "partitionMeshOnly": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Only partition mesh, then exit"
+                },
+                "dtIncreaseLimit": {
+                    "type": "number",
+                    "default": 2.0,
+                    "description": "Max factor for dt increase per step",
+                    "minimum": 1.0
+                },
+                "dtIncreaseAfterCount": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Steps before dt increase allowed",
+                    "minimum": 0.0
+                },
+                "dtCFLLimitScale": {
+                    "type": "number",
+                    "default": 1e+100,
+                    "description": "CFL-based dt limit scale"
+                },
+                "useDtPPLimit": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Use positivity-preserving dt limiter"
+                },
+                "dtPPLimitRelax": {
+                    "type": "number",
+                    "default": 0.8,
+                    "description": "PP dt limiter relaxation",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "dtPPLimitScale": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "PP dt limiter scale",
+                    "minimum": 0.0
+                }
+            }
+        },
+        "implicitReconstructionControl": {
+            "type": "object",
+            "description": "Implicit reconstruction settings",
+            "properties": {
+                "useExplicit": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Use explicit reconstruction (no implicit)"
+                },
+                "nInternalRecStep": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Number of internal reconstruction sub-steps",
+                    "minimum": 1.0
+                },
+                "zeroGrads": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Zero gradients before reconstruction"
+                },
+                "recLinearScheme": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Reconstruction linear solver: 0=SOR, 1=GMRES"
+                },
+                "nGmresSpace": {
+                    "type": "integer",
+                    "default": 5,
+                    "description": "GMRES Krylov subspace size for reconstruction",
+                    "minimum": 1.0
+                },
+                "nGmresIter": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "GMRES iterations for reconstruction",
+                    "minimum": 1.0
+                },
+                "gmresRecScale": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "GMRES reconstruction scaling mode"
+                },
+                "fpcgResetScheme": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "FPCG reset scheme"
+                },
+                "fpcgResetThres": {
+                    "type": "number",
+                    "default": 0.6,
+                    "description": "FPCG reset threshold",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "fpcgResetReport": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "FPCG reset report frequency"
+                },
+                "fpcgMaxPHistory": {
+                    "type": "integer",
+                    "default": 20,
+                    "description": "FPCG max preconditioner history",
+                    "minimum": 1.0
+                },
+                "recThreshold": {
+                    "type": "number",
+                    "default": 1e-05,
+                    "description": "Reconstruction convergence threshold",
+                    "minimum": 0.0
+                },
+                "nRecConsolCheck": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Console output interval for reconstruction",
+                    "minimum": 1.0
+                },
+                "nRecMultiplyForZeroedGrad": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Rec iteration multiplier when grad is zeroed",
+                    "minimum": 1.0
+                },
+                "storeRecInc": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Store reconstruction increment"
+                },
+                "dampRecIncDTau": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Damp reconstruction increment by dTau"
+                },
+                "zeroRecForSteps": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Zero reconstruction for N outer steps",
+                    "minimum": 0.0
+                },
+                "zeroRecForStepsInternal": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Zero reconstruction for N internal steps",
+                    "minimum": 0.0
+                }
+            }
+        },
+        "outputControl": {
+            "type": "object",
+            "description": "Output settings",
+            "properties": {
+                "nConsoleCheck": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Console output interval (outer steps)",
+                    "minimum": 1.0
+                },
+                "nConsoleCheckInternal": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Console output interval (internal steps)",
+                    "minimum": 1.0
+                },
+                "consoleOutputMode": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Console output mode: 0=basic, 1=wall force"
+                },
+                "consoleOutputEveryFix": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Force console output every N fix iterations"
+                },
+                "consoleMainOutputFormat": {
+                    "type": "array",
+                    "default": [
+                        "=== Step {termBold}[{step:4d}]   ",
+                        "res {termBold}{termRed}{resRel:.3e}{termReset}   ",
+                        "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   ",
+                        "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"
+                    ],
+                    "description": "Format strings for console output lines"
+                },
+                "consoleMainOutputFormatInternal": {
+                    "type": "array",
+                    "default": [
+                        "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   ",
+                        "res {termRed}{resRel:.3e}{termReset}   ",
+                        "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
+                        "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"
+                    ],
+                    "description": "Format strings for internal-step console output"
+                },
+                "logfileOutputTitles": {
+                    "type": "array",
+                    "default": [
+                        "step",
+                        "iStep",
+                        "iterAll",
+                        "iter",
+                        "tSimu",
+                        "res",
+                        "curDtImplicit",
+                        "curDtMin",
+                        "CFLNow",
+                        "nLimInc",
+                        "alphaMinInc",
+                        "nLimBeta",
+                        "minBeta",
+                        "nLimAlpha",
+                        "minAlpha",
+                        "tWall",
+                        "telapsed",
+                        "trec",
+                        "trhs",
+                        "tcomm",
+                        "tLim",
+                        "tLimiterA",
+                        "tLimiterB",
+                        "fluxWall",
+                        "CL",
+                        "CD",
+                        "AoA"
+                    ],
+                    "description": "Column titles for CSV log file"
+                },
+                "nPrecisionLog": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Log file floating-point precision",
+                    "minimum": 1.0
+                },
+                "dataOutAtInit": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Output data at initialization"
+                },
+                "restartOutAtInit": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Output restart at initialization"
+                },
+                "nDataOut": {
+                    "type": "integer",
+                    "default": 10000,
+                    "description": "Data output interval (outer steps)",
+                    "minimum": 1.0
+                },
+                "nDataOutC": {
+                    "type": "integer",
+                    "default": 50,
+                    "description": "Data output interval (convergence steps)",
+                    "minimum": 1.0
+                },
+                "nDataOutInternal": {
+                    "type": "integer",
+                    "default": 10000,
+                    "description": "Data output interval (internal steps)",
+                    "minimum": 1.0
+                },
+                "nDataOutCInternal": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Data output interval (internal convergence)"
+                },
+                "nRestartOut": {
+                    "type": "integer",
+                    "default": 2147483647,
+                    "description": "Restart output interval (outer steps)"
+                },
+                "nRestartOutC": {
+                    "type": "integer",
+                    "default": 2147483647,
+                    "description": "Restart output interval (convergence steps)"
+                },
+                "nRestartOutInternal": {
+                    "type": "integer",
+                    "default": 2147483647,
+                    "description": "Restart output interval (internal steps)"
+                },
+                "nRestartOutCInternal": {
+                    "type": "integer",
+                    "default": 2147483647,
+                    "description": "Restart output interval (internal convergence)"
+                },
+                "nTimeAverageOut": {
+                    "type": "integer",
+                    "default": 2147483647,
+                    "description": "Time-average output interval (outer steps)"
+                },
+                "nTimeAverageOutC": {
+                    "type": "integer",
+                    "default": 2147483647,
+                    "description": "Time-average output interval (convergence steps)"
+                },
+                "tDataOut": {
+                    "type": "number",
+                    "default": 3e+200,
+                    "description": "Output data at simulation time interval"
+                },
+                "lazyCoverDataOutput": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Overwrite previous data output files"
+                },
+                "useCollectiveTimer": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Use collective MPI timer for profiling"
+                }
+            }
+        },
+        "implicitCFLControl": {
+            "type": "object",
+            "description": "Implicit CFL settings",
+            "properties": {
+                "CFL": {
+                    "type": "number",
+                    "default": 10.0,
+                    "description": "CFL number for implicit time stepping",
+                    "minimum": 0.0
+                },
+                "nForceLocalStartStep": {
+                    "type": "integer",
+                    "default": 2147483647,
+                    "description": "Step to force local time stepping",
+                    "minimum": 0.0
+                },
+                "nCFLRampStart": {
+                    "type": "integer",
+                    "default": 2147483647,
+                    "description": "Step to begin CFL ramping",
+                    "minimum": 0.0
+                },
+                "nCFLRampLength": {
+                    "type": "integer",
+                    "default": 2147483647,
+                    "description": "Number of steps for CFL ramp",
+                    "minimum": 1.0
+                },
+                "CFLRampEnd": {
+                    "type": "number",
+                    "default": 0.0,
+                    "description": "CFL value at end of ramp"
+                },
+                "useLocalDt": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Use local (vs uniform) time step"
+                },
+                "nSmoothDTau": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Smoothing passes for local dTau",
+                    "minimum": 0.0
+                },
+                "RANSRelax": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "RANS equation under-relaxation factor",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                }
+            }
+        },
+        "convergenceControl": {
+            "type": "object",
+            "description": "Convergence monitoring settings",
+            "properties": {
+                "nTimeStepInternal": {
+                    "type": "integer",
+                    "default": 20,
+                    "description": "Max internal iterations per time step (0 = unlimited)",
+                    "minimum": 0.0
+                },
+                "nTimeStepInternalMin": {
+                    "type": "integer",
+                    "default": 5,
+                    "description": "Min internal iterations per time step",
+                    "minimum": 0.0
+                },
+                "nAnchorUpdate": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Anchor update frequency",
+                    "minimum": 1.0
+                },
+                "nAnchorUpdateStart": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Step to start anchor updates",
+                    "minimum": 0.0
+                },
+                "rhsThresholdInternal": {
+                    "type": "number",
+                    "default": 1e-10,
+                    "description": "RHS convergence threshold for internal loop",
+                    "minimum": 0.0
+                },
+                "res_base": {
+                    "type": "number",
+                    "default": 0.0,
+                    "description": "Residual base value (0=auto)"
+                },
+                "resBaseType": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Residual base type: 0=default, 1=rhs-based for unsteady"
+                },
+                "mergeMultiResidual": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Merge stage residuals for multi-stage: 0=off"
+                },
+                "normOrd": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Residual norm order (1=L1, 2=L2, etc.)",
+                    "minimum": 1.0
+                },
+                "useVolWiseResidual": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Volume-weighted residual"
+                },
+                "useCLDriver": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable CL-driven AoA adaptation"
+                }
+            }
+        },
+        "dataIOControl": {
+            "type": "object",
+            "description": "Data I/O and restart settings",
+            "properties": {
+                "uniqueStamps": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Use unique output stamps per run"
+                },
+                "meshRotZ": {
+                    "type": "number",
+                    "default": 0.0,
+                    "description": "Mesh rotation around Z axis (degrees)"
+                },
+                "meshScale": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "Mesh coordinate scaling factor",
+                    "minimum": 0.0
+                },
+                "meshElevation": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Mesh order elevation: 0=none, 1=O1->O2"
+                },
+                "meshElevationInternalSmoother": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Elevation smoother: 0=local, 1=coupled"
+                },
+                "meshElevationIter": {
+                    "type": "integer",
+                    "default": 1000,
+                    "description": "Elevation smoothing iterations"
+                },
+                "meshElevationNSearch": {
+                    "type": "integer",
+                    "default": 30,
+                    "description": "Elevation RBF neighbor search count",
+                    "minimum": 1.0
+                },
+                "meshElevationRBFRadius": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "Elevation RBF support radius",
+                    "minimum": 0.0
+                },
+                "meshElevationRBFPower": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "Elevation RBF power parameter"
+                },
+                "meshElevationRBFKernel": {
+                    "type": "string",
+                    "default": "InversedDistanceA1",
+                    "description": "Elevation RBF kernel type"
+                },
+                "meshElevationMaxIncludedAngle": {
+                    "type": "number",
+                    "default": 15.0,
+                    "description": "Max included angle for elevation (degrees)"
+                },
+                "meshElevationRefDWall": {
+                    "type": "number",
+                    "default": 0.001,
+                    "description": "Reference wall distance for elevation",
+                    "minimum": 0.0
+                },
+                "meshElevationBoundaryMode": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Elevation boundary: 0=wall only, 1=wall+inviscid"
+                },
+                "meshDirectBisect": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Mesh bisection passes",
+                    "minimum": 0.0
+                },
+                "meshReorderCells": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Reorder cells: 0=natural, 1=reorder"
+                },
+                "meshBuildWallDist": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Build wall distance field: 0=no, 1=yes"
+                },
+                "meshWallDistOptions": {
+                    "type": "object",
+                    "default": {
+                        "subdivide_quad": 1,
+                        "method": 0,
+                        "wallDistExecution": 0,
+                        "minWallDist": 1e-10,
+                        "verbose": 0
+                    },
+                    "description": "Wall distance computation options"
+                },
+                "meshFormat": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Mesh format code"
+                },
+                "meshPartitionOptions": {
+                    "type": "object",
+                    "default": {
+                        "metisType": "KWAY",
+                        "metisUfactor": 20,
+                        "metisSeed": 0,
+                        "edgeWeightMethod": 0,
+                        "metisNcuts": 3
+                    },
+                    "description": "Mesh partitioning options"
+                },
+                "meshFile": {
+                    "type": "string",
+                    "default": "data/mesh/NACA0012_WIDE_H3.cgns",
+                    "description": "Input mesh file path"
+                },
+                "outPltName": {
+                    "type": "string",
+                    "default": "data/out/debugData_",
+                    "description": "Output plot file base name"
+                },
+                "outLogName": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Output log file base name (empty=use outPltName)"
+                },
+                "outRestartName": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Output restart file base name (empty=use outPltName)"
+                },
+                "outPltMode": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Output mode: 0=serial, 1=distributed"
+                },
+                "readMeshMode": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Read mesh mode: 0=serial CGNS, 1=distributed JSON"
+                },
+                "outPltTecplotFormat": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Output in Tecplot format"
+                },
+                "outPltVTKFormat": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Output in VTK XML format"
+                },
+                "outPltVTKHDFFormat": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Output in VTK HDF format"
+                },
+                "outAtPointData": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Output point-interpolated data"
+                },
+                "outAtCellData": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Output cell-centered data"
+                },
+                "nASCIIPrecision": {
+                    "type": "integer",
+                    "default": 5,
+                    "description": "ASCII output floating-point precision",
+                    "minimum": 1.0
+                },
+                "vtuFloatEncodeMode": {
+                    "type": "string",
+                    "default": "binary",
+                    "description": "VTU float encoding: binary or ascii",
+                    "enum": [
+                        "binary",
+                        "ascii"
+                    ]
+                },
+                "hdfChunkSize": {
+                    "type": "integer",
+                    "default": 32768,
+                    "description": "HDF5 chunk size for output",
+                    "minimum": 0.0
+                },
+                "hdfDeflateLevel": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "HDF5 deflate compression level",
+                    "minimum": 0.0,
+                    "maximum": 9.0
+                },
+                "hdfCollOnMeta": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "HDF5 collective I/O on metadata"
+                },
+                "hdfCollOnData": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "HDF5 collective I/O on data arrays"
+                },
+                "outVolumeData": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Output volume data"
+                },
+                "outBndData": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Output boundary data"
+                },
+                "outCellScalarNames": {
+                    "type": "array",
+                    "default": [],
+                    "description": "Additional cell scalar names to output"
+                },
+                "serializerSaveURec": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Save reconstruction in restart"
+                },
+                "allowAsyncPrintData": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Allow asynchronous data output"
+                },
+                "rectifyNearPlane": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Rectify nodes near planes: bitmask 1=x,2=y,4=z"
+                },
+                "rectifyNearPlaneThres": {
+                    "type": "number",
+                    "default": 1e-10,
+                    "description": "Threshold for near-plane rectification",
+                    "minimum": 0.0
+                },
+                "restartWriter": {
+                    "type": "object",
+                    "description": "Restart file serializer settings",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "default": "JSON",
+                            "description": "Serializer backend: \"JSON\" or \"H5\"",
+                            "enum": [
+                                "JSON",
+                                "H5"
+                            ]
+                        },
+                        "hdfDeflateLevel": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "HDF5 deflate compression level",
+                            "minimum": 0.0,
+                            "maximum": 9.0
+                        },
+                        "hdfChunkSize": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "HDF5 chunk size (0=auto)",
+                            "minimum": 0.0
+                        },
+                        "hdfCollOnData": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "HDF5 collective I/O on data arrays"
+                        },
+                        "hdfCollOnMeta": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "HDF5 collective I/O on metadata"
+                        },
+                        "jsonBinaryDeflateLevel": {
+                            "type": "integer",
+                            "default": 5,
+                            "description": "JSON binary deflate level",
+                            "minimum": 0.0,
+                            "maximum": 9.0
+                        },
+                        "jsonUseCodecOnUInt8": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Apply codec on uint8 arrays in JSON"
+                        }
+                    }
+                },
+                "meshPartitionedWriter": {
+                    "type": "object",
+                    "description": "Partitioned mesh serializer settings",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "default": "JSON",
+                            "description": "Serializer backend: \"JSON\" or \"H5\"",
+                            "enum": [
+                                "JSON",
+                                "H5"
+                            ]
+                        },
+                        "hdfDeflateLevel": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "HDF5 deflate compression level",
+                            "minimum": 0.0,
+                            "maximum": 9.0
+                        },
+                        "hdfChunkSize": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "HDF5 chunk size (0=auto)",
+                            "minimum": 0.0
+                        },
+                        "hdfCollOnData": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "HDF5 collective I/O on data arrays"
+                        },
+                        "hdfCollOnMeta": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "HDF5 collective I/O on metadata"
+                        },
+                        "jsonBinaryDeflateLevel": {
+                            "type": "integer",
+                            "default": 5,
+                            "description": "JSON binary deflate level",
+                            "minimum": 0.0,
+                            "maximum": 9.0
+                        },
+                        "jsonUseCodecOnUInt8": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Apply codec on uint8 arrays in JSON"
+                        }
+                    }
+                },
+                "meshPartitionedReaderType": {
+                    "type": "string",
+                    "default": "JSON",
+                    "description": "Partitioned mesh reader type",
+                    "enum": [
+                        "JSON",
+                        "H5"
+                    ]
+                }
+            }
+        },
+        "boundaryDefinition": {
+            "type": "object",
+            "description": "Periodic boundary geometry",
+            "properties": {
+                "PeriodicTranslation1": {
+                    "type": "array",
+                    "default": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
+                    "description": "Periodic translation vector for pair 1"
+                },
+                "PeriodicTranslation2": {
+                    "type": "array",
+                    "default": [
+                        0.0,
+                        1.0,
+                        0.0
+                    ],
+                    "description": "Periodic translation vector for pair 2"
+                },
+                "PeriodicTranslation3": {
+                    "type": "array",
+                    "default": [
+                        0.0,
+                        0.0,
+                        1.0
+                    ],
+                    "description": "Periodic translation vector for pair 3"
+                },
+                "PeriodicRotationCent1": {
+                    "type": "array",
+                    "default": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "description": "Rotation center for periodic pair 1"
+                },
+                "PeriodicRotationCent2": {
+                    "type": "array",
+                    "default": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "description": "Rotation center for periodic pair 2"
+                },
+                "PeriodicRotationCent3": {
+                    "type": "array",
+                    "default": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "description": "Rotation center for periodic pair 3"
+                },
+                "PeriodicRotationEulerAngles1": {
+                    "type": "array",
+                    "default": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "description": "Rotation Euler angles (deg) for periodic pair 1"
+                },
+                "PeriodicRotationEulerAngles2": {
+                    "type": "array",
+                    "default": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "description": "Rotation Euler angles (deg) for periodic pair 2"
+                },
+                "PeriodicRotationEulerAngles3": {
+                    "type": "array",
+                    "default": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "description": "Rotation Euler angles (deg) for periodic pair 3"
+                },
+                "periodicTolerance": {
+                    "type": "number",
+                    "default": 1e-08,
+                    "description": "Tolerance for periodic node matching",
+                    "minimum": 0.0
+                }
+            }
+        },
+        "limiterControl": {
+            "type": "object",
+            "description": "Slope limiter settings",
+            "properties": {
+                "useLimiter": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable slope limiter"
+                },
+                "usePPRecLimiter": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable positivity-preserving reconstruction limiter"
+                },
+                "useViscousLimited": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Apply limiter to viscous reconstruction"
+                },
+                "smoothIndicatorProcedure": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Smooth indicator procedure index"
+                },
+                "limiterProcedure": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Limiter variant: 0=WBAP (V2), 1=CWBAP (V3)"
+                },
+                "nPartialLimiterStart": {
+                    "type": "integer",
+                    "default": 2147483647,
+                    "description": "Time step to begin partial limiting"
+                },
+                "nPartialLimiterStartLocal": {
+                    "type": "integer",
+                    "default": 2147483647,
+                    "description": "Time step to begin local partial limiting"
+                },
+                "preserveLimited": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Preserve limited reconstruction across steps"
+                },
+                "ppRecLimiterCompressToMean": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "PP limiter compresses toward cell mean"
+                }
+            }
+        },
+        "linearSolverControl": {
+            "type": "object",
+            "description": "Linear solver settings",
+            "properties": {
+                "jacobiCode": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Preconditioner: 0=jacobi, 1=GS, 2=ILU"
+                },
+                "sgsIter": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "SGS iteration count",
+                    "minimum": 0.0
+                },
+                "sgsWithRec": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Couple SGS with reconstruction"
+                },
+                "gmresCode": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Linear solver: 0=LUSGS, 1=GMRES, 2=LUSGS+GMRES"
+                },
+                "gmresScale": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "GMRES scaling: 0=none, 1=refU, 2=mean"
+                },
+                "nGmresSpace": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "GMRES Krylov subspace size",
+                    "minimum": 1.0
+                },
+                "nGmresIter": {
+                    "type": "integer",
+                    "default": 2,
+                    "description": "GMRES outer iterations",
+                    "minimum": 1.0
+                },
+                "nSgsConsoleCheck": {
+                    "type": "integer",
+                    "default": 100,
+                    "description": "Console check interval for SGS",
+                    "minimum": 1.0
+                },
+                "nGmresConsoleCheck": {
+                    "type": "integer",
+                    "default": 100,
+                    "description": "Console check interval for GMRES",
+                    "minimum": 1.0
+                },
+                "initWithLastURecInc": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Initialize GMRES with last uRec increment"
+                },
+                "multiGridLP": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Multi-grid levels (0=off)"
+                },
+                "multiGridLPInnerNIter": {
+                    "type": "integer",
+                    "default": 4,
+                    "description": "Multi-grid inner iterations",
+                    "minimum": 1.0
+                },
+                "multiGridLPStartIter": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Iteration to enable multi-grid",
+                    "minimum": 0.0
+                },
+                "multiGridLPInnerNSee": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Multi-grid inner console see interval",
+                    "minimum": 1.0
+                },
+                "coarseGridLinearSolverControlList": {
+                    "type": "object",
+                    "description": "Per-level coarse grid linear solver settings",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "jacobiCode": {
+                                "type": "integer",
+                                "default": 0,
+                                "description": "Preconditioner: 0=jacobi, 1=GS, 2=ILU"
+                            },
+                            "sgsIter": {
+                                "type": "integer",
+                                "default": 0,
+                                "description": "SGS iteration count",
+                                "minimum": 0.0
+                            },
+                            "gmresCode": {
+                                "type": "integer",
+                                "default": 0,
+                                "description": "Linear solver: 0=LUSGS, 1=GMRES, 2=LUSGS+GMRES"
+                            },
+                            "gmresScale": {
+                                "type": "integer",
+                                "default": 0,
+                                "description": "GMRES scaling: 0=none, 1=refU, 2=mean"
+                            },
+                            "nGmresIter": {
+                                "type": "integer",
+                                "default": 2,
+                                "description": "GMRES iterations",
+                                "minimum": 1.0
+                            },
+                            "nSgsConsoleCheck": {
+                                "type": "integer",
+                                "default": 100,
+                                "description": "Console check interval for SGS",
+                                "minimum": 1.0
+                            },
+                            "nGmresConsoleCheck": {
+                                "type": "integer",
+                                "default": 100,
+                                "description": "Console check interval for GMRES",
+                                "minimum": 1.0
+                            },
+                            "multiGridNIter": {
+                                "type": "integer",
+                                "default": -1,
+                                "description": "Multi-grid pre-smooth iterations (-1=auto)"
+                            },
+                            "multiGridNIterPost": {
+                                "type": "integer",
+                                "default": 0,
+                                "description": "Multi-grid post-smooth iterations",
+                                "minimum": 0.0
+                            },
+                            "centralSmoothInputResidual": {
+                                "type": "integer",
+                                "default": 0,
+                                "description": "Smooth input residual on coarse grid"
+                            }
+                        }
+                    }
+                },
+                "directPrecControl": {
+                    "type": "object",
+                    "description": "Direct preconditioner settings",
+                    "properties": {
+                        "useDirectPrec": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Enable direct preconditioner"
+                        },
+                        "iluCode": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "ILU fill level: 0=no fill, -1=complete"
+                        },
+                        "orderingCode": {
+                            "type": "integer",
+                            "default": -2147483648,
+                            "description": "Ordering: INT32_MIN=auto, 0=natural, 1=metis, 2=MMD"
+                        }
+                    }
+                }
+            }
+        },
+        "timeAverageControl": {
+            "type": "object",
+            "description": "Time averaging settings",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable time-averaging of solution fields"
+                }
+            }
+        },
+        "others": {
+            "type": "object",
+            "description": "Miscellaneous settings",
+            "properties": {
+                "nFreezePassiveInner": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Freeze passive scalars for N inner steps",
+                    "minimum": 0.0
+                },
+                "axisSymmetric": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Axisymmetric mode: 0=off"
+                },
+                "printRecMatrix": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Print reconstruction matrix to file"
+                },
+                "recMatrixWriter": {
+                    "type": "object",
+                    "description": "Serializer for reconstruction matrix output",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "default": "JSON",
+                            "description": "Serializer backend: \"JSON\" or \"H5\"",
+                            "enum": [
+                                "JSON",
+                                "H5"
+                            ]
+                        },
+                        "hdfDeflateLevel": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "HDF5 deflate compression level",
+                            "minimum": 0.0,
+                            "maximum": 9.0
+                        },
+                        "hdfChunkSize": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "HDF5 chunk size (0=auto)",
+                            "minimum": 0.0
+                        },
+                        "hdfCollOnData": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "HDF5 collective I/O on data arrays"
+                        },
+                        "hdfCollOnMeta": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "HDF5 collective I/O on metadata"
+                        },
+                        "jsonBinaryDeflateLevel": {
+                            "type": "integer",
+                            "default": 5,
+                            "description": "JSON binary deflate level",
+                            "minimum": 0.0,
+                            "maximum": 9.0
+                        },
+                        "jsonUseCodecOnUInt8": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Apply codec on uint8 arrays in JSON"
+                        }
+                    }
+                }
+            }
+        },
+        "restartState": {
+            "type": "object",
+            "description": "Restart checkpoint state",
+            "properties": {
+                "iStep": {
+                    "type": "integer",
+                    "default": -1,
+                    "description": "Restart step index"
+                },
+                "iStepInternal": {
+                    "type": "integer",
+                    "default": -1,
+                    "description": "Restart internal step index"
+                },
+                "odeCodePrev": {
+                    "type": "integer",
+                    "default": -1,
+                    "description": "Previous ODE code for restart"
+                },
+                "lastRestartFile": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Path to last restart file"
+                },
+                "otherRestartFile": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Path to alternate restart file"
+                },
+                "otherRestartStoreDim": {
+                    "type": "array",
+                    "default": [
+                        0
+                    ],
+                    "description": "Dimension mapping for alternate restart"
+                }
+            }
+        },
+        "eulerSettings": {
+            "type": "object",
+            "description": "Euler evaluator physics settings",
+            "properties": {
+                "useScalarJacobian": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Use scalar Jacobian approximation"
+                },
+                "useRoeJacobian": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Use Roe-based Jacobian"
+                },
+                "noRsOnWall": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Disable Riemann solver on wall boundaries"
+                },
+                "noGRPOnWall": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Disable GRP on wall boundaries"
+                },
+                "ignoreSourceTerm": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Ignore source terms"
+                },
+                "direct2ndRecMethod": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Direct 2nd-order reconstruction method"
+                },
+                "specialBuiltinInitializer": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Special built-in initializer code"
+                },
+                "uRecAlphaCompressPower": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "uRec alpha compression power"
+                },
+                "uRecBetaCompressPower": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "uRec beta compression power"
+                },
+                "forceVolURecBeta": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Force volume uRec beta"
+                },
+                "ppEpsIsRelaxed": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Positivity-preserving epsilon is relaxed"
+                },
+                "RANSBottomLimit": {
+                    "type": "number",
+                    "default": 0.01,
+                    "description": "RANS variable bottom limit",
+                    "minimum": 0.0
+                },
+                "riemannSolverType": {
+                    "type": "string",
+                    "default": "Roe",
+                    "description": "Riemann solver type"
+                },
+                "riemannSolverTypeAux": {
+                    "type": "string",
+                    "default": "UnknownRS",
+                    "description": "Auxiliary Riemann solver type"
+                },
+                "riemannSolverTypeWall": {
+                    "type": "string",
+                    "default": "UnknownRS",
+                    "description": "Wall Riemann solver type"
+                },
+                "rsFixScale": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "Riemann solver entropy fix scale"
+                },
+                "rsIncFScale": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "Riemann solver increment flux scale"
+                },
+                "rsMeanValueEig": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Riemann solver mean-value eigenvalue mode"
+                },
+                "rsRotateScheme": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Riemann solver rotation scheme"
+                },
+                "minWallDist": {
+                    "type": "number",
+                    "default": 1e-12,
+                    "description": "Minimum wall distance clamp",
+                    "minimum": 0.0
+                },
+                "wallDistExection": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Wall distance execution mode: 0=parallel, 1=serial"
+                },
+                "wallDistRefineMax": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "Wall distance max refinement"
+                },
+                "wallDistScheme": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Wall distance computation scheme"
+                },
+                "wallDistCellLoadSize": {
+                    "type": "integer",
+                    "default": 32768,
+                    "description": "Wall distance cell load batch size",
+                    "minimum": 1.0
+                },
+                "wallDistIter": {
+                    "type": "integer",
+                    "default": 1000,
+                    "description": "Wall distance solver iterations",
+                    "minimum": 1.0
+                },
+                "wallDistLinSolver": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Wall distance linear solver: 0=jacobi, 1=gmres"
+                },
+                "wallDistResTol": {
+                    "type": "number",
+                    "default": 0.0001,
+                    "description": "Wall distance residual tolerance",
+                    "minimum": 0.0
+                },
+                "wallDistIterStart": {
+                    "type": "integer",
+                    "default": 100,
+                    "description": "Wall distance solver start iteration",
+                    "minimum": 0.0
+                },
+                "wallDistPoissonP": {
+                    "type": "integer",
+                    "default": 2,
+                    "description": "Wall distance Poisson equation power"
+                },
+                "wallDistDTauScale": {
+                    "type": "number",
+                    "default": 100.0,
+                    "description": "Wall distance pseudo-time scale",
+                    "minimum": 0.0
+                },
+                "wallDistNJacobiSweep": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Wall distance Jacobi sweep count",
+                    "minimum": 1.0
+                },
+                "SADESScale": {
+                    "type": "number",
+                    "default": 3e+200,
+                    "description": "SA-DES length scale"
+                },
+                "SADESMode": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "SA-DES mode"
+                },
+                "ransModel": {
+                    "type": "string",
+                    "default": "RANS_None",
+                    "description": "RANS turbulence model"
+                },
+                "ransUseQCR": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Use QCR correction for RANS"
+                },
+                "ransSARotCorrection": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "SA rotation correction"
+                },
+                "ransEigScheme": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "RANS eigenvalue scheme"
+                },
+                "ransForce2nd": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Force 2nd-order RANS"
+                },
+                "ransSource2nd": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "RANS source 2nd-order"
+                },
+                "source2nd": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Source term 2nd-order"
+                },
+                "usePrimGradInVisFlux": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Use primitive gradient in viscous flux"
+                },
+                "useSourceGradFixGG": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Use source gradient fix for Green-Gauss"
+                },
+                "nCentralSmoothStep": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Central smoothing steps",
+                    "minimum": 0.0
+                },
+                "centralSmoothEps": {
+                    "type": "number",
+                    "default": 0.5,
+                    "description": "Central smoothing epsilon"
+                },
+                "constMassForce": {
+                    "type": "array",
+                    "default": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "description": "Constant mass force vector (3D)"
+                },
+                "frameConstRotation": {
+                    "type": "object",
+                    "description": "Constant-rotation reference frame settings",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Enable constant-rotation reference frame"
+                        },
+                        "axis": {
+                            "type": "array",
+                            "default": [
+                                0.0,
+                                0.0,
+                                1.0
+                            ],
+                            "description": "Rotation axis (unit vector)"
+                        },
+                        "center": {
+                            "type": "array",
+                            "default": [
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "description": "Rotation center coordinates"
+                        },
+                        "rpm": {
+                            "type": "number",
+                            "default": 0.0,
+                            "description": "Rotational speed in RPM"
+                        }
+                    }
+                },
+                "cLDriverSettings": {
+                    "type": "object",
+                    "description": "CL driver settings",
+                    "properties": {
+                        "AOAInit": {
+                            "type": "number",
+                            "default": 0.0,
+                            "description": "Initial angle of attack (degrees)"
+                        },
+                        "AOAAxis": {
+                            "type": "string",
+                            "default": "z",
+                            "description": "Rotation axis for AoA",
+                            "enum": [
+                                "x",
+                                "y",
+                                "z"
+                            ]
+                        },
+                        "CL0Axis": {
+                            "type": "string",
+                            "default": "y",
+                            "description": "Lift force reference axis",
+                            "enum": [
+                                "x",
+                                "y",
+                                "z"
+                            ]
+                        },
+                        "CD0Axis": {
+                            "type": "string",
+                            "default": "x",
+                            "description": "Drag force reference axis",
+                            "enum": [
+                                "x",
+                                "y",
+                                "z"
+                            ]
+                        },
+                        "refArea": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "Reference area for force coefficients",
+                            "minimum": 0.0
+                        },
+                        "refDynamicPressure": {
+                            "type": "number",
+                            "default": 0.5,
+                            "description": "Reference dynamic pressure",
+                            "minimum": 0.0
+                        },
+                        "targetCL": {
+                            "type": "number",
+                            "default": 0.0,
+                            "description": "Target lift coefficient"
+                        },
+                        "CLIncrementRelax": {
+                            "type": "number",
+                            "default": 0.25,
+                            "description": "Under-relaxation for AoA increment",
+                            "minimum": 0.0,
+                            "maximum": 1.0
+                        },
+                        "thresholdTargetRatio": {
+                            "type": "number",
+                            "default": 0.5,
+                            "description": "Reduce CL threshold when near target",
+                            "minimum": 0.0,
+                            "maximum": 1.0
+                        },
+                        "nIterStartDrive": {
+                            "type": "integer",
+                            "default": 2147483647,
+                            "description": "Iteration to start CL driver",
+                            "minimum": 0.0
+                        },
+                        "nIterConvergeMin": {
+                            "type": "integer",
+                            "default": 50,
+                            "description": "Min iterations before CL convergence check",
+                            "minimum": 1.0
+                        },
+                        "CLconvergeThreshold": {
+                            "type": "number",
+                            "default": 0.001,
+                            "description": "CL convergence window tolerance",
+                            "minimum": 0.0
+                        },
+                        "CLconvergeWindow": {
+                            "type": "integer",
+                            "default": 10,
+                            "description": "Number of samples in CL convergence window",
+                            "minimum": 2.0
+                        },
+                        "CLconvergeLongWindow": {
+                            "type": "integer",
+                            "default": 100,
+                            "description": "Long window for converged-at-target exit",
+                            "minimum": 1.0
+                        },
+                        "CLconvergeLongThreshold": {
+                            "type": "number",
+                            "default": 0.0001,
+                            "description": "Long-window CL tolerance",
+                            "minimum": 0.0
+                        },
+                        "CLconvergeLongStrictAoA": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Reset long counter on AoA update"
+                        }
+                    }
+                },
+                "cLDriverBCNames": {
+                    "type": "array",
+                    "default": [],
+                    "description": "Boundary names for CL driver force integration"
+                },
+                "farFieldStaticValue": {
+                    "type": "array",
+                    "default": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        2.5
+                    ],
+                    "description": "Far-field static value vector (size = nVars)"
+                },
+                "boxInitializers": {
+                    "type": "array",
+                    "description": "Box region initializers",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "x0": {
+                                "type": "number",
+                                "default": 0.0,
+                                "description": "Box x-min"
+                            },
+                            "x1": {
+                                "type": "number",
+                                "default": 0.0,
+                                "description": "Box x-max"
+                            },
+                            "y0": {
+                                "type": "number",
+                                "default": 0.0,
+                                "description": "Box y-min"
+                            },
+                            "y1": {
+                                "type": "number",
+                                "default": 0.0,
+                                "description": "Box y-max"
+                            },
+                            "z0": {
+                                "type": "number",
+                                "default": 0.0,
+                                "description": "Box z-min"
+                            },
+                            "z1": {
+                                "type": "number",
+                                "default": 0.0,
+                                "description": "Box z-max"
+                            },
+                            "v": {
+                                "type": "array",
+                                "default": [],
+                                "description": "Initial value vector (size = nVars)"
+                            }
+                        }
+                    }
+                },
+                "planeInitializers": {
+                    "type": "array",
+                    "description": "Plane region initializers",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "a": {
+                                "type": "number",
+                                "default": 0.0,
+                                "description": "Plane normal x-component"
+                            },
+                            "b": {
+                                "type": "number",
+                                "default": 0.0,
+                                "description": "Plane normal y-component"
+                            },
+                            "c": {
+                                "type": "number",
+                                "default": 0.0,
+                                "description": "Plane normal z-component"
+                            },
+                            "h": {
+                                "type": "number",
+                                "default": 0.0,
+                                "description": "Plane offset"
+                            },
+                            "v": {
+                                "type": "array",
+                                "default": [],
+                                "description": "Initial value vector (size = nVars)"
+                            }
+                        }
+                    }
+                },
+                "exprtkInitializers": {
+                    "type": "array",
+                    "description": "Exprtk expression initializers",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "exprs": {
+                                "type": "array",
+                                "default": [],
+                                "description": "Expression lines (concatenated with newlines)"
+                            }
+                        }
+                    }
+                },
+                "idealGasProperty": {
+                    "type": "object",
+                    "description": "Ideal gas thermodynamic properties",
+                    "properties": {
+                        "gamma": {
+                            "type": "number",
+                            "default": 1.4,
+                            "description": "Ratio of specific heats",
+                            "minimum": 1.0
+                        },
+                        "Rgas": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "Specific gas constant",
+                            "minimum": 0.0
+                        },
+                        "muGas": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "Dynamic viscosity",
+                            "minimum": 0.0
+                        },
+                        "prGas": {
+                            "type": "number",
+                            "default": 0.72,
+                            "description": "Prandtl number",
+                            "minimum": 0.0
+                        },
+                        "TRef": {
+                            "type": "number",
+                            "default": 273.15,
+                            "description": "Reference temperature (K)"
+                        },
+                        "CSutherland": {
+                            "type": "number",
+                            "default": 110.4,
+                            "description": "Sutherland constant (K)"
+                        },
+                        "muModel": {
+                            "type": "integer",
+                            "default": 1,
+                            "description": "Viscosity model: 0=constant, 1=sutherland, 2=constant_nu"
+                        }
+                    }
+                }
+            }
+        },
+        "vfvSettings": {
+            "type": "object",
+            "description": "Variational reconstruction settings",
+            "properties": {
+                "maxOrder": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Polynomial degree of reconstruction",
+                    "minimum": 0.0
+                },
+                "intOrder": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "Global integration degree",
+                    "minimum": 0.0
+                },
+                "ignoreMeshGeometryDeficiency": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Ignore mesh geometry deficiency warnings"
+                },
+                "nIterCellSmoothScale": {
+                    "type": "integer",
+                    "default": 15,
+                    "description": "Cell smooth scale iterations",
+                    "minimum": 0.0
+                },
+                "intOrderVR": {
+                    "type": "integer",
+                    "default": -1,
+                    "description": "VR integration degree (<0 = use intOrder)"
+                },
+                "intOrderVRBC": {
+                    "type": "integer",
+                    "default": -2,
+                    "description": "VR BC integration degree (-1=intOrder, <-1=intOrderVR)"
+                },
+                "cacheDiffBase": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Cache base function values at quadrature points"
+                },
+                "cacheDiffBaseSize": {
+                    "type": "integer",
+                    "default": 255,
+                    "description": "Cached diff base size (dim+1)"
+                },
+                "jacobiRelax": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "VR SOR/Jacobi relaxation factor",
+                    "minimum": 0.0
+                },
+                "SORInstead": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Use SOR instead of relaxed Jacobi"
+                },
+                "smoothThreshold": {
+                    "type": "number",
+                    "default": 0.01,
+                    "description": "Smooth indicator threshold",
+                    "minimum": 0.0
+                },
+                "WBAP_nStd": {
+                    "type": "number",
+                    "default": 10.0,
+                    "description": "WBAP limiter n parameter",
+                    "minimum": 0.0
+                },
+                "normWBAP": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Use normWBAP limiter variant"
+                },
+                "limiterBiwayAlter": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Limiter biway alter: 0=wbap-L2, 1=minmod"
+                },
+                "subs2ndOrder": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "2nd order substitution: 0=vfv, 1=gauss, 2=LS, 11=GGMP"
+                },
+                "subs2ndOrderGGScheme": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "2nd order GG scheme: 0=no interp, 1=distance interp"
+                },
+                "svdTolerance": {
+                    "type": "number",
+                    "default": 0.0,
+                    "description": "SVD tolerance for reconstruction",
+                    "minimum": 0.0
+                },
+                "baseSettings": {
+                    "type": "object",
+                    "description": "Basis function settings",
+                    "properties": {
+                        "localOrientation": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Use local orientation for basis"
+                        },
+                        "anisotropicLengths": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Use anisotropic length scales"
+                        }
+                    }
+                },
+                "functionalSettings": {
+                    "type": "object",
+                    "description": "Functional/weight settings",
+                    "properties": {
+                        "scaleType": {
+                            "type": "string",
+                            "default": "BaryDiff",
+                            "description": "Functional scale type"
+                        },
+                        "scaleMultiplier": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "Functional scale multiplier",
+                            "minimum": 0.0
+                        },
+                        "dirWeightScheme": {
+                            "type": "string",
+                            "default": "Factorial",
+                            "description": "Directional weight scheme"
+                        },
+                        "dirWeightCombPowV": {
+                            "type": "integer",
+                            "default": 1,
+                            "description": "Directional weight combination power"
+                        },
+                        "manualDirWeights": {
+                            "type": "array",
+                            "default": [
+                                1.0,
+                                1.0,
+                                0.5,
+                                0.16666666666666666,
+                                0.041666666666666664
+                            ],
+                            "description": "Manual directional weights vector"
+                        },
+                        "geomWeightScheme": {
+                            "type": "string",
+                            "default": "GWNone",
+                            "description": "Geometric weight scheme"
+                        },
+                        "geomWeightPower": {
+                            "type": "number",
+                            "default": 0.5,
+                            "description": "Geometric weight power"
+                        },
+                        "geomWeightPower1": {
+                            "type": "number",
+                            "default": 0.0,
+                            "description": "Geometric weight power 1"
+                        },
+                        "geomWeightPower2": {
+                            "type": "number",
+                            "default": 0.0,
+                            "description": "Geometric weight power 2"
+                        },
+                        "useAnisotropicFunctional": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Use anisotropic functional"
+                        },
+                        "tanWeightScale": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "Tangential weight scale"
+                        },
+                        "anisotropicType": {
+                            "type": "string",
+                            "default": "InertiaCoord",
+                            "description": "Anisotropic functional type"
+                        },
+                        "inertiaWeightPower": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "Inertia weight power"
+                        },
+                        "geomWeightBias": {
+                            "type": "number",
+                            "default": 0.0,
+                            "description": "Geometric weight bias"
+                        },
+                        "greenGauss1Weight": {
+                            "type": "number",
+                            "default": 0.0,
+                            "description": "Green-Gauss type-1 weight"
+                        },
+                        "greenGauss1Bias": {
+                            "type": "number",
+                            "default": 0.5,
+                            "description": "Green-Gauss type-1 bias"
+                        },
+                        "greenGauss1Penalty": {
+                            "type": "number",
+                            "default": 0.0,
+                            "description": "Green-Gauss type-1 penalty"
+                        },
+                        "greenGaussSpacial": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "Green-Gauss spatial mode: 0=default, 1=uniform"
+                        }
+                    }
+                },
+                "bcWeight": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "Boundary condition weight",
+                    "minimum": 0.0
+                }
+            }
+        },
+        "bcSettings": {
+            "type": "array",
+            "description": "Boundary condition settings (per-BC array)",
+            "items": {
+                "oneOf": [
+                    {
+                        "type": "object",
+                        "description": "Flow BC: BCFar",
+                        "properties": {
+                            "type": {
+                                "const": "BCFar",
+                                "description": "Boundary condition type"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Boundary zone name"
+                            },
+                            "value": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "BC state vector (size = nVars)"
+                            },
+                            "frameOption": {
+                                "type": "integer",
+                                "description": "Reference frame option",
+                                "default": 0
+                            },
+                            "anchorOption": {
+                                "type": "integer",
+                                "description": "Anchor point option",
+                                "default": 0
+                            },
+                            "integrationOption": {
+                                "type": "integer",
+                                "description": "Integration option",
+                                "default": 0
+                            },
+                            "valueExtra": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "Extra BC values (e.g. anchor coordinates)"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "name",
+                            "value"
+                        ]
+                    },
+                    {
+                        "type": "object",
+                        "description": "Flow BC: BCOut",
+                        "properties": {
+                            "type": {
+                                "const": "BCOut",
+                                "description": "Boundary condition type"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Boundary zone name"
+                            },
+                            "value": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "BC state vector (size = nVars)"
+                            },
+                            "frameOption": {
+                                "type": "integer",
+                                "description": "Reference frame option",
+                                "default": 0
+                            },
+                            "anchorOption": {
+                                "type": "integer",
+                                "description": "Anchor point option",
+                                "default": 0
+                            },
+                            "integrationOption": {
+                                "type": "integer",
+                                "description": "Integration option",
+                                "default": 0
+                            },
+                            "valueExtra": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "Extra BC values (e.g. anchor coordinates)"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "name",
+                            "value"
+                        ]
+                    },
+                    {
+                        "type": "object",
+                        "description": "Flow BC: BCOutP",
+                        "properties": {
+                            "type": {
+                                "const": "BCOutP",
+                                "description": "Boundary condition type"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Boundary zone name"
+                            },
+                            "value": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "BC state vector (size = nVars)"
+                            },
+                            "frameOption": {
+                                "type": "integer",
+                                "description": "Reference frame option",
+                                "default": 0
+                            },
+                            "anchorOption": {
+                                "type": "integer",
+                                "description": "Anchor point option",
+                                "default": 0
+                            },
+                            "integrationOption": {
+                                "type": "integer",
+                                "description": "Integration option",
+                                "default": 0
+                            },
+                            "valueExtra": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "Extra BC values (e.g. anchor coordinates)"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "name",
+                            "value"
+                        ]
+                    },
+                    {
+                        "type": "object",
+                        "description": "Flow BC: BCIn",
+                        "properties": {
+                            "type": {
+                                "const": "BCIn",
+                                "description": "Boundary condition type"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Boundary zone name"
+                            },
+                            "value": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "BC state vector (size = nVars)"
+                            },
+                            "frameOption": {
+                                "type": "integer",
+                                "description": "Reference frame option",
+                                "default": 0
+                            },
+                            "anchorOption": {
+                                "type": "integer",
+                                "description": "Anchor point option",
+                                "default": 0
+                            },
+                            "integrationOption": {
+                                "type": "integer",
+                                "description": "Integration option",
+                                "default": 0
+                            },
+                            "valueExtra": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "Extra BC values (e.g. anchor coordinates)"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "name",
+                            "value"
+                        ]
+                    },
+                    {
+                        "type": "object",
+                        "description": "Flow BC: BCInPsTs",
+                        "properties": {
+                            "type": {
+                                "const": "BCInPsTs",
+                                "description": "Boundary condition type"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Boundary zone name"
+                            },
+                            "value": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "BC state vector (size = nVars)"
+                            },
+                            "frameOption": {
+                                "type": "integer",
+                                "description": "Reference frame option",
+                                "default": 0
+                            },
+                            "anchorOption": {
+                                "type": "integer",
+                                "description": "Anchor point option",
+                                "default": 0
+                            },
+                            "integrationOption": {
+                                "type": "integer",
+                                "description": "Integration option",
+                                "default": 0
+                            },
+                            "valueExtra": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "Extra BC values (e.g. anchor coordinates)"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "name",
+                            "value"
+                        ]
+                    },
+                    {
+                        "type": "object",
+                        "description": "Wall BC: BCWall",
+                        "properties": {
+                            "type": {
+                                "const": "BCWall",
+                                "description": "Boundary condition type"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Boundary zone name"
+                            },
+                            "value": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "BC state vector (optional except for BCWallIsothermal)"
+                            },
+                            "frameOption": {
+                                "type": "integer",
+                                "description": "Reference frame option",
+                                "default": 0
+                            },
+                            "integrationOption": {
+                                "type": "integer",
+                                "description": "Integration option",
+                                "default": 0
+                            },
+                            "specialOption": {
+                                "type": "integer",
+                                "description": "Special BC sub-type option",
+                                "default": 0
+                            },
+                            "valueExtra": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "Extra BC values"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "name"
+                        ]
+                    },
+                    {
+                        "type": "object",
+                        "description": "Wall BC: BCWallInvis",
+                        "properties": {
+                            "type": {
+                                "const": "BCWallInvis",
+                                "description": "Boundary condition type"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Boundary zone name"
+                            },
+                            "value": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "BC state vector (optional except for BCWallIsothermal)"
+                            },
+                            "frameOption": {
+                                "type": "integer",
+                                "description": "Reference frame option",
+                                "default": 0
+                            },
+                            "integrationOption": {
+                                "type": "integer",
+                                "description": "Integration option",
+                                "default": 0
+                            },
+                            "specialOption": {
+                                "type": "integer",
+                                "description": "Special BC sub-type option",
+                                "default": 0
+                            },
+                            "valueExtra": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "Extra BC values"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "name"
+                        ]
+                    },
+                    {
+                        "type": "object",
+                        "description": "Wall BC: BCWallIsothermal",
+                        "properties": {
+                            "type": {
+                                "const": "BCWallIsothermal",
+                                "description": "Boundary condition type"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Boundary zone name"
+                            },
+                            "value": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "BC state vector (optional except for BCWallIsothermal)"
+                            },
+                            "frameOption": {
+                                "type": "integer",
+                                "description": "Reference frame option",
+                                "default": 0
+                            },
+                            "integrationOption": {
+                                "type": "integer",
+                                "description": "Integration option",
+                                "default": 0
+                            },
+                            "specialOption": {
+                                "type": "integer",
+                                "description": "Special BC sub-type option",
+                                "default": 0
+                            },
+                            "valueExtra": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "Extra BC values"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "name",
+                            "value"
+                        ]
+                    },
+                    {
+                        "type": "object",
+                        "description": "Wall BC: BCSpecial",
+                        "properties": {
+                            "type": {
+                                "const": "BCSpecial",
+                                "description": "Boundary condition type"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Boundary zone name"
+                            },
+                            "value": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "BC state vector (optional except for BCWallIsothermal)"
+                            },
+                            "frameOption": {
+                                "type": "integer",
+                                "description": "Reference frame option",
+                                "default": 0
+                            },
+                            "integrationOption": {
+                                "type": "integer",
+                                "description": "Integration option",
+                                "default": 0
+                            },
+                            "specialOption": {
+                                "type": "integer",
+                                "description": "Special BC sub-type option",
+                                "default": 0
+                            },
+                            "valueExtra": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "Extra BC values"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "name"
+                        ]
+                    },
+                    {
+                        "type": "object",
+                        "description": "Symmetry BC",
+                        "properties": {
+                            "type": {
+                                "const": "BCSym",
+                                "description": "Boundary condition type"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "Boundary zone name"
+                            },
+                            "rectifyOption": {
+                                "type": "integer",
+                                "description": "Symmetry plane rectification option",
+                                "default": 0
+                            },
+                            "integrationOption": {
+                                "type": "integer",
+                                "description": "Integration option",
+                                "default": 0
+                            },
+                            "valueExtra": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "description": "Extra BC values"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "name"
+                        ]
+                    }
+                ]
+            }
+        },
+        "bcNameMapping": {
+            "type": "object",
+            "default": {},
+            "description": "Boundary name to type mapping"
+        }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "DNDSR euler configuration"
+}

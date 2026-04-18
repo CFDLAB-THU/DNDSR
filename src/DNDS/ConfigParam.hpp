@@ -135,6 +135,13 @@ namespace DNDS
         static constexpr ConfigTypeTag value = ConfigTypeTag::Json;
     };
 
+    /// C++ enum types serialize as JSON strings via nlohmann, so map to Enum.
+    template <typename T>
+    struct ConfigTypeTagOf<T, std::enable_if_t<std::is_enum_v<T>>>
+    {
+        static constexpr ConfigTypeTag value = ConfigTypeTag::Enum;
+    };
+
     /// Eigen matrix/vector types serialize as JSON arrays, so map them to Array.
     /// Detection uses the `Scalar` typedef and `RowsAtCompileTime` enum that
     /// all Eigen matrix expressions expose — no Eigen headers needed here.

@@ -358,8 +358,8 @@ namespace DNDS::Euler
                 bool useCLDriver = false;
                 DNDS_DECLARE_CONFIG(ConvergenceControl)
                 {
-                    DNDS_FIELD(nTimeStepInternal,       "Max internal iterations per time step",
-                               DNDS::Config::range(1));
+                    DNDS_FIELD(nTimeStepInternal,       "Max internal iterations per time step (0 = unlimited)",
+                               DNDS::Config::range(0));
                     DNDS_FIELD(nTimeStepInternalMin,    "Min internal iterations per time step",
                                DNDS::Config::range(0));
                     DNDS_FIELD(nAnchorUpdate,           "Anchor update frequency",

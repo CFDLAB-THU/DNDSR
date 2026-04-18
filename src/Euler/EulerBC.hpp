@@ -104,7 +104,6 @@ namespace DNDS::Euler
 
             s["properties"] = props;
             s["required"] = required;
-            s["additionalProperties"] = false;
             return s;
         };
 
