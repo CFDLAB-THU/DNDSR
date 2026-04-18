@@ -1,4 +1,5 @@
 {
+    "$schema": "../eulerSA_schema.json",
     "timeMarchControl": {
         // "dtImplicit": 0.05,
         "dtImplicit": 0.1,

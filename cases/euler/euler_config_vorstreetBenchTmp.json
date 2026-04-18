@@ -1,4 +1,5 @@
 {
+    "$schema": "../euler_schema.json",
     "timeMarchControl": {
         "dtImplicit": 0.5e-1,
         "nTimeStep": 4000,

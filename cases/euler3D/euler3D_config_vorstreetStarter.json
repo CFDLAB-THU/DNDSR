@@ -1,4 +1,5 @@
 {
+    "$schema": "../euler3D_schema.json",
     "timeMarchControl": {
         "dtImplicit": 0.25e-1,
         "nTimeStep": 450,
