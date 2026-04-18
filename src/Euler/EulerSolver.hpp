@@ -1157,6 +1157,20 @@ namespace DNDS::Euler
         auto getMPI() const { return mpi; }
         auto getMesh() const { return mesh; }
         auto getVFV() const { return vfv; }
+
+        // Test accessors (for unit testing the evaluator pipeline)
+        auto &getU() { return u; }
+        auto &getURec() { return uRec; }
+        auto &getURecNew() { return uRecNew; }
+        auto &getURecLimited() { return uRecLimited; }
+        auto &getEval() { return *pEval; }
+        auto &getConfiguration() { return config; }
+        auto &getJSource() { return JSource; }
+        auto &getBetaPP() { return betaPP; }
+        auto &getAlphaPP() { return alphaPP; }
+        auto &getDTauTmp() { return dTauTmp; }
+        auto &getIfUseLimiter() { return ifUseLimiter; }
+        auto &getBCHandler() { return pBCHandler; }
     };
 }
 

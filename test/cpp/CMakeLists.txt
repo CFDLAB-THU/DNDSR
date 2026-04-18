@@ -238,9 +238,13 @@ add_custom_target(cfv_unit_tests)
 add_dependencies(all_unit_tests cfv_unit_tests)
 
 cfv_add_mpi_test(reconstruction "CFV/test_Reconstruction.cpp" "cfv;geom;dnds")
+cfv_add_unit_test(limiters "CFV/test_Limiters.cpp" "cfv;geom;dnds")
+cfv_add_mpi_test(reconstruction3d "CFV/test_Reconstruction3D.cpp" "cfv;geom;dnds")
 
 set(CFV_TEST_TARGETS
     cfv_test_reconstruction
+    cfv_test_limiters
+    cfv_test_reconstruction3d
 )
 
 # --- CUDA CFV tests ---
@@ -273,4 +277,122 @@ endif()
 
 foreach(T ${CFV_TEST_TARGETS})
     add_dependencies(cfv_unit_tests ${T})
+endforeach()
+
+# ===================================================================
+# Euler tests
+# ===================================================================
+
+# --- helper: add a serial unit test executable (Euler) ---
+# Gas.hpp functions are header-only; link cfv;geom;dnds for types.
+function(euler_add_unit_test TEST_NAME SRC_FILE LIBS)
+    set(TARGET_NAME "euler_test_${TEST_NAME}")
+    add_executable(${TARGET_NAME} ${SRC_FILE})
+    target_include_directories(${TARGET_NAME} PRIVATE
+        ${DNDS_EXTERNAL_INCLUDE_DOCTEST}
+        ${DNDS_EXTERNAL_INCLUDES}
+        ${DNDS_INCLUDES})
+    target_link_libraries(${TARGET_NAME} PRIVATE ${LIBS} ${DNDS_EXTERNAL_LIBS})
+    if(DNDS_USE_CCACHE)
+        set_property(TARGET ${TARGET_NAME} PROPERTY CXX_COMPILER_LAUNCHER ${DNDS_CCACHE_EXEC})
+    endif()
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        EXCLUDE_FROM_ALL ON)
+    add_test(NAME euler_${TEST_NAME} COMMAND ${TARGET_NAME})
+    set_tests_properties(euler_${TEST_NAME} PROPERTIES TIMEOUT 120)
+endfunction()
+
+# --- helper: add an MPI unit test executable (Euler) ---
+function(euler_add_mpi_test TEST_NAME SRC_FILE LIBS)
+    set(TARGET_NAME "euler_test_${TEST_NAME}")
+    add_executable(${TARGET_NAME} ${SRC_FILE})
+    target_include_directories(${TARGET_NAME} PRIVATE
+        ${DNDS_EXTERNAL_INCLUDE_DOCTEST}
+        ${DNDS_EXTERNAL_INCLUDES}
+        ${DNDS_INCLUDES})
+    target_link_libraries(${TARGET_NAME} PRIVATE ${LIBS} ${DNDS_EXTERNAL_LIBS})
+    if(DNDS_USE_CCACHE)
+        set_property(TARGET ${TARGET_NAME} PROPERTY CXX_COMPILER_LAUNCHER ${DNDS_CCACHE_EXEC})
+    endif()
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        EXCLUDE_FROM_ALL ON)
+    add_test(NAME euler_${TEST_NAME}_np1
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1
+                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(euler_${TEST_NAME}_np1 PROPERTIES TIMEOUT 120 PROCESSORS 1)
+    add_test(NAME euler_${TEST_NAME}_np2
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
+                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(euler_${TEST_NAME}_np2 PROPERTIES TIMEOUT 120 PROCESSORS 2)
+    add_test(NAME euler_${TEST_NAME}_np4
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4
+                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(euler_${TEST_NAME}_np4 PROPERTIES TIMEOUT 180 PROCESSORS 4)
+endfunction()
+
+add_custom_target(euler_unit_tests)
+add_dependencies(all_unit_tests euler_unit_tests)
+
+euler_add_unit_test(gas_thermo "Euler/test_GasThermo.cpp" "cfv;geom;dnds")
+euler_add_unit_test(riemann_solvers "Euler/test_RiemannSolvers.cpp" "cfv;geom;dnds")
+euler_add_unit_test(rans "Euler/test_RANS.cpp" "cfv;geom;dnds")
+
+# EulerEvaluator pipeline test: needs full Euler libraries for NS, NS_SA, NS_3D
+euler_add_mpi_test(evaluator_pipeline "Euler/test_EulerEvaluator.cpp"
+    "euler_library_NS;euler_library_fast_NS;euler_library_NS_SA;euler_library_fast_NS_SA;euler_library_NS_3D;euler_library_fast_NS_3D;cfv;geom;dnds")
+set_tests_properties(euler_evaluator_pipeline_np1 PROPERTIES TIMEOUT 600)
+set_tests_properties(euler_evaluator_pipeline_np2 PROPERTIES TIMEOUT 600)
+set_tests_properties(euler_evaluator_pipeline_np4 PROPERTIES TIMEOUT 600)
+
+set(EULER_TEST_TARGETS
+    euler_test_gas_thermo
+    euler_test_riemann_solvers
+    euler_test_rans
+    euler_test_evaluator_pipeline
+)
+foreach(T ${EULER_TEST_TARGETS})
+    add_dependencies(euler_unit_tests ${T})
+endforeach()
+
+# ===================================================================
+# Solver tests (ODE, Linear, Direct, Scalar)
+# ===================================================================
+
+add_custom_target(solver_unit_tests)
+add_dependencies(all_unit_tests solver_unit_tests)
+
+# All Solver tests are serial (header-only, no MPI needed at runtime)
+function(solver_add_unit_test TEST_NAME SRC_FILE LIBS)
+    set(TARGET_NAME "solver_test_${TEST_NAME}")
+    add_executable(${TARGET_NAME} ${SRC_FILE})
+    target_include_directories(${TARGET_NAME} PRIVATE
+        ${DNDS_EXTERNAL_INCLUDE_DOCTEST}
+        ${DNDS_EXTERNAL_INCLUDES}
+        ${DNDS_INCLUDES})
+    target_link_libraries(${TARGET_NAME} PRIVATE ${LIBS} ${DNDS_EXTERNAL_LIBS})
+    if(DNDS_USE_CCACHE)
+        set_property(TARGET ${TARGET_NAME} PROPERTY CXX_COMPILER_LAUNCHER ${DNDS_CCACHE_EXEC})
+    endif()
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        EXCLUDE_FROM_ALL ON)
+    add_test(NAME solver_${TEST_NAME} COMMAND ${TARGET_NAME})
+    set_tests_properties(solver_${TEST_NAME} PROPERTIES TIMEOUT 60)
+endfunction()
+
+solver_add_unit_test(ode "Solver/test_ODE.cpp" "dnds")
+solver_add_unit_test(linear "Solver/test_Linear.cpp" "dnds")
+solver_add_unit_test(direct "Solver/test_Direct.cpp" "dnds")
+solver_add_unit_test(scalar "Solver/test_Scalar.cpp" "dnds")
+
+set(SOLVER_TEST_TARGETS
+    solver_test_ode
+    solver_test_linear
+    solver_test_direct
+    solver_test_scalar
+)
+foreach(T ${SOLVER_TEST_TARGETS})
+    add_dependencies(solver_unit_tests ${T})
 endforeach()

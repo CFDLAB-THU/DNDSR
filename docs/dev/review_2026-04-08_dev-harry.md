@@ -1,4 +1,4 @@
-# Code Review: dev/harry (commits de53aa6..fb8c367)
+# Code Review: dev/harry (commits de53aa6..fb8c367) {#review_dev_harry}
 
 **Date:** 2026-04-08
 **Branch:** dev/harry
@@ -446,7 +446,7 @@ None found.
 | `docs/building.md` | +416 | **New**: Build instructions |
 | `docs/project_structure.md` | +157 | **New**: Directory tree, module dependencies |
 | `docs/TODO.md` | +384 | Expanded with concrete improvement items |
-| `docs/main.dox` | +24/-4 | Updated links, @mainpage |
+| `docs/main.dox` | +24/-4 | Updated links, \@mainpage |
 
 ### Removed
 

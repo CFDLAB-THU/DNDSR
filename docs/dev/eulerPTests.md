@@ -1,4 +1,4 @@
-# EulerP Tests
+# EulerP Tests {#eulerp_tests}
 
 The machine: 2xIntel(R) Xeon(R) Gold 6326 CPU @ 2.90GHz, 2xNVIDIA A100 80GB PCIe, **no p2p GPU access**.
 

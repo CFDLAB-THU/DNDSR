@@ -1,4 +1,4 @@
-# Python Geom Module - Mesh Reader Guide
+# Python Geom Module - Mesh Reader Guide {#python_geom_guide}
 
 This document describes how to use the DNDSR Python Geom module for reading and manipulating computational meshes.
 

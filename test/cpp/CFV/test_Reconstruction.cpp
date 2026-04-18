@@ -622,3 +622,206 @@ TEST_CASE("VFV P2 HQM converges on IV10 base mesh")
     CHECK(convergedAt > 0);
     CHECK(convergedAt < 200);
 }
+
+// ===================================================================
+// LIMITER PROCEDURE TESTS
+//
+// After reconstruction, apply DoCalculateSmoothIndicator + DoLimiterWBAP_C
+// and measure the post-limiter L1 error.  For scalar fields the
+// eigenvalue transform (FM/FMI) is identity.
+//
+// Golden value sentinel: 0.0 means "not yet acquired -- just print and
+// check non-negative".
+// ===================================================================
+
+#include "CFV/VariationalReconstruction_LimiterProcedure.hxx"
+
+/// Identity eigenvalue transform for nVarsFixed==1 (scalar).
+static tVR::tLimitBatch<g_nv> identityFM(
+    const Eigen::Vector<DNDS::real, g_nv> &,
+    const Eigen::Vector<DNDS::real, g_nv> &,
+    const tPoint &,
+    const Eigen::Ref<tVR::tLimitBatch<g_nv>> &data)
+{
+    return data;
+}
+
+/// Run reconstruction, then limiter, then measure L1 error.
+/// @param limiterKind  0 = WBAP_C, 1 = WBAP_3
+static DNDS::real runLimitedTest(
+    ssp<tVR> vr,
+    RecMethod method,
+    const ScalarFunc &exactFunc,
+    const tVR::TFBoundary<g_nv> &bc,
+    int maxIters,
+    DNDS::real convTol,
+    int limiterKind,
+    bool ifAll,
+    bool printProgress)
+{
+    auto mesh = vr->mesh;
+
+    // --- Allocate arrays ---
+    CFV::tUDof<g_nv> u;
+    vr->BuildUDof(u, 1);
+
+    // --- Set cell-averaged DOFs via quadrature ---
+    for (DNDS::index iCell = 0; iCell < mesh->NumCell(); iCell++)
+    {
+        auto qCell = vr->GetCellQuad(iCell);
+        Eigen::Vector<DNDS::real, g_nv> uc;
+        uc.setZero();
+        qCell.IntegrationSimple(
+            uc,
+            [&](auto &vInc, int iG)
+            {
+                vInc(0) = exactFunc(vr->GetCellQuadraturePPhys(iCell, iG)) *
+                           vr->GetCellJacobiDet(iCell, iG);
+            });
+        u[iCell] = uc / vr->GetCellVol(iCell);
+    }
+    u.trans.startPersistentPull();
+    u.trans.waitPersistentPull();
+
+    // --- Reconstruct (iterative VFV) ---
+    CFV::tURec<g_nv> uRec, uRecNew, uRecBuf;
+    vr->BuildURec(uRec, 1);
+    vr->BuildURec(uRecNew, 1);
+    vr->BuildURec(uRecBuf, 1);
+
+    for (int iter = 0; iter < maxIters; iter++)
+    {
+        vr->DoReconstructionIter<g_nv>(uRec, uRecNew, u, bc, true);
+        std::swap(uRec, uRecNew);
+        uRec.trans.startPersistentPull();
+        uRec.trans.waitPersistentPull();
+
+        DNDS::real incLocal = 0.0;
+        for (DNDS::index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            incLocal += (uRecNew[iCell] - uRec[iCell]).array().square().sum();
+        DNDS::real incGlobal = 0.0;
+        MPI::Allreduce(&incLocal, &incGlobal, 1, DNDS_MPI_REAL, MPI_SUM, g_mpi.comm);
+        incGlobal = std::sqrt(incGlobal / mesh->NumCellGlobal());
+        if (convTol > 0 && incGlobal < convTol)
+            break;
+    }
+
+    // --- Smooth indicator ---
+    CFV::tScalarPair si;
+    vr->BuildScalar(si);
+    vr->DoCalculateSmoothIndicator<g_nv, 1>(si, uRec, u, std::array<int, 1>{0});
+    si.trans.startPersistentPull();
+    si.trans.waitPersistentPull();
+
+    // --- Limiter ---
+    tVR::tFMEig<g_nv> fm = identityFM;
+    tVR::tFMEig<g_nv> fmi = identityFM;
+
+    if (limiterKind == 0)
+        vr->DoLimiterWBAP_C<g_nv>(u, uRec, uRecNew, uRecBuf, si, ifAll, fm, fmi, /*putIntoNew=*/true);
+    else
+        vr->DoLimiterWBAP_3<g_nv>(u, uRec, uRecNew, uRecBuf, si, ifAll, fm, fmi, /*putIntoNew=*/true);
+
+    // uRecNew now holds the limited reconstruction
+    auto &uRecLim = uRecNew;
+
+    // --- Measure L1 error ---
+    DNDS::real errLocal = 0.0;
+    for (DNDS::index iCell = 0; iCell < mesh->NumCell(); iCell++)
+    {
+        auto qCell = vr->GetCellQuad(iCell);
+        DNDS::real errCell = 0.0;
+        qCell.IntegrationSimple(
+            errCell,
+            [&](DNDS::real &vInc, int iG)
+            {
+                Eigen::VectorXd baseVal =
+                    vr->GetIntPointDiffBaseValue(
+                        iCell, -1, -1, iG, std::array<int, 1>{0}, 1) *
+                    uRecLim[iCell];
+                DNDS::real uRecVal = baseVal(0) + u[iCell](0);
+                DNDS::real uExact = exactFunc(vr->GetCellQuadraturePPhys(iCell, iG));
+                vInc = std::abs(uRecVal - uExact) * vr->GetCellJacobiDet(iCell, iG);
+            });
+        errLocal += errCell;
+    }
+    DNDS::real errGlobal = 0.0;
+    MPI::Allreduce(&errLocal, &errGlobal, 1, DNDS_MPI_REAL, MPI_SUM, g_mpi.comm);
+    return errGlobal / vr->GetGlobalVol();
+}
+
+struct LimiterTestCase
+{
+    const char *meshName;
+    ssp<UnstructuredMesh> *meshArray;
+    RecMethod method;
+    ScalarFunc func;
+    const char *funcName;
+    int limiterKind;       // 0 = WBAP_C, 1 = WBAP_3
+    const char *limName;
+    bool ifAll;            // limiter applied to all cells (no smooth-indicator skip)
+    DNDS::real golden[3];  // golden L1/vol for bisect 0,1,2
+                           // 0.0 = not yet acquired (just print, CHECK >= 0)
+};
+
+static LimiterTestCase g_limiterTests[] = {
+    // IV10 (quad), P2-HQM, sincos, WBAP_C (ifAll=true so every cell is limited)
+    {"IV10", g_iv10, RecMethod::VFV_P2_HQM, sinCos, "sincos",
+     0, "CWBAP", true,
+     {6.6975633577e-02, 2.2647765241e-02, 9.2028443979e-03}},
+
+    // IV10 (quad), P3-HQM, sincos, WBAP_C (ifAll=true)
+    {"IV10", g_iv10, RecMethod::VFV_P3_HQM, sinCos, "sincos",
+     0, "CWBAP", true,
+     {7.1333971937e-02, 2.6226392939e-02, 1.1194383457e-02}},
+
+    // IV10U (tri), P2-HQM, sincos, WBAP_C (ifAll=true)
+    {"IV10U", g_iv10u, RecMethod::VFV_P2_HQM, sinCos, "sincos",
+     0, "CWBAP", true,
+     {3.5176301510e-02, 1.4925026476e-02, 6.9002847378e-03}},
+
+    // IV10 (quad), P2-HQM, sincos, WBAP_3 (ifAll=true)
+    {"IV10", g_iv10, RecMethod::VFV_P2_HQM, sinCos, "sincos",
+     1, "3WBAP", true,
+     {6.6488044323e-02, 2.2593150005e-02, 9.1963848358e-03}},
+
+    // IV10 (quad), P3-HQM, sincos, WBAP_3 (ifAll=true)
+    {"IV10", g_iv10, RecMethod::VFV_P3_HQM, sinCos, "sincos",
+     1, "3WBAP", true,
+     {7.1372867657e-02, 2.6697894435e-02, 1.1593632890e-02}},
+};
+
+static const int g_nLimiterTests = sizeof(g_limiterTests) / sizeof(g_limiterTests[0]);
+
+TEST_CASE("Limiter procedure: reconstruction + smooth indicator + WBAP limiter")
+{
+    for (int ti = 0; ti < g_nLimiterTests; ti++)
+    {
+        auto &tc = g_limiterTests[ti];
+        std::string label = std::string(tc.meshName) + "/" + tc.funcName +
+                            "/" + recMethodName(tc.method) + "/" + tc.limName;
+
+        SUBCASE(label.c_str())
+        {
+            for (int ib = 0; ib < 3; ib++)
+            {
+                CAPTURE(ib);
+                auto mesh = tc.meshArray[ib];
+                auto vr = buildVR(mesh, tc.method);
+                DNDS::real err = runLimitedTest(
+                    vr, tc.method, tc.func, g_zeroBC,
+                    200, 1e-14, tc.limiterKind, tc.ifAll, false);
+
+                if (g_mpi.rank == 0)
+                    std::cout << "[" << label << " bis=" << ib
+                              << "] limited err = " << std::scientific
+                              << std::setprecision(10) << err << std::endl;
+
+                if (tc.golden[ib] != 0.0)
+                    CHECK(err == doctest::Approx(tc.golden[ib]).epsilon(1e-6));
+                else
+                    CHECK(err >= 0.0);
+            }
+        }
+    }
+}

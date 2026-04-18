@@ -1,4 +1,4 @@
-# Notes
+# Notes {#dev_notes}
 
 ## on periodic boundary
 

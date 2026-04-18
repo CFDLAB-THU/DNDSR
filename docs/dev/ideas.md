@@ -1,4 +1,4 @@
-# DNDSR Ideas
+# DNDSR Ideas {#ideas}
 
 ## Next Step:
 

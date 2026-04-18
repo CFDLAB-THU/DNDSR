@@ -1,4 +1,4 @@
-# CFV Module Refactoring Plan
+# CFV Module Refactoring Plan {#cfv_refactoring}
 
 **Branch:** `dev/harry_refac1`
 **Baseline commit:** `c774b89` (on `dev/harry_refac1`)

@@ -1,4 +1,4 @@
-# CUDA notes
+# CUDA Notes {#cuda_notes}
 
 ## About Eigen
 

@@ -2,17 +2,15 @@
 /**
  * @mainpage DNDSR Documentation
  *
- * @section intro Introduction
- *
  * DNDSR is a C++17 / Python CFD (Computational Fluid Dynamics) research code
  * implementing Compact Finite Volume methods with MPI parallelism and optional
  * CUDA GPU support.
  *
- * @section doc_pages Documentation Pages
- *
- * - @ref project_structure — Directory layout, module dependencies, build targets.
- * - @ref building — Prerequisites, CMake configuration, Python package install, testing.
- * - @ref dnds_unit_tests — C++ unit test suite (doctest, CTest).
+ * - @subpage page_guides
+ * - @subpage page_architecture
+ * - @subpage page_theory
+ * - @subpage page_tests
+ * - @subpage page_dev
  *
  * @section modules Core Modules
  *
@@ -44,6 +42,66 @@
  * # 4. Run tests
  * ctest --test-dir build -R dnds_ --output-on-failure   # C++
  * pytest test/DNDS/test_basic.py -v                      # Python
- * @endcode
  *
+ * # 5. Build and serve documentation
+ * cmake --build build -t serve-docs
+ * @endcode
+ */
+
+/**
+ * @page page_guides Guides
+ *
+ * Developer guides for building, configuring, and using DNDSR.
+ *
+ * - @subpage building
+ * - @subpage project_structure
+ * - @subpage style_guide
+ * - @subpage python_geom_guide
+ */
+
+/**
+ * @page page_architecture Architecture
+ *
+ * Design documents describing the internal structure of DNDSR.
+ *
+ * - @subpage paradigm
+ * - @subpage serialization
+ */
+
+/**
+ * @page page_theory Theory
+ *
+ * Mathematical background for the numerical methods.
+ *
+ * - @subpage variational_reconstruction
+ * - @subpage shape_functions
+ */
+
+/**
+ * @page page_tests Unit Tests
+ *
+ * Documentation for the C++ (doctest) and Python (pytest) test suites.
+ *
+ * - @subpage test_overview
+ * - @subpage dnds_unit_tests
+ * - @subpage cfv_unit_tests
+ * - @subpage euler_unit_tests
+ * - @subpage solver_unit_tests
+ */
+
+/**
+ * @page page_dev Development Notes
+ *
+ * Internal notes, plans, reviews, and benchmarks.
+ *
+ * - @subpage todo_list
+ * - @subpage ideas
+ * - @subpage dev_notes
+ * - @subpage cfv_refactoring
+ * - @subpage cuda_notes
+ * - @subpage eulerp_tests
+ * - @subpage current_report
+ * - @subpage current_tests
+ * - @subpage review_dev_harry
+ * - @subpage review_dev_harry_refac1
  */

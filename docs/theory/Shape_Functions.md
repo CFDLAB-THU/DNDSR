@@ -1,4 +1,4 @@
-# Shape Functions
+# Shape Functions {#shape_functions}
 
 **[PDF Version](Shape_Functions.pdf)**
 

@@ -24,6 +24,16 @@ if (DOXYGEN_FOUND)
     execute_process(COMMAND python ${CMAKE_SOURCE_DIR}/docs/getAllAttachForDox.py 
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/docs")
 
+    # Serve docs locally: cmake --build build -t serve-docs
+    add_custom_target(serve-docs
+        DEPENDS docs
+        COMMAND ${CMAKE_COMMAND} -E echo "Serving docs at http://localhost:8000  (Ctrl-C to stop)"
+        COMMAND python3 -m http.server 8000
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/docs/html
+        COMMENT "Building and serving Doxygen HTML docs on port 8000"
+        VERBATIM
+    )
+
     # find_file(DOXYGEN_PDF_FILES docs/*.pdf NO_DEFAULT_PATH)
     # message(STATUS ${DOXYGEN_PDF_FILES})
     ##### using CMAKE convenient DOXYGEN!only in 3.9 +!!!

@@ -1,4 +1,4 @@
-# Paradigm in designing DNDS
+# Paradigm in designing DNDS {#paradigm}
 
 
 DNDS is designed to be a set of commonly used infrastructure that can be used in CFD-like code. When organizing data and algorithms in CFD code, the programmer has to cope with geometry and field data, which correspond to mesh/grid related code and field related code. When the CFD scheme involves unstructured mesh and high order discretization, the grid and field code could become rather complex. Therefore, it is a natural thing to put some levels of abstraction here, and cover up the raw data types using C++ features.
