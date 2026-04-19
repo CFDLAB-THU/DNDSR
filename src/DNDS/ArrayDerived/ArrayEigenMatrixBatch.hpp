@@ -1,156 +1,73 @@
 #pragma once
+/// @file ArrayEigenMatrixBatch.hpp
+/// @brief Batch of variable-sized Eigen matrices stored in CSR layout.
+/// @par Unit Test Coverage (test_ArrayDerived.cpp, MPI np=1,2,4)
+/// - Resize, InitializeWriteRow, Compress, BatchSize, operator()(i,j)
+/// - Ghost communication via ArrayEigenMatrixBatchPair
+/// @par Not Yet Tested
+/// - WriteSerializer / ReadSerializer, device views
 
 #include "../ArrayTransformer.hpp"
+#include "DNDS/Defines.hpp"
+#include "ArrayEigenMatrixBatch_DeviceView.hpp"
+#include "DNDS/DeviceStorage.hpp"
 
 namespace DNDS
 {
-    class MatrixBatch
-    {
-    public:
-        struct UInt32PairIn64
-        {
-            uint64_t data;
-            [[nodiscard]] uint32_t getM() const { return uint32_t(data & 0x00000000FFFFFFFFULL); }
-            [[nodiscard]] uint32_t getN() const { return uint32_t(data >> 32); }
-            void setM(uint32_t v) { data = (data & 0xFFFFFFFF00000000ULL) | uint64_t(v); }
-            void setN(uint32_t v) { data = (data & 0x00000000FFFFFFFFULL) | (uint64_t(v) << 32); }
-        };
-        static_assert(sizeof(UInt32PairIn64) == 8);
-
-        struct UInt16QuadIn64
-        {
-            uint64_t data;
-            [[nodiscard]] uint16_t getA() const { return uint16_t((data & 0x000000000000FFFFULL) >> 0); }
-            [[nodiscard]] uint16_t getB() const { return uint16_t((data & 0x00000000FFFF0000ULL) >> 16); }
-            [[nodiscard]] uint16_t getC() const { return uint16_t((data & 0x0000FFFF00000000ULL) >> 32); }
-            [[nodiscard]] uint16_t getD() const { return uint16_t((data & 0xFFFF000000000000ULL) >> 48); }
-
-            void setA(uint16_t v) { data = (data & (~0x000000000000FFFFULL)) | (uint64_t(v) << 0); }
-            void setB(uint16_t v) { data = (data & (~0x00000000FFFF0000ULL)) | (uint64_t(v) << 16); }
-            void setC(uint16_t v) { data = (data & (~0x0000FFFF00000000ULL)) | (uint64_t(v) << 32); }
-            void setD(uint16_t v) { data = (data & (~0xFFFF000000000000ULL)) | (uint64_t(v) << 48); }
-        };
-        static_assert(sizeof(UInt32PairIn64) == 8 && sizeof(UInt16QuadIn64) == 8);
-
-        using t_matrix = MatrixXR;
-        using t_map = Eigen::Map<t_matrix>;
-
-        static rowsize getBufSize(const std::vector<t_matrix> &matrices)
-        {
-            DNDS_assert(matrices.size() < DNDS_ROWSIZE_MAX);
-            rowsize bufSiz = matrices.size() + 1;
-            for (const auto &i : matrices)
-            {
-                Eigen::Index mSiz = i.rows() * i.cols();
-                DNDS_assert(mSiz + bufSiz < DNDS_ROWSIZE_MAX && i.rows() < UINT16_MAX && i.cols() < UINT16_MAX);
-                bufSiz += mSiz;
-            }
-            return bufSiz;
-        }
-
-    private:
-        real *_buf;
-        rowsize _buf_size;
-        static_assert(sizeof(real) == 8);
-
-    public:
-        MatrixBatch(real *n_buf, rowsize new_size) : _buf(n_buf), _buf_size(new_size)
-        {
-        }
-
-        uint64_t &Size() const
-        {
-            DNDS_assert(_buf_size > 0);
-            return *(uint64_t *)(_buf);
-        }
-
-        uint16_t getNRow(rowsize k) const
-        {
-            DNDS_assert(k < _buf_size - 1);
-            return ((UInt16QuadIn64 *)(_buf + k + 1))->getA();
-        }
-
-        uint16_t getNCol(rowsize k) const
-        {
-            DNDS_assert(k < _buf_size - 1);
-            return ((UInt16QuadIn64 *)(_buf + k + 1))->getB();
-        }
-
-        uint32_t getOffset(rowsize k) const
-        {
-            DNDS_assert(k < _buf_size - 1);
-            return ((UInt32PairIn64 *)(_buf + k + 1))->getN();
-        }
-
-        void setNRow(rowsize k, uint16_t v)
-        {
-            DNDS_assert(k < _buf_size - 1);
-            return ((UInt16QuadIn64 *)(_buf + k + 1))->setA(v);
-        }
-
-        void setNCol(rowsize k, uint16_t v)
-        {
-            DNDS_assert(k < _buf_size - 1);
-            return ((UInt16QuadIn64 *)(_buf + k + 1))->setB(v);
-        }
-
-        void setOffset(rowsize k, uint32_t v)
-        {
-            DNDS_assert(k < _buf_size - 1);
-            return ((UInt32PairIn64 *)(_buf + k + 1))->setN(v);
-        }
-
-        void CompressIn(const std::vector<t_matrix> &matrices)
-        {
-            DNDS_assert(getBufSize(matrices) <= _buf_size);
-            this->Size() = uint64_t(matrices.size()); // assuming could fit
-            // std::cout << "Size: " << this->Size() << std::endl;
-            uint32_t curOffset = uint32_t(this->Size()) + 1;
-            for (size_t i = 0; i < matrices.size(); i++)
-            {
-                this->setNRow(rowsize(i), uint16_t(matrices[i].rows()));
-                this->setNCol(rowsize(i), uint16_t(matrices[i].cols()));
-                this->setOffset(rowsize(i), curOffset);
-                this->operator[](i) = matrices[i];
-                // std::cout << "SET: " << this->operator[](i) << std::endl;
-                curOffset += matrices[i].size();
-            }
-        }
-
-        t_map operator[](rowsize k) // todo: add const version
-        {
-            DNDS_assert(k < this->Size());
-            auto n_row = getNRow(k);
-            auto n_col = getNCol(k);
-            auto offset = getOffset(k);
-            return {_buf + offset, n_row, n_col};
-        }
-    };
-
+    /**
+     * @brief CSR array storing a variable-sized batch of Eigen matrices per row.
+     *
+     * @details Unlike @ref DNDS::ArrayEigenUniMatrixBatch "ArrayEigenUniMatrixBatch" the matrices in a batch may have
+     * different shapes, so each row carries a self-describing size prefix (see
+     * @ref DNDS::MatrixBatch "MatrixBatch" in VectorUtils.hpp). Used where a cell's quadrature rule /
+     * basis count is not known a priori at compile time.
+     *
+     * Populate rows with @ref InitializeWriteRow given a vector of concrete Eigen
+     * matrices. After that, #operator()(i,j) yields an `Eigen::Map` view onto
+     * the `j`-th matrix of row `i`.
+     */
     // has to use non uniform?
     class ArrayEigenMatrixBatch : public ParArray<real, NonUniformSize>
     {
     public:
+        using t_self = ArrayEigenMatrixBatch;
         using t_base = ParArray<real, NonUniformSize>;
         using t_base::t_base;
 
-        using t_matrix = MatrixBatch::t_matrix;
-        using t_map = MatrixBatch::t_map;
+        using t_matrix = typename MatrixBatch<real>::t_matrix;
+        using t_map = typename MatrixBatch<real>::t_map;
 
     private:
         using t_base::ResizeRow;
 
     public:
-        void InitializeWriteRow(index i, const std::vector<t_matrix> &matrices)
+        // default copy
+        ArrayEigenMatrixBatch(const t_self &R) = default;
+        t_self &operator=(const t_self &R) = default;
+        // operator= handled automatically
+
+        void clone(const t_self &R)
         {
-            this->ResizeRow(i, MatrixBatch::getBufSize(matrices));
+            this->operator=(R);
+        }
+
+
+        template <class t_matrices_elem>
+        void InitializeWriteRow(index i, const std::vector<t_matrices_elem> &matrices)
+        {
+            this->ResizeRow(i, MatrixBatch<real>::getBufSize(matrices));
             MatrixBatch batch(this->t_base::operator[](i), this->RowSize(i));
             batch.CompressIn(matrices);
         }
 
-        MatrixBatch operator[](index i) // todo: add const version
+        MatrixBatch<real> operator[](index i) // todo: add const version
         {
             return {this->t_base::operator[](i), this->RowSize(i)};
+        }
+
+        index BatchSize(index i)
+        {
+            return this->operator[](i).Size();
         }
 
         t_map operator()(index i, rowsize j)
@@ -160,6 +77,64 @@ namespace DNDS
 
         using t_base::ReadSerializer;
         using t_base::WriteSerializer; //! because no extra data than Array<>
+
+        template <DeviceBackend B>
+        using t_deviceView = ArrayEigenMatrixBatchDeviceView<B, real>;
+
+        template <DeviceBackend B>
+        using t_deviceViewConst = ArrayEigenMatrixBatchDeviceView<B, const real>;
+
+        template <DeviceBackend B>
+        auto deviceView()
+        {
+            return t_deviceView<B>{this->t_base::template deviceView<B>()}; // CTOR
+        }
+
+        template <DeviceBackend B>
+        auto deviceView() const
+        {
+            return t_deviceViewConst<B>{this->t_base::template deviceView<B>()}; // CTOR
+        }
+
+        using t_base::to_device;
+        using t_base::to_host;
+
+        /// @brief Element iterator for ArrayEigenMatrixBatch, yielding MatrixBatch per row.
+        template <DeviceBackend B>
+        class iterator : public ArrayIteratorBase<iterator<B>>
+        {
+        public:
+            using view_type = t_deviceView<B>;
+            using t_base_iter = ArrayIteratorBase<iterator<B>>;
+            using typename t_base_iter::difference_type;
+            using reference = MatrixBatch<real>;
+            using iterator_category = std::random_access_iterator_tag;
+
+        protected:
+            view_type view;
+
+        public:
+            auto getView() const { return view; }
+            DNDS_DEVICE_CALLABLE iterator(const iterator &) = default;
+            DNDS_DEVICE_CALLABLE ~iterator() = default;
+            DNDS_DEVICE_CALLABLE iterator(const view_type &n_view, index n_iRow) : view(n_view), t_base_iter(n_iRow)
+            {
+            }
+
+            DNDS_DEVICE_CALLABLE reference operator*() { return view.operator[](this->iRow); }
+        };
+
+        template <DeviceBackend B>
+        iterator<B> begin()
+        {
+            return {deviceView<B>(), 0};
+        }
+
+        template <DeviceBackend B>
+        iterator<B> end()
+        {
+            return {deviceView<B>(), this->Size()};
+        }
     };
 
 }

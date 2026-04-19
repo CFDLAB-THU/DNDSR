@@ -1,6 +1,9 @@
 #pragma once
+/// @file IndexMapping_bind.hpp
+/// @brief pybind11 bindings for @ref DNDS::GlobalOffsetsMapping "GlobalOffsetsMapping" and @ref DNDS::OffsetAscendIndexMapping "OffsetAscendIndexMapping".
 
 #include "IndexMapping.hpp"
+#include "Defines_bind.hpp"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -11,12 +14,12 @@ namespace DNDS
 {
     inline auto pybind11_GlobalOffsetsMapping_declare(py::module_ m)
     {
-        return py::class_<GlobalOffsetsMapping, std::shared_ptr<GlobalOffsetsMapping>>(m, "GlobalOffsetsMapping");
+        return py_class_ssp<GlobalOffsetsMapping>(m, "GlobalOffsetsMapping");
     }
 
     inline auto pybind11_GlobalOffsetsMapping_get_class(py::module_ m)
     {
-        return py::class_<GlobalOffsetsMapping, std::shared_ptr<GlobalOffsetsMapping>>(m.attr("GlobalOffsetsMapping"));
+        return py_class_ssp<GlobalOffsetsMapping>(m.attr("GlobalOffsetsMapping"));
     }
 
     inline void pybind11_GlobalOffsetsMapping_define(py::module_ m)
@@ -42,19 +45,19 @@ namespace DNDS
                 },
                 py::keep_alive<0, 1>())
             .def("search", [](GlobalOffsetsMapping &self, index globalQuery)
-                 { return self.search(globalQuery); })
+                 { return self.search(globalQuery); }, py::arg("globalQuery"))
             .def("__call__", [](GlobalOffsetsMapping &self, MPI_int rank, index val)
-                 { return self.operator()(rank, val); });
+                 { return self.operator()(rank, val); }, py::arg("rank"), py::arg("val"));
     }
 
     inline auto pybind11_OffsetAscendIndexMapping_declare(py::module_ m)
     {
-        return py::class_<OffsetAscendIndexMapping, std::shared_ptr<OffsetAscendIndexMapping>>(m, "OffsetAscendIndexMapping");
+        return py_class_ssp<OffsetAscendIndexMapping>(m, "OffsetAscendIndexMapping");
     }
 
     inline auto pybind11_OffsetAscendIndexMapping_get_class(py::module_ m)
     {
-        return py::class_<OffsetAscendIndexMapping, std::shared_ptr<OffsetAscendIndexMapping>>(m.attr("OffsetAscendIndexMapping"));
+        return py_class_ssp<OffsetAscendIndexMapping>(m.attr("OffsetAscendIndexMapping"));
     }
 
     inline void pybind11_OffsetAscendIndexMapping_define(py::module_ m)

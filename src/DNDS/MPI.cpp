@@ -1,3 +1,7 @@
+/// @file MPI.cpp
+/// @brief Implementations of the MPI wrapper functions declared in @ref MPI.hpp:
+/// retry-aware @ref Bcast/@ref Alltoall/@ref Alltoallv/@ref Allreduce/@ref Allgather/@ref Barrier
+/// variants, lazy waits, singleton definitions, CUDA-aware probe.
 
 #include <ctime>
 #include <cstdio>
@@ -6,24 +10,24 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
-
-#if defined(linux) || defined(_UNIX) || defined(__linux__)
-#include <sys/ptrace.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#endif
-#if defined(_WIN32) || defined(__WINDOWS_)
-#define NOMINMAX
-#include <Windows.h>
-#include <process.h>
-#endif
-
 #include "MPI.hpp"
 #include "Profiling.hpp"
 
+#ifdef DNDS_UNIX_LIKE
+#    include <sys/ptrace.h>
+#    include <unistd.h>
+#    include <sys/stat.h>
+#endif
+#if defined(_WIN32) || defined(__WINDOWS_)
+#    define NOMINMAX
+#    include <Windows.h>
+#    include <process.h>
+#endif
+
+
 #ifdef NDEBUG
-#define NDEBUG_DISABLED
-#undef NDEBUG
+#    define NDEBUG_DISABLED
+#    undef NDEBUG
 #endif
 
 namespace DNDS::Debug
@@ -31,7 +35,7 @@ namespace DNDS::Debug
     bool IsDebugged()
     {
 
-#if defined(linux) || defined(_UNIX) || defined(__linux__)
+#ifdef DNDS_UNIX_LIKE
         std::ifstream fin("/proc/self/status"); // able to detect gdb
         std::string buf;
         int tpid = 0;
@@ -54,7 +58,7 @@ namespace DNDS::Debug
 
     void MPIDebugHold(const MPIInfo &mpi)
     {
-#if defined(linux) || defined(_UNIX) || defined(__linux__)
+#ifdef DNDS_UNIX_LIKE
         MPISerialDo(mpi, [&]
                     { log() << "Rank " << mpi.rank << " PID: " << getpid() << std::endl; });
 #endif
@@ -86,16 +90,18 @@ namespace DNDS::Debug
     bool isDebugging = false;
 }
 
-void __DNDS_assert_false_info_mpi(const char *expr, const char *file, int line, const std::string &info, const DNDS::MPIInfo &mpi)
+namespace DNDS
 {
-    std::cerr << __DNDS_getTraceString() << "\n";
-    std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n"
-              << info << std::endl;
-    if (DNDS::Debug::isDebugging)
-        MPI_Barrier(mpi.comm);
-    std::abort();
+    void assert_false_info_mpi(const char *expr, const char *file, int line, const std::string &info, const DNDS::MPIInfo &mpi)
+    {
+        std::cerr << ::DNDS::getTraceString() << "\n";
+        std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n"
+                  << info << std::endl;
+        if (DNDS::Debug::isDebugging)
+            MPI_Barrier(mpi.comm);
+        std::abort();
+    }
 }
-
 namespace DNDS
 {
     MPIBufferHandler &MPIBufferHandler::Instance()
@@ -113,7 +119,7 @@ namespace DNDS
         std::array<char, 512> bufTime;
         std::array<char, 512 + 32> buf;
         int64_t pid = 0;
-#if defined(linux) || defined(_UNIX) || defined(__linux__)
+#ifdef DNDS_UNIX_LIKE
         // pid = Debug::getpid();
         pid = getpid();
 #endif
@@ -289,6 +295,45 @@ namespace DNDS::MPI
 
 namespace DNDS::MPI
 {
+    bool isCudaAware()
+    {
+#ifdef OPEN_MPI
+        return 1 == MPIX_Query_cuda_support();
+#else
+        return false;
+#endif
+    }
+}
+
+namespace DNDS::MPI
+{
+    ResourceRecycler &ResourceRecycler::Instance()
+    {
+        static ResourceRecycler recycler;
+        return recycler;
+    }
+
+    void ResourceRecycler::RegisterCleaner(void *p, std::function<void()> nCleaner)
+    {
+        DNDS_assert(cleaners.count(p) == 0);
+        cleaners.emplace(std::make_pair(p, std::move(nCleaner)));
+    }
+
+    void ResourceRecycler::RemoveCleaner(void *p)
+    {
+        DNDS_assert(cleaners.count(p) == 1);
+        cleaners.erase(p);
+    }
+
+    void ResourceRecycler::clean()
+    {
+        for (auto &[k, f] : cleaners)
+            f();
+    }
+}
+
+namespace DNDS::MPI
+{
     CommStrategy::CommStrategy()
     {
         try
@@ -405,6 +450,6 @@ namespace DNDS // TODO: get a concurrency header
 }
 
 #ifdef NDEBUG_DISABLED
-#define NDEBUG
-#undef NDEBUG_DISABLED
+#    define NDEBUG
+#    undef NDEBUG_DISABLED
 #endif

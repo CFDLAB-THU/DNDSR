@@ -4,6 +4,7 @@
 #include "base64_rfc4648.hpp"
 #include <zlib.h>
 #include <fmt/core.h>
+#include <set>
 
 namespace DNDS::Serializer
 {
@@ -55,8 +56,7 @@ namespace DNDS::Serializer
             fileStream << jObj;
         fileStream.close();
         cPathSplit.clear();
-        ptr_2_pth.clear();
-        pth_2_ssp.clear();
+        dedupClear();
         jObj.clear();
     }
     void SerializerJSON::CreatePath(const std::string &p)
@@ -85,6 +85,17 @@ namespace DNDS::Serializer
     std::string SerializerJSON::GetCurrentPath()
     {
         return cP;
+    }
+
+    std::set<std::string> SerializerJSON::ListCurrentPath()
+    {
+        auto cPointer = nlohmann::json::json_pointer(cP);
+        auto v = jObj[cPointer];
+        DNDS_assert_info(v.is_object(), fmt::format("current path is not an object " + cP));
+        std::set<std::string> ret;
+        for (auto &[key, value] : v.items())
+            ret.insert(key);
+        return ret;
     }
 
     void SerializerJSON::WriteInt(const std::string &name, int v)
@@ -122,26 +133,28 @@ namespace DNDS::Serializer
         auto cPointer = nlohmann::json::json_pointer(cP);
         jObj[cPointer][name] = v;
     }
-    void SerializerJSON::WriteSharedIndexVector(const std::string &name, const ssp<std::vector<index>> &v, ArrayGlobalOffset offset)
+    void SerializerJSON::WriteSharedIndexVector(const std::string &name, const ssp<host_device_vector<index>> &v, ArrayGlobalOffset offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
-        if (ptr_2_pth.count(v.get()))
-            jObj[cPointer][name]["ref"] = ptr_2_pth[v.get()];
+        std::string refPath;
+        if (dedupLookup(v, refPath))
+            jObj[cPointer][name]["ref"] = refPath;
         else
         {
             jObj[cPointer][name] = *v;
-            ptr_2_pth[v.get()] = cP + "/" + name;
+            dedupRegister(v, cP + "/" + name);
         }
     }
-    void SerializerJSON::WriteSharedRowsizeVector(const std::string &name, const ssp<std::vector<rowsize>> &v, ArrayGlobalOffset offset)
+    void SerializerJSON::WriteSharedRowsizeVector(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
-        if (ptr_2_pth.count(v.get()))
-            jObj[cPointer][name]["ref"] = ptr_2_pth[v.get()];
+        std::string refPath;
+        if (dedupLookup(v, refPath))
+            jObj[cPointer][name]["ref"] = refPath;
         else
         {
             jObj[cPointer][name] = *v;
-            ptr_2_pth[v.get()] = cP + "/" + name;
+            dedupRegister(v, cP + "/" + name);
         }
     }
 
@@ -190,10 +203,10 @@ namespace DNDS::Serializer
         DNDS_assert(jObj[cPointer][name].is_string());
         v = jObj[cPointer][name].get<std::remove_reference_t<decltype(v)>>();
     }
-    void SerializerJSON::ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> &v, ArrayGlobalOffset &offset)
+    void SerializerJSON::ReadSharedIndexVector(const std::string &name, ssp<host_device_vector<index>> &v, ArrayGlobalOffset &offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
-        using tValue = std::vector<index>;
+        using tValue = host_device_vector<index>;
         std::string refPath;
         if (jObj[cPointer][name].is_object() && !jObj[cPointer][name].is_array())
         {
@@ -212,15 +225,17 @@ namespace DNDS::Serializer
         else
         {
             DNDS_assert(jObj[nlohmann::json::json_pointer(refPath)].is_array());
-            v = std::make_shared<tValue>(jObj[nlohmann::json::json_pointer(refPath)].get<tValue>()); // vector's copy constructor
+            // TODO: OPTIMIZE into direct read from json
+            auto v_temp = jObj[nlohmann::json::json_pointer(refPath)].get<std::vector<index>>();
+            v = std::make_shared<tValue>(v_temp); // vector's copy constructor
             pth_2_ssp[refPath] = &v;
         }
         offset = ArrayGlobalOffset_Unknown;
     }
-    void SerializerJSON::ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> &v, ArrayGlobalOffset &offset)
+    void SerializerJSON::ReadSharedRowsizeVector(const std::string &name, ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset &offset)
     {
         auto cPointer = nlohmann::json::json_pointer(cP);
-        using tValue = std::vector<rowsize>;
+        using tValue = host_device_vector<rowsize>;
         std::string refPath;
         if (jObj[cPointer][name].is_object() && !jObj[cPointer][name].is_array())
         {
@@ -239,7 +254,9 @@ namespace DNDS::Serializer
         else
         {
             DNDS_assert(jObj[nlohmann::json::json_pointer(refPath)].is_array());
-            v = std::make_shared<tValue>(jObj[nlohmann::json::json_pointer(refPath)].get<tValue>()); // vector's copy constructor
+            // TODO: OPTIMIZE into direct read from json
+            auto v_temp = jObj[nlohmann::json::json_pointer(refPath)].get<std::vector<rowsize>>();
+            v = std::make_shared<tValue>(v_temp); // vector's copy constructor
             pth_2_ssp[refPath] = &v;
         }
         offset = ArrayGlobalOffset_Unknown;

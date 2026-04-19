@@ -2,7 +2,8 @@
 
 #include "DNDS/Defines.hpp"
 #include "Geometric.hpp"
-#include <nlohmann/json.hpp>
+#include "DNDS/JsonUtil.hpp"
+#include "DNDS/ConfigEnum.hpp"
 
 namespace DNDS::Geom::RBF
 {
@@ -18,16 +19,18 @@ namespace DNDS::Geom::RBF
         CPC0,
     };
 
-    NLOHMANN_JSON_SERIALIZE_ENUM(
+    DNDS_DEFINE_ENUM_JSON(
         RBFKernelType,
-        {{RBFKernelType::UnknownRBFKernel, nullptr},
-         {RBFKernelType::Distance, "Distance"},
-         {RBFKernelType::DistanceA1, "DistanceA1"},
-         {RBFKernelType::InversedDistanceA1, "InversedDistanceA1"},
-         {RBFKernelType::InversedDistanceA1Compact, "InversedDistanceA1Compact"},
-         {RBFKernelType::Gaussian, "Gaussian"},
-         {RBFKernelType::CPC2, "CPC2"},
-         {RBFKernelType::CPC0, "CPC0"}})
+        {
+            {RBFKernelType::UnknownRBFKernel, nullptr},
+            {RBFKernelType::Distance, "Distance"},
+            {RBFKernelType::DistanceA1, "DistanceA1"},
+            {RBFKernelType::InversedDistanceA1, "InversedDistanceA1"},
+            {RBFKernelType::InversedDistanceA1Compact, "InversedDistanceA1Compact"},
+            {RBFKernelType::Gaussian, "Gaussian"},
+            {RBFKernelType::CPC2, "CPC2"},
+            {RBFKernelType::CPC0, "CPC0"},
+        })
     inline bool KernelIsCompact(RBFKernelType t)
     {
         return t == CPC0 || t == CPC2 || t == InversedDistanceA1Compact;
@@ -44,7 +47,7 @@ namespace DNDS::Geom::RBF
         RiXj.resize(cent.cols(), xs.cols());
         for (int iC = 0; iC < cent.cols(); iC++)
         {
-            RiXj(iC, Eigen::all) = (xs.colwise() - cent(Eigen::all, iC)).colwise().norm();
+            RiXj(iC, EigenAll) = (xs.colwise() - cent(EigenAll, iC)).colwise().norm();
         }
         return RiXj.array().maxCoeff();
     }
@@ -99,7 +102,7 @@ namespace DNDS::Geom::RBF
         RiXj.resize(cent.cols(), xs.cols());
         for (int iC = 0; iC < cent.cols(); iC++)
         {
-            RiXj(iC, Eigen::all) = (xs.colwise() - cent(Eigen::all, iC)).colwise().norm() * (1. / R);
+            RiXj(iC, EigenAll) = (xs.colwise() - cent(EigenAll, iC)).colwise().norm() * (1. / R);
         }
         // MatrixXR NiXj = (1 + RiXj.array().square()).inverse();
         return FRBFBasis(RiXj, kernel);
@@ -111,8 +114,8 @@ namespace DNDS::Geom::RBF
     {
         MatrixXR PT;
         PT.resize(4, xs.cols());
-        PT(0, Eigen::all).setConstant(1);
-        PT({1, 2, 3}, Eigen::all) = xs;
+        PT(0, EigenAll).setConstant(1);
+        PT({1, 2, 3}, EigenAll) = xs;
         MatrixXR M = RBFCPC2(xs, xs, R, kernel);
         MatrixXR A;
         A.setZero(xs.cols() + 4, xs.cols() + 4);

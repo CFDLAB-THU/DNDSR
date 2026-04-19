@@ -32,7 +32,7 @@ namespace DNDS::Geom
             {
                 coordBnd.resize(3, bnd2nodeSerial->RowSize(iBnd));
                 for (rowsize ib2n = 0; ib2n < bnd2nodeSerial->RowSize(iBnd); ib2n++)
-                    coordBnd(Eigen::all, ib2n) = coordSerial->operator[]((*bnd2nodeSerial)(iBnd, ib2n));
+                    coordBnd(EigenAll, ib2n) = coordSerial->operator[]((*bnd2nodeSerial)(iBnd, ib2n));
             }
             tPoint faceCent = coordBnd.rowwise().mean();
 
@@ -86,7 +86,7 @@ namespace DNDS::Geom
             {
                 coordBnd.resize(3, bnd2nodeSerial->RowSize(iBnd));
                 for (rowsize ib2n = 0; ib2n < bnd2nodeSerial->RowSize(iBnd); ib2n++)
-                    coordBnd(Eigen::all, ib2n) = coordSerial->operator[]((*bnd2nodeSerial)(iBnd, ib2n));
+                    coordBnd(EigenAll, ib2n) = coordSerial->operator[]((*bnd2nodeSerial)(iBnd, ib2n));
             }
             tPoint faceCent = coordBnd.rowwise().mean();
 
@@ -134,7 +134,7 @@ namespace DNDS::Geom
                 {
                     coordBndOther.resize(3, bnd2nodeSerial->RowSize(donorIBnd));
                     for (rowsize ib2n = 0; ib2n < bnd2nodeSerial->RowSize(donorIBnd); ib2n++)
-                        coordBndOther(Eigen::all, ib2n) = // put onto main's data
+                        coordBndOther(EigenAll, ib2n) = // put onto main's data
                             coordSerial->operator[]((*bnd2nodeSerial)(donorIBnd, ib2n));
                 }
                 DNDS_assert(coordBndOther.cols() == coordBnd.cols());
@@ -145,8 +145,8 @@ namespace DNDS::Geom
                     rowsize jb2nMin = 0;
                     for (rowsize jb2n = 0; jb2n < coordBnd.cols(); jb2n++)
                     {
-                        real dist = (coordBndOther(Eigen::all, jb2n) -
-                                     mesh->periodicInfo.TransCoord(coordBnd(Eigen::all, ib2n), faceID))
+                        real dist = (coordBndOther(EigenAll, jb2n) -
+                                     mesh->periodicInfo.TransCoord(coordBnd(EigenAll, ib2n), faceID))
                                         .squaredNorm();
                         if (dist < minDist)
                         {
@@ -190,12 +190,23 @@ namespace DNDS::Geom
                     donorNode2Cell[iNode].push_back(iCell);
                 }
             }
+        std::unordered_map<index, std::vector<index>> donorNode2Bnd;
+        for (DNDS::index iBnd = 0; iBnd < bnd2nodeSerial->Size(); iBnd++)
+            for (DNDS::rowsize iN = 0; iN < Elem::Element{(*bndElemInfoSerial)(iBnd, 0).getElemType()}.GetNumVertices(); iN++)
+            {
+                auto iNode = (*bnd2nodeSerial)(iBnd, iN);
+                if (iNodeDonorToMain1.count(iNode) || iNodeDonorToMain2.count(iNode) || iNodeDonorToMain3.count(iNode))
+                {
+                    donorNode2Bnd[iNode].push_back(iBnd);
+                }
+            }
         /**********************************************************************************************************************/
 
-        DNDS_MAKE_SSP(cell2nodePbiSerial, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mesh->getMPI());
+        cell2nodePbiSerial = make_ssp<decltype(cell2nodePbiSerial)::element_type>(ObjName{"Deduplicate1to1Periodic::cell2nodePbiSerial"}, mesh->getMPI());
         cell2nodePbiSerial->Resize(cell2nodeSerial->Size());
         for (index iCell = 0; iCell < cell2nodeSerial->Size(); iCell++)
             cell2nodePbiSerial->ResizeRow(iCell, cell2nodeSerial->RowSize(iCell));
+        // scan the periodic bnds
         for (index iBnd = 0; iBnd < bnd2nodeSerial->Size(); iBnd++)
         {
             auto faceID = bndElemInfoSerial->operator()(iBnd, 0).zone;
@@ -216,6 +227,36 @@ namespace DNDS::Geom
                                         (*cell2nodePbiSerial)(iCell, ic2n).setP2True();
                                     if (faceID == BC_ID_PERIODIC_3_DONOR)
                                         (*cell2nodePbiSerial)(iCell, ic2n).setP3True();
+                                }
+                            }
+                }
+            }
+        }
+        bnd2nodePbiSerial = make_ssp<decltype(bnd2nodePbiSerial)::element_type>(ObjName{"Deduplicate1to1Periodic::bnd2nodePbiSerial"}, mesh->getMPI());
+        bnd2nodePbiSerial->Resize(bnd2nodeSerial->Size());
+        for (index iBnd = 0; iBnd < bnd2nodeSerial->Size(); iBnd++)
+            bnd2nodePbiSerial->ResizeRow(iBnd, bnd2nodeSerial->RowSize(iBnd));
+        // scan the periodic bnds
+        for (index iBnd = 0; iBnd < bnd2nodeSerial->Size(); iBnd++)
+        {
+            auto faceID = bndElemInfoSerial->operator()(iBnd, 0).zone;
+            if (FaceIDIsPeriodicDonor(faceID))
+            {
+                for (auto iNodeFace : (*bnd2nodeSerial)[iBnd])
+                {
+                    DNDS_assert(donorNode2Bnd.count(iNodeFace));
+                    for (auto iBndAdj : donorNode2Bnd[iNodeFace])
+                        for (auto iNode : (*bnd2nodeSerial)[iBnd])
+                            for (rowsize ic2n = 0; ic2n < (*bnd2nodeSerial).RowSize(iBndAdj); ic2n++)
+                            {
+                                if ((*bnd2nodeSerial)(iBndAdj, ic2n) == iNode)
+                                {
+                                    if (faceID == BC_ID_PERIODIC_1_DONOR)
+                                        (*bnd2nodePbiSerial)(iBndAdj, ic2n).setP1True();
+                                    if (faceID == BC_ID_PERIODIC_2_DONOR)
+                                        (*bnd2nodePbiSerial)(iBndAdj, ic2n).setP2True();
+                                    if (faceID == BC_ID_PERIODIC_3_DONOR)
+                                        (*bnd2nodePbiSerial)(iBndAdj, ic2n).setP3True();
                                 }
                             }
                 }
@@ -272,9 +313,10 @@ namespace DNDS::Geom
         // } //TODO
 
         cell2nodePbiSerial->Compress();
+        bnd2nodePbiSerial->Compress();
 
         decltype(coordSerial) coordSerialOld = coordSerial;
-        DNDS_MAKE_SSP(coordSerial, mesh->getMPI());
+        coordSerial = make_ssp<decltype(coordSerial)::element_type>(ObjName{"Deduplicate1to1Periodic::coordSerial"}, mesh->getMPI());
         coordSerial->Resize(nNodeNew);
         for (index i = 0; i < coordSerialOld->Size(); i++)
             if (iNodeOld2New[i] >= 0)
@@ -293,7 +335,7 @@ namespace DNDS::Geom
                         << fmt::format("Using OMP [{}]", omp_get_max_threads())
 #endif
                         << std::endl;
-        DNDS_MAKE_SSP(cell2cellSerial, mesh->getMPI());
+        cell2cellSerial = make_ssp<decltype(cell2cellSerial)::element_type>(ObjName{"BuildCell2Cell::cell2cellSerial"}, mesh->getMPI());
         // if (mRank != mesh->getMPI().rank)
         //     return;
         /// TODO: abstract these: invert cone (like node 2 cell -> cell 2 node) (also support operating on pair)
@@ -322,7 +364,7 @@ namespace DNDS::Geom
         index nCells = cell2nodeSerial->Size();
         index nCellsDone = 0;
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (DNDS::index iCell = 0; iCell < cell2nodeSerial->Size(); iCell++)
         {
@@ -343,7 +385,7 @@ namespace DNDS::Geom
             //                                    /****/
 #ifdef DNDS_USE_OMP
             // #pragma omp single
-#pragma omp critical
+#    pragma omp critical
 #endif
             {
                 if (nCellsDone % (nCells / 1000 + 1) == 0)
@@ -407,7 +449,7 @@ namespace DNDS::Geom
             for (auto iCellOther : c_neighbors)
                 (*cell2cellSerial)(iCell, ic2c++) = iCellOther;
 #ifdef DNDS_USE_OMP
-#pragma omp atomic
+#    pragma omp atomic
 #endif
             nCellsDone++;
         }
@@ -416,18 +458,18 @@ namespace DNDS::Geom
             log() << std::endl;
 
         /*************************************************************************************************/
-        DNDS_MAKE_SSP(cell2cellSerialFacial, mesh->getMPI());
+        cell2cellSerialFacial = make_ssp<decltype(cell2cellSerialFacial)::element_type>(ObjName{"BuildCell2Cell::cell2cellSerialFacial"}, mesh->getMPI());
         if (mesh->getMPI().rank == mRank)
             DNDS::log() << "UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2" << std::endl;
         cell2cellSerialFacial->Resize(cell2cellSerial->Size(), 6);
         nCellsDone = 0;
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
         for (index iCell = 0; iCell < cell2cellSerial->Size(); iCell++)
         {
 #ifdef DNDS_USE_OMP
-#pragma omp critical
+#    pragma omp critical
 #endif
             {
                 if (nCellsDone % (nCells / 1000 + 1) == 0)
@@ -465,7 +507,7 @@ namespace DNDS::Geom
             (*cell2cellSerialFacial).ResizeRow(iCell, facialNeighbors.size());
             (*cell2cellSerialFacial)[iCell] = facialNeighbors;
 #ifdef DNDS_USE_OMP
-#pragma omp atomic
+#    pragma omp atomic
 #endif
             nCellsDone++;
         }
@@ -488,8 +530,7 @@ namespace DNDS::Geom
             return;
         }
         tAdj1Pair nodeNeedCreate;
-        DNDS_MAKE_SSP(nodeNeedCreate.father, mpi);
-        DNDS_MAKE_SSP(nodeNeedCreate.son, mpi);
+        nodeNeedCreate.InitPair("RecreatePeriodicNodes::nodeNeedCreate", mpi);
         nodeNeedCreate.TransAttach();
         nodeNeedCreate.father->Resize(coords.father->Size());
         nodeNeedCreate.trans.BorrowGGIndexing(coords.trans);
@@ -502,7 +543,7 @@ namespace DNDS::Geom
                 nodeNeedCreate(cell2node(iC, ic2n), 0) |= (0x01U << uint8_t(cell2nodePbi(iC, ic2n)));
         DNDS::ArrayTransformerType<tAdj1::element_type>::Type nodeNeedCreatePastTrans;
         tAdj1 nodeNeedCreatePast;
-        DNDS_MAKE_SSP(nodeNeedCreatePast, mpi);
+        nodeNeedCreatePast = make_ssp<decltype(nodeNeedCreatePast)::element_type>(ObjName{"RecreatePeriodicNodes::nodeNeedCreatePast"}, mpi);
         nodeNeedCreatePastTrans.setFatherSon(nodeNeedCreate.son, nodeNeedCreatePast);
         nodeNeedCreatePastTrans.createFatherGlobalMapping();
         std::vector<index> pushSonSeries(nodeNeedCreate.son->Size());
@@ -522,8 +563,7 @@ namespace DNDS::Geom
 
         index nCreatedNodes{0};
         tAdj8Pair node2recreatedNodes;
-        DNDS_MAKE_SSP(node2recreatedNodes.father, mpi);
-        DNDS_MAKE_SSP(node2recreatedNodes.son, mpi);
+        node2recreatedNodes.InitPair("RecreatePeriodicNodes::node2recreatedNodes", mpi);
         node2recreatedNodes.TransAttach();
         node2recreatedNodes.father->Resize(coords.father->Size());
         node2recreatedNodes.trans.BorrowGGIndexing(coords.trans);
@@ -542,8 +582,7 @@ namespace DNDS::Geom
         }
         // node2recreatedNodes now points to local new coords
 
-        DNDS_MAKE_SSP(coordsPeriodicRecreated.father, mpi);
-        DNDS_MAKE_SSP(coordsPeriodicRecreated.son, mpi);
+        coordsPeriodicRecreated.InitPair("RecreatePeriodicNodes::coordsPeriodicRecreated", mpi);
         coordsPeriodicRecreated.TransAttach();
         coordsPeriodicRecreated.father->Resize(nCreatedNodes + coords.father->Size());
         coordsPeriodicRecreated.trans.createFatherGlobalMapping();
@@ -569,8 +608,7 @@ namespace DNDS::Geom
                         mpi.rank, node2recreatedNodes(iN, i));
         node2recreatedNodes.trans.pullOnce(); // for cell2node query
         // std::cout << "here X2" << std::endl;
-        DNDS_MAKE_SSP(cell2nodePeriodicRecreated.father, mpi);
-        DNDS_MAKE_SSP(cell2nodePeriodicRecreated.son, mpi);
+        cell2nodePeriodicRecreated.InitPair("RecreatePeriodicNodes::cell2nodePeriodicRecreated", mpi);
         cell2nodePeriodicRecreated.TransAttach();
         cell2nodePeriodicRecreated.father->Resize(cell2node.father->Size());
         for (index iC = 0; iC < cell2node.father->Size(); iC++)

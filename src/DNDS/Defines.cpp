@@ -1,3 +1,8 @@
+/// @file Defines.cpp
+/// @brief Implementations of symbols declared in @ref Defines.hpp: log stream
+/// management, signal handler body, OpenMP helpers, version string accessor,
+/// terminal / progress utilities.
+
 #include "Defines.hpp"
 
 // #ifdef _MSC_VER
@@ -7,20 +12,20 @@
 #include <boost/stacktrace.hpp>
 // #include <cpptrace.hpp>
 
-#if defined(linux) || defined(_UNIX) || defined(__linux__)
-#include <unistd.h>
-#include <sys/ioctl.h>
-#define _isatty isatty
+#ifdef DNDS_UNIX_LIKE
+#    include <unistd.h>
+#    include <sys/ioctl.h>
+#    define _isatty isatty
 #endif
 #if defined(_WIN32) || defined(__WINDOWS_)
-#define NOMINMAX
-#include <io.h>
-#include <windows.h>
+#    define NOMINMAX
+#    include <io.h>
+#    include <windows.h>
 #endif
 
 extern "C" void DNDS_signal_handler(int signal)
 {
-    std::cerr << __DNDS_getTraceString() << "\n";
+    std::cerr << ::DNDS::getTraceString() << "\n";
     std::cerr << "Signal " + std::to_string(signal) << std::endl;
     std::signal(signal, SIG_DFL);
     std::raise(signal);
@@ -37,7 +42,7 @@ namespace DNDS
         return false;
     }
 
-    std::ostream *logStream;
+    ssp<std::ostream> logStream;
 
     bool useCout = true;
 
@@ -45,7 +50,9 @@ namespace DNDS
 
     bool logIsTTY() { return ostreamIsTTY(*logStream); }
 
-    void setLogStream(std::ostream *nstream) { useCout = false, logStream = nstream; }
+    void setLogStream(ssp<std::ostream> nstream) { useCout = false, logStream = nstream; }
+
+    void setLogStreamCout() { useCout = true, logStream.reset(); }
 
     int get_terminal_width()
     {
@@ -123,6 +130,7 @@ namespace DNDS
                 }
                 catch (...)
                 {
+                    ret = -1;
                 }
         }
         return ret;
@@ -142,6 +150,7 @@ namespace DNDS
                 }
                 catch (...)
                 {
+                    ret = -1;
                 }
         }
         return ret;
@@ -150,7 +159,7 @@ namespace DNDS
 
 /********************************/
 // workaround for cpp trace
-std::string __DNDS_getTraceString()
+std::string DNDS::getTraceString()
 {
     std::stringstream ss;
     ss << boost::stacktrace::stacktrace();

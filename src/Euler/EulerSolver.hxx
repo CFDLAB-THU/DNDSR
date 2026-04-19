@@ -1,3 +1,13 @@
+/** @file EulerSolver.hxx
+ *  @brief Template implementation of EulerSolver::RunImplicitEuler, the main implicit
+ *         time-marching loop, along with linear solver dispatch (solveLinear),
+ *         preconditioner application (doPrecondition), and running environment
+ *         initialization (InitializeRunningEnvironment).
+ *
+ *  Covers CFL ramping, reconstruction update, RHS evaluation, LUSGS/GMRES
+ *  implicit time stepping, residual monitoring, CL-driver integration,
+ *  checkpoint/restart writing, time averaging, and output scheduling.
+ */
 #pragma once
 
 // #ifndef __DNDS_REALLY_COMPILING__
@@ -27,8 +37,23 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
+        template <>)
+    /** @brief Main implicit time-marching loop for the compressible Navier-Stokes solver.
+     *
+     *  Performs the following at each time step:
+     *  1. CFL ramping with exponential growth and linear fallback on divergence.
+     *  2. Reconstruction update: VR coefficient computation, gradient limiting,
+     *     positivity-preserving beta evaluation.
+     *  3. Local time step (dTau) estimation from face eigenvalues.
+     *  4. RHS evaluation via EvaluateRHS.
+     *  5. Implicit time stepping using either LU-SGS sweeps or GMRES with LU preconditioner.
+     *  6. Positivity-preserving alpha limiter for the update.
+     *  7. Component-wise L1 residual monitoring with convergence checks.
+     *  8. CL-driver integration for angle-of-attack adjustment.
+     *  9. Checkpoint/restart writing on schedule or SIGUSR1 signal.
+     *  10. Time averaging accumulation.
+     *  11. VTK output scheduling based on time or iteration.
+     */
     void EulerSolver<model>::RunImplicitEuler()
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -128,11 +153,11 @@ namespace DNDS::Euler
         {
             cx.trans.startPersistentPull();
             cx.trans.waitPersistentPull(); // for hermite3
-            auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
-            auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
-            auto &uRecIncC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRecInc1 : uRecInc;
-            auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
-            auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
+            auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
+            auto &JSourceC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JSource1 : JSource;
+            auto &uRecIncC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRecInc1 : uRecInc;
+            auto &alphaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? alphaPP1 : alphaPP;
+            auto &betaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? betaPP1 : betaPP;
             // if (mpi.rank == 0)
             //     std::cout << uRecC.father.get() << std::endl;
             typename TVFV::template TFBoundary<nVarsFixed>
@@ -185,7 +210,8 @@ namespace DNDS::Euler
                 betaPPC.setConstant(1.0);
                 alphaPP_tmp.setConstant(1.0);
                 uRecNew.setConstant(0.0);
-                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit, TEval::RHS_Ignore_Viscosity); // TODO: test with viscosity
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
+                                 TEval::RHS_Ignore_Viscosity); // TODO: test with viscosity // TODO: RHS_Direct_2nd_Rec_1st_Conv?
                 // vfv->DoReconstruction2nd(uRecOld, cx, FBoundary, 1, std::vector<int>());
                 // eval.EvaluateRHS(crhs, JSourceC, cx, uRecOld, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
                 //                  0); // TEval::RHS_Ignore_Viscosity
@@ -205,7 +231,11 @@ namespace DNDS::Euler
             Timer().StartTimer(PerformanceTimer::Reconstruction);
             if (config.implicitReconstructionControl.storeRecInc)
                 uRecOld = uRecC;
-            if (config.implicitReconstructionControl.recLinearScheme == 0)
+
+            if (config.implicitReconstructionControl.useExplicit)
+            { // pass
+            }
+            else if (config.implicitReconstructionControl.recLinearScheme == 0)
             {
                 for (int iRec = 1; iRec <= nRec; iRec++)
                 {
@@ -311,8 +341,8 @@ namespace DNDS::Euler
             {
                 Eigen::Array<real, 1, Eigen::Dynamic> resB;
                 int nPCGIterAll{0};
-                auto &pcgRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? pcgRec1 : pcgRec;
-                auto &uRecBC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRecB1 : uRecB;
+                auto &pcgRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? pcgRec1 : pcgRec;
+                auto &uRecBC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRecB1 : uRecB;
 
                 if (iter <= 2 //! consecutive pcg is bad in 0012, using separate pcg
                     || pcgRecC->getPHistorySize() >= config.implicitReconstructionControl.fpcgMaxPHistory)
@@ -417,7 +447,7 @@ namespace DNDS::Euler
             if (gradIsZero)
             {
                 uRec = uRecC;
-                if (config.timeMarchControl.odeCode == 401)
+                if (config.timeMarchControl.timeMarchIsTwoStage())
                     uRec1 = uRecC;
                 gradIsZero = false;
             }
@@ -427,7 +457,7 @@ namespace DNDS::Euler
             //     uRecC[iCell].m() -= uOld[iCell].m();
 
             DNDS_MPI_InsertCheck(mpi, " Lambda RHS: StartLim");
-            if (config.limiterControl.useLimiter)
+            if (!config.implicitReconstructionControl.useExplicit && config.limiterControl.useLimiter)
             {
                 // vfv->ReconstructionWBAPLimitFacial(
                 //     cx, uRecC, uRecNew, uF0, uF1, ifUseLimiter,
@@ -443,7 +473,7 @@ namespace DNDS::Euler
                     UC(Seq123) = normBase.transpose() * UC(Seq123);
 
                     auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, eval.settings.idealGasProperty.gamma);
-                    M(Eigen::all, Seq123) *= normBase.transpose();
+                    M(EigenAll, Seq123) *= normBase.transpose();
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
                     ret.setIdentity();
@@ -461,7 +491,7 @@ namespace DNDS::Euler
                     UC(Seq123) = normBase.transpose() * UC(Seq123);
 
                     auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, eval.settings.idealGasProperty.gamma);
-                    M(Seq123, Eigen::all) = normBase * M(Seq123, Eigen::all);
+                    M(Seq123, EigenAll) = normBase * M(Seq123, EigenAll);
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
                     ret.setIdentity();
@@ -560,7 +590,7 @@ namespace DNDS::Euler
             if (iter == 1)
                 alphaPPC.setConstant(1.0); // make RHS un-disturbed
             alphaPP_tmp.setConstant(1.0);  // make RHS un-disturbed
-            if (config.limiterControl.usePPRecLimiter)
+            if (!config.implicitReconstructionControl.useExplicit && config.limiterControl.usePPRecLimiter)
             {
                 Timer().StartTimer(PerformanceTimer::Positivity);
                 nLimBeta = 0;
@@ -587,7 +617,11 @@ namespace DNDS::Euler
             }
 
             Timer().StartTimer(PerformanceTimer::RHS);
-            if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter) // todo: opt to using limited for uRecUnlim
+            if (config.implicitReconstructionControl.useExplicit)
+                eval.EvaluateRHS(crhs, JSourceC, cx, uRecC /* dummy*/, uRecC /* dummy*/,
+                                 betaPPC /* dummy*/, alphaPP_tmp /* dummy*/, false, tSimu + ct * curDtImplicit,
+                                 TEval::RHS_Direct_2nd_Rec | (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+            else if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter) // todo: opt to using limited for uRecUnlim
                 eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecLimited : uRecC, uRecLimited,
                                  betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
             else
@@ -599,7 +633,7 @@ namespace DNDS::Euler
             if (getNVars(model) > (I4 + 1) && iter <= config.others.nFreezePassiveInner)
             {
                 for (int i = 0; i < crhs.Size(); i++)
-                    crhs[i](Eigen::seq(I4 + 1, Eigen::last)).setZero();
+                    crhs[i](Eigen::seq(I4 + 1, EigenLast)).setZero();
                 // if (mpi.rank == 0)
                 //     std::cout << "Freezing all passive" << std::endl;
             }
@@ -615,6 +649,25 @@ namespace DNDS::Euler
                 ArrayDOFV<1> &dTau,
                 int iter, real ct, int uPos)
         {
+            if (config.timeMarchControl.timeMarchIsTwoStage() && uPos == 2) // special for two stage (HM3):
+            {
+                // ! mind that JSource, betaPP uses as uPos == 0
+                return eval.EvaluateRHS(crhs, JSource, cx, uRecNew, uRecNew, betaPP, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
+                                        TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration |
+                                            TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
+                                            (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+                //! note: in HM3 IV test for TPMG, this O1 version makes convergence slower compared to the O2 one, why?
+                // static const int use_1st_conv = 1;
+                // static const int use_1st_conv_ignore_vis = 0;
+                // return eval.EvaluateRHS(crhs, JSource, cx, uRecNew, uRecNew, betaPP, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
+                //                         (TEval::RHS_Direct_2nd_Rec_1st_Conv * use_1st_conv) |
+                //                             TEval::RHS_Direct_2nd_Rec |
+                //                             TEval::RHS_Dont_Record_Bud_Flux |
+                //                             TEval::RHS_Dont_Update_Integration |
+                //                             (TEval::RHS_Ignore_Viscosity * use_1st_conv_ignore_vis) |
+                //                             TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
+                //                             (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+            }
             return frhsOuter(crhs, cx, dTau, iter, ct, uPos, 1); // reconstructionFlag == 1
         };
 
@@ -625,8 +678,8 @@ namespace DNDS::Euler
             cx.trans.waitPersistentPull();
             // uRec.trans.startPersistentPull();
             // uRec.trans.waitPersistentPull();
-            auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
-            eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt);
+            auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
+            eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu);
             for (int iS = 1; iS <= config.implicitCFLControl.nSmoothDTau; iS++)
             {
                 // ArrayDOFV<1> dTauNew = dTau; //TODO: copying is still unusable; consider doing copiers on the level of ArrayDOFV and ArrayRecV
@@ -646,10 +699,10 @@ namespace DNDS::Euler
                               real alpha, int uPos)
         {
             Timer().StartTimer(PerformanceTimer::Positivity);
-            auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
-            auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
-            auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
-            auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
+            auto &alphaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? alphaPP1 : alphaPP;
+            auto &betaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? betaPP1 : betaPP;
+            auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
+            auto &JSourceC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JSource1 : JSource;
             nLimInc = 0;
             alphaMinInc = 1;
             eval.EvaluateCellRHSAlpha(cx, uRecC, betaPPC, cxInc, alphaPP_tmp, nLimInc, alphaMinInc, config.timeMarchControl.incrementPPRelax,
@@ -694,12 +747,13 @@ namespace DNDS::Euler
                 eval.CentralSmoothResidual(rhsTemp, cres, uTemp);
             }
 
-            auto &JDC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JD1 : JD;
-            auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
-            auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
-            auto &uRecIncC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRecInc1 : uRecInc;
-            auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
-            auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
+            auto &JDC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JD1 : JD;
+            auto &JSourceC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JSource1 : JSource;
+            auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
+            auto &uRecIncC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRecInc1 : uRecInc;
+            auto &alphaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? alphaPP1 : alphaPP;
+            auto &betaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? betaPP1 : betaPP;
+            bool isTPMGLevel = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 2;
 
             Timer().StartTimer(PerformanceTimer::Positivity);
             if (config.timeMarchControl.rhsFPPMode == 1 || config.timeMarchControl.rhsFPPMode == 11)
@@ -763,8 +817,8 @@ namespace DNDS::Euler
             //     cres[iCell] = eval.CompressInc(cx[iCell], cres[iCell] * dTau[iCell]) / dTau[iCell];
             // }
             cxInc.setConstant(0.0);
-            this->solveLinear(alphaDiag, cres, cx, cxInc, uRecC, uRecIncC,
-                              JDC, *gmres, 0);
+            this->solveLinear(alphaDiag, tSimu, cres, cx, cxInc, uRecC, uRecIncC,
+                              JDC, *gmres, !isTPMGLevel ? 0 : 1); //! here we borrow PMG's level1 setting into TPMG
             // cxInc: in: full increment from previous level; out: full increment form current level
             const auto solve_multigrid = [&](TDof &x_upper, TDof &xIncBuf, TDof &rhsBuf, const TDof &resOther, int mgLevelInit, int mgLevelMax)
             {
@@ -823,46 +877,62 @@ namespace DNDS::Euler
                         resOtherCurMG.addTo(uMG1, 1. / dt);
                     }
 
+                    // from uMG1 to rhsTemp - JSourceTmp
+                    auto call_evaluate_rhs = [&]()
+                    {
+                        if (mgLevel == 1)
+                            eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
+                                             config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
+                                             betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
+                                             TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration |
+                                                 TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
+                                                 (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags) |
+                                                 TEval::RHS_Recover_IncFScale);
+                        else if (mgLevel == 2)
+                            eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
+                                             config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
+                                             betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
+                                             (TEval::RHS_Direct_2nd_Rec_1st_Conv * use_1st_conv) |
+                                                 TEval::RHS_Direct_2nd_Rec |
+                                                 TEval::RHS_Dont_Record_Bud_Flux |
+                                                 TEval::RHS_Dont_Update_Integration |
+                                                 (TEval::RHS_Ignore_Viscosity * use_1st_conv_ignore_vis) |
+                                                 TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
+                                                 (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags) |
+                                                 TEval::RHS_Recover_IncFScale);
+                        else
+                            DNDS_assert(false);
+                    };
+
                     for (int iIterMG = 1; iIterMG <= curMGIter; iIterMG++)
                     {
 
-                        // from uMG1 to rhsTemp - JSourceTmp
-                        auto call_evaluate_rhs = [&]()
+                        // if (curMGIter > 1 && mgLevel == mgLevelMax) // this is used for checking lusgs-1lusgs == 2xlusgs
                         {
-                            if (mgLevel == 1)
-                                eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
-                                                 config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
-                                                 betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
-                                                 TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration);
-                            else if (mgLevel == 2)
-                                eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
-                                                 config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
-                                                 betaPP /*dummy*/, alphaPP /*dummy*/, false, tSimu + dt * ct,
-                                                 (TEval::RHS_Direct_2nd_Rec_1st_Conv * use_1st_conv) |
-                                                     TEval::RHS_Direct_2nd_Rec |
-                                                     TEval::RHS_Dont_Record_Bud_Flux |
-                                                     TEval::RHS_Dont_Update_Integration |
-                                                     (TEval::RHS_Ignore_Viscosity * use_1st_conv_ignore_vis));
-                            else
-                                DNDS_assert(false);
-                        };
-                        call_evaluate_rhs();
-
-                        rhsTemp.trans.startPersistentPull();
-                        rhsTemp.trans.waitPersistentPull();
-                        if (iIterMG == 1)
-                        {
-                            // rhsInitCurMG1 = rhsTemp;
-                            resOtherCurMG.addTo(rhsTemp, -alphaDiag);
+                            if (iIterMG > 1)
+                                fdtau(uMG1, dTauC, alphaDiag, uPos); //! warning! dTauC is overwritten
+                            call_evaluate_rhs();
+                            rhsTemp.trans.startPersistentPull();
+                            rhsTemp.trans.waitPersistentPull();
+                            if (iIterMG == 1)
+                            {
+                                // rhsInitCurMG1 = rhsTemp;
+                                resOtherCurMG.addTo(rhsTemp, -alphaDiag);
+                            }
+                            // if (mgLevel < mgLevelMax && iIterMG == 1) // pre smoother coarser grid call
+                            //     solve_multigrid_impl_ref(uMG1, rhsTemp, resOtherCurMG, mgLevel + 1, mgLevelMax, solve_multigrid_impl_ref);
+                            rhsTemp *= alphaDiag;
+                            rhsTemp += resOtherCurMG;
+                            rhsTemp.addTo(uMG1, -1. / dt);
+                            // todo: add rhsfpphere
+                            // rhsTemp === alphaDiag * rhs(cur) - alphaDiag * rhs(at_step_1) - uMG1 / dt + uMG1Init / dt
                         }
-                        // if (mgLevel < mgLevelMax && iIterMG == 1) // pre smoother coarser grid call
-                        //     solve_multigrid_impl_ref(uMG1, rhsTemp, resOtherCurMG, mgLevel + 1, mgLevelMax, solve_multigrid_impl_ref);
-                        rhsTemp *= alphaDiag;
-                        rhsTemp += resOtherCurMG;
-                        rhsTemp.addTo(uMG1, -1. / dt);
-                        // todo: add rhsfpphere
-                        // rhsTemp === alphaDiag * rhs(cur) - alphaDiag * rhs(at_step_1) - uMG1 / dt + uMG1Init / dt
-                        fdtau(uMG1, dTauC, alphaDiag, uPos); //! warning! dTauC is overwritten
+                        // else
+                        // {
+                        //     rhsTemp = resOtherCurMG;
+                        //     rhsTemp.addTo(uMG1, -1. / dt);
+                        // }
+
                         eval.LUSGSMatrixInit(JDTmp, JSourceTmp, dTauC, dt, alphaDiag, uMG1, uRecNew, 0, tSimu);
 
                         if (iIterMG % config.linearSolverControl.multiGridLPInnerNSee == 0)
@@ -873,7 +943,7 @@ namespace DNDS::Euler
                                 log() << fmt::format("MG Level LP [{}] iter [{}] res [{:.3e}]", mgLevel, iIterMG, resNorm.transpose()) << std::endl;
                         }
                         xIncBuf.setConstant(0.0);
-                        solveLinear(alphaDiag, rhsTemp, uMG1, xIncBuf, uRecNew, uRecNew,
+                        solveLinear(alphaDiag, tSimu, rhsTemp, uMG1, xIncBuf, uRecNew, uRecNew,
                                     JDTmp, *gmres, mgLevel);
                         fincrement(uMG1, xIncBuf, 1.0, uPos);
                         // solve_multigrid_impl(x_base, cxInc, mgLevel + 1, mgLevelMax);
@@ -893,7 +963,10 @@ namespace DNDS::Euler
                     // alphaDiag *rhsTemp(x + xinc) - xinc / dt == alphaDiag *rhsTemp(x) - res_of_first
                 };
 
+                fdtau(x_upper, dTauC, alphaDiag, uPos); // warning: fdtau resets lambda01234, crucial if useRoeJacobian
                 frhs(rhsBuf, x_upper, dTauC, iter, ct, uPos);
+                rhsBuf.trans.startPersistentPull();
+                rhsBuf.trans.waitPersistentPull();
                 solve_multigrid_impl(x_upper, rhsBuf, resOther, mgLevelInit, mgLevelMax, solve_multigrid_impl);
             };
 
@@ -901,18 +974,22 @@ namespace DNDS::Euler
             {
                 DNDS_assert(config.linearSolverControl.multiGridLP <= 2);
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(cxTemp)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(resTemp)
                 cxTemp = cx;
                 fincrement(cxTemp, cxInc, 1.0, uPos);
-                solve_multigrid(cxTemp, cxInc, cres, resOther, 1, config.linearSolverControl.multiGridLP); //! overwrites cxInc and cres here
+                // eval.settings.useRoeJacobian = true;
+                //! overwrites cxInc, cxTemp and resTemp do not overwrite cres! (as we might use cres for evaluation of convergence)
+                solve_multigrid(cxTemp, cxInc, resTemp, resOther, 1, config.linearSolverControl.multiGridLP);
+                // eval.settings.useRoeJacobian = false;
                 cxInc = cxTemp;
-                cxInc -= cx;
+                cxInc -= cx; // TODO: renew fsolve to produce cxNew instead of cxInc!!!
             }
             // eval.FixIncrement(cx, cxInc);
             // !freeze something
             if (getNVars(model) > I4 + 1 && iter <= config.others.nFreezePassiveInner)
             {
                 for (int i = 0; i < cres.Size(); i++)
-                    cxInc[i](Eigen::seq(I4 + 1, Eigen::last)).setZero();
+                    cxInc[i](Eigen::seq(I4 + 1, EigenLast)).setZero();
                 // if (mpi.rank == 0)
                 //     std::cout << "Freezing all passive" << std::endl;
             }
@@ -937,18 +1014,18 @@ namespace DNDS::Euler
             }
 
             cxInc.setConstant(0.0);
-            auto &JDC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JD1 : JD;
-            auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
-            auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
+            auto &JDC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JD1 : JD;
+            auto &JSourceC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JSource1 : JSource;
+            auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
             // TODO: use "update spectral radius" procedure? or force update in fsolve
-            eval.EvaluateDt(dTau, cx1, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt);
+            eval.EvaluateDt(dTau, cx1, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu);
             dTau *= Coefs[2];
             eval.LUSGSMatrixInit(JD1, JSource1,
                                  dTau, dt * Coefs[2], alphaDiag,
                                  cx1, uRec,
                                  0,
                                  tSimu);
-            eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt);
+            eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu);
             dTau *= Coefs[3] * veryLargeReal;
             eval.LUSGSMatrixInit(JD, JSource,
                                  dTau, dt * Coefs[3], alphaDiag,
@@ -966,17 +1043,17 @@ namespace DNDS::Euler
                 // //! LUSGS
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
 
-                eval.UpdateLUSGSForward(alphaDiag, crhs, cx1, cxInc, JD1, cxInc);
+                eval.UpdateLUSGSForward(alphaDiag, tSimu, crhs, cx1, cxInc, JD1, cxInc);
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
-                eval.UpdateLUSGSBackward(alphaDiag, crhs, cx1, cxInc, JD1, cxInc);
+                eval.UpdateLUSGSBackward(alphaDiag, tSimu, crhs, cx1, cxInc, JD1, cxInc);
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
                 uTemp = cxInc;
-                eval.UpdateLUSGSForward(alphaDiag, uTemp, cx, cxInc, JD, cxInc);
+                eval.UpdateLUSGSForward(alphaDiag, tSimu, uTemp, cx, cxInc, JD, cxInc);
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
-                eval.UpdateLUSGSBackward(alphaDiag, uTemp, cx, cxInc, JD, cxInc);
+                eval.UpdateLUSGSBackward(alphaDiag, tSimu, uTemp, cx, cxInc, JD, cxInc);
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
                 cxInc *= 1. / (dt * Coefs[1]);
@@ -990,11 +1067,11 @@ namespace DNDS::Euler
                 gmres->solve(
                     [&](decltype(u) &x, decltype(u) &Ax)
                     {
-                        eval.LUSGSMatrixVec(alphaDiag, cx, x, JD, Ax);
+                        eval.LUSGSMatrixVec(alphaDiag, tSimu, cx, x, JD, Ax);
                         Ax.trans.startPersistentPull();
                         Ax.trans.waitPersistentPull();
                         uTemp = Ax;
-                        eval.LUSGSMatrixVec(alphaDiag, cx1, uTemp, JD1, Ax);
+                        eval.LUSGSMatrixVec(alphaDiag, tSimu, cx1, uTemp, JD1, Ax);
                         Ax.trans.startPersistentPull();
                         Ax.trans.waitPersistentPull();
                         Ax *= dt * Coefs[1];
@@ -1003,17 +1080,17 @@ namespace DNDS::Euler
                     [&](decltype(u) &x, decltype(u) &MLx)
                     {
                         // x as rhs, and MLx as uinc
-                        eval.UpdateLUSGSForward(alphaDiag, x, cx1, MLx, JD1, MLx);
+                        eval.UpdateLUSGSForward(alphaDiag, tSimu, x, cx1, MLx, JD1, MLx);
                         MLx.trans.startPersistentPull();
                         MLx.trans.waitPersistentPull();
-                        eval.UpdateLUSGSBackward(alphaDiag, x, cx1, MLx, JD1, MLx);
+                        eval.UpdateLUSGSBackward(alphaDiag, tSimu, x, cx1, MLx, JD1, MLx);
                         MLx.trans.startPersistentPull();
                         MLx.trans.waitPersistentPull();
                         uTemp = MLx;
-                        eval.UpdateLUSGSForward(alphaDiag, uTemp, cx, MLx, JD, MLx);
+                        eval.UpdateLUSGSForward(alphaDiag, tSimu, uTemp, cx, MLx, JD, MLx);
                         MLx.trans.startPersistentPull();
                         MLx.trans.waitPersistentPull();
-                        eval.UpdateLUSGSBackward(alphaDiag, uTemp, cx, MLx, JD, MLx);
+                        eval.UpdateLUSGSBackward(alphaDiag, tSimu, uTemp, cx, MLx, JD, MLx);
                         MLx.trans.startPersistentPull();
                         MLx.trans.waitPersistentPull();
                         MLx *= 1. / (dt * Coefs[1]);
@@ -1041,7 +1118,7 @@ namespace DNDS::Euler
             if (getNVars(model) > I4 + 1 && iter <= config.others.nFreezePassiveInner)
             {
                 for (int i = 0; i < crhs.Size(); i++)
-                    cxInc[i](Eigen::seq(I4 + 1, Eigen::last)).setZero();
+                    cxInc[i](Eigen::seq(I4 + 1, EigenLast)).setZero();
                 // if (mpi.rank == 0)
                 //     std::cout << "Freezing all passive" << std::endl;
             }
@@ -1051,7 +1128,7 @@ namespace DNDS::Euler
                                    ArrayDOFV<nVarsFixed> &v,
                                    int uPos)
         {
-            auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
+            auto &alphaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? alphaPP1 : alphaPP;
             for (index i = 0; i < v.Size(); i++)
                 v[i] *= alphaPPC[i](0);
         };
@@ -1066,10 +1143,10 @@ namespace DNDS::Euler
                                   int uPos)
         {
             Timer().StartTimer(PerformanceTimer::Positivity);
-            auto &alphaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? alphaPP1 : alphaPP;
-            auto &betaPPC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? betaPP1 : betaPP;
-            auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
-            auto &JSourceC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? JSource1 : JSource;
+            auto &alphaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? alphaPP1 : alphaPP;
+            auto &betaPPC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? betaPP1 : betaPP;
+            auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
+            auto &JSourceC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JSource1 : JSource;
             renewRhsIncPart(); // un-fixed now
             // rhsIncPart.trans.startPersistentPull();
             // rhsIncPart.trans.waitPersistentPull(); //seems not needed
@@ -1160,6 +1237,10 @@ namespace DNDS::Euler
                 eval, tSimu);
             eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "00000",
                                  u, uRec);
+        }
+        if (config.outputControl.restartOutAtInit)
+        {
+            PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + "00000");
         }
 
         for (step = 1; step <= config.timeMarchControl.nTimeStep; step++)
@@ -1274,7 +1355,7 @@ namespace DNDS::Euler
                     break;
                 }
             }
-            else if (config.timeMarchControl.odeCode == 401 && false)
+            else if (config.timeMarchControl.timeMarchIsTwoStage() && false)
                 std::dynamic_pointer_cast<ODE::ImplicitHermite3SimpleJacobianDualStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(ode)
                     ->StepNested(
                         u, uIncBufODE,
@@ -1305,10 +1386,26 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
+        template <>)
+    /** @brief Dispatch the linear solve for implicit time stepping.
+     *
+     *  Solves the linearized system using either SGS sweeps (gmresCode=0) or
+     *  FGMRES with preconditioner (gmresCode=1/2). Supports multi-grid levels
+     *  with per-level configuration of iteration counts and solver parameters.
+     *
+     *  @param alphaDiag   Diagonal scaling factor for the implicit operator.
+     *  @param t           Current simulation time.
+     *  @param cres        RHS residual (right-hand side of the linear system).
+     *  @param cx          Current solution DOF.
+     *  @param cxInc       Solution increment (input/output).
+     *  @param uRecC       Reconstruction coefficients.
+     *  @param uRecIncC    Reconstruction increment (for SGS-with-rec mode).
+     *  @param JDC         Diagonal Jacobian block.
+     *  @param gmres       GMRES solver object.
+     *  @param gridLevel   Multigrid level (0 = finest).
+     */
     void EulerSolver<model>::solveLinear(
-        real alphaDiag,
+        real alphaDiag, real t,
         TDof &cres, TDof &cx, TDof &cxInc, TRec &uRecC, TRec uRecIncC,
         JacobianDiagBlock<nVarsFixed> &JDC, tGMRES_u &gmres, int gridLevel)
     {
@@ -1369,20 +1466,20 @@ namespace DNDS::Euler
             if (initWithLastURecInc)
             {
                 DNDS_assert(config.implicitReconstructionControl.storeRecInc);
-                eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecIncC, JDC, true, sgsRes);
+                eval.UpdateSGSWithRec(alphaDiag, t, cres, cx, uRecC, cxInc, uRecIncC, JDC, true, sgsRes);
                 // for (index iCell = 0; iCell < uRecIncC.Size(); iCell++)
                 //     std::cout << "-------\n"
                 //               << uRecIncC[iCell] << std::endl;
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
-                eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecIncC, JDC, false, sgsRes);
+                eval.UpdateSGSWithRec(alphaDiag, t, cres, cx, uRecC, cxInc, uRecIncC, JDC, false, sgsRes);
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
             }
             else
             {
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
-                doPrecondition(alphaDiag, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
+                doPrecondition(alphaDiag, t, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
             }
 
             if (sgsWithRec != 0)
@@ -1397,17 +1494,17 @@ namespace DNDS::Euler
                         false);
                     uRecNew.trans.startPersistentPull();
                     uRecNew.trans.waitPersistentPull();
-                    eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecNew, JDC, true, sgsRes);
+                    eval.UpdateSGSWithRec(alphaDiag, t, cres, cx, uRecC, cxInc, uRecNew, JDC, true, sgsRes);
                     cxInc.trans.startPersistentPull();
                     cxInc.trans.waitPersistentPull();
-                    eval.UpdateSGSWithRec(alphaDiag, cres, cx, uRecC, cxInc, uRecNew, JDC, false, sgsRes);
+                    eval.UpdateSGSWithRec(alphaDiag, t, cres, cx, uRecC, cxInc, uRecNew, JDC, false, sgsRes);
                     cxInc.trans.startPersistentPull();
                     cxInc.trans.waitPersistentPull();
                 }
                 else
                 {
                     DNDS_EULER_SOLVER_GET_TEMP_UDOF(uTemp)
-                    doPrecondition(alphaDiag, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
+                    doPrecondition(alphaDiag, t, cres, cx, cxInc, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
                 }
                 if (iterSGS == 1)
                     sgsRes0 = sgsRes;
@@ -1447,7 +1544,7 @@ namespace DNDS::Euler
             gmres.solve(
                 [&](TDof &x, TDof &Ax)
                 {
-                    eval.LUSGSMatrixVec(alphaDiag, cx, x, JDC, Ax);
+                    eval.LUSGSMatrixVec(alphaDiag, t, cx, x, JDC, Ax);
                     Ax.trans.startPersistentPull();
                     Ax.trans.waitPersistentPull();
                 },
@@ -1455,10 +1552,10 @@ namespace DNDS::Euler
                 {
                     // x as rhs, and MLx as uinc
                     MLx.setConstant(0.0), inputIsZero = true; //! start as zero
-                    doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
+                    doPrecondition(alphaDiag, t, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
                     for (int i = 0; i < sgsIter; i++)
                     {
-                        doPrecondition(alphaDiag, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
+                        doPrecondition(alphaDiag, t, x, cx, MLx, uTemp, JDC, sgsRes, inputIsZero, hasLUDone, gridLevel);
                     }
                 },
                 [&](TDof &a, TDof &b) -> real
@@ -1486,9 +1583,27 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
-    void EulerSolver<model>::doPrecondition(real alphaDiag, TDof &cres, TDof &cx, TDof &cxInc, TDof &uTemp,
+        template <>)
+    /** @brief Apply the preconditioner for the GMRES linear solver.
+     *
+     *  Depending on jacobiCode: applies symmetric SGS sweeps (code 0/1) or
+     *  local LU factorization solve (code 2). Manages the inputIsZero and
+     *  hasLUDone state flags across GMRES restarts.
+     *
+     *  @param alphaDiag    Diagonal scaling factor.
+     *  @param t            Current simulation time.
+     *  @param cres         Right-hand side for preconditioning.
+     *  @param cx           Current solution DOF.
+     *  @param cxInc        Preconditioned result (output).
+     *  @param uTemp        Temporary DOF buffer.
+     *  @param JDC          Diagonal Jacobian block.
+     *  @param sgsRes       SGS residual for convergence tracking.
+     *  @param inputIsZero  Tracks whether cxInc is zero (updated in-place).
+     *  @param hasLUDone    Tracks whether LU factorization has been computed (updated).
+     *  @param gridLevel    Multigrid level.
+     */
+    void EulerSolver<model>::doPrecondition(real alphaDiag, real t,
+                                            TDof &cres, TDof &cx, TDof &cxInc, TDof &uTemp,
                                             JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone, int gridLevel)
     {
         DNDS_assert(pEval);
@@ -1507,15 +1622,13 @@ namespace DNDS::Euler
 
         if (jacobiCode <= 1)
         {
-            bool useJacobi = jacobiCode == 0;
-            eval.UpdateSGS(alphaDiag, cres, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, true, sgsRes);
-            if (useJacobi)
-                cxInc = uTemp;
+            bool useGS = jacobiCode == 1;
+            eval.UpdateSGS(alphaDiag, t, cres, cx, cxInc, uTemp, JDC, true, useGS, sgsRes);
+            cxInc = uTemp;
             cxInc.trans.startPersistentPull();
             cxInc.trans.waitPersistentPull();
-            eval.UpdateSGS(alphaDiag, cres, cx, cxInc, useJacobi ? uTemp : cxInc, JDC, false, sgsRes);
-            if (useJacobi)
-                cxInc = uTemp;
+            eval.UpdateSGS(alphaDiag, t, cres, cx, cxInc, uTemp, JDC, false, useGS, sgsRes);
+            cxInc = uTemp;
             cxInc.trans.startPersistentPull();
             cxInc.trans.waitPersistentPull();
             // eval.UpdateLUSGSForward(alphaDiag, cres, cx, cxInc, JDC, cxInc);
@@ -1531,16 +1644,16 @@ namespace DNDS::Euler
             DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsTemp)
             DNDS_assert_info(config.linearSolverControl.directPrecControl.useDirectPrec, "need to use config.linearSolverControl.directPrecControl.useDirectPrec first !");
             if (!hasLUDone)
-                eval.LUSGSMatrixToJacobianLU(alphaDiag, cx, JDC, *JLocalLU), hasLUDone = true;
+                eval.LUSGSMatrixToJacobianLU(alphaDiag, t, cx, JDC, *JLocalLU), hasLUDone = true;
             for (int iii = 0; iii < 2; iii++)
             {
-                eval.LUSGSMatrixSolveJacobianLU(alphaDiag, cres, cx, cxInc, uTemp, rhsTemp, JDC, *JLocalLU, sgsRes);
+                eval.LUSGSMatrixSolveJacobianLU(alphaDiag, t, cres, cx, cxInc, uTemp, rhsTemp, JDC, *JLocalLU, inputIsZero, sgsRes);
                 uTemp.SwapDataFatherSon(cxInc);
                 // cxInc = uTemp;
                 cxInc.trans.startPersistentPull();
                 cxInc.trans.waitPersistentPull();
+                inputIsZero = false;
             }
-            inputIsZero = false;
         }
     }
 
@@ -1549,8 +1662,15 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>
-    )
+        template <>)
+    /** @brief Initialize the running environment for the time-marching loop.
+     *
+     *  Sets up the ODE solver, error logging stream, temporary arrays, signal handlers,
+     *  output data structures, and applies steady-mode overrides when configured.
+     *  Must be called before entering the main time-stepping loop.
+     *
+     *  @param runningEnvironment  Running environment structure to populate (output).
+     */
     void EulerSolver<model>::InitializeRunningEnvironment(EulerSolver<model>::RunningEnvironment &runningEnvironment)
     {
         if (config.timeMarchControl.partitionMeshOnly)
@@ -1579,13 +1699,17 @@ namespace DNDS::Euler
         {
             vfv->BuildUDof(data, 1);
         };
-
+        // std::cout << fmt::format("nVars {}, here50", nVars);
         if (config.timeMarchControl.steadyQuit)
         {
             if (mpi.rank == 0)
                 log() << "Using steady!" << std::endl;
             config.timeMarchControl.odeCode = 1; // To bdf;
             config.timeMarchControl.nTimeStep = 1;
+            config.timeMarchControl.dtImplicit = 1e100;
+            config.timeMarchControl.useDtPPLimit = false;
+            config.timeMarchControl.dtCFLLimitScale = 1e110;
+            config.outputControl.tDataOut = 1e300; // no t-out steps
         }
         switch (config.timeMarchControl.odeCode)
         {
@@ -1605,8 +1729,18 @@ namespace DNDS::Euler
                 buildDOF, buildScalar,
                 0);
             break;
-        case 1: // BDF2 // Backward Euler
-        case 103:
+        case 202: // esdirk3
+        case 203: // trapz
+        case 204: // esdirk2
+            if (mpi.rank == 0)
+                log() << "=== ODE: " + std::vector<std::string>{"ESDIRK3", "Trapz", "ESDIRK2"}.at(config.timeMarchControl.odeCode - 202) << std::endl;
+            ode = std::make_shared<ODE::ImplicitSDIRK4DualTimeStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
+                mesh->NumCell(),
+                buildDOF, buildScalar,
+                config.timeMarchControl.odeCode - 200); // 202 -> 2
+            break;
+        case 1:   // BDF2
+        case 103: // Backward Euler
             if (mpi.rank == 0 && config.timeMarchControl.odeCode == 1)
                 log() << "=== ODE: BDF2 " << std::endl;
             if (mpi.rank == 0 && config.timeMarchControl.odeCode == 103)
@@ -1633,6 +1767,7 @@ namespace DNDS::Euler
                 false); // TODO: add local stepping options
             break;
         case 401: // H3S
+            DNDS_assert(config.timeMarchControl.timeMarchIsTwoStage());
             if (mpi.rank == 0)
                 log() << "=== ODE: Hermite3 (simple jacobian) " << std::endl;
             ode = std::make_shared<ODE::ImplicitHermite3SimpleJacobianDualStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
@@ -1642,16 +1777,40 @@ namespace DNDS::Euler
                 std::round(config.timeMarchControl.odeSetting2),                                         // Backward Euler Starter
                 0,                                                                                       // method
                 config.timeMarchControl.odeSetting3 == 0 ? 0.9146 : config.timeMarchControl.odeSetting3, // thetaM1
+                0.0,                                                                                     // thetaM2 = 0
                 std::round(config.timeMarchControl.odeSetting4)                                          // mask
+            );
+            break;
+        case 411: // H3S U2R2
+        case 412: // H3S U2R1
+        case 413: // H3S U3R1
+            DNDS_assert(config.timeMarchControl.timeMarchIsTwoStage());
+            if (mpi.rank == 0)
+                log() << "=== ODE: Hermite3 (simple jacobian) " + fmt::format("Mask {}", config.timeMarchControl.odeCode - 411)
+                      << std::endl;
+            ode = std::make_shared<ODE::ImplicitHermite3SimpleJacobianDualStep<ArrayDOFV<nVarsFixed>, ArrayDOFV<1>>>(
+                mesh->NumCell(),
+                buildDOF, buildScalar,
+                config.timeMarchControl.odeSetting1 == 0 ? 0.55 : config.timeMarchControl.odeSetting1,
+                std::round(config.timeMarchControl.odeSetting2),                                         // Backward Euler Starter
+                0,                                                                                       // method
+                config.timeMarchControl.odeSetting3 == 0 ? 0.9146 : config.timeMarchControl.odeSetting3, // thetaM1
+                config.timeMarchControl.odeSetting4 == 0 ? 0.0 : config.timeMarchControl.odeSetting4,    // thetaM2
+                config.timeMarchControl.odeCode - 411                                                    // mask
             );
             break;
         default:
             DNDS_assert_info(false, "no such ode code");
         }
+        if (config.timeMarchControl.odeSettingsExtra.is_object())
+            ode->SetExtraParams(config.timeMarchControl.odeSettingsExtra);
+
         if (config.timeMarchControl.useImplicitPP)
         {
             DNDS_assert(config.timeMarchControl.odeCode == 1 || config.timeMarchControl.odeCode == 102);
         }
+
+        // std::cout << fmt::format("nVars {}, here100", nVars);
 
         /*******************************************************/
         /*                 INIT GMRES AND PCG                  */
@@ -1681,7 +1840,7 @@ namespace DNDS::Euler
                     vfv->BuildURec(data, nVars);
                 });
 
-        if (config.implicitReconstructionControl.recLinearScheme == 2 || config.timeMarchControl.odeCode == 401)
+        if (config.implicitReconstructionControl.recLinearScheme == 2 || config.timeMarchControl.timeMarchIsTwoStage())
             pcgRec1 = std::make_unique<tPCG_uRec>(
                 [&](decltype(uRec) &data)
                 {

@@ -45,6 +45,8 @@ void doPartitioning(const std::string &meshName, int dim)
 
     reader.MeshPartitionCell2Cell(DNDS::Geom::UnstructuredMeshSerialRW::PartitionOptions{});
     reader.PartitionReorderToMeshCell2Cell();
+    mesh->RecoverNode2CellAndNode2Bnd();
+    mesh->RecoverCell2CellAndBnd2Cell();
     mesh->BuildGhostPrimary();
     mesh->AdjGlobal2LocalPrimary();
 
@@ -62,7 +64,7 @@ void doPartitioning(const std::string &meshName, int dim)
 
     serializerP->OpenFile(meshPartPath, false);
     mesh->WriteSerialize(serializerP, "meshPart");
-    serializerPP->CloseFile();
+    serializerP->CloseFile();
 
     MPISerialDo(mpi, [&]()
                 { DNDS::log() << "    Rank: " << mpi.rank << " nCell " << mesh->NumCell() << " nCellGhost " << mesh->NumCellGhost() << std::endl; });

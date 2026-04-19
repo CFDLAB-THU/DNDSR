@@ -1,3 +1,13 @@
+/** @file EulerSolver_PrintData.hxx
+ *  @brief Template implementations of EulerSolver output methods: PrintData for VTK/HDF5
+ *         volume and boundary surface output, PrintRestart/ReadRestart for checkpoint I/O,
+ *         and ReadRestartOtherSolver for cross-solver restart loading.
+ *
+ *  PrintData outputs primitive variables (rho, p, T, Mach, velocity), RANS quantities
+ *  (mut, nuTilde, k, omega), reconstruction quality (beta), cell residuals, and
+ *  boundary surface quantities (wall shear stress, Cp, Cf, y+, heat flux).
+ *  Supports time-averaged field output and configurable precision/encoding.
+ */
 #pragma once
 
 #include <future>
@@ -8,6 +18,30 @@ namespace DNDS::Euler
 {
     static const auto model = NS;
     DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    /** @brief Write volume and boundary surface data to VTK-HDF5 or legacy VTK files.
+     *
+     *  Outputs the following per-cell fields for volume data:
+     *  - Primitive variables: density, velocity components, pressure, temperature, Mach number.
+     *  - Reconstruction quality indicator (beta / smooth threshold).
+     *  - Cell residual from ODE integrator.
+     *  - RANS quantities (nuTilde for SA; k, omega/epsilon for 2-equation models).
+     *  - Additional user-registered cell scalar fields.
+     *
+     *  For boundary surface data (wall faces):
+     *  - Wall shear stress vector, pressure coefficient, skin friction coefficient.
+     *  - y+ (wall unit distance), heat flux.
+     *
+     *  Supports time-averaged mode, point-interpolated output, async I/O,
+     *  and configurable ASCII precision / VTK float encoding.
+     *
+     *  @param fname                  Base filename for volume output.
+     *  @param fnameSeries            Filename for VTK time series metadata.
+     *  @param odeResidualF           Functor returning per-cell ODE residual scalar.
+     *  @param additionalCellScalars  List of additional named cell scalar fields to output.
+     *  @param eval                   Reference to the EulerEvaluator.
+     *  @param tSimu                  Current simulation time for time-series annotation.
+     *  @param mode                   Output mode (normal or time-averaged).
+     */
     void EulerSolver<model>::PrintData(
         const std::string &fname,
         const std::string &fnameSeries,
@@ -18,7 +52,8 @@ namespace DNDS::Euler
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         reader->SetASCIIPrecision(config.dataIOControl.nASCIIPrecision);
         reader->SetVTKFloatEncodeMode(config.dataIOControl.vtuFloatEncodeMode);
-        mesh->SetHDF5OutSetting(config.dataIOControl.hdfChunkSize, config.dataIOControl.hdfDeflateLevel);
+        mesh->SetHDF5OutSetting(config.dataIOControl.hdfChunkSize, config.dataIOControl.hdfDeflateLevel,
+                                config.dataIOControl.hdfCollOnData, config.dataIOControl.hdfCollOnMeta);
         const int cDim = dim;
 
         ArrayDOFV<nVarsFixed> &uOut = mode == PrintDataTimeAverage ? uAveraged : u;
@@ -67,7 +102,7 @@ namespace DNDS::Euler
                         (*outDist)[iCell][I4 + 1] = T;
                         (*outDist)[iCell][I4 + 2] = M;
                         // (*outDist)[iCell][7] = (bool)(ifUseLimiter[iCell] & 0x0000000FU);
-                        (*outDist)[iCell][I4 + 3] = ifUseLimiter[iCell][0] / (vfv->settings.smoothThreshold + verySmallReal);
+                        (*outDist)[iCell][I4 + 3] = ifUseLimiter[iCell][0] / (vfv->getSettings().smoothThreshold + verySmallReal);
                         // std::cout << iCell << ode.rhsbuf[0][iCell] << std::endl;
                         (*outDist)[iCell][I4 + 4] = odeResidualF(iCell);
                         // { // see the cond
@@ -124,7 +159,7 @@ namespace DNDS::Euler
                             // std::cout << uRecNew[iCell].rows() << std::endl;
                             vfv->FDiffBaseValue(DiBj, pPhy, iCell, -2, -2);
 
-                            TU vRec = (DiBj(Eigen::all, Eigen::seq(1, Eigen::last)) * (config.limiterControl.useLimiter ? uRecNew[iCell] : uRec[iCell])).transpose() +
+                            TU vRec = (DiBj(EigenAll, Eigen::seq(1, EigenLast)) * (config.limiterControl.useLimiter ? uRecNew[iCell] : uRec[iCell])).transpose() +
                                       uOut[iCell];
                             if (mesh->isPeriodic) // transform velocity to node reference frame
                                 vRec(Seq123) = mesh->periodicInfo.GetVectorBackByBits<dim, 1>(vRec(Seq123), mesh->cell2nodePbi(iCell, ic2n));
@@ -481,7 +516,7 @@ namespace DNDS::Euler
                     // recu = EulerEvaluator::CompressRecPart(uOut[iCell], recu);
                     index iBnd = meshBnd->cell2parentCell.at(iB);
                     index iCell = mesh->bnd2cell[iBnd][0];
-                    index iFace = mesh->bnd2face.at(iBnd);
+                    index iFace = mesh->bnd2faceV.at(iBnd);
                     if (iFace == -1)
                     {
                         DNDS_assert(mesh->isPeriodic);                              // only internal bnd is valid, periodic bnd should be omitted
@@ -837,5 +872,283 @@ namespace DNDS::Euler
             runFOuts();
 
         DNDS_MPI_InsertCheck(mpi, "EulerSolver<model>::PrintData === bnd output done");
+    }
+
+    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    /** @brief Write a checkpoint/restart file containing the current solution.
+     *
+     *  Serializes the conservative variable DOF array and cell ordering information
+     *  to either JSON (per-rank directory) or HDF5 (single file with original indices
+     *  for redistribution support). Also writes the current configuration.
+     *
+     *  @param fname  Base filename for the restart output.
+     */
+    void EulerSolver<model>::PrintRestart(std::string fname)
+    {
+        if (config.dataIOControl.restartWriter.type == "JSON")
+        {
+            std::filesystem::path outPath;
+            outPath = {fname + "_p" + std::to_string(mpi.size) + "_restart.dir"};
+            std::filesystem::create_directories(outPath);
+            char BUF[512];
+            std::sprintf(BUF, "%04d", mpi.rank);
+            fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
+            config.restartState.lastRestartFile = getStringForcePath(outPath);
+        }
+        else if (config.dataIOControl.restartWriter.type == "H5")
+        {
+            fname += "_p" + std::to_string(mpi.size) + ".restart.dnds.h5";
+            std::filesystem::path outPath = fname;
+            std::filesystem::create_directories(outPath.parent_path() / ".");
+            config.restartState.lastRestartFile = fname;
+        }
+        else
+            DNDS_assert_info(false, "restartWriter is invalid");
+
+        Serializer::SerializerBaseSSP serializerP = config.dataIOControl.restartWriter.BuildSerializer(mpi);
+
+        serializerP->OpenFile(fname, false);
+        if (!serializerP->IsPerRank())
+        {
+            // H5 path: write with origIndex for redistribution support
+            std::vector<index> origIdx(mesh->NumCell());
+            for (index i = 0; i < mesh->NumCell(); i++)
+                origIdx[i] = mesh->cell2cellOrig(i, 0);
+            u.WriteSerialize(serializerP, "u", origIdx, /*PIG*/ false, /*son*/ false);
+        }
+        else
+        {
+            // JSON path: no redistribution support
+            u.WriteSerialize(serializerP, "u", /*PIG*/ false, /*son*/ false);
+        }
+        mesh->cell2cellOrig.WriteSerialize(serializerP, "cell2cellOrig", /*PIG*/ false, /*son*/ false);
+        serializerP->CloseFile();
+
+        PrintConfig();
+    }
+
+    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    /** @brief Reorder restart data to match current cell ordering using cell2cellOrig mapping.
+     *
+     *  When restart data was saved with a different partition layout (JSON path),
+     *  reads the original cell ordering and permutes the read DOF to match the
+     *  current mesh partition. Falls back to direct copy with a warning if
+     *  cell2cellOrig is not available.
+     *
+     *  @param self          Reference to the EulerSolver instance.
+     *  @param u             Target DOF array (output, reordered).
+     *  @param uRead         DOF array as read from file (input).
+     *  @param serializerP   Serializer used to read cell ordering metadata.
+     */
+    void paste_read_restart_with_cell_ordering(
+        EulerSolver<model> &self,
+        typename EulerSolver<model>::TDof &u,
+        typename EulerSolver<model>::TDof &uRead,
+        Serializer::SerializerBaseSSP serializerP)
+    {
+        auto mesh = self.getMesh();
+        auto mpi = self.getMPI();
+        auto vfv = self.getVFV();
+        auto list_current_path = serializerP->ListCurrentPath();
+        if (mpi.rank == 0)
+        {
+            log() << "Contains: [";
+            for (auto &v : list_current_path)
+                log() << v << ", ";
+            log() << "]";
+            log() << std::endl;
+        }
+        if (list_current_path.count("cell2cellOrig"))
+        {
+            // TODO: lazy-build this inverse map
+            std::unordered_map<index, index> cellOrig2localCell;
+            cellOrig2localCell.reserve(mesh->NumCell());
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                cellOrig2localCell[mesh->cell2cellOrig(iCell, 0)] = iCell;
+            bool isLocalReorder = true;
+
+            Geom::tAdj1Pair cell2cellOrigRead;
+            DNDS_MAKE_SSP(cell2cellOrigRead.father, mpi);
+            DNDS_MAKE_SSP(cell2cellOrigRead.son, mpi);
+            cell2cellOrigRead.ReadSerialize(serializerP, "cell2cellOrig", /*PIG*/ false, /*son*/ false);
+            DNDS_assert_info(cell2cellOrigRead.father->Size() == u.father->Size(),
+                             fmt::format("read size of cell2cellOrig not consistent: needed {}, got {}",
+                                         u.father->Size(), cell2cellOrigRead.father->Size()));
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                if (cellOrig2localCell.count(cell2cellOrigRead(iCell, 0)) == 0)
+                    isLocalReorder = false;
+            DNDS_assert_info(isLocalReorder, "must be local reorder now! global reorder not implemented for now");
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                index iCellOrigG = cell2cellOrigRead(iCell, 0);
+                u[cellOrig2localCell.at(iCellOrigG)] = uRead[iCell];
+            }
+        }
+        else
+        {
+            u.CopyFather(uRead);
+            log() << TermColor::Red << "!!! Warning !!!\n"
+                  << "Reading restart without cell2cellOrig information, ordering could be bad!" << std::endl;
+        }
+    }
+
+    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    /** @brief Read a checkpoint/restart file and load the solution into the DOF array.
+     *
+     *  Supports two file formats:
+     *  - JSON directory (.dir): per-rank files with local cell ordering reorder.
+     *  - HDF5 (.dnds.h5): single file with redistributed read using original cell indices,
+     *    supporting different MPI rank counts and partition layouts from the checkpoint.
+     *
+     *  @param fname  Path to the restart file or directory.
+     */
+    void EulerSolver<model>::ReadRestart(std::string fname)
+    {
+        if (mpi.rank == 0)
+            log() << fmt::format("=== Reading Restart From [{}]", fname) << std::endl;
+        std::filesystem::path outPath;
+        outPath = fname;
+
+        Serializer::SerializerBaseSSP serializerP;
+
+        if (sstringHasSuffix(fname, ".dir"))
+        {
+            char BUF[512];
+            std::sprintf(BUF, "%04d", mpi.rank);
+            fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
+
+            serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+            std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
+        }
+        else if (sstringHasSuffix(fname, ".dnds.h5"))
+        {
+            serializerP = std::make_shared<DNDS::Serializer::SerializerH5>(mpi);
+        }
+        else
+            DNDS_assert_info(false, "restart file suffix not supported");
+
+        serializerP->OpenFile(fname, true);
+
+        if (!serializerP->IsPerRank())
+        {
+            // H5 path: use redistributed read (supports different np and partition layout)
+            std::vector<index> newOrigIdx(mesh->NumCell());
+            for (index i = 0; i < mesh->NumCell(); i++)
+                newOrigIdx[i] = mesh->cell2cellOrig(i, 0);
+
+            u.ReadSerializeRedistributed(serializerP, "u", newOrigIdx);
+        }
+        else
+        {
+            // JSON path: read with same-partition, reorder locally
+            TDof uRead;
+            vfv->BuildUDof(uRead, nVars, false, false);
+            uRead.ReadSerialize(serializerP, "u", /*PIG*/ false, /*son*/ false);
+            DNDS_assert_info(uRead.father->Size() == u.father->Size(),
+                             fmt::format("read size not consistent: needed {}, got {}",
+                                         u.father->Size(), uRead.father->Size()));
+            // Doing reorder
+            paste_read_restart_with_cell_ordering(*this, u, uRead, serializerP);
+        }
+
+        u.trans.startPersistentPull();
+        u.trans.waitPersistentPull();
+
+        MPI::Barrier(mpi.comm);
+        serializerP->CloseFile();
+        if (mpi.rank == 0)
+            log() << fmt::format("=== Read Restart") << std::endl;
+    }
+
+    DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    /** @brief Load selected DOF components from a restart file written by a different solver configuration.
+     *
+     *  Reads a restart file that may have a different number of variables (e.g.,
+     *  loading a laminar solution into a RANS solver) and copies only the specified
+     *  variable dimensions (dimStore) into the current DOF array. Supports both
+     *  JSON and HDF5 restart formats with redistribution.
+     *
+     *  @param fname     Path to the other solver's restart file.
+     *  @param dimStore  Indices of DOF components to copy from the restart file.
+     */
+    void EulerSolver<model>::ReadRestartOtherSolver(std::string fname, const std::vector<int> &dimStore)
+    {
+        ArrayDOFV<Eigen::Dynamic> readBuf;
+        DNDS_MAKE_SSP(readBuf.father, mpi);
+        DNDS_MAKE_SSP(readBuf.son, mpi);
+
+        if (mpi.rank == 0)
+            log() << fmt::format("=== Reading Other Solver Restart From [{}]", fname) << std::endl;
+        std::filesystem::path outPath;
+        outPath = fname;
+
+        Serializer::SerializerBaseSSP serializerP;
+        if (sstringHasSuffix(fname, ".dir"))
+        {
+            char BUF[512];
+            std::sprintf(BUF, "%04d", mpi.rank);
+            fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
+
+            serializerP = std::make_shared<DNDS::Serializer::SerializerJSON>();
+            std::dynamic_pointer_cast<DNDS::Serializer::SerializerJSON>(serializerP)->SetUseCodecOnUint8(true);
+        }
+        else if (sstringHasSuffix(fname, ".dnds.h5"))
+        {
+            serializerP = std::make_shared<DNDS::Serializer::SerializerH5>(mpi);
+        }
+        else
+            DNDS_assert_info(false, "restart file suffix not supported");
+
+        serializerP->OpenFile(fname, true);
+
+        if (!serializerP->IsPerRank())
+        {
+            // H5 path: use redistributed read (supports different np and partition layout)
+            std::vector<index> newOrigIdx(mesh->NumCell());
+            for (index i = 0; i < mesh->NumCell(); i++)
+                newOrigIdx[i] = mesh->cell2cellOrig(i, 0);
+
+            // Peek at the file to determine the stored nVars (row dimension),
+            // then pre-size readBuf so RedistributeArrayWithTransformer can copy into it.
+            {
+                auto meta = readBuf.father->ReadSerializerMeta(serializerP, "u/father");
+                // ArrayDOFV<Eigen::Dynamic> stores nVars in row_size_dynamic
+                readBuf.father->Resize(mesh->NumCell(), meta.row_size_dynamic, 1);
+                readBuf.son->Resize(0, meta.row_size_dynamic, 1);
+            }
+
+            readBuf.ReadSerializeRedistributed(serializerP, "u", newOrigIdx);
+
+            int iMax = std::min(u.RowSize(), readBuf.RowSize()) - 1;
+            for (auto item : dimStore)
+                DNDS_assert(item <= iMax);
+
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                u[iCell](dimStore) = readBuf[iCell](dimStore);
+        }
+        else
+        {
+            // JSON path: read with same-partition, reorder locally
+            readBuf.ReadSerialize(serializerP, "u");
+
+            DNDS_assert_info(readBuf.father->Size() == u.father->Size(), fmt::format("{}, {}", readBuf.father->Size(), u.father->Size()));
+            DNDS_assert_info(readBuf.son->Size() == u.son->Size(), fmt::format("{}, {}", readBuf.son->Size(), u.son->Size()));
+            int iMax = std::min(u.RowSize(), readBuf.RowSize()) - 1;
+            for (auto item : dimStore)
+                DNDS_assert(item <= iMax);
+            TDof uRead;
+            vfv->BuildUDof(uRead, nVars, false, false);
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                uRead[iCell](dimStore) = readBuf[iCell](dimStore);
+
+            paste_read_restart_with_cell_ordering(*this, u, uRead, serializerP);
+        }
+
+        u.trans.startPersistentPull();
+        u.trans.waitPersistentPull();
+
+        serializerP->CloseFile();
+        if (mpi.rank == 0)
+            log() << fmt::format("=== Read Restart") << std::endl;
     }
 }

@@ -30,5 +30,14 @@ namespace DNDS
         pybind11_callBindArrayTransformers_rowsizes<index>(m);
         pybind11_ArrayTransformer_define<ParArray<index, DynamicSize>>(m);
         pybind11_ArrayTransformer_define<ParArray<index, NonUniformSize>>(m);
+
+        // primitive ArrayPair's
+        pybind11_callBindParArrayPairs_rowsizes<real>(m);
+        pybind11_ParArrayPair_define<real, DynamicSize>(m);
+        pybind11_ParArrayPair_define<real, NonUniformSize>(m);
+
+        pybind11_callBindParArrayPairs_rowsizes<index>(m);
+        pybind11_ParArrayPair_define<index, DynamicSize>(m);
+        pybind11_ParArrayPair_define<index, NonUniformSize>(m);
     }
 }

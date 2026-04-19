@@ -1,5 +1,6 @@
 numpy
 scipy
+sympy
 pandas
 matplotlib
 scikit-build
@@ -8,3 +9,10 @@ auditwheel
 pybind11-stubgen
 typing_extensions
 dash
+pytest
+pytest-mpi
+mpi4py
+compdb
+h5py
+jsonschema
+pyyaml

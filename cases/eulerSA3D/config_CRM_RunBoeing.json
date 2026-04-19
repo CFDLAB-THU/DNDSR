@@ -1,6 +1,7 @@
 // ./sb.sh 50 CRM_Boeing_O2_F_Dri ../build/app/eulerSA3D.exe ../cases/eulerSA3D/config_CRM_RunBoeing.json -k /dataIOControl/meshFile -v "\"../data/mesh/Boeing.Babcock.WB.ae2.75deg.UnstrMixedElement.F.b8.ugrid.cgns\"" -k /dataIOControl/outPltName -v "\"../data/out/CRM_2_Boeing/O2_F_Dri\"" -k /timeMarchControl/useRestart -v true -k /restartState/lastRestartFile -v "\"../data/out/CRM_2_Boeing/O2_F_Starter__C_p2800.restart.dnds.h5\"" -k /eulerSettings/cLDriverSettings/nIterStartDrive -v 1000 -k /convergenceControl/nTimeStepInternal -v 10000
 // ./sb.sh 50 CRM_Boeing_O4_F_Dri ../build/app/eulerSA3D.exe ../cases/eulerSA3D/config_CRM_RunBoeing.json -k /dataIOControl/meshFile -v "\"../data/mesh/Boeing.Babcock.WB.ae2.75deg.UnstrMixedElement.F.b8.ugrid.cgns\"" -k /dataIOControl/outPltName -v "\"../data/out/CRM_2_Boeing/O4_F_Dri\"" -k /timeMarchControl/useRestart -v true -k /restartState/lastRestartFile -v "\"../data/out/CRM_2_Boeing/O2_F_Dri__C_p2800.restart.dnds.h5\"" -k /eulerSettings/cLDriverSettings/nIterStartDrive -v 1000 -k /convergenceControl/nTimeStepInternal -v 10000 -k /vfvSettings/maxOrder -v 3 -k /vfvSettings/intOrder -v 5 -k /linearSolverControl/multiGridLP -v 1
 {
+    "$schema": "../eulerSA3D_schema.json",
     "timeMarchControl": {
         "dtImplicit": 2e30,
         "nTimeStep": 1,
@@ -16,9 +17,10 @@
     },
     "convergenceControl": {
         "nTimeStepInternal": 5000,
-        "rhsThresholdInternal": 1e-8,
+        "rhsThresholdInternal": 1e-3,
         "res_base": 0.0,
-        "useVolWiseResidual": true
+        "useVolWiseResidual": true,
+        "useCLDriver": true
     },
     "outputControl": {
         "nConsoleCheck": 1,
@@ -76,17 +78,13 @@
         "restartWriter": {
             "type": "H5",
             "hdfDeflateLevel": 5,
-            "hdfChunkSize": 4096,
-            "hdfCollOnMeta": true,
-            "hdfCollOnData": false
+            "hdfChunkSize": 4096
         },
         "meshPartitionedReaderType": "H5",
         "meshPartitionedWriter": {
             "type": "H5",
             "hdfDeflateLevel": 5,
-            "hdfChunkSize": 4096,
-            "hdfCollOnMeta": true,
-            "hdfCollOnData": false
+            "hdfChunkSize": 4096
         },
         "_tail": 0
     },
@@ -198,7 +196,7 @@
         "noGRPOnWall": true,
         "minWallDist": 1e-9,
         "wallDistScheme": 0,
-        // "wallDistExection": 3,
+        "wallDistExection": 4,
         "wallDistCellLoadSize": 2560,
         "wallDistRefineMax": 1, // inches
         "wallDistIter": 1000,
@@ -240,9 +238,11 @@
             "targetCL": 0.5,
             "CLIncrementRelax": 0.25,
             "nIterStartDrive": 1000000,
-            "nIterConvergeMin": 200,
+            "nIterConvergeMin": 100,
             "CLconvergeThreshold": 0.001,
-            "CLconvergeWindow": 50
+            "CLconvergeWindow": 40,
+            "CLconvergeLongWindow": 400,
+            "CLconvergeLongThreshold": 0.8e-4
         },
         "cLDriverBCNames": [
             "wall_wing",

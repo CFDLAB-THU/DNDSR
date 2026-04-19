@@ -9,17 +9,55 @@ namespace DNDS::Geom
     using tPoint = Eigen::Vector3d;
     using tJacobi = Eigen::Matrix3d;
     using tGPoint = Eigen::Matrix3d;
+    using tPointMap = Eigen::Map<tPoint, Eigen::Unaligned>;
+    using tPointConstMap = Eigen::Map<const tPoint, Eigen::Unaligned>;
+    using tGPointMap = Eigen::Map<tGPoint, Eigen::Unaligned>;
+    using tGPointConstMap = Eigen::Map<const tGPoint, Eigen::Unaligned>;
+
+    struct tPointPortable
+    {
+        std::array<real, 3> d;
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(tPointPortable, tPointPortable)
+        DNDS_DEVICE_CALLABLE auto map()
+        {
+            return tPointMap{d.data()};
+        }
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] auto map() const
+        {
+            return tPointConstMap{d.data()};
+        }
+    };
+
+    struct tGPointPortable
+    {
+        std::array<real, 9> d;
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(tGPointPortable, tGPointPortable)
+        DNDS_DEVICE_CALLABLE auto map()
+        {
+            return tGPointMap{d.data()};
+        }
+
+        DNDS_DEVICE_CALLABLE [[nodiscard]] auto map() const
+        {
+            return tGPointConstMap{d.data()};
+        }
+    };
+
+    static_assert(std::is_trivially_copyable_v<tPointPortable>);
+    static_assert(std::is_trivially_copyable_v<tGPointPortable>);
+
     using tSmallCoords = Eigen::Matrix<real, 3, Eigen::Dynamic>;
     struct SmallCoordsAsVector : public tSmallCoords
     {
         auto operator[](Eigen::Index i)
         {
-            return tSmallCoords::operator()(Eigen::all, i);
+            return tSmallCoords::operator()(EigenAll, i);
         }
 
         auto operator[](Eigen::Index i) const
         {
-            return tSmallCoords::operator()(Eigen::all, i);
+            return tSmallCoords::operator()(EigenAll, i);
         }
     };
 
@@ -78,14 +116,14 @@ namespace DNDS::Geom
         if constexpr (d == 2)
         {
             DNDS_assert_info(J(2, 0) == 0, "Must be a line in x-y plane");
-            DNDS_assert_info(J(Eigen::all, 1).norm() == 0, "Must be a line in x-y plane");
-            DNDS_assert_info(J(Eigen::all, 2).norm() == 0, "Must be a line in x-y plane");
+            DNDS_assert_info(J(EigenAll, 1).norm() == 0, "Must be a line in x-y plane");
+            DNDS_assert_info(J(EigenAll, 2).norm() == 0, "Must be a line in x-y plane");
             return tPoint{J(1, 0), -J(0, 0), 0};
         }
         if constexpr (d == 3)
         {
-            DNDS_assert_info(J(Eigen::all, 2).norm() == 0, "Must be a face");
-            return J(Eigen::all, 0).cross(J(Eigen::all, 1));
+            DNDS_assert_info(J(EigenAll, 2).norm() == 0, "Must be a face");
+            return J(EigenAll, 0).cross(J(EigenAll, 1));
         }
     }
 

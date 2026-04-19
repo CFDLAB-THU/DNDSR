@@ -15,8 +15,7 @@ namespace DNDS
             template <int nVarsFixed>
             ,
             template <>
-            template <>
-        )
+            template <>)
         auto VariationalReconstruction<dim>::GetBoundaryRHS(tURec<nVarsFixed> &uRec,
                                                             tUDof<nVarsFixed> &u,
                                                             index iCell, index iFace,
@@ -32,7 +31,7 @@ namespace DNDS
             DNDS_assert(FaceIDIsExternalBC(faceID));
 
             auto qFace = this->GetFaceQuad(iFace);
-            if (settings.intOrderVRIsSame() || settings.functionalSettings.greenGauss1Weight != 0)
+            if (settings.intOrderVRBCIsSame() || settings.functionalSettings.greenGauss1Weight != 0)
                 qFace.IntegrationSimple(
                     BCC,
                     [&](auto &vInc, int iG)
@@ -51,7 +50,7 @@ namespace DNDS
                                 this->GetFaceNorm(iFace, iG),
                                 this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
                         Eigen::RowVector<real, nVarsFixed> uIncBV = (uBV - u[iCell]).transpose();
-                        if (settings.intOrderVRIsSame())
+                        if (settings.intOrderVRBCIsSame())
                             vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
                         else
                             vInc.resizeLike(BCC), vInc.setZero();
@@ -60,21 +59,21 @@ namespace DNDS
                         {
                             // DNDS_assert(false); // not yet implemented
                             vInc += (settings.functionalSettings.greenGauss1Bias * this->GetGreenGauss1WeightOnCell(iCell) *
-                                     this->matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
+                                     this->coefficients_.matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
                                     uIncBV;
                         }
                         vInc *= this->GetFaceJacobiDet(iFace, iG);
-                        // std::cout << faceWeight[iFace].transpose() << std::endl;
+                        // std::cout << baseWeight_.faceWeight[iFace].transpose() << std::endl;
                     });
-            if (!settings.intOrderVRIsSame())
+            if (!settings.intOrderVRBCIsSame())
             {
-                auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRBCValue());
                 tSmallCoords coords;
                 mesh->GetCoordsOnFace(iFace, coords);
                 qFace.Integration(
                     BCC,
                     [&](auto &vInc, int __xxx_iG, const tPoint &pParam, const Elem::tD01Nj &DiNj) { // todo: cache these for bnd: pPhy JDet norm and dbv
-                        BndVRPointCache &bndCacheEntry = bndVRCaches.at(iFace).at(__xxx_iG);
+                        BndVRPointCache &bndCacheEntry = baseWeight_.bndVRCaches.at(iFace).at(__xxx_iG);
                         auto &dbv = bndCacheEntry.D0Bj;
                         auto &np = bndCacheEntry.norm;
                         auto &JDet = bndCacheEntry.JDet;
@@ -114,7 +113,7 @@ namespace DNDS
             DNDS_assert(FaceIDIsExternalBC(faceID));
 
             auto qFace = this->GetFaceQuad(iFace);
-            if (settings.intOrderVRIsSame() || settings.functionalSettings.greenGauss1Weight != 0)
+            if (settings.intOrderVRBCIsSame() || settings.functionalSettings.greenGauss1Weight != 0)
                 qFace.IntegrationSimple(
                     BCC,
                     [&](auto &vInc, int iG)
@@ -131,30 +130,30 @@ namespace DNDS
                                 this->GetFaceNorm(iFace, iG),
                                 this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
                         Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();
-                        if (settings.intOrderVRIsSame())
+                        if (settings.intOrderVRBCIsSame())
                             vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
                         else
                             vInc.resizeLike(BCC), vInc.setZero();
-                        // std::cout << faceWeight[iFace].transpose() << std::endl;
+                        // std::cout << baseWeight_.faceWeight[iFace].transpose() << std::endl;
                         if (settings.functionalSettings.greenGauss1Weight != 0)
                         {
                             // DNDS_assert(false); // not yet implemented
                             vInc += (settings.functionalSettings.greenGauss1Bias * this->GetGreenGauss1WeightOnCell(iCell) *
-                                     this->matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
+                                     this->coefficients_.matrixAHalf_GG[iCell].transpose() * this->GetFaceNorm(iFace, iG)(Seq012)) *
                                     uIncBV;
                         }
                         vInc *= this->GetFaceJacobiDet(iFace, iG);
                     });
-            if (!settings.intOrderVRIsSame())
+            if (!settings.intOrderVRBCIsSame())
             {
-                auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRValue());
+                auto qFace = Quadrature(mesh->GetFaceElement(iFace), settings.intOrderVRBCValue());
                 tSmallCoords coords;
                 mesh->GetCoordsOnFace(iFace, coords);
                 qFace.Integration(
                     BCC,
                     [&](auto &vInc, int __xxx_iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                     {
-                        BndVRPointCache &bndCacheEntry = bndVRCaches.at(iFace).at(__xxx_iG);
+                        BndVRPointCache &bndCacheEntry = baseWeight_.bndVRCaches.at(iFace).at(__xxx_iG);
                         auto &dbv = bndCacheEntry.D0Bj;
                         auto &np = bndCacheEntry.norm;
                         auto &JDet = bndCacheEntry.JDet;
@@ -181,8 +180,7 @@ namespace DNDS
             template <int nVarsFixed>
             ,
             template <>
-            template <>
-        )
+            template <>)
         void VariationalReconstruction<dim>::DoReconstruction2ndGrad(
             tUGrad<nVarsFixed, dim> &uRec,
             tUDof<nVarsFixed> &u,
@@ -199,7 +197,7 @@ namespace DNDS
             {
                 // simple gauss rule
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
@@ -234,16 +232,7 @@ namespace DNDS
                             if (settings.subs2ndOrderGGScheme == 0)
                                 lThat = 1;
                             Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther].transpose();
-                            if (mesh->isPeriodic)
-                            {
-                                DNDS_assert(FTransPeriodic && FTransPeriodicBack);
-                                if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                                    (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                                    FTransPeriodic(uOther, faceID);
-                                if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                                    (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                                    FTransPeriodicBack(uOther, faceID);
-                            }
+                            this->ApplyPeriodicTransform(if2c, faceID, uOther);
                             Eigen::Vector<real, dim> uNorm = this->GetFaceNormFromCell(iFace, iCell, -1, -1)(Seq012) * (CellIsFaceBack(iCell, iFace) ? 1. : -1.);
                             Eigen::Matrix<real, nVarsFixed, dim> gradInc =
                                 (uOther.transpose() - u[iCell]) *
@@ -257,7 +246,7 @@ namespace DNDS
                                      2 * faceCent(Seq012))
                                         .transpose();
                                 mGG(dim + ic2f, dim + ic2f) = 2;
-                                bGG(dim + ic2f, Eigen::all) = uOther + u[iCell].transpose();
+                                bGG(dim + ic2f, EigenAll) = uOther + u[iCell].transpose();
                             }
                         }
                         else
@@ -284,7 +273,7 @@ namespace DNDS
                                                            2 * faceCent(Seq012))
                                                               .transpose();
                                 mGG(dim + ic2f, dim + ic2f) = 2;
-                                bGG(dim + ic2f, Eigen::all) = (uBV + u[iCell]).transpose();
+                                bGG(dim + ic2f, EigenAll) = (uBV + u[iCell]).transpose();
                             }
                         }
                     }
@@ -293,14 +282,31 @@ namespace DNDS
 
                     if (method == 11)
                     {
-                        // std::cout << mGG << std::endl;
-                        // std::cout << bGG << std::endl;
-                        // DNDS_assert(false);
+
                         // auto mGGLU = mGG.colPivHouseholderQr();
                         auto mGGLU = mGG.fullPivLu();
                         DNDS_assert(mGGLU.isInvertible());
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> xGG = mGGLU.solve(bGG);
-                        grad = xGG(Seq012, Eigen::all).transpose();
+                        grad = xGG(Seq012, EigenAll).transpose();
+
+                        if (mesh->GetCellElement(iCell).type == Elem::Pyramid5)
+                        {
+                            std::cout << "pyramid5\n";
+                            std::cout << mGG << std::endl;
+                            std::cout << bGG << std::endl;
+                            auto svd = mGG.bdcSvd();
+                            std::cout << svd.singularValues().transpose() << std::endl;
+                            std::cout << svd.singularValues().maxCoeff() / svd.singularValues().minCoeff() << std::endl;
+                        }
+                        if (mesh->GetCellElement(iCell).type == Elem::Tet4)
+                        {
+                            std::cout << "Tet4\n";
+                            std::cout << mGG << std::endl;
+                            std::cout << bGG << std::endl;
+                            auto svd = mGG.bdcSvd();
+                            std::cout << svd.singularValues().transpose() << std::endl;
+                            std::cout << svd.singularValues().maxCoeff() / svd.singularValues().minCoeff() << std::endl;
+                        }
                     }
 
                     // tPoint cellBary = GetCellBary(iCell);
@@ -309,19 +315,12 @@ namespace DNDS
                     // DNDS_assert(vvv(0) < 1e-10);
 
                     uRec[iCell] = grad.transpose();
-
-                    // std::cout << " g " << std::endl;
-                    // std::cout << grad << std::endl;
-                    // std::cout << uRec[iCell] << std::endl;
-                    // std::cout << d1bv << std::endl;
-                    // std::cout << lud1bv.inverse() << std::endl;
-                    // std::abort();
                 }
             }
             else if (method == 2) //! warning, periodic not implemented here
             {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
@@ -341,9 +340,9 @@ namespace DNDS
 
                         if (iCellOther != UnInitIndex)
                         {
-                            dcs(ic2f, Eigen::all) = (GetOtherCellBaryFromCell(iCell, iCellOther, iFace) - GetCellBary(iCell))(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>))
-                                                        .transpose();
-                            dus(ic2f, Eigen::all) = (u[iCellOther] - u[iCell]).transpose();
+                            dcs(ic2f, EigenAll) = (GetOtherCellBaryFromCell(iCell, iCellOther, iFace) - GetCellBary(iCell))(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>))
+                                                      .transpose();
+                            dus(ic2f, EigenAll) = (u[iCellOther] - u[iCell]).transpose();
                         }
                         else
                         {
@@ -359,9 +358,9 @@ namespace DNDS
                                     u[iCell], iCell, iFace, -1,
                                     this->GetFaceNorm(iFace, -1),
                                     this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1), faceID);
-                            dus(ic2f, Eigen::all) = (uBV - u[iCell]).transpose();
+                            dus(ic2f, EigenAll) = (uBV - u[iCell]).transpose();
 
-                            dcs(ic2f, Eigen::all) =
+                            dcs(ic2f, EigenAll) =
                                 ((GetCellBary(iCell) - GetFaceQuadraturePPhys(iFace, -1)).dot(GetFaceNorm(iFace, -1)) * (-2.) * GetFaceNorm(iFace, -1))(
                                     Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>))
                                     .transpose();
@@ -369,7 +368,7 @@ namespace DNDS
                     }
                     // Eigen::MatrixXd m;
                     // m.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve()
-                    auto svd = dcs.bdcSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
+                    auto svd = dcs.template bdcSvd<Eigen::ComputeFullU | Eigen::ComputeFullV>();
                     grad = svd.solve(dus).transpose();
                     uRec[iCell] = grad.transpose();
                 }
@@ -385,8 +384,7 @@ namespace DNDS
             template <int nVarsFixed>
             ,
             template <>
-            template <>
-        )
+            template <>)
         void VariationalReconstruction<dim>::DoReconstruction2nd(
             tURec<nVarsFixed> &uRec,
             tUDof<nVarsFixed> &u,
@@ -396,22 +394,69 @@ namespace DNDS
         {
             using namespace Geom;
             using namespace Geom::Elem;
+            // using TU = Eigen::Vector<real, nVarsFixed>;
+            // using TU_Batch = Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic>;
+            int nVars = u.father->MatRowSize();
+            auto vfv = this;
 
-            static tUGrad<nVarsFixed, dim> uGrad;
-            if (!uGrad.father || uGrad.father->Size() < mesh->NumCell() || uGrad.father->MatColSize(0) != u.father->MatRowSize())
-            {
-                this->BuildUGrad(uGrad, u.father->MatRowSize(), false, false); // no son or trans makes this fully local operation
-            }
+            tUGrad<nVarsFixed, dim> uGrad;
+            this->BuildUGrad(uGrad, u.father->MatRowSize(), false, false); // no son or trans makes this fully local operation
 
             static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>); // note this is gDim!
             static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
 
             this->DoReconstruction2ndGrad(uGrad, u, FBoundary, method);
 
+            // // in place barth limiting
+            // for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            // {
+            //     auto c2f = mesh->cell2face[iCell];
+
+            //     TU_Batch uFaceInc;
+            //     uFaceInc.setZero(nVars, c2f.size() * 2); // j < c2f.size(): faceInc; j > c2f.size(): baryInc
+            //     TU uOtherMin = u[iCell];
+            //     TU uOtherMax = u[iCell];
+            //     for (rowsize ic2f = 0; ic2f < c2f.size(); ic2f++)
+            //     {
+            //         index iFace = c2f[ic2f];
+            //         uFaceInc(EigenAll, ic2f) =
+            //             uGrad[iCell].transpose() *
+            //             (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellQuadraturePPhys(iCell, -1))(Seq012);
+            //         index iCellOther = mesh->CellFaceOther(iCell, iFace);
+            //         if (iCellOther != UnInitIndex)
+            //         {
+            //             uOtherMin = uOtherMin.array().min(u[iCellOther].array());
+            //             uOtherMax = uOtherMin.array().max(u[iCellOther].array());
+            //         }
+            //     }
+
+            //     TU uFaceIncMax = uFaceInc.array().rowwise().maxCoeff();
+            //     TU uFaceIncMin = uFaceInc.array().rowwise().minCoeff();
+            //     TU alpha0;
+            //     alpha0.setConstant(nVars, 1.0);
+            //     alpha0 = alpha0.array().min(((uOtherMax - u[iCell]).array().abs() / (uFaceIncMax.array().abs() + verySmallReal)));
+            //     alpha0 = alpha0.array().min(((uOtherMin - u[iCell]).array().abs() / (uFaceIncMin.array().abs() + verySmallReal)));
+            //     uGrad[iCell].array().rowwise() *= alpha0.array().transpose();
+
+            //     // kill the axis-cells
+            //     for (rowsize ic2f = 0; ic2f < c2f.size(); ic2f++)
+            //     {
+            //         index iFace = c2f[ic2f];
+            //         if (this->axisFaces.count(iFace))
+            //             uGrad[iCell] *= 0;
+            //     }
+            // }
+
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(static)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+
+            // #if defined(DNDS_DIST_MT_USE_OMP)
+            // #pragma omp parallel for schedule(static)
+            // #endif
+            //             for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
+            //                 for (index iCell = mesh->LocalPartStart(iPart); iCell < mesh->LocalPartEnd(iPart); iCell++)
             {
                 int nVars = u[iCell].size();
                 auto c2f = mesh->cell2face[iCell];
@@ -419,27 +464,21 @@ namespace DNDS
 
                 Eigen::Matrix<real, dim, dim> d1bv;
                 d1bv = this->GetIntPointDiffBaseValue(
-                    iCell, -1, -1, -1, Seq123, dim + 1)(Eigen::all, Seq012);
+                    iCell, -1, -1, -1, Seq123, dim + 1)(EigenAll, Seq012);
                 auto lud1bv = d1bv.partialPivLu();
                 if (lud1bv.rcond() > 1e9)
                     std::cout << "Large Cond " << lud1bv.rcond() << std::endl;
                 if (mask.size() == 0)
                 {
                     uRec[iCell].setZero();
-                    uRec[iCell](Seq012, Eigen::all) = lud1bv.solve(grad.transpose());
+                    uRec[iCell](Seq012, EigenAll) = lud1bv.solve(grad.transpose());
                 }
                 else
                 {
-                    uRec[iCell](Eigen::all, mask).setZero();
-                    uRec[iCell](Seq012, mask) = lud1bv.solve(grad.transpose())(Eigen::all, mask);
+                    uRec[iCell](EigenAll, mask).setZero();
+                    uRec[iCell](Seq012, mask) = lud1bv.solve(grad.transpose())(EigenAll, mask);
                 }
 
-                // std::cout << " g " << std::endl;
-                // std::cout << grad << std::endl;
-                // std::cout << uRec[iCell] << std::endl;
-                // std::cout << d1bv << std::endl;
-                // std::cout << lud1bv.inverse() << std::endl;
-                // std::abort();
             }
         }
 
@@ -472,110 +511,103 @@ namespace DNDS
                 return;
             }
 
-            auto cellOp = [&](index iCell) {
+            // #if defined(DNDS_DIST_MT_USE_OMP)
+            // #pragma omp parallel for schedule(static)
+            // #endif
+            //             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
 
-            };
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(static)
 #endif
-            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-            {
-                cellOp(iCell);
-                real relax = cellAtr[iCell].relax;
-
-                if (recordInc)
+            for (int iPart = 0; iPart < mesh->NLocalParts(); iPart++)
+                for (index iCell = mesh->LocalPartStart(iPart); iCell < mesh->LocalPartEnd(iPart); iCell++)
                 {
-                    if (uRecIsZero)
-                        uRecNew[iCell].setZero();
-                    else
-                        uRecNew[iCell] = uRec[iCell];
-                }
-                else if (settings.SORInstead)
-                    uRec[iCell] = uRec[iCell] * ((recordInc ? 0 : 1) - relax);
-                else
-                    uRecNew[iCell] = uRec[iCell] * ((recordInc ? 0 : 1) - relax);
+                    real relax = GetCellAtr(iCell).relax;
 
-                auto c2f = mesh->cell2face[iCell];
-                auto matrixAAInvBRow = matrixAAInvB[iCell];
-                auto vectorAInvBRow = vectorAInvB[iCell];
-                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
-                {
-                    index iFace = c2f[ic2f];
-                    index iCellOther = CellFaceOther(iCell, iFace);
-                    auto faceID = mesh->GetFaceZone(iFace);
-                    int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
-                    if (iCellOther != UnInitIndex)
+                    if (recordInc)
                     {
-                        Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther];
-                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOther = uRec[iCellOther];
-                        if (mesh->isPeriodic)
+                        if (uRecIsZero)
+                            uRecNew[iCell].setZero();
+                        else
+                            uRecNew[iCell] = uRec[iCell];
+                    }
+                    else if (settings.SORInstead)
+                        uRec[iCell] = uRec[iCell] * ((recordInc ? 0 : 1) - relax);
+                    else
+                        uRecNew[iCell] = uRec[iCell] * ((recordInc ? 0 : 1) - relax);
+
+                    auto c2f = mesh->cell2face[iCell];
+                    auto matrixAAInvBRow = coefficients_.matrixAAInvB[iCell];
+                    auto vectorAInvBRow = coefficients_.vectorAInvB[iCell];
+                    for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+                    {
+                        index iFace = c2f[ic2f];
+                        index iCellOther = CellFaceOther(iCell, iFace);
+                        auto faceID = mesh->GetFaceZone(iFace);
+                        int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                        if (iCellOther != UnInitIndex)
                         {
-                            DNDS_assert(FTransPeriodic && FTransPeriodicBack);
-                            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                                FTransPeriodic(uOther, faceID), FTransPeriodic(uRecOther, faceID);
-                            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                                FTransPeriodicBack(uOther, faceID), FTransPeriodicBack(uRecOther, faceID);
-                        }
-                        if (recordInc)
-                        {
-                            if (uRecIsZero)
-                                uRecNew[iCell] -=
-                                    (vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
+                            Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther];
+                            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOther = uRec[iCellOther];
+                            this->ApplyPeriodicTransform(if2c, faceID, uOther, uRecOther);
+                            if (recordInc)
+                            {
+                                if (uRecIsZero)
+                                    uRecNew[iCell] -=
+                                        (vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
+                                else
+                                    uRecNew[iCell] -=
+                                        (matrixAAInvBRow[ic2f + 1] * uRecOther +
+                                         vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
+                            }
+                            else if (settings.SORInstead)
+                                uRec[iCell] +=
+                                    relax *
+                                    (matrixAAInvBRow[ic2f + 1] * uRecOther +
+                                     vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
                             else
-                                uRecNew[iCell] -=
+                                uRecNew[iCell] +=
+                                    relax *
                                     (matrixAAInvBRow[ic2f + 1] * uRecOther +
                                      vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
                         }
-                        else if (settings.SORInstead)
-                            uRec[iCell] +=
-                                relax *
-                                (matrixAAInvBRow[ic2f + 1] * uRecOther +
-                                 vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
                         else
-                            uRecNew[iCell] +=
-                                relax *
-                                (matrixAAInvBRow[ic2f + 1] * uRecOther +
-                                 vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
-                    }
-                    else
-                    {
-                        Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC = GetBoundaryRHS(uRec, u, iCell, iFace, FBoundary);
-                        // BCC *= 0;
-                        if (recordInc)
                         {
-                            if (uRecIsZero)
-                                ;
+                            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC = GetBoundaryRHS(uRec, u, iCell, iFace, FBoundary);
+                            // BCC *= 0;
+                            if (recordInc)
+                            {
+                                if (uRecIsZero)
+                                    ;
+                                else
+                                    uRecNew[iCell] -=
+                                        matrixAAInvBRow[0] * BCC;
+                            }
+                            else if (settings.SORInstead && !recordInc)
+                                uRec[iCell] +=
+                                    relax * matrixAAInvBRow[0] * BCC;
                             else
-                                uRecNew[iCell] -=
-                                    matrixAAInvBRow[0] * BCC;
+                                uRecNew[iCell] +=
+                                    relax * matrixAAInvBRow[0] * BCC;
                         }
-                        else if (settings.SORInstead && !recordInc)
-                            uRec[iCell] +=
-                                relax * matrixAAInvBRow[0] * BCC;
-                        else
-                            uRecNew[iCell] +=
-                                relax * matrixAAInvBRow[0] * BCC;
+                    }
+                    if ((!uRecNew[iCell].allFinite()) || (!uRec[iCell].allFinite()))
+                    {
+                        DNDS_assert(false);
                     }
                 }
-                if ((!uRecNew[iCell].allFinite()) || (!uRec[iCell].allFinite()))
-                {
-                    DNDS_assert(false);
-                }
-            }
 
             if (!recordInc)
             {
                 if (putIntoNew && settings.SORInstead)
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(static)
 #endif
                     for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                         uRecNew[iCell].swap(uRec[iCell]);
                 if ((!putIntoNew) && (!settings.SORInstead))
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(static)
 #endif
                     for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                         uRec[iCell].swap(uRecNew[iCell]);
@@ -600,21 +632,21 @@ namespace DNDS
             if (settings.maxOrder == 1 && settings.subs2ndOrder != 0)
             {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(static)
 #endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                     uRecNew[iCell].setZero();
                 return;
             }
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 uRecNew[iCell] = uRecDiff[iCell];
 
                 auto c2f = mesh->cell2face[iCell];
-                auto matrixAAInvBRow = matrixAAInvB[iCell];
+                auto matrixAAInvBRow = coefficients_.matrixAAInvB[iCell];
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
@@ -624,16 +656,7 @@ namespace DNDS
                     if (iCellOther != UnInitIndex)
                     {
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOtherDiff = uRecDiff[iCellOther];
-                        if (mesh->isPeriodic)
-                        {
-                            DNDS_assert(FTransPeriodic && FTransPeriodicBack);
-                            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                                FTransPeriodic(uRecOtherDiff, faceID);
-                            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                                FTransPeriodicBack(uRecOtherDiff, faceID);
-                        }
+                        this->ApplyPeriodicTransform(if2c, faceID, uRecOtherDiff);
                         uRecNew[iCell] -= matrixAAInvBRow[ic2f + 1] * uRecOtherDiff; // mind the sign
                     }
                     else
@@ -668,12 +691,12 @@ namespace DNDS
                 index iCell = iScan;
                 if (reverse)
                     iCell = mesh->NumCell() - 1 - iCell;
-                real relax = cellAtr[iCell].relax;
+                real relax = GetCellAtr(iCell).relax;
 
                 uRecNew[iCell] = (1 - relax) * uRecNew[iCell] + uRecInc[iCell];
 
                 auto c2f = mesh->cell2face[iCell];
-                auto matrixAAInvBRow = matrixAAInvB[iCell];
+                auto matrixAAInvBRow = coefficients_.matrixAAInvB[iCell];
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
@@ -683,16 +706,7 @@ namespace DNDS
                     if (iCellOther != UnInitIndex)
                     {
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOtherNew = uRecNew[iCellOther];
-                        if (mesh->isPeriodic)
-                        {
-                            DNDS_assert(FTransPeriodic && FTransPeriodicBack);
-                            if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
-                                (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
-                                FTransPeriodic(uRecOtherNew, faceID);
-                            if ((if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID)) ||
-                                (if2c == 0 && Geom::FaceIDIsPeriodicMain(faceID))) // I am main
-                                FTransPeriodicBack(uRecOtherNew, faceID);
-                        }
+                        this->ApplyPeriodicTransform(if2c, faceID, uRecOtherNew);
                         uRecNew[iCell] += relax * matrixAAInvBRow[ic2f + 1] * uRecOtherNew; // mind the sign
                     }
                     else

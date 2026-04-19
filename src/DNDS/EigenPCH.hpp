@@ -1,4 +1,8 @@
 #pragma once
+/// @file EigenPCH.hpp
+/// @brief Pre-compiled-header style shim that includes the heavy Eigen headers
+/// under DNDSR's warning suppressions. Every DNDS file that touches Eigen pulls
+/// this in instead of `<Eigen/Core>` directly.
 
 #include "Warnings.hpp"
 DISABLE_WARNING_PUSH

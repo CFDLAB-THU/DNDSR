@@ -1,3 +1,8 @@
+/// @file HardEigen.cpp
+/// @brief Implementations of the numerically-careful Eigen primitives
+/// declared in @ref HardEigen.hpp (pseudoinverses, symmetric eigen decompositions,
+/// condition-number helpers).
+
 #include "HardEigen.hpp"
 #include <iostream>
 
@@ -9,7 +14,7 @@ namespace DNDS::HardEigen
     {
         // static const double sVmin = 1e-12;
         // auto SVDResult = A.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
-        auto SVDResult = A.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
+        auto SVDResult = A.jacobiSvd<Eigen::ComputeThinU | Eigen::ComputeThinV>();
         if (svdTol > 0)
             SVDResult.setThreshold(svdTol);
         AI = SVDResult.solve(Eigen::MatrixXd::Identity(A.rows(), A.rows()));
@@ -21,7 +26,7 @@ namespace DNDS::HardEigen
     {
         double sVmin = svdTol == 0 ? Eigen::NumTraits<real>::epsilon() : svdTol;
         double sVminInv = 1. / (sVmin + verySmallReal);
-        auto SVDResult = A.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
+        auto SVDResult = A.jacobiSvd<Eigen::ComputeThinU | Eigen::ComputeThinV>();
         // auto SVDResult = A.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
 
         // AI = SVDResult.solve(Eigen::MatrixXd::Identity(A.rows(), A.rows()));
@@ -48,18 +53,18 @@ namespace DNDS::HardEigen
         Eigen::VectorXd svs = SVDResult.singularValues().array().abs();
         DNDS_assert_info(AI.allFinite() && !AI.hasNaN(), [&]() -> std::string
                          {
-                            std::cerr<< sVmin << " " << sVminInv << std::endl;
-                            std::cerr << sVs.transpose() << std::endl;
-                            std::cerr << svs.transpose() << std::endl;
-                            std::cerr << "A \n"
-                                      << std::scientific << std::setprecision(16) << A << std::endl;
-                            std::cerr << "AI \n"
-                                      << std::scientific << std::setprecision(16) << AI << std::endl;
-                            std::cerr << "V \n"
-                                      << std::scientific << std::setprecision(16) << SVDResult.matrixV() << std::endl;
-                            std::cerr << "U \n"
-                                      << std::scientific << std::setprecision(16) << SVDResult.matrixU() << std::endl;
-                            return "EigenLeastSquareInverse_Filtered Error info"; }());
+            log() << sVmin << " " << sVminInv << std::endl;
+            log() << sVs.transpose() << std::endl;
+            log() << svs.transpose() << std::endl;
+            log() << "A \n"
+                  << std::scientific << std::setprecision(16) << A << std::endl;
+            log() << "AI \n"
+                  << std::scientific << std::setprecision(16) << AI << std::endl;
+            log() << "V \n"
+                  << std::scientific << std::setprecision(16) << SVDResult.matrixV() << std::endl;
+            log() << "U \n"
+                  << std::scientific << std::setprecision(16) << SVDResult.matrixU() << std::endl;
+            return "EigenLeastSquareInverse_Filtered Error info"; }());
         return svs.maxCoeff() / (svs.minCoeff() + verySmallReal);
         // std::cout << AI * A << std::endl;
     }
@@ -73,10 +78,10 @@ namespace DNDS::HardEigen
         //     std::cout << solver.eigenvalues() << std::endl;
         //     std::exit(-1);
         // }
-        Eigen::Matrix3d ret = (solver.eigenvectors() * solver.eigenvalues().array().abs().sqrt().matrix().asDiagonal())(Eigen::all, {2, 1, 0});
-        // ret(Eigen::all, 0) *= signP(ret(0, 0));
-        // ret(Eigen::all, 1) *= signP(ret(1, 1));
-        // ret(Eigen::all, 2) *= ret.determinant();
+        Eigen::Matrix3d ret = (solver.eigenvectors() * solver.eigenvalues().array().abs().sqrt().matrix().asDiagonal())(EigenAll, {2, 1, 0});
+        // ret(EigenAll, 0) *= signP(ret(0, 0));
+        // ret(EigenAll, 1) *= signP(ret(1, 1));
+        // ret(EigenAll, 2) *= ret.determinant();
         return ret;
     }
 
@@ -89,10 +94,10 @@ namespace DNDS::HardEigen
         //     std::cout << solver.eigenvalues() << std::endl;
         //     std::exit(-1);
         // }
-        Eigen::Matrix2d ret = (solver.eigenvectors() * solver.eigenvalues().array().abs().sqrt().matrix().asDiagonal())(Eigen::all, {1, 0});
-        // ret(Eigen::all, 0) *= signP(ret(0, 0));
-        // ret(Eigen::all, 1) *= signP(ret(1, 1));
-        // ret(Eigen::all, 2) *= ret.determinant();
+        Eigen::Matrix2d ret = (solver.eigenvectors() * solver.eigenvalues().array().abs().sqrt().matrix().asDiagonal())(EigenAll, {1, 0});
+        // ret(EigenAll, 0) *= signP(ret(0, 0));
+        // ret(EigenAll, 1) *= signP(ret(1, 1));
+        // ret(EigenAll, 2) *= ret.determinant();
         return ret;
     }
 
@@ -130,10 +135,10 @@ namespace DNDS::HardEigen
         //     std::cout << solver.eigenvalues() << std::endl;
         //     std::exit(-1);
         // }
-        Eigen::Matrix3d ret = (solver.eigenvectors())(Eigen::all, {2, 1, 0});
-        // ret(Eigen::all, 0) *= signP(ret(0, 0));
-        // ret(Eigen::all, 1) *= signP(ret(1, 1));
-        // ret(Eigen::all, 2) *= ret.determinant();
+        Eigen::Matrix3d ret = (solver.eigenvectors())(EigenAll, {2, 1, 0});
+        // ret(EigenAll, 0) *= signP(ret(0, 0));
+        // ret(EigenAll, 1) *= signP(ret(1, 1));
+        // ret(EigenAll, 2) *= ret.determinant();
         return ret;
     }
 
@@ -146,15 +151,15 @@ namespace DNDS::HardEigen
         //     std::cout << solver.eigenvalues() << std::endl;
         //     std::exit(-1);
         // }
-        Eigen::Matrix2d ret = (solver.eigenvectors())(Eigen::all, {1, 0});
-        // ret(Eigen::all, 0) *= signP(ret(0, 0));
-        // ret(Eigen::all, 1) *= ret.determinant();
+        Eigen::Matrix2d ret = (solver.eigenvectors())(EigenAll, {1, 0});
+        // ret(EigenAll, 0) *= signP(ret(0, 0));
+        // ret(EigenAll, 1) *= ret.determinant();
         return ret;
     }
 
     Eigen::Index EigenLeastSquareSolve(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, Eigen::MatrixXd &AIB)
     {
-        auto SVDResult = A.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
+        auto SVDResult = A.jacobiSvd<Eigen::ComputeThinU | Eigen::ComputeThinV>();
         AIB = SVDResult.solve(B);
         return SVDResult.rank();
     }

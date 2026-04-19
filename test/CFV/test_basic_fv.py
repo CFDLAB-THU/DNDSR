@@ -1,0 +1,489 @@
+from DNDSR import DNDS, Geom, CFV
+from DNDSR.Geom.utils import *
+import numpy as np
+import json
+import time
+import pprint
+
+import time
+
+
+def time_function_until_limit(
+    func,
+    time_limit=1.0,
+    max_executions=None,
+    iter_pack=1,
+    report=None,
+    *args,
+    **kwargs,
+):
+    import math
+
+    if time_limit <= 0:
+        raise ValueError("time_limit must be positive")
+    if max_executions is not None and max_executions <= 0:
+        raise ValueError("max_executions must be positive if provided")
+
+    executions = 0
+    start_time = time.perf_counter()
+
+    reportTime = 1
+
+    while True:
+        # Check if we've hit the max executions
+        if max_executions is not None and executions >= max_executions:
+            break
+
+        # Execute the function
+        for _ in range(iter_pack):
+            func(*args, **kwargs)
+        executions += iter_pack
+
+        # Check elapsed time
+        elapsed = time.perf_counter() - start_time
+        if elapsed >= reportTime:
+            reportTime = math.floor(elapsed / 1) * 1 + 1
+            if report is not None:
+                report(elapsed, executions)
+        if elapsed >= time_limit:
+            break
+
+    total_time = time.perf_counter() - start_time
+    avg_time = total_time / executions if executions > 0 else 0.0
+
+    return (executions, total_time, avg_time)
+
+
+def get_fv(mpi):
+    print(CFV.tUDof_1)
+    # CFV.VariationalReconstruction_2()
+    meshFile = os.path.join(
+        os.path.dirname(__file__), "..", "..", "data", "mesh", "NACA0012_H2.cgns"
+    )
+    # meshFile = os.path.join(
+    #     os.path.dirname(__file__), "..", "..", "data", "mesh", "Uniform_3x3.cgns"
+    # )
+    mesh, reader, name2Id = create_mesh_from_CGNS(
+        meshFile,
+        mpi,
+        2,
+        periodic_geometry={
+            "translation1": [3, 0, 0],
+            "translation2": [0, 3, 0],
+        },
+        meshDirectBisect=2,
+    )
+    meshBnd, readerBnd = create_bnd_mesh(mesh)
+    fv = CFV.FiniteVolume(mpi, mesh)
+    settings = fv.GetSettings()
+    settings["intOrder"] = 3
+    settings["maxOrder"] = 3
+    fv.ParseSettings(settings)
+    if mpi.rank == 0:
+        print(fv.GetSettings())
+
+    bcid_2_bcweight_map = {}
+    for name, id in name2Id.n2id_map.items():
+        # if name == "WALL":
+        bcid_2_bcweight_map[(id, 0)] = 1.0
+        if name.startswith("PERIODIC"):
+            bcid_2_bcweight_map[(id, 0)] = 1.0
+            bcid_2_bcweight_map[(id, 1)] = 1.0
+            bcid_2_bcweight_map[(id, 2)] = 1.0
+            bcid_2_bcweight_map[(id, 3)] = 1.0
+
+    # construction: volume
+    fv.SetCellAtrBasic()
+    fv.ConstructCellVolume()
+    fv.ConstructCellBary()
+    fv.ConstructCellCent()
+    fv.ConstructCellIntJacobiDet()
+    fv.ConstructCellIntPPhysics()
+    fv.ConstructCellAlignedHBox()
+    fv.ConstructCellMajorHBoxCoordInertia()
+    # construction: face
+    fv.SetFaceAtrBasic()
+    fv.ConstructFaceCent()
+    fv.ConstructFaceArea()
+    fv.ConstructFaceIntJacobiDet()
+    fv.ConstructFaceIntPPhysics()
+    fv.ConstructFaceUnitNorm()
+    fv.ConstructFaceMeanNorm()
+
+    fv.ConstructCellSmoothScale()
+
+    nB = fv.getArrayBytes() / 1024**2
+    nBMesh = mesh.getArrayBytes() / 1024**2
+    if mpi.rank == 0:
+        print(f"Bytes     : {nB:.4g} MB")
+        print(f"Bytes mesh: {nBMesh:.4g} MB")
+
+    return mesh, reader, name2Id, meshBnd, readerBnd, fv
+
+
+def _test_fv_Op(
+    mpi,
+    fv: CFV.FiniteVolume,
+    mesh: Geom.UnstructuredMesh,
+    nvars=1,
+    test_time=5.0,
+    max_iter=1000 * 1000 * 1000,
+):
+    u = CFV.tUDof_D()
+    grad_u_arrs = [CFV.tUGrad_3xD() for _ in range(2)]
+    grad_u, grad_u1 = grad_u_arrs
+
+    fv.BuildUDof_D(u, nvars)
+    for arr in grad_u_arrs:
+        fv.BuildUGrad_3xD(arr, nvars)
+    grad_u1 = grad_u1.clone()
+    u.setConstant(1.23)
+    for iCell in range(mesh.NumCell()):
+        x = fv.GetCellBary(iCell)
+        ui = np.array(u[iCell], copy=False)
+        ui[:] = x[0] + np.sin(x[1] * np.pi)
+    u.trans.startPersistentPull()
+    u.trans.waitPersistentPull()
+
+    def test_CUDA():
+        CFV.finiteVolumeCellOpTest_main_CUDA(
+            fv,
+            u,
+            grad_u,
+            100,
+            {
+                "threadsPerBlock": 128,
+                # "method": "pervar",
+            },
+        )
+
+    def test_Host():
+        CFV.finiteVolumeCellOpTest_main_Host(fv, u, grad_u, 100)
+
+    print("AAA0")
+    grad_u.setConstant(0)
+    print("AAA1")
+    grad_u_norm2 = grad_u.norm2()
+    if mpi.rank == 0:
+        print(f"norm: {grad_u_norm2}")
+    executions, total_time, avg_time = time_function_until_limit(
+        test_Host,
+        test_time,
+        max_iter,
+        iter_pack=1,
+        report=lambda t, n: print(f" Host iter [{n:8}] time [{t:10.4e}]"),
+    )
+    grad_u_norm2 = grad_u.norm2()
+    grad_u_cnorm1 = grad_u.componentWiseNorm1()
+    if mpi.rank == 0:
+        print("--- HOST ---")
+        print(f"[{executions}] times, avg [{avg_time:8.04e}] s")
+        print(f"norm: {grad_u.norm2()}")
+    avg_time_host = avg_time
+
+    grad_u1.assign_value(grad_u)
+    grad_u.setConstant(0)
+
+    mesh.to_device("CUDA")
+    fv.to_device("CUDA")
+    u.to_device("CUDA")
+    grad_u.to_device("CUDA")
+    grad_u1.to_device("CUDA")
+
+    executions, total_time, avg_time = time_function_until_limit(
+        test_CUDA,
+        test_time,
+        max_iter,
+        iter_pack=1,
+        report=lambda t, n: print(f" CUDA iter [{n:8}] time [{t:8.04e}]"),
+    )
+    # grad_u.to_host()
+    grad_u_norm = grad_u.norm2()
+    grad_u_cnorm1 = grad_u.componentWiseNorm1()
+    grad_u1 *= np.ones((3, nvars))
+    grad_u_err_norm = grad_u.norm2(grad_u1)
+    grad_u_err_cnorm1 = grad_u.componentWiseNorm1(grad_u1)
+    if mpi.rank == 0:
+        print("--- CUDA ---")
+        print(f"[{executions}] times, avg [{avg_time:8.4e}] s")
+        print(f"norm: {grad_u_norm}, diff_norm: {grad_u_err_norm:.4e}")
+        pprint.pprint(grad_u_err_cnorm1.tolist())
+        print(f" -- acc [{avg_time_host / avg_time:.4g}]")
+
+
+def _test_fv_Op_Fix_Run(
+    fv, mesh, u, grad_u, grad_u1, test_Host, test_CUDA, test_time, max_iter
+):
+
+    # mesh.to_device("Host")
+    # fv.to_device("Host")
+    if hasattr(u, "to_device"):
+        u.to_device("Host")
+    else:
+        for e in u:
+            e.to_device("Host")
+    # grad_u.to_device("Host")
+    # grad_u1.to_device("Host")
+
+    if hasattr(grad_u, "setConstant"):
+        grad_u.setConstant(0)
+    else:
+        for e in grad_u:
+            e.setConstant(0)
+
+    executions, total_time, avg_time = time_function_until_limit(
+        test_Host,
+        test_time,
+        max_iter,
+        iter_pack=1,
+        report=lambda t, n: print(f" Host iter [{n:8}] time [{t:10.4e}]"),
+    )
+    if hasattr(grad_u, "norm2"):
+        grad_u_norm2 = grad_u.norm2()
+    else:
+        grad_u_norm2 = 0.0
+        for e in grad_u:
+            grad_u_norm2 += e.norm2()
+
+    if mpi.rank == 0:
+        print("--- HOST ---")
+        print(f"[{executions}] times, avg [{avg_time:8.04e}] s")
+        print(f"norm: {grad_u_norm2}")
+    avg_time_host = avg_time
+
+    if hasattr(grad_u, "setConstant"):
+        grad_u1.assign_value(grad_u)
+        grad_u.setConstant(0)
+    else:
+        for a, b in zip(grad_u, grad_u1):
+            b.assign_value(a)
+            a.setConstant(0)
+
+    mesh.to_device("CUDA")
+    fv.to_device("CUDA")
+    if hasattr(u, "to_device"):
+        u.to_device("CUDA")
+        grad_u.to_device("CUDA")
+        grad_u1.to_device("CUDA")
+    else:
+        for e in u:
+            e.to_device("CUDA")
+        for e in grad_u:
+            e.to_device("CUDA")
+        for e in grad_u1:
+            e.to_device("CUDA")
+
+    executions, total_time, avg_time = time_function_until_limit(
+        test_CUDA,
+        test_time,
+        max_iter,
+        iter_pack=1,
+        report=lambda t, n: print(f" CUDA iter [{n:8}] time [{t:8.04e}]"),
+    )
+
+    # grad_u.to_host()
+    if hasattr(grad_u, "norm2"):
+        grad_u_norm2 = grad_u.norm2()
+        grad_u_err_norm = grad_u.norm2(grad_u1)
+    else:
+        grad_u_norm2 = 0.0
+        grad_u_err_norm = 0.0
+        for e, e1 in zip(grad_u, grad_u1):
+            grad_u_norm2 += e.norm2()
+            grad_u_err_norm += e.norm2(e1)
+
+    if mpi.rank == 0:
+        print("--- CUDA ---")
+        print(f"[{executions}] times, avg [{avg_time:8.4e}] s")
+        print(f"norm: {grad_u_norm2}, diff_norm: {grad_u_err_norm:.4e}")
+        print(f" -- acc [{avg_time_host / avg_time:.4g}]")
+
+
+def _test_fv_Op_Fix1(
+    mpi,
+    fv: CFV.FiniteVolume,
+    mesh: Geom.UnstructuredMesh,
+    test_time=5.0,
+    max_iter=1000 * 1000 * 1000,
+):
+    nvars = 1
+    u = CFV.tUDof_1()
+    grad_u_arrs = [CFV.tUGrad_3x1() for _ in range(2)]
+    grad_u, grad_u1 = grad_u_arrs
+
+    fv.BuildUDof_1(u, nvars)
+    for arr in grad_u_arrs:
+        fv.BuildUGrad_3x1(arr, nvars)
+    grad_u1 = grad_u1.clone()
+    u.setConstant(1.23)
+    for iCell in range(mesh.NumCell()):
+        x = fv.GetCellBary(iCell)
+        ui = np.array(u[iCell], copy=False)
+        ui[:] = x[0] + np.sin(x[1] * np.pi)
+    u.trans.startPersistentPull()
+    u.trans.waitPersistentPull()
+
+    def test_CUDA():
+        CFV.finiteVolumeCellOpTest_Fixed_main_CUDA_N1(
+            fv,
+            u,
+            grad_u,
+            100,
+            {
+                "threadsPerBlock": 128,
+                "method": "pervar",
+            },
+        )
+
+    def test_Host():
+        CFV.finiteVolumeCellOpTest_Fixed_main_Host_N1(fv, u, grad_u, 100)
+
+    _test_fv_Op_Fix_Run(
+        fv, mesh, u, grad_u, grad_u1, test_Host, test_CUDA, test_time, max_iter
+    )
+
+
+def _test_fv_Op_Fix5(
+    mpi,
+    fv: CFV.FiniteVolume,
+    mesh: Geom.UnstructuredMesh,
+    test_time=5.0,
+    max_iter=1000 * 1000 * 1000,
+):
+    nvars = 5
+    u = CFV.tUDof_5()
+    grad_u_arrs = [CFV.tUGrad_3x5() for _ in range(2)]
+    grad_u, grad_u1 = grad_u_arrs
+
+    fv.BuildUDof_5(u, nvars)
+    for arr in grad_u_arrs:
+        fv.BuildUGrad_3x5(arr, nvars)
+    grad_u1 = grad_u1.clone()
+    u.setConstant(1.23)
+    for iCell in range(mesh.NumCell()):
+        x = fv.GetCellBary(iCell)
+        ui = np.array(u[iCell], copy=False)
+        ui[:] = x[0] + np.sin(x[1] * np.pi)
+    u.trans.startPersistentPull()
+    u.trans.waitPersistentPull()
+
+    def test_CUDA():
+        CFV.finiteVolumeCellOpTest_Fixed_main_CUDA_N5(
+            fv,
+            u,
+            grad_u,
+            100,
+            {
+                "threadsPerBlock": 64,
+                # "method": "pervar",
+            },
+        )
+
+    def test_Host():
+        CFV.finiteVolumeCellOpTest_Fixed_main_Host_N5(fv, u, grad_u, 100)
+
+    _test_fv_Op_Fix_Run(
+        fv, mesh, u, grad_u, grad_u1, test_Host, test_CUDA, test_time, max_iter
+    )
+
+
+def _test_fv_Op_SOA_ver0_X(
+    mpi,
+    fv: CFV.FiniteVolume,
+    mesh: Geom.UnstructuredMesh,
+    nvars=1,
+    test_time=5.0,
+    max_iter=1000 * 1000 * 1000,
+):
+    if nvars != 1 and nvars != 5:
+        raise ValueError("nvars needs to be 1 or 5")
+    u_e = CFV.tUDof_1()
+    grad_u_e = CFV.tUGrad_3x1()
+
+    fv.BuildUDof_1(u_e, 1)
+    fv.BuildUGrad_3x1(grad_u_e, 1)
+
+    u = [u_e.clone() for _ in range(nvars)]
+    grad_u = [grad_u_e.clone() for _ in range(nvars)]
+
+    grad_u1 = [e.clone() for e in grad_u]
+
+    for e in u:
+        e.setConstant(1.23)
+    for iCell in range(mesh.NumCell()):
+        for e in u:
+            x = fv.GetCellBary(iCell)
+            ui = np.array(e[iCell], copy=False)
+            ui[:] = x[0] + np.sin(x[1] * np.pi)
+    print("X2")
+    for e in u:
+        e.trans.startPersistentPull()
+        e.trans.waitPersistentPull()
+    print("X3")
+
+    if nvars == 1:
+        run_cuda = CFV.finiteVolumeCellOpTest_SOA_ver0_main_CUDA_N1
+        run_host = CFV.finiteVolumeCellOpTest_SOA_ver0_main_Host_N1
+    elif nvars == 5:
+        run_cuda = CFV.finiteVolumeCellOpTest_SOA_ver0_main_CUDA_N5
+        run_host = CFV.finiteVolumeCellOpTest_SOA_ver0_main_Host_N5
+
+    def test_CUDA():
+        run_cuda(
+            fv,
+            u,
+            grad_u,
+            100,
+            {
+                "threadsPerBlock": 128,
+                # "method": "pervar",
+            },
+        )
+
+    def test_Host():
+        run_host(fv, u, grad_u, 100)
+
+    _test_fv_Op_Fix_Run(
+        fv, mesh, u, grad_u, grad_u1, test_Host, test_CUDA, test_time, max_iter
+    )
+
+
+def _run_basic(mpi):
+    mesh, reader, name2Id, meshBnd, readerBnd, fv = get_fv(mpi)
+
+    test_time = 5.0
+
+    _test_fv_Op(
+        mpi,
+        fv,
+        mesh,
+        nvars=5,
+        test_time=test_time,
+    )
+
+    print("\n\nTesting Fixed")
+
+    _test_fv_Op_Fix5(
+        mpi,
+        fv,
+        mesh,
+        test_time=test_time,
+    )
+
+    print("\n\nTesting SOA ver0")
+
+    _test_fv_Op_SOA_ver0_X(
+        mpi,
+        fv,
+        mesh,
+        nvars=5,
+        test_time=test_time,
+    )
+
+    # print(input("type anything: "))
+
+
+if __name__ == "__main__":
+    mpi = DNDS.MPIInfo()
+    mpi.setWorld()
+    _run_basic(mpi)

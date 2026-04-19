@@ -1,0 +1,228 @@
+{
+    "$schema": "../euler_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 1e-2,
+        "nTimeStep": 5000,
+        "steadyQuit": true,
+        "odeCode": 202,
+        "tEnd": 3e+200,
+        "odeSetting1": 0.55,
+        "odeSetting2": 0,
+        "odeSetting3": 1.3333,
+        "rhsFPPMode": 1,
+        "rhsFPPScale": 1,
+        "useDtPPLimit": true,
+        "dtPPLimitScale": 0.01,
+        "_tail": 0
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 50000,
+        "rhsThresholdInternal": 1e-12,
+        "res_base": 0.0,
+        "useVolWiseResidual": true
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 10,
+        "consoleOutputMode": 0,
+        "nDataOutC": 1,
+        "nDataOut": 1000,
+        "nDataOutCInternal": 500,
+        "nDataOutInternal": 1000000000,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 10.0,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 2147483647,
+        "nCFLRampLength": 2147483647,
+        "CFLRampEnd": 0.0,
+        "useLocalDt": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshRotZ": 0.0,
+        "meshReorderCells": 1,
+        "meshFile": "../data/mesh/UniformUpRod_S_IR.cgns",
+        "outPltName": "../data/out/upRod/upRod_S_IR",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": false,
+        "outAtPointData": true,
+        "outAtCellData": true
+    },
+    "implicitReconstructionControl": {
+        // "nInternalRecStep": 10,
+        "zeroGrads": false,
+        "recLinearScheme": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 10,
+        "recThreshold": 1e-010,
+        "nRecConsolCheck": 10,
+        "nRecMultiplyForZeroedGrad": 1
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "smoothIndicatorProcedure": 0,
+        "limiterProcedure": 0, //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 5,
+        "cacheDiffBase": true,
+        "jacobiRelax": 1,
+        "SORInstead": false,
+        "smoothThreshold": 1e-3,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        "baseSettings": {
+            "localOrientation": true,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "scaleType": "BaryDiff",
+            "scaleMultiplier": 1.0,
+            // "dirWeightScheme": "HQM_OPT",
+            // "geomWeightScheme": "HQM_SD",
+            "dirWeightScheme": "Factorial",
+            "geomWeightScheme": "HQM_SD",
+            "_tail": 0
+        }
+    },
+    "linearSolverControl": {
+        "jacobiCode": 2,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
+        "gmresCode": 0,
+        "gmresScale": 2,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        "multiGridLP": 0,
+        "multiGridLPInnerNIter": 4,
+        "multiGridLPInnerNSee": 100,
+        "coarseGridLinearSolverControlList": {
+            "1": {
+                "jacobiCode": 2,
+                "sgsIter": 0,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0,
+                // "centralSmoothInputResidual": 4,
+                "_tail": 0
+            },
+            "2": {
+                "jacobiCode": 2,
+                "sgsIter": 0,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0
+            }
+        },
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 4,
+            "orderingCode": 4,
+            "_tail": 0
+        }
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": true,
+        "useScalarJacobian": false,
+        "useRoeJacobian": false,
+        "riemannSolverType": "Roe_M8",
+        "riemannSolverTypeAux": "Roe_M2",
+        "rsMeanValueEig": 1,
+        "rsFixScale": 1,
+        "rsRotateScheme": 0,
+        "nCentralSmoothStep": 0,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        // "farFieldStaticValue": [
+        //     1,
+        //     1,
+        //     0,
+        //     0,
+        //     79.8650793650794
+        // ],
+        // "farFieldStaticValue": [
+        //     1,
+        //     1.0,
+        //     0.0,
+        //     0,
+        //     3.290178571428572
+        // ],
+        "farFieldStaticValue": [ //M0.1
+            1,
+            0,
+            0,
+            0,
+            2.5
+        ],
+        // "farFieldStaticValue": [//M0.01
+        //     1,
+        //     1.0,
+        //     0.0,
+        //     0,
+        //     17857.642857142862
+        // ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 1.0,
+            "muGas": 1e-2,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4,
+            "muModel": 0
+        }
+    },
+    "bcSettings": [
+        {
+            "type": "BCWallInvis",
+            "name": "Le"
+        },
+        {
+            "type": "BCWallInvis",
+            "name": "Ri"
+        },
+        {
+            "type": "BCIn",
+            "name": "Lo",
+            "value": [
+                1,
+                0,
+                0,
+                0,
+                2.5
+            ]
+        },
+        {
+            "type": "BCIn",
+            "name": "Up",
+            "value": [
+                0.8,
+                0,
+                0,
+                0,
+                2.5
+            ]
+        }
+    ]
+}

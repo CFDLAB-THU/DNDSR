@@ -1,0 +1,120 @@
+{
+    "$schema": "../euler3D_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 2e30,
+        "nTimeStep": 1,
+        "steadyQuit": true,
+        "odeCode": 1, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
+        "tEnd": 3e+200
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 1,
+        "nDataOutC": 20,
+        "nDataOut": 100,
+        "nDataOutCInternal": 200,
+        "nDataOutInternal": 1000000000,
+        "tDataOut": 3e+200,
+        "dataOutAtInit": true
+    },
+    "implicitCFLControl": {
+        "CFL": 50.0,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 2147483647,
+        "nCFLRampLength": 2147483647,
+        "CFLRampEnd": 0.0,
+        "useLocalDt": true
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 0,
+        "rhsThresholdInternal": 1e-60,
+        "res_base": 0.0,
+        "useVolWiseResidual": false
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshFile": "../data/mesh/Ball4.cgns",
+        "outPltName": "../data/outUnsteady/Ball4",
+        "outLogName": "../data/outUnsteady/Ball4",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": false,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outCellScalarNames": [
+            // "minJacobiDetRel",
+            // "cellVolume",
+            "dWall"
+        ]
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0, // 0 for original SOR, 1 for GMRES
+        "nGmresSpace": 4,
+        "nGmresIter": 2,
+        "recThreshold": 1e-03,
+        "nRecConsolCheck": 1
+    },
+    "limiterControl": {
+        "useLimiter": false,
+        "smoothIndicatorProcedure": 0,
+        "limiterProcedure": 1, //1 == CWBAP
+        "nPartialLimiterStart": 2147483647,
+        "nPartialLimiterStartLocal": 2147483647
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 3,
+        "cacheDiffBase": false,
+        "jacobiRelax": 1.0,
+        "SORInstead": true,
+        "smoothThreshold": 1e-3,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false
+    },
+    "linearSolverControl": {
+        "gmresCode": 0,
+        "nGmresSpace": 10,
+        "nGmresIter": 2
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": true,
+        "useScalarJacobian": true,
+        "riemannSolverType": "HLLC",
+        "wallDistScheme": 3,
+        "wallDistExection": 5,
+        "wallDistRefineMax": 0.01,
+        "wallDistIter": 1000,
+        "wallDistLinSolver": 0,
+        "wallDistResTol": 1e-4,
+        "wallDistPoissonP": 2,
+        "wallDistDTauScale": 100,
+        "wallDistNJacobiSweep": 40,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "farFieldStaticValue": [
+            1,
+            0.965925826289068,
+            0.258819045102521,
+            0,
+            79.8650793650794
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 0.116221972344982,
+            "muGas": 1e-3,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        }
+    }
+}

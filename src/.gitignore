@@ -7,3 +7,4 @@ src/*/_internal/*.so*
 !src/*/_internal/*.pyi
 # now the stubs are generated
 *.pyi 
+pybind11-stubgen-out

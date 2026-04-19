@@ -469,7 +469,7 @@ namespace DNDS::Geom::OpenFOAM
                 // Geom::tSmallCoords coords;
                 // coords.resize(3, nodes.size());
                 // for (index iNode = 0; iNode < nodes.size(); iNode++)
-                //     coords(Eigen::all, iNode) = reader.points.at(nodes[iNode]);
+                //     coords(EigenAll, iNode) = reader.points.at(nodes[iNode]);
                 // Elem::Element elem{Elem::Hex8};
                 // Elem::Quadrature quad(elem, 2);
                 // real vol = 0;

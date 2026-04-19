@@ -1,0 +1,170 @@
+from DNDSR import DNDS, Geom
+import mpi4py as pyMPI
+import scipy.spatial
+from OversetCart import OversetBG2D, OversetPart2D, DistMap
+from GeomUtils import get_mpi4py_comm_from_MPIInfo
+import numpy as np
+import sys, os
+import time, itertools
+
+
+class OversetBG2DManager:
+    def __init__(self, mpi: DNDS.MPIInfo):
+        self._mpi = mpi
+        self._MPI = get_mpi4py_comm_from_MPIInfo(mpi)
+
+    def read_meshes_and_init(
+        self,
+        mesh_names: list[str],
+        initial_transforms=list[tuple[np.ndarray, np.ndarray]],
+    ):
+        mpi = self._mpi
+        assert len(mesh_names) == len(initial_transforms)
+        self.parts = parts = [
+            OversetPart2D(mpi, transform=initial_transforms[i])
+            for i in range(len(initial_transforms))
+        ]
+        for i, osPart in enumerate(parts):
+            osPart.read_mesh(mesh_names[i])
+            osPart.obtain_dist_node()
+        self.osBG = OversetBG2D(mpi)
+
+    @property
+    def nPart(self):
+        return len(self.parts)
+
+    def process_overset(self, h: float):
+        mpi = self._mpi
+        parts = self.parts
+        osBG = self.osBG
+        osBG.set_bg(parts, h)
+        assert osBG.procMap[osBG.rank_to_ax_rank()] == mpi.rank
+        self.dist_maps = dist_maps = osBG.obtain_dist_map(parts)
+        # self.print_proc_dist_maps()
+        self.cell_type_arrs, self.other_dists_nodes = osBG.decide_cell_types(
+            parts, dist_maps
+        )
+
+        # print(
+        #     osBG.query_dist_from_points(
+        #         dist_maps[0], points=np.array([[0.25, 0, 0 - 0.025], [0.5, 0.25, 0.5]])
+        #     )
+        # )
+        self.part_bnd_templates = []
+        for iPart, part in enumerate(parts):
+            iFacesSourceLoc, coords_mid = part.get_holed_faces_midpt(
+                self.cell_type_arrs[iPart]
+            )
+            iPartTemp, iCellTemp = osBG.decide_point_templates(
+                parts, dist_maps, coords_mid
+            )
+            self.part_bnd_templates.append((iPartTemp, iCellTemp, iFacesSourceLoc))
+
+    def cache_templates(self):
+        pass
+
+    def print_proc_dist_maps(self):
+        self.osBG.print_proc_dist_maps(self.dist_maps)
+
+    def print_full_mesh_type(self, out_name="", together=False):
+        highlight_iCells_list = []
+        for iPart, part in enumerate(self.parts):
+            highlight_iCells = set()
+            for iPartTemp, iCellTemp, iFacesSourceLoc in self.part_bnd_templates:
+                highlight_iCells.update(set(iCellTemp[iPartTemp == iPart]))
+            highlight_iCells_list.append(highlight_iCells)
+
+        if not together:
+            for iPart, part in enumerate(self.parts):
+                part.print_full_mesh_type(
+                    iPart,
+                    self.cell_type_arrs[iPart],
+                    highlight_iCells=highlight_iCells_list[iPart],
+                )
+        else:
+            import matplotlib.pyplot as plt
+
+            fig = plt.figure(figsize=(8, 6), dpi=400)
+
+            for iPart, part in enumerate(self.parts):
+                part.print_full_mesh_type(
+                    iPart,
+                    self.cell_type_arrs[iPart],
+                    no_hole=True,
+                    ax=plt.gca(),
+                    highlight_iCells=highlight_iCells_list[iPart],
+                )
+            plt.axis("equal")
+            plt.gca().autoscale()
+            if len(out_name):
+                out_name += "_"
+            plt.savefig(out_name + "parts_all.png")
+            plt.close(fig)
+
+
+def AnimateMotion(mpi: DNDS.MPIInfo):
+    mpiGlob = mpi
+    translates = [[0, 0, 0], [1.5, 0, 0]]
+    translates_end = [[0, 0, 0], [0.5, 0, 0]]
+    rot = np.array([0.0, 0])
+    rot_end = np.array([0.0, 90])
+    translates = np.array(translates)
+    translates_end = np.array(translates_end)
+    Nstep = 41
+
+    transforms = [
+        (np.eye(3, 3), np.array(translates[i])) for i in range(len(translates))
+    ]
+    # translates = [[0, 0, 0]]
+
+    mesh_names = [
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "..",
+            "data",
+            "mesh",
+            "CylinderNoFar.cgns",
+        )
+    ] * len(transforms)
+
+    osMan = OversetBG2DManager(mpiGlob)
+
+    osMan.read_meshes_and_init(mesh_names, transforms)
+
+    # for iter in range(100000):
+    #     osMan.process_overset(1.0 / 10) #todo: test forged leak here
+
+    inter = np.linspace(0, 1, Nstep)
+    for i in range(0, Nstep):
+        translate_now = inter[i] * translates_end + (1 - inter[i]) * translates
+        rot_now = inter[i] * rot_end + (1 - inter[i]) * rot
+        import scipy.linalg
+        from scipy.spatial.transform import Rotation as R
+
+        transforms = [
+            (
+                R.from_euler("xyz", [0, 0, rot_now[i]], degrees=True).as_matrix(),
+                np.array(translate_now[i]),
+            )
+            for i in range(len(translate_now))
+        ]
+        for iPart, part in enumerate(osMan.parts):
+            part.transform = transforms[iPart]
+
+        t0 = time.perf_counter()
+        osMan.process_overset(1.0 / 10)
+        if mpiGlob.rank == 0:
+            print(
+                f"[{i+1}/{Nstep}] process done. 🥺 time: [{time.perf_counter() - t0}]"
+            )
+
+        osMan.print_full_mesh_type(together=True, out_name=f"os_type_1_{i:04}")
+
+
+if __name__ == "__main__":
+    mpiGlob = DNDS.MPIInfo()
+    mpiGlob.setWorld()
+
+    AnimateMotion(mpiGlob)

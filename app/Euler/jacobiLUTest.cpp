@@ -28,6 +28,8 @@ namespace DNDS::Euler
         reader.MeshPartitionCell2Cell(DNDS::Geom::UnstructuredMeshSerialRW::PartitionOptions{});
         reader.PartitionReorderToMeshCell2Cell();
         reader.BuildSerialOut();
+        mesh->RecoverNode2CellAndNode2Bnd();
+        mesh->RecoverCell2CellAndBnd2Cell();
         mesh->BuildGhostPrimary();
         mesh->AdjGlobal2LocalPrimary();
         mesh->InterpolateFace(); // this mesh building is copied from meshSerial_Test

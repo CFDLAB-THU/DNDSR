@@ -1,0 +1,7 @@
+# Build artifacts (populated by cmake --install)
+_lib/
+*/_ext/*.so
+*/_ext/*.pyd
+*/_ext/*.dylib
+# Generated stubs (regenerated at install time)
+*.pyi
