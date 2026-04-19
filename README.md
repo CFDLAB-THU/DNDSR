@@ -3,21 +3,34 @@
 DNDSR is a C++17 / Python CFD research code implementing Compact Finite Volume
 methods with MPI parallelism and optional CUDA GPU support.
 
+**Documentation**: [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR/)
+(includes guides, architecture, API reference, and embedded
+[Doxygen C++ docs](https://cfdlab-thu.github.io/DNDSR/doxygen/))
+
+## Features
+
+- **Solvers**: Euler / Navier-Stokes (2D/3D), SA-IDDES, k-omega RANS
+- **Numerics**: Compact Finite Volume with variational reconstruction,
+  Roe / HLLE+ Riemann solvers, ESDIRK / HM3 time integration, p-Multigrid
+- **Parallelism**: MPI with ghost communication, optional CUDA GPU support
+- **Python bindings**: pybind11 modules for mesh, CFV, and solver access
+- **Config system**: typed JSON configs with schema validation
+
 Solver executables:
 
-- `euler` / `euler3D` — 2D/3D Navier-Stokes
-- `eulerSA` / `eulerSA3D` — Spalart-Allmaras RANS
-- `euler2EQ` / `euler2EQ3D` — k-omega two-equation RANS
-
-See [docs/project_structure.md](docs/project_structure.md) for the full
-directory layout, module dependencies, and build targets.
+| Executable | Model |
+|------------|-------|
+| `euler` / `euler3D` | Navier-Stokes |
+| `eulerSA` / `eulerSA3D` | Spalart-Allmaras RANS (IDDES) |
+| `euler2EQ` / `euler2EQ3D` | k-omega two-equation RANS |
 
 ## Quick Start
 
 ### 1. Clone and fetch dependencies
 
 ```bash
-git submodule update --init --recursive --depth=1
+git clone --recursive https://github.com/CFDLAB-THU/DNDSR.git
+cd DNDSR
 
 # Build binary external libraries (HDF5, CGNS, Metis, ParMetis, ...)
 cd external/cfd_externals
@@ -25,12 +38,9 @@ CC=mpicc CXX=mpicxx python cfd_externals_build.py
 cd ../..
 
 # Download and extract header-only libraries (Eigen, Boost, CGAL, fmt, pybind11, ...)
-# from the GitHub release:
 curl -L -o external/external_headeronlys.tar.gz \
   https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/latest/download/external_headeronlys.tar.gz
-cd external
-tar -xzf external_headeronlys.tar.gz
-cd ..
+cd external && tar -xzf external_headeronlys.tar.gz && cd ..
 ```
 
 ### 2. Build C++ solvers
@@ -97,43 +107,48 @@ ctest --test-dir build -R dnds_ --output-on-failure
 pytest test/DNDS/test_basic.py -v
 ```
 
-## Type Stubs
-
-After installing the Python package, generate `.pyi` type stubs for IDE
-support:
+### 6. Build and serve documentation locally
 
 ```bash
-PATH="venv/bin:$PATH" bash scripts/generate-stubs.sh
+pip install -r docs/sphinx/requirements.txt
+cmake --build build -t serve-docs
+# Then: cd build/docs/sphinx && python3 -m http.server 8000
 ```
-
-This produces stubs in `stubs/` and copies them into `python/DNDSR/` for
-PEP 561 compliance. The stubs should be committed to git.
-
-## VS Code / Pylance Setup
-
-For Pylance to resolve `from DNDSR import DNDS` correctly, add to
-`.vscode/settings.json`:
-
-```jsonc
-{
-    "python.analysis.extraPaths": ["${workspaceFolder}/python"],
-    "python.analysis.packageIndexDepths": [
-        {"name": "DNDSR", "depth": 10, "includeAllSymbols": true}
-    ]
-}
-```
-
-Also set the Python interpreter to the project venv
-(`venv/bin/python`) via the VS Code Python extension.
 
 ## Documentation
 
-- [Project Structure](docs/project_structure.md) — directory layout, module
-  dependencies, build targets.
-- [Building](docs/building.md) — full build instructions, CMake presets,
-  Python packaging.
-- [TODO](docs/TODO.md) — planned improvements.
-- Doxygen: `cmake --build build -t docs` (output in `docs/html/`).
+The full documentation is hosted at
+**[cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR/)**
+and includes:
+
+- **Guides**: [Building](https://cfdlab-thu.github.io/DNDSR/guides/building.html),
+  [Style Guide](https://cfdlab-thu.github.io/DNDSR/guides/style_guide.html),
+  [Array Usage](https://cfdlab-thu.github.io/DNDSR/guides/array_usage.html),
+  [Geometry + CFV](https://cfdlab-thu.github.io/DNDSR/guides/geom_usage.html),
+  [Doc Authoring](https://cfdlab-thu.github.io/DNDSR/guides/doc_authoring.html)
+- **Architecture**: Array infrastructure, Serialization, Paradigm
+- **Theory**: Variational Reconstruction, Shape Functions
+- **C++ API**: via [Breathe](https://cfdlab-thu.github.io/DNDSR/sphinx/api_cpp.html)
+  and [Doxygen](https://cfdlab-thu.github.io/DNDSR/doxygen/) (with class diagrams)
+- **Python API**: [autodoc](https://cfdlab-thu.github.io/DNDSR/sphinx/api_python.html)
+- **Unit Tests**: test suite overview, per-module documentation
+
+For local-only references:
+- [Project Structure](docs/guides/project_structure.md)
+- [Building](docs/guides/building.md)
+- [Doc Authoring Guide](docs/guides/doc_authoring.md)
+
+## Type Stubs
+
+Type stubs (`.pyi`) are generated automatically during `cmake --install`
+(and therefore during `pip install`). They are placed in `python/DNDSR/`
+for PEP 561 compliance and do not need to be committed.
+
+## VS Code Setup
+
+For Pylance / clangd to work correctly, the project ships `.vscode/`
+configs. Set the Python interpreter to `venv/bin/python` via the
+VS Code Python extension.
 
 ## License
 
