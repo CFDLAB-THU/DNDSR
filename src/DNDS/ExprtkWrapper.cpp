@@ -1,5 +1,5 @@
 /// @file ExprtkWrapper.cpp
-/// @brief exprtk-backed implementations of #ExprtkWrapperEvaluator's Compile,
+/// @brief exprtk-backed implementations of @ref DNDS::ExprtkWrapperEvaluator "ExprtkWrapperEvaluator"'s Compile,
 /// Evaluate, and Clear methods. Kept out-of-line so that exprtk's heavy
 /// templates stay confined to one translation unit.
 

@@ -1,6 +1,6 @@
 /// @file MPI.cpp
-/// @brief Implementations of the MPI wrapper functions declared in #MPI.hpp:
-/// retry-aware `Bcast`/`Alltoall`/`Alltoallv`/`Allreduce`/`Allgather`/`Barrier`
+/// @brief Implementations of the MPI wrapper functions declared in @ref MPI.hpp:
+/// retry-aware @ref Bcast/@ref Alltoall/@ref Alltoallv/@ref Allreduce/@ref Allgather/@ref Barrier
 /// variants, lazy waits, singleton definitions, CUDA-aware probe.
 
 #include <ctime>

@@ -1,6 +1,6 @@
 /// @file HardEigen.cpp
 /// @brief Implementations of the numerically-careful Eigen primitives
-/// declared in #HardEigen.hpp (pseudoinverses, symmetric eigen decompositions,
+/// declared in @ref HardEigen.hpp (pseudoinverses, symmetric eigen decompositions,
 /// condition-number helpers).
 
 #include "HardEigen.hpp"

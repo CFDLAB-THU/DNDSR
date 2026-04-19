@@ -12,7 +12,7 @@ namespace DNDS
      *
      * @details Provides a fixed set of named timer slots (RHS, Comm, LinSolve, ...)
      * that callers start / stop at well-known phases of the solver. Calls are
-     * expected to nest correctly (each `StartTimer` matched by a `StopTimer`).
+     * expected to nest correctly (each @ref StartTimer matched by a @ref StopTimer).
      *
      * The buffer holds two copies of each slot (`Ntype_All == 2 * Ntype`) so
      * current and previous-iteration timings can be retained for reporting.
@@ -63,11 +63,11 @@ namespace DNDS
         static PerformanceTimer &Instance();
         /// @brief Record the current wall time in the "start" slot for timer `t`.
         void StartTimer(TimerType t);
-        /// @brief Integer-id overload of #StartTimer.
+        /// @brief Integer-id overload of @ref StartTimer.
         void StartTimer(int t);
         /// @brief Add (now - start) to the accumulated time for timer `t`.
         void StopTimer(TimerType t);
-        /// @brief Integer-id overload of #StopTimer.
+        /// @brief Integer-id overload of @ref StopTimer.
         void StopTimer(int t);
         /// @brief Current local (this-rank) accumulated wall time (seconds).
         real getTimer(TimerType t);
@@ -132,7 +132,7 @@ namespace DNDS
         }
     };
 
-    /// @brief Short-hand accessor to the #PerformanceTimer singleton.
+    /// @brief Short-hand accessor to the @ref DNDS::PerformanceTimer "PerformanceTimer" singleton.
     inline PerformanceTimer &Timer()
     {
         return PerformanceTimer::Instance();

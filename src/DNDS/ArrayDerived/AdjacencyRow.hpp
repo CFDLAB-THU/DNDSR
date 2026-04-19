@@ -7,17 +7,17 @@
 namespace DNDS
 {
     /**
-     * @brief Non-owning span `(pointer, size)` into an #ArrayAdjacency row.
+     * @brief Non-owning span `(pointer, size)` into an @ref DNDS::ArrayAdjacency "ArrayAdjacency" row.
      *
      * @details Serves as the return value of `ArrayAdjacency::operator[]`.
      * It is the "typed row handle" equivalent of `std::span<index_T>` with a
      * few DNDSR-specific conveniences:
-     *  - indexing is bounds-checked in debug (#DNDS_assert);
+     *  - indexing is bounds-checked in debug (@ref DNDS_assert);
      *  - assignment from / conversion to `std::vector<index>`;
      *  - device-callable accessors so kernels can walk adjacency rows.
      *
      * The span does not own the underlying storage; it must not outlive the
-     * backing #ArrayAdjacency.
+     * backing @ref DNDS::ArrayAdjacency "ArrayAdjacency".
      *
      * @tparam index_T  Either `DNDS::index` (mutable) or `const DNDS::index`.
      */

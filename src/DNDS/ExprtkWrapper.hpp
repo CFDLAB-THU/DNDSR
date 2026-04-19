@@ -7,9 +7,9 @@
 
 namespace DNDS
 {
-    /// @brief Scalar name -> value map fed into an #ExprtkWrapperEvaluator.
+    /// @brief Scalar name -> value map fed into an @ref DNDS::ExprtkWrapperEvaluator "ExprtkWrapperEvaluator".
     using tExprVars = std::map<std::string, real>;
-    /// @brief Vector name -> Eigen dense vector map fed into an #ExprtkWrapperEvaluator.
+    /// @brief Vector name -> Eigen dense vector map fed into an @ref DNDS::ExprtkWrapperEvaluator "ExprtkWrapperEvaluator".
     using tExprVarVecs = std::map<std::string, Eigen::Vector<real, Eigen::Dynamic>>;
 
     /**
@@ -17,7 +17,7 @@ namespace DNDS
      *
      * @details Compiles a user-supplied math expression once (with named
      * scalar and vector variables) and evaluates it many times against
-     * variable values set through #Var / #VarVec. Used for user-defined
+     * variable values set through @ref Var / @ref VarVec. Used for user-defined
      * initial conditions and boundary functions read from config JSON
      * (see `docs/guides/array_usage.md` and CFV config files).
      *
@@ -68,13 +68,13 @@ namespace DNDS
         /// @brief Length of a registered vector variable.
         index VarVecSize(const std::string &name) { return _varVecs.at(name).size(); }
 
-        /// @brief Whether #Compile has been called and the expression parsed successfully.
+        /// @brief Whether @ref Compile has been called and the expression parsed successfully.
         [[nodiscard]] bool Compiled() const
         {
             return _compiled;
         }
 
-        /// @brief Compile `expr`. Throws (via #DNDS_check_throw) on parse error.
+        /// @brief Compile `expr`. Throws (via @ref DNDS_check_throw) on parse error.
         void Compile(const std::string &expr);
 
         /// @brief Evaluate the compiled expression with the current variable values.

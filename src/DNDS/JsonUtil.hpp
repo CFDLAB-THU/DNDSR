@@ -42,7 +42,7 @@ namespace DNDS
         }
     }
 
-    /// @brief Parse a JSON array into an #Eigen::VectorFMTSafe (fixed-point-aware wrapper).
+    /// @brief Parse a JSON array into an `Eigen`::VectorFMTSafe (fixed-point-aware wrapper).
     /// @details Used by configuration paths that feed values into code paths
     /// compiled with the fixed-point Eigen shim.
     inline Eigen::VectorFMTSafe<real, -1> JsonGetEigenVectorFMTSafe(const nlohmann::json &arr)
@@ -73,7 +73,7 @@ namespace DNDS
         return nlohmann::json(v);
     }
 
-    /// @brief Dump an #Eigen::VectorFMTSafe into a JSON array of doubles.
+    /// @brief Dump an `Eigen`::VectorFMTSafe into a JSON array of doubles.
     inline auto EigenVectorFMTSafeGetJson(const Eigen::VectorFMTSafe<real, -1> &ve)
     {
         std::vector<real> v;
@@ -93,7 +93,7 @@ namespace DNDS
  * #define __F(v) __DNDS__json_to_config(v)
  * __F(gamma); __F(CFL); __F(maxIter);
  * ```
- * Errors during reading are surfaced via #DNDS_assert_info with the member name.
+ * Errors during reading are surfaced via @ref DNDS_assert_info with the member name.
  */
 #define __DNDS__json_to_config(name)                                         \
     {                                                                        \
@@ -111,7 +111,7 @@ namespace DNDS
             (jsonObj[#name] = (name));                                       \
     }
 /**
- * @brief Like `NLOHMANN_DEFINE_TYPE_INTRUSIVE` but targets `nlohmann::ordered_json`.
+ * @brief Like @ref NLOHMANN_DEFINE_TYPE_INTRUSIVE but targets `nlohmann::ordered_json`.
  * @details DNDSR prefers ordered JSON for configuration; this macro wires up
  * both `to_json` and `from_json` friend functions against the ordered type.
  */
@@ -119,7 +119,7 @@ namespace DNDS
     friend void to_json(nlohmann::ordered_json &nlohmann_json_j, const Type &nlohmann_json_t) { NLOHMANN_JSON_EXPAND(NLOHMANN_JSON_PASTE(NLOHMANN_JSON_TO, __VA_ARGS__)) } \
     friend void from_json(const nlohmann::ordered_json &nlohmann_json_j, Type &nlohmann_json_t) { NLOHMANN_JSON_EXPAND(NLOHMANN_JSON_PASTE(NLOHMANN_JSON_FROM, __VA_ARGS__)) }
 
-/// @brief Like #DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON but
+/// @brief Like @ref DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_JSON but
 /// additionally installs the unordered-JSON overloads for interop with code
 /// that uses `nlohmann::json` directly.
 #define DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_AND_UNORDERED_JSON(Type, ...)                                                                                         \

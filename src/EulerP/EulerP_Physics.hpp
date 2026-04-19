@@ -4,10 +4,10 @@
  *        and inviscid flux computation.
  *
  * Provides:
- * - @c PhysicsParams: POD struct of gas parameters (gamma, viscosity, specific heats), JSON-serializable.
- * - @c PhysicsDeviceView: Device-callable view with conservative/primitive conversions and thermodynamic relations.
- * - @c Physics: Host-side physics object managing device transfer of reference values.
- * - @c GasInviscidFlux_XY: Device-callable inviscid flux projected onto a face normal.
+ * - `PhysicsParams:` POD struct of gas parameters (gamma, viscosity, specific heats), JSON-serializable.
+ * - `PhysicsDeviceView:` Device-callable view with conservative/primitive conversions and thermodynamic relations.
+ * - `Physics:` Host-side physics object managing device transfer of reference values.
+ * - `GasInviscidFlux_XY:` Device-callable inviscid flux projected onto a face normal.
  *
  * @note In EulerP, the primitive state stores @b internal @b energy (rho*e) at index I4,
  *       NOT pressure. This differs from the Euler module convention.
@@ -51,8 +51,8 @@ namespace DNDS::EulerP
     /**
      * @brief Device-callable view of physics parameters providing thermodynamic operations.
      *
-     * Wraps a device-resident view of reference values and a copy of @c PhysicsParams.
-     * All methods are @c DNDS_DEVICE_CALLABLE for use in both Host and CUDA kernels.
+     * Wraps a device-resident view of reference values and a copy of `PhysicsParams.`
+     * All methods are `DNDS_DEVICE_CALLABLE` for use in both Host and CUDA kernels.
      *
      * @note Primitive state convention: prim[0] = rho, prim[1..3] = velocity, prim[I4] = internal energy (rho*e).
      *       This differs from the Euler module where prim[I4] stores pressure.
@@ -238,7 +238,7 @@ namespace DNDS::EulerP
         /**
          * @brief Computes pressure from the primitive state using the ideal gas law.
          *
-         * Delegates to @c IdealGas::Pressure_From_InternalEnergy using prim[I4] (internal energy)
+         * Delegates to `IdealGas::Pressure_From_InternalEnergy` using prim[I4] (internal energy)
          * and the ratio of specific heats gamma.
          *
          * @tparam tUPrim Primitive state vector type (deduced).
@@ -293,7 +293,7 @@ namespace DNDS::EulerP
         /**
          * @brief Computes specific total enthalpy from conservative state and pressure.
          *
-         * H = (E + p) / rho, using @c IdealGas::Enthalpy.
+         * H = (E + p) / rho, using `IdealGas::Enthalpy.`
          *
          * @tparam tU Conservative state vector type (deduced).
          * @param U Conservative state vector.
@@ -332,9 +332,9 @@ namespace DNDS::EulerP
     /**
      * @brief Host-side physics object managing gas parameters and device-transferable reference values.
      *
-     * Stores a @c host_device_vector of reference values (e.g., freestream quantities) and
-     * @c PhysicsParams. Supports JSON serialization and host/device transfer for GPU offloading.
-     * Use @c deviceView<B>() to obtain a @c PhysicsDeviceView for kernel invocation.
+     * Stores a `host_device_vector` of reference values (e.g., freestream quantities) and
+     * `PhysicsParams.` Supports JSON serialization and host/device transfer for GPU offloading.
+     * Use `deviceView<B>()` to obtain a `PhysicsDeviceView` for kernel invocation.
      */
     struct Physics
     {
@@ -373,7 +373,7 @@ namespace DNDS::EulerP
          * Asserts that the reference values reside on backend @p B (or Host with Unknown).
          *
          * @tparam B Target device backend.
-         * @return A @c PhysicsDeviceView<B> suitable for device kernel invocation.
+         * @return A `PhysicsDeviceView<B>` suitable for device kernel invocation.
          */
         template <DeviceBackend B>
         t_deviceView<B> deviceView()

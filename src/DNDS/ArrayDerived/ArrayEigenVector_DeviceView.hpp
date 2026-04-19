@@ -1,6 +1,6 @@
 #pragma once
 /// @file ArrayEigenVector_DeviceView.hpp
-/// @brief Device-callable view type for #ArrayEigenVector; `operator[]` returns
+/// @brief Device-callable view type for @ref DNDS::ArrayEigenVector "ArrayEigenVector"; `operator[]` returns
 /// an `Eigen::Map<Vector>` suitable for use inside CUDA kernels.
 
 #include "../DeviceView.hpp"
@@ -11,9 +11,9 @@
 namespace DNDS
 {
     /**
-     * @brief Device-callable view onto #ArrayEigenVector rows.
+     * @brief Device-callable view onto @ref DNDS::ArrayEigenVector "ArrayEigenVector" rows.
      *
-     * @details Extends the generic #ArrayDeviceView to yield an
+     * @details Extends the generic @ref DNDS::ArrayDeviceView "ArrayDeviceView" to yield an
      * `Eigen::Map<Vector>` on `operator[]`. The Eigen maps use
      * `Eigen::DontAlign` to avoid assumptions about the backing pointer's
      * alignment (which is device-allocator specific).

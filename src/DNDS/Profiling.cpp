@@ -1,5 +1,5 @@
 /// @file Profiling.cpp
-/// @brief Implementation of #PerformanceTimer (start/stop/accumulate/reset)
+/// @brief Implementation of @ref DNDS::PerformanceTimer "PerformanceTimer" (start/stop/accumulate/reset)
 /// and the singleton instance accessor.
 
 #include "Profiling.hpp"

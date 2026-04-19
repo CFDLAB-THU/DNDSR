@@ -35,7 +35,7 @@ namespace DNDS
     class DeviceTransferable
     {
     public:
-        /// @brief Mirror every registered #ArrayPair to the given device backend.
+        /// @brief Mirror every registered @ref DNDS::ArrayPair "ArrayPair" to the given device backend.
         void to_device(DeviceBackend B)
         {
             auto op = [B](auto &v)

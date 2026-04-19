@@ -19,7 +19,7 @@ namespace DNDS
 
     /**
      * @brief CRTP base implementing the unified-index accessors shared by
-     * #ArrayPairDeviceView and #ArrayPairDeviceViewConst.
+     * @ref DNDS::ArrayPairDeviceView "ArrayPairDeviceView" and @ref DNDS::ArrayPairDeviceViewConst "ArrayPairDeviceViewConst".
      *
      * @details Indices in `[0, father.Size())` map to the owned-side view; indices
      * in `[father.Size(), father.Size() + son.Size())` map to the ghost-side view
@@ -97,7 +97,7 @@ namespace DNDS
         }
     };
 
-    /// @brief Mutable device view onto an #ArrayPair (for CUDA kernels).
+    /// @brief Mutable device view onto an @ref DNDS::ArrayPair "ArrayPair" (for CUDA kernels).
     /// @details Captures both father and son device views by value; must not
     /// outlive the owning pair.
     template <DeviceBackend B, class TArray = ParArray<real, 1>>
@@ -134,9 +134,9 @@ namespace DNDS
     };
 
     /**
-     * @brief Convenience bundle of a father, son, and attached #ArrayTransformer.
+     * @brief Convenience bundle of a father, son, and attached @ref DNDS::ArrayTransformer "ArrayTransformer".
      *
-     * @details `ArrayPair` is what most application code uses instead of
+     * @details @ref DNDS::ArrayPair "ArrayPair" is what most application code uses instead of
      * manipulating a raw transformer. It wraps:
      *  - `father` (owned rows) and `son` (ghost rows) as `shared_ptr<TArray>`,
      *  - a `trans` transformer that binds the two together.
@@ -156,7 +156,7 @@ namespace DNDS
      * ghost setup; every other pair on the same partition borrows from it.
      *
      * @tparam TArray Underlying array type (e.g., `ParArray<real, 5>`,
-     *                #ArrayAdjacency, #ArrayEigenVector).
+     *                @ref DNDS::ArrayAdjacency "ArrayAdjacency", @ref DNDS::ArrayEigenVector "ArrayEigenVector").
      */
     template <class TArray = ParArray<real, 1>>
     struct ArrayPair
@@ -168,14 +168,14 @@ namespace DNDS
 
         /// @brief Owned-side array (must be resized before ghost setup).
         ssp<TArray> father;
-        /// @brief Ghost-side array (sized automatically by #createMPITypes / #BorrowAndPull).
+        /// @brief Ghost-side array (sized automatically by #createMPITypes / @ref BorrowAndPull).
         ssp<TArray> son;
         using TTrans = typename ArrayTransformerType<TArray>::Type;
         /// @brief Ghost-communication engine bound to #father and #son.
         TTrans trans;
 
         /// @brief Deep-copy: allocate new father / son and copy their data; rebind trans.
-        /// @details Recreates the arrays through `TArray`'s copy ctor, then
+        /// @details Recreates the arrays through @ref TArray's copy ctor, then
         /// assigns `trans` from `R`. If the source's transformer was already
         /// attached, re-attaches to the new local arrays.
         void clone(const t_self &R)
@@ -297,7 +297,7 @@ namespace DNDS
 
         /// @brief Bind the transformer to the current father / son pointers.
         /// @details First step of the four-step ghost setup when not using
-        /// #BorrowAndPull. Both arrays must already be allocated.
+        /// @ref BorrowAndPull. Both arrays must already be allocated.
         void TransAttach()
         {
             DNDS_check_throw_info(bool(father) && bool(son),
@@ -397,7 +397,7 @@ namespace DNDS
         /// @brief Writes the ArrayPair (father, optional son, optional ghost mapping).
         ///
         /// Creates a sub-path `name` containing:
-        /// - `MPIRank` (per-rank only), `MPISize` — partition metadata.
+        /// - @ref MPIRank (per-rank only), @ref MPISize — partition metadata.
         /// - `father` — the father array via ParArray::WriteSerializer (Parts offset).
         /// - `son` — the son (ghost) array, if `includeSon` is true.
         /// - `pullingIndexGlobal` — ghost pull indices, if `includePIG` is true.
@@ -699,24 +699,24 @@ namespace DNDS
         }
     };
 
-    /// @brief #ArrayPair alias for mesh adjacency (variable-width integer rows).
+    /// @brief @ref DNDS::ArrayPair "ArrayPair" alias for mesh adjacency (variable-width integer rows).
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     using ArrayAdjacencyPair = ArrayPair<ArrayAdjacency<_row_size, _row_max, _align>>;
 
-    /// @brief #ArrayPair alias for per-row Eigen vectors (e.g., node coords with N=3).
+    /// @brief @ref DNDS::ArrayPair "ArrayPair" alias for per-row Eigen vectors (e.g., node coords with N=3).
     template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
     using ArrayEigenVectorPair = ArrayPair<ArrayEigenVector<_vec_size, _row_max, _align>>;
 
-    /// @brief #ArrayPair alias for per-row Eigen matrices.
+    /// @brief @ref DNDS::ArrayPair "ArrayPair" alias for per-row Eigen matrices.
     template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
               rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
     using ArrayEigenMatrixPair = ArrayPair<ArrayEigenMatrix<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>>;
 
-    /// @brief #ArrayPair alias for per-row variable-size Eigen matrix batches.
+    /// @brief @ref DNDS::ArrayPair "ArrayPair" alias for per-row variable-size Eigen matrix batches.
     using ArrayEigenMatrixBatchPair = ArrayPair<ArrayEigenMatrixBatch>;
 
-    /// @brief #ArrayPair alias for per-row batches of uniform `_n_row x _n_col` matrices.
-    /// @details Used by `FiniteVolume` / `VariationalReconstruction` to store
+    /// @brief @ref DNDS::ArrayPair "ArrayPair" alias for per-row batches of uniform `_n_row x _n_col` matrices.
+    /// @details Used by @ref FiniteVolume / @ref VariationalReconstruction to store
     /// per-quadrature-point Jacobians and basis coefficients.
     template <int _n_row, int _n_col>
     using ArrayEigenUniMatrixBatchPair = ArrayPair<ArrayEigenUniMatrixBatch<_n_row, _n_col>>;

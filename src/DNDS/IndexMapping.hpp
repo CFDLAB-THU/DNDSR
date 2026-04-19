@@ -39,7 +39,7 @@ namespace DNDS
      * After #setMPIAlignBcast, every rank holds an identical copy of the table
      * (it is globally replicated), so both local-to-global
      * (`operator()`) and global-to-local (#search) queries are purely local.
-     * Used by #ParArray::createGlobalMapping and friends.
+     * Used by @ref DNDS::ParArray "ParArray"::createGlobalMapping and friends.
      */
     class GlobalOffsetsMapping
     {
@@ -65,7 +65,7 @@ namespace DNDS
 
         /// @brief Broadcast each rank's length, then compute the global prefix sums.
         /// @details Collective call. After it returns, every rank holds the full
-        /// `RankLengths` / `RankOffsets` tables. Called by
+        /// @ref RankLengths / @ref RankOffsets tables. Called by
         /// `ParArray::createGlobalMapping` during mesh/array setup.
         /// @param mpi       MPI context.
         /// @param myLength  Number of rows owned by the calling rank.

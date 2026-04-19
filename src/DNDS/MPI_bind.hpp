@@ -1,6 +1,6 @@
 #pragma once
 /// @file MPI_bind.hpp
-/// @brief pybind11 bindings for the DNDS MPI wrappers (#MPIInfo, #CommStrategy,
+/// @brief pybind11 bindings for the DNDS MPI wrappers (@ref DNDS::MPIInfo "MPIInfo", @ref DNDS::CommStrategy "CommStrategy",
 /// buffer-protocol datatype helpers).
 
 #include "MPI.hpp"

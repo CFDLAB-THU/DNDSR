@@ -16,7 +16,7 @@ namespace DNDS
      * merged into a single larger block. This helper walks the input arrays
      * and returns a compacted `(n_size, blk_sizes, disps)` tuple.
      *
-     * Used by #ArrayTransformer::createMPITypes before calling the actual
+     * Used by @ref DNDS::ArrayTransformer "ArrayTransformer"::createMPITypes before calling the actual
      * `MPI_Type_create_hindexed`.
      *
      * @tparam TBlkSiz  Element type of the block-size array (e.g., `MPI_int`).
@@ -26,7 +26,7 @@ namespace DNDS
      * @param o_size       Number of input blocks.
      * @param blk_sizes    Block sizes (in element count).
      * @param disps        Displacements (in bytes).
-     * @param sizeofElem   Element size in bytes (matches `MPI_Type_extent`).
+     * @param sizeofElem   Element size in bytes (matches @ref MPI_Type_extent).
      * @return `(new_size, new_blk_sizes, new_disps)` -- a merged layout.
      */
     template <class TBlkSiz, class TDisp, class TSizeof>

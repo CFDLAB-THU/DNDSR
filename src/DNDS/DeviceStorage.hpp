@@ -17,10 +17,10 @@
 namespace DNDS
 {
     /**
-     * @brief Enumerates the backends a #DeviceStorage / #Array can live on.
+     * @brief Enumerates the backends a @ref DNDS::DeviceStorage "DeviceStorage" / @ref DNDS::Array "Array" can live on.
      *
-     * @details `Host` is always available; `CUDA` is compiled in when
-     * #DNDS_USE_CUDA is defined. Additional slots (`Custom1`, ...) are
+     * @details @ref Host is always available; @ref CUDA is compiled in when
+     * @ref DNDS_USE_CUDA is defined. Additional slots (@ref Custom1, ...) are
      * placeholders for future backends (e.g., HIP, SYCL) that can be plugged
      * in by providing new factory specialisations.
      */
@@ -47,7 +47,7 @@ namespace DNDS
     // implement      explicit instantiations of Host code,               like Geom/PeriodicInfo.cpp
     // implement      explicit instantiations of each needed device code, like Geom/PeriodicInfo.cu
 
-    /// @brief Canonical string name for a #DeviceBackend (used in log messages).
+    /// @brief Canonical string name for a @ref DNDS::DeviceBackend "DeviceBackend" (used in log messages).
     inline const char *device_backend_name(DeviceBackend B)
     {
         switch (B)
@@ -66,7 +66,7 @@ namespace DNDS
         }
     }
 
-    /// @brief Inverse of #device_backend_name. Returns `Unknown` for unrecognised names.
+    /// @brief Inverse of #device_backend_name. Returns @ref Unknown for unrecognised names.
     inline DeviceBackend device_backend_name_to_enum(std::string_view s)
     {
         if (s == "Host")
@@ -79,11 +79,11 @@ namespace DNDS
     }
 
     class DeviceStorageBase;
-    /// @brief Stateless deleter for #DeviceStorageBase that works across shared-library
+    /// @brief Stateless deleter for @ref DNDS::DeviceStorageBase "DeviceStorageBase" that works across shared-library
     /// boundaries where the vtable of `unique_ptr`'s default deleter would not.
     void deviceStorageBase_deleter(DeviceStorageBase *p); // safe deleter to maintain cross-DLL safety
 
-    /// @brief Owning unique pointer to a #DeviceStorageBase with cross-DLL-safe deleter.
+    /// @brief Owning unique pointer to a @ref DNDS::DeviceStorageBase "DeviceStorageBase" with cross-DLL-safe deleter.
     using t_supDeviceStorageBase = std::unique_ptr<DeviceStorageBase, std::function<void(DeviceStorageBase *)>>;
     /// @brief Shared pointer equivalent of #t_supDeviceStorageBase.
     using t_sspDeviceStorageBase = std::shared_ptr<DeviceStorageBase>;
@@ -99,7 +99,7 @@ namespace DNDS
      *
      * @details All DNDS device memory ultimately goes through this interface so
      * that the higher-level `host_device_vector<T>` can be backend-agnostic.
-     * Concrete backends provide specialised #DeviceStorage<B> implementations;
+     * Concrete backends provide specialised @ref DNDS::DeviceStorage "DeviceStorage"<B> implementations;
      * creation funnels through #device_storage_factory.
      */
     class DeviceStorageBase
@@ -122,11 +122,11 @@ namespace DNDS
         virtual ~DeviceStorageBase();
     };
 
-    /// @brief Compile-time-specialised storage class; one definition per #DeviceBackend.
+    /// @brief Compile-time-specialised storage class; one definition per @ref DNDS::DeviceBackend "DeviceBackend".
     template <DeviceBackend B>
     class DeviceStorage;
 
-    /// @brief Factory functions for constructing #DeviceStorageBase instances of
+    /// @brief Factory functions for constructing @ref DNDS::DeviceStorageBase "DeviceStorageBase" instances of
     /// a specific backend. Specialised per backend so that the concrete type
     /// creation can live in backend-specific translation units.
     template <DeviceBackend B>
@@ -158,7 +158,7 @@ namespace DNDS
 #endif
 
     /// @brief Top-level factory: dispatches to the per-backend factory based on
-    /// `backend`. Returns a null `unique_ptr` for #DeviceBackend::Unknown.
+    /// `backend`. Returns a null `unique_ptr` for @ref DNDS::DeviceBackend "DeviceBackend"::Unknown.
     inline t_supDeviceStorageBase device_storage_create(DeviceBackend backend, size_t n_bytes)
     {
         switch (backend)

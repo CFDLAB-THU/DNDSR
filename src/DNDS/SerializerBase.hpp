@@ -15,7 +15,7 @@ namespace DNDS::Serializer
     static const index Offset_Parts = -1;
     /// @brief Sentinel: "offset = One", indicating the first rank owns the whole dataset.
     static const index Offset_One = -2;
-    /// @brief Sentinel: "even-split read" (see #ArrayGlobalOffset_EvenSplit).
+    /// @brief Sentinel: "even-split read" (see @ref ArrayGlobalOffset_EvenSplit).
     static const index Offset_EvenSplit = -3;
     /// @brief Sentinel: offset unknown / uninitialised.
     static const index Offset_Unknown = UnInitIndex;
@@ -24,8 +24,8 @@ namespace DNDS::Serializer
      * @brief Describes one rank's window into a globally-distributed dataset.
      *
      * @details Stores a `(localSize, globalOffset)` pair. The offset is
-     * overloaded to carry the special sentinels #Offset_Parts / #Offset_One /
-     * #Offset_EvenSplit / #Offset_Unknown (negative values). Multiplication /
+     * overloaded to carry the special sentinels @ref Offset_Parts / @ref Offset_One /
+     * @ref Offset_EvenSplit / @ref Offset_Unknown (negative values). Multiplication /
      * division are defined so that byte offsets can be derived from element
      * offsets (`offset * sizeof(T)`) with overflow guards.
      */
@@ -42,7 +42,7 @@ namespace DNDS::Serializer
         /// @brief Local size this rank owns (in element units of the caller's choosing).
         [[nodiscard]] index size() const { return _size; }
         /// @brief Global offset of this rank's data (or a sentinel value, see
-        /// #Offset_Parts etc.).
+        /// @ref Offset_Parts etc.).
         [[nodiscard]] index offset() const { return _offset; }
 
         /// @brief Scale the descriptor's element count by `R` (and the offset
@@ -100,7 +100,7 @@ namespace DNDS::Serializer
         }
 
         /// @brief Whether this descriptor carries a real distributed offset
-        /// (rather than a sentinel like #Offset_Parts).
+        /// (rather than a sentinel like @ref Offset_Parts).
         [[nodiscard]] bool isDist() const
         {
             return _offset >= 0;
@@ -223,7 +223,7 @@ namespace DNDS::Serializer
         virtual void WriteString(const std::string &name, const std::string &v) = 0;
 
         /// @brief Write an index vector (collective for H5). `offset` carries the
-        /// distribution mode (`Parts`, explicit offset, etc.).
+        /// distribution mode (@ref Parts, explicit offset, etc.).
         virtual void WriteIndexVector(const std::string &name, const std::vector<index> &v, ArrayGlobalOffset offset) = 0;
         /// @brief Write a rowsize vector (collective for H5).
         virtual void WriteRowsizeVector(const std::string &name, const std::vector<rowsize> &v, ArrayGlobalOffset offset) = 0;

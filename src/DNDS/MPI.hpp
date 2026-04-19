@@ -64,8 +64,8 @@ namespace DNDS
 
     /**
      * @brief Map a DNDS integer type size to an MPI signed-integer datatype.
-     * @details Compile-time selects `MPI_INT64_T` or `MPI_INT32_T` based on `sizeof(Tbasic)`.
-     * Used by #DNDS_MPI_INDEX.
+     * @details Compile-time selects @ref MPI_INT64_T or @ref MPI_INT32_T based on `sizeof(Tbasic)`.
+     * Used by @ref DNDS_MPI_INDEX.
      */
     template <class Tbasic>
     constexpr MPI_Datatype __DNDSToMPITypeInt()
@@ -76,8 +76,8 @@ namespace DNDS
 
     /**
      * @brief Map a DNDS floating-point type size to an MPI datatype.
-     * @details Compile-time selects `MPI_REAL8` or `MPI_REAL4` based on `sizeof(Tbasic)`.
-     * Used by #DNDS_MPI_REAL.
+     * @details Compile-time selects @ref MPI_REAL8 or @ref MPI_REAL4 based on `sizeof(Tbasic)`.
+     * Used by @ref DNDS_MPI_REAL.
      */
     template <class Tbasic>
     constexpr MPI_Datatype __DNDSToMPITypeFloat()
@@ -86,15 +86,15 @@ namespace DNDS
         return sizeof(Tbasic) == 8 ? MPI_REAL8 : (sizeof(Tbasic) == 4 ? MPI_REAL4 : MPI_DATATYPE_NULL);
     }
 
-    /// @brief MPI datatype matching #index (= `MPI_INT64_T`).
+    /// @brief MPI datatype matching #index (= @ref MPI_INT64_T).
     const MPI_Datatype DNDS_MPI_INDEX = __DNDSToMPITypeInt<index>();
-    /// @brief MPI datatype matching #real (= `MPI_REAL8`).
+    /// @brief MPI datatype matching #real (= @ref MPI_REAL8).
     const MPI_Datatype DNDS_MPI_REAL = __DNDSToMPITypeFloat<real>();
 
     //! here are some reasons to upgrade to C++20...
     // detect if have CommMult and CommType static methods
 
-    /// @brief SFINAE trait detecting a static `CommMult` member in T.
+    /// @brief SFINAE trait detecting a static @ref CommMult member in T.
     template <typename T, typename = void>
     struct has_static_CommMult : std::false_type
     {
@@ -105,7 +105,7 @@ namespace DNDS
     {
     };
 
-    /// @brief SFINAE trait detecting a static `CommType` member in T.
+    /// @brief SFINAE trait detecting a static @ref CommType member in T.
     template <typename T, typename = void>
     struct has_static_CommType : std::false_type
     {
@@ -116,7 +116,7 @@ namespace DNDS
     {
     };
 
-    /// @brief Dispatch to a user-provided `CommPair` / `CommMult`+`CommType` pair on `T`.
+    /// @brief Dispatch to a user-provided @ref CommPair / @ref CommMult+@ref CommType pair on `T`.
     /// @details Last resort for types that are not scalars, plain arrays, or
     /// real Eigen matrices. `T` must either expose static `CommMult()` +
     /// `CommType()` methods, or a static `CommPair()` returning the same pair.
@@ -136,8 +136,8 @@ namespace DNDS
      * - builtin float / int types map to their obvious `MPI_*` datatypes, count = 1;
      * - C-style arrays (`T[N]`) recurse into the element type and multiply the count;
      * - `std::array<T, N>` recurses into `T::value_type` and multiplies by `N`;
-     * - fixed-size real Eigen matrices map to `DNDS_MPI_REAL` with count `sizeof(T)/sizeof(real)`;
-     * - otherwise falls back to #BasicType_To_MPIIntType_Custom.
+     * - fixed-size real Eigen matrices map to @ref DNDS_MPI_REAL with count `sizeof(T)/sizeof(real)`;
+     * - otherwise falls back to @ref BasicType_To_MPIIntType_Custom.
      *
      * Used throughout ghost-communication and collective code to avoid hand-
      * writing datatype mapping for every MPI call.
@@ -262,8 +262,8 @@ namespace DNDS
          *
          * @details MPI communicators, derived datatypes, and persistent requests
          * must be released before `MPI_Finalize`; otherwise they leak memory and
-         * MPICH prints warnings. Several DNDSR objects (#MPITypePairHolder,
-         * #MPIReqHolder) register themselves here so that `MPI::Finalize()`
+         * MPICH prints warnings. Several DNDSR objects (@ref DNDS::MPITypePairHolder "MPITypePairHolder",
+         * @ref DNDS::MPIReqHolder "MPIReqHolder") register themselves here so that `MPI::Finalize()`
          * can call their cleanup callbacks even if the C++ lifetime would
          * outlive the MPI runtime (e.g., static destructors).
          *
@@ -283,7 +283,7 @@ namespace DNDS
             static ResourceRecycler &Instance();
             /**
              * @brief Register a cleanup callback keyed by `p`.
-             * @warning Must be paired with #RemoveCleaner when `p` is destroyed,
+             * @warning Must be paired with @ref RemoveCleaner when `p` is destroyed,
              *          else dangling pointers will be invoked by #clean.
              */
             void RegisterCleaner(void *p, std::function<void()> nCleaner);
@@ -316,7 +316,7 @@ namespace DNDS
 
 /// @brief Debug helper: barrier + print "CHECK <info> RANK r @ fn @ file:line".
 /// @details Compiled out when either `NDEBUG` or `NINSERT` is defined. Used to
-/// trace parallel execution during development; see #InsertCheck.
+/// trace parallel execution during development; see @ref InsertCheck.
 #define DNDS_MPI_InsertCheck(mpi, info) \
     InsertCheck(mpi, info, __FUNCTION__, __FILE__, __LINE__)
 
@@ -325,11 +325,11 @@ namespace DNDS
      * @brief RAII vector of `(count, MPI_Datatype)` pairs that frees every
      * committed datatype when destroyed.
      *
-     * @details Used by #ArrayTransformer to hold the derived datatypes it
+     * @details Used by @ref DNDS::ArrayTransformer "ArrayTransformer" to hold the derived datatypes it
      * builds via `MPI_Type_create_hindexed`. Construction is channelled through
      * the static #create factory so instances are always owned by
      * `shared_ptr<MPITypePairHolder>` and correctly registered with the
-     * #ResourceRecycler.
+     * @ref DNDS::ResourceRecycler "ResourceRecycler".
      */
     struct MPITypePairHolder : public tMPI_typePairVec, public std::enable_shared_from_this<MPITypePairHolder>
     {
@@ -374,13 +374,13 @@ namespace DNDS
         }
     };
 
-    /// @brief Shared-pointer alias to #MPITypePairHolder.
+    /// @brief Shared-pointer alias to @ref DNDS::MPITypePairHolder "MPITypePairHolder".
     using tpMPITypePairHolder = ssp<MPITypePairHolder>;
     /**
      * @brief RAII vector of `MPI_Request`s that frees each non-null handle when destroyed.
      *
-     * @details Mirror of #MPITypePairHolder for MPI requests (persistent or
-     * transient). Used by #ArrayTransformer for send/recv request sets.
+     * @details Mirror of @ref DNDS::MPITypePairHolder "MPITypePairHolder" for MPI requests (persistent or
+     * transient). Used by @ref DNDS::ArrayTransformer "ArrayTransformer" for send/recv request sets.
      * Construction is likewise channelled through the static #create factory.
      */
     struct MPIReqHolder : public tMPI_reqVec, public std::enable_shared_from_this<MPIReqHolder>
@@ -437,7 +437,7 @@ namespace DNDS::Debug
     /// the user can attach a debugger and inspect state. Exit by setting
     /// `isDebugging = false` in the debugger.
     void MPIDebugHold(const MPIInfo &mpi);
-    /// @brief Flag consulted by #MPIDebugHold and #assert_false_info_mpi.
+    /// @brief Flag consulted by @ref MPIDebugHold and #assert_false_info_mpi.
     extern bool isDebugging;
 }
 
@@ -447,13 +447,13 @@ namespace DNDS
 {
     /// @brief MPI-aware assertion-failure reporter.
     /// @details Barriers before abort so every rank flushes its output; if
-    /// #Debug::isDebugging is set, busy-waits to allow debugger attachment.
+    /// @ref Debug::isDebugging is set, busy-waits to allow debugger attachment.
     void assert_false_info_mpi(const char *expr, const char *file, int line, const std::string &info, const DNDS::MPIInfo &mpi);
 }
 #ifdef DNDS_NDEBUG
 #    define DNDS_assert_info_mpi(expr, mpi, info) (void(0))
 #else
-/// @brief Collective-aware variant of #DNDS_assert_info: every rank calls
+/// @brief Collective-aware variant of @ref DNDS_assert_info: every rank calls
 /// into an MPI barrier before aborting, so logs are not interleaved.
 #    define DNDS_assert_info_mpi(expr, mpi, info) \
         ((static_cast<bool>(expr))                \
@@ -481,7 +481,7 @@ namespace DNDS // TODO: get a concurrency header
 
         /**
          * @brief Initialise MPI with thread support, honouring the
-         * `DNDS_DISABLE_ASYNC_MPI` environment override.
+         * @ref DNDS_DISABLE_ASYNC_MPI environment override.
          *
          * @details
          *  - No env var or value `0`: request `MPI_THREAD_MULTIPLE` (full).
@@ -662,11 +662,11 @@ namespace DNDS::MPI
     /// calls. Reduces CPU spin when many ranks wait unevenly.
     MPI_int BarrierLazy(MPI_Comm comm, uint64_t checkNanoSecs);
 
-    /// @brief Like #WaitallAuto but sleeps `checkNanoSecs` ns between polls.
+    /// @brief Like @ref WaitallAuto but sleeps `checkNanoSecs` ns between polls.
     MPI_int WaitallLazy(MPI_int count, MPI_Request *reqs, MPI_Status *statuses, uint64_t checkNanoSecs = 10000000);
 
     /// @brief Wait on an array of requests, choosing between `MPI_Waitall` and
-    /// the lazy-poll variant based on #CommStrategy settings.
+    /// the lazy-poll variant based on @ref DNDS::CommStrategy "CommStrategy" settings.
     MPI_int WaitallAuto(MPI_int count, MPI_Request *reqs, MPI_Status *statuses);
 
     /// @brief Single-scalar Allreduce helper for reals (in-place, count = 1).
@@ -709,26 +709,26 @@ namespace DNDS
 namespace DNDS::MPI
 {
     /**
-     * @brief Process-wide singleton that selects how #ArrayTransformer packs
+     * @brief Process-wide singleton that selects how @ref DNDS::ArrayTransformer "ArrayTransformer" packs
      * and waits for MPI messages.
      *
      * @details Settings affect every transformer:
-     *  - `ArrayCommType`: `HIndexed` (default: `MPI_Type_create_hindexed`
-     *    derived types) vs `InSituPack` (manual `memcpy` into contiguous send/recv
+     *  - @ref ArrayCommType: @ref HIndexed (default: `MPI_Type_create_hindexed`
+     *    derived types) vs @ref InSituPack (manual `memcpy` into contiguous send/recv
      *    buffers). The latter can be faster on networks where derived types pay
      *    large unpacking overhead.
-     *  - `UseStrongSyncWait`: insert barriers around wait calls for easier
+     *  - @ref UseStrongSyncWait: insert barriers around wait calls for easier
      *    profiling.
-     *  - `UseAsyncOneByOne`: issue per-peer `Isend`/`Irecv` instead of one
-     *    persistent `Startall`.
-     *  - `UseLazyWait`: poll interval (ns) used by #MPI::WaitallLazy.
+     *  - @ref UseAsyncOneByOne: issue per-peer @ref Isend/@ref Irecv instead of one
+     *    persistent @ref Startall.
+     *  - @ref UseLazyWait: poll interval (ns) used by @ref MPI::WaitallLazy.
      *
      * Must be constructed under `MPI_COMM_WORLD`. Thread-safe C++11 singleton.
      */
     class CommStrategy
     {
     public:
-        /// @brief Which derived-type strategy #ArrayTransformer should use.
+        /// @brief Which derived-type strategy @ref DNDS::ArrayTransformer "ArrayTransformer" should use.
         enum ArrayCommType
         {
             UnknownArrayCommType = 0, ///< Sentinel / uninitialised.
@@ -755,11 +755,11 @@ namespace DNDS::MPI
         ArrayCommType GetArrayStrategy();
         /// @brief Override the array-pack strategy (affects subsequently-created transformers).
         void SetArrayStrategy(ArrayCommType t);
-        /// @brief Whether barriers are inserted around `Waitall` for profiling.
+        /// @brief Whether barriers are inserted around @ref Waitall for profiling.
         [[nodiscard]] bool GetUseStrongSyncWait() const;
         /// @brief Whether transformers should use one-by-one Isend/Irecv.
         [[nodiscard]] bool GetUseAsyncOneByOne() const;
-        /// @brief Polling interval (ns) for #MPI::WaitallLazy. `0` means use `MPI_Waitall`.
+        /// @brief Polling interval (ns) for @ref MPI::WaitallLazy. `0` means use `MPI_Waitall`.
         [[nodiscard]] double GetUseLazyWait() const;
     };
 }
@@ -774,7 +774,7 @@ namespace DNDS::MPI
 
 namespace DNDS
 {
-    /// @brief Barrier + annotated print used by #DNDS_MPI_InsertCheck.
+    /// @brief Barrier + annotated print used by @ref DNDS_MPI_InsertCheck.
     /// @details No-op in release builds (`NDEBUG` or `NINSERT` defined).
     inline void InsertCheck(const MPIInfo &mpi, const std::string &info = "",
                             const std::string &FUNCTION = "", const std::string &FILE = "", int LINE = -1)

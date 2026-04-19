@@ -43,7 +43,7 @@ namespace DNDS
      * @brief Core 2D variable-length array container, the storage foundation of DNDSR.
      *
      * @details
-     * `Array` is a single template that unifies five distinct storage layouts
+     * @ref DNDS::Array "Array" is a single template that unifies five distinct storage layouts
      * used throughout the CFD code base (cell volumes, conservative variables,
      * mesh connectivity, reconstruction coefficients, etc.). The layout is
      * chosen at compile time by combining `_row_size` and `_row_max`:
@@ -71,20 +71,20 @@ namespace DNDS
      *   *decompressed* (`vector<vector<T>>`, used during incremental row growth).
      *   `Compress()` must be called before MPI communication or serialization.
      *
-     * The class inherits from #ObjectNaming so each instance may carry a
+     * The class inherits from @ref DNDS::ObjectNaming "ObjectNaming" so each instance may carry a
      * human-readable name (e.g. `"coords"`, `"cell2node"`) shown in assertions.
      *
      * @tparam T         Element type. Typically #real (double) or #index (int64_t).
      *                   Must be trivially copyable for CUDA / MPI paths.
      * @tparam _row_size Row width:
      *                   - `>=0`   fixed width at compile time;
-     *                   - #DynamicSize    uniform width set at Resize();
-     *                   - #NonUniformSize variable per row (combined with `_row_max`).
+     *                   - @ref DynamicSize    uniform width set at Resize();
+     *                   - @ref NonUniformSize variable per row (combined with `_row_max`).
      * @tparam _row_max  Only relevant when `_row_size == NonUniformSize`:
      *                   - `>=0`   `TABLE_StaticMax` layout;
-     *                   - #DynamicSize    `TABLE_Max` layout;
-     *                   - #NonUniformSize `CSR` layout.
-     * @tparam _align    Alignment hint (currently only `NoAlign` is used).
+     *                   - @ref DynamicSize    `TABLE_Max` layout;
+     *                   - @ref NonUniformSize `CSR` layout.
+     * @tparam _align    Alignment hint (currently only @ref NoAlign is used).
      *
      * @sa ArrayBasic.hpp for the layout enum and signature parsing.
      * @sa ArrayTransformer for adding MPI ghost communication.
@@ -290,7 +290,7 @@ namespace DNDS
         /// @details `true` means data sits in a single `_data` buffer plus `_pRowStart`;
         /// `false` means rows live in a `vector<vector<T>>` (`_dataUncompressed`), which
         /// allows per-row `ResizeRow()`. MPI / serialization / CUDA require the
-        /// compressed form -- call #Compress() first.
+        /// compressed form -- call @ref Compress() first.
         [[nodiscard]] bool IfCompressed() const
         {
             static_assert(_dataLayout == CSR, "invalid call");
@@ -300,7 +300,7 @@ namespace DNDS
         /// @brief (CSR only) Switch to the uncompressed (nested vector) representation.
         /// @details Copies each row out of the flat buffer into an entry of
         /// `_dataUncompressed`, then clears the flat buffer. No-op if already uncompressed.
-        /// After this, #ResizeRow and #ReserveRow may be used to reshape individual rows.
+        /// After this, @ref ResizeRow and @ref ReserveRow may be used to reshape individual rows.
         void CSRDecompress()
         {
             if (!IfCompressed())
@@ -320,7 +320,7 @@ namespace DNDS
         /// @brief (CSR only) Pack the nested-vector representation into a flat
         /// buffer plus `_pRowStart`. No-op if already compressed.
         /// @details Row widths are frozen; further per-row resizing requires another
-        /// #Decompress. Mandatory before MPI ghost exchange, CUDA transfer, or serialization.
+        /// @ref Decompress. Mandatory before MPI ghost exchange, CUDA transfer, or serialization.
         void CSRCompress()
         {
             if (IfCompressed())
@@ -351,13 +351,13 @@ namespace DNDS
             _dataUncompressed.clear();
         }
 
-        /// @brief Layout-polymorphic compress: no-op for non-CSR, calls #CSRCompress for CSR.
+        /// @brief Layout-polymorphic compress: no-op for non-CSR, calls @ref CSRCompress for CSR.
         void Compress()
         {
             if constexpr (_dataLayout == CSR)
                 CSRCompress();
         }
-        /// @brief Layout-polymorphic decompress: no-op for non-CSR, calls #CSRDecompress for CSR.
+        /// @brief Layout-polymorphic decompress: no-op for non-CSR, calls @ref CSRDecompress for CSR.
         void Decompress()
         {
             if constexpr (_dataLayout == CSR)
@@ -426,7 +426,7 @@ namespace DNDS
         /// @brief Resize using only the row count (layouts with an implicit row width).
         /// @details Valid for:
         /// - `TABLE_StaticFixed` / `TABLE_StaticMax` (width comes from template params);
-        /// - `CSR` decompressed (rows start empty, grow via #ResizeRow).
+        /// - `CSR` decompressed (rows start empty, grow via @ref ResizeRow).
         /// Asserts for other layouts -- use the two-argument overload instead.
         /// @param nSize New number of rows.
         void Resize(index nSize)
@@ -496,7 +496,7 @@ namespace DNDS
          * @details Valid for `CSR` (decompressed only) and `TABLE_*Max`.
          * For `TABLE_*Max`, the new size must not exceed the configured maximum and
          * the per-row-size vector is copied-on-write if shared with another array.
-         * For CSR, the array must be uncompressed; call #Decompress first.
+         * For CSR, the array must be uncompressed; call @ref Decompress first.
          *
          * @param iRow      Row index in `[0, Size())`.
          * @param nRowSize  New width in `T` elements.
@@ -552,10 +552,10 @@ namespace DNDS
         // TODO: ? same-size compress for non-uniforms
 
         /// @brief Produce a lightweight, device-agnostic view onto the array.
-        /// @details The returned #ArrayView captures pointers and sizes but does
+        /// @details The returned @ref DNDS::ArrayView "ArrayView" captures pointers and sizes but does
         /// not own any storage. It is the type that implements actual `operator[]`
         /// indexing for all layouts; it is also host/device-callable and is the
-        /// building block for #ArrayDeviceView on CUDA.
+        /// building block for @ref DNDS::ArrayDeviceView "ArrayDeviceView" on CUDA.
         t_View view()
         {
             return t_View(_size, _data.data(), _data.size(),
@@ -619,7 +619,7 @@ namespace DNDS
          * @brief Return a raw pointer to the start of row `iRow`.
          *
          * @details Fast, untyped access used by stencil loops. Derived classes
-         * (e.g. #ArrayEigenVector, #ArrayEigenMatrix) override this to return typed
+         * (e.g. @ref DNDS::ArrayEigenVector "ArrayEigenVector", @ref DNDS::ArrayEigenMatrix "ArrayEigenMatrix") override this to return typed
          * Eigen maps instead of `T*`.
          *
          * @param iRow Row index. For `CSR` compressed, `iRow == Size()` is allowed
@@ -1209,7 +1209,7 @@ namespace DNDS
 
         /// @brief Mirror the flat/structural buffers to a target device (e.g. CUDA).
         /// @details CSR arrays must be compressed. `backend` must match a supported
-        /// backend from #DeviceBackend; see #DeviceStorage.hpp.
+        /// backend from @ref DNDS::DeviceBackend "DeviceBackend"; see @ref DNDS::DeviceStorage "DeviceStorage".hpp.
         void to_device(DeviceBackend backend = DeviceBackend::Host)
         {
             if constexpr (_dataLayout == CSR)
@@ -1288,14 +1288,14 @@ namespace DNDS
                 _pRowSizes ? _pRowSizes->dataDevice() : nullptr);
         }
 
-        /// @brief Current device backend the data is mirrored on, or `Unknown` if host-only.
+        /// @brief Current device backend the data is mirrored on, or @ref Unknown if host-only.
         [[nodiscard]] DeviceBackend device() const
         {
             return this->deviceBackend;
         }
 
         /// @brief Random-access iterator over rows for a given device backend.
-        /// @details `operator*` yields a #RowView `{pointer, rowSize}`. Used by
+        /// @details `operator*` yields a @ref DNDS::RowView "RowView" `{pointer, rowSize}`. Used by
         /// `std::transform` / CUDA kernels that sweep over rows.
         template <DeviceBackend B>
         class iterator : public ArrayIteratorBase<iterator<B>>

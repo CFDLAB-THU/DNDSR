@@ -9,7 +9,7 @@ namespace DNDS
 {
 
     /**
-     * @brief Enumeration of the five concrete data layouts supported by #Array.
+     * @brief Enumeration of the five concrete data layouts supported by @ref DNDS::Array "Array".
      *
      * @details The value is determined at compile time from `_row_size` and
      * `_row_max` template parameters. See the layout table in Array.hpp.
@@ -50,7 +50,7 @@ namespace DNDS
         return lo == TABLE_Fixed || lo == TABLE_Max;
     }
 
-    /// @brief Whether `T` is legal as an `Array` element type (trivially copyable
+    /// @brief Whether `T` is legal as an @ref DNDS::Array "Array" element type (trivially copyable
     /// or a fixed-size real Eigen matrix). Controls CUDA/MPI copy paths.
     template <class T>
     constexpr bool array_comp_acceptable()
@@ -59,10 +59,10 @@ namespace DNDS
     }
 
     /**
-     * @brief Compile-time layout descriptor deducing the concrete #DataLayout
+     * @brief Compile-time layout descriptor deducing the concrete @ref DataLayout
      * from element type and row-size template arguments.
      *
-     * @details Serves as a base class for #Array / #ArrayView and as a static
+     * @details Serves as a base class for @ref DNDS::Array "Array" / @ref DNDS::ArrayView "ArrayView" and as a static
      * namespace of helpers (signature strings, compatibility checks). Carries
      * no runtime state of its own.
      *
@@ -70,7 +70,7 @@ namespace DNDS
      * @tparam _row_size Row size (>=0 / DynamicSize / NonUniformSize).
      * @tparam _row_max  Row max (>=0 / DynamicSize / NonUniformSize; only used
      *                   when `_row_size == NonUniformSize`).
-     * @tparam _align    Alignment hint (currently only `NoAlign` implemented).
+     * @tparam _align    Alignment hint (currently only @ref NoAlign implemented).
      */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size,
               // rowsize _depth_size = 1,
@@ -96,7 +96,7 @@ namespace DNDS
         static const rowsize s_T = al == NoAlign ? sizeof_T : (sizeof_T / al + 1) * al;
         static_assert(s_T >= sizeof_T && s_T - sizeof_T < (al == NoAlign ? 1 : al), "I1");
 
-        /// @brief Deduce the #DataLayout tag from the template parameters.
+        /// @brief Deduce the @ref DataLayout tag from the template parameters.
         static constexpr DataLayout _GetDataLayout()
         {
             if constexpr (rs != DynamicSize && rs != NonUniformSize && rs >= 0)
@@ -124,7 +124,7 @@ namespace DNDS
         /// @brief Human-readable type identifier including element typeid, sizes, and alignment.
         /// @details Format: `"<Layout>__<typeid>_<sizeof_T>_<rs>_<rm>_<al>"`.
         /// Primarily for debugging / error messages. Not stable across compilers
-        /// (uses `typeid(T).name()`); use #GetArraySignature for persisted data.
+        /// (uses `typeid(T).name()`); use @ref GetArraySignature for persisted data.
         static std::string GetArrayName()
         {
             std::string Layout;
@@ -170,7 +170,7 @@ namespace DNDS
 
         /// @brief Signature with `_row_size` / `_row_max` replaced by DynamicSize.
         /// @details Used when we want two arrays to match regardless of compile-time
-        /// row-size constants (e.g., compare a `DynamicSize` reader against a
+        /// row-size constants (e.g., compare a @ref DynamicSize reader against a
         /// fixed-size writer file).
         static std::string GetArraySignatureRelaxed()
         {
@@ -193,8 +193,8 @@ namespace DNDS
         }
 
         /// @brief Parse a signature string into `(sizeof_T, row_size, row_max, align)`.
-        /// @details Accepts both #GetArrayName (6 components incl. typeid) and
-        /// #GetArraySignature (5 components) forms; returns the last 4 fields.
+        /// @details Accepts both @ref GetArrayName (6 components incl. typeid) and
+        /// @ref GetArraySignature (5 components) forms; returns the last 4 fields.
         static std::tuple<int, int, int, int> ParseArraySignatureTuple(const std::string &v)
         {
             auto strings = splitSStringClean(v, '_');
@@ -220,7 +220,7 @@ namespace DNDS
     };
 
     /**
-     * @brief Non-owning, device-callable view onto an #Array.
+     * @brief Non-owning, device-callable view onto an @ref DNDS::Array "Array".
      *
      * @details Captures pointers to the flat data buffer and the structural
      * arrays (`_rowstart_or_rowsize`) plus the nested-vector pointer for CSR
@@ -229,7 +229,7 @@ namespace DNDS
      * `__host__ __device__` to work inside CUDA kernels.
      *
      * Instances are typically produced by `Array::view()` and must not outlive
-     * the owning `Array`.
+     * the owning @ref DNDS::Array "Array".
      */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size,
               // rowsize _depth_size = 1,
@@ -574,7 +574,7 @@ namespace DNDS
          *
          * @details Supports indexing, iteration (`begin`/`end`), copy-in / copy-out
          * from `std::vector`, and an `assign_value` kernel-safe copy. Returned by
-         * iterators derived from #ArrayIteratorBase.
+         * iterators derived from @ref DNDS::ArrayIteratorBase "ArrayIteratorBase".
          */
         class RowView
         {
@@ -627,7 +627,7 @@ namespace DNDS
     };
 
     /**
-     * @brief CRTP base for row-granularity iterators over an #Array / #ArrayView.
+     * @brief CRTP base for row-granularity iterators over an @ref DNDS::Array "Array" / @ref DNDS::ArrayView "ArrayView".
      *
      * @details Provides all comparison / arithmetic operators for a random-access
      * iterator (the `difference_type` is `std::ptrdiff_t` on a row basis); the

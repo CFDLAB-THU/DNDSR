@@ -1,6 +1,6 @@
 #pragma once
 /// @file IndexMapping_bind.hpp
-/// @brief pybind11 bindings for #GlobalOffsetsMapping and #OffsetAscendIndexMapping.
+/// @brief pybind11 bindings for @ref DNDS::GlobalOffsetsMapping "GlobalOffsetsMapping" and @ref DNDS::OffsetAscendIndexMapping "OffsetAscendIndexMapping".
 
 #include "IndexMapping.hpp"
 #include "Defines_bind.hpp"

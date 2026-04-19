@@ -41,19 +41,19 @@ namespace DNDS::HardEigen
     /// Returns the eigenvector matrix (columns = eigenvectors, scaled so that
     /// diagonal == eigenvalues).
     Eigen::Matrix3d Eigen3x3RealSymEigenDecomposition(const Eigen::Matrix3d &A);
-    /// @brief Analytic 2x2 analogue of #Eigen3x3RealSymEigenDecomposition.
+    /// @brief Analytic 2x2 analogue of @ref Eigen3x3RealSymEigenDecomposition.
     Eigen::Matrix2d Eigen2x2RealSymEigenDecomposition(const Eigen::Matrix2d &A);
 
     /// @brief Condition number of a 3x3 SPD matrix from its eigenvalues.
     real Eigen3x3RealSymEigenDecompositionGetCond(const Eigen::Matrix3d &A);
-    /// @brief Like #Eigen3x3RealSymEigenDecompositionGetCond but returns
+    /// @brief Like @ref Eigen3x3RealSymEigenDecompositionGetCond but returns
     /// `lambda0 / lambda1` only (ignores the smallest eigenvalue).
     real Eigen3x3RealSymEigenDecompositionGetCond01(const Eigen::Matrix3d &A);
-    /// @brief 2x2 analogue of #Eigen3x3RealSymEigenDecompositionGetCond.
+    /// @brief 2x2 analogue of @ref Eigen3x3RealSymEigenDecompositionGetCond.
     real Eigen2x2RealSymEigenDecompositionGetCond(const Eigen::Matrix2d &A);
 
     /// @brief Eigen-decomposition with eigenvector columns normalised to unit length.
     Eigen::Matrix3d Eigen3x3RealSymEigenDecompositionNormalized(const Eigen::Matrix3d &A);
-    /// @brief 2x2 analogue of #Eigen3x3RealSymEigenDecompositionNormalized.
+    /// @brief 2x2 analogue of @ref Eigen3x3RealSymEigenDecompositionNormalized.
     Eigen::Matrix2d Eigen2x2RealSymEigenDecompositionNormalized(const Eigen::Matrix2d &A);
 }

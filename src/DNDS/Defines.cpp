@@ -1,5 +1,5 @@
 /// @file Defines.cpp
-/// @brief Implementations of symbols declared in #Defines.hpp: log stream
+/// @brief Implementations of symbols declared in @ref Defines.hpp: log stream
 /// management, signal handler body, OpenMP helpers, version string accessor,
 /// terminal / progress utilities.
 

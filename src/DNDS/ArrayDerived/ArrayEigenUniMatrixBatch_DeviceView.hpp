@@ -1,6 +1,6 @@
 #pragma once
 /// @file ArrayEigenUniMatrixBatch_DeviceView.hpp
-/// @brief Device-callable view for #ArrayEigenUniMatrixBatch (rows of
+/// @brief Device-callable view for @ref DNDS::ArrayEigenUniMatrixBatch "ArrayEigenUniMatrixBatch" (rows of
 /// identically-shaped matrix batches, variable batch count per row).
 
 #include "../DeviceView.hpp"
@@ -8,10 +8,10 @@
 namespace DNDS
 {
     /**
-     * @brief `a * b` if both are compile-time sizes, `DynamicSize` if either
+     * @brief `a * b` if both are compile-time sizes, @ref DynamicSize if either
      * is `Eigen::Dynamic`, otherwise a sentinel.
-     * @details Helper used by #ArrayEigenUniMatrixBatchDeviceView to compute
-     * the underlying `ParArray` row width from the matrix shape.
+     * @details Helper used by @ref DNDS::ArrayEigenUniMatrixBatchDeviceView "ArrayEigenUniMatrixBatchDeviceView" to compute
+     * the underlying @ref DNDS::ParArray "ParArray" row width from the matrix shape.
      */
     template <int a, int b>
     constexpr rowsize EigenSize_Mul_RowSize()
@@ -28,7 +28,7 @@ namespace DNDS
     }
 
     /**
-     * @brief Device-callable view onto #ArrayEigenUniMatrixBatch rows.
+     * @brief Device-callable view onto @ref DNDS::ArrayEigenUniMatrixBatch "ArrayEigenUniMatrixBatch" rows.
      *
      * @details `operator()(i, j)` returns an `Eigen::Map<Matrix<real, _n_row, _n_col>>`
      * pointing at the `j`-th matrix of row `i`'s batch. `BatchSize(i)` reports

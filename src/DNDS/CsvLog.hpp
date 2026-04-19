@@ -15,7 +15,7 @@ namespace DNDS
      * @brief Storage-agnostic "either int or double" value with CSV-friendly streaming.
      *
      * @details Each instance holds either an integer (`i`) or a double (`d`);
-     * the unused field is set to the #UnInitIndex / #UnInitReal sentinel. The
+     * the unused field is set to the @ref UnInitIndex / @ref UnInitReal sentinel. The
      * assignment operator dispatches on the source type, and `operator<<`
      * prints whichever field is live. Designed for columns where some rows
      * are integer counts and others are floating residuals.
@@ -59,8 +59,8 @@ namespace DNDS
      * ordered list of column titles. After `n_line_max` rows the output is
      * rotated to `<bare>_<block>.suffix` to keep any single file size bounded.
      *
-     * Typical use: one `CsvLog` per solver per rank-0 process, recording
-     * per-iteration diagnostics with #LogSimpleDIValue entries keyed by title.
+     * Typical use: one @ref DNDS::CsvLog "CsvLog" per solver per rank-0 process, recording
+     * per-iteration diagnostics with @ref DNDS::LogSimpleDIValue "LogSimpleDIValue" entries keyed by title.
      */
     class CsvLog
     {
@@ -128,7 +128,7 @@ namespace DNDS
             }
         }
 
-        /// @brief Emit the title row (called automatically on the first #WriteLine).
+        /// @brief Emit the title row (called automatically on the first @ref WriteLine).
         void WriteTitle()
         {
             for (size_t i = 0; i < titles.size(); i++)
@@ -137,6 +137,6 @@ namespace DNDS
         }
     };
 
-    /// @brief Convenience alias: the `title -> value` map type passed to #CsvLog::WriteLine.
+    /// @brief Convenience alias: the `title -> value` map type passed to @ref DNDS::CsvLog "CsvLog"::WriteLine.
     using tLogSimpleDIValueMap = std::map<std::string, LogSimpleDIValue>;
 }

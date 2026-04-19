@@ -27,17 +27,17 @@
 
 namespace DNDS
 {
-    /// @brief Shared pointer to a #GlobalOffsetsMapping (globally replicated).
+    /// @brief Shared pointer to a @ref DNDS::GlobalOffsetsMapping "GlobalOffsetsMapping" (globally replicated).
     using t_pLGlobalMapping = ssp<GlobalOffsetsMapping>;
-    /// @brief Shared pointer to an #OffsetAscendIndexMapping (per-rank ghost layout).
+    /// @brief Shared pointer to an @ref DNDS::OffsetAscendIndexMapping "OffsetAscendIndexMapping" (per-rank ghost layout).
     using t_pLGhostMapping = ssp<OffsetAscendIndexMapping>; // TODO: change to unique_ptr and modify corresponding copy constructor/assigner
 
     /**
-     * @brief MPI-aware #Array: adds a communicator, rank, and global index mapping.
+     * @brief MPI-aware @ref DNDS::Array "Array": adds a communicator, rank, and global index mapping.
      *
-     * @details Inherits everything from #Array and layers on:
-     *  - an #MPIInfo `mpi` context;
-     *  - a #GlobalOffsetsMapping `pLGlobalMapping` that maps local row indices
+     * @details Inherits everything from @ref DNDS::Array "Array" and layers on:
+     *  - an @ref DNDS::MPIInfo "MPIInfo" `mpi` context;
+     *  - a @ref DNDS::GlobalOffsetsMapping "GlobalOffsetsMapping" `pLGlobalMapping` that maps local row indices
      *    to the global index space (populated by #createGlobalMapping);
      *  - collective serialization I/O that coordinates writes / reads across ranks.
      *
@@ -49,8 +49,8 @@ namespace DNDS
      * index nGlobal = father->globalSize();  // total rows across ranks
      * ```
      *
-     * Ghost (halo) data is not managed here; pair with #ArrayTransformer or
-     * wrap in an #ArrayPair for that.
+     * Ghost (halo) data is not managed here; pair with @ref DNDS::ArrayTransformer "ArrayTransformer" or
+     * wrap in an @ref DNDS::ArrayPair "ArrayPair" for that.
      *
      * @sa ArrayTransformer, ArrayPair, docs/architecture/arrays.md.
      */
@@ -81,7 +81,7 @@ namespace DNDS
         // operator= handled automatically
 
         /// @brief Copy-assign from another ParArray. Shallow copy semantics
-        /// (mirrors #Array::clone): shares structural/data buffers.
+        /// (mirrors @ref DNDS::Array "Array"::clone): shares structural/data buffers.
         void clone(const t_self &R)
         {
             this->operator=(R);
@@ -242,7 +242,7 @@ namespace DNDS
     public:
         /**
          * @brief Install the MPI context after default construction.
-         * @details Calls #AssertDataType to verify the deduced datatype / multiplier
+         * @details Calls @ref AssertDataType to verify the deduced datatype / multiplier
          * match `sizeof(T)`.
          */
         void setMPI(const MPIInfo &n_mpi)
@@ -271,7 +271,7 @@ namespace DNDS
             typeMult = n_TypeMult;
         }
 
-        /// @brief Default-construct an uninitialised ParArray; call #setMPI and #Resize later.
+        /// @brief Default-construct an uninitialised ParArray; call #setMPI and @ref Resize later.
         ParArray() = default;
 
         /// @brief Construct a ParArray bound to the given MPI context.
@@ -323,7 +323,7 @@ namespace DNDS
          * rank. Intended as a post-setup sanity check before entering ghost exchange.
          *
          * @warning Must be called collectively. O(nRanks) memory and communication.
-         * @return true Always (failures are reported via `DNDS_check_throw_info`).
+         * @return true Always (failures are reported via @ref DNDS_check_throw_info).
          */
         bool AssertConsistent()
         {
@@ -353,8 +353,8 @@ namespace DNDS
          * @brief Collective: build the global offsets table.
          *
          * @details Every rank broadcasts its local `Size()`; after the call,
-         * #pLGlobalMapping holds the full `RankLengths` / `RankOffsets` on every
-         * rank. Must be invoked before #globalSize, #ArrayTransformer::createFatherGlobalMapping,
+         * #pLGlobalMapping holds the full @ref RankLengths / @ref RankOffsets on every
+         * rank. Must be invoked before #globalSize, @ref DNDS::ArrayTransformer "ArrayTransformer"::createFatherGlobalMapping,
          * or any CSR collective serialization.
          *
          * @warning Must be called collectively on `mpi.comm`.
@@ -391,10 +391,10 @@ namespace DNDS
     /********************************************************************************************************/
 
     /**
-     * @brief Ghost-communication engine for a father / son #ParArray pair.
+     * @brief Ghost-communication engine for a father / son @ref DNDS::ParArray "ParArray" pair.
      *
      * @details Distributed-mesh stencil schemes need data from cells owned by
-     * other ranks. `ArrayTransformer` stores two #ParArray pointers -- the
+     * other ranks. @ref DNDS::ArrayTransformer "ArrayTransformer" stores two @ref DNDS::ParArray "ParArray" pointers -- the
      * *father* (owned rows) and the *son* (incoming ghost rows) -- plus the
      * MPI machinery to move data between them.
      *
@@ -406,7 +406,7 @@ namespace DNDS
      *                                types (or in-situ pack buffers) for send/recv.
      *
      * ## Communication
-     * - One-shot: #pullOnce / #pushOnce (short-lived `Isend`/`Irecv` pair).
+     * - One-shot: #pullOnce / #pushOnce (short-lived @ref Isend/@ref Irecv pair).
      * - Persistent: #initPersistentPull -> repeated #startPersistentPull /
      *   #waitPersistentPull cycles -> #clearPersistentPull when done.
      *   Persistent requests avoid re-posting sends and receives on every
@@ -415,7 +415,7 @@ namespace DNDS
      * ## Reuse
      * When multiple arrays share the same ghost pattern (e.g. the DOF array
      * and the gradient array both use the `cell2cell` partition), call
-     * #BorrowGGIndexing on the secondary transformer to copy the mapping
+     * @ref BorrowGGIndexing on the secondary transformer to copy the mapping
      * without redoing collective setup -- only #createMPITypes must be redone,
      * because the element size differs.
      *
@@ -465,13 +465,13 @@ namespace DNDS
         ssp<MPIReqHolder> PushReqVec;
         /// @brief Persistent request handles for pull.
         ssp<MPIReqHolder> PullReqVec;
-        /// @brief Device currently holding push buffers (`Unknown` if not initialised).
+        /// @brief Device currently holding push buffers (@ref Unknown if not initialised).
         DeviceBackend pushDevice = DeviceBackend::Unknown;
-        /// @brief Device currently holding pull buffers (`Unknown` if not initialised).
+        /// @brief Device currently holding pull buffers (@ref Unknown if not initialised).
         DeviceBackend pullDevice = DeviceBackend::Unknown;
-        /// @brief Number of `Recv` requests in #PushReqVec (the rest are `Send`s).
+        /// @brief Number of @ref Recv requests in @ref PushReqVec (the rest are @ref Sends).
         MPI_int nRecvPushReq{-1};
-        /// @brief Number of `Recv` requests in #PullReqVec.
+        /// @brief Number of @ref Recv requests in @ref PullReqVec.
         MPI_int nRecvPullReq{-1};
         /// @brief Status buffer for push completion.
         tMPI_statVec PushStatVec;
@@ -680,10 +680,10 @@ namespace DNDS
          *
          * @details Fourth (and final) setup step. Consumes the per-rank push
          * sizes and the ghost mapping produced by #createGhostMapping, then:
-         *  - for `HIndexed`: builds `MPI_Type_create_hindexed` types that
+         *  - for @ref HIndexed: builds `MPI_Type_create_hindexed` types that
          *    describe the scattered memory layout of the rows being sent and
          *    received;
-         *  - for `InSituPack`: allocates contiguous pack buffers.
+         *  - for @ref InSituPack: allocates contiguous pack buffers.
          *
          * Also resizes `son` to hold exactly the incoming ghost rows.
          *
@@ -940,7 +940,7 @@ namespace DNDS
          * re-posting sends and receives.
          *
          * @pre #createMPITypes has been called; #pPullTypeVec and #pPushTypeVec are valid.
-         * @post #PushReqVec is populated with `MPI_Send_init` / `MPI_Recv_init` requests.
+         * @post @ref PushReqVec is populated with `MPI_Send_init` / `MPI_Recv_init` requests.
          *
          * @param B Device backend for the send/recv buffers
          *          (`DeviceBackend::Unknown` to use host; requires CUDA-aware
@@ -1016,7 +1016,7 @@ namespace DNDS
          * direction (father -> son). Counterpart to #initPersistentPush.
          *
          * @pre #createMPITypes has been called; #pPullTypeVec and #pPushTypeVec are valid.
-         * @post #PullReqVec is populated.
+         * @post @ref PullReqVec is populated.
          *
          * @param B Device backend for the send/recv buffers.
          * @warning Raw data pointers for both father and son must remain stable
@@ -1136,7 +1136,7 @@ namespace DNDS
             }
         }
 
-        /// @brief Start all persistent push requests (`MPI_Startall`).
+        /// @brief Start all persistent push requests (@ref MPI_Startall).
         /// @param B Device backend; must match the one passed to #initPersistentPush.
         void startPersistentPush(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
@@ -1234,7 +1234,7 @@ namespace DNDS
             }
         }
 
-        /// @brief Start all persistent pull requests (`MPI_Startall`).
+        /// @brief Start all persistent pull requests (@ref MPI_Startall).
         /// @details After this call the sends/recvs are in flight; call
         /// #waitPersistentPull to consume the incoming ghost data.
         /// @param B Device backend; must match the one passed to #initPersistentPull.

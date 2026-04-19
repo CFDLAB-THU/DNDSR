@@ -1,7 +1,7 @@
 #pragma once
 /// @file ArrayAdjacency_DeviceView.hpp
-/// @brief Device-callable view type for #ArrayAdjacency. Mirrors the host
-/// `operator[]` returning an #AdjacencyRow, but with `__device__` methods.
+/// @brief Device-callable view type for @ref DNDS::ArrayAdjacency "ArrayAdjacency". Mirrors the host
+/// `operator[]` returning an @ref DNDS::AdjacencyRow "AdjacencyRow", but with `__device__` methods.
 
 #include "AdjacencyRow.hpp"
 #include "../DeviceView.hpp"
@@ -11,12 +11,12 @@
 namespace DNDS
 {
     /**
-     * @brief Device-callable adjacency view: extends #ArrayDeviceView so that
-     * indexing into a row returns an #AdjacencyRow of indices.
+     * @brief Device-callable adjacency view: extends @ref DNDS::ArrayDeviceView "ArrayDeviceView" so that
+     * indexing into a row returns an @ref DNDS::AdjacencyRow "AdjacencyRow" of indices.
      *
      * @tparam B         Target device backend.
      * @tparam index_T   `DNDS::index` or `const DNDS::index`.
-     * @tparam _row_size / _row_max / _align  Same meaning as in #Array.
+     * @tparam _row_size / _row_max / _align  Same meaning as in @ref DNDS::Array "Array".
      */
     template <DeviceBackend B, typename index_T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ArrayAdjacencyDeviceView : public ArrayDeviceView<B, index, _row_size, _row_max, _align>

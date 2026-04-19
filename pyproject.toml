@@ -31,6 +31,15 @@ build-backend = "scikit_build_core.build"
 name = "DNDSR"
 dynamic = ["version"]
 
+[project.optional-dependencies]
+docs = [
+    "sphinx>=7.2,<9",
+    "breathe>=4.35",
+    "myst-parser>=3.0",
+    "sphinxawesome-theme>=6.0",
+    "sphinx-copybutton>=0.5",
+]
+
 
 [tool.scikit-build]
 metadata.version.provider = "version_provider"

@@ -48,7 +48,7 @@ extern "C" void DNDS_signal_handler(int signal);
 
 namespace DNDS
 {
-    /// @brief Install SEGV / ABRT handlers that print a backtrace via #DNDS_signal_handler.
+    /// @brief Install SEGV / ABRT handlers that print a backtrace via @ref DNDS_signal_handler.
     /// @details Optional opt-in; not installed automatically so unit test drivers
     /// keep full control of their own handlers. Typical drivers call this once
     /// after `MPI_Init` in `main()`.
@@ -122,7 +122,7 @@ namespace DNDS
     static const char *outputDelim = "\t";
 
     /// @brief Split a global range `[0, nGlobal)` evenly among `nRanks` workers.
-    /// @details Used by the `EvenSplit` serialization-offset mode and by
+    /// @details Used by the @ref EvenSplit serialization-offset mode and by
     /// redistribution routines to pick per-rank slabs without exchanging sizes.
     /// The partition is dense and balanced to within one item.
     /// @return `[start, end)` for the caller's `rank`.
@@ -166,20 +166,20 @@ namespace DNDS
     /// @brief Paired indices, typically `(start, size)` or `(first, last)`.
     using t_indexerPair = std::tuple<index, index>;
 
-    /// @brief Minimum representable #index value (= `INT64_MIN`).
+    /// @brief Minimum representable #index value (= @ref INT64_MIN).
     DNDS_CONSTANT const index indexMin = INT64_MIN;
 
     /// @brief Sentinel "not initialised" real value (NaN). Cheap to detect with
-    /// `std::isnan` or #IsUnInitReal; survives MPI transport unchanged.
+    /// `std::isnan` or @ref IsUnInitReal; survives MPI transport unchanged.
     DNDS_CONSTANT const real UnInitReal = NAN;
-    /// @brief Sentinel "not initialised" index value (= `INT64_MIN`).
+    /// @brief Sentinel "not initialised" index value (= @ref INT64_MIN).
     DNDS_CONSTANT const index UnInitIndex = INT64_MIN;
     static_assert(UnInitIndex < 0);
-    /// @brief Sentinel "not initialised" rowsize value (= `INT32_MIN`).
+    /// @brief Sentinel "not initialised" rowsize value (= @ref INT32_MIN).
     DNDS_CONSTANT const rowsize UnInitRowsize = INT32_MIN;
     static_assert(UnInitRowsize < 0);
 
-    /// @brief Whether `v` equals the NaN sentinel #UnInitReal (tested via `isnan`).
+    /// @brief Whether `v` equals the NaN sentinel @ref UnInitReal (tested via `isnan`).
     inline bool IsUnInitReal(real v)
     {
         // return (*(int64_t *)(&v)) == (*(int64_t *)(&UnInitReal));
@@ -195,7 +195,7 @@ namespace DNDS
     /// @brief Loose lower bound (for iterative-solver tolerances etc.).
     DNDS_CONSTANT const real smallReal = 1e-10;
 #define DNDS_E_PI 3.1415926535897932384626433832795028841971693993751058209749445923078164062
-    /// @brief π in double precision (matches #DNDS_E_PI macro).
+    /// @brief π in double precision (matches @ref DNDS_E_PI macro).
     DNDS_CONSTANT const real pi = DNDS_E_PI;
 
     /// @brief Row-major dynamic Eigen matrix used by quadrature / basis tables.
@@ -306,7 +306,7 @@ namespace DNDS
     }
 
     /// @brief Encode an alignment value as a Python-binding snippet:
-    /// "N" for #NoAlign, the number otherwise.
+    /// "N" for @ref NoAlign, the number otherwise.
     inline std::string Align_To_PySnippet(rowsize al)
     {
         if (al == NoAlign)
@@ -354,7 +354,7 @@ namespace DNDS
 {
     /// @brief Read `OMP_NUM_THREADS` env var, returning 1 if unset / invalid.
     extern int get_env_OMP_NUM_THREADS();
-    /// @brief Read the DNDSR-specific `DNDS_DIST_OMP_NUM_THREADS` override,
+    /// @brief Read the DNDSR-specific @ref DNDS_DIST_OMP_NUM_THREADS override,
     /// falling back to #get_env_OMP_NUM_THREADS.
     extern int get_env_DNDS_DIST_OMP_NUM_THREADS();
 }
@@ -388,7 +388,7 @@ namespace DNDS
     }
 
     /// @brief Add two signed integers, asserting on overflow instead of silently wrapping.
-    /// @throws Dies via #DNDS_assert_info if the result would overflow.
+    /// @throws Dies via @ref DNDS_assert_info if the result would overflow.
     // Generic function to safely add with overflow check
     template <typename T>
     T signedIntSafeAdd(T value, T increment)
@@ -404,7 +404,7 @@ namespace DNDS
 
     /// @brief Narrowing `size_t -> T` conversion with range check.
     /// @tparam T  Signed integral target type.
-    /// @throws Dies via #DNDS_assert_info if `v > std::numeric_limits<T>::max()`.
+    /// @throws Dies via @ref DNDS_assert_info if `v > std::numeric_limits<T>::max()`.
     template <typename T>
     T size_t_to_signed(size_t v)
     {
@@ -440,7 +440,7 @@ namespace DNDS
      *
      * @details Resizes `rowstarts` to `rowsizes.size() + 1` and fills it so that
      * `rowstarts[i] = sum_{k<i} rowsizes[k]`. Asserts on overflow.
-     * Used extensively by CSR #Array / ghost-indexing to turn row-count vectors
+     * Used extensively by CSR @ref DNDS::Array "Array" / ghost-indexing to turn row-count vectors
      * into offset vectors.
      *
      * @tparam TtRowsizeVec  `std::vector`-like of row sizes (e.g. `rowsize`).

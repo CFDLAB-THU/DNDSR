@@ -22,7 +22,7 @@ namespace DNDS
      * } // handle goes out of scope -> worker returned to pool
      * ```
      *
-     * The pool shares ownership with every outstanding #ObjectPoolAllocated via
+     * The pool shares ownership with every outstanding @ref DNDS::ObjectPoolAllocated "ObjectPoolAllocated" via
      * a `shared_ptr<Pool>`; workers correctly skip the return step if the
      * pool itself has been destroyed meanwhile.
      *
@@ -60,7 +60,7 @@ namespace DNDS
         }
 
         /**
-         * @brief RAII handle returned by #ObjectPool::get (and friends).
+         * @brief RAII handle returned by @ref DNDS::ObjectPool "ObjectPool"::get (and friends).
          *
          * @details Behaves like a `unique_ptr<T>`; in its destructor it
          * returns the managed object to the pool (or drops it if the pool

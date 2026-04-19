@@ -1,7 +1,7 @@
 #pragma once
 /// @file SerializerFactory.hpp
-/// @brief Configurable factory that builds either a #SerializerJSON or a
-/// #SerializerH5 with all tunables exposed through the DNDS config system.
+/// @brief Configurable factory that builds either a @ref DNDS::SerializerJSON "SerializerJSON" or a
+/// @ref DNDS::SerializerH5 "SerializerH5" with all tunables exposed through the DNDS config system.
 
 #include "SerializerBase.hpp"
 #include "SerializerJSON.hpp"
@@ -16,7 +16,7 @@ namespace DNDS::Serializer
      *
      * @details Exposes the tunables of both backends under a single config
      * schema so users can switch formats by changing one JSON field. See
-     * `DNDS_DECLARE_CONFIG` body for the full list of fields.
+     * @ref DNDS_DECLARE_CONFIG body for the full list of fields.
      */
     struct SerializerFactory
     {

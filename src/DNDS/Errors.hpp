@@ -8,15 +8,15 @@
 ///
 /// | Macro                  | Release behaviour       | Failure mode              |
 /// |------------------------|-------------------------|---------------------------|
-/// | #DNDS_assert            | Compiled out (NDEBUG)   | `std::abort()`            |
-/// | #DNDS_assert_info       | Compiled out (NDEBUG)   | `std::abort()` + message  |
-/// | #DNDS_assert_infof      | Compiled out (NDEBUG)   | `std::abort()` + fmtprintf|
-/// | #DNDS_check_throw       | Always active           | `throw std::runtime_error`|
-/// | #DNDS_check_throw_info  | Always active           | `throw` + message         |
-/// | #DNDS_HD_assert         | Compiled out in NDEBUG  | host: `abort`, device: `trap` |
+/// | @ref DNDS_assert            | Compiled out (NDEBUG)   | `std::abort()`            |
+/// | @ref DNDS_assert_info       | Compiled out (NDEBUG)   | `std::abort()` + message  |
+/// | @ref DNDS_assert_infof      | Compiled out (NDEBUG)   | `std::abort()` + fmtprintf|
+/// | @ref DNDS_check_throw       | Always active           | `throw std::runtime_error`|
+/// | @ref DNDS_check_throw_info  | Always active           | `throw` + message         |
+/// | @ref DNDS_HD_assert         | Compiled out in NDEBUG  | host: `abort`, device: `trap` |
 ///
-/// Prefer #DNDS_assert for internal invariants that are expensive to check or
-/// cannot fail in correct code; use #DNDS_check_throw for user-input / runtime
+/// Prefer @ref DNDS_assert for internal invariants that are expensive to check or
+/// cannot fail in correct code; use @ref DNDS_check_throw for user-input / runtime
 /// validation that must remain active in release builds.
 ///
 /// The device variants (`DNDS_HD_*`) expand to host asserts on the host and to
@@ -53,7 +53,7 @@ namespace DNDS
         std::abort();
     }
 
-    /// @brief `printf`-style variant of #assert_false. Used by #DNDS_assert_infof.
+    /// @brief `printf`-style variant of #assert_false. Used by @ref DNDS_assert_infof.
     inline void assert_false_infof(const char *expr, const char *file, int line,
                                    const char *info, ...)
     {
@@ -68,7 +68,7 @@ namespace DNDS
         std::abort();
     }
 
-    /// @brief Throwing variant of #assert_false_info. Used by #DNDS_check_throw.
+    /// @brief Throwing variant of #assert_false_info. Used by @ref DNDS_check_throw.
     /// @tparam TException Exception type to throw (defaults to `std::runtime_error`).
     /// Currently the implementation ignores the template parameter and always
     /// throws `std::runtime_error`; kept for future customisation.
@@ -85,13 +85,13 @@ namespace DNDS
 
 /// @brief Runtime check active in both debug and release builds.
 /// Throws `std::runtime_error` if `expr` evaluates to `false`.
-/// Prefer this over `DNDS_assert` for user-input and API-contract checks.
+/// Prefer this over @ref DNDS_assert for user-input and API-contract checks.
 #define DNDS_check_throw(expr) \
     ((static_cast<bool>(expr)) \
          ? void(0)             \
          : ::DNDS::assert_false_info_throw(#expr, __FILE__, __LINE__, ""))
 
-/// @brief Same as #DNDS_check_throw but attaches a user-supplied `info` message
+/// @brief Same as @ref DNDS_check_throw but attaches a user-supplied `info` message
 /// to the thrown `std::runtime_error`.
 #define DNDS_check_throw_info(expr, info) \
     ((static_cast<bool>(expr))            \
@@ -103,7 +103,7 @@ namespace DNDS
 #    define DNDS_assert_info(expr, info) (void(0))
 #    define DNDS_assert_infof(expr, info, ...) (void(0))
 #else
-/// @brief Debug-only assertion (compiled out when `DNDS_NDEBUG` is defined).
+/// @brief Debug-only assertion (compiled out when @ref DNDS_NDEBUG is defined).
 /// Prints the expression + file/line + backtrace, then calls `std::abort()`.
 #    define DNDS_assert(expr)      \
         ((static_cast<bool>(expr)) \
@@ -161,7 +161,7 @@ __device__ inline void device_assert_fail_infof(const char *expr, const char *fi
 #    else
 /// @brief Host/device assertion: abort on host, PTX `trap` on CUDA device.
 /// @details Can be used inside `__host__ __device__` functions. Disabled when
-/// either `DNDS_NDEBUG` (host+device) or `DNDS_NDEBUG_DEVICE` (device-only) is set.
+/// either @ref DNDS_NDEBUG (host+device) or @ref DNDS_NDEBUG_DEVICE (device-only) is set.
 #        define DNDS_HD_assert(cond)                               \
             do                                                     \
             {                                                      \
@@ -185,9 +185,9 @@ __device__ inline void device_assert_fail_infof(const char *expr, const char *fi
 #else
 
 // HOST version
-/// @brief Host-only expansion of #DNDS_HD_assert (equivalent to #DNDS_assert).
+/// @brief Host-only expansion of @ref DNDS_HD_assert (equivalent to @ref DNDS_assert).
 #    define DNDS_HD_assert(cond) DNDS_assert(cond)
-/// @brief Host-only expansion of #DNDS_HD_assert_infof.
+/// @brief Host-only expansion of @ref DNDS_HD_assert_infof.
 #    define DNDS_HD_assert_infof(cond, info, ...) DNDS_assert_infof(cond, info, ##__VA_ARGS__)
 #endif
 

@@ -1,6 +1,6 @@
 #pragma once
 /// @file Array_bind.hpp
-/// @brief pybind11 bindings for #Array / #ParArray / #ArrayPair.
+/// @brief pybind11 bindings for @ref DNDS::Array "Array" / @ref DNDS::ParArray "ParArray" / @ref DNDS::ArrayPair "ArrayPair".
 ///
 /// Provides templated helper functions (`pybind11_Array_name_appends`,
 /// `pybind11_Array_declare_*`, ...) that mechanically generate Python classes

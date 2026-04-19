@@ -3,7 +3,7 @@
 /// @brief Eigen extensions: `to_string`, an fmt-safe wrapper, and fmt formatter
 /// specialisations for dense Eigen matrices.
 ///
-/// The `MatrixFMTSafe` / `VectorFMTSafe` helpers exist because modern fmtlib
+/// The @ref DNDS::MatrixFMTSafe "MatrixFMTSafe" / @ref VectorFMTSafe helpers exist because modern fmtlib
 /// (with `fmt/ranges.h`) will detect `Eigen::Matrix` as a range and format
 /// it as `[a, b, c, ...]`, overriding the Eigen stream formatting that
 /// DNDSR wants. Wrapping Eigen types with these aliases hides the iterator
@@ -52,7 +52,7 @@ namespace Eigen
      * formatting path. This wrapper inherits from `Eigen::Matrix` but deletes
      * `begin` / `end`, so fmt falls back to the ostream formatter.
      *
-     * Use this type (or its #VectorFMTSafe / #RowVectorFMTSafe aliases) wherever
+     * Use this type (or its @ref VectorFMTSafe / @ref RowVectorFMTSafe aliases) wherever
      * Eigen objects need to pass through `fmt::format`.
      */
     template <class T, int M, int N, int options = AutoAlign | ((M == 1 && N != 1) ? Eigen ::RowMajor : !(M == 1 && N != 1) ? Eigen ::ColMajor
@@ -69,18 +69,18 @@ namespace Eigen
         void end() = delete;
     };
 
-    /// @brief Column-vector alias of #MatrixFMTSafe.
+    /// @brief Column-vector alias of @ref DNDS::MatrixFMTSafe "MatrixFMTSafe".
     template <class T, int M>
     using VectorFMTSafe = MatrixFMTSafe<T, M, 1>;
 
-    /// @brief Row-vector alias of #MatrixFMTSafe.
+    /// @brief Row-vector alias of @ref DNDS::MatrixFMTSafe "MatrixFMTSafe".
     template <class T, int N>
     using RowVectorFMTSafe = MatrixFMTSafe<T, 1, N>;
 }
 
 namespace DNDS::Meta
 {
-    /// @brief Type trait: is `T` a `MatrixFMTSafe` with real scalar? Used by
+    /// @brief Type trait: is `T` a @ref DNDS::MatrixFMTSafe "MatrixFMTSafe" with real scalar? Used by
     /// the fmt formatter below to catch both wrapped and unwrapped Eigen types.
     template <class T>
     struct is_real_eigen_fmt_safe_matrix : public std::false_type

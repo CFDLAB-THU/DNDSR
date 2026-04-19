@@ -1,7 +1,7 @@
 #pragma once
 /// @file Macros.hpp
 /// @brief Project-wide preprocessor flags, branch-hint macros, and version/build
-/// metadata strings. Included first by #Defines.hpp.
+/// metadata strings. Included first by @ref Defines.hpp.
 
 #include <string>
 

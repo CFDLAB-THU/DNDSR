@@ -21,7 +21,7 @@ namespace DNDS
 {
     /**
      * @brief Mesh-connectivity array: `ParArray<index>` whose `operator[]`
-     * yields an #AdjacencyRow typed view.
+     * yields an @ref DNDS::AdjacencyRow "AdjacencyRow" typed view.
      *
      * @details Used for cell-to-node, cell-to-cell, face-to-cell, ... every
      * mesh connectivity table in DNDSR. Variable row widths (triangle vs
@@ -33,9 +33,9 @@ namespace DNDS
      * span that supports size queries, range-based `for`, conversion to
      * `std::vector`, and assignment from `std::vector`.
      *
-     * @tparam _row_size 1 or a small fixed edge/face size; `NonUniformSize` for
+     * @tparam _row_size 1 or a small fixed edge/face size; @ref NonUniformSize for
      *                   mixed-element connectivity.
-     * @tparam _row_max  Ignored unless `_row_size == NonUniformSize` (see #Array).
+     * @tparam _row_max  Ignored unless `_row_size == NonUniformSize` (see @ref DNDS::Array "Array").
      */
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ArrayAdjacency : public ParArray<index, _row_size, _row_max, _align>
@@ -56,7 +56,7 @@ namespace DNDS
             this->operator=(R);
         }
 
-        /// @brief Typed row access; returns an #AdjacencyRow bound to the
+        /// @brief Typed row access; returns an @ref DNDS::AdjacencyRow "AdjacencyRow" bound to the
         /// row's pointer and width. Past-the-end queries are disabled.
         AdjacencyRow<index> operator[](index i)
         {
@@ -145,7 +145,7 @@ namespace DNDS
      *
      * @details Suits places where the "adjacency" is really one index per row
      * (cell->partition map, cell->owner, etc.). Inherits all MPI / serialization
-     * plumbing from #ArrayAdjacency.
+     * plumbing from @ref DNDS::ArrayAdjacency "ArrayAdjacency".
      */
     class ArrayIndex : public ArrayAdjacency<1>
     {

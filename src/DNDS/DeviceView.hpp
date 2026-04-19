@@ -18,11 +18,11 @@ namespace DNDS
     // };
 
     /**
-     * @brief Non-owning device-callable view of an #Array, specialised per #DeviceBackend.
+     * @brief Non-owning device-callable view of an @ref DNDS::Array "Array", specialised per @ref DNDS::DeviceBackend "DeviceBackend".
      *
      * @details The primary template is deleted; concrete specialisations are
      * provided for each supported backend (Host always, CUDA when
-     * #DNDS_USE_CUDA is on). A device view captures host and/or device raw
+     * @ref DNDS_USE_CUDA is on). A device view captures host and/or device raw
      * pointers; on the CUDA specialisation the element accessors are marked
      * `__device__` so kernels can use them directly.
      *
@@ -30,9 +30,9 @@ namespace DNDS
      *
      * @tparam B         Device backend.
      * @tparam T         Element type (may be `const T` for read-only views).
-     * @tparam _row_size Mirrors #Array.
-     * @tparam _row_max  Mirrors #Array.
-     * @tparam _align    Mirrors #Array.
+     * @tparam _row_size Mirrors @ref DNDS::Array "Array".
+     * @tparam _row_max  Mirrors @ref DNDS::Array "Array".
+     * @tparam _align    Mirrors @ref DNDS::Array "Array".
      */
     template <DeviceBackend B,
               class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
@@ -42,7 +42,7 @@ namespace DNDS
         ArrayDeviceView() = delete;
     };
 
-    /// @brief Host specialisation of #ArrayDeviceView; identical to the host-side #ArrayView.
+    /// @brief Host specialisation of @ref DNDS::ArrayDeviceView "ArrayDeviceView"; identical to the host-side @ref DNDS::ArrayView "ArrayView".
     template <class T, rowsize _row_size, rowsize _row_max, rowsize _align>
     class ArrayDeviceView<
         DeviceBackend::Host, T, _row_size, _row_max, _align>
@@ -58,7 +58,7 @@ namespace DNDS
     };
 
 #ifdef DNDS_USE_CUDA
-    /// @brief CUDA specialisation of #ArrayDeviceView with `__device__`
+    /// @brief CUDA specialisation of @ref DNDS::ArrayDeviceView "ArrayDeviceView" with `__device__`
     /// element accessors suitable for use inside kernels.
     template <class T, rowsize _row_size, rowsize _row_max, rowsize _align>
     class ArrayDeviceView<
@@ -100,7 +100,7 @@ namespace DNDS
     };
 #endif
 
-    /// @brief Factory for #ArrayDeviceView: selects host or device pointers
+    /// @brief Factory for @ref DNDS::ArrayDeviceView "ArrayDeviceView": selects host or device pointers
     /// based on `B` and forwards everything else.
     /// @details Used by `Array::deviceView<B>()`; rarely called directly.
     template <DeviceBackend B, class T, rowsize _row_size, rowsize _row_max, rowsize _align>

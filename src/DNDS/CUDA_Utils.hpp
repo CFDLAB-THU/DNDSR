@@ -3,7 +3,7 @@
 /// @brief CUDA helpers: driver/runtime error macros, device sync primitives,
 /// thrust-backed allocators, kernel launch utilities.
 ///
-/// The whole file is gated on #DNDS_USE_CUDA; a no-op stub is exposed when
+/// The whole file is gated on @ref DNDS_USE_CUDA; a no-op stub is exposed when
 /// CUDA is not compiled in so callers can include it unconditionally.
 
 #include "Defines.hpp"
@@ -30,7 +30,7 @@
 #    define DNDS_CUDA_1D_TID_GLOBAL_INDEX ((index)blockIdx.x * (index)blockDim.x + (index)threadIdx.x)
 
 /// @brief Evaluate a `cudaError_t`-returning expression and throw on failure.
-/// @details Uses #DNDS_check_throw_info so the failure site and CUDA error
+/// @details Uses @ref DNDS_check_throw_info so the failure site and CUDA error
 /// string are included in the thrown exception.
 #    define DNDS_CUDA_CHECKED(expr)                                          \
         do                                                                   \
@@ -46,7 +46,7 @@
             }                                                                \
         } while (0)
 
-/// @brief Same as #DNDS_CUDA_CHECKED but for CUDA driver API (`CUresult`).
+/// @brief Same as @ref DNDS_CUDA_CHECKED but for CUDA driver API (`CUresult`).
 #    define DNDS_CUDA_DRIVER_CHECKED(expr)                                   \
         do                                                                   \
         {                                                                    \

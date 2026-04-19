@@ -1,6 +1,6 @@
 #pragma once
 /// @file ObjectUtils.hpp
-/// @brief Tiny reflection-style helpers (`MemberRef`, `MemberPtr`) and
+/// @brief Tiny reflection-style helpers (@ref DNDS::MemberRef "MemberRef", @ref DNDS::MemberPtr "MemberPtr") and
 /// `for_each_member_*` visitors used by config / serializer code to iterate
 /// struct members with their names.
 
@@ -11,7 +11,7 @@
 namespace DNDS
 {
     /// @brief Invoke `f(member)` for every element of a `std::tuple` of members.
-    /// @details Companion to #MemberRef / #MemberPtr below; used to build
+    /// @details Companion to @ref DNDS::MemberRef "MemberRef" / @ref DNDS::MemberPtr "MemberPtr" below; used to build
     /// auto-generated JSON / diagnostic dumps of struct contents.
     template <typename TList, typename F>
     void for_each_member_list(TList &&obj_member_list, F &&f)
@@ -21,7 +21,7 @@ namespace DNDS
     }
 
     /// @brief Simple `{reference, name}` bundle for a struct member.
-    /// @details Produced by #DNDS_MAKE_1_MEMBER_REF from a variable name;
+    /// @details Produced by @ref DNDS_MAKE_1_MEMBER_REF from a variable name;
     /// consumed by `for_each_member_list`.
     template <typename T>
     struct MemberRef
@@ -33,11 +33,11 @@ namespace DNDS
     template <typename T>
     MemberRef(T &, const char *) -> MemberRef<T>;
 
-/// @brief Construct a #MemberRef capturing `x` and its stringified name.
+/// @brief Construct a @ref DNDS::MemberRef "MemberRef" capturing `x` and its stringified name.
 #define DNDS_MAKE_1_MEMBER_REF(x) \
     MemberRef { x, #x }
 
-    /// @brief Invoke `f(name, obj.*ptr)` for every member in a list of #MemberPtr.
+    /// @brief Invoke `f(name, obj.*ptr)` for every member in a list of @ref DNDS::MemberPtr "MemberPtr".
     template <typename Class, typename TList, typename F>
     void for_each_member_ptr_list(Class &obj, TList &&obj_member_ptr_list, F &&f)
     {
@@ -45,7 +45,7 @@ namespace DNDS
                    { (f(member_ptr.name, obj.*(member_ptr.ptr)), ...); }, obj_member_ptr_list);
     }
 
-    /// @brief Low-level variant that passes each #MemberPtr object through
+    /// @brief Low-level variant that passes each @ref DNDS::MemberPtr "MemberPtr" object through
     /// to `f` directly (for callers that need access to both `ptr` and `name`).
     template <typename TList, typename F>
     void for_each_member_ptr_list_raw(TList &&obj_member_ptr_list, F &&f)
@@ -55,7 +55,7 @@ namespace DNDS
     }
 
     /// @brief Pointer-to-member wrapper with a symbolic name; the pointer-based
-    /// cousin of #MemberRef used when the object is known only at visit time.
+    /// cousin of @ref DNDS::MemberRef "MemberRef" used when the object is known only at visit time.
     template <typename Class, typename T>
     struct MemberPtr
     {
@@ -67,11 +67,11 @@ namespace DNDS
     template <typename Class, typename T>
     MemberPtr(T Class::*, const char *) -> MemberPtr<Class, T>;
 
-/// @brief Build a #MemberPtr for `Class::member`.
+/// @brief Build a @ref DNDS::MemberPtr "MemberPtr" for `Class::member`.
 #define DNDS_MAKE_1_MEMBER_PTR(Class, member) \
     MemberPtr { &Class::member, #member }
 
-/// @brief Like #DNDS_MAKE_1_MEMBER_PTR but uses the surrounding `t_self` alias,
+/// @brief Like @ref DNDS_MAKE_1_MEMBER_PTR but uses the surrounding `t_self` alias,
 /// common in DNDSR member definitions (`using t_self = ...;`).
 #define DNDS_MAKE_1_MEMBER_PTR_SELF(member) \
     MemberPtr { &t_self::member, #member }

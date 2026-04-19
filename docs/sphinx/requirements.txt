@@ -1,0 +1,9 @@
+# Sphinx documentation dependencies for DNDSR.
+# Install with:  pip install -r docs/sphinx/requirements.txt
+# Or:            pip install -e ".[docs]"
+
+sphinx>=7.2,<9
+breathe>=4.35
+myst-parser>=3.0
+sphinxawesome-theme>=6.0
+sphinx-copybutton>=0.5

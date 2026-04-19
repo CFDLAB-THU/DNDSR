@@ -5,7 +5,7 @@
 /// Each `#define USE_*` enables a non-default behaviour somewhere in the
 /// solver (reconstruction, entropy fixes, turbulence models, moving mesh, ...).
 /// They are collected here so the build provenance can be inspected via
-/// #DNDS_Experimentals_State at run time.
+/// @ref DNDS_Experimentals_State at run time.
 
 #include <string>
 

@@ -3,14 +3,14 @@
  * @brief Boundary condition types, implementations, and handler for the EulerP module.
  *
  * Provides:
- * - @c BCType: Enumeration of supported boundary condition types (Far, Wall, Sym, etc.)
- * - @c BCFunc_Impl: Template specializations for each BC type (currently stubs, TODO)
- * - @c BC_DeviceView / @c BC: Device-callable and host-side single BC objects
- * - @c BCHandlerDeviceView / @c BCHandler: Device-callable and host-side BC managers
- * - @c BCInput: JSON-deserializable input struct for BC configuration
+ * - `BCType:` Enumeration of supported boundary condition types (Far, Wall, Sym, etc.)
+ * - `BCFunc_Impl:` Template specializations for each BC type (currently stubs, TODO)
+ * - `BC_DeviceView` / `BC:` Device-callable and host-side single BC objects
+ * - `BCHandlerDeviceView` / `BCHandler:` Device-callable and host-side BC managers
+ * - `BCInput:` JSON-deserializable input struct for BC configuration
  *
- * The BC system uses a runtime switch-dispatch in @c BC_DeviceView::apply() to route
- * to the appropriate @c BCFunc_Impl specialization, enabling device-callable BC evaluation
+ * The BC system uses a runtime switch-dispatch in `BC_DeviceView::apply()` to route
+ * to the appropriate `BCFunc_Impl` specialization, enabling device-callable BC evaluation
  * on both Host and CUDA backends.
  */
 #pragma once
@@ -66,8 +66,8 @@ namespace DNDS::EulerP
     /**
      * @brief Primary template for boundary condition function implementations.
      *
-     * Each specialization provides a static @c apply() method implementing the
-     * specific BC logic for one @c BCType. All current specializations are stubs
+     * Each specialization provides a static `apply()` method implementing the
+     * specific BC logic for one `BCType.` All current specializations are stubs
      * that assert false (implementations are TODO).
      *
      * @tparam B Device backend (Host or CUDA).
@@ -80,14 +80,14 @@ namespace DNDS::EulerP
      * @brief Macro defining the standard BC apply interface signature.
      *
      * Expands to a static device-callable apply function taking:
-     * - @c U: Input conservative state
-     * - @c UOut: Output (ghost) conservative state
-     * - @c uSiz: Number of variables
-     * - @c x: Face centroid coordinates
-     * - @c n: Outward face normal
-     * - @c id: Boundary zone ID
-     * - @c value: BC parameter storage view
-     * - @c phy: Physics device view
+     * - `U:` Input conservative state
+     * - `UOut:` Output (ghost) conservative state
+     * - `uSiz:` Number of variables
+     * - `x:` Face centroid coordinates
+     * - `n:` Outward face normal
+     * - `id:` Boundary zone ID
+     * - `value:` BC parameter storage view
+     * - `phy:` Physics device view
      */
 #define DNDS_EULERP_BC_INTERFACE_APPLY                   \
     template <class tU, class tUOut, class tx, class tn> \
@@ -201,8 +201,8 @@ namespace DNDS::EulerP
      * @brief Device-callable view of a single boundary condition.
      *
      * Holds a device-resident view of BC parameter values, the boundary zone ID,
-     * and the BC type. The @c apply() method uses a runtime switch to dispatch
-     * to the appropriate @c BCFunc_Impl specialization.
+     * and the BC type. The `apply()` method uses a runtime switch to dispatch
+     * to the appropriate `BCFunc_Impl` specialization.
      *
      * @tparam B Device backend (Host or CUDA).
      */
@@ -236,8 +236,8 @@ namespace DNDS::EulerP
         /**
          * @brief Applies this boundary condition to compute the ghost state.
          *
-         * Dispatches to the appropriate @c BCFunc_Impl specialization based on the runtime
-         * @c type field using a switch statement. Asserts on unknown types.
+         * Dispatches to the appropriate `BCFunc_Impl` specialization based on the runtime
+         * `type` field using a switch statement. Asserts on unknown types.
          *
          * @tparam tU Input conservative state type (deduced).
          * @tparam tUOut Output ghost state type (deduced).
@@ -282,9 +282,9 @@ namespace DNDS::EulerP
     /**
      * @brief Host-side boundary condition object managing parameter values and device transfer.
      *
-     * Stores BC parameters in a @c host_device_vector for transparent host/device transfer.
-     * Provides property accessors for zone ID, type, and values. Use @c deviceView<B>()
-     * to obtain a @c BC_DeviceView for kernel invocation.
+     * Stores BC parameters in a `host_device_vector` for transparent host/device transfer.
+     * Provides property accessors for zone ID, type, and values. Use `deviceView<B>()`
+     * to obtain a `BC_DeviceView` for kernel invocation.
      */
     class BC
     {
@@ -327,7 +327,7 @@ namespace DNDS::EulerP
         /**
          * @brief Creates a device-callable view of this BC object.
          * @tparam B Target device backend.
-         * @return A @c BC_DeviceView<B> for use in device kernels.
+         * @return A `BC_DeviceView<B>` for use in device kernels.
          */
         template <DeviceBackend B>
         t_deviceView<B> deviceView()
@@ -341,7 +341,7 @@ namespace DNDS::EulerP
     /**
      * @brief Device-callable view of the BC handler providing BC lookup by zone ID.
      *
-     * Holds a device-resident array of @c BC_DeviceView objects indexed by boundary zone ID.
+     * Holds a device-resident array of `BC_DeviceView` objects indexed by boundary zone ID.
      *
      * @tparam B Device backend (Host or CUDA).
      */
@@ -359,7 +359,7 @@ namespace DNDS::EulerP
         /**
          * @brief Looks up a boundary condition by zone ID.
          * @param id Boundary zone identifier.
-         * @return Reference to the @c BC_DeviceView for the given zone.
+         * @return Reference to the `BC_DeviceView` for the given zone.
          */
         DNDS_DEVICE_CALLABLE BC_DeviceView<B> &id2bc(Geom::t_index id)
         {
@@ -372,7 +372,7 @@ namespace DNDS::EulerP
      * @brief Simple struct for JSON-deserialized boundary condition input specification.
      *
      * Used to read BC definitions from JSON configuration files before constructing
-     * the @c BCHandler. JSON-serializable via nlohmann_json intrusive macros.
+     * the `BCHandler.` JSON-serializable via nlohmann_json intrusive macros.
      */
     struct BCInput
     {
@@ -387,12 +387,12 @@ namespace DNDS::EulerP
     /**
      * @brief Host-side boundary condition handler managing all BC objects for a simulation.
      *
-     * Constructed from a list of @c BCInput specifications and a name-to-ID mapping.
+     * Constructed from a list of `BCInput` specifications and a name-to-ID mapping.
      * Automatically assigns default BC types for standard mesh zones (WALL, WALL_INVIS,
      * FAR, and SPECIAL benchmark zones). Supports host/device transfer of all managed BCs.
      *
-     * Use @c id2bc(id) to look up a BC by zone ID, and @c deviceView<B>() to obtain a
-     * @c BCHandlerDeviceView for kernel invocation.
+     * Use `id2bc(id)` to look up a BC by zone ID, and `deviceView<B>()` to obtain a
+     * `BCHandlerDeviceView` for kernel invocation.
      */
     class BCHandler
     {
@@ -404,9 +404,9 @@ namespace DNDS::EulerP
          *
          * Allocates BC slots for all zone IDs, applies user-specified BC inputs, then
          * sets default types for standard zones:
-         * - @c BC_ID_DEFAULT_WALL → BCType::Wall
-         * - @c BC_ID_DEFAULT_WALL_INVIS → BCType::WallInvis
-         * - @c BC_ID_DEFAULT_FAR → BCType::Far
+         * - `BC_ID_DEFAULT_WALL` → BCType::Wall
+         * - `BC_ID_DEFAULT_WALL_INVIS` → BCType::WallInvis
+         * - `BC_ID_DEFAULT_FAR` → BCType::Far
          * - Special benchmark zone IDs → BCType::Special
          *
          * @param bc_inputs Vector of BCInput specifications from JSON configuration.
@@ -458,7 +458,7 @@ namespace DNDS::EulerP
         /**
          * @brief Looks up a boundary condition by zone ID.
          * @param id Boundary zone identifier.
-         * @return Reference to the @c BC object for the given zone.
+         * @return Reference to the `BC` object for the given zone.
          */
         BC &id2bc(Geom::t_index id)
         {
@@ -497,8 +497,8 @@ namespace DNDS::EulerP
         /**
          * @brief Move-only device view wrapper owning the BC device view storage.
          *
-         * Wraps a @c host_device_vector of @c BC_DeviceView and the resulting
-         * @c BCHandlerDeviceView. Move-only to prevent accidental copies that
+         * Wraps a `host_device_vector` of `BC_DeviceView` and the resulting
+         * `BCHandlerDeviceView.` Move-only to prevent accidental copies that
          * would invalidate device pointers.
          *
          * @tparam B Device backend.
@@ -531,12 +531,12 @@ namespace DNDS::EulerP
         /**
          * @brief Creates a device view of all managed BCs for kernel invocation.
          *
-         * Builds a @c host_device_vector of @c BC_DeviceView from each managed BC,
+         * Builds a `host_device_vector` of `BC_DeviceView` from each managed BC,
          * transfers it to the specified device backend, and returns an owning
-         * @c t_deviceView wrapper. The returned object is move-only.
+         * `t_deviceView` wrapper. The returned object is move-only.
          *
          * @tparam B Target device backend.
-         * @return A @c t_deviceView<B> owning the device BC array.
+         * @return A `t_deviceView<B>` owning the device BC array.
          */
         template <DeviceBackend B>
         t_deviceView<B> deviceView()

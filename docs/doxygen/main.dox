@@ -56,6 +56,7 @@
  * - @subpage building
  * - @subpage project_structure
  * - @subpage style_guide
+ * - @subpage doc_authoring
  * - @subpage python_geom_guide
  * - @subpage array_usage
  * - @subpage serialization_usage
@@ -103,6 +104,7 @@
  * - @subpage ideas
  * - @subpage dev_notes
  * - @subpage cfv_refactoring
+ * - @subpage euler_refactoring
  * - @subpage cuda_notes
  * - @subpage eulerp_tests
  * - @subpage current_report

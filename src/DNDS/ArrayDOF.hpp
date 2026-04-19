@@ -86,10 +86,10 @@ namespace DNDS
 
     /**
      * @brief Host-side static dispatcher: implements every vector-space operation
-     * declared in `DNDS_ARRAY_DOF_OP_FUNC_LIST` for CPU execution.
+     * declared in @ref DNDS_ARRAY_DOF_OP_FUNC_LIST for CPU execution.
      *
      * @details Each member is a `static` free-function-style routine that takes
-     * the target `ArrayDof` by reference. Explicit instantiations for the
+     * the target @ref DNDS::ArrayDof "ArrayDof" by reference. Explicit instantiations for the
      * supported `(n_m, n_n)` combinations live in `ArrayDOF_inst/<...>.cpp`.
      * The host version uses OpenMP where profitable; the CUDA specialisation
      * (below) is a parallel mirror that dispatches to kernels.
@@ -143,11 +143,11 @@ namespace DNDS
     }
 
     /**
-     * @brief Primary solver state container: an `ArrayEigenMatrix` pair with
+     * @brief Primary solver state container: an @ref DNDS::ArrayEigenMatrix "ArrayEigenMatrix" pair with
      * MPI-collective vector-space operations.
      *
      * @details `ArrayDof<n_m, n_n>` inherits everything from
-     * #ArrayEigenMatrixPair<n_m, n_n> (father, son, transformer, typed row
+     * @ref ArrayEigenMatrixPair<n_m, n_n> (father, son, transformer, typed row
      * access as `Eigen::Map<Matrix<real, n_m, n_n>>`) and adds:
      *  - entry-wise updates: `+= real`, `+= ArrayDof`, `*= real`, `*= matrix`, etc.;
      *  - AXPY: #addTo;

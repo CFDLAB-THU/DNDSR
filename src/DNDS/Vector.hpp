@@ -18,7 +18,7 @@ namespace DNDS
      *
      * @details A cross-backend "uniquely owned chunk of memory" interface:
      * either a plain `std::vector<uint8_t>` on the host, or a
-     * backend-specific #DeviceStorage on a device. Used as the storage
+     * backend-specific @ref DNDS::DeviceStorage "DeviceStorage" on a device. Used as the storage
      * primitive for #host_device_vector_r1.
      */
     class DeviceHostSingleAllocationBase
@@ -27,7 +27,7 @@ namespace DNDS
         DeviceHostSingleAllocationBase() = default;
         virtual ~DeviceHostSingleAllocationBase();
 
-        /// @brief Allocate `bytes` on backend `B` (or on the host when `Unknown`).
+        /// @brief Allocate `bytes` on backend `B` (or on the host when @ref Unknown).
         virtual void allocate(size_t bytes, DeviceBackend B = DeviceBackend::Unknown) = 0;
         /// @brief Release the allocation.
         virtual void free() = 0;
@@ -46,8 +46,8 @@ namespace DNDS
     };
 
     /**
-     * @brief Concrete #DeviceHostSingleAllocationBase using `std::vector<uint8_t>`
-     * for host memory and #DeviceStorage for device memory.
+     * @brief Concrete @ref DNDS::DeviceHostSingleAllocationBase "DeviceHostSingleAllocationBase" using `std::vector<uint8_t>`
+     * for host memory and @ref DNDS::DeviceStorage "DeviceStorage" for device memory.
      */
     class DeviceHostSingleAllocationDirect : public DeviceHostSingleAllocationBase
     {
@@ -203,7 +203,7 @@ namespace DNDS
     /**
      * @brief Host + optional device vector of trivially copyable `T`.
      *
-     * @details Primary storage type used inside #Array. Always maintains a
+     * @details Primary storage type used inside @ref DNDS::Array "Array". Always maintains a
      * host copy; on demand, a device mirror can be created via #to_device.
      * Many "vector-like" `std::vector` operations (`resize`, `assign`,
      * `operator[]`) have been reimplemented so the class can be used as a

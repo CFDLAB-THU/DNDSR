@@ -20,10 +20,10 @@ namespace DNDS
      *
      * @details Each row holds `BatchSize(i)` matrices of shape `_n_row x _n_col`,
      * contiguous in memory. The raw CSR row width is `BatchSize(i) * _n_row * _n_col`,
-     * but the public API exposes batched semantics: `BatchSize` reports the matrix
+     * but the public API exposes batched semantics: @ref BatchSize reports the matrix
      * count, `operator()(i, j)` returns the `j`-th matrix in row `i`'s batch.
      *
-     * Used heavily by #FiniteVolume and #VariationalReconstruction to store
+     * Used heavily by @ref FiniteVolume and @ref VariationalReconstruction to store
      * per-quadrature-point Jacobians and basis-function coefficients: each cell
      * contributes one row, each quadrature point contributes one matrix.
      *

@@ -10,11 +10,11 @@ namespace DNDS::OMP
     /**
      * @brief Configure OpenMP and Eigen threading for the "distributed OMP" pattern.
      *
-     * @details Sets the OpenMP thread count from the `DNDS_DIST_OMP_NUM_THREADS`
+     * @details Sets the OpenMP thread count from the @ref DNDS_DIST_OMP_NUM_THREADS
      * environment variable (falling back to 1) and disables Eigen's internal
      * parallelism so it does not oversubscribe the MPI+OpenMP layout.
      *
-     * Intended to be called once near `main()` when #DNDS_USE_OMP is on.
+     * Intended to be called once near `main()` when @ref DNDS_USE_OMP is on.
      */
     inline void set_full_parallel_OMP()
     {
