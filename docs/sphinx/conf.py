@@ -132,6 +132,15 @@ html_theme_options = {
 html_static_path = []
 html_title = f"DNDSR {version}"
 
+# Syntax highlighting — use a colorful Pygments style for code blocks.
+# "friendly" is readable on both light backgrounds and print.
+pygments_style = "friendly"
+# For dark-mode code blocks (if the theme supports it):
+pygments_dark_style = "monokai"
+
+# Default language for unfenced code blocks.
+highlight_language = "cpp"
+
 # Show version in the top bar.
 html_context = {
     "display_version": True,
