@@ -1,33 +1,19 @@
 {
     "C_Cpp.default.includePath": [
-        "external/cgns/include",
-        "external/eigen-3.4.0",
+        "external/cfd_externals/install/include",
         "external/eigen",
-        "external/Gmsh/include",
-        "external/HDF5/include",
-        "external/metis/include",
-        "external/parmetis/include",
-        "external/TECIO/include",
-        "external/rapidjson/include",
+        "external/boost",
+        "external/CGAL/include",
         "external/nlohmann",
         "external/cppcodec",
-        "external/nanoflann-1.4.3",
         "external/nanoflann",
-        "external/CGAL-5.6/include",
-        "external/CGAL/include",
-        "external/boost_1_82_0",
-        "external/boost",
-        "external/pybind11-2.11.1/include",
+        "external/fmt/include",
         "external/pybind11/include",
         "external/pybind11_json/include",
-        "external/fmt-10.1.1/include",
-        "external/fmt/include",
-        "external/argparse-3.0/include/argparse",
         "external/argparse/include/argparse",
-        "external/cpptrace-0.5.1/include/cpptrace",
         "external/cpptrace/include/cpptrace",
         "external/exprtk",
-        "external/cfd_externals/install/include",
+        "external/doctest",
         "src"
     ],
     "files.associations": {
@@ -199,16 +185,8 @@
         "Vecs"
     ],
     "C_Cpp.dimInactiveRegions": true,
-    "spellright.language": [
-        "en"
-    ],
-    "spellright.documentTypes": [
-        "markdown",
-        "latex",
-        "plaintext"
-    ],
     "editor.bracketPairColorization.enabled": true,
-    "C_Cpp.default.compilerPath": "/usr/bin/clang++",
+    // "C_Cpp.default.compilerPath": "/usr/bin/clang++",  // set locally if needed
     "files.watcherExclude": {
         "**/venv/*": true
     },

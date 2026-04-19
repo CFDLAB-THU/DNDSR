@@ -26,24 +26,17 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": "${command:pickArgs}",
-            "env": {
-                "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
-            }
+            "args": "${command:pickArgs}"
+            // If pybind11 .so files fail with GLIBCXX errors, uncomment:
+            // "env": { "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6" }
         },
         {
             "name": "(gdb) Attach",
             "type": "cppdbg",
             "request": "attach",
-            // "program": "${workspaceFolder}/build/test/meshSerial_Test.exe",
-            "program": "${workspaceFolder}/build/app/eulerSA.exe",
+            "program": "${workspaceFolder}/build/app/euler.exe",
             "MIMode": "gdb",
             "setupCommands": [
-                // {
-                //     "description": "Insert python ",
-                //     "text": "python import sys;sys.path.insert(0, '/usr/share/gcc/python');from libstdcxx.v6.printers import register_libstdcxx_printers;register_libstdcxx_printers(None)",
-                //     "ignoreFailures": false
-                // },
                 {
                     "description": "Enable pretty-printing for gdb",
                     "text": "-enable-pretty-printing",
@@ -60,13 +53,8 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build_ninja/app/array_cuda_Bench.exe",
-            "args": [
-                "10",
-                "10",
-                "0",
-                "5"
-            ],
+            "program": "${workspaceFolder}/build/app/euler.exe",
+            "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
             "environment": [],
@@ -89,7 +77,6 @@
             "name": "Debug pybind11 with GDB",
             "type": "cppdbg",
             "request": "attach",
-            // "program": "${workspaceFolder}/build/test/meshSerial_Test.exe",
             "program": "${workspaceFolder}/venv/bin/python",
             "MIMode": "gdb",
             "setupCommands": [
@@ -98,8 +85,7 @@
                     "text": "-enable-pretty-printing",
                     "ignoreFailures": true
                 }
-            ],
-            "miDebuggerPath": "/usr/bin/gdb"
+            ]
         },
         {
             "name": "Debugpy Attach to MPI Rank",
@@ -112,7 +98,7 @@
             "pathMappings": [
                 {
                     "localRoot": "${workspaceFolder}",
-                    "remoteRoot": "/your/remote/path/if/needed" // usually not needed for local
+                    "remoteRoot": "${workspaceFolder}"
                 }
             ]
         }
