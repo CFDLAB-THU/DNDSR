@@ -8,7 +8,7 @@ namespace DNDS::Serializer
 {
 #define H5CHECK_Set DNDS_assert_info(herr >= 0, "H5 setting err")
 #define H5CHECK_Close DNDS_assert_info(herr >= 0, "H5 closing err")
-
+#define H5CHECK_Iter DNDS_assert_info(herr >= 0, "H5 iteration err")
     /**
      * @brief returns good path and if the path is absolute
      */
@@ -38,6 +38,7 @@ namespace DNDS::Serializer
      * @param read
      * @param groupName
      * @return hid_t group_id, need releasing
+     * @warning remember releasing returned group_id!
      */
     static hid_t GetGroupOfFileIfExist(hid_t file_id, bool read, const std::string &groupName, bool coll_on_meta)
     {
@@ -128,8 +129,7 @@ namespace DNDS::Serializer
     void SerializerH5::CloseFileNonVirtual()
     {
         cPathSplit.clear();
-        ptr_2_pth.clear();
-        pth_2_ssp.clear();
+        dedupClear();
         cP.clear();
 
         if (H5I_INVALID_HID != h5file)
@@ -165,6 +165,116 @@ namespace DNDS::Serializer
     std::string SerializerH5::GetCurrentPath()
     {
         return cP;
+    }
+
+    // Structure to hold collected HDF5 information
+    struct H5Contents
+    {
+        std::vector<std::string> groups;
+        std::vector<std::string> datasets;
+        std::vector<std::string> attributes;
+    };
+
+    struct TraverseData
+    {
+        H5Contents &contents;
+        std::string current_path;
+        bool coll_on_meta;
+        std::string get_indent() const
+        {
+            return std::string(std::count(current_path.begin(), current_path.end(), '/') * 2, ' ');
+        }
+    };
+
+    static herr_t link_iterate_cb(hid_t group_id, const char *name, const H5L_info_t *info, void *op_data)
+    {
+        herr_t herr;
+        auto *data = static_cast<TraverseData *>(op_data);
+        bool coll_on_meta = data->coll_on_meta;
+        std::string full_name = data->current_path + "/" + name;
+        // We only care about hard links that represent HDF5 objects
+        // std::cout << "name is " << name << std::endl;
+        if (info->type == H5L_TYPE_HARD)
+        {
+            data->contents.groups.push_back(name);
+            return 0;
+            //! now it seems obj_info is not correctly retrieved with type=Unknown
+            //! TODO: fix this and get actual object type
+            H5O_info_t obj_info;
+            hid_t lapl_id = H5Pcreate(H5P_LINK_ACCESS);
+            DNDS_assert(lapl_id >= 0);
+            herr = H5Pset_all_coll_metadata_ops(lapl_id, true), H5CHECK_Set;
+            // if (coll_on_meta)
+            //     herr = H5Pset_all_coll_metadata_ops(lapl_id, true), H5CHECK_Set;
+            if (H5Oget_info_by_name(group_id, name, &obj_info, H5P_DEFAULT, lapl_id) >= 0)
+            {
+                log() << "name is " << name << ", \n"
+                      << obj_info.type << "\n"
+                      << obj_info.mtime << "\n"
+                      << obj_info.rc << "\n"
+                      << obj_info.fileno << "\n"
+                      << std::endl;
+                switch (obj_info.type)
+                {
+                case H5O_TYPE_GROUP:
+                {
+                    data->contents.groups.push_back(name);
+                    // std::cout << data->get_indent() << "Group: " << full_name << std::endl;
+                    break;
+                }
+                case H5O_TYPE_DATASET:
+                {
+                    data->contents.datasets.push_back(name);
+                    // std::cout << data->get_indent() << "Dataset: " << full_name << std::endl;
+                    break;
+                }
+                default:
+                    // Other types (e.g., symbols, but less common for direct user interaction)
+                    break;
+                }
+            }
+            else
+            {
+                log() << "Error getting object info for: " << full_name << std::endl;
+                H5Eprint2(H5E_DEFAULT, stderr);
+            }
+            herr = H5Pclose(lapl_id), H5CHECK_Close;
+        }
+        else
+        {
+            // Handle soft links or external links if their names are also desired
+            // std::cout << data->get_indent() << "Link: " << full_name << " (Non-hard link)" << std::endl;
+        }
+        return 0; // Continue iteration
+    }
+
+    // Callback for H5Aiterate (iterating attributes)
+    static herr_t attribute_iterate_cb(hid_t obj_id, const char *attr_name, const H5A_info_t *info, void *op_data)
+    {
+        TraverseData *data = static_cast<TraverseData *>(op_data);
+        data->contents.attributes.push_back(attr_name);
+        // std::string full_attr_name = data->current_path + "@" + attr_name; // Common convention for attribute paths
+        // std::cout << data->get_indent() << "  Attribute: " << full_attr_name << std::endl; // Indent more for attributes
+        return 0; // Continue iteration
+    }
+
+    std::set<std::string> SerializerH5::ListCurrentPath()
+    {
+        hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
+        H5Contents contents;
+        TraverseData data{contents, cP, collectiveMetadataRW};
+        herr_t herr{0};
+        herr = H5Aiterate(group_id, H5_INDEX_NAME, H5_ITER_INC, NULL, attribute_iterate_cb, &data), H5CHECK_Iter;
+        herr = H5Literate(group_id, H5_INDEX_NAME, H5_ITER_INC, NULL, link_iterate_cb, &data), H5CHECK_Iter;
+        H5Gclose(group_id), H5CHECK_Close; // don't forget this
+        std::set<std::string> ret;
+        for (auto &v : contents.attributes)
+            ret.insert(v);
+        for (auto &v : contents.groups)
+            ret.insert(v);
+        for (auto &v : contents.datasets)
+            ret.insert(v);
+        return ret;
     }
 
     template <typename T>
@@ -300,7 +410,8 @@ namespace DNDS::Serializer
 
         herr_t herr{0};
         hid_t dxpl_id = H5Pcreate(H5P_DATASET_XFER);
-        if ((offset.isDist() || offset == ArrayGlobalOffset_Parts) && (coll_on_data || deflateLevel > 0)) //! is this necessary?
+        //! is this necessary? seems even global-unique vector needs this if deflate is on!
+        if (((offset.isDist() || offset == ArrayGlobalOffset_Parts) && (coll_on_data)) || deflateLevel > 0)
             herr = H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE), H5CHECK_Set;
         else
             herr = H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_INDEPENDENT), H5CHECK_Set;
@@ -368,28 +479,30 @@ namespace DNDS::Serializer
     {
         WriteAttributeScalar<std::string>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
-    void SerializerH5::WriteSharedIndexVector(const std::string &name, const ssp<std::vector<index>> &v, ArrayGlobalOffset offset)
+    void SerializerH5::WriteSharedIndexVector(const std::string &name, const ssp<host_device_vector<index>> &v, ArrayGlobalOffset offset)
     {
-        index CanNotShare = ptr_2_pth.count(v.get()) ? 0 : 1;
+        std::string refPath;
+        index CanNotShare = dedupLookup(v, refPath) ? 0 : 1;
         MPI::AllreduceOneIndex(CanNotShare, MPI_MAX, MPIInfo{commDup, mpi.rank, mpi.size});
         if (!CanNotShare)
-            this->WriteString(name + "::ref", ptr_2_pth[v.get()]);
+            this->WriteString(name + "::ref", refPath);
         else
         {
             WriteDataVector<index>(name, v->data(), v->size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup, collectiveMetadataRW, collectiveDataRW);
-            ptr_2_pth[v.get()] = cP + "/" + name;
+            dedupRegister(v, cP + "/" + name);
         }
     }
-    void SerializerH5::WriteSharedRowsizeVector(const std::string &name, const ssp<std::vector<rowsize>> &v, ArrayGlobalOffset offset)
+    void SerializerH5::WriteSharedRowsizeVector(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset)
     {
-        index CanNotShare = ptr_2_pth.count(v.get()) ? 0 : 1;
+        std::string refPath;
+        index CanNotShare = dedupLookup(v, refPath) ? 0 : 1;
         MPI::AllreduceOneIndex(CanNotShare, MPI_MAX, MPIInfo{commDup, mpi.rank, mpi.size});
         if (!CanNotShare)
-            this->WriteString(name + "::ref", ptr_2_pth[v.get()]);
+            this->WriteString(name + "::ref", refPath);
         else
         {
             WriteDataVector<rowsize>(name, v->data(), v->size(), offset, chunksize, deflateLevel, h5file, reading, cP, mpi, commDup, collectiveMetadataRW, collectiveDataRW);
-            ptr_2_pth[v.get()] = cP + "/" + name;
+            dedupRegister(v, cP + "/" + name);
         }
     }
 
@@ -509,13 +622,14 @@ namespace DNDS::Serializer
      * @param buf
      * @param dim2
      */
+    // When dxpl_id uses collective I/O (H5FD_MPIO_COLLECTIVE), every rank MUST
+    // call H5Dread even if nLocal==0.  Callers must provide a valid (possibly
+    // dummy) buf pointer; do NOT skip this function based on nLocal==0.
     static void H5_ReadDataset(hid_t loc, const char *name, index &nGlobal, index nOffset, index nLocal,
                                hid_t mem_dataType, hid_t dxpl_id, hid_t dapl_id,
                                void *buf, int &dim2)
     {
         int herr{0};
-        // DNDS_assert_info(nGlobal >= 0 && nLocal >= 0 && nOffset >= 0,
-        //                  fmt::format("{},{},{}", nGlobal, nLocal, nOffset));
         hid_t dset_id = H5Dopen(loc, name, dapl_id);
         DNDS_assert_info(dset_id >= 0, fmt::format("dataset [{}] open failed", name));
         hid_t fileSpace = H5Dget_space(dset_id);
@@ -663,14 +777,44 @@ namespace DNDS::Serializer
             //         size = nGlobal;
             //     }
             // }
-            else if (offset.isDist())
+            else if (offset == ArrayGlobalOffset_EvenSplit)
             {
-                // TODO: add re-distribute read from from partitioned arrays
-                DNDS_assert_info_mpi(size >= 0 && (size == 0 || v != nullptr), mpi, fmt::format("{} {}", size, size_t(v)));
+                // Even-split read: each rank reads ~N_global/nRanks rows.
+                // First pass (v==nullptr): query global size, compute local range, set offset.
+                // Second pass (v!=nullptr): read the data slice.
                 index nGlobal{-1};
                 int dim2{-1};
-                H5_ReadDataset(group_id, name.c_str(), nGlobal, offset.offset(), size, T_H5TYPE, dxpl_id, dapl_id, v, dim2);
-                DNDS_assert(dim2 == -1);
+                if (v == nullptr)
+                {
+                    H5_ReadDataset(group_id, name.c_str(), nGlobal, -1, -1, T_H5TYPE, dxpl_id, dapl_id, nullptr, dim2);
+                    DNDS_assert(dim2 == -1);
+                    auto [start, end] = EvenSplitRange(mpi.rank, mpi.size, nGlobal);
+                    size = end - start;
+                    offset = ArrayGlobalOffset{index(size), start};
+                }
+                else
+                {
+                    DNDS_assert_info(offset.isDist(), "EvenSplit second pass must have a resolved offset");
+                    H5_ReadDataset(group_id, name.c_str(), nGlobal, offset.offset(), size, T_H5TYPE, dxpl_id, dapl_id, v, dim2);
+                    DNDS_assert(dim2 == -1);
+                }
+            }
+            else if (offset.isDist())
+            {
+                if (v == nullptr)
+                {
+                    // First pass (size query): local size is already in offset.size().
+                    size = offset.size();
+                }
+                else
+                {
+                    // Second pass (data read): read `size` elements at offset.offset().
+                    // size==0 is valid for ranks with empty partitions (nGlobal < nRanks).
+                    index nGlobal{-1};
+                    int dim2{-1};
+                    H5_ReadDataset(group_id, name.c_str(), nGlobal, offset.offset(), size, T_H5TYPE, dxpl_id, dapl_id, v, dim2);
+                    DNDS_assert(dim2 == -1);
+                }
             }
             else
                 DNDS_assert_info(false, "offset ill-formed");
@@ -684,35 +828,37 @@ namespace DNDS::Serializer
     void SerializerH5::ReadIndexVector(const std::string &name, std::vector<index> &v, ArrayGlobalOffset &offset)
     {
         size_t size{0};
+        index dummy{};
         ReadDataVector<index>(name, nullptr, size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
         v.resize(size);
         DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
-        ReadDataVector<index>(name, v.data(), size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
+        ReadDataVector<index>(name, size == 0 ? &dummy : v.data(), size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
     }
     void SerializerH5::ReadRowsizeVector(const std::string &name, std::vector<rowsize> &v, ArrayGlobalOffset &offset)
     {
         size_t size{0};
+        rowsize dummy{};
         ReadDataVector<rowsize>(name, nullptr, size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
         v.resize(size);
         DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
-        ReadDataVector<rowsize>(name, v.data(), size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
+        ReadDataVector<rowsize>(name, size == 0 ? &dummy : v.data(), size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
     }
     void SerializerH5::ReadRealVector(const std::string &name, std::vector<real> &v, ArrayGlobalOffset &offset)
     {
         size_t size{0};
+        real dummy{};
         ReadDataVector<real>(name, nullptr, size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
-        // std::cout << name << "original " << v.size() << " resized to " << size << std::endl;
         v.resize(size);
         DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
-        ReadDataVector<real>(name, v.data(), size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
+        ReadDataVector<real>(name, size == 0 ? &dummy : v.data(), size, offset, h5file, reading, cP, mpi, collectiveMetadataRW, collectiveDataRW);
     }
     void SerializerH5::ReadString(const std::string &name, std::string &v)
     {
         ReadAttributeScalar<std::string>(name, v, h5file, reading, cP, collectiveMetadataRW);
     }
-    void SerializerH5::ReadSharedIndexVector(const std::string &name, ssp<std::vector<index>> &v, ArrayGlobalOffset &offset)
+    void SerializerH5::ReadSharedIndexVector(const std::string &name, ssp<host_device_vector<index>> &v, ArrayGlobalOffset &offset)
     {
-        using tValue = std::vector<index>;
+        using tValue = host_device_vector<index>;
         herr_t herr;
         std::string refPath;
         hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
@@ -737,15 +883,16 @@ namespace DNDS::Serializer
             pth_2_ssp[refPath] = &v;
 
             size_t size;
+            index dummy{};
             ReadDataVector<index>(refPath, nullptr, size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
             v->resize(size);
             DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
-            ReadDataVector<index>(refPath, v->data(), size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
+            ReadDataVector<index>(refPath, size == 0 ? &dummy : v->data(), size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
         }
     }
-    void SerializerH5::ReadSharedRowsizeVector(const std::string &name, ssp<std::vector<rowsize>> &v, ArrayGlobalOffset &offset)
+    void SerializerH5::ReadSharedRowsizeVector(const std::string &name, ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset &offset)
     {
-        using tValue = std::vector<rowsize>;
+        using tValue = host_device_vector<rowsize>;
         herr_t herr;
         std::string refPath;
         hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
@@ -770,10 +917,11 @@ namespace DNDS::Serializer
             pth_2_ssp[refPath] = &v;
 
             size_t size;
+            rowsize dummy{};
             ReadDataVector<rowsize>(refPath, nullptr, size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
             v->resize(size);
             DNDS_assert(!(offset == ArrayGlobalOffset_Unknown));
-            ReadDataVector<rowsize>(refPath, v->data(), size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
+            ReadDataVector<rowsize>(refPath, size == 0 ? &dummy : v->data(), size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
         }
     }
     void SerializerH5::WriteUint8Array(const std::string &name, const uint8_t *data, index size, ArrayGlobalOffset offset)

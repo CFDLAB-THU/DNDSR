@@ -1,0 +1,67 @@
+# clangd configuration for DNDSR
+#
+# OpenMP: clangd needs libomp-<ver>-dev to parse omp.h.  If not installed,
+# -UDNDS_USE_OMP below makes the #ifdef guard skip it.  Install with e.g.:
+#   apt install libomp-18-dev   (for clangd-18)
+#
+# CUDA: The CMake build adds -I<CUDAToolkit>/include via CMAKE_CUDA_FLAGS
+# so that compile_commands.json always contains the path, even for .cu
+# entries where nvcc would normally add it implicitly.  clangd's Remove
+# list strips the nvcc-only flags so clang can parse the rest.
+
+CompileFlags:
+  Add: [
+      -std=c++17,
+      -UDNDS_USE_OMP,    # skip omp.h (needs libomp-dev matching clang)
+    ]
+  Remove: [
+      -flto*,
+      -fopenmp,                        # clang OMP frontend needs libomp-dev
+      --generate-code=*,               # CUDA nvcc flag
+      -forward-unknown-to-host-compiler, # CUDA nvcc flag
+      --expt-relaxed-constexpr,        # CUDA nvcc flag
+      -ccbin=*,                        # CUDA cross-compiler
+      -Xcompiler=*,                    # CUDA nvcc flag
+      --extended-lambda,               # CUDA nvcc flag
+      --Werror,                        # CUDA nvcc flag
+      -rdc=*,                          # CUDA nvcc flag
+      -x=cu,                           # treat-as-CUDA
+    ]
+
+Diagnostics:
+  Suppress:
+    [
+      unused-but-set-parameter,
+      unused-parameter,
+      unused-variable,
+      unused-command-line-argument,
+    ]
+  ClangTidy:
+    Remove: [
+        readability-math-missing-parentheses,
+        modernize-use-trailing-return-type,
+        readability-braces-around-statements,
+        readability-identifier-length,
+        readability-implicit-bool-conversion,
+        readability-else-after-return,
+        readability-isolate-declaration,
+        bugprone-easily-swappable-parameters,
+        performance-avoid-endl,
+        bugprone-casting-through-void, # for MPI types...
+        performance-enum-size,
+        modernize-type-traits,
+        modernize-avoid-c-arrays,
+        readability-magic-numbers,
+        readability-convert-member-functions-to-static,
+        readability-avoid-nested-conditional-operator,
+      ]
+    Add: [
+        modernize-*,
+        readability-*
+        bugprone-*,
+        performance-*,
+        cppcoreguidelines-*
+        google-build-using-namespace,
+        mpi-*,
+        openmp-*,
+      ]

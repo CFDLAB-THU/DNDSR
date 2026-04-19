@@ -269,6 +269,14 @@ namespace DNDS::Geom::Base
         }
     }
 
+    /**
+     * @brief convert partial derivatives (diffs) from D_dxi to D_dx
+     *
+     * @tparam dim
+     * @tparam TMat
+     * @param mat standard concatenation of diffs, mat_{i,j}, i=0: D^0_xi, i=1: D^1_{xi_0}, i=2, D^1_{xi_1}... see BaseFunction.hpp
+     * @param dXijdXi dXi_j / d_X_i, Xi: old coord, X: new coord
+     */
     template <int dim, class TMat>
     inline void ConvertDiffsLinMap(TMat &&mat, const Geom::tGPoint &dXijdXi)
     {
@@ -290,7 +298,7 @@ namespace DNDS::Geom::Base
                         dXijdXi({0, 1}, {0, 1}));
 
             case 3:
-                mat({1, 2}, Eigen::all) = dXijdXi({0, 1}, {0, 1}) * mat({1, 2}, Eigen::all);
+                mat({1, 2}, EigenAll) = dXijdXi({0, 1}, {0, 1}) * mat({1, 2}, EigenAll);
             case 1:
                 break;
 
@@ -316,7 +324,7 @@ namespace DNDS::Geom::Base
                         dXijdXi);
 
             case 4:
-                mat({1, 2, 3}, Eigen::all) = dXijdXi * mat({1, 2, 3}, Eigen::all);
+                mat({1, 2, 3}, EigenAll) = dXijdXi * mat({1, 2, 3}, EigenAll);
             case 1:
                 break;
 
@@ -358,7 +366,7 @@ namespace DNDS::Geom::Base
                     ccv += DxiDx(std::get<1>(diffOperatorIJK2IcDim)[i], m) *
                            mat(std::get<1>(diffOperatorIJK2IcDim)[m], iB);
             }
-        mat(seq0t1, Eigen::all) = out(seq0t1, Eigen::all);
+        mat(seq0t1, EigenAll) = out(seq0t1, EigenAll);
         if (cmaxDiffOrder == 1)
             return;
 
@@ -380,7 +388,7 @@ namespace DNDS::Geom::Base
                                DxiDx(std::get<1>(diffOperatorIJK2IcDim)[j], n) *
                                mat(std::get<2>(diffOperatorIJK2IcDim)[m][n], iB);
             }
-        mat(seq1t2, Eigen::all) = out(seq1t2, Eigen::all);
+        mat(seq1t2, EigenAll) = out(seq1t2, EigenAll);
         if (cmaxDiffOrder == 2)
             return;
 
@@ -418,7 +426,7 @@ namespace DNDS::Geom::Base
                                 DxiDx(std::get<1>(diffOperatorIJK2IcDim)[k], p) *
                                 mat(std::get<3>(diffOperatorIJK2IcDim)[m][n][p], iB);
             }
-        mat(seq2t3, Eigen::all) = out(seq2t3, Eigen::all);
+        mat(seq2t3, EigenAll) = out(seq2t3, EigenAll);
         if (cmaxDiffOrder == 3)
             return;
     }
@@ -432,7 +440,7 @@ namespace DNDS::Geom::Base
         CFVPeriodicity(const tBase &vBase) : tBase(vBase) {} // copy from tBase
 
         template <int dim, class TU>
-        void TransDiValueInplace(TU &u, Geom::t_index id)
+        DNDS_DEVICE_CALLABLE void TransDiValueInplace(TU &u, Geom::t_index id)
         {
             using namespace Geom;
             DNDS_assert(FaceIDIsPeriodic(id));
@@ -441,11 +449,11 @@ namespace DNDS::Geom::Base
                 i = -id - 3;
             else
                 i = -id;
-            ConvertDiffsLinMap<dim>(u, rotation[i]);
+            ConvertDiffsLinMap<dim>(u, rotation[i].map());
         }
 
         template <int dim, class TU>
-        void TransDiValueBackInplace(TU &u, Geom::t_index id)
+        DNDS_DEVICE_CALLABLE void TransDiValueBackInplace(TU &u, Geom::t_index id)
         {
             using namespace Geom;
             DNDS_assert(FaceIDIsPeriodic(id));
@@ -454,7 +462,7 @@ namespace DNDS::Geom::Base
                 i = -id - 3;
             else
                 i = -id;
-            ConvertDiffsLinMap<dim>(u, rotation[i].transpose());
+            ConvertDiffsLinMap<dim>(u, rotation[i].map().transpose());
         }
     };
 
@@ -495,7 +503,7 @@ namespace DNDS::Geom::Base
         static const int nDiffSizC2 = ndiffSizS<dim>(2);
         static const auto seq1t2 = Eigen::seq(Eigen::fix<nDiffSizC1>, Eigen::fix<nDiffSizC2 - 1>); // 2D: 3 4 5
         Eigen::Matrix<real, nDiffSizCC, 3> M_RHS;
-        M_RHS(seq1t2, Eigen::all).setZero();
+        M_RHS(seq1t2, EigenAll).setZero();
         for (int j = 0; j < dim; j++)
             // for (int i = 0; i < dim; i++)
             //     for (int k = 0; k < dim; k++)
@@ -511,13 +519,13 @@ namespace DNDS::Geom::Base
                                DxiDx(std::get<1>(diffOperatorIJK2IcDim)[i], m) *
                                DxiDx(std::get<1>(diffOperatorIJK2IcDim)[k], n);
             }
-        DxiDx(seq1t2, Eigen::all) = M_RHS(seq1t2, Eigen::all) /* ikj */ * Dxi_j_Dx_i;
+        DxiDx(seq1t2, EigenAll) = M_RHS(seq1t2, EigenAll) /* ikj */ * Dxi_j_Dx_i;
 
         if (maxDiff == 2)
             return;
         static const int nDiffSizC3 = ndiffSizS<dim>(3);
         static const auto seq2t3 = Eigen::seq(Eigen::fix<nDiffSizC2>, Eigen::fix<nDiffSizC3 - 1>); // 2D: 6 7 8 9
-        M_RHS(seq2t3, Eigen::all).setZero();
+        M_RHS(seq2t3, EigenAll).setZero();
         for (int j = 0; j < dim; j++)
             // for (int i = 0; i < dim; i++)
             //     for (int k = 0; k < dim; k++)
@@ -548,7 +556,7 @@ namespace DNDS::Geom::Base
                                    DxiDx(std::get<1>(diffOperatorIJK2IcDim)[k], n) *
                                    DxiDx(std::get<1>(diffOperatorIJK2IcDim)[l], p);
             }
-        DxiDx(seq2t3, Eigen::all) = M_RHS(seq2t3, Eigen::all) /* ikj */ * Dxi_j_Dx_i;
+        DxiDx(seq2t3, EigenAll) = M_RHS(seq2t3, EigenAll) /* ikj */ * Dxi_j_Dx_i;
         if (maxDiff == 3)
             return;
         DNDS_assert_info(false, "maxDiff is too large!");

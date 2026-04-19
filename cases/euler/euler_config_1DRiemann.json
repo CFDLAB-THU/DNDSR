@@ -1,0 +1,236 @@
+{
+    "$schema": "../euler_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 0.5e-3,
+        "nTimeStep": 10000,
+        "steadyQuit": false,
+        "useImplicitPP": false,
+        "rhsFPPMode": 2,
+        "rhsFPPScale": 1,
+        "useDtPPLimit": true,
+        "rhsFPPRelax": 0.5,
+        // "incrementPPRelax": 0.9,
+        "tEnd": 0.1,
+        "odeCode": 0,
+        "odeSetting1": 0.5,
+        "odeSetting2": 1
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 50,
+        "rhsThresholdInternal": 1e-3,
+        "res_base": 0.0,
+        "useVolWiseResidual": true
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 0,
+        "nDataOutC": 1,
+        "nDataOut": 100,
+        "nDataOutCInternal": 1,
+        "nDataOutInternal": 1000000000,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 0.1,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 0,
+        "nCFLRampLength": 10,
+        "CFLRampEnd": 10.0,
+        "useLocalDt": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshRotZ": 0.0,
+        // "meshFile": "../data/mesh/Unifrom_1D400.cgns",
+        "meshFile": "../data/mesh/Uniform_01_400.cgns",
+        "outPltName": "../data/outUnsteady/PP5/DoubleRarefaction/Uniform_01_400_DoubleRarefaction",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": false,
+        "outAtPointData": true,
+        "outAtCellData": true
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation1": [
+            0,
+            2.5e-3,
+            0.0
+        ]
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 10,
+        "recThreshold": 1e-010,
+        "nRecConsolCheck": 10,
+        "nRecMultiplyForZeroedGrad": 1000,
+        "storeRecInc": true,
+        "dampRecIncDTau": false
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "ppRecLimiterCompressToMean": false,
+        "smoothIndicatorProcedure": 0,
+        "limiterProcedure": 0, //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 5,
+        "cacheDiffBase": true,
+        "jacobiRelax": 1,
+        "SORInstead": false,
+        "smoothThreshold": 1e-3,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        "baseSettings": {
+            "localOrientation": false,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "scaleType": "BaryDiff",
+            "dirWeightScheme": "Factorial",
+            // "useAnisotropicFunctional": true,
+            // "scaleMultiplier": 3.464101615137754,
+            "_tail": 0
+        }
+    },
+    "linearSolverControl": {
+        "jacobiCode": 0,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
+        "nSgsConsoleCheck": 100,
+        "gmresCode": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        "initWithLastURecInc": false
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": true,
+        "useScalarJacobian": true,
+        "riemannSolverType": "Roe_M2",
+        "rsMeanValueEig": 1,
+        "uRecBetaCompressPower": 1,
+        "ppEpsIsRelaxed": true,
+        "nCentralSmoothStep": 0,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "farFieldStaticValue": [
+            1,
+            2,
+            0,
+            0,
+            2.2500
+        ],
+        "boxInitializers": [
+            // for double rarefaction:
+            {
+                "x0": -1,
+                "x1": 0.5,
+                "y0": -100,
+                "y1": 100,
+                "z0": -100,
+                "z1": 100,
+                "v": [
+                    1,
+                    -2,
+                    0,
+                    0,
+                    2.2500
+                ]
+            },
+            {
+                "x0": 0.5,
+                "x1": 2,
+                "y0": -100,
+                "y1": 100,
+                "z0": -100,
+                "z1": 100,
+                "v": [
+                    1,
+                    2,
+                    0,
+                    0,
+                    2.2500
+                ]
+            }
+            // for LeBlanc
+            // {
+            //     "x0": -1,
+            //     "x1": 3,
+            //     "y0": -100,
+            //     "y1": 100,
+            //     "z0": -100,
+            //     "z1": 100,
+            //     "v": [
+            //         1,
+            //         0,
+            //         0,
+            //         0,
+            //         0.1
+            //     ]
+            // },
+            // {
+            //     "x0": 3,
+            //     "x1": 10,
+            //     "y0": -100,
+            //     "y1": 100,
+            //     "z0": -100,
+            //     "z1": 100,
+            //     "v": [
+            //         1e-3,
+            //         0,
+            //         0,
+            //         0,
+            //         0.1e-9
+            //     ]
+            // }
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            // "gamma": 1.666666666666667,
+            "Rgas": 289,
+            "muGas": 1e-200,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4,
+            "muModel": 0
+        }
+    },
+    "bcSettings": [
+        {
+            "type": "BCFar",
+            "name": "FAR_R",
+            "value": [
+                1,
+                2,
+                0,
+                0,
+                2.2500
+            ]
+        },
+        {
+            "type": "BCFar",
+            "name": "FAR_L",
+            "value": [
+                1,
+                -2,
+                0,
+                0,
+                2.2500
+            ]
+        }
+    ]
+}

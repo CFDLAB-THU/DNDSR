@@ -1,11 +1,11 @@
 #pragma once
 
 #include "Geometric.hpp"
+#include <metis.h>
+#include <parmetis.h>
 
 namespace _METIS
 {
-#include <metis.h>
-#include <parmetis.h>
 }
 
 namespace _METIS

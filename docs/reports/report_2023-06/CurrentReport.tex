@@ -1,0 +1,158 @@
+%!TEX program = xelatex
+\documentclass[UTF8,zihao=5]{ctexart} %ctex包的article
+
+
+
+
+
+
+\title{{\bfseries\rmfamily\Huge{DNDS Current Report}}}
+\author{周涵宇\hspace{2em}2022310984}
+\date{\today}
+
+\usepackage[a4paper]{geometry}
+\geometry{left=0.75in,right=0.75in,top=1in,bottom=1in}%纸张大小和页边距
+
+\usepackage[
+UseMSWordMultipleLineSpacing,
+MSWordLineSpacingMultiple=1.5
+]{zhlineskip}%office风格的行间距
+
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+% \setsansfont{Source Sans Pro}
+\setmonofont{Latin Modern Mono}
+\setCJKmainfont{SimSun}[AutoFakeBold=true]
+% \setCJKmainfont{仿宋}[AutoFakeBold=true]
+\setCJKsansfont{黑体}[AutoFakeBold=true]
+\setCJKmonofont{DengXian}[AutoFakeBold=true]
+
+\setCJKfamilyfont{kaiti}{楷体}
+\newfontfamily\CM{Cambria Math}
+
+
+% \usepackage{indentfirst} %不工作 怎样调整ctex的段首缩进大小呢
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\lhead{}
+\chead{}
+\rhead{}
+\lfoot{}
+\cfoot{\thepage}
+\rfoot{}
+\renewcommand{\headrulewidth}{1pt} %改为0pt即可去掉页眉下面的横线
+\renewcommand{\footrulewidth}{1pt} %改为0pt即可去掉页脚上面的横线
+\setcounter{page}{1}
+
+
+% \usepackage{bm}
+
+\usepackage{amsmath,amsfonts}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{unicode-math}
+
+% \usepackage{titlesec} % it subverts the ctex titles
+\usepackage{titletoc}
+
+
+% titles in toc:
+\titlecontents{section}
+              [2cm]
+              {\sffamily\zihao{5}\mdseries}%
+              {\contentslabel{3em}}%
+              {}%
+              {\titlerule*[0.5pc]{-}\contentspage\hspace*{1cm}}
+
+\titlecontents{subsection}
+              [3cm]
+              {\rmfamily\mdseries\zihao{5}}%
+              {\contentslabel{3em}}%
+              {}%
+              {\titlerule*[0.5pc]{-}\contentspage\hspace*{1cm}}
+
+\titlecontents{subsubsection}
+              [4cm]
+              {\rmfamily\mdseries\zihao{5}}%
+              {\contentslabel{3em}}%
+              {}%
+              {\titlerule*[0.5pc]{-}\contentspage\hspace*{1cm}}
+\renewcommand*\contentsname{\hfill \sffamily\mdseries 目录 \hfill}
+
+\ctexset{
+    section={   
+        % name={前面,后面},
+        number={\arabic{section}.},
+        format=\sffamily\raggedright\zihao{4}\bfseries,
+        indent= {0em},
+        aftername = \hspace{0.5em},
+        beforeskip=1ex,
+        afterskip=1ex
+    },
+    subsection={   
+        % name={另一个前面,另一个后面},
+        number={\arabic{section}.\arabic{subsection}.}, %如果只用一个数字而非1.1
+        format=\rmfamily\raggedright\bfseries\zihao{5},%正体字体，不加粗，main字体，五号字
+        indent = {0em}, %缩进
+        aftername = \hspace{0.5em},
+        beforeskip=1ex,
+        afterskip=1ex
+    },
+    subsubsection={   
+        % name={另一个前面,另一个后面},
+        number={\arabic{section}.\arabic{subsection}.\arabic{subsubsection}.}, %默认的 1.1.1
+        format=\rmfamily\raggedright\mdseries\zihao{5},%无衬线字体，加粗，sans字体，五号字
+        indent = {2em}, %缩进
+        aftername = \hspace{0.5em},  %名字和标题间插入字符（此处是空白）
+        beforeskip=1ex, %空行
+        afterskip=1ex
+    }
+}
+
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{multicol}
+\usepackage{arydshln}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{cite}
+
+\usepackage{listings}
+\usepackage{xcolor-solarized}
+\usepackage[]{hyperref}%超链接，自动加到目录里面
+
+%part、section、subsection、subsubsection、paragraph、subparagraph
+\newcommand{\bm}[1]{{\mathbf{#1}}}
+\newcommand{\trans}[0]{^\mathrm{T}}
+\newcommand{\tran}[1]{#1^\mathrm{T}}
+\newcommand{\hermi}[0]{^\mathrm{H}}
+\newcommand{\conj}[1]{\overline{#1}}
+\newcommand*{\av}[1]{\left\langle{#1}\right\rangle}
+\newcommand*{\avld}[1]{\frac{\overline{D}#1}{Dt}}
+\newcommand*{\pd}[2]{\frac{\partial #1}{\partial #2}}
+\newcommand*{\pdcd}[3]{\frac{\partial^2 #1}{\partial #2 \partial #3}}
+\newcommand*{\inc}[0]{{\Delta}}
+
+\newcommand*{\uu}[0]{\bm{u}}
+\newcommand*{\vv}[0]{\bm{v}}
+\newcommand*{\g}[0]{\bm{g}}
+\newcommand*{\nb}[0]{{\nabla}}
+
+\newcommand*{\mean}[1]{{#1}}
+
+
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\begin{itemize}
+    \item For current Chinese report, \href{docs/report_2023-06/DNDSR_report.pdf}{click here}
+    \item For current Doxygen document (incomplete), \href{build/docs/html/index.html}{click here}
+\end{itemize}
+
+
+\end{document}

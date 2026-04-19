@@ -1,6 +1,6 @@
 #include "DNDS/ArrayDerived/ArrayAdjacency.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenVector.hpp"
-#include "DNDS/ArrayDerived/ArrayEigenMatirx.hpp"
+#include "DNDS/ArrayDerived/ArrayEigenMatrix.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenMatrixBatch.hpp"
 #include "DNDS/SerializerJSON.hpp"

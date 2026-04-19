@@ -1,3 +1,4 @@
+// #define EIGEN_NO_MALLOC
 #include "Eigen/Dense"
 #include "DNDS/Defines.hpp"
 #include <unsupported/Eigen/CXX11/TensorSymmetry>
@@ -69,9 +70,33 @@ int main()
     for (int i = 0; i < b.size(); i++)
         std::cout << b(i) << std::endl;
 
+    std::cout << fmt::format("r,c stride: {},{}", b.rowStride(), b.colStride()) << std::endl;
 
-    
+    auto data = std::vector<double>();
+    for (auto i : {1, 2, 3, 4, 5, 6, 7, 8, 9})
+        data.push_back(i);
 
+    std::cout << std::endl;
+    std::cout << "=== col major, stride o,i= 3, 1" << std::endl;
+    std::cout << Eigen::Map<Eigen::Matrix<double,
+                                          3, 3, Eigen::DontAlign | Eigen::ColMajor>,
+                            Eigen::Unaligned, Eigen::Stride<3, 1>>(data.data(), 3, 3)
+              << std::endl;
+    std::cout << "=== col major, stride o,i= 1, 3" << std::endl;
+    std::cout << Eigen::Map<Eigen::Matrix<double,
+                                          3, 3, Eigen::DontAlign | Eigen::ColMajor>,
+                            Eigen::Unaligned, Eigen::Stride<1, 3>>(data.data(), 3, 3)
+              << std::endl;
+    std::cout << "=== row major, stride o,i= 3, 1" << std::endl;
+    std::cout << Eigen::Map<Eigen::Matrix<double,
+                                          3, 3, Eigen::DontAlign | Eigen::RowMajor>,
+                            Eigen::Unaligned, Eigen::Stride<3, 1>>(data.data(), 3, 3)
+              << std::endl;
+    std::cout << "=== row major, stride o,i= 1, 3" << std::endl;
+    std::cout << Eigen::Map<Eigen::Matrix<double,
+                                          3, 3, Eigen::DontAlign | Eigen::RowMajor>,
+                            Eigen::Unaligned, Eigen::Stride<1, 3>>(data.data(), 3, 3)
+              << std::endl;
 
     return 0;
 }

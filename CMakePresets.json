@@ -1,0 +1,93 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "default",
+            "displayName": "Default (Release, tests off)",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "debug",
+            "displayName": "Debug build with tests",
+            "binaryDir": "${sourceDir}/build-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "DNDS_BUILD_TESTS": "ON",
+                "DNDS_FAST_BUILD_FAST": "OFF"
+            }
+        },
+        {
+            "name": "release-test",
+            "displayName": "Release build with tests",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "DNDS_BUILD_TESTS": "ON"
+            }
+        },
+        {
+            "name": "cuda",
+            "displayName": "Release with CUDA and tests",
+            "binaryDir": "${sourceDir}/build-cuda",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "DNDS_USE_CUDA": "ON",
+                "DNDS_BUILD_TESTS": "ON"
+            }
+        },
+        {
+            "name": "ci",
+            "displayName": "CI configuration (Release, tests, no ccache)",
+            "binaryDir": "${sourceDir}/build-ci",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "DNDS_BUILD_TESTS": "ON",
+                "DNDS_USE_CCACHE": "OFF"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "default",
+            "configurePreset": "default"
+        },
+        {
+            "name": "tests",
+            "configurePreset": "release-test",
+            "targets": ["dnds_unit_tests"]
+        },
+        {
+            "name": "debug",
+            "configurePreset": "debug"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "unit",
+            "configurePreset": "release-test",
+            "output": {
+                "outputOnFailure": true
+            },
+            "filter": {
+                "include": {
+                    "name": "dnds_"
+                }
+            }
+        },
+        {
+            "name": "all",
+            "configurePreset": "release-test",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}

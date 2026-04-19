@@ -1,0 +1,165 @@
+{
+    "$schema": "../euler3D_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 0.25e-1,
+        "nTimeStep": 8000,
+        "steadyQuit": false,
+        "useRestart": true,
+        "odeCode": 1,
+        "tEnd": 3e+200,
+        "odeSetting1": 0.55,
+        "odeSetting2": 0,
+        "odeSetting3": 1.333, // 0.5-1; 0.55-1.333; 0.6- >1.6
+        "rhsFPPMode": 0,
+        "rhsFPPScale": 1,
+        "_tail": 0
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 40,
+        "rhsThresholdInternal": 1e-4,
+        "res_base": 0.0,
+        "useVolWiseResidual": true
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 0,
+        "nDataOutC": 10,
+        "nDataOut": 800,
+        "nDataOutCInternal": 2000,
+        "nDataOutInternal": 1000000000,
+        "nRestartOutC": 100,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 0.1,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 0,
+        "nCFLRampLength": 10,
+        "CFLRampEnd": 20.0,
+        "useLocalDt": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshRotZ": 0.0,
+        "meshFile": "../data/mesh/CylinderA1_LF.cgns",
+        "outPltName": "../data/outUnsteady/CylinderA1_LF_RE2000_BDF2_T1_S450",
+        "outLogName": "../data/outUnsteady/CylinderA1_LF_RE2000_BDF2_T1_S450",
+        "outRestartName": "../data/outUnsteady/CylinderA1_LF_RE2000_BDF2_T1_S450",
+        "outPltMode": 0,
+        "readMeshMode": 1,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": false,
+        "outAtPointData": true,
+        "outAtCellData": true
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation3": [
+            0.0,
+            0.0,
+            10.0
+        ]
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 10,
+        "recThreshold": 1e-010,
+        "nRecConsolCheck": 10,
+        "nRecMultiplyForZeroedGrad": 1000
+    },
+    "limiterControl": {
+        "useLimiter": false,
+        "usePPRecLimiter": false,
+        "smoothIndicatorProcedure": 0,
+        "limiterProcedure": 1, //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 3,
+        "cacheDiffBase": true,
+        "jacobiRelax": 1,
+        "SORInstead": true,
+        "smoothThreshold": 1e-3,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        "baseSettings": {
+            "localOrientation": true,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "scaleType": "BaryDiff",
+            "scaleMultiplier": 1.0,
+            "dirWeightScheme": "HQM_OPT",
+            "geomWeightScheme": "HQM_SD"
+        }
+    },
+    "linearSolverControl": {
+        "jacobiCode": 0,
+        "sgsIter": 10,
+        "sgsWithRec": 0,
+        "nSgsConsoleCheck": 100,
+        "gmresCode": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 1
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": true,
+        "useScalarJacobian": true,
+        "riemannSolverType": "Roe",
+        "rsMeanValueEig": 1,
+        "nCentralSmoothStep": 0,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "farFieldStaticValue": [
+            1,
+            1,
+            0,
+            0,
+            79.8650793650794
+        ],
+        "boxInitializers": [
+            // {
+            //     "x0": -0.5,
+            //     "x1": 1,
+            //     "y0": -0.5,
+            //     "y1": 0.5,
+            //     "z0": -1,
+            //     "z1": 1,
+            //     "v": [
+            //         1,
+            //         0,
+            //         1,
+            //         0,
+            //         79.8650793650794
+            //     ]`1
+            // }
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 0.116221972344982,
+            "muGas": 5e-4,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        }
+    },
+    "restartState": {
+        "iStep": 240,
+        "iStepInternal": -1,
+        "odeCodePrev": -1,
+        "lastRestartFile": "../data/outUnsteady/CylinderA1_LF_RE2000_BDF2_STARTER__240_p960_restart.dir"
+    },
+    "__commit": "8738a6c43a65239ae3a77058210895c9a87cfc5d(base)"
+}

@@ -1,12 +1,39 @@
+/** @file EulerSolver_Init.hxx
+ *  @brief Template implementation of EulerSolver::ReadMeshAndInitialize, the full
+ *         solver initialization pipeline from mesh reading to evaluator setup.
+ *
+ *  Covers CGNS/OpenFOAM mesh reading, periodic boundary deduplication, mesh
+ *  partitioning (ParMetis), O1-to-O2 elevation, h-refinement bisection, boundary
+ *  mesh extraction for wall distance, VFV (VariationalReconstruction) construction,
+ *  BC handler configuration, wall distance computation, evaluator initialization,
+ *  restart loading, and initial VTK output.
+ */
 #pragma once
 
 #include "EulerSolver.hpp"
 #include "SpecialFields.hpp"
+#include "DNDS/OMP.hpp"
 
 namespace DNDS::Euler
 {
     static const auto model = NS_SA;
     DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    /** @brief Read the mesh, partition it, build solver data structures, and initialize the evaluator.
+     *
+     *  Complete initialization pipeline:
+     *  1. Read mesh from CGNS or OpenFOAM format (serial, parallel, or distributed mode).
+     *  2. Handle periodic boundary deduplication and mesh topology (cell2cell, node2cell).
+     *  3. Optionally elevate mesh order (O1 to O2) and apply h-refinement bisection.
+     *  4. Partition with ParMetis and redistribute across MPI ranks.
+     *  5. Build ghost layers, adjacency, and coordinate structures.
+     *  6. Extract boundary mesh for wall distance computation.
+     *  7. Construct VFV (VariationalReconstruction) with configured settings.
+     *  8. Configure BC handlers from JSON settings.
+     *  9. Compute wall distance (CGAL or Poisson).
+     *  10. Initialize the EulerEvaluator (arrays, face data, etc.).
+     *  11. Load restart if configured.
+     *  12. Write initial VTK output.
+     */
     void EulerSolver<model>::ReadMeshAndInitialize()
     {
         DNDS_MPI_InsertCheck(mpi, "ReadMeshAndInitialize 1 nvars " + std::to_string(nVars));
@@ -26,23 +53,23 @@ namespace DNDS::Euler
 
         DNDS_MAKE_SSP(reader, mesh, 0);
         DNDS_MAKE_SSP(readerBnd, meshBnd, 0);
-        DNDS_assert(config.dataIOControl.readMeshMode == 0 || config.dataIOControl.readMeshMode == 1);
+        DNDS_assert(config.dataIOControl.readMeshMode == 0 || config.dataIOControl.readMeshMode == 1 || config.dataIOControl.readMeshMode == 2);
         DNDS_assert(config.dataIOControl.outPltMode == 0 || config.dataIOControl.outPltMode == 1);
-        mesh->periodicInfo.translation[1] = config.boundaryDefinition.PeriodicTranslation1;
-        mesh->periodicInfo.translation[2] = config.boundaryDefinition.PeriodicTranslation2;
-        mesh->periodicInfo.translation[3] = config.boundaryDefinition.PeriodicTranslation3;
-        mesh->periodicInfo.rotationCenter[1] = config.boundaryDefinition.PeriodicRotationCent1;
-        mesh->periodicInfo.rotationCenter[2] = config.boundaryDefinition.PeriodicRotationCent2;
-        mesh->periodicInfo.rotationCenter[3] = config.boundaryDefinition.PeriodicRotationCent3;
-        mesh->periodicInfo.rotation[1] =
+        mesh->periodicInfo.translation[1].map() = config.boundaryDefinition.PeriodicTranslation1;
+        mesh->periodicInfo.translation[2].map() = config.boundaryDefinition.PeriodicTranslation2;
+        mesh->periodicInfo.translation[3].map() = config.boundaryDefinition.PeriodicTranslation3;
+        mesh->periodicInfo.rotationCenter[1].map() = config.boundaryDefinition.PeriodicRotationCent1;
+        mesh->periodicInfo.rotationCenter[2].map() = config.boundaryDefinition.PeriodicRotationCent2;
+        mesh->periodicInfo.rotationCenter[3].map() = config.boundaryDefinition.PeriodicRotationCent3;
+        mesh->periodicInfo.rotation[1].map() =
             Geom::RotZ(config.boundaryDefinition.PeriodicRotationEulerAngles1[2]) *
             Geom::RotY(config.boundaryDefinition.PeriodicRotationEulerAngles1[1]) *
             Geom::RotX(config.boundaryDefinition.PeriodicRotationEulerAngles1[0]);
-        mesh->periodicInfo.rotation[2] =
+        mesh->periodicInfo.rotation[2].map() =
             Geom::RotZ(config.boundaryDefinition.PeriodicRotationEulerAngles2[2]) *
             Geom::RotY(config.boundaryDefinition.PeriodicRotationEulerAngles2[1]) *
             Geom::RotX(config.boundaryDefinition.PeriodicRotationEulerAngles2[0]);
-        mesh->periodicInfo.rotation[3] =
+        mesh->periodicInfo.rotation[3].map() =
             Geom::RotZ(config.boundaryDefinition.PeriodicRotationEulerAngles3[2]) *
             Geom::RotY(config.boundaryDefinition.PeriodicRotationEulerAngles3[1]) *
             Geom::RotX(config.boundaryDefinition.PeriodicRotationEulerAngles3[0]);
@@ -66,8 +93,11 @@ namespace DNDS::Euler
             reader->MeshPartitionCell2Cell(config.dataIOControl.meshPartitionOptions);
             reader->PartitionReorderToMeshCell2Cell();
 
+            mesh->RecoverNode2CellAndNode2Bnd();
+            mesh->RecoverCell2CellAndBnd2Cell();
             mesh->BuildGhostPrimary();
             mesh->AdjGlobal2LocalPrimary();
+            mesh->AdjGlobal2LocalN2CB();
             if (config.dataIOControl.meshElevation == 1)
             {
                 DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO2;
@@ -76,8 +106,11 @@ namespace DNDS::Euler
                 std::swap(meshO2, mesh);
 
                 reader->mesh = mesh;
+                mesh->RecoverNode2CellAndNode2Bnd();
+                mesh->RecoverCell2CellAndBnd2Cell();
                 mesh->BuildGhostPrimary();
                 mesh->AdjGlobal2LocalPrimary();
+                mesh->AdjGlobal2LocalN2CB();
             }
             DNDS_assert(config.dataIOControl.meshDirectBisect <= 4);
             for (int iter = 1; iter <= config.dataIOControl.meshDirectBisect; iter++)
@@ -85,6 +118,9 @@ namespace DNDS::Euler
                 DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO2;
                 DNDS_MAKE_SSP(meshO2, mpi, gDimLocal);
                 meshO2->BuildO2FromO1Elevation(*mesh);
+
+                meshO2->RecoverNode2CellAndNode2Bnd();
+                meshO2->RecoverCell2CellAndBnd2Cell();
                 meshO2->BuildGhostPrimary();
                 DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO1B;
                 DNDS_MAKE_SSP(meshO1B, mpi, gDimLocal);
@@ -105,48 +141,72 @@ namespace DNDS::Euler
                 }
             }
         }
-        else
+        else if (config.dataIOControl.readMeshMode == 1)
         {
             using namespace std::literals;
-            std::filesystem::path meshPath{config.dataIOControl.meshFile};
             std::string meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
                                       (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) +
                                       (config.dataIOControl.meshDirectBisect > 0 ? "_bisect" + std::to_string(config.dataIOControl.meshDirectBisect) : ""s);
-            std::string meshPartPath;
-            if (config.dataIOControl.meshPartitionedReaderType == "JSON")
-            {
-                std::filesystem::path meshOutDir{meshOutName + ".dir"};
-                // std::filesystem::create_directories(meshOutDir); // reading not writing
-                meshPartPath = getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
-            }
-            else if (config.dataIOControl.meshPartitionedReaderType == "H5")
-            {
-                meshPartPath = meshOutName + ".dnds.h5";
-            }
-            else
-                DNDS_assert_info(false, "serializer is invalid");
-
+            auto [meshOutNameMod, meshPartPath] = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).ModifyFilePath(meshOutName, mpi, "part_%d", true);
             Serializer::SerializerBaseSSP serializerP = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).BuildSerializer(mpi);
 
             if (mpi.rank == 0)
                 log() << "EulerSolver === to read via [" << config.dataIOControl.meshPartitionedReaderType << "]" << std::endl;
 
-            serializerP->OpenFile(meshPartPath, true);
+            serializerP->OpenFile(meshOutNameMod, true);
             mesh->ReadSerialize(serializerP, "meshPart");
             serializerP->CloseFile();
+
+            mesh->RecoverNode2CellAndNode2Bnd();
+            mesh->RecoverCell2CellAndBnd2Cell();
+            mesh->BuildGhostPrimary();
+            mesh->AdjGlobal2LocalPrimary();
+            mesh->AdjGlobal2LocalN2CB();
         }
+        else if (config.dataIOControl.readMeshMode == 2)
+        {
+            // Distributed read: even-split H5 read + ParMetis repartition.
+            // Works with any number of MPI ranks.
+            using namespace std::literals;
+            std::string meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
+                                      (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) +
+                                      (config.dataIOControl.meshDirectBisect > 0 ? "_bisect" + std::to_string(config.dataIOControl.meshDirectBisect) : ""s);
+            auto [meshOutNameMod, meshPartPath] = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).ModifyFilePath(meshOutName, mpi, "part_%d", true);
+            Serializer::SerializerBaseSSP serializerP = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).BuildSerializer(mpi);
+
+            if (mpi.rank == 0)
+                log() << "EulerSolver === distributed read via [" << config.dataIOControl.meshPartitionedReaderType << "]" << std::endl;
+
+            serializerP->OpenFile(meshOutNameMod, true);
+            mesh->ReadSerializeAndDistribute(serializerP, "meshPart", config.dataIOControl.meshPartitionOptions);
+            serializerP->CloseFile();
+
+            mesh->RecoverNode2CellAndNode2Bnd();
+            mesh->RecoverCell2CellAndBnd2Cell();
+            mesh->BuildGhostPrimary();
+            mesh->AdjGlobal2LocalPrimary();
+            mesh->AdjGlobal2LocalN2CB();
+        }
+        OMP::set_full_parallel_OMP();
         if (config.dataIOControl.meshReorderCells == 1)
+#ifdef DNDS_USE_OMP
+            mesh->ReorderLocalCells(std::max(get_env_DNDS_DIST_OMP_NUM_THREADS(), 1));
+#else
             mesh->ReorderLocalCells(); // do this early so that faces are natural to cell
+#endif
         // std::cout << "here" << std::endl;
         mesh->InterpolateFace();
         mesh->AssertOnFaces();
-
-        // todo: make this interpolation optional?
-        mesh->AdjLocal2GlobalPrimary();
-        mesh->RecoverNode2CellAndNode2Bnd(); // todo: don't do this if already done
-        mesh->AdjGlobal2LocalPrimary();
+        { // not needed after adding node2cell, node2bnd mandatory
+          // // todo: make this interpolation optional?
+          // mesh->AdjLocal2GlobalPrimary();
+          // mesh->RecoverNode2CellAndNode2Bnd(); // // todo: don't do this if already done
+          // mesh->AdjGlobal2LocalPrimary();
+        }
+        mesh->AdjLocal2GlobalN2CB();
         mesh->BuildGhostN2CB();
         mesh->AdjGlobal2LocalN2CB();
+        log() << fmt::format("{}, NumBndGhost {}", mpi.rank, mesh->NumBndGhost()) << std::endl;
 
         // mesh->AdjLocal2GlobalN2CB();
         // mesh->AdjGlobal2LocalN2CB();
@@ -167,7 +227,7 @@ namespace DNDS::Euler
                 [&](Geom::t_index bndId)
                 {
                     auto bType = pBCHandler->GetTypeFromID(bndId);
-                    if (bType == BCWall)
+                    if (bType == BCWall || bType == BCWallIsothermal)
                         return true;
                     if (config.dataIOControl.meshElevationBoundaryMode == 1 &&
                         (bType == BCWallInvis || bType == BCSym))
@@ -189,6 +249,17 @@ namespace DNDS::Euler
                 DNDS_assert(false);
         }
 
+        if (config.dataIOControl.meshBuildWallDist)
+        {
+            mesh->BuildNodeWallDist(
+                [pBCHandler = pBCHandler](Geom::t_index id)
+                {
+                    auto euler_bc_type = pBCHandler->GetTypeFromID(id);
+                    return static_cast<bool>(euler_bc_type == Euler::BCWall || euler_bc_type == Euler::BCWallIsothermal);
+                },
+                config.dataIOControl.meshWallDistOptions);
+        }
+
         if (config.dataIOControl.outPltMode == 0)
         {
             mesh->AdjLocal2GlobalPrimary();
@@ -199,42 +270,40 @@ namespace DNDS::Euler
         if (config.timeMarchControl.partitionMeshOnly)
         {
             using namespace std::literals;
-            std::string meshPartPath;
             std::string meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
                                       (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) +
                                       (config.dataIOControl.meshDirectBisect > 0 ? "_bisect" + std::to_string(config.dataIOControl.meshDirectBisect) : ""s);
 
-            if (config.dataIOControl.meshPartitionedWriter.type == "JSON")
-            {
-                meshOutName += ".dir";
-                std::filesystem::path meshOutDir{meshOutName};
-                std::filesystem::create_directories(meshOutDir);
-                meshPartPath = DNDS::getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
-            }
-            else if (config.dataIOControl.meshPartitionedWriter.type == "H5")
-            {
-                meshOutName += ".dnds.h5";
-                meshPartPath = meshOutName;
-                std::filesystem::path outPath = meshPartPath;
-                std::filesystem::create_directories(outPath.parent_path() / ".");
-            }
-            else
-                DNDS_assert_info(false, "serializer is invalid");
+            // std::string meshPartPath;
+            // if (config.dataIOControl.meshPartitionedWriter.type == "JSON")
+            // {
+            //     meshOutName += ".dir";
+            //     std::filesystem::path meshOutDir{meshOutName};
+            //     std::filesystem::create_directories(meshOutDir);
+            //     meshPartPath = DNDS::getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
+            // }
+            // else if (config.dataIOControl.meshPartitionedWriter.type == "H5")
+            // {
+            //     meshOutName += ".dnds.h5";
+            //     meshPartPath = meshOutName;
+            //     std::filesystem::path outPath = meshPartPath;
+            //     std::filesystem::create_directories(outPath.parent_path() / ".");
+            // }
+            // else
+            //     DNDS_assert_info(false, "serializer is invalid");
+
+            auto [meshOutNameMod, meshPartPath] = config.dataIOControl.meshPartitionedWriter.ModifyFilePath(meshOutName, mpi, "part_%d", false);
 
             Serializer::SerializerBaseSSP serializerP = config.dataIOControl.meshPartitionedWriter.BuildSerializer(mpi);
 
-            serializerP->OpenFile(meshPartPath, false);
+            serializerP->OpenFile(meshOutNameMod, false);
+            mesh->AdjLocal2GlobalPrimary();
             mesh->WriteSerialize(serializerP, "meshPart");
+            mesh->AdjGlobal2LocalPrimary();
             serializerP->CloseFile();
             return; //** mesh preprocess only (without transformation)
         }
 
-#ifdef DNDS_USE_OMP
-        omp_set_num_threads( // note that the meaning is like "omp_set_max_threads()"
-            DNDS::MPIWorldSize() == 1
-                ? std::min(omp_get_num_procs(), omp_get_max_threads())
-                : (get_env_DNDS_DIST_OMP_NUM_THREADS() == 0 ? 1 : DNDS::get_env_DNDS_DIST_OMP_NUM_THREADS()));
-#endif
         mesh->ConstructBndMesh(*meshBnd);
         if (config.dataIOControl.outPltMode == 0)
         {
@@ -259,11 +328,11 @@ namespace DNDS::Euler
                 { return Rz * p; });
 
             for (auto &r : mesh->periodicInfo.rotation)
-                r = Rz * r * Rz.transpose();
+                r.map() = Rz * r.map() * Rz.transpose();
             for (auto &p : mesh->periodicInfo.rotationCenter)
-                p = Rz * p;
+                p.map() = Rz * p.map();
             for (auto &p : mesh->periodicInfo.translation)
-                p = Rz * p;
+                p.map() = Rz * p.map();
             // @todo  //! todo: alter the rotation and translation in  periodicInfo mesh->periodicInfo
         }
         if (config.dataIOControl.meshScale != 1.0)
@@ -277,9 +346,9 @@ namespace DNDS::Euler
                 { return p * scale; });
 
             for (auto &i : mesh->periodicInfo.translation)
-                i *= scale;
+                i.map() *= scale;
             for (auto &i : mesh->periodicInfo.rotationCenter)
-                i *= scale;
+                i.map() *= scale;
         }
         if (config.dataIOControl.rectifyNearPlane)
         {
@@ -303,7 +372,7 @@ namespace DNDS::Euler
         { //* symBnd's rectifying: !  altering mesh
             for (index iB = 0; iB < mesh->NumBnd(); iB++)
             {
-                index iFace = mesh->bnd2face.at(iB);
+                index iFace = mesh->bnd2faceV.at(iB);
                 auto bndID = mesh->bndElemInfo(iB, 0).zone;
                 EulerBCType bndType = pBCHandler->GetTypeFromID(bndID);
                 if (bndType == BCSym)
@@ -343,35 +412,19 @@ namespace DNDS::Euler
         //                     { return BCHandler.GetNameFormID(i); }, BCHandler.GetAllNames());
 
         DNDS_MAKE_SSP(vfv, mpi, mesh);
-        vfv->SetPeriodicTransformations(
-            [&](auto u, Geom::t_index id)
-            {
-                DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-                u(Eigen::all, Seq123) = mesh->periodicInfo.TransVector<dim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
-            },
-            [&](auto u, Geom::t_index id)
-            {
-                DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-                u(Eigen::all, Seq123) = mesh->periodicInfo.TransVectorBack<dim, Eigen::Dynamic>(u(Eigen::all, Seq123).transpose(), id).transpose();
-            });
-        vfv->settings.ParseFromJson(config.vfvSettings);
-        vfv->ConstructMetrics();
-        vfv->ConstructBaseAndWeight(
-            [&](Geom::t_index id, int iOrder) -> real
-            {
-                auto type = BCHandler.GetTypeFromID(id);
-                if (type == BCSpecial || type == BCOut)
-                    return 0;
-                if (type == BCFar) // use Dirichlet type
-                    return iOrder ? 0. : 1.;
-                if (type == BCWallInvis || type == BCSym)
-                    return iOrder ? 0. : 1.;
-                if (Geom::FaceIDIsPeriodic(id))
-                    return iOrder ? 1. : 1.; //! treat as real internal
-                // others: use Dirichlet type
-                return iOrder ? 0. : 1.;
-            });
-        vfv->ConstructRecCoeff();
+        vfv->parseSettings(config.vfvSettings);
+        if (vfv->SetAxisSymmetric(config.others.axisSymmetric) && mpi.rank == 0)
+            log() << "EulerSolver === Using Axis Symmetric" << std::endl;
+        TEval::InitializeFV(mesh, vfv, pBCHandler);
+        if (config.others.printRecMatrix)
+        {
+            auto serializerP = config.others.recMatrixWriter.BuildSerializer(mpi);
+            std::string fName = config.dataIOControl.outPltName + "_RecMatrix";
+            auto [fNameMod, partPath] = config.others.recMatrixWriter.ModifyFilePath(fName, mpi, "part_%d", true);
+            serializerP->OpenFile(partPath, false);
+            vfv->WriteSerializeRecMatrix(serializerP);
+            serializerP->CloseFile();
+        }
 
         vfv->BuildUDof(u, nVars);
         vfv->BuildUDof(uIncBufODE, nVars);
@@ -385,7 +438,7 @@ namespace DNDS::Euler
                          { vfv->BuildUDof(uu, nVars); });
 
         vfv->BuildURec(uRec, nVars);
-        if (config.timeMarchControl.odeCode == 401)
+        if (config.timeMarchControl.timeMarchIsTwoStage())
             vfv->BuildURec(uRec1, nVars);
         vfv->BuildURec(uRecLimited, nVars);
         vfv->BuildURec(uRecNew, nVars);
@@ -400,7 +453,7 @@ namespace DNDS::Euler
         vfv->BuildUDof(dTauTmp, 1);
         betaPP.setConstant(1.0);
         alphaPP.setConstant(1.0);
-        if (config.timeMarchControl.odeCode == 401)
+        if (config.timeMarchControl.timeMarchIsTwoStage())
         {
             vfv->BuildUDof(betaPP1, 1);
             vfv->BuildUDof(alphaPP1, 1);
@@ -410,19 +463,19 @@ namespace DNDS::Euler
         if (config.implicitReconstructionControl.storeRecInc)
         {
             vfv->BuildURec(uRecInc, nVars);
-            if (config.timeMarchControl.odeCode == 401)
+            if (config.timeMarchControl.timeMarchIsTwoStage())
                 vfv->BuildURec(uRecInc1, nVars);
         }
 
         DNDS_MPI_InsertCheck(mpi, "ReadMeshAndInitialize 2 nvars " + std::to_string(nVars));
         /*******************************/
         // initialize pEval
-        DNDS_MAKE_SSP(pEval, mesh, vfv, pBCHandler, config.eulerSettings);
+        DNDS_MAKE_SSP(pEval, mesh, vfv, pBCHandler, config.eulerSettings, nVars);
         EulerEvaluator<model> &eval = *pEval;
 
         JD.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
         JSource.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
-        if (config.timeMarchControl.odeCode == 401)
+        if (config.timeMarchControl.timeMarchIsTwoStage())
         {
             JD1.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
             JSource1.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
@@ -500,17 +553,45 @@ namespace DNDS::Euler
         using namespace std::literals;
         DNDS_EULERSOLVER_RUNNINGENV_GET_REF_LIST
         iterAll++;
-        // auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
+        // auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
 
-        // auto &uRecC = config.timeMarchControl.odeCode == 401 && uPos == 1 ? uRec1 : uRec;
+        // auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
+
+        bool useRHSasResBase = !config.timeMarchControl.steadyQuit && config.convergenceControl.resBaseType == 1;
 
         Eigen::VectorFMTSafe<real, -1> res(nVars);
-        eval.EvaluateNorm(res, cres, 1, config.convergenceControl.useVolWiseResidual);
-        // if (iter == 1 && iStep == 1) // * using 1st rk step for reference
+        eval.EvaluateNorm(res, cres, config.convergenceControl.normOrd, config.convergenceControl.useVolWiseResidual);
+        if (config.convergenceControl.mergeMultiResidual == 1 && config.timeMarchControl.timeMarchIsTwoStage())
+        {
+            Eigen::VectorFMTSafe<real, -1> res1(nVars);
+            eval.EvaluateNorm(res1, ode->getRES(1), config.convergenceControl.normOrd, config.convergenceControl.useVolWiseResidual);
+            res += res1;
+            res *= 0.5;
+        }
+
+        Eigen::VectorFMTSafe<real, -1> resBaseNorm = res;
+
         if (iter == 1)
-            resBaseCInternal = res;
-        else
-            resBaseCInternal = resBaseCInternal.array().max(res.array()); //! using max !
+            resBaseCInternal.setZero();
+
+        if (useRHSasResBase)
+        {
+            if (iter == 1)
+            {
+                Eigen::VectorFMTSafe<real, -1> rhsBaseNorm(nVars);
+                eval.EvaluateNorm(rhsBaseNorm, ode->getLatestRHS(), 1, config.convergenceControl.useVolWiseResidual);
+                resBaseCInternal = rhsBaseNorm;
+            }
+            // {
+            //     resBaseNorm = resBaseCInternal; // using Only RHS no res
+            // }
+        }
+
+        // if (iter == 1 && iStep == 1)
+        // * using 1st rk step for reference
+
+        resBaseCInternal = resBaseCInternal.array().max(resBaseNorm.array()); //! using max !
+
         Eigen::VectorFMTSafe<real, -1> resRel = (res.array() / (resBaseCInternal.array() + verySmallReal)).matrix();
         bool ifStop = resRel(0) < config.convergenceControl.rhsThresholdInternal; // ! using only rho's residual
         if (config.convergenceControl.useCLDriver)
@@ -551,6 +632,7 @@ namespace DNDS::Euler
                                      DNDS_FMT_ARG(step),
                                      DNDS_FMT_ARG(iStep),
                                      DNDS_FMT_ARG(iter),
+                                     DNDS_FMT_ARG(iterAll),
                                      fmt::arg("resRel", resRel.transpose()),
                                      fmt::arg("wallFlux", eval.fluxWallSum.transpose()),
                                      DNDS_FMT_ARG(tSimu),

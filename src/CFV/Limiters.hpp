@@ -4,6 +4,135 @@
 namespace DNDS::CFV
 {
     /**
+     * @brief Computes the weighted polynomial squared norm of each column of theta.
+     *
+     * The weights follow from the L2 inner product structure of the polynomial
+     * basis: pure-order terms get weight 1, mixed terms get reduced weights
+     * proportional to the combinatorial mixing of coordinate directions.
+     *
+     * For dim=2:
+     *   nRows=2: theta(0)^2 + theta(1)^2
+     *   nRows=3: theta(0)^2 + theta(1)^2 * 0.5 + theta(2)^2
+     *   nRows=4: theta(0)^2 + theta(1)^2 * (1/3) + theta(2)^2 * (1/3) + theta(3)^2
+     *
+     * For dim=3:
+     *   nRows=3:  uniform weight 1
+     *   nRows=6:  first 3 weight 1, next 3 weight 0.5
+     *   nRows=10: first 3 weight 1, next 6 weight 1/3, last 1 weight 1/6
+     *
+     * @tparam dim  Spatial dimension (2 or 3)
+     * @param theta  Array of shape (nRows, nCols), normalized polynomial coefficients
+     * @return Eigen::ArrayXd of shape (nCols) containing the weighted squared norms
+     */
+    template <int dim, typename ThetaArray>
+    inline Eigen::ArrayXd PolynomialSquaredNorm(const ThetaArray &theta)
+    {
+        Eigen::ArrayXd result;
+        if constexpr (dim == 2)
+        {
+            switch (theta.rows())
+            {
+            case 2:
+                result =
+                    theta(0, EigenAll).square() +
+                    theta(1, EigenAll).square();
+                break;
+            case 3:
+                result =
+                    theta(0, EigenAll).square() +
+                    theta(1, EigenAll).square() * 0.5 +
+                    theta(2, EigenAll).square();
+                break;
+            case 4:
+                result =
+                    theta(0, EigenAll).square() +
+                    theta(1, EigenAll).square() * (1. / 3.) +
+                    theta(2, EigenAll).square() * (1. / 3.) +
+                    theta(3, EigenAll).square();
+                break;
+            default:
+                DNDS_assert(false);
+                break;
+            }
+        }
+        else
+        {
+            switch (theta.rows())
+            {
+            case 3:
+                result =
+                    theta(0, EigenAll).square() +
+                    theta(1, EigenAll).square() +
+                    theta(2, EigenAll).square();
+                break;
+            case 6:
+                result =
+                    theta(0, EigenAll).square() +
+                    theta(1, EigenAll).square() +
+                    theta(2, EigenAll).square() +
+                    theta(3, EigenAll).square() * 0.5 +
+                    theta(4, EigenAll).square() * 0.5 +
+                    theta(5, EigenAll).square() * 0.5;
+                break;
+            case 10:
+                result =
+                    theta(0, EigenAll).square() +
+                    theta(1, EigenAll).square() +
+                    theta(2, EigenAll).square() +
+                    theta(3, EigenAll).square() * (1. / 3.) +
+                    theta(4, EigenAll).square() * (1. / 3.) +
+                    theta(5, EigenAll).square() * (1. / 3.) +
+                    theta(6, EigenAll).square() * (1. / 3.) +
+                    theta(7, EigenAll).square() * (1. / 3.) +
+                    theta(8, EigenAll).square() * (1. / 3.) +
+                    theta(9, EigenAll).square() * (1. / 6.);
+                break;
+            default:
+                DNDS_assert(false);
+                break;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @brief Computes a weighted polynomial dot product between theta1 and theta2.
+     *
+     * Uses the same weight structure as PolynomialSquaredNorm<dim>.
+     * Only used for dim=2 in FMEMM_Multiway_Polynomial2D.
+     */
+    template <int dim, typename ThetaArray1, typename ThetaArray2>
+    inline Eigen::ArrayXd PolynomialDotProduct(const ThetaArray1 &theta1, const ThetaArray2 &theta2)
+    {
+        Eigen::ArrayXd result;
+        static_assert(dim == 2, "PolynomialDotProduct only implemented for dim=2");
+        switch (theta1.rows())
+        {
+        case 2:
+            result =
+                theta1(0, EigenAll) * theta2(0, EigenAll) +
+                theta1(1, EigenAll) * theta2(1, EigenAll);
+            break;
+        case 3:
+            result =
+                theta1(0, EigenAll) * theta2(0, EigenAll) +
+                theta1(1, EigenAll) * theta2(1, EigenAll) * 0.5 +
+                theta1(2, EigenAll) * theta2(2, EigenAll);
+            break;
+        case 4:
+            result =
+                theta1(0, EigenAll) * theta2(0, EigenAll) +
+                theta1(1, EigenAll) * theta2(1, EigenAll) * (1. / 3.) +
+                theta1(2, EigenAll) * theta2(2, EigenAll) * (1. / 3.) +
+                theta1(3, EigenAll) * theta2(3, EigenAll);
+            break;
+        default:
+            DNDS_assert(false);
+            break;
+        }
+        return result;
+    }
+    /**
      * @brief input vector<Eigen::Array-like>
      */
     template <typename TinOthers, typename Tout>
@@ -29,31 +158,7 @@ namespace DNDS::CFV
         {
             Eigen::ArrayXd thetaNorm;
             Eigen::ArrayXXd theta = uOthers[iOther] / uMax;
-            switch (theta.rows())
-            {
-            case 2:
-                thetaNorm =
-                    theta(0, Eigen::all).pow(2) +
-                    theta(1, Eigen::all).pow(2);
-                break;
-            case 3:
-                thetaNorm =
-                    theta(0, Eigen::all).pow(2) +
-                    theta(1, Eigen::all).pow(2) * 0.5 +
-                    theta(2, Eigen::all).pow(2);
-                break;
-            case 4:
-                thetaNorm =
-                    theta(0, Eigen::all).pow(2) +
-                    theta(1, Eigen::all).pow(2) * (1. / 3.) +
-                    theta(2, Eigen::all).pow(2) * (1. / 3.) +
-                    theta(3, Eigen::all).pow(2);
-                break;
-
-            default:
-                DNDS_assert(false);
-                break;
-            }
+            thetaNorm = PolynomialSquaredNorm<2>(theta);
             thetaNorm += verySmallReal_pDiP;
             thetaNorm = thetaNorm.pow(-p / 2);
 
@@ -62,11 +167,9 @@ namespace DNDS::CFV
             uUp += theta.rowwise() * thetaNorm.transpose() * exn;
         }
 
-        // std::cout << uUp << std::endl;
-        // std::cout << uDown << std::endl;
         uOut *= uUp.rowwise() / (uDown.transpose() + verySmallReal);
 
-        // // * Do cut off
+        // * Do cut off
         // for (int iOther = 0; iOther < Nother; iOther++)
         // {
         //     Eigen::ArrayXd uDotuOut;
@@ -74,21 +177,21 @@ namespace DNDS::CFV
         //     {
         //     case 2:
         //         uDotuOut =
-        //             uOthers[iOther](0, Eigen::all) * uOut(0, Eigen::all) +
-        //             uOthers[iOther](1, Eigen::all) * uOut(1, Eigen::all);
+        //             uOthers[iOther](0, EigenAll) * uOut(0, EigenAll) +
+        //             uOthers[iOther](1, EigenAll) * uOut(1, EigenAll);
         //         break;
         //     case 3:
         //         uDotuOut =
-        //             uOthers[iOther](0, Eigen::all) * uOut(0, Eigen::all) +
-        //             uOthers[iOther](1, Eigen::all) * uOut(1, Eigen::all) * 0.5 +
-        //             uOthers[iOther](2, Eigen::all) * uOut(2, Eigen::all);
+        //             uOthers[iOther](0, EigenAll) * uOut(0, EigenAll) +
+        //             uOthers[iOther](1, EigenAll) * uOut(1, EigenAll) * 0.5 +
+        //             uOthers[iOther](2, EigenAll) * uOut(2, EigenAll);
         //         break;
         //     case 4:
         //         uDotuOut =
-        //             uOthers[iOther](0, Eigen::all) * uOut(0, Eigen::all) +
-        //             uOthers[iOther](1, Eigen::all) * uOut(1, Eigen::all) * (1. / 3.) +
-        //             uOthers[iOther](2, Eigen::all) * uOut(2, Eigen::all) * (1. / 3.) +
-        //             uOthers[iOther](3, Eigen::all) * uOut(3, Eigen::all);
+        //             uOthers[iOther](0, EigenAll) * uOut(0, EigenAll) +
+        //             uOthers[iOther](1, EigenAll) * uOut(1, EigenAll) * (1. / 3.) +
+        //             uOthers[iOther](2, EigenAll) * uOut(2, EigenAll) * (1. / 3.) +
+        //             uOthers[iOther](3, EigenAll) * uOut(3, EigenAll);
         //         break;
 
         //     default:
@@ -131,55 +234,9 @@ namespace DNDS::CFV
             Eigen::ArrayXd thetaNorm;
             Eigen::ArrayXXd theta = uOthers[iOther] / umax;
             Eigen::ArrayXd theta0DotTheta;
-            switch (theta.rows())
-            {
-            case 2:
-                thetaNorm =
-                    theta(0, Eigen::all).pow(2) +
-                    theta(1, Eigen::all).pow(2);
-                thetaMinNormNorm =
-                    thetaMinNorm(0, Eigen::all).pow(2) +
-                    thetaMinNorm(1, Eigen::all).pow(2);
-                theta0DotTheta =
-                    theta(0, Eigen::all) * theta0(0, Eigen::all) +
-                    theta(1, Eigen::all) * theta0(1, Eigen::all);
-                break;
-            case 3:
-                thetaNorm =
-                    theta(0, Eigen::all).pow(2) +
-                    theta(1, Eigen::all).pow(2) * 0.5 +
-                    theta(2, Eigen::all).pow(2);
-                thetaMinNormNorm =
-                    thetaMinNorm(0, Eigen::all).pow(2) +
-                    thetaMinNorm(1, Eigen::all).pow(2) * 0.5 +
-                    thetaMinNorm(2, Eigen::all).pow(2);
-                theta0DotTheta =
-                    theta(0, Eigen::all) * theta0(0, Eigen::all) +
-                    theta(1, Eigen::all) * theta0(1, Eigen::all) * 0.5 +
-                    theta(2, Eigen::all) * theta0(2, Eigen::all);
-                break;
-            case 4:
-                thetaNorm =
-                    theta(0, Eigen::all).pow(2) +
-                    theta(1, Eigen::all).pow(2) * (1. / 3.) +
-                    theta(2, Eigen::all).pow(2) * (1. / 3.) +
-                    theta(3, Eigen::all).pow(2);
-                thetaMinNormNorm =
-                    thetaMinNorm(0, Eigen::all).pow(2) +
-                    thetaMinNorm(1, Eigen::all).pow(2) * (1. / 3.) +
-                    thetaMinNorm(2, Eigen::all).pow(2) * (1. / 3.) +
-                    thetaMinNorm(3, Eigen::all).pow(2);
-                theta0DotTheta =
-                    theta(0, Eigen::all) * theta0(0, Eigen::all) +
-                    theta(1, Eigen::all) * theta0(1, Eigen::all) * (1. / 3.) +
-                    theta(2, Eigen::all) * theta0(2, Eigen::all) * (1. / 3.) +
-                    theta(3, Eigen::all) * theta0(3, Eigen::all);
-                break;
-
-            default:
-                DNDS_assert(false);
-                break;
-            }
+            thetaNorm = PolynomialSquaredNorm<2>(theta);
+            thetaMinNormNorm = PolynomialSquaredNorm<2>(thetaMinNorm);
+            theta0DotTheta = PolynomialDotProduct<2>(theta, theta0);
             Eigen::ArrayXd selection = (thetaNorm - thetaMinNormNorm).sign() * 0.5 + 0.5; //! need eliminate one side?
             thetaMinNorm = theta.rowwise() * (1 - selection).transpose() +
                            thetaMinNorm.rowwise() * selection.transpose();
@@ -188,42 +245,8 @@ namespace DNDS::CFV
         }
         Eigen::ArrayXd thetaNorm;
         Eigen::ArrayXd thetaMinNormNorm;
-        switch (theta0.rows())
-        {
-        case 2:
-            thetaNorm =
-                theta0(0, Eigen::all).pow(2) +
-                theta0(1, Eigen::all).pow(2);
-            thetaMinNormNorm =
-                thetaMinNorm(0, Eigen::all).pow(2) +
-                thetaMinNorm(1, Eigen::all).pow(2);
-            break;
-        case 3:
-            thetaNorm =
-                theta0(0, Eigen::all).pow(2) +
-                theta0(1, Eigen::all).pow(2) * 0.5 +
-                theta0(2, Eigen::all).pow(2);
-            thetaMinNormNorm =
-                thetaMinNorm(0, Eigen::all).pow(2) +
-                thetaMinNorm(1, Eigen::all).pow(2) * 0.5 +
-                thetaMinNorm(2, Eigen::all).pow(2);
-            break;
-        case 4:
-            thetaNorm =
-                theta0(0, Eigen::all).pow(2) +
-                theta0(1, Eigen::all).pow(2) * (1. / 3.) +
-                theta0(2, Eigen::all).pow(2) * (1. / 3.) +
-                theta0(3, Eigen::all).pow(2);
-            thetaMinNormNorm =
-                thetaMinNorm(0, Eigen::all).pow(2) +
-                thetaMinNorm(1, Eigen::all).pow(2) * (1. / 3.) +
-                thetaMinNorm(2, Eigen::all).pow(2) * (1. / 3.) +
-                thetaMinNorm(3, Eigen::all).pow(2);
-            break;
-        default:
-            DNDS_assert(false);
-            break;
-        }
+        thetaNorm = PolynomialSquaredNorm<2>(theta0);
+        thetaMinNormNorm = PolynomialSquaredNorm<2>(thetaMinNorm);
         Eigen::ArrayXd replaceLoc = ((thetaNorm / (thetaMinNormNorm + verySmallReal)).sqrt() - 1).max(verySmallReal);
         // Eigen::ArrayXd replaceFactor = 2 - (-replaceLoc).exp();
         // Eigen::ArrayXd replaceFactor = 2 - (replaceLoc * p + 1).pow(-1. / p);
@@ -311,9 +334,8 @@ namespace DNDS::CFV
 
         inline real W12center(real *u, const int J, real n)
         {
-
-            real *theta = new real[J];
-            theta[0] = 1.0;
+            std::vector<real> thetaBuf(J);
+            real *theta = thetaBuf.data();
             for (int ii = 0; ii < J; ++ii)
             {
                 theta[ii] = (u[0] + signP(u[0]) * 1e-12) / (u[ii] + signP(u[ii]) * 1e-12);
@@ -327,9 +349,6 @@ namespace DNDS::CFV
                 sumLocal1 += std::pow(theta[ii], (p - 1.0));
                 sumLocal2 += std::pow(theta[ii], p);
             }
-
-            delete[] theta;
-            theta = NULL;
 
             return u[0] * sumLocal1 / (sumLocal2 + 1e-12);
         }
@@ -507,106 +526,8 @@ namespace DNDS::CFV
         Eigen::ArrayXd u1p, u2p;
         Eigen::Array<real, Eigen::Dynamic, nVarsFixed, Eigen::AutoAlign, nDofMax> theta1 = u1 / uMax;
         Eigen::Array<real, Eigen::Dynamic, nVarsFixed, Eigen::AutoAlign, nDofMax> theta2 = u2 / uMax;
-        if constexpr (dim == 2)
-        {
-            switch (u1.rows())
-            {
-            case 2:
-                u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square();
-                u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square();
-                break;
-            case 3:
-                u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() * 0.5 +
-                    theta1(2, Eigen::all).square();
-                u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() * 0.5 +
-                    theta2(2, Eigen::all).square();
-                break;
-            case 4:
-                u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() * (1. / 3.) +
-                    theta1(2, Eigen::all).square() * (1. / 3.) +
-                    theta1(3, Eigen::all).square();
-                u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() * (1. / 3.) +
-                    theta2(2, Eigen::all).square() * (1. / 3.) +
-                    theta2(3, Eigen::all).square();
-                break;
-
-            default:
-                DNDS_assert(false);
-                break;
-            }
-        }
-        else
-        {
-            switch (u1.rows())
-            {
-            case 3:
-                u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() +
-                    theta1(2, Eigen::all).square();
-                u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() +
-                    theta2(2, Eigen::all).square();
-                break;
-            case 6:
-                u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() +
-                    theta1(2, Eigen::all).square() +
-                    theta1(3, Eigen::all).square() * 0.5 +
-                    theta1(4, Eigen::all).square() * 0.5 +
-                    theta1(5, Eigen::all).square() * 0.5;
-                u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() +
-                    theta2(2, Eigen::all).square() +
-                    theta2(3, Eigen::all).square() * 0.5 +
-                    theta2(4, Eigen::all).square() * 0.5 +
-                    theta2(5, Eigen::all).square() * 0.5;
-                break;
-            case 10:
-                u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() +
-                    theta1(2, Eigen::all).square() +
-                    theta1(3, Eigen::all).square() * (1. / 3.) +
-                    theta1(4, Eigen::all).square() * (1. / 3.) +
-                    theta1(5, Eigen::all).square() * (1. / 3.) +
-                    theta1(6, Eigen::all).square() * (1. / 3.) +
-                    theta1(7, Eigen::all).square() * (1. / 3.) +
-                    theta1(8, Eigen::all).square() * (1. / 3.) +
-                    theta1(9, Eigen::all).square() * (1. / 6.);
-                u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() +
-                    theta2(2, Eigen::all).square() +
-                    theta2(3, Eigen::all).square() * (1. / 3.) +
-                    theta2(4, Eigen::all).square() * (1. / 3.) +
-                    theta2(5, Eigen::all).square() * (1. / 3.) +
-                    theta2(6, Eigen::all).square() * (1. / 3.) +
-                    theta2(7, Eigen::all).square() * (1. / 3.) +
-                    theta2(8, Eigen::all).square() * (1. / 3.) +
-                    theta2(9, Eigen::all).square() * (1. / 6.);
-                break;
-
-            default:
-                DNDS_assert(false);
-                break;
-            }
-        }
+        u1p = PolynomialSquaredNorm<dim>(theta1);
+        u2p = PolynomialSquaredNorm<dim>(theta2);
         // u1p = u1p.pow(p / 2);
         // u2p = u2p.pow(p / 2);
 
@@ -614,8 +535,6 @@ namespace DNDS::CFV
         u2p = u2p.square();
 
         uOut = (u2.rowwise() * u1p.transpose() + n * (u1.rowwise() * u2p.transpose())).rowwise() / ((u1p + n * u2p) + verySmallReal).transpose();
-
-        // std::cout << u2 << std::endl;
     }
 
     template <int dim, int nVarsFixed, typename Tin1, typename Tin2, typename Tout>
@@ -630,106 +549,8 @@ namespace DNDS::CFV
         Eigen::ArrayXd u1p, u2p;
         Eigen::Array<real, Eigen::Dynamic, nVarsFixed, Eigen::AutoAlign, nDofMax> theta1 = u1 / uMax;
         Eigen::Array<real, Eigen::Dynamic, nVarsFixed, Eigen::AutoAlign, nDofMax> theta2 = u2 / uMax;
-        if constexpr (dim == 2)
-        {
-            switch (u1.rows())
-            {
-            case 2:
-                u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square();
-                u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square();
-                break;
-            case 3:
-                u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() * 0.5 +
-                    theta1(2, Eigen::all).square();
-                u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() * 0.5 +
-                    theta2(2, Eigen::all).square();
-                break;
-            case 4:
-                u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() * (1. / 3.) +
-                    theta1(2, Eigen::all).square() * (1. / 3.) +
-                    theta1(3, Eigen::all).square();
-                u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() * (1. / 3.) +
-                    theta2(2, Eigen::all).square() * (1. / 3.) +
-                    theta2(3, Eigen::all).square();
-                break;
-
-            default:
-                DNDS_assert(false);
-                break;
-            }
-        }
-        else
-        {
-            switch (u1.rows())
-            {
-            case 3:
-                u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() +
-                    theta1(2, Eigen::all).square();
-                u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() +
-                    theta2(2, Eigen::all).square();
-                break;
-            case 6:
-                u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() +
-                    theta1(2, Eigen::all).square() +
-                    theta1(3, Eigen::all).square() * 0.5 +
-                    theta1(4, Eigen::all).square() * 0.5 +
-                    theta1(5, Eigen::all).square() * 0.5;
-                u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() +
-                    theta2(2, Eigen::all).square() +
-                    theta2(3, Eigen::all).square() * 0.5 +
-                    theta2(4, Eigen::all).square() * 0.5 +
-                    theta2(5, Eigen::all).square() * 0.5;
-                break;
-            case 10:
-                u1p =
-                    theta1(0, Eigen::all).square() +
-                    theta1(1, Eigen::all).square() +
-                    theta1(2, Eigen::all).square() +
-                    theta1(3, Eigen::all).square() * (1. / 3.) +
-                    theta1(4, Eigen::all).square() * (1. / 3.) +
-                    theta1(5, Eigen::all).square() * (1. / 3.) +
-                    theta1(6, Eigen::all).square() * (1. / 3.) +
-                    theta1(7, Eigen::all).square() * (1. / 3.) +
-                    theta1(8, Eigen::all).square() * (1. / 3.) +
-                    theta1(9, Eigen::all).square() * (1. / 6.);
-                u2p =
-                    theta2(0, Eigen::all).square() +
-                    theta2(1, Eigen::all).square() +
-                    theta2(2, Eigen::all).square() +
-                    theta2(3, Eigen::all).square() * (1. / 3.) +
-                    theta2(4, Eigen::all).square() * (1. / 3.) +
-                    theta2(5, Eigen::all).square() * (1. / 3.) +
-                    theta2(6, Eigen::all).square() * (1. / 3.) +
-                    theta2(7, Eigen::all).square() * (1. / 3.) +
-                    theta2(8, Eigen::all).square() * (1. / 3.) +
-                    theta2(9, Eigen::all).square() * (1. / 6.);
-                break;
-
-            default:
-                DNDS_assert(false);
-                break;
-            }
-        }
+        u1p = PolynomialSquaredNorm<dim>(theta1);
+        u2p = PolynomialSquaredNorm<dim>(theta2);
         u1p = u1p.sqrt();
         u2p = u2p.sqrt();
 
@@ -750,8 +571,6 @@ namespace DNDS::CFV
         uOut = u1.rowwise() * replaceFactor.transpose() + u2.rowwise() * (1 - replaceFactor).transpose();
         // //! cutting
         // uOut = uOut.rowwise() * (u1u2.sign() + 1).transpose() * 0.5;
-
-        // std::cout << u2 << std::endl;
     }
 
     template <typename Tin1, typename Tin2, typename Tout>
@@ -771,19 +590,6 @@ namespace DNDS::CFV
         u2p = u2p.pow(p / 2);
 
         uOut = (u2.rowwise() * u1p.transpose() + n * (u1.rowwise() * u2p.transpose())).rowwise() / ((u1p + n * u2p) + verySmallReal).transpose();
-
-        // std::cout << u2 << std::endl;
     }
 
-    template <typename TinC, typename TinOthers, typename Tout>
-    inline void FWBAP_LE_Multiway(const TinC &uC, const TinOthers &uOthers, int Nother, Tout &uOut)
-    {
-        static const int p = 4;
-        static const real n = 100.0;
-        static const real verySmallReal_pDiP = std::pow(verySmallReal, 1.0 / p);
-        static const real eps = 5;
-
-        //! TODO:
-        // static_assert(false, "Incomplete Implementation");
-    }
 }

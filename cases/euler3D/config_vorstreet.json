@@ -1,0 +1,279 @@
+{
+    "$schema": "../euler3D_schema.json",
+    "timeMarchControl": {
+        // "dtImplicit": 0.005,
+        // "dtImplicit": 0.10,
+        "dtImplicit": 0.1,
+        "nTimeStep": 20000,
+        // "steadyQuit": true,
+        // "odeCode": 0,
+        "odeCode": 202, // esdirk3
+        // "odeCode": 204, // esdirk2
+        // "odeCode": 1,
+        // "odeCode": 0,
+        // "odeCode": 411,
+        // "odeSetting1": 0.5,
+        // "odeSetting2": 0,
+        // "odeSetting3": 0.75,
+        // "odeSetting4": -1e-10,
+        // "odeSettingsExtra": {
+        //     "nMG": 2,
+        //     "thetaMMG": 1,
+        //     "coefIncMidMG": 1
+        // },
+        // "odeCode": 401,
+        // "odeSetting1": 0.55,
+        // "odeSetting2": 0,
+        // "odeSetting3": 1.333,
+        "rhsFPPMode": 2,
+        "rhsFPPScale": 5e-1,
+        "useRestart": true,
+        "_tail": 0
+    },
+    "convergenceControl": {
+        // "rhsThresholdInternal": 1e-10,
+        // "nTimeStepInternal": 100000,
+        "rhsThresholdInternal": 1e-3,
+        // "rhsThresholdInternal": 1e-3,
+        // "nTimeStepInternal": 100,
+        // "nTimeStepInternalMin": 20,
+        "nTimeStepInternalMin": 5, //!
+        "nTimeStepInternal": 500, //!
+        "res_base": 0.0,
+        // "resBaseType": 1,
+        "useVolWiseResidual": true,
+        // "useVolWiseResidual": false,
+        "mergeMultiResidual": 1,
+        "normOrd": 1,
+        "_tail": 0
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 1,
+        "consoleOutputEveryFix": 1,
+        "nDataOutC": 100,
+        "nDataOut": 1000,
+        "nDataOutCInternal": 20000,
+        "nDataOutInternal": 1000000000,
+        "nRestartOutC": 100,
+        "nRestartOut": 1000,
+        "tDataOut": 3e+200,
+        // "consoleMainOutputFormatInternal": [
+        //     "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d},{iterAll:4d}]   ",
+        //     "res {termRed}{resRel:.3e}{termReset}   ",
+        //     "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
+        //     "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]"
+        // ],
+        "dataOutAtInit": true,
+        "restartOutAtInit": true,
+        "_tail": 0
+    },
+    "implicitCFLControl": {
+        "CFL": 100,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 0,
+        "nCFLRampLength": 100,
+        "CFLRampEnd": 10.0,
+        "useLocalDt": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshRotZ": 0.0,
+        "meshReorderCells": true,
+        "meshFile": "../data/mesh/CylinderB1_L8U2.cgns",
+        // "outPltName": "../data/out/CylinderB1_L8_RANSTest/CylinderB1_L8_Rawstart2_PdT5_RM8",
+        "outPltName": "../data/out/CylinderB1_L8U2_ILESTest/CylinderB1_L8U2_Raw4dT05_TH3_ILES_dF02R_O4_GW2_res0",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": false,
+        // "outPltVTKHDFFormat": true,
+        "hdfDeflateLevel": 5,
+        "hdfChunkSize": 32768,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "restartWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 5,
+            "hdfChunkSize": 32768,
+            "jsonBinaryDeflateLevel": 5,
+            "jsonUseCodecOnUInt8": true
+        }
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation1": [
+            0,
+            0,
+            8
+        ]
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        "recThreshold": 1e-010,
+        "nRecConsolCheck": 10,
+        "nRecMultiplyForZeroedGrad": 1000,
+        "zeroRecForSteps": 0
+    },
+    "limiterControl": {
+        "useLimiter": false,
+        "smoothIndicatorProcedure": 0,
+        "limiterProcedure": 1,
+        //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 3,
+        "jacobiRelax": 1,
+        "SORInstead": false,
+        "smoothThreshold": 1e-3,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false,
+        "cacheDiffBase": true,
+        "subs2ndOrder": 1,
+        "baseSettings": {
+            "localOrientation": false,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "scaleType": "BaryDiff",
+            "scaleMultiplier": 1.0,
+            "dirWeightScheme": "HQM_OPT",
+            "geomWeightScheme": "HQM_SD",
+            "geomWeightPower": 0.0,
+            "geomWeightBias": 1.0,
+            // "geomWeightPower": 0.0,
+            "_tail": 0
+        }
+    },
+    "linearSolverControl": {
+        "jacobiCode": 0,
+        "sgsIter": 4,
+        "sgsWithRec": 0,
+        "nSgsConsoleCheck": 100,
+        "gmresCode": 0,
+        "gmresScale": 1,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        // "nGmresConsoleCheck": 1,
+        "multiGridLP": 0,
+        "coarseGridLinearSolverControlList": {
+            "1": {
+                "jacobiCode": 0,
+                "sgsIter": 4,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 3,
+                "multiGridNIterPost": 0,
+                "centralSmoothInputResidual": 0
+            }
+        },
+        "directPrecControl": {
+            "useDirectPrec": false,
+            "iluCode": 2,
+            "orderingCode": 0
+        }
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": false,
+        "riemannSolverType": "Roe_M8",
+        "rsMeanValueEig": 1,
+        "rsIncFScale": 0.2,
+        "nCentralSmoothStep": 0,
+        "SADESScale": 0.65,
+        "ransForce2nd": 1,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "farFieldStaticValue": [
+            1,
+            1,
+            0,
+            0,
+            179.0714285714286
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 0.2614994377762088,
+            "muGas": 2e-4,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4,
+            "muModel": 0
+        },
+        "cLDriverBCNames": [
+            "WALL"
+        ],
+        "exprtkInitializers": [
+            // {
+            //     "exprs": [
+            //         "var r := sqrt(x[1] * x[1] + x[0] * x[0]); ",
+            //         "var rmax := 6; ",
+            //         "if(r <= rmax) ",
+            //         "   inRegion := 1; ",
+            //         "var amp := 0.001 * 0.1 * exp( - (r / rmax * 3) ^ 2); ",
+            //         "var lam := 2.0; ",
+            //         "var phis[200] := {0.2666,0.4489,3.278,0.6078,5.141,5.137,4.539,0.9416,4.144,3.258,6.113,4.078,5.029,2.851,2.717,5.186,0.5245,0.8367,1.089,2.456,5.224,5.048,0.38,2.509,3.31,2.619,4.127,3.946,1.835,2.712,0.09731,6.183,1.05,0.6674,2.34,1.245,3.077,2.133,5.979,5.783,0.331,4.636,1.691,2.657,3.442,5.923,2.625,6.177,1.894,4.405,4.187,3.387,4.386,4.188,1.119,0.8043,6.277,1.075,0.2048,3.526,5.541,4.205,1.197,2.318,2.895,6.168,0.9827,5.375,4.051,2.364,1.2,2.691,3.029,0.7578,3.704,1.421,2.417,3.663,1.582,1.825,3.877,1.667,5.18,6.174,4.588,2.161,3.67,0.6771,5.695,5.527,5.138,1.638,3.734,0.1415,2.672,1.965,1.015,1.123,2.657,0.5921,3.761,2.959,4.373,4.398,4.012,0.2111,0.4323,2.008,3.336,4.112,2.561,5.152,4.514,6.086,3.338,2.043,0.6637,3.839,4.893,2.661,0.5707,1.674,0.9655,1.766,2.765,3.312,2.874,5.5,3.255,5.929,4.007,6.017,1.512,4.248,1.816,4.221,4.368,0.4272,1.601,1.408,4.196,5.305,2.164,4.904,4.243,0.04219,3.784,2.43,5.755,0.007232,2.906,2.666,2.896,4.839,2.026,4.931,2.962,0.2247,1.105,4.535,2.975,0.9596,2.143,3.816,1.205,4.64,1.526,5.764,1.691,4.81,1.185,1.806,0.5725,3.62,4.294,3.434,2.675,4.049,4.069,4.266,3.995,5.939,1.313,4.457,1.484,0.7502,3.816,2.828,2.882,4.159,4.84,2.2,4.16,2.615,5.29,5.233,1.611,3.854,3.658,3.398};",
+            //         "var As[10] := {0.5, 0.5, 0.25, 0.125, 0.125, 0.125, 0.1, 0.1, 0.1, 0.1};",
+            //         "var iPsi := 0;",
+            //         "for (var i := 0; i < As[]; i += 1)   {",
+            //         "for (var j := 0; j < As[]; j += 1)   {",
+            //         "for (var k := 0; k < As[]; k += 1)   {",
+            //         "   var ampC := amp * pow(As[i] * As[j] * As[k], 1.0/3.0);",
+            //         "   UPrim[2] += cos(x[2] / lam * (k+1) * pi * 2 ",
+            //         "             + x[1] / lam * (j+1) * pi * 2  ",
+            //         "             + x[0] / lam * (i+1) * pi * 2 + phis[iPsi]) * ampC; ",
+            //         "   iPsi += 1;",
+            //         "}}};",
+            //         "0"
+            //     ]
+            // }
+            // ,
+            // {
+            //     "exprs": [
+            //         "var r := sqrt(x[1] * x[1] + x[0] * x[0]); ",
+            //         "var rmax := 2; ",
+            //         "if(r <= rmax) ",
+            //         "   inRegion := 1; ",
+            //         "UPrim[1] += cos(x[2] / 4.0 * pi * 2 ) * 0.05; ",
+            //         "0"
+            //     ]
+            // }
+            // , //
+            // {
+            //     "exprs": [
+            //         "var r := sqrt(x[1] * x[1] + x[0] * x[0]); ",
+            //         "var rmax := 2; ",
+            //         "if(r <= rmax) ",
+            //         "   inRegion := 1; ",
+            //         "UPrim[2] += cos(x[0] / 0.5 * 2 * pi) * cos(x[1] / 0.5 * 2 * pi) * 0.05; ",
+            //         "0"
+            //     ]
+            // }
+        ]
+    },
+    "restartState": {
+        "iStep": 10000,
+        "iStepInternal": -1,
+        "odeCodePrev": -1,
+        // "lastRestartFile": "../data/outCylinderB1/CylinderB1_T0Starter/out_bdf2__10000_p8.restart.dnds.h5"
+        // "lastRestartFile": "../data/outCylinderB1/CylinderB1_T0Starter/out_bdf2_u2r2Refine__10000_p8.restart.dnds.h5"
+        "lastRestartFile": "../data/out/CylinderB1_L8U2_ILESTest/CylinderB1_L8U2_Rawstart4_PdT05_TH3_ILES_dF02R_O4_GW2__20000_p224.restart.dnds.h5"
+        // "lastRestartFile": "../data/out/CylinderB1_L8U2_ILESTest/CylinderB1_L8U2_Rawstart4_PdT05_TH3_ILES_dF02R_O4_GW2__14000_p224.restart.dnds.h5.to_p64.dnds.h5"
+    }
+}

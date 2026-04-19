@@ -1,19 +1,92 @@
+/** @file RANS_ke.hpp
+ *  @brief RANS two-equation turbulence model implementations for the DNDSR CFD solver.
+ *
+ *  Provides template functions for computing eddy viscosity, viscous fluxes, and
+ *  source terms for several widely-used RANS turbulence closures:
+ *
+ *  - **Realizable k-epsilon** (Shih et al.) with f_mu damping and realizability constraint.
+ *  - **k-omega SST** (Menter) with F1/F2 blending, cross-diffusion, and DES/DDES/IDDES support.
+ *  - **k-omega Wilcox** (1988 / 2006 variants) with stress limiter and f_beta correction.
+ *  - **Spalart-Allmaras** (SA) one-equation model with optional rotation correction,
+ *    negative-nuTilde extension, and DES/DDES/IDDES/WMLES length-scale modification.
+ *
+ *  All functions are templated on spatial dimension @c dim and accept Eigen-compatible
+ *  expression types for the conservative state vector @c UMeanXy and the gradient tensor
+ *  @c DiffUxy (dim × nVars).  The convention for variable layout is:
+ *  - Indices 0..dim: density and momentum components.
+ *  - Index @c I4 = dim+1: total energy.
+ *  - Index @c I4+1: first RANS variable (k or nuTilde).
+ *  - Index @c I4+2: second RANS variable (epsilon or omega), where applicable.
+ *
+ *  Compile-time macros control model variants and limiters; see definitions below.
+ *
+ *  @note This file is included by other Euler module headers and should not normally
+ *        be included directly by application code.
+ */
 #pragma once
 
 #include "Euler.hpp"
 
+/** @brief When set to 1, cap turbulent viscosity at 1e5 * mu_laminar for k-epsilon. */
 #define KE_LIMIT_MUT 1
 
+/** @brief Select Wilcox k-omega model version: 0 = original 1988, 1 = 2006 with stress limiter, 2 = simplified. */
 #define KW_WILCOX_VER 1
+/** @brief When set to 1, enable production limiters for Wilcox k-omega (CFL3D-style capping). */
 #define KW_WILCOX_PROD_LIMITS 1
+/** @brief When set to 1, cap turbulent viscosity at 1e5 * mu_laminar for Wilcox k-omega. */
 #define KW_WILCOX_LIMIT_MUT 1
 
+/** @brief When set to 1, cap turbulent viscosity at 1e5 * mu_laminar for SST. */
 #define KW_SST_LIMIT_MUT 1
+/** @brief When set to 1, enable production limiters for SST (CFL3D-style capping). */
 #define KW_SST_PROD_LIMITS 1
+/** @brief Select omega production formulation for SST: 0 = classical, 1 = strain-rate based, 2 = vorticity based. */
 #define KW_SST_PROD_OMEGA_VERSION 1
 
+/** @brief When set to 1, enable the ft2 laminar suppression term in Spalart-Allmaras. Setting to 0 disables ft2. */
+#define SA_USE_FT2_TERM 1
+
+/** @brief RANS turbulence model functions (eddy viscosity, viscous flux, source terms). */
 namespace DNDS::Euler::RANS
 {
+    /** @brief Spalart-Allmaras model constants used across multiple files.
+     *
+     *  Canonical definitions from Spalart & Allmaras (1994).
+     *  These constants are shared between the SA source term computation
+     *  and boundary condition routines in other translation units.
+     */
+    namespace SA
+    {
+        static constexpr real cnu1 = 7.1;   ///< SA model constant c_{v1} controlling the viscous damping function f_{v1}.
+        static constexpr real cn1 = 16.0;    ///< SA model constant c_{n1} for the negative-nuTilde extension function f_n.
+        static constexpr real sigma = 2.0 / 3.0; ///< SA model diffusion coefficient sigma.
+    }
+
+    /** @brief Wall-omega boundary condition coefficient for k-omega family models.
+     *
+     *  Applied at wall boundaries as: rhoOmegaWall = mu / d^2 * kWallOmegaCoeff,
+     *  where d is the wall-normal distance of the first cell center.
+     */
+    static constexpr real kWallOmegaCoeff = 800.0;
+
+    /**
+     * @brief Compute turbulent viscosity mu_t from the Shih et al. realizable k-epsilon model.
+     *
+     * Evaluates the eddy viscosity using the realizable k-epsilon formulation with:
+     * - f_mu damping function based on the turbulent Reynolds number Re_t = rho * k^2 / (mu * epsilon).
+     * - Realizability constraint: mu_t <= phi * rho * k / S, where S is the strain-rate magnitude.
+     * - Optional upper bound of 1e5 * mu_laminar when @c KE_LIMIT_MUT is enabled.
+     *
+     * @tparam dim     Spatial dimension (2 or 3).
+     * @tparam TU      Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU  Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @param UMeanXy  Conservative state vector [rho, rhoU, ..., rhoE, rho*k, rho*epsilon].
+     * @param DiffUxy  Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf      Laminar (molecular) dynamic viscosity.
+     * @param d        Wall distance (unused in this model but kept for interface consistency).
+     * @return         Turbulent dynamic viscosity mu_t (>= 0).
+     */
     template <int dim, class TU, class TDiffU>
     real GetMut_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d)
     {
@@ -50,6 +123,27 @@ namespace DNDS::Euler::RANS
         return mut;
     }
 
+    /**
+     * @brief Compute the RANS viscous flux for the realizable k-epsilon transport equations.
+     *
+     * Evaluates the diffusion (viscous) flux contributions for the k and epsilon equations
+     * projected onto the face normal direction. The effective diffusivities are:
+     * - k-equation:       (mu_laminar + mu_t / sigma_k),  sigma_k = 1.0
+     * - epsilon-equation: (mu_laminar + mu_t / sigma_e),  sigma_e = 1.3
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TN       Eigen-compatible type for the face unit normal vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, primitive variables).
+     * @tparam TVFlux   Eigen-compatible type for the output viscous flux vector.
+     * @param UMeanXy      Conservative state vector.
+     * @param DiffUxyPrim  Gradient tensor of *primitive* variables, size dim × nVars.
+     * @param uNorm        Outward-pointing face unit normal vector (length dim).
+     * @param mut          Turbulent dynamic viscosity (precomputed).
+     * @param d            Wall distance (unused here, kept for interface consistency).
+     * @param muPhy        Laminar (molecular) dynamic viscosity.
+     * @param[out] vFlux   Output viscous flux vector; entries at I4+1 and I4+2 are set.
+     */
     template <int dim, class TU, class TN, class TDiffU, class TVFlux>
     void GetVisFlux_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN &&uNorm, real mut, real d, real muPhy, TVFlux &vFlux)
     {
@@ -62,6 +156,38 @@ namespace DNDS::Euler::RANS
         vFlux(I4 + 2) = DiffUxyPrim(Seq012, {I4 + 2}).dot(uNorm) * (muPhy + mut / sigE);
     }
 
+    /**
+     * @brief Compute source terms for the realizable k-epsilon transport equations.
+     *
+     * Evaluates production, destruction, and extra source contributions for the
+     * k and epsilon equations following the Shih et al. realizable k-epsilon model.
+     *
+     * Key terms computed:
+     * - Reynolds stress tensor tau_{ij} via Boussinesq hypothesis with realizability clipping.
+     * - Production of k: P_k = -tau_{ij} * dU_i/dx_j, capped by the Shih pphi limiter.
+     * - Turbulent time scale T_t with low-Re correction via zeta = sqrt(Re_t / 2).
+     * - Extra dissipation term E involving the gradient of the turbulent time scale.
+     *
+     * When @p mode == 0, the full source vector is returned:
+     * - source(I4+1) = P_k - rho*epsilon
+     * - source(I4+2) = (c_{e1} * P_k - c_{e2} * rho*epsilon + E) / T_t
+     *
+     * When @p mode == 1, the implicit diagonal contribution (positive) is returned for
+     * use in implicit time stepping:
+     * - source(I4+1) = 0
+     * - source(I4+2) = c_{e2} / T_t
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @tparam TSource  Eigen-compatible type for the output source vector.
+     * @param UMeanXy   Conservative state vector.
+     * @param DiffUxy   Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf       Laminar (molecular) dynamic viscosity.
+     * @param d         Wall distance (unused here, kept for interface consistency).
+     * @param[out] source  Output source vector; entries at I4+1 and I4+2 are set.
+     * @param mode      Source computation mode: 0 = full source, 1 = implicit diagonal (destruction only).
+     */
     template <int dim, class TU, class TDiffU, class TSource>
     void GetSource_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, TSource &source, int mode)
     {
@@ -127,6 +253,24 @@ namespace DNDS::Euler::RANS
         }
     }
 
+    /**
+     * @brief Attempt to find equilibrium epsilon for zero-gradient (freestream) conditions via Newton iteration.
+     *
+     * Iteratively solves for the epsilon value that zeroes the k-equation source term
+     * when all spatial gradients are zero.  Uses a simple Newton-Raphson loop with
+     * finite-difference Jacobian evaluation.
+     *
+     * @warning This function is noted as **not applicable** in practice — the zero-gradient
+     *          equilibrium assumption does not hold for the realizable k-epsilon model.
+     *          Retained for reference and experimentation only.
+     *
+     * @tparam dim  Spatial dimension (2 or 3).
+     * @tparam TU   Eigen-compatible type for the conservative state vector.
+     * @param[in,out] u      Conservative state vector; u(I4+2) (rho*epsilon) is updated in place.
+     * @param         muPhy  Laminar (molecular) dynamic viscosity.
+     * @return A tuple (rhs_initial, rhs_final) giving the k-equation residual before and
+     *         after the Newton iteration, for convergence diagnostics.
+     */
     template <int dim, class TU>
     std::tuple<real, real> SolveZeroGradEquilibrium(TU &u, real muPhy) // this is tested to be not applicable!
     {
@@ -167,6 +311,26 @@ namespace DNDS::Euler::RANS
         return std::make_tuple(rhs0, rhs);
     }
 
+    /**
+     * @brief Compute the analytical diagonal of the source Jacobian for the realizable k-epsilon model.
+     *
+     * Evaluates -dS/dU diagonal entries for implicit time stepping of the k and epsilon
+     * transport equations.  The diagonal entries approximate the linearised destruction terms:
+     * - source(I4+1) = -P_k / (rho*k)  (destruction rate of k)
+     * - source(I4+2) = c_{e2} / T_t     (destruction rate of epsilon)
+     *
+     * These positive values are used to augment the implicit operator diagonal,
+     * improving stability of the coupled RANS system.
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @tparam TSource  Eigen-compatible type for the output Jacobian diagonal vector.
+     * @param UMeanXy   Conservative state vector.
+     * @param DiffUxy   Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf       Laminar (molecular) dynamic viscosity.
+     * @param[out] source  Output Jacobian diagonal vector; entries at I4+1 and I4+2 are set.
+     */
     template <int dim, class TU, class TDiffU, class TSource>
     void GetSourceJacobianDiag_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, TSource &source)
     {
@@ -212,6 +376,26 @@ namespace DNDS::Euler::RANS
         source(I4 + 2) = (ce2) / Tt;
     }
 
+    /**
+     * @brief Compute the numerical (finite-difference) diagonal of the source Jacobian for the realizable k-epsilon model.
+     *
+     * Evaluates -dS_i/dU_i by forward finite-difference perturbation of rho*k and rho*epsilon
+     * independently.  The perturbation step is proportional to sqrt(smallReal) times the variable
+     * magnitude.  Results are clamped to non-negative values and amplified by a factor of 10
+     * for enhanced implicit stability.
+     *
+     * This is a fallback when the analytical Jacobian diagonal
+     * (GetSourceJacobianDiag_RealizableKe) is suspected of inaccuracy.
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @tparam TSource  Eigen-compatible type for the output Jacobian diagonal vector.
+     * @param UMeanXy   Conservative state vector.
+     * @param DiffUxy   Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf       Laminar (molecular) dynamic viscosity.
+     * @param[out] source  Output numerical Jacobian diagonal vector; entries at I4+1 and I4+2 are set.
+     */
     template <int dim, class TU, class TDiffU, class TSource>
     void GetSourceJacobianDiag_RealizableKe_ND(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, TSource &source)
     {
@@ -236,6 +420,25 @@ namespace DNDS::Euler::RANS
         source(I4 + 2) = std::max(source(I4 + 2), 0.) * 10;
     }
 
+    /**
+     * @brief Compute turbulent viscosity mu_t from Menter's k-omega SST model.
+     *
+     * Evaluates the SST eddy viscosity with:
+     * - Vorticity magnitude Omega = ||(grad U)^T - grad U|| / sqrt(2).
+     * - Blending function F2 based on wall distance and turbulent Reynolds number.
+     * - Bradshaw's structural constraint: mu_t = a1 * k / max(Omega * F2, a1 * omega),
+     *   where a1 = 0.31.
+     * - Optional upper bound of 1e5 * mu_laminar when @c KW_SST_LIMIT_MUT is enabled.
+     *
+     * @tparam dim     Spatial dimension (2 or 3).
+     * @tparam TU      Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU  Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @param UMeanXy  Conservative state vector [rho, rhoU, ..., rhoE, rho*k, rho*omega].
+     * @param DiffUxy  Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf      Laminar (molecular) dynamic viscosity.
+     * @param d        Wall distance.
+     * @return         Turbulent dynamic viscosity mu_t (>= 0).
+     */
     template <int dim, class TU, class TDiffU>
     real GetMut_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d)
     {
@@ -279,6 +482,31 @@ namespace DNDS::Euler::RANS
         return mut;
     }
 
+    /**
+     * @brief Compute the RANS viscous flux for the k-omega SST transport equations.
+     *
+     * Evaluates the diffusion (viscous) flux contributions for the k and omega equations
+     * projected onto the face normal direction.  The effective diffusion coefficients are
+     * blended between the inner-layer (set 1) and outer-layer (set 2) values using the
+     * SST blending function F1:
+     * - sigma_k = sigma_k1 * F1 + sigma_k2 * (1 - F1)
+     * - sigma_omega = sigma_omega1 * F1 + sigma_omega2 * (1 - F1)
+     *
+     * Effective diffusivity for each equation: mu_laminar + mu_t * sigma_{k,omega}.
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TN       Eigen-compatible type for the face unit normal vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, primitive variables).
+     * @tparam TVFlux   Eigen-compatible type for the output viscous flux vector.
+     * @param UMeanXy      Conservative state vector.
+     * @param DiffUxyPrim  Gradient tensor of *primitive* variables, size dim × nVars.
+     * @param uNorm        Outward-pointing face unit normal vector (length dim).
+     * @param mutIn        Turbulent dynamic viscosity (precomputed, used for diffusion coefficients).
+     * @param d            Wall distance.
+     * @param muf          Laminar (molecular) dynamic viscosity.
+     * @param[out] vFlux   Output viscous flux vector; entries at I4+1 and I4+2 are set.
+     */
     template <int dim, class TU, class TN, class TDiffU, class TVFlux>
     void GetVisFlux_SST(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN &&uNorm, real mutIn, real d, real muf, TVFlux &vFlux)
     {
@@ -313,7 +541,7 @@ namespace DNDS::Euler::RANS
         real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
         real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
         real nuPhy = muf / rho;
-        real CDKW = std::max(2 * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1)), 1e-10);
+        real CDKW = std::max(2 * rho * sigO2 / omegaaa * diffKO(EigenAll, 0).dot(diffKO(EigenAll, 1)), 1e-10);
         real F1 = std::tanh(std::pow(
             std::min(std::max(std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa)),
                      4 * rho * sigO2 * k / (CDKW * sqr(d))),
@@ -343,8 +571,42 @@ namespace DNDS::Euler::RANS
         }
     }
 
+    /**
+     * @brief Compute source terms for the k-omega SST transport equations.
+     *
+     * Evaluates production, destruction, and cross-diffusion source contributions for
+     * the k and omega equations following Menter's SST model.  Supports DES/DDES
+     * capability via the RANS-to-LES length scale ratio.
+     *
+     * Key terms:
+     * - Production P_k from the Boussinesq Reynolds stress, optionally capped at
+     *   20 * beta* * rho * k * omega (when @c KW_SST_PROD_LIMITS is enabled).
+     * - Omega production P_omega with version-dependent formulation controlled by
+     *   @c KW_SST_PROD_OMEGA_VERSION (0 = classical, 1 = strain-rate, 2 = vorticity).
+     * - Destruction terms: beta* * rho * k * omega for k, beta * rho * omega^2 for omega.
+     * - Cross-diffusion term: 2 * (1 - F1) * rho * sigma_omega2 / omega * grad(k) . grad(omega).
+     * - DES shielding: F_DES = max(1, l_RANS / l_LES * (1 - F2)), reducing the destruction
+     *   of k outside the RANS region.
+     *
+     * When @p mode == 0, the full source vector is returned.
+     * When @p mode == 1, the implicit diagonal contribution (positive) is returned:
+     * - source(I4+1) = beta* * omega * F_DES
+     * - source(I4+2) = 2 * beta * omega
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @tparam TSource  Eigen-compatible type for the output source vector.
+     * @param UMeanXy   Conservative state vector.
+     * @param DiffUxy   Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf       Laminar (molecular) dynamic viscosity.
+     * @param d         Wall distance.
+     * @param lLES      LES length scale for DES/DDES shielding (set to a large value to disable DES).
+     * @param[out] source  Output source vector; entries at I4+1 and I4+2 are set.
+     * @param mode      Source computation mode: 0 = full source, 1 = implicit diagonal (destruction only).
+     */
     template <int dim, class TU, class TDiffU, class TSource>
-    void GetSource_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, TSource &source, int mode)
+    void GetSource_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, real lLES, TSource &source, int mode)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -378,12 +640,14 @@ namespace DNDS::Euler::RANS
         real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
         real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
         real nuPhy = muf / rho;
-        real CDKW = std::max(2 * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1)), 1e-10);
+        real CDKW = std::max(2 * rho * sigO2 / omegaaa * diffKO(EigenAll, 0).dot(diffKO(EigenAll, 1)), 1e-10);
         real F1 = std::tanh(std::pow(
             std::min(std::max(std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa)),
                      4 * rho * sigO2 * k / (CDKW * sqr(d))),
             4));
         real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
+        real lRANS = std::sqrt(k) / (betaStar * omegaaa);
+        real FDES = std::max(1.0, lRANS / (lLES + verySmallReal) * (1 - F2));
         // F2 = 0;
         real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho; // use S/OmegaMag for SST: S: CFD++, OmegaMag: Turbulence Modeling Validation, Testing, and Developmen
 #if KW_SST_LIMIT_MUT == 1
@@ -413,19 +677,40 @@ namespace DNDS::Euler::RANS
 #endif
         if (mode == 0)
         {
-            source(I4 + 1) = PkTilde - betaStar * rho * k * omegaaa;
+            source(I4 + 1) = PkTilde - betaStar * rho * k * omegaaa * FDES;
             source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
-                             2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));
+                             2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(EigenAll, 0).dot(diffKO(EigenAll, 1));
             // source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
-            //                  2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));
+            //                  2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO(EigenAll, 0).dot(diffKO(EigenAll, 1));
         }
         else
         {
-            source(I4 + 1) = betaStar * omegaaa;
+            source(I4 + 1) = betaStar * omegaaa * FDES;
             source(I4 + 2) = 2 * beta * omegaaa;
         }
     }
 
+    /**
+     * @brief Compute turbulent viscosity mu_t from the Wilcox k-omega model.
+     *
+     * Evaluates the eddy viscosity mu_t = rho * k / omega_tilde, where omega_tilde
+     * depends on the selected model version (@c KW_WILCOX_VER):
+     * - Version 0 (original 1988): omega_tilde = omega (no stress limiter).
+     * - Version 1 (2006): omega_tilde = max(omega, C_lim * sqrt(S_{ij}S_{ij} / beta*)),
+     *   applying the stress limiter with C_lim = 7/8.
+     * - Version 2 (simplified): omega_tilde = omega (no stress limiter).
+     *
+     * Optional upper bound of 1e5 * mu_laminar when @c KW_WILCOX_LIMIT_MUT is enabled.
+     *
+     * @tparam dim     Spatial dimension (2 or 3).
+     * @tparam TU      Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU  Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @param UMeanXy  Conservative state vector [rho, rhoU, ..., rhoE, rho*k, rho*omega].
+     * @param DiffUxy  Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf      Laminar (molecular) dynamic viscosity.
+     * @param d        Wall distance (unused in this model but kept for interface consistency).
+     * @return         Turbulent dynamic viscosity mu_t (>= 0).
+     */
     template <int dim, class TU, class TDiffU>
     real GetMut_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d)
     {
@@ -463,6 +748,30 @@ namespace DNDS::Euler::RANS
         return mut;
     }
 
+    /**
+     * @brief Compute the RANS viscous flux for the Wilcox k-omega transport equations.
+     *
+     * Evaluates the diffusion (viscous) flux contributions for the k and omega equations
+     * projected onto the face normal direction.  The Wilcox model uses constant diffusion
+     * coefficients:
+     * - sigma_k = 0.5
+     * - sigma_omega = 0.5
+     *
+     * Effective diffusivity: mu_laminar + mu_t * sigma_{k,omega}.
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TN       Eigen-compatible type for the face unit normal vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, primitive variables).
+     * @tparam TVFlux   Eigen-compatible type for the output viscous flux vector.
+     * @param UMeanXy      Conservative state vector.
+     * @param DiffUxyPrim  Gradient tensor of *primitive* variables, size dim × nVars.
+     * @param uNorm        Outward-pointing face unit normal vector (length dim).
+     * @param mutIn        Turbulent dynamic viscosity (precomputed).
+     * @param d            Wall distance (unused here, kept for interface consistency).
+     * @param muf          Laminar (molecular) dynamic viscosity.
+     * @param[out] vFlux   Output viscous flux vector; entries at I4+1 and I4+2 are set.
+     */
     template <int dim, class TU, class TN, class TDiffU, class TVFlux>
     void GetVisFlux_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN &&uNorm, real mutIn, real d, real muf, TVFlux &vFlux)
     {
@@ -501,6 +810,42 @@ namespace DNDS::Euler::RANS
         vFlux(I4 + 2) = diffKO(Seq012, 1).dot(uNorm) * (muf + mut * sigO);
     }
 
+    /**
+     * @brief Compute source terms for the Wilcox k-omega transport equations.
+     *
+     * Evaluates production, destruction, and cross-diffusion source contributions for
+     * the k and omega equations following the Wilcox k-omega model.  The version-dependent
+     * behavior is controlled by @c KW_WILCOX_VER:
+     *
+     * - **Version 0 (1988):** alpha = 5/9, beta = 3/40, no stress limiter, no cross-diffusion.
+     * - **Version 1 (2006):** alpha = 13/25, beta = f_beta * beta_0, with the f_beta correction
+     *   based on Chi_omega (mean rotation / strain invariant), stress limiter C_lim = 7/8,
+     *   and cross-diffusion sigma_d term (sigma_d = 0.125 when grad(k) . grad(omega) > 0).
+     * - **Version 2 (simplified):** alpha = 13/25, beta = 0.075, vorticity-based production,
+     *   no stress limiter, no cross-diffusion.
+     *
+     * Production of k is optionally capped at 20 * beta* * rho * k * omega (CFL3D-style)
+     * when @c KW_WILCOX_PROD_LIMITS is enabled.
+     *
+     * When @p mode == 0, the full source vector is returned:
+     * - source(I4+1) = P_k - beta* * rho * k * omega
+     * - source(I4+2) = P_omega - beta * rho * omega^2 + sigma_d / omega * grad(k) . grad(omega)
+     *
+     * When @p mode == 1, the implicit diagonal contribution (positive) is returned:
+     * - source(I4+1) = beta* * omega
+     * - source(I4+2) = 2 * beta * omega
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @tparam TSource  Eigen-compatible type for the output source vector.
+     * @param UMeanXy   Conservative state vector.
+     * @param DiffUxy   Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf       Laminar (molecular) dynamic viscosity.
+     * @param d         Wall distance (unused here, kept for interface consistency).
+     * @param[out] source  Output source vector; entries at I4+1 and I4+2 are set.
+     * @param mode      Source computation mode: 0 = full source, 1 = implicit diagonal (destruction only).
+     */
     template <int dim, class TU, class TDiffU, class TSource>
     void GetSource_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, TSource &source, int mode)
     {
@@ -553,7 +898,7 @@ namespace DNDS::Euler::RANS
 #else
         real beta = 0.075;
 #endif
-        real crossDiff = diffKO(Eigen::all, 0).dot(diffKO(Eigen::all, 1));
+        real crossDiff = diffKO(EigenAll, 0).dot(diffKO(EigenAll, 1));
 #if KW_WILCOX_VER == 0 || KW_WILCOX_VER == 2
         real SigD = 0;
 #else
@@ -591,54 +936,184 @@ namespace DNDS::Euler::RANS
         }
     }
 
+    /**
+     * @brief Compute source terms for the Spalart-Allmaras one-equation turbulence model.
+     *
+     * Evaluates the full SA source term including production, destruction, diffusion,
+     * and optional DES/DDES/IDDES/WMLES length-scale modification.  The SA model solves
+     * a single transport equation for the modified kinematic viscosity nuTilde (stored
+     * as rho * nuTilde at index I4+1 in the conservative state vector).
+     *
+     * Key terms computed:
+     * - **Vorticity magnitude** S = ||Omega|| * sqrt(2), with optional rotation correction
+     *   (SRotCor = c_rot * min(0, S - SS)) when @p rotCor is enabled.
+     * - **Modified vorticity** Sh = S + Sbar, where Sbar = nuTilde * f_{v2} / (kappa^2 * d^2).
+     * - **Production** P = c_{b1} * (1 - f_{t2}) * Sh * nuTilde.
+     * - **Destruction** D = (c_{w1} * f_w - c_{b1}/kappa^2 * f_{t2}) * (nuTilde / d)^2.
+     * - **Diffusion** term: c_{b2}/sigma * |grad(nuTilde)|^2 (conservative form contribution).
+     * - **f_{t2} laminar suppression** term controlled by @c SA_USE_FT2_TERM.
+     *
+     * DES/DDES/IDDES length-scale modification:
+     * - **DESMode 0 (RANS):** l_DES = d (pure RANS, wall distance).
+     * - **DESMode 1 (IDDES):** Blends l_RANS and l_LES using the IDDES shielding functions
+     *   f_d, f_B, f_e, with psi correction for grid-induced separation avoidance.
+     * - **DESMode 2 (WMLES):** Uses the wall-modeled LES length scale
+     *   l_WMLES = f_B * (1 + f_e) * l_RANS + (1 - f_B) * l_LES * psi.
+     *
+     * When @p mode == 0, the full source is returned at source(I4+1).
+     * When @p mode == 1, the implicit diagonal contribution -dS/dU (positive, suitable for
+     * augmenting the implicit operator) is returned at source(I4+1).
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @tparam TSource  Eigen-compatible type for the output source vector.
+     * @param UMeanXy   Conservative state vector [rho, rhoU, ..., rhoE, rho*nuTilde].
+     * @param DiffUxy   Gradient tensor of conservative variables, size dim × nVars.
+     * @param muRef     Reference viscosity scale used to non-dimensionalise nuTilde
+     *                  (nuTilde_physical = UMeanXy(I4+1) * muRef / rho).
+     * @param mufPhy    Physical (dimensional) laminar dynamic viscosity.
+     * @param gamma     Ratio of specific heats (used for pressure gradient in optional helicity correction).
+     * @param d         Wall distance.
+     * @param lLES      LES length scale for DES shielding (set to a large value to disable DES).
+     * @param hMax      Maximum cell size (used in IDDES alpha parameter: alpha = 0.25 - d/hMax).
+     * @param DESMode   DES operating mode: 0 = pure RANS, 1 = IDDES, 2 = WMLES.
+     * @param[out] source  Output source vector; entry at I4+1 is set.
+     * @param rotCor    Rotation correction flag: 0 = disabled, nonzero = enabled (c_rot = 2.0).
+     * @param mode      Source computation mode: 0 = full source, 1 = implicit diagonal (positive).
+     */
     template <int dim, class TU, class TDiffU, class TSource>
-    void GetSource_SA(TU &&UMeanXy, TDiffU &&DiffUxy, real muRef, real mufPhy, real gamma, real d, TSource &source, int rotCor, int mode)
+    void GetSource_SA(TU &&UMeanXy, TDiffU &&DiffUxy, real muRef, real mufPhy, real gamma,
+                      real d,
+                      real lLES,
+                      real hMax,
+                      int DESMode,
+                      TSource &source, int rotCor, int mode)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
         static const auto I4 = dim + 1;
 
-        real cb1 = 0.1355;
-        real cb2 = 0.622;
-        real sigma = 2. / 3.;
-        real cnu1 = 7.1;
-        real cnu2 = 0.7;
-        real cnu3 = 0.9;
-        real cw2 = 0.3;
-        real cw3 = 2;
-        real kappa = 0.41;
-        real rlim = 10;
-        real cw1 = cb1 / sqr(kappa) + (1 + cb2) / sigma;
+        static const real cb1 = 0.1355;
+        static const real cb2 = 0.622;
+        static const real sigma = SA::sigma;
+        static const real cnu1 = SA::cnu1;
+        static const real cnu2 = 0.7;
+        static const real cnu3 = 0.9;
+        static const real cw2 = 0.3;
+        static const real cw3 = 2;
+        static const real kappa = 0.41;
+        static const real rlim = 10;
+        static const real cw1 = cb1 / sqr(kappa) + (1 + cb2) / sigma;
 
-        real ct3 = 1.2;
-        real ct4 = 0.5;
+#if SA_USE_FT2_TERM
+        static const real ct3 = 1.2;
+        static const real ct4 = 0.5;
+#else
+        static const real ct3 = 0.0;
+        static const real ct4 = 0.0;
+#endif
 
-        real nuh = UMeanXy(I4 + 1) * muRef / UMeanXy(0);
+        const real nuh = UMeanXy(I4 + 1) * muRef / UMeanXy(0);
 
-        real Chi = (UMeanXy(I4 + 1) * muRef / mufPhy);
-        real fnu1 = std::pow(Chi, 3) / (std::pow(Chi, 3) + std::pow(cnu1, 3));
-        real fnu2 = 1 - Chi / (1 + Chi * fnu1);
+        const real Chi = (UMeanXy(I4 + 1) * muRef / mufPhy);
+        const real Chi3 = cube(Chi);
+        const real fnu1 = Chi3 / (Chi3 + cube(cnu1));
+        const real fnu2 = 1 - Chi / (1 + Chi * fnu1);
 
-        // 2 is recommended but we use 1 to avoid negative production, see Diskin, Boris, Yi Liu, and Marshall C. Galbraith. "High-Fidelity CFD Verification Workshop 2024: Spalart-Allmaras QCR2000-R Turbulence Model." AIAA Scitech 2023 Forum. 2023.
-        real cRot = 1.0;
+        const Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
+        const Eigen::Matrix<real, dim, 1> diffRhoNu = DiffUxy(Seq012, {I4 + 1}) * muRef;
+        const Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
+        const Eigen::Matrix<real, dim, 1> diffNu = (diffRhoNu - nuh * diffRho) / UMeanXy(0);
+        const Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
+        const Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
 
-        Eigen::Matrix<real, dim, 1> velo = UMeanXy(Seq123) / UMeanXy(0);
-        Eigen::Matrix<real, dim, 1> diffRhoNu = DiffUxy(Seq012, {I4 + 1}) * muRef;
-        Eigen::Matrix<real, dim, 1> diffRho = DiffUxy(Seq012, {0});
-        Eigen::Matrix<real, dim, 1> diffNu = (diffRhoNu - nuh * diffRho) / UMeanXy(0);
-        Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy(Seq012, Seq123);
-        Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
-
-        Eigen::Matrix<real, dim, dim> Omega = 0.5 * (diffU.transpose() - diffU);
+        const Eigen::Matrix<real, dim, dim> Omega = 0.5 * (diffU.transpose() - diffU);
 #ifndef USE_ABS_VELO_IN_ROTATION
         if (settings.frameConstRotation.enabled)
             Omega += Geom::CrossVecToMat(settings.frameConstRotation.vOmega())(Seq012, Seq012); // to static frame rotation
 #endif
-        real S = Omega.norm() * std::sqrt(2);         // is omega's magnitude
-        real SS = (diffU + diffU.transpose()).norm(); // is sqrt(2) * strainrate's norm
-        real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;
+        const real S = Omega.norm() * std::sqrt(2.0);                               // is omega's magnitude
+        const real SS = (diffU + diffU.transpose()).norm() * (1. / std::sqrt(2.0)); // is sqrt(2) * strainrate's norm
+        real SRotCor = 0.0;
+        if (rotCor)
+        {
+            // 2 is recommended but we use 1 to avoid negative production, see Diskin, Boris, Yi Liu, and Marshall C. Galbraith. "High-Fidelity CFD Verification Workshop 2024: Spalart-Allmaras QCR2000-R Turbulence Model." AIAA Scitech 2023 Forum. 2023.
+            // we now use 2.0
+            const real cRot = 2.0;
+            SRotCor += cRot * std::min(0.0, S - SS);
+        }
+        real diffUNorm = diffU.norm();
 
-        real Sh;
+        const real ft2 = ct3 * std::exp(-ct4 * sqr(Chi));
+        // {
+        //     Eigen::Matrix<real, dim, dim> sHat = 0.5 * (diffU.transpose() + diffU);
+        //     real sHatSqr = 2 * sHat.squaredNorm();
+        //     real rStar = std::sqrt(sHatSqr) / S;
+        //     real DD = 0.5 * (sHatSqr + sqr(S));
+        // !    // need second derivatives for rotation term !(CFD++ user manual)
+        // }
+
+        real lDES = d;
+        // DDES shield
+        {
+            real lRANS = d;
+            real fwStar = .424;
+            real nuTur = mufPhy / UMeanXy(0) * std::max((Chi * fnu1), 0.0);
+            real nufPhy = mufPhy / UMeanXy(0);
+            real rd = (nuTur + nufPhy) / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
+            real fd = 1. - std::tanh(cube(8 * rd));
+            real psiSqr = 0.0;
+            if (Chi <= 0)
+                psiSqr = 100.0;
+            else
+                psiSqr = std::min(100.0, (1 - cb1 / (cw1 * sqr(kappa) * fwStar) * (ft2 + (1 - ft2) * fnu2)) /
+                                             (fnu1 * std::max(smallReal, 1 - ft2)));
+            // if (psiSqr < 1.01)
+            // {
+            //     std::cout << psiSqr << "Chi " << Chi << " fnu1 " << fnu1 << " xx " << (fnu1 * std::max(smallReal, 1 - ft2)) << " xx " << cb1 / (cw1 * sqr(kappa) * fwStar) << std::endl;
+            // }
+            real psi = std::sqrt(std::max(psiSqr, 1.0));
+            //! note that psi has lower bound of 1
+            // psi = 1.0;
+            lDES = lRANS - fd * std::max(0., lRANS - lLES * psi);
+
+            // IDDES switch
+            if (DESMode == 1 || DESMode == 2)
+            {
+                const real alphaIDDES = 0.25 - d / hMax;
+                const real fB = std::min(2 * std::exp(-9. * sqr(alphaIDDES)), 1.0);
+
+                const real cl = 3.55;
+                const real ct = 1.63;
+                const real rdt = nuTur / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
+                const real rdl = nufPhy / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
+                const real ft = std::tanh(cube(sqr(ct) * rdt));
+                const real fl_tmp = sqr(sqr(cl) * rdl);
+                const real fl = std::tanh(sqr(sqr(fl_tmp)) * fl_tmp); // power 5
+
+                const real fe1 = 2. * std::exp(-(alphaIDDES >= 0 ? 11.09 : 9.0) * sqr(alphaIDDES));
+                const real fe2 = 1. - std::max(ft, fl);
+                const real fe = std::max((fe1 - 1.), 0.) * psi * fe2;
+                if (DESMode == 2)
+                {
+                    const real lWMLES = fB * (1 + fe) * lRANS + (1 - fB) * lLES * psi;
+                    lDES = lWMLES;
+                }
+                else
+                {
+                    const real fdTilde = std::max(fB, std::tanh(cube(8 * rdt)));
+                    real lIDDES = fdTilde * (1 + fe) * lRANS + (1 - fdTilde) * lLES * psi;
+                    lIDDES = std::max(lLES * smallReal, lIDDES);
+                    lDES = lIDDES;
+                }
+            }
+        }
+        d = lDES; //! super subs
+
+        const real Sbar = nuh / (sqr(kappa) * sqr(d)) * fnu2;
+
+        real Sh = 0.;
 
         { // Lee, K., Wilson, M., and Vahdati, M. (April 16, 2018). "Validation of a Numerical Model for Predicting Stalled Flows in a Low-Speed Fan—Part I: Modification of Spalart–Allmaras Turbulence Model." ASME. J. Turbomach. May 2018; 140(5): 051008.
           // real betaSCor = 1;
@@ -664,42 +1139,30 @@ namespace DNDS::Euler::RANS
         else //*negative fix
 #endif
             Sh = S + Sbar;
+        // here r is used for fw, we use real d instead of lDES
+        const real r = std::min(nuh / (Sh * sqr(kappa * d) + verySmallReal), rlim);
+        const real g = r + cw2 * (std::pow(r, 6) - r);
+        const real fw = g * std::pow((1 + std::pow(cw3, 6)) / (std::pow(g, 6) + std::pow(cw3, 6)), 1. / 6.);
 
-        real r = std::min(nuh / (Sh * sqr(kappa * d) + verySmallReal), rlim);
-        real g = r + cw2 * (std::pow(r, 6) - r);
-        real fw = g * std::pow((1 + std::pow(cw3, 6)) / (std::pow(g, 6) + std::pow(cw3, 6)), 1. / 6.);
-
-        real ft2 = ct3 * std::exp(-ct4 * sqr(Chi));
-        // {
-        //     Eigen::Matrix<real, dim, dim> sHat = 0.5 * (diffU.transpose() + diffU);
-        //     real sHatSqr = 2 * sHat.squaredNorm();
-        //     real rStar = std::sqrt(sHatSqr) / S;
-        //     real DD = 0.5 * (sHatSqr + sqr(S));
-        // !    // need second derivatives for rotation term !(CFD++ user manual)
-        // }
+        // if (d < 0.01)
+        //     std::cout << d << " " << lDES << " " << lLES << std::endl;
+        // DDES
 
 #ifdef USE_NS_SA_NEGATIVE_MODEL
-        real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / d); //! modified >>
-        real P = cb1 * (1 - ft2) * Sh * nuh;                         //! modified >>
-        if (rotCor)
-            P = cb1 * (1 - ft2) * (Sh + cRot * std::min(0., SS - S)) * nuh;
+        real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / lDES); //! modified >>
+        real P = cb1 * (1 - ft2) * (Sh + SRotCor) * nuh;                //! modified >>
 #else
-        real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / d);
-        real P = cb1 * (1 - ft2) * Sh * nuh;
-        if (rotCor)
-            P = cb1 * (1 - ft2) * (Sh + cRot * std::min(0., SS - S)) * nuh;
+        real D = (cw1 * fw - cb1 / sqr(kappa) * ft2) * sqr(nuh / lDES);
+        real P = cb1 * (1 - ft2) * (Sh + SRotCor) * nuh;
 #endif
         real fn = 1;
 #ifdef USE_NS_SA_NEGATIVE_MODEL
         if (UMeanXy(I4 + 1) < 0)
         {
-            real cn1 = 16;
             real Chi = UMeanXy(I4 + 1) * muRef / mufPhy;
-            fn = (cn1 + std::pow(Chi, 3)) / (cn1 - std::pow(Chi, 3));
-            D = -cw1 * sqr(nuh / d);
-            P = cb1 * (1 - ct3) * S * nuh;
-            if (rotCor)
-                P = cb1 * (1 - ct3) * std::abs(S + cRot * std::min(0., SS - S)) * nuh;
+            fn = (SA::cn1 + std::pow(Chi, 3)) / (SA::cn1 - std::pow(Chi, 3));
+            D = -cw1 * sqr(nuh / lDES);
+            P = cb1 * (1 - ct3) * std::abs(S + SRotCor) * nuh;
         }
 #endif
 
@@ -707,7 +1170,7 @@ namespace DNDS::Euler::RANS
             source(I4 + 1) = UMeanXy(0) * (P - D + diffNu.squaredNorm() * cb2 / sigma) / muRef -
                              (UMeanXy(I4 + 1) * fn * muRef + mufPhy) / (UMeanXy(0) * sigma) * diffRho.dot(diffNu) / muRef;
         else
-            source(I4 + 1) = -std::min(UMeanXy(0) * (P * 0 - D * 2) / muRef / (UMeanXy(I4 + 1) + verySmallReal), -verySmallReal);
+            source(I4 + 1) = -std::min(UMeanXy(0) * (std::min(P, 0.0) * 1 - D * 2) / muRef / (std::abs(UMeanXy(I4 + 1)) + verySmallReal), -verySmallReal);
 
         if (!source.allFinite())
         {

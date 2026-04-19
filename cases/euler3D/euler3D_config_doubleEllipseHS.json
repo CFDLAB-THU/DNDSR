@@ -1,0 +1,224 @@
+{
+    "$schema": "../euler3D_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 1e-3,
+        "nTimeStep": 1000,
+        "steadyQuit": true,
+        "odeCode": 103,
+        "tEnd": 3e+200,
+        "odeSetting1": 0.55,
+        "odeSetting2": 0,
+        "odeSetting3": 1.3333,
+        "rhsFPPMode": 2,
+        "rhsFPPScale": 1,
+        "useRestart": false,
+        "_tail": 0
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 10000,
+        "rhsThresholdInternal": 1e-5,
+        "res_base": 0.0,
+        "useVolWiseResidual": true
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 1,
+        "nRestartOutCInternal": 1000,
+        "nDataOutC": 10,
+        "nDataOut": 1000,
+        "nDataOutCInternal": 100,
+        "nDataOutInternal": 1000000000,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 0.5,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 10,
+        "nCFLRampLength": 20,
+        "CFLRampEnd": 1,
+        "useLocalDt": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshRotZ": 0.0,
+        "meshScale": 1e-3,
+        "meshFile": "../data/mesh/dualellipsoid_unstr_corr_r1.cgns",
+        // "meshFile": "../data/mesh/dualellipsoid_unstr_corr_r1_whole.cgns",
+        "outPltName": "../data/out/dualellipsoid_corr/test1_RM6F1rotRM6F1",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": false,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outBndData": true
+    },
+    "implicitReconstructionControl": {
+        "useExplicit": false,
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 10,
+        "recThreshold": 1e-010,
+        "nRecConsolCheck": 10,
+        "nRecMultiplyForZeroedGrad": 50
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "smoothIndicatorProcedure": 0,
+        "useViscousLimited": false, //!
+        "limiterProcedure": 0, //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000
+    },
+    "vfvSettings": {
+        "maxOrder": 1,
+        "intOrder": 1,
+        "cacheDiffBase": true,
+        "jacobiRelax": 1,
+        "SORInstead": true,
+        "smoothThreshold": 1e-3,
+        // "WBAP_nStd": 10.0,
+        "WBAP_nStd": 10,
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        "subs2ndOrderGGScheme": 0,
+        "baseSettings": {
+            "localOrientation": true,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "scaleType": "BaryDiff",
+            "scaleMultiplier": 1.0,
+            "dirWeightScheme": "Factorial",
+            "geomWeightScheme": "HQM_SD"
+        }
+    },
+    "linearSolverControl": {
+        "jacobiCode": 2,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
+        "nSgsConsoleCheck": 100,
+        "gmresCode": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        "initWithLastURecInc": false,
+        "multiGridLP": 0,
+        "multiGridLPInnerNIter": 4,
+        "coarseGridLinearSolverControlList": {
+            "1": {
+                "jacobiCode": 2,
+                "sgsIter": 0,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0,
+                "centralSmoothInputResidual": 0
+            }
+        },
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2,
+            "orderingCode": 4,
+            "_tail": 0
+        }
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": true,
+        "useScalarJacobian": false,
+        "noRsOnWall": false,
+        "noGRPOnWall": false,
+        "riemannSolverType": "Roe_M6",
+        // "riemannSolverTypeAux": "Roe_M2",
+        "rsFixScale": 1,
+        "rsMeanValueEig": 1,
+        "rsRotateScheme": 1,
+        "nCentralSmoothStep": 0,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "farFieldStaticValue": [
+            1,
+            1.0,
+            0.0,
+            0,
+            0.5276248466268515
+        ],
+        "boxInitializers": [
+            // {
+            //     "x0": -0.5,
+            //     "x1": 1,
+            //     "y0": -0.5,
+            //     "y1": 0.5,
+            //     "z0": -1,
+            //     "z1": 1,
+            //     "v": [
+            //         1,
+            //         0,
+            //         1,
+            //         0,
+            //         79.8650793650794
+            //     ]
+            // }
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            // "Rgas": 2.6149943777620887e-05,
+            "Rgas": 0.0001725474492620333,
+            "muGas": 3.5454426915433266e-07,
+            // "muGas": 5.598254009946912e-08,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        }
+    },
+    "bcSettings": [
+        {
+            "name": "Body",
+            "type": "BCWallIsothermal",
+            "value": [
+                296,
+                0,
+                0,
+                0,
+                0
+            ]
+        },
+        {
+            "name": "symmetry",
+            "type": "BCWallInvis"
+        },
+        {
+            "name": "far_field",
+            "type": "BCFar",
+            "value": [
+                1,
+                1.0,
+                0.0,
+                0,
+                0.5276248466268515
+            ]
+        }
+    ],
+    "restartState": {
+        "iStep": 1,
+        "iStepInternal": -1,
+        "odeCodePrev": -1,
+        "lastRestartFile": "../data/out/dualellipsoid_corr/test0__C_p64_restart.dir",
+        "otherRestartFile": "",
+        "otherRestartStoreDim": [
+            0
+        ]
+    },
+    "_tail": 0
+}

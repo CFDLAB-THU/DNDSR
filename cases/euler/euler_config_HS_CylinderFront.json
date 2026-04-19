@@ -1,0 +1,198 @@
+{
+    "$schema": "../euler_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 1e-2,
+        "nTimeStep": 20000,
+        "steadyQuit": true,
+        "odeCode": 0,
+        "tEnd": 3e+200,
+        "odeSetting1": 0.55,
+        "odeSetting2": 0,
+        "odeSetting3": 1.3333,
+        "rhsFPPMode": 2,
+        "rhsFPPScale": 1,
+        "useRestart": false,
+        "_tail": 0
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 5000,
+        "rhsThresholdInternal": 1e-8,
+        "res_base": 0.0,
+        "useVolWiseResidual": true
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 0,
+        "nRestartOutC": 50,
+        "nRestartOut": 1000,
+        "nRestartOutCInternal": 50,
+        "nDataOutC": 10,
+        "nDataOut": 1000,
+        "nDataOutCInternal": 10,
+        "nDataOutInternal": 1000000000,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 1,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 0,
+        "nCFLRampLength": 100,
+        "CFLRampEnd": 1,
+        "useLocalDt": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshRotZ": 0.0,
+        "meshFile": "../data/mesh/HSCylinderFront_Invis.cgns",
+        "outPltName": "../data/out/PP5/HSCylinderFront_Invis/test0_O1_RMX",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": false,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outCellScalarNames": [
+            "betaPP"
+        ],
+        "_tail": 0
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 10,
+        "recThreshold": 1e-010,
+        "nRecConsolCheck": 10,
+        "nRecMultiplyForZeroedGrad": 1
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "smoothIndicatorProcedure": 0,
+        "useViscousLimited": false, //!
+        "limiterProcedure": 1, //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 5,
+        "cacheDiffBase": true,
+        "jacobiRelax": 0.5,  
+        // "jacobiRelax": 0,
+        "SORInstead": false,
+        "smoothThreshold": 1e-3,
+        // "WBAP_nStd": 10.0,
+        "WBAP_nStd": 10,
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        // "subs2ndOrder": 0,
+        "baseSettings": {
+            "localOrientation": true,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "scaleType": "BaryDiff",
+            "scaleMultiplier": 1.0,
+            "dirWeightScheme": "Factorial",
+            "geomWeightScheme": "HQM_SD"
+        }
+    },
+    "linearSolverControl": {
+        "jacobiCode": 0,
+        "sgsIter": 4,
+        "sgsWithRec": 0,
+        "nSgsConsoleCheck": 100,
+        "gmresCode": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        "initWithLastURecInc": false,
+        "multiGridLP": 0,
+        "multiGridLPInnerNIter": 4,
+        "coarseGridLinearSolverControlList": {
+            "1": {
+                "jacobiCode": 2,
+                "sgsIter": 0,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0,
+                "centralSmoothInputResidual": 0
+            }
+        },
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2,
+            "orderingCode": 4,
+            "_tail": 0
+        }
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": true,
+        "useScalarJacobian": false,
+        "riemannSolverType": "Roe_M2",
+        "riemannSolverTypeAux": "Roe_M2",
+        "rsMeanValueEig": 1,
+        "rsFixScale": 1,
+        "rsRotateScheme": 0,
+        "uRecBetaCompressPower": 1,
+        "ppEpsIsRelaxed": true,
+        "nCentralSmoothStep": 0,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "farFieldStaticValue": [
+            // Ma 20
+            1,
+            1.0,
+            0.0,
+            0,
+            0.5044642857142857
+        ],
+        // "boxInitializers": [
+        //     {
+        //         "x0": -1e100,
+        //         "x1": 1e100,
+        //         "y0": -1e100,
+        //         "y1": 1e100,
+        //         "z0": -1e100,
+        //         "z1": 1e100,
+        //         "v": [
+        //             1,
+        //             0.0,
+        //             0.0,
+        //             0,
+        //             0.0044642857142857
+        //         ]
+        //     }
+        // ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            // "Rgas": 2.6149943777620887e-05,
+            "Rgas": 1.7857142857142862e-05,
+            "muGas": 4e-100, // 4e-3 for Re1000
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        }
+    },
+    "restartState": {
+        "iStep": 2000,
+        "iStepInternal": -1,
+        "odeCodePrev": -1,
+        "lastRestartFile": "../data/out/PP5/HSCylinderFront_Invis/test0_O1__C_p32_restart.dir",
+        "otherRestartFile": "",
+        "otherRestartStoreDim": [
+            0
+        ]
+    }
+}

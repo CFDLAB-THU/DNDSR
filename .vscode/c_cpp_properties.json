@@ -1,95 +1,58 @@
 {
     "configurations": [
         {
-            "name": "Win32_HZZ7",
+            "name": "Linux",
             "includePath": [
                 "${default}",
-                "C:\\Program Files\\MPICH2\\include"
-            ],
-            "defines": [
-                "_DEBUG",
-                "UNICODE",
-                "_UNICODE"
-            ],
-            "compilerPath": "E:/Program Files/mingw-w64/x86_64-8.1.0-win32-seh-rt_v6-rev0/mingw64/bin/gcc.exe",
-            "cStandard": "c17",
-            "intelliSenseMode": "windows-gcc-x64",
-            "cppStandard": "c++17"
-        },
-        {
-            "name": "Win32_HZXX",
-            "includePath": [
-                "${default}",
-                "C:\\Program Files (x86)\\MPI\\Include"
-            ],
-            "defines": [
-                "_DEBUG",
-                "UNICODE",
-                "_UNICODE"
-            ],
-            "compilerPath": "C:/MinGW/bin/gcc.exe",
-            "cStandard": "c17",
-            "intelliSenseMode": "windows-gcc-x86",
-            "cppStandard": "c++17"
-        },
-        {
-            "name": "GS",
-            "includePath": [
-                "${default}",
-                "/usr/lib/x86_64-linux-gnu/openmpi/include",
-                "${workspaceFolder}/external/Linux-x86_64/include",
-                "/usr/include/python3.10/"
+                "${workspaceFolder}/external/cfd_externals/install/include",
+                "${workspaceFolder}/external/eigen",
+                "${workspaceFolder}/external/boost",
+                "${workspaceFolder}/external/CGAL/include",
+                "${workspaceFolder}/external/nlohmann",
+                "${workspaceFolder}/external/cppcodec",
+                "${workspaceFolder}/external/nanoflann",
+                "${workspaceFolder}/external/fmt/include",
+                "${workspaceFolder}/external/pybind11/include",
+                "${workspaceFolder}/external/pybind11_json/include",
+                "${workspaceFolder}/external/argparse/include/argparse",
+                "${workspaceFolder}/external/cpptrace/include/cpptrace",
+                "${workspaceFolder}/external/exprtk",
+                "${workspaceFolder}/external/doctest",
+                "${workspaceFolder}/src"
             ],
             "defines": [],
             "cStandard": "c17",
-            "intelliSenseMode": "linux-gcc-x64",
             "cppStandard": "c++17",
-            "compilerPath": "/usr/bin/clang++"
+            "intelliSenseMode": "linux-gcc-x64"
         },
         {
-            "name": "BSSC-T",
+            "name": "Windows",
             "includePath": [
                 "${default}",
-                "/public1/soft/oneAPI/2022.1/mpi/latest/include",
-                "~/tools/cfd_externals/install/include/",
-                "/public1/soft/hdf5/1.10.6-openmpi-gcc9.3.0/include"
-            ],
-            "defines": [],
-            "cStandard": "c17",
-            "intelliSenseMode": "linux-gcc-x64",
-            "cppStandard": "c++17"
-        },
-        {
-            "name": "BSSC-A",
-            "includePath": [
-                "${default}",
-                "~/tools/cfd_externals/install/x86_64-linux-gnu-BSSCA-GaominsOpenMPI-4.1HDF5-1.12-gcc-9.1/include",
-                "~/gaomin/package/hdf5/1.12.0/include/",
-                "/public4/home/sc56867/gaomin/package/openmpi/4.1.0/include"
-            ],
-            "defines": [],
-            "cStandard": "c17",
-            "intelliSenseMode": "linux-gcc-x64",
-            "cppStandard": "c++17"
-        },
-        {
-            "name": "HZAU",
-            "includePath": [
-                "${default}",
-                "external\\Windows-AMD64\\include",
-                "C:\\Program Files (x86)\\Microsoft SDKs\\MPI\\Include",
-                "C:/ProgramData/anaconda3/Include"
+                "${workspaceFolder}/external/Windows-AMD64/include",
+                "${workspaceFolder}/external/eigen",
+                "${workspaceFolder}/external/boost",
+                "${workspaceFolder}/external/CGAL/include",
+                "${workspaceFolder}/external/nlohmann",
+                "${workspaceFolder}/external/cppcodec",
+                "${workspaceFolder}/external/nanoflann",
+                "${workspaceFolder}/external/fmt/include",
+                "${workspaceFolder}/external/pybind11/include",
+                "${workspaceFolder}/external/pybind11_json/include",
+                "${workspaceFolder}/external/argparse/include/argparse",
+                "${workspaceFolder}/external/cpptrace/include/cpptrace",
+                "${workspaceFolder}/external/exprtk",
+                "${workspaceFolder}/external/doctest",
+                "${workspaceFolder}/src"
             ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
                 "_UNICODE"
             ],
-            "windowsSdkVersion": "10.0.22000.0",
-            "compilerPath": null,
             "cStandard": "c17",
-            "intelliSenseMode": "windows-clang-x64",
-            "cppStandard": "c++17"
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-clang-x64"
         }
     ],
     "version": 4

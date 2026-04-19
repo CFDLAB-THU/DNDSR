@@ -1,0 +1,193 @@
+{
+    "$schema": "../euler_schema.json",
+    "timeMarchControl": {
+        // "dtImplicit": 1e-4,
+        // "nTimeStep": 2500,
+        "dtImplicit": 2e-4,
+        "nTimeStep": 1250,
+        "steadyQuit": false,
+        "odeCode": 0,
+        // "odeCode": 1,
+        // "odeCode": 202,
+        // "odeCode": 411,
+        // "odeSetting1": 0.5,
+        // "odeSetting2": 0,
+        // "odeSetting3": 0.75,
+        // "odeSetting4": -1e10,
+        // "odeSettingsExtra": {
+        //     "nMG": 0,
+        //     "thetaMMG": 1,
+        //     "coefIncMidMG": 1
+        // },
+        "tEnd": 3e+200,
+        "rhsFPPMode": 2,
+        // "rhsFPPScale": 0.01
+        "_tail": 0
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 0,
+        "consoleOutputEveryFix": 0,
+        "nDataOutC": 25,
+        "nDataOut": 500,
+        "nDataOutCInternal": 200,
+        "nDataOutInternal": 1000000000,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 10.0,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 2147483647,
+        "nCFLRampLength": 2147483647,
+        "CFLRampEnd": 0.0,
+        "useLocalDt": true
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 200,
+        "rhsThresholdInternal": 1e-3,
+        "res_base": 0.0,
+        "resBaseType": 1,
+        "useVolWiseResidual": false,
+        "mergeMultiResidual": 1,
+        "normOrd": 1,
+        "_tail": 0
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshRotZ": 0.0,
+        "meshFile": "../data/mesh/UniformDM480.cgns",
+        "meshReorderCells": true, //!for MT
+        // "outPltName": "../data/outUnsteady/DM480-OdeTest/testO4_c3/out_U2R2Pre0d75mInf_betaP1_JC1",
+        "outPltName": "../data/outUnsteady/DM480-OdeTest/testO4_c3/out_ESDIRK4_betaP1_JC1",
+        // "outPltName": "../data/outUnsteady/DM480-OdeTest/testO4_c4/out_ESDIRK3DT2_JC0",
+        // "outPltName": "../data/outUnsteady/DM480-OdeTest/testO4_c4/out_ESDIRK4_JC0",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": false,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outCellScalarNames": [
+            "betaPP"
+        ],
+        "_tail": 0
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 10,
+        "recThreshold": 1e-15,
+        "nRecConsolCheck": 10,
+        "nRecMultiplyForZeroedGrad": 1,
+        "storeRecInc": false,
+        "dampRecIncDTau": false,
+        "zeroRecForSteps": 0,
+        "zeroRecForStepsInternal": 0
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "smoothIndicatorProcedure": 0, //0 = normal, 1 = p only
+        "limiterProcedure": 0, //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 5,
+        "jacobiRelax": 1.0,
+        "SORInstead": false,
+        "smoothThreshold": 1e-2,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false,
+        "limiterBiwayAlter": 0, // 1=MM, 2=PN, 3=MEMM, 4=WBAP_L2_cut
+        "subs2ndOrder": 1,
+        "functionalSettings": {
+            "scaleType": "BaryDiff",
+            "scaleMultiplier": 1,
+            "dirWeightScheme": "HQM_OPT",
+            // "useAnisotropicFunctional": true,
+            // "scaleMultiplier": 3.464101615137754,
+            "_tail": 0
+        }
+    },
+    "linearSolverControl": {
+        "jacobiCode": 1,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
+        "nSgsConsoleCheck": 100,
+        "gmresCode": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
+        "coarseGridLinearSolverControlList": {
+            "1": {
+                "jacobiCode": 0,
+                "sgsIter": 4,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0,
+                "centralSmoothInputResidual": 0
+            }
+        },
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2,
+            "orderingCode": 0
+        }
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": true,
+        "useScalarJacobian": true,
+        "riemannSolverType": "Roe_M2",
+        // "riemannSolverTypeAux": "Roe_M2",
+        "rsMeanValueEig": 1,
+        "rsFixScale": 1,
+        "rsRotateScheme": 0,
+        "uRecBetaCompressPower": 1,
+        "ppEpsIsRelaxed": true,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "farFieldStaticValue": [
+            1.4,
+            0.0,
+            0.0,
+            0.0,
+            2.5
+        ],
+        "planeInitializers": [
+            {
+                "a": -1,
+                "b": 0.577350269189626,
+                "c": 0,
+                "h": 0.166666666666667,
+                "v": [
+                    8,
+                    57.157676649772960,
+                    -33,
+                    0,
+                    5.635e2
+                ]
+            }
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 289,
+            "muGas": 1e-200,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        }
+    }
+}

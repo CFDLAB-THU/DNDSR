@@ -2,6 +2,7 @@
 #include "DNDS/Defines.hpp"
 #include "DNDS/MPI.hpp"
 #include "Scalar.hpp"
+#include "DNDS/JsonUtil.hpp"
 
 namespace DNDS::ODE
 {
@@ -21,6 +22,16 @@ namespace DNDS::ODE
         virtual ~ImplicitDualTimeStep() = default;
 
         virtual TDATA &getLatestRHS() = 0;
+
+        virtual TDATA &getRHS(int i) = 0;
+
+        virtual TDATA &getRES(int i) = 0;
+
+        virtual void SetExtraParams(const nlohmann::ordered_json &j)
+        {
+            for (auto &[k, v] : j.items())
+                DNDS_assert_info(false, "no extra params to handle! key is " + k);
+        };
     };
 
     template <class TDATA, class TDTAU>
@@ -96,6 +107,16 @@ namespace DNDS::ODE
         {
             return rhsbuf[0];
         }
+
+        TDATA &getRHS(int i) override
+        {
+            return rhsbuf[0];
+        }
+
+        TDATA &getRES(int i) override
+        {
+            return rhs;
+        }
     };
 
     template <class TDATA, class TDTAU>
@@ -107,6 +128,7 @@ namespace DNDS::ODE
         Eigen::RowVector<real, -1> butcherB;
         int nInnerStage = 3;
         int schemeC = 0;
+        bool explicitFirst = false;
         int hasLastEndPointR = 0;
         int latestStage = 0;
 
@@ -157,6 +179,7 @@ namespace DNDS::ODE
             else if (schemeCode == 1)
             {
                 nInnerStage = 6;
+                explicitFirst = true;
                 butcherA.resize(nInnerStage, nInnerStage);
                 butcherC.resize(nInnerStage);
                 butcherB.resize(nInnerStage);
@@ -167,8 +190,61 @@ namespace DNDS::ODE
                     0.1446368660269822, -0.2239319076133447, 0.4492950415863626, 0.25, 0, 0,
                     0.09825878328356477, -0.5915442428196704, 0.8101210205756877, 0.283164405707806, 0.25, 0,
                     0.1579162951616714, 0, 0.1867589405240008, 0.6805652953093346, -0.2752405309950067, 0.25;
-                butcherB = butcherA(Eigen::last, Eigen::all);
+                butcherB = butcherA(EigenLast, EigenAll);
                 butcherC << 0, 0.5, 0.332, 0.62, 0.849999966747388, 1;
+            }
+            else if (schemeCode == 2) // esdirk3
+            {
+                nInnerStage = 4;
+                explicitFirst = true;
+
+                butcherA.resize(nInnerStage, nInnerStage);
+                butcherC.resize(nInnerStage);
+                butcherB.resize(nInnerStage);
+                double alphaC = double(1767732205903) / double(4055673282236);
+
+                butcherA << verySmallReal, 0, 0, 0,
+                    alphaC, alphaC, 0, 0,
+                    real(2746238789719) / real(10658868560708), real(-640167445237) / real(6845629431997), alphaC, 0,
+                    real(1471266399579) / real(7840856788654), real(-4482444167858) / real(7529755066697), real(11266239266428) / real(11593286722821), alphaC;
+
+                butcherB = butcherA(EigenLast, EigenAll);
+                butcherC = butcherA.rowwise().sum();
+                butcherC(0) = 0;
+                butcherC(3) = 1;
+            }
+            else if (schemeCode == 3) // trapezoid rule
+            {
+                nInnerStage = 2;
+                explicitFirst = true;
+                butcherA.resize(nInnerStage, nInnerStage);
+                butcherC.resize(nInnerStage);
+                butcherB.resize(nInnerStage);
+                butcherA << verySmallReal, 0,
+                    0.5, 0.5;
+                butcherB = butcherA(EigenLast, EigenAll);
+                butcherC << 0, 1;
+            }
+            else if (schemeCode == 4) // esdirk2
+            {
+                nInnerStage = 3;
+                explicitFirst = true;
+                butcherA.resize(nInnerStage, nInnerStage);
+                butcherC.resize(nInnerStage);
+                butcherB.resize(nInnerStage);
+
+                real gamma = 1. - std::sqrt(2.0) * 0.5;
+                real b2 = (1. - 2 * gamma) / (4 * gamma);
+                double alphaC = double(1767732205903) / double(4055673282236);
+
+                butcherA << verySmallReal, 0, 0,
+                    gamma, gamma, 0,
+                    1 - b2 - gamma, b2, gamma;
+
+                butcherB = butcherA(EigenLast, EigenAll);
+                butcherC = butcherA.rowwise().sum();
+                butcherC(0) = 0;
+                butcherC(2) = 1;
             }
             else
             {
@@ -203,7 +279,7 @@ namespace DNDS::ODE
                 int iter = 1;
                 for (; iter <= maxIter; iter++)
                 {
-                    if (schemeC == 1 && iB == 0) // for esdirk first frhs evaluation
+                    if (explicitFirst && iB == 0) // for esdirk first frhs evaluation
                     {
                         if (hasLastEndPointR)
                             rhsbuf[0] = rhsbuf[nInnerStage - 1];
@@ -243,7 +319,7 @@ namespace DNDS::ODE
 
                     if (fstop(iter, rhs, iB + 1))
                         break;
-                    if (schemeC == 1 && iB == 0) // for esdirk
+                    if (explicitFirst && iB == 0) // for esdirk
                         break;
 
                     // TODO: add time dependent rhs
@@ -251,7 +327,7 @@ namespace DNDS::ODE
                 if (iter > maxIter)
                     fstop(iter, rhs, iB + 1);
             }
-            if (schemeC == 1) // for esdirk
+            if (explicitFirst) // for esdirk
             {
                 hasLastEndPointR = 1;
                 return;
@@ -266,6 +342,18 @@ namespace DNDS::ODE
         virtual TDATA &getLatestRHS() override
         {
             return rhsbuf[latestStage];
+        }
+
+        TDATA &getRHS(int i) override
+        {
+            DNDS_assert(i >= 0 && i < rhsbuf.size());
+            return rhsbuf[i];
+        }
+
+        TDATA &getRES(int i) override
+        {
+            // todo: enable on-demanc calculation
+            return rhs;
         }
 
         virtual ~ImplicitSDIRK4DualTimeStep() = default;
@@ -487,6 +575,16 @@ namespace DNDS::ODE
         virtual TDATA &getLatestRHS() override
         {
             return rhsbuf[0];
+        }
+
+        TDATA &getRHS(int i) override
+        {
+            return rhsbuf[0];
+        }
+
+        TDATA &getRES(int i) override
+        {
+            return rhs;
         }
 
         virtual ~ImplicitBDFDualTimeStep() = default;
@@ -793,6 +891,16 @@ namespace DNDS::ODE
 
         virtual TDATA &getLatestRHS() override
         {
+            return rhsbuf[0];
+        }
+
+        TDATA &getRHS(int i) override
+        {
+            return rhsbuf[0];
+        }
+
+        TDATA &getRES(int i) override
+        {
             return rhs;
         }
 
@@ -822,10 +930,10 @@ namespace DNDS::ODE
             TDTAU &, const std::vector<real> &,
             real, real, TDATA &, int, int)>;
 
-        TDTAU dTau;
+        TDTAU dTau, dTauMid;
         TDATA xMid, rhsMid, rhsFull, resOther;
         std::vector<TDATA> rhsbuf;
-        TDATA xLast;
+        TDATA xLast, xMG0, xMG;
         TDATA xIncPrev;
         index DOF;
         index cnPrev;
@@ -837,9 +945,14 @@ namespace DNDS::ODE
         int curSolveMethod = 0;
         int nStartIter = 0;
         real thetaM1 = 0.9146;
+        real thetaM2 = 0.0;
+        real thetaMMG = 1.0;
+        real coefIncMidMG = 1.0;
         real alphaHM3 = 0.5;
         int maskHM3 = 0;
         int maskHM3Exe = 0;
+
+        int nMG = 0;
 
         TDATA xPrev;
         real dtPrev = 0;
@@ -852,16 +965,19 @@ namespace DNDS::ODE
         template <class Finit, class FinitDtau>
         ImplicitHermite3SimpleJacobianDualStep(
             index NDOF, Finit &&finit = [](TDATA &) {}, FinitDtau &&finitDtau = [](TDTAU &) {},
-            real alpha = 0.55, int nCurSolveMethod = 0, int nnStartIter = 0, real thetaM1n = 0.9146, int mask = 0)
+            real alpha = 0.55, int nCurSolveMethod = 0, int nnStartIter = 0,
+            real thetaM1n = 0.9146, real thetaM2n = 0.0, int mask = 0,
+            int nMGn = 4)
             : DOF(NDOF),
               cnPrev(0),
               curSolveMethod(nCurSolveMethod),
               nStartIter(nnStartIter),
               thetaM1(thetaM1n),
+              thetaM2(thetaM2n),
               alphaHM3(alpha),
-              maskHM3(mask)
+              maskHM3(mask),
+              nMG(nMGn)
         {
-
             rhsbuf.resize(3);
             finit(rhsbuf[0]);
             finit(rhsbuf[1]);
@@ -872,13 +988,42 @@ namespace DNDS::ODE
             finit(resOther);
             finit(xLast);
             finit(xIncPrev);
+            finit(xMG0);
+            finit(xMG);
             finit(xIncDamper);
             finit(xIncDamper2);
             finit(xPrev);
             finitDtau(dTau);
+            finitDtau(dTauMid);
 
             DNDS_assert_info(mask == 0 || mask == 1 || mask == 2, "mask not supported");
             SetCoefs(1);
+        }
+
+        virtual void SetExtraParams(const nlohmann::ordered_json &j) override
+        {
+            for (auto &[k, v] : j.items())
+            {
+                if (k == "nMG")
+                {
+                    DNDS_assert_info(v.is_number(), "need a number for nMG");
+                    nMG = v;
+                }
+                else if (k == "thetaMMG")
+                {
+                    DNDS_assert_info(v.is_number(), "need a number for thetaMMG");
+                    thetaMMG = v;
+                }
+                else if (k == "coefIncMidMG")
+                {
+                    DNDS_assert_info(v.is_number(), "need a number for coefIncMidMG");
+                    coefIncMidMG = v;
+                }
+                else
+                {
+                    DNDS_assert_info(false, "no such key for HM3: " + k);
+                }
+            }
         }
 
         void SetCoefs(real hR1 = 1)
@@ -950,19 +1095,26 @@ namespace DNDS::ODE
             SetCoefs(dtPrev / (dt + verySmallReal));
             xLast = x;
             xMid = x;
-            fdt(xLast, dTau, 1.0, 0);
 
             if (hasLastEndPointR)
+            {
                 rhsbuf[0] = rhsbuf[1];
+                // dTau = dTau here
+            }
             else
+            {
+                fdt(xLast, dTau, 1.0, 0);
                 frhs(rhsbuf[0], xLast, dTau, INT_MAX, 0.0, 0);
+            }
             rhsbuf[1] = rhsbuf[0];
             rhsbuf[2] = rhsbuf[0];
+            dTauMid = dTau;
 
             xIncPrev.setConstant(0.0);
             int iter = 1;
 
             int method = curSolveMethod;
+            bool stepIsRealU3R1 = prevSize >= 1 && maskHM3 == 2;
 
             for (; iter <= maxIter; iter++)
             {
@@ -985,52 +1137,144 @@ namespace DNDS::ODE
                         rhsMid.setConstant(0.0);
                         real thetaCur = thetaM1;
                         {
-                            if (prevSize >= 1 && maskHM3 == 2) // U3R1, cInter[2] is reused for xPrev
-                            {
-                                rhsMid.addTo(xLast, (cInter(0) + thetaCur) / dt);
-                                rhsMid.addTo(x, (cInter(1) - thetaCur) / dt);
+                            if (maskHM3Exe == 1 && maskHM3 == 2)
+                                thetaCur = 1; // for U2R1 filling first step of U3R1
+                            rhsMid.addTo(xLast, (cInter(0) + thetaCur) / dt);
+                            rhsMid.addTo(x, (cInter(1) - thetaCur) / dt);
+                            if (stepIsRealU3R1)
                                 rhsMid.addTo(xPrev, cInter(2) / dt);
-                                rhsMid.addTo(rhsbuf[0], 0 + thetaCur * wInteg(0));
-                                rhsMid.addTo(rhsbuf[1], cInter(3) + thetaCur * wInteg(2));
-                                resOther = rhsMid;
-                                rhsMid.addTo(xMid, -1. / dt);
-                                rhsMid.addTo(rhsbuf[2], thetaCur * wInteg(1));
-                            }
-                            else
-                            {
-                                if (maskHM3Exe == 1 && maskHM3 == 2)
-                                    thetaCur = 1; // for U2R1 filling
-                                rhsMid.addTo(xLast, (cInter(0) + thetaCur) / dt);
-                                rhsMid.addTo(x, (cInter(1) - thetaCur) / dt);
-                                rhsMid.addTo(rhsbuf[0], cInter(2) + thetaCur * wInteg(0));
-                                rhsMid.addTo(rhsbuf[1], cInter(3) + thetaCur * wInteg(2));
-                                resOther = rhsMid;
-                                rhsMid.addTo(xMid, -1. / dt);
-                                rhsMid.addTo(rhsbuf[2], thetaCur * wInteg(1));
-                            }
-                            fdt(xMid, dTau, 1.0, 1);
-                            fsolve(xMid, rhsMid, resOther, dTau, dt, std::abs(thetaCur * wInteg(1)), xinc, iter, alphaHM3, 1);
+                            rhsMid.addTo(rhsbuf[0], (stepIsRealU3R1 ? 0.0 : cInter(2)) + thetaCur * wInteg(0));
+                            rhsMid.addTo(rhsbuf[1], cInter(3) + thetaCur * wInteg(2));
+                            resOther = rhsMid;
+                            rhsMid.addTo(xMid, -1. / dt);
+                            rhsMid.addTo(rhsbuf[2], thetaCur * wInteg(1));
+
+                            fsolve(xMid, rhsMid, resOther, dTauMid, dt, std::abs(thetaCur * wInteg(1)), xinc, iter, alphaHM3, 1);
                         }
 
                         fincrement(xMid, xinc, 1.0, 1);
-
-                        frhs(rhsbuf[2], xMid, dTau, iter, alphaHM3, 1);
+                        fdt(xMid, dTauMid, 1.0, 1);
+                        frhs(rhsbuf[2], xMid, dTauMid, iter, alphaHM3, 1);
 
                         rhsFull.setConstant(0.0);
+                        real theta2Scale = 1 - thetaM2 * cInter(1);
+                        DNDS_assert_info(theta2Scale > 0, fmt::format("thetaM2 {}, cInter(1) {}", thetaM2, cInter(1)));
+                        theta2Scale = 1. / theta2Scale;
+                        bool theta2LimitSitu = thetaM2 < -1e5;
+                        real xLastCoef = !theta2LimitSitu
+                                             ? (theta2Scale * (1. + thetaM2 * cInter(0)) / dt)
+                                             : (-cInter(0) / cInter(1) / dt);
+                        real xMidCoef = !theta2LimitSitu
+                                            ? (-theta2Scale * thetaM2 * 1. / dt)
+                                            : (1 / cInter(1) * 1. / dt);
+                        real xPrevCoef = !theta2LimitSitu
+                                             ? (theta2Scale * thetaM2 * cInter(2) / dt)
+                                             : (-1. / cInter(1) * cInter(2) / dt);
+                        real rLastCoef = theta2Scale * (wInteg(0) + thetaM2 * (stepIsRealU3R1 ? 0.0 : cInter(2)));
+                        if (theta2LimitSitu)
+                            rLastCoef = -1. / cInter(1) * (stepIsRealU3R1 ? 0.0 : cInter(2));
+                        real rMidCoef = theta2LimitSitu ? 0.0 : theta2Scale * wInteg(1);
+                        real rCoef = !theta2LimitSitu ? (theta2Scale * (wInteg(2) + thetaM2 * cInter(3)))
+                                                      : (-1. / cInter(1) * cInter(3));
+                        // std::cout << xLastCoef << " "
+                        //           << xMidCoef << " "
+                        //           << xPrevCoef << " "
+                        //           << rLastCoef << " "
+                        //           << rMidCoef << " "
+                        //           << rCoef << " " << std::endl;
                         {
-                            rhsFull.addTo(xLast, 1. / dt);
-                            rhsFull.addTo(rhsbuf[0], wInteg(0));
-                            rhsFull.addTo(rhsbuf[2], wInteg(1));
+                            rhsFull.addTo(xLast, xLastCoef);
+                            if (thetaM2)
+                            {
+                                // rhsFull.addTo(x, thetaM2 * cInter(1) / dt); // need to add to diag part!!
+                                rhsFull.addTo(xMid, xMidCoef);
+                                if (stepIsRealU3R1)
+                                    rhsFull.addTo(xPrev, xPrevCoef);
+                            }
+
+                            rhsFull.addTo(rhsbuf[0], rLastCoef);
+                            rhsFull.addTo(rhsbuf[2], rMidCoef);
+
                             resOther = rhsFull;
                             rhsFull.addTo(x, -1. / dt);
-                            rhsFull.addTo(rhsbuf[1], wInteg(2));
-                            fdt(x, dTau, 1.0, 0);
-                            fsolve(x, rhsFull, resOther, dTau, dt, wInteg(2), xinc, iter, 1.0, 0);
+                            rhsFull.addTo(rhsbuf[1], rCoef);
+
+                            fsolve(x, rhsFull, resOther, dTau, dt, rCoef, xinc, iter, 1.0, 0);
                         }
 
                         fincrement(x, xinc, 1.0, 0);
-
+                        fdt(x, dTau, 1.0, 0);
                         frhs(rhsbuf[1], x, dTau, iter, 1.0, 0);
+
+                        // residual #1 + #0 * thetaMMG
+                        {
+                            rhsFull.setConstant(0.0);
+                            rhsFull.addTo(xLast, (1. + thetaMMG * cInter(0)) / dt);
+                            rhsFull.addTo(x, (thetaMMG * cInter(1)) / dt);
+                            rhsFull.addTo(xMid, -thetaMMG * 1. / dt);
+                            if (stepIsRealU3R1)
+                                rhsFull.addTo(xPrev, thetaMMG * cInter(2) / dt);
+                            rhsFull.addTo(rhsbuf[0], wInteg(0) + thetaMMG * (stepIsRealU3R1 ? 0.0 : cInter(2)));
+                            rhsFull.addTo(rhsbuf[2], wInteg(1));
+                            rhsFull.addTo(x, -1. / dt);
+                            rhsFull.addTo(rhsbuf[1], wInteg(2) + thetaMMG * cInter(3));
+                        }
+                        // std::cout << thetaMMG << std::endl;
+
+                        // * START pMG part
+                        if (nMG)
+                        {
+                            {
+                                // resOther.setConstant(0.0);
+                                // resOther.addTo(xLast, (1. + thetaMMG * cInter(0)) / dt);
+                                // resOther.addTo(x, (thetaMMG * cInter(1)) / dt);
+                                // resOther.addTo(xMid, -thetaMMG * 1. / dt);
+                                // if (stepIsRealU3R1)
+                                //     resOther.addTo(xPrev, thetaMMG * cInter(2) / dt);
+                                // resOther.addTo(rhsbuf[0], wInteg(0) + thetaMMG * (stepIsRealU3R1 ? 0.0 : cInter(2)));
+                                // resOther.addTo(rhsbuf[2], wInteg(1));
+                                // resOther.addTo(x, -1. / dt);
+                                // resOther.addTo(rhsbuf[1], wInteg(2) + thetaMMG * cInter(3));
+                            }
+                            resOther = rhsFull;
+                            xMG0 = x;
+                            xMG0 *= 0.5;
+                            xMG0.addTo(xMid, 0.5);
+                            xMG = xMG0;
+                            // F_trapz == (xLast - x) / dt + (rLast + r) * 0.5
+                            // F_trapz - F_trapz_0 == (x0 - x) / dt + (r - r_0) * 0.5
+                            real mgTrapzAlpha = 1.0;
+                            for (int iMG = 1; iMG <= nMG; iMG++)
+                            {
+                                // use upos == 2 for lower order spacial frhs
+                                fdt(xMG, dTau, 1.0, /*upos=*/2);
+                                frhs(rhsbuf[1], xMG, dTau, iter, 1.0, /*upos=*/2); // pos = 0 for original RHS
+                                if (iMG == 1 and /*1 smoother shortcut*/ nMG > 1)
+                                {
+                                    resOther.addTo(rhsbuf[1], -mgTrapzAlpha);
+                                    resOther.addTo(xMG, 1. / dt);
+                                }
+                                rhsMid = resOther;
+                                if (/*1 smoother shortcut*/ nMG > 1)
+                                {
+                                    rhsMid.addTo(rhsbuf[1], mgTrapzAlpha);
+                                    rhsMid.addTo(xMG, -1. / dt);
+                                }
+
+                                fsolve(xMG, rhsMid, resOther, dTau, dt, mgTrapzAlpha, xinc, iter, 1.0, /*upos=*/2);
+                                fincrement(xMG, xinc, 1.0, /*upos=*/2);
+                            }
+                            xinc = xMG;
+                            xinc.addTo(xMG0, -1.0);
+                            fincrement(x, xinc, 1.0, 0);
+                            if (coefIncMidMG)
+                                fincrement(xMid, xinc, coefIncMidMG, 1);
+                            fdt(xMid, dTauMid, 1.0, 1);
+                            frhs(rhsbuf[2], xMid, dTauMid, iter, alphaHM3, 1);
+
+                            fdt(x, dTau, 1.0, 0);
+                            frhs(rhsbuf[1], x, dTau, iter, 1.0, 0);
+                        }
                     }
                     else
                     {
@@ -1040,12 +1284,12 @@ namespace DNDS::ODE
 
                 xIncPrev = xinc;
 
-                if (fstop(iter, method == 0 ? rhsMid : rhsFull, 1))
+                if (fstop(iter, rhsFull, 1))
                     if (iter >= nStartIter)
                         break;
             }
             if (iter > maxIter)
-                fstop(iter, method == 0 ? rhsMid : rhsFull, 1);
+                fstop(iter, rhsFull, 1);
 
             hasLastEndPointR = 1;
 
@@ -1167,6 +1411,20 @@ namespace DNDS::ODE
             return rhsbuf[1];
         }
 
+        TDATA &getRHS(int i) override
+        {
+            // note that 0 for tn, 1 for tn+1, 2 or tn+c2
+            DNDS_assert(i >= 0 && i < rhsbuf.size());
+            return rhsbuf[i];
+        }
+
+        TDATA &getRES(int i) override
+        {
+            DNDS_assert(i >= 0 && i < 2);
+            // todo: enable on-demanc calculation
+            return i == 0 ? rhsFull : rhsMid;
+        }
+
         virtual ~ImplicitHermite3SimpleJacobianDualStep() = default;
     };
 
@@ -1261,6 +1519,18 @@ namespace DNDS::ODE
         virtual TDATA &getLatestRHS() override
         {
             return rhsbuf[0];
+        }
+
+        TDATA &getRHS(int i) override
+        {
+            DNDS_assert(i >= 0 && i < rhsbuf.size());
+            return rhsbuf[i];
+        }
+
+        TDATA &getRES(int i) override
+        {
+            // todo: return a zero (for this is explicit)
+            return rhs;
         }
     };
 }

@@ -1,0 +1,185 @@
+{
+    "$schema": "../euler_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 1e-2,
+        "nTimeStep": 20000,
+        "steadyQuit": false,
+        "odeCode": 0,
+        "tEnd": 3e+200,
+        "odeSetting1": 0.55,
+        "odeSetting2": 0,
+        "odeSetting3": 1.3333,
+        "rhsFPPMode": 2,
+        "rhsFPPScale": 1,
+        "useRestart": true,
+        "_tail": 0
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 40,
+        "rhsThresholdInternal": 1e-3,
+        "res_base": 0.0,
+        "useVolWiseResidual": true
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 10,
+        "consoleOutputMode": 0,
+        "nRestartOutC": 50,
+        "nRestartOut": 1000,
+        "nDataOutC": 10,
+        "nDataOut": 1000,
+        "nDataOutCInternal": 2000,
+        "nDataOutInternal": 1000000000,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 0.5,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 0,
+        "nCFLRampLength": 10,
+        "CFLRampEnd": 10,
+        "useLocalDt": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshRotZ": 0.0,
+        "meshFile": "../data/mesh/RoundHeadAndCavity.cgns",
+        "outPltName": "../data/outUnsteady/RoundHeadAndCavity/test0_res_1E6_t5_r1O4/out",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": false,
+        "outAtPointData": true,
+        "outAtCellData": true
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 10,
+        "recThreshold": 1e-010,
+        "nRecConsolCheck": 10,
+        "nRecMultiplyForZeroedGrad": 1000
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "smoothIndicatorProcedure": 0,
+        "useViscousLimited": false, //!
+        "limiterProcedure": 1, //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 3,
+        "cacheDiffBase": true,
+        "jacobiRelax": 1,
+        "SORInstead": true,
+        "smoothThreshold": 1e-3,
+        // "WBAP_nStd": 10.0,
+        "WBAP_nStd": 10,
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        "baseSettings": {
+            "localOrientation": true,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "scaleType": "BaryDiff",
+            "scaleMultiplier": 1.0,
+            "dirWeightScheme": "HQM_OPT",
+            "geomWeightScheme": "HQM_SD"
+        }
+    },
+    "linearSolverControl": {
+        "jacobiCode": 2,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
+        "nSgsConsoleCheck": 100,
+        "gmresCode": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        "initWithLastURecInc": false,
+        "multiGridLP": 0,
+        "multiGridLPInnerNIter": 4,
+        "coarseGridLinearSolverControlList": {
+            "1": {
+                "jacobiCode": 2,
+                "sgsIter": 0,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0,
+                "centralSmoothInputResidual": 0
+            }
+        },
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2,
+            "orderingCode": 4,
+            "_tail": 0
+        }
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": true,
+        "useScalarJacobian": false,
+        "riemannSolverType": "Roe_M1",
+        "nCentralSmoothStep": 0,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "farFieldStaticValue": [
+            // Ma 6
+            1,
+            1.0,
+            0.0,
+            0,
+            0.5496031746031746
+        ],
+        "boxInitializers": [ // inside cavity
+            {
+                "x0": 0,
+                "x1": 1e100,
+                "y0": -1e100,
+                "y1": 1,
+                "z0": -1e100,
+                "z1": 1e100,
+                "v": [
+                    1,
+                    0,
+                    0,
+                    0,
+                    0.049603174603175
+                ]
+            }
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            // "Rgas": 2.6149943777620887e-05,
+            "Rgas": 0.00031001984126984125,
+            "muGas": 4e-5, // 4e-3 for Re1000
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        }
+    },
+    "restartState": {
+        "iStep": 2000,
+        "iStepInternal": -1,
+        "odeCodePrev": -1,
+        "lastRestartFile": "../data/outUnsteady/RoundHeadAndCavity/test0_res_1E6_t5__20000_p32_restart.dir",
+        "otherRestartFile": "",
+        "otherRestartStoreDim": [
+            0
+        ]
+    }
+}

@@ -1,0 +1,143 @@
+{
+    "$schema": "../euler3D_schema.json",
+    "steadyQuit": false,
+    "odeCode": 1,
+    "recOrder": 3,
+    "nInternalRecStep": 1,
+    "nTimeStep": 3200,
+    "nTimeStepInternal": 20,
+    "nSGSIterationInternal": 0,
+    "gmresCode": 0,
+    "nGmresSpace": 10,
+    "nGmresIter": 3,
+    "jacobianTypeCode": 0,
+    "nFreezePassiveInner": 0,
+    "nConsoleCheck": 1,
+    "nConsoleCheckInternal": 10,
+    "consoleOutputMode": 0,
+    "nDataOutC": 100,
+    "nDataOut": 200,
+    "nDataOutCInternal": 200,
+    "nDataOutInternal": 1000000000,
+    "tDataOut": 1e100,
+    "tEnd": 100e100,
+    "CFL": 10,
+    "dtImplicit": 6.25e-5,
+    "rhsThresholdInternal": 1e-3,
+    "useLocalDt": true,
+    "useLimiter": true,
+    "smoothIndicatorProcedure": 0,
+    "limiterProcedure": 1, //1 == CWBAP
+    "nPartialLimiterStart": 0,
+    "nPartialLimiterStartLocal": 0,
+    "nLimiterTurnOn": 0,
+    "nLimiterTurnOnInternal": 0,
+    "nForceLocalStartStep": 1000000000,
+    "nCFLRampStart": 1000000000,
+    "nCFLRampLength": 10000,
+    "CFLRampEnd": 2,
+    "meshRotZ": 0,
+    "meshFile": "../data/mesh/UniformDM240_E120.cgns",
+    "comment_meshFileList": [],
+    "outPltName": "../data/outUnsteady/UniformDM240_E120",
+    "outLogName": "../data/outUnsteady/UniformDM240_E120",
+    "zeroGrads": true,
+    "readMeshMode": 0,
+    "outPltMode": 0,
+    "outPltTecplotFormat": true,
+    "outPltVTKFormat": true,
+    "outAtPointData": true,
+    "outAtCellData": false,
+    "uniqueStamps": false,
+    "err_dMax": 0.00,
+    "res_base": 0,
+    "useVolWiseResidual": true,
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 5,
+        "cacheDiffBase": true,
+        "jacobiRelax": 1.0,
+        "SORInstead": true,
+        "smoothThreshold": 1e-1,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false
+    },
+    "eulerSettings": {
+        "riemannSolverType": "HLLEP",
+        "nTimeFilterPass": 0,
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 289,
+            "muGas": 1e-200,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        },
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": false,
+        "visScale": 8,
+        "visScaleIn": 4,
+        "isiScale": 4,
+        "isiScaleIn": 2,
+        "ekCutDown": 0.5,
+        "isiCutDown": 0.5,
+        "farFieldStaticValue": [
+            1.4,
+            0,
+            0,
+            0,
+            2.5
+        ],
+        "boxInitializers": [],
+        "planeInitializers": [
+            {
+                "a": -1,
+                "b": 0.577350269189626,
+                "c": 0,
+                "h": 0.166666666666667,
+                "v": [
+                    8,
+                    57.157676649772960,
+                    -33,
+                    0,
+                    5.635e2
+                ]
+            }
+        ],
+        "specialBuiltinInitializer": 0,
+        "comment_farSatic": [
+            [
+                "A",
+                1,
+                0,
+                0,
+                0,
+                2.5
+            ],
+            [
+                "0.8M",
+                1,
+                0.946572765295939,
+                0,
+                0,
+                2.948
+            ],
+            [
+                "2M",
+                1,
+                3.54964786985977,
+                0,
+                0,
+                8.80000000000000
+            ],
+            [
+                "0.5M",
+                1,
+                0.591607978309962,
+                0,
+                0,
+                2.67500000000000
+            ]
+        ]
+    }
+}

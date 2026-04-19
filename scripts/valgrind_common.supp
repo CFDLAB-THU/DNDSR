@@ -1,0 +1,280 @@
+{
+   suppress_lib_event_leak
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:strdup
+   fun:get_data
+   obj:/usr/lib/x86_64-linux-gnu/libevent_core-2.1.so.7.0.1
+   fun:event_base_loop
+   fun:progress_engine
+   fun:start_thread
+   fun:clone
+}
+{
+   suppress_mpi_init
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:strdup
+   fun:ompi_comm_init_mpi3
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_1
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:ompi_group_allocate_plist_w_procs
+   fun:ompi_group_allocate
+   fun:ompi_group_from_pset
+   fun:ompi_comm_init_mpi3
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_2
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:ompi_comm_init_mpi3
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_3
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:pmix_pointer_array_init
+   fun:keyindex_construct
+   fun:pmix_rte_init
+   fun:PMIx_Init
+   fun:ompi_rte_init
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_4
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:pmix_pointer_array_init
+   fun:keyindex_construct
+   fun:pmix_rte_init
+   fun:PMIx_Init
+   fun:ompi_rte_init
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+}
+{
+   suppress_mpi_init_5
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:ompi_comm_init_mpi3
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_6
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:opal_hash_table_init2
+   fun:ompi_comm_init_mpi3
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_7
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:pmix_pointer_array_init
+   fun:keyindex_construct
+   fun:pmix_rte_init
+   fun:PMIx_Init
+   fun:ompi_rte_init
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_8
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:ompi_group_from_pset
+   fun:ompi_comm_init_mpi3
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_9
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:avx_component_op_query
+   fun:ompi_op_base_op_select
+   fun:ompi_op_init
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_10
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:ompi_op_base_op_select
+   fun:ompi_op_init
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_11
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:ompi_op_base_op_select
+   fun:ompi_op_init
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_12
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:ompi_op_base_op_select
+   fun:ompi_op_init
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_13
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:ompi_op_base_op_select
+   fun:ompi_op_init
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_14
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:ompi_op_base_op_select
+   fun:ompi_op_init
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_15
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:ompi_op_base_op_select
+   fun:ompi_op_init
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+{
+   suppress_mpi_init_16
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:ompi_op_base_op_select
+   fun:ompi_op_init
+   fun:ompi_mpi_instance_init_common
+   fun:ompi_mpi_instance_init
+   fun:ompi_mpi_init
+   fun:PMPI_Init_thread
+}
+
+
+
+
+{
+   suppress_cuda_driver_pthread
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create*
+   obj:*libcuda.so*
+}
+{
+   suppress_cuda_driver_pthread_1
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create*
+   obj:*libcuda.so*
+}
+
+{
+   suppress_all_cuda_driver
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   obj:*/libcuda.so*
+}
+{
+   suppress_all_cuda_driver_malloc
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   obj:*/libcuda.so*
+}
+{
+   suppress_all_nv_opencl_malloc
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   obj:*/libnvidia-opencl.so*
+}
+{
+   suppress_all_nv_opencl_calloc
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   obj:*/libnvidia-opencl.so*
+}

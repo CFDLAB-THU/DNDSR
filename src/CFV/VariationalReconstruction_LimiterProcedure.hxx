@@ -4,6 +4,39 @@
 
 namespace DNDS::CFV
 {
+    /**
+     * @brief Dispatches the biway limiter function selected by limiterBiwayAlter.
+     *
+     * Consolidates the switch(limiterBiwayAlter) block that appeared identically
+     * in both DoLimiterWBAP_C and DoLimiterWBAP_3.
+     */
+    template <int dim, int nVarsFixed, typename Tin1, typename Tin2, typename Tout>
+    inline void DispatchBiwayLimiter(int limiterBiwayAlter,
+                                     const Tin1 &uThis, const Tin2 &uOther,
+                                     Tout &uOut, real n)
+    {
+        switch (limiterBiwayAlter)
+        {
+        case 0:
+            FWBAP_L2_Biway(uThis, uOther, uOut, n);
+            break;
+        case 1:
+            FMINMOD_Biway(uThis, uOther, uOut, n);
+            break;
+        case 2:
+            FWBAP_L2_Biway_PolynomialNorm<dim, nVarsFixed>(uThis, uOther, uOut, n);
+            break;
+        case 3:
+            FMEMM_Biway_PolynomialNorm<dim, nVarsFixed>(uThis, uOther, uOut, n);
+            break;
+        case 4:
+            FWBAP_L2_Cut_Biway(uThis, uOther, uOut, n);
+            break;
+        default:
+            DNDS_assert_info(false, "no such limiterBiwayAlter code!");
+        }
+    }
+
     template <int dim>
     template <int nVarsFixed, int nVarsSee>
     void VariationalReconstruction<dim>::DoCalculateSmoothIndicator(
@@ -14,7 +47,7 @@ namespace DNDS::CFV
         static const int maxNDiff = dim == 2 ? 10 : 20;
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -34,7 +67,7 @@ namespace DNDS::CFV
                     IJIISI,
                     [&](auto &finc, int ig)
                     {
-                        int nDiff = faceAtr[iFace].NDIFF;
+                        int nDiff = GetFaceAtr(iFace).NDIFF;
                         // int nDiff = 1;
                         tPoint unitNorm = faceMeanNorm[iFace];
 
@@ -42,14 +75,14 @@ namespace DNDS::CFV
                             uRecVal(nDiff, nVarsSee), uRecValL(nDiff, nVarsSee), uRecValR(nDiff, nVarsSee), uRecValJump(nDiff, nVarsSee);
                         uRecVal.setZero(), uRecValJump.setZero();
                         uRecValL = this->GetIntPointDiffBaseValue(iCell, iFace, -1, -1, Eigen::seq(0, nDiff - 1)) *
-                                   uRec[iCell](Eigen::all, varsSee);
-                        uRecValL(0, Eigen::all) += u[iCell](varsSee).transpose();
+                                   uRec[iCell](EigenAll, varsSee);
+                        uRecValL(0, EigenAll) += u[iCell](varsSee).transpose();
 
                         if (iCellOther != UnInitIndex)
                         {
                             uRecValR = this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, -1, Eigen::seq(0, nDiff - 1)) *
-                                       uRec[iCellOther](Eigen::all, varsSee);
-                            uRecValR(0, Eigen::all) += u[iCellOther](varsSee).transpose();
+                                       uRec[iCellOther](EigenAll, varsSee);
+                            uRecValR(0, EigenAll) += u[iCellOther](varsSee).transpose();
                             uRecVal = (uRecValL + uRecValR) * 0.5;
                             uRecValJump = (uRecValL - uRecValR) * 0.5;
                         }
@@ -58,42 +91,19 @@ namespace DNDS::CFV
                         IJI = FFaceFunctional(uRecValJump, uRecValJump, iFace, iCell, iCellOther);
                         ISI = FFaceFunctional(uRecVal, uRecVal, iFace, iCell, iCellOther);
 
-                        finc(Eigen::all, 0) = IJI.diagonal();
-                        finc(Eigen::all, 1) = ISI.diagonal();
+                        finc(EigenAll, 0) = IJI.diagonal();
+                        finc(EigenAll, 1) = ISI.diagonal();
 
                         finc *= GetFaceArea(iFace); // don't forget this
-
-                        // if (iCell == 12517)
-                        // {
-                        //     std::cout << "   === Face:   ";
-                        //     std::cout << uRecValL << std::endl;
-                        //     std::cout << uRecValR << std::endl;
-                        //     std::cout << IJI << std::endl;
-                        //     std::cout << ISI << std::endl;
-                        //     std::cout << uRec[iCell] << std::endl;
-                        //     std::cout << uRec[iCellOther] << std::endl;
-                        //     std::cout << this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, ig, Eigen::all) << std::endl;
-                        // }
                     });
                 IJIISIsum += IJIISI;
-                // if (iCell == 12517)
-                // {
-                //     std::cout << "iFace " << iFace << " iCellOther " << iCellOther << std::endl;
-                //     std::cout << IJIISI << std::endl;
-                // }
             }
             Eigen::Vector<real, nVarsSee> smoothIndicator =
-                (IJIISIsum(Eigen::all, 0).array() /
-                 (IJIISIsum(Eigen::all, 1).array() + verySmallReal))
+                (IJIISIsum(EigenAll, 0).array() /
+                 (IJIISIsum(EigenAll, 1).array() + verySmallReal))
                     .matrix();
             real sImax = smoothIndicator.array().abs().maxCoeff();
             si(iCell, 0) = std::sqrt(sImax) * sqr(settings.maxOrder);
-            // if (iCell == 12517)
-            // {
-            //     std::cout << "SUM:\n";
-            //     std::cout << IJIISIsum << std::endl;
-            //     std::abort();
-            // }
         }
     }
 
@@ -109,7 +119,7 @@ namespace DNDS::CFV
         int nVars = u.RowSize();
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -143,14 +153,14 @@ namespace DNDS::CFV
                         uRecVal.setZero(1, nVars), uRecValJump.setZero(1, nVars);
                         uRecValL = this->GetIntPointDiffBaseValue(iCell, iFace, -1, -1, std::array<int, 1>{0}, 1) *
                                    uRec[iCell];
-                        uRecValL(0, Eigen::all) += u[iCell].transpose();
+                        uRecValL(0, EigenAll) += u[iCell].transpose();
                         FPost(uRecValL);
 
                         if (iCellOther != UnInitIndex)
                         {
                             uRecValR = this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, -1, std::array<int, 1>{0}, 1) *
                                        uRec[iCellOther];
-                            uRecValR(0, Eigen::all) += u[iCellOther].transpose();
+                            uRecValR(0, EigenAll) += u[iCellOther].transpose();
                             FPost(uRecValR);
                             uRecVal = (uRecValL + uRecValR) * 0.5;
                             uRecValJump = (uRecValL - uRecValR) * 0.5;
@@ -158,26 +168,20 @@ namespace DNDS::CFV
 
                         for (int i = 0; i < nVars; i++)
                         {
-                            finc(i, 0) = FFaceFunctional(uRecValJump(Eigen::all, {i}), uRecValJump(Eigen::all, {i}), iFace, iCell, iCellOther)(0, 0);
-                            finc(i, 1) = FFaceFunctional(uRecVal(Eigen::all, {i}), uRecVal(Eigen::all, {i}), iFace, iCell, iCellOther)(0, 0);
+                            finc(i, 0) = FFaceFunctional(uRecValJump(EigenAll, {i}), uRecValJump(EigenAll, {i}), iFace, iCell, iCellOther)(0, 0);
+                            finc(i, 1) = FFaceFunctional(uRecVal(EigenAll, {i}), uRecVal(EigenAll, {i}), iFace, iCell, iCellOther)(0, 0);
                         }
                         finc *= GetFaceArea(iFace); // don't forget this
                     });
                 IJIISIsum += IJIISI;
             }
             Eigen::Vector<real, nVarsFixed> smoothIndicator =
-                (IJIISIsum(Eigen::all, 0).array() /
-                 (IJIISIsum(Eigen::all, 1).array() + verySmallReal))
+                (IJIISIsum(EigenAll, 0).array() /
+                 (IJIISIsum(EigenAll, 1).array() + verySmallReal))
                     .matrix();
             smoothIndicator.array() *= varsSee.array();
             real sImax = smoothIndicator.array().abs().maxCoeff();
             si(iCell, 0) = std::sqrt(sImax) * sqr(settings.maxOrder);
-            // if (iCell == 12517)
-            // {
-            //     std::cout << "SUM:\n";
-            //     std::cout << IJIISIsum << std::endl;
-            //     std::abort();
-            // }
         }
     }
 
@@ -196,7 +200,7 @@ namespace DNDS::CFV
         using namespace Geom;
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
@@ -206,7 +210,7 @@ namespace DNDS::CFV
                 uRecNew[iCell] = uRec[iCell]; //! no lim need to copy !!!!
                 continue;
             }
-            index NRecDOF = cellAtr[iCell].NDOF - 1;
+            index NRecDOF = GetCellAtr(iCell).NDOF - 1;
             auto c2f = mesh->cell2face[iCell];
             std::vector<Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOF>> uFaces(c2f.size());
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
@@ -223,39 +227,7 @@ namespace DNDS::CFV
             int cPOrder = settings.maxOrder;
             for (; cPOrder >= 1; cPOrder--)
             {
-                int LimStart, LimEnd; // End is inclusive
-                if constexpr (dim == 2)
-                    switch (cPOrder)
-                    {
-                    case 3:
-                        LimStart = 5, LimEnd = 8;
-                        break;
-                    case 2:
-                        LimStart = 2, LimEnd = 4;
-                        break;
-                    case 1:
-                        LimStart = 0, LimEnd = 1;
-                        break;
-                    default:
-                        LimStart = -200, LimEnd = -100;
-                        DNDS_assert(false);
-                    }
-                else
-                    switch (cPOrder)
-                    {
-                    case 3:
-                        LimStart = 9, LimEnd = 18;
-                        break;
-                    case 2:
-                        LimStart = 3, LimEnd = 8;
-                        break;
-                    case 1:
-                        LimStart = 0, LimEnd = 2;
-                        break;
-                    default:
-                        LimStart = -200, LimEnd = -100;
-                        DNDS_assert(false);
-                    }
+                auto [LimStart, LimEnd] = GetRecDOFRange<dim>(cPOrder);
 
                 std::vector<Eigen::Array<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>>
                     uOthers;
@@ -264,7 +236,7 @@ namespace DNDS::CFV
                         Eigen::seq(
                             LimStart,
                             LimEnd),
-                        Eigen::all);
+                        EigenAll);
                 uOthers.reserve(maxNeighbour);
                 uOthers.push_back(uC); // using uC centered
                 // DNDS_MPI_InsertCheck(mpi, "HereAAC");
@@ -277,7 +249,7 @@ namespace DNDS::CFV
 
                     if (iCellOther != UnInitIndex)
                     {
-                        index NRecDOFOther = cellAtr[iCellOther].NDOF - 1;
+                        index NRecDOFOther = GetCellAtr(iCellOther).NDOF - 1;
                         index NRecDOFLim = std::min(NRecDOFOther, NRecDOF);
                         if (NRecDOFLim < (LimEnd + 1))
                             continue; // reserved for p-adaption
@@ -286,25 +258,23 @@ namespace DNDS::CFV
 
                         tPoint unitNorm = faceMeanNorm[iFace];
 
-                        const auto &matrixSecondary =
+                        const auto &matrixSecondaryThis =
                             this->GetMatrixSecondary(iCell, iFace, -1);
 
                         const auto &matrixSecondaryOther =
                             this->GetMatrixSecondary(iCellOther, iFace, -1);
 
-                        // std::cout << "A"<<std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOF>
-                            uOtherOther = uRec[iCellOther](Eigen::seq(0, NRecDOFLim - 1), Eigen::all);
+                            uOtherOther = uRec[iCellOther](Eigen::seq(0, NRecDOFLim - 1), EigenAll);
 
                         if (LimEnd < uOtherOther.rows() - 1) // successive SR
-                            uOtherOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::all) =
+                            uOtherOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), EigenAll) =
                                 matrixSecondaryOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::seq(LimEnd + 1, NRecDOFLim - 1)) *
-                                uFaces[ic2f](Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::all);
+                                uFaces[ic2f](Eigen::seq(LimEnd + 1, NRecDOFLim - 1), EigenAll);
 
-                        // std::cout << "B" << std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uOtherIn =
-                                matrixSecondary(Eigen::seq(LimStart, LimEnd), Eigen::all) * uOtherOther;
+                                matrixSecondaryThis(Eigen::seq(LimStart, LimEnd), EigenAll) * uOtherOther;
 
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uThisIn =
@@ -321,31 +291,14 @@ namespace DNDS::CFV
                             uLimOutArray;
 
                         real n = settings.WBAP_nStd;
-                        switch (settings.limiterBiwayAlter)
-                        {
-                        case 0:
-                            FWBAP_L2_Biway(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 1:
-                            FMINMOD_Biway(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 2:
-                            FWBAP_L2_Biway_PolynomialNorm<dim, nVarsFixed>(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 3:
-                            FMEMM_Biway_PolynomialNorm<dim, nVarsFixed>(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 4:
-                            FWBAP_L2_Cut_Biway(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        default:
-                            DNDS_assert_info(false, "no such limiterBiwayAlter code!");
-                        }
+                        DispatchBiwayLimiter<dim, nVarsFixed>(
+                            settings.limiterBiwayAlter,
+                            uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
 
                         // to phys space
                         uLimOutArray = (FMI(uL, uR, unitNorm, uLimOutArray.matrix())).array();
 
-                        uFaces[ic2f](Eigen::seq(LimStart, LimEnd), Eigen::all) = uLimOutArray.matrix();
+                        uFaces[ic2f](Eigen::seq(LimStart, LimEnd), EigenAll) = uLimOutArray.matrix();
                         uOthers.push_back(uLimOutArray);
                     }
                     else
@@ -357,7 +310,7 @@ namespace DNDS::CFV
 
                 real n = settings.WBAP_nStd;
                 if (settings.normWBAP)
-                    FWBAP_L2_Multiway_Polynomial2D(uOthers, uOthers.size(), uLimOutArray, n);
+                    FWBAP_L2_Multiway_Polynomial2D(uOthers, uOthers.size(), uLimOutArray, n); // TODO: add 3D version here!
                 else
                     FWBAP_L2_Multiway(uOthers, uOthers.size(), uLimOutArray, n);
 
@@ -365,7 +318,7 @@ namespace DNDS::CFV
                     Eigen::seq(
                         LimStart,
                         LimEnd),
-                    Eigen::all) = uLimOutArray.matrix();
+                    EigenAll) = uLimOutArray.matrix();
             }
         }
         uRecNew.trans.startPersistentPull();
@@ -373,7 +326,7 @@ namespace DNDS::CFV
         if (!putIntoNew)
         {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // mind the edge
                 uRec[iCell] = uRecNew[iCell];
@@ -396,52 +349,20 @@ namespace DNDS::CFV
 
         int cPOrder = settings.maxOrder;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // mind the edge
             uRecNew[iCell] = uRec[iCell];
         for (; cPOrder >= 1; cPOrder--)
         {
-            int LimStart, LimEnd; // End is inclusive
-            if constexpr (dim == 2)
-                switch (cPOrder)
-                {
-                case 3:
-                    LimStart = 5, LimEnd = 8;
-                    break;
-                case 2:
-                    LimStart = 2, LimEnd = 4;
-                    break;
-                case 1:
-                    LimStart = 0, LimEnd = 1;
-                    break;
-                default:
-                    LimStart = -200, LimEnd = -100;
-                    DNDS_assert(false);
-                }
-            else
-                switch (cPOrder)
-                {
-                case 3:
-                    LimStart = 9, LimEnd = 18;
-                    break;
-                case 2:
-                    LimStart = 3, LimEnd = 8;
-                    break;
-                case 1:
-                    LimStart = 0, LimEnd = 2;
-                    break;
-                default:
-                    LimStart = -200, LimEnd = -100;
-                    DNDS_assert(false);
-                }
+            auto [LimStart, LimEnd] = GetRecDOFRange<dim>(cPOrder);
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // mind the edge
                 uRecBuf[iCell] = uRecNew[iCell];
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
@@ -451,7 +372,7 @@ namespace DNDS::CFV
                     // uRecNew[iCell] = uRecBuf[iCell]; //! no copy for 3wbap!
                     continue;
                 }
-                index NRecDOF = cellAtr[iCell].NDOF - 1;
+                index NRecDOF = GetCellAtr(iCell).NDOF - 1;
                 auto c2f = mesh->cell2face[iCell];
                 // std::vector<Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOF>> uFaces(c2f.size());
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
@@ -472,7 +393,7 @@ namespace DNDS::CFV
                         Eigen::seq(
                             LimStart,
                             LimEnd),
-                        Eigen::all);
+                        EigenAll);
                 uOthers.reserve(maxNeighbour);
                 uOthers.push_back(uC); // using uC centered
                 // DNDS_MPI_InsertCheck(mpi, "HereAAC");
@@ -485,7 +406,7 @@ namespace DNDS::CFV
 
                     if (iCellOther != UnInitIndex)
                     {
-                        index NRecDOFOther = cellAtr[iCellOther].NDOF - 1;
+                        index NRecDOFOther = GetCellAtr(iCellOther).NDOF - 1;
                         index NRecDOFLim = std::min(NRecDOFOther, NRecDOF);
                         if (NRecDOFLim < (LimEnd + 1))
                             continue; // reserved for p-adaption
@@ -494,25 +415,23 @@ namespace DNDS::CFV
 
                         tPoint unitNorm = faceMeanNorm[iFace];
 
-                        const auto &matrixSecondary =
+                        const auto &matrixSecondaryThis =
                             this->GetMatrixSecondary(iCell, iFace, -1);
 
                         const auto &matrixSecondaryOther =
                             this->GetMatrixSecondary(iCellOther, iFace, -1);
 
-                        // std::cout << "A"<<std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOF>
-                            uOtherOther = uRecBuf[iCellOther](Eigen::seq(0, NRecDOFLim - 1), Eigen::all);
+                            uOtherOther = uRecBuf[iCellOther](Eigen::seq(0, NRecDOFLim - 1), EigenAll);
 
                         // if (LimEnd < uOtherOther.rows() - 1) // successive SR
-                        //     uOtherOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::all) =
+                        //     uOtherOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), EigenAll) =
                         //         matrixSecondaryOther(Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::seq(LimEnd + 1, NRecDOFLim - 1)) *
-                        //         uFaces[ic2f](Eigen::seq(LimEnd + 1, NRecDOFLim - 1), Eigen::all);
+                        //         uFaces[ic2f](Eigen::seq(LimEnd + 1, NRecDOFLim - 1), EigenAll);
 
-                        // std::cout << "B" << std::endl;
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uOtherIn =
-                                matrixSecondary(Eigen::seq(LimStart, LimEnd), Eigen::all) * uOtherOther;
+                                matrixSecondaryThis(Eigen::seq(LimStart, LimEnd), EigenAll) * uOtherOther;
 
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOFBatch>
                             uThisIn =
@@ -530,31 +449,14 @@ namespace DNDS::CFV
 
                         real n = settings.WBAP_nStd;
 
-                        switch (settings.limiterBiwayAlter)
-                        {
-                        case 0:
-                            FWBAP_L2_Biway(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 1:
-                            FMINMOD_Biway(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 2:
-                            FWBAP_L2_Biway_PolynomialNorm<dim, nVarsFixed>(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 3:
-                            FMEMM_Biway_PolynomialNorm<dim, nVarsFixed>(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        case 4:
-                            FWBAP_L2_Cut_Biway(uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
-                            break;
-                        default:
-                            DNDS_assert_info(false, "no such limiterBiwayAlter code!");
-                        }
+                        DispatchBiwayLimiter<dim, nVarsFixed>(
+                            settings.limiterBiwayAlter,
+                            uThisIn.array(), uOtherIn.array(), uLimOutArray, 1);
 
                         // to phys space
                         uLimOutArray = FMI(uL, uR, unitNorm, uLimOutArray.matrix()).array();
 
-                        // uFaces[ic2f](Eigen::seq(LimStart, LimEnd), Eigen::all) = uLimOutArray.matrix();
+                        // uFaces[ic2f](Eigen::seq(LimStart, LimEnd), EigenAll) = uLimOutArray.matrix();
                         uOthers.push_back(uLimOutArray);
                     }
                     else
@@ -575,13 +477,16 @@ namespace DNDS::CFV
                     Eigen::seq(
                         LimStart,
                         LimEnd),
-                    Eigen::all) = uLimOutArray.matrix();
+                    EigenAll) = uLimOutArray.matrix();
             }
             uRecNew.trans.startPersistentPull();
             uRecNew.trans.waitPersistentPull();
         }
         if (!putIntoNew)
         {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(runtime)
+#endif
             for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++) // mind the edge
                 uRec[iCell] = uRecNew[iCell];
         }

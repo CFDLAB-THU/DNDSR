@@ -1,0 +1,258 @@
+{
+    "$schema": "../eulerSA3D_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 1e100,
+        "nTimeStep": 1,
+        "steadyQuit": true,
+        "useRestart": false,
+        "rhsFPPMode": 1,
+        "rhsFPPScale": 1,
+        "odeCode": 103,
+        "tEnd": 3e+200,
+        "partitionMeshOnly": true,
+        "_tail": 0
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 5000,
+        "rhsThresholdInternal": 1e-8,
+        "res_base": 0.0,
+        "useVolWiseResidual": false
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 1,
+        "nDataOutC": 1,
+        "nDataOut": 20,
+        "nDataOutCInternal": 100,
+        "nDataOutInternal": 1000000000,
+        "nRestartOutC": 10,
+        "nRestartOut": 100,
+        "nRestartOutCInternal": 1000,
+        "nRestartOutInternal": 1000000000,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 10,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 2147483647,
+        "nCFLRampLength": 2147483647,
+        "CFLRampEnd": 0.0,
+        "nSmoothDTau": 2,
+        "useLocalDt": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshScale": 0.003333333333333,
+        "meshElevation": 0,
+        "meshElevationInternalSmoother": 0,
+        "meshElevationIter": 20,
+        "meshElevationNSearch": 100,
+        "meshElevationRBFRadius": 5,
+        "meshElevationRBFKernel": "CPC0",
+        "meshElevationMaxIncludedAngle": 20,
+        "meshFile": "../../../data/mesh/row_1_test3-Cylinderout.cgns",
+        "outPltName": "out",
+        "outPltMode": 0,
+        "readMeshMode": 1,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": true,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outBndData": true,
+        "outCellScalarNames": [
+            // "minJacobiDetRel",
+            // "cellVolume",
+            "dWall"
+        ],
+        "_tail": 0
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation1": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "PeriodicRotationEulerAngles1": [
+            0.0,
+            0.0,
+            18.947368421052630
+            //360 /19
+        ],
+        "periodicTolerance": 1e-4
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0,
+        "nGmresSpace": 4,
+        "nGmresIter": 2,
+        "recThreshold": 1e-03,
+        "nRecConsolCheck": 1,
+        "nRecMultiplyForZeroedGrad": 1,
+        "zeroRecForStepsInternal": 40
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "smoothIndicatorProcedure": 0,
+        "limiterProcedure": 0,
+        "nPartialLimiterStart": 100000,
+        "nPartialLimiterStartLocal": 50
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 5,
+        "cacheDiffBase": true,
+        "jacobiRelax": 1,
+        "SORInstead": false,
+        "smoothThreshold": 5e-3,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        // "bcWeight": 2,
+        "baseSettings": {
+            "localOrientation": true,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "dirWeightScheme": "HQM_OPT",
+            "geomWeightScheme": "HQM_SD",
+            "geomWeightBias": 1,
+            // "geomWeightScheme": "SD_Power",
+            // "geomWeightPower1": 0.125,
+            // "geomWeightPower2": -0.5,
+            // "useAnisotropicFunctional": true,
+            // "anisotropicType": "InertiaCoord",
+            "_tail": 0
+        },
+        "ignoreMeshGeometryDeficiency": false,
+        "_tail": 0
+    },
+    "linearSolverControl": {
+        "jacobiCode": 2,
+        "sgsIter": 0,
+        "sgsWithRec": 0,
+        "gmresCode": 1,
+        "nGmresSpace": 5,
+        "nGmresIter": 2,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 0
+        }
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": false,
+        "minWallDist": 1e-10,
+        "wallDistScheme": 1,
+        "riemannSolverType": "Roe_M1",
+        // "rsRotateScheme": 1,
+        "rsMeanValueEig": 1,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "frameConstRotation": {
+            "enabled": true,
+            "axis": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "rpm": 9.9
+        },
+        "farFieldStaticValue": [
+            1,
+            0,
+            0,
+            0.5,
+            // 1.127540981911547,
+            // 1.528047175703185, // 110000 Pa static pressure
+            // 1.655596918948928, // 120000
+            1.783146662194671, //130000
+            // 2.038246148686159, // 150000
+            3
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 0.001892583230368,
+            "muGas": 1.176178699050087e-07,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        }
+    },
+    "bcSettings": [
+        {
+            "type": "BCOutP",
+            "name": "RS_1_to_2",
+            "value": [
+                1,
+                0,
+                0,
+                0.5,
+                // 1.127540981911547, // 78600 pa
+                // 1.417397773437500, // 1.0 p0in
+                1.482017662109375,
+                // 1.05
+                // 1.546637550781250, // 1.1
+                // 1.572485506250000, // 1.12
+                // 1.611257439453125, //1.15
+                // 1.637105394921875, // 1.17
+                // 1.675877328125000, //1.2
+                3
+            ],
+            "valueExtra": [
+                128,
+                // profile divisions
+                0,
+                1,
+                1
+                // print info
+            ],
+            "anchorOption": 2,
+            "integrationOption": 2
+        },
+        {
+            "type": "BCInPsTs",
+            "name": "INLET_1",
+            "value": [
+                0.516959109375000,
+                //Ps
+                288.15,
+                //Ts
+                0,
+                0,
+                1,
+                3
+            ]
+        },
+        {
+            "type": "BCWall",
+            "name": "WALL_ROT_1"
+        },
+        {
+            "type": "BCWall",
+            "name": "WALL_HUB_1"
+        },
+        {
+            "type": "BCWall",
+            "name": "WALL_HUB_IN",
+            "frameOption": 1
+        },
+        {
+            "type": "BCWall",
+            "name": "WALL_SH",
+            "frameOption": 1
+        }
+    ]
+}

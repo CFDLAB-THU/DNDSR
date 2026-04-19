@@ -1,1 +1,0 @@
-zip -r pack.zip src app CMakeLists.txt external cmakeCommonUtils.cmake docs/Doxyfile

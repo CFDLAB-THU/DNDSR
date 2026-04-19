@@ -14,7 +14,7 @@
 
 #include "DNDS/EigenPCH.hpp"
 #ifdef DNDS_USE_SUPERLU
-#include <superlu_ddefs.h>
+#    include <superlu_ddefs.h>
 #endif
 
 namespace DNDS::Geom
@@ -121,10 +121,8 @@ namespace DNDS::Geom
 
         tCoordPair boundInterpCoo;
         tCoordPair boundInterpVal;
-        DNDS_MAKE_SSP(boundInterpCoo.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoo.son, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.father, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.son, mpi);
+        boundInterpCoo.InitPair("ElevatedNodesSolveInternalSmooth::boundInterpCoo", mpi);
+        boundInterpVal.InitPair("ElevatedNodesSolveInternalSmooth::boundInterpVal", mpi);
 
         boundInterpCoo.father->Resize(nodesBoundInterpolated.size());
         boundInterpVal.father->Resize(nodesBoundInterpolated.size());
@@ -191,8 +189,8 @@ namespace DNDS::Geom
             dispBnd.resize(3, nFound);
             for (index iF = 0; iF < nFound; iF++)
             {
-                coordBnd(Eigen::all, iF) = (*boundInterpCoo.son)[idxFound[iF]];
-                dispBnd(Eigen::all, iF) = (*boundInterpVal.son)[idxFound[iF]];
+                coordBnd(EigenAll, iF) = (*boundInterpCoo.son)[idxFound[iF]];
+                dispBnd(EigenAll, iF) = (*boundInterpVal.son)[idxFound[iF]];
             }
             real RMin = std::sqrt(outDistancesSqr.minCoeff());
             tPoint dispC;
@@ -209,7 +207,7 @@ namespace DNDS::Geom
                 qs = cooC - coordBndC;
                 tPoint dCur =
                     (RBF::RBFCPC2(coordBndRel, qs, elevationInfo.RBFRadius, elevationInfo.kernel).transpose() * coefs.topRows(coordBndRel.cols()) +
-                     coefs(Eigen::last - 3, Eigen::all) +
+                     coefs(EigenLast - 3, EigenAll) +
                      qs.transpose() * coefs.bottomRows(3))
                         .transpose();
                 dispC = dCur;
@@ -263,10 +261,8 @@ namespace DNDS::Geom
 
         tCoordPair boundInterpCoo;
         tCoordPair boundInterpVal;
-        DNDS_MAKE_SSP(boundInterpCoo.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoo.son, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.father, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.son, mpi);
+        boundInterpCoo.InitPair("ElevatedNodesSolveInternalSmoothV1Old::boundInterpCoo", mpi);
+        boundInterpVal.InitPair("ElevatedNodesSolveInternalSmoothV1Old::boundInterpVal", mpi);
 
         boundInterpCoo.father->Resize(nodesBoundInterpolated.size());
         boundInterpVal.father->Resize(nodesBoundInterpolated.size());
@@ -315,10 +311,8 @@ namespace DNDS::Geom
         using tScalarPair = DNDS::ArrayPair<DNDS::ParArray<real, 1>>;
         tScalarPair boundInterpR;
 
-        DNDS_MAKE_SSP(boundInterpCoef.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoef.son, mpi);
-        DNDS_MAKE_SSP(boundInterpR.father, mpi);
-        DNDS_MAKE_SSP(boundInterpR.son, mpi);
+        boundInterpCoef.InitPair("ElevatedNodesSolveInternalSmoothV1Old::boundInterpCoef", mpi);
+        boundInterpR.InitPair("ElevatedNodesSolveInternalSmoothV1Old::boundInterpR", mpi);
         boundInterpCoef.father->Resize(mpi.rank == mRank ? boundInterpGlobSize : 0);
         boundInterpR.father->Resize(mpi.rank == mRank ? boundInterpGlobSize : 0);
 
@@ -354,7 +348,7 @@ namespace DNDS::Geom
                 for (index in2n = 0; in2n < nFound; in2n++)
                     M.insert(iN, idxFound[in2n]) = fBasis(in2n);
 
-                f(iN, Eigen::all) = (*boundInterpVal.son)[iN].transpose();
+                f(iN, EigenAll) = (*boundInterpVal.son)[iN].transpose();
             }
 
             log() << "RBF assembled: " << boundInterpCoo.son->Size() << std::endl;
@@ -365,7 +359,7 @@ namespace DNDS::Geom
             LUSolver.factorize(M);
             coefs = LUSolver.solve(f);
             for (index iN = 0; iN < boundInterpGlobSize; iN++)
-                boundInterpCoef[iN] = coefs(iN, Eigen::all).transpose();
+                boundInterpCoef[iN] = coefs(iN, EigenAll).transpose();
         }
 
         boundInterpCoef.father->createGlobalMapping();
@@ -451,7 +445,7 @@ namespace DNDS::Geom
         //     coefsC.resize(3, nFound);
         //     for (index iF = 0; iF < nFound; iF++)
         //         foundRRBFs[iF] = (*boundInterpR.son)(idxFound[iF], 0),
-        //         coefsC(Eigen::all, iF) = (*boundInterpCoef.son)[idxFound[iF]].transpose();
+        //         coefsC(EigenAll, iF) = (*boundInterpCoef.son)[idxFound[iF]].transpose();
         //     Eigen::Vector<real, Eigen::Dynamic> outDists = outDistancesSqr.array().sqrt() / foundRRBFs.array();
         //     auto fBasis = RBF::FRBFBasis(outDists, elevationInfo.kernel);
         //     tPoint dispC = coefsC * fBasis;
@@ -503,10 +497,8 @@ namespace DNDS::Geom
 
         tCoordPair boundInterpCoo;
         tCoordPair boundInterpVal;
-        DNDS_MAKE_SSP(boundInterpCoo.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoo.son, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.father, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.son, mpi);
+        boundInterpCoo.InitPair("ElevatedNodesSolveInternalSmoothV1::boundInterpCoo", mpi);
+        boundInterpVal.InitPair("ElevatedNodesSolveInternalSmoothV1::boundInterpVal", mpi);
 
         boundInterpCoo.father->Resize(nodesBoundInterpolated.size());
         boundInterpVal.father->Resize(nodesBoundInterpolated.size());
@@ -556,12 +548,9 @@ namespace DNDS::Geom
         using tScalarPair = DNDS::ArrayPair<DNDS::ParArray<real, 1>>;
         tScalarPair boundInterpR;
         std::cout << "HEre-2" << std::endl;
-        DNDS_MAKE_SSP(boundInterpCoef.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoef.son, mpi);
-        DNDS_MAKE_SSP(boundInterpCoefRHS.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoefRHS.son, mpi);
-        DNDS_MAKE_SSP(boundInterpR.father, mpi);
-        DNDS_MAKE_SSP(boundInterpR.son, mpi);
+        boundInterpCoef.InitPair("ElevatedNodesSolveInternalSmoothV1::boundInterpCoef", mpi);
+        boundInterpCoefRHS.InitPair("ElevatedNodesSolveInternalSmoothV1::boundInterpCoefRHS", mpi);
+        boundInterpR.InitPair("ElevatedNodesSolveInternalSmoothV1::boundInterpR", mpi);
         boundInterpCoef.father->Resize(boundInterpCoo.father->Size());
         boundInterpCoefRHS.father->Resize(boundInterpCoo.father->Size());
         boundInterpR.father->Resize(boundInterpCoo.father->Size());
@@ -756,8 +745,7 @@ namespace DNDS::Geom
                 5,
                 [&](CoordPairDOF &v)
                 {
-                    DNDS_MAKE_SSP(v.father, mpi);
-                    DNDS_MAKE_SSP(v.son, mpi);
+                    v.InitPair("ElevatedNodesSolveInternalSmoothV1::v", mpi);
                     v.father->Resize(boundInterpCoef.father->Size());
                     v.TransAttach();
                     v.trans.BorrowGGIndexing(boundInterpCoef.trans);
@@ -792,12 +780,12 @@ namespace DNDS::Geom
                     Eigen::Matrix<real, Eigen::Dynamic, 3> xVal;
                     xVal.resize(boundInterpLocSize, 3);
                     for (index iN = 0; iN < boundInterpLocSize; iN++)
-                        xVal(iN, Eigen::all) = x[iN].transpose();
+                        xVal(iN, EigenAll) = x[iN].transpose();
                     Eigen::Matrix<real, Eigen::Dynamic, 3> xValPrec;
                     if (boundInterpLocSize)
                         xValPrec = LUSolver.solve(xVal);
                     for (index iN = 0; iN < boundInterpLocSize; iN++)
-                        MLX[iN] = xValPrec(iN, Eigen::all).transpose();
+                        MLX[iN] = xValPrec(iN, EigenAll).transpose();
                     MLX = x;
                     MLX.trans.startPersistentPull();
                     MLX.trans.waitPersistentPull();
@@ -906,7 +894,7 @@ namespace DNDS::Geom
         //     coefsC.resize(3, nFound);
         //     for (index iF = 0; iF < nFound; iF++)
         //         foundRRBFs[iF] = (*boundInterpR.son)(idxFound[iF], 0),
-        //         coefsC(Eigen::all, iF) = (*boundInterpCoef.son)[idxFound[iF]].transpose();
+        //         coefsC(EigenAll, iF) = (*boundInterpCoef.son)[idxFound[iF]].transpose();
         //     Eigen::Vector<real, Eigen::Dynamic> outDists = outDistancesSqr.array().sqrt() / foundRRBFs.array();
         //     auto fBasis = RBF::FRBFBasis(outDists, elevationInfo.kernel);
         //     tPoint dispC = coefsC * fBasis;
@@ -954,10 +942,8 @@ namespace DNDS::Geom
 
         tCoordPair boundInterpCoo;
         tCoordPair boundInterpVal;
-        DNDS_MAKE_SSP(boundInterpCoo.father, mpi);
-        DNDS_MAKE_SSP(boundInterpCoo.son, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.father, mpi);
-        DNDS_MAKE_SSP(boundInterpVal.son, mpi);
+        boundInterpCoo.InitPair("ElevatedNodesSolveInternalSmoothV2::boundInterpCoo", mpi);
+        boundInterpVal.InitPair("ElevatedNodesSolveInternalSmoothV2::boundInterpVal", mpi);
 
         boundInterpCoo.father->Resize(nodesBoundInterpolated.size());
         boundInterpVal.father->Resize(nodesBoundInterpolated.size());
@@ -1020,8 +1006,7 @@ namespace DNDS::Geom
         CoordPairDOF dispO2, bO2, dispO2New, dispO2PrecRHS, dispO2Inc, dispO2IncLimited;
         auto initDOF = [&](CoordPairDOF &dispO2)
         {
-            DNDS_MAKE_SSP(dispO2.father, mpi);
-            DNDS_MAKE_SSP(dispO2.son, mpi);
+            dispO2.InitPair("ElevatedNodesSolveInternalSmoothV2::dispO2", mpi);
             dispO2.father->Resize(coords.father->Size()); // O1 part is unused
             dispO2.TransAttach();
             dispO2.trans.BorrowGGIndexing(coords.trans); // should be subset of coord?
@@ -1097,7 +1082,7 @@ namespace DNDS::Geom
                             tJacobi JInv = tJacobi::Identity();
                             real JDet;
                             if (dim == 2)
-                                JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+                                JDet = J(EigenAll, 0).cross(J(EigenAll, 1)).stableNorm();
                             else
                                 JDet = J.determinant();
                             DNDS_assert(JDet > 0);
@@ -1105,18 +1090,18 @@ namespace DNDS::Geom
                                 JInv({0, 1}, {0, 1}) = J({0, 1}, {0, 1}).inverse().eval();
                             else
                                 JInv = J.inverse().eval();
-                            // JInv.transpose() * DiNj({1,2,3}, Eigen::all) * u (size = nnode,3) => du_j/dxi
-                            tSmallCoords m3 = JInv.transpose() * DiNj({1, 2, 3}, Eigen::all);
-                            mLoc(0, Eigen::seq(nnLoc * 0, nnLoc * 0 + nnLoc - 1)) = m3(0, Eigen::all);
-                            mLoc(1, Eigen::seq(nnLoc * 1, nnLoc * 1 + nnLoc - 1)) = m3(1, Eigen::all);
-                            mLoc(2, Eigen::seq(nnLoc * 2, nnLoc * 2 + nnLoc - 1)) = m3(2, Eigen::all);
+                            // JInv.transpose() * DiNj({1,2,3}, EigenAll) * u (size = nnode,3) => du_j/dxi
+                            tSmallCoords m3 = JInv.transpose() * DiNj({1, 2, 3}, EigenAll);
+                            mLoc(0, Eigen::seq(nnLoc * 0, nnLoc * 0 + nnLoc - 1)) = m3(0, EigenAll);
+                            mLoc(1, Eigen::seq(nnLoc * 1, nnLoc * 1 + nnLoc - 1)) = m3(1, EigenAll);
+                            mLoc(2, Eigen::seq(nnLoc * 2, nnLoc * 2 + nnLoc - 1)) = m3(2, EigenAll);
 
-                            mLoc(3, Eigen::seq(nnLoc * 1, nnLoc * 1 + nnLoc - 1)) = 0.5 * m3(2, Eigen::all);
-                            mLoc(3, Eigen::seq(nnLoc * 2, nnLoc * 2 + nnLoc - 1)) = 0.5 * m3(1, Eigen::all);
-                            mLoc(4, Eigen::seq(nnLoc * 2, nnLoc * 2 + nnLoc - 1)) = 0.5 * m3(0, Eigen::all);
-                            mLoc(4, Eigen::seq(nnLoc * 0, nnLoc * 0 + nnLoc - 1)) = 0.5 * m3(2, Eigen::all);
-                            mLoc(5, Eigen::seq(nnLoc * 0, nnLoc * 0 + nnLoc - 1)) = 0.5 * m3(1, Eigen::all);
-                            mLoc(5, Eigen::seq(nnLoc * 1, nnLoc * 1 + nnLoc - 1)) = 0.5 * m3(0, Eigen::all);
+                            mLoc(3, Eigen::seq(nnLoc * 1, nnLoc * 1 + nnLoc - 1)) = 0.5 * m3(2, EigenAll);
+                            mLoc(3, Eigen::seq(nnLoc * 2, nnLoc * 2 + nnLoc - 1)) = 0.5 * m3(1, EigenAll);
+                            mLoc(4, Eigen::seq(nnLoc * 2, nnLoc * 2 + nnLoc - 1)) = 0.5 * m3(0, EigenAll);
+                            mLoc(4, Eigen::seq(nnLoc * 0, nnLoc * 0 + nnLoc - 1)) = 0.5 * m3(2, EigenAll);
+                            mLoc(5, Eigen::seq(nnLoc * 0, nnLoc * 0 + nnLoc - 1)) = 0.5 * m3(1, EigenAll);
+                            mLoc(5, Eigen::seq(nnLoc * 1, nnLoc * 1 + nnLoc - 1)) = 0.5 * m3(0, EigenAll);
 
                             Eigen::Matrix<real, 6, 6> DStruct;
                             DStruct.setIdentity();
@@ -1130,8 +1115,8 @@ namespace DNDS::Geom
                             // DStruct *= std::pow((wDist / 1e-6), -10);
 
                             vInc.resizeLike(ALoc);
-                            vInc(Eigen::all, Eigen::seq(0, 3 * nnLoc - 1)) = mLoc.transpose() * DStruct * mLoc;
-                            vInc(Eigen::all, Eigen::last).setZero(); // no node force, thus zero
+                            vInc(EigenAll, Eigen::seq(0, 3 * nnLoc - 1)) = mLoc.transpose() * DStruct * mLoc;
+                            vInc(EigenAll, EigenLast).setZero(); // no node force, thus zero
                             vInc *= JDet;
                         });
                     // for (int ic2n = 0; ic2n < nnLoc; ic2n++)
@@ -1140,8 +1125,8 @@ namespace DNDS::Geom
 
                     //         if (ic2n == jc2n)
                     //             continue;
-                    //         real lBA = (coordsC(Eigen::all, jc2n) - coordsC(Eigen::all, ic2n)).norm();
-                    //         tPoint nBA = (coordsC(Eigen::all, jc2n) - coordsC(Eigen::all, ic2n)).normalized();
+                    //         real lBA = (coordsC(EigenAll, jc2n) - coordsC(EigenAll, ic2n)).norm();
+                    //         tPoint nBA = (coordsC(EigenAll, jc2n) - coordsC(EigenAll, ic2n)).normalized();
                     //         // real K = std::pow(lBA, 0);
                     //         real K = std::pow((wDist / elevationInfo.refDWall), -1);
                     //         tJacobi mnBA = nBA * nBA.transpose() * K;
@@ -1155,8 +1140,8 @@ namespace DNDS::Geom
                     if (dim != 3)
                     {
                         ALoc(Eigen::seq(2 * nnLoc, 3 * nnLoc - 1), Eigen::seq(2 * nnLoc, 3 * nnLoc - 1)).setZero();
-                        ALoc(Eigen::all, Eigen::seq(2 * nnLoc, 3 * nnLoc - 1)).setZero();
-                        ALoc(Eigen::seq(2 * nnLoc, 3 * nnLoc - 1), Eigen::all).setZero();
+                        ALoc(EigenAll, Eigen::seq(2 * nnLoc, 3 * nnLoc - 1)).setZero();
+                        ALoc(Eigen::seq(2 * nnLoc, 3 * nnLoc - 1), EigenAll).setZero();
                     }
 
                     for (rowsize ic2n = 0; ic2n < nnLoc; ic2n++)
@@ -1192,9 +1177,9 @@ namespace DNDS::Geom
                                 }
                             DNDS_assert(nMatrixFound == 1);
                         }
-                        bO2[iN](0) += ALoc(0 * nnLoc + ic2n, Eigen::last);
-                        bO2[iN](1) += ALoc(1 * nnLoc + ic2n, Eigen::last);
-                        bO2[iN](2) += ALoc(2 * nnLoc + ic2n, Eigen::last); // last col is b
+                        bO2[iN](0) += ALoc(0 * nnLoc + ic2n, EigenLast);
+                        bO2[iN](1) += ALoc(1 * nnLoc + ic2n, EigenLast);
+                        bO2[iN](2) += ALoc(2 * nnLoc + ic2n, EigenLast); // last col is b
                         if (coordsElevDisp[iN](0) != largeReal)
                         {
                             nFix++;
@@ -1300,7 +1285,7 @@ namespace DNDS::Geom
                                     tJacobi JInv = tJacobi::Identity();
                                     real JDet;
                                     if (dim == 2)
-                                        JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1)).stableNorm();
+                                        JDet = J(EigenAll, 0).cross(J(EigenAll, 1)).stableNorm();
                                     else
                                         JDet = J.determinant();
                                     if (dim == 2)
@@ -1312,19 +1297,19 @@ namespace DNDS::Geom
                                 auto [J, JInv, JDet] = getJ(coordsCSub);
                                 auto [Jn, JInvn, JDetn] = getJ(coordsCSub + coordsCuSub);
                                 DNDS_assert(JDet > 0);
-                                // JInv.transpose() * DiNj({1,2,3}, Eigen::all) * u (size = nnode,3) => du_j/dxi
-                                tSmallCoords m3 = JInv.transpose() * DiNj({1, 2, 3}, Eigen::all);
+                                // JInv.transpose() * DiNj({1,2,3}, EigenAll) * u (size = nnode,3) => du_j/dxi
+                                tSmallCoords m3 = JInv.transpose() * DiNj({1, 2, 3}, EigenAll);
                                 mLoc.setZero();
-                                mLoc(0, Eigen::seq(nnLocSub * 0, nnLocSub * 0 + nnLocSub - 1)) = m3(0, Eigen::all);
-                                mLoc(1, Eigen::seq(nnLocSub * 1, nnLocSub * 1 + nnLocSub - 1)) = m3(1, Eigen::all);
-                                mLoc(2, Eigen::seq(nnLocSub * 2, nnLocSub * 2 + nnLocSub - 1)) = m3(2, Eigen::all);
+                                mLoc(0, Eigen::seq(nnLocSub * 0, nnLocSub * 0 + nnLocSub - 1)) = m3(0, EigenAll);
+                                mLoc(1, Eigen::seq(nnLocSub * 1, nnLocSub * 1 + nnLocSub - 1)) = m3(1, EigenAll);
+                                mLoc(2, Eigen::seq(nnLocSub * 2, nnLocSub * 2 + nnLocSub - 1)) = m3(2, EigenAll);
 
-                                mLoc(3, Eigen::seq(nnLocSub * 1, nnLocSub * 1 + nnLocSub - 1)) = 0.5 * m3(2, Eigen::all);
-                                mLoc(3, Eigen::seq(nnLocSub * 2, nnLocSub * 2 + nnLocSub - 1)) = 0.5 * m3(1, Eigen::all);
-                                mLoc(4, Eigen::seq(nnLocSub * 2, nnLocSub * 2 + nnLocSub - 1)) = 0.5 * m3(0, Eigen::all);
-                                mLoc(4, Eigen::seq(nnLocSub * 0, nnLocSub * 0 + nnLocSub - 1)) = 0.5 * m3(2, Eigen::all);
-                                mLoc(5, Eigen::seq(nnLocSub * 0, nnLocSub * 0 + nnLocSub - 1)) = 0.5 * m3(1, Eigen::all);
-                                mLoc(5, Eigen::seq(nnLocSub * 1, nnLocSub * 1 + nnLocSub - 1)) = 0.5 * m3(0, Eigen::all);
+                                mLoc(3, Eigen::seq(nnLocSub * 1, nnLocSub * 1 + nnLocSub - 1)) = 0.5 * m3(2, EigenAll);
+                                mLoc(3, Eigen::seq(nnLocSub * 2, nnLocSub * 2 + nnLocSub - 1)) = 0.5 * m3(1, EigenAll);
+                                mLoc(4, Eigen::seq(nnLocSub * 2, nnLocSub * 2 + nnLocSub - 1)) = 0.5 * m3(0, EigenAll);
+                                mLoc(4, Eigen::seq(nnLocSub * 0, nnLocSub * 0 + nnLocSub - 1)) = 0.5 * m3(2, EigenAll);
+                                mLoc(5, Eigen::seq(nnLocSub * 0, nnLocSub * 0 + nnLocSub - 1)) = 0.5 * m3(1, EigenAll);
+                                mLoc(5, Eigen::seq(nnLocSub * 1, nnLocSub * 1 + nnLocSub - 1)) = 0.5 * m3(0, EigenAll);
 
                                 Eigen::Matrix<real, 6, 6> DStruct;
                                 DStruct.setIdentity();
@@ -1341,19 +1326,19 @@ namespace DNDS::Geom
                                 // DStruct *= std::pow((wDist / elevationInfo.refDWall), -1);
 
                                 vInc.resizeLike(ALocSub);
-                                vInc(Eigen::all, Eigen::seq(0, 3 * nnLocSub - 1)) = mLoc.transpose() * DStruct * mLoc;
-                                vInc(Eigen::all, Eigen::last).setZero(); // no node force, thus zero
+                                vInc(EigenAll, Eigen::seq(0, 3 * nnLocSub - 1)) = mLoc.transpose() * DStruct * mLoc;
+                                vInc(EigenAll, EigenLast).setZero(); // no node force, thus zero
                                 vInc *= JDet;
                             });
-                        ALoc(c2nSubLocal3, c2nSubLocal3) += ALocSub(Eigen::all, Eigen::seq(0, Eigen::last - 1));
-                        ALoc(c2nSubLocal3, Eigen::last) += ALocSub(Eigen::all, Eigen::last);
+                        ALoc(c2nSubLocal3, c2nSubLocal3) += ALocSub(EigenAll, Eigen::seq(0, EigenLast - 1));
+                        ALoc(c2nSubLocal3, EigenLast) += ALocSub(EigenAll, EigenLast);
                     }
 
                     if (dim != 3)
                     {
                         ALoc(Eigen::seq(2 * nnLoc, 3 * nnLoc - 1), Eigen::seq(2 * nnLoc, 3 * nnLoc - 1)).setZero();
-                        ALoc(Eigen::all, Eigen::seq(2 * nnLoc, 3 * nnLoc - 1)).setZero();
-                        ALoc(Eigen::seq(2 * nnLoc, 3 * nnLoc - 1), Eigen::all).setZero();
+                        ALoc(EigenAll, Eigen::seq(2 * nnLoc, 3 * nnLoc - 1)).setZero();
+                        ALoc(Eigen::seq(2 * nnLoc, 3 * nnLoc - 1), EigenAll).setZero();
                     }
 
                     for (rowsize ic2n = 0; ic2n < nnLoc; ic2n++)
@@ -1389,9 +1374,9 @@ namespace DNDS::Geom
                                 }
                             DNDS_assert(nMatrixFound == 1);
                         }
-                        bO2[iN](0) += ALoc(0 * nnLoc + ic2n, Eigen::last);
-                        bO2[iN](1) += ALoc(1 * nnLoc + ic2n, Eigen::last);
-                        bO2[iN](2) += ALoc(2 * nnLoc + ic2n, Eigen::last); // last col is b
+                        bO2[iN](0) += ALoc(0 * nnLoc + ic2n, EigenLast);
+                        bO2[iN](1) += ALoc(1 * nnLoc + ic2n, EigenLast);
+                        bO2[iN](2) += ALoc(2 * nnLoc + ic2n, EigenLast); // last col is b
                         if (coordsElevDisp[iN](0) != largeReal)
                         {
                             nFix++;
@@ -1568,7 +1553,7 @@ namespace DNDS::Geom
                                         tJacobi JInv = tJacobi::Identity();
                                         real JDet;
                                         if (dim == 2)
-                                            JDet = J(Eigen::all, 0).cross(J(Eigen::all, 1))(2); // ! note: for 2D, incompatible with curve surface situation
+                                            JDet = J(EigenAll, 0).cross(J(EigenAll, 1))(2); // ! note: for 2D, incompatible with curve surface situation
                                         else
                                             JDet = J.determinant();
                                         if (dim == 2)

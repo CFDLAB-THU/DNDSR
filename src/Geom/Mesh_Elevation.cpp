@@ -1,9 +1,9 @@
+#include "DNDS/Defines.hpp"
 #include "Mesh.hpp"
 #include "Quadrature.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
 #include "RadialBasisFunction.hpp"
 
-#include <omp.h>
 #include <fmt/core.h>
 #include <functional>
 #include <unordered_set>
@@ -14,7 +14,7 @@
 
 #include "DNDS/EigenPCH.hpp"
 #ifdef DNDS_USE_SUPERLU
-#include <superlu_ddefs.h>
+#    include <superlu_ddefs.h>
 #endif
 
 namespace DNDS::Geom
@@ -37,8 +37,7 @@ namespace DNDS::Geom
 
         tAdjPair cellNewNodes; // records iNode - iNodeO1
         index localNewNodeNum{0};
-        DNDS_MAKE_SSP(cellNewNodes.father, mpi);
-        DNDS_MAKE_SSP(cellNewNodes.son, mpi);
+        cellNewNodes.InitPair("BuildO2FromO1Elevation::cellNewNodes", mpi);
         cellNewNodes.father->Resize(meshO1.cell2node.father->Size());
         std::vector<Eigen::Vector<real, 3>> newCoords;
 
@@ -127,17 +126,31 @@ namespace DNDS::Geom
         MPI::Allreduce(&localNewNodeNum, &numNewNode, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
         if (mpi.rank == mRank)
             log() << fmt::format("=== Mesh Elevation: Num NewNode {} ", numNewNode) << std::endl;
+        index localNewNodeNumOffset{0};
+        MPI::Scan(&localNewNodeNum, &localNewNodeNumOffset, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        if (mpi.rank == mpi.size - 1)
+            DNDS_assert(localNewNodeNumOffset == numNewNode);
+        localNewNodeNumOffset -= localNewNodeNum;
+        index numNodeO1Global = meshO1.NumNodeGlobal();
 
         /**********************************/
         // build each proc coordO2 from cellNewNodes
-        DNDS_MAKE_SSP(coords.father, mpi);
-        DNDS_MAKE_SSP(coords.son, mpi);
+        coords.InitPair("BuildO2FromO1Elevation::coords", mpi);
         coords.father->Resize(meshO1.coords.father->Size() + localNewNodeNum);
         for (index iC = 0; iC < meshO1.coords.father->Size(); iC++)
             coords[iC] = meshO1.coords[iC];
         for (index iC = meshO1.coords.father->Size(); iC < meshO1.coords.father->Size() + localNewNodeNum; iC++)
             coords[iC] = newCoords.at(iC - meshO1.coords.father->Size());
         coords.father->createGlobalMapping();
+
+        node2nodeOrig.InitPair("BuildO2FromO1Elevation::node2nodeOrig", mpi);
+        node2nodeOrig.father->Resize(meshO1.coords.father->Size() + localNewNodeNum);
+        for (index iC = 0; iC < meshO1.coords.father->Size(); iC++)
+            node2nodeOrig[iC] = meshO1.node2nodeOrig[iC];
+        for (index iC = meshO1.coords.father->Size(); iC < meshO1.coords.father->Size() + localNewNodeNum; iC++)
+            node2nodeOrig[iC][0] = // new node does not correspond to any "original", so assigned sequential new space
+                numNodeO1Global +
+                (iC - meshO1.coords.father->Size() + localNewNodeNumOffset);
 
         // tAdj1Pair nodeLocalIdxOld;
         // DNDS_MAKE_SSP(nodeLocalIdxOld.father, mpi);
@@ -190,22 +203,26 @@ namespace DNDS::Geom
         coords.trans.createMPITypes();
         coords.trans.pullOnce();
 
+        node2nodeOrig.TransAttach();
+        node2nodeOrig.trans.BorrowGGIndexing(coords.trans);
+        node2nodeOrig.trans.createMPITypes();
+        node2nodeOrig.trans.pullOnce();
+
         /**********************************/
         // each cell obtain new global cell2node global state with cellNewNodesGlobalPair
-        DNDS_MAKE_SSP(cell2node.father, mpi);
-        DNDS_MAKE_SSP(cell2node.son, mpi);
-        DNDS_MAKE_SSP(cellElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(cellElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        cell2node.InitPair("BuildO2FromO1Elevation::cell2node", mpi);
+        cellElemInfo.InitPair("BuildO2FromO1Elevation::cellElemInfo", ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
         if (isPeriodic)
         {
-            DNDS_MAKE_SSP(cell2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), getMPI());
-            DNDS_MAKE_SSP(cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), getMPI());
+            cell2nodePbi.InitPair("BuildO2FromO1Elevation::cell2nodePbi", NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), getMPI());
         }
+        cell2cellOrig.InitPair("BuildO2FromO1Elevation::cell2cellOrig", mpi);
 
         cell2node.father->Resize(meshO1.cell2node.father->Size());
         cellElemInfo.father->Resize(meshO1.cell2node.father->Size());
         if (isPeriodic)
             cell2nodePbi.father->Resize(meshO1.cell2node.father->Size());
+        cell2cellOrig.father->Resize(meshO1.cell2cellOrig.father->Size());
         for (index iCell = 0; iCell < meshO1.cell2node.father->Size(); iCell++)
         {
             Elem::Element eCell = meshO1.GetCellElement(iCell);
@@ -235,6 +252,7 @@ namespace DNDS::Geom
 
             cellElemInfo(iCell, 0) = meshO1.cellElemInfo(iCell, 0);
             cellElemInfo(iCell, 0).setElemType(eCellO2.type); // update cell elem info
+            cell2cellOrig[iCell] = meshO1.cell2cellOrig[iCell];
         }
         // std::cout << "XXXXXXXXXXXXXXXXXXXXXXXXXXX" << std::endl;
         for (index iCell = 0; iCell < meshO1.cell2node.father->Size(); iCell++)
@@ -318,89 +336,105 @@ namespace DNDS::Geom
             }
         }
         /**********************************/
-        // cell2cell, bnd2cell can be copied; bnd2nodeO2 created with bnd2cell and bnd2node;
-        // cell2cell = meshO1.cell2cell;
-        // bnd2cell = meshO1.bnd2cell;
-        DNDS_MAKE_SSP(cell2cell.father, mpi);
-        DNDS_MAKE_SSP(cell2cell.son, mpi);
-        cell2cell.father->Resize(meshO1.cell2cell.father->Size());
-        for (index iCell = 0; iCell < meshO1.cell2node.father->Size(); iCell++)
+        //! now cell2cell, bnd2cell are lost
         {
-            cell2cell.father->ResizeRow(iCell, meshO1.cell2cell.RowSize(iCell));
-            cell2cell[iCell] = std::vector<index>{meshO1.cell2cell[iCell]};
-            for (auto &iCellOther : cell2cell[iCell])
-            {
-                iCellOther = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, iCellOther);
-            }
+            //! jumped because cell2cell, bnd2cell is to be recovered mandatorily
         }
-        DNDS_MAKE_SSP(bnd2cell.father, mpi);
-        DNDS_MAKE_SSP(bnd2cell.son, mpi);
-        bnd2cell.father->Resize(meshO1.bnd2cell.father->Size());
-        for (index iBnd = 0; iBnd < meshO1.bnd2node.father->Size(); iBnd++)
+        bnd2node.InitPair("BuildO2FromO1Elevation::bnd2node", mpi);
+        bndElemInfo.InitPair("BuildO2FromO1Elevation::bndElemInfo", mpi);
+        if (isPeriodic)
         {
-            bnd2cell(iBnd, 0) = meshO1.bnd2cell(iBnd, 0);
-            bnd2cell(iBnd, 1) = meshO1.bnd2cell(iBnd, 1);
-            bnd2cell(iBnd, 0) = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, bnd2cell(iBnd, 0));
-            if (bnd2cell(iBnd, 1) != UnInitIndex)
-                bnd2cell(iBnd, 1) = meshO1.cell2cell.trans.pLGhostMapping->operator()(-1, bnd2cell(iBnd, 1));
+            bnd2nodePbi.InitPair("BuildO2FromO1Elevation::bnd2nodePbi", getMPI());
         }
-
-        DNDS_MAKE_SSP(bnd2node.father, mpi);
-        DNDS_MAKE_SSP(bnd2node.son, mpi);
-        DNDS_MAKE_SSP(bndElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(bndElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        bnd2bndOrig.InitPair("BuildO2FromO1Elevation::bnd2bndOrig", mpi);
         bnd2node.father->Resize(meshO1.bnd2node.father->Size());
         bndElemInfo.father->Resize(meshO1.bnd2node.father->Size());
+        if (isPeriodic)
+            bnd2nodePbi.father->Resize(meshO1.bnd2node.father->Size());
+        bnd2bndOrig.father->Resize(meshO1.bnd2node.father->Size());
         for (index iBnd = 0; iBnd < meshO1.bnd2node.father->Size(); iBnd++)
         {
             index iCell = meshO1.bnd2cell(iBnd, 0); // my own bnd2cell is to global!
             auto eCellO2 = this->GetCellElement(iCell);
             auto b2n = meshO1.bnd2node[iBnd];
             auto c2nO2 = this->cell2node[iCell];
+            std::vector<NodeIndexPBI> b2nPbi = meshO1.getBnd2NodeIndexPbiRow(iBnd);
+            std::vector<NodeIndexPBI> c2nPbiO2 = this->getCell2NodeIndexPbiRow(iCell);
+
             std::vector<index> b2nv = b2n;
-            for (auto &i : b2nv)
+            std::vector<NodeIndexPBI> b2nPbiv = b2nPbi;
+            for (int ib2n = 0; ib2n < b2nv.size(); ib2n++)
             {
+                index iN = b2nv[ib2n];
                 //* note that b2nv holds O1 nodes' old and local indices
-                index iNodeOldGlobal = meshO1.coords.trans.pLGhostMapping->operator()(-1, i);
+                index iNodeOldGlobal = meshO1.coords.trans.pLGhostMapping->operator()(-1, iN);
                 index nodeOldOrigLocalIdx{-1};
                 int nodeOldOrigRank{-1};
                 if (!meshO1.coords.trans.pLGlobalMapping->search(iNodeOldGlobal, nodeOldOrigRank, nodeOldOrigLocalIdx))
                     DNDS_assert_info(false, "search failed");
                 // nodeOldOrigRank and nodeOldOrigLocalIdx is same in new
-                i = coords.father->pLGlobalMapping->operator()(nodeOldOrigRank, nodeOldOrigLocalIdx); // now point to global
+                iN = coords.father->pLGlobalMapping->operator()(nodeOldOrigRank, nodeOldOrigLocalIdx); // now point to global
+                b2nv[ib2n] = iN;
+                b2nPbiv[ib2n].i = iN; // also update this
             }
-            std::sort(b2nv.begin(), b2nv.end());
+            std::vector<index> b2nvSorted = b2nv;
+            std::vector<NodeIndexPBI> b2nPbivSorted = b2nPbiv;
+            std::sort(b2nvSorted.begin(), b2nvSorted.end());
+            std::sort(b2nPbivSorted.begin(), b2nPbivSorted.end());
 
             int nFound{0};
             int c2fFound{-1};
             std::vector<index> b2nO2Found;
+            std::vector<NodeIndexPBI> b2nPbiO2Found;
             Elem::Element eBndFound;
-
             for (int ic2f = 0; ic2f < eCellO2.GetNumFaces(); ic2f++)
             {
                 auto eFaceO2 = eCellO2.ObtainFace(ic2f);
                 std::vector<index> f2nO2, f2nO2Sorted;
+                std::vector<NodeIndexPBI> f2nPbiO2, f2nPbiO2Sorted;
                 f2nO2.resize(eFaceO2.GetNumNodes());
                 eCellO2.ExtractFaceNodes(ic2f, c2nO2, f2nO2);
+                if (isPeriodic)
+                {
+                    f2nPbiO2.resize(eFaceO2.GetNumNodes());
+                    eCellO2.ExtractFaceNodes(ic2f, c2nPbiO2, f2nPbiO2);
+                }
                 f2nO2Sorted = f2nO2;
                 std::sort(f2nO2Sorted.begin(), f2nO2Sorted.end()); //! cannot use sorted
-                if (std::includes(f2nO2Sorted.begin(), f2nO2Sorted.end(), b2nv.begin(), b2nv.end()))
+                f2nPbiO2Sorted = f2nPbiO2;
+                std::sort(f2nPbiO2Sorted.begin(), f2nPbiO2Sorted.end()); //! cannot use sorted
+                if (std::includes(f2nO2Sorted.begin(), f2nO2Sorted.end(), b2nvSorted.begin(), b2nvSorted.end()))
                 {
+                    if (isPeriodic) // need to doublecheck if pbis match
+                    {
+                        if (std::includes(f2nPbiO2Sorted.begin(), f2nPbiO2Sorted.end(), b2nPbivSorted.begin(), b2nPbivSorted.end()))
+                            ;
+                        else
+                            continue;
+                    }
                     nFound++;
                     c2fFound = ic2f;
                     b2nO2Found = f2nO2;
+                    b2nPbiO2Found = f2nPbiO2;
                     eBndFound = eFaceO2;
                 }
             }
             DNDS_assert(nFound == 1);
             bnd2node.father->ResizeRow(iBnd, b2nO2Found.size());
             bnd2node[iBnd] = b2nO2Found;
+            if (isPeriodic)
+            {
+                bnd2nodePbi.father->ResizeRow(iBnd, b2nO2Found.size());
+                for (int ib2n = 0; ib2n < b2nPbiO2Found.size(); ib2n++)
+                    bnd2nodePbi[iBnd][ib2n] = b2nPbiO2Found[ib2n].pbi;
+            }
             bndElemInfo(iBnd, 0) = meshO1.bndElemInfo(iBnd, 0);
             bndElemInfo(iBnd, 0).setElemType(eBndFound.type);
+            bnd2bndOrig[iBnd] = meshO1.bnd2bndOrig[iBnd];
         }
         adjPrimaryState = Adj_PointToGlobal;
 
-        DNDS_MAKE_SSP(coords.son, mpi); // delete because reconstructed later
+        coords.son = make_ssp<decltype(coords.son)::element_type>(ObjName{"BuildO2FromO1Elevation::coords.son"}, mpi); // delete because reconstructed later
 
         // this->BuildGhostPrimary();
 
@@ -450,14 +484,32 @@ namespace DNDS::Geom
         nNodeO1 = meshO2.nNodeO1;
         elevState = MeshElevationState::Elevation_Untouched;
 
-        DNDS_MAKE_SSP(coords.son, mpi);
-        coords.father = meshO2.coords.father; // coords are the same
+        coords.son = make_ssp<decltype(coords.son)::element_type>(ObjName{"BuildBisectO1FormO2::coords.son"}, mpi);
+        coords.father = meshO2.coords.father; // coords are the same, taken without change
+        node2nodeOrig.son = make_ssp<decltype(node2nodeOrig.son)::element_type>(ObjName{"BuildBisectO1FormO2::node2nodeOrig.son"}, mpi);
+        node2nodeOrig.father = meshO2.node2nodeOrig.father; // node2nodeOrig corresponds to coords, and is taken without change
 
         /**********************************/
         //* cell
         std::vector<std::vector<index>> cell2nodeV;
         std::vector<std::vector<NodePeriodicBits>> cell2nodePbiV;
         std::vector<ElemInfo> cellElemInfoV;
+        // std::vector<index> cell2cellOrigV;
+
+        index newNumCell = 0;
+        for (index iCell = 0; iCell < meshO2.cell2node.father->Size(); iCell++)
+        {
+            auto eCell = meshO2.GetCellElement(iCell);
+            newNumCell += eCell.GetO2NumBisect();
+        }
+        cell2nodeV.reserve(newNumCell);
+        cell2nodePbiV.reserve(newNumCell);
+        cellElemInfoV.reserve(newNumCell);
+        // cell2cellOrigV.reserve(newNumCell);
+
+        // index newNumCellOffset = 0;
+        // MPI::Scan(&newNumCell, &newNumCellOffset, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+        // newNumCellOffset -= newNumCell;
 
         for (index iCell = 0; iCell < meshO2.cell2node.father->Size(); iCell++)
         {
@@ -483,24 +535,27 @@ namespace DNDS::Geom
                     eCell.ExtractO2BisectElemNodes(iBi, iBiVariant, meshO2.cell2nodePbi[iCell], c2nPbiSub);
                     cell2nodePbiV.push_back(c2nPbiSub);
                 }
+                //! cell2cellOrig uses new global size later, cell2cellOrigV discarded
+                // cell2cellOrigV.push_back(newNumCellOffset + cell2cellOrigV.size());
+                // cell2cellOrigV.push_back(UnInitIndex);
             }
         }
         // std::cout << "here1" << std::endl;
-        DNDS_MAKE_SSP(cell2node.father, mpi);
-        DNDS_MAKE_SSP(cell2node.son, mpi);
-        DNDS_MAKE_SSP(cellElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(cellElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        cell2node.InitPair("BuildBisectO1FormO2::cell2node", mpi);
+        cellElemInfo.InitPair("BuildBisectO1FormO2::cellElemInfo", mpi);
         if (isPeriodic)
-        {
-            DNDS_MAKE_SSP(cell2nodePbi.father, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
-            DNDS_MAKE_SSP(cell2nodePbi.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
+        { // we preserve a sample of detailed array constructor
+            cell2nodePbi.InitPair("BuildBisectO1FormO2::cell2nodePbi", NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
         }
+        cell2cellOrig.InitPair("BuildBisectO1FormO2::cell2cellOrig", mpi);
         cell2node.father->Resize(cell2nodeV.size());
         cellElemInfo.father->Resize(cellElemInfoV.size());
         DNDS_assert(cellElemInfoV.size() == cell2nodeV.size());
         if (isPeriodic)
             cell2nodePbi.father->Resize(cell2nodePbiV.size()),
                 DNDS_assert(cell2nodePbiV.size() == cell2nodeV.size());
+        cell2cellOrig.father->Resize(cell2nodeV.size());
+        cell2node.father->createGlobalMapping();
         for (index i = 0; i < cell2nodeV.size(); i++)
         {
             cell2node.father->ResizeRow(i, cell2nodeV[i].size());
@@ -514,6 +569,8 @@ namespace DNDS::Geom
                 for (rowsize ic2n = 0; ic2n < cell2nodePbiV[i].size(); ic2n++)
                     cell2nodePbi.father->operator()(i, ic2n) = cell2nodePbiV[i][ic2n];
             }
+            //! cell2cellOrig uses new global size now
+            cell2cellOrig(i, 0) = cell2node.father->pLGlobalMapping->operator()(mpi.rank, i);
         }
         // std::cout << "here2" << std::endl;
 
@@ -521,6 +578,7 @@ namespace DNDS::Geom
         //* bnd
 
         std::vector<std::vector<index>> bnd2nodeV;
+        std::vector<std::vector<NodePeriodicBits>> bnd2nodePbiV;
         std::vector<ElemInfo> bndElemInfoV;
         for (index iBnd = 0; iBnd < meshO2.bnd2node.father->Size(); iBnd++)
         {
@@ -552,33 +610,55 @@ namespace DNDS::Geom
                 auto eBndSub = eBnd.ObtainO2BisectElem(iBi);
                 std::vector<index> b2nSub;
                 b2nSub.resize(eBndSub.GetNumNodes());
+                std::vector<NodePeriodicBits> b2nPbiSub;
+                b2nPbiSub.resize(eBndSub.GetNumNodes());
                 eBnd.ExtractO2BisectElemNodes(iBi, iBiVariant, meshO2.bnd2node[iBnd], b2nSub);
                 bnd2nodeV.push_back(b2nSub);
+                if (isPeriodic)
+                {
+                    eBnd.ExtractO2BisectElemNodes(iBi, iBiVariant, meshO2.bnd2nodePbi[iBnd], b2nPbiSub);
+                    bnd2nodePbiV.push_back(b2nPbiSub);
+                }
                 ElemInfo eInfo = meshO2.bndElemInfo(iBnd, 0);
                 eInfo.setElemType(eBndSub.type);
                 bndElemInfoV.push_back(eInfo);
             }
         }
-        DNDS_MAKE_SSP(bnd2node.father, mpi);
-        DNDS_MAKE_SSP(bnd2node.son, mpi);
-        DNDS_MAKE_SSP(bndElemInfo.father, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
-        DNDS_MAKE_SSP(bndElemInfo.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        bnd2node.InitPair("BuildBisectO1FormO2::bnd2node", mpi);
+        bndElemInfo.InitPair("BuildBisectO1FormO2::bndElemInfo", ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        if (isPeriodic)
+        {
+            bnd2nodePbi.InitPair("BuildBisectO1FormO2::bnd2nodePbi", mpi);
+        }
+        bnd2bndOrig.InitPair("BuildBisectO1FormO2::bnd2bndOrig", mpi);
         bnd2node.father->Resize(bnd2nodeV.size());
         bndElemInfo.father->Resize(bndElemInfoV.size());
         DNDS_assert(bndElemInfoV.size() == bnd2nodeV.size());
+        if (isPeriodic)
+            bnd2nodePbi.father->Resize(bnd2nodePbiV.size()), DNDS_assert(bnd2nodePbiV.size() == bnd2nodeV.size());
+        bnd2bndOrig.father->Resize(bnd2nodeV.size());
+        bnd2node.father->createGlobalMapping();
+
         for (index i = 0; i < bnd2nodeV.size(); i++)
         {
             bnd2node.father->ResizeRow(i, bnd2nodeV[i].size());
             for (rowsize ic2n = 0; ic2n < bnd2nodeV[i].size(); ic2n++)
                 bnd2node.father->operator()(i, ic2n) = bnd2nodeV[i][ic2n];
+            if (isPeriodic)
+            {
+                bnd2nodePbi.father->ResizeRow(i, bnd2nodePbiV[i].size());
+                DNDS_assert(bnd2nodePbiV[i].size() == bnd2nodeV[i].size());
+                for (rowsize ic2n = 0; ic2n < bnd2nodePbiV[i].size(); ic2n++)
+                    bnd2nodePbi.father->operator()(i, ic2n) = bnd2nodePbiV[i][ic2n];
+            }
             bndElemInfo(i, 0) = bndElemInfoV[i];
+            //! bnd2bndOrig uses new global size now
+            bnd2bndOrig(i, 0) = bnd2node.father->pLGlobalMapping->operator()(mpi.rank, i);
         }
 
         //* unhandled info
-        DNDS_MAKE_SSP(bnd2cell.father, mpi);
-        DNDS_MAKE_SSP(bnd2cell.son, mpi);
-        DNDS_MAKE_SSP(cell2cell.father, mpi);
-        DNDS_MAKE_SSP(cell2cell.son, mpi);
+        bnd2cell.InitPair("BuildBisectO1FormO2::bnd2cell", mpi);
+        cell2cell.InitPair("BuildBisectO1FormO2::cell2cell", mpi);
     }
 
     static tPoint HermiteInterpolateMidPointOnLine2WithNorm(tPoint c0, tPoint c1, tPoint n0, tPoint n1)
@@ -626,8 +706,7 @@ namespace DNDS::Geom
         DNDS_assert(adjC2FState == Adj_PointToLocal);
         DNDS_assert(face2node.father);
 
-        DNDS_MAKE_SSP(coordsElevDisp.father, mpi);
-        DNDS_MAKE_SSP(coordsElevDisp.son, mpi);
+        coordsElevDisp.InitPair("ElevatedNodesGetBoundarySmooth::coordsElevDisp", mpi);
         coordsElevDisp.father->Resize(coords.father->Size());
         coordsElevDisp.TransAttach();
         coordsElevDisp.trans.BorrowGGIndexing(coords.trans);
@@ -656,10 +735,10 @@ namespace DNDS::Geom
         faceElemInfoExtended.father = faceElemInfo.father;
         if (isPeriodic)
             face2nodePbiExtended.father = face2nodePbi.father;
-        DNDS_MAKE_SSP(face2nodeExtended.son, mpi);
-        DNDS_MAKE_SSP(faceElemInfoExtended.son, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
+        face2nodeExtended.son = make_ssp<decltype(face2nodeExtended.son)::element_type>(ObjName{"ElevatedNodesGetBoundarySmooth::face2nodeExtended.son"}, mpi);
+        faceElemInfoExtended.son = make_ssp<decltype(faceElemInfoExtended.son)::element_type>(ObjName{"ElevatedNodesGetBoundarySmooth::faceElemInfoExtended.son"}, ElemInfo::CommType(), ElemInfo::CommMult(), mpi);
         if (isPeriodic)
-            DNDS_MAKE_SSP(face2nodePbiExtended.son, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
+            face2nodePbiExtended.son = make_ssp<decltype(face2nodePbiExtended.son)::element_type>(ObjName{"ElevatedNodesGetBoundarySmooth::face2nodePbiExtended.son"}, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
 
         this->AdjLocal2GlobalFacial();
         this->AdjLocal2GlobalC2F();
@@ -751,9 +830,8 @@ namespace DNDS::Geom
         // build nodeNormClusters
         using t3VecsPair = ArrayPair<ArrayEigenUniMatrixBatch<3, 1>>;
         t3VecsPair nodeNormClusters;
-        DNDS_MAKE_SSP(nodeNormClusters.father, mpi);
+        nodeNormClusters.InitPair("ElevatedNodesGetBoundarySmooth::nodeNormClusters", mpi);
         nodeNormClusters.father->Resize(coords.father->Size(), 3, 1);
-        DNDS_MAKE_SSP(nodeNormClusters.son, mpi);
 
         std::vector<int> nodeBndNum(coords.father->Size(), 0); //? need row-appending methods for NonUniform arrays?
         for (index iFace = 0; iFace < face2nodeExtended.Size(); iFace++)
@@ -915,7 +993,7 @@ namespace DNDS::Geom
                 eFaceO1.ExtractElevNodeSpanNodes(iElev, f2n, spanO2Node); // should use O1f2n, but O2f2n is equivalent
                 eFaceO1.ExtractElevNodeSpanNodes(iElev, coordsF, coordsSpan);
                 eFaceO1.ExtractElevNodeSpanNodes(iElev, f2nVecSeq, spanO2if2n);
-                tPoint cooUnsmooth = coordsF(Eigen::all, if2n);
+                tPoint cooUnsmooth = coordsF(EigenAll, if2n);
 
                 std::vector<tPoint> edges;
                 if (spanO2Node.size() == 2)
@@ -955,15 +1033,15 @@ namespace DNDS::Geom
                         if (isPeriodic)
                             normN = periodicInfo.GetVectorByBits<3, 1>(normN, face2nodePbiExtended[iFace][if2n]);
                         real sinValMax = 0;
-                        for (auto e : edges)
+                        for (auto &e : edges)
                             sinValMax = std::max(sinValMax, std::abs(e.dot(normN.stableNormalized())));
                         //! angle is here
                         //* now using FFMaxAngle also
                         if (std::max(sinValMax, sinValFFMax * 0) > std::sin(pi / 180. * elevationInfo.MaxIncludedAngle))
                             continue;
                         nAdd[iN] += 1.;
-                        // norms(Eigen::all, iN) += normN * 1.;
-                        norms(Eigen::all, iN) += normN.stableNormalized();
+                        // norms(EigenAll, iN) += normN * 1.;
+                        norms(EigenAll, iN) += normN.stableNormalized();
 
                         // std::cout << fmt::format("iFace {}, if2n {}, iN {}, iNorm{}, sinValMax {}; ====",
                         // iFace, if2n, iN, iNorm, sinValMax) << normN.transpose() << std::endl;
@@ -974,7 +1052,7 @@ namespace DNDS::Geom
                 for (int iN = 0; iN < spanO2Node.size(); iN++)
                 {
                     if (nAdd[iN] < 0.1) // no found, then no mov
-                        norms(Eigen::all, iN).setZero();
+                        norms(EigenAll, iN).setZero();
                     // DNDS_assert(nAdd[iN] > 0.1);
                 }
 
@@ -983,7 +1061,7 @@ namespace DNDS::Geom
                 if (spanO2Node.size() == 2)
                 {
                     cooSmooth = HermiteInterpolateMidPointOnLine2WithNorm(
-                        coordsSpan[0], coordsSpan[1], norms(Eigen::all, 0), norms(Eigen::all, 1));
+                        coordsSpan[0], coordsSpan[1], norms(EigenAll, 0), norms(EigenAll, 1));
                     cooInc = cooSmooth - cooUnsmooth;
                 }
                 else // definitely is spanO2Node.size() == 4
@@ -1006,7 +1084,7 @@ namespace DNDS::Geom
 
                     cooSmooth = HermiteInterpolateMidPointOnQuad4WithNorm(
                         coordsSpan[0], coordsSpan[1], coordsSpan[2], coordsSpan[3],
-                        norms(Eigen::all, 0), norms(Eigen::all, 1), norms(Eigen::all, 2), norms(Eigen::all, 3));
+                        norms(EigenAll, 0), norms(EigenAll, 1), norms(EigenAll, 2), norms(EigenAll, 3));
 
                     cooInc = cooSmooth - cooUnsmooth;
                 }

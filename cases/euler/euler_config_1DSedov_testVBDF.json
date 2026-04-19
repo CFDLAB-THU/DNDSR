@@ -1,0 +1,181 @@
+{
+    "$schema": "../euler_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 10e-6,
+        "nTimeStep": 10000,
+        "steadyQuit": false,
+        "useImplicitPP": true,
+        "rhsFPPMode": 0,
+        "rhsFPPScale": 1,
+        "odeCode": 102,
+        "tEnd": 1e-3,
+        "odeSetting1": 0.5,
+        "odeSetting2": 1
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 200,
+        "nTimeStepInternalMin": 20,
+        "rhsThresholdInternal": 1e-4,
+        "res_base": 0.0,
+        "useVolWiseResidual": true
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "consoleOutputMode": 0,
+        "consoleOutputEveryFix": 1,
+        "nDataOutC": 1,
+        "nDataOut": 1,
+        "nDataOutCInternal": 100,
+        "nDataOutInternal": 1000000000,
+        "tDataOut": 3e+200
+    },
+    "implicitCFLControl": {
+        "CFL": 0.01,
+        "nForceLocalStartStep": 2147483647,
+        "nCFLRampStart": 0,
+        "nCFLRampLength": 20,
+        "CFLRampEnd": 2.0,
+        "useLocalDt": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshRotZ": 0.0,
+        "meshFile": "../data/mesh/Unifrom_2DSedov5EM3_narrow.pw.cgns",
+        "outPltName": "../data/outUnsteady/Unifrom_2DSedov5EM3_narrow_T1",
+        "outLogName": "../data/outUnsteady/Unifrom_2DSedov5EM3_narrow_T1",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": false,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outCellScalarNames": [
+            "betaPP"
+        ],
+        "_tail": 0
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation2": [
+            0.0,
+            0.2,
+            0.0
+        ]
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "zeroGrads": false,
+        "recLinearScheme": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 10,
+        "recThreshold": 1e-010,
+        "nRecConsolCheck": 10,
+        "nRecMultiplyForZeroedGrad": 1,
+        "storeRecInc": true,
+        "dampRecIncDTau": false
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "smoothIndicatorProcedure": 0,
+        "limiterProcedure": 0, //1 == CWBAP
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartLocal": 1000000
+    },
+    "vfvSettings": {
+        "maxOrder": 3,
+        "intOrder": 3,
+        "cacheDiffBase": true,
+        "jacobiRelax": 0.5,
+        "SORInstead": false,
+        "smoothThreshold": 1e-3,
+        "WBAP_nStd": 10.0,
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        "baseSettings": {
+            "localOrientation": false,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            "scaleType": "BaryDiff",
+            "scaleMultiplier": 1,
+            // "dirWeightScheme": "HQM_OPT",
+            // "useAnisotropicFunctional": true,
+            // "scaleMultiplier": 3.464101615137754,
+            "_tail": 0
+        }
+    },
+    "linearSolverControl": {
+        "jacobiCode": 0,
+        "sgsIter": 4,
+        "sgsWithRec": 0,
+        "nSgsConsoleCheck": 100,
+        "gmresCode": 0,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        "initWithLastURecInc": false
+    },
+    "others": {
+        "nFreezePassiveInner": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": true,
+        "useScalarJacobian": true,
+        "riemannSolverType": "Roe_M2",
+        "rsMeanValueEig": 1,
+        "nCentralSmoothStep": 0,
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "farFieldStaticValue": [
+            1,
+            1,
+            0,
+            0,
+            2.5
+        ],
+        "boxInitializers": [
+            {
+                "x0": -5,
+                "x1": 5,
+                "y0": -100,
+                "y1": 100,
+                "z0": -100,
+                "z1": 100,
+                "v": [
+                    1,
+                    0,
+                    0,
+                    0,
+                    1e-8
+                ]
+            },
+            {
+                "x0": -5e-3,
+                "x1": 5e-3,
+                // "y0": -5e-3,
+                // "y1": 5e-3,
+                "y0": -100,
+                "y1": 100,
+                "z0": -100,
+                "z1": 100,
+                "v": [
+                    1,
+                    0,
+                    0,
+                    0,
+                    320000000
+                ]
+            }
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 289,
+            "muGas": 1e-200,
+            "prGas": 0.72,
+            "TRef": 273.15,
+            "CSutherland": 110.4
+        }
+    }
+}

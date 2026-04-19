@@ -1,4 +1,5 @@
 {
+    "$schema": "../eulerSA_schema.json",
     "timeMarchControl": {
         "dtImplicit": 1e100,
         "nTimeStep": 1,
@@ -9,14 +10,14 @@
         "tEnd": 3e+200
     },
     "convergenceControl": {
-        "nTimeStepInternal": 10000,
-        "rhsThresholdInternal": 1e-8,
+        "nTimeStepInternal": 40000,
+        "rhsThresholdInternal": 1e-6,
         "res_base": 0.0,
         "useVolWiseResidual": true
     },
     "outputControl": {
         "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 10,
+        "nConsoleCheckInternal": 1,
         "consoleOutputMode": 1,
         "nDataOutC": 100,
         "nDataOut": 10,
@@ -47,10 +48,10 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2-MGtest_1_AOA15.dir/ilu2-3ilu2-3ilu2-t1",
+        "outPltName": "../data/out/NACA0012_H2-MGtest_3_VRes_AOA15.dir/x-ilu-4ilu",
         "outPltMode": 0,
         "readMeshMode": 0,
-        "meshDirectBisect": 0,
+        "meshDirectBisect": 1,
         "meshReorderCells": 1,
         "outPltTecplotFormat": true,
         "outPltVTKFormat": false,
@@ -66,8 +67,6 @@
             "type": "H5",
             "hdfDeflateLevel": 0,
             "hdfChunkSize": 0,
-            "hdfCollOnMeta": true,
-            "hdfCollOnData": false,
             "jsonBinaryDeflateLevel": 5,
             "jsonUseCodecOnUInt8": true
         },
@@ -76,8 +75,6 @@
             "type": "H5",
             "hdfDeflateLevel": 0,
             "hdfChunkSize": 0,
-            "hdfCollOnMeta": true,
-            "hdfCollOnData": false,
             "jsonBinaryDeflateLevel": 9,
             "jsonUseCodecOnUInt8": true
         },
@@ -151,7 +148,7 @@
         "gmresScale": 2,
         "nGmresSpace": 5,
         "nGmresIter": 1,
-        "multiGridLP": 2,
+        "multiGridLP": 0,
         "multiGridLPInnerNIter": 4,
         "multiGridLPInnerNSee": 100,
         "coarseGridLinearSolverControlList": {
@@ -163,7 +160,7 @@
                 "nGmresIter": 2,
                 "nSgsConsoleCheck": 100,
                 "nGmresConsoleCheck": 100,
-                "multiGridNIter": 3,
+                "multiGridNIter": 1,
                 "multiGridNIterPost": 0,
                 // "centralSmoothInputResidual": 4,
                 "_tail": 0
@@ -176,7 +173,7 @@
                 "nGmresIter": 2,
                 "nSgsConsoleCheck": 100,
                 "nGmresConsoleCheck": 100,
-                "multiGridNIter": 3,
+                "multiGridNIter": 2,
                 "multiGridNIterPost": 0
             }
         },
@@ -188,13 +185,25 @@
         }
     },
     "others": {
-        "nFreezePassiveInner": 0
+        "nFreezePassiveInner": 0,
+        // "printRecMatrix": true,
+        // "recMatrixWriter": {
+        //     "type": "H5",
+        //     "hdfDeflateLevel": 5,
+        //     "hdfChunkSize": 4096,
+        //     "hdfCollOnMeta": true,
+        //     "hdfCollOnData": false,
+        //     "jsonBinaryDeflateLevel": 5,
+        //     "jsonUseCodecOnUInt8": true
+        // },
+        "_tail": 0
     },
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "useRoeJacobian": false,
+        // "useRoeJacobian": true,
         "riemannSolverType": "Roe_M1",
+        "rsMeanValueEig": true,
         "uRecBetaCompressPower": 1,
         "wallDistScheme": 1,
         "wallDistExection": 5,

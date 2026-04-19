@@ -46,37 +46,6 @@ namespace DNDS::Geom
     using t_FBCName_2_ID = std::function<t_index(const std::string &)>;
     using t_FBCID_2_Name = std::function<std::string(t_index)>;
 
-    static const t_FBCName_2_ID FBC_Name_2_ID_Default = [](const std::string &name) -> t_index
-    {
-        if (name == "PERIODIC_1")
-            return BC_ID_PERIODIC_1;
-        if (name == "PERIODIC_2")
-            return BC_ID_PERIODIC_2;
-        if (name == "PERIODIC_3")
-            return BC_ID_PERIODIC_3;
-        if (name == "PERIODIC_1_DONOR")
-            return BC_ID_PERIODIC_1_DONOR;
-        if (name == "PERIODIC_2_DONOR")
-            return BC_ID_PERIODIC_2_DONOR;
-        if (name == "PERIODIC_3_DONOR")
-            return BC_ID_PERIODIC_3_DONOR;
-        if (name == "WALL" || name == "bc-4")
-            return BC_ID_DEFAULT_WALL;
-        if (name == "FAR" || name == "bc-2")
-            return BC_ID_DEFAULT_FAR;
-        if (name == "WALL_INVIS" || name == "bc-3")
-            return BC_ID_DEFAULT_WALL_INVIS;
-        if (name == "bc-DMRFar")
-            return BC_ID_DEFAULT_SPECIAL_DMR_FAR;
-        if (name == "bc-IVFar")
-            return BC_ID_DEFAULT_SPECIAL_IV_FAR;
-        if (name == "bc-RTFar")
-            return BC_ID_DEFAULT_SPECIAL_RT_FAR;
-        if (name == "bc-2DRiemannFar")
-            return BC_ID_DEFAULT_SPECIAL_2DRiemann_FAR;
-        return BC_ID_NULL;
-    };
-
     inline auto GetFaceName2IDDefault()
     {
         std::unordered_map<std::string, t_index> ret = {
@@ -99,22 +68,31 @@ namespace DNDS::Geom
         return ret;
     }
 
-    inline bool FaceIDIsExternalBC(t_index id)
+    static const t_FBCName_2_ID FBC_Name_2_ID_Default = [](const std::string &name) -> t_index
+    {
+        // if (name == "PERIODI
+        auto n2id_map = GetFaceName2IDDefault();
+        if (n2id_map.count(name))
+            return n2id_map.at(name);
+        return BC_ID_NULL;
+    };
+
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsExternalBC(t_index id)
     {
         return id > 0;
     }
 
-    inline bool FaceIDIsInternal(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsInternal(t_index id)
     {
         return id <= 0;
     }
 
-    inline bool FaceIDIsTrueInternal(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsTrueInternal(t_index id)
     {
         return id == 0;
     }
 
-    inline bool FaceIDIsPeriodic(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsPeriodic(t_index id)
     {
         return id == BC_ID_PERIODIC_1 ||
                id == BC_ID_PERIODIC_2 ||
@@ -124,36 +102,63 @@ namespace DNDS::Geom
                id == BC_ID_PERIODIC_3_DONOR;
     }
 
-    inline bool FaceIDIsPeriodic1(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsPeriodic1(t_index id)
     {
         return id == BC_ID_PERIODIC_1 ||
                id == BC_ID_PERIODIC_1_DONOR;
     }
 
-    inline bool FaceIDIsPeriodic2(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsPeriodic2(t_index id)
     {
         return id == BC_ID_PERIODIC_2 ||
                id == BC_ID_PERIODIC_2_DONOR;
     }
 
-    inline bool FaceIDIsPeriodic3(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsPeriodic3(t_index id)
     {
         return id == BC_ID_PERIODIC_3 ||
                id == BC_ID_PERIODIC_3_DONOR;
     }
 
-    inline bool FaceIDIsPeriodicMain(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsPeriodicMain(t_index id)
     {
         return id == BC_ID_PERIODIC_1 ||
                id == BC_ID_PERIODIC_2 ||
                id == BC_ID_PERIODIC_3;
     }
 
-    inline bool FaceIDIsPeriodicDonor(t_index id)
+    DNDS_DEVICE_CALLABLE inline bool FaceIDIsPeriodicDonor(t_index id)
     {
         return id == BC_ID_PERIODIC_1_DONOR ||
                id == BC_ID_PERIODIC_2_DONOR ||
                id == BC_ID_PERIODIC_3_DONOR;
     }
 
-} // namespace Geom
+} // namespace DNDS::Geom
+
+namespace DNDS::Geom
+{
+    struct AutoAppendName2ID
+    {
+        std::unordered_map<std::string, t_index> n2id_map = GetFaceName2IDDefault();
+        t_index id_cap = BC_ID_DEFAULT_MAX;
+
+        AutoAppendName2ID()
+        {
+            for (auto [k, v] : n2id_map)
+                id_cap = std::max(v + 1, id_cap);
+        }
+
+        t_index operator()(const std::string name)
+        {
+            if (n2id_map.count(name))
+                return n2id_map.at(name);
+            else
+            {
+                n2id_map[name] = id_cap;
+                id_cap++;
+                return id_cap - 1;
+            }
+        }
+    };
+}

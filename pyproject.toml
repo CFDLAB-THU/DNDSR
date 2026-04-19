@@ -1,5 +1,20 @@
 # usage:
-# CC=/usr/bin/gcc CXX=/usr/bin/g++ CMAKE_BUILD_PARALLEL_LEVEL=16 pip install . --verbose
+# CC=/usr/bin/gcc CXX=/usr/bin/g++ CMAKE_BUILD_PARALLEL_LEVEL=32 pip install . --verbose
+# Override build parallelism: SKBUILD_BUILD_TOOL_ARGS="-j8" pip install . --verbose
+# (default: -j0 = use all cores)
+#
+# editable (use the same compiler as the main C++ build):
+# CC=mpicc CXX=mpicxx CMAKE_BUILD_PARALLEL_LEVEL=32 pip install -e . --no-build-isolation
+#
+# If pip-built .so files fail with GLIBCXX version errors (e.g. anaconda Python
+# loads an older libstdc++), use the same GCC version as your Python environment:
+# CC=/usr/bin/gcc-11 CXX=/usr/bin/g++-11 CMAKE_BUILD_PARALLEL_LEVEL=32 pip install -e . --no-build-isolation
+#
+# In-place (no pip install needed):
+# cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j32
+# cmake --install build --component py
+# PYTHONPATH=python pytest test/        # or: export PYTHONPATH=$PWD/python
+
 
 [build-system]
 requires = [
@@ -8,29 +23,55 @@ requires = [
     "pybind11-stubgen",
     "typing_extensions",
     "numpy",
+    "ninja",
 ]
 build-backend = "scikit_build_core.build"
 
 [project]
 name = "DNDSR"
-version = "0.0.0"
+dynamic = ["version"]
+
+[project.optional-dependencies]
+docs = [
+    "sphinx>=7.2,<9",
+    "breathe>=4.35",
+    "myst-parser>=3.0",
+    "sphinxawesome-theme>=6.0",
+    "sphinx-copybutton>=0.5",
+]
 
 
 [tool.scikit-build]
+metadata.version.provider = "version_provider"
+metadata.version.provider-path = "cmake"
+
 cmake.minimum-version = "3.21"
 cmake.build-type = "Release"
-build.targets = ["dnds", "dnds_pybind11"]
+build.targets = [
+    "dnds_pybind11",
+    "geom_pybind11",
+    "cfv_pybind11",
+    "eulerP_pybind11",
+]
 build.verbose = true
 build-dir = "build_py"
-cmake.args = ["-G Unix Makefiles"]
-build.tool-args = ["-j8"]
+cmake.args = ["-G", "Ninja"]
+build.tool-args = ["-j0"]  # all cores; override: SKBUILD_BUILD_TOOL_ARGS="-j8"
 sdist.include = [
-    "src/*/*.pyi",
-    "src/*/_internal/*.so",
-    "src/*/_internal/*.dylib",
-    "src/*/_internal/*.pyd",
-] # append to .gitignore rules
+    "python/DNDSR/**/*.pyi",
+    "python/DNDSR/**/*.so",
+    "python/DNDSR/**/*.dylib",
+    "python/DNDSR/**/*.pyd",
+]
 
 [tool.scikit-build.wheel.packages]
-"DNDSR/DNDS" = "src/DNDS"
-"DNDSR/DNDS/_internal" = "src/DNDS/_internal"
+"DNDSR" = "python/DNDSR"
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+markers = [
+    "mpi: tests requiring mpirun",
+    "cuda: tests requiring CUDA device",
+    "slow: long-running tests",
+]
+timeout = 120
