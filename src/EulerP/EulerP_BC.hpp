@@ -1,3 +1,18 @@
+/**
+ * @file EulerP_BC.hpp
+ * @brief Boundary condition types, implementations, and handler for the EulerP module.
+ *
+ * Provides:
+ * - @c BCType: Enumeration of supported boundary condition types (Far, Wall, Sym, etc.)
+ * - @c BCFunc_Impl: Template specializations for each BC type (currently stubs, TODO)
+ * - @c BC_DeviceView / @c BC: Device-callable and host-side single BC objects
+ * - @c BCHandlerDeviceView / @c BCHandler: Device-callable and host-side BC managers
+ * - @c BCInput: JSON-deserializable input struct for BC configuration
+ *
+ * The BC system uses a runtime switch-dispatch in @c BC_DeviceView::apply() to route
+ * to the appropriate @c BCFunc_Impl specialization, enabling device-callable BC evaluation
+ * on both Host and CUDA backends.
+ */
 #pragma once
 #include "DNDS/DeviceStorage.hpp"
 #include "DNDS/ConfigEnum.hpp"
@@ -8,19 +23,24 @@
 
 namespace DNDS::EulerP
 {
+    /**
+     * @brief Enumeration of boundary condition types for the EulerP module.
+     *
+     * Mirrors the BC types in the Euler module. JSON-serializable via DNDS_DEFINE_ENUM_JSON.
+     */
     enum class BCType : uint8_t
     {
-        Unknown = 0,
-        Far,
-        Wall,
-        WallInvis,
-        WallIsothermal,
-        Out,
-        OutP,
-        In,
-        InPsTs,
-        Sym,
-        Special,
+        Unknown = 0,      ///< Uninitialized or unrecognized BC type.
+        Far,              ///< Farfield BC (characteristic-based).
+        Wall,             ///< No-slip viscous wall (adiabatic).
+        WallInvis,        ///< Inviscid (slip) wall BC.
+        WallIsothermal,   ///< No-slip viscous wall with fixed temperature.
+        Out,              ///< Supersonic/subsonic outflow BC.
+        OutP,             ///< Outflow with specified back-pressure.
+        In,               ///< Supersonic/subsonic inflow BC.
+        InPsTs,           ///< Inflow with specified stagnation pressure and temperature.
+        Sym,              ///< Symmetry plane BC.
+        Special,          ///< Special-purpose BC for benchmark cases (e.g., DMR, Riemann).
     };
 
     DNDS_DEFINE_ENUM_JSON(
@@ -39,12 +59,36 @@ namespace DNDS::EulerP
             {BCType::Special, "Special"},
         })
 
+    /// @brief Type alias for the device-resident BC parameter storage vector.
     template <DeviceBackend B>
     using BCStorageVecDeviceView = vector_DeviceView<B, real, int32_t>;
 
+    /**
+     * @brief Primary template for boundary condition function implementations.
+     *
+     * Each specialization provides a static @c apply() method implementing the
+     * specific BC logic for one @c BCType. All current specializations are stubs
+     * that assert false (implementations are TODO).
+     *
+     * @tparam B Device backend (Host or CUDA).
+     * @tparam T The BCType this specialization implements.
+     */
     template <DeviceBackend B, BCType T>
     struct BCFunc_Impl;
 
+    /**
+     * @brief Macro defining the standard BC apply interface signature.
+     *
+     * Expands to a static device-callable apply function taking:
+     * - @c U: Input conservative state
+     * - @c UOut: Output (ghost) conservative state
+     * - @c uSiz: Number of variables
+     * - @c x: Face centroid coordinates
+     * - @c n: Outward face normal
+     * - @c id: Boundary zone ID
+     * - @c value: BC parameter storage view
+     * - @c phy: Physics device view
+     */
 #define DNDS_EULERP_BC_INTERFACE_APPLY                   \
     template <class tU, class tUOut, class tx, class tn> \
     DNDS_DEVICE_CALLABLE static void apply(              \
@@ -53,6 +97,7 @@ namespace DNDS::EulerP
         Geom::t_index id,                                \
         BCStorageVecDeviceView<B> value, PhysicsDeviceView<B> &phy)
 
+    /// @brief Farfield BC implementation (TODO: not yet implemented).
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::Far>
     {
@@ -62,6 +107,7 @@ namespace DNDS::EulerP
         }
     };
 
+    /// @brief No-slip viscous wall BC implementation (TODO: not yet implemented).
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::Wall>
     {
@@ -71,6 +117,7 @@ namespace DNDS::EulerP
         }
     };
 
+    /// @brief Isothermal viscous wall BC implementation (TODO: not yet implemented).
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::WallIsothermal>
     {
@@ -80,6 +127,7 @@ namespace DNDS::EulerP
         }
     };
 
+    /// @brief Outflow BC implementation (TODO: not yet implemented).
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::Out>
     {
@@ -89,6 +137,7 @@ namespace DNDS::EulerP
         }
     };
 
+    /// @brief Outflow with back-pressure BC implementation (TODO: not yet implemented).
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::OutP>
     {
@@ -98,6 +147,7 @@ namespace DNDS::EulerP
         }
     };
 
+    /// @brief Inflow with stagnation pressure/temperature BC implementation (TODO: not yet implemented).
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::InPsTs>
     {
@@ -107,6 +157,7 @@ namespace DNDS::EulerP
         }
     };
 
+    /// @brief Symmetry plane BC implementation (TODO: not yet implemented).
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::Sym>
     {
@@ -116,6 +167,7 @@ namespace DNDS::EulerP
         }
     };
 
+    /// @brief Special-purpose BC implementation for benchmark cases (TODO: not yet implemented).
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::Special>
     {
@@ -125,6 +177,7 @@ namespace DNDS::EulerP
         }
     };
 
+    /// @brief General inflow BC implementation (TODO: not yet implemented).
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::In>
     {
@@ -134,6 +187,7 @@ namespace DNDS::EulerP
         }
     };
 
+    /// @brief Inviscid (slip) wall BC implementation (TODO: not yet implemented).
     template <DeviceBackend B>
     struct BCFunc_Impl<B, BCType::WallInvis>
     {
@@ -143,27 +197,59 @@ namespace DNDS::EulerP
         }
     };
 
+    /**
+     * @brief Device-callable view of a single boundary condition.
+     *
+     * Holds a device-resident view of BC parameter values, the boundary zone ID,
+     * and the BC type. The @c apply() method uses a runtime switch to dispatch
+     * to the appropriate @c BCFunc_Impl specialization.
+     *
+     * @tparam B Device backend (Host or CUDA).
+     */
     template <DeviceBackend B>
     class BC_DeviceView
     {
-        BCStorageVecDeviceView<B> values;
-        Geom::t_index id = Geom::BC_ID_NULL;
-        BCType type = BCType::Unknown;
+        BCStorageVecDeviceView<B> values; ///< Device-resident BC parameter values.
+        Geom::t_index id = Geom::BC_ID_NULL; ///< Boundary zone identifier.
+        BCType type = BCType::Unknown;        ///< Type of boundary condition.
 
     public:
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(BC_DeviceView, BC_DeviceView)
 
+        /**
+         * @brief Constructs a BC device view from values, zone ID, and type.
+         * @param n_values Device view of BC parameter values.
+         * @param n_id Boundary zone identifier.
+         * @param n_type Boundary condition type.
+         */
         DNDS_DEVICE_CALLABLE BC_DeviceView(
             BCStorageVecDeviceView<B> n_values,
             Geom::t_index n_id,
             BCType n_type)
             : values(n_values), id(n_id), type(n_type) {}
 
-        DNDS_DEVICE_CALLABLE Geom::t_index getId() const { return id; }
-        DNDS_DEVICE_CALLABLE BCType getType() const { return type; }
-        DNDS_DEVICE_CALLABLE int32_t getNValues() const { return values.size(); }
-        DNDS_DEVICE_CALLABLE real value(int32_t i) const { return values[i]; }
+        DNDS_DEVICE_CALLABLE Geom::t_index getId() const { return id; }   ///< Returns the boundary zone ID.
+        DNDS_DEVICE_CALLABLE BCType getType() const { return type; }       ///< Returns the boundary condition type.
+        DNDS_DEVICE_CALLABLE int32_t getNValues() const { return values.size(); } ///< Returns the number of BC parameter values.
+        DNDS_DEVICE_CALLABLE real value(int32_t i) const { return values[i]; }    ///< Returns the i-th BC parameter value.
 
+        /**
+         * @brief Applies this boundary condition to compute the ghost state.
+         *
+         * Dispatches to the appropriate @c BCFunc_Impl specialization based on the runtime
+         * @c type field using a switch statement. Asserts on unknown types.
+         *
+         * @tparam tU Input conservative state type (deduced).
+         * @tparam tUOut Output ghost state type (deduced).
+         * @tparam tx Coordinate vector type (deduced).
+         * @tparam tn Normal vector type (deduced).
+         * @param U Input conservative state at the boundary face.
+         * @param[out] UOut Output ghost conservative state.
+         * @param uSiz Number of variables.
+         * @param x Face centroid coordinates.
+         * @param n Outward face unit normal.
+         * @param phy Physics device view for thermodynamic computations.
+         */
         template <class tU, class tUOut, class tx, class tn>
         DNDS_DEVICE_CALLABLE void apply(tU &&U, tUOut &&UOut, int32_t uSiz,
                                         tx &&x, tn &&n,
@@ -193,40 +279,56 @@ namespace DNDS::EulerP
         }
     };
 
+    /**
+     * @brief Host-side boundary condition object managing parameter values and device transfer.
+     *
+     * Stores BC parameters in a @c host_device_vector for transparent host/device transfer.
+     * Provides property accessors for zone ID, type, and values. Use @c deviceView<B>()
+     * to obtain a @c BC_DeviceView for kernel invocation.
+     */
     class BC
     {
-        host_device_vector<real> values;
-        Geom::t_index id = Geom::BC_ID_NULL;
-        BCType type = BCType::Unknown;
+        host_device_vector<real> values; ///< BC parameter values (e.g., freestream state, wall temperature).
+        Geom::t_index id = Geom::BC_ID_NULL; ///< Boundary zone identifier.
+        BCType type = BCType::Unknown;        ///< Boundary condition type.
 
     public:
-        [[nodiscard]] Geom::t_index getId() const { return id; }
-        void setId(Geom::t_index n_id) { id = n_id; }
-        [[nodiscard]] BCType getType() const { return type; }
-        void setType(BCType n_type) { type = n_type; }
-        [[nodiscard]] int32_t getNValues() const { return size_t_to_signed<int32_t>(values.size()); }
-        [[nodiscard]] real value(int i) const { return values.at(i); }
-        void setValues(const std::vector<real> &v) { values = v; }
-        [[nodiscard]] auto getValues() const { return std::vector<real>(values); }
+        [[nodiscard]] Geom::t_index getId() const { return id; }            ///< Returns the boundary zone ID.
+        void setId(Geom::t_index n_id) { id = n_id; }                      ///< Sets the boundary zone ID.
+        [[nodiscard]] BCType getType() const { return type; }               ///< Returns the BC type.
+        void setType(BCType n_type) { type = n_type; }                      ///< Sets the BC type.
+        [[nodiscard]] int32_t getNValues() const { return size_t_to_signed<int32_t>(values.size()); } ///< Returns the number of parameter values.
+        [[nodiscard]] real value(int i) const { return values.at(i); }      ///< Returns the i-th parameter value (bounds-checked).
+        void setValues(const std::vector<real> &v) { values = v; }          ///< Sets BC parameter values from a vector.
+        [[nodiscard]] auto getValues() const { return std::vector<real>(values); } ///< Returns a copy of BC parameter values as std::vector.
 
+        /// @brief Transfers BC values to host memory.
         void to_host()
         {
             values.to_host();
         }
 
+        /// @brief Transfers BC values to the specified device backend.
+        /// @param B Target device backend.
         void to_device(DeviceBackend B)
         {
             values.to_device(B);
         }
 
+        /// @brief Returns the current device backend where BC values reside.
         DeviceBackend device()
         {
             return values.device();
         }
 
         template <DeviceBackend B>
-        using t_deviceView = BC_DeviceView<B>;
+        using t_deviceView = BC_DeviceView<B>; ///< Device view type alias.
 
+        /**
+         * @brief Creates a device-callable view of this BC object.
+         * @tparam B Target device backend.
+         * @return A @c BC_DeviceView<B> for use in device kernels.
+         */
         template <DeviceBackend B>
         t_deviceView<B> deviceView()
         {
@@ -236,16 +338,29 @@ namespace DNDS::EulerP
         }
     };
 
+    /**
+     * @brief Device-callable view of the BC handler providing BC lookup by zone ID.
+     *
+     * Holds a device-resident array of @c BC_DeviceView objects indexed by boundary zone ID.
+     *
+     * @tparam B Device backend (Host or CUDA).
+     */
     template <DeviceBackend B>
     class BCHandlerDeviceView
     {
-        vector_DeviceView<B, BC_DeviceView<B>, int32_t> bcs;
+        vector_DeviceView<B, BC_DeviceView<B>, int32_t> bcs; ///< Device array of BC views indexed by zone ID.
 
     public:
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(BCHandlerDeviceView, BCHandlerDeviceView)
 
+        /// @brief Constructs from a device view of BC_DeviceView array.
         DNDS_DEVICE_CALLABLE BCHandlerDeviceView(vector_DeviceView<B, BC_DeviceView<B>, int32_t> n_bcs) : bcs(n_bcs) {}
 
+        /**
+         * @brief Looks up a boundary condition by zone ID.
+         * @param id Boundary zone identifier.
+         * @return Reference to the @c BC_DeviceView for the given zone.
+         */
         DNDS_DEVICE_CALLABLE BC_DeviceView<B> &id2bc(Geom::t_index id)
         {
             DNDS_HD_assert(id < bcs.size() && id >= 0);
@@ -253,21 +368,51 @@ namespace DNDS::EulerP
         }
     };
 
+    /**
+     * @brief Simple struct for JSON-deserialized boundary condition input specification.
+     *
+     * Used to read BC definitions from JSON configuration files before constructing
+     * the @c BCHandler. JSON-serializable via nlohmann_json intrusive macros.
+     */
     struct BCInput
     {
-        BCType type;
-        std::string name;
-        std::vector<real> value;
+        BCType type;              ///< Boundary condition type.
+        std::string name;         ///< Boundary zone name (must match mesh zone names).
+        std::vector<real> value;  ///< BC parameter values (meaning depends on BC type).
         DNDS_NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_ORDERED_AND_UNORDERED_JSON(
             BCInput,
             type, name, value)
     };
 
+    /**
+     * @brief Host-side boundary condition handler managing all BC objects for a simulation.
+     *
+     * Constructed from a list of @c BCInput specifications and a name-to-ID mapping.
+     * Automatically assigns default BC types for standard mesh zones (WALL, WALL_INVIS,
+     * FAR, and SPECIAL benchmark zones). Supports host/device transfer of all managed BCs.
+     *
+     * Use @c id2bc(id) to look up a BC by zone ID, and @c deviceView<B>() to obtain a
+     * @c BCHandlerDeviceView for kernel invocation.
+     */
     class BCHandler
     {
-        std::vector<BC> bcs;
+        std::vector<BC> bcs; ///< Array of BC objects indexed by zone ID.
 
     public:
+        /**
+         * @brief Constructs the BC handler from JSON-deserialized inputs and a name-to-ID map.
+         *
+         * Allocates BC slots for all zone IDs, applies user-specified BC inputs, then
+         * sets default types for standard zones:
+         * - @c BC_ID_DEFAULT_WALL → BCType::Wall
+         * - @c BC_ID_DEFAULT_WALL_INVIS → BCType::WallInvis
+         * - @c BC_ID_DEFAULT_FAR → BCType::Far
+         * - Special benchmark zone IDs → BCType::Special
+         *
+         * @param bc_inputs Vector of BCInput specifications from JSON configuration.
+         * @param name2id Name-to-ID mapping from mesh zone names to integer IDs.
+         * @throws std::runtime_error If a BC input name is not found in name2id.
+         */
         BCHandler(const std::vector<BCInput> &bc_inputs, Geom::AutoAppendName2ID &name2id)
         {
             bcs.resize(name2id.id_cap);
@@ -310,24 +455,33 @@ namespace DNDS::EulerP
             }
         }
 
+        /**
+         * @brief Looks up a boundary condition by zone ID.
+         * @param id Boundary zone identifier.
+         * @return Reference to the @c BC object for the given zone.
+         */
         BC &id2bc(Geom::t_index id)
         {
             DNDS_HD_assert(id < bcs.size());
             return bcs[id];
         }
 
+        /// @brief Transfers all BC values to host memory.
         void to_host()
         {
             for (auto &bc : bcs)
                 bc.to_host();
         }
 
+        /// @brief Transfers all BC values to the specified device backend.
+        /// @param B Target device backend.
         void to_device(DeviceBackend B)
         {
             for (auto &bc : bcs)
                 bc.to_device(B);
         }
 
+        /// @brief Returns the device backend where BCs reside (asserts all BCs are on the same device).
         DeviceBackend device()
         {
             DeviceBackend B = DeviceBackend::Unknown;
@@ -340,11 +494,20 @@ namespace DNDS::EulerP
             return B;
         }
 
+        /**
+         * @brief Move-only device view wrapper owning the BC device view storage.
+         *
+         * Wraps a @c host_device_vector of @c BC_DeviceView and the resulting
+         * @c BCHandlerDeviceView. Move-only to prevent accidental copies that
+         * would invalidate device pointers.
+         *
+         * @tparam B Device backend.
+         */
         template <DeviceBackend B>
         struct t_deviceView
         {
-            host_device_vector<BC_DeviceView<B>> bcs_device_view;
-            BCHandlerDeviceView<B> view;
+            host_device_vector<BC_DeviceView<B>> bcs_device_view; ///< Owned device storage of BC views.
+            BCHandlerDeviceView<B> view;                           ///< The handler device view referencing bcs_device_view.
 
             t_deviceView(host_device_vector<BC_DeviceView<B>> &&n_bcs_device_view)
                 : bcs_device_view(n_bcs_device_view),
@@ -365,6 +528,16 @@ namespace DNDS::EulerP
             }
         };
 
+        /**
+         * @brief Creates a device view of all managed BCs for kernel invocation.
+         *
+         * Builds a @c host_device_vector of @c BC_DeviceView from each managed BC,
+         * transfers it to the specified device backend, and returns an owning
+         * @c t_deviceView wrapper. The returned object is move-only.
+         *
+         * @tparam B Target device backend.
+         * @return A @c t_deviceView<B> owning the device BC array.
+         */
         template <DeviceBackend B>
         t_deviceView<B> deviceView()
         {

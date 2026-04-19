@@ -1,3 +1,28 @@
+/**
+ * @file EulerEvaluator.hpp
+ * @brief Core finite-volume evaluator for compressible Navier-Stokes / Euler equations.
+ *
+ * Provides the EulerEvaluator class template, parameterized by EulerModel, which
+ * encapsulates the spatial discretization of the compressible Navier-Stokes equations
+ * using Compact Finite Volume (CFV) methods with variational reconstruction.
+ *
+ * Responsibilities include:
+ * - Right-hand side (RHS) evaluation of the semi-discrete system
+ * - Local time step estimation
+ * - Implicit Jacobian assembly (LU-SGS / SGS / GMRES preconditioning)
+ * - Boundary condition ghost-value generation for all supported BC types
+ * - Wall distance computation (AABB tree, batched AABB, p-Poisson)
+ * - Positivity-preserving limiters and increment compression
+ * - RANS turbulence model source terms (SA, k-omega SST, k-omega Wilcox, Realizable k-e)
+ * - Periodic boundary handling and rotating-frame transformations
+ *
+ * Supported model specializations (via EulerModel enum):
+ *   NS, NS_2D, NS_SA, NS_SA_3D, NS_2EQ, NS_2EQ_3D, NS_3D
+ *
+ * @see EulerSolver.hpp   Top-level solver orchestrating time marching
+ * @see EulerBC.hpp        Boundary condition handler
+ * @see Gas.hpp            Gas thermodynamic and Riemann solver routines
+ */
 #pragma once
 
 // #ifndef __DNDS_REALLY_COMPILING__
@@ -36,39 +61,65 @@
 namespace DNDS::Euler
 {
 
+    /**
+     * @brief Core finite-volume evaluator for compressible Navier-Stokes / Euler equations.
+     *
+     * Implements the spatial discretization of the compressible N-S equations on
+     * unstructured meshes using Compact Finite Volume (CFV) with variational
+     * reconstruction. Handles inviscid and viscous flux evaluation, source terms
+     * (including RANS turbulence models), implicit Jacobian assembly, boundary
+     * condition ghost-value generation, and positivity-preserving fixes.
+     *
+     * @tparam model  EulerModel enum selecting the equation set and spatial dimension
+     *                (NS, NS_2D, NS_SA, NS_SA_3D, NS_2EQ, NS_2EQ_3D, NS_3D).
+     */
     template <EulerModel model = NS>
     class EulerEvaluator
     {
     public:
-        using Traits = EulerModelTraits<model>;
-        static const int nVarsFixed = getnVarsFixed(model);
-        static const int dim = getDim_Fixed(model);
-        static const int gDim = getGeomDim_Fixed(model);
-        static const auto I4 = dim + 1;
+        using Traits = EulerModelTraits<model>; ///< Compile-time traits: hasSA, has2EQ, etc.
+        static const int nVarsFixed = getnVarsFixed(model); ///< Number of conserved variables (compile-time fixed).
+        static const int dim = getDim_Fixed(model);         ///< Spatial dimension (2 or 3).
+        static const int gDim = getGeomDim_Fixed(model);    ///< Geometric dimension of the mesh.
+        static const auto I4 = dim + 1;                     ///< Index of the energy equation (= dim+1).
 
-        static const int MaxBatch = 16;
+        static const int MaxBatch = 16; ///< Maximum batch size for vectorized quadrature-point evaluation.
+        /// @brief Compute the maximum batch-multiplied column count for batched Eigen matrices.
         static constexpr int MaxBatchMult(int n) { return MaxBatch > 0 ? (n * MaxBatch) : Eigen::Dynamic; }
 
-        typedef Eigen::VectorFMTSafe<real, dim> TVec;
-        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatch> TVec_Batch;
-        typedef Eigen::MatrixFMTSafe<real, dim, dim> TMat;
-        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatchMult(3)> TMat_Batch;
-        typedef Eigen::VectorFMTSafe<real, nVarsFixed> TU;
-        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, Eigen::Dynamic, Eigen::ColMajor, nVarsFixed, MaxBatch> TU_Batch;
-        typedef Eigen::MatrixFMTSafe<real, 1, Eigen::Dynamic, Eigen::RowMajor, 1, MaxBatch> TReal_Batch;
-        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, nVarsFixed> TJacobianU;
-        typedef Eigen::MatrixFMTSafe<real, dim, nVarsFixed> TDiffU;
-        typedef Eigen::MatrixFMTSafe<real, Eigen::Dynamic, nVarsFixed, Eigen::ColMajor, MaxBatchMult(3)> TDiffU_Batch;
-        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, dim> TDiffUTransposed;
-        typedef ArrayDOFV<nVarsFixed> TDof;
-        typedef ArrayRECV<nVarsFixed> TRec;
-        typedef ArrayRECV<1> TScalar;
+        typedef Eigen::VectorFMTSafe<real, dim> TVec;           ///< Spatial vector (dim components).
+        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatch> TVec_Batch; ///< Batch of spatial vectors.
+        typedef Eigen::MatrixFMTSafe<real, dim, dim> TMat;      ///< Spatial matrix (dim x dim).
+        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatchMult(3)> TMat_Batch; ///< Batch of spatial matrices.
+        typedef Eigen::VectorFMTSafe<real, nVarsFixed> TU;      ///< Conservative variable vector (nVarsFixed components).
+        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, Eigen::Dynamic, Eigen::ColMajor, nVarsFixed, MaxBatch> TU_Batch; ///< Batch of conservative variable vectors.
+        typedef Eigen::MatrixFMTSafe<real, 1, Eigen::Dynamic, Eigen::RowMajor, 1, MaxBatch> TReal_Batch; ///< Batch of scalar values.
+        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, nVarsFixed> TJacobianU;  ///< Jacobian matrix (nVars x nVars) of the flux w.r.t. conserved variables.
+        typedef Eigen::MatrixFMTSafe<real, dim, nVarsFixed> TDiffU;             ///< Gradient of conserved variables (dim x nVars).
+        typedef Eigen::MatrixFMTSafe<real, Eigen::Dynamic, nVarsFixed, Eigen::ColMajor, MaxBatchMult(3)> TDiffU_Batch; ///< Batch of gradient matrices.
+        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, dim> TDiffUTransposed;   ///< Transposed gradient (nVars x dim).
+        typedef ArrayDOFV<nVarsFixed> TDof;     ///< Cell-centered DOF array (mean values).
+        typedef ArrayRECV<nVarsFixed> TRec;     ///< Reconstruction coefficient array (per-cell polynomial coefficients).
+        typedef ArrayRECV<1> TScalar;           ///< Scalar reconstruction coefficient array.
 
-        typedef CFV::VariationalReconstruction<gDim> TVFV;
-        typedef ssp<CFV::VariationalReconstruction<gDim>> TpVFV;
-        typedef ssp<BoundaryHandler<model>> TpBCHandler;
+        typedef CFV::VariationalReconstruction<gDim> TVFV;      ///< Variational reconstruction type for this geometric dimension.
+        typedef ssp<CFV::VariationalReconstruction<gDim>> TpVFV; ///< Shared pointer to the variational reconstruction object.
+        typedef ssp<BoundaryHandler<model>> TpBCHandler;         ///< Shared pointer to the boundary condition handler.
 
     public:
+        /**
+         * @brief Initialize the finite-volume infrastructure on the mesh.
+         *
+         * Sets periodic transformations on the VFV object, constructs cell/face
+         * geometric metrics, builds reconstruction base functions and weights
+         * (with BC-type-dependent Dirichlet/Neumann weighting), and computes
+         * reconstruction coefficients.
+         *
+         * @param mesh       Shared pointer to the unstructured mesh.
+         * @param vfv        Shared pointer to the variational reconstruction object.
+         * @param pBCHandler Shared pointer to the boundary condition handler (used
+         *                   for per-face reconstruction weight selection).
+         */
         static void InitializeFV(ssp<Geom::UnstructuredMesh> &mesh, TpVFV vfv, TpBCHandler pBCHandler)
         {
             vfv->SetPeriodicTransformations(
@@ -106,66 +157,82 @@ namespace DNDS::Euler
         // static const int gdim = 2; //* geometry dim
 
     private:
-        int nVars = 5;
+        int nVars = 5; ///< Runtime number of conserved variables (may differ from nVarsFixed for dynamic models).
 
-        bool passiveDiscardSource = false;
+        bool passiveDiscardSource = false; ///< When true, discard source terms for passive scalar equations.
 
     public:
+        /// @brief Enable or disable discarding of passive-scalar source terms.
         void setPassiveDiscardSource(bool n) { passiveDiscardSource = n; }
 
     private:
-        int axisSymmetric = 0;
+        int axisSymmetric = 0; ///< Non-zero if the solver operates in axisymmetric mode (2D axisymmetric).
 
     public:
+        /// @brief Return the axisymmetric mode flag.
         int GetAxisSymmetric() { return axisSymmetric; }
 
     private:
     public:
-        ssp<Geom::UnstructuredMesh> mesh;
-        ssp<CFV::VariationalReconstruction<gDim>> vfv; //! gDim -> 3 for intellisense //!tmptmp
-        ssp<BoundaryHandler<model>> pBCHandler;
-        int kAv = 0;
+        ssp<Geom::UnstructuredMesh> mesh;                        ///< Shared pointer to the unstructured mesh.
+        ssp<CFV::VariationalReconstruction<gDim>> vfv; //! gDim -> 3 for intellisense //!tmptmp  ///< Variational reconstruction object.
+        ssp<BoundaryHandler<model>> pBCHandler;                  ///< Boundary condition handler.
+        int kAv = 0;                                             ///< Artificial viscosity polynomial order (maxOrder + 1).
 
         // buffer for fdtau
         // std::vector<real> lambdaCell;
-        std::vector<real> lambdaFace;
-        std::vector<real> lambdaFaceC;
-        std::vector<real> lambdaFaceVis;
-        std::vector<real> lambdaFace0;
-        std::vector<real> lambdaFace123;
-        std::vector<real> lambdaFace4;
-        std::vector<real> deltaLambdaFace;
-        ArrayDOFV<1> deltaLambdaCell;
+        std::vector<real> lambdaFace;       ///< Per-face spectral radius (inviscid + viscous combined).
+        std::vector<real> lambdaFaceC;      ///< Per-face convective spectral radius.
+        std::vector<real> lambdaFaceVis;    ///< Per-face viscous spectral radius.
+        std::vector<real> lambdaFace0;      ///< Per-face eigenvalue |u·n| (contact wave).
+        std::vector<real> lambdaFace123;    ///< Per-face eigenvalue |u·n + a| (acoustic wave).
+        std::vector<real> lambdaFace4;      ///< Per-face eigenvalue |u·n - a| (acoustic wave).
+        std::vector<real> deltaLambdaFace;  ///< Per-face spectral radius difference for implicit diagonal.
+        ArrayDOFV<1> deltaLambdaCell;       ///< Per-cell accumulated spectral radius difference.
 
         // grad fix
-        std::vector<TDiffU> gradUFix;
+        std::vector<TDiffU> gradUFix; ///< Green-Gauss gradient correction buffer for source term stabilization.
 
         // wall distance
-        std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall;
-        std::vector<real> dWallFace;
+        std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall;  ///< Per-cell wall distance (one value per cell node/quadrature point).
+        std::vector<real> dWallFace;                             ///< Per-face wall distance (interpolated from cell values).
 
         // maps from bc id to various objects
-        std::map<Geom::t_index, AnchorPointRecorder<nVarsFixed>> anchorRecorders;
-        std::map<Geom::t_index, OneDimProfile<nVarsFixed>> profileRecorders;
-        std::map<Geom::t_index, IntegrationRecorder> bndIntegrations;
-        std::map<Geom::t_index, std::ofstream> bndIntegrationLogs;
+        std::map<Geom::t_index, AnchorPointRecorder<nVarsFixed>> anchorRecorders; ///< Per-BC anchor point recorders for profile extraction.
+        std::map<Geom::t_index, OneDimProfile<nVarsFixed>> profileRecorders;      ///< Per-BC 1-D profile recorders.
+        std::map<Geom::t_index, IntegrationRecorder> bndIntegrations;             ///< Per-BC boundary flux/force integration accumulators.
+        std::map<Geom::t_index, std::ofstream> bndIntegrationLogs;                ///< Per-BC log file streams for integration output.
 
-        std::set<Geom::t_index> cLDriverBndIDs;
-        std::unique_ptr<CLDriver> pCLDriver;
+        std::set<Geom::t_index> cLDriverBndIDs;  ///< Boundary IDs driven by the CL (lift-coefficient) driver.
+        std::unique_ptr<CLDriver> pCLDriver;     ///< Lift-coefficient driver for AoA adaptation (null if unused).
 
         // ArrayVDOF<25> dRdUrec;
         // ArrayVDOF<25> dRdb;
-        ArrayGRADV<nVarsFixed, gDim> uGradBuf, uGradBufNoLim;
+        ArrayGRADV<nVarsFixed, gDim> uGradBuf, uGradBufNoLim; ///< Gradient buffers: limited and unlimited.
 
-        Eigen::Vector<real, -1> fluxWallSum;
-        std::vector<TU> fluxBnd;
-        std::vector<TVec> fluxBndForceT;
-        index nFaceReducedOrder = 0;
+        Eigen::Vector<real, -1> fluxWallSum;       ///< Accumulated wall flux integral (force on wall boundaries).
+        std::vector<TU> fluxBnd;                   ///< Per-boundary-face flux values.
+        std::vector<TVec> fluxBndForceT;           ///< Per-boundary-face tangential force.
+        index nFaceReducedOrder = 0;               ///< Count of faces where reconstruction order was reduced.
 
-        ssp<Direct::SerialSymLUStructure> symLU;
+        ssp<Direct::SerialSymLUStructure> symLU;   ///< Symmetric LU structure for direct preconditioner.
 
-        EulerEvaluatorSettings<model> settings;
+        EulerEvaluatorSettings<model> settings;    ///< Physics and numerics settings for this evaluator.
 
+        /**
+         * @brief Construct an EulerEvaluator and initialize all internal buffers.
+         *
+         * Allocates per-face spectral-radius buffers, per-boundary flux arrays,
+         * gradient correction arrays (if enabled), wall distance fields (for RANS),
+         * and the symmetric LU structure for direct preconditioning. Also validates
+         * CL-driver boundary configuration.
+         *
+         * @param Nmesh       Shared pointer to the unstructured mesh.
+         * @param Nvfv        Shared pointer to the variational reconstruction object.
+         * @param npBCHandler Shared pointer to the boundary condition handler.
+         * @param nSettings   Physics and numerics settings.
+         * @param n_nVars     Runtime number of conserved variables (default from model).
+         */
         EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler,
                        const EulerEvaluatorSettings<model> &nSettings,
                        int n_nVars = getNVars(model))
@@ -238,6 +305,13 @@ namespace DNDS::Euler
                 pCLDriver = std::make_unique<CLDriver>(settings.cLDriverSettings);
         }
 
+        /**
+         * @brief Compute wall distance for all cells (dispatcher).
+         *
+         * Selects the wall distance algorithm based on the wallDistScheme setting
+         * (AABB tree, batched AABB, p-Poisson, or combination) and populates dWall
+         * and dWallFace arrays used by RANS turbulence models.
+         */
         void GetWallDist();
 
     private:
@@ -262,8 +336,26 @@ namespace DNDS::Euler
     public:
 
         /******************************************************/
-        static const uint64_t DT_No_Flags = 0x0ull;
-        static const uint64_t DT_Dont_update_lambda01234 = 0x1ull << 0;
+        static const uint64_t DT_No_Flags = 0x0ull;                 ///< No flags for EvaluateDt.
+        static const uint64_t DT_Dont_update_lambda01234 = 0x1ull << 0; ///< Skip recomputation of per-face eigenvalues lambda0/123/4.
+        /**
+         * @brief Estimate the local or global time step for each cell.
+         *
+         * Computes the local pseudo-time step dTau based on CFL number, spectral radii
+         * of inviscid and viscous fluxes, and optionally enforces a global minimum.
+         * Updates per-face eigenvalue arrays (lambda0, lambda123, lambda4) unless
+         * DT_Dont_update_lambda01234 is set.
+         *
+         * @param[out] dt        Per-cell time step array (overwritten).
+         * @param[in]  u         Cell-centered conservative variable DOFs.
+         * @param[in]  uRec      Reconstruction coefficients.
+         * @param[in]  CFL       CFL number.
+         * @param[out] dtMinall  Global minimum time step (MPI-reduced).
+         * @param[in]  MaxDt     Upper bound on the time step.
+         * @param[in]  UseLocaldt If true, use local (per-cell) time stepping.
+         * @param[in]  t         Current simulation time.
+         * @param[in]  flags     Bitwise combination of DT_* flags.
+         */
         void EvaluateDt(
             ArrayDOFV<1> &dt,
             ArrayDOFV<nVarsFixed> &u,
@@ -273,20 +365,36 @@ namespace DNDS::Euler
             real t,
             uint64_t flags = DT_No_Flags);
 
-        static const uint64_t RHS_No_Flags = 0x0ull;
-        static const uint64_t RHS_Ignore_Viscosity = 0x1ull << 0;
-        static const uint64_t RHS_Dont_Update_Integration = 0x1ull << 1;
-        static const uint64_t RHS_Dont_Record_Bud_Flux = 0x1ull << 2;
-        static const uint64_t RHS_Direct_2nd_Rec = 0x1ull << 8;
-        static const uint64_t RHS_Direct_2nd_Rec_1st_Conv = 0x1ull << 9;
-        static const uint64_t RHS_Direct_2nd_Rec_use_limiter = 0x1ull << 10;
-        static const uint64_t RHS_Direct_2nd_Rec_already_have_uGradBufNoLim = 0x1ull << 11;
-        static const uint64_t RHS_Recover_IncFScale = 0x1ull << 12;
+        /// @name RHS evaluation flags (bitwise OR combinable)
+        /// @{
+        static const uint64_t RHS_No_Flags = 0x0ull;                              ///< Default: full RHS evaluation.
+        static const uint64_t RHS_Ignore_Viscosity = 0x1ull << 0;                 ///< Skip viscous flux contribution.
+        static const uint64_t RHS_Dont_Update_Integration = 0x1ull << 1;          ///< Skip boundary integration accumulation.
+        static const uint64_t RHS_Dont_Record_Bud_Flux = 0x1ull << 2;            ///< Skip recording per-boundary flux.
+        static const uint64_t RHS_Direct_2nd_Rec = 0x1ull << 8;                  ///< Use direct 2nd-order reconstruction.
+        static const uint64_t RHS_Direct_2nd_Rec_1st_Conv = 0x1ull << 9;         ///< 2nd-order rec with 1st-order convection.
+        static const uint64_t RHS_Direct_2nd_Rec_use_limiter = 0x1ull << 10;     ///< Apply limiter when using direct 2nd rec.
+        static const uint64_t RHS_Direct_2nd_Rec_already_have_uGradBufNoLim = 0x1ull << 11; ///< uGradBufNoLim is already computed.
+        static const uint64_t RHS_Recover_IncFScale = 0x1ull << 12;              ///< Recover incremental face scaling.
+        /// @}
 
         /**
-         * @brief
-         * \param rhs overwritten;
+         * @brief Evaluate the spatial right-hand side of the semi-discrete system.
          *
+         * Computes inviscid flux (Riemann solver), viscous flux, and source terms
+         * over all internal and boundary faces, accumulating cell residuals. Also
+         * records boundary force/flux integrations and updates reduced-order face counts.
+         *
+         * @param[out] rhs            Cell residual array (overwritten).
+         * @param[out] JSource        Diagonal Jacobian block from source terms.
+         * @param[in]  u              Cell-centered conservative DOFs.
+         * @param[in]  uRecUnlim      Unlimited reconstruction coefficients.
+         * @param[in]  uRec           Limited reconstruction coefficients.
+         * @param[in]  uRecBeta       Per-cell reconstruction compression factor (PP limiter).
+         * @param[in]  cellRHSAlpha   Per-cell RHS scaling factor (PP limiter).
+         * @param[in]  onlyOnHalfAlpha If true, evaluate only cells with alpha < 1.
+         * @param[in]  t              Current simulation time.
+         * @param[in]  flags          Bitwise combination of RHS_* flags.
          */
         void EvaluateRHS(
             ArrayDOFV<nVarsFixed> &rhs,
@@ -300,6 +408,22 @@ namespace DNDS::Euler
             real t,
             uint64_t flags = RHS_No_Flags);
 
+        /**
+         * @brief Assemble the diagonal blocks of the implicit Jacobian for LU-SGS / SGS.
+         *
+         * Computes J_diag = (V/dTau + alphaDiag * sum_faces(spectral_radius)) * I + J_source
+         * for each cell, where V is cell volume and dTau is the local pseudo-time step.
+         *
+         * @param[out] JDiag       Per-cell diagonal Jacobian block (overwritten).
+         * @param[in]  JSource     Source-term Jacobian contribution to diagonal.
+         * @param[in]  dTau        Per-cell local pseudo-time step.
+         * @param[in]  dt          Physical time step (for dual time stepping).
+         * @param[in]  alphaDiag   Diagonal scaling factor for implicit relaxation.
+         * @param[in]  u           Cell-centered conservative DOFs.
+         * @param[in]  uRec        Reconstruction coefficients.
+         * @param[in]  jacobianCode Controls Jacobian approximation: 0=scalar, 1=analytical flux Jacobian.
+         * @param[in]  t           Current simulation time.
+         */
         void LUSGSMatrixInit(
             JacobianDiagBlock<nVarsFixed> &JDiag,
             JacobianDiagBlock<nVarsFixed> &JSource,
@@ -309,6 +433,19 @@ namespace DNDS::Euler
             int jacobianCode,
             real t);
 
+        /**
+         * @brief Compute the matrix-vector product A * uInc for the implicit system.
+         *
+         * Evaluates the action of the approximate Jacobian on an increment vector,
+         * used as the matvec operation inside GMRES.
+         *
+         * @param[in]  alphaDiag Diagonal scaling factor.
+         * @param[in]  t         Current simulation time.
+         * @param[in]  u         Cell-centered conservative DOFs.
+         * @param[in]  uInc      Increment vector to multiply.
+         * @param[in]  JDiag     Pre-assembled diagonal Jacobian blocks.
+         * @param[out] AuInc     Result of A * uInc (overwritten).
+         */
         void LUSGSMatrixVec(
             real alphaDiag,
             real t,
@@ -317,6 +454,18 @@ namespace DNDS::Euler
             JacobianDiagBlock<nVarsFixed> &JDiag,
             ArrayDOFV<nVarsFixed> &AuInc);
 
+        /**
+         * @brief Build the local LU factorization of the Jacobian for direct solve.
+         *
+         * Assembles the full local Jacobian (including off-diagonal face coupling)
+         * and factorizes it, storing the result in jacLU for subsequent direct solves.
+         *
+         * @param[in]  alphaDiag Diagonal scaling factor.
+         * @param[in]  t         Current simulation time.
+         * @param[in]  u         Cell-centered conservative DOFs.
+         * @param[in]  JDiag     Pre-assembled diagonal Jacobian blocks.
+         * @param[out] jacLU     Local LU factorization result (overwritten).
+         */
         void LUSGSMatrixToJacobianLU(
             real alphaDiag,
             real t,
@@ -372,6 +521,21 @@ namespace DNDS::Euler
             bool forward, bool gsUpdate, TU &sumInc,
             bool uIncIsZero = false);
 
+        /**
+         * @brief Solve the implicit linear system using the pre-factored local LU.
+         *
+         * @param[in]  alphaDiag   Diagonal scaling factor.
+         * @param[in]  t           Current simulation time.
+         * @param[in]  rhs         Right-hand side residual.
+         * @param[in]  u           Cell-centered conservative DOFs.
+         * @param[in]  uInc        Current increment (input guess).
+         * @param[out] uIncNew     Updated increment (output).
+         * @param[out] bBuf        Buffer for intermediate right-hand side assembly.
+         * @param[in]  JDiag       Diagonal Jacobian blocks.
+         * @param[in]  jacLU       Pre-factored local LU decomposition.
+         * @param[in]  uIncIsZero  If true, skip contributions from zero-increment cells.
+         * @param[out] sumInc      Accumulated absolute increment for convergence monitoring.
+         */
         void LUSGSMatrixSolveJacobianLU(
             real alphaDiag,
             real t,
@@ -385,6 +549,23 @@ namespace DNDS::Euler
             bool uIncIsZero,
             TU &sumInc);
 
+        /**
+         * @brief SGS sweep coupled with reconstruction update.
+         *
+         * Performs a single SGS sweep that simultaneously updates the conservative
+         * increment (uInc) and the reconstruction increment (uRecInc).
+         *
+         * @param[in]  alphaDiag Diagonal scaling factor.
+         * @param[in]  t         Current simulation time.
+         * @param[in]  rhs       Right-hand side residual.
+         * @param[in]  u         Cell-centered conservative DOFs.
+         * @param[in]  uRec      Reconstruction coefficients.
+         * @param[in]  uInc      Current increment for conservative variables.
+         * @param[in]  uRecInc   Current reconstruction increment.
+         * @param[in]  JDiag     Diagonal Jacobian blocks.
+         * @param[in]  forward   Sweep direction: ascending (true) or descending (false).
+         * @param[out] sumInc    Accumulated absolute increment for convergence monitoring.
+         */
         void UpdateSGSWithRec(
             real alphaDiag,
             real t,
@@ -406,18 +587,43 @@ namespace DNDS::Euler
         //     ArrayDOFV<nVarsFixed> &JDiag,
         //     ArrayDOFV<nVarsFixed> &uIncNew);
 
+        /// @brief Clip extreme conserved-variable values to prevent overflow.
         void FixUMaxFilter(ArrayDOFV<nVarsFixed> &u);
 
+        /// @brief Accumulate time-averaged primitive variables for unsteady statistics.
         void TimeAverageAddition(ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &wAveraged, real dt, real &tCur);
 
+        /// @brief Convert cell-mean conservative variables to primitive variables.
         void MeanValueCons2Prim(ArrayDOFV<nVarsFixed> &u, ArrayDOFV<nVarsFixed> &w);
+        /// @brief Convert cell-mean primitive variables to conservative variables.
         void MeanValuePrim2Cons(ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &u);
 
-        using tFCompareField = std::function<TU(const Geom::tPoint &, real)>;
-        using tFCompareFieldWeight = std::function<real(const Geom::tPoint &, real)>;
+        using tFCompareField = std::function<TU(const Geom::tPoint &, real)>;         ///< Callback type for analytical comparison field.
+        using tFCompareFieldWeight = std::function<real(const Geom::tPoint &, real)>;  ///< Callback type for comparison weighting function.
 
+        /**
+         * @brief Compute the norm of the RHS residual vector.
+         *
+         * @param[out] res     Norm result per variable (resized to nVars).
+         * @param[in]  rhs     Cell residual array.
+         * @param[in]  P       Norm order (1 = L1, 2 = L2, etc.).
+         * @param[in]  volWise If true, weight by cell volume.
+         * @param[in]  average If true, divide by total volume/count.
+         */
         void EvaluateNorm(Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P = 1, bool volWise = false, bool average = false);
 
+        /**
+         * @brief Compute the reconstruction error norm (optionally against an analytical field).
+         *
+         * @param[out] res                 Norm result per variable.
+         * @param[in]  u                   Cell-centered conservative DOFs.
+         * @param[in]  uRec                Reconstruction coefficients.
+         * @param[in]  P                   Norm order.
+         * @param[in]  compare             If true, compute error against FCompareField.
+         * @param[in]  FCompareField       Analytical field callback.
+         * @param[in]  FCompareFieldWeight Weighting callback.
+         * @param[in]  t                   Current simulation time.
+         */
         void EvaluateRecNorm(
             Eigen::Vector<real, -1> &res,
             ArrayDOFV<nVarsFixed> &u,
@@ -430,27 +636,77 @@ namespace DNDS::Euler
             { return 1.0; },
             real t = 0);
 
-        static const uint64_t LIMITER_UGRAD_No_Flags = 0x0ull;
-        static const uint64_t LIMITER_UGRAD_Disable_Shock_Limiter = 0x1ull << 0;
+        /// @name Limiter flags
+        /// @{
+        static const uint64_t LIMITER_UGRAD_No_Flags = 0x0ull;                  ///< Default limiter flags.
+        static const uint64_t LIMITER_UGRAD_Disable_Shock_Limiter = 0x1ull << 0; ///< Disable shock-detecting component of the limiter.
+        /// @}
 
+        /**
+         * @brief Apply slope limiter to the gradient field.
+         *
+         * Limits the reconstructed gradient (uGrad) to produce a monotonicity-preserving
+         * gradient (uGradNew). Supports WBAP and CWBAP limiter variants.
+         *
+         * @param[in]  u         Cell-centered conservative DOFs.
+         * @param[in]  uGrad     Input (unlimited) gradient array.
+         * @param[out] uGradNew  Output limited gradient array.
+         * @param[in]  flags     Bitwise combination of LIMITER_UGRAD_* flags.
+         */
         void LimiterUGrad(ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew,
                           uint64_t flags = LIMITER_UGRAD_No_Flags);
 
-        static const int EvaluateURecBeta_DEFAULT = 0x00;
-        static const int EvaluateURecBeta_COMPRESS_TO_MEAN = 0x01;
+        static const int EvaluateURecBeta_DEFAULT = 0x00;           ///< Default: evaluate beta without compression.
+        static const int EvaluateURecBeta_COMPRESS_TO_MEAN = 0x01; ///< Compress reconstruction toward cell mean to enforce positivity.
+        /**
+         * @brief Evaluate the positivity-preserving reconstruction limiter (beta).
+         *
+         * For each cell, computes the maximum compression factor beta such that
+         * u_mean + beta * uRec remains physically realizable (positive density and pressure).
+         *
+         * @param[in]  u          Cell-centered conservative DOFs.
+         * @param[in]  uRec       Reconstruction coefficients.
+         * @param[out] uRecBeta   Per-cell compression factor in [0,1].
+         * @param[out] nLim       Number of cells where beta < 1.
+         * @param[out] betaMin    Global minimum beta value.
+         * @param[in]  flag       EvaluateURecBeta_DEFAULT or EvaluateURecBeta_COMPRESS_TO_MEAN.
+         */
         void EvaluateURecBeta(
             ArrayDOFV<nVarsFixed> &u,
             ArrayRECV<nVarsFixed> &uRec,
             ArrayDOFV<1> &uRecBeta, index &nLim, real &betaMin, int flag);
 
+        /**
+         * @brief Assert that all cell-mean values are physically realizable.
+         *
+         * Checks that density > 0 and internal energy > 0 for all cells.
+         *
+         * @param[in] u     Cell-centered conservative DOFs.
+         * @param[in] panic If true, abort on first violation; otherwise just report.
+         * @return true if all cells pass the check.
+         */
         bool AssertMeanValuePP(
             ArrayDOFV<nVarsFixed> &u, bool panic);
 
-        static const int EvaluateCellRHSAlpha_DEFAULT = 0x00;
-        static const int EvaluateCellRHSAlpha_MIN_IF_NOT_ONE = 0x01;
-        static const int EvaluateCellRHSAlpha_MIN_ALL = 0x02;
+        static const int EvaluateCellRHSAlpha_DEFAULT = 0x00;          ///< Default alpha evaluation mode.
+        static const int EvaluateCellRHSAlpha_MIN_IF_NOT_ONE = 0x01; ///< Take min(alpha, prev) only if prev != 1.
+        static const int EvaluateCellRHSAlpha_MIN_ALL = 0x02;        ///< Always take min(alpha, prev).
         /**
-         * @param res is incremental residual
+         * @brief Compute the positivity-preserving RHS scaling factor (alpha) per cell.
+         *
+         * Determines the maximum safe scaling alpha in [0,1] such that
+         * u + alpha * res remains physically realizable.
+         *
+         * @param[in]  u              Cell-centered conservative DOFs.
+         * @param[in]  uRec           Reconstruction coefficients.
+         * @param[in]  uRecBeta       Per-cell reconstruction beta from PP limiter.
+         * @param res  Incremental residual (the RHS increment to scale).
+         * @param[out] cellRHSAlpha   Per-cell alpha factor.
+         * @param[out] nLim           Number of cells where alpha < 1.
+         * @param[out] alphaMin       Global minimum alpha.
+         * @param[in]  relax          Relaxation factor applied to alpha.
+         * @param[in]  compress       Compression mode (1=compress, 0=clamp).
+         * @param[in]  flag           EvaluateCellRHSAlpha_* mode flag.
          */
         void EvaluateCellRHSAlpha(
             ArrayDOFV<nVarsFixed> &u,
@@ -462,8 +718,12 @@ namespace DNDS::Euler
             int flag = 0);
 
         /**
-         * @param res is incremental residual fixed previously
-         * @param cellRHSAlpha is limiting factor evaluated previously
+         * @brief Expand a previously computed cellRHSAlpha toward 1 where safe.
+         *
+         * @param res  Incremental residual fixed previously.
+         * @param cellRHSAlpha Limiting factor evaluated previously (expanded in-place).
+         * @param[out] nLim     Number of cells still limited after expansion.
+         * @param[out] alphaMin Global minimum alpha after expansion.
          */
         void EvaluateCellRHSAlphaExpansion(
             ArrayDOFV<nVarsFixed> &u,
@@ -472,11 +732,22 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &res,
             ArrayDOFV<1> &cellRHSAlpha, index &nLim, real alphaMin);
 
+        /// @brief Smooth the local time step across neighboring cells.
         void MinSmoothDTau(
             ArrayDOFV<1> &dTau, ArrayDOFV<1> &dTauNew);
 
         /******************************************************/
 
+        /**
+         * @brief Compute effective molecular viscosity using the configured viscosity model.
+         *
+         * Supports constant viscosity (muModel=0), Sutherland's law (muModel=1),
+         * and density-proportional viscosity (muModel=2).
+         *
+         * @param U Conservative state vector.
+         * @param T Temperature.
+         * @return Effective molecular dynamic viscosity.
+         */
         real muEff(const TU &U, real T) // TODO: more than sutherland law
         {
 
@@ -504,6 +775,19 @@ namespace DNDS::Euler
             return std::nan("0");
         }
 
+        /**
+         * @brief Compute turbulent eddy viscosity at a face.
+         *
+         * Dispatches to the appropriate RANS model (SA, k-omega SST, k-omega Wilcox,
+         * or Realizable k-epsilon) based on settings.ransModel.
+         *
+         * @param uMean        Cell-mean conservative state.
+         * @param GradUMeanXY  Gradient of conservative variables in physical coordinates.
+         * @param muRef        Reference dynamic viscosity scaling.
+         * @param muf          Molecular (physical) viscosity at the face.
+         * @param iFace        Face index (for wall distance lookup).
+         * @return Turbulent eddy viscosity mu_t.
+         */
         real getMuTur(const TU &uMean, const TDiffU &GradUMeanXY, real muRef, real muf, index iFace)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -533,6 +817,21 @@ namespace DNDS::Euler
             return muTur;
         }
 
+        /**
+         * @brief Compute viscous flux contribution from turbulence model variables.
+         *
+         * Adds the turbulent diffusion flux for SA (nuTilde) or two-equation (k, omega/epsilon)
+         * variables, and the turbulent normal-stress correction to the momentum and energy fluxes.
+         *
+         * @param UMeanXYC     Cell-mean state in physical coordinates.
+         * @param DiffUxyPrimC Gradient of primitive variables in physical coordinates.
+         * @param muRef        Reference viscosity scaling.
+         * @param mufPhy       Physical molecular viscosity.
+         * @param muTur        Turbulent eddy viscosity.
+         * @param uNormC       Face outward unit normal.
+         * @param iFace        Face index (for wall distance lookup).
+         * @param VisFlux      Viscous flux vector (accumulated in-place).
+         */
         void visFluxTurVariable(const TU &UMeanXYC, const TDiffU &DiffUxyPrimC,
                                 real muRef, real mufPhy, real muTur, const TVec &uNormC, index iFace, TU &VisFlux)
         {
@@ -566,6 +865,17 @@ namespace DNDS::Euler
             }
         }
 
+        /**
+         * @brief Transform a conservative state vector from cell frame to face frame for periodic BCs.
+         *
+         * Applies the periodic rotation/translation to the momentum components when
+         * the face is a periodic boundary and the cell is on the donor side.
+         *
+         * @param[in,out] u     Conservative state vector (modified in-place).
+         * @param[in]     iFace Face index.
+         * @param[in]     iCell Cell index.
+         * @param[in]     if2c  Face-to-cell local index (0=back, 1=front, <0=auto-detect).
+         */
         void UFromCell2Face(TU &u, index iFace, index iCell, rowsize if2c)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -582,6 +892,7 @@ namespace DNDS::Euler
                 u(Seq123) = mesh->periodicInfo.TransVector(Eigen::Vector<real, dim>{u(Seq123)}, faceID);
         }
 
+        /// @brief Inverse of UFromCell2Face: transform from face frame back to cell frame.
         void UFromFace2Cell(TU &u, index iFace, index iCell, rowsize if2c)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -598,6 +909,7 @@ namespace DNDS::Euler
                 u(Seq123) = mesh->periodicInfo.TransVectorBack(Eigen::Vector<real, dim>{u(Seq123)}, faceID);
         }
 
+        /// @brief Transform a state from a neighbor cell across a periodic face.
         void UFromOtherCell(TU &u, index iFace, index iCell, index iCellOther, rowsize if2c)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -612,6 +924,7 @@ namespace DNDS::Euler
                 { u(Seq123) = mesh->periodicInfo.TransVectorBack(Eigen::Vector<real, dim>{u(Seq123)}, faceID); });
         }
 
+        /// @brief Transform a gradient tensor from cell frame to face frame for periodic BCs.
         void DiffUFromCell2Face(TDiffU &u, index iFace, index iCell, rowsize if2c, bool reverse = false)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -636,6 +949,34 @@ namespace DNDS::Euler
             }
         }
 
+        /**
+         * @brief Compute the numerical flux at a face (batched over quadrature points).
+         *
+         * Evaluates the Riemann-solver-based inviscid flux and (optionally) the viscous
+         * flux at all quadrature points of a face simultaneously. Supports Roe, HLLC,
+         * Lax-Friedrichs, and other Riemann solvers selected by rsType.
+         *
+         * @param[in]  ULxy       Left state at quadrature points (batched).
+         * @param[in]  URxy       Right state at quadrature points (batched).
+         * @param[in]  ULMeanXy   Left cell mean state.
+         * @param[in]  URMeanXy   Right cell mean state.
+         * @param[in]  DiffUxy    Gradient of conservative variables at quad points.
+         * @param[in]  DiffUxyPrim Gradient of primitive variables at quad points.
+         * @param[in]  unitNorm   Face outward unit normals at quad points.
+         * @param[in]  vg         Grid velocity at quad points (for ALE / rotating frame).
+         * @param[in]  unitNormC  Face-center outward unit normal.
+         * @param[in]  vgC        Grid velocity at face center.
+         * @param[out] FLfix      Left-biased flux correction (batched).
+         * @param[out] FRfix      Right-biased flux correction (batched).
+         * @param[out] finc       Numerical flux increment (batched).
+         * @param[out] lam0V      Eigenvalue |u·n| at quad points.
+         * @param[out] lam123V    Eigenvalue |u·n + a| at quad points.
+         * @param[out] lam4V      Eigenvalue |u·n - a| at quad points.
+         * @param[in]  btype      Boundary type (UnInitIndex for internal faces).
+         * @param[in]  rsType     Riemann solver type (Roe, HLLC, LF, etc.).
+         * @param[in]  iFace      Face index.
+         * @param[in]  ignoreVis  If true, skip viscous flux computation.
+         */
         void fluxFace(
             const TU_Batch &ULxy,
             const TU_Batch &URxy,
@@ -655,6 +996,21 @@ namespace DNDS::Euler
             typename Gas::RiemannSolverType rsType,
             index iFace, bool ignoreVis);
 
+        /**
+         * @brief Compute the source term at a cell quadrature point.
+         *
+         * Evaluates body force, axisymmetric, rotating-frame, and RANS turbulence
+         * model source terms. Optionally computes the source Jacobian for implicit methods.
+         *
+         * @param[in]  UMeanXy  Conservative state at the quadrature point.
+         * @param[in]  DiffUxy  Gradient of conservative variables.
+         * @param[in]  pPhy     Physical coordinates of the quadrature point.
+         * @param[out] jacobian Source Jacobian matrix (populated if Mode=1 or 2).
+         * @param[in]  iCell    Cell index.
+         * @param[in]  ig       Quadrature point index within the cell.
+         * @param[in]  Mode     0=source vector only, 1=diagonal Jacobian, 2=full Jacobian.
+         * @return Source term vector.
+         */
         TU source(
             const TU &UMeanXy,
             const TDiffU &DiffUxy,
@@ -848,6 +1204,7 @@ namespace DNDS::Euler
             return dF;
         }
 
+        /// @brief Get the grid velocity at a face quadrature point (rotating frame).
         TVec GetFaceVGrid(index iFace, index iG)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -860,6 +1217,7 @@ namespace DNDS::Euler
             return ret;
         }
 
+        /// @brief Get the grid velocity at a face quadrature point (with explicit physical point).
         TVec GetFaceVGrid(index iFace, index iG, const Geom::tPoint &pPhy)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -873,6 +1231,7 @@ namespace DNDS::Euler
             return ret;
         }
 
+        /// @brief Get the grid velocity at a face quadrature point from a specific cell's perspective.
         TVec GetFaceVGridFromCell(index iFace, index iCell, int if2c, index iG)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -885,12 +1244,14 @@ namespace DNDS::Euler
             return ret;
         }
 
+        /// @brief Transform momentum in-place between inertial and rotating frame (velocity only).
         void TransformVelocityRotatingFrame(TU &U, const Geom::tPoint &pPhysics, int direction)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             U(Seq123) += direction * settings.frameConstRotation.vOmega().cross(pPhysics - settings.frameConstRotation.center)(Seq012) * U(0);
         }
 
+        /// @brief Transform full conservative state (momentum + total energy) between frames (relative velocity formulation).
         void TransformURotatingFrame(TU &U, const Geom::tPoint &pPhysics, int direction)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -901,6 +1262,7 @@ namespace DNDS::Euler
 #endif
         }
 
+        /// @brief Transform full conservative state for the absolute-velocity rotating frame formulation.
         void TransformURotatingFrame_ABS_VELO(TU &U, const Geom::tPoint &pPhysics, int direction)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -911,6 +1273,7 @@ namespace DNDS::Euler
 #endif
         }
 
+        /// @brief Update boundary anchor point recorders from current solution.
         void updateBCAnchors(ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -959,14 +1322,33 @@ namespace DNDS::Euler
                 v.second.ObtainAnchorMPI();
         }
 
+        /// @brief Update boundary 1-D profiles from the current solution.
         void updateBCProfiles(ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec);
 
+        /// @brief Update boundary profiles using radial-equilibrium pressure extrapolation.
         void updateBCProfilesPressureRadialEq();
 
         /**
-         * \brief
-         * iG < -1: anywhere
-         * linMode == 0: ULxy is inc, ULMeanXy is base
+         * @brief Generate the ghost (boundary) state for a boundary face.
+         *
+         * Dispatches to type-specific BC handlers (far-field, wall, outflow, inflow,
+         * symmetry, etc.) based on btype. Used by the RHS evaluator to obtain the
+         * right state at boundary faces for the Riemann solver.
+         *
+         * @param[in,out] ULxy      Left (interior) state; may be modified for certain BCs.
+         * @param[in]     ULMeanXy  Left cell-mean state (base state for linearized mode).
+         * @param[in]     iCell     Cell index adjacent to the boundary face.
+         * @param[in]     iFace     Face index.
+         * @param[in]     iG        Quadrature point index (< -1 for arbitrary location).
+         * @param[in]     uNorm     Face outward unit normal.
+         * @param[in]     normBase  Orthonormal basis with uNorm as first column.
+         * @param[in]     pPhysics  Physical coordinates of the evaluation point.
+         * @param[in]     t         Current simulation time.
+         * @param[in]     btype     Boundary type ID.
+         * @param[in]     fixUL     If true, do not modify the left state.
+         * @param[in]     geomMode  Geometry evaluation mode (0=standard).
+         * @param[in]     linMode   Linearization mode (0=nonlinear, nonzero=linearized about ULMeanXy).
+         * @return Ghost (right) state for the Riemann solver.
          */
         TU generateBoundaryValue(
             TU &ULxy, //! warning, possible that UL is also modified
@@ -1044,6 +1426,7 @@ namespace DNDS::Euler
 
     public:
 
+        /// @brief Write boundary profile data to CSV files (rank 0 only).
         void PrintBCProfiles(const std::string &name, ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
         {
             this->updateBCProfiles(u, uRec);
@@ -1060,6 +1443,7 @@ namespace DNDS::Euler
             }
         }
 
+        /// @brief Print boundary integration results (force/flux) to console on rank 0.
         void ConsoleOutputBndIntegrations()
         {
             for (auto &i : bndIntegrations)
@@ -1078,6 +1462,7 @@ namespace DNDS::Euler
             }
         }
 
+        /// @brief Append a line to the per-BC boundary integration CSV log files.
         void BndIntegrationLogWriteLine(const std::string &name, index step, index stage, index iter)
         {
             if (mesh->getMPI().rank != 0)
@@ -1105,6 +1490,15 @@ namespace DNDS::Euler
             }
         }
 
+        /**
+         * @brief Query the CL driver for current lift/drag coefficients and update AoA.
+         *
+         * Collects boundary force integrals from CL-driven boundaries, projects them
+         * onto lift/drag directions, and feeds the result to the CLDriver for AoA adaptation.
+         *
+         * @param iter Current iteration count.
+         * @return Tuple of (CL, CD, AoA) after the driver update.
+         */
         std::tuple<real, real, real> CLDriverGetIntegrationUpdate(index iter)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -1132,6 +1526,18 @@ namespace DNDS::Euler
             return {CLCur, CDCur, AOACur};
         }
 
+        /**
+         * @brief Compress a reconstruction increment to maintain positivity.
+         *
+         * Given a cell mean and reconstruction increment, returns umean + uRecInc
+         * with the increment clamped so that density, internal energy, and (for RANS)
+         * turbulent variables remain non-negative.
+         *
+         * @param umean     Cell-mean conservative state.
+         * @param uRecInc   Reconstruction polynomial increment at an evaluation point.
+         * @param compressed Set to true if compression was applied.
+         * @return Compressed reconstructed state.
+         */
         inline TU CompressRecPart(
             const TU &umean,
             const TU &uRecInc,
@@ -1224,6 +1630,18 @@ namespace DNDS::Euler
             return ret;
         }
 
+        /**
+         * @brief Compress a solution increment to maintain positivity.
+         *
+         * Given the current state u and an update increment uInc, returns a modified
+         * increment that ensures u + result has positive density, positive internal
+         * energy, and (for RANS) non-negative turbulent variables. Uses exponential
+         * decay clamping for density and a quadratic solve for internal energy.
+         *
+         * @param u    Current conservative state.
+         * @param uInc Proposed increment.
+         * @return Modified (compressed) increment safe to add to u.
+         */
         inline TU CompressInc(
             const TU &u,
             const TU &uInc)
@@ -1355,6 +1773,7 @@ namespace DNDS::Euler
             return ret;
         }
 
+        /// @brief Apply CompressInc to every cell, modifying cxInc in-place.
         void FixIncrement(
             ArrayDOFV<nVarsFixed> &cx,
             ArrayDOFV<nVarsFixed> &cxInc, real alpha = 1.0)
@@ -1363,6 +1782,16 @@ namespace DNDS::Euler
                 cxInc[iCell] = this->CompressInc(cx[iCell], cxInc[iCell] * alpha);
         }
 
+        /**
+         * @brief Add a positivity-compressed increment to the solution.
+         *
+         * For each cell, compresses the increment via CompressInc, then adds it to cx.
+         * Reports the global minimum compression factor via MPI reduction.
+         *
+         * @param[in,out] cx     Solution array (updated in-place).
+         * @param[in]     cxInc  Increment array.
+         * @param[in]     alpha  Scaling factor applied to the increment before compression.
+         */
         void AddFixedIncrement(
             ArrayDOFV<nVarsFixed> &cx,
             ArrayDOFV<nVarsFixed> &cxInc, real alpha = 1.0)
@@ -1480,6 +1909,17 @@ namespace DNDS::Euler
         //             std::cout << "Increment fixed number " << nFixed_c << std::endl;
         // }
 
+        /**
+         * @brief Apply Laplacian smoothing to a residual field.
+         *
+         * Iteratively smooths r into rs using weighted neighbor averaging.
+         * Used to stabilize central-difference residuals on coarse grids.
+         *
+         * @param[in]     r      Input residual.
+         * @param[in,out] rs     Smoothed residual (output; also used as work buffer).
+         * @param[out]    rtemp  Temporary buffer (same size as r).
+         * @param[in]     nStep  Number of smoothing passes (0 = use settings.nCentralSmoothStep).
+         */
         void CentralSmoothResidual(ArrayDOFV<nVarsFixed> &r, ArrayDOFV<nVarsFixed> &rs, ArrayDOFV<nVarsFixed> &rtemp, int nStep = 0)
         {
             for (int iterS = 1; iterS <= (nStep > 0 ? nStep : settings.nCentralSmoothStep); iterS++)
@@ -1511,16 +1951,31 @@ namespace DNDS::Euler
             }
         }
 
+        /**
+         * @brief Set initial conservative DOF values for all cells.
+         *
+         * Populates u with the far-field state (or a problem-specific initial condition)
+         * based on the evaluator settings. Handles rotating-frame velocity transformations.
+         *
+         * @param[out] u Cell-centered DOF array to initialize.
+         */
         void InitializeUDOF(ArrayDOFV<nVarsFixed> &u);
 
+        /**
+         * @brief References to arrays needed by the output data picker.
+         *
+         * Groups the solution, reconstruction, and PP-limiter arrays for
+         * use by InitializeOutputPicker to set up probe/output callbacks.
+         */
         struct OutputOverlapDataRefs
         {
-            ArrayDOFV<nVarsFixed> &u;
-            ArrayRECV<nVarsFixed> &uRec;
-            ArrayDOFV<1> &betaPP;
-            ArrayDOFV<1> &alphaPP;
+            ArrayDOFV<nVarsFixed> &u;      ///< Cell-centered conservative DOFs.
+            ArrayRECV<nVarsFixed> &uRec;   ///< Reconstruction coefficients.
+            ArrayDOFV<1> &betaPP;          ///< PP reconstruction limiter beta.
+            ArrayDOFV<1> &alphaPP;         ///< PP RHS limiter alpha.
         };
 
+        /// @brief Initialize an OutputPicker with field callbacks for VTK/HDF5 output.
         void InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs);
     };
 }

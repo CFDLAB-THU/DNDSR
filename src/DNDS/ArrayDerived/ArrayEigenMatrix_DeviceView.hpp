@@ -1,10 +1,21 @@
 #pragma once
+/// @file ArrayEigenMatrix_DeviceView.hpp
+/// @brief Device-callable view for #ArrayEigenMatrix. `operator[]` returns
+/// an `Eigen::Map<Matrix<real, Ni, Nj>>`.
 
 #include "../DeviceView.hpp"
 #include "../EigenUtil.hpp"
 
 namespace DNDS
 {
+    /**
+     * @brief Compute the underlying per-row element count for an `Ni x Nj`
+     * matrix cell.
+     *
+     * @details Resolves to `Ni*Nj` when both are compile-time fixed,
+     * `NonUniformSize` when either uses per-row sizing, or `DynamicSize`
+     * for the remaining runtime-determined cases.
+     */
     template <rowsize _mat_ni, rowsize _mat_nj>
     constexpr rowsize __OneMatGetRowSize()
     {
@@ -22,6 +33,15 @@ namespace DNDS
         }
     }
 
+    /**
+     * @brief Device-callable view onto #ArrayEigenMatrix rows.
+     *
+     * @details Mirrors the host `operator[]` -> `Eigen::Map<Matrix>` but works
+     * inside CUDA kernels. The underlying #ArrayDeviceView stores the flat row
+     * of `Ni*Nj` reals; this class reinterprets that row as an Eigen matrix.
+     *
+     * @tparam real_T `DNDS::real` or `const DNDS::real`.
+     */
     template <DeviceBackend B, class real_T, rowsize _mat_ni = 1, rowsize _mat_nj = 1,
               rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
     class ArrayEigenMatrixDeviceView : public ArrayDeviceView<B, real_T,

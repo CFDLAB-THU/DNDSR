@@ -19,7 +19,24 @@
 
 namespace DNDS
 {
-    /// @brief CSR-like index array for mesh connectivity, extending ParArray<index>.
+    /**
+     * @brief Mesh-connectivity array: `ParArray<index>` whose `operator[]`
+     * yields an #AdjacencyRow typed view.
+     *
+     * @details Used for cell-to-node, cell-to-cell, face-to-cell, ... every
+     * mesh connectivity table in DNDSR. Variable row widths (triangle vs
+     * quad vs hex) fall out naturally when instantiated with
+     * `NonUniformSize / NonUniformSize` template parameters (CSR layout);
+     * fixed-width connectivity (e.g., edges = 2 nodes) uses `ArrayAdjacency<2>`.
+     *
+     * The typed `operator[]` returns an `AdjacencyRow<index>`, a lightweight
+     * span that supports size queries, range-based `for`, conversion to
+     * `std::vector`, and assignment from `std::vector`.
+     *
+     * @tparam _row_size 1 or a small fixed edge/face size; `NonUniformSize` for
+     *                   mixed-element connectivity.
+     * @tparam _row_max  Ignored unless `_row_size == NonUniformSize` (see #Array).
+     */
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ArrayAdjacency : public ParArray<index, _row_size, _row_max, _align>
     {
@@ -33,11 +50,14 @@ namespace DNDS
         t_self &operator=(const t_self &R) = default;
         // operator= handled automatically
 
+        /// @brief Shallow copy (same semantics as assignment).
         void clone(const t_self &R)
         {
             this->operator=(R);
         }
 
+        /// @brief Typed row access; returns an #AdjacencyRow bound to the
+        /// row's pointer and width. Past-the-end queries are disabled.
         AdjacencyRow<index> operator[](index i)
         {
             DNDS_assert_info(
@@ -47,11 +67,13 @@ namespace DNDS
             return AdjacencyRow(t_base::operator[](i), t_base::RowSize(i));
         }
 
+        /// @brief Const typed row access.
         AdjacencyRow<const index> operator[](index i) const
         {
             return const_cast<t_self *>(this)->operator[](i);
         }
 
+        /// @brief Raw `index*` pointer to row `i` (bypasses the typed wrapper).
         index *rowPtr(index i) { return t_base::operator[](i); }
 
         template <DeviceBackend B>
@@ -117,19 +139,28 @@ namespace DNDS
 
 namespace DNDS
 {
-    /// @brief Single-column index array (ArrayAdjacency with fixed row size 1).
+    /**
+     * @brief `ArrayAdjacency<1>` specialisation with an integer-typed `operator[]`
+     * (returns the single index by reference instead of a row wrapper).
+     *
+     * @details Suits places where the "adjacency" is really one index per row
+     * (cell->partition map, cell->owner, etc.). Inherits all MPI / serialization
+     * plumbing from #ArrayAdjacency.
+     */
     class ArrayIndex : public ArrayAdjacency<1>
     {
     public:
         using t_base = ArrayAdjacency<1>;
         using t_base::t_base;
 
+        /// @brief Direct `index&` access to row `i`'s single element.
         index &operator[](index i)
         {
             DNDS_assert(i < this->Size()); //! disable past-end input
             return t_base::operator()(i, 0);
         }
 
+        /// @brief Raw pointer to the element of row `i`.
         index *rowPtr(index i) { return t_base::rowPtr(i); }
 
         using t_base::ReadSerializer;

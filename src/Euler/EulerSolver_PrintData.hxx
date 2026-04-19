@@ -1,3 +1,13 @@
+/** @file EulerSolver_PrintData.hxx
+ *  @brief Template implementations of EulerSolver output methods: PrintData for VTK/HDF5
+ *         volume and boundary surface output, PrintRestart/ReadRestart for checkpoint I/O,
+ *         and ReadRestartOtherSolver for cross-solver restart loading.
+ *
+ *  PrintData outputs primitive variables (rho, p, T, Mach, velocity), RANS quantities
+ *  (mut, nuTilde, k, omega), reconstruction quality (beta), cell residuals, and
+ *  boundary surface quantities (wall shear stress, Cp, Cf, y+, heat flux).
+ *  Supports time-averaged field output and configurable precision/encoding.
+ */
 #pragma once
 
 #include <future>
@@ -8,6 +18,30 @@ namespace DNDS::Euler
 {
     static const auto model = NS;
     DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    /** @brief Write volume and boundary surface data to VTK-HDF5 or legacy VTK files.
+     *
+     *  Outputs the following per-cell fields for volume data:
+     *  - Primitive variables: density, velocity components, pressure, temperature, Mach number.
+     *  - Reconstruction quality indicator (beta / smooth threshold).
+     *  - Cell residual from ODE integrator.
+     *  - RANS quantities (nuTilde for SA; k, omega/epsilon for 2-equation models).
+     *  - Additional user-registered cell scalar fields.
+     *
+     *  For boundary surface data (wall faces):
+     *  - Wall shear stress vector, pressure coefficient, skin friction coefficient.
+     *  - y+ (wall unit distance), heat flux.
+     *
+     *  Supports time-averaged mode, point-interpolated output, async I/O,
+     *  and configurable ASCII precision / VTK float encoding.
+     *
+     *  @param fname                  Base filename for volume output.
+     *  @param fnameSeries            Filename for VTK time series metadata.
+     *  @param odeResidualF           Functor returning per-cell ODE residual scalar.
+     *  @param additionalCellScalars  List of additional named cell scalar fields to output.
+     *  @param eval                   Reference to the EulerEvaluator.
+     *  @param tSimu                  Current simulation time for time-series annotation.
+     *  @param mode                   Output mode (normal or time-averaged).
+     */
     void EulerSolver<model>::PrintData(
         const std::string &fname,
         const std::string &fnameSeries,
@@ -841,6 +875,14 @@ namespace DNDS::Euler
     }
 
     DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    /** @brief Write a checkpoint/restart file containing the current solution.
+     *
+     *  Serializes the conservative variable DOF array and cell ordering information
+     *  to either JSON (per-rank directory) or HDF5 (single file with original indices
+     *  for redistribution support). Also writes the current configuration.
+     *
+     *  @param fname  Base filename for the restart output.
+     */
     void EulerSolver<model>::PrintRestart(std::string fname)
     {
         if (config.dataIOControl.restartWriter.type == "JSON")
@@ -886,6 +928,18 @@ namespace DNDS::Euler
     }
 
     DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    /** @brief Reorder restart data to match current cell ordering using cell2cellOrig mapping.
+     *
+     *  When restart data was saved with a different partition layout (JSON path),
+     *  reads the original cell ordering and permutes the read DOF to match the
+     *  current mesh partition. Falls back to direct copy with a warning if
+     *  cell2cellOrig is not available.
+     *
+     *  @param self          Reference to the EulerSolver instance.
+     *  @param u             Target DOF array (output, reordered).
+     *  @param uRead         DOF array as read from file (input).
+     *  @param serializerP   Serializer used to read cell ordering metadata.
+     */
     void paste_read_restart_with_cell_ordering(
         EulerSolver<model> &self,
         typename EulerSolver<model>::TDof &u,
@@ -939,6 +993,15 @@ namespace DNDS::Euler
     }
 
     DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    /** @brief Read a checkpoint/restart file and load the solution into the DOF array.
+     *
+     *  Supports two file formats:
+     *  - JSON directory (.dir): per-rank files with local cell ordering reorder.
+     *  - HDF5 (.dnds.h5): single file with redistributed read using original cell indices,
+     *    supporting different MPI rank counts and partition layouts from the checkpoint.
+     *
+     *  @param fname  Path to the restart file or directory.
+     */
     void EulerSolver<model>::ReadRestart(std::string fname)
     {
         if (mpi.rank == 0)
@@ -998,6 +1061,16 @@ namespace DNDS::Euler
     }
 
     DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    /** @brief Load selected DOF components from a restart file written by a different solver configuration.
+     *
+     *  Reads a restart file that may have a different number of variables (e.g.,
+     *  loading a laminar solution into a RANS solver) and copies only the specified
+     *  variable dimensions (dimStore) into the current DOF array. Supports both
+     *  JSON and HDF5 restart formats with redistribution.
+     *
+     *  @param fname     Path to the other solver's restart file.
+     *  @param dimStore  Indices of DOF components to copy from the restart file.
+     */
     void EulerSolver<model>::ReadRestartOtherSolver(std::string fname, const std::vector<int> &dimStore)
     {
         ArrayDOFV<Eigen::Dynamic> readBuf;

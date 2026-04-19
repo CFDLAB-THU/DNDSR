@@ -84,7 +84,16 @@ namespace DNDS
     spec ArrayDofOp<B, n_m, n_n>::t_element_mat DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) componentWiseNorm1(t_self &self, const t_self &R); \
     spec real DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) dot(t_self &self, const t_self &R);
 
-    /// @brief Static dispatch class providing host-side vector-space operations for ArrayDof.
+    /**
+     * @brief Host-side static dispatcher: implements every vector-space operation
+     * declared in `DNDS_ARRAY_DOF_OP_FUNC_LIST` for CPU execution.
+     *
+     * @details Each member is a `static` free-function-style routine that takes
+     * the target `ArrayDof` by reference. Explicit instantiations for the
+     * supported `(n_m, n_n)` combinations live in `ArrayDOF_inst/<...>.cpp`.
+     * The host version uses OpenMP where profitable; the CUDA specialisation
+     * (below) is a parallel mirror that dispatches to kernels.
+     */
     template <int n_m, int n_n>
     class ArrayDofOp<DeviceBackend::Host, n_m, n_n>
     {
@@ -95,6 +104,10 @@ namespace DNDS
     };
 
 #ifdef DNDS_USE_CUDA
+    /**
+     * @brief CUDA-side static dispatcher. Same interface as the host version;
+     * implemented in `ArrayDOF_inst/<...>.cu`.
+     */
     template <int n_m, int n_n>
     class ArrayDofOp<DeviceBackend::CUDA, n_m, n_n>
     {
@@ -129,7 +142,31 @@ namespace DNDS
         return (t_ops<DeviceBackend::Host>::expr); \
     }
 
-    /// @brief Degree-of-freedom array with MPI-collective vector-space operations (norm, dot, etc.).
+    /**
+     * @brief Primary solver state container: an `ArrayEigenMatrix` pair with
+     * MPI-collective vector-space operations.
+     *
+     * @details `ArrayDof<n_m, n_n>` inherits everything from
+     * #ArrayEigenMatrixPair<n_m, n_n> (father, son, transformer, typed row
+     * access as `Eigen::Map<Matrix<real, n_m, n_n>>`) and adds:
+     *  - entry-wise updates: `+= real`, `+= ArrayDof`, `*= real`, `*= matrix`, etc.;
+     *  - AXPY: #addTo;
+     *  - **MPI-collective** reductions: #norm2, #dot, #min, #max, #sum, #componentWiseNorm1.
+     *
+     * Host and CUDA backends are both supported -- the methods dispatch based
+     * on `father->device()` at the call site.
+     *
+     * CFV convenience aliases (in `CFV/VRDefines.hpp`):
+     *  - `tUDof<N>   = ArrayDof<N, 1>`              (per-cell state vector).
+     *  - `tURec<N>   = ArrayDof<DynamicSize, N>`    (reconstruction coefficients).
+     *  - `tUGrad<N,d>= ArrayDof<d, N>`              (gradients).
+     *
+     * @tparam n_m  Row count per cell (1 for state vectors).
+     * @tparam n_n  Column count per cell.
+     *
+     * @sa ArrayEigenMatrixPair, docs/architecture/arrays.md,
+     * docs/guides/array_usage.md.
+     */
     template <int n_m, int n_n>
     class ArrayDof : public ArrayEigenMatrixPair<n_m, n_n>
     {
@@ -137,17 +174,21 @@ namespace DNDS
         using t_base = ArrayEigenMatrixPair<n_m, n_n>;
         using t_base::t_base;
 
+        /// @brief Mutable device view alias.
         template <DeviceBackend B>
         using t_deviceView = ArrayDofDeviceView<B, n_m, n_n>;
+        /// @brief Const device view alias.
         template <DeviceBackend B>
         using t_deviceViewConst = ArrayDofDeviceViewConst<B, n_m, n_n>;
 
+        /// @brief Build a mutable device view (wraps the base-class implementation).
         template <DeviceBackend B>
         t_deviceView<B> deviceView()
         {
             return {t_base::template deviceView<B>()};
         }
 
+        /// @brief Build a const device view.
         template <DeviceBackend B>
         t_deviceViewConst<B> deviceView() const
         {
@@ -159,11 +200,14 @@ namespace DNDS
 
         using t_self = ArrayDof<n_m, n_n>;
 
+        /// @brief Static dispatcher alias selecting host / CUDA implementation.
         template <DeviceBackend B>
         using t_ops = ArrayDofOp<B, n_m, n_n>;
 
+        /// @brief Shape of one DOF row as an Eigen matrix.
         using t_element_mat = Eigen::Matrix<real, RowSize_To_EigenSize(n_m), RowSize_To_EigenSize(n_n)>;
 
+        /// @brief Deep copy from another ArrayDof. Delegates to the base-class clone.
         void clone(const t_self &R)
         {
             // ! no using operator= here
@@ -171,41 +215,51 @@ namespace DNDS
             // no extra data
         }
 
+        /// @brief Set every entry of every (father+son) row to the scalar `R`.
         void setConstant(real R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), setConstant(*this, R));
         }
 
+        /// @brief Set every row to the matrix `R` (must have shape `n_m x n_n`).
         void setConstant(const Eigen::Ref<const t_element_mat> &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), setConstant(*this, R));
         }
 
+        /// @brief In-place element-wise add: `this += R`.
         void operator+=(const t_self &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_plus_assign(*this, R));
         }
 
+        /// @brief Add the scalar `R` to every entry.
         void operator+=(real R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_plus_assign(*this, R));
         }
 
+        /// @brief Add a per-row matrix `R` (same to every row).
         void operator+=(const Eigen::Ref<const t_element_mat> &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_plus_assign(*this, R));
         }
 
+        /// @brief In-place element-wise subtract: `this -= R`.
         void operator-=(const t_self &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_minus_assign(*this, R));
         }
 
+        /// @brief Scalar multiply in place.
         void operator*=(real R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_mult_assign(*this, R));
         }
 
+        /// @brief Scale each row by a corresponding scalar stored in `R` (a `1x1` ArrayDof).
+        /// @details Typical use: multiply state DOFs by per-cell values such as
+        /// inverse mass. Only enabled for non-scalar DOF shapes.
         template <int n_m_T = n_m>
         std::enable_if_t<!(n_m_T == 1 && n_n == 1)>
         operator*=(const ArrayDof<1, 1> &R)
@@ -213,66 +267,79 @@ namespace DNDS
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_mult_assign_scalar_arr(*this, R));
         }
 
+        /// @brief In-place multiplication by a small fixed matrix (same applied to every row).
         void operator*=(const Eigen::Ref<const t_element_mat> &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_mult_assign(*this, R));
         }
 
+        /// @brief Element-wise multiply: `this *= R` (Hadamard).
         void operator*=(const t_self &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_mult_assign(*this, R));
         }
 
+        /// @brief Element-wise divide: `this /= R`.
         void operator/=(const t_self &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_div_assign(*this, R));
         }
 
+        /// @brief Value-copy assignment from another ArrayDof of identical layout.
         void operator=(const t_self &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_assign(*this, R));
         }
 
+        /// @brief AXPY: `this += r * R`. One of the hot-path solver primitives.
         void addTo(const t_self &R, real r)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), addTo(*this, R, r));
         }
 
+        /// @brief Global L2 norm (MPI-collective). `sqrt(sum_i sum_j x_ij^2)`.
         real norm2()
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), norm2(*this));
         }
 
+        /// @brief Global L2 distance between `this` and `R` (collective).
         real norm2(const t_self &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), norm2(*this, R));
         }
 
+        /// @brief Global minimum across all entries (collective).
         real min()
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), reduction(*this, "min"));
         }
 
+        /// @brief Global maximum across all entries (collective).
         real max()
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), reduction(*this, "max"));
         }
 
+        /// @brief Global sum of all entries (collective).
         real sum()
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), reduction(*this, "sum"));
         }
 
+        /// @brief Per-component global L1 norm, returned as an `n_m x n_n` matrix (collective).
         t_element_mat componentWiseNorm1()
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), componentWiseNorm1(*this));
         }
 
+        /// @brief Per-component global L1 distance between `this` and `R` (collective).
         t_element_mat componentWiseNorm1(const t_self &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), componentWiseNorm1(*this, R));
         }
 
+        /// @brief Global inner product: `sum_i sum_j x_ij * R_ij` (collective).
         real dot(const t_self &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), dot(*this, R));

@@ -1,4 +1,6 @@
 #pragma once
+/// @file DeviceStorage_bind.hpp
+/// @brief pybind11 binding of the #DeviceBackend enum into the Python module.
 
 #include "Defines_bind.hpp"
 #include "DeviceStorage.hpp"

@@ -1,3 +1,11 @@
+/** @file EulerEvaluator_EvaluateRHS.hxx
+ *  @brief Template implementation of EulerEvaluator::EvaluateRHS, the main spatial
+ *         right-hand side evaluation for the compressible Navier-Stokes / Euler equations.
+ *
+ *  Covers inviscid flux accumulation over internal and boundary faces, viscous flux
+ *  computation, RANS source terms, mass-force and rotating-frame source terms,
+ *  boundary integration recording, and optional direct 2nd-order reconstruction modes.
+ */
 #pragma once
 #include "EulerEvaluator.hpp"
 #include "DNDS/CppUtils/ScopedValueAlternator.hpp"
@@ -21,6 +29,29 @@ namespace DNDS::Euler
         ,
         // the intellisense friendly definition
         template <>)
+    /** @brief Evaluate the spatial right-hand side (RHS) of the semi-discrete equations.
+     *
+     *  This is the core spatial operator. It performs the following steps:
+     *  1. Loop over internal faces: reconstruct L/R states, compute inviscid numerical flux
+     *     via the selected Riemann solver, and accumulate face contributions to cell RHS.
+     *  2. Loop over boundary faces: generate ghost boundary values, compute boundary flux.
+     *  3. Loop over cells: compute viscous flux, source terms (RANS, mass force, rotating frame),
+     *     and add volume contributions.
+     *  4. Track faces where reduced-order reconstruction is used for robustness.
+     *  5. Optionally use direct 2nd-order reconstruction methods for multigrid.
+     *
+     *  @param rhs             Cell RHS residual (output, zeroed then accumulated).
+     *  @param JSource         Source-term Jacobian diagonal block (output for implicit).
+     *  @param u               Conservative variable DOF array.
+     *  @param uRecUnlim       Unlimited reconstruction coefficients.
+     *  @param uRec            Limited reconstruction coefficients.
+     *  @param uRecBeta        Per-cell reconstruction limiter coefficient.
+     *  @param cellRHSAlpha    Per-cell RHS scaling factor for positivity preservation.
+     *  @param onlyOnHalfAlpha If true, evaluate RHS only on cells with alpha < 1.
+     *  @param t               Current simulation time.
+     *  @param flags           Bitfield flags controlling viscosity, integration recording,
+     *                         direct 2nd-order reconstruction, and other options.
+     */
     void EulerEvaluator<model>::EvaluateRHS(
         ArrayDOFV<nVarsFixed> &rhs,
         JacobianDiagBlock<nVarsFixed> &JSource,

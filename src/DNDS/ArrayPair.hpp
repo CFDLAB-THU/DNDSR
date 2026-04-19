@@ -17,22 +17,33 @@
 namespace DNDS
 {
 
-    /// @brief CRTP base for device views of father-son array pairs.
+    /**
+     * @brief CRTP base implementing the unified-index accessors shared by
+     * #ArrayPairDeviceView and #ArrayPairDeviceViewConst.
+     *
+     * @details Indices in `[0, father.Size())` map to the owned-side view; indices
+     * in `[father.Size(), father.Size() + son.Size())` map to the ghost-side view
+     * with an offset subtraction. This lets stencil loops treat the father/son
+     * pair as one contiguous array. Device-callable.
+     */
     template <class Derived>
     struct ArrayPairDeviceView_Base
     {
+        /// @brief Combined father + son row count.
         DNDS_DEVICE_CALLABLE [[nodiscard]] index Size() const
         {
             auto dThis = static_cast<const Derived *>(this);
             return dThis->father.Size() + dThis->son.Size();
         }
 
+        /// @brief Uniform row width (delegates to father; father/son share it).
         DNDS_DEVICE_CALLABLE auto RowSize() const
         {
             auto dThis = static_cast<const Derived *>(this);
             return dThis->father.RowSize();
         }
 
+        /// @brief Per-row width in the combined address space.
         DNDS_DEVICE_CALLABLE auto RowSize(index i) const
         {
             auto dThis = static_cast<const Derived *>(this);
@@ -42,6 +53,7 @@ namespace DNDS
                 return dThis->son.RowSize(i - dThis->father.Size());
         }
 
+        /// @brief Row pointer for index `i` in the combined address space (const).
         DNDS_DEVICE_CALLABLE auto operator[](index i) const
         {
             auto dThis = static_cast<const Derived *>(this);
@@ -51,6 +63,7 @@ namespace DNDS
                 return dThis->son.operator[](i - dThis->father.Size());
         }
 
+        /// @brief Row pointer for index `i` (mutable).
         DNDS_DEVICE_CALLABLE auto operator[](index i)
         {
             auto dThis = static_cast<Derived *>(this);
@@ -60,6 +73,8 @@ namespace DNDS
                 return dThis->son.operator[](i - dThis->father.Size());
         }
 
+        /// @brief N-ary element access in the combined address space (mutable).
+        /// Forwards extra arguments to the underlying `operator()`.
         template <class... TOthers>
         DNDS_DEVICE_CALLABLE decltype(auto) operator()(index i, TOthers... aOthers)
         {
@@ -70,6 +85,7 @@ namespace DNDS
                 return dThis->son.operator()(i - dThis->father.Size(), aOthers...);
         }
 
+        /// @brief N-ary element access (const).
         template <class... TOthers>
         DNDS_DEVICE_CALLABLE decltype(auto) operator()(index i, TOthers... aOthers) const
         {
@@ -81,7 +97,9 @@ namespace DNDS
         }
     };
 
-    /// @brief Mutable device view of a father-son array pair.
+    /// @brief Mutable device view onto an #ArrayPair (for CUDA kernels).
+    /// @details Captures both father and son device views by value; must not
+    /// outlive the owning pair.
     template <DeviceBackend B, class TArray = ParArray<real, 1>>
     struct ArrayPairDeviceView : public ArrayPairDeviceView_Base<ArrayPairDeviceView<B, TArray>>
     {
@@ -115,19 +133,51 @@ namespace DNDS
             : father(n_father), son(n_son) {}
     };
 
-    /// @brief Father + son array pair with attached ArrayTransformer for ghost communication.
+    /**
+     * @brief Convenience bundle of a father, son, and attached #ArrayTransformer.
+     *
+     * @details `ArrayPair` is what most application code uses instead of
+     * manipulating a raw transformer. It wraps:
+     *  - `father` (owned rows) and `son` (ghost rows) as `shared_ptr<TArray>`,
+     *  - a `trans` transformer that binds the two together.
+     *
+     * `operator[]` / `operator()` treat the pair as one contiguous array of
+     * size `father->Size() + son->Size()`. Typical construction pattern:
+     *
+     * ```cpp
+     * ArrayPair<ParArray<real, 5>> u;
+     * u.InitPair("u", mpi);                  // allocates father and son
+     * u.father->Resize(nLocal);              // fill father with local data
+     * u.BorrowAndPull(primaryPair);          // ghost layout inherited; pull
+     * ```
+     *
+     * See `docs/guides/array_usage.md` for the broader "primary pair"
+     * pattern: one pair (typically `cell2cell`) does the full four-step
+     * ghost setup; every other pair on the same partition borrows from it.
+     *
+     * @tparam TArray Underlying array type (e.g., `ParArray<real, 5>`,
+     *                #ArrayAdjacency, #ArrayEigenVector).
+     */
     template <class TArray = ParArray<real, 1>>
     struct ArrayPair
     {
         using t_self = ArrayPair<TArray>;
         using t_arr = TArray;
+        /// @brief Whether the underlying array uses CSR storage.
         static constexpr bool IsCSR() { return t_arr::IsCSR(); }
 
+        /// @brief Owned-side array (must be resized before ghost setup).
         ssp<TArray> father;
+        /// @brief Ghost-side array (sized automatically by #createMPITypes / #BorrowAndPull).
         ssp<TArray> son;
         using TTrans = typename ArrayTransformerType<TArray>::Type;
+        /// @brief Ghost-communication engine bound to #father and #son.
         TTrans trans;
 
+        /// @brief Deep-copy: allocate new father / son and copy their data; rebind trans.
+        /// @details Recreates the arrays through `TArray`'s copy ctor, then
+        /// assigns `trans` from `R`. If the source's transformer was already
+        /// attached, re-attaches to the new local arrays.
         void clone(const t_self &R)
         {
             DNDS_check_throw(R.father && R.son);
@@ -144,6 +194,7 @@ namespace DNDS
                 trans.son = son;
         }
 
+        /// @brief Read-only row-pointer access in the combined address space.
         decltype(father->operator[](index(0))) operator[](index i) const
         {
             if (i >= 0 && i < father->Size())
@@ -152,6 +203,7 @@ namespace DNDS
                 return son->operator[](i - father->Size());
         }
 
+        /// @brief Mutable row-pointer access in the combined address space.
         decltype(father->operator[](index(0))) operator[](index i)
         {
             if (i >= 0 && i < father->Size())
@@ -168,6 +220,8 @@ namespace DNDS
         //         return son->operator()(i - father->Size(), j);
         // }
 
+        /// @brief N-ary element access in the combined space (mutable). Arguments
+        /// after the row index are forwarded to the underlying `operator()`.
         template <class... TOthers>
         decltype(auto) operator()(index i, TOthers... aOthers)
         {
@@ -177,6 +231,7 @@ namespace DNDS
                 return son->operator()(i - father->Size(), aOthers...);
         }
 
+        /// @brief N-ary element access (const).
         template <class... TOthers>
         decltype(auto) operator()(index i, TOthers... aOthers) const
         {
@@ -186,6 +241,10 @@ namespace DNDS
                 return son->operator()(i - father->Size(), aOthers...);
         }
 
+        /// @brief Invoke `F(array, localIndex)` on either father or son
+        /// depending on which range `i` falls into.
+        /// @details Useful when per-side state must be updated alongside the
+        /// indexed row (e.g., logging father vs son modifications).
         template <class TF>
         auto runFunctionAppendedIndex(index i, TF &&F)
         {
@@ -195,11 +254,13 @@ namespace DNDS
                 return F(*son, i - father->Size());
         }
 
+        /// @brief Uniform row width (delegates to father).
         auto RowSize() const
         {
             return father->RowSize();
         }
 
+        /// @brief Per-row width in the combined address space.
         auto RowSize(index i) const
         {
             if (i >= 0 && i < father->Size())
@@ -208,6 +269,7 @@ namespace DNDS
                 return son->RowSize(i - father->Size());
         }
 
+        /// @brief Resize a single row in the combined address space.
         void ResizeRow(index i, rowsize rs)
         {
             if (i >= 0 && i < father->Size())
@@ -216,6 +278,7 @@ namespace DNDS
                 son->ResizeRow(i - father->Size(), rs);
         }
 
+        /// @brief Variadic ResizeRow overload that forwards extra args.
         template <class... TOthers>
         void ResizeRow(index i, TOthers... aOthers)
         {
@@ -225,12 +288,16 @@ namespace DNDS
                 son->ResizeRow(i - father->Size(), aOthers...);
         }
 
+        /// @brief Combined row count (`father->Size() + son->Size()`).
         [[nodiscard]] index Size() const
         {
             DNDS_assert(father && son);
             return father->Size() + son->Size();
         }
 
+        /// @brief Bind the transformer to the current father / son pointers.
+        /// @details First step of the four-step ghost setup when not using
+        /// #BorrowAndPull. Both arrays must already be allocated.
         void TransAttach()
         {
             DNDS_check_throw_info(bool(father) && bool(son),
@@ -286,20 +353,23 @@ namespace DNDS
             this->trans.createMPITypes();
         }
 
+        /// @brief Compress both father and son CSR arrays (no-op for non-CSR layouts).
         void CompressBoth()
         {
             father->Compress();
             son->Compress();
         }
 
+        /// @brief Copy only the father's data from another pair (shallow).
         void CopyFather(t_self &R)
         {
             father->CopyData(*R.father);
         }
 
         /**
-         * \warning force waiting and re initializing persistent
-         *
+         * @brief Swap both father and son data with another pair of the same type.
+         * @warning Because the data pointers change, persistent MPI requests
+         * (if any) are rebuilt on both sides via #reInitPersistentPullPush.
          */
         // TODO: make a data change listener in transformer?
         //! a situation: the data pointer should remain static as long as initPersistentPuxx is done
@@ -311,6 +381,7 @@ namespace DNDS
             R.trans.reInitPersistentPullPush();
         }
 
+        /// @brief Combined hash across ranks. Used for determinism / equality checks in tests.
         std::size_t hash()
         {
             auto fatherHash = father->hash();
@@ -576,12 +647,16 @@ namespace DNDS
             }
         }
 
+        /// @brief Device-view template alias: `t_deviceView<DeviceBackend::CUDA>`
+        /// gives the mutable CUDA view type for this pair.
         template <DeviceBackend B>
         using t_deviceView = ArrayPairDeviceView<B, TArray>;
 
+        /// @brief Const-device-view template alias.
         template <DeviceBackend B>
         using t_deviceViewConst = ArrayPairDeviceViewConst<B, TArray>;
 
+        /// @brief Produce a mutable device view; both father and son must be allocated.
         template <DeviceBackend B>
         auto deviceView()
         {
@@ -593,6 +668,7 @@ namespace DNDS
                 son->template deviceView<B>()};
         }
 
+        /// @brief Produce a const device view.
         template <DeviceBackend B>
         auto deviceView() const
         {
@@ -604,6 +680,7 @@ namespace DNDS
                 std::as_const(*son).template deviceView<B>()};
         }
 
+        /// @brief Mirror both father and son to the given device backend.
         void to_device(DeviceBackend backend)
         {
             if (father)
@@ -612,6 +689,7 @@ namespace DNDS
                 son->to_device(backend);
         }
 
+        /// @brief Bring both father and son mirrors back to host memory.
         void to_host()
         {
             if (father)
@@ -621,18 +699,25 @@ namespace DNDS
         }
     };
 
+    /// @brief #ArrayPair alias for mesh adjacency (variable-width integer rows).
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     using ArrayAdjacencyPair = ArrayPair<ArrayAdjacency<_row_size, _row_max, _align>>;
 
+    /// @brief #ArrayPair alias for per-row Eigen vectors (e.g., node coords with N=3).
     template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
     using ArrayEigenVectorPair = ArrayPair<ArrayEigenVector<_vec_size, _row_max, _align>>;
 
+    /// @brief #ArrayPair alias for per-row Eigen matrices.
     template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
               rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
     using ArrayEigenMatrixPair = ArrayPair<ArrayEigenMatrix<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>>;
 
+    /// @brief #ArrayPair alias for per-row variable-size Eigen matrix batches.
     using ArrayEigenMatrixBatchPair = ArrayPair<ArrayEigenMatrixBatch>;
 
+    /// @brief #ArrayPair alias for per-row batches of uniform `_n_row x _n_col` matrices.
+    /// @details Used by `FiniteVolume` / `VariationalReconstruction` to store
+    /// per-quadrature-point Jacobians and basis coefficients.
     template <int _n_row, int _n_col>
     using ArrayEigenUniMatrixBatchPair = ArrayPair<ArrayEigenUniMatrixBatch<_n_row, _n_col>>;
 }

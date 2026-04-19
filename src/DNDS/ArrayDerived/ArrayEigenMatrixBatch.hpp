@@ -14,7 +14,18 @@
 
 namespace DNDS
 {
-    /// @brief Batch of variable-sized Eigen matrices stored in CSR layout.
+    /**
+     * @brief CSR array storing a variable-sized batch of Eigen matrices per row.
+     *
+     * @details Unlike #ArrayEigenUniMatrixBatch the matrices in a batch may have
+     * different shapes, so each row carries a self-describing size prefix (see
+     * `MatrixBatch` in VectorUtils.hpp). Used where a cell's quadrature rule /
+     * basis count is not known a priori at compile time.
+     *
+     * Populate rows with #InitializeWriteRow given a vector of concrete Eigen
+     * matrices. After that, #operator()(i,j) yields an `Eigen::Map` view onto
+     * the `j`-th matrix of row `i`.
+     */
     // has to use non uniform?
     class ArrayEigenMatrixBatch : public ParArray<real, NonUniformSize>
     {

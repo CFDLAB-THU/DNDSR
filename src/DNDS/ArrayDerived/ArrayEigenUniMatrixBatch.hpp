@@ -15,7 +15,21 @@
 
 namespace DNDS
 {
-    /// @brief Batch of uniform-sized Eigen matrices with variable batch count per row.
+    /**
+     * @brief CSR array whose rows store a *batch* of identically-sized Eigen matrices.
+     *
+     * @details Each row holds `BatchSize(i)` matrices of shape `_n_row x _n_col`,
+     * contiguous in memory. The raw CSR row width is `BatchSize(i) * _n_row * _n_col`,
+     * but the public API exposes batched semantics: `BatchSize` reports the matrix
+     * count, `operator()(i, j)` returns the `j`-th matrix in row `i`'s batch.
+     *
+     * Used heavily by #FiniteVolume and #VariationalReconstruction to store
+     * per-quadrature-point Jacobians and basis-function coefficients: each cell
+     * contributes one row, each quadrature point contributes one matrix.
+     *
+     * @tparam _n_row Row count of each stored matrix (compile time or `Eigen::Dynamic`).
+     * @tparam _n_col Column count of each stored matrix.
+     */
     template <int _n_row, int _n_col>
     class ArrayEigenUniMatrixBatch : public ParArray<real, NonUniformSize, NonUniformSize, NoAlign> // use CSR array
     {

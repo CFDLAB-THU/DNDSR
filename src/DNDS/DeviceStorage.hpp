@@ -16,15 +16,22 @@
 
 namespace DNDS
 {
-    /// @brief Enumerates available device backends (Host, CUDA, etc.).
+    /**
+     * @brief Enumerates the backends a #DeviceStorage / #Array can live on.
+     *
+     * @details `Host` is always available; `CUDA` is compiled in when
+     * #DNDS_USE_CUDA is defined. Additional slots (`Custom1`, ...) are
+     * placeholders for future backends (e.g., HIP, SYCL) that can be plugged
+     * in by providing new factory specialisations.
+     */
     enum class DeviceBackend
     {
-        Unknown = 0,
-        Host = 1,
+        Unknown = 0, ///< Unset / sentinel.
+        Host = 1,    ///< Plain CPU memory.
 #ifdef DNDS_USE_CUDA
-        CUDA = 2,
+        CUDA = 2,    ///< NVIDIA CUDA device memory.
 #endif
-        Custom1 = 101,
+        Custom1 = 101, ///< Reserved slot for a project-specific backend.
     };
 
     // To extend backend:
@@ -40,6 +47,7 @@ namespace DNDS
     // implement      explicit instantiations of Host code,               like Geom/PeriodicInfo.cpp
     // implement      explicit instantiations of each needed device code, like Geom/PeriodicInfo.cu
 
+    /// @brief Canonical string name for a #DeviceBackend (used in log messages).
     inline const char *device_backend_name(DeviceBackend B)
     {
         switch (B)
@@ -58,6 +66,7 @@ namespace DNDS
         }
     }
 
+    /// @brief Inverse of #device_backend_name. Returns `Unknown` for unrecognised names.
     inline DeviceBackend device_backend_name_to_enum(std::string_view s)
     {
         if (s == "Host")
@@ -70,36 +79,56 @@ namespace DNDS
     }
 
     class DeviceStorageBase;
+    /// @brief Stateless deleter for #DeviceStorageBase that works across shared-library
+    /// boundaries where the vtable of `unique_ptr`'s default deleter would not.
     void deviceStorageBase_deleter(DeviceStorageBase *p); // safe deleter to maintain cross-DLL safety
 
+    /// @brief Owning unique pointer to a #DeviceStorageBase with cross-DLL-safe deleter.
     using t_supDeviceStorageBase = std::unique_ptr<DeviceStorageBase, std::function<void(DeviceStorageBase *)>>;
+    /// @brief Shared pointer equivalent of #t_supDeviceStorageBase.
     using t_sspDeviceStorageBase = std::shared_ptr<DeviceStorageBase>;
 
+    /// @brief Null-value helper for #t_supDeviceStorageBase.
     inline t_supDeviceStorageBase null_supDeviceStorageBase()
     {
         return {nullptr, deviceStorageBase_deleter};
     }
 
-    /// @brief Abstract interface for device memory management (copy, query, lifetime).
+    /**
+     * @brief Abstract interface to a byte buffer owned by a specific backend.
+     *
+     * @details All DNDS device memory ultimately goes through this interface so
+     * that the higher-level `host_device_vector<T>` can be backend-agnostic.
+     * Concrete backends provide specialised #DeviceStorage<B> implementations;
+     * creation funnels through #device_storage_factory.
+     */
     class DeviceStorageBase
     {
     public:
+        /// @brief Raw byte pointer to the underlying storage.
         virtual uint8_t *raw_ptr() = 0;
+        /// @brief Copy `n_bytes` from `host_ptr` into this device buffer.
         virtual void copy_host_to_device(uint8_t *host_ptr, size_t n_bytes) = 0;
+        /// @brief Copy `n_bytes` from this device buffer into `host_ptr`.
         virtual void copy_device_to_host(uint8_t *host_ptr, size_t n_bytes) = 0;
+        /// @brief Device-to-device copy of `n_bytes` into `device_ptr_dst`.
         virtual void copy_to_device(uint8_t *device_ptr_dst, size_t n_bytes) = 0;
         //! =0 is a definition and all virtual functions must be defined to have vtable
         //! never omit =0 or use {}
+        /// @brief Buffer size in bytes.
         [[nodiscard]] virtual size_t bytes() const = 0;
+        /// @brief Which backend the buffer lives on.
         [[nodiscard]] virtual DeviceBackend backend() const = 0;
         virtual ~DeviceStorageBase();
     };
 
-    /// @brief Concrete device storage implementation, specialized per DeviceBackend.
+    /// @brief Compile-time-specialised storage class; one definition per #DeviceBackend.
     template <DeviceBackend B>
     class DeviceStorage;
 
-    /// @brief Factory for creating DeviceStorage instances for a given backend.
+    /// @brief Factory functions for constructing #DeviceStorageBase instances of
+    /// a specific backend. Specialised per backend so that the concrete type
+    /// creation can live in backend-specific translation units.
     template <DeviceBackend B>
     struct device_storage_factory
     {
@@ -128,6 +157,8 @@ namespace DNDS
 
 #endif
 
+    /// @brief Top-level factory: dispatches to the per-backend factory based on
+    /// `backend`. Returns a null `unique_ptr` for #DeviceBackend::Unknown.
     inline t_supDeviceStorageBase device_storage_create(DeviceBackend backend, size_t n_bytes)
     {
         switch (backend)

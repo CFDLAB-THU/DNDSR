@@ -8,44 +8,70 @@
 namespace DNDS
 {
 
+    /**
+     * @brief Enumeration of the five concrete data layouts supported by #Array.
+     *
+     * @details The value is determined at compile time from `_row_size` and
+     * `_row_max` template parameters. See the layout table in Array.hpp.
+     */
     enum DataLayout
     {
-        ErrorLayout,
-        TABLE_StaticFixed,
-        TABLE_Fixed,
-        TABLE_Max,
-        TABLE_StaticMax,
-        CSR,
+        ErrorLayout,        ///< Invalid combination of template parameters.
+        TABLE_StaticFixed,  ///< Fixed row width, known at compile time.
+        TABLE_Fixed,        ///< Fixed row width, set at runtime (uniform across rows).
+        TABLE_Max,          ///< Padded variable rows; max width set at runtime.
+        TABLE_StaticMax,    ///< Padded variable rows; max width fixed at compile time.
+        CSR,                ///< Compressed Sparse Row (flat buffer + row-start index).
     };
 
+    /// @brief Whether the layout uses a TABLE (padded) representation (vs CSR).
     constexpr bool isTABLE(DataLayout lo)
     {
         return lo == TABLE_StaticFixed || lo == TABLE_Fixed || lo == TABLE_Max || lo == TABLE_StaticMax;
     }
+    /// @brief Whether the layout has a uniform row width (no per-row size needed).
     constexpr bool isTABLE_Fixed(DataLayout lo)
     {
         return lo == TABLE_StaticFixed || lo == TABLE_Fixed;
     }
+    /// @brief Whether the layout is a padded-max variant (uses `_pRowSizes`).
     constexpr bool isTABLE_Max(DataLayout lo)
     {
         return lo == TABLE_Max || lo == TABLE_StaticMax;
     }
+    /// @brief Whether the layout has a compile-time row-size constant.
     constexpr bool isTABLE_Static(DataLayout lo)
     {
         return lo == TABLE_StaticFixed || lo == TABLE_StaticMax;
     }
+    /// @brief Whether the layout carries a runtime row-size parameter.
     constexpr bool isTABLE_Dynamic(DataLayout lo)
     {
         return lo == TABLE_Fixed || lo == TABLE_Max;
     }
 
+    /// @brief Whether `T` is legal as an `Array` element type (trivially copyable
+    /// or a fixed-size real Eigen matrix). Controls CUDA/MPI copy paths.
     template <class T>
     constexpr bool array_comp_acceptable()
     {
         return std::is_trivially_copyable_v<T> || Meta::is_fixed_data_real_eigen_matrix_v<T>;
     }
 
-    /// @brief Compile-time array layout descriptor mapping template args to data layout.
+    /**
+     * @brief Compile-time layout descriptor deducing the concrete #DataLayout
+     * from element type and row-size template arguments.
+     *
+     * @details Serves as a base class for #Array / #ArrayView and as a static
+     * namespace of helpers (signature strings, compatibility checks). Carries
+     * no runtime state of its own.
+     *
+     * @tparam T         Element type.
+     * @tparam _row_size Row size (>=0 / DynamicSize / NonUniformSize).
+     * @tparam _row_max  Row max (>=0 / DynamicSize / NonUniformSize; only used
+     *                   when `_row_size == NonUniformSize`).
+     * @tparam _align    Alignment hint (currently only `NoAlign` implemented).
+     */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size,
               // rowsize _depth_size = 1,
               rowsize _align = NoAlign>
@@ -70,6 +96,7 @@ namespace DNDS
         static const rowsize s_T = al == NoAlign ? sizeof_T : (sizeof_T / al + 1) * al;
         static_assert(s_T >= sizeof_T && s_T - sizeof_T < (al == NoAlign ? 1 : al), "I1");
 
+        /// @brief Deduce the #DataLayout tag from the template parameters.
         static constexpr DataLayout _GetDataLayout()
         {
             if constexpr (rs != DynamicSize && rs != NonUniformSize && rs >= 0)
@@ -94,6 +121,10 @@ namespace DNDS
         static_assert(_dataLayout != ErrorLayout, "Layout Error");
         static const bool isCSR = _dataLayout == CSR;
 
+        /// @brief Human-readable type identifier including element typeid, sizes, and alignment.
+        /// @details Format: `"<Layout>__<typeid>_<sizeof_T>_<rs>_<rm>_<al>"`.
+        /// Primarily for debugging / error messages. Not stable across compilers
+        /// (uses `typeid(T).name()`); use #GetArraySignature for persisted data.
         static std::string GetArrayName()
         {
             std::string Layout;
@@ -113,6 +144,11 @@ namespace DNDS
                    "_" + Align_To_PySnippet(_align);
         }
 
+        /// @brief Compiler-independent identifier used by serializers to tag an array.
+        /// @details Format: `"<Layout>__<sizeof_T>_<rs>_<rm>_<al>"`, where template
+        /// parameters are encoded numerically (so `-1` = DynamicSize, `-2` = NonUniformSize).
+        /// Stable across compilers; used for compatibility checks during
+        /// serialized restart.
         static std::string GetArraySignature()
         {
             std::string Layout;
@@ -132,6 +168,10 @@ namespace DNDS
                    "_" + std::to_string(_align);
         }
 
+        /// @brief Signature with `_row_size` / `_row_max` replaced by DynamicSize.
+        /// @details Used when we want two arrays to match regardless of compile-time
+        /// row-size constants (e.g., compare a `DynamicSize` reader against a
+        /// fixed-size writer file).
         static std::string GetArraySignatureRelaxed()
         {
             std::string Layout;
@@ -152,6 +192,9 @@ namespace DNDS
                    "_" + std::to_string(_align);
         }
 
+        /// @brief Parse a signature string into `(sizeof_T, row_size, row_max, align)`.
+        /// @details Accepts both #GetArrayName (6 components incl. typeid) and
+        /// #GetArraySignature (5 components) forms; returns the last 4 fields.
         static std::tuple<int, int, int, int> ParseArraySignatureTuple(const std::string &v)
         {
             auto strings = splitSStringClean(v, '_');
@@ -160,6 +203,9 @@ namespace DNDS
             return std::make_tuple(std::stoi(strings[sz - 4]), std::stoi(strings[sz - 3]), std::stoi(strings[sz - 2]), std::stoi(strings[sz - 1]));
         }
 
+        /// @brief Whether a stored signature can be read into this array type.
+        /// @details Requires matching `sizeof(T)` and compatible row-size constants:
+        /// fixed row sizes must be equal when both sides declare them.
         static bool ArraySignatureIsCompatible(const std::string &v)
         {
             auto [sz, rs, rm, align] = ParseArraySignatureTuple(v);
@@ -173,7 +219,18 @@ namespace DNDS
         }
     };
 
-    /// @brief Non-owning read-only view of an Array's data buffer.
+    /**
+     * @brief Non-owning, device-callable view onto an #Array.
+     *
+     * @details Captures pointers to the flat data buffer and the structural
+     * arrays (`_rowstart_or_rowsize`) plus the nested-vector pointer for CSR
+     * decompressed. It is the type responsible for actually implementing
+     * `operator[]` / `operator()` indexing across every layout, and is marked
+     * `__host__ __device__` to work inside CUDA kernels.
+     *
+     * Instances are typically produced by `Array::view()` and must not outlive
+     * the owning `Array`.
+     */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size,
               // rowsize _depth_size = 1,
               rowsize _align = NoAlign>
@@ -221,6 +278,7 @@ namespace DNDS
     public:
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayView, self_type)
 
+        /// @brief Construct a view from raw pointers. Intended for internal use by `Array::view()`.
         DNDS_DEVICE_CALLABLE ArrayView(index n_size, T *n_data, index n_data_size,
                                        const index *n_rowstart, index n_rowstart_size,
                                        const rowsize *n_rowsizes, index n_rowsizes_size,
@@ -253,6 +311,7 @@ namespace DNDS
             }
         }
 
+        /// @brief Whether the underlying array is in the compressed (flat) form (always true for non-CSR).
         DNDS_DEVICE_CALLABLE [[nodiscard]] bool isCompressed() const
         {
             if constexpr (_dataLayout == CSR)
@@ -261,8 +320,10 @@ namespace DNDS
                 return true;
         }
 
+        /// @brief Number of rows in the viewed array.
         DNDS_DEVICE_CALLABLE [[nodiscard]] index Size() const { return _size; }
 
+        /// @brief Uniform row width for fixed layouts (asserts otherwise).
         // to be device-callable
         DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize RowSize() const
         {
@@ -307,6 +368,7 @@ namespace DNDS
         }
 
     public:
+        /// @brief Per-row width. Handles CSR compressed and decompressed modes.
         // to be device-callable
         DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize RowSize(index iRow) const
         {
@@ -325,6 +387,7 @@ namespace DNDS
                 return this->RowSize_Compressed(iRow);
         }
 
+        /// @brief Maximum row width (TABLE_*Max only).
         // to be device-callable
         DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize RowSizeMax() const
         {
@@ -335,6 +398,7 @@ namespace DNDS
             return UnInitRowsize;
         }
 
+        /// @brief "Logical" row-field width used by derived Eigen arrays; see Array::RowSizeField.
         // to be device-callable
         DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize RowSizeField() const
         {
@@ -347,6 +411,7 @@ namespace DNDS
             return UnInitRowsize;
         }
 
+        /// @brief Per-row "field" size for CSR (= actual row width).
         // to be device-callable
         DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize RowSizeField(index iRow) const
         {
@@ -390,6 +455,8 @@ namespace DNDS
         }
 
     public:
+        /// @brief Bounds-checked element read (not device-callable because CSR
+        /// decompressed uses `std::vector::at` which throws on the host).
         // not device callable
         const T &at(index iRow, rowsize iCol) const
         {
@@ -404,11 +471,13 @@ namespace DNDS
                 return this->at_compressed(iRow, iCol);
         }
 
+        /// @brief 2D indexed access (writable). See `at`.
         T &operator()(index iRow, rowsize iCol = 0)
         {
             return const_cast<T &>(at(iRow, iCol));
         }
 
+        /// @brief 2D indexed access (read-only).
         const T &operator()(index iRow, rowsize iCol = 0) const
         {
             return at(iRow, iCol);
@@ -442,9 +511,10 @@ namespace DNDS
 
     public:
         /**
-         * @brief iRow could be past-the-end to query past-the-end position pointer
+         * @brief Raw row pointer. `iRow == Size()` is allowed for past-the-end
+         * queries (useful for computing buffer end in sweeps).
          *
-         * @param iRow
+         * @param iRow Row index.
          * @return T*
          */
         T *operator[](index iRow)
@@ -468,11 +538,14 @@ namespace DNDS
                 return this->get_rowstart_pointer_compressed(iRow);
         }
 
+        /// @brief Const row pointer; see the non-const overload.
         const T *operator[](index iRow) const
         {
             return static_cast<const T *>(const_cast<self_type *>(this)->operator[](iRow));
         }
 
+        /// @brief Raw pointer to the start of the flat data buffer.
+        /// @details For CSR, requires compressed form. Device-callable.
         DNDS_DEVICE_CALLABLE T *data()
         {
             if constexpr (_dataLayout == CSR)
@@ -480,6 +553,7 @@ namespace DNDS
             return get_rowstart_pointer_compressed(0);
         }
 
+        /// @brief Size of the flat data buffer in `T` elements.
         DNDS_DEVICE_CALLABLE size_t DataSize() const
         {
             if (this->Size() == 0)
@@ -489,12 +563,19 @@ namespace DNDS
             return _data_size;
         }
 
+        /// @brief Pointer equality (two views referring to the same buffer).
         DNDS_DEVICE_CALLABLE bool operator==(const self_type &R) const
         {
             return R._data == _data;
         }
 
-        /// @brief Non-owning view of a single row within an Array.
+        /**
+         * @brief Non-owning view of a single row: `{pointer, size}`.
+         *
+         * @details Supports indexing, iteration (`begin`/`end`), copy-in / copy-out
+         * from `std::vector`, and an `assign_value` kernel-safe copy. Returned by
+         * iterators derived from #ArrayIteratorBase.
+         */
         class RowView
         {
             T *ptr = nullptr;
@@ -545,7 +626,14 @@ namespace DNDS
         };
     };
 
-    /// @brief CRTP iterator base for Array row traversal.
+    /**
+     * @brief CRTP base for row-granularity iterators over an #Array / #ArrayView.
+     *
+     * @details Provides all comparison / arithmetic operators for a random-access
+     * iterator (the `difference_type` is `std::ptrdiff_t` on a row basis); the
+     * derived class supplies `getView()` and `operator*`. Used by
+     * `Array::iterator<B>` for both host and device traversal.
+     */
     template <class Derived>
     class ArrayIteratorBase
     {

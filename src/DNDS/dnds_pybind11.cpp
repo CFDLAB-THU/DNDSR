@@ -1,3 +1,9 @@
+/// @file dnds_pybind11.cpp
+/// @brief pybind11 entry point for the `dnds_pybind11` Python module.
+///
+/// Dispatches to the per-header `pybind11_bind_*` helpers so every DNDS
+/// component can register its own bindings in isolation. The resulting
+/// shared library is loaded by `DNDSR.DNDS` on the Python side.
 
 #include "DNDS/DeviceStorage_bind.hpp"
 #include "MPI_bind.hpp"
@@ -13,6 +19,10 @@
 
 #include "Serializer_bind.hpp"
 
+/// @brief pybind11 module initialiser for `dnds_pybind11`.
+/// @details Calls each component's `pybind11_bind_*` function against the
+/// shared module object, in a safe dependency order (Defines, DeviceStorage,
+/// MPI, IndexMapping, Array, ArrayDerived, ArrayDOF, Serializer).
 PYBIND11_MODULE(dnds_pybind11, m)
 {
     DNDS::pybind11_bind_defines(m);

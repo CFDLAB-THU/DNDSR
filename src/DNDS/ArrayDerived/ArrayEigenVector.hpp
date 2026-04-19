@@ -14,7 +14,25 @@
 
 namespace DNDS
 {
-    /// @brief Per-row Eigen vector array; each row is accessed as an Eigen::Map over contiguous storage.
+    /**
+     * @brief `ParArray<real, N>` whose `operator[]` returns an `Eigen::Map<Vector>`.
+     *
+     * @details Each row stores an `N`-component vector of `real`. `operator[]`
+     * produces an `Eigen::Map` so user code can write natural linear-algebra
+     * expressions directly on array storage without copies:
+     *
+     * ```cpp
+     * ArrayEigenVector<3> coords;
+     * coords.Resize(nLocal);
+     * coords[iNode] << x, y, z;       // write
+     * real mag = coords[iNode].norm(); // read
+     * ```
+     *
+     * Used chiefly for node coordinates (`ArrayEigenVectorPair<3>`) and per-cell
+     * fluxes.
+     *
+     * @tparam _vec_size Vector length. `1`, small fixed size, or `DynamicSize`.
+     */
     template <rowsize _vec_size = 1, rowsize _row_max = _vec_size, rowsize _align = NoAlign>
     class ArrayEigenVector : public ParArray<real, _vec_size, _row_max, _align>
     {
@@ -28,10 +46,14 @@ namespace DNDS
         template <DeviceBackend B>
         using t_deviceViewConst = ArrayEigenVectorDeviceView<B, const real, _vec_size, _row_max, _align>;
 
+        /// @brief Owning Eigen vector matching the row shape.
         using t_EigenVector = typename t_deviceView<DeviceBackend::Host>::t_EigenVector;
+        /// @brief Mutable Eigen map view onto a row.
         using t_EigenMap = typename t_deviceView<DeviceBackend::Host>::t_EigenMap;
+        /// @brief Const Eigen map view onto a row.
         using t_EigenMap_Const = typename t_deviceView<DeviceBackend::Host>::t_EigenMap_Const;
 
+        /// @brief Canonical "snapshot" type produced by value-returning helpers.
         using t_copy = t_EigenVector;
 
     public:
@@ -40,16 +62,19 @@ namespace DNDS
         t_self &operator=(const t_self &R) = default;
         // operator= handled automatically
 
+        /// @brief Shallow clone (same semantics as assignment).
         void clone(const t_self &R)
         {
             this->operator=(R);
         }
 
+        /// @brief Mutable row-as-Eigen-map accessor.
         t_EigenMap operator[](index i)
         {
             return {t_base::operator[](i), t_base::RowSize(i)}; // need static dispatch?
         }
 
+        /// @brief Const row-as-Eigen-map accessor.
         t_EigenMap_Const operator[](index i) const
         {
             return {t_base::operator[](i), t_base::RowSize(i)};
@@ -58,12 +83,14 @@ namespace DNDS
         using t_base::ReadSerializer;
         using t_base::WriteSerializer; //! because no extra data than Array<>
 
+        /// @brief Mutable device view (Eigen::Map rows on the given backend).
         template <DeviceBackend B>
         auto deviceView()
         {
             return t_deviceView<B>{this->t_base::template deviceView<B>()};
         }
 
+        /// @brief Const device view.
         template <DeviceBackend B>
         auto deviceView() const
         {

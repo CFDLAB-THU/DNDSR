@@ -3,7 +3,7 @@
  *
  * @tableofcontents
  *
- * @section test_overview Overview
+ * @section dnds_tests_overview Overview
  *
  * The DNDSR project uses the [doctest](https://github.com/doctest/doctest)
  * (v2.4.11) framework for C++ unit testing.  Test sources live under
@@ -202,7 +202,7 @@
  *   `WriteString`/`ReadString` (HDF5 attributes).
  * - **SerializerH5 vector** &mdash; `WriteRealVector`, `WriteIndexVector`
  *   with explicit `ArrayGlobalOffset`; read with `ArrayGlobalOffset_Unknown`
- *   auto-detection from `::rank_offsets` companion dataset.
+ *   auto-detection from the `rank_offsets` companion dataset.
  * - **SerializerH5 distributed vector** &mdash; non-uniform per-rank sizes,
  *   read with both `ArrayGlobalOffset_Unknown` and explicit offset.
  * - **SerializerH5 uint8** &mdash; two-pass read (nullptr size query, then

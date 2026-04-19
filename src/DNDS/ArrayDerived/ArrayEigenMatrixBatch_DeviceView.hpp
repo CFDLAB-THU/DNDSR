@@ -1,4 +1,11 @@
 #pragma once
+/// @file ArrayEigenMatrixBatch_DeviceView.hpp
+/// @brief Device-callable views and on-buffer matrix-batch helpers for
+/// #ArrayEigenMatrixBatch (variable-sized matrix batches per row).
+///
+/// Also defines a `MatrixBatch<real_T>` utility class that packs multiple
+/// variable-shaped matrices into a single flat buffer using 32-bit size-pair
+/// headers so each row can self-describe its matrix shapes.
 
 #include "../DeviceView.hpp"
 #include "DNDS/Defines.hpp"
@@ -10,6 +17,20 @@
 
 namespace DNDS
 {
+    /**
+     * @brief Packed variable-shape matrix-batch layout inside a flat buffer.
+     *
+     * @details Each row of #ArrayEigenMatrixBatch stores several matrices whose
+     * shapes may differ. `MatrixBatch` provides:
+     *  - nested `UInt32PairIn64` / `UInt16QuadIn64` helpers to pack two 32-bit
+     *    (or four 16-bit) integers into a single 64-bit word (matrix shape headers);
+     *  - size computation (`getBufSize`) and compression (`CompressIn`) for
+     *    an input vector of Eigen matrices;
+     *  - `operator()(j)` that returns an `Eigen::Map` onto the `j`-th matrix
+     *    inside the already-compressed row buffer.
+     *
+     * The templated `real_T` allows both mutable and const variants.
+     */
     template <class real_T = real>
     class MatrixBatch
     {

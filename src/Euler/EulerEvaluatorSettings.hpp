@@ -1,3 +1,22 @@
+/** @file EulerEvaluatorSettings.hpp
+ *  @brief Complete solver configuration for the Euler/Navier-Stokes evaluator.
+ *
+ *  Contains the EulerEvaluatorSettings template struct which aggregates all
+ *  runtime parameters for the compressible flow solver:
+ *  - Jacobian options (scalar vs. Roe, wall treatment).
+ *  - Reconstruction and limiting parameters.
+ *  - Riemann solver selection and tuning.
+ *  - Wall-distance computation settings.
+ *  - RANS turbulence model selection (SA, k-omega) and DES length scales.
+ *  - Viscous flux and source term options.
+ *  - Rotating reference frame (FrameConstRotation).
+ *  - CL (lift-coefficient) driver configuration.
+ *  - Region-based initial conditions (box, plane, exprtk).
+ *  - Ideal gas thermodynamic properties.
+ *
+ *  All settings use DNDS_DECLARE_CONFIG for automatic JSON schema generation
+ *  and serialization/deserialization.
+ */
 #pragma once
 #include "DNDS/JsonUtil.hpp"
 #include "DNDS/ConfigParam.hpp"
@@ -9,83 +28,142 @@
 
 namespace DNDS::Euler
 {
+    /**
+     * @brief Master configuration struct for the compressible Euler/Navier-Stokes evaluator.
+     *
+     * Organizes all solver-tunable parameters into a single struct that supports
+     * JSON round-trip serialization via DNDS_DECLARE_CONFIG. After deserialization,
+     * the finalize() hook validates cross-field constraints (e.g. mutually exclusive
+     * Jacobian modes) and computes derived reference quantities.
+     *
+     * @tparam model  The EulerModel tag (e.g. NS_SA_3D) that determines variable
+     *                count, spatial dimension, and available turbulence model traits.
+     */
     template <EulerModel model>
     struct EulerEvaluatorSettings
     {
-        using Traits = EulerModelTraits<model>;
-        static const int nVarsFixed = getnVarsFixed(model);
-        static const int dim = getDim_Fixed(model);
-        static const int gDim = getGeomDim_Fixed(model);
-        static const auto I4 = dim + 1;
+        using Traits = EulerModelTraits<model>;              ///< Compile-time model traits.
+        static const int nVarsFixed = getnVarsFixed(model);  ///< Compile-time variable count.
+        static const int dim = getDim_Fixed(model);          ///< Physical dimension (2 or 3).
+        static const int gDim = getGeomDim_Fixed(model);     ///< Geometric dimension (may differ for axi-symmetric).
+        static const auto I4 = dim + 1;                      ///< Index of the energy equation in the state vector.
 
-        bool useScalarJacobian = false;
-        bool useRoeJacobian = false;
-        bool noRsOnWall = false;
-        bool noGRPOnWall = false;
-        bool ignoreSourceTerm = false;
+        /// @name Jacobian Options
+        /// @{
+        bool useScalarJacobian = false;  ///< Use scalar (diagonal) Jacobian approximation instead of block.
+        bool useRoeJacobian = false;     ///< Use Roe-linearization-based Jacobian.
+        bool noRsOnWall = false;         ///< Disable the Riemann solver on wall boundary faces.
+        bool noGRPOnWall = false;        ///< Disable the Generalized Riemann Problem (GRP) on wall faces.
+        bool ignoreSourceTerm = false;   ///< Completely ignore source terms (must be false when RANS or body forces are active).
+        /// @}
 
-        int direct2ndRecMethod = 1;
+        /// @name Reconstruction
+        /// @{
+        int direct2ndRecMethod = 1;        ///< Direct 2nd-order reconstruction method selector.
+        int specialBuiltinInitializer = 0; ///< Index of a built-in special initializer (0 = none).
+        real uRecAlphaCompressPower = 1;   ///< Alpha compression power for the reconstruction limiter.
+        real uRecBetaCompressPower = 1;    ///< Beta compression power for the reconstruction limiter.
+        bool forceVolURecBeta = true;      ///< Force volume-based beta in the reconstruction.
+        bool ppEpsIsRelaxed = false;       ///< Use relaxed positivity-preserving epsilon.
+        /// @}
 
-        int specialBuiltinInitializer = 0;
+        real RANSBottomLimit = 0.01;       ///< Lower clamp for RANS turbulence variables.
 
-        real uRecAlphaCompressPower = 1;
-        real uRecBetaCompressPower = 1;
-        bool forceVolURecBeta = true;
-        bool ppEpsIsRelaxed = false;
+        /// @name Riemann Solver Configuration
+        /// @{
+        Gas::RiemannSolverType rsType = Gas::Roe;             ///< Primary Riemann solver type.
+        Gas::RiemannSolverType rsTypeAux = Gas::UnknownRS;    ///< Auxiliary Riemann solver type (UnknownRS = same as primary).
+        Gas::RiemannSolverType rsTypeWall = Gas::UnknownRS;   ///< Wall-face Riemann solver type (UnknownRS = same as primary).
+        real rsFixScale = 1;          ///< Entropy-fix scaling factor for the Riemann solver.
+        real rsIncFScale = 1;         ///< Incremental flux scaling factor.
+        int rsMeanValueEig = 0;       ///< Mean-value eigenvalue computation mode.
+        int rsRotateScheme = 0;       ///< Riemann solver rotation scheme selector.
+        /// @}
 
-        real RANSBottomLimit = 0.01;
+        /// @name Wall-Distance Computation
+        /// @{
+        real minWallDist = 1e-12;           ///< Minimum wall distance clamp (avoids singularities).
+        int wallDistExection = 0;           ///< Execution mode: 0 = parallel, 1 = serial.
+        real wallDistRefineMax = 1;         ///< Maximum wall-distance refinement factor.
+        int wallDistScheme = 0;             ///< Wall-distance computation scheme selector.
+        int wallDistCellLoadSize = 1024 * 32; ///< Cell batch size for wall-distance computation.
+        int wallDistIter = 1000;            ///< Maximum iterations for the wall-distance solver.
+        int wallDistLinSolver = 0;          ///< Linear solver: 0 = Jacobi, 1 = GMRES.
+        real wallDistResTol = 1e-4;         ///< Residual tolerance for wall-distance convergence.
+        int wallDistIterStart = 100;        ///< Starting iteration count for the wall-distance solver.
+        int wallDistPoissonP = 2;           ///< Poisson equation power in the wall-distance PDE.
+        real wallDistDTauScale = 100.;      ///< Pseudo-time step scaling for wall-distance solver.
+        int wallDistNJacobiSweep = 10;      ///< Number of Jacobi sweeps per wall-distance iteration.
+        /// @}
 
-        Gas::RiemannSolverType rsType = Gas::Roe;
-        Gas::RiemannSolverType rsTypeAux = Gas::UnknownRS;
-        Gas::RiemannSolverType rsTypeWall = Gas::UnknownRS;
-        real rsFixScale = 1;
-        real rsIncFScale = 1;
-        int rsMeanValueEig = 0;
-        int rsRotateScheme = 0;
-        real minWallDist = 1e-12;
-        int wallDistExection = 0; // 1 is serial
-        real wallDistRefineMax = 1;
-        int wallDistScheme = 0;
-        int wallDistCellLoadSize = 1024 * 32;
-        int wallDistIter = 1000;
-        int wallDistLinSolver = 0; // 0 for jacobi, 1 for gmres
-        real wallDistResTol = 1e-4;
-        int wallDistIterStart = 100;
-        int wallDistPoissonP = 2;
-        real wallDistDTauScale = 100.;
-        int wallDistNJacobiSweep = 10;
-        real SADESScale = veryLargeReal;
-        int SADESMode = 1;
-        RANSModel ransModel = RANSModel::RANS_None;
-        int ransUseQCR = 0;
-        int ransSARotCorrection = 1;
-        int ransEigScheme = 0;
-        int ransForce2nd = 0;
-        int ransSource2nd = 0;
-        int source2nd = 0;
-        int usePrimGradInVisFlux = 0;
-        int useSourceGradFixGG = 0;
-        int nCentralSmoothStep = 0;
-        real centralSmoothEps = 0.5;
-        Eigen::Vector<real, 3> constMassForce = Eigen::Vector<real, 3>{0, 0, 0};
+        /// @name RANS / DES Configuration
+        /// @{
+        real SADESScale = veryLargeReal;    ///< SA-DES length scale (veryLargeReal effectively disables DES).
+        int SADESMode = 1;                  ///< SA-DES mode selector (1 = DDES, etc.).
+        RANSModel ransModel = RANSModel::RANS_None; ///< RANS turbulence model (RANS_None, RANS_SA, RANS_KOWilcox, etc.).
+        int ransUseQCR = 0;                ///< Enable QCR (Quadratic Constitutive Relation) correction.
+        int ransSARotCorrection = 1;       ///< SA rotation/curvature correction mode.
+        int ransEigScheme = 0;             ///< Eigenvalue computation scheme for RANS.
+        int ransForce2nd = 0;              ///< Force 2nd-order accuracy for RANS variables.
+        int ransSource2nd = 0;             ///< Enable 2nd-order RANS source term discretization.
+        /// @}
+
+        /// @name Viscous Flux and Source Options
+        /// @{
+        int source2nd = 0;                 ///< Enable 2nd-order source term discretization.
+        int usePrimGradInVisFlux = 0;      ///< Use primitive-variable gradients in viscous flux.
+        int useSourceGradFixGG = 0;        ///< Apply Green-Gauss gradient fix for source terms.
+        int nCentralSmoothStep = 0;        ///< Number of central-difference smoothing steps.
+        real centralSmoothEps = 0.5;       ///< Epsilon for central smoothing.
+        Eigen::Vector<real, 3> constMassForce = Eigen::Vector<real, 3>{0, 0, 0}; ///< Constant body force vector [fx, fy, fz].
+        /// @}
+        /**
+         * @brief Constant-rotation reference frame settings.
+         *
+         * When enabled, the solver transforms the governing equations into
+         * a non-inertial frame rotating at a constant angular velocity about
+         * the specified axis through the specified center.
+         */
         struct FrameConstRotation
         {
-            bool enabled = false;
-            Geom::tPoint axis = Geom::tPoint{0, 0, 1};
-            Geom::tPoint center = Geom::tPoint{0, 0, 0};
-            real rpm = 0;
+            bool enabled = false;                            ///< Enable the rotating frame.
+            Geom::tPoint axis = Geom::tPoint{0, 0, 1};      ///< Rotation axis (unit vector; normalized in finalize()).
+            Geom::tPoint center = Geom::tPoint{0, 0, 0};    ///< Center of rotation [x, y, z].
+            real rpm = 0;                                    ///< Rotational speed in revolutions per minute.
+
+            /// @brief Compute angular velocity magnitude (rad/s) from RPM.
+            /// @return Omega = rpm * 2π / 60.
             real Omega()
             {
                 return rpm * (2 * pi / 60.);
             }
+
+            /// @brief Return the angular velocity vector (axis * Omega).
+            /// @return 3-D omega vector aligned with the rotation axis.
             Geom::tPoint vOmega()
             {
                 return axis * Omega();
             }
+
+            /**
+             * @brief Project a position vector onto the plane perpendicular to the axis.
+             * @param r  Position vector in the absolute frame.
+             * @return Radial component of @p r (axis-normal projection).
+             */
             Geom::tPoint rVec(const Geom::tPoint &r)
             {
                 return r - r.dot(axis) * axis;
             }
+
+            /**
+             * @brief Build the local cylindrical (r, θ, z) coordinate frame at position @p r.
+             *
+             * Column 0 = radial unit vector, column 1 = tangential (axis × r̂),
+             * column 2 = axial (same as the rotation axis).
+             *
+             * @param r  Position vector in the absolute frame.
+             * @return 3×3 matrix whose columns are the (r, θ, z) basis vectors.
+             */
             Geom::tGPoint rtzFrame(const Geom::tPoint &r)
             {
                 Geom::tPoint rn = rVec(r).normalized();
@@ -102,14 +180,20 @@ namespace DNDS::Euler
                 DNDS_FIELD(center,  "Rotation center coordinates");
                 DNDS_FIELD(rpm,     "Rotational speed in RPM");
             }
-        } frameConstRotation;
-        CLDriverSettings cLDriverSettings;
-        std::vector<std::string> cLDriverBCNames;
-        Eigen::Vector<real, -1> farFieldStaticValue = Eigen::Vector<real, 5>{1, 0, 0, 0, 2.5};
+        } frameConstRotation; ///< Rotating reference frame configuration.
+        CLDriverSettings cLDriverSettings;        ///< Lift-coefficient (CL) driver settings.
+        std::vector<std::string> cLDriverBCNames; ///< Boundary zone names for CL driver force integration.
+        Eigen::Vector<real, -1> farFieldStaticValue = Eigen::Vector<real, 5>{1, 0, 0, 0, 2.5}; ///< Far-field reference state vector (size = nVars).
+        /**
+         * @brief Axis-aligned box region for initial condition specification.
+         *
+         * Cells whose centroids lie within [x0,x1]×[y0,y1]×[z0,z1] are
+         * initialized to the state vector @c v.
+         */
         struct BoxInitializer
         {
-            real x0{0}, x1{0}, y0{0}, y1{0}, z0{0}, z1{0};
-            Eigen::Vector<real, -1> v;
+            real x0{0}, x1{0}, y0{0}, y1{0}, z0{0}, z1{0}; ///< Box bounds [min, max] per axis.
+            Eigen::Vector<real, -1> v;                       ///< Initial state vector (size = nVars).
 
             DNDS_DECLARE_CONFIG(BoxInitializer)
             {
@@ -122,12 +206,18 @@ namespace DNDS::Euler
                 DNDS_FIELD(v,  "Initial value vector (size = nVars)");
             }
         };
-        std::vector<BoxInitializer> boxInitializers;
+        std::vector<BoxInitializer> boxInitializers; ///< List of box-region initial condition specifiers.
 
+        /**
+         * @brief Half-space region for initial condition specification.
+         *
+         * Cells satisfying `a*x + b*y + c*z >= h` are initialized to the
+         * state vector @c v. The normal direction is (a, b, c).
+         */
         struct PlaneInitializer
         {
-            real a{0}, b{0}, c{0}, h{0};
-            Eigen::Vector<real, -1> v;
+            real a{0}, b{0}, c{0}, h{0}; ///< Plane equation coefficients: a*x + b*y + c*z = h.
+            Eigen::Vector<real, -1> v;    ///< Initial state vector (size = nVars).
 
             DNDS_DECLARE_CONFIG(PlaneInitializer)
             {
@@ -138,17 +228,28 @@ namespace DNDS::Euler
                 DNDS_FIELD(v, "Initial value vector (size = nVars)");
             }
         };
-        std::vector<PlaneInitializer> planeInitializers;
+        std::vector<PlaneInitializer> planeInitializers; ///< List of plane-region initial condition specifiers.
 
+        /**
+         * @brief Expression-based initial condition using the ExprTk library.
+         *
+         * Evaluates user-supplied mathematical expressions (one per line in @c exprs)
+         * to compute the initial state at each cell centroid. Lines are concatenated
+         * with newlines to form a single ExprTk program string.
+         */
         struct ExprtkInitializer
         {
-            std::vector<std::string> exprs;
+            std::vector<std::string> exprs; ///< ExprTk expression lines (concatenated with newlines).
 
             DNDS_DECLARE_CONFIG(ExprtkInitializer)
             {
                 DNDS_FIELD(exprs, "Expression lines (concatenated with newlines)");
             }
 
+            /**
+             * @brief Concatenate all expression lines into a single ExprTk program string.
+             * @return The full expression string with newline separators.
+             */
             std::string GetExpr() const
             {
                 std::string ret;
@@ -157,18 +258,25 @@ namespace DNDS::Euler
                 return ret;
             }
         };
-        std::vector<ExprtkInitializer> exprtkInitializers;
+        std::vector<ExprtkInitializer> exprtkInitializers; ///< List of ExprTk-based initial condition specifiers.
 
+        /**
+         * @brief Ideal gas thermodynamic property set.
+         *
+         * Stores gamma, gas constant, viscosity parameters, and Prandtl number.
+         * The heat capacity CpGas is a derived quantity recomputed automatically
+         * after deserialization via the post_read hook calling recomputeDerived().
+         */
         struct IdealGasProperty
         {
-            real gamma = 1.4;
-            real Rgas = 1;
-            real muGas = 1;
-            real prGas = 0.72;
-            real CpGas = Rgas * gamma / (gamma - 1); // derived, not serialized
-            real TRef = 273.15;
-            real CSutherland = 110.4;
-            int muModel = 1; // 0=constant, 1=sutherland, 2=constant_nu
+            real gamma = 1.4;                                  ///< Ratio of specific heats (Cp/Cv).
+            real Rgas = 1;                                     ///< Specific gas constant (J/(kg·K) in dimensional runs).
+            real muGas = 1;                                    ///< Dynamic viscosity (or reference viscosity for Sutherland).
+            real prGas = 0.72;                                 ///< Prandtl number.
+            real CpGas = Rgas * gamma / (gamma - 1);           ///< Heat capacity at constant pressure (derived, not serialized).
+            real TRef = 273.15;                                ///< Reference temperature (K) for Sutherland's law.
+            real CSutherland = 110.4;                          ///< Sutherland constant (K).
+            int muModel = 1;                                   ///< Viscosity model: 0 = constant, 1 = Sutherland, 2 = constant_nu.
 
             DNDS_DECLARE_CONFIG(IdealGasProperty)
             {
@@ -187,20 +295,20 @@ namespace DNDS::Euler
                 config.post_read([](T &s) { s.recomputeDerived(); });
             }
 
-            /// Recompute derived quantities after deserialization.
+            /// @brief Recompute derived quantities (CpGas) from gamma and Rgas after deserialization.
             void recomputeDerived()
             {
                 CpGas = Rgas * gamma / (gamma - 1);
             }
-        } idealGasProperty;
+        } idealGasProperty; ///< Ideal gas thermodynamic property configuration.
 
         /***************************************************************************************************/
         // end of setting entries
         /***************************************************************************************************/
 
         int _nVars = 0; ///< Runtime nVars, not serialized. Set by ctor, preserved across from_json.
-        Eigen::Vector<real, -1> refU;
-        Eigen::Vector<real, -1> refUPrim;
+        Eigen::Vector<real, -1> refU;     ///< Reference conservative state (derived from farFieldStaticValue).
+        Eigen::Vector<real, -1> refUPrim; ///< Reference primitive state (derived from farFieldStaticValue).
 
         DNDS_DECLARE_CONFIG(EulerEvaluatorSettings)
         {
@@ -289,8 +397,18 @@ namespace DNDS::Euler
             config.post_read([](T &s) { s.finalize(); });
         }
 
+        /// @brief Default constructor (used for schema emission; _nVars remains 0).
         EulerEvaluatorSettings() = default;
 
+        /**
+         * @brief Construct with a known variable count and set model-appropriate defaults.
+         *
+         * If the model includes SA or 2-equation RANS traits, the default ransModel
+         * is set accordingly. The farFieldStaticValue is sized to @p nVars and
+         * initialized to a default freestream state.
+         *
+         * @param nVars  Number of conservative variables for this model.
+         */
         EulerEvaluatorSettings(int nVars) : _nVars(nVars)
         {
             if constexpr (Traits::hasSA)
@@ -308,9 +426,18 @@ namespace DNDS::Euler
             farFieldStaticValue(I4) = 2.5;
         }
 
-        /// @brief Post-deserialization finalization: semantic checks and derived quantities.
-        /// Uses the stored _nVars set by the constructor. Called automatically by post_read
-        /// hook after from_json, or explicitly after copy-construction.
+        /**
+         * @brief Post-deserialization finalization: cross-field validation and derived quantities.
+         *
+         * Checks dimensional consistency of farFieldStaticValue, boxInitializers, and
+         * planeInitializers against _nVars. Normalizes the rotation axis if the rotating
+         * frame is enabled. Computes refU and refUPrim from the far-field state and ideal
+         * gas properties for use as reference scales in the solver.
+         *
+         * Uses the stored _nVars set by the constructor. Called automatically by the
+         * post_read hook after from_json, or explicitly after copy-construction.
+         * If _nVars <= 0 (e.g. default-constructed for schema emission), this is a no-op.
+         */
         void finalize()
         {
             int nVars = _nVars;

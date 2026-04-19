@@ -1,4 +1,11 @@
 #pragma once
+/// @file Array_bind.hpp
+/// @brief pybind11 bindings for #Array / #ParArray / #ArrayPair.
+///
+/// Provides templated helper functions (`pybind11_Array_name_appends`,
+/// `pybind11_Array_declare_*`, ...) that mechanically generate Python classes
+/// for every instantiated `(T, row_size, row_max)` combination. See the
+/// `ArrayPair.hpp` and `ArrayTransformer.hpp` corresponding C++ types.
 
 #include "Array.hpp"
 #include "ArrayTransformer.hpp"

@@ -13,24 +13,42 @@
 namespace DNDS
 {
 
-    /// @brief Abstract interface for a single host-or-device memory allocation.
+    /**
+     * @brief Abstract single-allocation owning byte buffer.
+     *
+     * @details A cross-backend "uniquely owned chunk of memory" interface:
+     * either a plain `std::vector<uint8_t>` on the host, or a
+     * backend-specific #DeviceStorage on a device. Used as the storage
+     * primitive for #host_device_vector_r1.
+     */
     class DeviceHostSingleAllocationBase
     {
     public:
         DeviceHostSingleAllocationBase() = default;
         virtual ~DeviceHostSingleAllocationBase();
 
+        /// @brief Allocate `bytes` on backend `B` (or on the host when `Unknown`).
         virtual void allocate(size_t bytes, DeviceBackend B = DeviceBackend::Unknown) = 0;
+        /// @brief Release the allocation.
         virtual void free() = 0;
+        /// @brief Typed byte pointer to the current allocation.
         virtual uint8_t *get() = 0;
+        /// @brief Allocation size in bytes.
         virtual size_t bytes() const = 0;
+        /// @brief Which backend currently owns the allocation.
         virtual DeviceBackend device() = 0;
+        /// @brief Copy `n` bytes from `host_src` into this allocation.
         virtual void copy_from_host(uint8_t *host_src, size_t n) = 0;
+        /// @brief Copy `n` bytes from this allocation into `host_dst`.
         virtual void copy_to_host(uint8_t *host_dst, size_t n) = 0;
+        /// @brief Deep copy; returns a new allocation containing the same bytes.
         virtual std::unique_ptr<DeviceHostSingleAllocationBase> clone() = 0;
     };
 
-    /// @brief Concrete host/device allocation using std::vector (host) or DeviceStorage (device).
+    /**
+     * @brief Concrete #DeviceHostSingleAllocationBase using `std::vector<uint8_t>`
+     * for host memory and #DeviceStorage for device memory.
+     */
     class DeviceHostSingleAllocationDirect : public DeviceHostSingleAllocationBase
     {
         t_supDeviceStorageBase device_storage;
@@ -119,7 +137,12 @@ namespace DNDS
         }
     };
 
-    /// @brief Non-owning device-side view of a contiguous typed array.
+    /**
+     * @brief Non-owning device-callable view `{pointer, size}` over a typed array.
+     *
+     * @details Analogue of `std::span<T>` that compiles inside `__device__` code.
+     * Constant copy semantics (trivially copyable); must not outlive its backing storage.
+     */
     template <DeviceBackend B, typename T, typename TSize = int64_t>
     class vector_DeviceView
     {
@@ -146,7 +169,11 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE TSize size() const { return _size; }
     };
 
-    /// @brief CRTP base providing operator[] and at() for vector-like types.
+    /**
+     * @brief CRTP base offering `operator[]` / `at` on top of a derived's
+     * `data()` and `size()` accessors. Used by both #host_device_vector_r1 and
+     * (implicitly) #host_device_vector_r0.
+     */
     template <class T, class Derived>
     class data_vector_base
     {
@@ -173,7 +200,18 @@ namespace DNDS
         }
     };
 
-    /// @brief Primary host-device vector with separate host and optional GPU device storage.
+    /**
+     * @brief Host + optional device vector of trivially copyable `T`.
+     *
+     * @details Primary storage type used inside #Array. Always maintains a
+     * host copy; on demand, a device mirror can be created via #to_device.
+     * Many "vector-like" `std::vector` operations (`resize`, `assign`,
+     * `operator[]`) have been reimplemented so the class can be used as a
+     * drop-in replacement in DNDSR code paths that need device-awareness.
+     *
+     * Use the variant #host_device_vector (a thin alias below) to pick up
+     * the appropriate specialisation based on element type.
+     */
     template <typename T>
     class host_device_vector_r1 : public data_vector_base<T, host_device_vector_r1<T>>
     {
@@ -364,7 +402,13 @@ namespace DNDS
         }
     };
 
-    /// @brief Legacy host-device vector extending std::vector<T> with optional device storage.
+    /**
+     * @brief Legacy `std::vector<T>` subclass with an optional device mirror.
+     *
+     * @details Simpler predecessor of #host_device_vector_r1, kept for
+     * third-party interop that expected a true `std::vector<T>`. Prefer
+     * #host_device_vector (aliased to `_r1`) for new code.
+     */
     template <typename T>
     struct host_device_vector_r0 : public std::vector<T>
     {
@@ -477,6 +521,8 @@ namespace DNDS
         }
     };
 
+    /// @brief Primary public alias: `host_device_vector<T>` = #host_device_vector_r1<T>.
+    /// Prefer this name throughout the code base.
     template <class T>
     using host_device_vector = host_device_vector_r1<T>;
 }

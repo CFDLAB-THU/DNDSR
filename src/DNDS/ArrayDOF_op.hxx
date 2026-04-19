@@ -1,4 +1,15 @@
 #pragma once
+/// @file ArrayDOF_op.hxx
+/// @brief Host-side implementations of #ArrayDofOp vector-space operations.
+///
+/// Each function (setConstant, +=, -=, *=, /=, addTo, norm2, dot, reduction,
+/// componentWiseNorm1, ...) is defined once here as a template over `(n_m, n_n)`.
+/// Explicit instantiations for the supported `(n_m, n_n)` combinations live in
+/// `ArrayDOF_inst/<...>.cpp`; the CUDA mirror lives in `ArrayDOF_op_CUDA.cuh`.
+///
+/// The file uses `#pragma omp` to parallelise row-wise loops when #DNDS_DIST_MT_USE_OMP
+/// is defined, so the choice of distributed-vs-threaded execution is a
+/// build-time decision.
 
 #include "ArrayDOF.hpp"
 #include "DNDS/Defines.hpp"

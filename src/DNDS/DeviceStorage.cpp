@@ -1,3 +1,7 @@
+/// @file DeviceStorage.cpp
+/// @brief Host-backend implementation of #DeviceStorage and the
+/// #deviceStorageBase_deleter helper.
+
 #include "DeviceStorage.hpp"
 #include "DeviceStorage.hxx"
 

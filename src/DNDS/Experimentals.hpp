@@ -1,4 +1,12 @@
 #pragma once
+/// @file Experimentals.hpp
+/// @brief Compile-time feature flags for experimental / research code paths.
+///
+/// Each `#define USE_*` enables a non-default behaviour somewhere in the
+/// solver (reconstruction, entropy fixes, turbulence models, moving mesh, ...).
+/// They are collected here so the build provenance can be inspected via
+/// #DNDS_Experimentals_State at run time.
+
 #include <string>
 
 // #define USE_ECCENTRIC_COMB_POW_2
@@ -11,32 +19,43 @@
 // #define USE_FLUX_BALANCE_TERM // TODO: decide how to flux balance for moving mesh
 // TODO: this option has been deleted, re-implement in the evaluate rhs code
 
+/// @brief Entropy-fix applied to SA turbulence-model advection lambdas.
 #define USE_ENTROPY_FIXED_LAMBDA_IN_SA
 
+/// @brief Zero the SA variable `nu_tilde` exactly at wall cells.
 #define USE_FIX_ZERO_SA_NUT_AT_WALL
 
 // #define USE_SIGN_MINUS_AT_ROE_M4_FLUX
 
+/// @brief Use first-order viscous wall distance inside the VR weight calculation.
 #define USE_FIRST_ORDER_VISCOUS_WALL_DELTA_IN_VR_WEIGHT
 
+/// @brief Use first-order (nearest-node) wall distance globally.
 #define USE_FIRST_ORDER_WALL_DIST
 
 // #define USE_MG_O1_NO_VISCOUS
 
 // #define USE_MG_O1_LLF_FLUX
 
+/// @brief Enable the negative SA formulation of Allmaras et al. (allows
+/// `nu_tilde < 0` with a modified source term).
 #define USE_NS_SA_NEGATIVE_MODEL
 
 // #define USE_NS_SA_NUT_REDUCED_ORDER
 
 // #define USE_NS_SA_ALLOW_NEGATIVE_MEAN
 
+/// @brief Use absolute (inertial-frame) velocities in rotating-frame source
+/// terms rather than relative velocity.
 #define USE_ABS_VELO_IN_ROTATION
 
 /*-------------------------------------------------------------------------------------------------*/
 /*-------------------------------------------------------------------------------------------------*/
 /*-------------------------------------------------------------------------------------------------*/
 
+/// @brief Run-time-inspectable concatenation of every experimental flag that
+/// was active during compilation. Accessed via `DNDS::GetSetVersionName` or
+/// directly from diagnostics printers.
 static const std::string DNDS_Experimentals_State = std::string("DNDS_Experimentals ")
 #ifdef USE_ECCENTRIC_COMB_POW_2
                                                     + " USE_ECCENTRIC_COMB_POW_2 "

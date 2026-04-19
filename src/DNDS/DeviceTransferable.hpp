@@ -12,26 +12,30 @@
 
 namespace DNDS
 {
-    /// @brief CRTP mixin providing device management methods.
-    ///
-    /// The Derived class must provide a method template:
-    ///
-    ///     template <typename F>
-    ///     void for_each_device_member(F&& f);
-    ///
-    /// where F is called with each `MemberRef<ArrayPairType>` element.
-    /// A simple implementation delegates to for_each_member_list:
-    ///
-    ///     template <typename F>
-    ///     void for_each_device_member(F&& f)
-    ///     {
-    ///         for_each_member_list(device_array_list(), std::forward<F>(f));
-    ///     }
-    ///
+    /**
+     * @brief CRTP mixin giving a class uniform `to_device` / `to_host` / `device` /
+     * `getDeviceArrayBytes` methods.
+     *
+     * @details The derived class only has to expose its device-managed members
+     * via a `for_each_device_member(F&&)` method template that invokes `F(m)`
+     * once per `MemberRef<ArrayPairType>`:
+     *
+     * ```cpp
+     * template <typename F>
+     * void for_each_device_member(F&& f)
+     * {
+     *     for_each_member_list(device_array_list(), std::forward<F>(f));
+     * }
+     * ```
+     *
+     * Once that is in place, all four member functions below iterate every
+     * registered pair and forward the device operation.
+     */
     template <typename Derived>
     class DeviceTransferable
     {
     public:
+        /// @brief Mirror every registered #ArrayPair to the given device backend.
         void to_device(DeviceBackend B)
         {
             auto op = [B](auto &v)
@@ -41,6 +45,7 @@ namespace DNDS
             self().for_each_device_member(op);
         }
 
+        /// @brief Pull every registered pair back to host memory.
         void to_host()
         {
             auto op = [](auto &v)
@@ -50,6 +55,9 @@ namespace DNDS
             self().for_each_device_member(op);
         }
 
+        /// @brief Consistent device backend across all registered pairs.
+        /// @details Asserts that every pair's father and son live on the same
+        /// backend; throws a descriptive message if not.
         DeviceBackend device()
         {
             DeviceBackend B = DeviceBackend::Unknown;
@@ -82,6 +90,7 @@ namespace DNDS
             return B;
         }
 
+        /// @brief Total footprint of every registered father+son pair in bytes.
         index getDeviceArrayBytes()
         {
             index bytes = 0;

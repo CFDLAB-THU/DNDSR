@@ -40,22 +40,57 @@ namespace DNDS
 {
 
     /**
-     * @brief 2D var-len data container template
+     * @brief Core 2D variable-length array container, the storage foundation of DNDSR.
+     *
      * @details
-     * ## Array's types
+     * `Array` is a single template that unifies five distinct storage layouts
+     * used throughout the CFD code base (cell volumes, conservative variables,
+     * mesh connectivity, reconstruction coefficients, etc.). The layout is
+     * chosen at compile time by combining `_row_size` and `_row_max`:
+     *
+     * ## Array layouts
      * |                         | _row_size>=0                         | _row_size==DynamicSize              | _row_size==NonUniformSize |
      * | ---                     |          ---                         |                    ---              |                       --- |
      * |_row_max>=0              |  TABLE_StaticFixed                   |  TABLE_Fixed                        |   TABLE_StaticMax         |
      * |_row_max==DynamicSize    |  TABLE_StaticFixed _row_max ignored  |  TABLE_Fixed  _row_max ignored      |   TABLE_Max               |
      * |_row_max==NonUniformSize |  TABLE_StaticFixed _row_max ignored  |  TABLE_Fixed  _row_max ignored      |   CSR                     |
      *
-     * @todo //TODO implement align feature
+     * Concrete semantics per layout:
+     * - **TABLE_StaticFixed**: every row has `_row_size` elements (compile-time
+     *   constant). Used for Euler state vectors (5 reals), cell volumes (1),
+     *   coordinates (3), etc.
+     * - **TABLE_Fixed**: every row has the same runtime-determined width
+     *   (`_row_size_dynamic`). Used when the width depends on solver settings
+     *   (e.g., reconstruction polynomial order).
+     * - **TABLE_StaticMax / TABLE_Max**: rows are padded to a maximum width
+     *   (`_row_max` compile-time or runtime), with an auxiliary `_pRowSizes`
+     *   vector giving the actual used width per row. Offers O(1) random access
+     *   at the cost of wasted space for short rows.
+     * - **CSR**: flat buffer plus `_pRowStart[n+1]`. No wasted space but needs
+     *   pointer indirection. Two internal sub-states: *compressed* (flat) and
+     *   *decompressed* (`vector<vector<T>>`, used during incremental row growth).
+     *   `Compress()` must be called before MPI communication or serialization.
      *
+     * The class inherits from #ObjectNaming so each instance may carry a
+     * human-readable name (e.g. `"coords"`, `"cell2node"`) shown in assertions.
      *
-     * @tparam T
-     * @tparam _row_size
-     * @tparam _row_max
-     * @tparam _align
+     * @tparam T         Element type. Typically #real (double) or #index (int64_t).
+     *                   Must be trivially copyable for CUDA / MPI paths.
+     * @tparam _row_size Row width:
+     *                   - `>=0`   fixed width at compile time;
+     *                   - #DynamicSize    uniform width set at Resize();
+     *                   - #NonUniformSize variable per row (combined with `_row_max`).
+     * @tparam _row_max  Only relevant when `_row_size == NonUniformSize`:
+     *                   - `>=0`   `TABLE_StaticMax` layout;
+     *                   - #DynamicSize    `TABLE_Max` layout;
+     *                   - #NonUniformSize `CSR` layout.
+     * @tparam _align    Alignment hint (currently only `NoAlign` is used).
+     *
+     * @sa ArrayBasic.hpp for the layout enum and signature parsing.
+     * @sa ArrayTransformer for adding MPI ghost communication.
+     * @sa ArrayPair for the typical father/son bundle.
+     * @sa docs/architecture/arrays.md, docs/guides/array_usage.md.
+     * @todo Implement the `_align` feature (currently ignored).
      */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class Array : public ArrayLayout<T, _row_size, _row_max, _align>, public ObjectNaming
@@ -108,11 +143,16 @@ namespace DNDS
         index _size = 0;               // in number of T
         rowsize _row_size_dynamic = 0; // in number of T
     public:
+        /// @brief Shared pointer to the row-start index (CSR layout only).
+        /// @details `_pRowStart->at(i)` gives the flat-buffer offset of row `i`.
+        /// Size is `Size()+1`; the sentinel at the end equals `DataSize()`.
         t_pRowStart getRowStart() { return _pRowStart; }
+        /// @brief Shared pointer to the per-row size vector (TABLE_Max / TABLE_StaticMax).
+        /// @details For padded layouts, records the number of "used" columns in each row.
         t_pRowSizes getRowSizes() { return _pRowSizes; }
 
     public:
-        // default constructor using default:
+        /// @brief Default-constructed array: empty, no storage.
         Array() = default;
 
         /// @brief Named constructor: sets the object name for tracing/debugging.
@@ -127,9 +167,12 @@ namespace DNDS
         // TODO: for CSR: c->c, u->u
         // TODO: for intertype: CSR->Max, Max->CSR ...
 
-        // read size
+        /// @brief Number of rows currently stored. O(1).
         [[nodiscard]] index Size() const { return _size; }
 
+        /// @brief Uniform row width for fixed layouts (no row index needed).
+        /// @details Valid only for `TABLE_Fixed` and `TABLE_StaticFixed`; asserts otherwise.
+        /// @return Width in number of `T` elements.
         [[nodiscard]] rowsize RowSize() const // iRow is actually dummy here
         {
             if constexpr (_dataLayout == TABLE_Fixed)
@@ -161,6 +204,13 @@ namespace DNDS
             }
         }
 
+        /// @brief Width used by row `iRow` in number of `T` elements.
+        /// @details Works for every layout:
+        /// - `TABLE_*Fixed`: returns the uniform row width (iRow ignored for value);
+        /// - `TABLE_*Max`:    returns `_pRowSizes->at(iRow)`;
+        /// - `CSR`:           returns `pRowStart[iRow+1] - pRowStart[iRow]` when
+        ///                    compressed, else the nested vector size.
+        /// @param iRow Row index in `[0, Size())`. Asserted in non-fixed layouts.
         [[nodiscard]] rowsize RowSize(index iRow) const
         {
             if constexpr (_dataLayout == TABLE_Fixed)
@@ -189,6 +239,9 @@ namespace DNDS
             }
         }
 
+        /// @brief Maximum allowed row width for `TABLE_Max` / `TABLE_StaticMax`.
+        /// @details Returns the compile-time `rm` for `TABLE_StaticMax` or the
+        /// dynamic max (`_row_size_dynamic`) for `TABLE_Max`. Asserts for other layouts.
         [[nodiscard]] rowsize RowSizeMax() const
         {
             if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
@@ -197,6 +250,8 @@ namespace DNDS
                 DNDS_assert_info(false, "invalid call");
         }
 
+        /// @brief "Logical" row-field width used by derived (Eigen) arrays: max for
+        /// padded layouts, uniform width for fixed layouts. Not valid for CSR.
         [[nodiscard]] rowsize RowSizeField() const
         {
             if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
@@ -207,6 +262,7 @@ namespace DNDS
                 DNDS_assert_info(false, "invalid call");
         }
 
+        /// @brief Per-row "field" size for CSR (= actual row width). Invalid elsewhere.
         [[nodiscard]] rowsize RowSizeField(index iRow) const
         {
             if constexpr (_dataLayout == CSR)
@@ -230,12 +286,21 @@ namespace DNDS
         }
 
     public:
+        /// @brief (CSR only) Whether the array is in packed / flat form.
+        /// @details `true` means data sits in a single `_data` buffer plus `_pRowStart`;
+        /// `false` means rows live in a `vector<vector<T>>` (`_dataUncompressed`), which
+        /// allows per-row `ResizeRow()`. MPI / serialization / CUDA require the
+        /// compressed form -- call #Compress() first.
         [[nodiscard]] bool IfCompressed() const
         {
             static_assert(_dataLayout == CSR, "invalid call");
             return IfCompressed_();
         }
 
+        /// @brief (CSR only) Switch to the uncompressed (nested vector) representation.
+        /// @details Copies each row out of the flat buffer into an entry of
+        /// `_dataUncompressed`, then clears the flat buffer. No-op if already uncompressed.
+        /// After this, #ResizeRow and #ReserveRow may be used to reshape individual rows.
         void CSRDecompress()
         {
             if (!IfCompressed())
@@ -252,6 +317,10 @@ namespace DNDS
             _pRowStart.reset();
         }
 
+        /// @brief (CSR only) Pack the nested-vector representation into a flat
+        /// buffer plus `_pRowStart`. No-op if already compressed.
+        /// @details Row widths are frozen; further per-row resizing requires another
+        /// #Decompress. Mandatory before MPI ghost exchange, CUDA transfer, or serialization.
         void CSRCompress()
         {
             if (IfCompressed())
@@ -282,17 +351,22 @@ namespace DNDS
             _dataUncompressed.clear();
         }
 
+        /// @brief Layout-polymorphic compress: no-op for non-CSR, calls #CSRCompress for CSR.
         void Compress()
         {
             if constexpr (_dataLayout == CSR)
                 CSRCompress();
         }
+        /// @brief Layout-polymorphic decompress: no-op for non-CSR, calls #CSRDecompress for CSR.
         void Decompress()
         {
             if constexpr (_dataLayout == CSR)
                 CSRDecompress();
         }
 
+        /// @brief Access to the underlying flat buffer (`host_device_vector<T>`).
+        /// @details For CSR, asserts that the array is compressed. Mutating the buffer
+        /// bypasses all row-size bookkeeping -- use with care.
         t_Data &RawDataVector()
         {
             if constexpr (_dataLayout == CSR)
@@ -301,16 +375,22 @@ namespace DNDS
         }
 
         /**
-         * @brief resize invalidates all data and aux, and resets the sizes info to 0 for max
+         * @brief Resize the array, setting a uniform or maximum row width.
          *
-         * @param nSize
-         * @param nRow_size_dynamic
-         * @return std::enable_if_t<
-         * _dataLayout == TABLE_Fixed ||
-         * _dataLayout == TABLE_StaticFixed ||
-         * _dataLayout == TABLE_Max ||
-         * _dataLayout == TABLE_StaticMax,
-         * void>
+         * @details
+         * Invalidates all existing data and resets row-size metadata.
+         *
+         * Layout-specific semantics:
+         * - `TABLE_StaticFixed`: `nRow_size_dynamic` must equal `rs`.
+         * - `TABLE_StaticMax`:   `nRow_size_dynamic` must equal `rm`.
+         * - `TABLE_Fixed`:       sets the runtime uniform row width.
+         * - `TABLE_Max`:         sets the runtime maximum row width (per-row sizes start at 0).
+         * - `CSR`:               requires the array to be **decompressed**; allocates
+         *                        `nSize` empty rows (nested vectors sized to `nRow_size_dynamic`).
+         *
+         * @param nSize               New number of rows.
+         * @param nRow_size_dynamic   Row width (uniform layouts) or max width
+         *                            (padded layouts) or initial row length (CSR).
          */
         void Resize(index nSize, rowsize nRow_size_dynamic)
         {
@@ -343,6 +423,12 @@ namespace DNDS
             }
         }
 
+        /// @brief Resize using only the row count (layouts with an implicit row width).
+        /// @details Valid for:
+        /// - `TABLE_StaticFixed` / `TABLE_StaticMax` (width comes from template params);
+        /// - `CSR` decompressed (rows start empty, grow via #ResizeRow).
+        /// Asserts for other layouts -- use the two-argument overload instead.
+        /// @param nSize New number of rows.
         void Resize(index nSize)
         {
             if constexpr (_dataLayout == CSR)
@@ -376,6 +462,17 @@ namespace DNDS
             }
         }
 
+        /**
+         * @brief Resize a CSR array directly to the compressed form via a width functor.
+         *
+         * @details CSR-only. Allocates `nSize+1` `_pRowStart` entries populated from
+         * the prefix sum of `FRowSize(i)`, then sizes the flat buffer to match.
+         * No nested-vector intermediate step; the array is compressed on return.
+         *
+         * @tparam TFRowSize Callable with signature `rowsize(index)`.
+         * @param nSize      New number of rows.
+         * @param FRowSize   Width-of-row-i functor.
+         */
         template <class TFRowSize>
         void Resize(index nSize, TFRowSize &&FRowSize)
         {
@@ -394,11 +491,15 @@ namespace DNDS
         }
 
         /**
-         * @brief resize one row
-         * valid only for non-uniform
+         * @brief Change the width of a single row.
          *
-         * @param iRow
-         * @param nRowSize
+         * @details Valid for `CSR` (decompressed only) and `TABLE_*Max`.
+         * For `TABLE_*Max`, the new size must not exceed the configured maximum and
+         * the per-row-size vector is copied-on-write if shared with another array.
+         * For CSR, the array must be uncompressed; call #Decompress first.
+         *
+         * @param iRow      Row index in `[0, Size())`.
+         * @param nRowSize  New width in `T` elements.
          */
         void ResizeRow(index iRow, rowsize nRowSize)
         {
@@ -429,6 +530,9 @@ namespace DNDS
             }
         }
 
+        /// @brief Reserve capacity for a CSR decompressed row without changing its size.
+        /// @details Analogous to `std::vector::reserve` for the nested row buffer.
+        /// CSR-only, decompressed-only.
         void ReserveRow(index iRow, rowsize nRowSize)
         {
             if constexpr (_dataLayout == CSR)
@@ -447,6 +551,11 @@ namespace DNDS
         // TODO: Data reference query method and pointer query method
         // TODO: ? same-size compress for non-uniforms
 
+        /// @brief Produce a lightweight, device-agnostic view onto the array.
+        /// @details The returned #ArrayView captures pointers and sizes but does
+        /// not own any storage. It is the type that implements actual `operator[]`
+        /// indexing for all layouts; it is also host/device-callable and is the
+        /// building block for #ArrayDeviceView on CUDA.
         t_View view()
         {
             return t_View(_size, _data.data(), _data.size(),
@@ -456,6 +565,11 @@ namespace DNDS
                           IfCompressed_(), IfCompressed_() ? nullptr : &_dataUncompressed);
         }
 
+        /// @brief Bounds-checked element access.
+        /// @details Asserts that `iRow` and `iCol` are in range (taking the used
+        /// row size into account, not just the stride). Works for every layout.
+        /// @param iRow Row index in `[0, Size())`.
+        /// @param iCol Column index in `[0, RowSize(iRow))`.
         const T &at(index iRow, rowsize iCol) const
         {
             DNDS_assert_info(iRow < _size && iRow >= 0,
@@ -487,21 +601,31 @@ namespace DNDS
             }
         }
 
+        /// @brief Bounds-checked 2D element access (writable).
+        /// @details Convenience wrapper around #at. `iCol` defaults to 0 so `arr(i)`
+        /// accesses the first column, useful for single-column layouts.
         T &operator()(index iRow, rowsize iCol = 0)
         {
             return const_cast<T &>(at(iRow, iCol));
         }
 
+        /// @brief Bounds-checked 2D element access (read-only).
         const T &operator()(index iRow, rowsize iCol = 0) const
         {
             return at(iRow, iCol);
         }
 
         /**
-         * @brief iRow could be past-the-end to query past-the-end position pointer
+         * @brief Return a raw pointer to the start of row `iRow`.
          *
-         * @param iRow
-         * @return T*
+         * @details Fast, untyped access used by stencil loops. Derived classes
+         * (e.g. #ArrayEigenVector, #ArrayEigenMatrix) override this to return typed
+         * Eigen maps instead of `T*`.
+         *
+         * @param iRow Row index. For `CSR` compressed, `iRow == Size()` is allowed
+         *             and returns the past-the-end pointer, useful for computing
+         *             the flat buffer end in sweeps.
+         * @return Pointer to the first element of row `iRow`.
          */
         T *operator[](index iRow)
         {
@@ -536,11 +660,16 @@ namespace DNDS
             // }
         }
 
+        /// @brief Const row pointer, see the non-const overload.
         const T *operator[](index iRow) const
         {
             return static_cast<const T *>(const_cast<self_type *>(this)->operator[](iRow));
         }
 
+        /// @brief Raw pointer to the flat data buffer.
+        /// @param B Target device. `DeviceBackend::Unknown` (default) returns the host
+        ///          pointer; otherwise returns the device pointer (must match the
+        ///          array's current device).
         T *data(DeviceBackend B = DeviceBackend::Unknown)
         {
             if constexpr (_dataLayout == CSR)
@@ -554,6 +683,8 @@ namespace DNDS
             }
         }
 
+        /// @brief Total number of `T` elements currently stored in the flat buffer.
+        /// @details For CSR, requires the array to be compressed.
         size_t DataSize() const
         {
             if (this->Size() == 0)
@@ -563,6 +694,7 @@ namespace DNDS
             return _data.size();
         }
 
+        /// @brief Flat buffer size in bytes (= `DataSize() * sizeof(T)`).
         size_t DataSizeBytes() const
         {
             return this->DataSize() * sizeof_T;
@@ -596,6 +728,10 @@ namespace DNDS
             this->Compress();
         }
 
+        /// @brief Total footprint in bytes including structural arrays.
+        /// @details Sums the flat data buffer, `_pRowStart` (if any), and
+        /// `_pRowSizes` (if any). Approximate because shared-ownership of row
+        /// structures is not deduplicated.
         size_t FullSizeBytes() const
         {
             size_t b = this->DataSize() * sizeof_T;
@@ -606,6 +742,9 @@ namespace DNDS
             return b;
         }
 
+        /// @brief Combined hash of size, structural arrays, and data.
+        /// @details Byte-hashes non-hashable elements. Intended for testing /
+        /// equality diagnostics; not guaranteed cryptographically strong.
         std::size_t hash()
         {
             std::size_t hashData;
@@ -626,6 +765,7 @@ namespace DNDS
             return array_hash<std::size_t, 3>()(std::array<std::size_t, 3>{std::size_t(_size), hashSize, hashData});
         }
 
+        /// @brief Pretty-print rows, one per line, tab-separated.
         friend std::ostream &operator<<(std::ostream &o, const Array<T, _row_size, _row_max, _align> &A)
         {
             for (index i = 0; i < A._size; i++)
@@ -637,9 +777,17 @@ namespace DNDS
             return o;
         }
 
+        /// @brief Compile-time layout tag (one of `TABLE_StaticFixed`, `TABLE_Fixed`,
+        /// `TABLE_StaticMax`, `TABLE_Max`, `CSR`).
         static constexpr DataLayout GetDataLayoutStatic() { return _dataLayout; }
+        /// @brief Runtime accessor for the layout tag (constexpr-folded).
         constexpr DataLayout GetDataLayout() { return _dataLayout; }
 
+        /// @brief Shallow clone: copies all metadata and shares structural/data storage.
+        /// @details Copies `_size`, `_row_size_dynamic`, device backend, and the
+        /// nested-vector storage. The `_data`, `_pRowStart`, `_pRowSizes` members
+        /// are `host_device_vector` / `shared_ptr`, so they share ownership with
+        /// the source; subsequent modifications to one may affect the other.
         void clone(const self_type &R)
         {
             this->_size = R._size;
@@ -652,12 +800,15 @@ namespace DNDS
             this->deviceBackend = R.deviceBackend;
         }
 
+        /// @brief Deep copy alias. Currently delegates to #clone; kept for API
+        /// compatibility and to allow a future true deep-copy implementation.
         void CopyData(const self_type &R)
         {
             this->clone(R);
             // non-trivial copy call: unique_ptr
         }
 
+        /// @brief Copy-assignment; implemented via #clone with self-assign guard.
         self_type &operator=(const self_type &R)
         {
             if (this == &R)
@@ -666,12 +817,16 @@ namespace DNDS
             return *this;
         }
 
-        // copy constructor
+        /// @brief Copy constructor (same semantics as #clone).
         Array(const self_type &R)
         {
             this->clone(R);
         }
 
+        /// @brief Swap the storage of two arrays in-place.
+        /// @details Both arrays must already have identical logical size and
+        /// flat-buffer size. Swaps only what the current layout uses (flat buffer
+        /// plus structural pointers, or the nested vectors for CSR decompressed).
         // TODO: SwapData on device?
         void SwapData(self_type &R)
         {
@@ -1039,6 +1194,9 @@ namespace DNDS
         }
 
     public:
+        /// @brief Mirror the flat/structural buffers back to host memory.
+        /// @details CSR arrays must be compressed before calling. After this the
+        /// array still has a device mirror unless #clear_device is also called.
         void to_host()
         {
             if constexpr (_dataLayout == CSR)
@@ -1049,6 +1207,9 @@ namespace DNDS
             deviceBackend = DeviceBackend::Unknown;
         }
 
+        /// @brief Mirror the flat/structural buffers to a target device (e.g. CUDA).
+        /// @details CSR arrays must be compressed. `backend` must match a supported
+        /// backend from #DeviceBackend; see #DeviceStorage.hpp.
         void to_device(DeviceBackend backend = DeviceBackend::Host)
         {
             if constexpr (_dataLayout == CSR)
@@ -1063,6 +1224,7 @@ namespace DNDS
             deviceBackend = _data.device();
         }
 
+        /// @brief Release any device-side mirror of this array's buffers.
         void clear_device()
         {
             _data.clear_device();
@@ -1080,6 +1242,9 @@ namespace DNDS
         template <DeviceBackend B>
         using t_deviceViewConst = ArrayDeviceView<B, const T, _row_size, _row_max, _align>;
 
+        /// @brief Mutable device-callable view (`Eigen::Map`-style row access on GPU).
+        /// @tparam B Device backend; must either match the array's current device
+        ///           or be `DeviceBackend::Host` (which yields a host-backed view).
         template <DeviceBackend B>
         t_deviceView<B> deviceView()
         {
@@ -1101,6 +1266,7 @@ namespace DNDS
                 _pRowSizes ? _pRowSizes->dataDevice() : nullptr);
         }
 
+        /// @brief Const device-callable view. See non-const overload.
         template <DeviceBackend B>
         t_deviceViewConst<B> deviceView() const
         {
@@ -1122,11 +1288,15 @@ namespace DNDS
                 _pRowSizes ? _pRowSizes->dataDevice() : nullptr);
         }
 
+        /// @brief Current device backend the data is mirrored on, or `Unknown` if host-only.
         [[nodiscard]] DeviceBackend device() const
         {
             return this->deviceBackend;
         }
 
+        /// @brief Random-access iterator over rows for a given device backend.
+        /// @details `operator*` yields a #RowView `{pointer, rowSize}`. Used by
+        /// `std::transform` / CUDA kernels that sweep over rows.
         template <DeviceBackend B>
         class iterator : public ArrayIteratorBase<iterator<B>>
         {
@@ -1152,12 +1322,14 @@ namespace DNDS
             DNDS_DEVICE_CALLABLE reference operator*() { return {view.operator[](this->iRow), view.RowSize(this->iRow)}; }
         };
 
+        /// @brief Iterator to the first row, viewed on device backend `B`.
         template <DeviceBackend B>
         iterator<B> begin()
         {
             return {deviceView<B>(), 0};
         }
 
+        /// @brief Iterator one past the last row, viewed on device backend `B`.
         template <DeviceBackend B>
         iterator<B> end()
         {

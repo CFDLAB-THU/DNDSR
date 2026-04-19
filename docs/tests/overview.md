@@ -81,7 +81,7 @@ Examples: `cfv_limiters`, `euler_evaluator_pipeline_np4`,
 test/<Module>/test_<name>.py::TestClass::test_method
 ```
 
-Examples: `test/CFV/test_fv_correctness.py::TestCellVolumes::test_wall_mesh_cell_volumes`.
+Examples: `test/CFV/test_fv_correctness.py\:\:TestCellVolumes\:\:test_wall_mesh_cell_volumes`.
 
 ## Golden Values and Regression
 

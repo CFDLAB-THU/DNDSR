@@ -1,4 +1,6 @@
 #pragma once
+/// @file IndexMapping_bind.hpp
+/// @brief pybind11 bindings for #GlobalOffsetsMapping and #OffsetAscendIndexMapping.
 
 #include "IndexMapping.hpp"
 #include "Defines_bind.hpp"

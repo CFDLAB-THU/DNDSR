@@ -1,3 +1,12 @@
+/** @file EulerP_Evaluator_impl.cpp
+ *  @brief Host-backend explicit specializations of Evaluator_impl kernel methods.
+ *
+ *  Provides the DeviceBackend::Host specialization for each Evaluator_impl static method.
+ *  Each method contains an OpenMP-parallelized loop that calls the corresponding
+ *  device-callable kernel function from EulerP_Evaluator_impl_common.hxx.
+ *
+ *  For the CUDA backend specializations, see the separate CUDA compilation unit.
+ */
 #include "DNDS/Defines.hpp"
 #include "DNDS/DeviceStorage.hpp"
 #include "EulerP/EulerP.hpp"
@@ -8,6 +17,12 @@ namespace DNDS::EulerP
 {
     static constexpr DeviceBackend B = DeviceBackend::Host;
 
+    /**
+     * @brief Host specialization: Green-Gauss gradient reconstruction.
+     *
+     * First loop (serial): generates boundary ghost values for all boundary faces.
+     * Second loop (OpenMP parallel): computes the Green-Gauss cell gradient for all owned cells.
+     */
     template <>
     void Evaluator_impl<B>::RecGradient_GGRec(RecGradient_Arg &arg)
     {
@@ -51,6 +66,13 @@ namespace DNDS::EulerP
         }
     }
 
+    /**
+     * @brief Host specialization: Barth-Jespersen gradient limiter.
+     *
+     * First loop (OpenMP parallel): applies the flow-variable limiter to all owned cells.
+     * Second loop (OpenMP parallel, conditional): applies the scalar-variable limiter if
+     * there are transported scalars.
+     */
     template <>
     void Evaluator_impl<B>::RecGradient_BarthLimiter(RecGradient_Arg &arg)
     {
@@ -93,6 +115,12 @@ namespace DNDS::EulerP
             }
     }
 
+    /**
+     * @brief Host specialization: conservative-to-primitive conversion with viscosity.
+     *
+     * OpenMP-parallel loop over all points in the u array, calling Cons2PrimMu_Kernel
+     * for each cell.
+     */
     template <>
     void Evaluator_impl<B>::Cons2PrimMu(Cons2PrimMu_Arg &arg)
     {
@@ -119,6 +147,12 @@ namespace DNDS::EulerP
         }
     }
 
+    /**
+     * @brief Host specialization: conservative-to-primitive conversion (no gradients/viscosity).
+     *
+     * OpenMP-parallel loop over all points in the u array, calling Cons2Prim_Kernel
+     * for each cell.
+     */
     template <>
     void Evaluator_impl<B>::Cons2Prim(Cons2Prim_Arg &arg)
     {
@@ -145,6 +179,12 @@ namespace DNDS::EulerP
         }
     }
 
+    /**
+     * @brief Host specialization: per-face eigenvalue estimation.
+     *
+     * OpenMP-parallel loop over all processor-local faces, calling
+     * EstEigenDt_GetFaceLam_Kernel for each face.
+     */
     template <>
     void Evaluator_impl<B>::EstEigenDt_GetFaceLam(EstEigenDt_Arg &arg)
     {
@@ -177,6 +217,12 @@ namespace DNDS::EulerP
         }
     }
 
+    /**
+     * @brief Host specialization: face eigenvalue accumulation to cell time steps.
+     *
+     * OpenMP-parallel loop over all owned cells, calling
+     * EstEigenDt_FaceLam2CellDt_Kernel for each cell.
+     */
     template <>
     void Evaluator_impl<B>::EstEigenDt_FaceLam2CellDt(EstEigenDt_Arg &arg)
     {
@@ -200,6 +246,12 @@ namespace DNDS::EulerP
         }
     }
 
+    /**
+     * @brief Host specialization: 2nd-order face value reconstruction.
+     *
+     * OpenMP-parallel loop over all processor-local faces, calling
+     * RecFace2nd_Kernel for each face.
+     */
     template <>
     void Evaluator_impl<B>::RecFace2nd(RecFace2nd_Arg &arg)
     {
@@ -226,6 +278,12 @@ namespace DNDS::EulerP
         }
     }
 
+    /**
+     * @brief Host specialization: 2nd-order Roe flux evaluation and face-to-cell RHS scatter.
+     *
+     * First loop (OpenMP parallel): computes per-face numerical flux via Flux2nd_Kernel_FluxFace.
+     * Second loop (OpenMP parallel): scatters face fluxes to cell RHS via Flux2nd_Kernel_Face2Cell.
+     */
     template <>
     void Evaluator_impl<B>::Flux2nd(Flux2nd_Arg &arg)
     {

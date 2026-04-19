@@ -1,4 +1,7 @@
 #pragma once
+/// @file ArrayDOF_bind.hpp
+/// @brief pybind11 bindings for #ArrayDof, mirroring the C++ vector-space
+/// operations (norm, dot, AXPY, reductions) into Python.
 
 #include "ArrayDOF.hpp"
 

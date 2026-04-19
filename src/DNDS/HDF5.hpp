@@ -7,6 +7,8 @@
 
 namespace DNDS
 {
+    /// @brief HDF5 native datatype matching DNDS #index (currently `H5T_NATIVE_INT64`).
+    /// @details Static-asserts that the DNDS type has not drifted from `int64_t`.
     inline hid_t DNDS_H5T_INDEX()
     {
         if constexpr (std::is_same_v<index, int64_t>)
@@ -18,6 +20,7 @@ namespace DNDS
         }
     }
 
+    /// @brief HDF5 native datatype matching DNDS #rowsize (currently `H5T_NATIVE_INT32`).
     inline hid_t DNDS_H5T_ROWSIZE()
     {
         if constexpr (std::is_same_v<rowsize, int32_t>)
@@ -29,6 +32,7 @@ namespace DNDS
         }
     }
 
+    /// @brief HDF5 native datatype matching DNDS #real (currently `H5T_NATIVE_DOUBLE`).
     inline hid_t DNDS_H5T_REAL()
     {
         if constexpr (std::is_same_v<real, double>)

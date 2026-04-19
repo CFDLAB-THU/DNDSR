@@ -19,7 +19,28 @@
 namespace DNDS
 {
 
-    /// @brief Per-row Eigen matrix array; each row is accessed as an Eigen::Map<Matrix> over contiguous storage.
+    /**
+     * @brief `ParArray<real>` whose `operator[]` returns an `Eigen::Map<Matrix<real, Ni, Nj>>`.
+     *
+     * @details Each row stores an `Ni x Nj` matrix contiguously (column-major,
+     * matching Eigen's default). The row count in the underlying `ParArray`
+     * equals `Ni * Nj`. Used for per-cell Jacobians, gradient matrices, and
+     * (via #ArrayDof) solver state containers.
+     *
+     * Supports three configurations for each of the two matrix dimensions:
+     * - compile-time fixed (`Ni >= 0`);
+     * - runtime uniform (`DynamicSize` + a `_max`);
+     * - per-row variable (`NonUniformSize` + a `_max`, which yields a
+     *   `TABLE_StaticMax` / `TABLE_Max` storage layout).
+     *
+     * The variable-row case carries an extra per-row-sizes vector
+     * `_mat_nRows`; all the other layouts have no extra data beyond `ParArray`.
+     *
+     * @tparam _mat_ni     Row dimension of the stored matrix.
+     * @tparam _mat_nj     Column dimension.
+     * @tparam _mat_ni_max Max row dimension (used when variable).
+     * @tparam _mat_nj_max Max column dimension.
+     */
     template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
               rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
     class ArrayEigenMatrix : public ParArray<real,

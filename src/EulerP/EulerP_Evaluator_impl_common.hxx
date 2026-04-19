@@ -1,3 +1,28 @@
+/** @file EulerP_Evaluator_impl_common.hxx
+ *  @brief Shared device-callable kernel implementations for the EulerP Evaluator.
+ *
+ *  Contains the per-element kernel functions (per-cell or per-face) that implement the
+ *  computational core of each EulerP evaluation stage. These kernels are called from both
+ *  the Host backend (via OpenMP loops in EulerP_Evaluator_impl.cpp) and the CUDA backend
+ *  (via CUDA kernel launches).
+ *
+ *  Each kernel operates on a single element index range [i, iEnd) and uses the Portable
+ *  sub-struct from the corresponding Evaluator_impl<B> arg for data access. CUDA-specific
+ *  shared memory buffers are conditionally compiled with DNDS_USE_CUDA.
+ *
+ *  Kernels defined here:
+ *  - RecGradient_GGRec_Kernel_BndVal — boundary ghost value generation for gradient reconstruction
+ *  - RecGradient_GGRec_Kernel_GG — Green-Gauss gradient computation (per-cell)
+ *  - RecGradient_BarthLimiter_Kernel_FlowPart — Barth-Jespersen limiter for flow variables (per-cell)
+ *  - RecGradient_BarthLimiter_Kernel_ScalarPart — Barth-Jespersen limiter for scalar variables (per-cell)
+ *  - Cons2PrimMu_Kernel — conservative-to-primitive + viscosity (per-cell)
+ *  - Cons2Prim_Kernel — conservative-to-primitive only (per-cell)
+ *  - EstEigenDt_GetFaceLam_Kernel — face eigenvalue estimation (per-face)
+ *  - EstEigenDt_FaceLam2CellDt_Kernel — face-to-cell eigenvalue accumulation + dt (per-cell)
+ *  - RecFace2nd_Kernel — 2nd-order face reconstruction (per-face)
+ *  - Flux2nd_Kernel_FluxFace — Roe inviscid flux computation (per-face)
+ *  - Flux2nd_Kernel_Face2Cell — face flux scatter to cell RHS (per-cell)
+ */
 #include "DNDS/Defines.hpp"
 #include "DNDS/DeviceStorage.hpp"
 #include "DNDS/Errors.hpp"
@@ -8,6 +33,21 @@
 #include "EulerP_Evaluator_impl_utils.hpp"
 namespace DNDS::EulerP
 {
+    /**
+     * @brief Generates boundary ghost values for Green-Gauss gradient reconstruction.
+     *
+     * For a given boundary face, applies the boundary condition to produce a ghost-cell
+     * state stored in the face BC buffer. Internal faces are skipped. The ghost values
+     * are later used by the Green-Gauss kernel in place of a neighbor cell's state.
+     *
+     * @tparam B DeviceBackend (Host or CUDA), defaulting to Host.
+     * @param self_view Device view providing mesh, BC handler, and physics access.
+     * @param arg Portable struct with device views of state arrays and face BC buffers.
+     * @param iBnd Boundary index to process.
+     * @param iBndEnd Upper bound of the boundary index range (used for bounds checking).
+     * @param nVars Total number of variables (flow + scalar).
+     * @param nVarsScalar Number of additional transported scalar variables.
+     */
     template <DeviceBackend B = DeviceBackend::Host>
     DNDS_DEVICE void RecGradient_GGRec_Kernel_BndVal(
         EvaluatorDeviceView<B> &self_view,
@@ -65,6 +105,24 @@ namespace DNDS::EulerP
         index iBnd, index iBndEnd,
         int nVars, int nVarsScalar);
 
+    /**
+     * @brief Green-Gauss gradient reconstruction kernel (per-cell).
+     *
+     * Computes the cell gradient of the conservative state using the Green-Gauss theorem:
+     * grad(u)_cell = (1/V) * sum_faces [ 0.5 * (u_neighbor - u_cell) (x) n * A ].
+     * Boundary faces use ghost values from the face BC buffer. Also computes gradients
+     * for transported scalar variables.
+     *
+     * On CUDA, uses shared memory for coalesced global writes via CUDA_Local2GlobalAssign.
+     *
+     * @tparam B DeviceBackend (Host or CUDA), defaulting to Host.
+     * @param self_view Device view providing mesh, BC handler, and physics access.
+     * @param arg Portable struct with device views of state, gradient, and BC buffer arrays.
+     * @param iCell Cell index to process.
+     * @param iCellEnd Upper bound of cell index range (used for bounds checking).
+     * @param nVars Total number of variables (flow + scalar).
+     * @param nVarsScalar Number of additional transported scalar variables.
+     */
     template <DeviceBackend B = DeviceBackend::Host>
     DNDS_DEVICE void RecGradient_GGRec_Kernel_GG(
         EvaluatorDeviceView<B> &self_view,
@@ -174,6 +232,22 @@ namespace DNDS::EulerP
         index iCell, index iCellEnd,
         int nVars, int nVarsScalar);
 
+    /**
+     * @brief Barth-Jespersen gradient limiter kernel for flow variables (per-cell).
+     *
+     * Limits cell gradients to prevent the reconstructed face values from creating
+     * new extrema. Operates on density, total energy, and velocity magnitude independently.
+     * Also enforces positivity of internal energy by computing a secondary limiting factor
+     * based on the minimum reconstructed internal energy across cell faces.
+     *
+     * @tparam B DeviceBackend (Host or CUDA), defaulting to Host.
+     * @param self_view Device view providing mesh, BC handler, and physics access.
+     * @param arg Portable struct with device views of state and gradient arrays.
+     * @param iCell Cell index to process.
+     * @param iCellEnd Upper bound of cell index range.
+     * @param nVars Total number of variables (flow + scalar).
+     * @param nVarsScalar Number of additional transported scalar variables.
+     */
     template <DeviceBackend B = DeviceBackend::Host>
     DNDS_DEVICE void RecGradient_BarthLimiter_Kernel_FlowPart(
         EvaluatorDeviceView<B> &self_view,
@@ -307,6 +381,21 @@ namespace DNDS::EulerP
         index iCell, index iCellEnd,
         int nVars, int nVarsScalar);
 
+    /**
+     * @brief Barth-Jespersen gradient limiter kernel for transported scalar variables (per-cell).
+     *
+     * Applies the same min/max bounding logic as the flow limiter but for additional
+     * transported scalar fields. Processes scalars in batches of bufSize (nVarsFlow)
+     * to reuse the TU-sized buffers.
+     *
+     * @tparam B DeviceBackend (Host or CUDA), defaulting to Host.
+     * @param self_view Device view providing mesh, BC handler, and physics access.
+     * @param arg Portable struct with device views of scalar and scalar gradient arrays.
+     * @param iCell Cell index to process.
+     * @param iCellEnd Upper bound of cell index range.
+     * @param nVars Total number of variables (flow + scalar).
+     * @param nVarsScalar Number of additional transported scalar variables.
+     */
     template <DeviceBackend B = DeviceBackend::Host>
     DNDS_DEVICE void RecGradient_BarthLimiter_Kernel_ScalarPart(
         EvaluatorDeviceView<B> &self_view,
@@ -384,6 +473,22 @@ namespace DNDS::EulerP
         index iCell, index iCellEnd,
         int nVars, int nVarsScalar);
 
+    /**
+     * @brief Conservative-to-primitive conversion with gradient transformation and viscosity (per-cell).
+     *
+     * For each cell, converts conservative variables (rho, rho*u, rho*E, ...) to primitive
+     * variables (rho, u, v, w, p_or_E_internal, ...) and transforms the conservative
+     * gradients into primitive gradients using the Jacobian of the transformation.
+     * Also computes thermodynamic quantities (p, T, a, gamma) and total viscosity (mu).
+     *
+     * @tparam B DeviceBackend (Host or CUDA), defaulting to Host.
+     * @param self_view Device view providing mesh, BC handler, and physics access.
+     * @param arg Portable struct with all input/output device views.
+     * @param iPt Point (cell) index to process.
+     * @param iPtEnd Upper bound of point index range.
+     * @param nVars Total number of variables (flow + scalar).
+     * @param nVarsScalar Number of additional transported scalar variables.
+     */
     template <DeviceBackend B = DeviceBackend::Host>
     DNDS_DEVICE void Cons2PrimMu_Kernel(
         EvaluatorDeviceView<B> &self_view,
@@ -509,6 +614,21 @@ namespace DNDS::EulerP
         index iPt, index iPtEnd,
         int nVars, int nVarsScalar);
 
+    /**
+     * @brief Conservative-to-primitive conversion without gradient transformation or viscosity (per-cell).
+     *
+     * Simplified version of Cons2PrimMu_Kernel that only converts conservative to primitive
+     * variables and computes thermodynamic scalars (T, p, a, gamma). No gradient
+     * transformation or viscosity computation is performed.
+     *
+     * @tparam B DeviceBackend (Host or CUDA), defaulting to Host.
+     * @param self_view Device view providing mesh, BC handler, and physics access.
+     * @param arg Portable struct with input/output device views.
+     * @param iPt Point (cell) index to process.
+     * @param iPtEnd Upper bound of point index range.
+     * @param nVars Total number of variables (flow + scalar).
+     * @param nVarsScalar Number of additional transported scalar variables.
+     */
     template <DeviceBackend B = DeviceBackend::Host>
     DNDS_DEVICE void Cons2Prim_Kernel(
         EvaluatorDeviceView<B> &self_view,
@@ -592,6 +712,22 @@ namespace DNDS::EulerP
         index iPt, index iPtEnd,
         int nVars, int nVarsScalar);
 
+    /**
+     * @brief Per-face eigenvalue estimation kernel for time-step computation.
+     *
+     * For each face, estimates the convective eigenvalues (lam-, lam0, lam+) as the
+     * maximum of left/right normal velocity +/- speed of sound. Also estimates the
+     * viscous eigenvalue contribution based on face-averaged viscosity and the
+     * face-area-to-volume ratio. Computes deltaLamFace for H-correction.
+     *
+     * @tparam B DeviceBackend (Host or CUDA), defaulting to Host.
+     * @param self_view Device view providing mesh, BC handler, and physics access.
+     * @param arg Portable struct with device views of state, eigenvalue, and dt arrays.
+     * @param iFace Face index to process.
+     * @param iFaceEnd Upper bound of face index range.
+     * @param nVars Total number of variables (flow + scalar).
+     * @param nVarsScalar Number of additional transported scalar variables.
+     */
     template <DeviceBackend B = DeviceBackend::Host>
     DNDS_DEVICE void EstEigenDt_GetFaceLam_Kernel(
         EvaluatorDeviceView<B> &self_view,
@@ -665,6 +801,22 @@ namespace DNDS::EulerP
         index iFace, index iFaceEnd,
         int nVars, int nVarsScalar);
 
+    /**
+     * @brief Per-cell kernel converting face eigenvalues to a local CFL time step.
+     *
+     * For each cell, sums the maximum face eigenvalue (convective + viscous) weighted by
+     * face area across all cell faces. The local time step is computed as:
+     * dt = V * smoothScaleRatio / sum(lambda_face * A_face).
+     * Also computes the per-cell maximum deltaLamFace for H-correction.
+     *
+     * @tparam B DeviceBackend (Host or CUDA), defaulting to Host.
+     * @param self_view Device view providing mesh and FV geometry access.
+     * @param arg Portable struct with device views of eigenvalue and dt arrays.
+     * @param iCell Cell index to process.
+     * @param iCellEnd Upper bound of cell index range.
+     * @param nVars Total number of variables (flow + scalar).
+     * @param nVarsScalar Number of additional transported scalar variables.
+     */
     template <DeviceBackend B = DeviceBackend::Host>
     DNDS_DEVICE void EstEigenDt_FaceLam2CellDt_Kernel(
         EvaluatorDeviceView<B> &self_view,
@@ -712,6 +864,24 @@ namespace DNDS::EulerP
         index iCell, index iCellEnd,
         int nVars, int nVarsScalar);
 
+    /**
+     * @brief 2nd-order face value reconstruction kernel (per-face).
+     *
+     * For each face, extrapolates cell-centered values using the cell gradient:
+     * u_face = u_cell + grad(u) . (x_face - x_cell).
+     * For internal faces, computes both left and right states and a face-averaged gradient
+     * with a correction term proportional to the jump (uR - uL) / distance.
+     * For boundary faces, applies the BC handler to generate the right (ghost) state.
+     * Also reconstructs transported scalar face values and gradients.
+     *
+     * @tparam B DeviceBackend (Host or CUDA), defaulting to Host.
+     * @param self_view Device view providing mesh, BC handler, and physics access.
+     * @param arg Portable struct with device views of state, gradient, and face output arrays.
+     * @param iFace Face index to process.
+     * @param iFaceEnd Upper bound of face index range.
+     * @param nVars Total number of variables (flow + scalar).
+     * @param nVarsScalar Number of additional transported scalar variables.
+     */
     template <DeviceBackend B = DeviceBackend::Host>
     DNDS_DEVICE void RecFace2nd_Kernel(
         EvaluatorDeviceView<B> &self_view,
@@ -844,6 +1014,23 @@ namespace DNDS::EulerP
         index iFace, index iFaceEnd,
         int nVars, int nVarsScalar);
 
+    /**
+     * @brief 2nd-order Roe inviscid flux computation kernel (per-face).
+     *
+     * For each face, computes the Roe-averaged state (velocity, enthalpy, speed of sound),
+     * evaluates the three characteristic eigenvalues with H-correction fixing, and assembles
+     * the numerical flux via RoeFluxFlow. The result is stored in fluxFF.
+     *
+     * @note Scalar flux and viscous flux are not yet implemented (marked TODO).
+     *
+     * @tparam B DeviceBackend (Host or CUDA), defaulting to Host.
+     * @param self_view Device view providing mesh, BC handler, and physics access.
+     * @param arg Portable struct with device views of all state, face, thermodynamic, and flux arrays.
+     * @param iFace Face index to process.
+     * @param iFaceEnd Upper bound of face index range.
+     * @param nVars Total number of variables (flow + scalar).
+     * @param nVarsScalar Number of additional transported scalar variables.
+     */
     template <DeviceBackend B = DeviceBackend::Host>
     DNDS_DEVICE void Flux2nd_Kernel_FluxFace(
         EvaluatorDeviceView<B> &self_view,
@@ -1008,6 +1195,22 @@ namespace DNDS::EulerP
         index iFace, index iFaceEnd,
         int nVars, int nVarsScalar);
 
+    /**
+     * @brief Scatters face fluxes to cell RHS residual (per-cell).
+     *
+     * For each cell, accumulates the face-level numerical fluxes into the cell's RHS
+     * vector. Each face flux is weighted by -Area / Volume * sign, where sign accounts
+     * for the face normal orientation relative to the cell. Also accumulates scalar
+     * fluxes into rhsScalar.
+     *
+     * @tparam B DeviceBackend (Host or CUDA), defaulting to Host.
+     * @param self_view Device view providing mesh and FV geometry access.
+     * @param arg Portable struct with device views of flux and RHS arrays.
+     * @param iCell Cell index to process.
+     * @param iCellEnd Upper bound of cell index range.
+     * @param nVars Total number of variables (flow + scalar).
+     * @param nVarsScalar Number of additional transported scalar variables.
+     */
     template <DeviceBackend B = DeviceBackend::Host>
     DNDS_DEVICE void Flux2nd_Kernel_Face2Cell(
         EvaluatorDeviceView<B> &self_view,

@@ -1,3 +1,8 @@
+/** @file EulerEvaluator.hxx
+ *  @brief Template implementations of EulerEvaluator methods for implicit time-stepping,
+ *         LU-SGS preconditioning, DOF initialization, boundary value generation,
+ *         reconstruction limiting, norm evaluation, and BC profile updates.
+ */
 #pragma once
 
 #include "DNDS/Defines.hpp" // for correct  DNDS_SWITCH_INTELLISENSE
@@ -13,6 +18,22 @@ namespace DNDS::Euler
 
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, )
+    /** @brief Assemble diagonal Jacobian block for each cell for LU-SGS preconditioning.
+     *
+     *  Computes the spectral radius contribution from face eigenvalues and accumulates
+     *  into JDiag. When settings.useRoeJacobian is enabled, also computes Roe flux
+     *  Jacobian block contributions including boundary face linearization.
+     *
+     *  @param JDiag      Diagonal Jacobian block storage (output, cleared then filled).
+     *  @param JSource    Source-term Jacobian diagonal block (must match JDiag block mode).
+     *  @param dTau       Local pseudo-time step per cell.
+     *  @param dt         Global physical time step.
+     *  @param alphaDiag  Diagonal scaling factor for the spectral radius.
+     *  @param u          Conservative variable DOF array.
+     *  @param uRec       Reconstruction coefficients.
+     *  @param jacobianCode  Jacobian assembly mode (must be 0).
+     *  @param t          Current simulation time.
+     */
     void EulerEvaluator<model>::LUSGSMatrixInit(
         JacobianDiagBlock<nVarsFixed> &JDiag,
         JacobianDiagBlock<nVarsFixed> &JSource,
@@ -139,6 +160,18 @@ namespace DNDS::Euler
 
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, )
+    /** @brief Compute the implicit matrix-vector product A*uInc for GMRES.
+     *
+     *  Evaluates the action of the implicit operator (diagonal block + off-diagonal
+     *  flux Jacobian contributions) on the increment vector, storing the result in AuInc.
+     *
+     *  @param alphaDiag  Diagonal scaling factor.
+     *  @param t          Current simulation time.
+     *  @param u          Conservative variable DOF array.
+     *  @param uInc       Increment vector to multiply.
+     *  @param JDiag      Diagonal Jacobian block.
+     *  @param AuInc      Result of the matrix-vector product (output).
+     */
     void EulerEvaluator<model>::LUSGSMatrixVec(
         real alphaDiag,
         real t,
@@ -242,6 +275,18 @@ namespace DNDS::Euler
 
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, )
+    /** @brief Assemble and factorize the local LU Jacobian from diagonal and off-diagonal blocks.
+     *
+     *  Populates the sparse local LU structure with diagonal blocks from JDiag and
+     *  off-diagonal Roe flux Jacobian entries for local-partition neighbor cells,
+     *  then performs in-place LU decomposition.
+     *
+     *  @param alphaDiag  Diagonal scaling factor for face flux Jacobian.
+     *  @param t          Current simulation time.
+     *  @param u          Conservative variable DOF array.
+     *  @param JDiag      Diagonal Jacobian block.
+     *  @param jacLU      Local LU factorization structure (output).
+     */
     void EulerEvaluator<model>::LUSGSMatrixToJacobianLU(
         real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &u,
@@ -315,6 +360,19 @@ namespace DNDS::Euler
 
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, template <>)
+    /** @brief [[deprecated]] Forward LU-SGS sweep. Use UpdateSGS with uIncIsZero=true instead.
+     *
+     *  Performs a forward Gauss-Seidel sweep using diagonal inversion and lower-triangular
+     *  off-diagonal flux Jacobian contributions. Retained for callers that alias uInc==uIncNew.
+     *
+     *  @param alphaDiag  Diagonal scaling factor.
+     *  @param t          Current simulation time.
+     *  @param rhs        Right-hand side residual.
+     *  @param u          Conservative variable DOF array.
+     *  @param uInc       Current increment (input, may alias uIncNew).
+     *  @param JDiag      Diagonal Jacobian block.
+     *  @param uIncNew    Updated increment (output, may alias uInc).
+     */
     void EulerEvaluator<model>::UpdateLUSGSForward(
         real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &rhs,
@@ -398,6 +456,19 @@ namespace DNDS::Euler
 
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, template <>)
+    /** @brief [[deprecated]] Backward LU-SGS sweep. Use UpdateSGS instead.
+     *
+     *  Performs a backward Gauss-Seidel sweep using diagonal inversion and upper-triangular
+     *  off-diagonal flux Jacobian contributions. Adds the correction to uIncNew in-place.
+     *
+     *  @param alphaDiag  Diagonal scaling factor.
+     *  @param t          Current simulation time.
+     *  @param rhs        Right-hand side residual.
+     *  @param u          Conservative variable DOF array.
+     *  @param uInc       Current increment (input).
+     *  @param JDiag      Diagonal Jacobian block.
+     *  @param uIncNew    Updated increment (input/output, correction added).
+     */
     void EulerEvaluator<model>::UpdateLUSGSBackward(
         real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &rhs,
@@ -458,6 +529,24 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief Symmetric Gauss-Seidel (SGS) sweep for implicit preconditioning.
+     *
+     *  Performs a single forward or backward sweep. When uIncIsZero is true, skips
+     *  off-diagonal terms involving the zeroed increment in the first forward pass
+     *  to save computation. Accumulates the global L1 increment change into sumInc.
+     *
+     *  @param alphaDiag   Diagonal scaling factor.
+     *  @param t           Current simulation time.
+     *  @param rhs         Right-hand side residual.
+     *  @param u           Conservative variable DOF array.
+     *  @param uInc        Current increment (input, must not alias uIncNew).
+     *  @param uIncNew     Updated increment (output).
+     *  @param JDiag       Diagonal Jacobian block.
+     *  @param forward     If true, sweep from cell 0 to N-1; otherwise N-1 to 0.
+     *  @param gsUpdate    If true, use Gauss-Seidel update (use latest values); otherwise Jacobi.
+     *  @param sumInc      Global L1 sum of increment changes (output, MPI-reduced).
+     *  @param uIncIsZero  If true, skip off-diagonal terms for zero-initialized increment.
+     */
     void EulerEvaluator<model>::UpdateSGS(
         real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &rhs,
@@ -604,6 +693,23 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief SGS sweep with reconstruction-level off-diagonal terms.
+     *
+     *  Extends UpdateSGS by including reconstruction increment contributions
+     *  (uRecInc) in the off-diagonal flux Jacobian product, enabling higher-order
+     *  implicit coupling.
+     *
+     *  @param alphaDiag  Diagonal scaling factor.
+     *  @param t          Current simulation time.
+     *  @param rhs        Right-hand side residual.
+     *  @param u          Conservative variable DOF array.
+     *  @param uRec       Reconstruction coefficients.
+     *  @param uInc       Current DOF increment.
+     *  @param uRecInc    Current reconstruction increment.
+     *  @param JDiag      Diagonal Jacobian block.
+     *  @param forward    Sweep direction: true for forward, false for backward.
+     *  @param sumInc     Global L1 sum of increment changes (output, MPI-reduced).
+     */
     void EulerEvaluator<model>::UpdateSGSWithRec(
         real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &rhs,
@@ -711,6 +817,24 @@ namespace DNDS::Euler
 
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, template <>)
+    /** @brief Solve the local LU-factorized Jacobian system for the increment.
+     *
+     *  Applies the pre-factorized local LU solve (from LUSGSMatrixToJacobianLU) to
+     *  compute the new increment from the RHS residual and off-diagonal contributions.
+     *  Supports accumulation onto a nonzero initial increment when uIncIsZero is false.
+     *
+     *  @param alphaDiag   Diagonal scaling factor.
+     *  @param t           Current simulation time.
+     *  @param rhs         Right-hand side residual.
+     *  @param u           Conservative variable DOF array.
+     *  @param uInc        Current increment (input).
+     *  @param uIncNew     Updated increment (output, must not alias uInc).
+     *  @param bBuf        Temporary buffer for RHS assembly.
+     *  @param JDiag       Diagonal Jacobian block.
+     *  @param jacLU       Pre-factorized local LU structure.
+     *  @param uIncIsZero  If true, uInc is zero and can be skipped in accumulation.
+     *  @param sumInc      Component-wise L1 norm of the new increment (output).
+     */
     void EulerEvaluator<model>::LUSGSMatrixSolveJacobianLU(
         real alphaDiag, real t,
         ArrayDOFV<nVarsFixed> &rhs,
@@ -804,6 +928,15 @@ namespace DNDS::Euler
 
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, )
+    /** @brief Initialize conservative variable DOF from farfield and special-field initializers.
+     *
+     *  Sets all cells to the farfield static value, then applies model-specific
+     *  initialization (SA wall-distance scaling), box/plane/exprtk region overrides,
+     *  and built-in special fields (isentropic vortex, Rayleigh-Taylor, Taylor-Green,
+     *  double Mach reflection, etc.) based on settings.
+     *
+     *  @param u  Conservative variable DOF array (output, fully initialized).
+     */
     void EulerEvaluator<model>::InitializeUDOF(ArrayDOFV<nVarsFixed> &u)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -1175,6 +1308,13 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief Apply maximum-value spatial filter to conservative variables.
+     *
+     *  Placeholder for a spatial filter Jacobian approach. Currently returns immediately
+     *  without modification.
+     *
+     *  @param u  Conservative variable DOF array (unmodified).
+     */
     void EulerEvaluator<model>::FixUMaxFilter(ArrayDOFV<nVarsFixed> &u)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -1183,6 +1323,15 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief Accumulate time-averaged solution field using running weighted average.
+     *
+     *  Updates wAveraged as a running weighted average: wAveraged = (tCur*wAveraged + dt*w) / (tCur+dt).
+     *
+     *  @param w          Current primitive variable field.
+     *  @param wAveraged  Running time-averaged field (input/output).
+     *  @param dt         Time step weight for current sample.
+     *  @param tCur       Accumulated averaging time (input/output, incremented by dt).
+     */
     void EulerEvaluator<model>::TimeAverageAddition(ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &wAveraged, real dt, real &tCur)
     {
         wAveraged *= (tCur / (tCur + dt + verySmallReal));
@@ -1191,6 +1340,11 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief Convert cell mean values from conservative to primitive variables.
+     *
+     *  @param u  Conservative variable DOF array (input).
+     *  @param w  Primitive variable DOF array (output).
+     */
     void EulerEvaluator<model>::MeanValueCons2Prim(ArrayDOFV<nVarsFixed> &u, ArrayDOFV<nVarsFixed> &w)
     {
 #if defined(DNDS_DIST_MT_USE_OMP)
@@ -1206,6 +1360,11 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief Convert cell mean values from primitive to conservative variables.
+     *
+     *  @param w  Primitive variable DOF array (input).
+     *  @param u  Conservative variable DOF array (output).
+     */
     void EulerEvaluator<model>::MeanValuePrim2Cons(ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &u)
     {
 #if defined(DNDS_DIST_MT_USE_OMP)
@@ -1221,6 +1380,17 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief Evaluate the LP norm of the RHS residual (MPI-global).
+     *
+     *  For P < 3, computes component-wise LP norm; for P >= 3, computes L-infinity norm.
+     *  Optionally volume-weighted and/or averaged.
+     *
+     *  @param res      Result vector of nVars component norms (output).
+     *  @param rhs      Right-hand side residual.
+     *  @param P        Norm exponent (1 for L1, 2 for L2, >=3 for L-infinity).
+     *  @param volWise  If true, weight by cell volume.
+     *  @param average  If true, divide by total weight.
+     */
     void EulerEvaluator<model>::EvaluateNorm(Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P, bool volWise, bool average)
     {
         res.resize(nVars);
@@ -1287,6 +1457,20 @@ namespace DNDS::Euler
     };
 
     template <EulerModel model>
+    /** @brief Evaluate the LP norm of the reconstructed solution, optionally against a reference field.
+     *
+     *  Integrates the reconstructed solution (or its error against FCompareField) over
+     *  quadrature points in each cell and reduces globally.
+     *
+     *  @param res               Result vector of nVars component norms (output).
+     *  @param u                 Conservative variable DOF array.
+     *  @param uRec              Reconstruction coefficients.
+     *  @param P                 Norm exponent (1 for L1, 2 for L2, >=3 for L-infinity).
+     *  @param compare           If true, compute error against FCompareField.
+     *  @param FCompareField     Reference field function(point, time) -> TU.
+     *  @param FCompareFieldWeight  Weight function(point, time) -> TU for error weighting.
+     *  @param t                 Current simulation time.
+     */
     void EulerEvaluator<model>::EvaluateRecNorm(
         Eigen::Vector<real, -1> &res,
         ArrayDOFV<nVarsFixed> &u,
@@ -1340,6 +1524,17 @@ namespace DNDS::Euler
 
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, template <>)
+    /** @brief Apply positivity-preserving gradient limiter to reconstructed solution gradients.
+     *
+     *  Limits the gradient so that density and internal energy remain above threshold
+     *  values at all face quadrature points (Zhang-Shu style for gradients).
+     *  Optionally disables shock-based limiting via flags.
+     *
+     *  @param u         Conservative variable DOF array.
+     *  @param uGrad     Input gradient array.
+     *  @param uGradNew  Limited gradient array (output).
+     *  @param flags     Bitfield flags (e.g., LIMITER_UGRAD_Disable_Shock_Limiter).
+     */
     void EulerEvaluator<model>::LimiterUGrad(
         ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew,
         uint64_t flags)
@@ -1429,6 +1624,20 @@ namespace DNDS::Euler
 
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, template <>)
+    /** @brief Evaluate the positivity-preserving reconstruction limiter coefficient (beta) per cell.
+     *
+     *  Computes a scalar beta in [0,1] for each cell such that the reconstructed
+     *  solution at all face and (optionally) volume quadrature points maintains
+     *  positive density and pressure. Uses bisection to find the maximum allowable beta.
+     *  Reports the total number of limited cells and the global minimum beta.
+     *
+     *  @param u         Conservative variable DOF array.
+     *  @param uRec      Reconstruction coefficients (may be modified for order reduction).
+     *  @param uRecBeta  Per-cell limiter coefficient (output).
+     *  @param nLim      Total number of limited cells across all MPI ranks (output).
+     *  @param betaMin   Global minimum beta value (output).
+     *  @param flag      Evaluation mode flags.
+     */
     void EulerEvaluator<model>::EvaluateURecBeta(
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,
@@ -1709,6 +1918,23 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief Evaluate per-cell RHS scaling factor (alpha) for positivity-preserving time stepping.
+     *
+     *  Determines the largest alpha in [0,1] such that u + alpha*res remains physically
+     *  realizable (positive density and pressure) at all quadrature points. Used for
+     *  under-relaxation to preserve positivity during explicit or implicit updates.
+     *
+     *  @param u             Conservative variable DOF array.
+     *  @param uRec          Reconstruction coefficients.
+     *  @param uRecBeta      Per-cell reconstruction limiter coefficient.
+     *  @param res            RHS residual to be scaled.
+     *  @param cellRHSAlpha  Per-cell alpha scaling factor (output).
+     *  @param nLim          Total number of limited cells (output, MPI-reduced).
+     *  @param alphaMin      Global minimum alpha (output, MPI-reduced).
+     *  @param relax         Relaxation factor applied to alpha.
+     *  @param compress      Compression mode for reconstruction part.
+     *  @param flag          Evaluation mode flags (e.g., EvaluateCellRHSAlpha_MIN_ALL).
+     */
     void EulerEvaluator<model>::EvaluateCellRHSAlpha(
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,
@@ -1821,6 +2047,20 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief Expand the per-cell alpha limiter to neighboring cells for smoothness.
+     *
+     *  Cells adjacent to limited cells (alpha < 1) are also given reduced alpha
+     *  values to create a smooth transition region, preventing isolated sharp
+     *  limiting boundaries.
+     *
+     *  @param u             Conservative variable DOF array.
+     *  @param uRec          Reconstruction coefficients.
+     *  @param uRecBeta      Per-cell reconstruction limiter coefficient.
+     *  @param res            RHS residual.
+     *  @param cellRHSAlpha  Per-cell alpha (input/output, expanded to neighbors).
+     *  @param nLim          Additional limited cells from expansion (output, accumulated).
+     *  @param alphaMin      Global minimum alpha (input).
+     */
     void EulerEvaluator<model>::EvaluateCellRHSAlphaExpansion(
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,
@@ -1907,6 +2147,14 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief Smooth the local pseudo-time step by taking the minimum of the cell value and its neighbor average.
+     *
+     *  Prevents large time-step jumps between adjacent cells by capping each cell's
+     *  dTau at the weighted average of its neighbors' values.
+     *
+     *  @param dTau     Input local pseudo-time step per cell.
+     *  @param dTauNew  Smoothed pseudo-time step (output).
+     */
     void EulerEvaluator<model>::MinSmoothDTau(
         ArrayDOFV<1> &dTau, ArrayDOFV<1> &dTauNew)
     {
@@ -1935,6 +2183,15 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief Update boundary condition profiles from current solution for profile-anchored BCs.
+     *
+     *  For BC zones with anchorOpt==2, integrates the solution at boundary faces into
+     *  a 1D radial profile recorder. Used for radial equilibrium pressure BCs in
+     *  turbomachinery applications.
+     *
+     *  @param u     Conservative variable DOF array.
+     *  @param uRec  Reconstruction coefficients.
+     */
     void EulerEvaluator<model>::updateBCProfiles(ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -2029,6 +2286,12 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief Compute radial equilibrium pressure distribution from BC profiles.
+     *
+     *  Integrates the centrifugal pressure gradient (rho * vt^2 / r) along the
+     *  radial direction in boundary profiles to obtain the radial equilibrium
+     *  pressure increment for turbomachinery outlet BCs.
+     */
     void EulerEvaluator<model>::updateBCProfilesPressureRadialEq()
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS

@@ -1,3 +1,9 @@
+/** @file EulerEvaluator_EvaluateDt.hxx
+ *  @brief Template implementations of EulerEvaluator methods for local time-step estimation,
+ *         wall distance computation (CGAL AABB and Poisson-based), positivity-preserving
+ *         limiters, face eigenvalue estimation, numerical flux evaluation, source terms,
+ *         boundary value generation, and output variable registration.
+ */
 #pragma once
 #include "EulerEvaluator.hpp"
 #include "RANS_ke.hpp"
@@ -18,6 +24,16 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Collect wall boundary face triangulations for AABB-based wall distance computation.
+     *
+     *  Iterates over wall and isothermal-wall boundary faces, decomposes them into triangles
+     *  (handling Line, Tri, and Quad element types), and appends to the output vector.
+     *  When useQuadPatches is true, uses quadrature-point-based sub-patches instead of
+     *  vertex-based triangulation.
+     *
+     *  @param useQuadPatches  If true, create triangle patches from quadrature points.
+     *  @param trianglesOut    Collected triangles as 3x3 matrices (columns = vertices) (output).
+     */
     void EulerEvaluator<model>::GetWallDist_CollectTriangles(
         bool useQuadPatches,
         std::vector<Eigen::Matrix<real, 3, 3>> &trianglesOut)
@@ -97,6 +113,11 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Compute face-averaged wall distances from cell wall distances.
+     *
+     *  For each face, averages the wall distance of its two adjacent cells (or uses
+     *  the single owner cell for boundary faces) and stores in dWallFace.
+     */
     void EulerEvaluator<model>::GetWallDist_ComputeFaceDistances()
     {
         dWallFace.resize(mesh->NumFaceProc());
@@ -114,6 +135,12 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Compute geometric wall distance using CGAL AABB tree (all-to-all broadcast).
+     *
+     *  Gathers all wall triangles globally, builds a CGAL AABB tree, and queries the
+     *  nearest distance for each cell's quadrature points. Uses execution serialization
+     *  (wallDistExection) to limit concurrent memory usage. Clamps result to minWallDist.
+     */
     void EulerEvaluator<model>::GetWallDist_AABB()
     {
         using TriArray = ArrayEigenMatrix<3, 3>;
@@ -219,6 +246,13 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Compute geometric wall distance using batched CGAL AABB tree queries.
+     *
+     *  Builds a local AABB tree from wall triangles (using quadrature patches), then
+     *  performs batched distributed queries where cells are processed in configurable
+     *  load-sized chunks. Supports refinement mode (wallDistScheme==20) for selective
+     *  re-querying of cells below wallDistRefineMax.
+     */
     void EulerEvaluator<model>::GetWallDist_BatchedAABB()
     {
         typedef CGAL::Simple_cartesian<double> K;
@@ -386,6 +420,13 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Compute wall distance by solving a Poisson equation with pseudo-time stepping.
+     *
+     *  Solves a p-Poisson equation (grad^2 phi = -1) with Dirichlet BC (phi=0) on
+     *  wall boundaries and Neumann BC elsewhere, using Jacobi or GMRES iterations.
+     *  The wall distance is recovered from the solution as d = |grad(phi)| + sqrt(|grad(phi)|^2 + 2*phi).
+     *  Configurable via settings: wallDistNJacobiSweep, wallDistIter, wallDistPoissonP, etc.
+     */
     void EulerEvaluator<model>::GetWallDist_Poisson()
     {
             int nSweep = settings.wallDistNJacobiSweep;
@@ -753,6 +794,11 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Dispatcher for wall distance computation, selecting method based on settings.
+     *
+     *  Routes to GetWallDist_AABB (schemes 0,1,20), GetWallDist_BatchedAABB (schemes 2,20),
+     *  or GetWallDist_Poisson (scheme 3), then computes face-averaged distances.
+     */
     void EulerEvaluator<model>::GetWallDist()
     {
         if (settings.wallDistScheme == 0 || settings.wallDistScheme == 1 || settings.wallDistScheme == 20)
@@ -773,6 +819,24 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Estimate the local time step and face spectral radii for CFL-based time stepping.
+     *
+     *  For each face, evaluates L/R states using 2nd-order reconstruction, computes the
+     *  convective and viscous eigenvalue estimates, and stores face spectral radii
+     *  (lambdaFace, lambdaFace0..4, lambdaFaceC, lambdaFaceVis). Then for each cell,
+     *  sums the face spectral radii to obtain a CFL-limited local time step, optionally
+     *  clamped by MaxDt or made uniform (global minimum).
+     *
+     *  @param dt          Local time step per cell (output).
+     *  @param u           Conservative variable DOF array.
+     *  @param uRec        Reconstruction coefficients.
+     *  @param CFL         CFL number for time step scaling.
+     *  @param dtMinall    Global minimum time step (output, MPI-reduced).
+     *  @param MaxDt       Maximum allowed time step (upper clamp).
+     *  @param UseLocaldt  If true, use local time stepping; otherwise set all cells to dtMinall.
+     *  @param t           Current simulation time.
+     *  @param flags       Bitfield flags (e.g., DT_Dont_update_lambda01234).
+     */
     void EulerEvaluator<model>::EvaluateDt(
         ArrayDOFV<1> &dt,
         ArrayDOFV<nVarsFixed> &u,
@@ -989,6 +1053,34 @@ namespace DNDS::Euler
         ,
         // the intellisense friendly definition
         template <>)
+    /** @brief Evaluate the numerical flux at a single face for a batch of quadrature points.
+     *
+     *  Computes the inviscid and viscous numerical flux at a face given batched L/R states,
+     *  gradients, and face geometry. Dispatches to the configured Riemann solver type.
+     *  Outputs left/right viscous corrections (FLfix, FRfix), the total flux increment (finc),
+     *  and per-quadrature-point eigenvalue estimates (lam0V, lam123V, lam4V).
+     *
+     *  @param ULxy        Batched left states at quadrature points.
+     *  @param URxy        Batched right states at quadrature points.
+     *  @param ULMeanXy    Left cell mean state.
+     *  @param URMeanXy    Right cell mean state.
+     *  @param DiffUxy     Batched conservative gradient at face.
+     *  @param DiffUxyPrim Batched primitive gradient at face.
+     *  @param unitNorm    Batched outward unit normals at quadrature points.
+     *  @param vgXY        Batched grid velocity at quadrature points.
+     *  @param unitNormC   Face-center unit normal.
+     *  @param vgC         Face-center grid velocity.
+     *  @param FLfix       Left viscous correction (output).
+     *  @param FRfix       Right viscous correction (output).
+     *  @param finc        Total flux increment (output).
+     *  @param lam0V       Eigenvalue estimate for wave 0 (output).
+     *  @param lam123V     Eigenvalue estimate for waves 1-3 (output).
+     *  @param lam4V       Eigenvalue estimate for wave 4 (output).
+     *  @param btype       Boundary type index of the face.
+     *  @param rsType      Riemann solver type to use.
+     *  @param iFace       Face index.
+     *  @param ignoreVis   If true, skip viscous flux computation.
+     */
     void EulerEvaluator<model>::fluxFace(
         const TU_Batch &ULxy,
         const TU_Batch &URxy,
@@ -1422,6 +1514,21 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Compute source terms for a cell at a quadrature point.
+     *
+     *  Evaluates volume source terms including: constant mass force, rotating-frame
+     *  fictitious forces (Coriolis and centrifugal), axisymmetric source terms,
+     *  SA turbulence model source, and k-omega/k-epsilon RANS model sources.
+     *
+     *  @param UMeanXy   Cell mean conservative state.
+     *  @param DiffUxy   Gradient of conservative variables at the quadrature point.
+     *  @param pPhy      Physical coordinates of the quadrature point.
+     *  @param jacobian  Source-term Jacobian matrix (output when Mode==2).
+     *  @param iCell     Cell index.
+     *  @param ig        Quadrature point index within the cell (-1 for cell center).
+     *  @param Mode      0: return source vector; 1: return diagonal Jacobian; 2: return full Jacobian.
+     *  @return Source term vector.
+     */
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::source(
         const TU &UMeanXy,
         const TDiffU &DiffUxy,
@@ -1611,6 +1718,27 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Dispatcher for boundary ghost-value generation, routing to per-BC-type handlers.
+     *
+     *  Selects the appropriate boundary value generator based on the BC type (farfield,
+     *  wall, inviscid wall, outflow, inflow, total-condition inflow, symmetry, etc.)
+     *  and returns the ghost (right) state for the boundary face.
+     *
+     *  @param ULxy       Left (interior) state; may be modified by some handlers (e.g., fixUL).
+     *  @param ULMeanXy   Left cell mean state.
+     *  @param iCell      Owner cell index.
+     *  @param iFace      Face index.
+     *  @param iG         Quadrature point index (-1 for face center).
+     *  @param uNorm      Outward unit normal vector.
+     *  @param normBase   Local coordinate frame built from the normal.
+     *  @param pPhysics   Physical coordinates of the quadrature point.
+     *  @param t          Current simulation time.
+     *  @param btype      Boundary zone identifier.
+     *  @param fixUL      If true, handler may modify ULxy (e.g., enforce zero SA at wall).
+     *  @param geomMode   Geometry mode for normal evaluation.
+     *  @param linMode    If 1, return linearized boundary perturbation (for Jacobian).
+     *  @return Ghost (right) state for the boundary face.
+     */
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBoundaryValue(
         TU &ULxy, //! warning, possible that UL is also modified
         const TU &ULMeanXy,
@@ -1716,6 +1844,28 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Generate ghost state for farfield and back-pressure outlet boundary conditions.
+     *
+     *  Uses Riemann-invariant-based switching: supersonic outflow extrapolates the
+     *  interior state; subsonic outflow imposes farfield pressure; subsonic inflow
+     *  imposes farfield values but retains interior pressure; supersonic inflow uses
+     *  the full farfield state. Supports anchor-point and radial-profile pressure corrections,
+     *  CL-driver AoA rotation, and rotating-frame transformations.
+     *
+     *  @param ULxy       Left (interior) state.
+     *  @param ULMeanXy   Left cell mean state.
+     *  @param iCell      Owner cell index.
+     *  @param iFace      Face index.
+     *  @param iG         Quadrature point index.
+     *  @param uNorm      Outward unit normal.
+     *  @param normBase   Local coordinate frame.
+     *  @param pPhysics   Physical coordinates.
+     *  @param t          Current simulation time.
+     *  @param btype      Boundary zone identifier.
+     *  @param fixUL      If true, may modify ULxy.
+     *  @param geomMode   Geometry mode.
+     *  @return Ghost (right) state for the farfield face.
+     */
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_FarField(
         TU &ULxy, const TU &ULMeanXy,
         index iCell, index iFace, int iG,
@@ -1810,6 +1960,24 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Generate ghost state for special farfield BCs (DMR, Rayleigh-Taylor, etc.).
+     *
+     *  Handles built-in special boundary conditions identified by reserved BC IDs:
+     *  double Mach reflection (DMR), Rayleigh-Taylor instability, and user-specified
+     *  special options. Uses Riemann-invariant switching like the standard farfield.
+     *
+     *  @param ULxy       Left (interior) state.
+     *  @param ULMeanXy   Left cell mean state.
+     *  @param iCell      Owner cell index.
+     *  @param iFace      Face index.
+     *  @param iG         Quadrature point index.
+     *  @param uNorm      Outward unit normal.
+     *  @param normBase   Local coordinate frame.
+     *  @param pPhysics   Physical coordinates.
+     *  @param t          Current simulation time.
+     *  @param btype      Boundary zone identifier (special reserved ID).
+     *  @return Ghost (right) state for the special farfield face.
+     */
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_SpecialFar(
         TU &ULxy, const TU &ULMeanXy,
         index iCell, index iFace, int iG,
@@ -2010,6 +2178,23 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Generate ghost state for inviscid wall (slip wall) and symmetry boundary conditions.
+     *
+     *  Mirrors the velocity component normal to the wall while preserving the
+     *  tangential component, density, and energy. Handles rotating-frame transformations.
+     *
+     *  @param ULxy       Left (interior) state.
+     *  @param ULMeanXy   Left cell mean state.
+     *  @param iCell      Owner cell index.
+     *  @param iFace      Face index.
+     *  @param iG         Quadrature point index.
+     *  @param uNorm      Outward unit normal.
+     *  @param normBase   Local coordinate frame.
+     *  @param pPhysics   Physical coordinates.
+     *  @param t          Current simulation time.
+     *  @param btype      Boundary zone identifier.
+     *  @return Ghost (right) state with reflected normal velocity.
+     */
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_InviscidWall(
         TU &ULxy, const TU &ULMeanXy,
         index iCell, index iFace, int iG,
@@ -2031,6 +2216,27 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Generate ghost state for viscous (no-slip) wall boundary conditions.
+     *
+     *  Reverses the velocity to enforce zero velocity at the wall (ghost mirroring).
+     *  For isothermal walls, adjusts density to match the prescribed wall temperature.
+     *  Handles SA turbulence variable (negated or zeroed at wall) and k-omega/k-epsilon
+     *  wall boundary conditions including the realizable k-epsilon wall epsilon formula.
+     *
+     *  @param ULxy       Left (interior) state (may be modified when fixUL is true for SA).
+     *  @param ULMeanXy   Left cell mean state.
+     *  @param iCell      Owner cell index.
+     *  @param iFace      Face index.
+     *  @param iG         Quadrature point index.
+     *  @param uNorm      Outward unit normal.
+     *  @param normBase   Local coordinate frame.
+     *  @param pPhysics   Physical coordinates.
+     *  @param t          Current simulation time.
+     *  @param btype      Boundary zone identifier.
+     *  @param fixUL      If true, may zero SA variables in ULxy at the wall.
+     *  @param linMode    If 1, return linearized ghost perturbation for Jacobian.
+     *  @return Ghost (right) state with no-slip wall condition.
+     */
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_ViscousWall(
         TU &ULxy, const TU &ULMeanXy,
         index iCell, index iFace, int iG,
@@ -2119,6 +2325,23 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Generate ghost state for supersonic/extrapolation outflow BC.
+     *
+     *  Simply returns the interior state as the ghost value, allowing all waves to
+     *  exit the domain without reflection.
+     *
+     *  @param ULxy       Left (interior) state.
+     *  @param ULMeanXy   Left cell mean state.
+     *  @param iCell      Owner cell index.
+     *  @param iFace      Face index.
+     *  @param iG         Quadrature point index.
+     *  @param uNorm      Outward unit normal.
+     *  @param normBase   Local coordinate frame.
+     *  @param pPhysics   Physical coordinates.
+     *  @param t          Current simulation time.
+     *  @param btype      Boundary zone identifier.
+     *  @return Ghost state equal to the interior state (full extrapolation).
+     */
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Outflow(
         TU &ULxy, const TU &ULMeanXy,
         index iCell, index iFace, int iG,
@@ -2133,6 +2356,23 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Generate ghost state for prescribed inflow boundary condition.
+     *
+     *  Sets the ghost state to the BC-prescribed conservative values. Applies
+     *  CL-driver AoA rotation and rotating-frame transformation if applicable.
+     *
+     *  @param ULxy       Left (interior) state (unused for pure inflow).
+     *  @param ULMeanXy   Left cell mean state.
+     *  @param iCell      Owner cell index.
+     *  @param iFace      Face index.
+     *  @param iG         Quadrature point index.
+     *  @param uNorm      Outward unit normal.
+     *  @param normBase   Local coordinate frame.
+     *  @param pPhysics   Physical coordinates.
+     *  @param t          Current simulation time.
+     *  @param btype      Boundary zone identifier.
+     *  @return Ghost state set to prescribed inflow values.
+     */
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Inflow(
         TU &ULxy, const TU &ULMeanXy,
         index iCell, index iFace, int iG,
@@ -2154,6 +2394,25 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         template <>)
+    /** @brief Generate ghost state for total-condition (stagnation) inflow BC.
+     *
+     *  Given prescribed stagnation pressure and temperature, computes the static
+     *  conditions from the interior velocity magnitude using isentropic relations.
+     *  The flow direction is taken from the BC-prescribed direction vector.
+     *  Applies CL-driver AoA rotation and rotating-frame transformation.
+     *
+     *  @param ULxy       Left (interior) state (used for velocity magnitude).
+     *  @param ULMeanXy   Left cell mean state.
+     *  @param iCell      Owner cell index.
+     *  @param iFace      Face index.
+     *  @param iG         Quadrature point index.
+     *  @param uNorm      Outward unit normal.
+     *  @param normBase   Local coordinate frame.
+     *  @param pPhysics   Physical coordinates.
+     *  @param t          Current simulation time.
+     *  @param btype      Boundary zone identifier.
+     *  @return Ghost state computed from total conditions and interior velocity.
+     */
     typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_TotalConditionInflow(
         TU &ULxy, const TU &ULMeanXy,
         index iCell, index iFace, int iG,
@@ -2196,6 +2455,16 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
+    /** @brief Register available output scalar fields in the OutputPicker.
+     *
+     *  Populates the output picker with named lambda functions that extract per-cell
+     *  scalar quantities (conservative components, reconstruction coefficients,
+     *  limiter values, wall distance, cell volume, turbulent viscosity, etc.)
+     *  for use in post-processing output.
+     *
+     *  @param op        OutputPicker to populate with named field extractors (output).
+     *  @param dataRefs  References to the solution arrays (u, uRec, betaPP, alphaPP).
+     */
     void EulerEvaluator<model>::InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS

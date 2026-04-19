@@ -26,7 +26,7 @@ through a layered design:
 
 | Sentinel             | Meaning                                                    |
 |----------------------|------------------------------------------------------------|
-| `Unknown`            | Auto-detect from `::rank_offsets` dataset in the H5 file.  |
+| `Unknown`            | Auto-detect from the `rank_offsets` companion dataset in the H5 file. |
 | `Parts`              | Compute offset via `MPI_Scan` over local sizes at write time. |
 | `One`                | Rank 0 writes/reads the entire dataset; others write/read nothing. |
 | `EvenSplit`          | Read only: each rank reads `~nGlobal/nRanks` rows.        |
@@ -100,7 +100,7 @@ assigns 0 rows to some ranks. This is valid and handled throughout the stack:
 
 `ParArray::ReadSerializer` with `Unknown` offset:
 
-1. Reads per-rank size from the `size` dataset (auto-detected via `::rank_offsets`).
+1. Reads per-rank size from the `size` dataset (auto-detected via the `rank_offsets` companion).
 2. For CSR: reads per-rank size, computes row offset via `MPI_Scan`, resolves to
    `isDist()`.
 3. Delegates to `Array::ReadSerializer`.

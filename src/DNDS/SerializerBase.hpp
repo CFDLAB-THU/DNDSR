@@ -11,12 +11,24 @@
 
 namespace DNDS::Serializer
 {
+    /// @brief Sentinel: "offset = Parts", indicating each rank writes its own slab.
     static const index Offset_Parts = -1;
+    /// @brief Sentinel: "offset = One", indicating the first rank owns the whole dataset.
     static const index Offset_One = -2;
+    /// @brief Sentinel: "even-split read" (see #ArrayGlobalOffset_EvenSplit).
     static const index Offset_EvenSplit = -3;
+    /// @brief Sentinel: offset unknown / uninitialised.
     static const index Offset_Unknown = UnInitIndex;
 
-    /// @brief Describes a rank's portion of a globally-distributed array (local size + global offset).
+    /**
+     * @brief Describes one rank's window into a globally-distributed dataset.
+     *
+     * @details Stores a `(localSize, globalOffset)` pair. The offset is
+     * overloaded to carry the special sentinels #Offset_Parts / #Offset_One /
+     * #Offset_EvenSplit / #Offset_Unknown (negative values). Multiplication /
+     * division are defined so that byte offsets can be derived from element
+     * offsets (`offset * sizeof(T)`) with overflow guards.
+     */
     class ArrayGlobalOffset
     {
         index _size{0};
@@ -24,11 +36,18 @@ namespace DNDS::Serializer
 
     public:
         static_assert(UnInitIndex < 0);
+        /// @brief Construct with explicit local size and global offset.
         ArrayGlobalOffset(index __size, index __offset) : _size(__size), _offset(__offset) {}
 
+        /// @brief Local size this rank owns (in element units of the caller's choosing).
         [[nodiscard]] index size() const { return _size; }
+        /// @brief Global offset of this rank's data (or a sentinel value, see
+        /// #Offset_Parts etc.).
         [[nodiscard]] index offset() const { return _offset; }
 
+        /// @brief Scale the descriptor's element count by `R` (and the offset
+        /// too if it is a real offset, not a sentinel). Used for byte-level
+        /// offsets: `elemOffset * sizeof(T)`.
         ArrayGlobalOffset operator*(index R) const
         {
             if (_offset >= 0)
@@ -43,6 +62,8 @@ namespace DNDS::Serializer
                 return ArrayGlobalOffset{_size * R, _offset};
         }
 
+        /// @brief Inverse of #operator*. Real-offset descriptors scale both
+        /// size and offset; sentinel descriptors only scale the size.
         ArrayGlobalOffset operator/(index R) const
         {
             if (_offset >= 0)
@@ -51,6 +72,8 @@ namespace DNDS::Serializer
                 return ArrayGlobalOffset{_size / R, _offset};
         }
 
+        /// @brief Assert that both size and offset are multiples of `R`.
+        /// @details Used when translating between element and byte offsets.
         void CheckMultipleOf(index R) const
         {
             if (_offset >= 0)
@@ -60,6 +83,8 @@ namespace DNDS::Serializer
             }
         }
 
+        /// @brief Equality: sentinel offsets compare only by offset,
+        /// real-offset descriptors compare by the full `(size, offset)` pair.
         bool operator==(const ArrayGlobalOffset &other) const
         {
             if (_offset >= 0)
@@ -68,11 +93,14 @@ namespace DNDS::Serializer
                 return _offset == other._offset;
         }
 
+        /// @brief Pretty-printed representation for logging.
         operator std::string() const
         {
             return fmt::format("ArrayGlobalOffset{{size: {}, offset: {}}}", _size, _offset);
         }
 
+        /// @brief Whether this descriptor carries a real distributed offset
+        /// (rather than a sentinel like #Offset_Parts).
         [[nodiscard]] bool isDist() const
         {
             return _offset >= 0;
@@ -85,10 +113,14 @@ namespace DNDS::Serializer
         }
     };
 
+    /// @brief Sentinel: offset unknown / uninitialised.
     static const ArrayGlobalOffset ArrayGlobalOffset_Unknown = ArrayGlobalOffset{0, Offset_Unknown};
+    /// @brief Sentinel: rank 0 owns the whole dataset.
     static const ArrayGlobalOffset ArrayGlobalOffset_One = ArrayGlobalOffset{0, Offset_One};
+    /// @brief Sentinel: each rank writes its slab; serializer infers offsets via MPI_Scan.
     static const ArrayGlobalOffset ArrayGlobalOffset_Parts = ArrayGlobalOffset{0, Offset_Parts};
-    /// @brief Even-split read: each rank reads ~N_global/nRanks rows starting at rank * N_global / nRanks.
+    /// @brief Sentinel: even-split read (each rank reads ~N_global/nRanks rows
+    /// starting at `rank * N_global / nRanks`). Used during repartitioned restarts.
     static const ArrayGlobalOffset ArrayGlobalOffset_EvenSplit = ArrayGlobalOffset{0, Offset_EvenSplit};
 
     /// @brief Abstract interface for reading/writing scalars, vectors, and byte arrays.
@@ -158,34 +190,61 @@ namespace DNDS::Serializer
 
     public:
         virtual ~SerializerBase(); // define in CPP
+        /// @brief Open a backing file (H5 file or JSON file depending on subclass).
+        /// @param read `true` for reading, `false` for writing.
         virtual void OpenFile(const std::string &fName, bool read) = 0;
+        /// @brief Close the backing file, flushing buffers.
         virtual void CloseFile() = 0;
+        /// @brief Create a sub-path (H5 group / JSON object) at the current location.
         virtual void CreatePath(const std::string &p) = 0;
+        /// @brief Navigate to an existing path. Supports `/` -separated segments.
         virtual void GoToPath(const std::string &p) = 0;
+        /// @brief Whether this serializer is per-rank (JSON-file-per-rank) or
+        /// collective (shared H5 file). Controls which API entry points are used.
         virtual bool IsPerRank() = 0;
+        /// @brief String form of the current path.
         virtual std::string GetCurrentPath() = 0;
+        /// @brief Names of direct children of the current path.
         virtual std::set<std::string> ListCurrentPath() = 0;
+        /// @brief Rank index cached by the serializer (relevant for collective I/O).
         virtual int GetMPIRank() = 0;
+        /// @brief Rank count cached by the serializer.
         virtual int GetMPISize() = 0;
+        /// @brief MPI context the serializer was opened with.
         virtual const MPIInfo& getMPI() = 0;
 
+        /// @brief Write a scalar int under `name` at the current path.
         virtual void WriteInt(const std::string &name, int v) = 0;
+        /// @brief Write a scalar #index under `name`.
         virtual void WriteIndex(const std::string &name, index v) = 0;
+        /// @brief Write a scalar #real under `name`.
         virtual void WriteReal(const std::string &name, real v) = 0;
+        /// @brief Write a UTF-8 string under `name`.
         virtual void WriteString(const std::string &name, const std::string &v) = 0;
 
+        /// @brief Write an index vector (collective for H5). `offset` carries the
+        /// distribution mode (`Parts`, explicit offset, etc.).
         virtual void WriteIndexVector(const std::string &name, const std::vector<index> &v, ArrayGlobalOffset offset) = 0;
+        /// @brief Write a rowsize vector (collective for H5).
         virtual void WriteRowsizeVector(const std::string &name, const std::vector<rowsize> &v, ArrayGlobalOffset offset) = 0;
+        /// @brief Write a real vector (collective for H5).
         virtual void WriteRealVector(const std::string &name, const std::vector<real> &v, ArrayGlobalOffset offset) = 0;
+        /// @brief Write a shared index vector; deduplicated across multiple writes
+        /// that share the same `shared_ptr`.
         virtual void WriteSharedIndexVector(const std::string &name, const ssp<host_device_vector<index>> &v, ArrayGlobalOffset offset) = 0;
+        /// @brief Write a shared rowsize vector; deduplicated across multiple writes.
         virtual void WriteSharedRowsizeVector(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset) = 0;
+        /// @brief Write a raw byte buffer under `name`. `offset.isDist()` = true
+        /// means the caller provides the exact per-rank slab; otherwise the
+        /// buffer is treated according to the offset's sentinel.
         virtual void WriteUint8Array(const std::string &name, const uint8_t *data, index size, ArrayGlobalOffset offset) = 0;
 
         /**
-         * @brief size of v need to be identical across ranks
-         *
-         * @param name
-         * @param v
+         * @brief Write a per-rank index vector (replicated name, independent values).
+         * @details Every rank writes its own vector under `name`; in the H5 case
+         * each rank's slab is placed in a separate dataset.
+         * @param name  Dataset name (identical on every rank).
+         * @param v     Rank-local vector; size may differ between ranks.
          */
         virtual void WriteIndexVectorPerRank(const std::string &name, const std::vector<index> &v) = 0;
         // virtual void WriteIndexVectorParallel(const std::string &name, const host_device_vector<index> &v, ArrayGlobalOffset offset) = 0;
@@ -195,9 +254,13 @@ namespace DNDS::Serializer
         // virtual void WriteSharedRowsizeVectorParallel(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset) = 0;
         // virtual void WriteUint8ArrayParallel(const std::string &name, const uint8_t *data, index size, ArrayGlobalOffset offset) = 0;
 
+        /// @brief Read a scalar int into `v`.
         virtual void ReadInt(const std::string &name, int &v) = 0;
+        /// @brief Read a scalar #index into `v`.
         virtual void ReadIndex(const std::string &name, index &v) = 0;
+        /// @brief Read a scalar #real into `v`.
         virtual void ReadReal(const std::string &name, real &v) = 0;
+        /// @brief Read a UTF-8 string into `v`.
         virtual void ReadString(const std::string &name, std::string &v) = 0;
 
         /// Read methods resize the output container and populate it.

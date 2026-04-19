@@ -1,3 +1,13 @@
+/** @file EulerP_Evaluator_impl.hpp
+ *  @brief Backend-specific implementation layer for EulerP Evaluator kernel dispatch.
+ *
+ *  Defines Evaluator_impl<B>, a template struct parameterized by DeviceBackend (Host or CUDA).
+ *  For each Evaluator kernel, an inner argument struct wraps the host-side shared_ptr-based
+ *  Evaluator::*_Arg into device views suitable for kernel execution. The inner Portable
+ *  sub-struct is trivially copyable and can be passed to CUDA kernels.
+ *
+ *  Also defines helper macros for constructing device views from Evaluator argument members.
+ */
 #pragma once
 
 #include "EulerP_Evaluator.hpp"
@@ -6,6 +16,11 @@
 
 namespace DNDS::EulerP
 {
+/** @name Argument construction macros
+ *  @brief Helper macros used inside Evaluator_impl inner arg struct constructors to
+ *         create device views from host-side Evaluator argument members.
+ *  @{
+ */
 #define DNDS_EULERP_IMPL_ARG_GET_REF(member) auto &member = arg.member;
 #define DNDS_EULERP_IMPL_ARG_GET_REF_PORTABLE(member) auto &member = arg.portable.member;
 
@@ -46,35 +61,62 @@ namespace DNDS::EulerP
         portable.member = (member_v)->deviceView();                                       \
     }
 
+/** @} */ // end of argument construction macros
+
+    /**
+     * @brief Backend-specific implementation of EulerP Evaluator kernels.
+     *
+     * Each kernel (RecGradient, Cons2PrimMu, EstEigenDt, RecFace2nd, Flux2nd) is wrapped
+     * in an inner Arg struct that converts host-side shared_ptr arrays into device views,
+     * and a static method that dispatches the actual computation. The inner Portable struct
+     * within each Arg is trivially copyable for CUDA kernel launch.
+     *
+     * @tparam B The DeviceBackend (Host or CUDA). Explicit specializations live in
+     *           EulerP_Evaluator_impl.cpp (Host) and the CUDA compilation unit.
+     */
     template <DeviceBackend B>
     struct Evaluator_impl
     {
+        /** @brief Unique pointer to a device view vector of scalar array views. */
         using t_Scalar_deviceViewVector_sup = std::unique_ptr<deviceViewVector<TUScalar::t_deviceView<B>, B>>;
+        /** @brief Unique pointer to a device view vector of scalar-gradient array views. */
         using t_ScalarGrad_deviceViewVector_sup = std::unique_ptr<deviceViewVector<TUScalarGrad::t_deviceView<B>, B>>;
+        /**
+         * @brief Device-side argument struct for gradient reconstruction kernels.
+         *
+         * Wraps Evaluator::RecGradient_Arg by converting shared_ptr arrays into device views.
+         * The Portable sub-struct is trivially copyable for CUDA kernel parameters.
+         */
         struct RecGradient_Arg
         {
             Evaluator &self;
             Evaluator::t_deviceView<B> this_v; //! must keep this alive
             EvaluatorDeviceView<B> self_view;
 
+            /** @brief Trivially-copyable payload holding device views of all kernel data. */
             struct Portable
             {
                 // buffer
-                TUDof::t_deviceView<B> faceBCBuffer;
-                vector_DeviceView<B, TUScalar::t_deviceView<B>> faceBCScalarBuffer;
+                TUDof::t_deviceView<B> faceBCBuffer;                                      /**< @brief Face BC ghost DOF buffer (device view). */
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> faceBCScalarBuffer;       /**< @brief Face BC ghost scalar buffers (device view). */
 
-                TUDof::t_deviceView<B> u;
-                TUGrad::t_deviceView<B> uGrad;
-                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalar;
-                vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGrad;
+                TUDof::t_deviceView<B> u;                                                 /**< @brief Conservative state (device view). */
+                TUGrad::t_deviceView<B> uGrad;                                            /**< @brief Gradient of conservative state (device view). */
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalar;                  /**< @brief Transported scalar fields (device view). */
+                vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGrad;          /**< @brief Gradients of transported scalars (device view). */
             } portable;
             static_assert(std::is_trivially_copyable_v<Portable>);
 
-            t_Scalar_deviceViewVector_sup faceBCScalarBuffer_v;
+            t_Scalar_deviceViewVector_sup faceBCScalarBuffer_v;  /**< @brief Owning storage for face BC scalar buffer device views. */
             // out
-            t_Scalar_deviceViewVector_sup uScalar_v;
-            t_ScalarGrad_deviceViewVector_sup uScalarGrad_v;
+            t_Scalar_deviceViewVector_sup uScalar_v;               /**< @brief Owning storage for scalar field device views. */
+            t_ScalarGrad_deviceViewVector_sup uScalarGrad_v;       /**< @brief Owning storage for scalar gradient device views. */
 
+            /**
+             * @brief Constructs device views from the host-side RecGradient_Arg.
+             * @param self_ Reference to the Evaluator.
+             * @param arg Host-side argument struct providing shared_ptr arrays.
+             */
             RecGradient_Arg(Evaluator &self_, Evaluator::RecGradient_Arg &arg)
                 : DNDS_EULERP_IMPL_ARG_CTOR_INIT_SELF()
             {
@@ -88,32 +130,46 @@ namespace DNDS::EulerP
                 DNDS_EULERP_IMPL_ARG_CTOR_PORTABLE_COPY_VECSSPARR(uScalarGrad, uScalarGrad_v)
             }
         };
+        /**
+         * @brief Green-Gauss gradient reconstruction: boundary ghost values + cell gradient computation.
+         * @param arg Device-side argument struct with all required views.
+         */
         static void RecGradient_GGRec(RecGradient_Arg &arg);
 
+        /**
+         * @brief Barth-Jespersen gradient limiter applied to reconstructed gradients.
+         * @param arg Device-side argument struct with all required views.
+         */
         static void RecGradient_BarthLimiter(RecGradient_Arg &arg);
 
+        /**
+         * @brief Device-side argument struct for conservative-to-primitive + viscosity kernel.
+         *
+         * Wraps Evaluator::Cons2PrimMu_Arg by converting all shared_ptr arrays into device views.
+         */
         struct Cons2PrimMu_Arg
         {
             Evaluator &self;
             Evaluator::t_deviceView<B> this_v; //! must keep this alive
             EvaluatorDeviceView<B> self_view;
 
+            /** @brief Trivially-copyable payload for Cons2PrimMu kernel data. */
             struct Portable
             {
-                TUDof::t_deviceView<B> u;
-                TUGrad::t_deviceView<B> uGrad;
-                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalar;
-                vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGrad;
-                TUDof::t_deviceView<B> uPrim;
-                TUGrad::t_deviceView<B> uGradPrim;
-                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarPrim;
-                vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradPrim;
-                TUScalar::t_deviceView<B> p;
-                TUScalar::t_deviceView<B> T;
-                TUScalar::t_deviceView<B> a;
-                TUScalar::t_deviceView<B> gamma;
-                TUScalar::t_deviceView<B> mu;
-                vector_DeviceView<B, TUScalar::t_deviceView<B>> muComp;
+                TUDof::t_deviceView<B> u;                                                 /**< @brief Conservative state (device view). */
+                TUGrad::t_deviceView<B> uGrad;                                            /**< @brief Gradient of conservative state (device view). */
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalar;                  /**< @brief Transported scalars (device view). */
+                vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGrad;          /**< @brief Scalar gradients (device view). */
+                TUDof::t_deviceView<B> uPrim;                                             /**< @brief Primitive state output (device view). */
+                TUGrad::t_deviceView<B> uGradPrim;                                        /**< @brief Primitive gradient output (device view). */
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> uScalarPrim;              /**< @brief Primitive scalars output (device view). */
+                vector_DeviceView<B, TUScalarGrad::t_deviceView<B>> uScalarGradPrim;      /**< @brief Primitive scalar gradients output (device view). */
+                TUScalar::t_deviceView<B> p;                                              /**< @brief Pressure output (device view). */
+                TUScalar::t_deviceView<B> T;                                              /**< @brief Temperature output (device view). */
+                TUScalar::t_deviceView<B> a;                                              /**< @brief Speed of sound output (device view). */
+                TUScalar::t_deviceView<B> gamma;                                          /**< @brief Gamma output (device view). */
+                TUScalar::t_deviceView<B> mu;                                             /**< @brief Total viscosity output (device view). */
+                vector_DeviceView<B, TUScalar::t_deviceView<B>> muComp;                   /**< @brief Component viscosities output (device view). */
             } portable;
             static_assert(std::is_trivially_copyable_v<Portable>);
             t_Scalar_deviceViewVector_sup uScalar_v;
@@ -145,8 +201,15 @@ namespace DNDS::EulerP
             }
         };
 
+        /**
+         * @brief Executes conservative-to-primitive conversion with viscosity computation.
+         * @param arg Device-side argument struct with all required views.
+         */
         static void Cons2PrimMu(Cons2PrimMu_Arg &arg);
 
+        /**
+         * @brief Device-side argument struct for conservative-to-primitive conversion (no gradients/viscosity).
+         */
         struct Cons2Prim_Arg
         {
             Evaluator &self;
@@ -187,8 +250,15 @@ namespace DNDS::EulerP
             }
         };
 
+        /**
+         * @brief Executes conservative-to-primitive conversion (no gradients/viscosity).
+         * @param arg Device-side argument struct with all required views.
+         */
         static void Cons2Prim(Cons2Prim_Arg &arg);
 
+        /**
+         * @brief Device-side argument struct for eigenvalue estimation and time-step computation.
+         */
         struct EstEigenDt_Arg
         {
             Evaluator &self;
@@ -223,10 +293,21 @@ namespace DNDS::EulerP
             }
         };
 
+        /**
+         * @brief First pass: computes per-face eigenvalue estimates from cell states.
+         * @param arg Device-side argument struct with all required views.
+         */
         static void EstEigenDt_GetFaceLam(EstEigenDt_Arg &arg);
 
+        /**
+         * @brief Second pass: accumulates face eigenvalues to cells and computes local dt.
+         * @param arg Device-side argument struct with all required views.
+         */
         static void EstEigenDt_FaceLam2CellDt(EstEigenDt_Arg &arg);
 
+        /**
+         * @brief Device-side argument struct for 2nd-order face value reconstruction.
+         */
         struct RecFace2nd_Arg
         {
             Evaluator &self;
@@ -274,8 +355,18 @@ namespace DNDS::EulerP
             }
         };
 
+        /**
+         * @brief Executes 2nd-order face value reconstruction from cell-centered data.
+         * @param arg Device-side argument struct with all required views.
+         */
         static void RecFace2nd(RecFace2nd_Arg &arg);
 
+        /**
+         * @brief Device-side argument struct for 2nd-order flux evaluation and RHS accumulation.
+         *
+         * The largest impl arg struct, wrapping all state, thermodynamic, face-reconstructed,
+         * and output arrays as device views for kernel execution.
+         */
         struct Flux2nd_Arg
         {
             Evaluator &self;
@@ -374,6 +465,10 @@ namespace DNDS::EulerP
             }
         };
 
+        /**
+         * @brief Evaluates 2nd-order Roe flux per face and scatters to cell RHS.
+         * @param arg Device-side argument struct with all required views.
+         */
         static void Flux2nd(Flux2nd_Arg &arg);
     };
 }

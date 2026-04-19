@@ -27,10 +27,33 @@
 
 namespace DNDS
 {
+    /// @brief Shared pointer to a #GlobalOffsetsMapping (globally replicated).
     using t_pLGlobalMapping = ssp<GlobalOffsetsMapping>;
+    /// @brief Shared pointer to an #OffsetAscendIndexMapping (per-rank ghost layout).
     using t_pLGhostMapping = ssp<OffsetAscendIndexMapping>; // TODO: change to unique_ptr and modify corresponding copy constructor/assigner
 
-    /// @brief MPI-aware Array with global index mapping and ghost support.
+    /**
+     * @brief MPI-aware #Array: adds a communicator, rank, and global index mapping.
+     *
+     * @details Inherits everything from #Array and layers on:
+     *  - an #MPIInfo `mpi` context;
+     *  - a #GlobalOffsetsMapping `pLGlobalMapping` that maps local row indices
+     *    to the global index space (populated by #createGlobalMapping);
+     *  - collective serialization I/O that coordinates writes / reads across ranks.
+     *
+     * Typical usage:
+     * ```cpp
+     * auto father = std::make_shared<ParArray<real, 5>>(mpi);
+     * father->Resize(nLocal);
+     * father->createGlobalMapping();         // collective
+     * index nGlobal = father->globalSize();  // total rows across ranks
+     * ```
+     *
+     * Ghost (halo) data is not managed here; pair with #ArrayTransformer or
+     * wrap in an #ArrayPair for that.
+     *
+     * @sa ArrayTransformer, ArrayPair, docs/architecture/arrays.md.
+     */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ParArray : public Array<T, _row_size, _row_max, _align>
     {
@@ -42,7 +65,11 @@ namespace DNDS
 
         using TArray::Array;
         // TODO: privatize these
+        /// @brief Shared pointer to the global-offsets table. Populated by
+        /// #createGlobalMapping; may be pointed at an existing table to skip
+        /// the collective setup.
         t_pLGlobalMapping pLGlobalMapping;
+        /// @brief MPI context associated with this array (must be set before collectives).
         MPIInfo mpi;
         using t_pRowSizes = typename TArray::t_pRowSizes;
 
@@ -53,6 +80,8 @@ namespace DNDS
 
         // operator= handled automatically
 
+        /// @brief Copy-assign from another ParArray. Shallow copy semantics
+        /// (mirrors #Array::clone): shares structural/data buffers.
         void clone(const t_self &R)
         {
             this->operator=(R);
@@ -205,14 +234,16 @@ namespace DNDS
         MPI_int typeMult = BasicType_To_MPIIntType<T>().second;
 
     public:
+        /// @brief MPI element datatype used for ghost exchange (deduced from `T`).
         MPI_Datatype getDataType() { return dataType; }
+        /// @brief Per-element count multiplier that goes with #getDataType.
         MPI_int getTypeMult() { return typeMult; }
 
     public:
         /**
-         * @brief allows using default constructor and set MPI after
-         *
-         * @param n_mpi
+         * @brief Install the MPI context after default construction.
+         * @details Calls #AssertDataType to verify the deduced datatype / multiplier
+         * match `sizeof(T)`.
          */
         void setMPI(const MPIInfo &n_mpi)
         {
@@ -220,28 +251,37 @@ namespace DNDS
             AssertDataType();
         }
 
+        /// @brief Mutable MPI context accessor.
         MPIInfo &getMPI()
         {
             return mpi;
         }
 
+        /// @brief Read-only MPI context accessor.
         [[nodiscard]] const MPIInfo &getMPI() const
         {
             return mpi;
         }
 
+        /// @brief Override the deduced MPI datatype and element multiplier
+        /// (advanced; needed for custom compound element types).
         void setDataType(MPI_Datatype n_dType, MPI_int n_TypeMult)
         {
             dataType = n_dType;
             typeMult = n_TypeMult;
         }
 
+        /// @brief Default-construct an uninitialised ParArray; call #setMPI and #Resize later.
         ParArray() = default;
 
+        /// @brief Construct a ParArray bound to the given MPI context.
         ParArray(const MPIInfo &n_mpi) : mpi(n_mpi)
         {
             AssertDataType();
         }
+        /// @brief Construct with a custom (MPI datatype, multiplier) pair.
+        /// @details Useful for element types whose in-memory layout differs from
+        /// the default `BasicType_To_MPIIntType<T>()` deduction.
         ParArray(MPI_Datatype n_dType, MPI_int n_TypeMult, const MPIInfo &n_mpi)
             : mpi(n_mpi), dataType(n_dType), typeMult(n_TypeMult)
         {
@@ -263,6 +303,9 @@ namespace DNDS
             this->setObjectName(std::move(objName.name));
         }
 
+        /// @brief Assert the MPI datatype matches `sizeof(T)` exactly.
+        /// @details Called from constructors / #setMPI / #setDataType. Guards
+        /// against size mismatches that would silently corrupt comms.
         void AssertDataType()
         {
             DNDS_check_throw(dataType != MPI_DATATYPE_NULL);
@@ -273,12 +316,14 @@ namespace DNDS
         }
 
         /**
-         * @brief asserts on the consistencies
+         * @brief Check array consistency across all ranks.
          *
+         * @details Uses `MPI_Allgather` to verify that row sizes (for `TABLE_Fixed`
+         * and `TABLE_Max` layouts) and MPI type multipliers are the same on every
+         * rank. Intended as a post-setup sanity check before entering ghost exchange.
          *
-         * @warning //! warning, complexity O(Nproc); must collectively call
-         * @return true currently only true
-         * @return false
+         * @warning Must be called collectively. O(nRanks) memory and communication.
+         * @return true Always (failures are reported via `DNDS_check_throw_info`).
          */
         bool AssertConsistent()
         {
@@ -304,7 +349,16 @@ namespace DNDS
             return true; // currently all errors aborts inside
         }
 
-        /// @warning must collectively call
+        /**
+         * @brief Collective: build the global offsets table.
+         *
+         * @details Every rank broadcasts its local `Size()`; after the call,
+         * #pLGlobalMapping holds the full `RankLengths` / `RankOffsets` on every
+         * rank. Must be invoked before #globalSize, #ArrayTransformer::createFatherGlobalMapping,
+         * or any CSR collective serialization.
+         *
+         * @warning Must be called collectively on `mpi.comm`.
+         */
         void createGlobalMapping() // collective;
         {
             DNDS_check_throw_info(mpi.comm != MPI_COMM_NULL, "MPI unset");
@@ -336,7 +390,37 @@ namespace DNDS
 
     /********************************************************************************************************/
 
-    /// @brief Manages ghost (halo) communication for a father-son ParArray pair.
+    /**
+     * @brief Ghost-communication engine for a father / son #ParArray pair.
+     *
+     * @details Distributed-mesh stencil schemes need data from cells owned by
+     * other ranks. `ArrayTransformer` stores two #ParArray pointers -- the
+     * *father* (owned rows) and the *son* (incoming ghost rows) -- plus the
+     * MPI machinery to move data between them.
+     *
+     * ## Setup (done once)
+     * 1. #setFatherSon            -- attach the two arrays.
+     * 2. #createFatherGlobalMapping -- collective; populate global offsets.
+     * 3. #createGhostMapping      -- specify which global rows this rank needs as ghosts.
+     * 4. #createMPITypes          -- build `MPI_Type_create_hindexed` derived
+     *                                types (or in-situ pack buffers) for send/recv.
+     *
+     * ## Communication
+     * - One-shot: #pullOnce / #pushOnce (short-lived `Isend`/`Irecv` pair).
+     * - Persistent: #initPersistentPull -> repeated #startPersistentPull /
+     *   #waitPersistentPull cycles -> #clearPersistentPull when done.
+     *   Persistent requests avoid re-posting sends and receives on every
+     *   iteration, saving per-step overhead.
+     *
+     * ## Reuse
+     * When multiple arrays share the same ghost pattern (e.g. the DOF array
+     * and the gradient array both use the `cell2cell` partition), call
+     * #BorrowGGIndexing on the secondary transformer to copy the mapping
+     * without redoing collective setup -- only #createMPITypes must be redone,
+     * because the element size differs.
+     *
+     * @sa ArrayPair, ArrayDof, docs/architecture/arrays.md.
+     */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     // template <class TArray>
     class ArrayTransformer
@@ -358,38 +442,58 @@ namespace DNDS
         /*          MEMBER               */
         /*********************************/
 
+        /// @brief MPI context; copied from the attached father array.
         MPIInfo mpi;
+        /// @brief Ghost index mapping (rank-local layout). Populated by #createGhostMapping.
         t_pLGhostMapping pLGhostMapping;
+        /// @brief The "owned" side of the father/son pair.
         t_pArray father;
+        /// @brief The "ghost" side of the father/son pair (receives from other ranks).
         t_pArray son;
 
+        /// @brief Shared pointer to the global offsets table (shared with father).
         t_pLGlobalMapping pLGlobalMapping; // reference from father
 
+        /// @brief Cached `(count, MPI_Datatype)` pairs for push (son -> father).
         ssp<tMPI_typePairVec> pPushTypeVec;
+        /// @brief Cached `(count, MPI_Datatype)` pairs for pull (father -> son).
         ssp<tMPI_typePairVec> pPullTypeVec;
 
         // ** comm aux info: comm running structures **
         // TODO: make these aux info (sized) shared and thread-safe
+        /// @brief Persistent request handles for push.
         ssp<MPIReqHolder> PushReqVec;
+        /// @brief Persistent request handles for pull.
         ssp<MPIReqHolder> PullReqVec;
+        /// @brief Device currently holding push buffers (`Unknown` if not initialised).
         DeviceBackend pushDevice = DeviceBackend::Unknown;
+        /// @brief Device currently holding pull buffers (`Unknown` if not initialised).
         DeviceBackend pullDevice = DeviceBackend::Unknown;
+        /// @brief Number of `Recv` requests in #PushReqVec (the rest are `Send`s).
         MPI_int nRecvPushReq{-1};
+        /// @brief Number of `Recv` requests in #PullReqVec.
         MPI_int nRecvPullReq{-1};
+        /// @brief Status buffer for push completion.
         tMPI_statVec PushStatVec;
+        /// @brief Status buffer for pull completion.
         tMPI_statVec PullStatVec;
+        /// @brief Total bytes sent per push call (for buffer sizing).
         MPI_Aint pushSendSize;
+        /// @brief Total bytes sent per pull call.
         MPI_Aint pullSendSize;
 
-        tMPI_intVec pushingSizes;                 // currently only temp in CreateMPITypes()
-        tMPI_AintVec pushingDisps;                // currently only temp in CreateMPITypes()
-        std::vector<index> pushingIndexLocal;     // for InSituPack strategy
-        std::vector<std::vector<T>> inSituBuffer; // for InSituPack strategy
+        tMPI_intVec pushingSizes;                 ///< temp: per-peer count for #createMPITypes.
+        tMPI_AintVec pushingDisps;                ///< temp: per-peer byte displacements for #createMPITypes.
+        std::vector<index> pushingIndexLocal;     ///< for InSituPack strategy
+        std::vector<std::vector<T>> inSituBuffer; ///< for InSituPack strategy
 
         /*********************************/
         /*          MEMBER               */
         /*********************************/
 
+        /// @brief Copy-assign the transformer state. Persistent requests are
+        /// re-created rather than shared because they point to different
+        /// memory than the source object.
         TSelf &operator=(const TSelf &R)
         {
             if (this == &R)
@@ -438,14 +542,27 @@ namespace DNDS
             return *this;
         }
 
+        /// @brief Default-construct an empty transformer; attach arrays later via #setFatherSon.
         ArrayTransformer() = default;
 
+        /// @brief Copy-construct via operator=.
         ArrayTransformer(const TSelf &R)
         {
             // initial-safe operator= call
             this->operator=(R);
         }
 
+        /**
+         * @brief Attach father and son arrays. First setup step.
+         *
+         * @details Both arrays must share the same MPI context and element
+         * MPI datatype. The transformer cannot be used until the remaining
+         * setup calls (#createFatherGlobalMapping, #createGhostMapping,
+         * #createMPITypes) have run.
+         *
+         * @param n_father Owned-side array (must not be null).
+         * @param n_son    Ghost-side array (must not be null).
+         */
         void setFatherSon(const t_pArray &n_father, const t_pArray &n_son)
         {
             DNDS_check_throw(n_father && n_son);
@@ -462,6 +579,18 @@ namespace DNDS
             pLGlobalMapping = father->pLGlobalMapping;
         }
 
+        /**
+         * @brief Borrow the ghost and global mapping from another transformer.
+         *
+         * @details Intended for the common case where several arrays share the
+         * same partition (e.g., the DOF array and the gradient array both
+         * live on the same cell partitioning). Copies the shared pointers --
+         * no collective work is performed. After this call, #createMPITypes
+         * still needs to be invoked because the element size differs.
+         *
+         * @tparam TRArrayTrans A compatible transformer type; must expose
+         *                     `father`, `pLGhostMapping`, `pLGlobalMapping`.
+         */
         template <class TRArrayTrans>
         void BorrowGGIndexing(const TRArrayTrans &RArrayTrans)
         {
@@ -475,6 +604,9 @@ namespace DNDS
             father->pLGlobalMapping = RArrayTrans.pLGlobalMapping;
         }
 
+        /// @brief Collective: build the global offsets table on the father array.
+        /// @details Thin wrapper over `father->createGlobalMapping()` that also
+        /// caches the pointer in this transformer. Second setup step.
         void createFatherGlobalMapping()
         {
             father->createGlobalMapping();
@@ -510,11 +642,22 @@ namespace DNDS
                 mpi);
         }
 
-        /** @brief create ghost by pushing data, son is resized
-         * @details
-         * pulling data indicates the data distributed in father (received in pushing operation)
-         * CSR(pushingIndexLocal,pushStarts) indicates the local indices in father, for each rank to push from or pull to
-         * CSR(pushingIndexLocal,pushStarts) is required to be mutually different entries of father, otherwise behavior undefined
+        /**
+         * @brief Create the ghost mapping from a *push* specification. Collective.
+         *
+         * @details Each rank supplies, grouped per receiver, the local indices it
+         * will push to that receiver. Row `i` of this rank's father will be sent
+         * to every rank listed for `i` across the CSR `(pushingIndexLocal, pushStarts)`.
+         * The son array is resized to hold the incoming entries on return from
+         * #createMPITypes.
+         *
+         * @param pushingIndexLocal Flat vector of local indices to push, grouped
+         *                          by receiver in ascending rank order.
+         * @param pushStarts        Prefix-sum offsets into `pushingIndexLocal`,
+         *                          size `mpi.size + 1`.
+         *
+         * @warning Each local index must appear at most once across the entire
+         * CSR, otherwise the resulting ghost layout is undefined.
          */
         template <class TPushSet, class TPushStart>
         void createGhostMapping(TPushSet &&pushingIndexLocal, TPushStart &&pushStarts) // collective;
@@ -531,12 +674,22 @@ namespace DNDS
                 *pLGlobalMapping,
                 mpi);
         }
-        /******************************************************************************************************************************/
         /**
-         * \brief get real element byte info into account, with ghost indexer and comm types built, need two mappings.
-         * son is resized
-         * \pre has pLGlobalMapping pLGhostMapping, and resize the son
-         * \post my indexer pPullTypeVec pPushTypeVec established
+         * @brief Collective: build the MPI derived datatypes (or in-situ buffers)
+         * that describe the ghost send/recv layout. Resizes the son array.
+         *
+         * @details Fourth (and final) setup step. Consumes the per-rank push
+         * sizes and the ghost mapping produced by #createGhostMapping, then:
+         *  - for `HIndexed`: builds `MPI_Type_create_hindexed` types that
+         *    describe the scattered memory layout of the rows being sent and
+         *    received;
+         *  - for `InSituPack`: allocates contiguous pack buffers.
+         *
+         * Also resizes `son` to hold exactly the incoming ghost rows.
+         *
+         * @pre `father`, `son`, #pLGlobalMapping, #pLGhostMapping are set.
+         * @post `pPullTypeVec` and `pPushTypeVec` (or the in-situ buffers) are
+         *       valid; son has been resized.
          */
         void createMPITypes() // collective;
         {
@@ -779,10 +932,21 @@ namespace DNDS
 
         /******************************************************************************************************************************/
         /**
-         * \brief when established push and pull types, init persistent-nonblocked-nonbuffered MPI reqs
-         * \pre has pPullTypeVec pPushTypeVec
-         * \post PushReqVec established
-         * \warning after init, raw buffers of data for both father and son/ghost should remain static
+         * @brief Initialise persistent, non-blocking, non-buffered MPI requests
+         * for the push direction (son -> father).
+         *
+         * @details Once persistent requests are created, many push cycles may
+         * be run via #startPersistentPush / #waitPersistentPush without
+         * re-posting sends and receives.
+         *
+         * @pre #createMPITypes has been called; #pPullTypeVec and #pPushTypeVec are valid.
+         * @post #PushReqVec is populated with `MPI_Send_init` / `MPI_Recv_init` requests.
+         *
+         * @param B Device backend for the send/recv buffers
+         *          (`DeviceBackend::Unknown` to use host; requires CUDA-aware
+         *          MPI for non-host backends).
+         * @warning After init, the raw data pointers of both father and son
+         * must remain stable until #clearPersistentPush is called.
          */
         void initPersistentPush(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
@@ -848,10 +1012,15 @@ namespace DNDS
 
         /******************************************************************************************************************************/
         /**
-         * \brief when established push and pull types, init persistent-nonblocked-nonbuffered MPI reqs
-         * \pre has pPullTypeVec pPushTypeVec
-         * \post PullReqVec established
-         * \warning after init, raw buffers of data for both father and son/ghost should remain static
+         * @brief Initialise persistent, non-blocking MPI requests for the pull
+         * direction (father -> son). Counterpart to #initPersistentPush.
+         *
+         * @pre #createMPITypes has been called; #pPullTypeVec and #pPushTypeVec are valid.
+         * @post #PullReqVec is populated.
+         *
+         * @param B Device backend for the send/recv buffers.
+         * @warning Raw data pointers for both father and son must remain stable
+         * until #clearPersistentPull.
          */
         void initPersistentPull(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
@@ -967,6 +1136,8 @@ namespace DNDS
             }
         }
 
+        /// @brief Start all persistent push requests (`MPI_Startall`).
+        /// @param B Device backend; must match the one passed to #initPersistentPush.
         void startPersistentPush(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
             if (commTypeCurrent == MPI::CommStrategy::HIndexed)
@@ -1063,6 +1234,10 @@ namespace DNDS
             }
         }
 
+        /// @brief Start all persistent pull requests (`MPI_Startall`).
+        /// @details After this call the sends/recvs are in flight; call
+        /// #waitPersistentPull to consume the incoming ghost data.
+        /// @param B Device backend; must match the one passed to #initPersistentPull.
         void startPersistentPull(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
             PerformanceTimer::Instance().StartTimer(PerformanceTimer::TimerType::Comm);
@@ -1095,6 +1270,7 @@ namespace DNDS
             PerformanceTimer::Instance().StopTimer(PerformanceTimer::TimerType::Comm);
         }
 
+        /// @brief Wait for all outstanding persistent push requests to complete.
         void waitPersistentPush(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
             if (MPI::CommStrategy::Instance().GetUseStrongSyncWait())
@@ -1167,6 +1343,8 @@ namespace DNDS
             if (MPI::CommStrategy::Instance().GetUseStrongSyncWait())
                 MPI::Barrier(mpi.comm);
         }
+        /// @brief Wait for all outstanding persistent pull requests. After this
+        /// returns, the son array holds fresh ghost data.
         void waitPersistentPull(DeviceBackend B = DeviceBackend::Unknown) // collective;
         {
             PerformanceTimer::Instance().StartTimer(PerformanceTimer::TimerType::Comm);
@@ -1216,33 +1394,42 @@ namespace DNDS
             PerformanceTimer::Instance().StopTimer(PerformanceTimer::TimerType::Comm);
         }
 
+        /// @brief Wait on outstanding push requests then free them.
         void clearPersistentPush() // collective;
         {
             waitPersistentPush();
             PushReqVec->clear(); // stat vec is left untouched here
         }
+        /// @brief Wait on outstanding pull requests then free them.
         void clearPersistentPull() // collective;
         {
             waitPersistentPull();
             PullReqVec->clear();
         }
 
+        /// @brief Release the MPI derived datatypes built by #createMPITypes.
+        /// Rebuild with another call if you wish to continue using the transformer.
         void clearMPITypes() // collective;
         {
             pPullTypeVec.reset();
             pPushTypeVec.reset();
         }
 
+        /// @brief Drop the shared pointer to the global offsets table.
         void clearGlobalMapping() // collective;
         {
             pLGlobalMapping.reset();
         }
 
+        /// @brief Drop the ghost mapping (#pLGhostMapping).
         void clearGhostMapping() // collective;
         {
             pLGhostMapping.reset();
         }
 
+        /// @brief Convenience: init + start + wait + clear a single pull.
+        /// @details Suitable when ghosts are updated only once (e.g., post-restart);
+        /// use the persistent API in hot loops.
         void pullOnce() // collective;
         {
             initPersistentPull();
@@ -1251,6 +1438,7 @@ namespace DNDS
             clearPersistentPull();
         }
 
+        /// @brief Convenience: init + start + wait + clear a single push.
         void pushOnce() // collective;
         {
             initPersistentPush();
@@ -1259,6 +1447,9 @@ namespace DNDS
             clearPersistentPush();
         }
 
+        /// @brief Re-initialise persistent requests; useful after rebuilding MPI
+        /// types but wanting to resume persistent comms. Idempotent w.r.t.
+        /// whichever direction(s) were previously initialised.
         void reInitPersistentPullPush()
         {
             bool clearedPull{false}, clearedPush{false};

@@ -1,4 +1,17 @@
 #pragma once
+/// @file Warnings.hpp
+/// @brief Cross-compiler macros for saving / restoring / disabling warnings.
+///
+/// Typical pattern around third-party headers that generate noise:
+/// ```cpp
+/// DISABLE_WARNING_PUSH
+/// DISABLE_WARNING_UNUSED_VALUE
+/// #include "noisy_header.h"
+/// DISABLE_WARNING_POP
+/// ```
+///
+/// Each supported compiler (MSVC, clang-MSVC, clang, GCC) provides the full
+/// macro set; others fall through to no-ops.
 
 /*------------------------------------------*/
 // Warning disabler:

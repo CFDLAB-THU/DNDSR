@@ -1,4 +1,8 @@
 #pragma once
+/// @file Defines_bind.hpp
+/// @brief Shared pybind11 plumbing used by every `*_bind.hpp` in DNDS
+/// (buffer-protocol type check, ssp-based class alias, ostream redirect guard,
+/// top-level `pybind11_bind_defines` entry point).
 
 #include "Defines.hpp"
 #ifdef DNDS_USE_OMP

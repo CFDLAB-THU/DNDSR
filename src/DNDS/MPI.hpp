@@ -38,22 +38,34 @@ DISABLE_WARNING_POP
 namespace DNDS
 {
 
+    /// @brief MPI counterpart type for `MPI_int` (= C `int`). Used for counts
+    /// and ranks in MPI calls.
     using MPI_int = int;
+    /// @brief MPI-compatible address/offset type (= `MPI_Aint`, 64-bit on all
+    /// supported platforms). Used by the `hindexed` datatype machinery.
     using MPI_index = MPI_Aint;
 #define MAX_MPI_int INT32_MAX
 #define MAX_MPI_Aint INT64_MAX
     static_assert(sizeof(MPI_Aint) == 8);
 
+    /// @brief Vector of MPI counts.
     using tMPI_sizeVec = std::vector<MPI_int>;
+    /// @brief Alias for #tMPI_sizeVec; used where the name "int vec" reads better.
     using tMPI_intVec = tMPI_sizeVec;
+    /// @brief Vector of MPI_Aint byte-offsets for hindexed datatypes.
     using tMPI_indexVec = std::vector<MPI_index>;
+    /// @brief Alias for #tMPI_indexVec to match `MPI_Aint` terminology.
     using tMPI_AintVec = tMPI_indexVec;
 
+    /// @brief Vector of `MPI_Status`, for `MPI_Waitall` / `MPI_Testall`.
     using tMPI_statVec = std::vector<MPI_Status>;
+    /// @brief Vector of `MPI_Request`, for persistent / nonblocking calls.
     using tMPI_reqVec = std::vector<MPI_Request>;
 
     /**
-     * \brief maps index or other DNDS types to MPI_Datatype ids
+     * @brief Map a DNDS integer type size to an MPI signed-integer datatype.
+     * @details Compile-time selects `MPI_INT64_T` or `MPI_INT32_T` based on `sizeof(Tbasic)`.
+     * Used by #DNDS_MPI_INDEX.
      */
     template <class Tbasic>
     constexpr MPI_Datatype __DNDSToMPITypeInt()
@@ -62,6 +74,11 @@ namespace DNDS
         return sizeof(Tbasic) == 8 ? MPI_INT64_T : (sizeof(Tbasic) == 4 ? MPI_INT32_T : MPI_DATATYPE_NULL);
     }
 
+    /**
+     * @brief Map a DNDS floating-point type size to an MPI datatype.
+     * @details Compile-time selects `MPI_REAL8` or `MPI_REAL4` based on `sizeof(Tbasic)`.
+     * Used by #DNDS_MPI_REAL.
+     */
     template <class Tbasic>
     constexpr MPI_Datatype __DNDSToMPITypeFloat()
     {
@@ -69,7 +86,9 @@ namespace DNDS
         return sizeof(Tbasic) == 8 ? MPI_REAL8 : (sizeof(Tbasic) == 4 ? MPI_REAL4 : MPI_DATATYPE_NULL);
     }
 
+    /// @brief MPI datatype matching #index (= `MPI_INT64_T`).
     const MPI_Datatype DNDS_MPI_INDEX = __DNDSToMPITypeInt<index>();
+    /// @brief MPI datatype matching #real (= `MPI_REAL8`).
     const MPI_Datatype DNDS_MPI_REAL = __DNDSToMPITypeFloat<real>();
 
     //! here are some reasons to upgrade to C++20...
@@ -97,6 +116,10 @@ namespace DNDS
     {
     };
 
+    /// @brief Dispatch to a user-provided `CommPair` / `CommMult`+`CommType` pair on `T`.
+    /// @details Last resort for types that are not scalars, plain arrays, or
+    /// real Eigen matrices. `T` must either expose static `CommMult()` +
+    /// `CommType()` methods, or a static `CommPair()` returning the same pair.
     template <class T>
     std::pair<MPI_Datatype, MPI_int> BasicType_To_MPIIntType_Custom()
     {
@@ -106,6 +129,21 @@ namespace DNDS
             return T::CommPair(); // last resort
     }
 
+    /**
+     * @brief Deduce an `(MPI_Datatype, count)` pair that represents a `T` value.
+     *
+     * @details Compile-time dispatch:
+     * - builtin float / int types map to their obvious `MPI_*` datatypes, count = 1;
+     * - C-style arrays (`T[N]`) recurse into the element type and multiply the count;
+     * - `std::array<T, N>` recurses into `T::value_type` and multiplies by `N`;
+     * - fixed-size real Eigen matrices map to `DNDS_MPI_REAL` with count `sizeof(T)/sizeof(real)`;
+     * - otherwise falls back to #BasicType_To_MPIIntType_Custom.
+     *
+     * Used throughout ghost-communication and collective code to avoid hand-
+     * writing datatype mapping for every MPI call.
+     *
+     * @note Not `constexpr` because OpenMPI handles are not constant-expressions.
+     */
     template <class T> // TODO: see if an array is bounded
     //! Warning, not const-expr since OpenMPI disallows it
     std::pair<MPI_Datatype, MPI_int> BasicType_To_MPIIntType()
@@ -162,15 +200,29 @@ namespace DNDS
         //     return badReturn;
     }
 
-    /// @brief MPI communicator, rank, and size bundle.
+    /**
+     * @brief Lightweight bundle of an MPI communicator and the calling rank's coordinates.
+     *
+     * @details The canonical "where am I in the parallel world" object passed
+     * almost everywhere in DNDSR. Cheap to copy (three ints). Two-phase
+     * construction is supported:
+     *  - default-construct, then call #setWorld (or the `MPI_Comm` ctor) once
+     *    `MPI_Init` has run.
+     *
+     * Comparison (#operator==) tests exact equality of the triple `(comm, rank, size)`.
+     */
     struct MPIInfo
     {
+        /// @brief The underlying MPI communicator handle.
         MPI_Comm comm = MPI_COMM_NULL;
+        /// @brief This rank's 0-based index within #comm (`-1` until initialised).
         int rank = -1;
+        /// @brief Number of ranks in #comm (`-1` until initialised).
         int size = -1;
 
         MPIInfo() = default;
 
+        /// @brief Wrap an existing MPI communicator; queries rank and size.
         MPIInfo(MPI_Comm ncomm)
         {
             comm = ncomm;
@@ -179,10 +231,14 @@ namespace DNDS
             ierr = MPI_Comm_size(comm, &size), DNDS_assert(ierr == MPI_SUCCESS);
         }
 
+        /// @brief Low-level constructor for callers that already know `(rank, size)`.
+        /// @warning Bug: the fourth argument stores `r` into `size` too; callers
+        /// currently pass matching values. Prefer the single-arg MPI_Comm ctor.
         MPIInfo(MPI_Comm nc, int r, int s) : comm(nc), rank(r), size(r)
         {
         }
 
+        /// @brief Initialise the object to `MPI_COMM_WORLD`. Requires `MPI_Init` to have run.
         void setWorld()
         {
             comm = MPI_COMM_WORLD;
@@ -191,6 +247,7 @@ namespace DNDS
             ierr = MPI_Comm_size(comm, &size), DNDS_assert(ierr == MPI_SUCCESS);
         }
 
+        /// @brief Exact triple equality.
         bool operator==(const MPIInfo &r) const
         {
             return (comm == r.comm) && (rank == r.rank) && (size == r.size);
@@ -200,9 +257,17 @@ namespace DNDS
     namespace MPI
     {
         /**
-         * @brief // cxx11 + thread-safe singleton
-         * must be constructed in MPI_COMM_WORLD
+         * @brief Singleton that tracks and releases long-lived MPI resources at
+         * `MPI_Finalize` time.
          *
+         * @details MPI communicators, derived datatypes, and persistent requests
+         * must be released before `MPI_Finalize`; otherwise they leak memory and
+         * MPICH prints warnings. Several DNDSR objects (#MPITypePairHolder,
+         * #MPIReqHolder) register themselves here so that `MPI::Finalize()`
+         * can call their cleanup callbacks even if the C++ lifetime would
+         * outlive the MPI runtime (e.g., static destructors).
+         *
+         * Thread-safe C++11 singleton. Intended to be created under `MPI_COMM_WORLD`.
          */
         class ResourceRecycler
         {
@@ -214,16 +279,23 @@ namespace DNDS
             ResourceRecycler &operator=(const ResourceRecycler &);
 
         public:
+            /// @brief Access the process-wide singleton.
             static ResourceRecycler &Instance();
             /**
-             * ! @warning must combine with remove cleaner!!
+             * @brief Register a cleanup callback keyed by `p`.
+             * @warning Must be paired with #RemoveCleaner when `p` is destroyed,
+             *          else dangling pointers will be invoked by #clean.
              */
             void RegisterCleaner(void *p, std::function<void()> nCleaner);
+            /// @brief Remove a previously-registered cleaner.
             void RemoveCleaner(void *p);
+            /// @brief Invoke all registered cleaners and drop them. Called by
+            /// `MPI::Finalize()`.
             void clean();
         };
     }
 
+    /// @brief Convenience: `MPI_Comm_size(MPI_COMM_WORLD)`.
     inline MPI_int MPIWorldSize()
     {
         MPI_int ret{0};
@@ -231,6 +303,7 @@ namespace DNDS
         return ret;
     }
 
+    /// @brief Convenience: `MPI_Comm_rank(MPI_COMM_WORLD)`.
     inline MPI_int MPIWorldRank()
     {
         MPI_int ret{0};
@@ -238,14 +311,25 @@ namespace DNDS
         return ret;
     }
 
+    /// @brief Format a human-readable timestamp using the calling rank as context.
     std::string getTimeStamp(const MPIInfo &mpi);
 
+/// @brief Debug helper: barrier + print "CHECK <info> RANK r @ fn @ file:line".
+/// @details Compiled out when either `NDEBUG` or `NINSERT` is defined. Used to
+/// trace parallel execution during development; see #InsertCheck.
 #define DNDS_MPI_InsertCheck(mpi, info) \
     InsertCheck(mpi, info, __FUNCTION__, __FILE__, __LINE__)
 
     using tMPI_typePairVec = std::vector<std::pair<MPI_int, MPI_Datatype>>;
     /**
-     * \brief wrapper of tMPI_typePairVec
+     * @brief RAII vector of `(count, MPI_Datatype)` pairs that frees every
+     * committed datatype when destroyed.
+     *
+     * @details Used by #ArrayTransformer to hold the derived datatypes it
+     * builds via `MPI_Type_create_hindexed`. Construction is channelled through
+     * the static #create factory so instances are always owned by
+     * `shared_ptr<MPITypePairHolder>` and correctly registered with the
+     * #ResourceRecycler.
      */
     struct MPITypePairHolder : public tMPI_typePairVec, public std::enable_shared_from_this<MPITypePairHolder>
     {
@@ -259,6 +343,7 @@ namespace DNDS
         };
 
     public:
+        /// @brief Perfect-forwarding factory; returns `shared_ptr<MPITypePairHolder>`.
         template <typename... Args>
         MPITypePairHolder(shared_ctor_guard g, Args &&...args) : tBase(std::forward<Args>(args)...)
         {
@@ -268,6 +353,7 @@ namespace DNDS
                                                               { this->clear(); });
         }
 
+        /// @brief Only public path to construct an instance; forwards to the private constructor.
         template <typename... Args>
         static ssp<MPITypePairHolder> create(Args &&...args)
         {
@@ -278,6 +364,7 @@ namespace DNDS
             this->clear();
             MPI::ResourceRecycler::Instance().RemoveCleaner(this);
         }
+        /// @brief Free every committed datatype and empty the vector.
         void clear()
         {
             for (auto &i : (*this))
@@ -287,9 +374,14 @@ namespace DNDS
         }
     };
 
+    /// @brief Shared-pointer alias to #MPITypePairHolder.
     using tpMPITypePairHolder = ssp<MPITypePairHolder>;
     /**
-     * \brief wrapper of tMPI_reqVec, so that the requests are freed automatically
+     * @brief RAII vector of `MPI_Request`s that frees each non-null handle when destroyed.
+     *
+     * @details Mirror of #MPITypePairHolder for MPI requests (persistent or
+     * transient). Used by #ArrayTransformer for send/recv request sets.
+     * Construction is likewise channelled through the static #create factory.
      */
     struct MPIReqHolder : public tMPI_reqVec, public std::enable_shared_from_this<MPIReqHolder>
     {
@@ -303,6 +395,7 @@ namespace DNDS
         };
 
     public:
+        /// @brief Perfect-forwarding factory; returns `shared_ptr<MPIReqHolder>`.
         template <typename... Args>
         MPIReqHolder(shared_ctor_guard g, Args &&...args) : tBase(std::forward<Args>(args)...)
         {
@@ -312,6 +405,7 @@ namespace DNDS
                                                               { this->clear(); });
         }
 
+        /// @brief Only public path to construct an instance.
         template <typename... Args>
         static ssp<MPIReqHolder> create(Args &&...args)
         {
@@ -322,6 +416,7 @@ namespace DNDS
             this->clear();
             MPI::ResourceRecycler::Instance().RemoveCleaner(this);
         }
+        /// @brief Free every non-null request and empty the vector.
         void clear()
         {
             for (auto &i : (*this))
@@ -335,8 +430,14 @@ namespace DNDS
 
 namespace DNDS::Debug
 {
+    /// @brief Whether the current process is running under a debugger.
+    /// Implemented via `/proc/self/status TracerPid` on Linux.
     bool IsDebugged();
+    /// @brief If #isDebugging is set, block every rank in a busy-wait loop so
+    /// the user can attach a debugger and inspect state. Exit by setting
+    /// `isDebugging = false` in the debugger.
     void MPIDebugHold(const MPIInfo &mpi);
+    /// @brief Flag consulted by #MPIDebugHold and #assert_false_info_mpi.
     extern bool isDebugging;
 }
 
@@ -344,11 +445,16 @@ namespace DNDS::Debug
 // remember to set a breakpoint here
 namespace DNDS
 {
+    /// @brief MPI-aware assertion-failure reporter.
+    /// @details Barriers before abort so every rank flushes its output; if
+    /// #Debug::isDebugging is set, busy-waits to allow debugger attachment.
     void assert_false_info_mpi(const char *expr, const char *file, int line, const std::string &info, const DNDS::MPIInfo &mpi);
 }
 #ifdef DNDS_NDEBUG
 #    define DNDS_assert_info_mpi(expr, mpi, info) (void(0))
 #else
+/// @brief Collective-aware variant of #DNDS_assert_info: every rank calls
+/// into an MPI barrier before aborting, so logs are not interleaved.
 #    define DNDS_assert_info_mpi(expr, mpi, info) \
         ((static_cast<bool>(expr))                \
              ? void(0)                            \
@@ -357,10 +463,14 @@ namespace DNDS
 
 namespace DNDS // TODO: get a concurrency header
 {
+    /// @brief Global mutex serialising host-side HDF5 calls.
+    /// @details HDF5 is not thread-safe by default; this mutex guards all
+    /// DNDSR HDF5 I/O when multiple CPU threads might touch the same file.
     extern std::mutex HDF_mutex;
 
     namespace MPI
     {
+        /// @brief Return the MPI thread-support level the current process was initialised with.
         inline int GetMPIThreadLevel()
         {
             int ret;
@@ -369,6 +479,19 @@ namespace DNDS // TODO: get a concurrency header
             return ret;
         }
 
+        /**
+         * @brief Initialise MPI with thread support, honouring the
+         * `DNDS_DISABLE_ASYNC_MPI` environment override.
+         *
+         * @details
+         *  - No env var or value `0`: request `MPI_THREAD_MULTIPLE` (full).
+         *  - `1`: drop to `MPI_THREAD_SERIALIZED`.
+         *  - `2`: drop to `MPI_THREAD_FUNNELED`.
+         *  - `>=3`: `MPI_THREAD_SINGLE`.
+         *
+         * Aborts via `MPI_Abort` if the provided level is lower than requested.
+         * Idempotent: if MPI is already initialised the call just queries the level.
+         */
         inline MPI_int Init_thread(int *argc, char ***argv)
         {
             int init_flag{0};
@@ -403,6 +526,8 @@ namespace DNDS // TODO: get a concurrency header
             return ret;
         }
 
+        /// @brief Release DNDSR-registered MPI resources then call `MPI_Finalize`.
+        /// @details Idempotent: returns immediately if MPI has already been finalised.
         inline int Finalize()
         {
             MPI::ResourceRecycler::Instance().clean();
@@ -419,7 +544,19 @@ namespace DNDS // TODO: get a concurrency header
 #define MPIBufferHandler_REPORT_CHANGE // for monitoring
 namespace DNDS
 {
-    /// @brief Singleton managing an MPI buffer for buffered sends.
+    /**
+     * @brief Process-singleton managing the buffer attached to MPI for
+     * `MPI_Bsend` (buffered sends).
+     *
+     * @details Some algorithms (e.g., serialised writes) use buffered sends to
+     * decouple sender from receiver. MPI requires the application to provide
+     * the buffer via `MPI_Buffer_attach`. This singleton owns that buffer,
+     * grows it on demand via #claim, and exposes a thin accounting layer
+     * (#claim / #unclaim) so multiple components can share the buffer without
+     * stepping on each other.
+     *
+     * Thread-safe construction on C++11; not MT-safe for concurrent claims.
+     */
     class MPIBufferHandler // cxx11 + thread-safe singleton
     {
     private:
@@ -445,12 +582,16 @@ namespace DNDS
         MPIBufferHandler &operator=(const MPIBufferHandler &);
 
     public:
+        /// @brief Access the process-wide singleton.
         static MPIBufferHandler &Instance();
+        /// @brief Current buffer size in bytes (fits in `MPI_int`; asserted).
         MPI_int size()
         {
             DNDS_assert(buf.size() <= MAX_MPI_int);
             return MPI_int(buf.size()); // could overflow!
         }
+        /// @brief Reserve `cs` additional bytes, growing and re-attaching the
+        /// MPI buffer if needed. `reportRank` is only used for diagnostic logs.
         void claim(MPI_Aint cs, int reportRank = 0)
         {
             if (buf.size() - claimed < static_cast<size_type>(cs))
@@ -472,11 +613,14 @@ namespace DNDS
             }
             claimed += cs;
         }
+        /// @brief Release `cs` previously-#claim ed bytes (only updates accounting;
+        /// does not shrink the buffer).
         void unclaim(MPI_int cs)
         {
             DNDS_assert(size_t_to_signed<MPI_int>(claimed) >= cs);
             claimed -= cs;
         }
+        /// @brief Direct pointer to the attached buffer (for diagnostics).
         void *getBuf()
         {
             return (void *)(buf.data());
@@ -487,37 +631,51 @@ namespace DNDS
 
 namespace DNDS::MPI
 {
+    /// @brief Wrapper over `MPI_Bcast` that logs on error and goes through DNDSR retry logic.
     MPI_int Bcast(void *buf, MPI_int num, MPI_Datatype type, MPI_int source_rank, MPI_Comm comm);
 
+    /// @brief Wrapper over `MPI_Alltoall` (fixed per-peer count).
     MPI_int Alltoall(void *send, MPI_int sendNum, MPI_Datatype typeSend, void *recv, MPI_int recvNum, MPI_Datatype typeRecv, MPI_Comm comm);
 
+    /// @brief Wrapper over `MPI_Alltoallv` (variable per-peer counts + displacements).
     MPI_int Alltoallv(
         void *send, MPI_int *sendSizes, MPI_int *sendStarts, MPI_Datatype sendType,
         void *recv, MPI_int *recvSizes, MPI_int *recvStarts, MPI_Datatype recvType, MPI_Comm comm);
 
+    /// @brief Wrapper over `MPI_Allreduce`.
     MPI_int Allreduce(const void *sendbuf, void *recvbuf, MPI_int count,
                       MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
 
+    /// @brief Wrapper over `MPI_Scan` (inclusive prefix reduction).
     MPI_int Scan(const void *sendbuf, void *recvbuf, MPI_int count,
                  MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
 
+    /// @brief Wrapper over `MPI_Allgather`.
     MPI_int Allgather(const void *sendbuf, MPI_int sendcount, MPI_Datatype sendtype,
                       void *recvbuf, MPI_int recvcount,
                       MPI_Datatype recvtype, MPI_Comm comm);
 
+    /// @brief Wrapper over `MPI_Barrier`.
     MPI_int Barrier(MPI_Comm comm);
 
+    /// @brief Polling barrier that sleeps `checkNanoSecs` ns between MPI_Test
+    /// calls. Reduces CPU spin when many ranks wait unevenly.
     MPI_int BarrierLazy(MPI_Comm comm, uint64_t checkNanoSecs);
 
+    /// @brief Like #WaitallAuto but sleeps `checkNanoSecs` ns between polls.
     MPI_int WaitallLazy(MPI_int count, MPI_Request *reqs, MPI_Status *statuses, uint64_t checkNanoSecs = 10000000);
 
+    /// @brief Wait on an array of requests, choosing between `MPI_Waitall` and
+    /// the lazy-poll variant based on #CommStrategy settings.
     MPI_int WaitallAuto(MPI_int count, MPI_Request *reqs, MPI_Status *statuses);
 
+    /// @brief Single-scalar Allreduce helper for reals (in-place, count = 1).
     inline void AllreduceOneReal(real &v, MPI_Op op, const MPIInfo &mpi)
     {
         Allreduce(MPI_IN_PLACE, &v, 1, DNDS_MPI_REAL, op, mpi.comm);
     }
 
+    /// @brief Single-scalar Allreduce helper for indices (in-place, count = 1).
     inline void AllreduceOneIndex(index &v, MPI_Op op, const MPIInfo &mpi)
     {
         Allreduce(MPI_IN_PLACE, &v, 1, DNDS_MPI_INDEX, op, mpi.comm);
@@ -527,6 +685,15 @@ namespace DNDS::MPI
 
 namespace DNDS
 {
+    /**
+     * @brief Execute `f` on each rank serially, in rank order.
+     *
+     * @details Inserts an `MPI_Barrier` before each rank's turn so that output
+     * interleaving is deterministic. Useful for diagnostics where every rank
+     * prints something about its own state.
+     *
+     * @tparam F  Callable with no arguments.
+     */
     template <class F>
     inline void MPISerialDo(const MPIInfo &mpi, F f)
     { //! need some improvement: order could be bad?
@@ -542,18 +709,31 @@ namespace DNDS
 namespace DNDS::MPI
 {
     /**
-     * @brief // cxx11 + thread-safe singleton
-     * must be constructed in MPI_COMM_WORLD
+     * @brief Process-wide singleton that selects how #ArrayTransformer packs
+     * and waits for MPI messages.
      *
+     * @details Settings affect every transformer:
+     *  - `ArrayCommType`: `HIndexed` (default: `MPI_Type_create_hindexed`
+     *    derived types) vs `InSituPack` (manual `memcpy` into contiguous send/recv
+     *    buffers). The latter can be faster on networks where derived types pay
+     *    large unpacking overhead.
+     *  - `UseStrongSyncWait`: insert barriers around wait calls for easier
+     *    profiling.
+     *  - `UseAsyncOneByOne`: issue per-peer `Isend`/`Irecv` instead of one
+     *    persistent `Startall`.
+     *  - `UseLazyWait`: poll interval (ns) used by #MPI::WaitallLazy.
+     *
+     * Must be constructed under `MPI_COMM_WORLD`. Thread-safe C++11 singleton.
      */
     class CommStrategy
     {
     public:
+        /// @brief Which derived-type strategy #ArrayTransformer should use.
         enum ArrayCommType
         {
-            UnknownArrayCommType = 0,
-            HIndexed = 1,
-            InSituPack = 2,
+            UnknownArrayCommType = 0, ///< Sentinel / uninitialised.
+            HIndexed = 1,             ///< Use `MPI_Type_create_hindexed` derived types (default).
+            InSituPack = 2,           ///< Manually pack / unpack into contiguous buffers.
         };
 
         static const int Ntype = 10;
@@ -569,22 +749,33 @@ namespace DNDS::MPI
         CommStrategy &operator=(const CommStrategy &);
 
     public:
+        /// @brief Access the process-wide singleton.
         static CommStrategy &Instance();
+        /// @brief Current array-pack strategy.
         ArrayCommType GetArrayStrategy();
+        /// @brief Override the array-pack strategy (affects subsequently-created transformers).
         void SetArrayStrategy(ArrayCommType t);
+        /// @brief Whether barriers are inserted around `Waitall` for profiling.
         [[nodiscard]] bool GetUseStrongSyncWait() const;
+        /// @brief Whether transformers should use one-by-one Isend/Irecv.
         [[nodiscard]] bool GetUseAsyncOneByOne() const;
+        /// @brief Polling interval (ns) for #MPI::WaitallLazy. `0` means use `MPI_Waitall`.
         [[nodiscard]] double GetUseLazyWait() const;
     };
 }
 
 namespace DNDS::MPI
 {
+    /// @brief Runtime probe: is the current MPI implementation configured with
+    /// CUDA-aware support? Affects whether arrays are transferred on-device or
+    /// via the host round-trip.
     bool isCudaAware();
 }
 
 namespace DNDS
 {
+    /// @brief Barrier + annotated print used by #DNDS_MPI_InsertCheck.
+    /// @details No-op in release builds (`NDEBUG` or `NINSERT` defined).
     inline void InsertCheck(const MPIInfo &mpi, const std::string &info = "",
                             const std::string &FUNCTION = "", const std::string &FILE = "", int LINE = -1)
     {

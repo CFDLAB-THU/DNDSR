@@ -121,5 +121,8 @@ include(cmake/DndsApps.cmake)
 # 9. Doxygen documentation target
 include(cmake/DndsDocs.cmake)
 
-# 10. compile_commands.json post-processing + stub generation
+# 10. Compilable documentation examples
+add_subdirectory(${CMAKE_SOURCE_DIR}/examples)
+
+# 11. compile_commands.json post-processing + stub generation
 include(cmake/DndsTooling.cmake)

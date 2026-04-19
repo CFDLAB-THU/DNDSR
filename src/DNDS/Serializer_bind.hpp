@@ -1,4 +1,7 @@
 #pragma once
+/// @file Serializer_bind.hpp
+/// @brief pybind11 bindings for the serializer hierarchy (#SerializerBase,
+/// #SerializerJSON, #SerializerH5) and the factory.
 
 #include "MPI.hpp"
 #include "Defines_bind.hpp"

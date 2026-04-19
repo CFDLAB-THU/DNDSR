@@ -1,3 +1,12 @@
+/** @file EulerP_Evaluator.cpp
+ *  @brief Host-side implementation of EulerP Evaluator methods.
+ *
+ *  Provides the constructor for EvaluatorConfig (with default JSON settings),
+ *  configuration validation, VTK-HDF5 output, and the dispatch methods for each
+ *  evaluation stage. Each dispatch method validates arguments, detects the active
+ *  device backend, constructs the corresponding Evaluator_impl<B> args, and calls
+ *  the backend-specific kernel methods.
+ */
 #include "EulerP_Evaluator.hpp"
 #include "DNDS/DeviceStorage.hpp"
 #include "DNDS/Errors.hpp"
@@ -9,6 +18,13 @@
 namespace DNDS::EulerP
 {
 
+    /** @brief Initializes EvaluatorConfig with default JSON values.
+     *
+     *  Default settings:
+     *  - threadsPerBlock: 128 (CUDA block size)
+     *  - pullAllInputArgs: true (wait for all MPI pulls before kernel dispatch)
+     *  - serializeCUDAExecution: false (allow concurrent CUDA operations)
+     */
     EvaluatorConfig::EvaluatorConfig()
     {
         auto &c = this->config_data = t_jsonconfig::object();
@@ -17,6 +33,15 @@ namespace DNDS::EulerP
         c["serializeCUDAExecution"] = false;
     }
 
+    /**
+     * @brief Recursively validates that all keys in the user config exist in the defaults.
+     *
+     * Walks both the user-provided and default JSON objects in parallel. If any key in
+     * the user config does not exist in the defaults, throws a std::runtime_error with
+     * the offending key path.
+     *
+     * @param config_in User-provided JSON configuration patch to validate.
+     */
     void EvaluatorConfig::valid_patch_keys(const t_jsonconfig &config_in)
     {
         auto validate_keys_run = [](const t_jsonconfig &user, const t_jsonconfig &def, const std::string &path, auto &&validate_keys_runF)
@@ -41,6 +66,14 @@ namespace DNDS::EulerP
         validate_keys_run(config_in, config_data, "", validate_keys_run);
     }
 
+    /**
+     * @brief Writes cell-centered and node-centered field data to a parallel VTK-HDF5 file.
+     *
+     * Prepends primitive variable fields (density as scalar, velocity as vector) if
+     * uPrimCell / uPrimNode are provided, then appends all user-specified scalar and
+     * vector field arrays. Validates array sizes against the mesh topology before output.
+     * Uses a duplicated MPI communicator for thread-safe HDF5 I/O.
+     */
     void Evaluator::PrintDataVTKHDF(std::string fname, std::string series_name,
                                     std::vector<ssp<TUScalar>> &arrCellCentScalar,
                                     const std::vector<std::string> &arrCellCentScalar_names_in,
@@ -158,6 +191,13 @@ namespace DNDS::EulerP
         MPI_Comm_free(&commDup);
     }
 
+    /**
+     * @brief Dispatches Green-Gauss gradient reconstruction + Barth-Jespersen limiter.
+     *
+     * Validates arguments, prepares face buffers, detects the active backend (Host or CUDA),
+     * constructs the impl-level arg struct with device views, and calls both the GG
+     * reconstruction and Barth limiter sub-kernels.
+     */
     void Evaluator::RecGradient(
         RecGradient_Arg &arg)
     {
@@ -195,6 +235,12 @@ namespace DNDS::EulerP
             DNDS_check_throw(false);
     }
 
+    /**
+     * @brief Dispatches conservative-to-primitive conversion with viscosity computation.
+     *
+     * Validates arguments, waits for MPI data pulls, and dispatches to the backend-specific
+     * Cons2PrimMu kernel via a compile-time lambda parameterized by DeviceBackend.
+     */
     void Evaluator::Cons2PrimMu(Cons2PrimMu_Arg &arg)
     {
         DeviceBackend B = this->device();
@@ -243,6 +289,11 @@ namespace DNDS::EulerP
             DNDS_check_throw(false);
     }
 
+    /**
+     * @brief Dispatches conservative-to-primitive conversion (no gradients or viscosity).
+     *
+     * Simplified dispatch: validates, waits for MPI pulls, and calls the Cons2Prim kernel.
+     */
     void Evaluator::Cons2Prim(Cons2Prim_Arg &arg)
     {
         DeviceBackend B = this->device();
@@ -285,6 +336,12 @@ namespace DNDS::EulerP
             DNDS_check_throw(false);
     }
 
+    /**
+     * @brief Dispatches eigenvalue estimation and local time-step computation.
+     *
+     * Two-pass dispatch: first computes per-face eigenvalue estimates (GetFaceLam),
+     * then accumulates to per-cell local time steps (FaceLam2CellDt).
+     */
     void Evaluator::EstEigenDt(EstEigenDt_Arg &arg)
     {
         DeviceBackend B = this->device();
@@ -325,6 +382,12 @@ namespace DNDS::EulerP
             DNDS_check_throw(false);
     }
 
+    /**
+     * @brief Dispatches 2nd-order face value reconstruction from cell-centered data.
+     *
+     * Validates arguments, waits for MPI pulls, and calls the RecFace2nd kernel which
+     * extrapolates cell values/gradients to face quadrature points.
+     */
     void Evaluator::RecFace2nd(RecFace2nd_Arg &arg)
     {
         DeviceBackend B = this->device();
@@ -353,6 +416,13 @@ namespace DNDS::EulerP
             DNDS_check_throw(false);
     }
 
+    /**
+     * @brief Dispatches 2nd-order Roe flux evaluation and RHS accumulation.
+     *
+     * Validates arguments, prepares face buffers, waits for all scalar MPI pulls,
+     * and dispatches the Flux2nd kernel which computes per-face Roe flux and scatters
+     * to per-cell RHS.
+     */
     void Evaluator::Flux2nd(Flux2nd_Arg &arg)
     {
         DeviceBackend B = this->device();

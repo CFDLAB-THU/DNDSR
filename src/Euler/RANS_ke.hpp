@@ -1,34 +1,92 @@
+/** @file RANS_ke.hpp
+ *  @brief RANS two-equation turbulence model implementations for the DNDSR CFD solver.
+ *
+ *  Provides template functions for computing eddy viscosity, viscous fluxes, and
+ *  source terms for several widely-used RANS turbulence closures:
+ *
+ *  - **Realizable k-epsilon** (Shih et al.) with f_mu damping and realizability constraint.
+ *  - **k-omega SST** (Menter) with F1/F2 blending, cross-diffusion, and DES/DDES/IDDES support.
+ *  - **k-omega Wilcox** (1988 / 2006 variants) with stress limiter and f_beta correction.
+ *  - **Spalart-Allmaras** (SA) one-equation model with optional rotation correction,
+ *    negative-nuTilde extension, and DES/DDES/IDDES/WMLES length-scale modification.
+ *
+ *  All functions are templated on spatial dimension @c dim and accept Eigen-compatible
+ *  expression types for the conservative state vector @c UMeanXy and the gradient tensor
+ *  @c DiffUxy (dim × nVars).  The convention for variable layout is:
+ *  - Indices 0..dim: density and momentum components.
+ *  - Index @c I4 = dim+1: total energy.
+ *  - Index @c I4+1: first RANS variable (k or nuTilde).
+ *  - Index @c I4+2: second RANS variable (epsilon or omega), where applicable.
+ *
+ *  Compile-time macros control model variants and limiters; see definitions below.
+ *
+ *  @note This file is included by other Euler module headers and should not normally
+ *        be included directly by application code.
+ */
 #pragma once
 
 #include "Euler.hpp"
 
+/** @brief When set to 1, cap turbulent viscosity at 1e5 * mu_laminar for k-epsilon. */
 #define KE_LIMIT_MUT 1
 
+/** @brief Select Wilcox k-omega model version: 0 = original 1988, 1 = 2006 with stress limiter, 2 = simplified. */
 #define KW_WILCOX_VER 1
+/** @brief When set to 1, enable production limiters for Wilcox k-omega (CFL3D-style capping). */
 #define KW_WILCOX_PROD_LIMITS 1
+/** @brief When set to 1, cap turbulent viscosity at 1e5 * mu_laminar for Wilcox k-omega. */
 #define KW_WILCOX_LIMIT_MUT 1
 
+/** @brief When set to 1, cap turbulent viscosity at 1e5 * mu_laminar for SST. */
 #define KW_SST_LIMIT_MUT 1
+/** @brief When set to 1, enable production limiters for SST (CFL3D-style capping). */
 #define KW_SST_PROD_LIMITS 1
+/** @brief Select omega production formulation for SST: 0 = classical, 1 = strain-rate based, 2 = vorticity based. */
 #define KW_SST_PROD_OMEGA_VERSION 1
 
+/** @brief When set to 1, enable the ft2 laminar suppression term in Spalart-Allmaras. Setting to 0 disables ft2. */
 #define SA_USE_FT2_TERM 1
 
+/** @brief RANS turbulence model functions (eddy viscosity, viscous flux, source terms). */
 namespace DNDS::Euler::RANS
 {
-    // Spalart-Allmaras model constants used across multiple files.
-    // Canonical definitions from the SA model (Spalart & Allmaras, 1994).
+    /** @brief Spalart-Allmaras model constants used across multiple files.
+     *
+     *  Canonical definitions from Spalart & Allmaras (1994).
+     *  These constants are shared between the SA source term computation
+     *  and boundary condition routines in other translation units.
+     */
     namespace SA
     {
-        static constexpr real cnu1 = 7.1;
-        static constexpr real cn1 = 16.0;
-        static constexpr real sigma = 2.0 / 3.0;
+        static constexpr real cnu1 = 7.1;   ///< SA model constant c_{v1} controlling the viscous damping function f_{v1}.
+        static constexpr real cn1 = 16.0;    ///< SA model constant c_{n1} for the negative-nuTilde extension function f_n.
+        static constexpr real sigma = 2.0 / 3.0; ///< SA model diffusion coefficient sigma.
     }
 
-    // Wall-omega boundary coefficient for k-omega models.
-    // Applied as: rhoOmegaWall = mu / d^2 * kWallOmegaCoeff
+    /** @brief Wall-omega boundary condition coefficient for k-omega family models.
+     *
+     *  Applied at wall boundaries as: rhoOmegaWall = mu / d^2 * kWallOmegaCoeff,
+     *  where d is the wall-normal distance of the first cell center.
+     */
     static constexpr real kWallOmegaCoeff = 800.0;
 
+    /**
+     * @brief Compute turbulent viscosity mu_t from the Shih et al. realizable k-epsilon model.
+     *
+     * Evaluates the eddy viscosity using the realizable k-epsilon formulation with:
+     * - f_mu damping function based on the turbulent Reynolds number Re_t = rho * k^2 / (mu * epsilon).
+     * - Realizability constraint: mu_t <= phi * rho * k / S, where S is the strain-rate magnitude.
+     * - Optional upper bound of 1e5 * mu_laminar when @c KE_LIMIT_MUT is enabled.
+     *
+     * @tparam dim     Spatial dimension (2 or 3).
+     * @tparam TU      Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU  Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @param UMeanXy  Conservative state vector [rho, rhoU, ..., rhoE, rho*k, rho*epsilon].
+     * @param DiffUxy  Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf      Laminar (molecular) dynamic viscosity.
+     * @param d        Wall distance (unused in this model but kept for interface consistency).
+     * @return         Turbulent dynamic viscosity mu_t (>= 0).
+     */
     template <int dim, class TU, class TDiffU>
     real GetMut_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d)
     {
@@ -65,6 +123,27 @@ namespace DNDS::Euler::RANS
         return mut;
     }
 
+    /**
+     * @brief Compute the RANS viscous flux for the realizable k-epsilon transport equations.
+     *
+     * Evaluates the diffusion (viscous) flux contributions for the k and epsilon equations
+     * projected onto the face normal direction. The effective diffusivities are:
+     * - k-equation:       (mu_laminar + mu_t / sigma_k),  sigma_k = 1.0
+     * - epsilon-equation: (mu_laminar + mu_t / sigma_e),  sigma_e = 1.3
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TN       Eigen-compatible type for the face unit normal vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, primitive variables).
+     * @tparam TVFlux   Eigen-compatible type for the output viscous flux vector.
+     * @param UMeanXy      Conservative state vector.
+     * @param DiffUxyPrim  Gradient tensor of *primitive* variables, size dim × nVars.
+     * @param uNorm        Outward-pointing face unit normal vector (length dim).
+     * @param mut          Turbulent dynamic viscosity (precomputed).
+     * @param d            Wall distance (unused here, kept for interface consistency).
+     * @param muPhy        Laminar (molecular) dynamic viscosity.
+     * @param[out] vFlux   Output viscous flux vector; entries at I4+1 and I4+2 are set.
+     */
     template <int dim, class TU, class TN, class TDiffU, class TVFlux>
     void GetVisFlux_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN &&uNorm, real mut, real d, real muPhy, TVFlux &vFlux)
     {
@@ -77,6 +156,38 @@ namespace DNDS::Euler::RANS
         vFlux(I4 + 2) = DiffUxyPrim(Seq012, {I4 + 2}).dot(uNorm) * (muPhy + mut / sigE);
     }
 
+    /**
+     * @brief Compute source terms for the realizable k-epsilon transport equations.
+     *
+     * Evaluates production, destruction, and extra source contributions for the
+     * k and epsilon equations following the Shih et al. realizable k-epsilon model.
+     *
+     * Key terms computed:
+     * - Reynolds stress tensor tau_{ij} via Boussinesq hypothesis with realizability clipping.
+     * - Production of k: P_k = -tau_{ij} * dU_i/dx_j, capped by the Shih pphi limiter.
+     * - Turbulent time scale T_t with low-Re correction via zeta = sqrt(Re_t / 2).
+     * - Extra dissipation term E involving the gradient of the turbulent time scale.
+     *
+     * When @p mode == 0, the full source vector is returned:
+     * - source(I4+1) = P_k - rho*epsilon
+     * - source(I4+2) = (c_{e1} * P_k - c_{e2} * rho*epsilon + E) / T_t
+     *
+     * When @p mode == 1, the implicit diagonal contribution (positive) is returned for
+     * use in implicit time stepping:
+     * - source(I4+1) = 0
+     * - source(I4+2) = c_{e2} / T_t
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @tparam TSource  Eigen-compatible type for the output source vector.
+     * @param UMeanXy   Conservative state vector.
+     * @param DiffUxy   Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf       Laminar (molecular) dynamic viscosity.
+     * @param d         Wall distance (unused here, kept for interface consistency).
+     * @param[out] source  Output source vector; entries at I4+1 and I4+2 are set.
+     * @param mode      Source computation mode: 0 = full source, 1 = implicit diagonal (destruction only).
+     */
     template <int dim, class TU, class TDiffU, class TSource>
     void GetSource_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, TSource &source, int mode)
     {
@@ -142,6 +253,24 @@ namespace DNDS::Euler::RANS
         }
     }
 
+    /**
+     * @brief Attempt to find equilibrium epsilon for zero-gradient (freestream) conditions via Newton iteration.
+     *
+     * Iteratively solves for the epsilon value that zeroes the k-equation source term
+     * when all spatial gradients are zero.  Uses a simple Newton-Raphson loop with
+     * finite-difference Jacobian evaluation.
+     *
+     * @warning This function is noted as **not applicable** in practice — the zero-gradient
+     *          equilibrium assumption does not hold for the realizable k-epsilon model.
+     *          Retained for reference and experimentation only.
+     *
+     * @tparam dim  Spatial dimension (2 or 3).
+     * @tparam TU   Eigen-compatible type for the conservative state vector.
+     * @param[in,out] u      Conservative state vector; u(I4+2) (rho*epsilon) is updated in place.
+     * @param         muPhy  Laminar (molecular) dynamic viscosity.
+     * @return A tuple (rhs_initial, rhs_final) giving the k-equation residual before and
+     *         after the Newton iteration, for convergence diagnostics.
+     */
     template <int dim, class TU>
     std::tuple<real, real> SolveZeroGradEquilibrium(TU &u, real muPhy) // this is tested to be not applicable!
     {
@@ -182,6 +311,26 @@ namespace DNDS::Euler::RANS
         return std::make_tuple(rhs0, rhs);
     }
 
+    /**
+     * @brief Compute the analytical diagonal of the source Jacobian for the realizable k-epsilon model.
+     *
+     * Evaluates -dS/dU diagonal entries for implicit time stepping of the k and epsilon
+     * transport equations.  The diagonal entries approximate the linearised destruction terms:
+     * - source(I4+1) = -P_k / (rho*k)  (destruction rate of k)
+     * - source(I4+2) = c_{e2} / T_t     (destruction rate of epsilon)
+     *
+     * These positive values are used to augment the implicit operator diagonal,
+     * improving stability of the coupled RANS system.
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @tparam TSource  Eigen-compatible type for the output Jacobian diagonal vector.
+     * @param UMeanXy   Conservative state vector.
+     * @param DiffUxy   Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf       Laminar (molecular) dynamic viscosity.
+     * @param[out] source  Output Jacobian diagonal vector; entries at I4+1 and I4+2 are set.
+     */
     template <int dim, class TU, class TDiffU, class TSource>
     void GetSourceJacobianDiag_RealizableKe(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, TSource &source)
     {
@@ -227,6 +376,26 @@ namespace DNDS::Euler::RANS
         source(I4 + 2) = (ce2) / Tt;
     }
 
+    /**
+     * @brief Compute the numerical (finite-difference) diagonal of the source Jacobian for the realizable k-epsilon model.
+     *
+     * Evaluates -dS_i/dU_i by forward finite-difference perturbation of rho*k and rho*epsilon
+     * independently.  The perturbation step is proportional to sqrt(smallReal) times the variable
+     * magnitude.  Results are clamped to non-negative values and amplified by a factor of 10
+     * for enhanced implicit stability.
+     *
+     * This is a fallback when the analytical Jacobian diagonal
+     * (GetSourceJacobianDiag_RealizableKe) is suspected of inaccuracy.
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @tparam TSource  Eigen-compatible type for the output Jacobian diagonal vector.
+     * @param UMeanXy   Conservative state vector.
+     * @param DiffUxy   Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf       Laminar (molecular) dynamic viscosity.
+     * @param[out] source  Output numerical Jacobian diagonal vector; entries at I4+1 and I4+2 are set.
+     */
     template <int dim, class TU, class TDiffU, class TSource>
     void GetSourceJacobianDiag_RealizableKe_ND(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, TSource &source)
     {
@@ -251,6 +420,25 @@ namespace DNDS::Euler::RANS
         source(I4 + 2) = std::max(source(I4 + 2), 0.) * 10;
     }
 
+    /**
+     * @brief Compute turbulent viscosity mu_t from Menter's k-omega SST model.
+     *
+     * Evaluates the SST eddy viscosity with:
+     * - Vorticity magnitude Omega = ||(grad U)^T - grad U|| / sqrt(2).
+     * - Blending function F2 based on wall distance and turbulent Reynolds number.
+     * - Bradshaw's structural constraint: mu_t = a1 * k / max(Omega * F2, a1 * omega),
+     *   where a1 = 0.31.
+     * - Optional upper bound of 1e5 * mu_laminar when @c KW_SST_LIMIT_MUT is enabled.
+     *
+     * @tparam dim     Spatial dimension (2 or 3).
+     * @tparam TU      Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU  Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @param UMeanXy  Conservative state vector [rho, rhoU, ..., rhoE, rho*k, rho*omega].
+     * @param DiffUxy  Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf      Laminar (molecular) dynamic viscosity.
+     * @param d        Wall distance.
+     * @return         Turbulent dynamic viscosity mu_t (>= 0).
+     */
     template <int dim, class TU, class TDiffU>
     real GetMut_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d)
     {
@@ -294,6 +482,31 @@ namespace DNDS::Euler::RANS
         return mut;
     }
 
+    /**
+     * @brief Compute the RANS viscous flux for the k-omega SST transport equations.
+     *
+     * Evaluates the diffusion (viscous) flux contributions for the k and omega equations
+     * projected onto the face normal direction.  The effective diffusion coefficients are
+     * blended between the inner-layer (set 1) and outer-layer (set 2) values using the
+     * SST blending function F1:
+     * - sigma_k = sigma_k1 * F1 + sigma_k2 * (1 - F1)
+     * - sigma_omega = sigma_omega1 * F1 + sigma_omega2 * (1 - F1)
+     *
+     * Effective diffusivity for each equation: mu_laminar + mu_t * sigma_{k,omega}.
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TN       Eigen-compatible type for the face unit normal vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, primitive variables).
+     * @tparam TVFlux   Eigen-compatible type for the output viscous flux vector.
+     * @param UMeanXy      Conservative state vector.
+     * @param DiffUxyPrim  Gradient tensor of *primitive* variables, size dim × nVars.
+     * @param uNorm        Outward-pointing face unit normal vector (length dim).
+     * @param mutIn        Turbulent dynamic viscosity (precomputed, used for diffusion coefficients).
+     * @param d            Wall distance.
+     * @param muf          Laminar (molecular) dynamic viscosity.
+     * @param[out] vFlux   Output viscous flux vector; entries at I4+1 and I4+2 are set.
+     */
     template <int dim, class TU, class TN, class TDiffU, class TVFlux>
     void GetVisFlux_SST(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN &&uNorm, real mutIn, real d, real muf, TVFlux &vFlux)
     {
@@ -358,6 +571,40 @@ namespace DNDS::Euler::RANS
         }
     }
 
+    /**
+     * @brief Compute source terms for the k-omega SST transport equations.
+     *
+     * Evaluates production, destruction, and cross-diffusion source contributions for
+     * the k and omega equations following Menter's SST model.  Supports DES/DDES
+     * capability via the RANS-to-LES length scale ratio.
+     *
+     * Key terms:
+     * - Production P_k from the Boussinesq Reynolds stress, optionally capped at
+     *   20 * beta* * rho * k * omega (when @c KW_SST_PROD_LIMITS is enabled).
+     * - Omega production P_omega with version-dependent formulation controlled by
+     *   @c KW_SST_PROD_OMEGA_VERSION (0 = classical, 1 = strain-rate, 2 = vorticity).
+     * - Destruction terms: beta* * rho * k * omega for k, beta * rho * omega^2 for omega.
+     * - Cross-diffusion term: 2 * (1 - F1) * rho * sigma_omega2 / omega * grad(k) . grad(omega).
+     * - DES shielding: F_DES = max(1, l_RANS / l_LES * (1 - F2)), reducing the destruction
+     *   of k outside the RANS region.
+     *
+     * When @p mode == 0, the full source vector is returned.
+     * When @p mode == 1, the implicit diagonal contribution (positive) is returned:
+     * - source(I4+1) = beta* * omega * F_DES
+     * - source(I4+2) = 2 * beta * omega
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @tparam TSource  Eigen-compatible type for the output source vector.
+     * @param UMeanXy   Conservative state vector.
+     * @param DiffUxy   Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf       Laminar (molecular) dynamic viscosity.
+     * @param d         Wall distance.
+     * @param lLES      LES length scale for DES/DDES shielding (set to a large value to disable DES).
+     * @param[out] source  Output source vector; entries at I4+1 and I4+2 are set.
+     * @param mode      Source computation mode: 0 = full source, 1 = implicit diagonal (destruction only).
+     */
     template <int dim, class TU, class TDiffU, class TSource>
     void GetSource_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, real lLES, TSource &source, int mode)
     {
@@ -443,6 +690,27 @@ namespace DNDS::Euler::RANS
         }
     }
 
+    /**
+     * @brief Compute turbulent viscosity mu_t from the Wilcox k-omega model.
+     *
+     * Evaluates the eddy viscosity mu_t = rho * k / omega_tilde, where omega_tilde
+     * depends on the selected model version (@c KW_WILCOX_VER):
+     * - Version 0 (original 1988): omega_tilde = omega (no stress limiter).
+     * - Version 1 (2006): omega_tilde = max(omega, C_lim * sqrt(S_{ij}S_{ij} / beta*)),
+     *   applying the stress limiter with C_lim = 7/8.
+     * - Version 2 (simplified): omega_tilde = omega (no stress limiter).
+     *
+     * Optional upper bound of 1e5 * mu_laminar when @c KW_WILCOX_LIMIT_MUT is enabled.
+     *
+     * @tparam dim     Spatial dimension (2 or 3).
+     * @tparam TU      Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU  Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @param UMeanXy  Conservative state vector [rho, rhoU, ..., rhoE, rho*k, rho*omega].
+     * @param DiffUxy  Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf      Laminar (molecular) dynamic viscosity.
+     * @param d        Wall distance (unused in this model but kept for interface consistency).
+     * @return         Turbulent dynamic viscosity mu_t (>= 0).
+     */
     template <int dim, class TU, class TDiffU>
     real GetMut_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d)
     {
@@ -480,6 +748,30 @@ namespace DNDS::Euler::RANS
         return mut;
     }
 
+    /**
+     * @brief Compute the RANS viscous flux for the Wilcox k-omega transport equations.
+     *
+     * Evaluates the diffusion (viscous) flux contributions for the k and omega equations
+     * projected onto the face normal direction.  The Wilcox model uses constant diffusion
+     * coefficients:
+     * - sigma_k = 0.5
+     * - sigma_omega = 0.5
+     *
+     * Effective diffusivity: mu_laminar + mu_t * sigma_{k,omega}.
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TN       Eigen-compatible type for the face unit normal vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, primitive variables).
+     * @tparam TVFlux   Eigen-compatible type for the output viscous flux vector.
+     * @param UMeanXy      Conservative state vector.
+     * @param DiffUxyPrim  Gradient tensor of *primitive* variables, size dim × nVars.
+     * @param uNorm        Outward-pointing face unit normal vector (length dim).
+     * @param mutIn        Turbulent dynamic viscosity (precomputed).
+     * @param d            Wall distance (unused here, kept for interface consistency).
+     * @param muf          Laminar (molecular) dynamic viscosity.
+     * @param[out] vFlux   Output viscous flux vector; entries at I4+1 and I4+2 are set.
+     */
     template <int dim, class TU, class TN, class TDiffU, class TVFlux>
     void GetVisFlux_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN &&uNorm, real mutIn, real d, real muf, TVFlux &vFlux)
     {
@@ -518,6 +810,42 @@ namespace DNDS::Euler::RANS
         vFlux(I4 + 2) = diffKO(Seq012, 1).dot(uNorm) * (muf + mut * sigO);
     }
 
+    /**
+     * @brief Compute source terms for the Wilcox k-omega transport equations.
+     *
+     * Evaluates production, destruction, and cross-diffusion source contributions for
+     * the k and omega equations following the Wilcox k-omega model.  The version-dependent
+     * behavior is controlled by @c KW_WILCOX_VER:
+     *
+     * - **Version 0 (1988):** alpha = 5/9, beta = 3/40, no stress limiter, no cross-diffusion.
+     * - **Version 1 (2006):** alpha = 13/25, beta = f_beta * beta_0, with the f_beta correction
+     *   based on Chi_omega (mean rotation / strain invariant), stress limiter C_lim = 7/8,
+     *   and cross-diffusion sigma_d term (sigma_d = 0.125 when grad(k) . grad(omega) > 0).
+     * - **Version 2 (simplified):** alpha = 13/25, beta = 0.075, vorticity-based production,
+     *   no stress limiter, no cross-diffusion.
+     *
+     * Production of k is optionally capped at 20 * beta* * rho * k * omega (CFL3D-style)
+     * when @c KW_WILCOX_PROD_LIMITS is enabled.
+     *
+     * When @p mode == 0, the full source vector is returned:
+     * - source(I4+1) = P_k - beta* * rho * k * omega
+     * - source(I4+2) = P_omega - beta * rho * omega^2 + sigma_d / omega * grad(k) . grad(omega)
+     *
+     * When @p mode == 1, the implicit diagonal contribution (positive) is returned:
+     * - source(I4+1) = beta* * omega
+     * - source(I4+2) = 2 * beta * omega
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @tparam TSource  Eigen-compatible type for the output source vector.
+     * @param UMeanXy   Conservative state vector.
+     * @param DiffUxy   Gradient tensor of conservative variables, size dim × nVars.
+     * @param muf       Laminar (molecular) dynamic viscosity.
+     * @param d         Wall distance (unused here, kept for interface consistency).
+     * @param[out] source  Output source vector; entries at I4+1 and I4+2 are set.
+     * @param mode      Source computation mode: 0 = full source, 1 = implicit diagonal (destruction only).
+     */
     template <int dim, class TU, class TDiffU, class TSource>
     void GetSource_KOWilcox(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, TSource &source, int mode)
     {
@@ -608,6 +936,52 @@ namespace DNDS::Euler::RANS
         }
     }
 
+    /**
+     * @brief Compute source terms for the Spalart-Allmaras one-equation turbulence model.
+     *
+     * Evaluates the full SA source term including production, destruction, diffusion,
+     * and optional DES/DDES/IDDES/WMLES length-scale modification.  The SA model solves
+     * a single transport equation for the modified kinematic viscosity nuTilde (stored
+     * as rho * nuTilde at index I4+1 in the conservative state vector).
+     *
+     * Key terms computed:
+     * - **Vorticity magnitude** S = ||Omega|| * sqrt(2), with optional rotation correction
+     *   (SRotCor = c_rot * min(0, S - SS)) when @p rotCor is enabled.
+     * - **Modified vorticity** Sh = S + Sbar, where Sbar = nuTilde * f_{v2} / (kappa^2 * d^2).
+     * - **Production** P = c_{b1} * (1 - f_{t2}) * Sh * nuTilde.
+     * - **Destruction** D = (c_{w1} * f_w - c_{b1}/kappa^2 * f_{t2}) * (nuTilde / d)^2.
+     * - **Diffusion** term: c_{b2}/sigma * |grad(nuTilde)|^2 (conservative form contribution).
+     * - **f_{t2} laminar suppression** term controlled by @c SA_USE_FT2_TERM.
+     *
+     * DES/DDES/IDDES length-scale modification:
+     * - **DESMode 0 (RANS):** l_DES = d (pure RANS, wall distance).
+     * - **DESMode 1 (IDDES):** Blends l_RANS and l_LES using the IDDES shielding functions
+     *   f_d, f_B, f_e, with psi correction for grid-induced separation avoidance.
+     * - **DESMode 2 (WMLES):** Uses the wall-modeled LES length scale
+     *   l_WMLES = f_B * (1 + f_e) * l_RANS + (1 - f_B) * l_LES * psi.
+     *
+     * When @p mode == 0, the full source is returned at source(I4+1).
+     * When @p mode == 1, the implicit diagonal contribution -dS/dU (positive, suitable for
+     * augmenting the implicit operator) is returned at source(I4+1).
+     *
+     * @tparam dim      Spatial dimension (2 or 3).
+     * @tparam TU       Eigen-compatible type for the conservative state vector.
+     * @tparam TDiffU   Eigen-compatible type for the gradient tensor (dim × nVars, conservative variables).
+     * @tparam TSource  Eigen-compatible type for the output source vector.
+     * @param UMeanXy   Conservative state vector [rho, rhoU, ..., rhoE, rho*nuTilde].
+     * @param DiffUxy   Gradient tensor of conservative variables, size dim × nVars.
+     * @param muRef     Reference viscosity scale used to non-dimensionalise nuTilde
+     *                  (nuTilde_physical = UMeanXy(I4+1) * muRef / rho).
+     * @param mufPhy    Physical (dimensional) laminar dynamic viscosity.
+     * @param gamma     Ratio of specific heats (used for pressure gradient in optional helicity correction).
+     * @param d         Wall distance.
+     * @param lLES      LES length scale for DES shielding (set to a large value to disable DES).
+     * @param hMax      Maximum cell size (used in IDDES alpha parameter: alpha = 0.25 - d/hMax).
+     * @param DESMode   DES operating mode: 0 = pure RANS, 1 = IDDES, 2 = WMLES.
+     * @param[out] source  Output source vector; entry at I4+1 is set.
+     * @param rotCor    Rotation correction flag: 0 = disabled, nonzero = enabled (c_rot = 2.0).
+     * @param mode      Source computation mode: 0 = full source, 1 = implicit diagonal (positive).
+     */
     template <int dim, class TU, class TDiffU, class TSource>
     void GetSource_SA(TU &&UMeanXy, TDiffU &&DiffUxy, real muRef, real mufPhy, real gamma,
                       real d,

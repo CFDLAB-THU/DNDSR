@@ -1,3 +1,13 @@
+/** @file EulerSolver.hxx
+ *  @brief Template implementation of EulerSolver::RunImplicitEuler, the main implicit
+ *         time-marching loop, along with linear solver dispatch (solveLinear),
+ *         preconditioner application (doPrecondition), and running environment
+ *         initialization (InitializeRunningEnvironment).
+ *
+ *  Covers CFL ramping, reconstruction update, RHS evaluation, LUSGS/GMRES
+ *  implicit time stepping, residual monitoring, CL-driver integration,
+ *  checkpoint/restart writing, time averaging, and output scheduling.
+ */
 #pragma once
 
 // #ifndef __DNDS_REALLY_COMPILING__
@@ -28,6 +38,22 @@ namespace DNDS::Euler
         ,
         // the intellisense friendly definition
         template <>)
+    /** @brief Main implicit time-marching loop for the compressible Navier-Stokes solver.
+     *
+     *  Performs the following at each time step:
+     *  1. CFL ramping with exponential growth and linear fallback on divergence.
+     *  2. Reconstruction update: VR coefficient computation, gradient limiting,
+     *     positivity-preserving beta evaluation.
+     *  3. Local time step (dTau) estimation from face eigenvalues.
+     *  4. RHS evaluation via EvaluateRHS.
+     *  5. Implicit time stepping using either LU-SGS sweeps or GMRES with LU preconditioner.
+     *  6. Positivity-preserving alpha limiter for the update.
+     *  7. Component-wise L1 residual monitoring with convergence checks.
+     *  8. CL-driver integration for angle-of-attack adjustment.
+     *  9. Checkpoint/restart writing on schedule or SIGUSR1 signal.
+     *  10. Time averaging accumulation.
+     *  11. VTK output scheduling based on time or iteration.
+     */
     void EulerSolver<model>::RunImplicitEuler()
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -1361,6 +1387,23 @@ namespace DNDS::Euler
         ,
         // the intellisense friendly definition
         template <>)
+    /** @brief Dispatch the linear solve for implicit time stepping.
+     *
+     *  Solves the linearized system using either SGS sweeps (gmresCode=0) or
+     *  FGMRES with preconditioner (gmresCode=1/2). Supports multi-grid levels
+     *  with per-level configuration of iteration counts and solver parameters.
+     *
+     *  @param alphaDiag   Diagonal scaling factor for the implicit operator.
+     *  @param t           Current simulation time.
+     *  @param cres        RHS residual (right-hand side of the linear system).
+     *  @param cx          Current solution DOF.
+     *  @param cxInc       Solution increment (input/output).
+     *  @param uRecC       Reconstruction coefficients.
+     *  @param uRecIncC    Reconstruction increment (for SGS-with-rec mode).
+     *  @param JDC         Diagonal Jacobian block.
+     *  @param gmres       GMRES solver object.
+     *  @param gridLevel   Multigrid level (0 = finest).
+     */
     void EulerSolver<model>::solveLinear(
         real alphaDiag, real t,
         TDof &cres, TDof &cx, TDof &cxInc, TRec &uRecC, TRec uRecIncC,
@@ -1541,6 +1584,24 @@ namespace DNDS::Euler
         ,
         // the intellisense friendly definition
         template <>)
+    /** @brief Apply the preconditioner for the GMRES linear solver.
+     *
+     *  Depending on jacobiCode: applies symmetric SGS sweeps (code 0/1) or
+     *  local LU factorization solve (code 2). Manages the inputIsZero and
+     *  hasLUDone state flags across GMRES restarts.
+     *
+     *  @param alphaDiag    Diagonal scaling factor.
+     *  @param t            Current simulation time.
+     *  @param cres         Right-hand side for preconditioning.
+     *  @param cx           Current solution DOF.
+     *  @param cxInc        Preconditioned result (output).
+     *  @param uTemp        Temporary DOF buffer.
+     *  @param JDC          Diagonal Jacobian block.
+     *  @param sgsRes       SGS residual for convergence tracking.
+     *  @param inputIsZero  Tracks whether cxInc is zero (updated in-place).
+     *  @param hasLUDone    Tracks whether LU factorization has been computed (updated).
+     *  @param gridLevel    Multigrid level.
+     */
     void EulerSolver<model>::doPrecondition(real alphaDiag, real t,
                                             TDof &cres, TDof &cx, TDof &cxInc, TDof &uTemp,
                                             JacobianDiagBlock<nVarsFixed> &JDC, TU &sgsRes, bool &inputIsZero, bool &hasLUDone, int gridLevel)
@@ -1602,6 +1663,14 @@ namespace DNDS::Euler
         ,
         // the intellisense friendly definition
         template <>)
+    /** @brief Initialize the running environment for the time-marching loop.
+     *
+     *  Sets up the ODE solver, error logging stream, temporary arrays, signal handlers,
+     *  output data structures, and applies steady-mode overrides when configured.
+     *  Must be called before entering the main time-stepping loop.
+     *
+     *  @param runningEnvironment  Running environment structure to populate (output).
+     */
     void EulerSolver<model>::InitializeRunningEnvironment(EulerSolver<model>::RunningEnvironment &runningEnvironment)
     {
         if (config.timeMarchControl.partitionMeshOnly)

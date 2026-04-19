@@ -1,4 +1,14 @@
 #pragma once
+/// @file EigenUtil.hpp
+/// @brief Eigen extensions: `to_string`, an fmt-safe wrapper, and fmt formatter
+/// specialisations for dense Eigen matrices.
+///
+/// The `MatrixFMTSafe` / `VectorFMTSafe` helpers exist because modern fmtlib
+/// (with `fmt/ranges.h`) will detect `Eigen::Matrix` as a range and format
+/// it as `[a, b, c, ...]`, overriding the Eigen stream formatting that
+/// DNDSR wants. Wrapping Eigen types with these aliases hides the iterator
+/// interface from fmt and keeps the matrix pretty-print.
+
 #include "EigenPCH.hpp"
 
 #include "Defines.hpp"
@@ -11,6 +21,9 @@
 
 namespace DNDS
 {
+    /// @brief Render an `Eigen::DenseBase` to a string via `operator<<`.
+    /// @param precision Setprecision applied if `> 0`.
+    /// @param scientific Whether to use `std::scientific` notation.
     // TODO: lessen copying chance?
     template <class dir>
     std::string to_string(const Eigen::DenseBase<dir> &v,
@@ -30,6 +43,18 @@ namespace DNDS
 
 namespace Eigen
 {
+    /**
+     * @brief `Eigen::Matrix` wrapper that hides `begin`/`end` from fmt.
+     *
+     * @details When both `fmt/ranges.h` and Eigen are present, the fmt range
+     * formatter picks up `Eigen::Matrix` via its iterator interface and renders
+     * it as a bracketed list (`[1, 2, 3]`). This disables Eigen's stream
+     * formatting path. This wrapper inherits from `Eigen::Matrix` but deletes
+     * `begin` / `end`, so fmt falls back to the ostream formatter.
+     *
+     * Use this type (or its #VectorFMTSafe / #RowVectorFMTSafe aliases) wherever
+     * Eigen objects need to pass through `fmt::format`.
+     */
     template <class T, int M, int N, int options = AutoAlign | ((M == 1 && N != 1) ? Eigen ::RowMajor : !(M == 1 && N != 1) ? Eigen ::ColMajor
                                                                                                                             : Eigen ::ColMajor),
               int max_m = M, int max_n = N>
@@ -38,19 +63,25 @@ namespace Eigen
         using Base = Matrix<T, M, N, options, max_m, max_n>;
         using Base::Base;
 
+        /// @brief Deleted to hide range interface from fmt.
         void begin() = delete;
+        /// @brief Deleted to hide range interface from fmt.
         void end() = delete;
     };
 
+    /// @brief Column-vector alias of #MatrixFMTSafe.
     template <class T, int M>
     using VectorFMTSafe = MatrixFMTSafe<T, M, 1>;
 
+    /// @brief Row-vector alias of #MatrixFMTSafe.
     template <class T, int N>
     using RowVectorFMTSafe = MatrixFMTSafe<T, 1, N>;
 }
 
 namespace DNDS::Meta
 {
+    /// @brief Type trait: is `T` a `MatrixFMTSafe` with real scalar? Used by
+    /// the fmt formatter below to catch both wrapped and unwrapped Eigen types.
     template <class T>
     struct is_real_eigen_fmt_safe_matrix : public std::false_type
     {

@@ -1,3 +1,8 @@
+/// @file ExprtkWrapper.cpp
+/// @brief exprtk-backed implementations of #ExprtkWrapperEvaluator's Compile,
+/// Evaluate, and Clear methods. Kept out-of-line so that exprtk's heavy
+/// templates stay confined to one translation unit.
+
 #include "ExprtkWrapper.hpp"
 #include "ExprtkPCH.hpp"
 #include <exprtk.hpp>

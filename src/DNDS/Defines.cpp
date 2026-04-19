@@ -1,3 +1,8 @@
+/// @file Defines.cpp
+/// @brief Implementations of symbols declared in #Defines.hpp: log stream
+/// management, signal handler body, OpenMP helpers, version string accessor,
+/// terminal / progress utilities.
+
 #include "Defines.hpp"
 
 // #ifdef _MSC_VER

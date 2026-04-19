@@ -1,3 +1,14 @@
+/**
+ * @file EulerP_Evaluator_bind.hpp
+ * @brief Pybind11 bindings for the EulerP Evaluator class and its packed argument structs.
+ *
+ * Exposes the following Python API under the EulerP module:
+ * - @c Evaluator: Main evaluator class with constructor, config get/set, device transfer,
+ *   VTK output, and all kernel methods (RecGradient, RecFace2nd, Cons2PrimMu, Cons2Prim,
+ *   EstEigenDt, Flux2nd).
+ * - For each kernel, a corresponding @c *_Arg packed argument struct is exposed with
+ *   all member ArrayDof pointers as read/write properties.
+ */
 #pragma once
 
 #include "DNDS/Defines_bind.hpp"
@@ -8,6 +19,19 @@
 
 namespace DNDS::EulerP
 {
+    /**
+     * @brief Defines pybind11 bindings for the Evaluator class and its kernel argument structs.
+     *
+     * Registers the Evaluator class with:
+     * - Constructor taking (fv, bcHandler, physics)
+     * - @c setConfig / @c getConfig for JSON configuration round-trip
+     * - @c fv, @c bcHandler, @c physics as read/write properties
+     * - @c to_host, @c to_device, @c device for device management
+     * - @c PrintDataVTKHDF for VTK output
+     * - Kernel methods and their packed argument structs via DNDS_EULERP_EVALUATOR_BIND_STANDARD_PACKED_API
+     *
+     * @param m Pybind11 module to register bindings into.
+     */
     inline void pybind11_Evaluator_define(py::module_ &m)
     {
         using T = Evaluator;
@@ -69,6 +93,13 @@ namespace DNDS::EulerP
 #undef DNDS_EULERP_EVALUATOR_BIND_STANDARD_PACKED_API
     }
 
+    /**
+     * @brief Top-level binding function for the EulerP Evaluator Python API.
+     *
+     * Calls @c pybind11_Evaluator_define to register all Evaluator bindings.
+     *
+     * @param m Pybind11 module to register bindings into.
+     */
     inline void pybind11_Evaluator_bind(py::module_ &m)
     {
         pybind11_Evaluator_define(m);

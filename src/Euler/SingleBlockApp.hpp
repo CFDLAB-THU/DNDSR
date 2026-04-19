@@ -1,3 +1,12 @@
+/** @file SingleBlockApp.hpp
+ *  @brief Main entry-point template for single-block Euler/Navier-Stokes solver executables.
+ *
+ *  Provides getSingleBlockAppName() for mapping EulerModel enum values to
+ *  executable names, and the RunSingleBlockConsoleApp() template that wires up
+ *  CLI argument parsing (argparse), JSON configuration loading with optional
+ *  key/value overrides, JSON Schema emission, and the solve pipeline
+ *  (mesh read → initialization → implicit time integration).
+ */
 #pragma once
 
 #include <argparse.hpp>
@@ -6,6 +15,16 @@
 
 namespace DNDS::Euler
 {
+    /**
+     * @brief Map an EulerModel enum value to its corresponding executable name string.
+     *
+     * Used to derive default configuration file paths and to set the program name
+     * shown in --help output.
+     *
+     * @param model  Compile-time or runtime EulerModel variant.
+     * @return Null-terminated C string with the executable name (e.g. "euler",
+     *         "eulerSA", "euler3D"). Returns "_error_app_name_" for unrecognized models.
+     */
     constexpr static inline const char *getSingleBlockAppName(const EulerModel model)
     {
         if (model == NS)
@@ -29,6 +48,33 @@ namespace DNDS::Euler
         return "_error_app_name_";
     }
 
+    /**
+     * @brief Main entry point for single-block solver console applications.
+     *
+     * This function template is instantiated for each EulerModel variant and
+     * serves as the complete `main()` implementation for that solver executable.
+     *
+     * **Execution flow:**
+     * 1. Initialize MPI and build default/user configuration file paths.
+     * 2. Parse command-line arguments via argparse:
+     *    - Positional `config` — path to the user JSON configuration file.
+     *    - Positional `field_n_variables` (extended models with DynamicSize only).
+     *    - `-k`/`--overwrite_key` and `-v`/`--overwrite_value` — repeated pairs
+     *      for ad-hoc JSON config overrides.
+     *    - `--debug` — attach-debugger mode (MPI hold).
+     *    - `--emit-schema` — print the full JSON Schema for this solver's
+     *      configuration and exit.
+     * 3. In `--emit-schema` mode: instantiate a default EulerSolver, emit the
+     *    schema produced by DNDS_DECLARE_CONFIG, and return.
+     * 4. In normal mode: construct an EulerSolver, load the default config then
+     *    the user config (with key/value overrides), call
+     *    ReadMeshAndInitialize(), and RunImplicitEuler().
+     *
+     * @tparam model  Compile-time EulerModel selecting the equation set / dimension.
+     * @param argc    Argument count forwarded from main().
+     * @param argv    Argument vector forwarded from main().
+     * @return 0 on success (abnormal paths call std::abort()).
+     */
     template <EulerModel model>
     int RunSingleBlockConsoleApp(int argc, char *argv[])
     {

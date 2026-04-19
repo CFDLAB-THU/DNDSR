@@ -1,3 +1,13 @@
+/** @file EulerSolver_Init.hxx
+ *  @brief Template implementation of EulerSolver::ReadMeshAndInitialize, the full
+ *         solver initialization pipeline from mesh reading to evaluator setup.
+ *
+ *  Covers CGNS/OpenFOAM mesh reading, periodic boundary deduplication, mesh
+ *  partitioning (ParMetis), O1-to-O2 elevation, h-refinement bisection, boundary
+ *  mesh extraction for wall distance, VFV (VariationalReconstruction) construction,
+ *  BC handler configuration, wall distance computation, evaluator initialization,
+ *  restart loading, and initial VTK output.
+ */
 #pragma once
 
 #include "EulerSolver.hpp"
@@ -8,6 +18,22 @@ namespace DNDS::Euler
 {
     static const auto model = NS_SA;
     DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
+    /** @brief Read the mesh, partition it, build solver data structures, and initialize the evaluator.
+     *
+     *  Complete initialization pipeline:
+     *  1. Read mesh from CGNS or OpenFOAM format (serial, parallel, or distributed mode).
+     *  2. Handle periodic boundary deduplication and mesh topology (cell2cell, node2cell).
+     *  3. Optionally elevate mesh order (O1 to O2) and apply h-refinement bisection.
+     *  4. Partition with ParMetis and redistribute across MPI ranks.
+     *  5. Build ghost layers, adjacency, and coordinate structures.
+     *  6. Extract boundary mesh for wall distance computation.
+     *  7. Construct VFV (VariationalReconstruction) with configured settings.
+     *  8. Configure BC handlers from JSON settings.
+     *  9. Compute wall distance (CGAL or Poisson).
+     *  10. Initialize the EulerEvaluator (arrays, face data, etc.).
+     *  11. Load restart if configured.
+     *  12. Write initial VTK output.
+     */
     void EulerSolver<model>::ReadMeshAndInitialize()
     {
         DNDS_MPI_InsertCheck(mpi, "ReadMeshAndInitialize 1 nvars " + std::to_string(nVars));
