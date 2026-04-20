@@ -89,7 +89,7 @@ namespace DNDS
      * @sa ArrayBasic.hpp for the layout enum and signature parsing.
      * @sa ArrayTransformer for adding MPI ghost communication.
      * @sa ArrayPair for the typical father/son bundle.
-     * @sa docs/architecture/arrays.md, docs/guides/array_usage.md.
+     * @sa docs/architecture/array_infrastructure.md, docs/guides/array_usage.md.
      * @todo Implement the `_align` feature (currently ignored).
      */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>

@@ -21,4 +21,5 @@ api_cpp_geom
 api_cpp_cfv
 api_cpp_euler
 api_cpp_eulerp
+api_cpp_solver
 ```

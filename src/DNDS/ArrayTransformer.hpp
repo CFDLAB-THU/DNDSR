@@ -52,7 +52,7 @@ namespace DNDS
      * Ghost (halo) data is not managed here; pair with @ref DNDS::ArrayTransformer "ArrayTransformer" or
      * wrap in an @ref DNDS::ArrayPair "ArrayPair" for that.
      *
-     * @sa ArrayTransformer, ArrayPair, docs/architecture/arrays.md.
+     * @sa ArrayTransformer, ArrayPair, docs/architecture/array_infrastructure.md.
      */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ParArray : public Array<T, _row_size, _row_max, _align>
@@ -419,7 +419,7 @@ namespace DNDS
      * without redoing collective setup -- only #createMPITypes must be redone,
      * because the element size differs.
      *
-     * @sa ArrayPair, ArrayDof, docs/architecture/arrays.md.
+     * @sa ArrayPair, ArrayDof, docs/architecture/array_infrastructure.md.
      */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     // template <class TArray>

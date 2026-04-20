@@ -1,5 +1,12 @@
 # TODO {#todo_list}
 
+> **Note (2026-04-20):** This file was audited. Several items previously
+> listed as open have been verified as complete and are now struck through.
+> Remaining high-priority open items include: replacing global
+> `add_compile_options` (still present in `DndsCompilerFlags.cmake`),
+> removing duplicate `#include` directives in Euler headers, and replacing
+> raw `assert()` calls in `Solver/ODE.hpp`.
+
 ## Miscellaneous
 
 - DPW: see separation size
@@ -58,8 +65,10 @@
 - Consolidate explicit-instantiation translation units: group multiple model
   instantiations per .cpp file to cut the 58 Euler + 24 CFV tiny compilation
   units (each pulls in massive template headers)
-- Enable PCH by default (`DNDS_USE_PRECOMPILED_HEADER ON`) now that
-  infrastructure exists
+- ~~Enable PCH by default (`DNDS_USE_PRECOMPILED_HEADER ON`) now that
+  infrastructure exists~~ (deferred — PCH targets exist but default remains OFF
+  to avoid build issues with varying compiler/toolchain setups; explicitly
+  enable with `-DDNDS_USE_PRECOMPILED_HEADER=ON` when desired)
 
 ### CTest and test infrastructure
 
@@ -262,8 +271,8 @@ non-periodic mesh paths remain clean.
   library (line 27 of `src/CFV/CMakeLists.txt`)
 - Move `test/Geom/OversetCart/` (7-file library package) out of `test/`
   into `src/` since it is library code, not tests
-- Delete `src/Geom/GeomUtils.py` (outdated duplicate of `utils.py` with bugs)
-- Delete `src/check.py` (stale integration test, superseded by `test/`)
+- ~~Delete `src/Geom/GeomUtils.py` (outdated duplicate of `utils.py` with bugs)~~ (done)
+- ~~Delete `src/check.py` (stale integration test, superseded by `test/`)~~ (done)
 
 ## Unit Test
 
@@ -304,8 +313,7 @@ MPI tests registered at np=1, np=2, np=4.
 
 ### Test infrastructure improvements remaining
 
-- Create a shared `test/conftest.py` with an MPI fixture, replacing the
-  per-file `DNDS.MPIInfo()` boilerplate duplicated across all test files
+- ~~Create a shared `test/conftest.py` with an MPI fixture~~ (done — exists at `test/conftest.py`)
 - Add `[tool.pytest.ini_options]` to `pyproject.toml`:
   `testpaths = ["test"]`, custom markers (`mpi`, `cuda`, `slow`),
   and a default timeout
@@ -381,6 +389,10 @@ MPI tests registered at np=1, np=2, np=4.
   verify spatial convergence rate matches scheme order
 
 ## Python Integration — Package Restructure Plan
+
+> **Status: COMPLETE** — The `python/DNDSR/` tree is fully implemented. The
+> following section documents what was done for reference. Remaining items
+> (stub generation cleanup, test import fixes) are minor polish.
 
 ### Problem summary
 

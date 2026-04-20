@@ -30,7 +30,7 @@ cmake --build build -t euler -j32
 # 3. Install Python package (editable)
 python3.12 -m venv venv && source venv/bin/activate
 pip install numpy scipy pytest pytest-mpi pytest-timeout mpi4py pybind11 pybind11-stubgen scikit-build-core ninja
-CC=mpicc CXX=mpicxx CMAKE_BUILD_PARALLEL_LEVEL=32 pip install -e . --no-build-isolation
+CC=mpicc CXX=mpicxx CMAKE_BUILD_PARALLEL_LEVEL=32 pip install -e .
 
 # 4. Run tests
 ctest --test-dir build -R dnds_ --output-on-failure   # C++

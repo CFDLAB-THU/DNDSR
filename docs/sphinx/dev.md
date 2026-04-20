@@ -15,6 +15,5 @@ Internal notes, plans, reviews, and benchmarks.
 /dev/CurrentReport
 /dev/CurrentTests
 /dev/euler_refactoring_plan
-/dev/review_2026-04-08_dev-harry
 /dev/review_2026-04-09_dev-harry-refac1
 ```

@@ -92,7 +92,7 @@ mask and alpha parameters:
 | `DITR U2R2 (mask=0, alpha=0.55)` | 0 | 0.55 | 3 | 3rd order for alpha != 0.5 |
 | `DITR U2R1 (mask=1)` | 1 | 0.5 | 3 | L-stable, 3rd order |
 
-Theory reference: `HM3Draft/HM3Draft_Content.tex` (U2R2, U2R1, U3R1
+Theory reference: [HM3Draft_Content.tex](https://github.com/harryzhou2000/HM3Draft/blob/main/HM3Draft_Content.tex) (U2R2, U2R1, U3R1
 methods in the Hermite-Multistep family).
 
 ### Golden Value

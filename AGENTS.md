@@ -24,6 +24,7 @@ Compact Finite Volume methods with MPI parallelism and optional CUDA GPU support
 # Configure (from project root)
 mkdir build && cd build
 CC=mpicc CXX=mpicxx cmake ..
+# ^ Use CC=mpicc CXX=mpicxx when unsure which MPI CMake will find.
 
 # Or use CMake presets (see CMakePresets.json)
 cmake --preset release-test   # Release with tests enabled
@@ -170,7 +171,7 @@ with POSIX `index()` from `<strings.h>` (pulled in by doctest).
 ### Python Geom Module
 
 The Python `DNDSR.Geom` module provides mesh reading and manipulation capabilities.
-See the comprehensive guide at `docs/python_geom_mesh_reader.md` for full API
+See the comprehensive guide at `docs/python_geom_guide.md` for full API
 details, including all parameters, read modes, and notes on which C++ methods
 are (and are not) exposed in the Python bindings.
 
@@ -329,5 +330,5 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", 
 - **MPI:** MPI-3 compatible (OpenMPI or MPICH)
 - **CMake:** >= 3.21
 - **C++ libs:** Eigen, Boost, CGAL, nlohmann_json, fmt, pybind11, HDF5, CGNS, Metis, ParMetis
-- **Python:** >= 3.9, numpy, scipy, pytest, pytest-mpi, mpi4py, h5py
+- **Python:** >= 3.10, numpy, scipy, pytest, pytest-mpi, mpi4py, h5py
 - **Optional:** CUDA toolkit, SuperLU_dist
