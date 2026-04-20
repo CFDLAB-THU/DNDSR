@@ -1,4 +1,10 @@
 # Doxyfile 1.8.17
+#
+# IMPORTANT: This file uses CMake placeholders (e.g., @PROJECT_SOURCE_DIR@).
+# Do NOT run `doxygen` directly on this file. Use CMake instead:
+#   cmake -B build
+#   cmake --build build -t doxygen
+# The CMake configure step generates a populated Doxyfile in the build tree.
 
 # This file describes the settings to be used by the documentation system
 # doxygen (www.doxygen.org) for a project.

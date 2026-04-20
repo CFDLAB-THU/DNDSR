@@ -10,7 +10,7 @@ Developer guides for building, configuring, and using DNDSR.
 /guides/project_structure
 /guides/style_guide
 /guides/doc_authoring
-/guides/python_geom_mesh_reader
+/guides/python_geom_guide
 /guides/array_usage
 /guides/serialization_usage
 /guides/geom_usage

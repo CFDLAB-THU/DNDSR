@@ -1,13 +1,15 @@
 import os
 import shutil
+import sys
 
 
-paths = []
-
-dstPath = "../build/docs/html"
+# Allow override via command line or environment variable
+dstPath = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("DNDSR_DOX_ATTACH_DIR", "../build/docs/html")
 
 if not os.path.exists(dstPath):
     os.makedirs(dstPath)
+
+paths = []
 
 for current_dir, subdirs, files in os.walk("."):
     # Skip subdirs since we're only interested in files.

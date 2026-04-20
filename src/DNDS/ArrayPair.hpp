@@ -397,7 +397,7 @@ namespace DNDS
         /// @brief Writes the ArrayPair (father, optional son, optional ghost mapping).
         ///
         /// Creates a sub-path `name` containing:
-        /// - @ref MPIRank (per-rank only), @ref MPISize — partition metadata.
+        /// - `MPIRank` (per-rank only), `MPISize` — partition metadata.
         /// - `father` — the father array via ParArray::WriteSerializer (Parts offset).
         /// - `son` — the son (ghost) array, if `includeSon` is true.
         /// - `pullingIndexGlobal` — ghost pull indices, if `includePIG` is true.

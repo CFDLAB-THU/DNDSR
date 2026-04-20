@@ -65,7 +65,7 @@ namespace DNDS
 
         /// @brief Broadcast each rank's length, then compute the global prefix sums.
         /// @details Collective call. After it returns, every rank holds the full
-        /// @ref RankLengths / @ref RankOffsets tables. Called by
+        /// #RLengths / #ROffsets tables. Called by
         /// `ParArray::createGlobalMapping` during mesh/array setup.
         /// @param mpi       MPI context.
         /// @param myLength  Number of rows owned by the calling rank.

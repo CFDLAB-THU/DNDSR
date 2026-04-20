@@ -5,15 +5,11 @@ DNDS is designed to be a set of commonly used infrastructure that can be used in
 
 ## Basic Data Structure
 
-There has been countless C++ involved computational applications in the field of computer graphics and CG designing (like [blender](https://github.com/blender/blenderC)), CAD (like [FreeCAD](https://github.com/FreeCAD/FreeCAD)), CAE mesh generation (like [gmsh](https://gitlab.onelab.info/gmsh/gmsh)) that involve very complex unstructured and polymorphic geometry data. And massive computational applications including deep learning architectures (like [PyTorch](https://github.com/pytorch/pytorch)) use high levels of abstraction directly on fully structured and homogeneously organized data arrays.
+There has been countless C++ involved computational applications in the field of computer graphics and CG designing (like [blender](https://github.com/blender/blender)), CAD (like [FreeCAD](https://github.com/FreeCAD/FreeCAD)), CAE mesh generation (like [gmsh](https://gitlab.onelab.info/gmsh/gmsh)) that involve very complex unstructured and polymorphic geometry data. And massive computational applications including deep learning architectures (like [PyTorch](https://github.com/pytorch/pytorch)) use high levels of abstraction directly on fully structured and homogeneously organized data arrays.
 
 Unstructured CFD applications are different from both types of computational models, where both complex geometry and massive homogeneous numeric operations are required but easier to cover. Unstructured CFD code only involve limited types of geometry elements and connection type, which can be nearly hard-coded; while while global high-rank structured arrays are mostly not needed, only rank 2 to 5 arrays with potentially non-uniform sizes could be utilized.
 
 So, how do we design the interface used in implementing CFD (By CFD, I mean math formulae of discrete schemes)? Here we inspect some references of famous open cfd code chunks:
-
-
-
-
 
 It seems concerning basic data arrangement, the OpenFOAM and SU2 both require the data to be able to be accessed with random accessors (random_iterator, pointer, subscript or similar):
 
@@ -116,7 +112,7 @@ class primitiveMesh
 
 And OpenFOAM wraps these data with methods to access mesh topo and geom with inheritance.
 
-DNDS does not intend to directly apply such methods at first, but intend to simplify the **MPI communications** on some **limited types** of data arrays. Communication for any complex object is secondary in DNDS, for most of the communication is needed only for arrays of basic types like `int_64` and `float_64` and their simple composite c-like-struct, which is implemented in `Array` and `ArrayTransformer` classes. Any communication on general objects would be a concept requiring the objects being able to serialize/deserialize themselves to a buffer in a given method and given order (which is closer to the communication model in PHengLEI).
+DNDS does not intend to directly apply such methods at first, but intend to simplify the **MPI communications** on some **limited types** of data arrays. Communication for any complex object is secondary in DNDS, for most of the communication is needed only for arrays of basic types like `int64_t` and `double` (or the project aliases `DNDS::index` and `DNDS::real`) and their simple composite c-like-struct, which is implemented in `Array` and `ArrayTransformer` classes. Any communication on general objects would be a concept requiring the objects being able to serialize/deserialize themselves to a buffer in a given method and given order (which is closer to the communication model in PHengLEI).
 
 The first application of DNDS, the simple CFV *euler* solver, does only invoke basic type communications in `ArrayTransformer`, and has yet to come up with any MPI-related bug (data corruption, dead lock...) since no hard MPI operation is needed outside the DNDS wrapping.
 
@@ -142,8 +138,8 @@ The reasoning behind this, is to separate different data genres, which may need 
 class Solution{
     real rho, ru, rv, rw, E, u, v, w, p, T;
 public:
-    void WriteStream(ByteStream&);
-    void ReadStream(ByteStream&);
+    void WriteStream(ByteStream&);  // ByteStream: conceptual serialization interface
+    void ReadStream(ByteStream&);   // (not an actual class; represents any serialization mechanism)
 };
 std::vector<Solution> solutions;
 ```
@@ -155,8 +151,8 @@ class Solution{
     real rho, ru, rv, rw, E, u, v, w, p, T;
     real rho_1, ru_1, rv_1, rw_1, E_1;
 public:
-    void WriteStream(ByteStream&);
-    void ReadStream(ByteStream&);
+    void WriteStream(ByteStream&);  // ByteStream: conceptual serialization interface
+    void ReadStream(ByteStream&);   // (not an actual class; represents any serialization mechanism)
 };
 ```
 
