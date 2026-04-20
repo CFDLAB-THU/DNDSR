@@ -52,7 +52,7 @@ The refactoring demonstrates excellent software engineering practices:
 
 ## 2. Refactoring Phases Overview
 
-The refactoring follows a systematic 3-phase approach documented in `docs/TODO.md`:
+The refactoring follows a systematic 3-phase approach documented in `docs/dev/TODO.md`:
 
 ### Phase 1: Eliminate Duplication (Low Risk, High Reward)
 - Template the 12 index conversion methods
@@ -517,7 +517,7 @@ DNDS_ELEMENT_TRAITS_COMMON(Tri3, 2, 1, 3, 3, 3, TriSpace, 0.5)
 
 ### 10.1 Before Merge (Critical)
 
-1. **Fix typo:** `Offset_Unkown` → `Offset_Unknown`
+1. ~~**Fix typo:** `Offset_Unkown` → `Offset_Unknown`~~ (done — see `src/DNDS/SerializerBase.hpp`)
 2. **Remove or document:** Commented `InterpolateTopology()` block
 3. **Verify:** All CTest tests pass at np=1, np=2, np=4
 
@@ -530,7 +530,7 @@ DNDS_ELEMENT_TRAITS_COMMON(Tri3, 2, 1, 3, 3, 3, TriSpace, 0.5)
 
 ### 10.3 Long-term (Future Refactors)
 
-**Phase 4: Component Decomposition** (from `docs/TODO.md`):
+**Phase 4: Component Decomposition** (from `docs/dev/TODO.md`):
 
 ```
 Target Architecture:
@@ -579,8 +579,8 @@ Target Architecture:
 - `python/DNDSR/DNDS/__init__.py` - Updated imports
 
 ### Documentation (4 files)
-- `docs/TODO.md` - Comprehensive roadmap
-- `docs/style_guide.md` - C++ style guide
+- `docs/dev/TODO.md` - Comprehensive roadmap
+- `docs/guides/style_guide.md` - C++ style guide
 - `AGENTS.md` - Build and test instructions
 
 ---
@@ -611,7 +611,7 @@ This section provides a prioritized, actionable TODO list for cleaning up the re
 - **Action**: 
   - Option 1: Delete the commented `InterpolateTopology()` method
   - Option 2: Add comment explaining why it's preserved (if planned for future use)
-- **Rationale**: Dead code creates confusion; if planned, should be documented in `docs/TODO.md` instead
+- **Rationale**: Dead code creates confusion; if planned, should be documented in `docs/dev/TODO.md` instead
 - **Suggested Commit Message**: `chore: remove commented InterpolateTopology dead code` or `docs: document planned InterpolateTopology feature`
 
 #### ✅ TODO-A3: Verify Test Suite Passes (COMPLETED)
@@ -817,7 +817,7 @@ This section provides a prioritized, actionable TODO list for cleaning up the re
   - `MeshIO` - serialization, VTK/CGNS I/O
   - `MeshElevation` - O1→O2 elevation
   - `MeshReordering` - cell reordering
-- **Reference**: See `docs/TODO.md` Phase 4 section
+- **Reference**: See `docs/dev/TODO.md` Phase 4 section
 - **Rationale**: God class decomposition; better testability
 
 #### TODO-E2: Convert UnstructuredMesh to Class

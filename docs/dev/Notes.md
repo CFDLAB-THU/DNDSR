@@ -34,12 +34,12 @@ Point-to-point comm in MPI could potentially **cause comm race** when the comm p
 calling like:
 
 ```c
-MPI_Request* sendReqs, recvReqs;
+MPI_Request *sendReqs, *recvReqs;
 //traversing all ranks in comm, which is the densest, actual code would omit those with zero size
 for(int rankOther = 0; rankOther < commSize; rankOther++) 
-    MPI_SendInit(buf,count,...,rankOher,..., sendReqs + rankOther);
-for(int rankOther = 0; recvOther < commSize; rankOther++)
-    MPI_RecvInit(buf,count,...,rankdOher,..., recvReqs + rankOther); 
+    MPI_SendInit(buf,count,...,rankOther,..., sendReqs + rankOther);
+for(int rankOther = 0; rankOther < commSize; rankOther++)
+    MPI_RecvInit(buf,count,...,rankOther,..., recvReqs + rankOther); 
 MPI_Startall(commSize, sendReqs);
 MPI_Startall(commSize, recvReqs);
 
@@ -50,16 +50,16 @@ MPI_Waitall(commSize, recvReqs, ...);
 would launch multiple data transferring tasks in MPI simultaneously, which is ok on a dense machine like a NUMA machine, but it causes network racing and saturation in a sparse machine like a common multi-node supercomputer. The best practice, for the performance of communication, would be like a MPI_Alltoall, which refers to the current machine's topology. On the other hand, alltoall is always global and brings extra zero-sized-data communication overhead globally, which is O(np) overhead. So, DNDS assumes that the comm pattern is sparse enough, and when the the sparsity exceeds that of the machine, the current implementation of DNDS uses one-by-one send/recv, like: 
 
 ```c
-MPI_Request* sendReqs, recvReqs;
+MPI_Request *sendReqs, *recvReqs;
 //traversing all ranks in comm, which is the densest, actual code would omit those with zero size
 for(int rankOther = 0; rankOther < commSize; rankOther++) 
-    MPI_SendInit(buf,count,...,rankOher,..., sendReqs + rankOther);
-for(int rankOther = 0; recvOther < commSize; rankOther++)
-    MPI_RecvInit(buf,count,...,rankdOher,..., recvReqs + rankOther); 
+    MPI_SendInit(buf,count,...,rankOther,..., sendReqs + rankOther);
+for(int rankOther = 0; rankOther < commSize; rankOther++)
+    MPI_RecvInit(buf,count,...,rankOther,..., recvReqs + rankOther); 
 MPI_Startall(commSize, sendReqs);
 
 // foreach_recvReqs: start,wait
-for(int rankOther = 0; recvOther < commSize; rankOther++)
+for(int rankOther = 0; rankOther < commSize; rankOther++)
 {
     MPI_Start(recvReq[rankOther]);
     MPI_Wait(recvReq[rankOther]);

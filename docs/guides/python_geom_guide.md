@@ -568,4 +568,4 @@ nGhost = mesh.NumCellGhost()
 - See `python/DNDSR/Geom/utils.py` for the Python API implementation
 - See `src/Geom/Mesh_bind.hpp` for the complete list of Python-exposed methods
 - See `src/Geom/Elements_bind.hpp` for the `ElemType` enum bindings
-- See `docs/Paradigm.md` for overall design philosophy
+- See `docs/architecture/Paradigm.md` for overall design philosophy

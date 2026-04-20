@@ -107,8 +107,6 @@
  * - @subpage euler_refactoring
  * - @subpage cuda_notes
  * - @subpage eulerp_tests
- * - @subpage current_report
- * - @subpage current_tests
- * - @subpage review_dev_harry
+ * - @subpage initial_report
  * - @subpage review_dev_harry_refac1
  */

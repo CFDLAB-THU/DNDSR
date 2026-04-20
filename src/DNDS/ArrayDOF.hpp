@@ -164,7 +164,7 @@ namespace DNDS
      * @tparam n_m  Row count per cell (1 for state vectors).
      * @tparam n_n  Column count per cell.
      *
-     * @sa ArrayEigenMatrixPair, docs/architecture/arrays.md,
+     * @sa ArrayEigenMatrixPair, docs/architecture/array_infrastructure.md,
      * docs/guides/array_usage.md.
      */
     template <int n_m, int n_n>

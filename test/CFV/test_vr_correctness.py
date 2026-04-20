@@ -144,8 +144,8 @@ class TestVRConstruction:
         assert vfv.GetGlobalVol() == pytest.approx(9.0, abs=1e-10)
 
     def test_cell_bary_in_range(self, periodic_vfv):
-        """Primary cell barycenters should be within [-1,2]^2
-        (the Uniform_3x3 mesh spans [-1,2]^2 with period 3)."""
+        """Primary cell barycenters should lie within [-1,2]^2
+        (a superset of the Uniform_3x3 mesh bounds)."""
         mesh, vfv, _ = periodic_vfv
         for iCell in range(mesh.NumCell()):
             bary = vfv.GetCellBary(iCell)

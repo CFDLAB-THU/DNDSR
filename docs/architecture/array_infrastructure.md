@@ -49,8 +49,8 @@ uses `ArrayPair`.
 
 ## Array -- Core 2D Container
 
-**Source:** `DNDS/Array.hpp`, class at line 60; layout logic in
-`DNDS/ArrayBasic.hpp`, line 73.
+**Source:** `DNDS/Array.hpp` (class `Array`); layout logic in
+`DNDS/ArrayBasic.hpp`.
 
 ```cpp
 template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size,
@@ -78,11 +78,11 @@ and compressed sparse row (no waste, but row-start indirection):
 | `DynamicSize` (runtime max) | `TABLE_Max` | Same but max is set at `Resize` time |
 | `NonUniformSize` | `CSR` | Flat buffer + `pRowStart[n+1]`; no waste; needs `Compress()` before MPI |
 
-The full layout table is at `DNDS/ArrayBasic.hpp:46`.
+The full layout table is in `DNDS/ArrayBasic.hpp` (`DataLayout` enum).
 
 ### CSR Compressed vs. Decompressed
 
-CSR arrays have two internal modes (see `Array.hpp:219`):
+CSR arrays have two internal modes (`Compress()` / `Decompress()` in `Array.hpp`):
 
 - **Decompressed**: a `vector<vector<T>>` -- each inner vector is one row.
   Allows `ResizeRow()` to grow or shrink individual rows incrementally.
@@ -95,7 +95,7 @@ compresses once after construction and never decompresses again.
 
 ## ParArray -- MPI-Aware Array
 
-**Source:** `DNDS/ArrayTransformer.hpp`, line 35.
+**Source:** `DNDS/ArrayTransformer.hpp` (`ParArray`).
 
 `ParArray` inherits from `Array` and adds two things:
 
@@ -114,7 +114,7 @@ MPI-collective HDF5 I/O (see @ref serialization).
 
 ## ArrayTransformer -- Ghost Communication
 
-**Source:** `DNDS/ArrayTransformer.hpp`, line 342.
+**Source:** `DNDS/ArrayTransformer.hpp` (class `ArrayTransformer`).
 
 ### The Father / Son Model
 
@@ -149,12 +149,12 @@ space.
 **Step 3: Ghost mapping.**  `createGhostMapping(pullIndexGlobal)` takes
 a vector of global row indices this rank needs.  The transformer
 determines which ranks own them and builds push/pull tables.
-(See `ArrayTransformer.hpp:498` for the pull-based variant.)
+(The pull-based variant is in `ArrayTransformer.hpp`.)
 
 **Step 4: MPI types.**  `createMPITypes()` builds `MPI_Type_create_hindexed`
 datatypes that describe the scattered memory layout of the rows to send
 and receive.  It also resizes the son array to match the ghost count.
-(See `ArrayTransformer.hpp:541`.)
+(See `ArrayTransformer.hpp`.)
 
 ### Communication: Persistent Requests
 
@@ -181,11 +181,11 @@ and the gradient array both live on the same cell partition),
 `BorrowGGIndexing(otherTransformer)` copies the ghost/global mapping
 without repeating the expensive collective setup.  Only `createMPITypes()`
 needs to run again because the MPI datatypes depend on the element size.
-See `ArrayTransformer.hpp:466`.
+See `ArrayTransformer.hpp` (`BorrowGGIndexing`).
 
 ## ArrayPair -- Convenience Bundle
 
-**Source:** `DNDS/ArrayPair.hpp`, line 120.
+**Source:** `DNDS/ArrayPair.hpp` (class `ArrayPair`).
 
 Most application code does not use `ArrayTransformer` directly.
 `ArrayPair` bundles father + son + transformer:
@@ -206,12 +206,12 @@ which cells are local and which are ghosts.
 The most common pattern is `BorrowAndPull(primary)`: given a primary
 pair whose ghost mapping is already set up (typically `cell2cell` or
 `coords`), borrow its mapping, build MPI types for the new element size,
-and pull data in one call.  See `ArrayPair.hpp:269`.
+and pull data in one call.  See `ArrayPair.hpp` (`BorrowAndPull`).
 
 ### Type Aliases
 
 The project defines convenience aliases for the most common array-pair
-combinations (see `ArrayPair.hpp:624`):
+combinations (in `ArrayPair.hpp`):
 
 | Alias | Underlying | Use |
 |---|---|---|
@@ -227,7 +227,7 @@ return a typed view instead of a raw `T*`.
 
 ### ArrayAdjacency
 
-**Source:** `DNDS/ArrayDerived/ArrayAdjacency.hpp`, line 24.
+**Source:** `DNDS/ArrayDerived/ArrayAdjacency.hpp`.
 
 Stores index connectivity (cell-to-node, cell-to-cell, etc.).
 `operator[](i)` returns an `AdjacencyRow` -- a lightweight span that
@@ -236,7 +236,7 @@ This is the workhorse for all mesh topology arrays.
 
 ### ArrayEigenVector
 
-**Source:** `DNDS/ArrayDerived/ArrayEigenVector.hpp`, line 19.
+**Source:** `DNDS/ArrayDerived/ArrayEigenVector.hpp`.
 
 Each row is an `Eigen::Vector<real, N>`.  `operator[](i)` returns
 `Eigen::Map<Vector>`, so Eigen operations work directly on the array's
@@ -244,7 +244,7 @@ memory.  Used for node coordinates (`ArrayEigenVectorPair<3>`).
 
 ### ArrayEigenMatrix
 
-**Source:** `DNDS/ArrayDerived/ArrayEigenMatrix.hpp`, line 25.
+**Source:** `DNDS/ArrayDerived/ArrayEigenMatrix.hpp`.
 
 Each row stores an `M x N` matrix.  The underlying `ParArray` row size
 is `M * N`.  `operator[](i)` returns `Eigen::Map<Matrix>`.  Used for
@@ -253,7 +253,7 @@ per-cell Jacobians, gradient matrices, and the DOF arrays (via
 
 ### ArrayEigenUniMatrixBatch
 
-**Source:** `DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp`, line 19.
+**Source:** `DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp`.
 
 A CSR array where each row stores a *batch* of identically-sized
 `M x N` matrices.  `RowSize(i)` returns the batch count (not the raw
@@ -264,7 +264,7 @@ basis function coefficients inside `FiniteVolume` and
 
 ## ArrayDof -- DOF Arrays with Vector-Space Operations
 
-**Source:** `DNDS/ArrayDOF.hpp`, line 134.
+**Source:** `DNDS/ArrayDOF.hpp`.
 
 ```cpp
 template <int n_m, int n_n>
@@ -280,7 +280,7 @@ backends.
 
 ### CFV DOF Typedefs
 
-Defined in `CFV/VRDefines.hpp` (lines 79-85):
+Defined in `CFV/VRDefines.hpp`:
 
 | Typedef | Template | Per-cell shape | Purpose |
 |---|---|---|---|
@@ -289,6 +289,6 @@ Defined in `CFV/VRDefines.hpp` (lines 79-85):
 | `tUGrad<N, dim>` | `ArrayDof<dim, N>` | `dim x N` | Spatial gradients of the N variables |
 
 If you are writing a new PDE solver on top of DNDSR, these are the
-arrays you will use for your unknowns.  `FiniteVolume::BuildUDof`,
-`BuildURec`, and `BuildUGrad` allocate them with the correct sizes and
-ghost mappings from the mesh.
+arrays you will use for your unknowns.  `FiniteVolume::BuildUDof` and
+`VariationalReconstruction::BuildURec`/`BuildUGrad` allocate them with the
+correct sizes and ghost mappings from the mesh.

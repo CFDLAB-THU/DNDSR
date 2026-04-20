@@ -89,6 +89,9 @@ Available presets (defined in `CMakePresets.json`):
 | `cuda`          | Release    | ON    | `build-cuda/`   | Enables CUDA GPU support      |
 | `ci`            | Release    | ON    | `build-ci/`     | CI (no ccache)                |
 
+> **Note:** Each preset writes to its own build directory (`build/`, `build-debug/`, `build-cuda/`, etc.).
+> If you switch presets, use the corresponding directory in subsequent `cmake --build` and `ctest` commands.
+
 ### Manual CMake Configuration
 
 ```bash
@@ -98,8 +101,8 @@ cmake --build build -t dnds_unit_tests -j32 # Build C++ tests
 ctest --test-dir build -R dnds_ --output-on-failure
 ```
 
-Let CMake detect the system default compiler; do not set `CC`/`CXX`
-unless you have a specific reason.
+Let CMake detect the system default compiler. Use `CC=mpicc CXX=mpicxx`
+when unsure which MPI implementation CMake will find.
 
 ### Solver Targets
 
@@ -316,8 +319,8 @@ GPU-accelerated versions of the test apps are built when
 ### C++ Unit Tests
 
 C++ tests use [doctest](https://github.com/doctest/doctest) and live
-under `test/cpp/`.  They are registered with CTest at np=1, np=2, and
-np=4.
+under `test/cpp/`.  MPI tests are registered with CTest at np=1, np=2,
+and np=4 (DNDS and Geom tests additionally at np=8).
 
 ```bash
 cmake --build build -t dnds_unit_tests -j32

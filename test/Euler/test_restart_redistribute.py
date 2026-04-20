@@ -7,9 +7,12 @@ identical solver behaviour.
 
 Steps:
   1. Run the Euler IV solver for 20 time steps with np=2, writing an H5 restart.
-  2. Run 1 more time step from that restart with np=2 (reference).
-  3. Run 1 more time step from that restart with np=3 (redistributed read).
+  2. Load that restart and immediately write it back at np=2 (reference).
+  3. Load that restart and immediately write it back at np=3 (redistributed read).
   4. Compare the two restart H5 files: the DOF data must match to machine precision.
+
+The file contains three test variants: same-np reseed, cross-np redistribution,
+and a large-mesh multi-np (np=4 → np=4..8) case.
 
 Usage:
     pytest test/Euler/test_restart_redistribute.py -s

@@ -81,7 +81,7 @@ pip install numpy scipy pytest pytest-mpi pytest-timeout mpi4py \
             pybind11 pybind11-stubgen scikit-build-core ninja
 
 CC=mpicc CXX=mpicxx CMAKE_BUILD_PARALLEL_LEVEL=32 \
-    pip install -e . --no-build-isolation
+    pip install -e .
 ```
 
 > **Why system Python?** Conda/Anaconda Python embeds an RPATH to conda's

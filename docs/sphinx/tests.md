@@ -8,7 +8,8 @@ Documentation for the C++ (doctest) and Python (pytest) test suites.
 
 /tests/overview
 /tests/dnds_unit_tests
-/tests/cfv_tests
-/tests/euler_tests
-/tests/solver_tests
+/tests/geom_unit_tests
+/tests/cfv_unit_tests
+/tests/euler_unit_tests
+/tests/solver_unit_tests
 ```

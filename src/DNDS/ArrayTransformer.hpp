@@ -52,7 +52,7 @@ namespace DNDS
      * Ghost (halo) data is not managed here; pair with @ref DNDS::ArrayTransformer "ArrayTransformer" or
      * wrap in an @ref DNDS::ArrayPair "ArrayPair" for that.
      *
-     * @sa ArrayTransformer, ArrayPair, docs/architecture/arrays.md.
+     * @sa ArrayTransformer, ArrayPair, docs/architecture/array_infrastructure.md.
      */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     class ParArray : public Array<T, _row_size, _row_max, _align>
@@ -353,7 +353,8 @@ namespace DNDS
          * @brief Collective: build the global offsets table.
          *
          * @details Every rank broadcasts its local `Size()`; after the call,
-         * #pLGlobalMapping holds the full @ref RankLengths / @ref RankOffsets on every
+         * #pLGlobalMapping holds the full #GlobalOffsetsMapping::RLengths /
+         * #GlobalOffsetsMapping::ROffsets on every
          * rank. Must be invoked before #globalSize, @ref DNDS::ArrayTransformer "ArrayTransformer"::createFatherGlobalMapping,
          * or any CSR collective serialization.
          *
@@ -406,7 +407,7 @@ namespace DNDS
      *                                types (or in-situ pack buffers) for send/recv.
      *
      * ## Communication
-     * - One-shot: #pullOnce / #pushOnce (short-lived @ref Isend/@ref Irecv pair).
+     * - One-shot: #pullOnce / #pushOnce (short-lived `MPI_Isend`/`MPI_Irecv` pair).
      * - Persistent: #initPersistentPull -> repeated #startPersistentPull /
      *   #waitPersistentPull cycles -> #clearPersistentPull when done.
      *   Persistent requests avoid re-posting sends and receives on every
@@ -419,7 +420,7 @@ namespace DNDS
      * without redoing collective setup -- only #createMPITypes must be redone,
      * because the element size differs.
      *
-     * @sa ArrayPair, ArrayDof, docs/architecture/arrays.md.
+     * @sa ArrayPair, ArrayDof, docs/architecture/array_infrastructure.md.
      */
     template <class T, rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
     // template <class TArray>
@@ -469,9 +470,9 @@ namespace DNDS
         DeviceBackend pushDevice = DeviceBackend::Unknown;
         /// @brief Device currently holding pull buffers (@ref Unknown if not initialised).
         DeviceBackend pullDevice = DeviceBackend::Unknown;
-        /// @brief Number of @ref Recv requests in @ref PushReqVec (the rest are @ref Sends).
+        /// @brief Number of receive requests in #PushReqVec (the rest are sends).
         MPI_int nRecvPushReq{-1};
-        /// @brief Number of @ref Recv requests in @ref PullReqVec.
+        /// @brief Number of receive requests in #PullReqVec.
         MPI_int nRecvPullReq{-1};
         /// @brief Status buffer for push completion.
         tMPI_statVec PushStatVec;

@@ -36,7 +36,7 @@ if [[ "$MODE" == "doxygen" ]]; then
     BUILD_TARGET="doxygen"
     DEFAULT_PORT=8001
 else
-    DOC_HTML_DIR="${BUILD_DIR}/docs/sphinx/sphinx"
+    DOC_HTML_DIR="${BUILD_DIR}/docs/sphinx"
     BUILD_TARGET="sphinx"
     DEFAULT_PORT=8000
 fi

@@ -7,6 +7,6 @@ Design documents describing the internal structure of DNDSR.
 :maxdepth: 2
 
 /architecture/Paradigm
-/architecture/arrays
+/architecture/array_infrastructure
 /architecture/Serialization
 ```

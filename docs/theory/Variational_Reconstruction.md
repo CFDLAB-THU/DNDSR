@@ -122,7 +122,7 @@ I_f=w_g(f)\int_f{d\Gamma
 }
 $$
 
-- $L_f$ is a facial length reference, all the anisotropy within derivative components are dealt in the inner product with a relative (dimensionless form). *Out put of inner product becomes dimensional*.
+- $L_f$ is a facial length reference, all the anisotropy within derivative components are dealt in the inner product with a relative (dimensionless form). *Output of inner product becomes dimensional*.
 
 
 ## Reconstruction Matrices

@@ -223,7 +223,7 @@ namespace DNDS::Serializer
         virtual void WriteString(const std::string &name, const std::string &v) = 0;
 
         /// @brief Write an index vector (collective for H5). `offset` carries the
-        /// distribution mode (@ref Parts, explicit offset, etc.).
+        /// distribution mode (#ArrayGlobalOffset_Parts, explicit offset, etc.).
         virtual void WriteIndexVector(const std::string &name, const std::vector<index> &v, ArrayGlobalOffset offset) = 0;
         /// @brief Write a rowsize vector (collective for H5).
         virtual void WriteRowsizeVector(const std::string &name, const std::vector<rowsize> &v, ArrayGlobalOffset offset) = 0;

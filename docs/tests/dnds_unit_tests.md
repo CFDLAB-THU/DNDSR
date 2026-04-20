@@ -8,8 +8,8 @@ The DNDSR project uses the [doctest](https://github.com/doctest/doctest)
 (v2.4.11) framework for C++ unit testing.  Test sources live under
 `test/cpp/DNDS/` and are built only when `DNDS_BUILD_TESTS=ON`.
 
-Every MPI-aware test is registered with CTest at three process counts
-(np = 1, 2, 4) so that correctness under parallel execution is
+Every MPI-aware test is registered with CTest at four process counts
+(np = 1, 2, 4, 8) so that correctness under parallel execution is
 verified automatically.
 
 @subsection test_build Building and Running
@@ -88,7 +88,7 @@ Serial-only tests covering every @ref DNDS::Array data layout:
 
 @see test_MPI.cpp
 
-Run at np = 1, 2, 4.  All expected values are formulated in
+Run at np = 1, 2, 4, 8.  All expected values are formulated in
 terms of `mpi.size` so they hold for any rank count.
 
 - **MPIInfo basics** — `setWorld()`, field validity, equality.
@@ -109,7 +109,7 @@ terms of `mpi.size` so they hold for any rank count.
 
 @see test_ArrayTransformer.cpp
 
-Exercises ghost (halo) communication at np = 1, 2, 4.
+Exercises ghost (halo) communication at np = 1, 2, 4, 8.
 
 - **ParArray basics** — `createGlobalMapping()`, `globalSize()`,
   `AssertConsistent()`.
@@ -133,7 +133,7 @@ Exercises ghost (halo) communication at np = 1, 2, 4.
 
 @see test_ArrayDerived.cpp
 
-Covers every derived array type at np = 1, 2, 4.
+Covers every derived array type at np = 1, 2, 4, 8.
 
 - **ArrayAdjacency** — basics (resize, row resize, compress,
   `operator[]`, `rowPtr()`), ghost communication, clone, fixed-size
@@ -154,7 +154,7 @@ Covers every derived array type at np = 1, 2, 4.
 @see test_ArrayDOF.cpp
 
 Tests every vector-space operation on @ref DNDS::ArrayDof at
-np = 1, 2, 4.  All MPI-global reductions (`norm2`, `dot`,
+np = 1, 2, 4, 8.  All MPI-global reductions (`norm2`, `dot`,
 `min`, `max`, `sum`, `componentWiseNorm1`) use rank-aware expected
 values.
 
@@ -177,7 +177,7 @@ values.
 
 @see test_IndexMapping.cpp
 
-Tests global/local index mapping at np = 1, 2, 4.
+Tests global/local index mapping at np = 1, 2, 4, 8.
 
 - **GlobalOffsetsMapping** — uniform distribution, non-uniform
   distribution, `search()` for first/last/middle/out-of-range indices.
@@ -191,7 +191,7 @@ Tests global/local index mapping at np = 1, 2, 4.
 
 @see test_Serializer.cpp
 
-Round-trip write/read verification at np = 1, 2, 4.
+Round-trip write/read verification at np = 1, 2, 4, 8.
 
 - **SerializerJSON scalar** — `WriteInt`/`ReadInt`,
   `WriteIndex`/`ReadIndex`, `WriteReal`/`ReadReal`,
