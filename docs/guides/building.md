@@ -319,8 +319,8 @@ GPU-accelerated versions of the test apps are built when
 ### C++ Unit Tests
 
 C++ tests use [doctest](https://github.com/doctest/doctest) and live
-under `test/cpp/`.  They are registered with CTest at np=1, np=2, and
-np=4.
+under `test/cpp/`.  MPI tests are registered with CTest at np=1, np=2,
+and np=4 (DNDS and Geom tests additionally at np=8).
 
 ```bash
 cmake --build build -t dnds_unit_tests -j32

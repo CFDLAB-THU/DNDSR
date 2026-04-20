@@ -11,10 +11,6 @@ Unstructured CFD applications are different from both types of computational mod
 
 So, how do we design the interface used in implementing CFD (By CFD, I mean math formulae of discrete schemes)? Here we inspect some references of famous open cfd code chunks:
 
-
-
-
-
 It seems concerning basic data arrangement, the OpenFOAM and SU2 both require the data to be able to be accessed with random accessors (random_iterator, pointer, subscript or similar):
 
 [OpenFOAM's gradient calculation](https://github.com/OpenFOAM/OpenFOAM-dev/blob/master/src/finiteVolume/finiteVolume/gradSchemes/LeastSquaresGrad/LeastSquaresGrad.C):

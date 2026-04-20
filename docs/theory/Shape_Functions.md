@@ -34,7 +34,7 @@ Here we slice N3 from Pyramid5.
 
 At $\xi = 0$: 
 ![Pyramid5_N3_X0](Pyramid5_N3_X0.png)
-At $\xi = 0$: 
+At $\xi = 0.01$: 
 ![Pyramid5_N3_X00](Pyramid5_N3_X00.png)
 At $\xi = 0.1$: 
 ![Pyramid5_N3_X01](Pyramid5_N3_X01.png)

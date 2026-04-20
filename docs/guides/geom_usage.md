@@ -36,7 +36,7 @@ B--D add the CFV layer.
 
 Each step is explained with *why* it is needed.
 (Source: `Geom/Mesh.hpp` for declarations;
-`Geom/MeshSerialRW_Read.hxx` for the CGNS reader implementation.)
+`Geom/Mesh_Serial_ReadFromCGNS.cpp` for the CGNS reader implementation.)
 
 ```cpp
 #include "Geom/Mesh.hpp"

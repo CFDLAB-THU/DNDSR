@@ -79,7 +79,7 @@ class OversetPart2D:
         self.dist_node = obtain_part_local_elem_dists(self, bc_names)
 
     def get_travelling_cell(self, iCell: int, in_phy: bool = True):
-        """_summary_
+        """Pack a cell's geometry into a travelling-cell tuple.
 
         Args:
             iCell (int): is local iCell
@@ -115,10 +115,10 @@ class OversetPart2D:
         return travelling_cell
 
     def get_holed_faces_midpt(self, cell_type_arr: DNDS.ArrayEigenVectorPair_1_1_N):
-        """_summary_
+        """Return indices and midpoints of faces between cells of differing type.
 
         Args:
-            cell_type_arr (DNDS.ArrayEigenVectorPair_1_1_N): _description_
+            cell_type_arr (DNDS.ArrayEigenVectorPair_1_1_N): per-cell type tag array.
 
         Returns:
             (array, array): iFaces (local), midpt coords

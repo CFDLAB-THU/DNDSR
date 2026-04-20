@@ -34,7 +34,7 @@ For 3x5 sized linear reconstruction problem, using 1 thread per cell is OK, but 
 
 ## Compilation
 
-It seems sometimes CUAD toolchain could be corrupted that dynamic linking / separated linking of cub::reduce would cause runtime error?
+It seems sometimes CUDA toolchain could be corrupted that dynamic linking / separated linking of cub::reduce would cause runtime error?
 
 Changing from 12.1 to 12.0 installation fixed.
 

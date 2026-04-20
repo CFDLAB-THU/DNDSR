@@ -12,8 +12,7 @@ Internal notes, plans, reviews, and benchmarks.
 /dev/cfv_refactoring_plan
 /dev/cudaNotes
 /dev/eulerPTests
-/dev/CurrentReport
-/dev/CurrentTests
+/dev/InitialReport
 /dev/euler_refactoring_plan
 /dev/review_2026-04-09_dev-harry-refac1
 ```

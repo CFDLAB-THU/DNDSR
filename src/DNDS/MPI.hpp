@@ -64,7 +64,7 @@ namespace DNDS
 
     /**
      * @brief Map a DNDS integer type size to an MPI signed-integer datatype.
-     * @details Compile-time selects @ref MPI_INT64_T or @ref MPI_INT32_T based on `sizeof(Tbasic)`.
+     * @details Compile-time selects `MPI_INT64_T` or `MPI_INT32_T` based on `sizeof(Tbasic)`.
      * Used by @ref DNDS_MPI_INDEX.
      */
     template <class Tbasic>
@@ -76,8 +76,8 @@ namespace DNDS
 
     /**
      * @brief Map a DNDS floating-point type size to an MPI datatype.
-     * @details Compile-time selects @ref MPI_REAL8 or @ref MPI_REAL4 based on `sizeof(Tbasic)`.
-     * Used by @ref DNDS_MPI_REAL.
+     * @details Compile-time selects `MPI_REAL8` or `MPI_REAL4` based on `sizeof(Tbasic)`.
+     * Used by #DNDS_MPI_REAL.
      */
     template <class Tbasic>
     constexpr MPI_Datatype __DNDSToMPITypeFloat()
@@ -86,9 +86,9 @@ namespace DNDS
         return sizeof(Tbasic) == 8 ? MPI_REAL8 : (sizeof(Tbasic) == 4 ? MPI_REAL4 : MPI_DATATYPE_NULL);
     }
 
-    /// @brief MPI datatype matching #index (= @ref MPI_INT64_T).
+    /// @brief MPI datatype matching #index (= `MPI_INT64_T`).
     const MPI_Datatype DNDS_MPI_INDEX = __DNDSToMPITypeInt<index>();
-    /// @brief MPI datatype matching #real (= @ref MPI_REAL8).
+    /// @brief MPI datatype matching #real (= `MPI_REAL8`).
     const MPI_Datatype DNDS_MPI_REAL = __DNDSToMPITypeFloat<real>();
 
     //! here are some reasons to upgrade to C++20...
@@ -136,7 +136,7 @@ namespace DNDS
      * - builtin float / int types map to their obvious `MPI_*` datatypes, count = 1;
      * - C-style arrays (`T[N]`) recurse into the element type and multiply the count;
      * - `std::array<T, N>` recurses into `T::value_type` and multiplies by `N`;
-     * - fixed-size real Eigen matrices map to @ref DNDS_MPI_REAL with count `sizeof(T)/sizeof(real)`;
+     * - fixed-size real Eigen matrices map to #DNDS_MPI_REAL with count `sizeof(T)/sizeof(real)`;
      * - otherwise falls back to @ref BasicType_To_MPIIntType_Custom.
      *
      * Used throughout ghost-communication and collective code to avoid hand-

@@ -317,10 +317,10 @@ MPI tests registered at np=1, np=2, np=4.
 - Add `[tool.pytest.ini_options]` to `pyproject.toml`:
   `testpaths = ["test"]`, custom markers (`mpi`, `cuda`, `slow`),
   and a default timeout
-- Remove the `sys.path.append` hack in `test/DNDS/test_basic.py`
-  (unnecessary with a proper editable install)
-- Fix `test/Geom/test_basic_geom.py`: remove the `while True: pass`
-  infinite loop (line 85) that makes the test hang
+- ~~Remove the `sys.path.append` hack in `test/DNDS/test_basic.py`
+  (unnecessary with a proper editable install)~~ (done)
+- ~~Fix `test/Geom/test_basic_geom.py`: remove the `while True: pass`
+  infinite loop (line 85) that makes the test hang~~ (done — line commented out)
 
 ### Convert existing print-only tests to assertion-based tests
 

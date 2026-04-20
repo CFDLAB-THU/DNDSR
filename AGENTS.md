@@ -140,7 +140,7 @@ mpirun -np 2 python test/DNDS/test_basic.py
 
 C++ tests live under `test/cpp/` and use the [doctest](https://github.com/doctest/doctest)
 framework. They are built when `DNDS_BUILD_TESTS=ON` and registered with CTest.
-MPI tests are registered at np=1, np=2, and np=4.
+MPI tests are registered at np=1, np=2, np=4, and np=8.
 
 ```bash
 # Configure with tests enabled (from build directory)
@@ -171,7 +171,7 @@ with POSIX `index()` from `<strings.h>` (pulled in by doctest).
 ### Python Geom Module
 
 The Python `DNDSR.Geom` module provides mesh reading and manipulation capabilities.
-See the comprehensive guide at `docs/python_geom_guide.md` for full API
+See the comprehensive guide at `docs/guides/python_geom_guide.md` for full API
 details, including all parameters, read modes, and notes on which C++ methods
 are (and are not) exposed in the Python bindings.
 

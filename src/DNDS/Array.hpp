@@ -1209,7 +1209,7 @@ namespace DNDS
 
         /// @brief Mirror the flat/structural buffers to a target device (e.g. CUDA).
         /// @details CSR arrays must be compressed. `backend` must match a supported
-        /// backend from @ref DNDS::DeviceBackend "DeviceBackend"; see @ref DNDS::DeviceStorage "DeviceStorage".hpp.
+        /// backend from @ref DNDS::DeviceBackend "DeviceBackend"; see `DeviceStorage.hpp`.
         void to_device(DeviceBackend backend = DeviceBackend::Host)
         {
             if constexpr (_dataLayout == CSR)
