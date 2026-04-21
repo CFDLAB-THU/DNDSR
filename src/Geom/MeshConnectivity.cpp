@@ -9,6 +9,59 @@
 namespace DNDS::Geom
 {
     // -----------------------------------------------------------------
+    // adjKindName
+    // -----------------------------------------------------------------
+
+    std::string adjKindName(const AdjKind &kind)
+    {
+        if (kind.isDirect())
+            return fmt::format("{}2{}", entityKindName(kind.from), entityKindName(kind.to));
+        else
+            return fmt::format("{}2{}({})", entityKindName(kind.from),
+                               entityKindName(kind.to), entityKindName(kind.via));
+    }
+
+    // -----------------------------------------------------------------
+    // Adjacency registry
+    // -----------------------------------------------------------------
+
+    void MeshConnectivity::registerAdj(AdjKind kind, tAdjPair &pair)
+    {
+        adjRegistry[kind] = &pair;
+    }
+
+    void MeshConnectivity::registerGlobalMapping(EntityKind kind, const ssp<GlobalOffsetsMapping> &gm)
+    {
+        globalMappings[kind] = gm;
+    }
+
+    tAdjPair *MeshConnectivity::resolveAdj(AdjKind kind)
+    {
+        auto it = adjRegistry.find(kind);
+        return (it != adjRegistry.end()) ? it->second : nullptr;
+    }
+
+    const tAdjPair *MeshConnectivity::resolveAdj(AdjKind kind) const
+    {
+        auto it = adjRegistry.find(kind);
+        return (it != adjRegistry.end()) ? it->second : nullptr;
+    }
+
+    const ssp<GlobalOffsetsMapping> &MeshConnectivity::getGlobalMapping(EntityKind kind) const
+    {
+        auto it = globalMappings.find(kind);
+        if (it != globalMappings.end())
+            return it->second;
+        static ssp<GlobalOffsetsMapping> null_mapping;
+        return null_mapping;
+    }
+
+    bool MeshConnectivity::hasAdj(AdjKind kind) const
+    {
+        return adjRegistry.find(kind) != adjRegistry.end();
+    }
+
+    // -----------------------------------------------------------------
     // Cone management
     // -----------------------------------------------------------------
 

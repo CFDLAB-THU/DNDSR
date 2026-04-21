@@ -21,9 +21,309 @@
 #include "Mesh_DeviceView.hpp"
 
 #include <variant>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace DNDS::Geom
 {
+    // =================================================================
+    // EntityKind: logical entity roles
+    // =================================================================
+
+    /// Logical entity roles in the mesh. Topological depth depends on the
+    /// mesh dimension (2D or 3D).
+    ///
+    /// In 3D: Cell=3, Face=2, Edge=1, Node=0.
+    /// In 2D: Cell=2, Face=1, Edge=1 (==Face), Node=0.
+    /// Bnd shares Face's depth but is stored separately (zone-labeled subset).
+    enum class EntityKind : int8_t
+    {
+        Cell = 0,
+        Face = 1,
+        Edge = 2,
+        Node = 3,
+        Bnd = 4,
+        NUM_KINDS = 5,
+    };
+
+    /// Resolve EntityKind to topological depth for a given mesh dimension.
+    /// In 2D, Edge and Face both resolve to dim-1 = 1.
+    /// Bnd resolves to dim-1 (same depth as Face).
+    inline int entityDepth(EntityKind kind, int dim)
+    {
+        switch (kind)
+        {
+        case EntityKind::Cell:
+            return dim;
+        case EntityKind::Face:
+            return dim - 1;
+        case EntityKind::Edge:
+            return (dim == 2) ? 1 : 1; // always 1; coincides with Face in 2D
+        case EntityKind::Node:
+            return 0;
+        case EntityKind::Bnd:
+            return dim - 1; // same depth as Face
+        default:
+            return -1;
+        }
+    }
+
+    /// String name for an EntityKind (for diagnostics).
+    inline const char *entityKindName(EntityKind kind)
+    {
+        switch (kind)
+        {
+        case EntityKind::Cell:
+            return "Cell";
+        case EntityKind::Face:
+            return "Face";
+        case EntityKind::Edge:
+            return "Edge";
+        case EntityKind::Node:
+            return "Node";
+        case EntityKind::Bnd:
+            return "Bnd";
+        default:
+            return "Unknown";
+        }
+    }
+
+    // =================================================================
+    // AdjKind: named adjacency hop
+    // =================================================================
+
+    /// Identifies a specific adjacency relation in the DAG.
+    ///
+    /// Direct adjacencies (from != to): cone or support between two entity strata.
+    ///   e.g., AdjKind(Cell, Node) = cell2node cone.
+    ///   e.g., AdjKind(Node, Cell) = node2cell support.
+    ///
+    /// Intra-level adjacencies (from == to): composed adjacency traversing through
+    /// a lower-level intermediary. Default intermediary is Node.
+    ///   e.g., AdjKind(Cell, Cell)       = cell2cell via Node (node-neighbor).
+    ///   e.g., AdjKind(Cell, Cell, Face) = cell2cell via Face (face-neighbor).
+    ///   e.g., AdjKind(Bnd, Bnd)         = bnd2bnd via Node.
+    struct AdjKind
+    {
+        EntityKind from{EntityKind::Cell};
+        EntityKind to{EntityKind::Node};
+        EntityKind via{EntityKind::Node}; ///< Intermediary for intra-level (from==to).
+                                          ///< Ignored for direct (from!=to).
+
+        constexpr AdjKind() = default;
+
+        /// Direct adjacency: from != to. `via` is ignored.
+        constexpr AdjKind(EntityKind from_, EntityKind to_)
+            : from(from_), to(to_), via(EntityKind::Node)
+        {
+        }
+
+        /// Intra-level adjacency: from == to, with explicit intermediary.
+        constexpr AdjKind(EntityKind from_, EntityKind to_, EntityKind via_)
+            : from(from_), to(to_), via(via_)
+        {
+        }
+
+        /// Whether this is an intra-level (composed) adjacency.
+        [[nodiscard]] constexpr bool isIntraLevel() const { return from == to; }
+
+        /// Whether this is a direct (inter-level) adjacency.
+        [[nodiscard]] constexpr bool isDirect() const { return from != to; }
+
+        /// Equality comparison (for use in hash maps).
+        constexpr bool operator==(const AdjKind &o) const
+        {
+            if (from != o.from || to != o.to)
+                return false;
+            if (isIntraLevel())
+                return via == o.via;
+            return true; // direct: via is ignored
+        }
+
+        constexpr bool operator!=(const AdjKind &o) const { return !(*this == o); }
+    };
+
+    /// Hash for AdjKind (for use in unordered containers).
+    struct AdjKindHash
+    {
+        std::size_t operator()(const AdjKind &k) const noexcept
+        {
+            // Combine from, to, and (if intra-level) via into a single hash.
+            auto h = static_cast<std::size_t>(k.from) * 31 +
+                     static_cast<std::size_t>(k.to);
+            if (k.isIntraLevel())
+                h = h * 31 + static_cast<std::size_t>(k.via);
+            return h;
+        }
+    };
+
+    /// Convenience constants for common adjacency kinds.
+    namespace Adj
+    {
+        // Direct cones (downward)
+        inline constexpr AdjKind Cell2Node{EntityKind::Cell, EntityKind::Node};
+        inline constexpr AdjKind Cell2Face{EntityKind::Cell, EntityKind::Face};
+        inline constexpr AdjKind Cell2Edge{EntityKind::Cell, EntityKind::Edge};
+        inline constexpr AdjKind Face2Node{EntityKind::Face, EntityKind::Node};
+        inline constexpr AdjKind Face2Edge{EntityKind::Face, EntityKind::Edge};
+        inline constexpr AdjKind Edge2Node{EntityKind::Edge, EntityKind::Node};
+        inline constexpr AdjKind Bnd2Node{EntityKind::Bnd, EntityKind::Node};
+
+        // Direct supports (upward)
+        inline constexpr AdjKind Node2Cell{EntityKind::Node, EntityKind::Cell};
+        inline constexpr AdjKind Node2Face{EntityKind::Node, EntityKind::Face};
+        inline constexpr AdjKind Node2Edge{EntityKind::Node, EntityKind::Edge};
+        inline constexpr AdjKind Node2Bnd{EntityKind::Node, EntityKind::Bnd};
+        inline constexpr AdjKind Face2Cell{EntityKind::Face, EntityKind::Cell};
+        inline constexpr AdjKind Edge2Face{EntityKind::Edge, EntityKind::Face};
+        inline constexpr AdjKind Edge2Cell{EntityKind::Edge, EntityKind::Cell};
+        inline constexpr AdjKind Bnd2Cell{EntityKind::Bnd, EntityKind::Cell};
+
+        // Intra-level (composed), default via Node
+        inline constexpr AdjKind Cell2Cell{EntityKind::Cell, EntityKind::Cell, EntityKind::Node};
+        inline constexpr AdjKind Bnd2Bnd{EntityKind::Bnd, EntityKind::Bnd, EntityKind::Node};
+        inline constexpr AdjKind Face2Face{EntityKind::Face, EntityKind::Face, EntityKind::Node};
+
+        // Intra-level with explicit intermediary
+        inline constexpr AdjKind Cell2CellFace{EntityKind::Cell, EntityKind::Cell, EntityKind::Face};
+    } // namespace Adj
+
+    /// Format an AdjKind as a diagnostic string, e.g. "Cell2Node", "Cell2Cell(Node)".
+    std::string adjKindName(const AdjKind &kind);
+
+    // Forward declaration for CompiledGhostTree::checkAvailable.
+    struct MeshConnectivity;
+
+    // =================================================================
+    // GhostChain, GhostSpec: user-facing ghost specification
+    // =================================================================
+
+    /// One ghost chain: starts from owned entities of `anchor`, traverses
+    /// explicit adjacency hops, collects ghost entities of `target`.
+    ///
+    /// Validation rules (checked by CompiledGhostTree::compile):
+    ///   - anchor == hops[0].from
+    ///   - target == hops.back().to
+    ///   - consecutive hops: hops[i].to == hops[i+1].from
+    ///   - at least one hop
+    struct GhostChain
+    {
+        EntityKind anchor;         ///< Owned entities to start from.
+        std::vector<AdjKind> hops; ///< Sequence of adjacency lookups.
+        EntityKind target;         ///< Entity kind to ghost (must == hops.back().to).
+    };
+
+    /// Full ghost specification: multiple chains, possibly targeting the same
+    /// EntityKind. The ghost set per kind is the union of all chains' results.
+    struct GhostSpec
+    {
+        std::vector<GhostChain> chains;
+
+        /// The current default pipeline specification.
+        /// Cell ghost: owned cells -> Cell2Cell -> cells
+        /// Node ghost: owned cells -> Cell2Cell -> Cell2Node -> nodes
+        /// Bnd ghost:  owned bnds  -> Bnd2Node -> Node2Bnd -> bnds
+        /// Bnd-node ghost: owned bnds -> Bnd2Node -> Node2Bnd -> Bnd2Node -> nodes
+        static GhostSpec defaultPrimary();
+    };
+
+    // =================================================================
+    // CompiledGhostTree: chains compiled into BFS-ordered forest
+    // =================================================================
+
+    /// One node in the compiled ghost tree.
+    struct GhostTreeNode
+    {
+        EntityKind kind;        ///< Entity kind at this node.
+        AdjKind hop;            ///< Adjacency used to reach this node from parent.
+                                ///< Undefined (default-constructed) for root nodes.
+        bool collect{false};    ///< If true, non-owned entities here become ghosts.
+        int level{0};           ///< BFS depth (root = 0).
+        int id{-1};             ///< Unique ID within the tree (assigned by compile).
+        int parentId{-1};       ///< Parent node ID (-1 for roots).
+        std::vector<GhostTreeNode> children;
+    };
+
+    /// A reference to a tree node at a specific level, with its parent.
+    /// Used by the precomputed per-level lists.
+    struct LevelEntry
+    {
+        int nodeId;             ///< ID of the tree node.
+        int parentId;           ///< ID of the parent node (-1 for roots).
+        EntityKind kind;        ///< Entity kind of this node.
+        AdjKind hop;            ///< Hop used to reach this node.
+        bool collect;           ///< Whether to collect at this node.
+        bool hasChildren;       ///< Whether this node has children (needs pull).
+    };
+
+    /// Compiled forest of ghost traversal chains.
+    ///
+    /// Multiple chains sharing common prefixes are merged into a trie to
+    /// avoid redundant traversals. The tree is evaluated BFS level-by-level
+    /// with pull barriers between levels.
+    ///
+    /// After compilation, `levels[L]` contains all tree nodes at BFS depth L,
+    /// with parent references for efficient evaluation (no recursive scans).
+    struct CompiledGhostTree
+    {
+        std::vector<GhostTreeNode> roots;
+        int maxLevel{0};        ///< Maximum BFS depth across all nodes.
+        int totalNodes{0};      ///< Total number of nodes (for flat array sizing).
+
+        /// Precomputed per-level node lists. `levels[L]` contains all tree
+        /// nodes at BFS depth L. Level 0 = roots.
+        std::vector<std::vector<LevelEntry>> levels;
+
+        /// Compile a GhostSpec into a forest. Validates chain consistency.
+        /// Assigns node IDs, builds per-level lists.
+        /// Throws std::runtime_error on invalid chains.
+        static CompiledGhostTree compile(const GhostSpec &spec);
+
+        /// Collect all distinct AdjKind values used by any hop in the tree.
+        std::unordered_set<AdjKind, AdjKindHash> requiredAdjs() const;
+
+        /// Pre-check that all required adjacencies exist in the DAG.
+        /// Returns the set of missing AdjKind values (empty = all available).
+        std::vector<AdjKind> checkAvailable(const MeshConnectivity &dag) const;
+
+        /// Collect all EntityKind values that appear at COLLECT nodes.
+        std::unordered_set<EntityKind> collectedKinds() const;
+
+        /// Pretty-print the tree (for diagnostics).
+        std::string dump() const;
+    };
+
+    // =================================================================
+    // GhostResult: output of ghost evaluation
+    // =================================================================
+
+    /// Result of evaluating a CompiledGhostTree.
+    /// Contains per-EntityKind sorted, deduplicated global indices to ghost.
+    struct GhostResult
+    {
+        /// Per EntityKind: sorted, deduplicated global indices to ghost.
+        std::unordered_map<EntityKind, std::vector<index>> ghostIndices;
+
+        /// Entity kinds that have ghosts on ANY rank (collective).
+        /// Populated by evaluateGhostTree via MPI_Allreduce.
+        std::unordered_set<EntityKind> activeKinds;
+
+        /// Whether any rank has ghosts for a given kind (collective).
+        /// Safe to branch on — consistent across all ranks.
+        [[nodiscard]] bool hasGhosts(EntityKind kind) const
+        {
+            return activeKinds.count(kind) > 0;
+        }
+
+        /// Total number of ghost entities on THIS rank.
+        [[nodiscard]] index totalGhosts() const
+        {
+            index total = 0;
+            for (auto &[k, v] : ghostIndices)
+                total += static_cast<index>(v.size());
+            return total;
+        }
+    };
     // =================================================================
     // Type-erased adjacency storage
     // =================================================================
@@ -239,11 +539,52 @@ namespace DNDS::Geom
     /// Cones (downward adjacencies) and supports (upward adjacencies) are stored
     /// in separate vectors. Each is identified by a `(fromDepth, toDepth)` pair
     /// using dynamic depth tags (e.g., `(dim, 0)` for cell→node).
+    ///
+    /// The adjacency registry (`adjRegistry`) maps AdjKind tags to tAdjPair
+    /// pointers for use by the ghost traversal system. Only a restricted set
+    /// of adjacencies may be registered:
+    ///   - Direct cones/supports (inter-level, e.g., Cell2Node, Node2Cell)
+    ///   - Intra-level adjacencies via Node or Face (e.g., Cell2Cell, Cell2CellFace)
+    /// More complex composed adjacencies are NOT stored in the registry.
     struct MeshConnectivity
     {
         int meshDim{0};
         std::vector<ConeAdj> cones;
         std::vector<SupportAdj> supports;
+
+        // -----------------------------------------------------------------
+        // Adjacency registry (restricted set for ghost traversal)
+        // -----------------------------------------------------------------
+
+        /// Maps AdjKind to the tAdjPair used by ghost chain evaluation.
+        /// Only direct cones/supports and intra-level (via Node/Face)
+        /// adjacencies are allowed. Registered via registerAdj().
+        std::unordered_map<AdjKind, tAdjPair *, AdjKindHash> adjRegistry;
+
+        /// Per-EntityKind global offsets mapping (for ownership determination).
+        /// Must be registered for every EntityKind that appears as a root anchor
+        /// or COLLECT target in any ghost chain.
+        std::unordered_map<EntityKind, ssp<GlobalOffsetsMapping>> globalMappings;
+
+        /// Register an adjacency for ghost traversal.
+        /// The pointer must remain valid for the lifetime of the registry entry.
+        /// Overwrites any existing registration for the same AdjKind.
+        void registerAdj(AdjKind kind, tAdjPair &pair);
+
+        /// Register a GlobalOffsetsMapping for an EntityKind.
+        void registerGlobalMapping(EntityKind kind, const ssp<GlobalOffsetsMapping> &gm);
+
+        /// Resolve an AdjKind to the registered tAdjPair.
+        /// Returns nullptr if not registered.
+        tAdjPair *resolveAdj(AdjKind kind);
+        const tAdjPair *resolveAdj(AdjKind kind) const;
+
+        /// Resolve a GlobalOffsetsMapping for an EntityKind.
+        /// Returns nullptr if not registered.
+        const ssp<GlobalOffsetsMapping> &getGlobalMapping(EntityKind kind) const;
+
+        /// Check whether an AdjKind is registered.
+        [[nodiscard]] bool hasAdj(AdjKind kind) const;
 
         // -----------------------------------------------------------------
         // Cone management
@@ -367,6 +708,29 @@ namespace DNDS::Geom
             index nParent,
             index nNode,
             const MPIInfo &mpi);
+
+        // -----------------------------------------------------------------
+        // Ghost evaluation
+        // -----------------------------------------------------------------
+
+        /// Evaluate a compiled ghost tree to determine which entities to ghost.
+        ///
+        /// BFS level-by-level evaluation with scratch pulls between levels.
+        /// Produces a GhostResult containing per-EntityKind ghost index sets
+        /// (union of all COLLECT nodes).
+        ///
+        /// @param tree          Compiled ghost tree (from CompiledGhostTree::compile).
+        /// @param mpi           MPI communicator.
+        /// @return              Per-EntityKind sorted, deduplicated ghost indices.
+        ///
+        /// Preconditions:
+        ///   - All AdjKind values in the tree must be registered via registerAdj().
+        ///   - The registered tAdjPair arrays must be in Adj_PointToGlobal state.
+        ///   - GlobalOffsetsMapping must be available for entity kinds at root
+        ///     level (to determine ownership).
+        GhostResult evaluateGhostTree(
+            const CompiledGhostTree &tree,
+            const MPIInfo &mpi) const;
     };
 
     // =====================================================================
