@@ -20,6 +20,7 @@ namespace DNDS::Geom
         case TRI_3:
             return Elem::Tri3;
         case TRI_6:
+            return Elem::Tri6;
         case QUAD_4:
             return Elem::Quad4;
         case QUAD_9:

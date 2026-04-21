@@ -121,114 +121,63 @@ namespace DNDS::Geom::Elem
     };
     // <GEN_SHAPE_FUNCS_END>
 
+    // <GEN_ELEM_TRAITS_BEGIN>
 
-    /**
-     * @brief Element traits for 10-node quadratic tetrahedron (Tet10)
-     *
-     * Tet10 is a high-order 3D element with:
-     * - 4 corner nodes (vertices)
-     * - 6 edge mid-nodes
-     *
-     * Used for high-order finite element methods requiring curved geometry representation.
-     */
     template <>
     struct ElementTraits<Tet10>
     {
-        // ============================================================
-        // Core Element Identification
-        // ============================================================
-
         static constexpr ElemType elemType = Tet10;
         static constexpr int dim = 3;
         static constexpr int order = 2;
         static constexpr int numVertices = 4;
         static constexpr int numNodes = 10;
         static constexpr int numFaces = 4;
+        static constexpr int numEdges = 6;
         static constexpr ParamSpace paramSpace = TetSpace;
         static constexpr t_real paramSpaceVol = 1.0 / 6.0;
 
-        // ============================================================
-        // Geometry Definition
-        // ============================================================
-
-        /**
-         * @brief Standard coordinates of nodes in parametric space
-         *
-         * Nodes 0-3: vertices (same as Tet4)
-         * Nodes 4-9: edge midpoints
-         */
         static constexpr std::array<t_real, 3 * 10> standardCoords = {
-            0,   0,   0,     // Node 0: vertex
-            1,   0,   0,     // Node 1: vertex
-            0,   1,   0,     // Node 2: vertex
-            0,   0,   1,     // Node 3: vertex
-            0.5, 0,   0,     // Node 4: edge 0-1 midpoint
-            0.5, 0.5, 0,     // Node 5: edge 1-2 midpoint
-            0,   0.5, 0,     // Node 6: edge 2-0 midpoint
-            0,   0,   0.5,   // Node 7: edge 0-3 midpoint
-            0.5, 0,   0.5,   // Node 8: edge 1-3 midpoint
-            0,   0.5, 0.5};  // Node 9: edge 2-3 midpoint
+            0, 0, 0,  // Node 0: vertex
+            1, 0, 0,  // Node 1: vertex
+            0, 1, 0,  // Node 2: vertex
+            0, 0, 1,  // Node 3: vertex
+            0.5, 0, 0,  // Node 4
+            0.5, 0.5, 0,  // Node 5
+            0, 0.5, 0,  // Node 6
+            0, 0, 0.5,  // Node 7
+            0.5, 0, 0.5,  // Node 8
+            0, 0.5, 0.5};  // Node 9
 
-        // ============================================================
-        // Face/Edge Definitions
-        // ============================================================
-
-        /**
-         * @brief Get the element type of a face
-         * @return Tri6 (all faces are 6-node quadratic triangles)
-         */
         static constexpr ElemType GetFaceType(t_index /*iFace*/) { return Tri6; }
 
-        /**
-         * @brief Node indices for each face (quadratic triangle)
-         *
-         * Each face has 6 nodes: 3 vertices + 3 edge midpoints
-         */
         static constexpr std::array<std::array<t_index, 10>, 4> faceNodes = {{
-            {0, 2, 1, 6, 5, 4},    // Face 0: bottom (nodes + edge mids)
-            {0, 1, 3, 4, 8, 7},    // Face 1: side
-            {1, 2, 3, 5, 9, 8},    // Face 2: side
-            {2, 0, 3, 6, 7, 9}}};  // Face 3: side
+            {0, 2, 1, 6, 5, 4},
+            {0, 1, 3, 4, 8, 7},
+            {1, 2, 3, 5, 9, 8},
+            {2, 0, 3, 6, 7, 9}
+        }};
 
-        // ============================================================
-        // Order Elevation (P-Refinement)
-        // ============================================================
+        static constexpr ElemType GetEdgeType(t_index /*iEdge*/) { return Line3; }
 
-        /// @brief Element type after order elevation (O2 has no higher elevation defined)
+        static constexpr std::array<std::array<t_index, 3>, 6> edgeNodes = {{
+            {0, 1, 4},
+            {1, 2, 5},
+            {2, 0, 6},
+            {0, 3, 7},
+            {1, 3, 8},
+            {2, 3, 9}
+        }};
+
         static constexpr ElemType elevatedType = UnknownElem;
-
-        /// @brief Number of additional nodes created during elevation (none for O2)
         static constexpr int numElevNodes = 0;
 
-        // ============================================================
-        // Bisection (Adaptive Refinement)
-        // ============================================================
-
-        /// @brief Number of sub-elements created when bisecting (8 Tet4 elements)
         static constexpr int numBisect = 8;
-
-        /**
-         * @brief Number of bisection variants (3 different diagonal choices)
-         *
-         * A tetrahedron can be bisected in multiple ways depending on which
-         * internal diagonal is chosen for subdivision.
-         */
         static constexpr int numBisectVariants = 3;
 
-        /**
-         * @brief Get the element type of a sub-element after bisection
-         * @return Tet4 (all sub-elements are linear tets)
-         */
         static constexpr ElemType GetBisectElemType(t_index /*i*/) { return Tet4; }
 
-        /**
-         * @brief Node indices for each sub-element created by bisection
-         *
-         * 3 variants x 8 sub-tets = 24 entries total.
-         * Each variant uses a different internal diagonal for subdivision.
-         */
         static constexpr std::array<tBisectSub, 24> bisectElements = {{
-            // Variant 0 (diagonal 4-9, i.e., node4-node9 in 0-based)
+            // Variant 0
             {0, 4, 6, 7},
             {4, 1, 5, 8},
             {6, 5, 2, 9},
@@ -237,7 +186,7 @@ namespace DNDS::Geom::Elem
             {4, 8, 9, 7},
             {4, 9, 8, 5},
             {4, 6, 9, 5},
-            // Variant 1 (diagonal 5-7, i.e., node5-node7 in 0-based)
+            // Variant 1
             {0, 4, 6, 7},
             {4, 1, 5, 8},
             {6, 5, 2, 9},
@@ -246,7 +195,7 @@ namespace DNDS::Geom::Elem
             {5, 7, 8, 9},
             {5, 8, 7, 4},
             {5, 7, 6, 4},
-            // Variant 2 (diagonal 6-8, i.e., node6-node8 in 0-based)
+            // Variant 2
             {0, 4, 6, 7},
             {4, 1, 5, 8},
             {6, 5, 2, 9},
@@ -254,23 +203,14 @@ namespace DNDS::Geom::Elem
             {6, 7, 8, 9},
             {6, 8, 5, 9},
             {6, 8, 7, 4},
-            {6, 5, 8, 4}}};
+            {6, 5, 8, 4}
+        }};
 
-        // ============================================================
-        // VTK/Visualization Support
-        // ============================================================
-
-        /// @brief VTK cell type identifier (24 = VTK_QUADRATIC_TETRA)
         static constexpr int vtkCellType = 24;
 
-        /**
-         * @brief VTK node ordering map
-         *
-         * VTK uses the same ordering as DNDS for Tet10:
-         *   VTK nodes 0-3 = corner nodes 0-3
-         *   VTK nodes 4-9 = edge mid-nodes 4-9
-         */
         static constexpr std::array<int, 10> vtkNodeOrder = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     };
+    // <GEN_ELEM_TRAITS_END>
+
 
 } // namespace DNDS::Geom::Elem

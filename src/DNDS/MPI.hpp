@@ -20,8 +20,19 @@
 #include <mutex>
 
 #include "Defines.hpp"
+
+// Prevent deprecated MPI C++ bindings (removed in MPI-3.0) from being included.
+// These macros must be defined BEFORE including mpi.h.
+// - MPICH_SKIP_MPICXX: MPICH and Intel MPI (which is MPICH-based)
+// - OMPI_SKIP_MPICXX: OpenMPI (only needed if built with --enable-mpi-cxx)
+#ifndef MPICH_SKIP_MPICXX
+#    define MPICH_SKIP_MPICXX 1
+#endif
+#ifndef OMPI_SKIP_MPICXX
+#    define OMPI_SKIP_MPICXX 1
+#endif
+
 DISABLE_WARNING_PUSH
-// disable mpicxx 's many warnings in intel oneAPI mpi's header
 DISABLE_WARNING_UNUSED_VALUE
 #include "mpi.h"
 DISABLE_WARNING_POP

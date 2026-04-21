@@ -51,113 +51,41 @@ namespace DNDS::Geom::Elem
     };
     // <GEN_SHAPE_FUNCS_END>
 
+    // <GEN_ELEM_TRAITS_BEGIN>
 
-
-    /**
-     * @brief Element traits for 2-node linear line element (Line2)
-     * 
-     * Line2 is a 1D linear element with nodes at the endpoints.
-     * Used as edge/face elements for 2D/3D meshes.
-     */
     template <>
     struct ElementTraits<Line2>
     {
-        // ============================================================
-        // Core Element Identification
-        // ============================================================
-        
-        /// @brief Element type enum value for static dispatch
         static constexpr ElemType elemType = Line2;
-        
-        /// @brief Spatial dimension (1 = line element)
         static constexpr int dim = 1;
-        
-        /// @brief Polynomial order of shape functions (1 = linear)
         static constexpr int order = 1;
-        
-        /// @brief Number of vertices (2 endpoints)
         static constexpr int numVertices = 2;
-        
-        /// @brief Total number of nodes (same as vertices for linear element)
         static constexpr int numNodes = 2;
-        
-        /// @brief Number of faces (0 for 1D element - endpoints are nodes, not faces)
         static constexpr int numFaces = 0;
-        
-        /// @brief Parametric space type (line space: xi in [-1, 1])
         static constexpr ParamSpace paramSpace = LineSpace;
-        
-        /// @brief Volume of parametric space (length = 2.0)
         static constexpr t_real paramSpaceVol = 2.0;
 
-        // ============================================================
-        // Geometry Definition
-        // ============================================================
-        
-        /**
-         * @brief Standard coordinates of nodes in parametric space
-         * 
-         * Format: {x, y, z} for each node. Even though this is 1D,
-         * we store 3D coordinates for consistency with higher-D elements.
-         * Node 0: xi = -1 -> (-1, 0, 0)
-         * Node 1: xi = +1 -> ( 1, 0, 0)
-         */
         static constexpr std::array<t_real, 3 * 2> standardCoords = {
-            -1, 0, 0,   // Node 0: left endpoint
-             1, 0, 0};  // Node 1: right endpoint
+            -1, 0, 0,  // Node 0: vertex
+            1, 0, 0};  // Node 1: vertex
 
-        // ============================================================
-        // Face/Edge Type Queries
-        // ============================================================
-        
-        /**
-         * @brief Get the element type of a face
-         * @param iFace Face index (unused for Line2 as it has no faces)
-         * @return UnknownElem (1D elements don't have faces in the traditional sense)
-         */
         static constexpr ElemType GetFaceType(t_index /*iFace*/) { return UnknownElem; }
 
-        // ============================================================
-        // Order Elevation (P-Refinement)
-        // ============================================================
-        
-        /**
-         * @brief Element type after order elevation (O1 -> O2)
-         * Line2 elevates to Line3 (3-node quadratic line)
-         */
         static constexpr ElemType elevatedType = Line3;
-        
-        /// @brief Number of additional nodes created during elevation
         static constexpr int numElevNodes = 1;
-        
-        /**
-         * @brief Elevation spans define which parent nodes each new node connects
-         * 
-         * For Line2 -> Line3:
-         *   - 1 new node at the midpoint
-         *   - Span {0, 1} means this new node connects nodes 0 and 1
-         */
-        static constexpr std::array<tElevSpan, 1> elevSpans = {{
-            {0, 1}}};  // Midpoint connects nodes 0 and 1
-        
-        /// @brief Element type of each elevation span (all Line2 edges)
-        static constexpr std::array<ElemType, 1> elevNodeSpanTypes = {Line2};
 
-        // ============================================================
-        // VTK/Visualization Support
-        // ============================================================
-        
-        /// @brief VTK cell type identifier (3 = VTK_LINE)
+        static constexpr std::array<tElevSpan, 1> elevSpans = {{
+            {0, 1}
+        }};
+
+        static constexpr std::array<ElemType, 1> elevNodeSpanTypes = {
+            Line2};
+
         static constexpr int vtkCellType = 3;
-        
-        /**
-         * @brief VTK node ordering map
-         * 
-         * For Line2, VTK uses the same ordering as DNDS:
-         *   VTK node 0 = DNDS node 0
-         *   VTK node 1 = DNDS node 1
-         */
+
         static constexpr std::array<int, 2> vtkNodeOrder = {0, 1};
     };
+    // <GEN_ELEM_TRAITS_END>
+
 
 } // namespace DNDS::Geom::Elem

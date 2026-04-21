@@ -1,18 +1,24 @@
 """
-C++ code emitter for shape function derivatives.
+C++ code emitter for shape function derivatives and element traits.
 
 Takes symbolic SymPy expressions and produces optimized C++ assignment code
 using CSE (Common Subexpression Elimination).
 
 Generated structure per element:
+    // <GEN_SHAPE_FUNCS_BEGIN>
     template <> struct ShapeFuncImpl<Line2> {
         template <class TPoint, class TArray>
         DNDS_DEVICE_CALLABLE static inline void Diff0(const TPoint &p, TArray &&v) { ... }
         ...Diff1, Diff2, Diff3...
     };
+    // <GEN_SHAPE_FUNCS_END>
 
-The primary template is declared in Elements.hpp and each generated header
-provides a full specialization.
+    // <GEN_ELEM_TRAITS_BEGIN>
+    template <> struct ElementTraits<Line2> { ... };
+    // <GEN_ELEM_TRAITS_END>
+
+The primary templates are declared in ElementTraitsBase.hpp and each generated
+header provides full specializations.
 """
 
 import os
@@ -20,6 +26,7 @@ import sys
 from sympy import symbols, diff, cse, numbered_symbols, simplify, Rational, Pow, S
 from sympy.printing.c import C99CodePrinter
 from .diff_layout import get_diff_layout
+from .traits_emitter import emit_elem_traits
 
 
 class _ShapeFuncPrinter(C99CodePrinter):
@@ -121,10 +128,11 @@ def emit_cpp_block(entries, indent="    "):
 
 
 def _extract_preserved_content(filepath):
-    """Extract content that should be preserved when regenerating.
+    """Extract content after the last generation marker.
 
-    Looks for GEN_SHAPE_FUNCS_END marker and returns everything AFTER
-    that line to the end of file. Returns None if no marker found.
+    Checks for GEN_ELEM_TRAITS_END first (new style), then falls back to
+    GEN_SHAPE_FUNCS_END (legacy style). Returns everything after that marker
+    line, or None if no marker found.
     """
     if not os.path.exists(filepath):
         return None
@@ -132,38 +140,51 @@ def _extract_preserved_content(filepath):
     with open(filepath, 'r') as f:
         content = f.read()
 
-    # Look for the end guard
-    marker = "// <GEN_SHAPE_FUNCS_END>"
-    idx = content.find(marker)
-    if idx == -1:
-        return None
+    # Try new-style marker first
+    for marker in ["// <GEN_ELEM_TRAITS_END>", "// <GEN_SHAPE_FUNCS_END>"]:
+        idx = content.find(marker)
+        if idx != -1:
+            line_end = content.find('\n', idx)
+            if line_end == -1:
+                return None
+            remaining = content[line_end:]
+            # For legacy marker, skip the hand-written ElementTraits since
+            # we are now generating it. Only preserve content after
+            # GEN_ELEM_TRAITS_END if present, otherwise discard the old
+            # hand-written traits entirely.
+            if marker == "// <GEN_SHAPE_FUNCS_END>":
+                # Check if the remaining content has the new marker
+                new_marker_idx = remaining.find("// <GEN_ELEM_TRAITS_END>")
+                if new_marker_idx != -1:
+                    new_line_end = remaining.find('\n', new_marker_idx)
+                    if new_line_end != -1:
+                        return remaining[new_line_end:]
+                # Legacy: the remaining content IS the hand-written traits.
+                # We will replace it entirely with generated traits.
+                # Return None to indicate nothing to preserve.
+                return None
+            else:
+                return remaining
 
-    # Find the end of the line containing the marker
-    line_end = content.find('\n', idx)
-    if line_end == -1:
-        return None  # Marker is at end of file, nothing to preserve
-
-    # Return everything after the marker line (starting from the newline)
-    return content[line_end:]
+    return None
 
 
 def emit_element_file(elem_cls, out_path):
     """Generate a complete C++ header for one element type.
 
-    Produces a full specialization of ShapeFuncImpl<ElemType> with
-    static Diff0..Diff3 methods.
+    Produces:
+    1. ShapeFuncImpl<ElemType> specialization (Diff0..Diff3) between
+       GEN_SHAPE_FUNCS markers.
+    2. ElementTraits<ElemType> specialization between GEN_ELEM_TRAITS markers.
+    3. Any preserved content after GEN_ELEM_TRAITS_END (if present).
 
     Writes to out_path (e.g. src/Geom/Elements/Line2.hpp).
-
-    If the file already exists and contains GEN_SHAPE_FUNCS markers,
-    the content after GEN_SHAPE_FUNCS_END is preserved (contains the
-    ElementTraits specialization and other manual code).
     """
     name = elem_cls.name
     # Decide decorators
     device_attr = "" if elem_cls.rational else "DNDS_DEVICE_CALLABLE "
 
-    # Try to extract preserved content (ElementTraits, etc.)
+    # Try to extract preserved content (anything after the last gen marker)
     preserved = _extract_preserved_content(out_path)
 
     lines = []
@@ -183,6 +204,8 @@ def emit_element_file(elem_cls, out_path):
     lines.append(f"    // Forward declaration (primary template is in ElementTraitsBase.hpp)")
     lines.append(f"    template <ElemType> struct ShapeFuncImpl;")
     lines.append("")
+
+    # ---- Shape functions ----
     lines.append(f"    // <GEN_SHAPE_FUNCS_BEGIN>")
     lines.append(f"    template <>")
     lines.append(f"    struct ShapeFuncImpl<{name}>")
@@ -223,11 +246,18 @@ def emit_element_file(elem_cls, out_path):
     lines.append(f"    }};")
     lines.append(f"    // <GEN_SHAPE_FUNCS_END>")
 
-    # Append preserved content (ElementTraits specialization) if it exists
+    # ---- Element traits ----
+    lines.append(f"")
+    lines.append(f"    // <GEN_ELEM_TRAITS_BEGIN>")
+    traits_lines = emit_elem_traits(name)
+    lines.extend(traits_lines)
+    lines.append(f"    // <GEN_ELEM_TRAITS_END>")
+
+    # Append preserved content (anything after the last gen marker)
     if preserved:
         lines.append(preserved)
     else:
-        # Default closing for new files
+        # Default closing for new/clean files
         lines.append("")
         lines.append(f"}} // namespace DNDS::Geom::Elem")
         lines.append("")
