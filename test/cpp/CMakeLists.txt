@@ -10,7 +10,28 @@
 #   geom_unit_tests  — only Geom/ tests
 #   all_unit_tests   — everything
 #
-# MPI tests are registered with mpirun -np 1, 2, 4, and 8.
+# MPI tests are registered for each np in DNDS_TEST_NP_LIST.
+# Set via environment variable: DNDS_TEST_NP_LIST="1;2;4" cmake ..
+# Default: 1;2;4;8
+
+# --- Read NP list from env, default to 1;2;4;8 ---
+if(DEFINED ENV{DNDS_TEST_NP_LIST})
+    set(DNDS_TEST_NP_LIST "$ENV{DNDS_TEST_NP_LIST}")
+else()
+    set(DNDS_TEST_NP_LIST "1;2;4;8")
+endif()
+message(STATUS "DNDS_TEST_NP_LIST: ${DNDS_TEST_NP_LIST}")
+
+# --- Timeout per np ---
+function(_dnds_np_timeout NP OUT_VAR)
+    if(NP LESS_EQUAL 2)
+        set(${OUT_VAR} 120 PARENT_SCOPE)
+    elseif(NP LESS_EQUAL 4)
+        set(${OUT_VAR} 180 PARENT_SCOPE)
+    else()
+        set(${OUT_VAR} 240 PARENT_SCOPE)
+    endif()
+endfunction()
 
 find_path(DNDS_EXTERNAL_INCLUDE_DOCTEST doctest.h PATHS
     "${PROJECT_SOURCE_DIR}/external/doctest"
@@ -51,26 +72,13 @@ function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    # np=1 (serial MPI)
-    add_test(NAME dnds_${TEST_NAME}_np1
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(dnds_${TEST_NAME}_np1 PROPERTIES TIMEOUT 120 PROCESSORS 1)
-    # np=2
-    add_test(NAME dnds_${TEST_NAME}_np2
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(dnds_${TEST_NAME}_np2 PROPERTIES TIMEOUT 120 PROCESSORS 2)
-    # np=4
-    add_test(NAME dnds_${TEST_NAME}_np4
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(dnds_${TEST_NAME}_np4 PROPERTIES TIMEOUT 180 PROCESSORS 4)
-    # np=8
-    add_test(NAME dnds_${TEST_NAME}_np8
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 8
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(dnds_${TEST_NAME}_np8 PROPERTIES TIMEOUT 240 PROCESSORS 8)
+    foreach(NP ${DNDS_TEST_NP_LIST})
+        _dnds_np_timeout(${NP} _TIMEOUT)
+        add_test(NAME dnds_${TEST_NAME}_np${NP}
+            COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
+                    ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+        set_tests_properties(dnds_${TEST_NAME}_np${NP} PROPERTIES TIMEOUT ${_TIMEOUT} PROCESSORS ${NP})
+    endforeach()
 endfunction()
 
 # --- helper: add a serial unit test executable (Geom) ---
@@ -107,26 +115,13 @@ function(geom_add_mpi_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    # np=1
-    add_test(NAME geom_${TEST_NAME}_np1
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(geom_${TEST_NAME}_np1 PROPERTIES TIMEOUT 120 PROCESSORS 1)
-    # np=2
-    add_test(NAME geom_${TEST_NAME}_np2
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(geom_${TEST_NAME}_np2 PROPERTIES TIMEOUT 120 PROCESSORS 2)
-    # np=4
-    add_test(NAME geom_${TEST_NAME}_np4
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(geom_${TEST_NAME}_np4 PROPERTIES TIMEOUT 180 PROCESSORS 4)
-    # np=8
-    add_test(NAME geom_${TEST_NAME}_np8
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 8
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(geom_${TEST_NAME}_np8 PROPERTIES TIMEOUT 240 PROCESSORS 8)
+    foreach(NP ${DNDS_TEST_NP_LIST})
+        _dnds_np_timeout(${NP} _TIMEOUT)
+        add_test(NAME geom_${TEST_NAME}_np${NP}
+            COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
+                    ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+        set_tests_properties(geom_${TEST_NAME}_np${NP} PROPERTIES TIMEOUT ${_TIMEOUT} PROCESSORS ${NP})
+    endforeach()
 endfunction()
 
 # ===================================================================
@@ -222,18 +217,13 @@ function(cfv_add_mpi_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    add_test(NAME cfv_${TEST_NAME}_np1
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(cfv_${TEST_NAME}_np1 PROPERTIES TIMEOUT 120 PROCESSORS 1)
-    add_test(NAME cfv_${TEST_NAME}_np2
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(cfv_${TEST_NAME}_np2 PROPERTIES TIMEOUT 120 PROCESSORS 2)
-    add_test(NAME cfv_${TEST_NAME}_np4
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(cfv_${TEST_NAME}_np4 PROPERTIES TIMEOUT 180 PROCESSORS 4)
+    foreach(NP ${DNDS_TEST_NP_LIST})
+        _dnds_np_timeout(${NP} _TIMEOUT)
+        add_test(NAME cfv_${TEST_NAME}_np${NP}
+            COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
+                    ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+        set_tests_properties(cfv_${TEST_NAME}_np${NP} PROPERTIES TIMEOUT ${_TIMEOUT} PROCESSORS ${NP})
+    endforeach()
 endfunction()
 
 add_custom_target(cfv_unit_tests)
@@ -320,18 +310,13 @@ function(euler_add_mpi_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    add_test(NAME euler_${TEST_NAME}_np1
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(euler_${TEST_NAME}_np1 PROPERTIES TIMEOUT 120 PROCESSORS 1)
-    add_test(NAME euler_${TEST_NAME}_np2
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(euler_${TEST_NAME}_np2 PROPERTIES TIMEOUT 120 PROCESSORS 2)
-    add_test(NAME euler_${TEST_NAME}_np4
-        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4
-                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-    set_tests_properties(euler_${TEST_NAME}_np4 PROPERTIES TIMEOUT 180 PROCESSORS 4)
+    foreach(NP ${DNDS_TEST_NP_LIST})
+        _dnds_np_timeout(${NP} _TIMEOUT)
+        add_test(NAME euler_${TEST_NAME}_np${NP}
+            COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
+                    ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+        set_tests_properties(euler_${TEST_NAME}_np${NP} PROPERTIES TIMEOUT ${_TIMEOUT} PROCESSORS ${NP})
+    endforeach()
 endfunction()
 
 add_custom_target(euler_unit_tests)
@@ -344,9 +329,11 @@ euler_add_unit_test(rans "Euler/test_RANS.cpp" "cfv;geom;dnds")
 # EulerEvaluator pipeline test: needs full Euler libraries for NS, NS_SA, NS_3D
 euler_add_mpi_test(evaluator_pipeline "Euler/test_EulerEvaluator.cpp"
     "euler_library_NS;euler_library_fast_NS;euler_library_NS_SA;euler_library_fast_NS_SA;euler_library_NS_3D;euler_library_fast_NS_3D;cfv;geom;dnds")
-set_tests_properties(euler_evaluator_pipeline_np1 PROPERTIES TIMEOUT 600)
-set_tests_properties(euler_evaluator_pipeline_np2 PROPERTIES TIMEOUT 600)
-set_tests_properties(euler_evaluator_pipeline_np4 PROPERTIES TIMEOUT 600)
+foreach(NP ${DNDS_TEST_NP_LIST})
+    if(TEST euler_evaluator_pipeline_np${NP})
+        set_tests_properties(euler_evaluator_pipeline_np${NP} PROPERTIES TIMEOUT 600)
+    endif()
+endforeach()
 
 set(EULER_TEST_TARGETS
     euler_test_gas_thermo
