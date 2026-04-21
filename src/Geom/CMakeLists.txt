@@ -19,6 +19,7 @@ message(STATUS "DNDS_PCH_TARGETS: ${DNDS_PCH_TARGETS}")
 set(CPPS
 Elements.cpp
 PeriodicInfo.cpp
+MeshConnectivity.cpp
 Mesh.cpp
 Mesh_Plts.cpp
 Mesh_Serial_BuildCell2Cell.cpp

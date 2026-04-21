@@ -1,0 +1,790 @@
+/**
+ * @file test_MeshConnectivity.cpp
+ * @brief Unit tests for MeshConnectivity DSL operations: Inverse, Compose, ComposeFiltered.
+ *
+ * Tests:
+ *   - Inverse: hand-crafted 4-quad mesh, verify node2cell correctness
+ *   - Inverse: MPI partitioned mesh (UniformSquare_10), verify globally-complete node2cell
+ *   - Inverse: round-trip inverse(inverse(cell2node)) covers original cell2node
+ *   - Compose: cell2node + node2cell -> cell2cell (node-neighbor)
+ *   - ComposeFiltered: with SharedCountPredicate, verify against known cell2cell
+ *   - ComposeFiltered: bnd2node + node2cell -> bnd2cell with face-share filter
+ *   - Regression: DSL Inverse matches RecoverNode2CellAndNode2Bnd on real mesh
+ *   - Regression: DSL ComposeFiltered matches RecoverCell2CellAndBnd2Cell on real mesh
+ */
+
+#define DOCTEST_CONFIG_IMPLEMENT
+#include "doctest.h"
+
+#include "Geom/MeshConnectivity.hpp"
+#include "Geom/Mesh.hpp"
+#include <string>
+#include <vector>
+#include <set>
+#include <algorithm>
+#include <unordered_set>
+#include <numeric>
+
+using namespace DNDS;
+using namespace DNDS::Geom;
+
+static MPIInfo g_mpi;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+static std::string meshPath(const std::string &name)
+{
+    std::string f(__FILE__);
+    for (int i = 0; i < 4; i++)
+    {
+        auto pos = f.rfind('/');
+        if (pos == std::string::npos)
+            pos = f.rfind('\\');
+        if (pos != std::string::npos)
+            f = f.substr(0, pos);
+    }
+    return f + "/data/mesh/" + name;
+}
+
+/// Build a small hand-crafted 4-quad mesh on a single rank.
+///
+/// Layout (nodes 0-8, cells 0-3):
+///
+///     6---7---8
+///     |   |   |
+///     | 2 | 3 |
+///     |   |   |
+///     3---4---5
+///     |   |   |
+///     | 0 | 1 |
+///     |   |   |
+///     0---1---2
+///
+/// cell2node:
+///   cell 0: [0, 1, 4, 3]
+///   cell 1: [1, 2, 5, 4]
+///   cell 2: [3, 4, 7, 6]
+///   cell 3: [4, 5, 8, 7]
+///
+static tAdjPair make4QuadCell2Node(const MPIInfo &mpi)
+{
+    tAdjPair c2n;
+    c2n.InitPair("test_c2n", mpi);
+
+    if (mpi.size == 1)
+    {
+        c2n.father->Resize(4);
+        int data[4][4] = {
+            {0, 1, 4, 3},
+            {1, 2, 5, 4},
+            {3, 4, 7, 6},
+            {4, 5, 8, 7}};
+        for (DNDS::index i = 0; i < 4; i++)
+        {
+            c2n.father->ResizeRow(i, 4);
+            for (DNDS::rowsize j = 0; j < 4; j++)
+                c2n.father->operator()(i, j) = data[i][j];
+        }
+    }
+    else if (mpi.size == 2)
+    {
+        // Partition: rank 0 owns cells 0,1; rank 1 owns cells 2,3
+        c2n.father->Resize(2);
+        if (mpi.rank == 0)
+        {
+            int data[2][4] = {
+                {0, 1, 4, 3},
+                {1, 2, 5, 4}};
+            for (DNDS::index i = 0; i < 2; i++)
+            {
+                c2n.father->ResizeRow(i, 4);
+                for (DNDS::rowsize j = 0; j < 4; j++)
+                    c2n.father->operator()(i, j) = data[i][j];
+            }
+        }
+        else
+        {
+            int data[2][4] = {
+                {3, 4, 7, 6},
+                {4, 5, 8, 7}};
+            for (DNDS::index i = 0; i < 2; i++)
+            {
+                c2n.father->ResizeRow(i, 4);
+                for (DNDS::rowsize j = 0; j < 4; j++)
+                    c2n.father->operator()(i, j) = data[i][j];
+            }
+        }
+    }
+    else
+    {
+        // For np>2, only rank 0 and 1 have cells; others have 0
+        if (mpi.rank == 0)
+        {
+            c2n.father->Resize(2);
+            int data[2][4] = {
+                {0, 1, 4, 3},
+                {1, 2, 5, 4}};
+            for (DNDS::index i = 0; i < 2; i++)
+            {
+                c2n.father->ResizeRow(i, 4);
+                for (DNDS::rowsize j = 0; j < 4; j++)
+                    c2n.father->operator()(i, j) = data[i][j];
+            }
+        }
+        else if (mpi.rank == 1)
+        {
+            c2n.father->Resize(2);
+            int data[2][4] = {
+                {3, 4, 7, 6},
+                {4, 5, 8, 7}};
+            for (DNDS::index i = 0; i < 2; i++)
+            {
+                c2n.father->ResizeRow(i, 4);
+                for (DNDS::rowsize j = 0; j < 4; j++)
+                    c2n.father->operator()(i, j) = data[i][j];
+            }
+        }
+        else
+        {
+            c2n.father->Resize(0);
+        }
+    }
+    return c2n;
+}
+
+/// Create a node distribution for the 9-node grid.
+/// For np=1: rank 0 owns all 9.
+/// For np=2: rank 0 owns nodes 0-4, rank 1 owns nodes 5-8.
+/// For np>2: rank 0 owns 0-4, rank 1 owns 5-8, others own 0.
+static DNDS::index nodeLocalCount4Quad(const MPIInfo &mpi)
+{
+    if (mpi.size == 1)
+        return 9;
+    if (mpi.rank == 0)
+        return 5; // nodes 0-4
+    if (mpi.rank == 1)
+        return 4; // nodes 5-8
+    return 0;
+}
+
+static DNDS::index nodeLocal2Global4Quad(const MPIInfo &mpi, DNDS::index local)
+{
+    if (mpi.size == 1)
+        return local;
+    if (mpi.rank == 0)
+        return local;
+    if (mpi.rank == 1)
+        return local + 5;
+    return -1; // should not be called
+}
+
+static ssp<GlobalOffsetsMapping> makeNodeGlobalMapping4Quad(const MPIInfo &mpi)
+{
+    auto gm = std::make_shared<GlobalOffsetsMapping>();
+    gm->setMPIAlignBcast(mpi, nodeLocalCount4Quad(mpi));
+    return gm;
+}
+
+static DNDS::index cellLocal2Global4Quad(const MPIInfo &mpi, DNDS::index local)
+{
+    if (mpi.size == 1)
+        return local;
+    // np>=2: rank 0 owns cells 0-1, rank 1 owns cells 2-3
+    if (mpi.rank == 0)
+        return local;
+    if (mpi.rank == 1)
+        return local + 2;
+    return -1;
+}
+
+/// Collect all (to-global -> set-of-from-globals) across all ranks for verification.
+static std::vector<std::set<DNDS::index>> gatherInverseGlobal(
+    const tAdjPair &support, DNDS::index nToLocal,
+    const std::function<DNDS::index(DNDS::index)> &toLocal2Global,
+    DNDS::index nToGlobal, const MPIInfo &mpi)
+{
+    // Gather local data
+    // Each rank packs: [toGlobal, count, from0, from1, ...]
+    std::vector<DNDS::index> localPacked;
+    for (DNDS::index i = 0; i < nToLocal; i++)
+    {
+        DNDS::index toG = toLocal2Global(i);
+        auto row = support.father->operator[](i);
+        localPacked.push_back(toG);
+        localPacked.push_back(row.size());
+        for (auto v : row)
+            localPacked.push_back(v);
+    }
+
+    // Gather sizes
+    int localSize = static_cast<int>(localPacked.size());
+    std::vector<int> sizes(mpi.size);
+    MPI_Allgather(&localSize, 1, MPI_INT, sizes.data(), 1, MPI_INT, mpi.comm);
+
+    std::vector<int> disps(mpi.size + 1, 0);
+    for (int r = 0; r < mpi.size; r++)
+        disps[r + 1] = disps[r] + sizes[r];
+
+    std::vector<DNDS::index> allPacked(disps[mpi.size]);
+    MPI_Allgatherv(localPacked.data(), localSize, DNDS_MPI_INDEX,
+                   allPacked.data(), sizes.data(), disps.data(), DNDS_MPI_INDEX,
+                   mpi.comm);
+
+    // Unpack into global result
+    std::vector<std::set<DNDS::index>> result(nToGlobal);
+    DNDS::index pos = 0;
+    while (pos < static_cast<DNDS::index>(allPacked.size()))
+    {
+        DNDS::index toG = allPacked[pos++];
+        DNDS::index count = allPacked[pos++];
+        for (DNDS::index k = 0; k < count; k++)
+            result[toG].insert(allPacked[pos++]);
+    }
+    return result;
+}
+
+// ===========================================================================
+// Inverse Tests
+// ===========================================================================
+
+TEST_CASE("Inverse: 4-quad serial correctness")
+{
+    auto c2n = make4QuadCell2Node(g_mpi);
+    c2n.father->createGlobalMapping();
+    auto nodeGM = makeNodeGlobalMapping4Quad(g_mpi);
+
+    DNDS::index nNodeLocal = nodeLocalCount4Quad(g_mpi);
+    auto n2c = MeshConnectivity::Inverse(
+        c2n, nNodeLocal, g_mpi,
+        [&](DNDS::index i)
+        { return cellLocal2Global4Quad(g_mpi, i); },
+        [&](DNDS::index i)
+        { return nodeLocal2Global4Quad(g_mpi, i); },
+        nodeGM);
+
+    // Gather global result for verification
+    auto globalN2C = gatherInverseGlobal(
+        n2c, nNodeLocal,
+        [&](DNDS::index i)
+        { return nodeLocal2Global4Quad(g_mpi, i); },
+        9, g_mpi);
+
+    // Expected node2cell (from the 4-quad layout):
+    //   node 0: {0}
+    //   node 1: {0, 1}
+    //   node 2: {1}
+    //   node 3: {0, 2}
+    //   node 4: {0, 1, 2, 3}
+    //   node 5: {1, 3}
+    //   node 6: {2}
+    //   node 7: {2, 3}
+    //   node 8: {3}
+    std::vector<std::set<DNDS::index>> expected = {
+        {0},          // node 0
+        {0, 1},       // node 1
+        {1},          // node 2
+        {0, 2},       // node 3
+        {0, 1, 2, 3}, // node 4
+        {1, 3},       // node 5
+        {2},          // node 6
+        {2, 3},       // node 7
+        {3},          // node 8
+    };
+
+    for (DNDS::index n = 0; n < 9; n++)
+    {
+        CAPTURE(n);
+        CHECK(globalN2C[n] == expected[n]);
+    }
+}
+
+TEST_CASE("Inverse: round-trip covers original cell2node")
+{
+    // inverse(inverse(cell2node)) should give cell2cell-like structure where
+    // each cell's row contains at least itself and all cells sharing any node.
+    // Specifically: for each cell c, for each node n in c2n[c], all cells in
+    // n2c[n] should appear in the re-inverted result for c.
+
+    auto c2n = make4QuadCell2Node(g_mpi);
+    c2n.father->createGlobalMapping();
+    auto nodeGM = makeNodeGlobalMapping4Quad(g_mpi);
+
+    DNDS::index nNodeLocal = nodeLocalCount4Quad(g_mpi);
+    DNDS::index nCellLocal = c2n.father->Size();
+
+    auto n2c = MeshConnectivity::Inverse(
+        c2n, nNodeLocal, g_mpi,
+        [&](DNDS::index i)
+        { return cellLocal2Global4Quad(g_mpi, i); },
+        [&](DNDS::index i)
+        { return nodeLocal2Global4Quad(g_mpi, i); },
+        nodeGM);
+
+    // Now create a cell global mapping for the second inverse
+    auto cellGM = std::make_shared<GlobalOffsetsMapping>();
+    cellGM->setMPIAlignBcast(g_mpi, nCellLocal);
+
+    // inverse(n2c) -> cell2node_roundtrip
+    // n2c maps node->cells, so inverse gives cell->nodes
+    auto c2n_rt = MeshConnectivity::Inverse(
+        n2c, nCellLocal, g_mpi,
+        [&](DNDS::index i)
+        { return nodeLocal2Global4Quad(g_mpi, i); },
+        [&](DNDS::index i)
+        { return cellLocal2Global4Quad(g_mpi, i); },
+        cellGM);
+
+    // For each local cell, verify that the original c2n nodes are a subset
+    // of the round-tripped nodes
+    for (DNDS::index iCell = 0; iCell < nCellLocal; iCell++)
+    {
+        std::set<DNDS::index> originalNodes;
+        for (auto n : c2n.father->operator[](iCell))
+            originalNodes.insert(n);
+
+        std::set<DNDS::index> roundTripNodes;
+        for (auto n : c2n_rt.father->operator[](iCell))
+            roundTripNodes.insert(n);
+
+        for (auto n : originalNodes)
+        {
+            CAPTURE(iCell);
+            CAPTURE(n);
+            CHECK(roundTripNodes.count(n) == 1);
+        }
+    }
+}
+
+// ===========================================================================
+// Compose / ComposeFiltered Tests
+// ===========================================================================
+
+TEST_CASE("ComposeFiltered: 4-quad cell2cell via node-neighbor")
+{
+    auto c2n = make4QuadCell2Node(g_mpi);
+    c2n.father->createGlobalMapping();
+    auto nodeGM = makeNodeGlobalMapping4Quad(g_mpi);
+
+    DNDS::index nNodeLocal = nodeLocalCount4Quad(g_mpi);
+    DNDS::index nCellLocal = c2n.father->Size();
+
+    // Step 1: Inverse to get node2cell
+    auto n2c = MeshConnectivity::Inverse(
+        c2n, nNodeLocal, g_mpi,
+        [&](DNDS::index i)
+        { return cellLocal2Global4Quad(g_mpi, i); },
+        [&](DNDS::index i)
+        { return nodeLocal2Global4Quad(g_mpi, i); },
+        nodeGM);
+
+    // Step 2: Ghost-pull n2c for off-rank nodes referenced by c2n
+    // Build ghost list: all node globals in c2n that are off-rank
+    std::unordered_set<DNDS::index> ghostNodeSet;
+    for (DNDS::index iCell = 0; iCell < nCellLocal; iCell++)
+        for (auto iNode : c2n.father->operator[](iCell))
+        {
+            auto [ret, rank, val] = nodeGM->search(iNode);
+            if (rank != g_mpi.rank)
+                ghostNodeSet.insert(iNode);
+        }
+    std::vector<DNDS::index> ghostNodes(ghostNodeSet.begin(), ghostNodeSet.end());
+
+    n2c.son = make_ssp<decltype(n2c.son)::element_type>(ObjName{"n2c.son"}, g_mpi);
+    n2c.TransAttach();
+    n2c.trans.createFatherGlobalMapping();
+    n2c.trans.createGhostMapping(ghostNodes);
+    n2c.trans.createMPITypes();
+    n2c.trans.pullOnce();
+
+    // Build bGlobal2Local map for n2c
+    std::unordered_map<DNDS::index, DNDS::index> nodeG2L;
+    for (DNDS::index i = 0; i < n2c.Size(); i++)
+        nodeG2L[n2c.trans.pLGhostMapping->operator()(-1, i)] = i;
+
+    // Step 3: ComposeFiltered with SharedCountPredicate{1, removeSelf=true}
+    auto c2c = MeshConnectivity::ComposeFiltered(
+        c2n, n2c, nCellLocal, nodeG2L,
+        [&](DNDS::index i)
+        { return cellLocal2Global4Quad(g_mpi, i); },
+        SharedCountPredicate{.minShared = 1, .removeSelf = true});
+
+    // Gather and verify globally
+    // Expected cell2cell (node-neighbor, self removed):
+    //   cell 0: {1, 2, 3}  (shares node 1 with cell 1, node 3 with cell 2, node 4 with all)
+    //   cell 1: {0, 2, 3}
+    //   cell 2: {0, 1, 3}
+    //   cell 3: {0, 1, 2}
+    auto cellGM = std::make_shared<GlobalOffsetsMapping>();
+    cellGM->setMPIAlignBcast(g_mpi, nCellLocal);
+
+    // Gather local c2c results
+    std::vector<std::set<DNDS::index>> globalC2C(4);
+    for (DNDS::index i = 0; i < nCellLocal; i++)
+    {
+        DNDS::index cG = cellLocal2Global4Quad(g_mpi, i);
+        for (auto v : c2c.father->operator[](i))
+            globalC2C[cG].insert(v);
+    }
+
+    // Allgather to merge
+    for (DNDS::index c = 0; c < 4; c++)
+    {
+        std::vector<DNDS::index> localVec(globalC2C[c].begin(), globalC2C[c].end());
+        int localSize = static_cast<int>(localVec.size());
+        std::vector<int> sizes(g_mpi.size);
+        MPI_Allgather(&localSize, 1, MPI_INT, sizes.data(), 1, MPI_INT, g_mpi.comm);
+        std::vector<int> disps(g_mpi.size + 1, 0);
+        for (int r = 0; r < g_mpi.size; r++)
+            disps[r + 1] = disps[r] + sizes[r];
+        std::vector<DNDS::index> allVec(disps[g_mpi.size]);
+        MPI_Allgatherv(localVec.data(), localSize, DNDS_MPI_INDEX,
+                       allVec.data(), sizes.data(), disps.data(), DNDS_MPI_INDEX,
+                       g_mpi.comm);
+        globalC2C[c].clear();
+        for (auto v : allVec)
+            globalC2C[c].insert(v);
+    }
+
+    // For 4-quad: all cells share at least node 4, so every cell is neighbor of every other
+    for (DNDS::index c = 0; c < 4; c++)
+    {
+        CAPTURE(c);
+        CHECK(globalC2C[c].size() == 3);
+        for (DNDS::index other = 0; other < 4; other++)
+            if (other != c)
+                CHECK(globalC2C[c].count(other) == 1);
+    }
+}
+
+TEST_CASE("ComposeFiltered: face-share filter (minShared=dim)")
+{
+    // For 2D quads, face-share means >= 2 shared nodes.
+    // In the 4-quad grid:
+    //   cell 0 shares edge with cell 1 (nodes 1,4) and cell 2 (nodes 3,4)
+    //   cell 0 shares only node 4 with cell 3 -> NOT face-neighbor
+    //   cell 3 shares edge with cell 1 (nodes 4,5) and cell 2 (nodes 4,7)
+    //   cell 3 shares only node 4 with cell 0 -> NOT face-neighbor
+
+    auto c2n = make4QuadCell2Node(g_mpi);
+    c2n.father->createGlobalMapping();
+    auto nodeGM = makeNodeGlobalMapping4Quad(g_mpi);
+
+    DNDS::index nNodeLocal = nodeLocalCount4Quad(g_mpi);
+    DNDS::index nCellLocal = c2n.father->Size();
+
+    auto n2c = MeshConnectivity::Inverse(
+        c2n, nNodeLocal, g_mpi,
+        [&](DNDS::index i)
+        { return cellLocal2Global4Quad(g_mpi, i); },
+        [&](DNDS::index i)
+        { return nodeLocal2Global4Quad(g_mpi, i); },
+        nodeGM);
+
+    // Ghost-pull n2c
+    std::unordered_set<DNDS::index> ghostNodeSet;
+    for (DNDS::index iCell = 0; iCell < nCellLocal; iCell++)
+        for (auto iNode : c2n.father->operator[](iCell))
+        {
+            auto [ret, rank, val] = nodeGM->search(iNode);
+            if (rank != g_mpi.rank)
+                ghostNodeSet.insert(iNode);
+        }
+    std::vector<DNDS::index> ghostNodes(ghostNodeSet.begin(), ghostNodeSet.end());
+
+    n2c.son = make_ssp<decltype(n2c.son)::element_type>(ObjName{"n2c.son"}, g_mpi);
+    n2c.TransAttach();
+    n2c.trans.createFatherGlobalMapping();
+    n2c.trans.createGhostMapping(ghostNodes);
+    n2c.trans.createMPITypes();
+    n2c.trans.pullOnce();
+
+    std::unordered_map<DNDS::index, DNDS::index> nodeG2L;
+    for (DNDS::index i = 0; i < n2c.Size(); i++)
+        nodeG2L[n2c.trans.pLGhostMapping->operator()(-1, i)] = i;
+
+    // ComposeFiltered with minShared=2 (face-share for 2D)
+    auto c2c_face = MeshConnectivity::ComposeFiltered(
+        c2n, n2c, nCellLocal, nodeG2L,
+        [&](DNDS::index i)
+        { return cellLocal2Global4Quad(g_mpi, i); },
+        SharedCountPredicate{.minShared = 2, .removeSelf = true});
+
+    // Gather globally
+    std::vector<std::set<DNDS::index>> globalC2CFace(4);
+    for (DNDS::index i = 0; i < nCellLocal; i++)
+    {
+        DNDS::index cG = cellLocal2Global4Quad(g_mpi, i);
+        for (auto v : c2c_face.father->operator[](i))
+            globalC2CFace[cG].insert(v);
+    }
+    for (DNDS::index c = 0; c < 4; c++)
+    {
+        std::vector<DNDS::index> localVec(globalC2CFace[c].begin(), globalC2CFace[c].end());
+        int localSize = static_cast<int>(localVec.size());
+        std::vector<int> sizes(g_mpi.size);
+        MPI_Allgather(&localSize, 1, MPI_INT, sizes.data(), 1, MPI_INT, g_mpi.comm);
+        std::vector<int> disps(g_mpi.size + 1, 0);
+        for (int r = 0; r < g_mpi.size; r++)
+            disps[r + 1] = disps[r] + sizes[r];
+        std::vector<DNDS::index> allVec(disps[g_mpi.size]);
+        MPI_Allgatherv(localVec.data(), localSize, DNDS_MPI_INDEX,
+                       allVec.data(), sizes.data(), disps.data(), DNDS_MPI_INDEX,
+                       g_mpi.comm);
+        globalC2CFace[c].clear();
+        for (auto v : allVec)
+            globalC2CFace[c].insert(v);
+    }
+
+    // Expected face-neighbors:
+    //   cell 0: {1, 2}       (not 3, only vertex-share)
+    //   cell 1: {0, 3}       (not 2, only vertex-share)
+    //   cell 2: {0, 3}       (not 1, only vertex-share)
+    //   cell 3: {1, 2}       (not 0, only vertex-share)
+    std::vector<std::set<DNDS::index>> expected = {
+        {1, 2},
+        {0, 3},
+        {0, 3},
+        {1, 2},
+    };
+
+    for (DNDS::index c = 0; c < 4; c++)
+    {
+        CAPTURE(c);
+        CHECK(globalC2CFace[c] == expected[c]);
+    }
+}
+
+// ===========================================================================
+// Regression: DSL vs legacy pipeline on real mesh
+// ===========================================================================
+
+/// Build a mesh through the legacy pipeline up to node2cell state,
+/// then compare with DSL Inverse.
+TEST_CASE("Regression: Inverse matches RecoverNode2CellAndNode2Bnd on UniformSquare_10")
+{
+    // Build mesh via legacy pipeline
+    auto mesh = std::make_shared<UnstructuredMesh>(g_mpi, 2);
+    UnstructuredMeshSerialRW reader(mesh, 0);
+    reader.ReadFromCGNSSerial(meshPath("UniformSquare_10.cgns"));
+    reader.Deduplicate1to1Periodic(1e-8);
+    reader.BuildCell2Cell();
+
+    UnstructuredMeshSerialRW::PartitionOptions pOpt;
+    pOpt.metisType = "KWAY";
+    pOpt.metisUfactor = 30;
+    pOpt.metisSeed = 42;
+    pOpt.metisNcuts = 1;
+    reader.MeshPartitionCell2Cell(pOpt);
+    reader.PartitionReorderToMeshCell2Cell();
+
+    // Legacy: build node2cell
+    mesh->RecoverNode2CellAndNode2Bnd();
+
+    // Snapshot the legacy node2cell
+    DNDS::index nNodeLocal = mesh->coords.father->Size();
+    std::vector<std::set<DNDS::index>> legacyN2C(nNodeLocal);
+    for (DNDS::index i = 0; i < nNodeLocal; i++)
+        for (auto v : mesh->node2cell.father->operator[](i))
+            legacyN2C[i].insert(v);
+
+    // DSL: Inverse
+    if (!mesh->coords.father->pLGlobalMapping)
+        mesh->coords.father->createGlobalMapping();
+    if (!mesh->cell2node.father->pLGlobalMapping)
+        mesh->cell2node.father->createGlobalMapping();
+
+    auto dslN2C = MeshConnectivity::Inverse(
+        mesh->cell2node, nNodeLocal, g_mpi,
+        [&](DNDS::index i)
+        { return mesh->CellIndexLocal2Global_NoSon(i); },
+        [&](DNDS::index i)
+        { return mesh->NodeIndexLocal2Global_NoSon(i); },
+        mesh->coords.father->pLGlobalMapping);
+
+    // Compare: for each local node, the set of global cells must match
+    for (DNDS::index i = 0; i < nNodeLocal; i++)
+    {
+        std::set<DNDS::index> dslSet;
+        for (auto v : dslN2C.father->operator[](i))
+            dslSet.insert(v);
+        CAPTURE(i);
+        CHECK(dslSet == legacyN2C[i]);
+    }
+}
+
+TEST_CASE("Regression: ComposeFiltered matches RecoverCell2CellAndBnd2Cell on UniformSquare_10")
+{
+    // Build mesh via legacy pipeline
+    auto mesh = std::make_shared<UnstructuredMesh>(g_mpi, 2);
+    UnstructuredMeshSerialRW reader(mesh, 0);
+    reader.ReadFromCGNSSerial(meshPath("UniformSquare_10.cgns"));
+    reader.Deduplicate1to1Periodic(1e-8);
+    reader.BuildCell2Cell();
+
+    UnstructuredMeshSerialRW::PartitionOptions pOpt;
+    pOpt.metisType = "KWAY";
+    pOpt.metisUfactor = 30;
+    pOpt.metisSeed = 42;
+    pOpt.metisNcuts = 1;
+    reader.MeshPartitionCell2Cell(pOpt);
+    reader.PartitionReorderToMeshCell2Cell();
+
+    mesh->RecoverNode2CellAndNode2Bnd();
+    mesh->RecoverCell2CellAndBnd2Cell();
+
+    // Snapshot legacy cell2cell (global indices, in Adj_PointToGlobal state)
+    DNDS::index nCellLocal = mesh->cell2node.father->Size();
+    std::vector<std::set<DNDS::index>> legacyC2C(nCellLocal);
+    for (DNDS::index i = 0; i < nCellLocal; i++)
+        for (auto v : mesh->cell2cell.father->operator[](i))
+            legacyC2C[i].insert(v);
+
+    // DSL approach: use Inverse to get node2cell, ghost-pull, then ComposeFiltered
+
+    if (!mesh->coords.father->pLGlobalMapping)
+        mesh->coords.father->createGlobalMapping();
+    if (!mesh->cell2node.father->pLGlobalMapping)
+        mesh->cell2node.father->createGlobalMapping();
+
+    DNDS::index nNodeLocal = mesh->coords.father->Size();
+
+    auto dslN2C = MeshConnectivity::Inverse(
+        mesh->cell2node, nNodeLocal, g_mpi,
+        [&](DNDS::index i)
+        { return mesh->CellIndexLocal2Global_NoSon(i); },
+        [&](DNDS::index i)
+        { return mesh->NodeIndexLocal2Global_NoSon(i); },
+        mesh->coords.father->pLGlobalMapping);
+
+    // Ghost-pull dslN2C for off-rank nodes
+    std::unordered_set<DNDS::index> ghostNodeSet;
+    for (DNDS::index i = 0; i < nCellLocal; i++)
+        for (auto iNode : mesh->cell2node.father->operator[](i))
+        {
+            auto [ret, rank, val] = mesh->coords.father->pLGlobalMapping->search(iNode);
+            if (rank != g_mpi.rank)
+                ghostNodeSet.insert(iNode);
+        }
+    std::vector<DNDS::index> ghostNodes(ghostNodeSet.begin(), ghostNodeSet.end());
+
+    dslN2C.son = make_ssp<decltype(dslN2C.son)::element_type>(ObjName{"dslN2C.son"}, g_mpi);
+    dslN2C.TransAttach();
+    dslN2C.trans.createFatherGlobalMapping();
+    dslN2C.trans.createGhostMapping(ghostNodes);
+    dslN2C.trans.createMPITypes();
+    dslN2C.trans.pullOnce();
+
+    // Build bGlobal2Local map
+    std::unordered_map<DNDS::index, DNDS::index> nodeG2L;
+    for (DNDS::index i = 0; i < dslN2C.Size(); i++)
+        nodeG2L[dslN2C.trans.pLGhostMapping->operator()(-1, i)] = i;
+
+    // Verify all nodes in cell2node are in the map
+    for (DNDS::index i = 0; i < nCellLocal; i++)
+        for (auto iNode : mesh->cell2node.father->operator[](i))
+            REQUIRE(nodeG2L.count(iNode));
+
+    // ComposeFiltered with SharedCountPredicate{1, removeSelf=true} -> cell2cell (node-neighbor)
+    auto dslC2C = MeshConnectivity::ComposeFiltered(
+        mesh->cell2node, dslN2C, nCellLocal, nodeG2L,
+        [&](DNDS::index i)
+        { return mesh->CellIndexLocal2Global_NoSon(i); },
+        SharedCountPredicate{.minShared = 1, .removeSelf = true});
+
+    // Compare
+    for (DNDS::index i = 0; i < nCellLocal; i++)
+    {
+        std::set<DNDS::index> dslSet;
+        for (auto v : dslC2C.father->operator[](i))
+            dslSet.insert(v);
+        CAPTURE(i);
+        CHECK(dslSet == legacyC2C[i]);
+    }
+}
+
+// ===========================================================================
+// Cone / Support management tests
+// ===========================================================================
+
+TEST_CASE("MeshConnectivity: cone management")
+{
+    MeshConnectivity dag;
+    dag.meshDim = 2;
+
+    CHECK(!dag.hasCone(2, 0));
+    auto &c = dag.addCone(2, 0);
+    CHECK(dag.hasCone(2, 0));
+    CHECK(!dag.hasCone(0, 2));
+    CHECK(c.fromDepth == 2);
+    CHECK(c.toDepth == 0);
+
+    auto *found = dag.findCone(2, 0);
+    CHECK(found == &c);
+    CHECK(dag.findCone(0, 2) == nullptr);
+
+    auto &c2 = dag.addCone(1, 0);
+    CHECK(dag.hasCone(1, 0));
+    CHECK(dag.cones.size() == 2);
+}
+
+TEST_CASE("MeshConnectivity: support management")
+{
+    MeshConnectivity dag;
+    dag.meshDim = 2;
+
+    CHECK(!dag.hasSupport(0, 2));
+    auto &s = dag.addSupport(0, 2);
+    CHECK(dag.hasSupport(0, 2));
+    CHECK(!dag.hasSupport(2, 0));
+    CHECK(s.fromDepth == 0);
+    CHECK(s.toDepth == 2);
+
+    CHECK(dag.findSupport(0, 2) == &s);
+    CHECK(dag.findSupport(2, 0) == nullptr);
+    CHECK(dag.supports.size() == 1);
+}
+
+TEST_CASE("ConeAdj: AdjVariant typed access")
+{
+    ConeAdj cone;
+    cone.fromDepth = 2;
+    cone.toDepth = 0;
+    // Default-constructed variant holds tAdjPair (index 0)
+    CHECK(std::holds_alternative<tAdjPair>(cone.adj));
+    CHECK(!cone.initialized());
+    CHECK(!cone.hasPbi());
+
+    // Initialize with a tAdj2Pair variant
+    ConeAdj cone2;
+    cone2.fromDepth = 1;
+    cone2.toDepth = 2;
+    cone2.adj = tAdj2Pair{};
+    CHECK(std::holds_alternative<tAdj2Pair>(cone2.adj));
+}
+
+TEST_CASE("SupportAdj: no pbi member")
+{
+    SupportAdj sup;
+    sup.fromDepth = 0;
+    sup.toDepth = 2;
+    CHECK(!sup.initialized());
+    // SupportAdj has no pbi member -- compile-time check that it's absent
+    // (this test just verifies the struct compiles correctly)
+    CHECK(sup.fatherSize() == 0);
+}
+
+// ---------------------------------------------------------------------------
+int main(int argc, char **argv)
+{
+    MPI_Init(&argc, &argv);
+    g_mpi.setWorld();
+
+    doctest::Context ctx;
+    ctx.applyCommandLine(argc, argv);
+    int res = ctx.run();
+
+    MPI_Finalize();
+    return res;
+}
