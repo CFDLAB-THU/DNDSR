@@ -1922,6 +1922,68 @@ TEST_CASE("Periodic 2x2x2: ComposeFiltered cell2cellFace is WRONG without pbi fi
     }
 }
 
+// ===========================================================================
+// ComposeFiltered with matchExtra: pbi containment check for bnd2cell
+// ===========================================================================
+
+/// Build a pbi containment matchExtra for ComposeFiltered.
+/// For bnd2cell: checks that every (node, pbi) pair in the A-entity (bnd)
+/// appears in the C-entity (cell). This is stricter than uniform XOR —
+/// it requires exact pbi matching per node, not just consistent shift.
+///
+/// @param a2nodePbi  A-entity → node pbi (bnd2nodePbi).
+/// @param c2node     C-entity → nodes (cell2node, with ghost for lookup).
+/// @param c2nodePbi  C-entity → node pbi (cell2nodePbi, with ghost).
+/// @param cGlobal2Local  Maps global C-index to local-appended index.
+static std::function<bool(DNDS::index, DNDS::index, const std::vector<DNDS::index> &)>
+makePbiContainmentMatchExtra(
+    const tAdjPair &a2node,
+    const tPbiPair &a2nodePbi,
+    const tAdjPair &c2node,
+    const tPbiPair &c2nodePbi,
+    const std::unordered_map<DNDS::index, DNDS::index> &cGlobal2Local)
+{
+    return [&](DNDS::index aLocal, DNDS::index cGlobal,
+               const std::vector<DNDS::index> & /*sharedNodes*/) -> bool
+    {
+        auto itC = cGlobal2Local.find(cGlobal);
+        if (itC == cGlobal2Local.end())
+            return false;
+        DNDS::index cLocal = itC->second;
+
+        // For every node in A's row, check that the same (node, pbi) pair
+        // exists in C's row.
+        for (DNDS::rowsize ia = 0; ia < a2node.father->RowSize(aLocal); ia++)
+        {
+            DNDS::index nodeA = a2node.father->operator()(aLocal, ia);
+            uint8_t pbiA = uint8_t(a2nodePbi.father->operator()(aLocal, ia));
+            bool found = false;
+            auto cRow = c2node[cLocal];
+            for (DNDS::rowsize ic = 0; ic < cRow.size(); ic++)
+            {
+                if (cRow[ic] == nodeA && uint8_t(c2nodePbi(cLocal, ic)) == pbiA)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+                return false;
+        }
+        return true;
+    };
+}
+
+/// Verify that cell2cellFace on periodic meshes should be derived from
+/// Interpolate (face→cell), not from ComposeFiltered. The compose-based
+/// approach cannot correctly distinguish face-neighbors from non-face-neighbors
+/// when all cells share all nodes (as on 2×2 doubly-periodic or 2×2×2
+/// triply-periodic meshes).
+///
+/// The correct cell2cellFace derivation is tested in
+/// "Periodic 2x2: cell2face from Interpolate" and
+/// "Periodic 2x2x2: face interpolation" tests above.
+
 // ---------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
