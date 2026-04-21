@@ -332,3 +332,12 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", 
 - **C++ libs:** Eigen, Boost, CGAL, nlohmann_json, fmt, pybind11, HDF5, CGNS, Metis, ParMetis
 - **Python:** >= 3.10, numpy, scipy, pytest, pytest-mpi, mpi4py, h5py
 - **Optional:** CUDA toolkit, SuperLU_dist
+
+## GitHub CLI (`gh`) Policy
+
+**Read-only by default.** You may use `gh` freely for read operations (viewing
+issues, PRs, checks, releases, diffs, comments). **Do NOT use `gh` for any
+write operation** (creating/closing issues, creating/merging PRs, posting
+comments, approving reviews, creating releases, editing labels, etc.) **unless
+the user explicitly requests that specific write action.** One-time explicit
+permission does not carry over to other write actions — ask each time.

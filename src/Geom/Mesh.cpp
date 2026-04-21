@@ -690,7 +690,10 @@ namespace DNDS::Geom
             auto cellResult = dag.evaluateGhostTree(
                 CompiledGhostTree::compile(cellSpec), mpi);
 
-            auto &ghostCells = cellResult.ghostIndices[EntityKind::Cell];
+            auto it = cellResult.ghostIndices.find(EntityKind::Cell);
+            std::vector<DNDS::index> ghostCells;
+            if (it != cellResult.ghostIndices.end())
+                ghostCells = std::move(it->second);
             cell2cell.trans.createGhostMapping(ghostCells);
 
             cell2cell.trans.createMPITypes();

@@ -52,7 +52,7 @@ namespace DNDS::Geom
         auto it = globalMappings.find(kind);
         if (it != globalMappings.end())
             return it->second;
-        static ssp<GlobalOffsetsMapping> null_mapping;
+        static const ssp<GlobalOffsetsMapping> null_mapping{};
         return null_mapping;
     }
 
