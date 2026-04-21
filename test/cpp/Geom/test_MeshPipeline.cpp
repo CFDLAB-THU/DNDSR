@@ -28,6 +28,8 @@
 #include <vector>
 #include <array>
 #include <cmath>
+#include <set>
+#include <fmt/core.h>
 
 using namespace DNDS;
 using namespace DNDS::Geom;
@@ -202,7 +204,14 @@ int main(int argc, char **argv)
 
     // Build one full-pipeline mesh per config.
     for (int ic = 0; ic < N_CONFIGS; ic++)
+    {
+        // Ball2 (index 4) is only tested with np=8 — skip the expensive
+        // build at other rank counts to avoid wasting ~60s on serial
+        // read+partition of a 958K-cell 3D mesh that no test will use.
+        if (ic == 4 && g_mpi.size != 8)
+            continue;
         g_full[ic] = buildFullMesh(ic, g_configs[ic]);
+    }
 
     doctest::Context ctx;
     ctx.applyCommandLine(argc, argv);
@@ -809,6 +818,272 @@ TEST_CASE("bnd2cell: DSL matches Legacy on all mesh configs")
                 CHECK(dslNeighbors == legNeighbors);
             }
         }
+    }
+}
+
+// --- BuildGhostPrimary: DSL vs Legacy ---
+
+/// Build mesh through BuildGhostPrimary, using either DSL or Legacy path.
+static ssp<UnstructuredMesh> buildMeshUpToGhost(
+    const MeshConfig &cfg, bool useLegacy)
+{
+    auto mesh = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
+    UnstructuredMeshSerialRW reader(mesh, 0);
+
+    if (cfg.periodic)
+    {
+        tPoint zero{0, 0, 0};
+        mesh->SetPeriodicGeometry(
+            cfg.translation1, zero, zero,
+            cfg.translation2, zero, zero,
+            cfg.translation3, zero, zero);
+    }
+
+    reader.ReadFromCGNSSerial(meshPath(cfg.file));
+    reader.Deduplicate1to1Periodic(1e-8);
+    reader.BuildCell2Cell();
+
+    UnstructuredMeshSerialRW::PartitionOptions pOpt;
+    pOpt.metisType = "KWAY";
+    pOpt.metisUfactor = 30;
+    pOpt.metisSeed = 42;
+    pOpt.metisNcuts = 1;
+    reader.MeshPartitionCell2Cell(pOpt);
+    reader.PartitionReorderToMeshCell2Cell();
+
+    mesh->RecoverNode2CellAndNode2Bnd();
+    mesh->RecoverCell2CellAndBnd2Cell();
+
+    if (useLegacy)
+        mesh->BuildGhostPrimaryLegacy();
+    else
+        mesh->BuildGhostPrimary();
+
+    return mesh;
+}
+
+TEST_CASE("BuildGhostPrimary: DSL matches Legacy ghost sets")
+{
+    for (int ci = 0; ci < N_CONFIGS; ci++)
+    {
+        if (ci == 4 && g_mpi.size != 8)
+            continue;
+        const auto &cfg = g_configs[ci];
+        CAPTURE(ci);
+        SUBCASE(cfg.name)
+        {
+            auto mDSL = buildMeshUpToGhost(cfg, false);
+            auto mLeg = buildMeshUpToGhost(cfg, true);
+
+            // Cell ghost sets must be identical (same cell2cell traversal).
+            DNDS::index nCellDSL = mDSL->NumCellGhost();
+            DNDS::index nCellLeg = mLeg->NumCellGhost();
+            CHECK(nCellDSL == nCellLeg);
+
+            // Ghost cell indices must match (from the ghost mapping).
+            {
+                auto &dslGhost = mDSL->cell2cell.trans.pLGhostMapping->ghostIndex;
+                auto &legGhost = mLeg->cell2cell.trans.pLGhostMapping->ghostIndex;
+                std::set<DNDS::index> dslSet(dslGhost.begin(), dslGhost.end());
+                std::set<DNDS::index> legSet(legGhost.begin(), legGhost.end());
+                CHECK(dslSet == legSet);
+            }
+
+            // Node ghost sets must be identical.
+            DNDS::index nNodeDSL = mDSL->NumNodeGhost();
+            DNDS::index nNodeLeg = mLeg->NumNodeGhost();
+            CHECK(nNodeDSL == nNodeLeg);
+
+            {
+                auto &dslGhost = mDSL->coords.trans.pLGhostMapping->ghostIndex;
+                auto &legGhost = mLeg->coords.trans.pLGhostMapping->ghostIndex;
+                std::set<DNDS::index> dslSet(dslGhost.begin(), dslGhost.end());
+                std::set<DNDS::index> legSet(legGhost.begin(), legGhost.end());
+                CHECK(dslSet == legSet);
+            }
+
+            // Bnd ghost sets must be identical.
+            DNDS::index nBndDSL = mDSL->NumBndGhost();
+            DNDS::index nBndLeg = mLeg->NumBndGhost();
+            CHECK(nBndDSL == nBndLeg);
+
+            {
+                auto &dslGhost = mDSL->bnd2cell.trans.pLGhostMapping->ghostIndex;
+                auto &legGhost = mLeg->bnd2cell.trans.pLGhostMapping->ghostIndex;
+                std::set<DNDS::index> dslSet(dslGhost.begin(), dslGhost.end());
+                std::set<DNDS::index> legSet(legGhost.begin(), legGhost.end());
+                CHECK(dslSet == legSet);
+            }
+
+            if (g_mpi.rank == 0)
+                fmt::print("  [{}] ghost: cells={}, nodes={}, bnds={}\n",
+                           cfg.name, nCellDSL, nNodeDSL, nBndDSL);
+        }
+    }
+}
+
+// --- Benchmark: DSL vs Legacy for all migrated APIs ---
+
+/// Build a mesh up to the point where we can benchmark each API independently.
+/// Returns mesh in Adj_PointToGlobal state after serial read + partition.
+static ssp<UnstructuredMesh> buildMeshForBenchmark(const MeshConfig &cfg)
+{
+    auto mesh = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
+    UnstructuredMeshSerialRW reader(mesh, 0);
+
+    if (cfg.periodic)
+    {
+        tPoint zero{0, 0, 0};
+        mesh->SetPeriodicGeometry(
+            cfg.translation1, zero, zero,
+            cfg.translation2, zero, zero,
+            cfg.translation3, zero, zero);
+    }
+
+    reader.ReadFromCGNSSerial(meshPath(cfg.file));
+    reader.Deduplicate1to1Periodic(1e-8);
+    reader.BuildCell2Cell();
+
+    UnstructuredMeshSerialRW::PartitionOptions pOpt;
+    pOpt.metisType = "KWAY";
+    pOpt.metisUfactor = 30;
+    pOpt.metisSeed = 42;
+    pOpt.metisNcuts = 1;
+    reader.MeshPartitionCell2Cell(pOpt);
+    reader.PartitionReorderToMeshCell2Cell();
+    return mesh;
+}
+
+TEST_CASE("Benchmark: DSL vs Legacy pipeline steps")
+{
+    // Use NACA0012_H2 (20816 cells) — large enough to measure, small enough to
+    // run quickly.  Ball2 is too expensive and the small meshes have too much
+    // noise.  Index 2 in g_configs.
+    const auto &cfg = g_configs[2];
+
+    if (g_mpi.size < 2)
+        return; // benchmarking single-rank is not interesting
+
+    const int nRuns = 3; // repeat for stability
+
+    // --- RecoverNode2CellAndNode2Bnd (Inverse) ---
+    {
+        double tDSL = 0, tLeg = 0;
+        for (int r = 0; r < nRuns; r++)
+        {
+            auto m1 = buildMeshForBenchmark(cfg);
+            MPI_Barrier(g_mpi.comm);
+            double t0 = MPI_Wtime();
+            m1->RecoverNode2CellAndNode2Bnd();
+            MPI_Barrier(g_mpi.comm);
+            double t1 = MPI_Wtime();
+            tDSL += t1 - t0;
+
+            auto m2 = buildMeshForBenchmark(cfg);
+            MPI_Barrier(g_mpi.comm);
+            double t2 = MPI_Wtime();
+            m2->RecoverNode2CellAndNode2BndLegacy();
+            MPI_Barrier(g_mpi.comm);
+            double t3 = MPI_Wtime();
+            tLeg += t3 - t2;
+        }
+        if (g_mpi.rank == 0)
+            fmt::print("  Inverse (RecoverN2CB):  DSL {:.4f}s  Legacy {:.4f}s  ({:.2f}x, {} runs)\n",
+                       tDSL / nRuns, tLeg / nRuns, tLeg / tDSL, nRuns);
+    }
+
+    // --- RecoverCell2CellAndBnd2Cell (ComposeFiltered) ---
+    {
+        double tDSL = 0, tLeg = 0;
+        for (int r = 0; r < nRuns; r++)
+        {
+            auto m1 = buildMeshForBenchmark(cfg);
+            m1->RecoverNode2CellAndNode2Bnd();
+            MPI_Barrier(g_mpi.comm);
+            double t0 = MPI_Wtime();
+            m1->RecoverCell2CellAndBnd2Cell();
+            MPI_Barrier(g_mpi.comm);
+            double t1 = MPI_Wtime();
+            tDSL += t1 - t0;
+
+            auto m2 = buildMeshForBenchmark(cfg);
+            m2->RecoverNode2CellAndNode2BndLegacy();
+            MPI_Barrier(g_mpi.comm);
+            double t2 = MPI_Wtime();
+            m2->RecoverCell2CellAndBnd2CellLegacy();
+            MPI_Barrier(g_mpi.comm);
+            double t3 = MPI_Wtime();
+            tLeg += t3 - t2;
+        }
+        if (g_mpi.rank == 0)
+            fmt::print("  Compose (RecoverC2C):   DSL {:.4f}s  Legacy {:.4f}s  ({:.2f}x, {} runs)\n",
+                       tDSL / nRuns, tLeg / nRuns, tLeg / tDSL, nRuns);
+    }
+
+    // --- BuildGhostPrimary (evaluateGhostTree for cell ghost) ---
+    {
+        double tDSL = 0, tLeg = 0;
+        for (int r = 0; r < nRuns; r++)
+        {
+            auto m1 = buildMeshForBenchmark(cfg);
+            m1->RecoverNode2CellAndNode2Bnd();
+            m1->RecoverCell2CellAndBnd2Cell();
+            MPI_Barrier(g_mpi.comm);
+            double t0 = MPI_Wtime();
+            m1->BuildGhostPrimary();
+            MPI_Barrier(g_mpi.comm);
+            double t1 = MPI_Wtime();
+            tDSL += t1 - t0;
+
+            auto m2 = buildMeshForBenchmark(cfg);
+            m2->RecoverNode2CellAndNode2Bnd();
+            m2->RecoverCell2CellAndBnd2Cell();
+            MPI_Barrier(g_mpi.comm);
+            double t2 = MPI_Wtime();
+            m2->BuildGhostPrimaryLegacy();
+            MPI_Barrier(g_mpi.comm);
+            double t3 = MPI_Wtime();
+            tLeg += t3 - t2;
+        }
+        if (g_mpi.rank == 0)
+            fmt::print("  Ghost (BuildGhostPri):  DSL {:.4f}s  Legacy {:.4f}s  ({:.2f}x, {} runs)\n",
+                       tDSL / nRuns, tLeg / nRuns, tLeg / tDSL, nRuns);
+    }
+
+    // --- InterpolateFace (Interpolate) ---
+    {
+        double tDSL = 0, tLeg = 0;
+        for (int r = 0; r < nRuns; r++)
+        {
+            auto m1 = buildMeshForBenchmark(cfg);
+            m1->RecoverNode2CellAndNode2Bnd();
+            m1->RecoverCell2CellAndBnd2Cell();
+            m1->BuildGhostPrimary();
+            m1->AdjGlobal2LocalPrimary();
+            m1->AdjGlobal2LocalN2CB();
+            MPI_Barrier(g_mpi.comm);
+            double t0 = MPI_Wtime();
+            m1->InterpolateFace();
+            MPI_Barrier(g_mpi.comm);
+            double t1 = MPI_Wtime();
+            tDSL += t1 - t0;
+
+            auto m2 = buildMeshForBenchmark(cfg);
+            m2->RecoverNode2CellAndNode2Bnd();
+            m2->RecoverCell2CellAndBnd2Cell();
+            m2->BuildGhostPrimary();
+            m2->AdjGlobal2LocalPrimary();
+            m2->AdjGlobal2LocalN2CB();
+            MPI_Barrier(g_mpi.comm);
+            double t2 = MPI_Wtime();
+            m2->InterpolateFaceLegacy();
+            MPI_Barrier(g_mpi.comm);
+            double t3 = MPI_Wtime();
+            tLeg += t3 - t2;
+        }
+        if (g_mpi.rank == 0)
+            fmt::print("  Interpolate (Face):     DSL {:.4f}s  Legacy {:.4f}s  ({:.2f}x, {} runs)\n",
+                       tDSL / nRuns, tLeg / nRuns, tLeg / tDSL, nRuns);
     }
 }
 

@@ -667,8 +667,9 @@ namespace DNDS::Geom
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
         DNDS_assert(cell2cell.father && cell2cell.father->Size() == this->NumCell());
         DNDS_assert(bnd2cell.father && bnd2cell.father->Size() == this->NumBnd());
+
         /********************************/
-        // cells
+        // cells — use evaluateGhostTree for ghost cell set
         {
             cell2cell.TransAttach();
             cell2node.TransAttach();
@@ -679,20 +680,17 @@ namespace DNDS::Geom
 
             cell2cell.trans.createFatherGlobalMapping();
 
-            std::vector<DNDS::index> ghostCells;
-            for (DNDS::index iCell = 0; iCell < cell2cell.father->Size(); iCell++)
-            {
-                for (DNDS::rowsize ic2c = 0; ic2c < cell2cell.father->RowSize(iCell); ic2c++)
-                {
-                    auto iCellOther = (*cell2cell.father)(iCell, ic2c);
-                    DNDS::MPI_int rank;
-                    DNDS::index val;
-                    if (!cell2cell.trans.pLGlobalMapping->search(iCellOther, rank, val))
-                        DNDS_assert_info(false, "search failed");
-                    if (rank != mpi.rank)
-                        ghostCells.push_back(iCellOther);
-                }
-            }
+            // Use MeshConnectivity ghost evaluator for cell ghost set.
+            MeshConnectivity dag;
+            dag.meshDim = dim;
+            dag.registerAdj(Adj::Cell2Cell, cell2cell);
+            dag.registerGlobalMapping(EntityKind::Cell, cell2cell.trans.pLGlobalMapping);
+
+            GhostSpec cellSpec{{{EntityKind::Cell, {Adj::Cell2Cell}, EntityKind::Cell}}};
+            auto cellResult = dag.evaluateGhostTree(
+                CompiledGhostTree::compile(cellSpec), mpi);
+
+            auto &ghostCells = cellResult.ghostIndices[EntityKind::Cell];
             cell2cell.trans.createGhostMapping(ghostCells);
 
             cell2cell.trans.createMPITypes();
@@ -703,11 +701,6 @@ namespace DNDS::Geom
                 cell2nodePbi.BorrowAndPull(cell2cell);
             cellElemInfo.BorrowAndPull(cell2cell);
         }
-        // if(mpi.rank == 0)
-        //     std::cout <<"XXXXXXXXXXXXXXXXXXXXXXXXX" <<std::endl;
-        // if(mpi.rank == 0)
-        //     for(index iC = 0; iC < coords.father->Size(); iC ++)
-        //         std::cout << coords.father->operator[](iC).transpose() << std::endl;
 
         /********************************/
         // cells done, go on to nodes
@@ -736,11 +729,6 @@ namespace DNDS::Geom
             coords.trans.pullOnce();
             node2nodeOrig.BorrowAndPull(coords);
         }
-        // if(mpi.rank == 0)
-        //     std::cout <<"XXXXXXXXXXXXXXXXXXXXXXXXX" <<std::endl;
-        // if(mpi.rank == 0)
-        //     for(index iC = 0; iC < coords.Size(); iC ++)
-        //         std::cout << coords.operator[](iC).transpose() << std::endl;
 
         /********************************/
         // bnds: added via node2bnd's father part
