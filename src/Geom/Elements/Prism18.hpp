@@ -40,9 +40,9 @@ namespace DNDS::Geom::Elem
             const t_real _t13 = _t0*zt;
             const t_real _t14 = _t13*_t3;
             const t_real _t15 = _t4*xi;
-            const t_real _t16 = ((zt) * (zt)) - 1;
+            const t_real _t16 = _t11*zt;
             const t_real _t17 = _t16*_t3;
-            const t_real _t18 = _t11*zt;
+            const t_real _t18 = ((zt) * (zt)) - 1;
             const t_real _t19 = _t18*_t3;
             const t_real _t20 = 4*xi;
             v(0, 0) = _t2*_t8;
@@ -54,15 +54,15 @@ namespace DNDS::Geom::Elem
             v(0, 6) = -_t14*_t5;
             v(0, 7) = _t13*_t15;
             v(0, 8) = -_t14*_t4;
-            v(0, 9) = -_t17*_t7;
-            v(0, 10) = -_t16*_t9;
-            v(0, 11) = -_t10*_t16;
-            v(0, 12) = -_t19*_t5;
-            v(0, 13) = _t15*_t18;
-            v(0, 14) = -_t19*_t4;
-            v(0, 15) = _t17*_t20;
-            v(0, 16) = -_t16*_t20*et;
-            v(0, 17) = 4*_t17*et;
+            v(0, 9) = -_t17*_t5;
+            v(0, 10) = _t15*_t16;
+            v(0, 11) = -_t17*_t4;
+            v(0, 12) = -_t19*_t7;
+            v(0, 13) = -_t18*_t9;
+            v(0, 14) = -_t10*_t18;
+            v(0, 15) = _t19*_t20;
+            v(0, 16) = -_t18*_t20*et;
+            v(0, 17) = 4*_t19*et;
         }
 
         template <class TPoint, class TArray>
@@ -90,11 +90,11 @@ namespace DNDS::Geom::Elem
             const t_real _t16 = 2*et;
             const t_real _t17 = _t16*zt;
             const t_real _t18 = -_t3;
-            const t_real _t19 = ((zt) * (zt)) - 1;
-            const t_real _t20 = -_t19*_t2;
-            const t_real _t21 = _t17*_t8;
-            const t_real _t22 = 4*_t19;
-            const t_real _t23 = -_t19;
+            const t_real _t19 = _t17*_t8;
+            const t_real _t20 = ((zt) * (zt)) - 1;
+            const t_real _t21 = -_t2*_t20;
+            const t_real _t22 = 4*_t20;
+            const t_real _t23 = -_t20;
             const t_real _t24 = _t0 - 1;
             const t_real _t25 = _t11*zt;
             const t_real _t26 = _t16 - 1;
@@ -120,14 +120,14 @@ namespace DNDS::Geom::Elem
             v(0, 6) = _t15*_t3;
             v(0, 7) = _t17*_t3;
             v(0, 8) = _t17*_t18;
-            v(0, 9) = _t20;
-            v(0, 10) = -_t19*_t7;
-            v(0, 12) = _t15*_t8;
-            v(0, 13) = _t21;
-            v(0, 14) = -_t21;
+            v(0, 9) = _t15*_t8;
+            v(0, 10) = _t19;
+            v(0, 11) = -_t19;
+            v(0, 12) = _t21;
+            v(0, 13) = -_t20*_t7;
             v(0, 15) = _t13*_t22;
             v(0, 16) = _t0*_t23;
-            v(0, 17) = _t0*_t19;
+            v(0, 17) = _t0*_t20;
             v(1, 0) = _t6;
             v(1, 2) = _t24*_t5;
             v(1, 3) = _t10;
@@ -135,12 +135,12 @@ namespace DNDS::Geom::Elem
             v(1, 6) = _t18*_t25;
             v(1, 7) = _t25*_t3;
             v(1, 8) = _t28*_t3;
-            v(1, 9) = _t20;
-            v(1, 11) = -_t19*_t24;
-            v(1, 12) = -_t29;
-            v(1, 13) = _t29;
-            v(1, 14) = _t28*_t8;
-            v(1, 15) = _t1*_t19;
+            v(1, 9) = -_t29;
+            v(1, 10) = _t29;
+            v(1, 11) = _t28*_t8;
+            v(1, 12) = _t21;
+            v(1, 14) = -_t20*_t24;
+            v(1, 15) = _t1*_t20;
             v(1, 16) = _t1*_t23;
             v(1, 17) = _t22*_t27;
             v(2, 0) = _t31*_t33;
@@ -152,12 +152,12 @@ namespace DNDS::Geom::Elem
             v(2, 6) = _t11*_t38;
             v(2, 7) = _t30*_t39;
             v(2, 8) = _t16*_t38;
-            v(2, 9) = -_t14*_t33;
-            v(2, 10) = -_t12*_t25;
-            v(2, 11) = -_t17*_t26;
-            v(2, 12) = _t11*_t40;
-            v(2, 13) = _t36*_t39;
-            v(2, 14) = _t16*_t40;
+            v(2, 9) = _t11*_t40;
+            v(2, 10) = _t36*_t39;
+            v(2, 11) = _t16*_t40;
+            v(2, 12) = -_t14*_t33;
+            v(2, 13) = -_t12*_t25;
+            v(2, 14) = -_t17*_t26;
             v(2, 15) = _t32*_t41;
             v(2, 16) = -_t41*et;
             v(2, 17) = 8*_t32*et*zt;
@@ -177,11 +177,11 @@ namespace DNDS::Geom::Elem
             const t_real _t5 = -_t0;
             const t_real _t6 = 4*zt;
             const t_real _t7 = _t5*_t6;
-            const t_real _t8 = ((zt) * (zt));
-            const t_real _t9 = 4*_t8 - 4;
-            const t_real _t10 = -_t9;
-            const t_real _t11 = -_t3*_t6;
-            const t_real _t12 = 8*_t8 - 8;
+            const t_real _t8 = -_t3*_t6;
+            const t_real _t9 = ((zt) * (zt));
+            const t_real _t10 = 4*_t9 - 4;
+            const t_real _t11 = -_t10;
+            const t_real _t12 = 8*_t9 - 8;
             const t_real _t13 = et + xi - 1;
             const t_real _t14 = 2*et;
             const t_real _t15 = 2*xi;
@@ -218,9 +218,9 @@ namespace DNDS::Geom::Elem
             const t_real _t46 = -4*zt;
             const t_real _t47 = _t28*zt;
             const t_real _t48 = _t46 + _t47;
-            const t_real _t49 = _t1*(-_t22 - _t24 + 3);
-            const t_real _t50 = _t1 + 1;
-            const t_real _t51 = -_t50;
+            const t_real _t49 = _t1 + 1;
+            const t_real _t50 = -_t49;
+            const t_real _t51 = _t1*(-_t22 - _t24 + 3);
             const t_real _t52 = _t27*zt;
             const t_real _t53 = 8*zt;
             const t_real _t54 = _t33 + _t39;
@@ -230,17 +230,17 @@ namespace DNDS::Geom::Elem
             v(0, 3) = _t4;
             v(0, 4) = _t4;
             v(0, 6) = _t7;
-            v(0, 9) = _t10;
-            v(0, 10) = _t10;
+            v(0, 9) = _t8;
             v(0, 12) = _t11;
+            v(0, 13) = _t11;
             v(0, 15) = _t12;
             v(1, 0) = _t2;
             v(1, 2) = _t2;
             v(1, 3) = _t4;
             v(1, 5) = _t4;
             v(1, 8) = _t7;
-            v(1, 9) = _t10;
-            v(1, 11) = _t10;
+            v(1, 11) = _t8;
+            v(1, 12) = _t11;
             v(1, 14) = _t11;
             v(1, 17) = _t12;
             v(2, 0) = _t17;
@@ -252,12 +252,12 @@ namespace DNDS::Geom::Elem
             v(2, 6) = _t23;
             v(2, 7) = _t25;
             v(2, 8) = _t26;
-            v(2, 9) = -2*_t17;
-            v(2, 10) = -_t15*_t16;
-            v(2, 11) = -_t14*_t19;
-            v(2, 12) = _t23;
-            v(2, 13) = _t25;
-            v(2, 14) = _t26;
+            v(2, 9) = _t23;
+            v(2, 10) = _t25;
+            v(2, 11) = _t26;
+            v(2, 12) = -2*_t17;
+            v(2, 13) = -_t15*_t16;
+            v(2, 14) = -_t14*_t19;
             v(2, 15) = _t13*_t27;
             v(2, 16) = -_t27*et;
             v(2, 17) = _t13*_t28;
@@ -266,13 +266,13 @@ namespace DNDS::Geom::Elem
             v(3, 6) = _t29;
             v(3, 7) = _t2;
             v(3, 8) = _t29;
-            v(3, 9) = _t10;
-            v(3, 12) = _t30;
-            v(3, 13) = _t4;
-            v(3, 14) = _t30;
-            v(3, 15) = _t9;
-            v(3, 16) = _t10;
-            v(3, 17) = _t9;
+            v(3, 9) = _t30;
+            v(3, 10) = _t4;
+            v(3, 11) = _t30;
+            v(3, 12) = _t11;
+            v(3, 15) = _t10;
+            v(3, 16) = _t11;
+            v(3, 17) = _t10;
             v(4, 0) = _t38;
             v(4, 2) = _t35 + _t40 + (0.5);
             v(4, 3) = _t43;
@@ -280,11 +280,11 @@ namespace DNDS::Geom::Elem
             v(4, 6) = _t15*_t45;
             v(4, 7) = _t15*_t44;
             v(4, 8) = _t24 - _t34 - _t48 - 2;
-            v(4, 9) = _t49;
-            v(4, 11) = _t1*(1 - _t24);
-            v(4, 12) = _t15*_t51;
-            v(4, 13) = _t15*_t50;
-            v(4, 14) = -_t24 - _t41 - _t48 + 2;
+            v(4, 9) = _t15*_t50;
+            v(4, 10) = _t15*_t49;
+            v(4, 11) = -_t24 - _t41 - _t48 + 2;
+            v(4, 12) = _t51;
+            v(4, 14) = _t1*(1 - _t24);
             v(4, 15) = _t52;
             v(4, 16) = -_t52;
             v(4, 17) = _t53*(_t19 + xi);
@@ -295,11 +295,11 @@ namespace DNDS::Geom::Elem
             v(5, 6) = _t22 - _t37 - _t55 - 2;
             v(5, 7) = _t14*_t44;
             v(5, 8) = _t14*_t45;
-            v(5, 9) = _t49;
-            v(5, 10) = _t1*(1 - _t22);
-            v(5, 12) = -_t22 - _t42 - _t55 + 2;
-            v(5, 13) = _t14*_t50;
-            v(5, 14) = _t14*_t51;
+            v(5, 9) = -_t22 - _t42 - _t55 + 2;
+            v(5, 10) = _t14*_t49;
+            v(5, 11) = _t14*_t50;
+            v(5, 12) = _t51;
+            v(5, 13) = _t1*(1 - _t22);
             v(5, 15) = _t53*(_t16 + et);
             v(5, 16) = -_t47;
             v(5, 17) = _t47;
@@ -316,8 +316,8 @@ namespace DNDS::Geom::Elem
             const t_real _t2 = _t0 + 2;
             const t_real _t3 = 8*zt;
             const t_real _t4 = 4 - _t3;
-            const t_real _t5 = -_t3;
-            const t_real _t6 = -_t3 - 4;
+            const t_real _t5 = -_t3 - 4;
+            const t_real _t6 = -_t3;
             const t_real _t7 = 16*zt;
             const t_real _t8 = 4*et;
             const t_real _t9 = 4*xi;
@@ -338,8 +338,8 @@ namespace DNDS::Geom::Elem
             v(5, 3) = _t2;
             v(5, 5) = _t2;
             v(5, 8) = _t4;
-            v(5, 9) = _t5;
             v(5, 11) = _t5;
+            v(5, 12) = _t6;
             v(5, 14) = _t6;
             v(5, 17) = _t7;
             v(6, 0) = _t10;
@@ -349,11 +349,11 @@ namespace DNDS::Geom::Elem
             v(6, 6) = _t12;
             v(6, 7) = _t9;
             v(6, 8) = _t14;
-            v(6, 9) = _t16;
-            v(6, 11) = 2 - _t13;
-            v(6, 12) = _t12;
-            v(6, 13) = _t9;
-            v(6, 14) = _t14;
+            v(6, 9) = _t12;
+            v(6, 10) = _t9;
+            v(6, 11) = _t14;
+            v(6, 12) = _t16;
+            v(6, 14) = 2 - _t13;
             v(6, 15) = _t15;
             v(6, 16) = -_t15;
             v(6, 17) = _t15 + 16*et - 8;
@@ -364,11 +364,11 @@ namespace DNDS::Geom::Elem
             v(7, 6) = _t18;
             v(7, 7) = _t8;
             v(7, 8) = _t19;
-            v(7, 9) = _t16;
-            v(7, 10) = 2 - _t15;
-            v(7, 12) = _t18;
-            v(7, 13) = _t8;
-            v(7, 14) = _t19;
+            v(7, 9) = _t18;
+            v(7, 10) = _t8;
+            v(7, 11) = _t19;
+            v(7, 12) = _t16;
+            v(7, 13) = 2 - _t15;
             v(7, 15) = _t13 + 16*xi - 8;
             v(7, 16) = -_t13;
             v(7, 17) = _t13;
@@ -378,174 +378,112 @@ namespace DNDS::Geom::Elem
             v(8, 4) = _t2;
             v(8, 6) = _t4;
             v(8, 9) = _t5;
-            v(8, 10) = _t5;
             v(8, 12) = _t6;
+            v(8, 13) = _t6;
             v(8, 15) = _t7;
             v(9, 0) = _t1;
             v(9, 3) = _t2;
             v(9, 6) = _t20;
             v(9, 7) = _t1;
             v(9, 8) = _t20;
-            v(9, 9) = _t5;
-            v(9, 12) = _t21;
-            v(9, 13) = _t2;
-            v(9, 14) = _t21;
+            v(9, 9) = _t21;
+            v(9, 10) = _t2;
+            v(9, 11) = _t21;
+            v(9, 12) = _t6;
             v(9, 15) = _t3;
-            v(9, 16) = _t5;
+            v(9, 16) = _t6;
             v(9, 17) = _t3;
         }
     };
     // <GEN_SHAPE_FUNCS_END>
 
+    // <GEN_ELEM_TRAITS_BEGIN>
 
-    /**
-     * @brief Element traits for 18-node quadratic prism (Prism18)
-     *
-     * Prism18 is a high-order 3D prismatic element with:
-     * - 6 corner nodes (vertices)
-     * - 9 edge mid-nodes
-     * - 3 face center nodes (on quadrilateral faces)
-     *
-     * Used for high-order finite element methods with prismatic elements.
-     */
     template <>
     struct ElementTraits<Prism18>
     {
-        // ============================================================
-        // Core Element Identification
-        // ============================================================
-
         static constexpr ElemType elemType = Prism18;
         static constexpr int dim = 3;
         static constexpr int order = 2;
         static constexpr int numVertices = 6;
         static constexpr int numNodes = 18;
         static constexpr int numFaces = 5;
+        static constexpr int numEdges = 9;
         static constexpr ParamSpace paramSpace = PrismSpace;
         static constexpr t_real paramSpaceVol = 1.0;
 
-        // ============================================================
-        // Geometry Definition
-        // ============================================================
-
-        /**
-         * @brief Standard coordinates of nodes in parametric space
-         *
-         * Nodes 0-5: vertices (same as Prism6)
-         * Nodes 6-8: bottom triangle edge midpoints
-         * Nodes 9-11: vertical edge midpoints
-         * Nodes 12-14: top triangle edge midpoints
-         * Nodes 15-17: side quadrilateral face centers
-         */
         static constexpr std::array<t_real, 3 * 18> standardCoords = {
-            // Vertices (0-5)
-            0, 0, -1,   1, 0, -1,   0, 1, -1,
-            0, 0,  1,   1, 0,  1,   0, 1,  1,
-            // Bottom edge mids (6-8)
-            0.5, 0,   -1,   0.5, 0.5, -1,   0,   0.5, -1,
-            // Vertical edge mids (9-11)
-            0,   0,    0,   1,   0,    0,   0,   1,    0,
-            // Top edge mids (12-14)
-            0.5, 0,    1,   0.5, 0.5,  1,   0,   0.5,  1,
-            // Side face centers (15-17)
-            0.5, 0,    0,   0.5, 0.5,  0,   0,   0.5,  0};
+            0, 0, -1,  // Node 0: vertex
+            1, 0, -1,  // Node 1: vertex
+            0, 1, -1,  // Node 2: vertex
+            0, 0, 1,  // Node 3: vertex
+            1, 0, 1,  // Node 4: vertex
+            0, 1, 1,  // Node 5: vertex
+            0.5, 0, -1,  // Node 6
+            0.5, 0.5, -1,  // Node 7
+            0, 0.5, -1,  // Node 8
+            0.5, 0, 1,  // Node 9
+            0.5, 0.5, 1,  // Node 10
+            0, 0.5, 1,  // Node 11
+            0, 0, 0,  // Node 12
+            1, 0, 0,  // Node 13
+            0, 1, 0,  // Node 14
+            0.5, 0, 0,  // Node 15
+            0.5, 0.5, 0,  // Node 16
+            0, 0.5, 0};  // Node 17
 
-        // ============================================================
-        // Face/Edge Definitions
-        // ============================================================
-
-        /**
-         * @brief Get the element type of a face
-         * @param iFace Face index (0-2 are quads, 3-4 are triangles)
-         * @return Quad9 for side faces, Tri6 for cap faces
-         */
         static constexpr ElemType GetFaceType(t_index iFace)
         {
-            return iFace < 3 ? Quad9 : Tri6;
+            if (iFace < 3) return Quad9;
+            return Tri6;
         }
 
-        /**
-         * @brief Node indices for each face
-         *
-         * Quadrilateral faces have 9 nodes (4 vertices + 4 edge mids + 1 center)
-         * Triangular faces have 6 nodes (3 vertices + 3 edge mids)
-         */
         static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{
-            {0, 1, 4, 3, 6, 10, 12, 9, 15},     // Face 0: side quad
-            {1, 2, 5, 4, 7, 11, 13, 10, 16},    // Face 1: side quad
-            {2, 0, 3, 5, 8, 9, 14, 11, 17},     // Face 2: side quad
-            {0, 2, 1, 8, 7, 6},                 // Face 3: bottom triangle
-            {3, 4, 5, 9, 10, 11}}};             // Face 4: top triangle
+            {0, 1, 4, 3, 6, 13, 9, 12, 15},
+            {1, 2, 5, 4, 7, 14, 10, 13, 16},
+            {2, 0, 3, 5, 8, 12, 11, 14, 17},
+            {0, 2, 1, 8, 7, 6},
+            {3, 4, 5, 9, 10, 11}
+        }};
 
-        // ============================================================
-        // Order Elevation (P-Refinement)
-        // ============================================================
+        static constexpr ElemType GetEdgeType(t_index /*iEdge*/) { return Line3; }
 
-        /// @brief Element type after order elevation (O2 has no higher elevation defined)
+        static constexpr std::array<std::array<t_index, 3>, 9> edgeNodes = {{
+            {0, 1, 6},
+            {1, 2, 7},
+            {2, 0, 8},
+            {0, 3, 12},
+            {1, 4, 13},
+            {2, 5, 14},
+            {3, 4, 9},
+            {4, 5, 10},
+            {5, 3, 11}
+        }};
+
         static constexpr ElemType elevatedType = UnknownElem;
-
-        /// @brief Number of additional nodes created during elevation (none for O2)
         static constexpr int numElevNodes = 0;
 
-        // ============================================================
-        // Bisection (Adaptive Refinement)
-        // ============================================================
-
-        /**
-         * @brief O2 bisection: 8 sub-prisms created from one Prism18
-         *
-         * Bisection splits the prism by connecting mid-edge nodes,
-         * creating 8 smaller linear prisms (Prism6 elements).
-         */
         static constexpr int numBisect = 8;
-
-        /// @brief Number of bisection variants (1 standard bisection pattern)
         static constexpr int numBisectVariants = 1;
 
-        /**
-         * @brief Get the element type of a sub-element after bisection
-         * @return Prism6 (all sub-elements are linear prisms)
-         */
         static constexpr ElemType GetBisectElemType(t_index /*i*/) { return Prism6; }
 
-        /**
-         * @brief Sub-element connectivity after bisection
-         *
-         * Each row defines one sub-prism using parent node indices.
-         * The 8 sub-prisms fill the volume of the original element.
-         */
         static constexpr std::array<tBisectSub, 8> bisectElements = {{
-            {0, 6, 8, 9, 15, 17},      // Sub-prism 0: near vertex 0
-            {6, 1, 7, 15, 10, 16},     // Sub-prism 1: near vertex 1
-            {8, 6, 7, 17, 15, 16},     // Sub-prism 2: bottom center
-            {8, 7, 2, 17, 16, 11},     // Sub-prism 3: near vertex 2
-            {9, 15, 17, 3, 12, 14},    // Sub-prism 4: near vertex 3
-            {15, 10, 16, 12, 4, 13},   // Sub-prism 5: near vertex 4
-            {17, 15, 16, 14, 12, 13},  // Sub-prism 6: top center
-            {17, 16, 11, 14, 13, 5}}}; // Sub-prism 7: near vertex 5
+            {0, 6, 8, 12, 15, 17},
+            {6, 1, 7, 15, 13, 16},
+            {8, 6, 7, 17, 15, 16},
+            {8, 7, 2, 17, 16, 14},
+            {12, 15, 17, 3, 9, 11},
+            {15, 13, 16, 9, 4, 10},
+            {17, 15, 16, 11, 9, 10},
+            {17, 16, 14, 11, 10, 5}
+        }};
 
-        // ============================================================
-        // VTK/Visualization Support
-        // ============================================================
-
-        /// @brief VTK cell type identifier (26 = VTK_BIQUADRATIC_QUADRATIC_WEDGE)
         static constexpr int vtkCellType = 26;
 
-        /**
-         * @brief VTK node ordering map
-         *
-         * VTK has non-trivial node reordering for Prism18:
-         *   VTK nodes 0-5 = vertices 0-5
-         *   VTK nodes 6-8 = bottom triangle edge mids 6-8
-         *   VTK nodes 9-11 = top triangle edge mids 12-14 (note: reordered!)
-         *   VTK nodes 12-14 = vertical edge mids 9-11 (note: reordered!)
-         * Note: Face center nodes 15-17 are not included in VTK ordering
-         */
-        static constexpr std::array<int, 15> vtkNodeOrder = {
-            0, 1, 2, 3, 4, 5,       // Vertices
-            6, 7, 8,                // Bottom edges
-            12, 13, 14,             // Top edges (reordered)
-            9, 10, 11};             // Vertical edges (reordered)
+        static constexpr std::array<int, 15> vtkNodeOrder = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
     };
+    // <GEN_ELEM_TRAITS_END>
+
 
 } // namespace DNDS::Geom::Elem

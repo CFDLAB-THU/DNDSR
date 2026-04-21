@@ -74,6 +74,32 @@ namespace DNDS::Geom::Elem
                                    { return decltype(tr)::GetFaceType(iFace); });
     }
 
+    /// Get the number of edges for a 3D element. Returns 0 for 1D/2D elements.
+    DNDS_DEVICE_CALLABLE inline constexpr t_index GetNumEdges(ElemType t_v)
+    {
+        return DispatchElementType(t_v, [](auto tr) -> t_index
+        {
+            using T = decltype(tr);
+            if constexpr (T::dim >= 3)
+                return T::numEdges;
+            else
+                return 0;
+        });
+    }
+
+    /// Get the element type of edge iEdge for a 3D element. Returns UnknownElem for 1D/2D.
+    DNDS_DEVICE_CALLABLE inline constexpr ElemType GetEdgeType(ElemType t_v, t_index iEdge)
+    {
+        return DispatchElementType(t_v, [iEdge](auto tr) -> ElemType
+        {
+            using T = decltype(tr);
+            if constexpr (T::dim >= 3)
+                return T::GetEdgeType(iEdge);
+            else
+                return UnknownElem;
+        });
+    }
+
     DNDS_DEVICE_CALLABLE inline constexpr t_real ParamSpaceVol(ParamSpace ps)
     {
         return Elem::ParamSpaceVolume(ps);
@@ -238,6 +264,36 @@ namespace DNDS::Geom::Elem
         {
             DNDS_assert(iFace < this->GetNumFaces());
             return Element{GetFaceType(type, iFace)};
+        }
+
+        /// Number of edges (3D elements only; returns 0 for 1D/2D).
+        DNDS_DEVICE_CALLABLE [[nodiscard]] constexpr t_index GetNumEdges() const
+        {
+            return Geom::Elem::GetNumEdges(type);
+        }
+
+        /// Edge sub-element type for edge iEdge (Line2 or Line3).
+        DNDS_DEVICE_CALLABLE [[nodiscard]] constexpr Element ObtainEdge(t_index iEdge) const
+        {
+            DNDS_assert(iEdge < this->GetNumEdges());
+            return Element{Geom::Elem::GetEdgeType(type, iEdge)};
+        }
+
+        /// Extract the global node indices of edge iEdge from a cell's node list.
+        /// @warning Assumes edgeNodesOut has sufficient size.
+        template <class TIn, class TOut>
+        void ExtractEdgeNodes(t_index iEdge, const TIn &nodes, TOut &edgeNodesOut)
+        {
+            DNDS_assert(iEdge < this->GetNumEdges());
+            DispatchElementType(type, [&](auto tr)
+            {
+                using T = decltype(tr);
+                if constexpr (T::dim >= 3)
+                {
+                    for (t_index i = 0; i < ObtainEdge(iEdge).GetNumNodes(); i++)
+                        edgeNodesOut[i] = nodes[T::edgeNodes[iEdge][i]];
+                }
+            });
         }
 
         /**

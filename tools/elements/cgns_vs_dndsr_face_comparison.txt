@@ -1,0 +1,181 @@
+# CGNS vs DNDSR Face Topology Comparison
+#
+# Date: 2026-04-21
+# Purpose: Verify DNDSR faceNodes tables match CGNS SIDS convention.
+# Method: CGNS 1-based tables converted to 0-based and compared with
+#         DNDSR ElementTraits<T>::faceNodes arrays.
+#
+# Notation:
+#   CGNS 0-based = CGNS 1-based minus 1 for each node index
+#   DNDSR        = from ElementTraits<T>::faceNodes in src/Geom/Elements/*.hpp
+#   Match?       = YES if identical, NO with explanation otherwise
+#
+# ======================================================================
+
+
+# ======================================================================
+# Tet4 (TETRA_4) — 4 faces, all Tri3
+# Source: src/Geom/Elements/Tet4.hpp:138-142
+# ======================================================================
+
+Face | CGNS (0-based)   | DNDSR            | Match?
+F0   | {0, 2, 1}        | {0, 2, 1}        | YES
+F1   | {0, 1, 3}        | {0, 1, 3}        | YES
+F2   | {1, 2, 3}        | {1, 2, 3}        | YES
+F3   | {2, 0, 3}        | {2, 0, 3}        | YES
+
+Verdict: IDENTICAL
+
+
+# ======================================================================
+# Tet10 (TETRA_10) — 4 faces, all Tri6
+# Source: src/Geom/Elements/Tet10.hpp:187-191
+# ======================================================================
+
+Face | CGNS (0-based)           | DNDSR                      | Match?
+F0   | {0, 2, 1, 6, 5, 4}      | {0, 2, 1, 6, 5, 4}        | YES
+F1   | {0, 1, 3, 4, 8, 7}      | {0, 1, 3, 4, 8, 7}        | YES
+F2   | {1, 2, 3, 5, 9, 8}      | {1, 2, 3, 5, 9, 8}        | YES
+F3   | {2, 0, 3, 6, 7, 9}      | {2, 0, 3, 6, 7, 9}        | YES
+
+Verdict: IDENTICAL
+
+
+# ======================================================================
+# Hex8 (HEXA_8) — 6 faces, all Quad4
+# Source: src/Geom/Elements/Hex8.hpp:241-247
+# ======================================================================
+
+Face | CGNS (0-based)      | DNDSR               | Match?
+F0   | {0, 3, 2, 1}        | {0, 3, 2, 1}        | YES
+F1   | {0, 1, 5, 4}        | {0, 1, 5, 4}        | YES
+F2   | {1, 2, 6, 5}        | {1, 2, 6, 5}        | YES
+F3   | {2, 3, 7, 6}        | {2, 3, 7, 6}        | YES
+F4   | {0, 4, 7, 3}        | {0, 4, 7, 3}        | YES
+F5   | {4, 5, 6, 7}        | {4, 5, 6, 7}        | YES
+
+Verdict: IDENTICAL
+
+
+# ======================================================================
+# Hex27 (HEXA_27) — 6 faces, all Quad9
+# Source: src/Geom/Elements/Hex27.hpp:977-983
+# ======================================================================
+
+Face | CGNS (0-based)                         | DNDSR                                    | Match?
+F0   | {0, 3, 2, 1, 11, 10, 9, 8, 20}        | {0, 3, 2, 1, 11, 10, 9, 8, 20}         | YES
+F1   | {0, 1, 5, 4, 8, 13, 16, 12, 21}       | {0, 1, 5, 4, 8, 13, 16, 12, 21}        | YES
+F2   | {1, 2, 6, 5, 9, 14, 17, 13, 22}       | {1, 2, 6, 5, 9, 14, 17, 13, 22}        | YES
+F3   | {2, 3, 7, 6, 10, 15, 18, 14, 23}      | {2, 3, 7, 6, 10, 15, 18, 14, 23}       | YES
+F4   | {0, 4, 7, 3, 12, 19, 15, 11, 24}      | {0, 4, 7, 3, 12, 19, 15, 11, 24}       | YES
+F5   | {4, 5, 6, 7, 16, 17, 18, 19, 25}      | {4, 5, 6, 7, 16, 17, 18, 19, 25}       | YES
+
+Verdict: IDENTICAL
+
+
+# ======================================================================
+# Prism6 (PENTA_6) — 5 faces: 3 Quad4 + 2 Tri3
+# Source: src/Geom/Elements/Prism6.hpp:174-179
+# ======================================================================
+
+Face | CGNS (0-based)      | DNDSR               | Match?
+F0   | {0, 1, 4, 3}        | {0, 1, 4, 3}        | YES
+F1   | {1, 2, 5, 4}        | {1, 2, 5, 4}        | YES
+F2   | {2, 0, 3, 5}        | {2, 0, 3, 5}        | YES
+F3   | {0, 2, 1}           | {0, 2, 1}           | YES
+F4   | {3, 4, 5}           | {3, 4, 5}           | YES
+
+Verdict: IDENTICAL
+
+
+# ======================================================================
+# Prism18 (PENTA_18) — 5 faces: 3 Quad9 + 2 Tri6
+# Source: src/Geom/Elements/Prism18.hpp:473-478
+#
+# KEY DIFFERENCE: DNDSR and CGNS number high-order nodes differently.
+#
+# CGNS mid-edge node order: bottom(E1-E3)=N7-N9, top(E7-E9)=N10-N12, vertical(E4-E6)=N13-N15
+# DNDSR mid-edge node order: bottom(E1-E3)=N6-N8, vertical(E4-E6)=N9-N11, top(E7-E9)=N12-N14
+#   (DNDSR is 0-based, so DNDSR node 6 = 7th node)
+#
+# Mapping DNDSR-to-role:
+#   DNDSR 6,7,8   = mid(edge 0-1), mid(edge 1-2), mid(edge 2-0)   [bottom edges]
+#   DNDSR 9,10,11 = mid(edge 0-3), mid(edge 1-4), mid(edge 2-5)   [vertical edges]
+#   DNDSR 12,13,14= mid(edge 3-4), mid(edge 4-5), mid(edge 5-3)   [top edges]
+#   DNDSR 15,16,17= center(face 0), center(face 1), center(face 2) [quad face centers]
+# ======================================================================
+
+Face | DNDSR                                       | Geometric correctness?
+F0   | {0, 1, 4, 3, 6, 10, 12, 9, 15}             | YES — verts + correct mid-edges + face center
+F1   | {1, 2, 5, 4, 7, 11, 13, 10, 16}            | YES
+F2   | {2, 0, 3, 5, 8, 9, 14, 11, 17}             | YES
+F3   | {0, 2, 1, 8, 7, 6}                          | YES — bottom tri with bottom edge mids
+F4   | {3, 4, 5, 9, 10, 11}                        | ** SUSPECT BUG **
+
+ISSUE: Face 4 is the top triangle (vertices 3, 4, 5).
+  Its edges are: 3-4, 4-5, 5-3.
+  In DNDSR numbering, the midpoints of those edges are: 12, 13, 14 (top edges).
+  But DNDSR's faceNodes uses {3, 4, 5, 9, 10, 11}, where 9,10,11 are
+  VERTICAL edge midpoints (edges 0-3, 1-4, 2-5), NOT top edge midpoints.
+  Correct Face 4 should be: {3, 4, 5, 12, 13, 14}.
+
+  Verified from DNDSR standardCoords in Prism18.hpp:
+    Node 9:  (0, 0, 0)    = midpoint of edge (0,0,-1)->(0,0,1)  = vertical edge 0-3
+    Node 12: (0.5, 0, 1)  = midpoint of edge (0,0,1)->(1,0,1)   = top edge 3-4
+
+Verdict: FACES 0-3 CORRECT. FACE 4 HAS WRONG MID-EDGE NODES.
+
+
+# ======================================================================
+# Pyramid5 (PYRA_5) — 5 faces: 1 Quad4 + 4 Tri3
+# Source: src/Geom/Elements/Pyramid5.hpp:239-244
+# ======================================================================
+
+Face | CGNS (0-based)      | DNDSR               | Match?
+F0   | {0, 3, 2, 1}        | {0, 3, 2, 1}        | YES
+F1   | {0, 1, 4}           | {0, 1, 4}           | YES
+F2   | {1, 2, 4}           | {1, 2, 4}           | YES
+F3   | {2, 3, 4}           | {2, 3, 4}           | YES
+F4   | {3, 0, 4}           | {3, 0, 4}           | YES
+
+Verdict: IDENTICAL
+
+
+# ======================================================================
+# Pyramid14 (PYRA_14) — 5 faces: 1 Quad9 + 4 Tri6
+# Source: src/Geom/Elements/Pyramid14.hpp:728-733
+# ======================================================================
+
+Face | CGNS (0-based)                     | DNDSR                                | Match?
+F0   | {0, 3, 2, 1, 8, 7, 6, 5, 13}      | {0, 3, 2, 1, 8, 7, 6, 5, 13}       | YES
+F1   | {0, 1, 4, 5, 10, 9}               | {0, 1, 4, 5, 10, 9}                | YES
+F2   | {1, 2, 4, 6, 11, 10}              | {1, 2, 4, 6, 11, 10}               | YES
+F3   | {2, 3, 4, 7, 12, 11}              | {2, 3, 4, 7, 12, 11}               | YES
+F4   | {3, 0, 4, 8, 9, 12}               | {3, 0, 4, 8, 9, 12}                | YES
+
+Verdict: IDENTICAL
+
+
+# ======================================================================
+# SUMMARY
+# ======================================================================
+#
+# Element    | Face Count | Match? | Notes
+# -----------|------------|--------|------
+# Tet4       | 4          | YES    |
+# Tet10      | 4          | YES    |
+# Hex8       | 6          | YES    |
+# Hex27      | 6          | YES    |
+# Prism6     | 5          | YES    |
+# Prism18    | 5          | F0-F3 YES, F4 SUSPECT BUG | F4 uses vertical mids instead of top mids
+# Pyramid5   | 5          | YES    |
+# Pyramid14  | 5          | YES    |
+#
+# DNDSR uses the CGNS convention for corner node numbering on all linear
+# elements (Tet4, Hex8, Prism6, Pyramid5) and for the following quadratic
+# elements: Tet10, Hex27, Pyramid14.
+#
+# Prism18 is the exception: DNDSR swaps vertical and top edge midpoint
+# groups relative to CGNS. This is a legitimate internal convention
+# difference, BUT the faceNodes table for Face 4 (top triangle) appears
+# to reference the wrong nodes given DNDSR's own numbering.
