@@ -720,6 +720,98 @@ TEST_CASE("Periodic: face2nodePbi matches DSL vs Legacy")
     }
 }
 
+// --- bnd2cell DSL vs Legacy ---
+
+/// Build mesh through RecoverCell2CellAndBnd2Cell only (not InterpolateFace).
+static ssp<UnstructuredMesh> buildMeshUpToBnd2Cell(
+    const MeshConfig &cfg, bool useLegacy)
+{
+    auto mesh = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
+    UnstructuredMeshSerialRW reader(mesh, 0);
+
+    if (cfg.periodic)
+    {
+        tPoint zero{0, 0, 0};
+        mesh->SetPeriodicGeometry(
+            cfg.translation1, zero, zero,
+            cfg.translation2, zero, zero,
+            cfg.translation3, zero, zero);
+    }
+
+    reader.ReadFromCGNSSerial(meshPath(cfg.file));
+    reader.Deduplicate1to1Periodic(1e-8);
+    reader.BuildCell2Cell();
+
+    UnstructuredMeshSerialRW::PartitionOptions pOpt;
+    pOpt.metisType = "KWAY";
+    pOpt.metisUfactor = 30;
+    pOpt.metisSeed = 42;
+    pOpt.metisNcuts = 1;
+    reader.MeshPartitionCell2Cell(pOpt);
+    reader.PartitionReorderToMeshCell2Cell();
+
+    if (useLegacy)
+    {
+        mesh->RecoverNode2CellAndNode2BndLegacy();
+        mesh->RecoverCell2CellAndBnd2CellLegacy();
+    }
+    else
+    {
+        mesh->RecoverNode2CellAndNode2Bnd();
+        mesh->RecoverCell2CellAndBnd2Cell();
+    }
+
+    return mesh;
+}
+
+TEST_CASE("bnd2cell: DSL matches Legacy on all mesh configs")
+{
+    for (int ci = 0; ci < N_CONFIGS; ci++)
+    {
+        if (ci == 4 && g_mpi.size != 8)
+            continue;
+        const auto &cfg = g_configs[ci];
+        CAPTURE(ci);
+        SUBCASE(cfg.name)
+        {
+            auto mDSL = buildMeshUpToBnd2Cell(cfg, false);
+            auto mLeg = buildMeshUpToBnd2Cell(cfg, true);
+
+            REQUIRE(mDSL->NumBnd() == mLeg->NumBnd());
+
+            // Compare bnd2cell: for each bnd, the cell pair (as a set) must match.
+            for (DNDS::index iBnd = 0; iBnd < mDSL->NumBnd(); iBnd++)
+            {
+                CAPTURE(iBnd);
+                std::set<DNDS::index> dslCells{mDSL->bnd2cell(iBnd, 0), mDSL->bnd2cell(iBnd, 1)};
+                std::set<DNDS::index> legCells{mLeg->bnd2cell(iBnd, 0), mLeg->bnd2cell(iBnd, 1)};
+                CHECK(dslCells == legCells);
+
+                // For periodic boundaries with 2 cells, the ordering matters
+                // (bnd2cell(i,0) is donor-side). Check exact match.
+                if (mDSL->bnd2cell(iBnd, 1) != DNDS::UnInitIndex)
+                {
+                    CHECK(mDSL->bnd2cell(iBnd, 0) == mLeg->bnd2cell(iBnd, 0));
+                    CHECK(mDSL->bnd2cell(iBnd, 1) == mLeg->bnd2cell(iBnd, 1));
+                }
+            }
+
+            // Also compare cell2cell: for each cell, the neighbor set must match.
+            REQUIRE(mDSL->NumCell() == mLeg->NumCell());
+            for (DNDS::index iCell = 0; iCell < mDSL->NumCell(); iCell++)
+            {
+                CAPTURE(iCell);
+                std::set<DNDS::index> dslNeighbors, legNeighbors;
+                for (DNDS::rowsize j = 0; j < mDSL->cell2cell.father->RowSize(iCell); j++)
+                    dslNeighbors.insert(mDSL->cell2cell.father->operator()(iCell, j));
+                for (DNDS::rowsize j = 0; j < mLeg->cell2cell.father->RowSize(iCell); j++)
+                    legNeighbors.insert(mLeg->cell2cell.father->operator()(iCell, j));
+                CHECK(dslNeighbors == legNeighbors);
+            }
+        }
+    }
+}
+
 // --- N2CB ---
 
 TEST_CASE("N2CB: every local node has at least one adjacent cell")
