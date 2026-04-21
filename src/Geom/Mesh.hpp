@@ -432,6 +432,7 @@ namespace DNDS::Geom
          *
          */
         void BuildGhostPrimary();
+        void BuildGhostPrimaryLegacy();
         void AdjGlobal2LocalPrimary();
         void AdjLocal2GlobalPrimary();
         // ForBnd: reduction of primary version, only on cell2node

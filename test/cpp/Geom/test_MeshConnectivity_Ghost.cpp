@@ -411,6 +411,16 @@ TEST_CASE("GhostChain: adjKindName")
 ///
 /// Each rank owns cells with col in [rank*N, (rank+1)*N).
 /// Ghost cells: 1-ring node-neighbors across tile boundaries.
+///
+/// NOTE: Node global indices are row-major across the full (N+1)×(np*N+1)
+/// grid, so they are NOT rank-contiguous.  The node GlobalOffsetsMapping
+/// from setMPIAlignBcast assigns contiguous ownership ranges
+/// (rank 0 owns [0, nNodeLocal_0), rank 1 owns [nNodeLocal_0, ...)).
+/// This abstract partition does NOT align with geometric locality — a
+/// rank's "owned" range may include node indices physically located on
+/// other ranks' tiles.  The test is self-consistent: both the evaluator
+/// and the analytical expected-value functions use the same nodeGM, so
+/// ghost counts are exact within this abstract partition.
 struct SyntheticTiledGrid
 {
     DNDS::index N;           // tile size per rank
@@ -747,6 +757,12 @@ TEST_CASE("evaluateGhostTree: two-hop cell2cell2node with manual ghost")
         CHECK(ghostNodeSet == std::set<DNDS::index>{0, 1, 2, 3, 4});
         CHECK(result.totalGhosts() == 7); // 2 ghost cells + 5 ghost nodes
     }
+    else
+    {
+        // Ranks 2+: no cells, no ghosts of any kind.
+        CHECK(result.ghostIndices[EntityKind::Node].empty());
+        CHECK(result.totalGhosts() == 0);
+    }
 }
 
 TEST_CASE("evaluateGhostTree: 2-ring cell chain")
@@ -842,15 +858,38 @@ TEST_CASE("evaluateGhostTree: union of multiple chains")
     }};
     auto resultUnion = dag.evaluateGhostTree(CompiledGhostTree::compile(specUnion), g_mpi);
 
-    if (g_mpi.rank < 2)
+    if (g_mpi.rank == 0)
     {
-        // Union >= chain 2 alone.
+        // Chain 2 alone: cell2cell→cell2node on all 4 cells → nodes {0..8},
+        // non-owned [0,5) → ghost = {5,6,7,8}.
         auto &ghost2 = result2.ghostIndices[EntityKind::Node];
-        auto &ghostU = resultUnion.ghostIndices[EntityKind::Node];
         std::set<DNDS::index> set2(ghost2.begin(), ghost2.end());
+        CHECK(set2 == std::set<DNDS::index>{5, 6, 7, 8});
+
+        // Union of chain1 (owned cell2node → ghost {5}) + chain2 (→ ghost {5,6,7,8}).
+        // Exact: {5,6,7,8}.
+        auto &ghostU = resultUnion.ghostIndices[EntityKind::Node];
         std::set<DNDS::index> setU(ghostU.begin(), ghostU.end());
-        for (auto g : set2)
-            CHECK(setU.count(g) == 1);
+        CHECK(setU == std::set<DNDS::index>{5, 6, 7, 8});
+    }
+    else if (g_mpi.rank == 1)
+    {
+        // Chain 2 alone: rank 1 owns nodes [5,9). Ghost = {0,1,2,3,4}.
+        auto &ghost2 = result2.ghostIndices[EntityKind::Node];
+        std::set<DNDS::index> set2(ghost2.begin(), ghost2.end());
+        CHECK(set2 == std::set<DNDS::index>{0, 1, 2, 3, 4});
+
+        // Union: chain1 on rank 1 owned cells {2,3} → nodes {3,4,5,6,7,8},
+        // ghost from chain1 = {3,4} (outside [5,9)).
+        // Union = {3,4} ∪ {0,1,2,3,4} = {0,1,2,3,4}.
+        auto &ghostU = resultUnion.ghostIndices[EntityKind::Node];
+        std::set<DNDS::index> setU(ghostU.begin(), ghostU.end());
+        CHECK(setU == std::set<DNDS::index>{0, 1, 2, 3, 4});
+    }
+    else
+    {
+        // Ranks 2+: no cells, no ghost nodes.
+        CHECK(resultUnion.ghostIndices[EntityKind::Node].empty());
     }
 }
 

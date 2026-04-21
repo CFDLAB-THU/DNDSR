@@ -447,4 +447,141 @@ namespace DNDS::Geom
         }
     }
 
+    void UnstructuredMesh::
+        BuildGhostPrimaryLegacy()
+    {
+        DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert(cell2cell.father && cell2cell.father->Size() == this->NumCell());
+        DNDS_assert(bnd2cell.father && bnd2cell.father->Size() == this->NumBnd());
+        /********************************/
+        // cells
+        {
+            cell2cell.TransAttach();
+            cell2node.TransAttach();
+            cell2cellOrig.TransAttach();
+            if (isPeriodic)
+                cell2nodePbi.TransAttach();
+            cellElemInfo.TransAttach();
+
+            cell2cell.trans.createFatherGlobalMapping();
+
+            std::vector<DNDS::index> ghostCells;
+            for (DNDS::index iCell = 0; iCell < cell2cell.father->Size(); iCell++)
+            {
+                for (DNDS::rowsize ic2c = 0; ic2c < cell2cell.father->RowSize(iCell); ic2c++)
+                {
+                    auto iCellOther = (*cell2cell.father)(iCell, ic2c);
+                    DNDS::MPI_int rank;
+                    DNDS::index val;
+                    if (!cell2cell.trans.pLGlobalMapping->search(iCellOther, rank, val))
+                        DNDS_assert_info(false, "search failed");
+                    if (rank != mpi.rank)
+                        ghostCells.push_back(iCellOther);
+                }
+            }
+            cell2cell.trans.createGhostMapping(ghostCells);
+
+            cell2cell.trans.createMPITypes();
+            cell2cell.trans.pullOnce();
+            cell2node.BorrowAndPull(cell2cell);
+            cell2cellOrig.BorrowAndPull(cell2cell);
+            if (isPeriodic)
+                cell2nodePbi.BorrowAndPull(cell2cell);
+            cellElemInfo.BorrowAndPull(cell2cell);
+        }
+
+        /********************************/
+        // cells done, go on to nodes
+        {
+            coords.TransAttach();
+            node2nodeOrig.TransAttach();
+
+            coords.trans.createFatherGlobalMapping();
+
+            std::vector<DNDS::index> ghostNodes;
+            for (DNDS::index iCell = 0; iCell < cell2cell.Size(); iCell++) // note doing full (son + father) traverse
+            {
+                for (DNDS::rowsize ic2c = 0; ic2c < cell2node.RowSize(iCell); ic2c++)
+                {
+                    auto iNode = cell2node(iCell, ic2c);
+                    DNDS::MPI_int rank;
+                    DNDS::index val;
+                    if (!coords.trans.pLGlobalMapping->search(iNode, rank, val))
+                        DNDS_assert_info(false, "search failed");
+                    if (rank != mpi.rank)
+                        ghostNodes.push_back(iNode);
+                }
+            }
+            coords.trans.createGhostMapping(ghostNodes);
+            coords.trans.createMPITypes();
+            coords.trans.pullOnce();
+            node2nodeOrig.BorrowAndPull(coords);
+        }
+
+        /********************************/
+        // bnds: added via node2bnd's father part
+        {
+            DNDS_assert(node2bnd.father);
+            DNDS_assert(this->adjN2CBState == Adj_PointToGlobal);
+            bnd2cell.TransAttach();
+            bnd2node.TransAttach();
+            if (isPeriodic)
+                bnd2nodePbi.TransAttach();
+            bndElemInfo.TransAttach();
+            bnd2bndOrig.TransAttach();
+
+            bnd2cell.trans.createFatherGlobalMapping();
+
+            std::vector<DNDS::index> ghostBnds;
+            for (index iNode = 0; iNode < node2bnd.father->Size(); iNode++)
+                for (auto iBnd : node2bnd[iNode])
+                {
+                    auto [ret, rank, val] = bnd2cell.trans.pLGlobalMapping->search(iBnd);
+                    DNDS_assert_info(ret, "search failed");
+                    if (rank != mpi.rank)
+                        ghostBnds.push_back(iBnd);
+                }
+            bnd2cell.trans.createGhostMapping(ghostBnds);
+            bnd2cell.trans.createMPITypes();
+            bnd2cell.trans.pullOnce();
+            bnd2node.BorrowAndPull(bnd2cell);
+            if (isPeriodic)
+                bnd2nodePbi.BorrowAndPull(bnd2cell);
+            bndElemInfo.BorrowAndPull(bnd2cell);
+            bnd2bndOrig.BorrowAndPull(bnd2cell);
+
+            // Ghost bnds may reference nodes not yet in the coord ghost layer.
+            // Add those nodes so that AdjGlobal2LocalPrimary can convert bnd2node.
+            // This is collective: all ranks must participate even if some have no extras.
+            {
+                std::vector<DNDS::index> extraGhostNodes;
+                for (DNDS::index iBnd = bnd2node.father->Size(); iBnd < bnd2node.Size(); iBnd++)
+                    for (DNDS::rowsize j = 0; j < bnd2node.RowSize(iBnd); j++)
+                    {
+                        auto iNode = bnd2node(iBnd, j);
+                        DNDS::MPI_int rank;
+                        DNDS::index val;
+                        if (!coords.trans.pLGhostMapping->search_indexAppend(iNode, rank, val))
+                            extraGhostNodes.push_back(iNode);
+                    }
+                DNDS::index nExtraLocal = extraGhostNodes.size();
+                DNDS::index nExtraGlobal{0};
+                MPI::Allreduce(&nExtraLocal, &nExtraGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+                if (nExtraGlobal > 0)
+                {
+                    // Rebuild coord ghost mapping with the additional nodes
+                    auto &existingGhost = coords.trans.pLGhostMapping->ghostIndex;
+                    std::vector<DNDS::index> allGhostNodes(existingGhost.begin(), existingGhost.end());
+                    allGhostNodes.insert(allGhostNodes.end(), extraGhostNodes.begin(), extraGhostNodes.end());
+                    coords.trans.createGhostMapping(allGhostNodes);
+                    node2nodeOrig.trans.BorrowGGIndexing(coords.trans);
+                    coords.trans.createMPITypes();
+                    node2nodeOrig.trans.createMPITypes();
+                    coords.trans.pullOnce();
+                    node2nodeOrig.trans.pullOnce();
+                }
+            }
+        }
+    }
+
 } // namespace DNDS::Geom
