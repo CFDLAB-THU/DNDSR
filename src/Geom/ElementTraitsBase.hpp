@@ -85,6 +85,22 @@ namespace DNDS::Geom::Elem
     using tBisectSub = std::array<t_index, bisectSubMaxNodes>;
 
     /**
+     * @brief Maximum nodes in an edge (Line3 = 3 nodes for quadratic)
+     *
+     * Edge sub-entities of 3D elements. Linear elements have 2-node edges
+     * (Line2), quadratic elements have 3-node edges (Line3).
+     */
+    static constexpr int edgeNodeMaxWidth = 3;
+
+    /**
+     * @brief Edge node array type: local node indices forming one edge.
+     *
+     * For Line2 edges, only the first 2 entries are valid.
+     * For Line3 edges, all 3 entries are valid.
+     */
+    using tEdgeNodes = std::array<t_index, edgeNodeMaxWidth>;
+
+    /**
      * @brief Maximum VTK nodes (Hex27 = 27 nodes)
      * 
      * VTK uses different node ordering than internal DNDS representation

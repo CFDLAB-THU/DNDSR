@@ -24,6 +24,7 @@
 #include "doctest.h"
 
 #include "Geom/Elements.hpp"
+#include "Geom/Quadrature.hpp"
 
 #include <cmath>
 #include <random>
@@ -649,5 +650,361 @@ TEST_CASE("Shape functions: all derivatives are finite")
                 CHECK(std::isfinite(DiNj(i, j)));
             }
         }
+    }
+}
+
+// ===================================================================
+// Part C: Face Normal Orientation Tests
+// ===================================================================
+//
+// On the standard reference element, all faces are flat (even for O2
+// elements, since mid-edge nodes lie at exact geometric midpoints).
+// This means the face normal is constant across the face.
+//
+// For each face, we compute the expected unit normal analytically from
+// the face vertex positions, then verify that the Jacobian-derived
+// normal at every quadrature point matches it (direction and magnitude).
+//
+// 2D faces (edges in the xy-plane):
+//   tangent = v1 - v0
+//   expected outward normal direction = (tangent.y, -tangent.x, 0)
+//
+// 3D faces (triangles/quads):
+//   expected outward normal direction = (v1 - v0) × (v2 - v0)
+
+/// Compute the centroid of the reference element by averaging all vertex
+/// coordinates (not all nodes — just the first numVertices).
+static tPoint CellCentroid(ElemType t)
+{
+    auto coords = NodeCoords(t);
+    Element e{t};
+    tPoint c = tPoint::Zero();
+    for (int i = 0; i < e.GetNumVertices(); i++)
+        c += coords.col(i);
+    c /= e.GetNumVertices();
+    return c;
+}
+
+/// Extract face node coordinates as a 3×N_face_nodes matrix.
+static Eigen::Matrix<t_real, 3, Eigen::Dynamic> FaceCoords(
+    ElemType cellType, int iFace)
+{
+    auto allCoords = NodeCoords(cellType);
+    Element cell{cellType};
+    Element face = cell.ObtainFace(iFace);
+    int nFaceNodes = face.GetNumNodes();
+
+    std::array<DNDS::index, 10> faceNodeIdx;
+    Eigen::Array<DNDS::index, Eigen::Dynamic, 1> localIdx(cell.GetNumNodes());
+    for (int i = 0; i < cell.GetNumNodes(); i++)
+        localIdx(i) = i;
+
+    cell.ExtractFaceNodes(iFace, localIdx, faceNodeIdx);
+
+    Eigen::Matrix<t_real, 3, Eigen::Dynamic> fc(3, nFaceNodes);
+    for (int i = 0; i < nFaceNodes; i++)
+        fc.col(i) = allCoords.col(faceNodeIdx[i]);
+    return fc;
+}
+
+/// Compute the expected unit outward normal for a 2D element's face (edge).
+/// The face is a line segment from vertex v0 to v1 in the xy-plane.
+/// Outward normal = (dy, -dx, 0) / length, verified against cell centroid.
+static tPoint ExpectedNormal2D(
+    const Eigen::Matrix<t_real, 3, Eigen::Dynamic> &fc,
+    const tPoint &centroid)
+{
+    tPoint v0 = fc.col(0);
+    tPoint v1 = fc.col(1);
+    tPoint tangent = v1 - v0;
+    tPoint n;
+    n << tangent(1), -tangent(0), 0.0;
+
+    // Ensure outward direction (away from centroid)
+    tPoint faceMid = (v0 + v1) * 0.5;
+    if (n.dot(faceMid - centroid) < 0)
+        n = -n;
+
+    return n.normalized();
+}
+
+/// Compute the expected unit outward normal for a 3D element's face.
+/// Uses the first 3 face vertices: normal = (v1-v0) × (v2-v0).
+/// Sign is verified against the cell centroid.
+static tPoint ExpectedNormal3D(
+    const Eigen::Matrix<t_real, 3, Eigen::Dynamic> &fc,
+    const tPoint &centroid)
+{
+    tPoint v0 = fc.col(0);
+    tPoint v1 = fc.col(1);
+    tPoint v2 = fc.col(2);
+    tPoint n = (v1 - v0).cross(v2 - v0);
+
+    // Ensure outward direction (away from centroid)
+    // Use the average of the first 3 vertices as face center
+    tPoint faceMid = (v0 + v1 + v2) / 3.0;
+    if (n.dot(faceMid - centroid) < 0)
+        n = -n;
+
+    return n.normalized();
+}
+
+TEST_CASE("Face normals: 2D elements match expected unit normal at quad points")
+{
+    const t_real tol = 1e-12;
+
+    for (auto t : Elem2DWithFaces)
+    {
+        Element cell{t};
+        tPoint centroid = CellCentroid(t);
+        CAPTURE(t);
+
+        for (int iFace = 0; iFace < cell.GetNumFaces(); iFace++)
+        {
+            Element face = cell.ObtainFace(iFace);
+            auto fc = FaceCoords(t, iFace);
+            tPoint expectedN = ExpectedNormal2D(fc, centroid);
+            CAPTURE(iFace);
+
+            Quadrature quad(face, 3);
+
+            for (int iG = 0; iG < quad.GetNumPoints(); iG++)
+            {
+                auto [pParam, w] = quad.GetQuadraturePointInfo(iG);
+
+                tD01Nj D01Nj;
+                face.GetD01Nj(pParam, D01Nj);
+
+                tJacobi J = ShapeJacobianCoordD01Nj(fc, D01Nj);
+
+                // Computed normal from tangent
+                tPoint tangent = J.col(0);
+                tPoint computedN;
+                computedN << tangent(1), -tangent(0), 0.0;
+                tPoint computedUnitN = computedN.normalized();
+
+                CAPTURE(iG);
+                // Direction should match expected
+                CHECK(computedUnitN(0) == doctest::Approx(expectedN(0)).epsilon(tol));
+                CHECK(computedUnitN(1) == doctest::Approx(expectedN(1)).epsilon(tol));
+                CHECK(computedUnitN(2) == doctest::Approx(expectedN(2)).epsilon(tol));
+
+                // Normal should point outward
+                tPoint pPhys = PPhysicsCoordD01Nj(fc, D01Nj);
+                t_real outwardDot = computedN.dot(pPhys - centroid);
+                CHECK(outwardDot > 0.0);
+
+                // Face Jacobian determinant = |tangent| should be positive
+                t_real jdet = JacobiDetFace<2>(J);
+                CHECK(jdet > 0.0);
+
+                // For flat faces on standard element, |tangent| should be
+                // half the edge length (parametric range is [-1,1], length 2)
+                tPoint edgeVec = fc.col(1) - fc.col(0);
+                t_real expectedJdet = edgeVec.norm() / 2.0; // dphys/dparam scaling
+                CHECK(jdet == doctest::Approx(expectedJdet).epsilon(tol));
+            }
+        }
+    }
+}
+
+TEST_CASE("Face normals: 3D elements match expected unit normal at quad points")
+{
+    const t_real tol = 1e-10;
+
+    for (auto t : Elem3DWithFaces)
+    {
+        Element cell{t};
+        tPoint centroid = CellCentroid(t);
+        CAPTURE(t);
+
+        for (int iFace = 0; iFace < cell.GetNumFaces(); iFace++)
+        {
+            Element face = cell.ObtainFace(iFace);
+            auto fc = FaceCoords(t, iFace);
+            tPoint expectedN = ExpectedNormal3D(fc, centroid);
+            CAPTURE(iFace);
+
+            Quadrature quad(face, 3);
+
+            for (int iG = 0; iG < quad.GetNumPoints(); iG++)
+            {
+                auto [pParam, w] = quad.GetQuadraturePointInfo(iG);
+
+                tD01Nj D01Nj;
+                face.GetD01Nj(pParam, D01Nj);
+
+                tJacobi J = ShapeJacobianCoordD01Nj(fc, D01Nj);
+                tPoint computedN = J.col(0).cross(J.col(1));
+                t_real computedMag = computedN.norm();
+                tPoint computedUnitN = computedN / computedMag;
+
+                CAPTURE(iG);
+
+                // Direction should match expected unit normal
+                CHECK(computedUnitN(0) == doctest::Approx(expectedN(0)).epsilon(tol));
+                CHECK(computedUnitN(1) == doctest::Approx(expectedN(1)).epsilon(tol));
+                CHECK(computedUnitN(2) == doctest::Approx(expectedN(2)).epsilon(tol));
+
+                // Normal should point outward (away from centroid)
+                tPoint pPhys = PPhysicsCoordD01Nj(fc, D01Nj);
+                t_real outwardDot = computedN.dot(pPhys - centroid);
+                CHECK(outwardDot > 0.0);
+
+                // Face Jacobian determinant should be positive
+                t_real jdet = JacobiDetFace<3>(J);
+                CHECK(jdet > 0.0);
+                CHECK(jdet == doctest::Approx(computedMag).epsilon(tol));
+            }
+        }
+    }
+}
+
+TEST_CASE("Face normals: CGNS outward convention (no centroid correction needed)")
+{
+    // Stronger test: the cross product / rotation normal should ALREADY
+    // point outward WITHOUT needing to flip sign. This verifies that
+    // the faceNodes ordering follows CGNS outward-normal convention
+    // directly (right-hand rule for 3D, counterclockwise for 2D).
+    //
+    // This test does NOT use ExpectedNormal (which auto-flips).
+    // Instead it directly checks: dot(raw_normal, face_center - centroid) > 0.
+
+    for (auto t : Elem2DWithFaces)
+    {
+        Element cell{t};
+        tPoint centroid = CellCentroid(t);
+        CAPTURE(t);
+
+        for (int iFace = 0; iFace < cell.GetNumFaces(); iFace++)
+        {
+            auto fc = FaceCoords(t, iFace);
+            tPoint v0 = fc.col(0), v1 = fc.col(1);
+            tPoint tangent = v1 - v0;
+            tPoint rawNormal;
+            rawNormal << tangent(1), -tangent(0), 0.0;
+
+            tPoint faceMid = (v0 + v1) * 0.5;
+            t_real dot = rawNormal.dot(faceMid - centroid);
+            CAPTURE(iFace);
+            CHECK(dot > 0.0);
+        }
+    }
+
+    for (auto t : Elem3DWithFaces)
+    {
+        Element cell{t};
+        tPoint centroid = CellCentroid(t);
+        CAPTURE(t);
+
+        for (int iFace = 0; iFace < cell.GetNumFaces(); iFace++)
+        {
+            auto fc = FaceCoords(t, iFace);
+            tPoint v0 = fc.col(0), v1 = fc.col(1), v2 = fc.col(2);
+            tPoint rawNormal = (v1 - v0).cross(v2 - v0);
+
+            // Face center from vertices (use first 3 for simplicity)
+            tPoint faceMid = (v0 + v1 + v2) / 3.0;
+            t_real dot = rawNormal.dot(faceMid - centroid);
+            CAPTURE(iFace);
+            CHECK(dot > 0.0);
+        }
+    }
+}
+
+TEST_CASE("Edge topology: 3D elements have correct edge count and types")
+{
+    for (auto t : Elem3DWithFaces)
+    {
+        Element cell{t};
+        CAPTURE(t);
+
+        int numEdges = cell.GetNumEdges();
+        CHECK(numEdges > 0);
+
+        for (int iEdge = 0; iEdge < numEdges; iEdge++)
+        {
+            Element edge = cell.ObtainEdge(iEdge);
+            CAPTURE(iEdge);
+
+            // Edge should be a 1D element (Line2 or Line3)
+            CHECK(edge.GetDim() == 1);
+            CHECK(edge.GetNumNodes() >= 2);
+            CHECK(edge.GetNumNodes() <= 3);
+        }
+    }
+}
+
+TEST_CASE("Edge topology: extracted edge nodes are valid cell nodes")
+{
+    for (auto t : Elem3DWithFaces)
+    {
+        Element cell{t};
+        auto allCoords = NodeCoords(t);
+        CAPTURE(t);
+
+        // Build identity local node index array
+        std::vector<DNDS::index> localIdx(cell.GetNumNodes());
+        for (int i = 0; i < cell.GetNumNodes(); i++)
+            localIdx[i] = i;
+
+        for (int iEdge = 0; iEdge < cell.GetNumEdges(); iEdge++)
+        {
+            Element edge = cell.ObtainEdge(iEdge);
+            std::array<DNDS::index, 3> edgeNodeIdx = {-1, -1, -1};
+            cell.ExtractEdgeNodes(iEdge, localIdx, edgeNodeIdx);
+            CAPTURE(iEdge);
+
+            for (int i = 0; i < edge.GetNumNodes(); i++)
+            {
+                CAPTURE(i);
+                CHECK(edgeNodeIdx[i] >= 0);
+                CHECK(edgeNodeIdx[i] < cell.GetNumNodes());
+            }
+
+            // First two nodes (vertices) should be distinct
+            CHECK(edgeNodeIdx[0] != edgeNodeIdx[1]);
+
+            // Edge endpoints should have positive distance
+            tPoint p0 = allCoords.col(edgeNodeIdx[0]);
+            tPoint p1 = allCoords.col(edgeNodeIdx[1]);
+            CHECK((p1 - p0).norm() > 0.0);
+
+            // For quadratic edges, the midpoint should be between the endpoints
+            if (edge.GetNumNodes() == 3)
+            {
+                tPoint pMid = allCoords.col(edgeNodeIdx[2]);
+                tPoint expected = (p0 + p1) * 0.5;
+                CHECK((pMid - expected).norm() < 1e-12);
+            }
+        }
+    }
+}
+
+TEST_CASE("Edge topology: edges are unique (no duplicate edges per cell)")
+{
+    for (auto t : Elem3DWithFaces)
+    {
+        Element cell{t};
+        CAPTURE(t);
+
+        std::vector<DNDS::index> localIdx(cell.GetNumNodes());
+        for (int i = 0; i < cell.GetNumNodes(); i++)
+            localIdx[i] = i;
+
+        // Collect edge vertex pairs as sorted pairs
+        std::set<std::pair<DNDS::index, DNDS::index>> edgeSet;
+        for (int iEdge = 0; iEdge < cell.GetNumEdges(); iEdge++)
+        {
+            std::array<DNDS::index, 3> edgeNodeIdx = {-1, -1, -1};
+            cell.ExtractEdgeNodes(iEdge, localIdx, edgeNodeIdx);
+
+            auto v0 = std::min(edgeNodeIdx[0], edgeNodeIdx[1]);
+            auto v1 = std::max(edgeNodeIdx[0], edgeNodeIdx[1]);
+            auto result = edgeSet.insert({v0, v1});
+            CAPTURE(iEdge);
+            CHECK(result.second); // No duplicate
+        }
+        CHECK(static_cast<int>(edgeSet.size()) == cell.GetNumEdges());
     }
 }
