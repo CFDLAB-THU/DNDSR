@@ -311,7 +311,13 @@ namespace DNDS::Geom
         index BndIndexGlobal2Local_NoSon(index i) { return IndexGlobal2Local_NoSon(bnd2node, i); }
 
         // =================================================================
-        // Adjacency bulk-conversion helper
+        // Named wrappers — Face
+        // =================================================================
+        index FaceIndexGlobal2Local(DNDS::index i) { return IndexGlobal2Local(face2node, i); }
+        index FaceIndexLocal2Global(DNDS::index i) { return IndexLocal2Global(face2node, i); }
+
+        // =================================================================
+        // Adjacency bulk-conversion helpers
         // =================================================================
 
         /**
@@ -331,6 +337,24 @@ namespace DNDS::Geom
         template <class TAdj, class TFn>
         static void ConvertAdjEntries(TAdj &adj, index nRows, TFn &&fn)
         {
+            for (index i = 0; i < nRows; i++)
+                for (rowsize j = 0; j < adj.RowSize(i); j++)
+                    adj(i, j) = fn(adj(i, j));
+        }
+
+        /**
+         * \brief OpenMP-parallelized variant of ConvertAdjEntries.
+         *
+         * Same semantics as ConvertAdjEntries but with `#pragma omp parallel for`
+         * over the outer row loop. Use when the adjacency array is large and
+         * the conversion function is thread-safe.
+         */
+        template <class TAdj, class TFn>
+        static void ConvertAdjEntriesOMP(TAdj &adj, index nRows, TFn &&fn)
+        {
+#ifdef DNDS_USE_OMP
+#pragma omp parallel for
+#endif
             for (index i = 0; i < nRows; i++)
                 for (rowsize j = 0; j < adj.RowSize(i); j++)
                     adj(i, j) = fn(adj(i, j));
