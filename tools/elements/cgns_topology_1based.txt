@@ -1,0 +1,256 @@
+# CGNS Element Topology Data — Transcribed from CGNS SIDS Convention
+#
+# Source: https://cgns.org/standard/SIDS/convention.html
+# Section: 3.3 Unstructured Grid Element Numbering Conventions
+# Transcribed: 2026-04-21
+#
+# All indexing is 1-based per CGNS convention.
+# Node notation: N1, N2, ... (N1 = first node of element)
+# Edge notation: E1, E2, ... (oriented from first to second node)
+# Face notation: F1, F2, ... (outward normal via right-hand rule)
+# Negative edge (e.g., -E1) = edge traversed in reverse direction.
+#
+# Format per element:
+#   ELEMENT_NAME  nodes=<N>  edges=<E>  faces=<F>
+#   EDGES:
+#     E<i>: N<a>, N<b> [, N<mid>]     # mid = mid-edge node (quadratic+)
+#   FACES:
+#     F<i>: N<a>, N<b>, ... [| mid-edge: N<x>, ... ] [| mid-face: N<y>]
+#
+# ======================================================================
+
+
+# ======================================================================
+# TETRA_4  (3D linear tetrahedron)
+# nodes=4  edges=6  faces=4
+# ======================================================================
+
+TETRA_4  nodes=4  edges=6  faces=4
+
+EDGES:
+  E1:  N1, N2
+  E2:  N2, N3
+  E3:  N3, N1
+  E4:  N1, N4
+  E5:  N2, N4
+  E6:  N3, N4
+
+FACES:
+  F1:  N1, N3, N2    | edges: -E3, -E2, -E1
+  F2:  N1, N2, N4    | edges:  E1,  E5, -E4
+  F3:  N2, N3, N4    | edges:  E2,  E6, -E5
+  F4:  N3, N1, N4    | edges:  E3,  E4, -E6
+
+
+# ======================================================================
+# TETRA_10  (3D quadratic tetrahedron)
+# nodes=10  edges=6  faces=4
+# Corner nodes: N1-N4
+# Mid-edge nodes: N5-N10
+# ======================================================================
+
+TETRA_10  nodes=10  edges=6  faces=4
+
+EDGES:
+  E1:  N1, N2,  mid=N5
+  E2:  N2, N3,  mid=N6
+  E3:  N3, N1,  mid=N7
+  E4:  N1, N4,  mid=N8
+  E5:  N2, N4,  mid=N9
+  E6:  N3, N4,  mid=N10
+
+FACES:
+  F1:  N1, N3, N2    | mid-edge: N7, N6, N5     | edges: -E3, -E2, -E1
+  F2:  N1, N2, N4    | mid-edge: N5, N9, N8     | edges:  E1,  E5, -E4
+  F3:  N2, N3, N4    | mid-edge: N6, N10, N9    | edges:  E2,  E6, -E5
+  F4:  N3, N1, N4    | mid-edge: N7, N8, N10    | edges:  E3,  E4, -E6
+
+
+# ======================================================================
+# PYRA_5  (3D linear pyramid)
+# nodes=5  edges=8  faces=5
+# Base is quad F1; sides are triangles F2-F5.
+# ======================================================================
+
+PYRA_5  nodes=5  edges=8  faces=5
+
+EDGES:
+  E1:  N1, N2
+  E2:  N2, N3
+  E3:  N3, N4
+  E4:  N4, N1
+  E5:  N1, N5
+  E6:  N2, N5
+  E7:  N3, N5
+  E8:  N4, N5
+
+FACES:
+  F1:  N1, N4, N3, N2       | edges: -E4, -E3, -E2, -E1    # base quad
+  F2:  N1, N2, N5           | edges:  E1,  E6, -E5          # side tri
+  F3:  N2, N3, N5           | edges:  E2,  E7, -E6          # side tri
+  F4:  N3, N4, N5           | edges:  E3,  E8, -E7          # side tri
+  F5:  N4, N1, N5           | edges:  E4,  E5, -E8          # side tri
+
+
+# ======================================================================
+# PYRA_14  (3D quadratic pyramid)
+# nodes=14  edges=8  faces=5
+# Corner nodes: N1-N5
+# Mid-edge nodes: N6-N13
+# Mid-face node: N14 (on base quad only)
+# ======================================================================
+
+PYRA_14  nodes=14  edges=8  faces=5
+
+EDGES:
+  E1:  N1, N2,  mid=N6
+  E2:  N2, N3,  mid=N7
+  E3:  N3, N4,  mid=N8
+  E4:  N4, N1,  mid=N9
+  E5:  N1, N5,  mid=N10
+  E6:  N2, N5,  mid=N11
+  E7:  N3, N5,  mid=N12
+  E8:  N4, N5,  mid=N13
+
+FACES:
+  F1:  N1, N4, N3, N2       | mid-edge: N9, N8, N7, N6    | mid-face: N14   | edges: -E4, -E3, -E2, -E1
+  F2:  N1, N2, N5           | mid-edge: N6, N11, N10      | edges:  E1,  E6, -E5
+  F3:  N2, N3, N5           | mid-edge: N7, N12, N11      | edges:  E2,  E7, -E6
+  F4:  N3, N4, N5           | mid-edge: N8, N13, N12      | edges:  E3,  E8, -E7
+  F5:  N4, N1, N5           | mid-edge: N9, N10, N13      | edges:  E4,  E5, -E8
+
+
+# ======================================================================
+# PENTA_6  (3D linear pentahedron / prism / wedge)
+# nodes=6  edges=9  faces=5
+# Bottom triangle: N1-N3; Top triangle: N4-N6.
+# F1-F3 are quad lateral faces; F4 is bottom tri; F5 is top tri.
+# ======================================================================
+
+PENTA_6  nodes=6  edges=9  faces=5
+
+EDGES:
+  E1:  N1, N2
+  E2:  N2, N3
+  E3:  N3, N1
+  E4:  N1, N4
+  E5:  N2, N5
+  E6:  N3, N6
+  E7:  N4, N5
+  E8:  N5, N6
+  E9:  N6, N4
+
+FACES:
+  F1:  N1, N2, N5, N4       | edges:  E1,  E5, -E7, -E4    # side quad
+  F2:  N2, N3, N6, N5       | edges:  E2,  E6, -E8, -E5    # side quad
+  F3:  N3, N1, N4, N6       | edges:  E3,  E4, -E9, -E6    # side quad
+  F4:  N1, N3, N2           | edges: -E3, -E2, -E1          # bottom tri
+  F5:  N4, N5, N6           | edges:  E7,  E8,  E9          # top tri
+
+
+# ======================================================================
+# PENTA_18  (3D quadratic pentahedron / prism / wedge)
+# nodes=18  edges=9  faces=5
+# Corner nodes: N1-N6
+# Mid-edge nodes: N7-N15
+#   N7-N9:   bottom triangle edges (E1-E3)
+#   N10-N12: top triangle edges (E7-E9)
+#   N13-N15: vertical edges (E4-E6)
+# Mid-face nodes: N16-N18 (on quad lateral faces F1-F3)
+#
+# NOTE: The CGNS convention numbers mid-edge nodes as:
+#   N7=mid(E1), N8=mid(E2), N9=mid(E3),
+#   N10=mid(E7), N11=mid(E8), N12=mid(E9),
+#   N13=mid(E4), N14=mid(E5), N15=mid(E6)
+# i.e., bottom edges first, then top edges, then vertical edges.
+# ======================================================================
+
+PENTA_18  nodes=18  edges=9  faces=5
+
+EDGES:
+  E1:  N1, N2,  mid=N7
+  E2:  N2, N3,  mid=N8
+  E3:  N3, N1,  mid=N9
+  E4:  N1, N4,  mid=N13
+  E5:  N2, N5,  mid=N14
+  E6:  N3, N6,  mid=N15
+  E7:  N4, N5,  mid=N10
+  E8:  N5, N6,  mid=N11
+  E9:  N6, N4,  mid=N12
+
+FACES:
+  F1:  N1, N2, N5, N4       | mid-edge: N7, N14, N10, N13   | mid-face: N16   | edges:  E1,  E5, -E7, -E4
+  F2:  N2, N3, N6, N5       | mid-edge: N8, N15, N11, N14   | mid-face: N17   | edges:  E2,  E6, -E8, -E5
+  F3:  N3, N1, N4, N6       | mid-edge: N9, N13, N12, N15   | mid-face: N18   | edges:  E3,  E4, -E9, -E6
+  F4:  N1, N3, N2           | mid-edge: N9, N8, N7          | edges: -E3, -E2, -E1
+  F5:  N4, N5, N6           | mid-edge: N10, N11, N12       | edges:  E7,  E8,  E9
+
+
+# ======================================================================
+# HEXA_8  (3D linear hexahedron)
+# nodes=8  edges=12  faces=6
+# Bottom face: N1-N4; Top face: N5-N8.
+# ======================================================================
+
+HEXA_8  nodes=8  edges=12  faces=6
+
+EDGES:
+  E1:   N1, N2
+  E2:   N2, N3
+  E3:   N3, N4
+  E4:   N4, N1
+  E5:   N1, N5
+  E6:   N2, N6
+  E7:   N3, N7
+  E8:   N4, N8
+  E9:   N5, N6
+  E10:  N6, N7
+  E11:  N7, N8
+  E12:  N8, N5
+
+FACES:
+  F1:  N1, N4, N3, N2       | edges: -E4, -E3, -E2, -E1          # bottom
+  F2:  N1, N2, N6, N5       | edges:  E1,  E6, -E9, -E5          # front
+  F3:  N2, N3, N7, N6       | edges:  E2,  E7, -E10, -E6         # right
+  F4:  N3, N4, N8, N7       | edges:  E3,  E8, -E11, -E7         # back
+  F5:  N1, N5, N8, N4       | edges:  E5, -E12, -E8,  E4         # left
+  F6:  N5, N6, N7, N8       | edges:  E9,  E10,  E11,  E12       # top
+
+
+# ======================================================================
+# HEXA_27  (3D quadratic hexahedron)
+# nodes=27  edges=12  faces=6
+# Corner nodes: N1-N8
+# Mid-edge nodes: N9-N20
+#   N9=mid(E1), N10=mid(E2), N11=mid(E3), N12=mid(E4),
+#   N13=mid(E5), N14=mid(E6), N15=mid(E7), N16=mid(E8),
+#   N17=mid(E9), N18=mid(E10), N19=mid(E11), N20=mid(E12)
+# Mid-face nodes: N21-N26
+#   N21=center(F1), N22=center(F2), N23=center(F3),
+#   N24=center(F4), N25=center(F5), N26=center(F6)
+# Body center: N27
+# ======================================================================
+
+HEXA_27  nodes=27  edges=12  faces=6
+
+EDGES:
+  E1:   N1, N2,   mid=N9
+  E2:   N2, N3,   mid=N10
+  E3:   N3, N4,   mid=N11
+  E4:   N4, N1,   mid=N12
+  E5:   N1, N5,   mid=N13
+  E6:   N2, N6,   mid=N14
+  E7:   N3, N7,   mid=N15
+  E8:   N4, N8,   mid=N16
+  E9:   N5, N6,   mid=N17
+  E10:  N6, N7,   mid=N18
+  E11:  N7, N8,   mid=N19
+  E12:  N8, N5,   mid=N20
+
+FACES:
+  F1:  N1, N4, N3, N2       | mid-edge: N12, N11, N10, N9        | mid-face: N21   | edges: -E4, -E3, -E2, -E1
+  F2:  N1, N2, N6, N5       | mid-edge: N9, N14, N17, N13        | mid-face: N22   | edges:  E1,  E6, -E9, -E5
+  F3:  N2, N3, N7, N6       | mid-edge: N10, N15, N18, N14       | mid-face: N23   | edges:  E2,  E7, -E10, -E6
+  F4:  N3, N4, N8, N7       | mid-edge: N11, N16, N19, N15       | mid-face: N24   | edges:  E3,  E8, -E11, -E7
+  F5:  N1, N5, N8, N4       | mid-edge: N13, N20, N16, N12       | mid-face: N25   | edges:  E5, -E12, -E8,  E4
+  F6:  N5, N6, N7, N8       | mid-edge: N17, N18, N19, N20       | mid-face: N26   | edges:  E9,  E10,  E11,  E12

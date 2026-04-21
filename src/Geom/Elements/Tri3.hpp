@@ -57,29 +57,11 @@ namespace DNDS::Geom::Elem
     };
     // <GEN_SHAPE_FUNCS_END>
 
+    // <GEN_ELEM_TRAITS_BEGIN>
 
-    /**
-     * @brief Element traits for 3-node linear triangle (Tri3)
-     * 
-     * Tri3 is the simplest 2D element, commonly used for:
-     * - Unstructured triangular meshes
-     * - Simplex mesh generation
-     * - Boundary layer regions requiring high aspect ratio cells
-     * 
-     * Geometry:
-     * - Reference triangle with vertices at (0,0), (1,0), (0,1)
-     * - Parametric space is a right triangle with area = 0.5
-     * 
-     * Faces:
-     * - 3 edges, each is a Line2 element
-     */
     template <>
     struct ElementTraits<Tri3>
     {
-        // ============================================================
-        // Core Element Identification
-        // ============================================================
-        
         static constexpr ElemType elemType = Tri3;
         static constexpr int dim = 2;
         static constexpr int order = 1;
@@ -89,93 +71,36 @@ namespace DNDS::Geom::Elem
         static constexpr ParamSpace paramSpace = TriSpace;
         static constexpr t_real paramSpaceVol = 0.5;
 
-        // ============================================================
-        // Geometry Definition
-        // ============================================================
-        
-        /**
-         * @brief Standard coordinates of nodes in parametric space
-         * 
-         * Node 0: (0, 0) - origin
-         * Node 1: (1, 0) - on xi axis
-         * Node 2: (0, 1) - on eta axis
-         * 
-         * Forms a right triangle covering half of the unit square.
-         */
         static constexpr std::array<t_real, 3 * 3> standardCoords = {
-            0, 0, 0,   // Node 0: origin
-            1, 0, 0,   // Node 1: xi = 1
-            0, 1, 0};  // Node 2: eta = 1
+            0, 0, 0,  // Node 0: vertex
+            1, 0, 0,  // Node 1: vertex
+            0, 1, 0};  // Node 2: vertex
 
-        // ============================================================
-        // Face/Edge Definitions
-        // ============================================================
-        
-        /**
-         * @brief Get the element type of a face (edge)
-         * @return Line2 (all edges of triangle are linear lines)
-         */
         static constexpr ElemType GetFaceType(t_index /*iFace*/) { return Line2; }
 
-        /**
-         * @brief Node indices for each face (edge)
-         * 
-         * Edge 0: nodes 0-1 (bottom edge along xi axis)
-         * Edge 1: nodes 1-2 (hypotenuse from (1,0) to (0,1))
-         * Edge 2: nodes 2-0 (left edge along eta axis)
-         * 
-         * Note: Face normal direction follows right-hand rule.
-         */
         static constexpr std::array<std::array<t_index, 10>, 3> faceNodes = {{
-            {0, 1},     // Edge 0: bottom
-            {1, 2},     // Edge 1: hypotenuse
-            {2, 0}}};   // Edge 2: left
+            {0, 1},
+            {1, 2},
+            {2, 0}
+        }};
 
-        // ============================================================
-        // Order Elevation (P-Refinement)
-        // ============================================================
-        
-        /**
-         * @brief Element type after order elevation (O1 -> O2)
-         * Tri3 elevates to Tri6 (6-node quadratic triangle)
-         */
         static constexpr ElemType elevatedType = Tri6;
-        
-        /// @brief Number of additional nodes created during elevation (3 edge midpoints)
         static constexpr int numElevNodes = 3;
-        
-        /**
-         * @brief Elevation spans define edge midpoints
-         * 
-         * Each new node is at the midpoint of an edge:
-         *   Span 0: nodes {0, 1} -> edge 0 midpoint
-         *   Span 1: nodes {1, 2} -> edge 1 midpoint
-         *   Span 2: nodes {2, 0} -> edge 2 midpoint
-         */
-        static constexpr std::array<tElevSpan, 3> elevSpans = {{
-            {0, 1},     // Edge 0 midpoint
-            {1, 2},     // Edge 1 midpoint
-            {2, 0}}};   // Edge 2 midpoint
-        
-        /// @brief Element type of each elevation span (all are Line2 edges)
-        static constexpr std::array<ElemType, 3> elevNodeSpanTypes = {Line2, Line2, Line2};
 
-        // ============================================================
-        // VTK/Visualization Support
-        // ============================================================
-        
-        /// @brief VTK cell type identifier (5 = VTK_TRIANGLE)
+        static constexpr std::array<tElevSpan, 3> elevSpans = {{
+            {0, 1},
+            {1, 2},
+            {2, 0}
+        }};
+
+        static constexpr std::array<ElemType, 3> elevNodeSpanTypes = {
+            Line2, Line2, Line2};
+
         static constexpr int vtkCellType = 5;
-        
-        /**
-         * @brief VTK node ordering map
-         * 
-         * VTK uses the same ordering as DNDS for Tri3:
-         *   VTK node 0 = DNDS node 0
-         *   VTK node 1 = DNDS node 1
-         *   VTK node 2 = DNDS node 2
-         */
+
         static constexpr std::array<int, 3> vtkNodeOrder = {0, 1, 2};
     };
+    // <GEN_ELEM_TRAITS_END>
+
 
 } // namespace DNDS::Geom::Elem

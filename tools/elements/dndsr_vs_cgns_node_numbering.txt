@@ -1,0 +1,79 @@
+# DNDSR vs CGNS Node Numbering Comparison — All Elements
+#
+# Date: 2026-04-21
+# Method: Compared standardCoords from DNDSR ElementTraits<T> with
+#         CGNS SIDS reference node positions for each element type.
+#
+# Result: 13 of 14 elements have IDENTICAL node numbering.
+#         Only Prism18 (PENTA_18) differs.
+#
+# ======================================================================
+
+
+# ======================================================================
+# IDENTICAL ELEMENTS (DNDSR 0-based = CGNS 1-based minus 1)
+# ======================================================================
+
+Line2:     2 nodes — IDENTICAL to CGNS BAR_2
+Line3:     3 nodes — IDENTICAL to CGNS BAR_3
+Tri3:      3 nodes — IDENTICAL to CGNS TRI_3
+Tri6:      6 nodes — IDENTICAL to CGNS TRI_6
+Quad4:     4 nodes — IDENTICAL to CGNS QUAD_4
+Quad9:     9 nodes — IDENTICAL to CGNS QUAD_9
+Tet4:      4 nodes — IDENTICAL to CGNS TETRA_4
+Tet10:    10 nodes — IDENTICAL to CGNS TETRA_10
+Hex8:      8 nodes — IDENTICAL to CGNS HEXA_8
+Hex27:    27 nodes — IDENTICAL to CGNS HEXA_27
+Prism6:    6 nodes — IDENTICAL to CGNS PENTA_6
+Pyramid5:  5 nodes — IDENTICAL to CGNS PYRA_5
+Pyramid14:14 nodes — IDENTICAL to CGNS PYRA_14
+
+
+# ======================================================================
+# PRISM18 (PENTA_18) — NODE NUMBERING DIFFERS
+# ======================================================================
+#
+# Corners (0-5) and bottom edge mids (6-8) are identical.
+# Face centers (15-17) are identical.
+# The difference is in the mid-edge node groups 9-11 and 12-14:
+#
+#   DNDSR indices 9,10,11  = vertical edge midpoints: mid(0-3), mid(1-4), mid(2-5)
+#   DNDSR indices 12,13,14 = top edge midpoints:      mid(3-4), mid(4-5), mid(5-3)
+#
+#   CGNS  N10,N11,N12      = top edge midpoints:      mid(4-5), mid(5-6), mid(6-4)
+#   CGNS  N13,N14,N15      = vertical edge midpoints: mid(1-4), mid(2-5), mid(3-6)
+#
+# The two groups are swapped: CGNS has top-then-vertical; DNDSR has vertical-then-top.
+#
+# Full coordinate proof (DNDSR standardCoords from Prism18.hpp):
+#
+#   DNDSR  9 = (0,   0,   0)   = midpoint of (0,0,-1)-(0,0,1)   = vertical edge 0-3
+#   DNDSR 10 = (1,   0,   0)   = midpoint of (1,0,-1)-(1,0,1)   = vertical edge 1-4
+#   DNDSR 11 = (0,   1,   0)   = midpoint of (0,1,-1)-(0,1,1)   = vertical edge 2-5
+#   DNDSR 12 = (0.5, 0,   1)   = midpoint of (0,0,1)-(1,0,1)    = top edge 3-4
+#   DNDSR 13 = (0.5, 0.5, 1)   = midpoint of (1,0,1)-(0,1,1)    = top edge 4-5
+#   DNDSR 14 = (0,   0.5, 1)   = midpoint of (0,1,1)-(0,0,1)    = top edge 5-3
+#
+#   CGNS  N10 = mid(N4,N5) = (0.5, 0,   1)   = top edge 3-4
+#   CGNS  N11 = mid(N5,N6) = (0.5, 0.5, 1)   = top edge 4-5
+#   CGNS  N12 = mid(N6,N4) = (0,   0.5, 1)   = top edge 5-3
+#   CGNS  N13 = mid(N1,N4) = (0,   0,   0)   = vertical edge 0-3
+#   CGNS  N14 = mid(N2,N5) = (1,   0,   0)   = vertical edge 1-4
+#   CGNS  N15 = mid(N3,N6) = (0,   1,   0)   = vertical edge 2-5
+#
+# Permutation maps (0-based):
+#
+#   CGNS-to-DNDSR: [0,1,2,3,4,5,6,7,8, 12,13,14, 9,10,11, 15,16,17]
+#     (CGNS index i -> DNDSR index perm[i])
+#
+#   DNDSR-to-CGNS: [0,1,2,3,4,5,6,7,8, 12,13,14, 9,10,11, 15,16,17]
+#     (same permutation — the swap is symmetric)
+#
+#
+# CONSEQUENCE: Prism18 faceNodes Face 4 (top triangle) in DNDSR
+#   Current:  {3, 4, 5, 9, 10, 11}  — 9,10,11 are VERTICAL edge mids (WRONG)
+#   Correct:  {3, 4, 5, 12, 13, 14} — 12,13,14 are TOP edge mids
+#
+#   This is a confirmed bug in DNDSR's Prism18.hpp faceNodes table.
+#   The faceNodes table was likely copied from the CGNS table without
+#   accounting for DNDSR's different mid-edge node ordering.

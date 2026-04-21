@@ -9,7 +9,7 @@
 namespace DNDS::Geom::Elem
 {
     /**
-     * Complying to [CGNS Element standard](https://cgns.github.io/CGNS_docs_current/sids/conv.html)
+     * Complying to [CGNS Element standard](https://cgns.org/standard/SIDS/convention.html)
      *  !note that we use 0 based indexing (CGNS uses 1 based in the link)
      */
 

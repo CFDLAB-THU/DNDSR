@@ -75,30 +75,11 @@ namespace DNDS::Geom::Elem
     };
     // <GEN_SHAPE_FUNCS_END>
 
+    // <GEN_ELEM_TRAITS_BEGIN>
 
-    /**
-     * @brief Element traits for 4-node bilinear quadrilateral (Quad4)
-     *
-     * Quad4 is the simplest 2D quadrilateral element, commonly used for:
-     * - Structured and unstructured quadrilateral meshes
-     * - Boundary-fitted grids
-     * - Isoparametric mapping
-     *
-     * Geometry:
-     * - Reference quad: xi in [-1, 1], eta in [-1, 1]
-     * - Nodes at the 4 corners of the reference square
-     * - Parametric space area = 4.0
-     *
-     * Faces:
-     * - 4 edges, each is a Line2 element
-     */
     template <>
     struct ElementTraits<Quad4>
     {
-        // ============================================================
-        // Core Element Identification
-        // ============================================================
-
         static constexpr ElemType elemType = Quad4;
         static constexpr int dim = 2;
         static constexpr int order = 1;
@@ -108,95 +89,40 @@ namespace DNDS::Geom::Elem
         static constexpr ParamSpace paramSpace = QuadSpace;
         static constexpr t_real paramSpaceVol = 4.0;
 
-        // ============================================================
-        // Geometry Definition
-        // ============================================================
-
-        /**
-         * @brief Standard coordinates of nodes in parametric space
-         *
-         * Reference square [-1,1] x [-1,1] with nodes at corners:
-         * Node 0: (-1, -1) - bottom-left
-         * Node 1: ( 1, -1) - bottom-right
-         * Node 2: ( 1,  1) - top-right
-         * Node 3: (-1,  1) - top-left
-         */
         static constexpr std::array<t_real, 3 * 4> standardCoords = {
-            -1, -1, 0,   // Node 0: bottom-left
-             1, -1, 0,   // Node 1: bottom-right
-             1,  1, 0,   // Node 2: top-right
-            -1,  1, 0};  // Node 3: top-left
+            -1, -1, 0,  // Node 0: vertex
+            1, -1, 0,  // Node 1: vertex
+            1, 1, 0,  // Node 2: vertex
+            -1, 1, 0};  // Node 3: vertex
 
-        // ============================================================
-        // Face/Edge Definitions
-        // ============================================================
-
-        /**
-         * @brief Get the element type of a face (edge)
-         * @return Line2 (all edges of quad are linear lines)
-         */
         static constexpr ElemType GetFaceType(t_index /*iFace*/) { return Line2; }
 
-        /**
-         * @brief Node indices for each face (edge)
-         *
-         * Edge 0: nodes 0-1 (bottom edge)
-         * Edge 1: nodes 1-2 (right edge)
-         * Edge 2: nodes 2-3 (top edge)
-         * Edge 3: nodes 3-0 (left edge)
-         */
         static constexpr std::array<std::array<t_index, 10>, 4> faceNodes = {{
-            {0, 1},     // Edge 0: bottom
-            {1, 2},     // Edge 1: right
-            {2, 3},     // Edge 2: top
-            {3, 0}}};   // Edge 3: left
+            {0, 1},
+            {1, 2},
+            {2, 3},
+            {3, 0}
+        }};
 
-        // ============================================================
-        // Order Elevation (P-Refinement)
-        // ============================================================
-
-        /**
-         * @brief Element type after order elevation (O1 -> O2)
-         * Quad4 elevates to Quad9 (9-node biquadratic quad)
-         */
         static constexpr ElemType elevatedType = Quad9;
-
-        /// @brief Number of additional nodes created during elevation
         static constexpr int numElevNodes = 5;
 
-        /**
-         * @brief Elevation spans define new node connections
-         *
-         * Elevation creates 5 new nodes:
-         *   Spans 0-3: edge midpoints (4 nodes on edges)
-         *   Span 4: body center (1 node connecting all 4 vertices)
-         */
         static constexpr std::array<tElevSpan, 5> elevSpans = {{
-            {0, 1},             // Edge 0 midpoint
-            {1, 2},             // Edge 1 midpoint
-            {2, 3},             // Edge 2 midpoint
-            {3, 0},             // Edge 3 midpoint
-            {0, 1, 2, 3}}};     // Body center (all 4 vertices)
+            {0, 1},
+            {1, 2},
+            {2, 3},
+            {3, 0},
+            {0, 1, 2, 3}
+        }};
 
-        /// @brief Element type of each elevation span
         static constexpr std::array<ElemType, 5> elevNodeSpanTypes = {
-            Line2, Line2, Line2, Line2,   // Edge midpoints
-            Quad4};                       // Body center
+            Line2, Line2, Line2, Line2, Quad4};
 
-        // ============================================================
-        // VTK/Visualization Support
-        // ============================================================
-
-        /// @brief VTK cell type identifier (9 = VTK_QUAD)
         static constexpr int vtkCellType = 9;
 
-        /**
-         * @brief VTK node ordering map
-         *
-         * VTK uses the same ordering as DNDS for Quad4:
-         *   VTK node 0 = DNDS node 0, VTK node 1 = DNDS node 1, etc.
-         */
         static constexpr std::array<int, 4> vtkNodeOrder = {0, 1, 2, 3};
     };
+    // <GEN_ELEM_TRAITS_END>
+
 
 } // namespace DNDS::Geom::Elem
