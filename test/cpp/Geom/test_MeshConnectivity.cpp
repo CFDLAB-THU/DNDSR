@@ -1592,6 +1592,336 @@ TEST_CASE("Interpolate: 2x2 periodic quad mesh — collaborating check required"
     CHECK(pairCount.count({1, 2}) == 0);
 }
 
+// ===========================================================================
+// 2×2×2 triply-periodic hex mesh
+// ===========================================================================
+
+/// Build a 2×2×2 Hex8 mesh on [0,2]³, triply-periodic (P1=X, P2=Y, P3=Z).
+///
+/// After periodic dedup: 27 nodes → 8 nodes, 8 cells.
+/// All 8 cells reference all 8 nodes (with varying pbi).
+///
+/// Expected topology (3-torus T³):
+///   V=8, E=24, F=24, C=8 → Euler χ = 8-24+24-8 = 0.
+///
+struct Periodic2x2x2Mesh
+{
+    tAdjPair cell2node;
+    tElemInfoArrayPair cellElemInfo;
+    tPbiPair cell2nodePbi;
+    DNDS::index nNodes = 8;
+    DNDS::index nCells = 8;
+};
+
+static Periodic2x2x2Mesh makePeriodic2x2x2Mesh(const MPIInfo &mpi)
+{
+    Periodic2x2x2Mesh m;
+    m.cell2node.InitPair("p2x2x2_c2n", mpi);
+    m.cellElemInfo.InitPair("p2x2x2_cei", mpi);
+    m.cell2nodePbi.InitPair("p2x2x2_pbi", mpi);
+
+    m.cell2node.father->Resize(8);
+    m.cellElemInfo.father->Resize(8);
+    m.cell2nodePbi.father->Resize(8);
+
+    // Deduped node index: d(i,j,k) = i + 2*j + 4*k for i,j,k ∈ {0,1}
+    // Cell index: ci + 2*cj + 4*ck for ci,cj,ck ∈ {0,1}
+    // Hex8 local ordering: BL-front-bot, BR-front-bot, BR-back-bot, BL-back-bot,
+    //                       BL-front-top, BR-front-top, BR-back-top, BL-back-top
+    DNDS::index c2n[8][8] = {
+        {0, 1, 3, 2, 4, 5, 7, 6}, // cell 0 (0,0,0)
+        {1, 0, 2, 3, 5, 4, 6, 7}, // cell 1 (1,0,0)
+        {2, 3, 1, 0, 6, 7, 5, 4}, // cell 2 (0,1,0)
+        {3, 2, 0, 1, 7, 6, 4, 5}, // cell 3 (1,1,0)
+        {4, 5, 7, 6, 0, 1, 3, 2}, // cell 4 (0,0,1)
+        {5, 4, 6, 7, 1, 0, 2, 3}, // cell 5 (1,0,1)
+        {6, 7, 5, 4, 2, 3, 1, 0}, // cell 6 (0,1,1)
+        {7, 6, 4, 5, 3, 2, 0, 1}, // cell 7 (1,1,1)
+    };
+    uint8_t pbi[8][8] = {
+        {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // cell 0: all main
+        {0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x01, 0x00}, // cell 1: X-wrap
+        {0x00, 0x00, 0x02, 0x02, 0x00, 0x00, 0x02, 0x02}, // cell 2: Y-wrap
+        {0x00, 0x01, 0x03, 0x02, 0x00, 0x01, 0x03, 0x02}, // cell 3: XY-wrap
+        {0x00, 0x00, 0x00, 0x00, 0x04, 0x04, 0x04, 0x04}, // cell 4: Z-wrap
+        {0x00, 0x01, 0x01, 0x00, 0x04, 0x05, 0x05, 0x04}, // cell 5: XZ-wrap
+        {0x00, 0x00, 0x02, 0x02, 0x04, 0x04, 0x06, 0x06}, // cell 6: YZ-wrap
+        {0x00, 0x01, 0x03, 0x02, 0x04, 0x05, 0x07, 0x06}, // cell 7: XYZ-wrap
+    };
+
+    ElemInfo hi;
+    hi.setElemType(Elem::Hex8);
+    hi.zone = 0;
+
+    for (DNDS::index i = 0; i < 8; i++)
+    {
+        m.cell2node.father->ResizeRow(i, 8);
+        m.cell2nodePbi.father->ResizeRow(i, 8);
+        m.cellElemInfo(i, 0) = hi;
+        for (DNDS::rowsize j = 0; j < 8; j++)
+        {
+            m.cell2node.father->operator()(i, j) = c2n[i][j];
+            m.cell2nodePbi.father->operator()(i, j) = NodePeriodicBits{pbi[i][j]};
+        }
+    }
+    return m;
+}
+
+/// Helper: build the periodic matchExtra callback for a given mesh.
+static std::function<bool(DNDS::index, int, DNDS::index, DNDS::index, int)>
+makePeriodicMatchExtra(const tElemInfoArrayPair &cellElemInfo,
+                       const tAdjPair &cell2node,
+                       const tPbiPair &cell2nodePbi,
+                       bool forEdges)
+{
+    return [&cellElemInfo, &cell2node, &cell2nodePbi, forEdges](
+               DNDS::index iParent, int iSub,
+               DNDS::index, DNDS::index candidateParent, int candidateSub) -> bool
+    {
+        auto eParentA = Elem::Element{cellElemInfo[iParent]->getElemType()};
+        auto eParentB = Elem::Element{cellElemInfo[candidateParent]->getElemType()};
+
+        int nFN;
+        std::vector<DNDS::index> nodesA, nodesB;
+        std::vector<NodePeriodicBits> pbiA, pbiB;
+
+        if (forEdges)
+        {
+            auto eEdge = eParentA.ObtainEdge(iSub);
+            nFN = eEdge.GetNumNodes();
+            nodesA.resize(nFN); nodesB.resize(nFN);
+            pbiA.resize(nFN); pbiB.resize(nFN);
+            eParentA.ExtractEdgeNodes(iSub, cell2node[iParent], nodesA);
+            eParentA.ExtractEdgeNodes(iSub, cell2nodePbi[iParent], pbiA);
+            eParentB.ExtractEdgeNodes(candidateSub, cell2node[candidateParent], nodesB);
+            eParentB.ExtractEdgeNodes(candidateSub, cell2nodePbi[candidateParent], pbiB);
+        }
+        else
+        {
+            auto eFace = eParentA.ObtainFace(iSub);
+            nFN = eFace.GetNumNodes();
+            nodesA.resize(nFN); nodesB.resize(nFN);
+            pbiA.resize(nFN); pbiB.resize(nFN);
+            eParentA.ExtractFaceNodes(iSub, cell2node[iParent], nodesA);
+            eParentA.ExtractFaceNodes(iSub, cell2nodePbi[iParent], pbiA);
+            eParentB.ExtractFaceNodes(candidateSub, cell2node[candidateParent], nodesB);
+            eParentB.ExtractFaceNodes(candidateSub, cell2nodePbi[candidateParent], pbiB);
+        }
+
+        using P = std::pair<DNDS::index, NodePeriodicBits>;
+        auto cmp = [](const P &L, const P &R)
+        { return L.first == R.first ? uint8_t(L.second) < uint8_t(R.second)
+                                    : L.first < R.first; };
+        std::vector<P> pA(nFN), pB(nFN);
+        for (int i = 0; i < nFN; i++)
+        {
+            pA[i] = {nodesA[i], pbiA[i]};
+            pB[i] = {nodesB[i], pbiB[i]};
+        }
+        std::sort(pA.begin(), pA.end(), cmp);
+        std::sort(pB.begin(), pB.end(), cmp);
+
+        auto v0 = pA[0].second ^ pB[0].second;
+        for (int i = 1; i < nFN; i++)
+            if ((pA[i].second ^ pB[i].second) != v0)
+                return false;
+        return true;
+    };
+}
+
+TEST_CASE("Periodic 2x2x2: face interpolation (3D, collaborating check)")
+{
+    if (g_mpi.rank != 0 && g_mpi.size > 1)
+        return;
+
+    auto pm = makePeriodic2x2x2Mesh(g_mpi);
+
+    // Without collaborating check: expect overflow
+    {
+        auto q = makeFaceQuery(pm.cellElemInfo);
+        auto res = MeshConnectivity::Interpolate(pm.cell2node, q, 8, 8, g_mpi);
+        CHECK(res.duplicateOverflow == true);
+    }
+
+    // With collaborating check: expect 24 faces, all internal
+    {
+        auto q = makeFaceQuery(pm.cellElemInfo);
+        q.matchExtra = makePeriodicMatchExtra(pm.cellElemInfo, pm.cell2node, pm.cell2nodePbi, false);
+        auto res = MeshConnectivity::Interpolate(pm.cell2node, q, 8, 8, g_mpi);
+
+        CHECK(res.duplicateOverflow == false);
+        CHECK(res.nEntities == 24);
+
+        // All faces internal (both parents set)
+        int nInternal = 0;
+        for (DNDS::index i = 0; i < res.nEntities; i++)
+            if (res.entity2parent.father->operator()(i, 1) != DNDS::UnInitIndex)
+                nInternal++;
+        CHECK(nInternal == 24);
+
+        // Each cell references 6 faces
+        for (DNDS::index i = 0; i < 8; i++)
+        {
+            CAPTURE(i);
+            CHECK(res.parent2entity.father->RowSize(i) == 6);
+        }
+
+        // All faces are Quad4
+        for (DNDS::index i = 0; i < res.nEntities; i++)
+            CHECK(res.entityElemInfo[i].getElemType() == Elem::Quad4);
+
+        // No face connects a cell to itself
+        for (DNDS::index i = 0; i < res.nEntities; i++)
+        {
+            auto p0 = res.entity2parent.father->operator()(i, 0);
+            auto p1 = res.entity2parent.father->operator()(i, 1);
+            CHECK(p0 != p1);
+        }
+
+        // Each cell has exactly 3 face-neighbors (X±, Y±, Z± — but periodic
+        // means X- wraps to X+, so each cell is face-adjacent to 6 cells?
+        // No: 2×2×2 periodic hex, each cell has 6 faces, each face is shared
+        // with exactly 1 other cell. Each cell has at most 6 neighbors, but
+        // some neighbors repeat (e.g., cell 0's +X neighbor is cell 1,
+        // cell 0's -X neighbor is also cell 1 via periodicity).
+        // Actually: cell 0 at (0,0,0), +X neighbor = cell 1 at (1,0,0),
+        // -X neighbor = cell 1 via X-periodic wrap. So cell 0 and cell 1
+        // share 2 faces (both X-faces). Similarly Y→cell2, Z→cell4.
+        // So each cell has 3 distinct face-neighbors, each sharing 2 faces.
+        std::map<DNDS::index, std::set<DNDS::index>> cellFN;
+        for (DNDS::index i = 0; i < res.nEntities; i++)
+        {
+            auto p0 = res.entity2parent.father->operator()(i, 0);
+            auto p1 = res.entity2parent.father->operator()(i, 1);
+            cellFN[p0].insert(p1);
+            cellFN[p1].insert(p0);
+        }
+        for (DNDS::index i = 0; i < 8; i++)
+        {
+            CAPTURE(i);
+            CHECK(cellFN[i].size() == 3);
+        }
+    }
+}
+
+TEST_CASE("Periodic 2x2x2: edge interpolation (3D, collaborating check)")
+{
+    if (g_mpi.rank != 0 && g_mpi.size > 1)
+        return;
+
+    auto pm = makePeriodic2x2x2Mesh(g_mpi);
+
+    // Without collaborating check: expect overflow
+    {
+        auto q = makeEdgeQuery(pm.cellElemInfo);
+        auto res = MeshConnectivity::Interpolate(pm.cell2node, q, 8, 8, g_mpi);
+        CHECK(res.duplicateOverflow == true);
+    }
+
+    // With collaborating check: expect 24 edges, all shared by 4 cells
+    {
+        auto q = makeEdgeQuery(pm.cellElemInfo);
+        q.matchExtra = makePeriodicMatchExtra(pm.cellElemInfo, pm.cell2node, pm.cell2nodePbi, true);
+        auto res = MeshConnectivity::Interpolate(pm.cell2node, q, 8, 8, g_mpi);
+
+        CHECK(res.duplicateOverflow == false);
+        CHECK(res.nEntities == 24);
+
+        // All edges are Line2
+        for (DNDS::index i = 0; i < res.nEntities; i++)
+            CHECK(res.entityElemInfo[i].getElemType() == Elem::Line2);
+
+        // Each cell references 12 edges
+        for (DNDS::index i = 0; i < 8; i++)
+        {
+            CAPTURE(i);
+            CHECK(res.parent2entity.father->RowSize(i) == 12);
+        }
+
+        // entity2parent only stores 2 parents, but edges are shared by 4 cells.
+        // After Interpolate, entity2parent has the first 2 cells that
+        // encountered each edge. The other 2 cells reference the same entity
+        // via parent2entity but aren't recorded in entity2parent.
+        // So we count how many cells reference each edge via parent2entity.
+        std::vector<int> edgeRefCount(res.nEntities, 0);
+        for (DNDS::index iCell = 0; iCell < 8; iCell++)
+            for (DNDS::rowsize j = 0; j < res.parent2entity.father->RowSize(iCell); j++)
+                edgeRefCount[res.parent2entity.father->operator()(iCell, j)]++;
+
+        // Each edge should be referenced by exactly 4 cells
+        for (DNDS::index i = 0; i < res.nEntities; i++)
+        {
+            CAPTURE(i);
+            CHECK(edgeRefCount[i] == 4);
+        }
+
+        // Euler characteristic: V - E + F = 8 - 24 + 24 = 8
+        // (For the cell complex: V - E + F - C = 8 - 24 + 24 - 8 = 0 for T³)
+    }
+}
+
+TEST_CASE("Periodic 2x2x2: ComposeFiltered cell2cellFace is WRONG without pbi filter")
+{
+    // This test uses MPI-collective operations (Inverse, ghost comm),
+    // so all ranks must participate. Only rank 0 has data.
+    DNDS::index nCells = (g_mpi.rank == 0) ? 8 : 0;
+    DNDS::index nNodes = (g_mpi.rank == 0) ? 8 : 0;
+
+    tAdjPair c2n;
+    c2n.InitPair("p2x2x2_c2n_compose", g_mpi);
+    c2n.father->Resize(nCells);
+
+    if (g_mpi.rank == 0)
+    {
+        auto pm = makePeriodic2x2x2Mesh(g_mpi);
+        // Copy data from the full mesh
+        for (DNDS::index i = 0; i < 8; i++)
+        {
+            c2n.father->ResizeRow(i, 8);
+            for (DNDS::rowsize j = 0; j < 8; j++)
+                c2n.father->operator()(i, j) = pm.cell2node.father->operator()(i, j);
+        }
+    }
+
+    c2n.father->createGlobalMapping();
+    auto nodeGM = std::make_shared<GlobalOffsetsMapping>();
+    nodeGM->setMPIAlignBcast(g_mpi, nNodes);
+
+    auto n2c = MeshConnectivity::Inverse(
+        c2n, nNodes, g_mpi,
+        [](DNDS::index i) { return i; },
+        [](DNDS::index i) { return i; },
+        nodeGM);
+
+    n2c.son = make_ssp<decltype(n2c.son)::element_type>(ObjName{"n2c.son"}, g_mpi);
+    n2c.TransAttach();
+    n2c.trans.createFatherGlobalMapping();
+    std::vector<DNDS::index> emptyGhost;
+    n2c.trans.createGhostMapping(emptyGhost);
+    n2c.trans.createMPITypes();
+    n2c.trans.pullOnce();
+
+    std::unordered_map<DNDS::index, DNDS::index> nodeG2L;
+    for (DNDS::index i = 0; i < n2c.Size(); i++)
+        nodeG2L[n2c.trans.pLGhostMapping->operator()(-1, i)] = i;
+
+    auto c2cFace = MeshConnectivity::ComposeFiltered(
+        c2n, n2c, nCells, nodeG2L,
+        [](DNDS::index i) { return i; },
+        SharedCountPredicate{.minShared = 3, .removeSelf = true});
+
+    // Only rank 0 has cells to verify
+    if (g_mpi.rank == 0)
+    {
+        // Without pbi filter: each cell has 7 neighbors (WRONG, should be 3)
+        for (DNDS::index i = 0; i < 8; i++)
+        {
+            CAPTURE(i);
+            CHECK(c2cFace.father->RowSize(i) == 7);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
