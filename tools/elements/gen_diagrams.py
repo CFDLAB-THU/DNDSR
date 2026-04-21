@@ -2,261 +2,452 @@
 """
 Generate element topology diagrams.
 
-For each element, produces an SVG/PNG showing:
-  - Node positions with indices
-  - Edges highlighted and labeled (3D elements)
-  - Faces highlighted with transparent fill and labeled
-  - Outward face normal arrows at face centroids
+For each element, produces multiple figures:
+  1. *_nodes.png  — Node positions with indices (clean, no topology clutter)
+  2. *_faces.png  — Subplot grid, one face per subplot highlighted on wireframe
+  3. *_edges.png  — Subplot grid, edges grouped and highlighted on wireframe (3D only)
 
 Usage:
-    python3 -m tools.elements.gen_diagrams [--outdir DIR] [--format svg|png]
+    python3 -m tools.elements.gen_diagrams [--outdir DIR] [--format svg|png] [--element NAME]
 
 Run from the project root directory.
 """
 
 import argparse
+import math
 import os
 import sys
-import itertools
 
 import numpy as np
 import matplotlib
-matplotlib.use("Agg")  # non-interactive backend
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
 from tools.elements.element_data import ALL_ELEMENTS, ElementData
 
-# Color palettes
-FACE_COLORS = [
-    (0.2, 0.6, 1.0, 0.15),   # blue
-    (1.0, 0.4, 0.4, 0.15),   # red
-    (0.3, 0.8, 0.3, 0.15),   # green
-    (1.0, 0.8, 0.2, 0.15),   # yellow
-    (0.7, 0.3, 0.9, 0.15),   # purple
-    (1.0, 0.6, 0.2, 0.15),   # orange
-]
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
-EDGE_COLORS = [
-    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
-    "#9467bd", "#8c564b", "#e377c2", "#7f7f7f",
-    "#bcbd22", "#17becf", "#aec7e8", "#ffbb78",
-]
+HIGHLIGHT_FACE_FILL = (0.2, 0.55, 1.0, 0.30)
+HIGHLIGHT_EDGE_COLOR = "#c0392b"
+NORMAL_ARROW_COLOR = "#8B0000"
+WIREFRAME_LINE = "silver"
+GHOST_NODE_COLOR = "#aaaaaa"
+DPI = 200
 
-
-def _coords_0based(e: ElementData):
-    """Return node coordinates as (N, 3) numpy float64 array, 0-based."""
-    coords = e.node_coords_0based()
-    return np.array(coords, dtype=np.float64)
+# Per-element-class 3D view angles for clarity
+VIEW_ANGLES = {
+    "TetSpace":     (30, -50),
+    "HexSpace":     (22, -48),
+    "PrismSpace":   (18, -70),
+    "PyramidSpace": (12, -35),
+}
 
 
-def _face_centroid(coords, face_nodes_0):
-    """Centroid of face vertex positions."""
-    # Use only the first min(len, numVertices-of-face) nodes for centroid
-    # For simplicity, average all listed nodes
-    pts = coords[face_nodes_0]
-    return pts.mean(axis=0)
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _coords(e: ElementData):
+    return np.array(e.node_coords_0based(), dtype=np.float64)
 
 
-def _face_normal_3d(coords, face_nodes_0):
-    """Outward normal of a 3D face from first 3 vertices."""
-    v0 = coords[face_nodes_0[0]]
-    v1 = coords[face_nodes_0[1]]
-    v2 = coords[face_nodes_0[2]]
+def _face_nv(ft: str):
+    if "Tri" in ft:
+        return 3
+    if "Quad" in ft:
+        return 4
+    return 2
+
+
+def _centroid(coords, nv):
+    return coords[:nv].mean(axis=0)
+
+
+def _fnormal_3d(coords, fn):
+    v0, v1, v2 = coords[fn[0]], coords[fn[1]], coords[fn[2]]
     n = np.cross(v1 - v0, v2 - v0)
-    norm = np.linalg.norm(n)
-    if norm > 1e-15:
-        n /= norm
-    return n
+    mag = np.linalg.norm(n)
+    return n / mag if mag > 1e-15 else n
 
 
-def _face_normal_2d(coords, face_nodes_0):
-    """Outward normal of a 2D face (edge) in the xy-plane."""
-    v0 = coords[face_nodes_0[0]]
-    v1 = coords[face_nodes_0[1]]
-    tangent = v1 - v0
-    n = np.array([tangent[1], -tangent[0], 0.0])
-    norm = np.linalg.norm(n)
-    if norm > 1e-15:
-        n /= norm
-    return n
+def _fnormal_2d(coords, fn):
+    v0, v1 = coords[fn[0]], coords[fn[1]]
+    t = v1 - v0
+    n = np.array([t[1], -t[0], 0.0])
+    mag = np.linalg.norm(n)
+    return n / mag if mag > 1e-15 else n
 
 
-def draw_element_2d(e: ElementData, ax):
-    """Draw a 2D element with faces (edges) and nodes."""
-    coords = _coords_0based(e)
-    centroid = coords[:e.num_vertices].mean(axis=0)
+def _set_3d(ax, coords_v, e):
+    lo = coords_v.min(0)
+    hi = coords_v.max(0)
+    ranges = hi - lo
+    mid = (lo + hi) * 0.5
 
-    face_nodes_0 = e.face_nodes_0based()
+    # Equal range on all axes (no geometric distortion)
+    r = max(ranges) * 0.65
+    ax.set_xlim(mid[0] - r, mid[0] + r)
+    ax.set_ylim(mid[1] - r, mid[1] + r)
+    ax.set_zlim(mid[2] - r, mid[2] + r)
+    ax.set_box_aspect((1, 1, 1))
 
-    # Draw faces (edges) as colored lines
-    for fi, fn in enumerate(face_nodes_0):
-        # Only use the first 2 nodes (vertices) for the line
-        verts = fn[:2]
-        color = EDGE_COLORS[fi % len(EDGE_COLORS)]
-        xs = [coords[verts[0], 0], coords[verts[1], 0]]
-        ys = [coords[verts[0], 1], coords[verts[1], 1]]
-        ax.plot(xs, ys, color=color, linewidth=2.5, zorder=2)
+    ax.set_xlabel("x", fontsize=7, labelpad=1)
+    ax.set_ylabel("y", fontsize=7, labelpad=1)
+    ax.set_zlabel("z", fontsize=7, labelpad=1)
+    ax.tick_params(labelsize=5, pad=0)
+    elev, azim = VIEW_ANGLES.get(e.param_space, (25, -55))
+    ax.view_init(elev=elev, azim=azim)
 
-        # Face label at midpoint
-        mid = (coords[verts[0]] + coords[verts[1]]) * 0.5
-        n = _face_normal_2d(coords, fn)
-        # Ensure outward
-        if np.dot(n, mid - centroid) < 0:
-            n = -n
-        label_pos = mid[:2] + n[:2] * 0.12
-        ax.text(label_pos[0], label_pos[1], f"F{fi}",
-                fontsize=7, ha="center", va="center", color=color, fontweight="bold")
 
-        # Normal arrow
-        ax.annotate("", xy=(mid[0] + n[0] * 0.15, mid[1] + n[1] * 0.15),
-                     xytext=(mid[0], mid[1]),
-                     arrowprops=dict(arrowstyle="->", color=color, lw=1.2))
-
-    # Draw nodes
-    for i in range(e.num_nodes):
-        marker = "o" if i < e.num_vertices else "s"
-        size = 50 if i < e.num_vertices else 30
-        color = "black" if i < e.num_vertices else "gray"
-        ax.scatter(coords[i, 0], coords[i, 1], s=size, c=color, zorder=5, marker=marker)
-        offset = np.array([0.06, 0.06])
-        ax.text(coords[i, 0] + offset[0], coords[i, 1] + offset[1],
-                str(i), fontsize=8, ha="left", va="bottom", zorder=6)
-
+def _set_2d(ax, coords, pad=0.2):
+    xmin, xmax = coords[:, 0].min() - pad, coords[:, 0].max() + pad
+    ymin, ymax = coords[:, 1].min() - pad, coords[:, 1].max() + pad
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
     ax.set_aspect("equal")
-    ax.set_title(f"{e.dndsr_name} ({e.cgns_name})", fontsize=11, fontweight="bold")
-    ax.grid(True, alpha=0.3)
+    ax.grid(True, alpha=0.2)
+    ax.tick_params(labelsize=6)
 
 
-def draw_element_3d(e: ElementData, ax):
-    """Draw a 3D element with faces, edges, and nodes."""
-    coords = _coords_0based(e)
-    centroid = coords[:e.num_vertices].mean(axis=0)
+def _grid(n, max_cols=3):
+    cols = min(n, max_cols)
+    rows = math.ceil(n / cols)
+    return rows, cols
 
-    face_nodes_0 = e.face_nodes_0based()
-    edge_nodes_0 = e.edge_nodes_0based()
 
-    # Draw faces as transparent polygons
-    for fi, fn in enumerate(face_nodes_0):
-        # Use only vertex nodes for the polygon
-        # Determine how many are vertices: for the face element type
-        ft = e.face_types[fi]
-        if "Tri" in ft:
-            nv = 3
-        elif "Quad" in ft:
-            nv = 4
-        else:
-            nv = len(fn)
-        verts = [coords[fn[j]] for j in range(nv)]
-        color = FACE_COLORS[fi % len(FACE_COLORS)]
-        edge_color = list(color[:3]) + [0.6]
+# ---------------------------------------------------------------------------
+# Wireframe
+# ---------------------------------------------------------------------------
 
-        poly = Poly3DCollection([verts], alpha=color[3],
-                                facecolors=[color[:3]],
-                                edgecolors=[edge_color], linewidths=0.8)
-        ax.add_collection3d(poly)
+def _wire_2d(ax, e, c):
+    for fn in e.face_nodes_0based():
+        v0, v1 = fn[0], fn[1]
+        ax.plot([c[v0, 0], c[v1, 0]], [c[v0, 1], c[v1, 1]],
+                color=WIREFRAME_LINE, lw=1, zorder=1)
 
-        # Face label at centroid
-        fc = _face_centroid(coords, fn[:nv])
-        n = _face_normal_3d(coords, fn)
-        if np.dot(n, fc - centroid) < 0:
-            n = -n
-        label_pos = fc + n * 0.15
-        ax.text(label_pos[0], label_pos[1], label_pos[2],
-                f"F{fi}", fontsize=7, ha="center", va="center",
-                color=list(color[:3]), fontweight="bold")
 
-    # Draw edges as colored lines
-    for ei, en in enumerate(edge_nodes_0):
+def _wire_3d(ax, e, c):
+    for en in e.edge_nodes_0based():
         v0, v1 = en[0], en[1]
-        color = EDGE_COLORS[ei % len(EDGE_COLORS)]
-        xs = [coords[v0, 0], coords[v1, 0]]
-        ys = [coords[v0, 1], coords[v1, 1]]
-        zs = [coords[v0, 2], coords[v1, 2]]
-        ax.plot(xs, ys, zs, color=color, linewidth=1.5, zorder=2)
+        ax.plot([c[v0, 0], c[v1, 0]], [c[v0, 1], c[v1, 1]], [c[v0, 2], c[v1, 2]],
+                color=WIREFRAME_LINE, lw=0.8, zorder=1)
 
-        # Edge label at midpoint
-        mid = (coords[v0] + coords[v1]) * 0.5
-        ax.text(mid[0], mid[1], mid[2], f"E{ei}",
-                fontsize=5, ha="center", va="center", color=color, alpha=0.8)
 
-    # Draw nodes
+# ---------------------------------------------------------------------------
+# Node drawing
+# ---------------------------------------------------------------------------
+
+def _label_offset_2d(coords, i, centroid):
+    """Push label away from centroid."""
+    d = coords[i, :2] - centroid[:2]
+    mag = np.linalg.norm(d)
+    if mag < 1e-12:
+        return np.array([0.06, 0.06])
+    return d / mag * 0.10
+
+
+def _nodes_2d(ax, e, c, fs=9, centroid=None):
+    if centroid is None:
+        centroid = _centroid(c, e.num_vertices)
     for i in range(e.num_nodes):
-        marker = "o" if i < e.num_vertices else "s"
-        size = 40 if i < e.num_vertices else 20
-        color = "black" if i < e.num_vertices else "dimgray"
-        ax.scatter(coords[i, 0], coords[i, 1], coords[i, 2],
-                   s=size, c=color, zorder=5, marker=marker, depthshade=False)
-        ax.text(coords[i, 0], coords[i, 1], coords[i, 2],
-                f" {i}", fontsize=7, zorder=6)
-
-    ax.set_title(f"{e.dndsr_name} ({e.cgns_name})", fontsize=11, fontweight="bold")
-
-    # Equal aspect for 3D
-    all_pts = coords[:e.num_vertices]
-    ranges = all_pts.max(axis=0) - all_pts.min(axis=0)
-    max_range = max(ranges) * 0.6
-    mid = (all_pts.max(axis=0) + all_pts.min(axis=0)) * 0.5
-    ax.set_xlim(mid[0] - max_range, mid[0] + max_range)
-    ax.set_ylim(mid[1] - max_range, mid[1] + max_range)
-    ax.set_zlim(mid[2] - max_range, mid[2] + max_range)
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
+        m = "o" if i < e.num_vertices else "s"
+        s = 50 if i < e.num_vertices else 28
+        clr = "black" if i < e.num_vertices else "dimgray"
+        ax.scatter(c[i, 0], c[i, 1], s=s, c=clr, zorder=5, marker=m)
+        off = _label_offset_2d(c, i, centroid)
+        ax.text(c[i, 0] + off[0], c[i, 1] + off[1], str(i),
+                fontsize=fs, ha="center", va="center", zorder=6,
+                fontweight="bold" if i < e.num_vertices else "normal")
 
 
-def draw_element_1d(e: ElementData, ax):
-    """Draw a 1D element with nodes."""
-    coords = _coords_0based(e)
-
-    # Draw the line
-    ax.plot([coords[0, 0], coords[1, 0]], [0, 0], "k-", linewidth=2.5, zorder=2)
-
-    # Draw nodes
+def _nodes_3d(ax, e, c, fs=8):
     for i in range(e.num_nodes):
-        marker = "o" if i < e.num_vertices else "s"
-        size = 60 if i < e.num_vertices else 35
-        color = "black" if i < e.num_vertices else "gray"
-        ax.scatter(coords[i, 0], 0, s=size, c=color, zorder=5, marker=marker)
-        ax.text(coords[i, 0], 0.05, str(i), fontsize=9, ha="center", va="bottom", zorder=6)
-
-    ax.set_ylim(-0.3, 0.3)
-    ax.set_aspect("equal")
-    ax.set_title(f"{e.dndsr_name} ({e.cgns_name})", fontsize=11, fontweight="bold")
-    ax.grid(True, alpha=0.3)
-    ax.set_yticks([])
+        m = "o" if i < e.num_vertices else "s"
+        s = 40 if i < e.num_vertices else 18
+        clr = "black" if i < e.num_vertices else "dimgray"
+        ax.scatter(c[i, 0], c[i, 1], c[i, 2], s=s, c=clr, zorder=5,
+                   marker=m, depthshade=False)
+        ax.text(c[i, 0], c[i, 1], c[i, 2], f"  {i}", fontsize=fs, zorder=6,
+                fontweight="bold" if i < e.num_vertices else "normal")
 
 
-def generate_diagram(e: ElementData, outdir: str, fmt: str = "svg"):
-    """Generate a single element diagram."""
+def _ghost_nodes_2d(ax, e, c, exclude=set()):
+    for i in range(e.num_nodes):
+        if i in exclude:
+            continue
+        ax.scatter(c[i, 0], c[i, 1], s=18, c=GHOST_NODE_COLOR, zorder=3)
+
+
+def _ghost_nodes_3d(ax, e, c, exclude=set()):
+    for i in range(e.num_vertices):
+        if i in exclude:
+            continue
+        ax.scatter(c[i, 0], c[i, 1], c[i, 2], s=15, c=GHOST_NODE_COLOR,
+                   zorder=3, depthshade=False)
+        ax.text(c[i, 0], c[i, 1], c[i, 2], f"  {i}",
+                fontsize=6, color="#999999", zorder=3)
+
+
+# ---------------------------------------------------------------------------
+# 1. Node diagram
+# ---------------------------------------------------------------------------
+
+def gen_nodes(e, c, outdir, fmt):
     if e.dim == 1:
-        fig, ax = plt.subplots(1, 1, figsize=(5, 2))
-        draw_element_1d(e, ax)
+        fig, ax = plt.subplots(figsize=(5, 1.5))
+        ax.plot([c[0, 0], c[1, 0]], [0, 0], "k-", lw=2)
+        for i in range(e.num_nodes):
+            m = "o" if i < e.num_vertices else "s"
+            s = 60 if i < e.num_vertices else 35
+            clr = "black" if i < e.num_vertices else "gray"
+            ax.scatter(c[i, 0], 0, s=s, c=clr, zorder=5, marker=m)
+            ax.text(c[i, 0], 0.07, str(i), fontsize=10, ha="center", va="bottom",
+                    fontweight="bold" if i < e.num_vertices else "normal")
+        ax.set_ylim(-0.2, 0.3)
+        ax.set_aspect("equal")
+        ax.set_yticks([])
+        ax.grid(True, alpha=0.3)
     elif e.dim == 2:
-        fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-        draw_element_2d(e, ax)
+        fig, ax = plt.subplots(figsize=(5, 5))
+        _wire_2d(ax, e, c)
+        _nodes_2d(ax, e, c, fs=10)
+        _set_2d(ax, c, pad=0.25)
     else:
-        fig = plt.figure(figsize=(7, 6))
+        fig = plt.figure(figsize=(6.5, 6))
         ax = fig.add_subplot(111, projection="3d")
-        draw_element_3d(e, ax)
+        _wire_3d(ax, e, c)
+        _nodes_3d(ax, e, c, fs=9)
+        _set_3d(ax, c[:e.num_vertices], e)
 
-    fig.tight_layout()
-    path = os.path.join(outdir, f"{e.dndsr_name}.{fmt}")
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.suptitle(f"{e.dndsr_name} ({e.cgns_name}) — Nodes",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    path = os.path.join(outdir, f"{e.dndsr_name}_nodes.{fmt}")
+    fig.savefig(path, dpi=DPI, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+# ---------------------------------------------------------------------------
+# 2. Face diagrams
+# ---------------------------------------------------------------------------
+
+def _face_2d(ax, e, c, fi, fn):
+    _wire_2d(ax, e, c)
+    cent = _centroid(c, e.num_vertices)
+
+    # Highlight edge
+    v0, v1 = fn[0], fn[1]
+    ax.plot([c[v0, 0], c[v1, 0]], [c[v0, 1], c[v1, 1]],
+            color=HIGHLIGHT_EDGE_COLOR, lw=3.5, zorder=3)
+
+    # Normal arrow (quiver for reliability)
+    mid = (c[v0] + c[v1]) * 0.5
+    n = _fnormal_2d(c, fn)
+    if np.dot(n, mid - cent) < 0:
+        n = -n
+    scale = 0.30
+    ax.quiver(mid[0], mid[1], n[0] * scale, n[1] * scale,
+              angles="xy", scale_units="xy", scale=1,
+              color=NORMAL_ARROW_COLOR, width=0.012, zorder=4)
+
+    # Label face nodes
+    for ni in fn:
+        ax.scatter(c[ni, 0], c[ni, 1], s=45, c=HIGHLIGHT_EDGE_COLOR,
+                   zorder=6, marker="o" if ni < e.num_vertices else "s")
+        off = _label_offset_2d(c, ni, cent)
+        ax.text(c[ni, 0] + off[0], c[ni, 1] + off[1], str(ni),
+                fontsize=8, color=HIGHLIGHT_EDGE_COLOR, fontweight="bold", zorder=7)
+
+    _ghost_nodes_2d(ax, e, c, exclude=set(fn))
+    _set_2d(ax, c, pad=0.35)
+    ax.set_title(f"F{fi}: {e.face_types[fi]} [{', '.join(str(n) for n in fn)}]",
+                 fontsize=9, pad=4)
+
+
+def _face_3d(ax, e, c, fi, fn):
+    _wire_3d(ax, e, c)
+    cent = _centroid(c, e.num_vertices)
+
+    nv = _face_nv(e.face_types[fi])
+    verts = [c[fn[j]] for j in range(nv)]
+
+    poly = Poly3DCollection([verts], alpha=HIGHLIGHT_FACE_FILL[3],
+                            facecolors=[HIGHLIGHT_FACE_FILL[:3]],
+                            edgecolors=[HIGHLIGHT_EDGE_COLOR], linewidths=1.8)
+    ax.add_collection3d(poly)
+
+    # Normal arrow
+    fc = np.mean(verts, axis=0)
+    n = _fnormal_3d(c, fn)
+    if np.dot(n, fc - cent) < 0:
+        n = -n
+    ax.quiver(fc[0], fc[1], fc[2], n[0] * 0.7, n[1] * 0.7, n[2] * 0.7,
+              color=NORMAL_ARROW_COLOR, arrow_length_ratio=0.18, linewidth=2.5)
+
+    # Highlighted nodes
+    for ni in fn[:nv]:
+        ax.scatter(c[ni, 0], c[ni, 1], c[ni, 2], s=35, c=HIGHLIGHT_EDGE_COLOR,
+                   zorder=6, depthshade=False)
+        ax.text(c[ni, 0], c[ni, 1], c[ni, 2], f"  {ni}",
+                fontsize=8, color=HIGHLIGHT_EDGE_COLOR, fontweight="bold", zorder=7)
+
+    _ghost_nodes_3d(ax, e, c, exclude=set(fn[:nv]))
+    _set_3d(ax, c[:e.num_vertices], e)
+
+    node_str = ', '.join(str(n) for n in fn[:nv])
+    if len(fn) > nv:
+        node_str += f" +{len(fn) - nv}mid"
+    ax.set_title(f"F{fi}: {e.face_types[fi]} [{node_str}]", fontsize=8, pad=2)
+
+
+def gen_faces(e, c, outdir, fmt):
+    if e.num_faces == 0:
+        return None
+
+    fn0 = e.face_nodes_0based()
+    nf = e.num_faces
+    rows, cols = _grid(nf, max_cols=3)
+
+    if e.dim <= 2:
+        fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
+        axes_flat = np.atleast_1d(axes).flatten().tolist()
+    else:
+        fig = plt.figure(figsize=(4.5 * cols, 4.2 * rows))
+        axes_flat = [fig.add_subplot(rows, cols, i + 1, projection="3d")
+                     for i in range(rows * cols)]
+
+    for fi in range(nf):
+        ax = axes_flat[fi]
+        if e.dim <= 2:
+            _face_2d(ax, e, c, fi, fn0[fi])
+        else:
+            _face_3d(ax, e, c, fi, fn0[fi])
+
+    for i in range(nf, len(axes_flat)):
+        axes_flat[i].set_visible(False)
+
+    fig.suptitle(f"{e.dndsr_name} — Faces ({nf})", fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=[0, 0, 1, 0.93], h_pad=2, w_pad=1.5)
+    path = os.path.join(outdir, f"{e.dndsr_name}_faces.{fmt}")
+    fig.savefig(path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+# ---------------------------------------------------------------------------
+# 3. Edge diagrams (3D only, using edge_groups from element data)
+# ---------------------------------------------------------------------------
+
+EDGE_GROUP_COLORS = [
+    "#c0392b", "#27ae60", "#2980b9", "#e67e22",
+]
+
+
+def gen_edges(e, c, outdir, fmt):
+    if e.num_edges == 0:
+        return None
+
+    en0 = e.edge_nodes_0based()
+
+    # Use edge_groups if defined, otherwise fall back to chunks of 3
+    if e.edge_groups:
+        groups = [(label, indices) for label, indices in e.edge_groups]
+    else:
+        ne = e.num_edges
+        per_sub = 3
+        groups = [(f"E{s}-E{min(s + per_sub, ne) - 1}",
+                   list(range(s, min(s + per_sub, ne))))
+                  for s in range(0, ne, per_sub)]
+
+    n_sub = len(groups)
+    rows, cols = _grid(n_sub, max_cols=3)
+
+    fig = plt.figure(figsize=(4.5 * cols, 4.2 * rows))
+    axes_flat = [fig.add_subplot(rows, cols, i + 1, projection="3d")
+                 for i in range(rows * cols)]
+
+    for si, (group_label, edge_indices) in enumerate(groups):
+        ax = axes_flat[si]
+        _wire_3d(ax, e, c)
+
+        for gi, ei in enumerate(edge_indices):
+            en = en0[ei]
+            v0, v1 = en[0], en[1]
+            clr = EDGE_GROUP_COLORS[gi % len(EDGE_GROUP_COLORS)]
+
+            # Draw thick edge
+            ax.plot([c[v0, 0], c[v1, 0]], [c[v0, 1], c[v1, 1]], [c[v0, 2], c[v1, 2]],
+                    color=clr, lw=3, zorder=3)
+
+            # Endpoint markers + labels
+            for ni in [v0, v1]:
+                ax.scatter(c[ni, 0], c[ni, 1], c[ni, 2], s=40, c=clr,
+                           zorder=6, depthshade=False)
+                ax.text(c[ni, 0], c[ni, 1], c[ni, 2], f"  {ni}",
+                        fontsize=7, color=clr, fontweight="bold", zorder=7)
+
+            # Mid-edge node for O2
+            if len(en) == 3:
+                nm = en[2]
+                ax.scatter(c[nm, 0], c[nm, 1], c[nm, 2], s=25, c=clr,
+                           zorder=6, marker="s", depthshade=False)
+                ax.text(c[nm, 0], c[nm, 1], c[nm, 2], f"  {nm}",
+                        fontsize=6, color=clr, zorder=7)
+
+            # E-label at edge midpoint with background box
+            mid = (c[v0] + c[v1]) * 0.5
+            ax.text(mid[0], mid[1], mid[2], f" E{ei}",
+                    fontsize=9, color=clr, fontweight="bold", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.15", facecolor="white",
+                              edgecolor=clr, alpha=0.85, linewidth=0.8))
+
+        _ghost_nodes_3d(ax, e, c, exclude=set())
+        _set_3d(ax, c[:e.num_vertices], e)
+
+        # Subplot title: group label + edge list
+        parts = [f"E{ei}" for ei in edge_indices]
+        ax.set_title(f"{group_label}: {', '.join(parts)}", fontsize=8, pad=2)
+
+    for i in range(n_sub, len(axes_flat)):
+        axes_flat[i].set_visible(False)
+
+    fig.suptitle(f"{e.dndsr_name} — Edges ({e.num_edges})", fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=[0, 0, 1, 0.93], h_pad=2, w_pad=1.5)
+    path = os.path.join(outdir, f"{e.dndsr_name}_edges.{fmt}")
+    fig.savefig(path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def generate_all(e, outdir, fmt):
+    c = _coords(e)
+    paths = [gen_nodes(e, c, outdir, fmt)]
+    p = gen_faces(e, c, outdir, fmt)
+    if p:
+        paths.append(p)
+    p = gen_edges(e, c, outdir, fmt)
+    if p:
+        paths.append(p)
+    return paths
 
 
 def main():
     parser = argparse.ArgumentParser(description="Generate element topology diagrams")
     parser.add_argument("--outdir", "-o", type=str,
                         default=os.path.join(PROJECT_ROOT, "docs", "elements"),
-                        help="Output directory for diagrams")
-    parser.add_argument("--format", "-f", type=str, default="svg",
+                        help="Output directory")
+    parser.add_argument("--format", "-f", type=str, default="png",
                         choices=["svg", "png"], help="Output format")
     parser.add_argument("--element", "-e", type=str, default=None,
                         help="Generate only the named element")
@@ -266,18 +457,21 @@ def main():
 
     elements = ALL_ELEMENTS
     if args.element:
-        elements = [e for e in ALL_ELEMENTS if e.dndsr_name == args.element]
+        elements = [el for el in ALL_ELEMENTS if el.dndsr_name == args.element]
         if not elements:
-            names = [e.dndsr_name for e in ALL_ELEMENTS]
-            print(f"Error: unknown element '{args.element}'. Available: {names}",
-                  file=sys.stderr)
+            names = [el.dndsr_name for el in ALL_ELEMENTS]
+            print(f"Error: unknown '{args.element}'. Available: {names}", file=sys.stderr)
             sys.exit(1)
 
-    for e in elements:
-        path = generate_diagram(e, args.outdir, args.format)
-        print(f"  {e.dndsr_name} -> {os.path.relpath(path, PROJECT_ROOT)}")
+    total = 0
+    for el in elements:
+        paths = generate_all(el, args.outdir, args.format)
+        for p in paths:
+            print(f"  {os.path.relpath(p, PROJECT_ROOT)}")
+        total += len(paths)
 
-    print(f"\nDone: {len(elements)} diagrams generated in {os.path.relpath(args.outdir, PROJECT_ROOT)}/")
+    print(f"\nDone: {total} diagrams for {len(elements)} elements "
+          f"in {os.path.relpath(args.outdir, PROJECT_ROOT)}/")
 
 
 if __name__ == "__main__":
