@@ -314,6 +314,9 @@ namespace DNDS::Geom
 
 **Goal:** Implement `MeshConnectivity` struct, `Inverse()`, and unit tests.
 
+**Status:** Implemented and migrated. `RecoverNode2CellAndNode2Bnd()` now uses
+DSL `Inverse` internally.
+
 **Files:**
 - `src/Geom/MeshConnectivity.hpp` — class definition
 - `src/Geom/MeshConnectivity.cpp` — `Inverse()` implementation
@@ -336,6 +339,10 @@ namespace DNDS::Geom
 
 **Goal:** Implement `Compose()` and `FilterBySharedNodes()` with tests.
 
+**Status:** Implemented and migrated. `RecoverCell2CellAndBnd2Cell()` now uses
+DSL `ComposeFiltered` for `cell2cell` internally. The `bnd2cell` part retains
+its periodic pbi filter logic.
+
 **Tests:**
 - Compose cell2node + node2cell → cell2cell (verify against known mesh)
 - Compose with removeSelf → no diagonal entries
@@ -347,16 +354,124 @@ namespace DNDS::Geom
 
 **Goal:** Implement `Interpolate()` — the generalized face/edge generator.
 
-**Implementation:** Extract the core algorithm from the existing
-`EnumerateFacesFromCells` / `CollectFaces` / `CompactFacesAndRemapCell2Face`
-anonymous-namespace helpers in `Mesh.cpp` into `MeshConnectivity::Interpolate`.
+**Status:** Implemented and migrated. `InterpolateFace()` now uses DSL internally.
+
+**Implementation:** Standalone `MeshConnectivity::Interpolate` in
+`MeshConnectivity_Interpolate.cpp`. Decoupled from `Element` module via
+user-provided `SubEntityQuery` callbacks. Includes periodic-aware dedup via
+optional `matchExtra` predicate.
 
 **Tests:**
-- Interpolate a 2D quad mesh → verify face count, face2node, cell2face
-- Interpolate a 2D tri mesh → verify face count
-- Interpolate a 3D tet mesh → verify face count
-- Verify: for each cell, the number of faces matches element topology
-- Verify: every face has exactly 1 or 2 parent cells
+- 2D quads (4-cell), 2D tris (2-cell), 2D mixed (tri+quad)
+- 3D tet (1-cell, 2-cell shared face), 3D hex (1-cell)
+- Edge extraction from 3D tets
+- 2×2 doubly-periodic quad mesh (corner case, requires collaborating check)
+- Regression: DSL matches legacy `InterpolateFace` on all 5 mesh configs
+- DSL-vs-Legacy periodic pbi comparison, recreate counts
+
+---
+
+## 9. Periodic Face Deduplication: The Collaborating Check
+
+### 9.1. Problem
+
+After periodic node deduplication (`Deduplicate1to1Periodic`), cells on
+opposite sides of a periodic boundary share the same node **indices** but
+carry different `NodePeriodicBits` (pbi) in `cell2nodePbi`. The pbi bits
+record which periodic translations must be applied to recover each node's
+physical coordinates as seen from a given cell.
+
+When extracting faces (sub-entities) from cells, face deduplication compares
+sorted vertex indices. On a doubly- or triply-periodic mesh, two distinct
+physical faces can share **identical vertex index sets** — because periodic
+node deduplication merged nodes at intersections of periodic boundaries
+(corners in 2D, edges/corners in 3D).
+
+**Example: 2×2 doubly-periodic quad mesh.**
+
+After dedup, 9 original nodes collapse to 4. All 4 cells reference the same
+4 nodes. Every cell has the same 4 edge vertex sets: `{0,1}`, `{1,3}`,
+`{2,3}`, `{0,2}`. Without disambiguation, cell 0's edges would be falsely
+merged with cell 3's edges (the diagonally opposite cell), producing a
+sub-entity with 3+ parents — which is topologically impossible for a
+manifold mesh.
+
+### 9.2. Solution: Uniform XOR Check
+
+Two faces with the same vertex indices are the same physical face **if and
+only if** the periodic-bit difference between the two cells' views of the
+face nodes is **uniform** across all node pairs.
+
+Concretely, for candidate face match between cell A (sub-entity `iSub`) and
+cell B (sub-entity `jSub`):
+
+1. Extract `(nodeIndex, pbi)` pairs from both cells for their respective
+   face nodes: `{(n_k, pbi_A_k)}` and `{(n_k, pbi_B_k)}`.
+
+2. Sort both lists by `(nodeIndex, pbi)`.
+
+3. Compute `v0 = pbi_A_0 XOR pbi_B_0`.
+
+4. For all `k > 0`, check `pbi_A_k XOR pbi_B_k == v0`.
+
+If the XOR is uniform, the faces are **collaborating** — they represent the
+same physical face, possibly viewed through a single periodic translation
+(`v0 != 0`) or from the same side (`v0 == 0`). If non-uniform, the faces are
+on different periodic images and must remain distinct entities.
+
+### 9.3. Implementation in the DSL
+
+`MeshConnectivity::Interpolate` is topology-agnostic — it does not know about
+periodic bits. Instead, the `SubEntityQuery` struct has an optional
+`matchExtra` callback:
+
+```cpp
+std::function<bool(index iParent, int iSub,
+                   index iCandEntity,
+                   index candidateParent, int candidateSub)>
+    matchExtra;
+```
+
+After a vertex-set match, if `matchExtra` is set, Interpolate calls it to
+validate the match. The callback receives both the current sub-entity's
+origin `(iParent, iSub)` and the candidate entity's creating origin
+`(candidateParent, candidateSub)`, allowing the caller to extract pbi from
+both and perform the uniform XOR check.
+
+In `UnstructuredMesh::InterpolateFace`, the callback is wired up for
+periodic meshes (`isPeriodic == true`):
+
+```cpp
+faceQuery.matchExtra = [this](index iParent, int iSub,
+                               index, index candidateParent, int candidateSub) -> bool
+{
+    // Extract (nodeIndex, pbi) for both faces, sort, check uniform XOR
+    // ... (see Mesh.cpp InterpolateFace implementation)
+};
+```
+
+For non-periodic meshes, `matchExtra` is left unset (null), and Interpolate
+performs vertex-only dedup — which is correct since non-periodic meshes never
+have two distinct faces sharing the same vertex set.
+
+### 9.4. Overflow Detection
+
+If the collaborating check is omitted on a periodic mesh that requires it,
+a face may be falsely matched to an entity that already has two parents.
+Instead of aborting, `Interpolate` sets `result.duplicateOverflow = true`
+and creates a new entity for the unmatched face. This allows tests to detect
+the failure gracefully.
+
+### 9.5. Test Coverage
+
+| Test | What it proves |
+|------|----------------|
+| 2×2 periodic quad, no `matchExtra` | `duplicateOverflow == true` (false merge detected) |
+| 2×2 periodic quad, with `matchExtra` | 8 faces, all internal, correct cell pairs, no self-connections |
+| Pipeline collaborating check (IV10_10, IV10U_10) | Uniform XOR holds for all internal faces |
+| Pipeline pbi consistency | `face2nodePbi` matches owner cell's `cell2nodePbi` |
+| DSL-vs-Legacy pbi | Identical `(node, pbi)` sets per face |
+| RecreatePeriodicNodes counts | DSL and Legacy produce identical recreated node counts |
 
 ### Phase 3: Ghost Build via Traversal Chains
 

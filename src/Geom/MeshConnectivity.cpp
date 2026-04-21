@@ -1,6 +1,5 @@
 #include "MeshConnectivity.hpp"
 
-#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -148,7 +147,7 @@ namespace DNDS::Geom
             MPI_int rank{-1};
             index val{-1};
             if (!support.trans.pLGhostMapping->search(toGlobal, rank, val))
-                DNDS_assert_info(false, "Inverse: ghost search failed");
+                DNDS_check_throw_info(false, "Inverse: ghost search failed");
             if (rank >= 0)
             {
                 // This is a ghost entry — fill son

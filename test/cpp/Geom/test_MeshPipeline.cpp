@@ -360,6 +360,366 @@ TEST_CASE("InterpolateFace: face element types are valid")
     })
 }
 
+// --- InterpolateFace: DSL vs Legacy comparison ---
+
+/// Build a mesh through the pipeline up to (and including) InterpolateFace,
+/// using the specified face interpolation method.
+static ssp<UnstructuredMesh> buildMeshUpToFace(
+    const MeshConfig &cfg, bool useLegacy)
+{
+    auto mesh = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
+    UnstructuredMeshSerialRW reader(mesh, 0);
+
+    if (cfg.periodic)
+    {
+        tPoint zero{0, 0, 0};
+        mesh->SetPeriodicGeometry(
+            cfg.translation1, zero, zero,
+            cfg.translation2, zero, zero,
+            cfg.translation3, zero, zero);
+    }
+
+    reader.ReadFromCGNSSerial(meshPath(cfg.file));
+    reader.Deduplicate1to1Periodic(1e-8);
+    reader.BuildCell2Cell();
+
+    UnstructuredMeshSerialRW::PartitionOptions pOpt;
+    pOpt.metisType = "KWAY";
+    pOpt.metisUfactor = 30;
+    pOpt.metisSeed = 42;
+    pOpt.metisNcuts = 1;
+    reader.MeshPartitionCell2Cell(pOpt);
+    reader.PartitionReorderToMeshCell2Cell();
+
+    mesh->RecoverNode2CellAndNode2Bnd();
+    mesh->RecoverCell2CellAndBnd2Cell();
+    mesh->BuildGhostPrimary();
+    mesh->AdjGlobal2LocalPrimary();
+    mesh->AdjGlobal2LocalN2CB();
+
+    if (useLegacy)
+        mesh->InterpolateFaceLegacy();
+    else
+        mesh->InterpolateFace();
+
+    return mesh;
+}
+
+/// Collect sorted face vertex sets for all local cells.
+static std::vector<std::set<std::set<DNDS::index>>>
+collectCellFaceVertexSets(const ssp<UnstructuredMesh> &m)
+{
+    DNDS::index nCells = m->cell2node.father->Size();
+    std::vector<std::set<std::set<DNDS::index>>> result(nCells);
+    for (DNDS::index iCell = 0; iCell < nCells; iCell++)
+    {
+        auto eCell = Elem::Element{m->cellElemInfo[iCell]->getElemType()};
+        for (DNDS::rowsize j = 0; j < m->cell2face.RowSize(iCell); j++)
+        {
+            DNDS::index iFace = m->cell2face(iCell, j);
+            auto eFace = eCell.ObtainFace(j);
+            int nVerts = eFace.GetNumVertices();
+            std::set<DNDS::index> vs;
+            for (int k = 0; k < nVerts; k++)
+                vs.insert(m->face2node[iFace][k]);
+            result[iCell].insert(vs);
+        }
+    }
+    return result;
+}
+
+TEST_CASE("InterpolateFace: DSL matches Legacy on all mesh configs")
+{
+    for (int ci = 0; ci < N_CONFIGS; ci++)
+    {
+        if (ci == 4 && g_mpi.size != 8)
+            continue;
+        CAPTURE(ci);
+        const auto &cfg = g_configs[ci];
+        SUBCASE(cfg.name)
+        {
+            auto mDSL = buildMeshUpToFace(cfg, false);
+            auto mLeg = buildMeshUpToFace(cfg, true);
+
+            // Both should have the same number of local faces
+            CHECK(mDSL->NumFace() == mLeg->NumFace());
+            CHECK(mDSL->NumFaceGhost() == mLeg->NumFaceGhost());
+
+            // For each local cell, the face vertex sets must match
+            auto dslSets = collectCellFaceVertexSets(mDSL);
+            auto legSets = collectCellFaceVertexSets(mLeg);
+            DNDS::index nCells = mDSL->cell2node.father->Size();
+            CHECK(nCells == static_cast<DNDS::index>(legSets.size()));
+
+            for (DNDS::index iCell = 0; iCell < nCells; iCell++)
+            {
+                CAPTURE(iCell);
+                CHECK(dslSets[iCell] == legSets[iCell]);
+            }
+
+            // face2cell: for each local face, the set of (face vertex set, cell pair)
+            // should match. We compare by face vertex set → cell global indices.
+            // (Face ordering may differ, so we compare via vertex sets.)
+            std::map<std::set<DNDS::index>, std::pair<DNDS::index, DNDS::index>> dslF2C, legF2C;
+            for (DNDS::index iF = 0; iF < mDSL->NumFace(); iF++)
+            {
+                auto eFace = Elem::Element{mDSL->faceElemInfo(iF, 0).getElemType()};
+                std::set<DNDS::index> vs;
+                for (int k = 0; k < eFace.GetNumVertices(); k++)
+                    vs.insert(mDSL->face2node[iF][k]);
+                dslF2C[vs] = {mDSL->face2cell(iF, 0), mDSL->face2cell(iF, 1)};
+            }
+            for (DNDS::index iF = 0; iF < mLeg->NumFace(); iF++)
+            {
+                auto eFace = Elem::Element{mLeg->faceElemInfo(iF, 0).getElemType()};
+                std::set<DNDS::index> vs;
+                for (int k = 0; k < eFace.GetNumVertices(); k++)
+                    vs.insert(mLeg->face2node[iF][k]);
+                legF2C[vs] = {mLeg->face2cell(iF, 0), mLeg->face2cell(iF, 1)};
+            }
+            CHECK(dslF2C.size() == legF2C.size());
+
+            for (auto &[vs, dslPair] : dslF2C)
+            {
+                auto it = legF2C.find(vs);
+                REQUIRE(it != legF2C.end());
+                // Cell pairs should be same set (order of L/R might differ)
+                std::set<DNDS::index> dslCells{dslPair.first, dslPair.second};
+                std::set<DNDS::index> legCells{it->second.first, it->second.second};
+                CHECK(dslCells == legCells);
+            }
+
+            // Boundary zone assignment: same face vertex set should have same zone
+            std::map<std::set<DNDS::index>, t_index> dslZones, legZones;
+            for (DNDS::index iF = 0; iF < mDSL->NumFace(); iF++)
+            {
+                auto eFace = Elem::Element{mDSL->faceElemInfo(iF, 0).getElemType()};
+                std::set<DNDS::index> vs;
+                for (int k = 0; k < eFace.GetNumVertices(); k++)
+                    vs.insert(mDSL->face2node[iF][k]);
+                dslZones[vs] = mDSL->faceElemInfo(iF, 0).zone;
+            }
+            for (DNDS::index iF = 0; iF < mLeg->NumFace(); iF++)
+            {
+                auto eFace = Elem::Element{mLeg->faceElemInfo(iF, 0).getElemType()};
+                std::set<DNDS::index> vs;
+                for (int k = 0; k < eFace.GetNumVertices(); k++)
+                    vs.insert(mLeg->face2node[iF][k]);
+                legZones[vs] = mLeg->faceElemInfo(iF, 0).zone;
+            }
+            for (auto &[vs, dslZone] : dslZones)
+            {
+                auto it = legZones.find(vs);
+                REQUIRE(it != legZones.end());
+                CHECK(dslZone == it->second);
+            }
+        }
+    }
+}
+
+// --- Periodic face invariants ---
+
+using idx_pbi_t = std::pair<DNDS::index, uint8_t>;
+
+TEST_CASE("Periodic: face pbi has uniform XOR between owner and neighbor (collaborating check)")
+{
+    for (int _ci = 0; _ci < N_CONFIGS; _ci++)
+    {
+        if (_ci == 4 && g_mpi.size != 8) continue;
+        const auto &cfg = g_configs[_ci];
+        if (!cfg.periodic) continue;
+        auto m = g_full[_ci];
+        CAPTURE(_ci);
+        SUBCASE(cfg.name)
+        {
+            for (DNDS::index iFace = 0; iFace < m->NumFace(); iFace++)
+            {
+                DNDS::index iCellL = m->face2cell(iFace, 0);
+                DNDS::index iCellR = m->face2cell(iFace, 1);
+                if (iCellR == DNDS::UnInitIndex)
+                    continue;
+
+                auto eCellL = Elem::Element{m->cellElemInfo[iCellL]->getElemType()};
+                auto eCellR = Elem::Element{m->cellElemInfo[iCellR]->getElemType()};
+
+                int slotL = -1, slotR = -1;
+                for (DNDS::rowsize j = 0; j < m->cell2face.RowSize(iCellL); j++)
+                    if (m->cell2face(iCellL, j) == iFace) { slotL = j; break; }
+                for (DNDS::rowsize j = 0; j < m->cell2face.RowSize(iCellR); j++)
+                    if (m->cell2face(iCellR, j) == iFace) { slotR = j; break; }
+                REQUIRE(slotL >= 0);
+                REQUIRE(slotR >= 0);
+
+                auto eFaceL = eCellL.ObtainFace(slotL);
+                int nFN = eFaceL.GetNumNodes();
+
+                std::vector<DNDS::index> nodesL(nFN), nodesR(nFN);
+                std::vector<NodePeriodicBits> pbiL(nFN), pbiR(nFN);
+                eCellL.ExtractFaceNodes(slotL, m->cell2node[iCellL], nodesL);
+                eCellL.ExtractFaceNodes(slotL, m->cell2nodePbi[iCellL], pbiL);
+                eCellR.ExtractFaceNodes(slotR, m->cell2node[iCellR], nodesR);
+                eCellR.ExtractFaceNodes(slotR, m->cell2nodePbi[iCellR], pbiR);
+
+                std::vector<idx_pbi_t> pairsL(nFN), pairsR(nFN);
+                for (int k = 0; k < nFN; k++)
+                {
+                    pairsL[k] = {nodesL[k], uint8_t(pbiL[k])};
+                    pairsR[k] = {nodesR[k], uint8_t(pbiR[k])};
+                }
+                std::sort(pairsL.begin(), pairsL.end());
+                std::sort(pairsR.begin(), pairsR.end());
+
+                for (int k = 0; k < nFN; k++)
+                {
+                    CAPTURE(iFace); CAPTURE(k);
+                    CHECK(pairsL[k].first == pairsR[k].first);
+                }
+
+                uint8_t v0 = pairsL[0].second ^ pairsR[0].second;
+                for (int k = 1; k < nFN; k++)
+                {
+                    uint8_t vk = pairsL[k].second ^ pairsR[k].second;
+                    CAPTURE(iFace); CAPTURE(k); CAPTURE(v0); CAPTURE(vk);
+                    CHECK(vk == v0);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("Periodic: face2nodePbi is consistent with owner cell's cell2nodePbi")
+{
+    for (int _ci = 0; _ci < N_CONFIGS; _ci++)
+    {
+        if (_ci == 4 && g_mpi.size != 8) continue;
+        const auto &cfg = g_configs[_ci];
+        if (!cfg.periodic) continue;
+        auto m = g_full[_ci];
+        CAPTURE(_ci);
+        SUBCASE(cfg.name)
+        {
+            for (DNDS::index iFace = 0; iFace < m->NumFace(); iFace++)
+            {
+                DNDS::index iCellOwner = m->face2cell(iFace, 0);
+                auto eCell = Elem::Element{m->cellElemInfo[iCellOwner]->getElemType()};
+
+                int iSlot = -1;
+                for (DNDS::rowsize j = 0; j < m->cell2face.RowSize(iCellOwner); j++)
+                    if (m->cell2face(iCellOwner, j) == iFace) { iSlot = j; break; }
+                REQUIRE(iSlot >= 0);
+
+                auto eFace = eCell.ObtainFace(iSlot);
+                int nFN = eFace.GetNumNodes();
+
+                std::vector<DNDS::index> cellFaceNodes(nFN);
+                std::vector<NodePeriodicBits> cellFacePbi(nFN);
+                eCell.ExtractFaceNodes(iSlot, m->cell2node[iCellOwner], cellFaceNodes);
+                eCell.ExtractFaceNodes(iSlot, m->cell2nodePbi[iCellOwner], cellFacePbi);
+
+                std::set<idx_pbi_t> fromCell, fromFace;
+                for (int k = 0; k < nFN; k++)
+                {
+                    fromCell.insert({cellFaceNodes[k], uint8_t(cellFacePbi[k])});
+                    fromFace.insert({m->face2node(iFace, k), uint8_t(m->face2nodePbi(iFace, k))});
+                }
+                CAPTURE(iFace);
+                CHECK(fromCell == fromFace);
+            }
+        }
+    }
+}
+
+TEST_CASE("Periodic: RecreatePeriodicNodes produces consistent counts DSL vs Legacy")
+{
+    for (int ci = 0; ci < N_CONFIGS; ci++)
+    {
+        if (ci == 4 && g_mpi.size != 8)
+            continue;
+        const auto &cfg = g_configs[ci];
+        if (!cfg.periodic)
+            continue;
+        CAPTURE(ci);
+        SUBCASE(cfg.name)
+        {
+            auto mDSL = buildMeshUpToFace(cfg, false);
+            auto mLeg = buildMeshUpToFace(cfg, true);
+
+            mDSL->AdjLocal2GlobalN2CB();
+            mDSL->BuildGhostN2CB();
+            mDSL->AdjGlobal2LocalN2CB();
+            mDSL->RecreatePeriodicNodes();
+
+            mLeg->AdjLocal2GlobalN2CB();
+            mLeg->BuildGhostN2CB();
+            mLeg->AdjGlobal2LocalN2CB();
+            mLeg->RecreatePeriodicNodes();
+
+            CHECK(mDSL->coordsPeriodicRecreated.father->Size() ==
+                  mLeg->coordsPeriodicRecreated.father->Size());
+
+            auto dslGlobal = mDSL->coordsPeriodicRecreated.father->globalSize();
+            auto legGlobal = mLeg->coordsPeriodicRecreated.father->globalSize();
+            CHECK(dslGlobal == legGlobal);
+        }
+    }
+}
+
+TEST_CASE("Periodic: face2nodePbi matches DSL vs Legacy")
+{
+    for (int ci = 0; ci < N_CONFIGS; ci++)
+    {
+        if (ci == 4 && g_mpi.size != 8)
+            continue;
+        const auto &cfg = g_configs[ci];
+        if (!cfg.periodic)
+            continue;
+        CAPTURE(ci);
+        SUBCASE(cfg.name)
+        {
+            auto mDSL = buildMeshUpToFace(cfg, false);
+            auto mLeg = buildMeshUpToFace(cfg, true);
+
+            REQUIRE(mDSL->NumFace() == mLeg->NumFace());
+
+            // Map face vertex set → sorted (node, pbi) pairs for each path
+            using FaceKey = std::set<DNDS::index>;
+            using NodePbiSet = std::set<std::pair<DNDS::index, uint8_t>>;
+            std::map<FaceKey, NodePbiSet> dslMap, legMap;
+
+            for (DNDS::index iF = 0; iF < mDSL->NumFace(); iF++)
+            {
+                auto eF = Elem::Element{mDSL->faceElemInfo(iF, 0).getElemType()};
+                FaceKey vs;
+                for (int k = 0; k < eF.GetNumVertices(); k++)
+                    vs.insert(mDSL->face2node(iF, k));
+                NodePbiSet nps;
+                for (int k = 0; k < eF.GetNumNodes(); k++)
+                    nps.insert({mDSL->face2node(iF, k), uint8_t(mDSL->face2nodePbi(iF, k))});
+                dslMap[vs] = nps;
+            }
+            for (DNDS::index iF = 0; iF < mLeg->NumFace(); iF++)
+            {
+                auto eF = Elem::Element{mLeg->faceElemInfo(iF, 0).getElemType()};
+                FaceKey vs;
+                for (int k = 0; k < eF.GetNumVertices(); k++)
+                    vs.insert(mLeg->face2node(iF, k));
+                NodePbiSet nps;
+                for (int k = 0; k < eF.GetNumNodes(); k++)
+                    nps.insert({mLeg->face2node(iF, k), uint8_t(mLeg->face2nodePbi(iF, k))});
+                legMap[vs] = nps;
+            }
+
+            CHECK(dslMap.size() == legMap.size());
+            for (auto &[vs, dslNps] : dslMap)
+            {
+                auto it = legMap.find(vs);
+                REQUIRE(it != legMap.end());
+                CHECK(dslNps == it->second);
+            }
+        }
+    }
+}
+
 // --- N2CB ---
 
 TEST_CASE("N2CB: every local node has at least one adjacent cell")

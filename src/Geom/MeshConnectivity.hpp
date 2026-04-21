@@ -144,6 +144,93 @@ namespace DNDS::Geom
     };
 
     // =================================================================
+    // SubEntityDef: user-provided sub-entity topology query
+    // =================================================================
+
+    /// Describes one sub-entity extracted from a parent entity.
+    /// Returned by SubEntityQuery::describe().
+    struct SubEntityDesc
+    {
+        int nVertices{0};  ///< Number of corner vertices (used for deduplication).
+        int nNodes{0};     ///< Total number of nodes (vertices + mid-edge + ...).
+        t_index typeTag{0}; ///< Element type tag to store in entityElemInfo.
+                            ///< Opaque to Interpolate; only used for type-match
+                            ///< during deduplication (two sub-entities with different
+                            ///< typeTags are never considered duplicates).
+    };
+
+    /// User-provided callbacks that describe how to decompose parent entities
+    /// into sub-entities. This decouples Interpolate from any specific element
+    /// topology module.
+    ///
+    /// Example: to extract faces from cells, the caller would implement:
+    ///   - numSubEntities(iParent): returns eCell.GetNumFaces()
+    ///   - describe(iParent, iSub):  returns {nVerts, nNodes, faceElemType}
+    ///   - extractNodes(iParent, iSub, parentNodes, out): calls ExtractFaceNodes
+    ///   - matchExtra (optional): periodic collaborating check
+    struct SubEntityQuery
+    {
+        /// Number of sub-entities for parent iParent.
+        std::function<int(index iParent)> numSubEntities;
+
+        /// Describe sub-entity iSub of parent iParent.
+        std::function<SubEntityDesc(index iParent, int iSub)> describe;
+
+        /// Extract node indices of sub-entity iSub from parentNodes into out.
+        /// Must write exactly desc.nNodes entries starting at out[0].
+        /// parentNodes is an indexable range (operator[] returning index).
+        std::function<void(index iParent, int iSub,
+                           const std::function<index(int)> &parentNodes,
+                           index *out)>
+            extractNodes;
+
+        /// Optional extra match predicate for deduplication.
+        ///
+        /// Called after vertex-set match succeeds. If set, must return true
+        /// for the match to be accepted. Used for periodic meshes to implement
+        /// the "collaborating" check (uniform XOR of periodic bits).
+        ///
+        /// @param iParent       Current parent entity index.
+        /// @param iSub          Current sub-entity index within parent.
+        /// @param iCandEntity   Index of the candidate entity in the result arrays.
+        /// @param candidateParent  Index of the parent that created the candidate entity.
+        /// @param candidateSub    Sub-entity index that created the candidate entity.
+        /// @return true if the match is valid, false to reject.
+        std::function<bool(index iParent, int iSub,
+                           index iCandEntity,
+                           index candidateParent, int candidateSub)>
+            matchExtra;
+    };
+
+    // =================================================================
+    // InterpolateResult: output of sub-entity interpolation
+    // =================================================================
+
+    /// Result of interpolating (extracting) sub-entities from parent→node connectivity.
+    ///
+    /// Given parent→node (e.g., cell→node), Interpolate creates intermediate entities
+    /// (e.g., faces or edges) by extracting sub-entities from element topology,
+    /// deduplicating by sorted vertex comparison, and building both parent→entity
+    /// and entity→node adjacencies.
+    ///
+    /// All indices are local (0-based within the input arrays). No MPI communication
+    /// is performed — the caller is responsible for providing a complete view
+    /// (local + ghost cells) and for subsequent ownership resolution / ghost exchange.
+    struct InterpolateResult
+    {
+        tAdjPair parent2entity; ///< CSR: parent → entities (e.g., cell2face). Father-only.
+        tAdjPair entity2node;   ///< CSR: entity → nodes (e.g., face2node). Father-only.
+        tAdj2Pair entity2parent; ///< Fixed-2: entity → (parentL, parentR). Father-only.
+                                 ///< parentR = UnInitIndex for single-sided (boundary) entities.
+        std::vector<ElemInfo> entityElemInfo; ///< Per-entity element info (zone=0, type from SubEntityDesc::typeTag).
+        index nEntities{0};     ///< Total number of unique entities created.
+        bool duplicateOverflow{false}; ///< Set if a sub-entity matched an entity that already has
+                                       ///< two parents (would need a third). Indicates incorrect
+                                       ///< deduplication — typically a missing matchExtra on
+                                       ///< periodic meshes.
+    };
+
+    // =================================================================
     // MeshConnectivity: the layered DAG
     // =================================================================
 
@@ -242,6 +329,35 @@ namespace DNDS::Geom
             const std::unordered_map<index, index> &bGlobal2Local,
             const std::function<index(index)> &aLocal2Global,
             Predicate &&pred);
+
+        // -----------------------------------------------------------------
+        // Interpolate: extract sub-entities from parent→node connectivity
+        // -----------------------------------------------------------------
+
+        /// Extract sub-entities (faces or edges) from parent→node connectivity.
+        ///
+        /// For each parent entity, queries the SubEntityQuery to enumerate its
+        /// sub-entities, extracts node indices, and deduplicates by sorted-vertex
+        /// comparison. Produces parent→entity, entity→node, and entity→parent
+        /// (2-wide) adjacencies.
+        ///
+        /// This is a local-only operation: no MPI communication. The caller
+        /// provides a contiguous block of parent entities (typically local + ghost
+        /// cells) and receives local-indexed results.
+        ///
+        /// @param parent2node    CSR: parent → nodes (father-only or father+son).
+        ///                       Accessed via operator[] for indices [0, nParent).
+        /// @param query          User-provided callbacks describing sub-entity topology.
+        /// @param nParent        Number of parent entities to process.
+        /// @param nNode          Total number of nodes (for reverse-index sizing).
+        /// @param mpi            MPI info (only for array allocation, no communication).
+        /// @return               InterpolateResult with all adjacencies.
+        static InterpolateResult Interpolate(
+            const tAdjPair &parent2node,
+            const SubEntityQuery &query,
+            index nParent,
+            index nNode,
+            const MPIInfo &mpi);
     };
 
     // =====================================================================

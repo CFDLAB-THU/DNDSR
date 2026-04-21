@@ -412,12 +412,14 @@ namespace DNDS::Geom
          * generates node2cell and node2bnd (father part)
          */
         void RecoverNode2CellAndNode2Bnd();
+        void RecoverNode2CellAndNode2BndLegacy();
 
         /**
          * \brief needs to use RecoverNode2CellAndNode2Bnd before doing this.
          * Requires node2cell.father and builds a version of its son.
          */
         void RecoverCell2CellAndBnd2Cell();
+        void RecoverCell2CellAndBnd2CellLegacy();
 
         /**
          * @brief building ghost (son) from primary (currently only cell2cell)
@@ -452,6 +454,7 @@ namespace DNDS::Geom
         void AdjLocal2GlobalC2CFace();
 
         void InterpolateFace();
+        void InterpolateFaceLegacy();
         void AssertOnFaces();
 
         void ConstructBndMesh(UnstructuredMesh &bMesh);

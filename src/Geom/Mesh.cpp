@@ -1,5 +1,6 @@
 #include "Mesh.hpp"
 #include "Mesh_PartitionHelpers.hpp"
+#include "MeshConnectivity.hpp"
 #include "Solver/Direct.hpp"
 
 #include <cstdlib>
@@ -470,7 +471,7 @@ namespace DNDS::Geom
     }
 
     void UnstructuredMesh::
-        RecoverNode2CellAndNode2Bnd()
+        RecoverNode2CellAndNode2BndLegacy()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
         DNDS_assert(coords.father);
@@ -523,7 +524,298 @@ namespace DNDS::Geom
         // mesh->node2cell.trans.pullOnce();
     }
 
+    void UnstructuredMesh::
+        RecoverNode2CellAndNode2Bnd()
+    {
+        DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert(coords.father);
+        DNDS_assert(cell2node.father);
+        DNDS_assert(bnd2node.father);
+
+        if (!coords.father->pLGlobalMapping)
+            coords.father->createGlobalMapping();
+        if (!cell2node.father->pLGlobalMapping)
+            cell2node.father->createGlobalMapping();
+
+        // node2cell via DSL Inverse
+        auto dslN2C = MeshConnectivity::Inverse(
+            cell2node, coords.father->Size(), mpi,
+            [this](index i) { return this->CellIndexLocal2Global_NoSon(i); },
+            [this](index i) { return this->NodeIndexLocal2Global_NoSon(i); },
+            coords.father->pLGlobalMapping);
+
+        // Copy DSL result into node2cell pair (father only)
+        node2cell.InitPair("node2cell", mpi);
+        node2cell.father->Resize(coords.father->Size());
+        for (index iNode = 0; iNode < coords.father->Size(); iNode++)
+        {
+            auto row = dslN2C.father->operator[](iNode);
+            node2cell.father->ResizeRow(iNode, row.size());
+            for (rowsize j = 0; j < static_cast<rowsize>(row.size()); j++)
+                node2cell.father->operator()(iNode, j) = row[j];
+        }
+
+        // node2bnd via DSL Inverse
+        if (!bnd2node.father->pLGlobalMapping)
+            bnd2node.father->createGlobalMapping();
+
+        auto dslN2B = MeshConnectivity::Inverse(
+            bnd2node, coords.father->Size(), mpi,
+            [this](index i) { return this->BndIndexLocal2Global_NoSon(i); },
+            [this](index i) { return this->NodeIndexLocal2Global_NoSon(i); },
+            coords.father->pLGlobalMapping);
+
+        node2bnd.InitPair("node2bnd", mpi);
+        node2bnd.father->Resize(coords.father->Size());
+        for (index iNode = 0; iNode < coords.father->Size(); iNode++)
+        {
+            auto row = dslN2B.father->operator[](iNode);
+            node2bnd.father->ResizeRow(iNode, row.size());
+            for (rowsize j = 0; j < static_cast<rowsize>(row.size()); j++)
+                node2bnd.father->operator()(iNode, j) = row[j];
+        }
+
+        this->adjN2CBState = Adj_PointToGlobal;
+    }
+
     void UnstructuredMesh::RecoverCell2CellAndBnd2Cell()
+    {
+        DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert(adjN2CBState == Adj_PointToGlobal);
+        DNDS_assert(coords.father);
+        DNDS_assert(cell2node.father);
+        DNDS_assert(bnd2node.father);
+        DNDS_assert(node2cell.father);
+
+        coords.TransAttach();
+        coords.trans.createFatherGlobalMapping();
+        cell2node.TransAttach();
+        cell2node.trans.createFatherGlobalMapping();
+        bnd2node.TransAttach();
+        bnd2node.trans.createFatherGlobalMapping();
+
+        // Ghost-pull node2cell for off-rank nodes referenced by local cells and bnds
+        std::unordered_set<index> ghostNodesCompactSet;
+        for (index i = 0; i < cell2node.father->Size(); i++)
+            for (auto in : cell2node.father->operator[](i))
+                if (NodeIndexGlobal2Local_NoSon(in) < 0)
+                    ghostNodesCompactSet.insert(in);
+        for (index i = 0; i < bnd2node.father->Size(); i++)
+            for (auto in : bnd2node.father->operator[](i))
+                if (NodeIndexGlobal2Local_NoSon(in) < 0)
+                    ghostNodesCompactSet.insert(in);
+        std::vector<index> ghostNodes;
+        ghostNodes.reserve(ghostNodesCompactSet.size());
+        for (auto v : ghostNodesCompactSet)
+            ghostNodes.push_back(v);
+
+        node2cell.son = make_ssp<decltype(node2cell.son)::element_type>(ObjName{"node2cell.son"}, mpi);
+        node2cell.TransAttach();
+        node2cell.trans.createFatherGlobalMapping();
+        node2cell.trans.createGhostMapping(ghostNodes);
+        node2cell.trans.createMPITypes();
+        node2cell.trans.pullOnce();
+
+        // Build global→local-appended map for node2cell
+        std::unordered_map<index, index> nodeG2L;
+        for (index i = 0; i < node2cell.Size(); i++)
+            nodeG2L[node2cell.trans.pLGhostMapping->operator()(-1, i)] = i;
+
+        // cell2cell via DSL ComposeFiltered
+        auto dslC2C = MeshConnectivity::ComposeFiltered(
+            cell2node, node2cell,
+            cell2node.father->Size(),
+            nodeG2L,
+            [this](index i) { return this->CellIndexLocal2Global_NoSon(i); },
+            SharedCountPredicate{.minShared = 1, .removeSelf = true});
+
+        cell2cell.InitPair("cell2cell", mpi);
+        cell2cell.father->Resize(cell2node.father->Size());
+        for (index i = 0; i < cell2node.father->Size(); i++)
+        {
+            auto row = dslC2C.father->operator[](i);
+            cell2cell.father->ResizeRow(i, row.size());
+            for (rowsize j = 0; j < static_cast<rowsize>(row.size()); j++)
+                cell2cell.father->operator()(i, j) = row[j];
+        }
+
+        // bnd2cell: same logic as legacy (including periodic pbi filter)
+        bnd2cell.InitPair("bnd2cell", mpi);
+        bnd2cell.father->Resize(bnd2node.father->Size());
+
+        std::vector<std::set<index>> bndCellCandidates;
+        if (isPeriodic)
+            bndCellCandidates.resize(bnd2node.father->Size());
+
+        for (index i = 0; i < bnd2node.father->Size(); i++)
+        {
+            std::set<index> cellRecCur;
+            bool initDone{false};
+            for (auto in : bnd2node.father->operator[](i))
+            {
+                DNDS_assert(nodeG2L.count(in));
+                std::set<index> cellRecCurNew;
+                for (auto ico : node2cell[nodeG2L.at(in)])
+                    if (!initDone || cellRecCur.count(ico))
+                        cellRecCurNew.insert(ico);
+                std::swap(cellRecCur, cellRecCurNew);
+                initDone = true;
+            }
+
+            if (isPeriodic)
+                bndCellCandidates[i] = std::move(cellRecCur);
+            else
+            {
+                DNDS_assert_info(cellRecCur.size() == 1, fmt::format("cellRecCur.size() is [{}]", cellRecCur.size()));
+                bnd2cell.father->operator()(i, 0) = *cellRecCur.begin();
+                bnd2cell.father->operator()(i, 1) = UnInitIndex;
+            }
+        }
+
+        // Periodic: ghost-pull cell2node and cell2nodePbi for candidate cells,
+        // then do pbi filter and donor/receiver assignment.
+        // (Identical to legacy — keeping the periodic bnd2cell logic as-is.)
+        if (isPeriodic)
+        {
+            std::vector<index> neededCells;
+            for (index i = 0; i < bnd2cell.father->Size(); i++)
+            {
+                if (!Geom::FaceIDIsPeriodic(bndElemInfo.father->operator()(i, 0).zone))
+                    continue;
+                for (auto ic : bndCellCandidates[i])
+                    neededCells.push_back(ic);
+            }
+
+            cell2nodePbi.son = make_ssp<decltype(cell2nodePbi.son)::element_type>(ObjName{"cell2nodePbi.son"}, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
+            cell2nodePbi.TransAttach();
+            cell2nodePbi.trans.createFatherGlobalMapping();
+            cell2nodePbi.trans.createGhostMapping(neededCells);
+            cell2nodePbi.trans.createMPITypes();
+            cell2nodePbi.trans.pullOnce();
+            cell2node.son = make_ssp<decltype(cell2node.son)::element_type>(ObjName{"cell2node.son"}, mpi);
+            cell2node.BorrowAndPull(cell2nodePbi);
+
+            for (index i = 0; i < bnd2cell.father->Size(); i++)
+            {
+                if (!Geom::FaceIDIsPeriodic(bndElemInfo.father->operator()(i, 0).zone))
+                    continue;
+
+                auto &cellRecCur = bndCellCandidates[i];
+                std::set<index> cellRecFiltered;
+                for (auto ic : cellRecCur)
+                {
+                    auto [ret, rank, icAppend] = cell2nodePbi.trans.pLGhostMapping->search_indexAppend(ic);
+                    DNDS_assert_info(ret, fmt::format("periodic bnd {} candidate cell {} not found in ghost mapping", i, ic));
+
+                    bool cellContainsBnd = true;
+                    for (int ib2n = 0; ib2n < bnd2node.father->operator[](i).size(); ib2n++)
+                    {
+                        index iNode = bnd2node.father->operator[](i)[ib2n];
+                        auto iNodePbi = bnd2nodePbi.father->operator[](i)[ib2n];
+                        int nIndexMatchNode{0}, nIndexPBIMatchNode{0};
+                        for (int ic2n = 0; ic2n < cell2node[icAppend].size(); ic2n++)
+                            if (iNode == cell2node(icAppend, ic2n))
+                            {
+                                nIndexMatchNode++;
+                                if (iNodePbi == cell2nodePbi(icAppend, ic2n))
+                                    nIndexPBIMatchNode++;
+                            }
+                        DNDS_assert(nIndexMatchNode >= 1);
+                        if (nIndexPBIMatchNode == 0)
+                            cellContainsBnd = false;
+                    }
+                    if (cellContainsBnd)
+                        cellRecFiltered.insert(ic);
+                }
+
+                DNDS_assert_info(cellRecFiltered.size() == 2 || cellRecFiltered.size() == 1,
+                                 fmt::format("periodic bnd {} has {} cells after pbi filter", i, cellRecFiltered.size()));
+                auto it = cellRecFiltered.begin();
+                bnd2cell.father->operator()(i, 0) = *it;
+                if (cellRecFiltered.size() == 2)
+                    ++it;
+                bnd2cell.father->operator()(i, 1) = *it;
+            }
+
+            // Swap check: ensure bnd2cell(i, 0) is the donor-side cell
+            for (index i = 0; i < bnd2cell.father->Size(); i++)
+                if (bnd2cell(i, 1) != UnInitIndex && bnd2cell(i, 0) != bnd2cell(i, 1))
+                {
+                    index ic0 = bnd2cell(i, 0);
+                    index ic1 = bnd2cell(i, 1);
+                    auto [ret0, rank0, ic0L] = cell2nodePbi.trans.pLGhostMapping->search_indexAppend(ic0);
+                    auto [ret1, rank1, ic1L] = cell2nodePbi.trans.pLGhostMapping->search_indexAppend(ic1);
+                    DNDS_assert_info(ret0 && ret1, "search failed");
+                    std::vector<Geom::NodePeriodicBits> pbi0, pbi1;
+
+                    for (auto in : bnd2node[i])
+                    {
+                        bool found0{false}, found1{false};
+                        for (rowsize ic2n = 0; ic2n < cell2node[ic0L].size(); ic2n++)
+                            if (cell2node[ic0L][ic2n] == in)
+                                found0 = true, pbi0.push_back(cell2nodePbi(ic0L, ic2n));
+                        for (rowsize ic2n = 0; ic2n < cell2node[ic1L].size(); ic2n++)
+                            if (cell2node[ic1L][ic2n] == in)
+                                found1 = true, pbi1.push_back(cell2nodePbi(ic1L, ic2n));
+                        DNDS_assert(found0 && found1);
+                    }
+                    auto cleanOtherBits = [&](Geom::NodePeriodicBits &b)
+                    {
+                        if (Geom::FaceIDIsPeriodic1(bndElemInfo(i, 0).zone))
+                            b = b & nodePB1;
+                        else if (Geom::FaceIDIsPeriodic2(bndElemInfo(i, 0).zone))
+                            b = b & nodePB2;
+                        else if (Geom::FaceIDIsPeriodic3(bndElemInfo(i, 0).zone))
+                            b = b & nodePB3;
+                    };
+                    for (auto &b : pbi0)
+                        cleanOtherBits(b);
+                    for (auto &b : pbi1)
+                        cleanOtherBits(b);
+
+                    Geom::NodePeriodicBits bndBit;
+                    if (bndElemInfo(i, 0).zone == Geom::BC_ID_PERIODIC_1_DONOR)
+                        bndBit.setP1True();
+                    else if (bndElemInfo(i, 0).zone == Geom::BC_ID_PERIODIC_2_DONOR)
+                        bndBit.setP2True();
+                    else if (bndElemInfo(i, 0).zone == Geom::BC_ID_PERIODIC_3_DONOR)
+                        bndBit.setP3True();
+                    else if (!Geom::FaceIDIsPeriodic(bndElemInfo(i, 0).zone))
+                        DNDS_assert_info(false, "this bnd with both sides has to be periodic");
+
+                    bool match0{true}, match1{true};
+                    for (auto b : pbi0)
+                        if (b ^ bndBit)
+                            match0 = false;
+                    for (auto b : pbi1)
+                        if (b ^ bndBit)
+                            match1 = false;
+                    if (match0 && !match1)
+                        ;
+                    else if (match1 && !match0)
+                        std::swap(bnd2cell(i, 0), bnd2cell(i, 1));
+                    else
+                    {
+                        if (mpi.rank >= 0)
+                        {
+                            for (auto b : pbi0)
+                                DNDS::log() << b << ", ";
+                            DNDS::log() << " ---- ";
+                            for (auto b : pbi1)
+                                DNDS::log() << b << ", ";
+                            DNDS::log() << " ---- " << bndBit;
+                            DNDS::log() << std::endl;
+                        }
+                        DNDS_assert_info(false,
+                                         match0
+                                             ? "this periodic bnd matches both sides"
+                                             : "this periodic bnd matches no sides");
+                    }
+                }
+        }
+    }
+
+    void UnstructuredMesh::RecoverCell2CellAndBnd2CellLegacy()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
         DNDS_assert(adjN2CBState == Adj_PointToGlobal);
@@ -1678,7 +1970,7 @@ namespace DNDS::Geom
 
     /// @todo //TODO: handle periodic cases
     void UnstructuredMesh::
-        InterpolateFace()
+        InterpolateFaceLegacy()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToLocal); // And also should have primary ghost comm
 
@@ -1787,6 +2079,254 @@ namespace DNDS::Geom
         }
 
         auto gSize = face2node.father->globalSize(); //! sync call!!!
+        if (mpi.rank == 0)
+            log() << "UnstructuredMesh === InterpolateFaceLegacy: total faces " << gSize << std::endl;
+    }
+
+    void UnstructuredMesh::
+        InterpolateFace()
+    {
+        DNDS_assert(adjPrimaryState == Adj_PointToLocal);
+
+        // === Section A: Allocate face-related array pairs ===
+        cell2face.InitPair("cell2face", mpi);
+        face2cell.InitPair("face2cell", mpi);
+        face2node.InitPair("face2node", mpi);
+        if (isPeriodic)
+            face2nodePbi.InitPair("face2nodePbi", mpi);
+        faceElemInfo.InitPair("faceElemInfo", mpi);
+        face2bnd.InitPair("face2bnd", mpi);
+        bnd2face.InitPair("bnd2face", mpi);
+
+        cell2face.father->Resize(cell2cell.father->Size());
+        cell2face.son->Resize(cell2cell.son->Size());
+
+        // === Section B: DSL Interpolate replaces EnumerateFacesFromCells ===
+        index nCellAll = cell2cell.Size();
+        index nNodeAll = coords.Size();
+
+        // Build SubEntityQuery from Element topology
+        SubEntityQuery faceQuery;
+        faceQuery.numSubEntities = [this](index iParent) -> int
+        {
+            return Elem::Element{cellElemInfo[iParent]->getElemType()}.GetNumFaces();
+        };
+        faceQuery.describe = [this](index iParent, int iSub) -> SubEntityDesc
+        {
+            auto eParent = Elem::Element{cellElemInfo[iParent]->getElemType()};
+            auto eFace = eParent.ObtainFace(iSub);
+            return SubEntityDesc{eFace.GetNumVertices(), eFace.GetNumNodes(),
+                                 static_cast<t_index>(eFace.type)};
+        };
+        faceQuery.extractNodes = [this](index iParent, int iSub,
+                                         const std::function<index(int)> &parentNodes,
+                                         index *out)
+        {
+            auto eParent = Elem::Element{cellElemInfo[iParent]->getElemType()};
+            auto eFace = eParent.ObtainFace(iSub);
+            std::vector<index> pNodes(eParent.GetNumNodes());
+            for (int i = 0; i < eParent.GetNumNodes(); i++)
+                pNodes[i] = parentNodes(i);
+            std::vector<index> fNodes(eFace.GetNumNodes());
+            eParent.ExtractFaceNodes(iSub, pNodes, fNodes);
+            for (int i = 0; i < eFace.GetNumNodes(); i++)
+                out[i] = fNodes[i];
+        };
+
+        // Periodic collaborating check: two faces with the same vertex indices
+        // are the same face only if the XOR of their periodic bits is uniform
+        // across all node pairs (sorted by node index).
+        if (isPeriodic)
+        {
+            faceQuery.matchExtra = [this](index iParent, int iSub,
+                                           index /*iCandEntity*/,
+                                           index candidateParent, int candidateSub) -> bool
+            {
+                auto eParentA = Elem::Element{cellElemInfo[iParent]->getElemType()};
+                auto eFaceA = eParentA.ObtainFace(iSub);
+                int nFaceNodes = eFaceA.GetNumNodes();
+
+                // Extract (nodeIndex, pbi) pairs for current sub-entity
+                std::vector<index> nodesA(nFaceNodes);
+                eParentA.ExtractFaceNodes(iSub, cell2node[iParent], nodesA);
+                std::vector<NodePeriodicBits> pbiA(nFaceNodes);
+                eParentA.ExtractFaceNodes(iSub, cell2nodePbi[iParent], pbiA);
+
+                // Extract (nodeIndex, pbi) pairs for candidate entity
+                auto eParentB = Elem::Element{cellElemInfo[candidateParent]->getElemType()};
+                std::vector<index> nodesB(nFaceNodes);
+                eParentB.ExtractFaceNodes(candidateSub, cell2node[candidateParent], nodesB);
+                std::vector<NodePeriodicBits> pbiB(nFaceNodes);
+                eParentB.ExtractFaceNodes(candidateSub, cell2nodePbi[candidateParent], pbiB);
+
+                // Sort both by (nodeIndex, pbi) for aligned comparison
+                using idx_pbi = std::pair<index, NodePeriodicBits>;
+                auto cmp = [](const idx_pbi &L, const idx_pbi &R)
+                { return L.first == R.first ? uint8_t(L.second) < uint8_t(R.second)
+                                            : L.first < R.first; };
+
+                std::vector<idx_pbi> pairsA(nFaceNodes), pairsB(nFaceNodes);
+                for (int i = 0; i < nFaceNodes; i++)
+                {
+                    pairsA[i] = {nodesA[i], pbiA[i]};
+                    pairsB[i] = {nodesB[i], pbiB[i]};
+                }
+                std::sort(pairsA.begin(), pairsA.end(), cmp);
+                std::sort(pairsB.begin(), pairsB.end(), cmp);
+
+                // Check uniform XOR across all node pairs
+                auto v0 = pairsA[0].second ^ pairsB[0].second;
+                for (int i = 1; i < nFaceNodes; i++)
+                    if ((pairsA[i].second ^ pairsB[i].second) != v0)
+                        return false; // Non-uniform XOR: different periodic image
+                return true;
+            };
+        }
+
+        auto dslResult = MeshConnectivity::Interpolate(
+            cell2node, faceQuery, nCellAll, nNodeAll, mpi);
+
+        // === Convert InterpolateResult → FaceEnumerationResult ===
+        FaceEnumerationResult faceEnum;
+        faceEnum.nFaces = dslResult.nEntities;
+        faceEnum.face2nodeV.resize(dslResult.nEntities);
+        faceEnum.face2cellV.resize(dslResult.nEntities);
+        faceEnum.faceElemInfoV = std::move(dslResult.entityElemInfo);
+
+        for (index iEnt = 0; iEnt < dslResult.nEntities; iEnt++)
+        {
+            // entity2node → face2nodeV
+            auto row = dslResult.entity2node.father->operator[](iEnt);
+            faceEnum.face2nodeV[iEnt].assign(row.begin(), row.end());
+
+            // entity2parent → face2cellV
+            faceEnum.face2cellV[iEnt] = std::make_pair(
+                dslResult.entity2parent.father->operator()(iEnt, 0),
+                dslResult.entity2parent.father->operator()(iEnt, 1));
+        }
+
+        if (isPeriodic)
+        {
+            // For periodic meshes, extract face node periodic bits from cell2nodePbi
+            // following the same extraction logic used for face nodes.
+            faceEnum.face2nodePbiV.resize(dslResult.nEntities);
+            for (index iEnt = 0; iEnt < dslResult.nEntities; iEnt++)
+            {
+                index iParent = faceEnum.face2cellV[iEnt].first;
+                auto eParent = Elem::Element{cellElemInfo[iParent]->getElemType()};
+
+                // Find which sub-entity index of iParent maps to iEnt
+                int iSub = -1;
+                for (rowsize j = 0; j < dslResult.parent2entity.father->RowSize(iParent); j++)
+                {
+                    if (dslResult.parent2entity.father->operator()(iParent, j) == iEnt)
+                    {
+                        iSub = j;
+                        break;
+                    }
+                }
+                DNDS_assert(iSub >= 0);
+
+                auto eFace = eParent.ObtainFace(iSub);
+                faceEnum.face2nodePbiV[iEnt].resize(eFace.GetNumNodes());
+                eParent.ExtractFaceNodes(iSub, cell2nodePbi[iParent],
+                                         faceEnum.face2nodePbiV[iEnt]);
+            }
+        }
+
+        // Copy parent2entity into cell2face
+        for (index iCell = 0; iCell < nCellAll; iCell++)
+        {
+            rowsize nFaces = dslResult.parent2entity.father->RowSize(iCell);
+            cell2face.ResizeRow(iCell, nFaces);
+            for (rowsize j = 0; j < nFaces; j++)
+                cell2face(iCell, j) = dslResult.parent2entity.father->operator()(iCell, j);
+        }
+
+        // === Section C: Filter faces — discard ghost-only and duplicate cross-rank ===
+        auto faceCollect = CollectFaces(
+            faceEnum.faceElemInfoV, faceEnum.face2cellV, faceEnum.nFaces,
+            cell2face.father->Size(),
+            *cell2node.trans.pLGhostMapping, *cell2node.father->pLGlobalMapping,
+            mpi.size, mpi.rank);
+
+        // === Section D: Compact collected faces into member arrays, remap cell2face ===
+        CompactFacesAndRemapCell2Face(
+            faceEnum, faceCollect,
+            face2cell, face2node, face2nodePbi, faceElemInfo,
+            cell2face, isPeriodic, mpi.comm);
+        adjFacialState = Adj_PointToLocal;
+
+        // === Section E: Match boundary elements to faces ===
+        MatchBoundariesToFaces(
+            bndElemInfo, bnd2cell, bnd2node, cell2face, face2node, cell2node,
+            faceElemInfo, bnd2faceV, face2bndM, face2bnd, bnd2face);
+
+        // === Section F: Ghost face communication ===
+        this->AdjLocal2GlobalFacial();
+
+        std::vector<index> faceSendLocalsIdx;
+        std::vector<index> faceSendLocalsStarts(mpi.size + 1);
+        faceSendLocalsStarts[0] = 0;
+        for (MPI_int r = 0; r < mpi.size; r++)
+            faceSendLocalsStarts[r + 1] = faceSendLocalsStarts[r] + faceCollect.faceSendLocals[r].size();
+        faceSendLocalsIdx.resize(faceSendLocalsStarts.back());
+        for (MPI_int r = 0; r < mpi.size; r++)
+            std::copy(faceCollect.faceSendLocals[r].begin(), faceCollect.faceSendLocals[r].end(),
+                      faceSendLocalsIdx.begin() + faceSendLocalsStarts[r]);
+
+        face2node.father->Compress();
+        if (isPeriodic)
+            face2nodePbi.father->Compress();
+        face2cell.TransAttach();
+        face2cell.trans.createFatherGlobalMapping();
+        face2cell.trans.createGhostMapping(faceSendLocalsIdx, faceSendLocalsStarts);
+        face2cell.trans.createMPITypes();
+        face2cell.trans.pullOnce();
+        face2node.BorrowAndPull(face2cell);
+        if (isPeriodic)
+            face2nodePbi.BorrowAndPull(face2cell);
+        faceElemInfo.BorrowAndPull(face2cell);
+        face2bnd.BorrowAndPull(face2cell);
+
+        this->AdjGlobal2LocalFacial();
+
+        // === Section G: Assign ghost faces to cell2face entries marked -1 ===
+        AssignGhostFacesToCells(
+            face2cell.son, face2node.son, faceElemInfo.son,
+            cell2face, cell2node, cellElemInfo,
+            face2cell.father->Size());
+
+        cell2face.father->Compress();
+        cell2face.son->Compress();
+        adjC2FState = Adj_PointToLocal;
+
+        // === Section H: Communicate cell2face and bnd2face ghost data ===
+        this->AdjLocal2GlobalC2F();
+        cell2face.TransAttach();
+        cell2face.trans.BorrowGGIndexing(cell2node.trans);
+        cell2face.trans.createMPITypes();
+        cell2face.trans.pullOnce();
+        bnd2face.TransAttach();
+        bnd2face.trans.BorrowGGIndexing(bnd2node.trans);
+        bnd2face.trans.createMPITypes();
+        bnd2face.trans.pullOnce();
+        this->AdjGlobal2LocalC2F();
+
+        for (DNDS::index iFace = 0; iFace < faceElemInfo.Size(); iFace++)
+        {
+            if (FaceIDIsPeriodicMain(faceElemInfo(iFace, 0).zone))
+            {
+            }
+        }
+        for (DNDS::index iFace = 0; iFace < faceElemInfo.Size(); iFace++)
+        {
+            if (FaceIDIsPeriodicDonor(faceElemInfo(iFace, 0).zone))
+            {
+            }
+        }
+
+        auto gSize = face2node.father->globalSize();
         if (mpi.rank == 0)
             log() << "UnstructuredMesh === InterpolateFace: total faces " << gSize << std::endl;
     }
