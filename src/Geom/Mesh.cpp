@@ -639,54 +639,27 @@ namespace DNDS::Geom
                 cell2cell.father->operator()(i, j) = row[j];
         }
 
-        // bnd2cell: same logic as legacy (including periodic pbi filter)
+        // bnd2cell via ComposeFiltered with per-bnd node-count predicate.
+        // For periodic meshes, additionally uses pbi containment matchExtra.
         bnd2cell.InitPair("bnd2cell", mpi);
         bnd2cell.father->Resize(bnd2node.father->Size());
 
-        std::vector<std::set<index>> bndCellCandidates;
-        if (isPeriodic)
-            bndCellCandidates.resize(bnd2node.father->Size());
-
-        for (index i = 0; i < bnd2node.father->Size(); i++)
-        {
-            std::set<index> cellRecCur;
-            bool initDone{false};
-            for (auto in : bnd2node.father->operator[](i))
-            {
-                DNDS_assert(nodeG2L.count(in));
-                std::set<index> cellRecCurNew;
-                for (auto ico : node2cell[nodeG2L.at(in)])
-                    if (!initDone || cellRecCur.count(ico))
-                        cellRecCurNew.insert(ico);
-                std::swap(cellRecCur, cellRecCurNew);
-                initDone = true;
-            }
-
-            if (isPeriodic)
-                bndCellCandidates[i] = std::move(cellRecCur);
-            else
-            {
-                DNDS_assert_info(cellRecCur.size() == 1, fmt::format("cellRecCur.size() is [{}]", cellRecCur.size()));
-                bnd2cell.father->operator()(i, 0) = *cellRecCur.begin();
-                bnd2cell.father->operator()(i, 1) = UnInitIndex;
-            }
-        }
-
-        // Periodic: ghost-pull cell2node and cell2nodePbi for candidate cells,
-        // then do pbi filter and donor/receiver assignment.
-        // (Identical to legacy — keeping the periodic bnd2cell logic as-is.)
+        // For periodic: ghost-pull cell2node and cell2nodePbi for all cells
+        // reachable through node2cell, so the pbi matchExtra can access them.
+        std::unordered_map<index, index> cellG2LAppended; // cell global → local-appended in cell2node/cell2nodePbi
         if (isPeriodic)
         {
+            // Collect all unique cell globals from node2cell (father+son)
+            std::unordered_set<index> allCellGlobals;
+            for (index iNode = 0; iNode < node2cell.Size(); iNode++)
+                for (auto ic : node2cell[iNode])
+                    allCellGlobals.insert(ic);
             std::vector<index> neededCells;
-            for (index i = 0; i < bnd2cell.father->Size(); i++)
-            {
-                if (!Geom::FaceIDIsPeriodic(bndElemInfo.father->operator()(i, 0).zone))
-                    continue;
-                for (auto ic : bndCellCandidates[i])
-                    neededCells.push_back(ic);
-            }
+            for (auto ic : allCellGlobals)
+                neededCells.push_back(ic);
 
-            cell2nodePbi.son = make_ssp<decltype(cell2nodePbi.son)::element_type>(ObjName{"cell2nodePbi.son"}, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
+            cell2nodePbi.son = make_ssp<decltype(cell2nodePbi.son)::element_type>(
+                ObjName{"cell2nodePbi.son"}, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
             cell2nodePbi.TransAttach();
             cell2nodePbi.trans.createFatherGlobalMapping();
             cell2nodePbi.trans.createGhostMapping(neededCells);
@@ -695,49 +668,87 @@ namespace DNDS::Geom
             cell2node.son = make_ssp<decltype(cell2node.son)::element_type>(ObjName{"cell2node.son"}, mpi);
             cell2node.BorrowAndPull(cell2nodePbi);
 
-            for (index i = 0; i < bnd2cell.father->Size(); i++)
+            // Build global→local-appended map
+            for (index i = 0; i < cell2node.Size(); i++)
+                cellG2LAppended[cell2nodePbi.trans.pLGhostMapping->operator()(-1, i)] = i;
+        }
+
+        // Per-bnd predicate: keep cells sharing ALL bnd nodes (set intersection)
+        auto bndAllNodesPred = [this](index aBndGlobal, index cCellGlobal, int nShared) -> bool
+        {
+            // Map aBndGlobal to local bnd index to get row size
+            index aBndLocal = this->BndIndexGlobal2Local_NoSon(aBndGlobal);
+            DNDS_assert(aBndLocal >= 0);
+            return nShared >= bnd2node.father->RowSize(aBndLocal);
+        };
+
+        // matchExtra for periodic: pbi containment check
+        std::function<bool(index, index, const std::vector<index> &)> bndMatchExtra = nullptr;
+        if (isPeriodic)
+        {
+            bndMatchExtra = [this, &cellG2LAppended](
+                                index aBndLocal, index cCellGlobal,
+                                const std::vector<index> & /*sharedNodes*/) -> bool
             {
-                if (!Geom::FaceIDIsPeriodic(bndElemInfo.father->operator()(i, 0).zone))
-                    continue;
+                auto itC = cellG2LAppended.find(cCellGlobal);
+                if (itC == cellG2LAppended.end())
+                    return false;
+                index cLocal = itC->second;
 
-                auto &cellRecCur = bndCellCandidates[i];
-                std::set<index> cellRecFiltered;
-                for (auto ic : cellRecCur)
+                // Every (node, pbi) in the bnd must appear in the cell
+                for (rowsize ib2n = 0; ib2n < bnd2node.father->RowSize(aBndLocal); ib2n++)
                 {
-                    auto [ret, rank, icAppend] = cell2nodePbi.trans.pLGhostMapping->search_indexAppend(ic);
-                    DNDS_assert_info(ret, fmt::format("periodic bnd {} candidate cell {} not found in ghost mapping", i, ic));
-
-                    bool cellContainsBnd = true;
-                    for (int ib2n = 0; ib2n < bnd2node.father->operator[](i).size(); ib2n++)
+                    index iNode = bnd2node.father->operator()(aBndLocal, ib2n);
+                    auto iNodePbi = bnd2nodePbi.father->operator()(aBndLocal, ib2n);
+                    bool found = false;
+                    for (rowsize ic2n = 0; ic2n < cell2node[cLocal].size(); ic2n++)
                     {
-                        index iNode = bnd2node.father->operator[](i)[ib2n];
-                        auto iNodePbi = bnd2nodePbi.father->operator[](i)[ib2n];
-                        int nIndexMatchNode{0}, nIndexPBIMatchNode{0};
-                        for (int ic2n = 0; ic2n < cell2node[icAppend].size(); ic2n++)
-                            if (iNode == cell2node(icAppend, ic2n))
-                            {
-                                nIndexMatchNode++;
-                                if (iNodePbi == cell2nodePbi(icAppend, ic2n))
-                                    nIndexPBIMatchNode++;
-                            }
-                        DNDS_assert(nIndexMatchNode >= 1);
-                        if (nIndexPBIMatchNode == 0)
-                            cellContainsBnd = false;
+                        if (cell2node(cLocal, ic2n) == iNode &&
+                            cell2nodePbi(cLocal, ic2n) == iNodePbi)
+                        {
+                            found = true;
+                            break;
+                        }
                     }
-                    if (cellContainsBnd)
-                        cellRecFiltered.insert(ic);
+                    if (!found)
+                        return false;
                 }
+                return true;
+            };
+        }
 
-                DNDS_assert_info(cellRecFiltered.size() == 2 || cellRecFiltered.size() == 1,
-                                 fmt::format("periodic bnd {} has {} cells after pbi filter", i, cellRecFiltered.size()));
-                auto it = cellRecFiltered.begin();
-                bnd2cell.father->operator()(i, 0) = *it;
-                if (cellRecFiltered.size() == 2)
-                    ++it;
-                bnd2cell.father->operator()(i, 1) = *it;
+        auto dslB2C = MeshConnectivity::ComposeFiltered(
+            bnd2node, node2cell,
+            bnd2node.father->Size(),
+            nodeG2L,
+            [this](index i) { return this->BndIndexLocal2Global_NoSon(i); },
+            bndAllNodesPred,
+            bndMatchExtra);
+
+        // Fill bnd2cell from compose result
+        for (index i = 0; i < bnd2node.father->Size(); i++)
+        {
+            auto row = dslB2C.father->operator[](i);
+            if (isPeriodic && Geom::FaceIDIsPeriodic(bndElemInfo.father->operator()(i, 0).zone))
+            {
+                DNDS_assert_info(row.size() == 2 || row.size() == 1,
+                                 fmt::format("periodic bnd {} has {} cells after pbi filter", i, row.size()));
+                bnd2cell.father->operator()(i, 0) = row[0];
+                bnd2cell.father->operator()(i, 1) = (row.size() == 2) ? row[1] : row[0];
             }
+            else
+            {
+                DNDS_assert_info(row.size() == 1,
+                                 fmt::format("non-periodic bnd {} has {} cells", i, row.size()));
+                bnd2cell.father->operator()(i, 0) = row[0];
+                bnd2cell.father->operator()(i, 1) = UnInitIndex;
+            }
+        }
 
-            // Swap check: ensure bnd2cell(i, 0) is the donor-side cell
+        // Periodic: donor/main swap check — ensure bnd2cell(i, 0) is the donor-side cell.
+        // (This domain-specific logic is kept as-is.)
+        if (isPeriodic)
+        {
             for (index i = 0; i < bnd2cell.father->Size(); i++)
                 if (bnd2cell(i, 1) != UnInitIndex && bnd2cell(i, 0) != bnd2cell(i, 1))
                 {
