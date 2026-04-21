@@ -27,6 +27,7 @@ Mesh_Serial_Partition.cpp
 Mesh_ReadSerializeDistributed.cpp
 Mesh_Elevation.cpp
 Mesh_Elevation_SmoothSolver.cpp
+Mesh_Elevation_SmoothV2.cpp
 Mesh_WallDist.cpp
 SerialAdjReordering.cpp
 )

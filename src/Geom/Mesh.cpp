@@ -42,22 +42,6 @@ namespace DNDS::Geom
      *
      * \todo Evaluate need for parallel topology API in Phase 5 refactoring.
      */
-    // void UnstructuredMeshSerialRW::InterpolateTopology()
-    // {
-    //     // count node 2 face
-    //     DNDS_MAKE_SSP(cell2faceSerial, mesh->getMPI());
-    //     DNDS_MAKE_SSP(face2cellSerial, mesh->getMPI());
-    //     DNDS_MAKE_SSP(face2nodeSerial, mesh->getMPI());
-    //     DNDS_MAKE_SSP(faceElemInfoSerial, ElemInfo::CommType(), ElemInfo::CommMult(), mesh->getMPI());
-
-    //     if (mRank != mesh->getMPI().rank)
-    //         return;
-
-    //     for (DNDS::index iCell = 0; iCell <cell2nodeSerial->Size(); iCell++)
-    //     {
-    //         // Parallel face construction logic would go here
-    //     }
-    // }
 
     /*******************************************************************************************************************/
     /*******************************************************************************************************************/
@@ -1095,34 +1079,10 @@ namespace DNDS::Geom
     {
         DNDS_assert(adjC2FState == Adj_PointToLocal);
         /**********************************/
-        // convert cell2face
-
-        auto FaceIndexLocal2Global = [&](DNDS::index &iF)
-        {
-            DNDS_assert(face2node.trans.pLGhostMapping);
-            if (iF == UnInitIndex)
-                return;
-            if (iF < 0) // mapping to un-found in father-son
-                iF = -1 - iF;
-            else
-                iF = face2node.trans.pLGhostMapping->operator()(-1, iF);
-        };
-
-#ifdef DNDS_USE_OMP
-#    pragma omp parallel for
-#endif
-        for (DNDS::index iCell = 0; iCell < cell2face.Size(); iCell++)
-        {
-            for (rowsize ic2f = 0; ic2f < cell2face.RowSize(iCell); ic2f++)
-            {
-                index &iFace = cell2face(iCell, ic2f);
-                FaceIndexLocal2Global(iFace);
-            }
-        }
-        for (index iBnd = 0; iBnd < bnd2face.Size(); iBnd++)
-            for (auto &iFace : bnd2face[iBnd])
-                FaceIndexLocal2Global(iFace);
-        // MPI::Barrier(mpi.comm);
+        ConvertAdjEntriesOMP(cell2face, cell2face.Size(),
+                             [&](index v) { return FaceIndexLocal2Global(v); });
+        ConvertAdjEntries(bnd2face, bnd2face.Size(),
+                          [&](index v) { return FaceIndexLocal2Global(v); });
         /**********************************/
         adjC2FState = Adj_PointToGlobal;
     }
@@ -1132,36 +1092,10 @@ namespace DNDS::Geom
     {
         DNDS_assert(adjC2FState == Adj_PointToGlobal);
         /**********************************/
-        // convert cell2face
-
-        auto FaceIndexGlobal2Local = [&](DNDS::index &iF)
-        {
-            DNDS_assert(face2node.trans.pLGhostMapping);
-            if (iF == UnInitIndex)
-                return;
-            DNDS::MPI_int rank;
-            DNDS::index val;
-            auto result = face2node.trans.pLGhostMapping->search_indexAppend(iF, rank, val);
-            if (result)
-                iF = val;
-            else
-                iF = -1 - iF; // mapping to un-found in father-son
-        };
-
-#ifdef DNDS_USE_OMP
-#    pragma omp parallel for
-#endif
-        for (DNDS::index iCell = 0; iCell < cell2face.Size(); iCell++)
-        {
-            for (rowsize ic2f = 0; ic2f < cell2face.RowSize(iCell); ic2f++)
-            {
-                index &iFace = cell2face(iCell, ic2f);
-                FaceIndexGlobal2Local(iFace);
-            }
-        }
-        for (index iBnd = 0; iBnd < bnd2face.Size(); iBnd++)
-            for (auto &iFace : bnd2face[iBnd])
-                FaceIndexGlobal2Local(iFace);
+        ConvertAdjEntriesOMP(cell2face, cell2face.Size(),
+                             [&](index v) { return FaceIndexGlobal2Local(v); });
+        ConvertAdjEntries(bnd2face, bnd2face.Size(),
+                          [&](index v) { return FaceIndexGlobal2Local(v); });
         /**********************************/
         adjC2FState = Adj_PointToLocal;
     }
@@ -1191,21 +1125,10 @@ namespace DNDS::Geom
         DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
         DNDS_assert_info(bndElemInfo.trans.pLGhostMapping, "trans of bndElemInfo needed but not built");
         /**********************************/
-#ifdef DNDS_USE_OMP
-#    pragma omp parallel for
-#endif
-        for (index iNode = 0; iNode < node2cell.Size(); iNode++)
-            for (index &iCell : node2cell[iNode])
-                iCell = CellIndexLocal2Global(iCell);
-
-#ifdef DNDS_USE_OMP
-#    pragma omp parallel for
-#endif
-        for (index iNode = 0; iNode < node2bnd.Size(); iNode++)
-            for (index &iBnd : node2bnd[iNode])
-                iBnd = BndIndexLocal2Global(iBnd); // ! bnd has son now
-
-        // MPI::Barrier(mpi.comm);
+        ConvertAdjEntriesOMP(node2cell, node2cell.Size(),
+                             [&](index v) { return CellIndexLocal2Global(v); });
+        ConvertAdjEntriesOMP(node2bnd, node2bnd.Size(),
+                             [&](index v) { return BndIndexLocal2Global(v); }); // ! bnd has son now
         /**********************************/
         adjN2CBState = Adj_PointToGlobal;
     }
@@ -1217,22 +1140,10 @@ namespace DNDS::Geom
         DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
         DNDS_assert_info(bndElemInfo.trans.pLGhostMapping, "trans of bndElemInfo needed but not built");
         /**********************************/
-// todo: ensure using dist omp settings not single!
-#ifdef DNDS_USE_OMP
-#    pragma omp parallel for
-#endif
-        for (index iNode = 0; iNode < node2cell.Size(); iNode++)
-            for (index &iCell : node2cell[iNode])
-                iCell = CellIndexGlobal2Local(iCell);
-
-#ifdef DNDS_USE_OMP
-#    pragma omp parallel for
-#endif
-        for (index iNode = 0; iNode < node2bnd.Size(); iNode++)
-            for (index &iBnd : node2bnd[iNode])
-                iBnd = BndIndexGlobal2Local(iBnd); // ! bnd has son now
-
-        // MPI::Barrier(mpi.comm);
+        ConvertAdjEntriesOMP(node2cell, node2cell.Size(),
+                             [&](index v) { return CellIndexGlobal2Local(v); });
+        ConvertAdjEntriesOMP(node2bnd, node2bnd.Size(),
+                             [&](index v) { return BndIndexGlobal2Local(v); }); // ! bnd has son now
         /**********************************/
         adjN2CBState = Adj_PointToLocal;
     }

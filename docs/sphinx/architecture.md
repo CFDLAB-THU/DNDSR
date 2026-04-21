@@ -9,4 +9,6 @@ Design documents describing the internal structure of DNDSR.
 /architecture/Paradigm
 /architecture/array_infrastructure
 /architecture/Serialization
+/architecture/MeshConnectivity
+/architecture/MeshDAGDesign
 ```

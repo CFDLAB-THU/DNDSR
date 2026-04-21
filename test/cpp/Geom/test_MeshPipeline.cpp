@@ -23,9 +23,11 @@
 #include "doctest.h"
 
 #include "Geom/Mesh.hpp"
+#include "Geom/BoundaryCondition.hpp"
 #include <string>
 #include <vector>
 #include <array>
+#include <cmath>
 
 using namespace DNDS;
 using namespace DNDS::Geom;
@@ -1050,4 +1052,217 @@ TEST_CASE("Elevation+Bisection: exact cell count progression")
     CHECK(nCellOrig == 100);
     CHECK(nCellElevated == 100);
     CHECK(nCellBisected == 400);
+}
+
+// ===========================================================================
+// Elevation + Boundary/Internal Smooth tests (NACA0012_H2, config 2)
+// ===========================================================================
+
+/**
+ * \brief Build an O2 mesh with full face interpolation, ready for smoothing.
+ *
+ * Sequence: read O1 -> partition -> ghost -> elevate -> rebuild topology
+ * -> face interpolation -> N2CB ghost.
+ */
+static ssp<UnstructuredMesh> buildO2MeshWithFaces(
+    const MeshConfig &cfg, ssp<UnstructuredMesh> &mO1Out)
+{
+    // Build O1 mesh
+    auto mO1 = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
+    UnstructuredMeshSerialRW reader(mO1, 0);
+
+    if (cfg.periodic)
+    {
+        tPoint zero{0, 0, 0};
+        mO1->SetPeriodicGeometry(
+            cfg.translation1, zero, zero,
+            cfg.translation2, zero, zero,
+            cfg.translation3, zero, zero);
+    }
+
+    reader.ReadFromCGNSSerial(meshPath(cfg.file));
+    reader.Deduplicate1to1Periodic(1e-8);
+    reader.BuildCell2Cell();
+
+    UnstructuredMeshSerialRW::PartitionOptions pOpt;
+    pOpt.metisType = "KWAY";
+    pOpt.metisUfactor = 30;
+    pOpt.metisSeed = 42;
+    pOpt.metisNcuts = 1;
+    reader.MeshPartitionCell2Cell(pOpt);
+    reader.PartitionReorderToMeshCell2Cell();
+
+    mO1->RecoverNode2CellAndNode2Bnd();
+    mO1->RecoverCell2CellAndBnd2Cell();
+    mO1->BuildGhostPrimary();
+    mO1->AdjGlobal2LocalPrimary();
+
+    // Build O2 mesh via elevation
+    auto mO2 = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
+    mO2->BuildO2FromO1Elevation(*mO1);
+
+    // Rebuild full topology for O2
+    mO2->RecoverNode2CellAndNode2Bnd();
+    mO2->RecoverCell2CellAndBnd2Cell();
+    mO2->BuildGhostPrimary();
+    mO2->AdjGlobal2LocalPrimary();
+    mO2->AdjGlobal2LocalN2CB();
+
+    mO2->InterpolateFace();
+    mO2->AssertOnFaces();
+
+    mO2->AdjLocal2GlobalN2CB();
+    mO2->BuildGhostN2CB();
+    mO2->AdjGlobal2LocalN2CB();
+
+    mO2->BuildCell2CellFace();
+    mO2->AdjGlobal2LocalC2CFace();
+
+    mO1Out = mO1;
+    return mO2;
+}
+
+TEST_CASE("BoundarySmooth: NACA0012 moves boundary O2 nodes")
+{
+    // NACA0012_H2 is config 2 — non-periodic, curved airfoil boundary
+    const auto &cfg = g_configs[2];
+
+    ssp<UnstructuredMesh> mO1;
+    auto mO2 = buildO2MeshWithFaces(cfg, mO1);
+
+    // Snapshot pre-smooth coordinates
+    std::vector<tPoint> preSmooth(mO2->NumNode());
+    for (DNDS::index i = 0; i < mO2->NumNode(); i++)
+        preSmooth[i] = mO2->coords[i];
+
+    // Run boundary smooth — all external BCs are smoothed
+    mO2->ElevatedNodesGetBoundarySmooth(
+        [](Geom::t_index bndId)
+        { return Geom::FaceIDIsExternalBC(bndId); });
+
+    // Check that nTotalMoved > 0 (some O2 boundary nodes moved)
+    CHECK(mO2->nTotalMoved > 0);
+
+    // Check that coordsElevDisp was initialized
+    CHECK(mO2->coordsElevDisp.father != nullptr);
+
+    // All coordinates must be finite (no NaN/Inf)
+    for (DNDS::index i = 0; i < mO2->NumNode(); i++)
+    {
+        for (int d = 0; d < 3; d++)
+            CHECK(std::isfinite(mO2->coords[i](d)));
+    }
+}
+
+TEST_CASE("BoundarySmooth: no NaN in displacement field")
+{
+    const auto &cfg = g_configs[2]; // NACA0012_H2
+
+    ssp<UnstructuredMesh> mO1;
+    auto mO2 = buildO2MeshWithFaces(cfg, mO1);
+
+    mO2->ElevatedNodesGetBoundarySmooth(
+        [](Geom::t_index bndId)
+        { return Geom::FaceIDIsExternalBC(bndId); });
+
+    // coordsElevDisp should have no NaN for moved nodes
+    DNDS::index nMovedLocal = 0;
+    for (DNDS::index i = 0; i < mO2->coordsElevDisp.father->Size(); i++)
+    {
+        auto disp = mO2->coordsElevDisp[i];
+        // Entries with disp(0) != largeReal were set by the smooth
+        if (disp(0) != UnInitReal && std::abs(disp(0)) < 1e30)
+        {
+            for (int d = 0; d < 3; d++)
+                CHECK(std::isfinite(disp(d)));
+            nMovedLocal++;
+        }
+    }
+
+    DNDS::index nMovedGlobal = 0;
+    MPI_Allreduce(&nMovedLocal, &nMovedGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+    CHECK(nMovedGlobal > 0);
+}
+
+TEST_CASE("InternalSmooth V2: coordinates remain finite after solve")
+{
+    const auto &cfg = g_configs[2]; // NACA0012_H2
+
+    ssp<UnstructuredMesh> mO1;
+    auto mO2 = buildO2MeshWithFaces(cfg, mO1);
+
+    // Set up elevation info for fast convergence (small problem)
+    mO2->elevationInfo.nIter = 10;
+    mO2->elevationInfo.nSearch = 20;
+    mO2->elevationInfo.RBFRadius = 5.0;
+
+    // Run boundary smooth
+    mO2->ElevatedNodesGetBoundarySmooth(
+        [](Geom::t_index bndId)
+        { return Geom::FaceIDIsExternalBC(bndId); });
+
+    if (mO2->nTotalMoved == 0)
+        return; // nothing to smooth
+
+    // Save pre-smooth coords
+    std::vector<tPoint> preSmoothCoords(mO2->NumNode());
+    for (DNDS::index i = 0; i < mO2->NumNode(); i++)
+        preSmoothCoords[i] = mO2->coords[i];
+
+    // Run internal smooth V2
+    mO2->ElevatedNodesSolveInternalSmoothV2();
+
+    // All coordinates must be finite
+    for (DNDS::index i = 0; i < mO2->NumNode(); i++)
+        for (int d = 0; d < 3; d++)
+            CHECK(std::isfinite(mO2->coords[i](d)));
+
+    // At least some coordinates should have changed
+    DNDS::index nChangedLocal = 0;
+    for (DNDS::index i = 0; i < mO2->NumNode(); i++)
+        if ((mO2->coords[i] - preSmoothCoords[i]).norm() > 1e-15)
+            nChangedLocal++;
+
+    DNDS::index nChangedGlobal = 0;
+    MPI_Allreduce(&nChangedLocal, &nChangedGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+    CHECK(nChangedGlobal > 0);
+}
+
+TEST_CASE("Elevation: O2 coordinates have no NaN")
+{
+    // Test on all non-periodic configs (0, 2)
+    for (int ci : {0, 2})
+    {
+        const auto &cfg = g_configs[ci];
+        SUBCASE(cfg.name)
+        {
+            auto mO1 = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
+            UnstructuredMeshSerialRW reader(mO1, 0);
+
+            reader.ReadFromCGNSSerial(meshPath(cfg.file));
+            reader.Deduplicate1to1Periodic(1e-8);
+            reader.BuildCell2Cell();
+
+            UnstructuredMeshSerialRW::PartitionOptions pOpt;
+            pOpt.metisType = "KWAY";
+            pOpt.metisUfactor = 30;
+            pOpt.metisSeed = 42;
+            pOpt.metisNcuts = 1;
+            reader.MeshPartitionCell2Cell(pOpt);
+            reader.PartitionReorderToMeshCell2Cell();
+
+            mO1->RecoverNode2CellAndNode2Bnd();
+            mO1->RecoverCell2CellAndBnd2Cell();
+            mO1->BuildGhostPrimary();
+            mO1->AdjGlobal2LocalPrimary();
+
+            auto mO2 = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
+            mO2->BuildO2FromO1Elevation(*mO1);
+
+            // All O2 coordinates must be finite
+            for (DNDS::index i = 0; i < mO2->coords.father->Size(); i++)
+                for (int d = 0; d < 3; d++)
+                    CHECK(std::isfinite(mO2->coords[i](d)));
+        }
+    }
 }
