@@ -55,6 +55,9 @@ class ElementData:
     num_edges: int = 0
     edge_type: str = "UnknownElem"       # C++ ElemType for edges (Line2/Line3)
     edge_nodes: List[Edge1] = field(default_factory=list)
+    # Visual grouping for diagrams: list of (label, [edge_indices_0based])
+    # e.g. [("bottom", [0,1,2,3]), ("lateral", [4,5]), ("lateral", [6,7])]
+    edge_groups: List[Tuple[str, List[int]]] = field(default_factory=list)
 
     # --- Elevation: O1 -> O2 (only on O1 elements) ---
     elevated_type: str = "UnknownElem"
@@ -217,6 +220,7 @@ TET4 = ElementData(
     face_nodes=[[1, 3, 2], [1, 2, 4], [2, 3, 4], [3, 1, 4]],
     num_edges=6, edge_type="Line2",
     edge_nodes=[(1, 2), (2, 3), (3, 1), (1, 4), (2, 4), (3, 4)],
+    edge_groups=[("base", [0, 1, 2]), ("lateral", [3, 4, 5])],
     elevated_type="Tet10", num_elev_nodes=6,
     elev_spans=[(1, 2), (2, 3), (3, 1), (1, 4), (2, 4), (3, 4)],
     elev_span_types=["Line2"] * 6,
@@ -245,6 +249,7 @@ TET10 = ElementData(
         (1, 2, 5), (2, 3, 6), (3, 1, 7),
         (1, 4, 8), (2, 4, 9), (3, 4, 10),
     ],
+    edge_groups=[("base", [0, 1, 2]), ("lateral", [3, 4, 5])],
     num_bisect=8, num_bisect_variants=3,
     bisect_uniform_type="Tet4",
     bisect_elements=[
@@ -283,6 +288,7 @@ PYRAMID5 = ElementData(
         (1, 2), (2, 3), (3, 4), (4, 1),  # base
         (1, 5), (2, 5), (3, 5), (4, 5),  # lateral
     ],
+    edge_groups=[("base", [0, 1, 2, 3]), ("lateral", [4, 5]), ("lateral", [6, 7])],
     elevated_type="Pyramid14", num_elev_nodes=9,
     elev_spans=[
         (1, 2), (2, 3), (3, 4), (4, 1),  # base edges
@@ -319,6 +325,7 @@ PYRAMID14 = ElementData(
         (1, 2, 6), (2, 3, 7), (3, 4, 8), (4, 1, 9),    # base
         (1, 5, 10), (2, 5, 11), (3, 5, 12), (4, 5, 13),  # lateral
     ],
+    edge_groups=[("base", [0, 1, 2, 3]), ("lateral", [4, 5]), ("lateral", [6, 7])],
     num_bisect=12, num_bisect_variants=2,
     bisect_elem_types=["Pyramid5"] * 4 + ["Tet4"] * 8,
     bisect_elements=[
@@ -364,6 +371,7 @@ PRISM6 = ElementData(
         (1, 4), (2, 5), (3, 6),    # vertical edges
         (4, 5), (5, 6), (6, 4),    # top edges
     ],
+    edge_groups=[("bottom", [0, 1, 2]), ("vertical", [3, 4, 5]), ("top", [6, 7, 8])],
     elevated_type="Prism18", num_elev_nodes=12,
     # CGNS ordering: bottom edges, TOP edges, VERTICAL edges, face centers
     elev_spans=[
@@ -408,6 +416,7 @@ PRISM18 = ElementData(
         (1, 4, 13), (2, 5, 14), (3, 6, 15),     # vertical
         (4, 5, 10), (5, 6, 11), (6, 4, 12),     # top
     ],
+    edge_groups=[("bottom", [0, 1, 2]), ("vertical", [3, 4, 5]), ("top", [6, 7, 8])],
     num_bisect=8, num_bisect_variants=1,
     bisect_uniform_type="Prism6",
     # Bisect nodes use CGNS 1-based indexing
@@ -452,6 +461,7 @@ HEX8 = ElementData(
         (1, 5), (2, 6), (3, 7), (4, 8),    # vertical
         (5, 6), (6, 7), (7, 8), (8, 5),    # top
     ],
+    edge_groups=[("bottom", [0, 1, 2, 3]), ("vertical", [4, 5, 6, 7]), ("top", [8, 9, 10, 11])],
     elevated_type="Hex27", num_elev_nodes=19,
     elev_spans=[
         (1, 2), (2, 3), (3, 4), (4, 1),              # bottom edges
@@ -499,6 +509,7 @@ HEX27 = ElementData(
         (1, 5, 13), (2, 6, 14), (3, 7, 15), (4, 8, 16),
         (5, 6, 17), (6, 7, 18), (7, 8, 19), (8, 5, 20),
     ],
+    edge_groups=[("bottom", [0, 1, 2, 3]), ("vertical", [4, 5, 6, 7]), ("top", [8, 9, 10, 11])],
     num_bisect=8, num_bisect_variants=1,
     bisect_uniform_type="Hex8",
     bisect_elements=[
