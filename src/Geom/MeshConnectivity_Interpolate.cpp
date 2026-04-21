@@ -132,14 +132,18 @@ namespace DNDS::Geom
                 }
                 else
                 {
-                    // Existing sub-entity: record second parent
-                    if (ent2parentVec[iFound].second != UnInitIndex)
+                    // Existing sub-entity: record parent linkage
+                    if (ent2parentVec[iFound].second == UnInitIndex)
                     {
-                        // Third parent detected — deduplication is wrong
-                        // (typically missing matchExtra on periodic meshes).
-                        // Set overflow flag and skip this match.
+                        // Second parent — normal case (face shared by 2 cells)
+                        ent2parentVec[iFound].second = iParent;
+                    }
+                    else if (!hasMatchExtra)
+                    {
+                        // Third+ parent WITHOUT matchExtra — indicates false
+                        // dedup (typically missing collaborating check on
+                        // periodic meshes). Create a new entity instead.
                         result.duplicateOverflow = true;
-                        // Treat as new entity to avoid corrupting existing data
                         std::vector<index> subNodesVec(subNodesBuf.begin(),
                                                        subNodesBuf.begin() + desc.nNodes);
                         ent2nodeVec.emplace_back(std::move(subNodesVec));
@@ -150,12 +154,14 @@ namespace DNDS::Geom
                             node2entity[iV].push_back(nEntities);
                         result.parent2entity.father->operator()(iParent, iSub) = nEntities;
                         nEntities++;
+                        continue; // skip the normal assignment below
                     }
-                    else
-                    {
-                        ent2parentVec[iFound].second = iParent;
-                        result.parent2entity.father->operator()(iParent, iSub) = iFound;
-                    }
+                    // else: Third+ parent WITH matchExtra — legitimate
+                    // multi-sharing (e.g., edge shared by 4 cells).
+                    // entity2parent only stores 2; the rest are tracked
+                    // via parent2entity.
+
+                    result.parent2entity.father->operator()(iParent, iSub) = iFound;
                 }
             }
         }

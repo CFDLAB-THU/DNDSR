@@ -59,31 +59,31 @@ namespace DNDS::Geom
 
         /// Access as variable-width tAdjPair. Throws if adj holds a fixed-width type.
         tAdjPair &asAdj() { return std::get<tAdjPair>(adj); }
-        const tAdjPair &asAdj() const { return std::get<tAdjPair>(adj); }
+        [[nodiscard]] const tAdjPair &asAdj() const { return std::get<tAdjPair>(adj); }
 
         /// Access as fixed-width tAdj2Pair (e.g., for cell2face with 2 entries).
         tAdj2Pair &asAdj2() { return std::get<tAdj2Pair>(adj); }
-        const tAdj2Pair &asAdj2() const { return std::get<tAdj2Pair>(adj); }
+        [[nodiscard]] const tAdj2Pair &asAdj2() const { return std::get<tAdj2Pair>(adj); }
 
         tAdj1Pair &asAdj1() { return std::get<tAdj1Pair>(adj); }
-        const tAdj1Pair &asAdj1() const { return std::get<tAdj1Pair>(adj); }
+        [[nodiscard]] const tAdj1Pair &asAdj1() const { return std::get<tAdj1Pair>(adj); }
 
         /// Number of local (father) rows.
-        index fatherSize() const
+        [[nodiscard]] index fatherSize() const
         {
             return std::visit([](const auto &p) -> index
                               { return p.father ? p.father->Size() : 0; }, adj);
         }
 
         /// Check if the adjacency pair is initialized (father is non-null).
-        bool initialized() const
+        [[nodiscard]] bool initialized() const
         {
             return std::visit([](const auto &p) -> bool
                               { return bool(p.father); }, adj);
         }
 
         /// Check if pbi is attached (only valid for toDepth==0).
-        bool hasPbi() const { return bool(pbi.father); }
+        [[nodiscard]] bool hasPbi() const { return bool(pbi.father); }
     };
 
     // =================================================================
@@ -103,21 +103,21 @@ namespace DNDS::Geom
 
         /// Access as variable-width tAdjPair.
         tAdjPair &asAdj() { return std::get<tAdjPair>(adj); }
-        const tAdjPair &asAdj() const { return std::get<tAdjPair>(adj); }
+        [[nodiscard]] const tAdjPair &asAdj() const { return std::get<tAdjPair>(adj); }
 
         tAdj2Pair &asAdj2() { return std::get<tAdj2Pair>(adj); }
-        const tAdj2Pair &asAdj2() const { return std::get<tAdj2Pair>(adj); }
+        [[nodiscard]] const tAdj2Pair &asAdj2() const { return std::get<tAdj2Pair>(adj); }
 
         tAdj1Pair &asAdj1() { return std::get<tAdj1Pair>(adj); }
-        const tAdj1Pair &asAdj1() const { return std::get<tAdj1Pair>(adj); }
+        [[nodiscard]] const tAdj1Pair &asAdj1() const { return std::get<tAdj1Pair>(adj); }
 
-        index fatherSize() const
+        [[nodiscard]] index fatherSize() const
         {
             return std::visit([](const auto &p) -> index
                               { return p.father ? p.father->Size() : 0; }, adj);
         }
 
-        bool initialized() const
+        [[nodiscard]] bool initialized() const
         {
             return std::visit([](const auto &p) -> bool
                               { return bool(p.father); }, adj);
