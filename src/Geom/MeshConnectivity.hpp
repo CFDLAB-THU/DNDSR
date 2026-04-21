@@ -320,6 +320,12 @@ namespace DNDS::Geom
         /// @param bGlobal2Local Maps global B-index to local-appended index in BC.
         /// @param aLocal2Global Maps local A-index to global A-index.
         /// @param pred         Predicate(a_global, c_global, nShared) → keep?
+        /// @param matchExtra   Optional second predicate called after pred passes.
+        ///                     Receives (aLocal, cGlobal, sharedBGlobals) where
+        ///                     sharedBGlobals is the list of B-entities through
+        ///                     which A and C are connected. If set and returns
+        ///                     false, the (A, C) pair is rejected.
+        ///                     Used for periodic pbi filtering.
         /// @return             CSR: A → C (global C indices), father-only.
         template <class Predicate>
         static tAdjPair ComposeFiltered(
@@ -328,7 +334,10 @@ namespace DNDS::Geom
             index nALocal,
             const std::unordered_map<index, index> &bGlobal2Local,
             const std::function<index(index)> &aLocal2Global,
-            Predicate &&pred);
+            Predicate &&pred,
+            const std::function<bool(index aLocal, index cGlobal,
+                                     const std::vector<index> &sharedBGlobals)>
+                &matchExtra = nullptr);
 
         // -----------------------------------------------------------------
         // Interpolate: extract sub-entities from parent→node connectivity
@@ -371,9 +380,13 @@ namespace DNDS::Geom
         index nALocal,
         const std::unordered_map<index, index> &bGlobal2Local,
         const std::function<index(index)> &aLocal2Global,
-        Predicate &&pred)
+        Predicate &&pred,
+        const std::function<bool(index aLocal, index cGlobal,
+                                 const std::vector<index> &sharedBGlobals)>
+            &matchExtra)
     {
         const auto &mpi = AB.father->getMPI();
+        const bool hasMatchExtra = bool(matchExtra);
         tAdjPair result;
         result.InitPair("ComposeFiltered_result", mpi);
         result.father->Resize(nALocal);
@@ -383,7 +396,9 @@ namespace DNDS::Geom
             index aGlobal = aLocal2Global(iA);
 
             // Collect all candidate C-entities with their shared-B count
+            // and optionally the list of shared B-entities.
             std::unordered_map<index, int> candidateSharedCount;
+            std::unordered_map<index, std::vector<index>> candidateSharedBs;
             for (auto iB : AB.father->operator[](iA))
             {
                 auto it = bGlobal2Local.find(iB);
@@ -391,15 +406,25 @@ namespace DNDS::Geom
                                  fmt::format("ComposeFiltered: B-entity {} not found in bGlobal2Local", iB));
                 index bLocal = it->second;
                 for (auto iC : BC[bLocal])
+                {
                     candidateSharedCount[iC]++;
+                    if (hasMatchExtra)
+                        candidateSharedBs[iC].push_back(iB);
+                }
             }
 
             // Apply predicate and collect passing entries
             std::vector<index> accepted;
             for (auto &[cGlobal, nShared] : candidateSharedCount)
             {
-                if (pred(aGlobal, cGlobal, nShared))
-                    accepted.push_back(cGlobal);
+                if (!pred(aGlobal, cGlobal, nShared))
+                    continue;
+                if (hasMatchExtra)
+                {
+                    if (!matchExtra(iA, cGlobal, candidateSharedBs[cGlobal]))
+                        continue;
+                }
+                accepted.push_back(cGlobal);
             }
 
             // Sort for deterministic output
