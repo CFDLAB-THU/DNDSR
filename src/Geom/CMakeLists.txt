@@ -22,6 +22,7 @@ PeriodicInfo.cpp
 MeshConnectivity.cpp
 MeshConnectivity_Interpolate.cpp
 Mesh.cpp
+Mesh_Legacy.cpp
 Mesh_Plts.cpp
 Mesh_Serial_BuildCell2Cell.cpp
 Mesh_Serial_ReadFromCGNS.cpp
