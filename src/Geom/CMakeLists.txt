@@ -20,6 +20,7 @@ set(CPPS
 Elements.cpp
 PeriodicInfo.cpp
 MeshConnectivity.cpp
+MeshConnectivity_Interpolate.cpp
 Mesh.cpp
 Mesh_Plts.cpp
 Mesh_Serial_BuildCell2Cell.cpp
