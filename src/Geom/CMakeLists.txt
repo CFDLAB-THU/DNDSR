@@ -21,6 +21,7 @@ Elements.cpp
 PeriodicInfo.cpp
 MeshConnectivity.cpp
 MeshConnectivity_Interpolate.cpp
+MeshConnectivity_Ghost.cpp
 Mesh.cpp
 Mesh_Legacy.cpp
 Mesh_Plts.cpp
