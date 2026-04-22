@@ -1898,41 +1898,13 @@ namespace DNDS::Geom
             }
         }
 
-        // === Section G: Convert to local indices ===
-        for (index iFace = 0; iFace < face2node.Size(); iFace++)
-            for (rowsize j = 0; j < face2node.RowSize(iFace); j++)
-            {
-                auto [found, rank, localAppend] =
-                    coords.trans.pLGhostMapping->search_indexAppend(face2node(iFace, j));
-                DNDS_assert(found);
-                face2node(iFace, j) = localAppend;
-            }
-        for (index iFace = 0; iFace < face2cell.Size(); iFace++)
-            for (rowsize side = 0; side < 2; side++)
-            {
-                index &iCell = face2cell(iFace, side);
-                if (iCell == UnInitIndex)
-                    continue;
-                auto [found, rank, localAppend] =
-                    cell2node.trans.pLGhostMapping->search_indexAppend(iCell);
-                DNDS_assert(found);
-                iCell = localAppend;
-            }
-        for (index iCell = 0; iCell < nCellAll; iCell++)
-            for (rowsize j = 0; j < cell2face.RowSize(iCell); j++)
-            {
-                index &iFace = cell2face(iCell, j);
-                if (iFace == UnInitIndex)
-                    continue;
-                auto [found, rank, localAppend] =
-                    face2cell.trans.pLGhostMapping->search_indexAppend(iFace);
-                DNDS_assert_info(found,
-                                 fmt::format("InterpolateFace: face global {} not found locally (cell {})",
-                                             iFace, iCell));
-                iFace = localAppend;
-            }
-
-        adjFacialState = Adj_PointToLocal;
+        // === Section G: Convert face and cell2face to local indices ===
+        adjFacialState = Adj_PointToGlobal;
+        AdjGlobal2LocalFacial(); // face2node: global node → local, face2cell: global cell → local
+        // cell2face: global face → local
+        adjC2FState = Adj_PointToGlobal;
+        ConvertAdjEntries(cell2face, nCellAll,
+                          [&](index v) { return FaceIndexGlobal2Local(v); });
         adjC2FState = Adj_PointToLocal;
 
         // === Section H: Match boundary elements to faces ===
