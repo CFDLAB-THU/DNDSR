@@ -17,6 +17,7 @@
 #include <unordered_set>
 #include <set>
 #include <fmt/core.h>
+#include "Mesh_InterpolateHelpers.hpp"
 
 namespace DNDS::Geom
 {
@@ -582,6 +583,121 @@ namespace DNDS::Geom
                 }
             }
         }
+    }
+
+    /// @todo //TODO: handle periodic cases
+    void UnstructuredMesh::
+        InterpolateFaceLegacy()
+    {
+        DNDS_assert(adjPrimaryState == Adj_PointToLocal); // And also should have primary ghost comm
+
+        // Allocate face-related array pairs
+        cell2face.InitPair("cell2face", mpi);
+        face2cell.InitPair("face2cell", mpi);
+        face2node.InitPair("face2node", mpi);
+        if (isPeriodic)
+            face2nodePbi.InitPair("face2nodePbi", mpi);
+        faceElemInfo.InitPair("faceElemInfo", mpi);
+        face2bnd.InitPair("face2bnd", mpi);
+        bnd2face.InitPair("bnd2face", mpi);
+
+        cell2face.father->Resize(cell2cell.father->Size());
+        cell2face.son->Resize(cell2cell.son->Size());
+
+        // Section B: Enumerate unique faces from cell connectivity
+        auto faceEnum = EnumerateFacesFromCells(
+            cell2face, cellElemInfo, cell2node, cell2nodePbi,
+            cell2cell.Size(), coords.Size(), isPeriodic);
+
+        // Section C: Filter faces — discard ghost-only and duplicate cross-rank
+        auto faceCollect = CollectFaces(
+            faceEnum.faceElemInfoV, faceEnum.face2cellV, faceEnum.nFaces,
+            cell2face.father->Size(),
+            *cell2node.trans.pLGhostMapping, *cell2node.father->pLGlobalMapping,
+            mpi.size, mpi.rank);
+
+        // Section D: Compact collected faces into member arrays, remap cell2face
+        CompactFacesAndRemapCell2Face(
+            faceEnum, faceCollect,
+            face2cell, face2node, face2nodePbi, faceElemInfo,
+            cell2face, isPeriodic, mpi.comm);
+        adjFacialState = Adj_PointToLocal;
+
+        // Section E: Match boundary elements to faces
+        MatchBoundariesToFaces(
+            bndElemInfo, bnd2cell, bnd2node, cell2face, face2node, cell2node,
+            faceElemInfo, bnd2faceV, face2bndM, face2bnd, bnd2face);
+
+        // Section F: Ghost face communication
+        this->AdjLocal2GlobalFacial();
+
+        // Flatten faceSendLocals into CSR format
+        std::vector<index> faceSendLocalsIdx;
+        std::vector<index> faceSendLocalsStarts(mpi.size + 1);
+        faceSendLocalsStarts[0] = 0;
+        for (MPI_int r = 0; r < mpi.size; r++)
+            faceSendLocalsStarts[r + 1] = faceSendLocalsStarts[r] + faceCollect.faceSendLocals[r].size();
+        faceSendLocalsIdx.resize(faceSendLocalsStarts.back());
+        for (MPI_int r = 0; r < mpi.size; r++)
+            std::copy(faceCollect.faceSendLocals[r].begin(), faceCollect.faceSendLocals[r].end(),
+                      faceSendLocalsIdx.begin() + faceSendLocalsStarts[r]);
+
+        face2node.father->Compress(); // before comm
+        if (isPeriodic)
+            face2nodePbi.father->Compress();
+        face2cell.TransAttach();
+        face2cell.trans.createFatherGlobalMapping();
+        face2cell.trans.createGhostMapping(faceSendLocalsIdx, faceSendLocalsStarts);
+        face2cell.trans.createMPITypes();
+        face2cell.trans.pullOnce();
+        face2node.BorrowAndPull(face2cell);
+        if (isPeriodic)
+            face2nodePbi.BorrowAndPull(face2cell);
+        faceElemInfo.BorrowAndPull(face2cell);
+        face2bnd.BorrowAndPull(face2cell);
+
+        this->AdjGlobal2LocalFacial();
+
+        // Section G: Assign ghost faces to cell2face entries marked -1
+        AssignGhostFacesToCells(
+            face2cell.son, face2node.son, faceElemInfo.son,
+            cell2face, cell2node, cellElemInfo,
+            face2cell.father->Size());
+
+        cell2face.father->Compress();
+        cell2face.son->Compress();
+        adjC2FState = Adj_PointToLocal;
+
+        // Section H: Communicate cell2face and bnd2face ghost data
+        this->AdjLocal2GlobalC2F();
+        cell2face.TransAttach();
+        cell2face.trans.BorrowGGIndexing(cell2node.trans);
+        cell2face.trans.createMPITypes();
+        cell2face.trans.pullOnce();
+        bnd2face.TransAttach();
+        bnd2face.trans.BorrowGGIndexing(bnd2node.trans);
+        bnd2face.trans.createMPITypes();
+        bnd2face.trans.pullOnce();
+        this->AdjGlobal2LocalC2F();
+
+        for (DNDS::index iFace = 0; iFace < faceElemInfo.Size(); iFace++)
+        {
+            if (FaceIDIsPeriodicMain(faceElemInfo(iFace, 0).zone))
+            {
+                // DNDS_assert(false);
+            }
+        }
+        for (DNDS::index iFace = 0; iFace < faceElemInfo.Size(); iFace++)
+        {
+            if (FaceIDIsPeriodicDonor(faceElemInfo(iFace, 0).zone))
+            {
+                // DNDS_assert(false);
+            }
+        }
+
+        auto gSize = face2node.father->globalSize(); //! sync call!!!
+        if (mpi.rank == 0)
+            log() << "UnstructuredMesh === InterpolateFaceLegacy: total faces " << gSize << std::endl;
     }
 
 } // namespace DNDS::Geom
