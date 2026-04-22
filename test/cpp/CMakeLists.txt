@@ -167,6 +167,7 @@ geom_add_mpi_test(mesh_pipeline "Geom/test_MeshPipeline.cpp" "geom;dnds")
 geom_add_mpi_test(mesh_distributed_read "Geom/test_MeshDistributedRead.cpp" "geom;dnds")
 geom_add_mpi_test(mesh_connectivity "Geom/test_MeshConnectivity.cpp" "geom;dnds")
 geom_add_mpi_test(mesh_connectivity_ghost "Geom/test_MeshConnectivity_Ghost.cpp" "geom;dnds")
+geom_add_mpi_test(mesh_connectivity_interpolate "Geom/test_MeshConnectivity_Interpolate.cpp" "geom;dnds")
 
 set(GEOM_TEST_TARGETS
     geom_test_elements
@@ -176,6 +177,7 @@ set(GEOM_TEST_TARGETS
     geom_test_mesh_distributed_read
     geom_test_mesh_connectivity
     geom_test_mesh_connectivity_ghost
+    geom_test_mesh_connectivity_interpolate
 )
 foreach(T ${GEOM_TEST_TARGETS})
     add_dependencies(geom_unit_tests ${T})

@@ -503,7 +503,83 @@ namespace DNDS::Geom
     };
 
     // =================================================================
-    // InterpolateResult: output of sub-entity interpolation
+    // InterpolateGlobal: distributed sub-entity creation with global dedup
+    // =================================================================
+
+    /// Extended sub-entity query that also extracts pbi.
+    /// Extends SubEntityQuery with pbi extraction for periodic meshes.
+    struct SubEntityQueryPbi : SubEntityQuery
+    {
+        /// Extract pbi of sub-entity iSub from parentPbi into out.
+        /// Must write exactly desc.nNodes entries starting at out[0].
+        /// Only called when the mesh is periodic.
+        std::function<void(index iParent, int iSub,
+                           const std::function<NodePeriodicBits(int)> &parentPbi,
+                           NodePeriodicBits *out)>
+            extractPbi;
+    };
+
+    /// Ownership decision for a globally-deduplicated B entity.
+    /// Returned by the OwnershipResolverMulti callback.
+    struct OwnershipDecision
+    {
+        bool owned;       ///< true if this rank owns the entity.
+        /// Peer ranks that need this entity pushed (for owned entities).
+        /// Empty if fully local or single-sided.
+        /// For non-owned entities, this is unused.
+        std::vector<MPI_int> peerRanks;
+    };
+
+    /// Callback for ownership resolution during distributed interpolation.
+    ///
+    /// Called for each locally-enumerated entity with its parent information.
+    /// Faces have exactly 2 parents; edges can have N >= 2.
+    ///
+    /// @param parents       All parent indices (local-appended) of this entity.
+    ///                      [0, nLocalParents) = owned, [nLocal, nTotal) = ghost.
+    /// @param nLocalParents Number of owned (father) parents on this rank.
+    /// @param parentRanks   Rank owning each parent (parallel to parents vector).
+    /// @return OwnershipDecision: whether this rank owns the entity and which
+    ///         peers need it pushed.
+    using OwnershipResolverMulti = std::function<OwnershipDecision(
+        const std::vector<index> &parents,
+        const std::vector<MPI_int> &parentRanks,
+        index nLocalParents)>;
+
+    /// Legacy 2-parent ownership resolver (used by InterpolateDistributed).
+    using OwnershipResolver2 = std::function<OwnershipDecision(
+        index parentL, index parentR, index nLocalParents)>;
+
+    /// Result of distributed interpolation with globally-unique B entities.
+    ///
+    /// Given A→C cone (global C indices, A is ghosted via A→C→A), creates
+    /// globally-unique B entities (faces or edges). Produces:
+    ///   - A→B in global B indices (father = local A, son = ghost A)
+    ///   - B→C in global C indices (father-only, owned B)
+    ///   - B→C pbi (father-only, owned B; from first-discovered parent's perspective)
+    ///   - B→A support in global A indices (father-only, owned B; variable-width)
+    ///   - B element info (father-only, owned B)
+    ///
+    /// Ghost B entities are NOT included. Use evaluateGhostTree(A → A2B → B)
+    /// to pull them, then BorrowAndPull on entity2node/entity2nodePbi/entityElemInfo.
+    ///
+    /// After obtaining ghost B, entity2parent.son can be built by Inverse(parent2entity).
+    struct InterpolateGlobalResult
+    {
+        tAdjPair parent2entity;         ///< CSR: A → B (global B indices). Father = local A,
+                                        ///< son = ghost A. All entries are global B indices.
+        tAdjPair entity2node;           ///< CSR: B → C (global C indices). Father-only (owned B).
+        tAdjPair entity2parent;         ///< CSR: B → A (global A indices). Father-only (owned B).
+                                        ///< Variable-width: 1-2 for faces, N for edges.
+        tPbiPair entity2nodePbi;        ///< B → C pbi. Father-only (owned B).
+                                        ///< Pbi from the first-discovered parent's view.
+                                        ///< Uninitialized/empty if not periodic.
+        tElemInfoArrayPair entityElemInfo; ///< Per-entity elem info. Father-only (owned B).
+        index nOwnedEntities{0};        ///< Number of owned B entities (father size).
+    };
+
+    // =================================================================
+    // InterpolateResult: output of LOCAL sub-entity interpolation
     // =================================================================
 
     /// Result of interpolating (extracting) sub-entities from parent→node connectivity.
@@ -520,14 +596,32 @@ namespace DNDS::Geom
     {
         tAdjPair parent2entity; ///< CSR: parent → entities (e.g., cell2face). Father-only.
         tAdjPair entity2node;   ///< CSR: entity → nodes (e.g., face2node). Father-only.
-        tAdj2Pair entity2parent; ///< Fixed-2: entity → (parentL, parentR). Father-only.
-                                 ///< parentR = UnInitIndex for single-sided (boundary) entities.
+        tAdjPair entity2parent; ///< CSR: entity → parents. Father-only. Variable-width:
+                                ///< 1 for boundary faces, 2 for internal faces, N for edges.
         std::vector<ElemInfo> entityElemInfo; ///< Per-entity element info (zone=0, type from SubEntityDesc::typeTag).
         index nEntities{0};     ///< Total number of unique entities created.
-        bool duplicateOverflow{false}; ///< Set if a sub-entity matched an entity that already has
-                                       ///< two parents (would need a third). Indicates incorrect
-                                       ///< deduplication — typically a missing matchExtra on
-                                       ///< periodic meshes.
+    };
+
+    // (InterpolateDistributedResult and legacy types moved above)
+
+    // =================================================================
+    // InterpolateDistributedResult: output of distributed interpolation
+    // =================================================================
+
+    /// Result of distributed interpolation with ownership resolution.
+    ///
+    /// Extends InterpolateResult with ghost communication: entity arrays have
+    /// father (owned) + son (ghost) populated. parent2entity entries use
+    /// local-appended entity indices that span both father and son.
+    struct InterpolateDistributedResult
+    {
+        tAdjPair parent2entity;          ///< CSR: parent → entities. Father = local parents,
+                                         ///< son = ghost parents. Entries are local-appended entity indices.
+        tAdjPair entity2node;            ///< CSR: entity → nodes. Father = owned, son = ghost.
+        tAdj2Pair entity2parent;         ///< Fixed-2: entity → (parentL, parentR). Father = owned, son = ghost.
+                                         ///< Entries are local-appended parent indices.
+        tElemInfoArrayPair entityElemInfo; ///< Per-entity element info. Father = owned, son = ghost.
+        index nOwnedEntities{0};         ///< Number of owned entities (father size).
     };
 
     // =================================================================
@@ -655,10 +749,23 @@ namespace DNDS::Geom
         /// For each row a in AB, iterates b in AB[a], collects c in BC[b].
         /// Counts shared B-entities per candidate, applies predicate.
         ///
+        /// ## Ghost prerequisite
+        ///
+        /// **BC must contain (father+son) all B-entities referenced by AB.**
+        /// The caller must ghost-pull BC for every global B-index that appears
+        /// in any row of AB. The `bGlobal2Local` map must cover all such
+        /// B-globals. If a B-global from AB is not in `bGlobal2Local`, the
+        /// method asserts (fatal error indicating incomplete ghost pull).
+        ///
+        /// Typical pattern: before calling ComposeFiltered, the caller builds
+        /// BC (e.g., node2cell via Inverse), then ghost-pulls it for all
+        /// off-rank B-entities referenced by local AB rows.
+        ///
         /// @param AB           CSR: A → B (father only, global B indices).
         /// @param BC           CSR: B → C (father+son, global C indices).
         /// @param nALocal      Number of local A-entities.
         /// @param bGlobal2Local Maps global B-index to local-appended index in BC.
+        ///                      Must contain every B-global that appears in AB.
         /// @param aLocal2Global Maps local A-index to global A-index.
         /// @param pred         Predicate(a_global, c_global, nShared) → keep?
         /// @param matchExtra   Optional second predicate called after pred passes.
@@ -681,19 +788,25 @@ namespace DNDS::Geom
                 &matchExtra = nullptr);
 
         // -----------------------------------------------------------------
-        // Interpolate: extract sub-entities from parent→node connectivity
+        // InterpolateLocal: rank-local sub-entity extraction (no MPI)
         // -----------------------------------------------------------------
 
         /// Extract sub-entities (faces or edges) from parent→node connectivity.
+        /// This is a **local-only** operation — no MPI communication.
         ///
-        /// For each parent entity, queries the SubEntityQuery to enumerate its
-        /// sub-entities, extracts node indices, and deduplicates by sorted-vertex
-        /// comparison. Produces parent→entity, entity→node, and entity→parent
-        /// (2-wide) adjacencies.
+        /// Enumerates and deduplicates B entities within a contiguous block of
+        /// parent A entities (typically local + ghost cells). Produces local-indexed
+        /// parent→entity, entity→node, and entity→parent adjacencies.
         ///
-        /// This is a local-only operation: no MPI communication. The caller
-        /// provides a contiguous block of parent entities (typically local + ghost
-        /// cells) and receives local-indexed results.
+        /// Used internally by InterpolateGlobal (step 1). Can also be used
+        /// directly for rank-local analysis or testing.
+        ///
+        /// ## Ghost note
+        ///
+        /// The caller typically passes all A parents (father+son) so that
+        /// shared sub-entities are deduplicated within the local view. If ghost
+        /// A parents are omitted, shared B entities at rank boundaries will
+        /// appear as separate single-sided entities.
         ///
         /// @param parent2node    CSR: parent → nodes (father-only or father+son).
         ///                       Accessed via operator[] for indices [0, nParent).
@@ -701,12 +814,113 @@ namespace DNDS::Geom
         /// @param nParent        Number of parent entities to process.
         /// @param nNode          Total number of nodes (for reverse-index sizing).
         /// @param mpi            MPI info (only for array allocation, no communication).
-        /// @return               InterpolateResult with all adjacencies.
+        /// @return               InterpolateResult with all adjacencies (local indices).
         static InterpolateResult Interpolate(
             const tAdjPair &parent2node,
             const SubEntityQuery &query,
             index nParent,
             index nNode,
+            const MPIInfo &mpi);
+
+        /// Distributed interpolation with ownership resolution and ghost exchange.
+        ///
+        /// Extends Interpolate by:
+        ///   1. Calling the local Interpolate on all parents (local + ghost).
+        ///   2. Using the OwnershipResolver callback to decide which rank owns
+        ///      each entity.
+        ///   3. Compacting owned entities and assigning global IDs.
+        ///   4. Push-based ghost exchange so non-owning ranks receive the
+        ///      entities they need.
+        ///   5. Resolving parent2entity so all entries (for both local and ghost
+        ///      parents) use local-appended entity indices.
+        ///
+        /// @param parent2node       CSR: parent → nodes (father + son).
+        /// @param parentGhostMapping Ghost mapping for parent entities (for global
+        ///                           index lookups). Must map local-appended index
+        ///                           to global parent index.
+        /// @param query             Sub-entity topology callbacks.
+        /// @param nLocalParents     Number of local (owned/father) parents.
+        /// @param nTotalParents     Total parents (father + son).
+        /// @param nNode             Total number of nodes.
+        /// @param resolver          Ownership callback.
+        /// @param nodeGhostMapping  Ghost mapping for nodes (local-appended → global).
+        ///                          Used to convert entity2node to global before push
+        ///                          and back to local on the receiver.
+        /// @param mpi               MPI communicator.
+        /// @return InterpolateDistributedResult with owned + ghost entities.
+        static InterpolateDistributedResult InterpolateDistributed(
+            const tAdjPair &parent2node,
+            const OffsetAscendIndexMapping &parentGhostMapping,
+            const SubEntityQuery &query,
+            index nLocalParents,
+            index nTotalParents,
+            index nNode,
+            const OwnershipResolver2 &resolver,
+            const OffsetAscendIndexMapping &nodeGhostMapping,
+            const MPIInfo &mpi);
+
+        /// Distributed interpolation producing globally-unique B entities.
+        ///
+        /// Given an A→C cone with pbi (where A is ghosted), creates
+        /// globally-unique B entities (faces or edges). B entities are created
+        /// only from **local (non-ghost) A parents**. Ghost A parents are used
+        /// solely for deduplication — when a local A's sub-entity shares C-vertices
+        /// with a ghost A's sub-entity, they are recognized as the same B entity.
+        ///
+        /// ## Ghost prerequisites (caller's responsibility)
+        ///
+        /// **A must be ghosted by at least the A→C→A 1-hop node-neighbor set.**
+        /// This means: for every local A entity, all other A entities that share
+        /// at least one C-vertex must be present as ghosts.
+        ///
+        /// If the ghost set is insufficient, some shared B entities (internal
+        /// faces/edges) across ranks will not find their ghost A counterpart
+        /// during local dedup. They will appear as single-sided when they are
+        /// actually internal. This is a silent correctness error that the method
+        /// cannot detect — boundary faces and partially-ghosted edges are
+        /// legitimately single-sided.
+        ///
+        /// **C (nodes) must be ghosted** to cover all C-vertices referenced by
+        /// ghost A parents. Typically guaranteed by the A→C→A ghost chain.
+        ///
+        /// ## Algorithm
+        ///
+        ///   1. Local enumeration + dedup (InterpolateLocal) on all A (father+son).
+        ///      Also extracts B→C pbi via extractPbi callback.
+        ///   2. Push locally-deduplicated B entities to ranks owning ghost A-parents,
+        ///      so each rank sees all B candidates for its local A neighborhood.
+        ///   3. Inter-rank dedup by sorted (C-vertex, pbi) fingerprint with
+        ///      collaborating check (matchExtra).
+        ///   4. Ownership resolution via callback (supports N-parent edges).
+        ///   5. Assign global B indices to owned entities.
+        ///   6. Build A→B (global B indices) for both local and ghost A.
+        ///
+        /// Ghost B entities are NOT produced. Use evaluateGhostTree(A→A2B→B)
+        /// after this call to pull them.
+        ///
+        /// @param parent2node       CSR: A → C (father+son, local C indices).
+        /// @param parent2nodePbi    A → C pbi (father+son). Pass empty pair if not periodic.
+        /// @param parentGhostMapping Ghost mapping for A (local-appended → global).
+        /// @param parentGlobalMapping Global offsets mapping for A (for rank lookup).
+        /// @param nodeGhostMapping   Ghost mapping for C (local-appended → global).
+        /// @param query             Sub-entity topology + pbi extraction callbacks.
+        /// @param nLocalParents     Number of owned A.
+        /// @param nTotalParents     Total A (father + son).
+        /// @param nNode             Total C (father + son).
+        /// @param resolver          N-parent ownership callback.
+        /// @param mpi               MPI communicator.
+        /// @return InterpolateGlobalResult with owned B entities in global indices.
+        static InterpolateGlobalResult InterpolateGlobal(
+            const tAdjPair &parent2node,
+            const tPbiPair &parent2nodePbi,
+            const OffsetAscendIndexMapping &parentGhostMapping,
+            const GlobalOffsetsMapping &parentGlobalMapping,
+            const OffsetAscendIndexMapping &nodeGhostMapping,
+            const SubEntityQueryPbi &query,
+            index nLocalParents,
+            index nTotalParents,
+            index nNode,
+            const OwnershipResolverMulti &resolver,
             const MPIInfo &mpi);
 
         // -----------------------------------------------------------------
@@ -767,7 +981,11 @@ namespace DNDS::Geom
             {
                 auto it = bGlobal2Local.find(iB);
                 DNDS_assert_info(it != bGlobal2Local.end(),
-                                 fmt::format("ComposeFiltered: B-entity {} not found in bGlobal2Local", iB));
+                                 fmt::format("ComposeFiltered: B-entity global {} (referenced by A-entity "
+                                             "local {} / global {}) not found in bGlobal2Local. "
+                                             "Ghost pull of B→C is incomplete — the caller must "
+                                             "pull BC for all B-globals referenced by AB rows.",
+                                             iB, iA, aGlobal));
                 index bLocal = it->second;
                 for (auto iC : BC[bLocal])
                 {
