@@ -1841,7 +1841,8 @@ namespace DNDS::Geom
         if (isPeriodic)
             face2nodePbi.father = globalResult.entity2nodePbi.father;
 
-        // === Section F: Ghost face pull ===
+        // === Section F: Ghost face pull via evaluateGhostTree ===
+        // Populate cell2face from InterpolateGlobal's parent2entity (global face IDs).
         for (index iCell = 0; iCell < nCellAll; iCell++)
         {
             rowsize nFaces = globalResult.parent2entity.RowSize(iCell);
@@ -1852,18 +1853,29 @@ namespace DNDS::Geom
         cell2face.father->Compress();
         cell2face.son->Compress();
 
+        // Determine ghost faces via evaluateGhostTree(Cell → Cell2Face → Face).
+        // The tree traverses owned cells only (single hop), so cell2faceAdj
+        // only needs father with cell global mapping — no ghost infrastructure.
         {
-            std::vector<index> ghostFaces;
-            auto faceFatherGM = face2node.trans.pLGlobalMapping;
-            index myFaceStart = (*faceFatherGM)(mpi.rank, 0);
-            index myFaceEnd = myFaceStart + nOwnedFaces;
-            for (index iCell = 0; iCell < nLocalCells; iCell++)
-                for (rowsize j = 0; j < cell2face.RowSize(iCell); j++)
-                {
-                    index gFace = cell2face(iCell, j);
-                    if (gFace != UnInitIndex && (gFace < myFaceStart || gFace >= myFaceEnd))
-                        ghostFaces.push_back(gFace);
-                }
+            MeshConnectivity dag;
+            dag.meshDim = dim;
+            tAdjPair cell2faceAdj;
+            cell2faceAdj.father = cell2face.father;
+            cell2faceAdj.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
+            dag.registerAdj(Adj::Cell2Face, cell2faceAdj);
+            dag.registerGlobalMapping(EntityKind::Cell, cell2node.father->pLGlobalMapping);
+            dag.registerGlobalMapping(EntityKind::Face, face2node.trans.pLGlobalMapping);
+
+            GhostSpec ghostSpec;
+            ghostSpec.chains.push_back(GhostChain{
+                EntityKind::Cell,
+                {Adj::Cell2Face},
+                EntityKind::Face,
+            });
+            auto ghostTree = CompiledGhostTree::compile(ghostSpec);
+            auto ghostResult = dag.evaluateGhostTree(ghostTree, mpi);
+
+            auto &ghostFaces = ghostResult.ghostIndices[EntityKind::Face];
 
             face2cell.TransAttach();
             face2cell.trans.createFatherGlobalMapping();
