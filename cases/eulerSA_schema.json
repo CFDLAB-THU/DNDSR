@@ -1497,6 +1497,11 @@
                     "default": 1,
                     "description": "SA-DES mode"
                 },
+                "SAVersion": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "SA variant: 0=current (cRot=2, corrected |S|, min(P,0) Jacobian), 1=legacy/pre-31578ce (cRot=1, Frobenius SS, P*0 Jacobian)"
+                },
                 "ransModel": {
                     "type": "string",
                     "default": "RANS_None",

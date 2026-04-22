@@ -455,6 +455,8 @@ namespace DNDS::Geom
         void AdjLocal2GlobalC2CFace();
 
         void InterpolateFace();
+        void BuildGhostFace();
+        void MatchFaceBoundary();
         void InterpolateFaceLegacy();
         void AssertOnFaces();
 

@@ -22,6 +22,21 @@ else()
 endif()
 message(STATUS "DNDS_TEST_NP_LIST: ${DNDS_TEST_NP_LIST}")
 
+# --- Detect OpenMPI and add --oversubscribe if needed ---
+# OpenMPI requires --oversubscribe when np > physical cores (common in CI/testing).
+# MPICH/Intel MPI do not need (or recognize) this flag.
+if(MPIEXEC_EXECUTABLE)
+    execute_process(
+        COMMAND ${MPIEXEC_EXECUTABLE} --version
+        OUTPUT_VARIABLE _MPIEXEC_VERSION_OUTPUT
+        ERROR_VARIABLE _MPIEXEC_VERSION_OUTPUT
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(_MPIEXEC_VERSION_OUTPUT MATCHES "Open MPI")
+        message(STATUS "Detected OpenMPI: adding --oversubscribe to MPIEXEC_PREFLAGS for tests")
+        list(APPEND MPIEXEC_PREFLAGS "--oversubscribe")
+    endif()
+endif()
+
 # --- Timeout per np ---
 function(_dnds_np_timeout NP OUT_VAR)
     if(NP LESS_EQUAL 2)
@@ -167,6 +182,7 @@ geom_add_mpi_test(mesh_pipeline "Geom/test_MeshPipeline.cpp" "geom;dnds")
 geom_add_mpi_test(mesh_distributed_read "Geom/test_MeshDistributedRead.cpp" "geom;dnds")
 geom_add_mpi_test(mesh_connectivity "Geom/test_MeshConnectivity.cpp" "geom;dnds")
 geom_add_mpi_test(mesh_connectivity_ghost "Geom/test_MeshConnectivity_Ghost.cpp" "geom;dnds")
+geom_add_mpi_test(mesh_connectivity_interpolate "Geom/test_MeshConnectivity_Interpolate.cpp" "geom;dnds")
 
 set(GEOM_TEST_TARGETS
     geom_test_elements
@@ -176,6 +192,7 @@ set(GEOM_TEST_TARGETS
     geom_test_mesh_distributed_read
     geom_test_mesh_connectivity
     geom_test_mesh_connectivity_ghost
+    geom_test_mesh_connectivity_interpolate
 )
 foreach(T ${GEOM_TEST_TARGETS})
     add_dependencies(geom_unit_tests ${T})

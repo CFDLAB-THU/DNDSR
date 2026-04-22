@@ -988,7 +988,8 @@ namespace DNDS::Euler::RANS
                       real lLES,
                       real hMax,
                       int DESMode,
-                      TSource &source, int rotCor, int mode)
+                      TSource &source, int rotCor, int mode,
+                      int SAVersion = 0)
     {
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -1034,14 +1035,16 @@ namespace DNDS::Euler::RANS
             Omega += Geom::CrossVecToMat(settings.frameConstRotation.vOmega())(Seq012, Seq012); // to static frame rotation
 #endif
         const real S = Omega.norm() * std::sqrt(2.0);                               // is omega's magnitude
-        const real SS = (diffU + diffU.transpose()).norm() * (1. / std::sqrt(2.0)); // is sqrt(2) * strainrate's norm
+        const real SS = SAVersion == 0
+                            ? (diffU + diffU.transpose()).norm() * (1. / std::sqrt(2.0))  // corrected strain rate magnitude
+                            : (diffU + diffU.transpose()).norm();                          // legacy (Frobenius of 2*S_ij)
         real SRotCor = 0.0;
         if (rotCor)
         {
-            // 2 is recommended but we use 1 to avoid negative production, see Diskin, Boris, Yi Liu, and Marshall C. Galbraith. "High-Fidelity CFD Verification Workshop 2024: Spalart-Allmaras QCR2000-R Turbulence Model." AIAA Scitech 2023 Forum. 2023.
-            // we now use 2.0
-            const real cRot = 2.0;
-            SRotCor += cRot * std::min(0.0, S - SS);
+            const real cRot = SAVersion == 0 ? 2.0 : 1.0;
+            SRotCor += SAVersion == 0
+                           ? cRot * std::min(0.0, S - SS)
+                           : cRot * std::min(0.0, SS - S);
         }
         real diffUNorm = diffU.norm();
 
@@ -1170,7 +1173,9 @@ namespace DNDS::Euler::RANS
             source(I4 + 1) = UMeanXy(0) * (P - D + diffNu.squaredNorm() * cb2 / sigma) / muRef -
                              (UMeanXy(I4 + 1) * fn * muRef + mufPhy) / (UMeanXy(0) * sigma) * diffRho.dot(diffNu) / muRef;
         else
-            source(I4 + 1) = -std::min(UMeanXy(0) * (std::min(P, 0.0) * 1 - D * 2) / muRef / (std::abs(UMeanXy(I4 + 1)) + verySmallReal), -verySmallReal);
+            source(I4 + 1) = SAVersion == 0
+                                 ? -std::min(UMeanXy(0) * (std::min(P, 0.0) * 1 - D * 2) / muRef / (std::abs(UMeanXy(I4 + 1)) + verySmallReal), -verySmallReal)
+                                 : -std::min(UMeanXy(0) * (P * 0 - D * 2) / muRef / (std::abs(UMeanXy(I4 + 1)) + verySmallReal), -verySmallReal);
 
         if (!source.allFinite())
         {
