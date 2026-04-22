@@ -1468,6 +1468,155 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
         CHECK(result.parent2entity.father->RowSize(iCell) == 6);
     }
 
+    // --- Verify face2nodePbi VALUES ---
+    // For each owned face, the stored pbi should match the pbi extracted from
+    // the first parent cell's perspective (entity2parent[iFace][0]).
+    {
+        DNDS::index nFail = 0;
+        for (DNDS::index iFace = 0; iFace < result.nOwnedEntities; iFace++)
+        {
+            // Get the first parent (global A) and resolve to local-appended
+            DNDS::index parentGlobal = result.entity2parent.father->operator()(iFace, 0);
+            auto [pFound, pRank, parentLocal] = cellGhostMapping->search_indexAppend(parentGlobal);
+            REQUIRE(pFound);
+
+            // Find which sub-entity slot of the parent maps to this face.
+            // We need the local parent2entity, but we only have global B IDs.
+            // Instead, recompute the face nodes and pbi from the parent, then
+            // match by comparing global node sets.
+
+            // Get face's global node set
+            auto faceNodeRow = result.entity2node.father->operator[](iFace);
+            std::set<DNDS::index> faceNodeGlobals;
+            for (auto gn : faceNodeRow)
+                faceNodeGlobals.insert(gn);
+
+            auto eParent = Elem::Element{cellElemInfo[parentLocal]->getElemType()};
+            int nFaces = eParent.GetNumFaces();
+            bool matched = false;
+            for (int iSub = 0; iSub < nFaces && !matched; iSub++)
+            {
+                auto eFace = eParent.ObtainFace(iSub);
+                int nFN = eFace.GetNumNodes();
+
+                // Extract nodes (local-appended) and convert to global
+                std::vector<DNDS::index> subNodes(nFN);
+                std::vector<DNDS::index> parentNodes(8);
+                for (int k = 0; k < 8; k++)
+                    parentNodes[k] = cell2node(parentLocal, k);
+                eParent.ExtractFaceNodes(iSub, parentNodes, subNodes);
+
+                std::set<DNDS::index> subNodeGlobals;
+                for (auto la : subNodes)
+                    subNodeGlobals.insert(nodeGhostMapping->operator()(-1, la));
+
+                if (subNodeGlobals != faceNodeGlobals)
+                    continue;
+
+                // Match found. Extract pbi from cell2nodePbi for this sub-entity.
+                std::vector<NodePeriodicBits> parentPbiVec(8);
+                for (int k = 0; k < 8; k++)
+                    parentPbiVec[k] = cell2nodePbi(parentLocal, k);
+                std::vector<NodePeriodicBits> expectedPbi(nFN);
+                eParent.ExtractFaceNodes(iSub, parentPbiVec, expectedPbi);
+
+                // Compare with stored entity2nodePbi
+                REQUIRE(result.entity2nodePbi.father->RowSize(iFace) == nFN);
+                for (int j = 0; j < nFN; j++)
+                {
+                    auto stored = result.entity2nodePbi.father->operator()(iFace, j);
+                    if (!(stored == expectedPbi[j]))
+                        nFail++;
+                }
+                matched = true;
+            }
+            REQUIRE(matched);
+        }
+        DNDS::index globalNFail = 0;
+        MPI_Allreduce(&nFail, &globalNFail, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+        CHECK(globalNFail == 0);
+    }
+
+    // --- Verify parent2entityPbi VALUES (faces) ---
+    // For each local cell and each face slot, the parent2entityPbi should be the
+    // uniform XOR between the cell's face-node pbi and the face's stored pbi.
+    // We verify: for each local cell iCell, sub j → face iFace:
+    //   cell's face-pbi (from cell2nodePbi) XOR face's stored pbi (entity2nodePbi)
+    //   should be uniform and equal to parent2entityPbi[iCell][j].
+    REQUIRE(bool(result.parent2entityPbi.father));
+    {
+        DNDS::index nFail = 0;
+        for (DNDS::index iCell = 0; iCell < nCellLocal; iCell++)
+        {
+            auto eCell = Elem::Element{cellElemInfo[iCell]->getElemType()};
+            for (rowsize j = 0; j < result.parent2entity.father->RowSize(iCell); j++)
+            {
+                DNDS::index gFace = result.parent2entity.father->operator()(iCell, j);
+                if (gFace == UnInitIndex)
+                    continue;
+                NodePeriodicBits storedRelPbi = result.parent2entityPbi.father->operator()(iCell, j);
+
+                // Find the face in owned entities to get its stored pbi.
+                // gFace is a global face ID. We need to check if it's owned by this rank.
+                auto faceFatherGM = result.entity2node.trans.pLGlobalMapping;
+                DNDS::index myFaceStart = (*faceFatherGM)(g_mpi.rank, 0);
+                DNDS::index myFaceEnd = myFaceStart + result.nOwnedEntities;
+                if (gFace < myFaceStart || gFace >= myFaceEnd)
+                    continue; // face owned by another rank, skip (we don't have entity2nodePbi for it)
+
+                DNDS::index iFaceLocal = gFace - myFaceStart;
+
+                // Extract cell's face pbi
+                auto eFace = eCell.ObtainFace(j);
+                int nFN = eFace.GetNumNodes();
+                std::vector<NodePeriodicBits> cellFacePbi(nFN);
+                std::vector<DNDS::index> cellFaceNodes(nFN);
+                {
+                    std::vector<NodePeriodicBits> parentPbiVec(8);
+                    std::vector<DNDS::index> parentNodes(8);
+                    for (int k = 0; k < 8; k++)
+                    {
+                        parentPbiVec[k] = cell2nodePbi(iCell, k);
+                        parentNodes[k] = cell2node(iCell, k);
+                    }
+                    eCell.ExtractFaceNodes(j, parentPbiVec, cellFacePbi);
+                    eCell.ExtractFaceNodes(j, parentNodes, cellFaceNodes);
+                }
+
+                // Face stored pbi
+                auto faceNodeRow = result.entity2node.father->operator[](iFaceLocal);
+
+                // Match nodes by identity (convert cell nodes to global)
+                using NP = std::pair<DNDS::index, uint8_t>;
+                auto cmp = [](const NP &a, const NP &b)
+                { return a.first == b.first ? a.second < b.second : a.first < b.first; };
+                std::vector<NP> cellNP(nFN), faceNP(nFN);
+                for (int k = 0; k < nFN; k++)
+                {
+                    cellNP[k] = {nodeGhostMapping->operator()(-1, cellFaceNodes[k]),
+                                 uint8_t(cellFacePbi[k])};
+                    faceNP[k] = {faceNodeRow[k],
+                                 uint8_t(result.entity2nodePbi.father->operator()(iFaceLocal, k))};
+                }
+                std::sort(cellNP.begin(), cellNP.end(), cmp);
+                std::sort(faceNP.begin(), faceNP.end(), cmp);
+
+                // Compute expected uniform XOR
+                uint8_t expectedXor = cellNP[0].second ^ faceNP[0].second;
+                bool uniform = true;
+                for (int k = 1; k < nFN; k++)
+                    if ((cellNP[k].second ^ faceNP[k].second) != expectedXor)
+                        uniform = false;
+
+                if (!uniform || !(NodePeriodicBits{expectedXor} == storedRelPbi))
+                    nFail++;
+            }
+        }
+        DNDS::index globalNFail = 0;
+        MPI_Allreduce(&nFail, &globalNFail, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+        CHECK(globalNFail == 0);
+    }
+
     // Similarly test edges.
     auto edgeQuery = makeHex8EdgeQueryPbi(cellElemInfo);
     edgeQuery.matchExtra = [&](DNDS::index iParent, int iSub,
@@ -1536,6 +1685,233 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
     {
         CAPTURE(iCell);
         CHECK(edgeResult.parent2entity.father->RowSize(iCell) == 12);
+    }
+
+    // --- Verify edge2nodePbi VALUES ---
+    // Same approach: for each owned edge, find the first parent cell, extract
+    // the expected edge pbi, and compare with stored entity2nodePbi.
+    {
+        DNDS::index nFail = 0;
+        for (DNDS::index iEdge = 0; iEdge < edgeResult.nOwnedEntities; iEdge++)
+        {
+            DNDS::index parentGlobal = edgeResult.entity2parent.father->operator()(iEdge, 0);
+            auto [pFound, pRank, parentLocal] = cellGhostMapping->search_indexAppend(parentGlobal);
+            REQUIRE(pFound);
+
+            auto edgeNodeRow = edgeResult.entity2node.father->operator[](iEdge);
+            std::set<DNDS::index> edgeNodeGlobals;
+            for (auto gn : edgeNodeRow)
+                edgeNodeGlobals.insert(gn);
+
+            auto eParent = Elem::Element{cellElemInfo[parentLocal]->getElemType()};
+            int nEdges = eParent.GetNumEdges();
+            bool matched = false;
+            for (int iSub = 0; iSub < nEdges && !matched; iSub++)
+            {
+                auto eEdge = eParent.ObtainEdge(iSub);
+                int nEN = eEdge.GetNumNodes();
+
+                std::vector<DNDS::index> subNodes(nEN);
+                std::vector<DNDS::index> parentNodes(8);
+                for (int k = 0; k < 8; k++)
+                    parentNodes[k] = cell2node(parentLocal, k);
+                eParent.ExtractEdgeNodes(iSub, parentNodes, subNodes);
+
+                std::set<DNDS::index> subNodeGlobals;
+                for (auto la : subNodes)
+                    subNodeGlobals.insert(nodeGhostMapping->operator()(-1, la));
+
+                if (subNodeGlobals != edgeNodeGlobals)
+                    continue;
+
+                std::vector<NodePeriodicBits> parentPbiVec(8);
+                for (int k = 0; k < 8; k++)
+                    parentPbiVec[k] = cell2nodePbi(parentLocal, k);
+                std::vector<NodePeriodicBits> expectedPbi(nEN);
+                eParent.ExtractEdgeNodes(iSub, parentPbiVec, expectedPbi);
+
+                REQUIRE(edgeResult.entity2nodePbi.father->RowSize(iEdge) == nEN);
+                for (int j = 0; j < nEN; j++)
+                {
+                    auto stored = edgeResult.entity2nodePbi.father->operator()(iEdge, j);
+                    if (!(stored == expectedPbi[j]))
+                        nFail++;
+                }
+                matched = true;
+            }
+            REQUIRE(matched);
+        }
+        DNDS::index globalNFail = 0;
+        MPI_Allreduce(&nFail, &globalNFail, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+        CHECK(globalNFail == 0);
+    }
+
+    // --- Verify parent2entityPbi for faces is at most 1-bit ---
+    // A face can cross at most one periodic boundary, so the relative pbi
+    // should have at most one bit set (P1, P2, P3, or 0).
+    {
+        DNDS::index nMultiBit = 0;
+        for (DNDS::index iCell = 0; iCell < nCellLocal; iCell++)
+            for (rowsize j = 0; j < result.parent2entity.father->RowSize(iCell); j++)
+            {
+                uint8_t v = uint8_t(result.parent2entityPbi.father->operator()(iCell, j));
+                int bits = __builtin_popcount(v);
+                if (bits > 1)
+                    nMultiBit++;
+            }
+        DNDS::index globalMultiBit = 0;
+        MPI_Allreduce(&nMultiBit, &globalMultiBit, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+        CHECK(globalMultiBit == 0);
+    }
+
+    // --- Coordinate-based verification for faces and edges ---
+    // Build synthetic node coordinates: node at local index ix*N*N+iy*N+iz
+    // has physical coords (rank*N + ix, iy, iz).
+    // Periodicity: P1 → +np*N in X, P2 → +N in Y, P3 → +N in Z.
+    using tPoint = Eigen::Vector3d;
+    auto makeCoord = [&](DNDS::index nodeGlobalIdx) -> tPoint
+    {
+        // Find owning rank and local index
+        DNDS::MPI_int r; DNDS::index v;
+        nodeGM->search(nodeGlobalIdx, r, v);
+        DNDS::index localIdx = nodeGlobalIdx - (*nodeGM)(r, 0);
+        DNDS::index ix = localIdx / (N * N);
+        DNDS::index iy = (localIdx / N) % N;
+        DNDS::index iz = localIdx % N;
+        return tPoint(double(r * N + ix), double(iy), double(iz));
+    };
+    auto applyPbi = [&](const tPoint &c, NodePeriodicBits pbi) -> tPoint
+    {
+        tPoint ret = c;
+        if (pbi.getP1()) ret(0) += double(np * N);
+        if (pbi.getP2()) ret(1) += double(N);
+        if (pbi.getP3()) ret(2) += double(N);
+        return ret;
+    };
+
+    // Face center verification
+    {
+        DNDS::index nFail = 0;
+        for (DNDS::index iCell = 0; iCell < nCellLocal; iCell++)
+        {
+            auto eCell = Elem::Element{cellElemInfo[iCell]->getElemType()};
+            for (rowsize j = 0; j < result.parent2entity.father->RowSize(iCell); j++)
+            {
+                DNDS::index gFace = result.parent2entity.father->operator()(iCell, j);
+                if (gFace == UnInitIndex) continue;
+                auto faceFatherGM = result.entity2node.trans.pLGlobalMapping;
+                DNDS::index myFaceStart = (*faceFatherGM)(g_mpi.rank, 0);
+                DNDS::index myFaceEnd = myFaceStart + result.nOwnedEntities;
+                if (gFace < myFaceStart || gFace >= myFaceEnd) continue;
+                DNDS::index iFaceLocal = gFace - myFaceStart;
+
+                NodePeriodicBits relPbi = result.parent2entityPbi.father->operator()(iCell, j);
+
+                // Compute face center from CELL's perspective
+                auto eFace = eCell.ObtainFace(j);
+                int nFN = eFace.GetNumNodes();
+                std::vector<DNDS::index> cellFaceNodes(nFN);
+                std::vector<NodePeriodicBits> cellFacePbiVec(nFN);
+                {
+                    std::vector<DNDS::index> pN(8);
+                    std::vector<NodePeriodicBits> pP(8);
+                    for (int k = 0; k < 8; k++)
+                    {
+                        pN[k] = cell2node(iCell, k);
+                        pP[k] = cell2nodePbi(iCell, k);
+                    }
+                    eCell.ExtractFaceNodes(j, pN, cellFaceNodes);
+                    eCell.ExtractFaceNodes(j, pP, cellFacePbiVec);
+                }
+                tPoint centerCell = tPoint::Zero();
+                for (int k = 0; k < nFN; k++)
+                {
+                    DNDS::index ng = nodeGhostMapping->operator()(-1, cellFaceNodes[k]);
+                    centerCell += applyPbi(makeCoord(ng), cellFacePbiVec[k]);
+                }
+                centerCell /= double(nFN);
+
+                // Compute face center from ENTITY's perspective, then transform via relPbi
+                auto faceNodeRow = result.entity2node.father->operator[](iFaceLocal);
+                tPoint centerEntity = tPoint::Zero();
+                for (rowsize k = 0; k < static_cast<rowsize>(faceNodeRow.size()); k++)
+                {
+                    NodePeriodicBits ePbi = result.entity2nodePbi.father->operator()(iFaceLocal, k);
+                    centerEntity += applyPbi(makeCoord(faceNodeRow[k]), ePbi);
+                }
+                centerEntity /= double(faceNodeRow.size());
+                // Transform entity center to cell perspective
+                tPoint centerConverted = applyPbi(centerEntity, relPbi);
+
+                if ((centerCell - centerConverted).norm() > 1e-12)
+                    nFail++;
+            }
+        }
+        DNDS::index globalNFail = 0;
+        MPI_Allreduce(&nFail, &globalNFail, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+        CHECK(globalNFail == 0);
+    }
+
+    // Edge center verification
+    {
+        DNDS::index nFail = 0;
+        for (DNDS::index iCell = 0; iCell < nCellLocal; iCell++)
+        {
+            auto eCell = Elem::Element{cellElemInfo[iCell]->getElemType()};
+            for (rowsize j = 0; j < edgeResult.parent2entity.father->RowSize(iCell); j++)
+            {
+                DNDS::index gEdge = edgeResult.parent2entity.father->operator()(iCell, j);
+                if (gEdge == UnInitIndex) continue;
+                auto edgeFatherGM = edgeResult.entity2node.trans.pLGlobalMapping;
+                DNDS::index myEdgeStart = (*edgeFatherGM)(g_mpi.rank, 0);
+                DNDS::index myEdgeEnd = myEdgeStart + edgeResult.nOwnedEntities;
+                if (gEdge < myEdgeStart || gEdge >= myEdgeEnd) continue;
+                DNDS::index iEdgeLocal = gEdge - myEdgeStart;
+
+                NodePeriodicBits relPbi = edgeResult.parent2entityPbi.father->operator()(iCell, j);
+
+                // Compute edge center from CELL's perspective
+                auto eEdge = eCell.ObtainEdge(j);
+                int nEN = eEdge.GetNumNodes();
+                std::vector<DNDS::index> cellEdgeNodes(nEN);
+                std::vector<NodePeriodicBits> cellEdgePbiVec(nEN);
+                {
+                    std::vector<DNDS::index> pN(8);
+                    std::vector<NodePeriodicBits> pP(8);
+                    for (int k = 0; k < 8; k++)
+                    {
+                        pN[k] = cell2node(iCell, k);
+                        pP[k] = cell2nodePbi(iCell, k);
+                    }
+                    eCell.ExtractEdgeNodes(j, pN, cellEdgeNodes);
+                    eCell.ExtractEdgeNodes(j, pP, cellEdgePbiVec);
+                }
+                tPoint centerCell = tPoint::Zero();
+                for (int k = 0; k < nEN; k++)
+                {
+                    DNDS::index ng = nodeGhostMapping->operator()(-1, cellEdgeNodes[k]);
+                    centerCell += applyPbi(makeCoord(ng), cellEdgePbiVec[k]);
+                }
+                centerCell /= double(nEN);
+
+                // Compute edge center from ENTITY's perspective, then transform via relPbi
+                auto edgeNodeRow = edgeResult.entity2node.father->operator[](iEdgeLocal);
+                tPoint centerEntity = tPoint::Zero();
+                for (rowsize k = 0; k < static_cast<rowsize>(edgeNodeRow.size()); k++)
+                {
+                    NodePeriodicBits ePbi = edgeResult.entity2nodePbi.father->operator()(iEdgeLocal, k);
+                    centerEntity += applyPbi(makeCoord(edgeNodeRow[k]), ePbi);
+                }
+                centerEntity /= double(edgeNodeRow.size());
+                tPoint centerConverted = applyPbi(centerEntity, relPbi);
+
+                if ((centerCell - centerConverted).norm() > 1e-12)
+                    nFail++;
+            }
+        }
+        DNDS::index globalNFail = 0;
+        MPI_Allreduce(&nFail, &globalNFail, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+        CHECK(globalNFail == 0);
     }
 }
 

@@ -354,20 +354,41 @@ its periodic pbi filter logic.
 
 **Goal:** Implement `Interpolate()` — the generalized face/edge generator.
 
-**Status:** Implemented and migrated. `InterpolateFace()` now uses DSL internally.
+**Status:** Fully implemented. Three tiers:
 
-**Implementation:** Standalone `MeshConnectivity::Interpolate` in
-`MeshConnectivity_Interpolate.cpp`. Decoupled from `Element` module via
-user-provided `SubEntityQuery` callbacks. Includes periodic-aware dedup via
-optional `matchExtra` predicate.
+- `InterpolateLocal` (rank-only, no MPI): extracts and deduplicates sub-entities
+  from parent→node. Used directly for local analysis/testing and as Step 1 of
+  InterpolateGlobal.
+- `InterpolateDistributed` (legacy, 2-parent only): extends InterpolateLocal with
+  push-based ghost exchange. Superseded by InterpolateGlobal. Retained for backward
+  compatibility.
+- `InterpolateGlobal` (production): distributed sub-entity creation with global
+  dedup, N-parent edges, pbi extraction, and `parent2entityPbi` output. Used by
+  `InterpolateFace()` in `Mesh.cpp`.
+
+**Key design decisions:**
+- `entity2parent` is variable-width `tAdjPair` (not fixed-2), supporting N-parent edges.
+- `entity2nodePbi` stores pbi from the first-discovered parent's perspective.
+- `parent2entityPbi` stores the uniform XOR between each parent's view and the entity's
+  stored pbi. Computed locally (no push needed). Faces: at most 1 bit. Edges: multi-bit.
+- Ghost B entities are NOT produced. The caller pulls them via `evaluateGhostTree`.
+- The push protocol uses `(globalA, globalB, subIdx)` triplets — `subIdx` disambiguates
+  which slot of a parent with multiple non-owned sub-entities receives which global B ID.
 
 **Tests:**
 - 2D quads (4-cell), 2D tris (2-cell), 2D mixed (tri+quad)
 - 3D tet (1-cell, 2-cell shared face), 3D hex (1-cell)
-- Edge extraction from 3D tets
+- Edge extraction from 3D tets (single, two-tet shared)
 - 2×2 doubly-periodic quad mesh (corner case, requires collaborating check)
-- Regression: DSL matches legacy `InterpolateFace` on all 5 mesh configs
-- DSL-vs-Legacy periodic pbi comparison, recreate counts
+- 2×2×2 triply-periodic hex mesh (faces: 24, all 2-parent; edges: 24, all 4-parent)
+- Regression: DSL matches legacy `InterpolateFace` on UniformSquare_10
+- Distributed InterpolateGlobal on 4×4×4 hex: non-periodic + X-periodic (faces + edges)
+- Distributed InterpolateGlobal on 4×4×4 triply-periodic hex (faces + edges)
+- entity2nodePbi value verification (faces + edges, triply-periodic)
+- parent2entityPbi value verification (faces + edges, triply-periodic)
+- Coordinate-based center verification: face/edge center via entity2nodePbi + parent2entityPbi
+  matches cell's direct computation (triply-periodic, np=2,4,8)
+- parent2entityPbi 1-bit check for faces (triply-periodic)
 
 ---
 
@@ -454,24 +475,67 @@ For non-periodic meshes, `matchExtra` is left unset (null), and Interpolate
 performs vertex-only dedup — which is correct since non-periodic meshes never
 have two distinct faces sharing the same vertex set.
 
-### 9.4. Overflow Detection
+### 9.4. N-Parent Entity Handling (Variable-Width entity2parent)
 
-If the collaborating check is omitted on a periodic mesh that requires it,
-a face may be falsely matched to an entity that already has two parents.
-Instead of aborting, `Interpolate` sets `result.duplicateOverflow = true`
-and creates a new entity for the unmatched face. This allows tests to detect
-the failure gracefully.
+With variable-width `entity2parent` (`tAdjPair`), there is no overflow.
+If the collaborating check is omitted on a periodic mesh, false merges
+produce entities with >2 parents (faces) or >4 parents (edges). Tests
+detect this by checking `entity2parent.RowSize(i)` bounds.
 
-### 9.5. Test Coverage
+In 2D doubly-periodic: without `matchExtra`, at least one face gets 3+ parents.
+In 3D triply-periodic: without `matchExtra`, at least one face/edge gets extra parents.
+With `matchExtra`: faces have exactly 1-2 parents, edges have exactly 1-4 parents.
+
+### 9.5. parent2entityPbi: Relative Periodic Transform
+
+`entity2nodePbi` is stored from the first-discovered parent's perspective (the
+entity's own frame). When parent cell A accesses entity B, A needs to know the
+relative periodic transform between its own frame and B's stored frame.
+
+`parent2entityPbi[iParent][iSub]` is a single `NodePeriodicBits` value — the
+**uniform XOR** between parent A's sub-entity node-pbi and entity B's stored
+`entity2nodePbi`, matched by node identity (not position).
+
+**Why match by node identity:** Different parents may enumerate the same face/edge
+nodes in different local orderings. The per-position XOR can be non-uniform even
+when the per-node XOR is uniform. Sorting `(node, pbi)` pairs by node index before
+XORing handles this correctly.
+
+**Properties:**
+- For the first parent (B's stored perspective): always `{0}`.
+- For faces: at most 1 bit (P1, P2, or P3). A face crosses at most one periodic boundary.
+- For edges: can be multi-bit (e.g., P1|P2 for a corner edge crossing two periodic boundaries).
+- Computed locally in Step 2b of InterpolateGlobal — no MPI push needed. The XOR depends
+  only on `cell2nodePbi` and `entity2nodePbi`, both available after InterpolateLocal.
+
+**Usage:** To get entity B's node coordinates in parent A's frame:
+```cpp
+NodePeriodicBits relPbi = parent2entityPbi(iCell, iSub);
+for (int k = 0; k < nFaceNodes; k++)
+{
+    NodePeriodicBits entPbi = entity2nodePbi(iFace, k);
+    // XOR relPbi to transform from entity frame to cell frame:
+    NodePeriodicBits cellPbi{uint8_t(uint8_t(entPbi) ^ uint8_t(relPbi))};
+    coord = periodicInfo.GetCoordByBits(coords[entity2node(iFace, k)], cellPbi);
+}
+```
+
+### 9.6. Test Coverage
 
 | Test | What it proves |
 |------|----------------|
-| 2×2 periodic quad, no `matchExtra` | `duplicateOverflow == true` (false merge detected) |
+| 2×2 periodic quad, no `matchExtra` | >2-parent entity detected (false merge) |
 | 2×2 periodic quad, with `matchExtra` | 8 faces, all internal, correct cell pairs, no self-connections |
-| Pipeline collaborating check (IV10_10, IV10U_10) | Uniform XOR holds for all internal faces |
-| Pipeline pbi consistency | `face2nodePbi` matches owner cell's `cell2nodePbi` |
-| DSL-vs-Legacy pbi | Identical `(node, pbi)` sets per face |
-| RecreatePeriodicNodes counts | DSL and Legacy produce identical recreated node counts |
+| 2×2×2 triply-periodic hex, faces | 24 Quad4, all 2-parent, 3 distinct face-neighbors per cell |
+| 2×2×2 triply-periodic hex, edges | 24 Line2, all 4-parent, 12 edges per cell |
+| Distributed 4×4×4 hex, non-periodic | Exact face/edge counts, boundary/internal split |
+| Distributed 4×4×4 hex, X-periodic | No X-boundary faces, adjusted counts |
+| Distributed 4×4×4 hex, triply-periodic | 3*np*N^3 faces/edges, all internal |
+| entity2nodePbi value verification | Stored pbi matches first-parent extraction (faces + edges) |
+| parent2entityPbi value verification | Uniform XOR matches cell-to-entity pbi difference |
+| parent2entityPbi 1-bit for faces | At most 1 bit set per face slot |
+| Coordinate center verification | Face/edge center via entity2nodePbi + parent2entityPbi matches cell's direct computation |
+| Regression: InterpolateFace | DSL matches legacy on UniformSquare_10 |
 
 ### Phase 3: Ghost Build via Traversal Chains
 
@@ -1016,25 +1080,28 @@ and for resolving row indices in the adjacency arrays).
 
 ### Phase 4: Integration with UnstructuredMesh
 
-**Goal:** Wire `MeshConnectivity` into `UnstructuredMesh` as the internal
-organizer. Legacy members transfer ownership via `ssp<>` pointer swap.
+**Goal:** Wire `MeshConnectivity` DSL operations into `UnstructuredMesh`.
 
-**Approach:**
-- `UnstructuredMesh` gains a `MeshConnectivity dag` member.
-- `AdoptIntoDAG()` swaps `ssp<>` father/son pointers from legacy `ArrayPair`
-  members into the DAG's cone/support slots. The legacy `ArrayPair::trans`
-  stays in place; the `father`/`son` shared_ptrs become null on the legacy side.
-- `ReturnFromDAG()` swaps back: DAG slots → legacy members.
-- Ghost building uses `GhostSpec` + compiled tree to orchestrate pulls.
-  After evaluation, the legacy `ArrayPair::trans` is (re)initialized with
-  the ghost mapping produced by the tree.
-- `convertAllToLocal()` / `convertAllToGlobal()` iterate DAG cone/support
-  vectors instead of hardcoded member lists.
+**Status:** Implemented. All ghost operations migrated to `evaluateGhostTree`.
+`InterpolateFace` migrated to `InterpolateGlobal` + pull-based ghost faces.
 
-**Tests:**
-- Full pipeline test: build mesh through DAG path, compare all adjacency
-  arrays with the current pipeline's output (bit-for-bit match).
-- Round-trip: adopt → convertToGlobal → convertToLocal → verify unchanged.
+**What was done:**
+- `BuildGhostPrimary`: node ghosts via `evaluateGhostTree(Cell→Cell2Cell→Cell2Node→Node)`,
+  bnd ghosts via `evaluateGhostTree(Node→Node2Bnd→Bnd)`.
+- `RecoverCell2CellAndBnd2Cell`: N2CB ghost pull via
+  `evaluateGhostTree(Cell→Cell2Node→Node ∪ Bnd→Bnd2Node→Node)`.
+- `ReadSerializeAndDistribute`: ghost cell collection via
+  `evaluateGhostTree(Cell→Cell2Cell→Cell)`.
+- `InterpolateFace`: uses `InterpolateGlobal` + pull-based ghost faces via
+  `createGhostMapping`, not push protocol inside the DSL.
+
+**Not done (kept as manual code):**
+- `BuildCell2CellFace`: 9 lines of local code, uses `tAdj2Pair` not supported by
+  `ComposeFiltered`.
+- Serial-path adjacency ops (`BuildCell2Cell`, `BuildBnd2CellSerial`): rank-0 only.
+- `ReadSerializeAndDistribute` facial filtering: needs vertex-only counting.
+- `InterpolateGlobal` for edges in production: API and tests ready, not yet called
+  by the mesh pipeline (no edge adjacency in current solver).
 
 ### Phase 5: Replace Legacy Build Methods
 
@@ -1083,18 +1150,24 @@ cells. So `bnd2cell[iBnd] = face2cell[bnd2face[iBnd]]`.
 
 ## 7. Testing Strategy
 
-All tests are MPI-aware (np=1, 2, 4) using doctest + mpirun.
+All tests are MPI-aware (np=1, 2, 4, 8) using doctest + mpirun.
 
 | Phase | Test File | Key Assertions |
 |-------|-----------|----------------|
 | 0 | `test_MeshConnectivity.cpp` | Inverse correctness, MPI completeness |
-| 1 | same | Compose correctness, filter correctness |
-| 2 | same | Interpolation face count, cell2face consistency |
-| 3 | same | Ghost set matches known results |
+| 1 | same | Compose correctness, filter correctness, periodic pbi filter |
+| 2 | `test_MeshConnectivity_Interpolate.cpp` | Face/edge counts, dedup, periodic collab check, distributed InterpolateGlobal, pbi value verification, coordinate center verification |
+| 3 | `test_MeshConnectivity_Ghost.cpp` | Ghost set matches known results, chain merging, performance benchmarks |
 | 4 | `test_MeshPipeline.cpp` (existing) | Full pipeline regression |
 
-Small test meshes (hand-crafted 4-cell, 9-cell quads) for Phases 0-3.
-Existing CGNS meshes (UniformSquare_10, IV10_10, NACA0012_H2) for Phase 4.
+Small test meshes (hand-crafted 4-cell quads, periodic 2×2, 2×2×2) for local tests.
+Distributed NxNxN hex meshes (N=4) for InterpolateGlobal tests.
+Existing CGNS meshes (UniformSquare_10) for regression.
+
+Shared builders in `SyntheticMeshBuilders.hpp`:
+`HandCraftedMesh`, `Periodic2x2Mesh`, `Periodic2x2x2Mesh`, `DistributedHex3D`,
+`makeFaceQuery`, `makeEdgeQuery`, `makePeriodicMatchExtra`,
+`makeHex8FaceQueryPbi`, `makeHex8EdgeQueryPbi`.
 
 ---
 
@@ -1102,11 +1175,14 @@ Existing CGNS meshes (UniformSquare_10, IV10_10, NACA0012_H2) for Phase 4.
 
 ```
 src/Geom/
-  MeshConnectivity.hpp      — class definition, InterLayerAdj, GhostRequirement
-  MeshConnectivity.cpp      — Inverse, Compose, FilterBySharedNodes
-  MeshConnectivity_Interpolate.cpp — Interpolate (extracted from Mesh.cpp)
-  MeshConnectivity_Ghost.cpp      — BuildGhost with traversal chains
+  MeshConnectivity.hpp              — types, result structs, method declarations
+  MeshConnectivity.cpp              — Inverse, Compose, ComposeFiltered, registry
+  MeshConnectivity_Interpolate.cpp  — InterpolateLocal, InterpolateDistributed, InterpolateGlobal
+  MeshConnectivity_Ghost.cpp        — GhostChain, CompiledGhostTree, evaluateGhostTree
 
 test/cpp/Geom/
-  test_MeshConnectivity.cpp — standalone unit tests (Phases 0-3)
+  SyntheticMeshBuilders.hpp         — shared mesh builders (4-quad, periodic 2x2/2x2x2, DistributedHex3D)
+  test_MeshConnectivity.cpp         — Inverse, Compose, management tests (11 tests)
+  test_MeshConnectivity_Ghost.cpp   — ghost chain and evaluateGhostTree tests (16 tests)
+  test_MeshConnectivity_Interpolate.cpp — InterpolateLocal + InterpolateGlobal tests (17 tests)
 ```
