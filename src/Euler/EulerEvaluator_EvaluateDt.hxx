@@ -1625,7 +1625,7 @@ namespace DNDS::Euler
 
             //! DES mesh lengths should be cached!
             real hMax = vfv->GetCellMaxLenScale(iCell);
-            real cWall = 0.15;
+            real cWall = settings.SADESScale > 100.0 ? 1.0 : 0.15;
             real lLES = hMax * settings.SADESScale;
             //! missing hWallNormal!
             lLES = std::min(lLES, std::max({d * cWall, hMax * cWall}));
@@ -1635,7 +1635,8 @@ namespace DNDS::Euler
                                         gamma,
                                         d, lLES, hMax, settings.SADESMode,
                                         retInc,
-                                        settings.ransSARotCorrection, mode);
+                                        settings.ransSARotCorrection, mode,
+                                        settings.SAVersion);
             };
 
             if (Mode == 0)

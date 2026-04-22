@@ -50,7 +50,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/NACA0012_H2.cgns",
-        "outPltName": "../data/out/NACA0012_H2-anisotropicTest.dir/test_49",
+        "outPltName": "../data/out/NACA0012_H2-test.dir/test_xx",
         "outPltMode": 0,
         "readMeshMode": 0,
         "meshDirectBisect": 0,
@@ -113,9 +113,8 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
-        "intOrderVR": 1,
-        "intOrderVRBC": 5,
+        "intOrder": 5,
+        "intOrderVR": 5,
         "cacheDiffBase": true,
         "jacobiRelax": 1.0,
         "SORInstead": false,
@@ -125,8 +124,8 @@
         "subs2ndOrder": 1,
         "subs2ndOrderGGScheme": 0,
         "baseSettings": {
-            "localOrientation": true,
-            "anisotropicLengths": true
+            // "localOrientation": true,
+            // "anisotropicLengths": true
         },
         "functionalSettings": {
             // "scaleType": "MeanAACBB",
@@ -163,11 +162,11 @@
             // "geomWeightScheme": "SD_Power",
             // "geomWeightPower1": -1.0,
             // "geomWeightPower2": 0,  
-            "useAnisotropicFunctional": true,
-            "tanWeightScale": 1.0,
+            // "useAnisotropicFunctional": true,
+            // "tanWeightScale": 1.0,
             // "anisotropicType": "Norm",
-            "anisotropicType": "InertiaCoordBB",
-            // "anisotropicType": "WallDist",
+            // "anisotropicType": "InertiaCoordBBSym",
+            // "anisotropicType": "WallDist",       
             // "inertiaWeightPower": 0,
             // "scaleMultiplier": 0.5,
             "_tail": 0
@@ -224,7 +223,7 @@
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
         "useRoeJacobian": false,
-        "riemannSolverType": "Roe_M6",
+        "riemannSolverType": "Roe_M8",
         "uRecBetaCompressPower": 1,
         "wallDistScheme": 1,
         "wallDistExection": 5,
