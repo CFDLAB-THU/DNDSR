@@ -100,6 +100,19 @@ namespace DNDS::Euler
         /// @{
         real SADESScale = veryLargeReal;    ///< SA-DES length scale (veryLargeReal effectively disables DES).
         int SADESMode = 1;                  ///< SA-DES mode selector (1 = DDES, etc.).
+        /**
+         * @brief SA model variant selector.
+         *
+         * - **0 (default):** Current formulation — rotation correction uses cRot = 2.0
+         *   with corrected strain-rate magnitude |S| = ||S_ij + S_ij^T|| / sqrt(2),
+         *   SRotCor = cRot * min(0, |Omega| - |S|), and the implicit Jacobian source
+         *   includes the negative part of production: min(P, 0) * 1.
+         * - **1 (legacy):** Pre-31578ce (dev/harry_ba3) formulation — rotation correction
+         *   uses cRot = 1.0 with the Frobenius norm SS = ||S_ij + S_ij^T||,
+         *   SRotCor = cRot * min(0, SS - S), and the implicit Jacobian source omits
+         *   production entirely (P * 0).
+         */
+        int SAVersion = 0;
         RANSModel ransModel = RANSModel::RANS_None; ///< RANS turbulence model (RANS_None, RANS_SA, RANS_KOWilcox, etc.).
         int ransUseQCR = 0;                ///< Enable QCR (Quadratic Constitutive Relation) correction.
         int ransSARotCorrection = 1;       ///< SA rotation/curvature correction mode.
@@ -356,6 +369,7 @@ namespace DNDS::Euler
                        DNDS::Config::range(1));
             DNDS_FIELD(SADESScale,              "SA-DES length scale");
             DNDS_FIELD(SADESMode,               "SA-DES mode");
+            DNDS_FIELD(SAVersion,               "SA variant: 0=current (cRot=2, corrected |S|, min(P,0) Jacobian), 1=legacy/pre-31578ce (cRot=1, Frobenius SS, P*0 Jacobian)");
             DNDS_FIELD(ransModel,               "RANS turbulence model");
             DNDS_FIELD(ransUseQCR,              "Use QCR correction for RANS");
             DNDS_FIELD(ransSARotCorrection,     "SA rotation correction");

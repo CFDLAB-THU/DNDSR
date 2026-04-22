@@ -1,4 +1,5 @@
 #include "Mesh.hpp"
+#include "MeshConnectivity.hpp"
 #include "Mesh_PartitionHelpers.hpp"
 #include "Metis.hpp"
 
@@ -163,18 +164,20 @@ namespace DNDS::Geom
             cell2cell.TransAttach();
             cell2cell.trans.createFatherGlobalMapping();
 
+            // Use evaluateGhostTree for ghost cell collection (Cell → Cell2Cell → Cell).
+            MeshConnectivity dagTmp;
+            dagTmp.meshDim = dim;
+            dagTmp.registerAdj(Adj::Cell2Cell, cell2cell);
+            dagTmp.registerGlobalMapping(EntityKind::Cell, cell2cell.trans.pLGlobalMapping);
+
+            GhostSpec cellSpec{{{EntityKind::Cell, {Adj::Cell2Cell}, EntityKind::Cell}}};
+            auto cellResult = dagTmp.evaluateGhostTree(
+                CompiledGhostTree::compile(cellSpec), mpi);
+
+            auto it = cellResult.ghostIndices.find(EntityKind::Cell);
             std::vector<index> ghostCells;
-            for (index iCell = 0; iCell < cell2cell.father->Size(); iCell++)
-                for (rowsize ic2c = 0; ic2c < cell2cell.father->RowSize(iCell); ic2c++)
-                {
-                    index iCellOther = (*cell2cell.father)(iCell, ic2c);
-                    MPI_int rank;
-                    index val;
-                    if (!cell2cell.trans.pLGlobalMapping->search(iCellOther, rank, val))
-                        DNDS_assert_info(false, "search failed");
-                    if (rank != mpi.rank)
-                        ghostCells.push_back(iCellOther);
-                }
+            if (it != cellResult.ghostIndices.end())
+                ghostCells = std::move(it->second);
 
             cell2node.TransAttach();
             cell2node.trans.createFatherGlobalMapping();
