@@ -36,6 +36,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 
+#include "SyntheticMeshBuilders.hpp"
 #include "Geom/MeshConnectivity.hpp"
 #include <string>
 #include <vector>
@@ -49,60 +50,9 @@ using namespace DNDS::Geom;
 static MPIInfo g_mpi;
 
 // ---------------------------------------------------------------------------
-// Helpers: 4-quad mesh
+// Helpers: 4-quad cell2cell and cell2node with mapping (ghost-test specific)
 // ---------------------------------------------------------------------------
 
-/// Build a small hand-crafted 4-quad mesh cell2node on a single or 2-rank partition.
-///
-///     6---7---8
-///     | 2 | 3 |
-///     3---4---5
-///     | 0 | 1 |
-///     0---1---2
-///
-/// Partition: rank 0 owns cells 0,1; rank 1 owns cells 2,3. Ranks 2+ empty.
-static tAdjPair make4QuadCell2Node(const MPIInfo &mpi)
-{
-    tAdjPair c2n;
-    c2n.InitPair("test_c2n", mpi);
-
-    if (mpi.size == 1)
-    {
-        c2n.father->Resize(4);
-        int data[4][4] = {
-            {0, 1, 4, 3},
-            {1, 2, 5, 4},
-            {3, 4, 7, 6},
-            {4, 5, 8, 7}};
-        for (DNDS::index i = 0; i < 4; i++)
-        {
-            c2n.father->ResizeRow(i, 4);
-            for (DNDS::rowsize j = 0; j < 4; j++)
-                c2n.father->operator()(i, j) = data[i][j];
-        }
-    }
-    else
-    {
-        DNDS::index nLocal = (mpi.rank < 2) ? 2 : 0;
-        c2n.father->Resize(nLocal);
-        int data[4][4] = {
-            {0, 1, 4, 3},
-            {1, 2, 5, 4},
-            {3, 4, 7, 6},
-            {4, 5, 8, 7}};
-        DNDS::index offset = (mpi.rank < 2) ? mpi.rank * 2 : 0;
-        for (DNDS::index i = 0; i < nLocal; i++)
-        {
-            c2n.father->ResizeRow(i, 4);
-            for (DNDS::rowsize j = 0; j < 4; j++)
-                c2n.father->operator()(i, j) = data[offset + i][j];
-        }
-    }
-    return c2n;
-}
-
-/// Build partitioned cell2cell for the 4-quad mesh.
-/// Every cell is node-neighbor of every other (all share node 4).
 static tAdjPair make4QuadCell2Cell(const MPIInfo &mpi)
 {
     tAdjPair c2c;
