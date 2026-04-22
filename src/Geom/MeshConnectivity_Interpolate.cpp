@@ -492,6 +492,88 @@ namespace DNDS::Geom
         }
 
         // ============================================================
+        // Step 2b: Compute parent2entityPbi for all parents
+        // ============================================================
+        // For each (parent, sub) pair, compute the uniform XOR between this
+        // parent's sub-entity pbi and the entity's stored pbi (first-parent view).
+        // This is a single NodePeriodicBits value per (parent, sub) slot.
+        //
+        // The XOR must be computed per matching node (by node index), not per
+        // position, because different parents may enumerate the same face/edge
+        // nodes in a different local order.
+        std::vector<std::vector<NodePeriodicBits>> localParent2EntityPbi;
+        if (hasPbi && query.extractPbi)
+        {
+            localParent2EntityPbi.resize(nTotalParents);
+            std::array<NodePeriodicBits, maxSubEntityNodes> thisPbiBuf{};
+            std::array<index, maxSubEntityNodes> thisNodeBuf{};
+            for (index iParent = 0; iParent < nTotalParents; iParent++)
+            {
+                rowsize nSubs = localResult.parent2entity.father->RowSize(iParent);
+                localParent2EntityPbi[iParent].resize(nSubs);
+                for (rowsize j = 0; j < nSubs; j++)
+                {
+                    index iEnt = localResult.parent2entity.father->operator()(iParent, j);
+                    auto desc = query.describe(iParent, j);
+
+                    // Extract pbi and nodes from THIS parent's view
+                    auto pbiAccessor = [&](int k) -> NodePeriodicBits
+                    {
+                        return parent2nodePbi[iParent][k];
+                    };
+                    query.extractPbi(iParent, j, pbiAccessor, thisPbiBuf.data());
+
+                    auto nodeAccessor = [&](int k) -> index
+                    {
+                        return parent2node[iParent][k];
+                    };
+                    query.extractNodes(iParent, j, nodeAccessor, thisNodeBuf.data());
+
+                    // Entity's stored pbi and nodes (from first parent's view)
+                    auto &entPbi = localEntityPbi[iEnt];
+                    auto entNodeRow = localResult.entity2node.father->operator[](iEnt);
+                    DNDS_assert(desc.nNodes == static_cast<int>(entPbi.size()));
+
+                    if (desc.nNodes > 0)
+                    {
+                        // Build sorted (node, pbi) pairs for this parent
+                        using NP = std::pair<index, uint8_t>;
+                        std::vector<NP> thisNP(desc.nNodes), entNP(desc.nNodes);
+                        for (int k = 0; k < desc.nNodes; k++)
+                        {
+                            thisNP[k] = {thisNodeBuf[k], uint8_t(thisPbiBuf[k])};
+                            entNP[k] = {entNodeRow[k], uint8_t(entPbi[k])};
+                        }
+                        auto cmp = [](const NP &a, const NP &b)
+                        { return a.first == b.first ? a.second < b.second : a.first < b.first; };
+                        std::sort(thisNP.begin(), thisNP.end(), cmp);
+                        std::sort(entNP.begin(), entNP.end(), cmp);
+
+                        // Verify same node set and compute uniform XOR
+                        uint8_t xorVal = thisNP[0].second ^ entNP[0].second;
+                        for (int k = 1; k < desc.nNodes; k++)
+                        {
+                            DNDS_assert_info(thisNP[k].first == entNP[k].first,
+                                             fmt::format("parent2entityPbi: node mismatch at parent {} sub {} node {}: "
+                                                         "this={}, ent={}",
+                                                         iParent, j, k, thisNP[k].first, entNP[k].first));
+                            uint8_t xk = thisNP[k].second ^ entNP[k].second;
+                            DNDS_assert_info(xk == xorVal,
+                                             fmt::format("parent2entityPbi: non-uniform XOR at parent {} sub {} node {}: "
+                                                         "expected 0x{:02x}, got 0x{:02x}",
+                                                         iParent, j, k, xorVal, xk));
+                        }
+                        localParent2EntityPbi[iParent][j] = NodePeriodicBits{xorVal};
+                    }
+                    else
+                    {
+                        localParent2EntityPbi[iParent][j] = NodePeriodicBits{0};
+                    }
+                }
+            }
+        }
+
+        // ============================================================
         // Step 3: Classify entities and resolve ownership
         // ============================================================
         // For each entity, determine: fully local, fully ghost, or straddling.
@@ -644,13 +726,15 @@ namespace DNDS::Geom
         // ============================================================
         // For local A parents: remap owned entities via oldToOwned → global B ID.
         // For non-owned entities: need to receive global B ID from owner.
+        //
+        // parent2entityPbi does NOT need to be pushed: Step 2b already computed
+        // localParent2EntityPbi[iParent][j] for ALL parents (father+son),
+        // because the XOR is a local property of (cell, sub-entity slot) that
+        // only depends on cell2nodePbi and entity2nodePbi — both available locally.
 
         // 6a: Push global B IDs to peer ranks.
-        // For each owned B with peer ranks, push: (global A-parent, global B ID) pairs
-        // so the peer can fill its parent2entity.
-
-        // Build per-rank push messages: list of (globalA, globalB, subIdx) triplets
-        // so the peer can fill parent2entity at the correct slot.
+        // For each owned B with ghost A-parents, push (globalA, globalB, subIdx)
+        // so the peer can fill its parent2entity at the correct slot.
         std::vector<std::vector<std::array<index, 3>>> pushMessages(mpi.size);
         for (index iEnt = 0; iEnt < nAllEntities; iEnt++)
         {
@@ -659,8 +743,6 @@ namespace DNDS::Geom
             index iNew = oldToOwned[iEnt];
             index globalB = myFaceOffset + iNew;
 
-            // For each ghost A-parent of this B entity, find the sub-entity slot
-            // and push (globalA, globalB, subIdx).
             auto parentRow = localResult.entity2parent.father->operator[](iEnt);
             for (auto pLocal : parentRow)
             {
@@ -668,7 +750,6 @@ namespace DNDS::Geom
                 {
                     MPI_int pRank = getParentRank(pLocal);
                     index pGlobal = parentGhostMapping(-1, pLocal);
-                    // Find subIdx: which slot of parent pLocal maps to iEnt
                     int subIdx = -1;
                     for (rowsize s = 0; s < localResult.parent2entity.father->RowSize(pLocal); s++)
                     {
@@ -704,9 +785,9 @@ namespace DNDS::Geom
             index offset = sendDisp[r];
             for (auto &msg : pushMessages[r])
             {
-                sendBuf[offset++] = msg[0]; // globalA
-                sendBuf[offset++] = msg[1]; // globalB
-                sendBuf[offset++] = msg[2]; // subIdx
+                sendBuf[offset++] = msg[0];
+                sendBuf[offset++] = msg[1];
+                sendBuf[offset++] = msg[2];
             }
         }
         std::vector<index> recvBuf(recvDisp.back());
@@ -724,20 +805,37 @@ namespace DNDS::Geom
             receivedA2SubB[gA][subIdx] = gB;
         }
 
-        // 6d: Build parent2entity for all parents (father + son).
+        // 6d: Build parent2entity and parent2entityPbi for all parents (father + son).
         result.parent2entity.InitPair("InterpGlobal_p2e", mpi);
         result.parent2entity.father->Resize(nLocalParents);
         result.parent2entity.son = std::make_shared<tAdj::element_type>(
             ObjName{"InterpGlobal_p2e.son"}, mpi);
         result.parent2entity.son->Resize(nTotalParents - nLocalParents);
 
+        if (hasPbi)
+        {
+            result.parent2entityPbi.InitPair("InterpGlobal_p2ePbi", mpi);
+            result.parent2entityPbi.father->Resize(nLocalParents);
+            result.parent2entityPbi.son = std::make_shared<decltype(result.parent2entityPbi.son)::element_type>(
+                ObjName{"InterpGlobal_p2ePbi.son"}, NodePeriodicBits::CommType(), NodePeriodicBits::CommMult(), mpi);
+            result.parent2entityPbi.son->Resize(nTotalParents - nLocalParents);
+        }
+
         for (index iParent = 0; iParent < nTotalParents; iParent++)
         {
             rowsize nSubs = localResult.parent2entity.father->RowSize(iParent);
             result.parent2entity.ResizeRow(iParent, nSubs);
+            if (hasPbi)
+                result.parent2entityPbi.ResizeRow(iParent, nSubs);
 
             for (rowsize j = 0; j < nSubs; j++)
             {
+                // parent2entityPbi is always from localParent2EntityPbi (computed
+                // in Step 2b for ALL parents, father+son).
+                if (hasPbi)
+                    result.parent2entityPbi(iParent, j) =
+                        localParent2EntityPbi[iParent][j];
+
                 index oldEntIdx = localResult.parent2entity.father->operator()(iParent, j);
                 index newOwnedIdx = oldToOwned[oldEntIdx];
                 if (newOwnedIdx != UnInitIndex)
