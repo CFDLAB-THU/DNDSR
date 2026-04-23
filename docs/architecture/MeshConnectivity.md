@@ -175,7 +175,7 @@ toggle back and forth between Global and Local.
    cell2cell doesn't exist until `RecoverCell2CellAndBnd2Cell`, while cell2node
    exists from the partition step. They share the same state flag.
 
-### 4.2. Per-Adjacency State Tracking (`AdjWithState`)
+### 4.2. Per-Adjacency State Tracking (`AdjPairTracked`)
 
 To address the weaknesses above, each adjacency array now carries its own
 `AdjIndexInfo` recording per-adjacency state and a shared pointer to the
@@ -183,7 +183,7 @@ target entity's ghost mapping. This sits alongside (not replacing) the five
 group flags.
 
 **Files:**
-- `src/Geom/Mesh/AdjIndexInfo.hpp` — `AdjIndexInfo` struct + `AdjWithState<TPair>`
+- `src/Geom/Mesh/AdjIndexInfo.hpp` — `AdjIndexInfo` struct + `AdjPairTracked<TPair>`
 - `src/Geom/Mesh/MeshConnectivity_StateChecked.hpp` — checked DSL wrappers
 
 #### `AdjIndexInfo`
@@ -236,13 +236,13 @@ public:
 - `toLocal()` encodes not-found entries as `(-1 - globalIndex)`, matching
   `IndexGlobal2Local`.
 
-#### `AdjWithState<TPair>`
+#### `AdjPairTracked<TPair>`
 
 Uses **inheritance** (not composition) from `TPair`:
 
 ```cpp
 template <class TPair>
-struct AdjWithState : public TPair
+struct AdjPairTracked : public TPair
 {
     AdjIndexInfo idx;
     void toLocal();             // idx.toLocal(*this, Size())
@@ -262,22 +262,22 @@ struct AdjWithState : public TPair
 
 Inheritance keeps all existing callers (`.father`, `.son`, `.trans`,
 `BorrowAndPull`, `operator[]`, etc.) working unchanged. All 12 adjacency
-members on `UnstructuredMesh` use `AdjWithState<T>`:
+members on `UnstructuredMesh` use `AdjPairTracked<T>`:
 
 | Member | Type | Target Entity |
 |--------|------|---------------|
-| `cell2node` | `AdjWithState<tAdjPair>` | node |
-| `bnd2node` | `AdjWithState<tAdjPair>` | node |
-| `bnd2cell` | `AdjWithState<tAdj2Pair>` | cell |
-| `cell2cell` | `AdjWithState<tAdjPair>` | cell |
-| `node2cell` | `AdjWithState<tAdjPair>` | cell |
-| `node2bnd` | `AdjWithState<tAdjPair>` | bnd |
-| `cell2face` | `AdjWithState<tAdjPair>` | face |
-| `face2node` | `AdjWithState<tAdjPair>` | node |
-| `face2cell` | `AdjWithState<tAdj2Pair>` | cell |
-| `bnd2face` | `AdjWithState<tAdj2Pair>` | face |
-| `face2bnd` | `AdjWithState<tAdj2Pair>` | bnd |
-| `cell2cellFace` | `AdjWithState<tAdjPair>` | cell |
+| `cell2node` | `AdjPairTracked<tAdjPair>` | node |
+| `bnd2node` | `AdjPairTracked<tAdjPair>` | node |
+| `bnd2cell` | `AdjPairTracked<tAdj2Pair>` | cell |
+| `cell2cell` | `AdjPairTracked<tAdjPair>` | cell |
+| `node2cell` | `AdjPairTracked<tAdjPair>` | cell |
+| `node2bnd` | `AdjPairTracked<tAdjPair>` | bnd |
+| `cell2face` | `AdjPairTracked<tAdjPair>` | face |
+| `face2node` | `AdjPairTracked<tAdjPair>` | node |
+| `face2cell` | `AdjPairTracked<tAdj2Pair>` | cell |
+| `bnd2face` | `AdjPairTracked<tAdj2Pair>` | face |
+| `face2bnd` | `AdjPairTracked<tAdj2Pair>` | bnd |
+| `cell2cellFace` | `AdjPairTracked<tAdjPair>` | cell |
 
 #### Wiring Protocol
 
@@ -308,10 +308,10 @@ DSL counterparts.
 |-------|------|--------------------|
 | **DSL** | `MeshConnectivity.hpp` | No — operates on bare `ArrayAdjacencyPair<rs>` |
 | **Checked wrappers** | `MeshConnectivity_StateChecked.hpp` | Yes — asserts `idx.state`, then forwards to DSL |
-| **Mesh methods** | `Mesh.cpp` | Yes — owns `AdjWithState` members, calls checked wrappers |
+| **Mesh methods** | `Mesh.cpp` | Yes — owns `AdjPairTracked` members, calls checked wrappers |
 
 `CheckedInverse`, `CheckedComposeFiltered`, and `CheckedInterpolateGlobal`
-are stateless free function templates. They static-cast `AdjWithState<T>&`
+are stateless free function templates. They static-cast `AdjPairTracked<T>&`
 to `T&` before forwarding.
 
 #### Current Status
@@ -556,7 +556,7 @@ void InterpolateEntities(
 | **Son** | Ghost (remote-owned) portion of an array, pulled from other ranks |
 | **Ghost mapping** | `pLGhostMapping` on an ArrayTransformer — maps global indices to local father+son indices |
 | **Target mapping** | Ghost mapping of the entity kind an adjacency's indices point to (e.g., for `cell2node`, the node ghost mapping) |
-| **AdjWithState** | Wrapper that inherits from an ArrayPair and adds per-adjacency `AdjIndexInfo` (state + target mapping) |
+| **AdjPairTracked** | Wrapper that inherits from an ArrayPair and adds per-adjacency `AdjIndexInfo` (state + target mapping) |
 | **Node-neighbor** | Two cells that share at least one vertex |
 | **Face-neighbor** | Two cells that share a codimension-1 face (>= dim shared vertices) |
 | **Complemented** | A ghost entity has all its sub-entity data available locally |

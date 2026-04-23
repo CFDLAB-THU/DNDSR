@@ -1,13 +1,13 @@
 #pragma once
-/// @file AdjWithState_bind.hpp
-/// @brief pybind11 bindings for AdjWithState<TPair> and AdjIndexInfo.
+/// @file AdjPairTracked_bind.hpp
+/// @brief pybind11 bindings for AdjPairTracked<TPair> and AdjIndexInfo.
 ///
-/// AdjWithState<TPair> inherits from TPair, so its pybind11 class is
+/// AdjPairTracked<TPair> inherits from TPair, so its pybind11 class is
 /// declared as a subclass of the already-registered ArrayAdjacencyPair
 /// type.  The three instantiations needed are:
-///   AdjWithState<tAdjPair>   (NonUniformSize)
-///   AdjWithState<tAdj2Pair>  (row_size=2)
-///   AdjWithState<tAdj1Pair>  (row_size=1)
+///   AdjPairTracked<tAdjPair>   (NonUniformSize)
+///   AdjPairTracked<tAdj2Pair>  (row_size=2)
+///   AdjPairTracked<tAdj1Pair>  (row_size=1)
 
 #include "AdjIndexInfo.hpp"
 #include "DNDS/ArrayDerived/ArrayAdjacency_bind.hpp"
@@ -19,13 +19,13 @@ namespace DNDS::Geom
     // ================================================================
 
     template <rowsize _row_size, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    std::string pybind11_AdjWithState_name()
+    std::string pybind11_AdjPairTracked_name()
     {
-        return "AdjWithState" + pybind11_ArrayAdjacency_name_appends<_row_size, _row_max, _align>();
+        return "AdjPairTracked" + pybind11_ArrayAdjacency_name_appends<_row_size, _row_max, _align>();
     }
 
     template <rowsize _row_size, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    using tPy_AdjWithState = py_class_ssp<AdjWithState<ArrayAdjacencyPair<_row_size, _row_max, _align>>>;
+    using tPy_AdjPairTracked = py_class_ssp<AdjPairTracked<ArrayAdjacencyPair<_row_size, _row_max, _align>>>;
 
     // ================================================================
     // MeshAdjState enum (bound once)
@@ -54,15 +54,15 @@ namespace DNDS::Geom
     }
 
     // ================================================================
-    // AdjWithState<ArrayAdjacencyPair<rs, rm, al>> binding
+    // AdjPairTracked<ArrayAdjacencyPair<rs, rm, al>> binding
     // ================================================================
 
     /// Declare the pybind11 class (creates the type stub in the module).
     /// Must be called AFTER the base ArrayAdjacencyPair type is registered
     /// (typically by importing DNDSR.DNDS).
     template <rowsize _row_size, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    tPy_AdjWithState<_row_size, _row_max, _align>
-    pybind11_AdjWithState_declare(py::module_ &m)
+    tPy_AdjPairTracked<_row_size, _row_max, _align>
+    pybind11_AdjPairTracked_declare(py::module_ &m)
     {
         using TPair = ArrayAdjacencyPair<_row_size, _row_max, _align>;
 
@@ -70,17 +70,17 @@ namespace DNDS::Geom
         auto dnds_m = py::module_::import("DNDSR.DNDS");
         auto baseCls = pybind11_ArrayAdjacencyPair_get_class<_row_size, _row_max, _align>(dnds_m);
 
-        return {m, pybind11_AdjWithState_name<_row_size, _row_max, _align>().c_str(), baseCls};
+        return {m, pybind11_AdjPairTracked_name<_row_size, _row_max, _align>().c_str(), baseCls};
     }
 
-    /// Define all AdjWithState-specific methods on the pybind11 class.
+    /// Define all AdjPairTracked-specific methods on the pybind11 class.
     template <rowsize _row_size, rowsize _row_max = _row_size, rowsize _align = NoAlign>
-    void pybind11_AdjWithState_define(py::module_ &m)
+    void pybind11_AdjPairTracked_define(py::module_ &m)
     {
         using TPair = ArrayAdjacencyPair<_row_size, _row_max, _align>;
-        using TAdjWS = AdjWithState<TPair>;
+        using TAdjWS = AdjPairTracked<TPair>;
 
-        auto cls = pybind11_AdjWithState_declare<_row_size, _row_max, _align>(m);
+        auto cls = pybind11_AdjPairTracked_declare<_row_size, _row_max, _align>(m);
 
         cls
             // idx member (read-only reference)

@@ -70,8 +70,8 @@ Elements_bind.cpp
 Mesh/Mesh_bind.cpp
 )
 
-file(GLOB ADJWITHSTATE_BIND_SOURCES CONFIGURE_DEPENDS "Mesh/AdjWithState_bind_inst/*.cpp")
-list(APPEND CPPS_BIND ${ADJWITHSTATE_BIND_SOURCES})
+file(GLOB ADJPAIRTRACKED_BIND_SOURCES CONFIGURE_DEPENDS "Mesh/AdjPairTracked_bind_inst/*.cpp")
+list(APPEND CPPS_BIND ${ADJPAIRTRACKED_BIND_SOURCES})
 
 dnds_add_py_module(${LIBNAME}_pybind11 "${CPPS_BIND}" "${LIBNAME}_shared;${LINKS_SHARED}" "${DNDS_PCH_TARGETS_FAST}"
     ON ON ON)  # SHARED,FAST, EXCLUDE

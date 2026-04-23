@@ -243,7 +243,7 @@ namespace DNDS::Geom
     /**
      * \brief Flattened wrapper: inherits from TPair and adds AdjIndexInfo.
      *
-     * Because AdjWithState inherits publicly from TPair, all existing
+     * Because AdjPairTracked inherits publicly from TPair, all existing
      * code that accesses `.father`, `.son`, `.trans`, `operator[]`,
      * `BorrowAndPull()`, etc. works unchanged.  The only addition is
      * the `idx` member for per-adjacency state tracking.
@@ -251,7 +251,7 @@ namespace DNDS::Geom
      * \tparam TPair  The ArrayPair type (e.g. tAdjPair, tAdj2Pair).
      */
     template <class TPair>
-    struct AdjWithState : public TPair
+    struct AdjPairTracked : public TPair
     {
         AdjIndexInfo idx;
 

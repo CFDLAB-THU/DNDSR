@@ -53,10 +53,10 @@ namespace DNDS::Geom
         MeshElevationState elevState = Elevation_Untouched;
         /// reader
         tCoordPair coords;
-        AdjWithState<tAdjPair> cell2node;    // → Node
-        AdjWithState<tAdjPair> bnd2node;     // → Node
-        AdjWithState<tAdj2Pair> bnd2cell;    // → Cell
-        AdjWithState<tAdjPair> cell2cell;    // → Cell
+        AdjPairTracked<tAdjPair> cell2node; // → Node
+        AdjPairTracked<tAdjPair> bnd2node;  // → Node
+        AdjPairTracked<tAdj2Pair> bnd2cell; // → Cell
+        AdjPairTracked<tAdjPair> cell2cell; // → Cell
         tElemInfoArrayPair cellElemInfo;
         tElemInfoArrayPair bndElemInfo;
         tAdj1Pair cell2cellOrig; // no device
@@ -81,8 +81,8 @@ namespace DNDS::Geom
         }
 
         /// inverse relations
-        AdjWithState<tAdjPair> node2cell;    // → Cell
-        AdjWithState<tAdjPair> node2bnd;     // → Bnd
+        AdjPairTracked<tAdjPair> node2cell; // → Cell
+        AdjPairTracked<tAdjPair> node2bnd;  // → Bnd
 
         auto device_array_list_N2CB()
         {
@@ -92,12 +92,12 @@ namespace DNDS::Geom
         }
 
         /// interpolated
-        AdjWithState<tAdjPair> cell2face;    // → Face
-        AdjWithState<tAdjPair> face2node;    // → Node
-        AdjWithState<tAdj2Pair> face2cell;   // → Cell
+        AdjPairTracked<tAdjPair> cell2face;  // → Face
+        AdjPairTracked<tAdjPair> face2node;  // → Node
+        AdjPairTracked<tAdj2Pair> face2cell; // → Cell
         tElemInfoArrayPair faceElemInfo;
-        AdjWithState<tAdj1Pair> bnd2face;    // → Face
-        AdjWithState<tAdj1Pair> face2bnd;    // → Bnd
+        AdjPairTracked<tAdj1Pair> bnd2face; // → Face
+        AdjPairTracked<tAdj1Pair> face2bnd; // → Bnd
 
         std::vector<index> bnd2faceV;               // no device
         std::unordered_map<index, index> face2bndM; // no device
@@ -122,7 +122,7 @@ namespace DNDS::Geom
         }
 
         /// constructed on demand
-        AdjWithState<tAdjPair> cell2cellFace;  // → Cell
+        AdjPairTracked<tAdjPair> cell2cellFace; // → Cell
 
         /// parent built
         std::vector<index> node2parentNode; // from local-appended iNode to local-appended iNode in parent
@@ -354,7 +354,7 @@ namespace DNDS::Geom
         static void ConvertAdjEntriesOMP(TAdj &adj, index nRows, TFn &&fn)
         {
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
             for (index i = 0; i < nRows; i++)
                 for (rowsize j = 0; j < adj.RowSize(i); j++)
@@ -484,29 +484,93 @@ namespace DNDS::Geom
         index LocalPartStart(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart) : 0; }
         index LocalPartEnd(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart + 1) : this->NumCell(); }
 
-        index NumNode() const { DNDS_check_throw_info(coords.father, "coords not initialized"); return coords.father->Size(); }
-        index NumCell() const { DNDS_check_throw_info(cell2node.father, "cell2node not initialized"); return cell2node.father->Size(); }
-        index NumFace() const { DNDS_check_throw_info(face2node.father, "face2node not initialized"); return face2node.father->Size(); }
-        index NumBnd() const { DNDS_check_throw_info(bnd2node.father, "bnd2node not initialized"); return bnd2node.father->Size(); }
+        index NumNode() const
+        {
+            DNDS_check_throw_info(coords.father, "coords not initialized");
+            return coords.father->Size();
+        }
+        index NumCell() const
+        {
+            DNDS_check_throw_info(cell2node.father, "cell2node not initialized");
+            return cell2node.father->Size();
+        }
+        index NumFace() const
+        {
+            DNDS_check_throw_info(face2node.father, "face2node not initialized");
+            return face2node.father->Size();
+        }
+        index NumBnd() const
+        {
+            DNDS_check_throw_info(bnd2node.father, "bnd2node not initialized");
+            return bnd2node.father->Size();
+        }
 
-        index NumNodeGhost() const { DNDS_check_throw_info(coords.son, "coords not initialized"); return coords.son->Size(); }
-        index NumCellGhost() const { DNDS_check_throw_info(cell2node.son, "cell2node not initialized"); return cell2node.son->Size(); }
-        index NumFaceGhost() const { DNDS_check_throw_info(face2node.son, "face2node not initialized"); return face2node.son->Size(); }
-        index NumBndGhost() const { DNDS_check_throw_info(bnd2node.son, "bnd2node not initialized"); return bnd2node.son->Size(); }
+        index NumNodeGhost() const
+        {
+            DNDS_check_throw_info(coords.son, "coords not initialized");
+            return coords.son->Size();
+        }
+        index NumCellGhost() const
+        {
+            DNDS_check_throw_info(cell2node.son, "cell2node not initialized");
+            return cell2node.son->Size();
+        }
+        index NumFaceGhost() const
+        {
+            DNDS_check_throw_info(face2node.son, "face2node not initialized");
+            return face2node.son->Size();
+        }
+        index NumBndGhost() const
+        {
+            DNDS_check_throw_info(bnd2node.son, "bnd2node not initialized");
+            return bnd2node.son->Size();
+        }
 
-        index NumNodeProc() const { DNDS_check_throw_info(coords.father && coords.son, "coords not initialized"); return coords.Size(); }
-        index NumCellProc() const { DNDS_check_throw_info(cell2node.father && cell2node.son, "cell2node not initialized"); return cell2node.Size(); }
-        index NumFaceProc() const { DNDS_check_throw_info(face2node.father && face2node.son, "face2node not initialized"); return face2node.Size(); }
-        index NumBndProc() const { DNDS_check_throw_info(bnd2node.father && bnd2node.son, "bnd2node not initialized"); return bnd2node.Size(); }
+        index NumNodeProc() const
+        {
+            DNDS_check_throw_info(coords.father && coords.son, "coords not initialized");
+            return coords.Size();
+        }
+        index NumCellProc() const
+        {
+            DNDS_check_throw_info(cell2node.father && cell2node.son, "cell2node not initialized");
+            return cell2node.Size();
+        }
+        index NumFaceProc() const
+        {
+            DNDS_check_throw_info(face2node.father && face2node.son, "face2node not initialized");
+            return face2node.Size();
+        }
+        index NumBndProc() const
+        {
+            DNDS_check_throw_info(bnd2node.father && bnd2node.son, "bnd2node not initialized");
+            return bnd2node.Size();
+        }
 
         /// @warning must collectively call
-        index NumCellGlobal() { DNDS_check_throw_info(cell2node.father, "cell2node not initialized"); return cell2node.father->globalSize(); }
+        index NumCellGlobal()
+        {
+            DNDS_check_throw_info(cell2node.father, "cell2node not initialized");
+            return cell2node.father->globalSize();
+        }
         /// @warning must collectively call
-        index NumNodeGlobal() { DNDS_check_throw_info(coords.father, "coords not initialized"); return coords.father->globalSize(); }
+        index NumNodeGlobal()
+        {
+            DNDS_check_throw_info(coords.father, "coords not initialized");
+            return coords.father->globalSize();
+        }
         /// @warning must collectively call
-        index NumFaceGlobal() { DNDS_check_throw_info(face2node.father, "face2node not initialized"); return face2node.father->globalSize(); }
+        index NumFaceGlobal()
+        {
+            DNDS_check_throw_info(face2node.father, "face2node not initialized");
+            return face2node.father->globalSize();
+        }
         /// @warning must collectively call
-        index NumBndGlobal() { DNDS_check_throw_info(bnd2node.father, "bnd2node not initialized"); return bnd2node.father->globalSize(); }
+        index NumBndGlobal()
+        {
+            DNDS_check_throw_info(bnd2node.father, "bnd2node not initialized");
+            return bnd2node.father->globalSize();
+        }
 
         Elem::Element GetCellElement(index iC) { return Elem::Element{cellElemInfo(iC, 0).getElemType()}; }
         Elem::Element GetFaceElement(index iF) { return Elem::Element{faceElemInfo(iF, 0).getElemType()}; }
@@ -764,7 +828,6 @@ namespace DNDS::Geom
             const EntityPartitions &partitions);
 
     public:
-
         template <class TFTrans>
         void TransformCoords(TFTrans &&FTrans)
         {
@@ -810,15 +873,15 @@ namespace DNDS::Geom
 
             DNDS_DECLARE_CONFIG(WallDistOptions)
             {
-                DNDS_FIELD(subdivide_quad,    "Subdivide quads for wall distance computation",
+                DNDS_FIELD(subdivide_quad, "Subdivide quads for wall distance computation",
                            DNDS::Config::range(0));
-                DNDS_FIELD(method,            "Wall distance computation method (0: brute, 1: tree)",
+                DNDS_FIELD(method, "Wall distance computation method (0: brute, 1: tree)",
                            DNDS::Config::range(0));
-                DNDS_FIELD(wallDistExecution,  "MPI concurrency (0: all parallel, 1: serial, >1: batched N ranks)",
+                DNDS_FIELD(wallDistExecution, "MPI concurrency (0: all parallel, 1: serial, >1: batched N ranks)",
                            DNDS::Config::range(0));
-                DNDS_FIELD(minWallDist,       "Minimum wall distance clamp",
+                DNDS_FIELD(minWallDist, "Minimum wall distance clamp",
                            DNDS::Config::range(0.0));
-                DNDS_FIELD(verbose,           "Verbosity level for wall distance computation",
+                DNDS_FIELD(verbose, "Verbosity level for wall distance computation",
                            DNDS::Config::range(0));
             }
         };
@@ -904,14 +967,14 @@ namespace DNDS::Geom
 
         DNDS_DECLARE_CONFIG(PartitionOptions)
         {
-            DNDS_FIELD(metisType,         "METIS partitioning method",
+            DNDS_FIELD(metisType, "METIS partitioning method",
                        DNDS::Config::enum_values({"KWAY", "RB"}));
-            DNDS_FIELD(metisUfactor,      "METIS imbalance factor (ufactor)",
+            DNDS_FIELD(metisUfactor, "METIS imbalance factor (ufactor)",
                        DNDS::Config::range(1));
-            DNDS_FIELD(metisSeed,         "METIS random seed");
-            DNDS_FIELD(edgeWeightMethod,  "Edge weight method (0: none, 1: face size)",
+            DNDS_FIELD(metisSeed, "METIS random seed");
+            DNDS_FIELD(edgeWeightMethod, "Edge weight method (0: none, 1: face size)",
                        DNDS::Config::range(0, 1));
-            DNDS_FIELD(metisNcuts,        "Number of cuts for METIS to try",
+            DNDS_FIELD(metisNcuts, "Number of cuts for METIS to try",
                        DNDS::Config::range(1));
         }
     };

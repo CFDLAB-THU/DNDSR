@@ -1,12 +1,12 @@
 #pragma once
 /// @file MeshConnectivity_StateChecked.hpp
 /// @brief Thin free-function wrappers over MeshConnectivity DSL methods
-///        that assert per-adjacency state (AdjWithState::idx) before
+///        that assert per-adjacency state (AdjPairTracked::idx) before
 ///        delegating to the bare-pair DSL.
 ///
 /// MeshConnectivity operates on bare ArrayAdjacencyPair<rs> and has no
 /// knowledge of AdjIndexInfo. These wrappers bridge the gap: they accept
-/// AdjWithState<T> inputs, validate state, and forward to the DSL.
+/// AdjPairTracked<T> inputs, validate state, and forward to the DSL.
 
 #include "AdjIndexInfo.hpp"
 #include "MeshConnectivity.hpp"
@@ -23,12 +23,12 @@ namespace DNDS::Geom
     /// (Inverse requires global indices).
     ///
     /// @tparam cone_rs  Row-size of the cone adjacency.
-    /// @param cone      AdjWithState cone (A → B, global indices).
+    /// @param cone      AdjPairTracked cone (A → B, global indices).
     /// @param args      Remaining arguments forwarded to MeshConnectivity::Inverse.
     /// @return          Same as MeshConnectivity::Inverse.
     template <rowsize cone_rs = NonUniformSize, class... TArgs>
     tAdjPair CheckedInverse(
-        const AdjWithState<ArrayAdjacencyPair<cone_rs>> &cone,
+        const AdjPairTracked<ArrayAdjacencyPair<cone_rs>> &cone,
         TArgs &&...args)
     {
         DNDS_assert_info(cone.idx.state() == Adj_PointToGlobal,
@@ -48,8 +48,8 @@ namespace DNDS::Geom
     template <rowsize rs_AB = NonUniformSize, rowsize rs_BC = NonUniformSize,
               rowsize out_rs = NonUniformSize, class Predicate, class... TArgs>
     ArrayAdjacencyPair<out_rs> CheckedComposeFiltered(
-        const AdjWithState<ArrayAdjacencyPair<rs_AB>> &AB,
-        const AdjWithState<ArrayAdjacencyPair<rs_BC>> &BC,
+        const AdjPairTracked<ArrayAdjacencyPair<rs_AB>> &AB,
+        const AdjPairTracked<ArrayAdjacencyPair<rs_BC>> &BC,
         index nALocal,
         const std::unordered_map<index, index> &bGlobal2Local,
         const std::function<index(index)> &aLocal2Global,
@@ -75,7 +75,7 @@ namespace DNDS::Geom
     /// State-checked wrapper for MeshConnectivity::InterpolateGlobal.
     template <rowsize p2n_rs = NonUniformSize, rowsize e2p_rs = NonUniformSize>
     auto CheckedInterpolateGlobal(
-        const AdjWithState<ArrayAdjacencyPair<p2n_rs>> &parent2node,
+        const AdjPairTracked<ArrayAdjacencyPair<p2n_rs>> &parent2node,
         const tPbiPair &parent2nodePbi,
         const OffsetAscendIndexMapping &parentGhostMapping,
         const GlobalOffsetsMapping &parentGlobalMapping,

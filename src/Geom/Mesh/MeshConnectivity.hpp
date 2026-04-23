@@ -27,7 +27,8 @@
 namespace DNDS::Geom
 {
     // Forward declaration for registerAdj overload
-    template <class TPair> struct AdjWithState;
+    template <class TPair>
+    struct AdjPairTracked;
 
     // =================================================================
     // EntityKind: logical entity roles
@@ -237,13 +238,13 @@ namespace DNDS::Geom
     /// One node in the compiled ghost tree.
     struct GhostTreeNode
     {
-        EntityKind kind;        ///< Entity kind at this node.
-        AdjKind hop;            ///< Adjacency used to reach this node from parent.
-                                ///< Undefined (default-constructed) for root nodes.
-        bool collect{false};    ///< If true, non-owned entities here become ghosts.
-        int level{0};           ///< BFS depth (root = 0).
-        int id{-1};             ///< Unique ID within the tree (assigned by compile).
-        int parentId{-1};       ///< Parent node ID (-1 for roots).
+        EntityKind kind;     ///< Entity kind at this node.
+        AdjKind hop;         ///< Adjacency used to reach this node from parent.
+                             ///< Undefined (default-constructed) for root nodes.
+        bool collect{false}; ///< If true, non-owned entities here become ghosts.
+        int level{0};        ///< BFS depth (root = 0).
+        int id{-1};          ///< Unique ID within the tree (assigned by compile).
+        int parentId{-1};    ///< Parent node ID (-1 for roots).
         std::vector<GhostTreeNode> children;
     };
 
@@ -251,12 +252,12 @@ namespace DNDS::Geom
     /// Used by the precomputed per-level lists.
     struct LevelEntry
     {
-        int nodeId;             ///< ID of the tree node.
-        int parentId;           ///< ID of the parent node (-1 for roots).
-        EntityKind kind;        ///< Entity kind of this node.
-        AdjKind hop;            ///< Hop used to reach this node.
-        bool collect;           ///< Whether to collect at this node.
-        bool hasChildren;       ///< Whether this node has children (needs pull).
+        int nodeId;       ///< ID of the tree node.
+        int parentId;     ///< ID of the parent node (-1 for roots).
+        EntityKind kind;  ///< Entity kind of this node.
+        AdjKind hop;      ///< Hop used to reach this node.
+        bool collect;     ///< Whether to collect at this node.
+        bool hasChildren; ///< Whether this node has children (needs pull).
     };
 
     /// Compiled forest of ghost traversal chains.
@@ -270,8 +271,8 @@ namespace DNDS::Geom
     struct CompiledGhostTree
     {
         std::vector<GhostTreeNode> roots;
-        int maxLevel{0};        ///< Maximum BFS depth across all nodes.
-        int totalNodes{0};      ///< Total number of nodes (for flat array sizing).
+        int maxLevel{0};   ///< Maximum BFS depth across all nodes.
+        int totalNodes{0}; ///< Total number of nodes (for flat array sizing).
 
         /// Precomputed per-level node lists. `levels[L]` contains all tree
         /// nodes at BFS depth L. Level 0 = roots.
@@ -406,10 +407,10 @@ namespace DNDS::Geom
     /// Both the DAG and legacy mesh members can share the same allocation.
     struct ConeAdj
     {
-        int fromDepth{-1};      ///< Source stratum (e.g., dim for cells, dim-1 for faces)
-        int toDepth{-1};        ///< Target stratum (e.g., 0 for nodes, dim-1 for faces)
-        ssp<AdjVariant> adj;    ///< Shared adjacency pair (typed by row width)
-        tPbiPair pbi;           ///< Periodic bits per entry (only for toDepth==0, optional)
+        int fromDepth{-1};   ///< Source stratum (e.g., dim for cells, dim-1 for faces)
+        int toDepth{-1};     ///< Target stratum (e.g., 0 for nodes, dim-1 for faces)
+        ssp<AdjVariant> adj; ///< Shared adjacency pair (typed by row width)
+        tPbiPair pbi;        ///< Periodic bits per entry (only for toDepth==0, optional)
 
         /// Access as variable-width tAdjPair. Throws if adj holds a fixed-width type.
         tAdjPair &asAdj() { return std::get<tAdjPair>(*adj); }
@@ -463,8 +464,8 @@ namespace DNDS::Geom
     /// The adjacency data is stored via `ssp<AdjVariant>` for shared ownership.
     struct SupportAdj
     {
-        int fromDepth{-1}; ///< Source stratum (e.g., 0 for nodes)
-        int toDepth{-1};   ///< Target stratum (e.g., dim for cells)
+        int fromDepth{-1};   ///< Source stratum (e.g., 0 for nodes)
+        int toDepth{-1};     ///< Target stratum (e.g., dim for cells)
         ssp<AdjVariant> adj; ///< Shared adjacency pair (typed by row width)
 
         /// Access as variable-width tAdjPair.
@@ -527,8 +528,8 @@ namespace DNDS::Geom
     /// Returned by SubEntityQuery::describe().
     struct SubEntityDesc
     {
-        int nVertices{0};  ///< Number of corner vertices (used for deduplication).
-        int nNodes{0};     ///< Total number of nodes (vertices + mid-edge + ...).
+        int nVertices{0};   ///< Number of corner vertices (used for deduplication).
+        int nNodes{0};      ///< Total number of nodes (vertices + mid-edge + ...).
         t_index typeTag{0}; ///< Element type tag to store in entityElemInfo.
                             ///< Opaque to Interpolate; only used for type-match
                             ///< during deduplication (two sub-entities with different
@@ -606,7 +607,7 @@ namespace DNDS::Geom
     /// Returned by the OwnershipResolverMulti callback.
     struct OwnershipDecision
     {
-        bool owned;       ///< true if this rank owns the entity.
+        bool owned; ///< true if this rank owns the entity.
         /// Peer ranks that need this entity pushed (for owned entities).
         /// Empty if fully local or single-sided.
         /// For non-owned entities, this is unused.
@@ -686,23 +687,23 @@ namespace DNDS::Geom
     template <rowsize e2p_rs = NonUniformSize>
     struct InterpolateGlobalResultT
     {
-        tAdjPair parent2entity;         ///< A → B (global B indices). Father = local A,
-                                        ///< son = ghost A. Slot j = face/edge j per topology.
-        tPbiPair parent2entityPbi;      ///< A → B pbi (parallel to parent2entity).
-                                        ///< Uniform XOR: A's sub-entity node-pbi vs B's stored
-                                        ///< entity2nodePbi. Faces: at most 1 bit. Edges: multi-bit.
-                                        ///< 0 for B's first parent. Empty if not periodic.
-                                        ///< No push needed — computed locally in Step 2b.
-        tAdjPair entity2node;           ///< B → C (global C indices). Father-only (owned B).
-                                        ///< Node order: first-discovered parent's extraction order.
+        tAdjPair parent2entity;                   ///< A → B (global B indices). Father = local A,
+                                                  ///< son = ghost A. Slot j = face/edge j per topology.
+        tPbiPair parent2entityPbi;                ///< A → B pbi (parallel to parent2entity).
+                                                  ///< Uniform XOR: A's sub-entity node-pbi vs B's stored
+                                                  ///< entity2nodePbi. Faces: at most 1 bit. Edges: multi-bit.
+                                                  ///< 0 for B's first parent. Empty if not periodic.
+                                                  ///< No push needed — computed locally in Step 2b.
+        tAdjPair entity2node;                     ///< B → C (global C indices). Father-only (owned B).
+                                                  ///< Node order: first-discovered parent's extraction order.
         ArrayAdjacencyPair<e2p_rs> entity2parent; ///< B → A (global A indices). Father-only (owned B).
-                                        ///< Width 1-2 for faces, 1-N for edges.
-                                        ///< Complete under A→C→A ghosting.
-        tPbiPair entity2nodePbi;        ///< B → C pbi. Father-only (owned B).
-                                        ///< First-discovered parent's perspective (entity's own frame).
-                                        ///< Parallel to entity2node. Empty if not periodic.
-        tElemInfoArrayPair entityElemInfo; ///< Per-B elem info. Father-only (owned B).
-        index nOwnedEntities{0};        ///< Number of owned B entities (father size).
+                                                  ///< Width 1-2 for faces, 1-N for edges.
+                                                  ///< Complete under A→C→A ghosting.
+        tPbiPair entity2nodePbi;                  ///< B → C pbi. Father-only (owned B).
+                                                  ///< First-discovered parent's perspective (entity's own frame).
+                                                  ///< Parallel to entity2node. Empty if not periodic.
+        tElemInfoArrayPair entityElemInfo;        ///< Per-B elem info. Father-only (owned B).
+        index nOwnedEntities{0};                  ///< Number of owned B entities (father size).
     };
 
     /// Default: all fields variable-width.
@@ -752,16 +753,16 @@ namespace DNDS::Geom
     {
         ArrayAdjacencyPair<p2e_rs> parent2entity; ///< parent → entities. Father-only. Slot j = sub-entity j.
         ArrayAdjacencyPair<e2n_rs> entity2node;   ///< entity → nodes. Father-only. First-parent extraction order.
-        ArrayAdjacencyPair<e2p_rs> entity2parent;  ///< entity → parents. Father-only. Variable-width:
-                                ///< 1 for boundary faces, 2 for internal faces, N for edges.
-                                ///< Discovery order (first parent first).
-        std::vector<ElemInfo> entityElemInfo; ///< Per-entity element info (zone=0, type from SubEntityDesc::typeTag).
+        ArrayAdjacencyPair<e2p_rs> entity2parent; ///< entity → parents. Father-only. Variable-width:
+                                                  ///< 1 for boundary faces, 2 for internal faces, N for edges.
+                                                  ///< Discovery order (first parent first).
+        std::vector<ElemInfo> entityElemInfo;     ///< Per-entity element info (zone=0, type from SubEntityDesc::typeTag).
         std::vector<std::vector<NodePeriodicBits>> parent2entityPbi;
-                                ///< Per-parent, per-sub pbi. Parallel to parent2entity.
-                                ///< Populated by InterpolateGlobal Step 2b, not by
-                                ///< InterpolateLocal itself. Empty if not periodic or
-                                ///< if InterpolateLocal was called directly.
-        index nEntities{0};     ///< Total number of unique entities created.
+        ///< Per-parent, per-sub pbi. Parallel to parent2entity.
+        ///< Populated by InterpolateGlobal Step 2b, not by
+        ///< InterpolateLocal itself. Empty if not periodic or
+        ///< if InterpolateLocal was called directly.
+        index nEntities{0}; ///< Total number of unique entities created.
     };
 
     /// Default InterpolateResult: all fields are variable-width (NonUniformSize).
@@ -792,14 +793,14 @@ namespace DNDS::Geom
               rowsize e2p_rs = 2>
     struct InterpolateDistributedResultT
     {
-        ArrayAdjacencyPair<p2e_rs> parent2entity;   ///< parent → entities. Father = local parents,
-                                                     ///< son = ghost parents. Local-appended entity indices.
-        ArrayAdjacencyPair<e2n_rs> entity2node;     ///< entity → nodes. Father = owned, son = ghost.
-        ArrayAdjacencyPair<e2p_rs> entity2parent;   ///< entity → (parentL, parentR).
-                                                     ///< Father = owned, son = ghost. Local-appended parent indices.
-                                                     ///< parentR = UnInitIndex for boundary entities.
-        tElemInfoArrayPair entityElemInfo; ///< Per-entity element info. Father = owned, son = ghost.
-        index nOwnedEntities{0};         ///< Number of owned entities (father size).
+        ArrayAdjacencyPair<p2e_rs> parent2entity; ///< parent → entities. Father = local parents,
+                                                  ///< son = ghost parents. Local-appended entity indices.
+        ArrayAdjacencyPair<e2n_rs> entity2node;   ///< entity → nodes. Father = owned, son = ghost.
+        ArrayAdjacencyPair<e2p_rs> entity2parent; ///< entity → (parentL, parentR).
+                                                  ///< Father = owned, son = ghost. Local-appended parent indices.
+                                                  ///< parentR = UnInitIndex for boundary entities.
+        tElemInfoArrayPair entityElemInfo;        ///< Per-entity element info. Father = owned, son = ghost.
+        index nOwnedEntities{0};                  ///< Number of owned entities (father size).
     };
 
     /// Default InterpolateDistributedResult: entity2parent is fixed-2 (as before).
@@ -871,9 +872,9 @@ namespace DNDS::Geom
             registerAdj(kind, std::move(adjVar));
         }
 
-        /// Overload for AdjWithState<TPair>: unwrap to base TPair.
+        /// Overload for AdjPairTracked<TPair>: unwrap to base TPair.
         template <class TPair>
-        void registerAdj(AdjKind kind, AdjWithState<TPair> &pair)
+        void registerAdj(AdjKind kind, AdjPairTracked<TPair> &pair)
         {
             registerAdj(kind, static_cast<TPair &>(pair));
         }
