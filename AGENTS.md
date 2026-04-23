@@ -239,7 +239,7 @@ in **`docs/architecture/MeshConnectivity.md`**.
 Key concepts agents should know:
 
 - **Adjacency state:** Each adjacency array (e.g. `cell2node`, `face2cell`)
-  is wrapped in `AdjWithState<TPair>` (inherits from `TPair`, adds an
+  is wrapped in `AdjPairTracked<TPair>` (inherits from `TPair`, adds an
   `AdjIndexInfo idx` member). All `idx` fields are private; state
   transitions go through `markGlobal()`, `markLocal()`,
   `wireTargetMapping()`, `toLocal()`/`toGlobal()`, and
@@ -248,7 +248,7 @@ Key concepts agents should know:
 - **Three-layer architecture:**
   1. `MeshConnectivity` (DSL) -- bare `ArrayAdjacencyPair<rs>`, no state
   2. `Mesh/MeshConnectivity_StateChecked.hpp` -- asserts `idx.state()`, forwards to DSL
-  3. `UnstructuredMesh` (Mesh/Mesh.cpp) -- owns `AdjWithState` members, calls checked wrappers
+  3. `UnstructuredMesh` (Mesh/Mesh.cpp) -- owns `AdjPairTracked` members, calls checked wrappers
 
 - **Conversion methods:** `AdjGlobal2Local*` / `AdjLocal2Global*` delegate
   to `adj.toLocal()` / `adj.toGlobal()`, which use the stored target

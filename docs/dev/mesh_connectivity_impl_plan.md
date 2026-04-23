@@ -1429,7 +1429,7 @@ problems:
    and `ReorderLocalCells` do expensive local->global->local round-trips on
    entire groups because the group state forces all-or-nothing conversion.
 
-### 10.2. Design: `AdjIndexInfo` and `AdjWithState<TPair>`
+### 10.2. Design: `AdjIndexInfo` and `AdjPairTracked<TPair>`
 
 #### 10.2.1. `AdjIndexInfo`
 
@@ -1506,13 +1506,13 @@ struct AdjIndexInfo
 };
 ```
 
-#### 10.2.2. `AdjWithState<TPair>`
+#### 10.2.2. `AdjPairTracked<TPair>`
 
 A thin wrapper that pairs an `ArrayPair` with its `AdjIndexInfo`:
 
 ```cpp
 template <class TPair>
-struct AdjWithState
+struct AdjPairTracked
 {
     TPair pair;
     AdjIndexInfo idx;
@@ -1667,25 +1667,25 @@ void AdjGlobal2LocalPrimaryForBnd()
 
 ### 10.7. Phased Migration Plan
 
-**Phase A: Introduce `AdjIndexInfo` + `AdjWithState<TPair>` (non-breaking)**
+**Phase A: Introduce `AdjIndexInfo` + `AdjPairTracked<TPair>` (non-breaking)**
 
 1. Add `AdjIndexInfo` struct (new header `src/Geom/AdjIndexInfo.hpp`
    or within `Mesh_DeviceView.hpp`).
-2. Add `AdjWithState<TPair>` wrapper template.
-3. Ensure `AdjWithState` has implicit conversion `operator TPair&()` so
+2. Add `AdjPairTracked<TPair>` wrapper template.
+3. Ensure `AdjPairTracked` has implicit conversion `operator TPair&()` so
    existing code that passes the pair to functions compiles unchanged.
 4. Unit tests for `AdjIndexInfo::toLocal` / `toGlobal` standalone.
 
 **Phase B: Replace member types on `UnstructuredMesh`**
 
-1. Change `tAdjPair cell2node;` → `AdjWithState<tAdjPair> cell2node;`
+1. Change `tAdjPair cell2node;` → `AdjPairTracked<tAdjPair> cell2node;`
    and similarly for all adjacency pairs.
-2. Because `AdjWithState` has implicit conversion and forwarding operators,
+2. Because `AdjPairTracked` has implicit conversion and forwarding operators,
    most callers should compile unchanged. Fix any that break.
 3. The 5 group state variables become `MeshAdjState adjPrimaryState() const`
    methods. The old data members are removed.
 4. Update `device_array_list_primary()` etc. to return references to
-   `pair` member of each `AdjWithState`.
+   `pair` member of each `AdjPairTracked`.
 
 **Phase C: Wire target mappings**
 
@@ -1718,24 +1718,24 @@ tAdjPair cell2node;
 MeshAdjState adjPrimaryState{Adj_Unknown};
 
 // After:
-AdjWithState<tAdjPair> cell2node;
+AdjPairTracked<tAdjPair> cell2node;
 // adjPrimaryState is a derived query method
 ```
 
-### 10.9. `AdjWithState` Implicit Conversion Challenges
+### 10.9. `AdjPairTracked` Implicit Conversion Challenges
 
 Potential breakage sites for implicit `operator TPair&()`:
 
 1. **Template argument deduction.** When a template function takes
-   `template<class T> void f(T&)`, passing `AdjWithState<tAdjPair>` deduces
-   `T = AdjWithState<tAdjPair>`, not `T = tAdjPair`. If the function body
+   `template<class T> void f(T&)`, passing `AdjPairTracked<tAdjPair>` deduces
+   `T = AdjPairTracked<tAdjPair>`, not `T = tAdjPair`. If the function body
    accesses `.father`, `.son`, `.trans`, it breaks.
    **Mitigation:** Add forwarding members: `auto &father()`, `auto &son()`,
-   `auto &trans()` on `AdjWithState`, or use `.pair.father` at those sites.
+   `auto &trans()` on `AdjPairTracked`, or use `.pair.father` at those sites.
 
 2. **`ConvertAdjEntries` and `ConvertAdjEntriesOMP`.** These templates use
    `TAdj::RowSize()` and `TAdj::operator()()` — both forwarded by
-   `AdjWithState`, so they should work.
+   `AdjPairTracked`, so they should work.
 
 3. **`PermuteRows`.** Uses `pair.father` directly. Will need `.pair.father`
    or forwarding.
@@ -1769,6 +1769,6 @@ Potential breakage sites for implicit `operator TPair&()`:
   individual adjacencies, but we do NOT change the ghost pull protocol (which
   fundamentally requires global indices).
 
-- **Moving state into ArrayPair.** The user chose `AdjWithState<TPair>`
+- **Moving state into ArrayPair.** The user chose `AdjPairTracked<TPair>`
   wrapper over modifying `ArrayPair` directly, keeping DNDS core types
   unchanged.
