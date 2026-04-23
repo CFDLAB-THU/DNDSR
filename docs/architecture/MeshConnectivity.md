@@ -183,27 +183,56 @@ target entity's ghost mapping. This sits alongside (not replacing) the five
 group flags.
 
 **Files:**
-- `src/Geom/AdjIndexInfo.hpp` — `AdjIndexInfo` struct + `AdjWithState<TPair>`
-- `src/Geom/MeshConnectivity_StateChecked.hpp` — checked DSL wrappers
+- `src/Geom/Mesh/AdjIndexInfo.hpp` — `AdjIndexInfo` struct + `AdjWithState<TPair>`
+- `src/Geom/Mesh/MeshConnectivity_StateChecked.hpp` — checked DSL wrappers
 
 #### `AdjIndexInfo`
+
+All fields are private. State transitions go through methods:
 
 ```cpp
 struct AdjIndexInfo
 {
-    MeshAdjState state{Adj_Unknown};
-    t_pLGhostMapping   targetMapping;        // ghost mapping of the TARGET entity
-    t_pLGlobalMapping  targetGlobalMapping;   // global-offsets mapping of the target
-    void wireTargetMapping(const t_pLGhostMapping &mapping);
-    // toLocal / toGlobal / OMP variants
+private:
+    MeshAdjState    _state{Adj_Unknown};
+    t_pLGhostMapping _targetMapping;   // ghost mapping of the TARGET entity
+
+public:
+    // Queries
+    MeshAdjState state() const;
+    bool isLocal() const;
+    bool isGlobal() const;
+    bool isBuilt() const;
+    bool isWired() const;
+    const t_pLGhostMapping &mapping() const;
+
+    // State transitions
+    void markGlobal();                              // Unknown|Global -> Global
+    void markLocal();                               // Unknown -> Local (requires wired)
+    void wireTargetMapping(const t_pLGhostMapping&);// rejects Local state
+
+    // Conversion (requires wired)
+    void toLocal(adj, nRows);                       // Global -> Local
+    void toGlobal(adj, nRows);                      // Local -> Global
+    void toLocalOMP(adj, nRows);                    // Global -> Local (OMP)
+    void toGlobalOMP(adj, nRows);                   // Local -> Global (OMP)
+
+    // Bootstrap: wire + convert in one call (solves chicken-and-egg)
+    void bootstrapToLocal(mapping, adj, nRows);     // Unknown|Global -> Local
+    void bootstrapToLocalOMP(mapping, adj, nRows);
 };
 ```
 
-- `targetMapping` is the ghost mapping of the entity kind the indices
+- `_targetMapping` is the ghost mapping of the entity kind the indices
   **point to**. For `cell2node`, that is the node ghost mapping
-  (`coords.trans.pLGhostMapping`).
-- `wireTargetMapping()` asserts `state != Adj_PointToLocal` — wiring a
+  (`coords.trans.pLGhostMapping`). The target mapping always exists on
+  some other array pair's transformer — `wireTargetMapping` just stores
+  a shared pointer to it.
+- `wireTargetMapping()` asserts `_state != Adj_PointToLocal` — wiring a
   mapping while indices are local is a logic error.
+- `markLocal()` is for adjacencies populated directly with local indices
+  (bypassing the global phase), e.g. `ConstructBndMesh`. Requires the
+  mapping to be wired first.
 - `toLocal()` encodes not-found entries as `(-1 - globalIndex)`, matching
   `IndexGlobal2Local`.
 
@@ -216,12 +245,18 @@ template <class TPair>
 struct AdjWithState : public TPair
 {
     AdjIndexInfo idx;
-    void toLocal();     // delegates to idx.toLocal(*this, this->Size())
+    void toLocal();             // idx.toLocal(*this, Size())
     void toGlobal();
+    void toLocalOMP();
+    void toGlobalOMP();
+    void bootstrapToLocal(mapping);
+    void bootstrapToLocalOMP(mapping);
     MeshAdjState state() const;
     bool isLocal() const;
     bool isGlobal() const;
     bool isBuilt() const;
+    bool isWired() const;
+    const t_pLGhostMapping &mapping() const;
 };
 ```
 
@@ -246,20 +281,26 @@ members on `UnstructuredMesh` use `AdjWithState<T>`:
 
 #### Wiring Protocol
 
-Target mappings are wired at three points in the mesh build pipeline:
+Target mappings are wired at these points in the mesh build pipeline:
 
 1. **After `BuildGhostPrimary`:** cell2node, bnd2node (target=node);
    cell2cell, bnd2cell, node2cell (target=cell); node2bnd (target=bnd).
 
-2. **After `MatchFaceBoundary`:** face2node (target=node); face2cell,
-   cell2face (target=face/cell); bnd2face, face2bnd (target=face/bnd).
+2. **In `BuildGhostFace`:** face2node (target=node); face2cell
+   (target=cell); cell2face, bnd2face (target=face).
 
-3. **After `BuildCell2CellFace`:** cell2cellFace (target=cell).
+3. **In `MatchFaceBoundary`:** face2bnd (target=bnd).
 
-`idx.state` is set to `Adj_PointToGlobal` at partition, redistribute,
-and build sites. Conversion methods (`AdjGlobal2Local*` /
-`AdjLocal2Global*`) now delegate to `adj.toLocal()` / `adj.toGlobal()`,
-and update both the per-adj state and the group flag in parallel.
+4. **After `BuildCell2CellFace`:** cell2cellFace (target=cell).
+
+`markGlobal()` is called wherever `adjXState = Adj_PointToGlobal` is
+set. Conversion methods (`AdjGlobal2Local*` / `AdjLocal2Global*`)
+delegate to `adj.toLocal()` / `adj.toGlobal()` and update both the
+per-adj state and the group flag in parallel.
+
+Legacy methods (`BuildGhostPrimaryLegacy`, `InterpolateFaceLegacy`)
+mirror the same wiring and `markGlobal`/`markLocal` calls as their
+DSL counterparts.
 
 #### Three-Layer Architecture
 
@@ -277,8 +318,14 @@ to `T&` before forwarding.
 
 The five group state variables still exist as real data members and are
 updated in parallel with per-adj states. They have NOT been converted to
-derived queries yet. Legacy methods in `Mesh_Legacy.cpp` still use
-`ConvertAdjEntries` rather than `toLocal()` / `toGlobal()`.
+derived queries yet. All code paths (DSL and legacy) now maintain per-adj
+`idx` state consistently — `markGlobal()`, `wireTargetMapping()`,
+`markLocal()`, `toLocal()`/`toGlobal()` are called at every site where
+adjacency data or state changes. The `setStateUnchecked` escape hatch has
+been eliminated; all state transitions go through the `AdjIndexInfo` API.
+
+DeviceView does not read per-adj state yet (still uses group state
+variables). Python bindings do not expose `idx` yet.
 
 ---
 
