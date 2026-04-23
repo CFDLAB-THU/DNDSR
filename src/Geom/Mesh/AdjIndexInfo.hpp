@@ -14,49 +14,86 @@ namespace DNDS::Geom
      * For example, `cell2node` points to nodes, so its `AdjIndexInfo`
      * holds a reference to the node ghost mapping
      * (`coords.trans.pLGhostMapping`).
+     *
+     * All fields are private.  State transitions are enforced by methods:
+     *
+     * - markGlobal():           Adj_Unknown  -> Adj_PointToGlobal
+     * - wireTargetMapping(m):   requires !isLocal(); stores ghost mapping
+     * - toLocal(adj, n):        Adj_PointToGlobal -> Adj_PointToLocal  (requires wired)
+     * - toGlobal(adj, n):       Adj_PointToLocal  -> Adj_PointToGlobal (requires wired)
+     * - bootstrapToLocal(m,adj,n):  markGlobal + wire + toLocal in one call
+     *                               (accepts Adj_Unknown or Adj_PointToGlobal)
      */
     struct AdjIndexInfo
     {
+    private:
         /// Current global/local state of the entries in this adjacency.
-        MeshAdjState state{Adj_Unknown};
+        MeshAdjState _state{Adj_Unknown};
 
         /// Ghost mapping of the **target** entity kind.
         /// Used for global<->local conversion of entries.
         /// nullptr until the target entity's ghost layer has been built.
-        t_pLGhostMapping targetMapping;
+        t_pLGhostMapping _targetMapping;
 
-        /// Global-offsets mapping of the target entity kind.
-        /// Used for _NoSon conversion paths (father-only, no ghost).
-        t_pLGlobalMapping targetGlobalMapping;
+    public:
+        // ============================================================
+        // Queries
+        // ============================================================
 
-        /// \brief Attach the target entity's ghost mapping to this adjacency.
+        MeshAdjState state() const { return _state; }
+        bool isLocal() const { return _state == Adj_PointToLocal; }
+        bool isGlobal() const { return _state == Adj_PointToGlobal; }
+        bool isBuilt() const { return _state != Adj_Unknown; }
+        bool isWired() const { return _targetMapping != nullptr; }
+
+        /// Read-only access to the stored mapping (for assertions/comparisons).
+        const t_pLGhostMapping &mapping() const { return _targetMapping; }
+
+        // ============================================================
+        // State transitions
+        // ============================================================
+
+        /// \brief Mark this adjacency as containing global indices.
         ///
-        /// Asserts that either:
-        ///   (a) state == Adj_PointToGlobal (indices are global, mapping is
-        ///       meaningful for future toLocal()), or
-        ///   (b) state == Adj_Unknown (adjacency not yet populated — the
-        ///       mapping is being pre-wired for later use).
+        /// Valid from Adj_Unknown or Adj_PointToGlobal (idempotent).
+        /// Use after building or receiving an adjacency whose entries
+        /// are global entity indices.
+        void markGlobal()
+        {
+            DNDS_assert_info(
+                _state == Adj_Unknown || _state == Adj_PointToGlobal,
+                "markGlobal: expected Adj_Unknown or Adj_PointToGlobal state");
+            _state = Adj_PointToGlobal;
+        }
+
+        /// \brief Force state without conversion (legacy ConvertAdjEntries paths).
         ///
-        /// Calling this when state == Adj_PointToLocal is a logic error:
-        /// the indices are already local with respect to some (possibly
-        /// different) mapping, and silently replacing the mapping would
-        /// make the next toGlobal() produce garbage.
+        /// This bypasses the normal state machine. Use ONLY for code paths
+        /// that perform index conversion via ConvertAdjEntries instead of
+        /// toLocal/toGlobal.
+        /// \todo Eliminate once all ConvertAdjEntries call sites are migrated.
+        void setStateUnchecked(MeshAdjState s) { _state = s; }
+
+        /// \brief Attach the target entity's ghost mapping.
+        ///
+        /// Callable when state is Adj_Unknown or Adj_PointToGlobal.
+        /// Calling while Adj_PointToLocal is a logic error: indices are
+        /// already local w.r.t. some (possibly different) mapping, and
+        /// replacing the mapping silently would make toGlobal() produce
+        /// garbage.
         void wireTargetMapping(const t_pLGhostMapping &mapping)
         {
             DNDS_assert_info(
-                state != Adj_PointToLocal,
+                _state != Adj_PointToLocal,
                 "wireTargetMapping called while indices are local — "
                 "convert to global first, or the stored mapping will "
                 "be inconsistent with the index values");
-            targetMapping = mapping;
+            _targetMapping = mapping;
         }
 
-        /// \brief Attach the target entity's global-offsets mapping.
-        /// Same safety invariant as wireTargetMapping.
-        void wireTargetGlobalMapping(const t_pLGlobalMapping &mapping)
-        {
-            targetGlobalMapping = mapping;
-        }
+        // ============================================================
+        // Conversion: toLocal / toGlobal (mapping must be wired)
+        // ============================================================
 
         /// \brief Bulk-convert all entries in [0, nRows) from global to local.
         ///
@@ -66,8 +103,10 @@ namespace DNDS::Geom
         template <class TAdj>
         void toLocal(TAdj &adj, index nRows)
         {
-            DNDS_assert(state == Adj_PointToGlobal);
-            DNDS_assert(targetMapping);
+            DNDS_assert_info(_state == Adj_PointToGlobal,
+                             "toLocal: expected Adj_PointToGlobal state");
+            DNDS_assert_info(_targetMapping,
+                             "toLocal: target mapping not wired");
             for (index i = 0; i < nRows; i++)
                 for (rowsize j = 0; j < adj.RowSize(i); j++)
                 {
@@ -76,20 +115,22 @@ namespace DNDS::Geom
                         continue;
                     MPI_int rank;
                     index val;
-                    if (targetMapping->search_indexAppend(v, rank, val))
+                    if (_targetMapping->search_indexAppend(v, rank, val))
                         v = val;
                     else
                         v = -1 - v; // not-found encoding
                 }
-            state = Adj_PointToLocal;
+            _state = Adj_PointToLocal;
         }
 
         /// \brief Bulk-convert all entries in [0, nRows) from local to global.
         template <class TAdj>
         void toGlobal(TAdj &adj, index nRows)
         {
-            DNDS_assert(state == Adj_PointToLocal);
-            DNDS_assert(targetMapping);
+            DNDS_assert_info(_state == Adj_PointToLocal,
+                             "toGlobal: expected Adj_PointToLocal state");
+            DNDS_assert_info(_targetMapping,
+                             "toGlobal: target mapping not wired");
             for (index i = 0; i < nRows; i++)
                 for (rowsize j = 0; j < adj.RowSize(i); j++)
                 {
@@ -99,19 +140,21 @@ namespace DNDS::Geom
                     if (v < 0) // "not-found" encoding from prior G2L
                         v = -1 - v;
                     else
-                        v = targetMapping->operator()(-1, v);
+                        v = _targetMapping->operator()(-1, v);
                 }
-            state = Adj_PointToGlobal;
+            _state = Adj_PointToGlobal;
         }
 
         /// \brief OMP-parallelized variant of toLocal.
         template <class TAdj>
         void toLocalOMP(TAdj &adj, index nRows)
         {
-            DNDS_assert(state == Adj_PointToGlobal);
-            DNDS_assert(targetMapping);
+            DNDS_assert_info(_state == Adj_PointToGlobal,
+                             "toLocalOMP: expected Adj_PointToGlobal state");
+            DNDS_assert_info(_targetMapping,
+                             "toLocalOMP: target mapping not wired");
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
             for (index i = 0; i < nRows; i++)
                 for (rowsize j = 0; j < adj.RowSize(i); j++)
@@ -121,22 +164,24 @@ namespace DNDS::Geom
                         continue;
                     MPI_int rank;
                     index val;
-                    if (targetMapping->search_indexAppend(v, rank, val))
+                    if (_targetMapping->search_indexAppend(v, rank, val))
                         v = val;
                     else
                         v = -1 - v;
                 }
-            state = Adj_PointToLocal;
+            _state = Adj_PointToLocal;
         }
 
         /// \brief OMP-parallelized variant of toGlobal.
         template <class TAdj>
         void toGlobalOMP(TAdj &adj, index nRows)
         {
-            DNDS_assert(state == Adj_PointToLocal);
-            DNDS_assert(targetMapping);
+            DNDS_assert_info(_state == Adj_PointToLocal,
+                             "toGlobalOMP: expected Adj_PointToLocal state");
+            DNDS_assert_info(_targetMapping,
+                             "toGlobalOMP: target mapping not wired");
 #ifdef DNDS_USE_OMP
-#pragma omp parallel for
+#    pragma omp parallel for
 #endif
             for (index i = 0; i < nRows; i++)
                 for (rowsize j = 0; j < adj.RowSize(i); j++)
@@ -147,9 +192,42 @@ namespace DNDS::Geom
                     if (v < 0)
                         v = -1 - v;
                     else
-                        v = targetMapping->operator()(-1, v);
+                        v = _targetMapping->operator()(-1, v);
                 }
-            state = Adj_PointToGlobal;
+            _state = Adj_PointToGlobal;
+        }
+
+        // ============================================================
+        // Bootstrap: wire mapping + convert in one atomic operation
+        // ============================================================
+
+        /// \brief Wire target mapping and convert to local in one step.
+        ///
+        /// Solves the chicken-and-egg problem where the mapping becomes
+        /// available at the same time the adjacency needs converting.
+        /// Accepts Adj_Unknown or Adj_PointToGlobal.  Sets state to
+        /// Adj_PointToLocal on completion.
+        template <class TAdj>
+        void bootstrapToLocal(const t_pLGhostMapping &mapping, TAdj &adj, index nRows)
+        {
+            DNDS_assert_info(
+                _state == Adj_Unknown || _state == Adj_PointToGlobal,
+                "bootstrapToLocal: expected Adj_Unknown or Adj_PointToGlobal state");
+            _targetMapping = mapping;
+            _state = Adj_PointToGlobal; // ensure toLocal precondition
+            toLocal(adj, nRows);
+        }
+
+        /// \brief OMP variant of bootstrapToLocal.
+        template <class TAdj>
+        void bootstrapToLocalOMP(const t_pLGhostMapping &mapping, TAdj &adj, index nRows)
+        {
+            DNDS_assert_info(
+                _state == Adj_Unknown || _state == Adj_PointToGlobal,
+                "bootstrapToLocalOMP: expected Adj_Unknown or Adj_PointToGlobal state");
+            _targetMapping = mapping;
+            _state = Adj_PointToGlobal;
+            toLocalOMP(adj, nRows);
         }
     };
 
@@ -174,11 +252,23 @@ namespace DNDS::Geom
         void toLocalOMP() { idx.toLocalOMP(*this, this->Size()); }
         void toGlobalOMP() { idx.toGlobalOMP(*this, this->Size()); }
 
-        // State queries
-        MeshAdjState state() const { return idx.state; }
-        bool isLocal() const { return idx.state == Adj_PointToLocal; }
-        bool isGlobal() const { return idx.state == Adj_PointToGlobal; }
-        bool isBuilt() const { return idx.state != Adj_Unknown; }
+        /// Bootstrap: wire mapping + convert to local (solves chicken-and-egg).
+        void bootstrapToLocal(const t_pLGhostMapping &mapping)
+        {
+            idx.bootstrapToLocal(mapping, *this, this->Size());
+        }
+        void bootstrapToLocalOMP(const t_pLGhostMapping &mapping)
+        {
+            idx.bootstrapToLocalOMP(mapping, *this, this->Size());
+        }
+
+        // State queries (delegate to idx)
+        MeshAdjState state() const { return idx.state(); }
+        bool isLocal() const { return idx.isLocal(); }
+        bool isGlobal() const { return idx.isGlobal(); }
+        bool isBuilt() const { return idx.isBuilt(); }
+        bool isWired() const { return idx.isWired(); }
+        const t_pLGhostMapping &mapping() const { return idx.mapping(); }
     };
 
 } // namespace DNDS::Geom

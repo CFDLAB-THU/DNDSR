@@ -39,6 +39,17 @@ docs = [
     "sphinxawesome-theme>=6.0",
     "sphinx-copybutton>=0.5",
 ]
+# Formatter / pre-commit hook tools. Keep in sync with requirements.txt.
+# scikit-build-core does not (yet) support reading dependencies from
+# requirements.txt via [tool.setuptools.dynamic], so the two lists are
+# maintained in parallel. requirements.txt is the single source of truth
+# for `pip install -r requirements.txt`; this extra exists so
+# `pip install -e .[dev]` also pulls in the formatters.
+# (clang-format is a system package, not on PyPI.)
+dev = [
+    "autopep8",
+    "nbstripout",
+]
 
 
 [tool.scikit-build]
