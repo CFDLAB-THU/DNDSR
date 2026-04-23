@@ -175,6 +175,111 @@ toggle back and forth between Global and Local.
    cell2cell doesn't exist until `RecoverCell2CellAndBnd2Cell`, while cell2node
    exists from the partition step. They share the same state flag.
 
+### 4.2. Per-Adjacency State Tracking (`AdjWithState`)
+
+To address the weaknesses above, each adjacency array now carries its own
+`AdjIndexInfo` recording per-adjacency state and a shared pointer to the
+target entity's ghost mapping. This sits alongside (not replacing) the five
+group flags.
+
+**Files:**
+- `src/Geom/AdjIndexInfo.hpp` — `AdjIndexInfo` struct + `AdjWithState<TPair>`
+- `src/Geom/MeshConnectivity_StateChecked.hpp` — checked DSL wrappers
+
+#### `AdjIndexInfo`
+
+```cpp
+struct AdjIndexInfo
+{
+    MeshAdjState state{Adj_Unknown};
+    t_pLGhostMapping   targetMapping;        // ghost mapping of the TARGET entity
+    t_pLGlobalMapping  targetGlobalMapping;   // global-offsets mapping of the target
+    void wireTargetMapping(const t_pLGhostMapping &mapping);
+    // toLocal / toGlobal / OMP variants
+};
+```
+
+- `targetMapping` is the ghost mapping of the entity kind the indices
+  **point to**. For `cell2node`, that is the node ghost mapping
+  (`coords.trans.pLGhostMapping`).
+- `wireTargetMapping()` asserts `state != Adj_PointToLocal` — wiring a
+  mapping while indices are local is a logic error.
+- `toLocal()` encodes not-found entries as `(-1 - globalIndex)`, matching
+  `IndexGlobal2Local`.
+
+#### `AdjWithState<TPair>`
+
+Uses **inheritance** (not composition) from `TPair`:
+
+```cpp
+template <class TPair>
+struct AdjWithState : public TPair
+{
+    AdjIndexInfo idx;
+    void toLocal();     // delegates to idx.toLocal(*this, this->Size())
+    void toGlobal();
+    MeshAdjState state() const;
+    bool isLocal() const;
+    bool isGlobal() const;
+    bool isBuilt() const;
+};
+```
+
+Inheritance keeps all existing callers (`.father`, `.son`, `.trans`,
+`BorrowAndPull`, `operator[]`, etc.) working unchanged. All 12 adjacency
+members on `UnstructuredMesh` use `AdjWithState<T>`:
+
+| Member | Type | Target Entity |
+|--------|------|---------------|
+| `cell2node` | `AdjWithState<tAdjPair>` | node |
+| `bnd2node` | `AdjWithState<tAdjPair>` | node |
+| `bnd2cell` | `AdjWithState<tAdj2Pair>` | cell |
+| `cell2cell` | `AdjWithState<tAdjPair>` | cell |
+| `node2cell` | `AdjWithState<tAdjPair>` | cell |
+| `node2bnd` | `AdjWithState<tAdjPair>` | bnd |
+| `cell2face` | `AdjWithState<tAdjPair>` | face |
+| `face2node` | `AdjWithState<tAdjPair>` | node |
+| `face2cell` | `AdjWithState<tAdj2Pair>` | cell |
+| `bnd2face` | `AdjWithState<tAdj2Pair>` | face |
+| `face2bnd` | `AdjWithState<tAdj2Pair>` | bnd |
+| `cell2cellFace` | `AdjWithState<tAdjPair>` | cell |
+
+#### Wiring Protocol
+
+Target mappings are wired at three points in the mesh build pipeline:
+
+1. **After `BuildGhostPrimary`:** cell2node, bnd2node (target=node);
+   cell2cell, bnd2cell, node2cell (target=cell); node2bnd (target=bnd).
+
+2. **After `MatchFaceBoundary`:** face2node (target=node); face2cell,
+   cell2face (target=face/cell); bnd2face, face2bnd (target=face/bnd).
+
+3. **After `BuildCell2CellFace`:** cell2cellFace (target=cell).
+
+`idx.state` is set to `Adj_PointToGlobal` at partition, redistribute,
+and build sites. Conversion methods (`AdjGlobal2Local*` /
+`AdjLocal2Global*`) now delegate to `adj.toLocal()` / `adj.toGlobal()`,
+and update both the per-adj state and the group flag in parallel.
+
+#### Three-Layer Architecture
+
+| Layer | File | Knows About State? |
+|-------|------|--------------------|
+| **DSL** | `MeshConnectivity.hpp` | No — operates on bare `ArrayAdjacencyPair<rs>` |
+| **Checked wrappers** | `MeshConnectivity_StateChecked.hpp` | Yes — asserts `idx.state`, then forwards to DSL |
+| **Mesh methods** | `Mesh.cpp` | Yes — owns `AdjWithState` members, calls checked wrappers |
+
+`CheckedInverse`, `CheckedComposeFiltered`, and `CheckedInterpolateGlobal`
+are stateless free function templates. They static-cast `AdjWithState<T>&`
+to `T&` before forwarding.
+
+#### Current Status
+
+The five group state variables still exist as real data members and are
+updated in parallel with per-adj states. They have NOT been converted to
+derived queries yet. Legacy methods in `Mesh_Legacy.cpp` still use
+`ConvertAdjEntries` rather than `toLocal()` / `toGlobal()`.
+
 ---
 
 ## 5. Limitations and Inflexibility
@@ -403,6 +508,8 @@ void InterpolateEntities(
 | **Father** | Locally-owned (non-ghost) portion of an array |
 | **Son** | Ghost (remote-owned) portion of an array, pulled from other ranks |
 | **Ghost mapping** | `pLGhostMapping` on an ArrayTransformer — maps global indices to local father+son indices |
+| **Target mapping** | Ghost mapping of the entity kind an adjacency's indices point to (e.g., for `cell2node`, the node ghost mapping) |
+| **AdjWithState** | Wrapper that inherits from an ArrayPair and adds per-adjacency `AdjIndexInfo` (state + target mapping) |
 | **Node-neighbor** | Two cells that share at least one vertex |
 | **Face-neighbor** | Two cells that share a codimension-1 face (>= dim shared vertices) |
 | **Complemented** | A ghost entity has all its sub-entity data available locally |

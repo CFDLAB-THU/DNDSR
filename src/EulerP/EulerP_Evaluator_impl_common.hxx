@@ -24,7 +24,7 @@
  *  - Flux2nd_Kernel_Face2Cell — face flux scatter to cell RHS (per-cell)
  */
 #include "DNDS/Defines.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "DNDS/Errors.hpp"
 #include "EulerP/EulerP.hpp"
 #include "EulerP_ARS.hpp"

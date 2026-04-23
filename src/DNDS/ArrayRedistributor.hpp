@@ -13,7 +13,7 @@
 ///           (identified by origIndex) from whichever rank read them.
 
 #include "ArrayTransformer.hpp"
-#include "SerializerBase.hpp"
+#include "Serializer/SerializerBase.hpp"
 #include <unordered_map>
 #include <algorithm>
 #include <numeric>

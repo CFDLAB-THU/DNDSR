@@ -10,7 +10,7 @@
 #include "../ArrayTransformer.hpp"
 #include "DNDS/Defines.hpp"
 #include "ArrayEigenMatrixBatch_DeviceView.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 
 namespace DNDS
 {

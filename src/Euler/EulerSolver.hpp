@@ -35,13 +35,13 @@
 // #define __DNDS_REALLY_COMPILING__
 // #define __DNDS_REALLY_COMPILING__HEADER_ON__
 // #endif
-#include "DNDS/JsonUtil.hpp"
-#include "DNDS/ConfigParam.hpp"
-#include "DNDS/SerializerFactory.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
+#include "DNDS/Config/ConfigParam.hpp"
+#include "DNDS/Serializer/SerializerFactory.hpp"
 #include "DNDS/CsvLog.hpp"
 #include "DNDS/ObjectPool.hpp"
 #include "Solver/Linear.hpp"
-#include "Geom/Mesh.hpp"
+#include "Geom/Mesh/Mesh.hpp"
 #include "CFV/VariationalReconstruction.hpp"
 #include "Gas.hpp"
 #include "EulerEvaluator.hpp"
@@ -50,7 +50,7 @@
 // #undef __DNDS_REALLY_COMPILING__
 // #endif
 
-#include "DNDS/JsonUtil.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
 
 #include "Solver/ODE.hpp"
 #include "Solver/Linear.hpp"

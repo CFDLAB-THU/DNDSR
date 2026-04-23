@@ -25,8 +25,8 @@
 
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
-#include "DNDS/SerializerJSON.hpp"
-#include "DNDS/SerializerH5.hpp"
+#include "DNDS/Serializer/SerializerJSON.hpp"
+#include "DNDS/Serializer/SerializerH5.hpp"
 #include "DNDS/ArrayPair.hpp"
 #include "DNDS/MPI.hpp"
 #include <filesystem>

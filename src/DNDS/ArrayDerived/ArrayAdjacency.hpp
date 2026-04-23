@@ -14,7 +14,7 @@
 #    define DNDS_ARRAY_PAIR_HPP
 #    include "DNDS/ArrayDerived/ArrayAdjacency_DeviceView.hpp"
 #    include "DNDS/Defines.hpp"
-#    include "DNDS/DeviceStorage.hpp"
+#    include "DNDS/Device/DeviceStorage.hpp"
 #    include "../ArrayTransformer.hpp"
 
 namespace DNDS

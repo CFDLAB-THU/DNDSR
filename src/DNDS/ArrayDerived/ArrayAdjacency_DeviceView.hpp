@@ -4,9 +4,9 @@
 /// `operator[]` returning an @ref DNDS::AdjacencyRow "AdjacencyRow", but with `__device__` methods.
 
 #include "AdjacencyRow.hpp"
-#include "../DeviceView.hpp"
+#include "DNDS/Device/DeviceView.hpp"
 #include "DNDS/Defines.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 
 namespace DNDS
 {

@@ -20,9 +20,9 @@
  */
 #pragma once
 #include "DNDS/Defines.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "DNDS/EigenUtil.hpp"
-#include "DNDS/ConfigEnum.hpp"
+#include "DNDS/Config/ConfigEnum.hpp"
 #include "CFV/VRDefines.hpp"
 #include "DNDS/Errors.hpp"
 

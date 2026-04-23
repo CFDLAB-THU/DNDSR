@@ -1,7 +1,7 @@
 #include "EulerP_BC.hpp"
 
-#include "DNDS/DeviceStorage_CUDA.cuh"
-#include "DNDS/DeviceStorage.hxx"
+#include "DNDS/Device/DeviceStorage_CUDA.cuh"
+#include "DNDS/Device/DeviceStorage.hxx"
 
 namespace DNDS::EulerP
 {

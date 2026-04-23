@@ -2,8 +2,8 @@
 
 #include "DNDS/Defines.hpp"
 #include "Geometric.hpp"
-#include "DNDS/JsonUtil.hpp"
-#include "DNDS/ConfigEnum.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
+#include "DNDS/Config/ConfigEnum.hpp"
 
 namespace DNDS::Geom::RBF
 {

@@ -21,8 +21,8 @@
 #include "DNDS/Defines.hpp"
 #include "DNDS/IdealGasPhysics.hpp"
 
-#include "DNDS/JsonUtil.hpp"
-#include "DNDS/ConfigEnum.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
+#include "DNDS/Config/ConfigEnum.hpp"
 #include <fmt/core.h>
 
 namespace DNDS::Euler::Gas

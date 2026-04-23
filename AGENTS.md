@@ -203,126 +203,53 @@ mesh, reader, name2ID = create_mesh_from_CGNS(
 - CUDA device offloading (`to_device` / `to_host`)
 - Three read modes: Serial, Parallel, Distributed
 
-## Formatting and Linting
+## Code Style
 
-### C++ — clang-format (config in `src/.clang-format`)
+Full style guide (naming, formatting, includes, error handling, Doxygen,
+Python conventions): **`docs/guides/style_guide.md`**
 
-- **Style:** LLVM-based with Allman braces
-- **Indent:** 4 spaces, no tabs
-- **Column limit:** none (unlimited line length)
-- **Includes:** not sorted by clang-format (`SortIncludes: Never`)
-- **Namespace indentation:** all content indented
-- **Access modifiers:** outdented 4 spaces from body
+Quick reference for C++:
 
-```bash
-clang-format -i src/DNDS/SomeFile.hpp    # format a file
-```
+- **Braces:** Allman (opening brace on its own line)
+- **Naming:** `PascalCase` classes/methods, `_` prefix for private members,
+  `DNDS_ALL_CAPS` macros, `t_` prefix type aliases
+- **Headers:** `#pragma once`, preserve include order (no auto-sort)
+- **Errors:** `DNDS_assert` (debug) / `DNDS_check_throw` (release) from
+  `DNDS/Errors.hpp`; never raw `assert()`
+- **Core types:** `real = double`, `index = int64_t`, `rowsize = int32_t`,
+  `ssp<T> = std::shared_ptr<T>`
 
-### C++ — clang-tidy (config in `src/.clang-tidy`)
+Quick reference for Python:
 
-Enabled check groups: `modernize-*`, `readability-*`, `bugprone-*`, `performance-*`,
-`cppcoreguidelines-*`, `google-build-using-namespace`, `mpi-*`, `openmp-*`.
+- `snake_case` functions/variables; C++ wrapper classes match C++ name
+- Plain `assert`; `@pytest.fixture` for MPI; numpy for array comparisons
 
-## Code Style — C++
+## Geom Module Architecture
 
-### Naming Conventions
+Mesh connectivity, ghost management, and the build pipeline are documented
+in **`docs/architecture/MeshConnectivity.md`**.
 
-| Element               | Convention       | Example                              |
-|-----------------------|------------------|--------------------------------------|
-| Namespace             | `PascalCase`     | `DNDS`, `DNDS::Geom`, `DNDS::CFV`   |
-| Class / Struct        | `PascalCase`     | `MPIInfo`, `VariationalReconstruction` |
-| Public method         | `PascalCase`     | `Resize()`, `ConstructMetrics()`     |
-| Private/protected member | `_` prefix    | `_size`, `_data`, `_pRowStart`       |
-| Type alias            | `t_` prefix or `using` | `t_IndexVec`, `tDiFj`          |
-| Template parameter    | `T`-prefix or PascalCase | `T`, `TOut`, `_row_size`      |
-| Constant              | `PascalCase`     | `UnInitReal`, `DynamicSize`          |
-| Macro                 | `DNDS_ALL_CAPS`  | `DNDS_INDEX_MAX`, `DNDS_MPI_REAL`    |
-| Enum value            | `PascalCase`     | `UnknownElem`, `Line2`, `Roe`        |
+Key concepts agents should know:
 
-### Core Type Aliases (from `Defines.hpp`)
+- **Adjacency state:** Each adjacency array (e.g. `cell2node`, `face2cell`)
+  is wrapped in `AdjWithState<TPair>` (inherits from `TPair`, adds an
+  `AdjIndexInfo idx` member). The `idx` tracks whether indices are
+  global/local and holds a `shared_ptr` to the target entity's ghost mapping.
+  See `src/Geom/AdjIndexInfo.hpp`.
 
-```cpp
-using real = double;
-using index = int64_t;
-using rowsize = int32_t;
-template <typename T> using ssp = std::shared_ptr<T>;
-```
+- **Three-layer architecture:**
+  1. `MeshConnectivity` (DSL) -- bare `ArrayAdjacencyPair<rs>`, no state
+  2. `MeshConnectivity_StateChecked.hpp` -- asserts `idx.state`, forwards to DSL
+  3. `UnstructuredMesh` (Mesh.cpp) -- owns `AdjWithState` members, calls checked wrappers
 
-### Header Guards
+- **Conversion methods:** `AdjGlobal2Local*` / `AdjLocal2Global*` delegate
+  to `adj.toLocal()` / `adj.toGlobal()`, which use the stored
+  `targetMapping`. The five group state variables (`adjPrimaryState`, etc.)
+  still exist and are updated in parallel with per-adj states.
 
-Always use `#pragma once` — no `#ifndef` guards.
-
-### Include Order
-
-1. Project macros (`"DNDS/Macros.hpp"`, `"DNDS/Defines.hpp"`)
-2. Standard library headers
-3. External library headers (Eigen, fmt, nlohmann_json, etc.)
-4. Project headers (quoted, relative to `src/`): `"DNDS/Array.hpp"`, `"Geom/Mesh.hpp"`
-
-Includes are NOT auto-sorted. Preserve existing order.
-
-### Error Handling
-
-Use the project's assert/check macros from `DNDS/Errors.hpp`:
-
-```cpp
-DNDS_assert(expr);                         // debug-only, calls std::abort()
-DNDS_assert_info(expr, info_string);       // debug-only with message
-DNDS_assert_infof(expr, fmt_string, ...);  // debug-only with printf format
-DNDS_check_throw(expr);                    // always active, throws std::runtime_error
-DNDS_check_throw_info(expr, info_string);  // always active with message
-```
-
-Do NOT use raw `assert()`. Use `DNDS_assert` for debug checks and
-`DNDS_check_throw` for runtime validation that must remain in release builds.
-
-### Templates and Eigen
-
-- Heavy use of Eigen matrices; prefer `Eigen::Matrix<real, ...>` with project's `real` type
-- Use `if constexpr` for compile-time branching on template parameters
-- Explicit template instantiation goes in `_explicit_instantiation/` subdirectories
-
-### Brace Style
-
-Allman style — opening brace on its own line:
-
-```cpp
-if (condition)
-{
-    // ...
-}
-```
-
-## Code Style — Python
-
-### Naming
-
-- Functions/variables: `snake_case` (`test_all_reduce_scalar`, `meshFile`)
-- Classes wrapping C++ types: match C++ name (`MPIInfo`, `VariationalReconstruction_2`)
-- Private helpers: `_` prefix (`_pre_import`, `_init_mpi`)
-
-### Imports
-
-```python
-from __future__ import annotations      # when used
-import sys, os
-from DNDSR import DNDS, Geom, CFV, EulerP
-import numpy as np
-import pytest
-```
-
-Test files append `src/` to `sys.path` to find the `DNDSR` package:
-
-```python
-sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "src"))
-```
-
-### Testing Patterns
-
-- Use `@pytest.fixture` for MPI setup
-- Use plain `assert` statements (not unittest-style)
-- Tests may also run standalone: `if __name__ == "__main__":` block calling test functions
-- Use numpy for array comparisons: `assert np.all(...)`, `assert (arr == val).all()`
+- **Legacy coexistence:** `Mesh_Legacy.cpp` methods still use
+  `ConvertAdjEntries` rather than `toLocal()` / `toGlobal()`. The group
+  state variables are real data members, not yet derived from per-adj state.
 
 ## Key Dependencies
 

@@ -10,9 +10,9 @@
 #include "ArrayDerived/ArrayEigenMatrixBatch.hpp"
 #include "ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
 #include "DNDS/Defines.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "DNDS/Errors.hpp"
-#include "DeviceView.hpp"
+#include "Device/DeviceView.hpp"
 #include <fmt/format.h>
 namespace DNDS
 {

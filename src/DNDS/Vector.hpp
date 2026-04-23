@@ -3,7 +3,7 @@
 /// @brief Host-device vector types with optional GPU storage and device-side views.
 
 #include "DNDS/Errors.hpp"
-#include "DeviceStorage.hpp"
+#include "Device/DeviceStorage.hpp"
 #include <algorithm>
 #include <cstddef>
 #include <memory>

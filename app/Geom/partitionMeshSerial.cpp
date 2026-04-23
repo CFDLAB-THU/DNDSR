@@ -1,5 +1,5 @@
-#include "Geom/Mesh.hpp"
-#include "DNDS/SerializerJSON.hpp"
+#include "Geom/Mesh/Mesh.hpp"
+#include "DNDS/Serializer/SerializerJSON.hpp"
 #include "stdio.h"
 
 #include <filesystem>

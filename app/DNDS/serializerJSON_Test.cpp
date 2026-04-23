@@ -1,4 +1,4 @@
-#include "DNDS/SerializerJSON.hpp"
+#include "DNDS/Serializer/SerializerJSON.hpp"
 #include <iostream>
 #include <base64_rfc4648.hpp>
 

@@ -37,7 +37,7 @@
 #include "doctest.h"
 
 #include "SyntheticMeshBuilders.hpp"
-#include "Geom/MeshConnectivity.hpp"
+#include "Geom/Mesh/MeshConnectivity.hpp"
 #include <string>
 #include <vector>
 #include <set>
