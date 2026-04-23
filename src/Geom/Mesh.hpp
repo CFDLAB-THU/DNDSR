@@ -11,6 +11,7 @@
 #include "RadialBasisFunction.hpp"
 #include "DNDS/ObjectUtils.hpp"
 #include "DNDS/ConfigParam.hpp"
+#include "AdjIndexInfo.hpp"
 
 namespace DNDS::Direct
 {
@@ -52,10 +53,10 @@ namespace DNDS::Geom
         MeshElevationState elevState = Elevation_Untouched;
         /// reader
         tCoordPair coords;
-        tAdjPair cell2node;
-        tAdjPair bnd2node;
-        tAdj2Pair bnd2cell;
-        tAdjPair cell2cell;
+        AdjWithState<tAdjPair> cell2node;    // → Node
+        AdjWithState<tAdjPair> bnd2node;     // → Node
+        AdjWithState<tAdj2Pair> bnd2cell;    // → Cell
+        AdjWithState<tAdjPair> cell2cell;    // → Cell
         tElemInfoArrayPair cellElemInfo;
         tElemInfoArrayPair bndElemInfo;
         tAdj1Pair cell2cellOrig; // no device
@@ -80,8 +81,8 @@ namespace DNDS::Geom
         }
 
         /// inverse relations
-        tAdjPair node2cell;
-        tAdjPair node2bnd;
+        AdjWithState<tAdjPair> node2cell;    // → Cell
+        AdjWithState<tAdjPair> node2bnd;     // → Bnd
 
         auto device_array_list_N2CB()
         {
@@ -91,12 +92,12 @@ namespace DNDS::Geom
         }
 
         /// interpolated
-        tAdjPair cell2face;
-        tAdjPair face2node;
-        tAdj2Pair face2cell;
+        AdjWithState<tAdjPair> cell2face;    // → Face
+        AdjWithState<tAdjPair> face2node;    // → Node
+        AdjWithState<tAdj2Pair> face2cell;   // → Cell
         tElemInfoArrayPair faceElemInfo;
-        tAdj1Pair bnd2face;
-        tAdj1Pair face2bnd;
+        AdjWithState<tAdj1Pair> bnd2face;    // → Face
+        AdjWithState<tAdj1Pair> face2bnd;    // → Bnd
 
         std::vector<index> bnd2faceV;               // no device
         std::unordered_map<index, index> face2bndM; // no device
@@ -121,7 +122,7 @@ namespace DNDS::Geom
         }
 
         /// constructed on demand
-        tAdjPair cell2cellFace;
+        AdjWithState<tAdjPair> cell2cellFace;  // → Cell
 
         /// parent built
         std::vector<index> node2parentNode; // from local-appended iNode to local-appended iNode in parent

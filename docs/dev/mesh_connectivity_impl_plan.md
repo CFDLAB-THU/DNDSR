@@ -1401,3 +1401,374 @@ void traverseHop(const ssp<AdjVariant>& adjVar, ...) {
 | AdjVariant size grows | Currently 6 alternatives; no change needed |
 | ssp overhead vs raw ptr | Negligible — these are large arrays; one extra indirection per access |
 | evaluateGhostTree perf with std::visit | Visit dispatch is one virtual call per hop, not per element; negligible |
+
+---
+
+## 10. Per-Adjacency Index State Tracking
+
+### 10.1. Problem Statement
+
+The current global/local index state management has five group-level state
+variables (`adjPrimaryState`, `adjFacialState`, `adjC2FState`, `adjN2CBState`,
+`adjC2CFaceState`) that each govern 1-4 adjacency arrays. This creates three
+problems:
+
+1. **Wrong granularity.** `adjPrimaryState` covers `cell2node` (points to
+   nodes), `cell2cell` (points to cells), `bnd2node` (points to nodes), and
+   `bnd2cell` (points to cells). Converting any one forces converting all four,
+   even when only one needs to change. The "ForBnd" variants
+   (`AdjGlobal2LocalPrimaryForBnd`) are ad-hoc workarounds.
+
+2. **Implicit mapping dependencies.** Each conversion hard-codes which
+   `pLGhostMapping` to use: `cell2cell` uses `cellElemInfo.trans.pLGhostMapping`,
+   `cell2node` uses `coords.trans.pLGhostMapping`. This coupling is scattered
+   across 10+ methods and is easy to break during refactoring.
+
+3. **Bounce conversions.** Ghost pulls require global indices; computation
+   requires local. Operations like `MatchFaceBoundary`, `BuildCell2CellFace`,
+   and `ReorderLocalCells` do expensive local->global->local round-trips on
+   entire groups because the group state forces all-or-nothing conversion.
+
+### 10.2. Design: `AdjIndexInfo` and `AdjWithState<TPair>`
+
+#### 10.2.1. `AdjIndexInfo`
+
+A lightweight struct recording what an adjacency array points to and its
+current state:
+
+```cpp
+// In Mesh_DeviceView.hpp or a new header (e.g., AdjIndexInfo.hpp)
+
+struct AdjIndexInfo
+{
+    /// Current global/local state of the entries in this adjacency.
+    MeshAdjState state{Adj_Unknown};
+
+    /// Ghost mapping of the **target** entity kind.
+    /// - cell2node → coords.trans.pLGhostMapping (node ghost mapping)
+    /// - cell2cell → cellElemInfo.trans.pLGhostMapping (cell ghost mapping)
+    /// - face2cell → cellElemInfo.trans.pLGhostMapping (cell ghost mapping)
+    /// - node2cell → cellElemInfo.trans.pLGhostMapping (cell ghost mapping)
+    /// - face2node → coords.trans.pLGhostMapping (node ghost mapping)
+    /// nullptr until the target entity's ghost layer has been built.
+    t_pLGhostMapping targetMapping;
+
+    /// Global-offsets mapping of the target entity kind.
+    /// Used for _NoSon conversion paths (father-only, no ghost lookup).
+    t_pLGlobalMapping targetGlobalMapping;
+
+    /// Convert all entries in [0, nRows) from global to local.
+    template <class TAdj>
+    void toLocal(TAdj &adj, index nRows)
+    {
+        DNDS_assert(state == Adj_PointToGlobal);
+        DNDS_assert(targetMapping);
+        for (index i = 0; i < nRows; i++)
+            for (rowsize j = 0; j < adj.RowSize(i); j++)
+            {
+                index &v = adj(i, j);
+                if (v == UnInitIndex)
+                    continue;
+                MPI_int rank;
+                index val;
+                auto ret = targetMapping->search_indexAppend(v, rank, val);
+                DNDS_assert(ret);
+                v = val;
+            }
+        state = Adj_PointToLocal;
+    }
+
+    /// Convert all entries in [0, nRows) from local to global.
+    template <class TAdj>
+    void toGlobal(TAdj &adj, index nRows)
+    {
+        DNDS_assert(state == Adj_PointToLocal);
+        DNDS_assert(targetMapping);
+        for (index i = 0; i < nRows; i++)
+            for (rowsize j = 0; j < adj.RowSize(i); j++)
+            {
+                index &v = adj(i, j);
+                if (v == UnInitIndex)
+                    continue;
+                if (v < 0) // "not-found" encoding from prior G2L
+                    v = -1 - v;
+                else
+                    v = targetMapping->operator()(-1, v);
+            }
+        state = Adj_PointToGlobal;
+    }
+
+    /// OMP-parallelized variant for large arrays.
+    template <class TAdj>
+    void toLocalOMP(TAdj &adj, index nRows);
+    template <class TAdj>
+    void toGlobalOMP(TAdj &adj, index nRows);
+};
+```
+
+#### 10.2.2. `AdjWithState<TPair>`
+
+A thin wrapper that pairs an `ArrayPair` with its `AdjIndexInfo`:
+
+```cpp
+template <class TPair>
+struct AdjWithState
+{
+    TPair pair;
+    AdjIndexInfo idx;
+
+    // ---- Forwarding accessors (transparent to callers) ----
+    decltype(auto) operator[](index i) { return pair[i]; }
+    decltype(auto) operator[](index i) const { return pair[i]; }
+    decltype(auto) operator()(index i, rowsize j) { return pair(i, j); }
+    decltype(auto) operator()(index i, rowsize j) const { return pair(i, j); }
+    auto RowSize(index i) const { return pair.RowSize(i); }
+    auto Size() const { return pair.Size(); }
+
+    // Access the underlying pair directly
+    TPair *operator->() { return &pair; }
+    const TPair *operator->() const { return &pair; }
+
+    // Implicit conversion to TPair& for legacy callers
+    operator TPair &() { return pair; }
+    operator const TPair &() const { return pair; }
+
+    // Convenience: convert this adjacency in-place
+    void toLocal() { idx.toLocal(pair, pair.Size()); }
+    void toGlobal() { idx.toGlobal(pair, pair.Size()); }
+    void toLocalOMP() { idx.toLocalOMP(pair, pair.Size()); }
+    void toGlobalOMP() { idx.toGlobalOMP(pair, pair.Size()); }
+
+    // State queries
+    MeshAdjState state() const { return idx.state; }
+    bool isLocal() const { return idx.state == Adj_PointToLocal; }
+    bool isGlobal() const { return idx.state == Adj_PointToGlobal; }
+    bool isBuilt() const { return idx.state != Adj_Unknown; }
+
+    // Delegation to TPair
+    void InitPair(const std::string &name, const MPIInfo &mpi)
+    { pair.InitPair(name, mpi); }
+    void TransAttach() { pair.TransAttach(); }
+};
+```
+
+### 10.3. Target Entity Mapping Table
+
+Each adjacency points to a specific entity kind. This table shows which
+`pLGhostMapping` and `pLGlobalMapping` each adjacency needs:
+
+| Adjacency | Points to | targetMapping source | targetGlobalMapping source |
+|-----------|-----------|---------------------|---------------------------|
+| `cell2node` | Node | `coords.trans.pLGhostMapping` | `coords.father->pLGlobalMapping` |
+| `bnd2node` | Node | `coords.trans.pLGhostMapping` | `coords.father->pLGlobalMapping` |
+| `face2node` | Node | `coords.trans.pLGhostMapping` | `coords.father->pLGlobalMapping` |
+| `cell2cell` | Cell | `cellElemInfo.trans.pLGhostMapping` | `cell2node.father->pLGlobalMapping` |
+| `bnd2cell` | Cell | `cellElemInfo.trans.pLGhostMapping` | `cell2node.father->pLGlobalMapping` |
+| `face2cell` | Cell | `cellElemInfo.trans.pLGhostMapping` | `cell2node.father->pLGlobalMapping` |
+| `node2cell` | Cell | `cellElemInfo.trans.pLGhostMapping` | `cell2node.father->pLGlobalMapping` |
+| `cell2cellFace` | Cell | `cellElemInfo.trans.pLGhostMapping` | `cell2node.father->pLGlobalMapping` |
+| `node2bnd` | Bnd | `bndElemInfo.trans.pLGhostMapping` | `bnd2node.father->pLGlobalMapping` |
+| `face2bnd` | Bnd | `bndElemInfo.trans.pLGhostMapping` | `bnd2node.father->pLGlobalMapping` |
+| `cell2face` | Face | `face2node.trans.pLGhostMapping` | `face2node.father->pLGlobalMapping` |
+| `bnd2face` | Face | `face2node.trans.pLGhostMapping` | `face2node.father->pLGlobalMapping` |
+
+### 10.4. Wiring Protocol
+
+Mappings are wired at well-defined points in the mesh pipeline:
+
+1. **After `PartitionReorderToMeshCell2Cell` / `ReadDistributed_Redistribute`:**
+   - Cell and node `pLGlobalMapping` exist (from `createFatherGlobalMapping`).
+   - Ghost mappings do NOT exist yet.
+   - Set `state = Adj_PointToGlobal` on primary adjacencies.
+   - Wire `targetGlobalMapping` where available.
+
+2. **After `BuildGhostPrimary`:**
+   - `cellElemInfo.trans.pLGhostMapping` and `coords.trans.pLGhostMapping` exist.
+   - Wire `targetMapping` for all adjacencies that point to cells or nodes:
+     ```cpp
+     auto cellGhostMap = cellElemInfo.trans.pLGhostMapping;
+     auto nodeGhostMap = coords.trans.pLGhostMapping;
+     cell2node.idx.targetMapping = nodeGhostMap;
+     cell2cell.idx.targetMapping = cellGhostMap;
+     bnd2node.idx.targetMapping  = nodeGhostMap;
+     bnd2cell.idx.targetMapping  = cellGhostMap;
+     ```
+
+3. **After `InterpolateFace` builds face ghosts:**
+   - `face2node.trans.pLGhostMapping` exists.
+   - Wire `cell2face.idx.targetMapping` and `bnd2face.idx.targetMapping`.
+   - Wire face2cell and face2node targetMappings.
+
+4. **After `BuildGhostN2CB` builds node2cell/node2bnd ghosts:**
+   - Wire `face2bnd.idx.targetMapping` and `node2bnd.idx.targetMapping`
+     (if bnd ghost mapping is available).
+
+Each wiring step is a single shared_ptr copy per adjacency — O(1) cost.
+
+### 10.5. Group State Variables as Derived Queries
+
+The 5 legacy group state variables become read-only computed properties:
+
+```cpp
+// In UnstructuredMesh:
+MeshAdjState adjPrimaryState() const
+{
+    // All primary adjacencies must agree (or be Unknown).
+    MeshAdjState s = cell2node.state();
+    DNDS_assert(cell2cell.state() == s || cell2cell.state() == Adj_Unknown);
+    DNDS_assert(bnd2node.state() == s || bnd2node.state() == Adj_Unknown);
+    DNDS_assert(bnd2cell.state() == s || bnd2cell.state() == Adj_Unknown);
+    return s;
+}
+// Similarly for adjFacialState(), adjC2FState(), adjN2CBState(), adjC2CFaceState().
+```
+
+This maintains backward compatibility: callers that read `m->adjPrimaryState`
+continue to compile (now as a function call) and get the same semantics.
+
+For the DeviceView, the state values are still plain members (POD for GPU),
+populated from the derived queries at construction time:
+```cpp
+// In UnstructuredMeshDeviceView constructor:
+adjPrimaryState = mesh.adjPrimaryState();
+adjFacialState  = mesh.adjFacialState();
+```
+
+### 10.6. Convenience Wrappers (Backward Compat)
+
+The grouped conversion methods remain as thin wrappers:
+
+```cpp
+void AdjGlobal2LocalPrimary()
+{
+    cell2cell.toLocal();
+    bnd2cell.toLocal();
+    cell2node.toLocal();
+    bnd2node.toLocal();
+}
+
+void AdjLocal2GlobalPrimary()
+{
+    cell2cell.toGlobal();
+    bnd2cell.toGlobal();
+    cell2node.toGlobal();
+    bnd2node.toGlobal();
+}
+```
+
+The `ForBnd` variants become trivially:
+```cpp
+void AdjGlobal2LocalPrimaryForBnd()
+{
+    cell2node.toLocal();
+    // Only cell2node needs conversion for bnd mesh objects
+}
+```
+
+### 10.7. Phased Migration Plan
+
+**Phase A: Introduce `AdjIndexInfo` + `AdjWithState<TPair>` (non-breaking)**
+
+1. Add `AdjIndexInfo` struct (new header `src/Geom/AdjIndexInfo.hpp`
+   or within `Mesh_DeviceView.hpp`).
+2. Add `AdjWithState<TPair>` wrapper template.
+3. Ensure `AdjWithState` has implicit conversion `operator TPair&()` so
+   existing code that passes the pair to functions compiles unchanged.
+4. Unit tests for `AdjIndexInfo::toLocal` / `toGlobal` standalone.
+
+**Phase B: Replace member types on `UnstructuredMesh`**
+
+1. Change `tAdjPair cell2node;` → `AdjWithState<tAdjPair> cell2node;`
+   and similarly for all adjacency pairs.
+2. Because `AdjWithState` has implicit conversion and forwarding operators,
+   most callers should compile unchanged. Fix any that break.
+3. The 5 group state variables become `MeshAdjState adjPrimaryState() const`
+   methods. The old data members are removed.
+4. Update `device_array_list_primary()` etc. to return references to
+   `pair` member of each `AdjWithState`.
+
+**Phase C: Wire target mappings**
+
+1. After `BuildGhostPrimary`, wire `targetMapping` for all primary adjacencies.
+2. After `InterpolateFace`, wire for facial/C2F adjacencies.
+3. After `BuildGhostN2CB`, wire for N2CB adjacencies.
+4. After `BuildCell2CellFace`, wire for C2CFace.
+
+**Phase D: Simplify conversion methods**
+
+1. Replace the body of each `AdjGlobal2Local*` / `AdjLocal2Global*` with
+   calls to `adj.toLocal()` / `adj.toGlobal()`.
+2. The group methods remain as convenience wrappers.
+3. Remove the hard-coded mapping lookups from each method body.
+
+**Phase E: Enable fine-grained conversions (optional, future)**
+
+1. Call sites that currently bounce an entire group can now convert
+   individual adjacencies. E.g., `BuildCell2CellFace` only needs
+   `cell2cell` in local state — no need to convert `bnd2node`.
+2. `ReorderLocalCells` can convert only the adjacencies it touches.
+3. `MatchFaceBoundary` can convert only `cell2face` without touching
+   `bnd2face`.
+
+### 10.8. Key Type Changes
+
+```
+// Before:
+tAdjPair cell2node;
+MeshAdjState adjPrimaryState{Adj_Unknown};
+
+// After:
+AdjWithState<tAdjPair> cell2node;
+// adjPrimaryState is a derived query method
+```
+
+### 10.9. `AdjWithState` Implicit Conversion Challenges
+
+Potential breakage sites for implicit `operator TPair&()`:
+
+1. **Template argument deduction.** When a template function takes
+   `template<class T> void f(T&)`, passing `AdjWithState<tAdjPair>` deduces
+   `T = AdjWithState<tAdjPair>`, not `T = tAdjPair`. If the function body
+   accesses `.father`, `.son`, `.trans`, it breaks.
+   **Mitigation:** Add forwarding members: `auto &father()`, `auto &son()`,
+   `auto &trans()` on `AdjWithState`, or use `.pair.father` at those sites.
+
+2. **`ConvertAdjEntries` and `ConvertAdjEntriesOMP`.** These templates use
+   `TAdj::RowSize()` and `TAdj::operator()()` — both forwarded by
+   `AdjWithState`, so they should work.
+
+3. **`PermuteRows`.** Uses `pair.father` directly. Will need `.pair.father`
+   or forwarding.
+
+4. **`device_array_list_*()`.** The `DNDS_MAKE_1_MEMBER_REF` macro takes
+   a member name. Will need to reference `cell2node.pair` or adapt the macro.
+
+5. **Serialization (`ReadSerialize`/`WriteSerialize`).** Accesses
+   `.father`, `.son`, `.trans` directly. Will need `.pair.` prefix.
+
+### 10.10. Risks and Mitigations
+
+| Risk | Mitigation |
+|------|------------|
+| Implicit conversion not deduced in templates | Add forwarding members or use `.pair` at breakage sites |
+| `device_array_list_*` macros break | Adapt macros to access `.pair` member |
+| DeviceView constructor copies state | Populate from derived query methods — same semantics |
+| Serialization/deserialization breaks | Access `.pair` explicitly at serialization sites |
+| Python bindings reference member types | pybind11 bindings need `.pair` access; update `Mesh_bind.hpp` |
+| `evaluateGhostTree` still needs global state | Unchanged; the per-adj state just makes the precondition checkable per-adjacency |
+| OMP parallel conversion safety | `toLocalOMP`/`toGlobalOMP` use same `#pragma omp parallel for` pattern as existing code |
+
+### 10.11. Non-Goals (This Phase)
+
+- **Lazy/automatic conversion.** The system does NOT automatically convert
+  indices on access. Callers still explicitly call `toLocal()` / `toGlobal()`.
+  The improvement is that the mapping dependency is recorded (not hard-coded)
+  and conversion is per-adjacency (not per-group).
+
+- **Eliminating bounce conversions.** Phase E can reduce bounces by converting
+  individual adjacencies, but we do NOT change the ghost pull protocol (which
+  fundamentally requires global indices).
+
+- **Moving state into ArrayPair.** The user chose `AdjWithState<TPair>`
+  wrapper over modifying `ArrayPair` directly, keeping DNDS core types
+  unchanged.

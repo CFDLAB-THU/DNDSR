@@ -26,6 +26,9 @@
 
 namespace DNDS::Geom
 {
+    // Forward declaration for registerAdj overload
+    template <class TPair> struct AdjWithState;
+
     // =================================================================
     // EntityKind: logical entity roles
     // =================================================================
@@ -866,6 +869,13 @@ namespace DNDS::Geom
             // pLGhostMapping lives on trans (transformer-level).
             stored.trans.pLGhostMapping = pair.trans.pLGhostMapping;
             registerAdj(kind, std::move(adjVar));
+        }
+
+        /// Overload for AdjWithState<TPair>: unwrap to base TPair.
+        template <class TPair>
+        void registerAdj(AdjKind kind, AdjWithState<TPair> &pair)
+        {
+            registerAdj(kind, static_cast<TPair &>(pair));
         }
 
         /// Register a GlobalOffsetsMapping for an EntityKind.
