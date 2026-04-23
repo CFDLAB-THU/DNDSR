@@ -168,6 +168,8 @@ namespace DNDS::Geom
             { return this->NodeIndexLocal2Global_NoSon(v); });
 
         this->adjN2CBState = Adj_PointToGlobal;
+        node2cell.idx.markGlobal();
+        node2bnd.idx.markGlobal();
 
         // if (mpi.rank == 0)
         // {
@@ -446,8 +448,9 @@ namespace DNDS::Geom
                     // }
                 }
         }
+        cell2cell.idx.markGlobal();
+        bnd2cell.idx.markGlobal();
     }
-
     void UnstructuredMesh::
         BuildGhostPrimaryLegacy()
     {
@@ -583,9 +586,21 @@ namespace DNDS::Geom
                 }
             }
         }
-    }
 
-    /// @todo //TODO: handle periodic cases
+        // Wire per-adjacency target mappings (mirrors BuildGhostPrimary)
+        {
+            auto cellGhostMap = cellElemInfo.trans.pLGhostMapping;
+            auto nodeGhostMap = coords.trans.pLGhostMapping;
+            auto bndGhostMap = bndElemInfo.trans.pLGhostMapping;
+
+            cell2node.idx.wireTargetMapping(nodeGhostMap);
+            bnd2node.idx.wireTargetMapping(nodeGhostMap);
+            cell2cell.idx.wireTargetMapping(cellGhostMap);
+            bnd2cell.idx.wireTargetMapping(cellGhostMap);
+            node2cell.idx.wireTargetMapping(cellGhostMap);
+            node2bnd.idx.wireTargetMapping(bndGhostMap);
+        }
+    }
     void UnstructuredMesh::
         InterpolateFaceLegacy()
     {
@@ -622,6 +637,14 @@ namespace DNDS::Geom
             face2cell, face2node, face2nodePbi, faceElemInfo,
             cell2face, isPeriodic, mpi.comm);
         adjFacialState = Adj_PointToLocal;
+        // Wire facial target mappings (ghost mappings available from BuildGhostPrimaryLegacy).
+        face2node.idx.wireTargetMapping(coords.trans.pLGhostMapping);
+        face2cell.idx.wireTargetMapping(cellElemInfo.trans.pLGhostMapping);
+        face2bnd.idx.wireTargetMapping(bndElemInfo.trans.pLGhostMapping);
+        // CompactFacesAndRemapCell2Face produced local indices; mark accordingly.
+        face2node.idx.markLocal();
+        face2cell.idx.markLocal();
+        face2bnd.idx.markLocal();
 
         // Section E: Match boundary elements to faces
         MatchBoundariesToFaces(
@@ -656,6 +679,11 @@ namespace DNDS::Geom
         faceElemInfo.BorrowAndPull(face2cell);
         face2bnd.BorrowAndPull(face2cell);
 
+        // Wire facial target mappings (ghost mappings now available)
+        face2node.idx.wireTargetMapping(coords.trans.pLGhostMapping);
+        face2cell.idx.wireTargetMapping(cellElemInfo.trans.pLGhostMapping);
+        face2bnd.idx.wireTargetMapping(bndElemInfo.trans.pLGhostMapping);
+
         this->AdjGlobal2LocalFacial();
 
         // Section G: Assign ghost faces to cell2face entries marked -1
@@ -666,7 +694,17 @@ namespace DNDS::Geom
 
         cell2face.father->Compress();
         cell2face.son->Compress();
+        // Wire C2F target mappings (face ghost mapping available from facial pull).
+        {
+            auto faceGhostMap = face2cell.trans.pLGhostMapping;
+            cell2face.idx.wireTargetMapping(faceGhostMap);
+            bnd2face.idx.wireTargetMapping(faceGhostMap);
+        }
+        // CompactFacesAndRemapCell2Face + AssignGhostFacesToCells produced
+        // local face indices in cell2face; bnd2face is empty but tracks state.
         adjC2FState = Adj_PointToLocal;
+        cell2face.idx.markLocal();
+        bnd2face.idx.markLocal();
 
         // Section H: Communicate cell2face and bnd2face ghost data
         this->AdjLocal2GlobalC2F();

@@ -433,6 +433,8 @@ namespace DNDS::Geom
             bnd2bndOrig[iBnd] = meshO1.bnd2bndOrig[iBnd];
         }
         adjPrimaryState = Adj_PointToGlobal;
+        cell2node.idx.markGlobal();
+        bnd2node.idx.markGlobal();
 
         coords.son = make_ssp<decltype(coords.son)::element_type>(ObjName{"BuildO2FromO1Elevation::coords.son"}, mpi); // delete because reconstructed later
 
@@ -476,6 +478,8 @@ namespace DNDS::Geom
         DNDS_assert(O2MeshIsO2);
         DNDS_assert(meshO2.adjPrimaryState == Adj_PointToGlobal);
         adjPrimaryState = meshO2.adjPrimaryState;
+        cell2node.idx.markGlobal();
+        bnd2node.idx.markGlobal();
         mRank = meshO2.mRank;
         mpi = meshO2.mpi;
         dim = meshO2.dim;
