@@ -16,8 +16,8 @@
  */
 
 #include "CFV/FiniteVolume.hpp"
-#include "Geom/Mesh.hpp"
-#include "DNDS/CUDA_Utils.hpp"
+#include "Geom/Mesh/Mesh.hpp"
+#include "DNDS/Device/CUDA_Utils.hpp"
 
 #include <cmath>
 #include <iostream>

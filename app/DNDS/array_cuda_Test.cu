@@ -7,7 +7,7 @@
 #include "DNDS/ArrayDerived/ArrayEigenMatrixBatch.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
 #include "DNDS/ArrayPair.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 
 #include <iostream>
 

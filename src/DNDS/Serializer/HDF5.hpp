@@ -1,0 +1,46 @@
+#pragma once
+/// @file HDF5.hpp
+/// @brief HDF5 native type mappings for DNDS index, rowsize, and real types.
+
+#include "DNDS/Defines.hpp"
+#include <hdf5.h>
+
+namespace DNDS
+{
+    /// @brief HDF5 native datatype matching DNDS #index (currently `H5T_NATIVE_INT64`).
+    /// @details Static-asserts that the DNDS type has not drifted from `int64_t`.
+    inline hid_t DNDS_H5T_INDEX()
+    {
+        if constexpr (std::is_same_v<index, int64_t>)
+            return H5T_NATIVE_INT64;
+        else
+        {
+            static_assert(std::is_same_v<index, int64_t>, "index type not right");
+            return H5T_NATIVE_INT64;
+        }
+    }
+
+    /// @brief HDF5 native datatype matching DNDS #rowsize (currently `H5T_NATIVE_INT32`).
+    inline hid_t DNDS_H5T_ROWSIZE()
+    {
+        if constexpr (std::is_same_v<rowsize, int32_t>)
+            return H5T_NATIVE_INT32;
+        else
+        {
+            static_assert(std::is_same_v<rowsize, int32_t>, "rowsize type not right");
+            return H5T_NATIVE_INT32;
+        }
+    }
+
+    /// @brief HDF5 native datatype matching DNDS #real (currently `H5T_NATIVE_DOUBLE`).
+    inline hid_t DNDS_H5T_REAL()
+    {
+        if constexpr (std::is_same_v<real, double>)
+            return H5T_NATIVE_DOUBLE;
+        else
+        {
+            static_assert(std::is_same_v<real, double>, "real type not right");
+            return H5T_NATIVE_DOUBLE;
+        }
+    }
+}

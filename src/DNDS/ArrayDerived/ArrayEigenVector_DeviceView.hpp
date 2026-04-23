@@ -3,9 +3,9 @@
 /// @brief Device-callable view type for @ref DNDS::ArrayEigenVector "ArrayEigenVector"; `operator[]` returns
 /// an `Eigen::Map<Vector>` suitable for use inside CUDA kernels.
 
-#include "../DeviceView.hpp"
+#include "DNDS/Device/DeviceView.hpp"
 #include "DNDS/Defines.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "Eigen/src/Core/util/Constants.h"
 
 namespace DNDS

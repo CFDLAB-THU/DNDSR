@@ -1,6 +1,6 @@
 #include "DNDS/ArrayDOF.hpp"
 #include "DNDS/Defines.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "DNDS/MPI.hpp"
 
 namespace DNDS::arrayDOF_test

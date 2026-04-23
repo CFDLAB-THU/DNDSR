@@ -30,10 +30,10 @@
 
 #    include "Defines.hpp"
 #    include "ArrayBasic.hpp"
-#    include "DeviceStorage.hpp"
-#    include "DeviceView.hpp"
-#    include "SerializerBase.hpp"
-#    include "SerializerJSON.hpp"
+#    include "Device/DeviceStorage.hpp"
+#    include "Device/DeviceView.hpp"
+#    include "Serializer/SerializerBase.hpp"
+#    include "Serializer/SerializerJSON.hpp"
 #    include "Vector.hpp"
 
 namespace DNDS

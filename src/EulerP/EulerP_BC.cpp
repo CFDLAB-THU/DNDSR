@@ -1,5 +1,5 @@
 #include "EulerP_BC.hpp"
-#include "DNDS/DeviceStorage.hxx" // we use this for device storage code
+#include "DNDS/Device/DeviceStorage.hxx" // we use this for device storage code
 
 namespace DNDS::EulerP
 {

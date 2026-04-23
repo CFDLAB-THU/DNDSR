@@ -10,9 +10,9 @@
 #include "Array.hpp"
 #include "ArrayTransformer.hpp"
 #include "ArrayPair.hpp"
-#include "SerializerBase.hpp"
+#include "Serializer/SerializerBase.hpp"
 #include "DNDS/Defines.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "Defines_bind.hpp"
 
 #include <pybind11/numpy.h>

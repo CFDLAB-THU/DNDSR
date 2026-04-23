@@ -6,7 +6,7 @@
 /// FiniteVolume::BuildUDof and BuildUGradD delegate to these.
 
 #include "VRDefines.hpp"
-#include "Geom/Mesh.hpp"
+#include "Geom/Mesh/Mesh.hpp"
 
 namespace DNDS::CFV
 {

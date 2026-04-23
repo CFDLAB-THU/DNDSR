@@ -86,8 +86,8 @@
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 
-#include "Geom/Mesh.hpp"
-#include "DNDS/SerializerH5.hpp"
+#include "Geom/Mesh/Mesh.hpp"
+#include "DNDS/Serializer/SerializerH5.hpp"
 #include <string>
 #include <filesystem>
 #include <algorithm>

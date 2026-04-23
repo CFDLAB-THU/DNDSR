@@ -2,7 +2,7 @@
 #include "DNDS/Defines.hpp"
 #include "DNDS/MPI.hpp"
 #include "Scalar.hpp"
-#include "DNDS/JsonUtil.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
 
 namespace DNDS::ODE
 {

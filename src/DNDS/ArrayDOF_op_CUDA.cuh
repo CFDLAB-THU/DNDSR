@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ArrayDOF.hpp"
-// #include "DNDS/CUDA_Utils.hpp"
+// #include "DNDS/Device/CUDA_Utils.hpp"
 #include "DNDS/Defines.hpp"
 #include "DNDS/Errors.hpp"
 #include "mpi.h"

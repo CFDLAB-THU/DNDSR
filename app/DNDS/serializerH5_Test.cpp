@@ -1,4 +1,4 @@
-#include "DNDS/SerializerH5.hpp"
+#include "DNDS/Serializer/SerializerH5.hpp"
 #include <iostream>
 
 void testSerializerH5(const DNDS::MPIInfo &mpiInfo)

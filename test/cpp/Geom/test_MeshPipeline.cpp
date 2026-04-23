@@ -22,7 +22,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 
-#include "Geom/Mesh.hpp"
+#include "Geom/Mesh/Mesh.hpp"
 #include "Geom/BoundaryCondition.hpp"
 #include <string>
 #include <vector>

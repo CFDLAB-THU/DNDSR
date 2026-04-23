@@ -1,5 +1,5 @@
 #include "VRDefines.hpp"
-#include "DNDS/DeviceStorage.hxx"
+#include "DNDS/Device/DeviceStorage.hxx"
 
 namespace DNDS
 {

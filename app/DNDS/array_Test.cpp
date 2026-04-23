@@ -1,7 +1,7 @@
 #include "DNDS/Array.hpp"
 
-#include "DNDS/SerializerBase.hpp"
-#include "DNDS/SerializerJSON.hpp"
+#include "DNDS/Serializer/SerializerBase.hpp"
+#include "DNDS/Serializer/SerializerJSON.hpp"
 
 int main()
 {

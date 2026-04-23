@@ -8,9 +8,9 @@
  *  the backend-specific kernel methods.
  */
 #include "EulerP_Evaluator.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "DNDS/Errors.hpp"
-#include "DNDS/DeviceStorageHelper.hpp"
+#include "DNDS/Device/DeviceStorageHelper.hpp"
 #include "EulerP/EulerP.hpp"
 #include "EulerP_Evaluator_impl.hpp"
 #include <type_traits>

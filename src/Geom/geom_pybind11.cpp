@@ -1,7 +1,7 @@
 
 #include "Boundary_bind.hpp"
 #include "Elements_bind.hpp"
-#include "Mesh_bind.hpp"
+#include "Mesh/Mesh_bind.hpp"
 
 PYBIND11_MODULE(geom_pybind11, m)
 {
