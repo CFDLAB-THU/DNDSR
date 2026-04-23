@@ -2,6 +2,7 @@
 #include "Mesh_PartitionHelpers.hpp"
 #include "Mesh_InterpolateHelpers.hpp"
 #include "MeshConnectivity.hpp"
+#include "MeshConnectivity_StateChecked.hpp"
 #include "Solver/Direct.hpp"
 
 #include <cstdlib>
@@ -181,6 +182,9 @@ namespace DNDS::Geom
                 log() << std::endl;
         }
         mesh->adjPrimaryState = Adj_PointToGlobal;
+        mesh->cell2node.idx.state = Adj_PointToGlobal;
+        mesh->bnd2node.idx.state = Adj_PointToGlobal;
+        mesh->bnd2cell.idx.state = Adj_PointToGlobal;
         if (mesh->getMPI().rank == mRank)
             DNDS::log() << "UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell" << std::endl;
     }
@@ -372,8 +376,8 @@ namespace DNDS::Geom
         if (!cell2node.father->pLGlobalMapping)
             cell2node.father->createGlobalMapping();
 
-        // node2cell via DSL Inverse
-        auto dslN2C = MeshConnectivity::Inverse(
+        // node2cell via DSL Inverse (cell2node must be in global state)
+        auto dslN2C = CheckedInverse(
             cell2node, coords.father->Size(), mpi,
             [this](index i) { return this->CellIndexLocal2Global_NoSon(i); },
             [this](index i) { return this->NodeIndexLocal2Global_NoSon(i); },
@@ -390,11 +394,11 @@ namespace DNDS::Geom
                 node2cell.father->operator()(iNode, j) = row[j];
         }
 
-        // node2bnd via DSL Inverse
+        // node2bnd via DSL Inverse (bnd2node must be in global state)
         if (!bnd2node.father->pLGlobalMapping)
             bnd2node.father->createGlobalMapping();
 
-        auto dslN2B = MeshConnectivity::Inverse(
+        auto dslN2B = CheckedInverse(
             bnd2node, coords.father->Size(), mpi,
             [this](index i) { return this->BndIndexLocal2Global_NoSon(i); },
             [this](index i) { return this->NodeIndexLocal2Global_NoSon(i); },
@@ -411,6 +415,8 @@ namespace DNDS::Geom
         }
 
         this->adjN2CBState = Adj_PointToGlobal;
+        node2cell.idx.state = Adj_PointToGlobal;
+        node2bnd.idx.state = Adj_PointToGlobal;
     }
 
     void UnstructuredMesh::RecoverCell2CellAndBnd2Cell()
@@ -465,8 +471,8 @@ namespace DNDS::Geom
         for (index i = 0; i < node2cell.Size(); i++)
             nodeG2L[node2cell.trans.pLGhostMapping->operator()(-1, i)] = i;
 
-        // cell2cell via DSL ComposeFiltered
-        auto dslC2C = MeshConnectivity::ComposeFiltered(
+        // cell2cell via DSL ComposeFiltered (inputs must be in global state)
+        auto dslC2C = CheckedComposeFiltered(
             cell2node, node2cell,
             cell2node.father->Size(),
             nodeG2L,
@@ -561,7 +567,8 @@ namespace DNDS::Geom
             };
         }
 
-        auto dslB2C = MeshConnectivity::ComposeFiltered<NonUniformSize, NonUniformSize, 2>(
+        // bnd2cell via ComposeFiltered (inputs must be in global state)
+        auto dslB2C = CheckedComposeFiltered<NonUniformSize, NonUniformSize, 2>(
             bnd2node, node2cell,
             bnd2node.father->Size(),
             nodeG2L,
@@ -676,6 +683,8 @@ namespace DNDS::Geom
         BuildGhostPrimary()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert(cell2cell.idx.state == Adj_PointToGlobal || cell2cell.idx.state == Adj_Unknown);
+        DNDS_assert(bnd2cell.idx.state == Adj_PointToGlobal || bnd2cell.idx.state == Adj_Unknown);
         DNDS_assert(cell2cell.father && cell2cell.father->Size() == this->NumCell());
         DNDS_assert(bnd2cell.father && bnd2cell.father->Size() == this->NumBnd());
 
@@ -823,6 +832,20 @@ namespace DNDS::Geom
                 }
             }
         }
+
+        // === Wire per-adjacency target mappings for primary adjacencies ===
+        {
+            auto cellGhostMap = cellElemInfo.trans.pLGhostMapping;
+            auto nodeGhostMap = coords.trans.pLGhostMapping;
+            auto bndGhostMap  = bndElemInfo.trans.pLGhostMapping;
+
+            cell2node.idx.wireTargetMapping(nodeGhostMap);
+            bnd2node.idx.wireTargetMapping(nodeGhostMap);
+            cell2cell.idx.wireTargetMapping(cellGhostMap);
+            bnd2cell.idx.wireTargetMapping(cellGhostMap);
+            node2cell.idx.wireTargetMapping(cellGhostMap);
+            node2bnd.idx.wireTargetMapping(bndGhostMap);
+        }
     }
 
     void UnstructuredMesh::
@@ -830,24 +853,20 @@ namespace DNDS::Geom
     {
         // needs results of BuildGhostPrimary()
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
-        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
-        DNDS_assert_info(coords.trans.pLGhostMapping, "trans of coords needed but not built");
+        DNDS_assert_info(cell2node.idx.targetMapping, "cell2node target mapping not wired");
+        DNDS_assert_info(cell2cell.idx.targetMapping, "cell2cell target mapping not wired");
+        DNDS_assert_info(bnd2node.idx.targetMapping, "bnd2node target mapping not wired");
+        DNDS_assert_info(bnd2cell.idx.targetMapping, "bnd2cell target mapping not wired");
 
         /**********************************/
-        // convert bnd2cell, bnd2node, cell2cell, cell2node ptrs global to local
-        ConvertAdjEntries(cell2cell, cell2cell.Size(),
-                          [&](index v) { return CellIndexGlobal2Local(v); });
+        cell2cell.toLocal();
+        cell2node.toLocal();
+        bnd2node.toLocal();
 
-        for (DNDS::index iBnd = 0; iBnd < bnd2cell.Size(); iBnd++)
-            for (DNDS::rowsize j = 0; j < bnd2cell.RowSize(iBnd); j++)
-                bnd2cell(iBnd, j) = CellIndexGlobal2Local(bnd2cell(iBnd, j)),
-                               DNDS_assert(j == 0 ? (iBnd < bnd2cell.father->Size() ? bnd2cell(iBnd, j) >= 0 : true) : true); // father bnds' owner cell must be inside
-
-        ConvertAdjEntries(cell2node, cell2node.Size(),
-                          [&](index v) { auto r = NodeIndexGlobal2Local(v); DNDS_assert(r >= 0); return r; });
-
-        ConvertAdjEntries(bnd2node, bnd2node.Size(),
-                          [&](index v) { auto r = NodeIndexGlobal2Local(v); DNDS_assert(r >= 0); return r; });
+        // bnd2cell: use toLocal() then assert father bnds' slot-0 cell is inside
+        bnd2cell.toLocal();
+        for (DNDS::index iBnd = 0; iBnd < bnd2cell.father->Size(); iBnd++)
+            DNDS_assert(bnd2cell(iBnd, 0) >= 0); // father bnd's owner cell must be found
         /**********************************/
         adjPrimaryState = Adj_PointToLocal;
     }
@@ -856,26 +875,19 @@ namespace DNDS::Geom
         AdjLocal2GlobalPrimary()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToLocal);
-        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
-        DNDS_assert_info(coords.trans.pLGhostMapping, "trans of coords needed but not built");
+        DNDS_assert_info(cell2node.idx.targetMapping, "cell2node target mapping not wired");
+        DNDS_assert_info(cell2cell.idx.targetMapping, "cell2cell target mapping not wired");
+        DNDS_assert_info(bnd2node.idx.targetMapping, "bnd2node target mapping not wired");
+        DNDS_assert_info(bnd2cell.idx.targetMapping, "bnd2cell target mapping not wired");
 
         /**********************************/
-        // convert bnd2cell, bnd2node, cell2cell, cell2node ptrs local to global
-        ConvertAdjEntries(cell2cell, cell2cell.Size(),
-                          [&](index v) { return CellIndexLocal2Global(v); });
-
-        for (DNDS::index iBnd = 0; iBnd < bnd2cell.Size(); iBnd++)
-            for (DNDS::rowsize j = 0; j < bnd2cell.RowSize(iBnd); j++)
-                bnd2cell(iBnd, j) = CellIndexLocal2Global(bnd2cell(iBnd, j)),
-                               DNDS_assert(j == 0 ? (iBnd < bnd2cell.father->Size() ? bnd2cell(iBnd, j) >= 0 : true) : true); // father bnds' owner cell must be inside
-
-        ConvertAdjEntries(cell2node, cell2node.Size(),
-                          [&](index v) { auto r = NodeIndexLocal2Global(v); DNDS_assert(r >= 0); return r; });
-
-        ConvertAdjEntries(bnd2node, bnd2node.Size(),
-                          [&](index v) { auto r = NodeIndexLocal2Global(v); DNDS_assert(r >= 0); return r; });
+        cell2cell.toGlobal();
+        bnd2cell.toGlobal();
+        cell2node.toGlobal();
+        bnd2node.toGlobal();
         /**********************************/
         adjPrimaryState = Adj_PointToGlobal;
+        bnd2node.idx.state = Adj_PointToGlobal;
     }
 
     void UnstructuredMesh::
@@ -883,10 +895,9 @@ namespace DNDS::Geom
     {
         // needs results of BuildGhostPrimary()
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert_info(cell2node.idx.targetMapping, "cell2node target mapping not wired");
         /**********************************/
-        // convert cell2node ptrs global to local
-        ConvertAdjEntries(cell2node, cell2node.Size(),
-                          [&](index v) { auto r = NodeIndexGlobal2Local(v); DNDS_assert(r >= 0); return r; });
+        cell2node.toLocal();
         /**********************************/
         adjPrimaryState = Adj_PointToLocal;
     }
@@ -895,10 +906,9 @@ namespace DNDS::Geom
         AdjLocal2GlobalPrimaryForBnd() // a reduction of primary version
     {
         DNDS_assert(adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert_info(cell2node.idx.targetMapping, "cell2node target mapping not wired");
         /**********************************/
-        // convert cell2node ptrs local to global
-        ConvertAdjEntries(cell2node, cell2node.Size(),
-                          [&](index v) { auto r = NodeIndexLocal2Global(v); DNDS_assert(r >= 0); return r; });
+        cell2node.toGlobal();
         /**********************************/
         adjPrimaryState = Adj_PointToGlobal;
     }
@@ -907,35 +917,11 @@ namespace DNDS::Geom
         AdjGlobal2LocalFacial()
     {
         DNDS_assert(adjFacialState == Adj_PointToGlobal);
+        DNDS_assert_info(face2node.idx.targetMapping, "face2node target mapping not wired");
+        DNDS_assert_info(face2cell.idx.targetMapping, "face2cell target mapping not wired");
         /**********************************/
-        // convert face2cell ptrs and face2node ptrs global to local
-#ifdef DNDS_USE_OMP
-#    pragma omp parallel for
-#endif
-        for (DNDS::index iFace = 0; iFace < face2cell.Size(); iFace++)
-        {
-            for (rowsize if2n = 0; if2n < face2node.RowSize(iFace); if2n++)
-            {
-                index &iNode = face2node(iFace, if2n);
-                index val;
-                MPI_int rank;
-                auto ret = coords.trans.pLGhostMapping->search_indexAppend(iNode, rank, val);
-                DNDS_assert(ret);
-                iNode = val;
-            }
-            for (rowsize if2c = 0; if2c < 2; if2c++)
-            {
-                index &iCell = face2cell(iFace, if2c);
-                if (iCell != UnInitIndex) // is not a bnd
-                {
-                    index val;
-                    MPI_int rank;
-                    auto ret = cell2node.trans.pLGhostMapping->search_indexAppend(iCell, rank, val);
-                    DNDS_assert(ret);
-                    iCell = val;
-                }
-            }
-        }
+        face2node.toLocalOMP();
+        face2cell.toLocalOMP();
         /**********************************/
         adjFacialState = Adj_PointToLocal;
     }
@@ -944,27 +930,13 @@ namespace DNDS::Geom
         AdjLocal2GlobalFacial()
     {
         DNDS_assert(adjFacialState == Adj_PointToLocal);
+        DNDS_assert_info(face2node.idx.targetMapping, "face2node target mapping not wired");
+        DNDS_assert_info(face2cell.idx.targetMapping, "face2cell target mapping not wired");
+        DNDS_assert_info(face2bnd.idx.targetMapping, "face2bnd target mapping not wired");
         /**********************************/
-        // convert face2cell ptrs and face2node ptrs to global
-#ifdef DNDS_USE_OMP
-#    pragma omp parallel for
-#endif
-        for (DNDS::index iFace = 0; iFace < face2cell.Size(); iFace++)
-        {
-            for (rowsize if2n = 0; if2n < face2node.RowSize(iFace); if2n++)
-            {
-                index &iNode = face2node(iFace, if2n);
-                iNode = coords.trans.pLGhostMapping->operator()(-1, iNode);
-            }
-            for (rowsize if2c = 0; if2c < 2; if2c++)
-            {
-                index &iCell = face2cell(iFace, if2c);
-                if (iCell != UnInitIndex) // is not a bnd
-                    iCell = cell2node.trans.pLGhostMapping->operator()(-1, iCell);
-            }
-            index &iBnd = face2bnd(iFace);
-            iBnd = this->BndIndexGlobal2Local(iBnd);
-        }
+        face2node.toGlobalOMP();
+        face2cell.toGlobalOMP();
+        face2bnd.toGlobal();
         // MPI::Barrier(mpi.comm);
         /**********************************/
         adjFacialState = Adj_PointToGlobal;
@@ -974,11 +946,11 @@ namespace DNDS::Geom
         AdjLocal2GlobalC2F()
     {
         DNDS_assert(adjC2FState == Adj_PointToLocal);
+        DNDS_assert_info(cell2face.idx.targetMapping, "cell2face target mapping not wired");
+        DNDS_assert_info(bnd2face.idx.targetMapping, "bnd2face target mapping not wired");
         /**********************************/
-        ConvertAdjEntriesOMP(cell2face, cell2face.Size(),
-                             [&](index v) { return FaceIndexLocal2Global(v); });
-        ConvertAdjEntries(bnd2face, bnd2face.Size(),
-                          [&](index v) { return FaceIndexLocal2Global(v); });
+        cell2face.toGlobalOMP();
+        bnd2face.toGlobal();
         /**********************************/
         adjC2FState = Adj_PointToGlobal;
     }
@@ -987,11 +959,11 @@ namespace DNDS::Geom
         AdjGlobal2LocalC2F()
     {
         DNDS_assert(adjC2FState == Adj_PointToGlobal);
+        DNDS_assert_info(cell2face.idx.targetMapping, "cell2face target mapping not wired");
+        DNDS_assert_info(bnd2face.idx.targetMapping, "bnd2face target mapping not wired");
         /**********************************/
-        ConvertAdjEntriesOMP(cell2face, cell2face.Size(),
-                             [&](index v) { return FaceIndexGlobal2Local(v); });
-        ConvertAdjEntries(bnd2face, bnd2face.Size(),
-                          [&](index v) { return FaceIndexGlobal2Local(v); });
+        cell2face.toLocalOMP();
+        bnd2face.toLocal();
         /**********************************/
         adjC2FState = Adj_PointToLocal;
     }
@@ -1012,19 +984,20 @@ namespace DNDS::Geom
         node2bnd.trans.BorrowGGIndexing(coords.trans);
         node2bnd.trans.createMPITypes();
         node2bnd.trans.pullOnce();
+
+        node2cell.idx.state = Adj_PointToGlobal;
+        node2bnd.idx.state = Adj_PointToGlobal;
     }
 
     void UnstructuredMesh::
         AdjLocal2GlobalN2CB()
     {
         DNDS_assert(adjN2CBState == Adj_PointToLocal);
-        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
-        DNDS_assert_info(bndElemInfo.trans.pLGhostMapping, "trans of bndElemInfo needed but not built");
+        DNDS_assert_info(node2cell.idx.targetMapping, "node2cell target mapping not wired");
+        DNDS_assert_info(node2bnd.idx.targetMapping, "node2bnd target mapping not wired");
         /**********************************/
-        ConvertAdjEntriesOMP(node2cell, node2cell.Size(),
-                             [&](index v) { return CellIndexLocal2Global(v); });
-        ConvertAdjEntriesOMP(node2bnd, node2bnd.Size(),
-                             [&](index v) { return BndIndexLocal2Global(v); }); // ! bnd has son now
+        node2cell.toGlobalOMP();
+        node2bnd.toGlobalOMP();
         /**********************************/
         adjN2CBState = Adj_PointToGlobal;
     }
@@ -1033,13 +1006,11 @@ namespace DNDS::Geom
         AdjGlobal2LocalN2CB()
     {
         DNDS_assert(adjN2CBState == Adj_PointToGlobal);
-        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
-        DNDS_assert_info(bndElemInfo.trans.pLGhostMapping, "trans of bndElemInfo needed but not built");
+        DNDS_assert_info(node2cell.idx.targetMapping, "node2cell target mapping not wired");
+        DNDS_assert_info(node2bnd.idx.targetMapping, "node2bnd target mapping not wired");
         /**********************************/
-        ConvertAdjEntriesOMP(node2cell, node2cell.Size(),
-                             [&](index v) { return CellIndexGlobal2Local(v); });
-        ConvertAdjEntriesOMP(node2bnd, node2bnd.Size(),
-                             [&](index v) { return BndIndexGlobal2Local(v); }); // ! bnd has son now
+        node2cell.toLocalOMP();
+        node2bnd.toLocalOMP();
         /**********************************/
         adjN2CBState = Adj_PointToLocal;
     }
@@ -1114,17 +1085,20 @@ namespace DNDS::Geom
         cell2cellFace.trans.createMPITypes();
         cell2cellFace.trans.pullOnce(); // warning! to pull the adj, must be in global state!
         adjC2CFaceState = Adj_PointToGlobal;
+        cell2cellFace.idx.state = Adj_PointToGlobal;
+
+        // Wire cell2cellFace target mapping (points to cells)
+        cell2cellFace.idx.wireTargetMapping(cellElemInfo.trans.pLGhostMapping);
     }
 
     void UnstructuredMesh::AdjLocal2GlobalC2CFace()
     {
         // needs results of BuildGhostPrimary()
         DNDS_assert(adjC2CFaceState == Adj_PointToLocal);
-        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
+        DNDS_assert_info(cell2cellFace.idx.targetMapping, "cell2cellFace target mapping not wired");
 
         /**********************************/
-        ConvertAdjEntries(cell2cellFace, cell2cellFace.Size(),
-                          [&](index v) { return CellIndexLocal2Global(v); });
+        cell2cellFace.toGlobal();
         /**********************************/
 
         adjC2CFaceState = Adj_PointToGlobal;
@@ -1134,11 +1108,10 @@ namespace DNDS::Geom
     {
         // needs results of BuildGhostPrimary()
         DNDS_assert(adjC2CFaceState == Adj_PointToGlobal);
-        DNDS_assert_info(cellElemInfo.trans.pLGhostMapping, "trans of cellElemInfo needed but not built");
+        DNDS_assert_info(cell2cellFace.idx.targetMapping, "cell2cellFace target mapping not wired");
 
         /**********************************/
-        ConvertAdjEntries(cell2cellFace, cell2cellFace.Size(),
-                          [&](index v) { return CellIndexGlobal2Local(v); });
+        cell2cellFace.toLocal();
         /**********************************/
 
         adjC2CFaceState = Adj_PointToLocal;
@@ -1274,7 +1247,7 @@ namespace DNDS::Geom
         };
 
         // === Section D: InterpolateGlobal (e2p_rs=2: face2cell is fixed-width) ===
-        auto globalResult = MeshConnectivity::InterpolateGlobal<NonUniformSize, 2>(
+        auto globalResult = CheckedInterpolateGlobal<NonUniformSize, 2>(
             cell2node, isPeriodic ? cell2nodePbi : tPbiPair{},
             *cell2node.trans.pLGhostMapping,
             *cell2node.father->pLGlobalMapping,
@@ -1365,13 +1338,20 @@ namespace DNDS::Geom
 
         // Convert face arrays to local indices.
         adjFacialState = Adj_PointToGlobal;
+        face2node.idx.state = Adj_PointToGlobal;
+        face2cell.idx.state = Adj_PointToGlobal;
+        face2bnd.idx.state = Adj_PointToGlobal;
         AdjGlobal2LocalFacial();
 
         // Convert cell2face to local face indices (father + son).
         adjC2FState = Adj_PointToGlobal;
+        cell2face.idx.state = Adj_PointToGlobal;
+        bnd2face.idx.state = Adj_PointToGlobal;
         ConvertAdjEntries(cell2face, cell2face.Size(),
                           [&](index v) { return FaceIndexGlobal2Local(v); });
         adjC2FState = Adj_PointToLocal;
+        cell2face.idx.state = Adj_PointToLocal;
+        bnd2face.idx.state = Adj_PointToLocal;
     }
 
     void UnstructuredMesh::
@@ -1394,6 +1374,20 @@ namespace DNDS::Geom
         bnd2face.trans.createMPITypes();
         bnd2face.trans.pullOnce();
         this->AdjGlobal2LocalC2F();
+
+        // === Wire per-adjacency target mappings for facial/C2F adjacencies ===
+        {
+            auto cellGhostMap = cellElemInfo.trans.pLGhostMapping;
+            auto nodeGhostMap = coords.trans.pLGhostMapping;
+            auto faceGhostMap = face2node.trans.pLGhostMapping;
+            auto bndGhostMap  = bndElemInfo.trans.pLGhostMapping;
+
+            face2node.idx.wireTargetMapping(nodeGhostMap);
+            face2cell.idx.wireTargetMapping(cellGhostMap);
+            cell2face.idx.wireTargetMapping(faceGhostMap);
+            bnd2face.idx.wireTargetMapping(faceGhostMap);
+            face2bnd.idx.wireTargetMapping(bndGhostMap);
+        }
     }
 
     void UnstructuredMesh::

@@ -163,6 +163,8 @@ namespace DNDS::Geom
         readFatherAt(bnd2bndOrig.father, bnd2bndOrig.son, "bnd2bndOrig");
 
         adjPrimaryState = Adj_PointToGlobal;
+        cell2node.idx.state = Adj_PointToGlobal;
+        bnd2node.idx.state = Adj_PointToGlobal;
 
         if (mpi.rank == 0)
             log() << "UnstructuredMesh === ReadSerializeAndDistribute: even-split read done, "
@@ -520,6 +522,8 @@ namespace DNDS::Geom
         }
 
         adjPrimaryState = Adj_PointToGlobal;
+        cell2node.idx.state = Adj_PointToGlobal;
+        bnd2node.idx.state = Adj_PointToGlobal;
     }
 
 } // namespace DNDS::Geom
