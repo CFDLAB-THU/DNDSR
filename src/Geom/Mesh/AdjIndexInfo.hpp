@@ -66,13 +66,22 @@ namespace DNDS::Geom
             _state = Adj_PointToGlobal;
         }
 
-        /// \brief Force state without conversion (legacy ConvertAdjEntries paths).
+        /// \brief Mark this adjacency as containing local indices.
         ///
-        /// This bypasses the normal state machine. Use ONLY for code paths
-        /// that perform index conversion via ConvertAdjEntries instead of
-        /// toLocal/toGlobal.
-        /// \todo Eliminate once all ConvertAdjEntries call sites are migrated.
-        void setStateUnchecked(MeshAdjState s) { _state = s; }
+        /// Valid from Adj_Unknown only.  Requires target mapping to be wired
+        /// (needed for future toGlobal calls).
+        /// Use when an adjacency is populated directly with local indices,
+        /// bypassing the normal global->local pipeline.
+        void markLocal()
+        {
+            DNDS_assert_info(
+                _state == Adj_Unknown,
+                "markLocal: expected Adj_Unknown state");
+            DNDS_assert_info(
+                _targetMapping,
+                "markLocal: target mapping must be wired before marking local");
+            _state = Adj_PointToLocal;
+        }
 
         /// \brief Attach the target entity's ghost mapping.
         ///

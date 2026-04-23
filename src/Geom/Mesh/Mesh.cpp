@@ -1357,15 +1357,20 @@ namespace DNDS::Geom
         AdjGlobal2LocalFacial();
 
         // Convert cell2face to local face indices (father + son).
+        // Wire target mapping first (face ghost mapping available from BuildGhostFace).
+        {
+            auto faceGhostMap = face2cell.trans.pLGhostMapping;
+            cell2face.idx.wireTargetMapping(faceGhostMap);
+            bnd2face.idx.wireTargetMapping(faceGhostMap);
+        }
         adjC2FState = Adj_PointToGlobal;
         cell2face.idx.markGlobal();
         bnd2face.idx.markGlobal();
-        ConvertAdjEntries(cell2face, cell2face.Size(),
-                          [&](index v)
-                          { return FaceIndexGlobal2Local(v); });
+        cell2face.toLocalOMP();
         adjC2FState = Adj_PointToLocal;
-        cell2face.idx.setStateUnchecked(Adj_PointToLocal);
-        bnd2face.idx.setStateUnchecked(Adj_PointToLocal);
+        // bnd2face has no entries yet (populated in MatchFaceBoundary),
+        // but its state must track cell2face for the group invariant.
+        bnd2face.toLocal();
     }
 
     void UnstructuredMesh::
@@ -1377,16 +1382,8 @@ namespace DNDS::Geom
         face2bnd.BorrowAndPull(face2cell);
 
         // Communicate cell2face and bnd2face ghost data.
-        // cell2face.father is local; convert to global for pull.
-        // Use ConvertAdjEntries (not AdjLocal2GlobalC2F) because target
-        // mappings are not yet wired for C2F adjacencies.
-        DNDS_assert(adjC2FState == Adj_PointToLocal);
-        ConvertAdjEntries(cell2face, cell2face.Size(),
-                          [&](index v)
-                          { return FaceIndexLocal2Global(v); });
-        adjC2FState = Adj_PointToGlobal;
-        cell2face.idx.setStateUnchecked(Adj_PointToGlobal);
-        bnd2face.idx.setStateUnchecked(Adj_PointToGlobal);
+        // cell2face/bnd2face are already wired (BuildGhostFace).
+        this->AdjLocal2GlobalC2F();
         cell2face.TransAttach();
         cell2face.trans.BorrowGGIndexing(cell2node.trans);
         cell2face.trans.createMPITypes();
@@ -1396,17 +1393,8 @@ namespace DNDS::Geom
         bnd2face.trans.createMPITypes();
         bnd2face.trans.pullOnce();
 
-        // Wire per-adjacency target mappings for C2F and bnd-face adjacencies.
-        // face2node and face2cell are already wired in BuildGhostFace().
-        // Wire here while cell2face/bnd2face are in global state (after pull).
-        {
-            auto faceGhostMap = face2node.trans.pLGhostMapping;
-            auto bndGhostMap = bndElemInfo.trans.pLGhostMapping;
-
-            cell2face.idx.wireTargetMapping(faceGhostMap);
-            bnd2face.idx.wireTargetMapping(faceGhostMap);
-            face2bnd.idx.wireTargetMapping(bndGhostMap);
-        }
+        // Wire face2bnd target mapping (not wired in BuildGhostFace).
+        face2bnd.idx.wireTargetMapping(bndElemInfo.trans.pLGhostMapping);
 
         this->AdjGlobal2LocalC2F();
     }
@@ -1568,6 +1556,8 @@ namespace DNDS::Geom
         cell2cellOrig.trans.createMPITypes();
         node2nodeOrig.trans.createMPITypes();
         adjPrimaryState = Adj_PointToGlobal; // the file is pointing to local
+        cell2node.idx.markGlobal();
+        bnd2node.idx.markGlobal();
 
         index nCellG = this->NumCellGlobal(); // collective call!
         index nNodeG = this->NumNodeGlobal(); // collective call!
@@ -1755,6 +1745,10 @@ namespace DNDS::Geom
         bMesh.cell2cellOrig.father->createGlobalMapping();
 
         bMesh.adjPrimaryState = Adj_PointToLocal;
+        // bMesh.cell2node was populated directly with local indices.
+        // Wire the target mapping (bMesh's node ghost mapping), then mark local.
+        bMesh.cell2node.idx.wireTargetMapping(bMesh.coords.trans.pLGhostMapping);
+        bMesh.cell2node.idx.markLocal();
         if (mpi.rank == mRank)
             log() << "UnstructuredMesh === ConstructBndMesh Done" << std::endl;
     }
