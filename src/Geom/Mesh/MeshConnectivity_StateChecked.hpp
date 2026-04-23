@@ -31,7 +31,7 @@ namespace DNDS::Geom
         const AdjWithState<ArrayAdjacencyPair<cone_rs>> &cone,
         TArgs &&...args)
     {
-        DNDS_assert_info(cone.idx.state == Adj_PointToGlobal,
+        DNDS_assert_info(cone.idx.state() == Adj_PointToGlobal,
                          "CheckedInverse: cone must be in Adj_PointToGlobal state");
         return MeshConnectivity::Inverse<cone_rs>(
             static_cast<const ArrayAdjacencyPair<cone_rs> &>(cone),
@@ -56,9 +56,9 @@ namespace DNDS::Geom
         Predicate &&pred,
         TArgs &&...args)
     {
-        DNDS_assert_info(AB.idx.state == Adj_PointToGlobal,
+        DNDS_assert_info(AB.idx.state() == Adj_PointToGlobal,
                          "CheckedComposeFiltered: AB must be in Adj_PointToGlobal state");
-        DNDS_assert_info(BC.idx.state == Adj_PointToGlobal,
+        DNDS_assert_info(BC.idx.state() == Adj_PointToGlobal,
                          "CheckedComposeFiltered: BC must be in Adj_PointToGlobal state");
         return MeshConnectivity::ComposeFiltered<rs_AB, rs_BC, out_rs>(
             static_cast<const ArrayAdjacencyPair<rs_AB> &>(AB),
@@ -87,11 +87,11 @@ namespace DNDS::Geom
         const OwnershipResolverMulti &resolver,
         const MPIInfo &mpi)
     {
-        DNDS_assert_info(parent2node.idx.state == Adj_PointToLocal,
+        DNDS_assert_info(parent2node.idx.state() == Adj_PointToLocal,
                          "CheckedInterpolateGlobal: parent2node must be in Adj_PointToLocal state");
         // Verify mapping consistency when wired
-        DNDS_assert_info(!parent2node.idx.targetMapping ||
-                             parent2node.idx.targetMapping.get() == &nodeGhostMapping,
+        DNDS_assert_info(!parent2node.idx.isWired() ||
+                             parent2node.idx.mapping().get() == &nodeGhostMapping,
                          "CheckedInterpolateGlobal: nodeGhostMapping parameter does not match "
                          "parent2node.idx.targetMapping");
         return MeshConnectivity::InterpolateGlobal<p2n_rs, e2p_rs>(
