@@ -7,7 +7,14 @@ Compact Finite Volume methods with MPI parallelism and optional CUDA GPU support
 
 - `src/` — C++ and Python source, organized by module:
   - `DNDS/` — Core: MPI arrays, serialization (JSON, HDF5), profiling, CUDA
+    - `Config/` — Runtime configuration enums, parameters, registry
+    - `Device/` — Host-device memory transfer, CUDA utilities
+    - `Serializer/` — JSON and HDF5 serialization framework
+    - `ArrayDerived/` — Specialized array types (adjacency, Eigen matrices)
   - `Geom/` — Unstructured mesh, CGNS I/O, partitioning (Metis/ParMetis)
+    - `Mesh/` — Mesh data structures, connectivity, ghost management, state tracking
+    - `Elements/` — Per-element-type shape functions
+    - `Quadratures/` — Numerical integration rules
   - `CFV/` — Compact Finite Volume, variational reconstruction
   - `Euler/` — Compressible N-S solvers (2D/3D, SA, k-omega RANS)
   - `EulerP/` — Alternative evaluator with CUDA GPU support
@@ -233,23 +240,27 @@ Key concepts agents should know:
 
 - **Adjacency state:** Each adjacency array (e.g. `cell2node`, `face2cell`)
   is wrapped in `AdjWithState<TPair>` (inherits from `TPair`, adds an
-  `AdjIndexInfo idx` member). The `idx` tracks whether indices are
-  global/local and holds a `shared_ptr` to the target entity's ghost mapping.
-  See `src/Geom/AdjIndexInfo.hpp`.
+  `AdjIndexInfo idx` member). All `idx` fields are private; state
+  transitions go through `markGlobal()`, `markLocal()`,
+  `wireTargetMapping()`, `toLocal()`/`toGlobal()`, and
+  `bootstrapToLocal()`. See `src/Geom/Mesh/AdjIndexInfo.hpp`.
 
 - **Three-layer architecture:**
   1. `MeshConnectivity` (DSL) -- bare `ArrayAdjacencyPair<rs>`, no state
-  2. `MeshConnectivity_StateChecked.hpp` -- asserts `idx.state`, forwards to DSL
-  3. `UnstructuredMesh` (Mesh.cpp) -- owns `AdjWithState` members, calls checked wrappers
+  2. `Mesh/MeshConnectivity_StateChecked.hpp` -- asserts `idx.state()`, forwards to DSL
+  3. `UnstructuredMesh` (Mesh/Mesh.cpp) -- owns `AdjWithState` members, calls checked wrappers
 
 - **Conversion methods:** `AdjGlobal2Local*` / `AdjLocal2Global*` delegate
-  to `adj.toLocal()` / `adj.toGlobal()`, which use the stored
-  `targetMapping`. The five group state variables (`adjPrimaryState`, etc.)
+  to `adj.toLocal()` / `adj.toGlobal()`, which use the stored target
+  mapping. The five group state variables (`adjPrimaryState`, etc.)
   still exist and are updated in parallel with per-adj states.
 
-- **Legacy coexistence:** `Mesh_Legacy.cpp` methods still use
-  `ConvertAdjEntries` rather than `toLocal()` / `toGlobal()`. The group
-  state variables are real data members, not yet derived from per-adj state.
+- **State discipline:** Every site that sets a group state variable
+  (`adjXState = ...`) must also call the corresponding `idx` method
+  (`markGlobal()`, `markLocal()`) on the governed adjacencies. Every
+  site that builds ghost mappings must wire them to the relevant
+  adjacencies via `wireTargetMapping()`. Both DSL and legacy code
+  paths maintain this invariant.
 
 ## Key Dependencies
 
