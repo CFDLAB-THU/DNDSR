@@ -723,6 +723,47 @@ namespace DNDS::Geom
             const std::string &name,
             const PartitionOptions &partitionOptions);
 
+    private:
+        // --- ReadSerializeAndDistribute sub-steps ---
+
+        /// Read scalar metadata and all primary arrays with H5 even-split.
+        /// Sets adjPrimaryState = Adj_PointToGlobal.
+        void ReadDistributed_EvenSplitRead(
+            Serializer::SerializerBaseSSP serializerP);
+
+        /// Build facial cell2cell from the even-split data.
+        /// Calls RecoverNode2CellAndNode2Bnd + RecoverCell2CellAndBnd2Cell,
+        /// then ghost-pulls cell2node/cellElemInfo and filters cell2cell
+        /// to face-sharing neighbors (O1 vertex intersection >= dim).
+        /// Returns the facial cell2cell as a compressed father-only array.
+        ssp<tAdj::element_type> ReadDistributed_BuildFacialCell2Cell();
+
+        /// Run ParMetis on the facial cell2cell graph.
+        /// Returns per-cell partition assignment (indexed by local cell).
+        std::vector<MPI_int> ReadDistributed_PartitionParMetis(
+            const ssp<tAdj::element_type> &cell2cellFacial,
+            const PartitionOptions &partitionOptions);
+
+        /// Derive node and bnd partitions from cell partition.
+        /// Node partition: min cell partition over all cells referencing the node.
+        /// Bnd partition: same rank as bnd's owner cell (bnd2cell(iBnd, 0)).
+        struct EntityPartitions
+        {
+            std::vector<MPI_int> cellPartition;
+            std::vector<MPI_int> nodePartition;
+            std::vector<MPI_int> bndPartition;
+        };
+        EntityPartitions ReadDistributed_DeriveEntityPartitions(
+            std::vector<MPI_int> cellPartition);
+
+        /// Redistribute all primary arrays to the new partition.
+        /// Frees temporary adjacencies (cell2cell, node2cell, etc.).
+        /// Sets adjPrimaryState = Adj_PointToGlobal.
+        void ReadDistributed_Redistribute(
+            const EntityPartitions &partitions);
+
+    public:
+
         template <class TFTrans>
         void TransformCoords(TFTrans &&FTrans)
         {
