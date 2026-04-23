@@ -1186,3 +1186,218 @@ test/cpp/Geom/
   test_MeshConnectivity_Ghost.cpp   — ghost chain and evaluateGhostTree tests (16 tests)
   test_MeshConnectivity_Interpolate.cpp — InterpolateLocal + InterpolateGlobal tests (17 tests)
 ```
+
+---
+
+## 9. Templatization of MeshConnectivity (Row-Size Parametric)
+
+**Date:** 2026-04-23
+**Goal:** Make every adjacency in MeshConnectivity capable of using any
+`ArrayAdjacencyPair<rs>` directly, instead of forcing `tAdjPair` (NonUniformSize)
+everywhere. This enables fixed-width adjacencies (face2cell=2, bnd2face=1, etc.)
+to flow through the DSL without conversion, and supports custom mesh topologies.
+
+### 9.1. Design Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| DSL method dispatch | Function templates (`template<int rs_...>`) | Compile-time specialization; `if constexpr` for ResizeRow differences |
+| Result structs | Per-field template params | `InterpolateResult<p2e_rs, e2n_rs, e2p_rs>` lets callers choose output width |
+| ConeAdj/SupportAdj storage | `ssp<AdjVariant>` shared ownership | Both DAG and legacy mesh members share the same allocation |
+| adjRegistry | Owns `ssp<AdjVariant>`, no raw pointers | Safe shared ownership; `std::visit` dispatches at ghost traversal time |
+| Backward compat | Default template params = NonUniformSize | Existing callers compile unchanged |
+
+### 9.2. Key Type Changes
+
+**Before:**
+```cpp
+using AdjVariant = std::variant<tAdjPair, tAdj1Pair, tAdj2Pair, ...>;
+
+struct ConeAdj {
+    AdjVariant adj;     // by-value, not shared
+    tPbiPair pbi;
+    // ...
+};
+
+struct MeshConnectivity {
+    std::unordered_map<AdjKind, tAdjPair*, AdjKindHash> adjRegistry;
+    // ...
+};
+```
+
+**After:**
+```cpp
+// AdjVariant unchanged (std::variant of all pair widths)
+
+struct ConeAdj {
+    ssp<AdjVariant> adj;   // shared ownership
+    tPbiPair pbi;
+    // Typed accessor: get<tAdj2Pair>() etc.
+    template<class TPair> TPair& as() { return std::get<TPair>(*adj); }
+    // ...
+};
+
+struct MeshConnectivity {
+    // Registry owns shared references to the AdjVariant stored in ConeAdj/SupportAdj.
+    // No raw pointers. Ghost traversal dispatches via std::visit.
+    std::unordered_map<AdjKind, ssp<AdjVariant>, AdjKindHash> adjRegistry;
+    // ...
+};
+```
+
+### 9.3. DSL Method Templates
+
+All DSL methods become function templates parameterized on input/output row sizes.
+Default template args = NonUniformSize for backward compatibility.
+
+```cpp
+// Inverse: input cone rs → output support (always NonUniformSize, since
+// the inverse of a fixed-width cone is variable-width)
+template<int cone_rs = NonUniformSize>
+static tAdjPair Inverse(
+    const ArrayAdjacencyPair<cone_rs>& cone,
+    index nToLocal,
+    const MPIInfo& mpi,
+    ...);
+
+// ComposeFiltered: AB and BC can have different rs.
+// Output is always NonUniformSize (composed adjacency has unpredictable width).
+template<int rs_AB = NonUniformSize, int rs_BC = NonUniformSize, class Predicate>
+static tAdjPair ComposeFiltered(
+    const ArrayAdjacencyPair<rs_AB>& AB,
+    const ArrayAdjacencyPair<rs_BC>& BC,
+    index nALocal,
+    ...);
+
+// InterpolateLocal: parent2node can be any rs.
+// Outputs have caller-chosen rs (defaulting to NonUniformSize).
+template<int p2n_rs = NonUniformSize,
+         int p2e_rs = NonUniformSize,
+         int e2n_rs = NonUniformSize,
+         int e2p_rs = NonUniformSize>
+static InterpolateResult<p2e_rs, e2n_rs, e2p_rs> Interpolate(
+    const ArrayAdjacencyPair<p2n_rs>& parent2node,
+    const SubEntityQuery& query,
+    index nParent,
+    index nNode,
+    const MPIInfo& mpi);
+```
+
+### 9.4. Result Struct Templates
+
+```cpp
+template<int p2e_rs = NonUniformSize,
+         int e2n_rs = NonUniformSize,
+         int e2p_rs = NonUniformSize>
+struct InterpolateResult {
+    ArrayAdjacencyPair<p2e_rs> parent2entity;
+    ArrayAdjacencyPair<e2n_rs> entity2node;
+    ArrayAdjacencyPair<e2p_rs> entity2parent;
+    std::vector<ElemInfo> entityElemInfo;
+    std::vector<std::vector<NodePeriodicBits>> parent2entityPbi;
+    index nEntities{0};
+};
+
+// Similar for InterpolateGlobalResult, InterpolateDistributedResult
+```
+
+### 9.5. if-constexpr Differences
+
+For fixed-width arrays (`rs > 0`), `ResizeRow` is not supported (the width
+is compile-time fixed). The DSL methods must use `if constexpr` to skip
+`ResizeRow` calls when the output is fixed-width (the rows are already
+the correct size after `Resize(n)`).
+
+```cpp
+// In Interpolate, when building parent2entity:
+if constexpr (p2e_rs == NonUniformSize)
+    result.parent2entity.father->ResizeRow(iParent, nSubs);
+else
+    DNDS_assert(p2e_rs == nSubs); // compile-time width must match
+
+// In Inverse, output is always NonUniformSize (variable fan-out), but
+// input iteration over cone rows uses:
+if constexpr (cone_rs == NonUniformSize)
+    for (auto iTo : cone.father->operator[](iFrom)) ...
+else
+    for (rowsize j = 0; j < cone_rs; j++) ...
+// (Actually both cases work via operator[] since AdjacencyRow handles both.)
+```
+
+Key `if constexpr` sites:
+- `ResizeRow`: skip for fixed-width outputs, assert width matches instead
+- `Compress`: skip for fixed-width (no CSR to compress)
+- Row iteration: works uniformly via `operator[]` (AdjacencyRow handles both)
+- `RowSize`: compile-time constant for fixed-width, runtime for NonUniformSize
+
+### 9.6. adjRegistry with Shared Ownership
+
+```cpp
+struct MeshConnectivity {
+    std::unordered_map<AdjKind, ssp<AdjVariant>, AdjKindHash> adjRegistry;
+
+    // Register: shares the ssp from ConeAdj/SupportAdj
+    void registerAdj(AdjKind kind, ssp<AdjVariant> adjPtr) {
+        adjRegistry[kind] = adjPtr;
+    }
+
+    // Resolve: returns the shared variant
+    ssp<AdjVariant> resolveAdj(AdjKind kind) const;
+};
+```
+
+Ghost traversal (`evaluateGhostTree`) dispatches via `std::visit`:
+
+```cpp
+void traverseHop(const ssp<AdjVariant>& adjVar, ...) {
+    std::visit([&](auto& pair) {
+        // pair is tAdjPair, tAdj1Pair, tAdj2Pair, etc.
+        // All have the same operator[] / RowSize interface.
+        for (index i = 0; i < nOwned; i++)
+            for (auto target : pair[i])
+                collectGhost(target);
+    }, *adjVar);
+}
+```
+
+### 9.7. Migration Plan
+
+**Phase A: Shared ownership for ConeAdj/SupportAdj/Registry**
+1. Change `ConeAdj::adj` from `AdjVariant` to `ssp<AdjVariant>`.
+2. Change `SupportAdj::adj` from `AdjVariant` to `ssp<AdjVariant>`.
+3. Change `adjRegistry` from `map<AdjKind, tAdjPair*>` to `map<AdjKind, ssp<AdjVariant>>`.
+4. Update `registerAdj` to accept `ssp<AdjVariant>`.
+5. Update `addCone`/`addSupport` to allocate `make_ssp<AdjVariant>(...)`.
+6. Update all `asAdj()`, `asAdj2()`, etc. to dereference through ssp.
+7. Update `evaluateGhostTree` to use `std::visit` on `*resolveAdj(kind)`.
+8. Tests must pass unchanged.
+
+**Phase B: Templatize DSL methods**
+1. Convert `Inverse` to `template<int cone_rs>`. Keep return as `tAdjPair`.
+2. Convert `ComposeFiltered` to `template<int rs_AB, int rs_BC, class Pred>`.
+3. Convert `Interpolate` (local) to `template<int p2n_rs, int p2e_rs, int e2n_rs, int e2p_rs>`.
+4. Convert `InterpolateGlobal` similarly.
+5. Add `if constexpr` for ResizeRow/Compress differences.
+6. All default template args = NonUniformSize → existing callers compile unchanged.
+7. Move template implementations to header (or explicit instantiation).
+
+**Phase C: Templatize result structs**
+1. Parameterize `InterpolateResult<p2e_rs, e2n_rs, e2p_rs>`.
+2. Parameterize `InterpolateGlobalResult<p2e_rs, e2n_rs, e2p_rs>`.
+3. Parameterize `InterpolateDistributedResult<p2e_rs, e2n_rs, e2p_rs>`.
+4. Update callers that destructure result fields.
+
+**Phase D: Production usage with fixed-width**
+1. InterpolateFace: use `e2p_rs=2` for entity2parent (faces always have ≤2 parents).
+2. face2cell stored as `tAdj2Pair` already — wire through the DAG.
+3. bnd2face/face2bnd as `tAdj1Pair` through the DAG.
+
+### 9.8. Risks and Mitigations
+
+| Risk | Mitigation |
+|------|------------|
+| Template bloat (many instantiations) | Only instantiate used combinations; explicit instantiation in .cpp |
+| Compile time increase | Templates in headers are unavoidable for if-constexpr; mitigate with explicit instantiation |
+| AdjVariant size grows | Currently 6 alternatives; no change needed |
+| ssp overhead vs raw ptr | Negligible — these are large arrays; one extra indirection per access |
+| evaluateGhostTree perf with std::visit | Visit dispatch is one virtual call per hop, not per element; negligible |

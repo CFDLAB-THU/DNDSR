@@ -281,9 +281,11 @@ namespace DNDS::Geom
 
     /// Traverse one hop: for each global index in parentSet, look up the
     /// adjacency row and collect all entries into a sorted, deduplicated vector.
-    static std::vector<index> traverseHop(
+    /// Templatized to work with any ArrayAdjacencyPair<rs> (variable or fixed-width).
+    template <class TAdjPair>
+    static std::vector<index> traverseHopImpl(
         const std::vector<index> &parentSet,
-        const tAdjPair &adj,
+        const TAdjPair &adj,
         bool assertFound)
     {
         if (parentSet.empty())
@@ -334,6 +336,17 @@ namespace DNDS::Geom
         std::vector<index> result(seen.begin(), seen.end());
         std::sort(result.begin(), result.end());
         return result;
+    }
+
+    /// Dispatch traverseHop through AdjVariant via std::visit.
+    static std::vector<index> traverseHop(
+        const std::vector<index> &parentSet,
+        const AdjVariant &adjVar,
+        bool assertFound)
+    {
+        return std::visit([&](const auto &adj) -> std::vector<index>
+                          { return traverseHopImpl(parentSet, adj, assertFound); },
+                          adjVar);
     }
 
     /// Filter non-owned indices from a sorted set.
@@ -420,8 +433,8 @@ namespace DNDS::Geom
                     // childEntry.parentId points to the parent at this level.
                     auto &parentSet = nodeSets[childEntry.parentId];
 
-                    const tAdjPair *adj = resolveAdj(childEntry.hop);
-                    DNDS_assert_info(adj && adj->father,
+                    auto adjVar = resolveAdj(childEntry.hop);
+                    DNDS_assert_info(adjVar,
                                      fmt::format("evaluateGhostTree: adjacency {} not resolved",
                                                  adjKindName(childEntry.hop)));
 
@@ -430,7 +443,7 @@ namespace DNDS::Geom
                     // ghost entities that need prior scratch pulls).
                     bool assertFound = (level > 0);
 
-                    nodeSets[childEntry.nodeId] = traverseHop(parentSet, *adj, assertFound);
+                    nodeSets[childEntry.nodeId] = traverseHop(parentSet, *adjVar, assertFound);
                 }
             }
         }

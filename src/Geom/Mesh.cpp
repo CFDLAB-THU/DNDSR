@@ -561,7 +561,7 @@ namespace DNDS::Geom
             };
         }
 
-        auto dslB2C = MeshConnectivity::ComposeFiltered(
+        auto dslB2C = MeshConnectivity::ComposeFiltered<NonUniformSize, NonUniformSize, 2>(
             bnd2node, node2cell,
             bnd2node.father->Size(),
             nodeG2L,
@@ -569,23 +569,24 @@ namespace DNDS::Geom
             bndAllNodesPred,
             bndMatchExtra);
 
-        // Fill bnd2cell from compose result
-        for (index i = 0; i < bnd2node.father->Size(); i++)
+        // Adopt directly — ComposeFiltered<..., 2> already produced tAdj2Pair.
+        // Non-periodic bnds: slot 0 = cell, slot 1 = UnInitIndex (from ComposeFiltered padding).
+        // Periodic bnds: slot 0 = donor cell, slot 1 = partner cell (if found) or UnInitIndex.
+        // The pbi filter in bndMatchExtra typically rejects the periodic partner, so
+        // periodic bnds usually have slot 1 = UnInitIndex (1 match only).
+        bnd2cell.father = dslB2C.father;
+
+        // Periodic fixup: when a periodic bnd has only 1 matching cell (slot 1 == UnInitIndex),
+        // fill slot 1 with slot 0 (self-reference) to match legacy behavior.
+        if (isPeriodic)
         {
-            auto row = dslB2C.father->operator[](i);
-            if (isPeriodic && Geom::FaceIDIsPeriodic(bndElemInfo.father->operator()(i, 0).zone))
+            for (index i = 0; i < bnd2cell.father->Size(); i++)
             {
-                DNDS_assert_info(row.size() == 2 || row.size() == 1,
-                                 fmt::format("periodic bnd {} has {} cells after pbi filter", i, row.size()));
-                bnd2cell.father->operator()(i, 0) = row[0];
-                bnd2cell.father->operator()(i, 1) = (row.size() == 2) ? row[1] : row[0];
-            }
-            else
-            {
-                DNDS_assert_info(row.size() == 1,
-                                 fmt::format("non-periodic bnd {} has {} cells", i, row.size()));
-                bnd2cell.father->operator()(i, 0) = row[0];
-                bnd2cell.father->operator()(i, 1) = UnInitIndex;
+                if (Geom::FaceIDIsPeriodic(bndElemInfo.father->operator()(i, 0).zone) &&
+                    bnd2cell.father->operator()(i, 1) == UnInitIndex)
+                {
+                    bnd2cell.father->operator()(i, 1) = bnd2cell.father->operator()(i, 0);
+                }
             }
         }
 
@@ -1272,8 +1273,8 @@ namespace DNDS::Geom
             return {true, std::move(peers)};
         };
 
-        // === Section D: InterpolateGlobal ===
-        auto globalResult = MeshConnectivity::InterpolateGlobal(
+        // === Section D: InterpolateGlobal (e2p_rs=2: face2cell is fixed-width) ===
+        auto globalResult = MeshConnectivity::InterpolateGlobal<NonUniformSize, 2>(
             cell2node, isPeriodic ? cell2nodePbi : tPbiPair{},
             *cell2node.trans.pLGhostMapping,
             *cell2node.father->pLGlobalMapping,
@@ -1283,18 +1284,13 @@ namespace DNDS::Geom
 
         index nOwnedFaces = globalResult.nOwnedEntities;
 
-        // === Section E: Copy owned face data into mesh arrays ===
+        // === Section E: Adopt owned face data directly into mesh arrays ===
         face2node.father = globalResult.entity2node.father;
         face2node.TransAttach();
         face2node.trans.createFatherGlobalMapping();
 
-        face2cell.father->Resize(nOwnedFaces);
-        for (index iFace = 0; iFace < nOwnedFaces; iFace++)
-        {
-            auto pRow = globalResult.entity2parent.father->operator[](iFace);
-            face2cell.father->operator()(iFace, 0) = pRow[0];
-            face2cell.father->operator()(iFace, 1) = (pRow.size() >= 2) ? pRow[1] : UnInitIndex;
-        }
+        // entity2parent is already ArrayAdjacencyPair<2> — adopt directly, no copy.
+        face2cell.father = globalResult.entity2parent.father;
 
         faceElemInfo.father = globalResult.entityElemInfo.father;
         if (isPeriodic)

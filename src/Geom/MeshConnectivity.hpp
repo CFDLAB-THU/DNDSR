@@ -340,6 +340,54 @@ namespace DNDS::Geom
         tAdj4Pair,  // 4 per row
         tAdj8Pair>; // 8 per row
 
+    /// Convenience: create a shared AdjVariant from a specific pair type.
+    /// Usage: `auto adj = makeAdjVariant(myTAdj2Pair);`
+    /// or:    `auto adj = makeAdjVariant<tAdj2Pair>();` (empty)
+    template <class TPair>
+    static ssp<AdjVariant> makeAdjVariant(TPair &&pair)
+    {
+        return make_ssp<AdjVariant>(std::forward<TPair>(pair));
+    }
+
+    /// Create a shared AdjVariant holding a default-constructed TPair.
+    template <class TPair>
+    static ssp<AdjVariant> makeAdjVariant()
+    {
+        return make_ssp<AdjVariant>(TPair{});
+    }
+
+    // =================================================================
+    // narrowAdjToFixed: variable-width → fixed-width conversion
+    // =================================================================
+
+    /// Copy a variable-width adjacency (father-only) into a fixed-width
+    /// target. Each row is truncated or padded with `fill` to exactly
+    /// `target_rs` entries.
+    ///
+    /// @tparam target_rs  Compile-time row width of the target.
+    /// @tparam source_rs  Row width of the source (typically NonUniformSize).
+    /// @param source      Source adjacency (father-only or father+son).
+    /// @param target      Target fixed-width adjacency. Father must be pre-Resize'd
+    ///                    to at least `nRows`.
+    /// @param nRows       Number of rows to copy.
+    /// @param fill        Value for missing entries (default: UnInitIndex).
+    template <rowsize target_rs, rowsize source_rs = NonUniformSize>
+    static void narrowAdjToFixed(
+        const ArrayAdjacencyPair<source_rs> &source,
+        ArrayAdjacencyPair<target_rs> &target,
+        index nRows,
+        index fill = UnInitIndex)
+    {
+        static_assert(target_rs > 0, "narrowAdjToFixed: target must be fixed-width");
+        for (index i = 0; i < nRows; i++)
+        {
+            auto row = source.father->operator[](i);
+            for (rowsize j = 0; j < target_rs; j++)
+                target.father->operator()(i, j) =
+                    (j < static_cast<rowsize>(row.size())) ? row[j] : fill;
+        }
+    }
+
     // =================================================================
     // ConeAdj: downward adjacency (higher depth → lower depth)
     // =================================================================
@@ -350,36 +398,49 @@ namespace DNDS::Geom
     ///
     /// Periodic bits (`pbi`) are only meaningful when `toDepth == 0` (nodes).
     /// For non-periodic meshes or non-node targets, `pbi` remains uninitialized.
+    ///
+    /// The adjacency data is stored via `ssp<AdjVariant>` for shared ownership.
+    /// Both the DAG and legacy mesh members can share the same allocation.
     struct ConeAdj
     {
-        int fromDepth{-1}; ///< Source stratum (e.g., dim for cells, dim-1 for faces)
-        int toDepth{-1};   ///< Target stratum (e.g., 0 for nodes, dim-1 for faces)
-        AdjVariant adj;    ///< The adjacency pair (typed by row width)
-        tPbiPair pbi;      ///< Periodic bits per entry (only for toDepth==0, optional)
+        int fromDepth{-1};      ///< Source stratum (e.g., dim for cells, dim-1 for faces)
+        int toDepth{-1};        ///< Target stratum (e.g., 0 for nodes, dim-1 for faces)
+        ssp<AdjVariant> adj;    ///< Shared adjacency pair (typed by row width)
+        tPbiPair pbi;           ///< Periodic bits per entry (only for toDepth==0, optional)
 
         /// Access as variable-width tAdjPair. Throws if adj holds a fixed-width type.
-        tAdjPair &asAdj() { return std::get<tAdjPair>(adj); }
-        [[nodiscard]] const tAdjPair &asAdj() const { return std::get<tAdjPair>(adj); }
+        tAdjPair &asAdj() { return std::get<tAdjPair>(*adj); }
+        [[nodiscard]] const tAdjPair &asAdj() const { return std::get<tAdjPair>(*adj); }
 
         /// Access as fixed-width tAdj2Pair (e.g., for cell2face with 2 entries).
-        tAdj2Pair &asAdj2() { return std::get<tAdj2Pair>(adj); }
-        [[nodiscard]] const tAdj2Pair &asAdj2() const { return std::get<tAdj2Pair>(adj); }
+        tAdj2Pair &asAdj2() { return std::get<tAdj2Pair>(*adj); }
+        [[nodiscard]] const tAdj2Pair &asAdj2() const { return std::get<tAdj2Pair>(*adj); }
 
-        tAdj1Pair &asAdj1() { return std::get<tAdj1Pair>(adj); }
-        [[nodiscard]] const tAdj1Pair &asAdj1() const { return std::get<tAdj1Pair>(adj); }
+        tAdj1Pair &asAdj1() { return std::get<tAdj1Pair>(*adj); }
+        [[nodiscard]] const tAdj1Pair &asAdj1() const { return std::get<tAdj1Pair>(*adj); }
+
+        /// Typed access: `as<tAdj2Pair>()` etc.
+        template <class TPair>
+        TPair &as() { return std::get<TPair>(*adj); }
+        template <class TPair>
+        [[nodiscard]] const TPair &as() const { return std::get<TPair>(*adj); }
 
         /// Number of local (father) rows.
         [[nodiscard]] index fatherSize() const
         {
+            if (!adj)
+                return 0;
             return std::visit([](const auto &p) -> index
-                              { return p.father ? p.father->Size() : 0; }, adj);
+                              { return p.father ? p.father->Size() : 0; }, *adj);
         }
 
         /// Check if the adjacency pair is initialized (father is non-null).
         [[nodiscard]] bool initialized() const
         {
+            if (!adj)
+                return false;
             return std::visit([](const auto &p) -> bool
-                              { return bool(p.father); }, adj);
+                              { return bool(p.father); }, *adj);
         }
 
         /// Check if pbi is attached (only valid for toDepth==0).
@@ -395,32 +456,44 @@ namespace DNDS::Geom
     /// Inverse), and is stable but not semantically ordered.
     ///
     /// Supports never carry periodic bits — pbi is a property of cones to nodes.
+    ///
+    /// The adjacency data is stored via `ssp<AdjVariant>` for shared ownership.
     struct SupportAdj
     {
         int fromDepth{-1}; ///< Source stratum (e.g., 0 for nodes)
         int toDepth{-1};   ///< Target stratum (e.g., dim for cells)
-        AdjVariant adj;    ///< The adjacency pair (typed by row width)
+        ssp<AdjVariant> adj; ///< Shared adjacency pair (typed by row width)
 
         /// Access as variable-width tAdjPair.
-        tAdjPair &asAdj() { return std::get<tAdjPair>(adj); }
-        [[nodiscard]] const tAdjPair &asAdj() const { return std::get<tAdjPair>(adj); }
+        tAdjPair &asAdj() { return std::get<tAdjPair>(*adj); }
+        [[nodiscard]] const tAdjPair &asAdj() const { return std::get<tAdjPair>(*adj); }
 
-        tAdj2Pair &asAdj2() { return std::get<tAdj2Pair>(adj); }
-        [[nodiscard]] const tAdj2Pair &asAdj2() const { return std::get<tAdj2Pair>(adj); }
+        tAdj2Pair &asAdj2() { return std::get<tAdj2Pair>(*adj); }
+        [[nodiscard]] const tAdj2Pair &asAdj2() const { return std::get<tAdj2Pair>(*adj); }
 
-        tAdj1Pair &asAdj1() { return std::get<tAdj1Pair>(adj); }
-        [[nodiscard]] const tAdj1Pair &asAdj1() const { return std::get<tAdj1Pair>(adj); }
+        tAdj1Pair &asAdj1() { return std::get<tAdj1Pair>(*adj); }
+        [[nodiscard]] const tAdj1Pair &asAdj1() const { return std::get<tAdj1Pair>(*adj); }
+
+        /// Typed access: `as<tAdj2Pair>()` etc.
+        template <class TPair>
+        TPair &as() { return std::get<TPair>(*adj); }
+        template <class TPair>
+        [[nodiscard]] const TPair &as() const { return std::get<TPair>(*adj); }
 
         [[nodiscard]] index fatherSize() const
         {
+            if (!adj)
+                return 0;
             return std::visit([](const auto &p) -> index
-                              { return p.father ? p.father->Size() : 0; }, adj);
+                              { return p.father ? p.father->Size() : 0; }, *adj);
         }
 
         [[nodiscard]] bool initialized() const
         {
+            if (!adj)
+                return false;
             return std::visit([](const auto &p) -> bool
-                              { return bool(p.father); }, adj);
+                              { return bool(p.father); }, *adj);
         }
     };
 
@@ -605,7 +678,10 @@ namespace DNDS::Geom
     /// only carries the global B index; pbi is local). After ghost B pull,
     /// entity2parent for ghost B can be obtained via Inverse(parent2entity)
     /// or by ghost-pulling entity2parent itself.
-    struct InterpolateGlobalResult
+    /// @tparam e2p_rs  Row-size of entity2parent (NonUniformSize = variable,
+    ///                 2 = fixed for faces, etc.).
+    template <rowsize e2p_rs = NonUniformSize>
+    struct InterpolateGlobalResultT
     {
         tAdjPair parent2entity;         ///< A → B (global B indices). Father = local A,
                                         ///< son = ghost A. Slot j = face/edge j per topology.
@@ -616,8 +692,8 @@ namespace DNDS::Geom
                                         ///< No push needed — computed locally in Step 2b.
         tAdjPair entity2node;           ///< B → C (global C indices). Father-only (owned B).
                                         ///< Node order: first-discovered parent's extraction order.
-        tAdjPair entity2parent;         ///< B → A (global A indices). Father-only (owned B).
-                                        ///< Variable-width: 1-2 for faces, 1-N for edges.
+        ArrayAdjacencyPair<e2p_rs> entity2parent; ///< B → A (global A indices). Father-only (owned B).
+                                        ///< Width 1-2 for faces, 1-N for edges.
                                         ///< Complete under A→C→A ghosting.
         tPbiPair entity2nodePbi;        ///< B → C pbi. Father-only (owned B).
                                         ///< First-discovered parent's perspective (entity's own frame).
@@ -625,6 +701,9 @@ namespace DNDS::Geom
         tElemInfoArrayPair entityElemInfo; ///< Per-B elem info. Father-only (owned B).
         index nOwnedEntities{0};        ///< Number of owned B entities (father size).
     };
+
+    /// Default: all fields variable-width.
+    using InterpolateGlobalResult = InterpolateGlobalResultT<>;
 
     // =================================================================
     // InterpolateResult: output of LOCAL sub-entity interpolation
@@ -659,11 +738,18 @@ namespace DNDS::Geom
     ///     that created entity iEnt. Later parents that find the same entity do not
     ///     alter the node order.
     ///   - entity2parent[iEnt] lists parents in discovery order (first parent first).
-    struct InterpolateResult
+    ///
+    /// @tparam p2e_rs  Row-size of parent2entity (NonUniformSize = variable).
+    /// @tparam e2n_rs  Row-size of entity2node (NonUniformSize = variable).
+    /// @tparam e2p_rs  Row-size of entity2parent (NonUniformSize = variable).
+    template <rowsize p2e_rs = NonUniformSize,
+              rowsize e2n_rs = NonUniformSize,
+              rowsize e2p_rs = NonUniformSize>
+    struct InterpolateResultT
     {
-        tAdjPair parent2entity; ///< parent → entities. Father-only. Slot j = sub-entity j.
-        tAdjPair entity2node;   ///< entity → nodes. Father-only. First-parent extraction order.
-        tAdjPair entity2parent; ///< entity → parents. Father-only. Variable-width:
+        ArrayAdjacencyPair<p2e_rs> parent2entity; ///< parent → entities. Father-only. Slot j = sub-entity j.
+        ArrayAdjacencyPair<e2n_rs> entity2node;   ///< entity → nodes. Father-only. First-parent extraction order.
+        ArrayAdjacencyPair<e2p_rs> entity2parent;  ///< entity → parents. Father-only. Variable-width:
                                 ///< 1 for boundary faces, 2 for internal faces, N for edges.
                                 ///< Discovery order (first parent first).
         std::vector<ElemInfo> entityElemInfo; ///< Per-entity element info (zone=0, type from SubEntityDesc::typeTag).
@@ -674,6 +760,9 @@ namespace DNDS::Geom
                                 ///< if InterpolateLocal was called directly.
         index nEntities{0};     ///< Total number of unique entities created.
     };
+
+    /// Default InterpolateResult: all fields are variable-width (NonUniformSize).
+    using InterpolateResult = InterpolateResultT<>;
 
     // (InterpolateDistributedResult and legacy types moved above)
 
@@ -691,17 +780,27 @@ namespace DNDS::Geom
     /// Retained for backward compatibility with InterpolateDistributed.
     /// Limitations: entity2parent is fixed-2 (tAdj2Pair), does not support
     /// N-parent edges, does not produce parent2entityPbi.
-    struct InterpolateDistributedResult
+    ///
+    /// @tparam p2e_rs  Row-size of parent2entity (NonUniformSize = variable).
+    /// @tparam e2n_rs  Row-size of entity2node (NonUniformSize = variable).
+    /// @tparam e2p_rs  Row-size of entity2parent (2 = fixed face-to-parent).
+    template <rowsize p2e_rs = NonUniformSize,
+              rowsize e2n_rs = NonUniformSize,
+              rowsize e2p_rs = 2>
+    struct InterpolateDistributedResultT
     {
-        tAdjPair parent2entity;          ///< parent → entities. Father = local parents,
-                                         ///< son = ghost parents. Local-appended entity indices.
-        tAdjPair entity2node;            ///< entity → nodes. Father = owned, son = ghost.
-        tAdj2Pair entity2parent;         ///< Fixed-2: entity → (parentL, parentR).
-                                         ///< Father = owned, son = ghost. Local-appended parent indices.
-                                         ///< parentR = UnInitIndex for boundary entities.
+        ArrayAdjacencyPair<p2e_rs> parent2entity;   ///< parent → entities. Father = local parents,
+                                                     ///< son = ghost parents. Local-appended entity indices.
+        ArrayAdjacencyPair<e2n_rs> entity2node;     ///< entity → nodes. Father = owned, son = ghost.
+        ArrayAdjacencyPair<e2p_rs> entity2parent;   ///< entity → (parentL, parentR).
+                                                     ///< Father = owned, son = ghost. Local-appended parent indices.
+                                                     ///< parentR = UnInitIndex for boundary entities.
         tElemInfoArrayPair entityElemInfo; ///< Per-entity element info. Father = owned, son = ghost.
         index nOwnedEntities{0};         ///< Number of owned entities (father size).
     };
+
+    /// Default InterpolateDistributedResult: entity2parent is fixed-2 (as before).
+    using InterpolateDistributedResult = InterpolateDistributedResultT<>;
 
     // =================================================================
     // MeshConnectivity: the layered DAG
@@ -713,9 +812,13 @@ namespace DNDS::Geom
     /// in separate vectors. Each is identified by a `(fromDepth, toDepth)` pair
     /// using dynamic depth tags (e.g., `(dim, 0)` for cell→node).
     ///
-    /// The adjacency registry (`adjRegistry`) maps AdjKind tags to tAdjPair
-    /// pointers for use by the ghost traversal system. Only a restricted set
-    /// of adjacencies may be registered:
+    /// Adjacency data is stored via `ssp<AdjVariant>` for shared ownership.
+    /// Both the DAG's ConeAdj/SupportAdj and the legacy mesh members can share
+    /// the same underlying arrays (shallow copy of ssp<Array> pointers).
+    ///
+    /// The adjacency registry (`adjRegistry`) maps AdjKind tags to
+    /// `ssp<AdjVariant>` for use by the ghost traversal system. No raw pointers.
+    /// Only a restricted set of adjacencies may be registered:
     ///   - Direct cones/supports (inter-level, e.g., Cell2Node, Node2Cell)
     ///   - Intra-level adjacencies via Node or Face (e.g., Cell2Cell, Cell2CellFace)
     /// More complex composed adjacencies are NOT stored in the registry.
@@ -729,10 +832,11 @@ namespace DNDS::Geom
         // Adjacency registry (restricted set for ghost traversal)
         // -----------------------------------------------------------------
 
-        /// Maps AdjKind to the tAdjPair used by ghost chain evaluation.
+        /// Maps AdjKind to the shared AdjVariant used by ghost chain evaluation.
         /// Only direct cones/supports and intra-level (via Node/Face)
         /// adjacencies are allowed. Registered via registerAdj().
-        std::unordered_map<AdjKind, tAdjPair *, AdjKindHash> adjRegistry;
+        /// Owns shared references (ssp) — no raw pointers.
+        std::unordered_map<AdjKind, ssp<AdjVariant>, AdjKindHash> adjRegistry;
 
         /// Per-EntityKind global offsets mapping (for ownership determination).
         /// Must be registered for every EntityKind that appears as a root anchor
@@ -740,17 +844,36 @@ namespace DNDS::Geom
         std::unordered_map<EntityKind, ssp<GlobalOffsetsMapping>> globalMappings;
 
         /// Register an adjacency for ghost traversal.
-        /// The pointer must remain valid for the lifetime of the registry entry.
+        /// The ssp shares ownership with the ConeAdj/SupportAdj that holds the data.
         /// Overwrites any existing registration for the same AdjKind.
-        void registerAdj(AdjKind kind, tAdjPair &pair);
+        void registerAdj(AdjKind kind, ssp<AdjVariant> adjPtr);
+
+        /// Convenience: register a specific pair type (tAdjPair, tAdj2Pair, etc.).
+        /// Creates a shared AdjVariant wrapping a shallow-shared pair: the new
+        /// pair shares the same father, son, and ghost mapping without triggering
+        /// ArrayTransformer copy constructor side effects.
+        template <class TPair>
+        void registerAdj(AdjKind kind, TPair &pair)
+        {
+            // Build a fresh AdjVariant holding a default TPair, then share
+            // the father/son/ghost-mapping from the source pair.
+            auto adjVar = makeAdjVariant<TPair>();
+            auto &stored = std::get<TPair>(*adjVar);
+            stored.father = pair.father;
+            stored.son = pair.son;
+            // Share ghost mapping for evaluateGhostTree traversal.
+            // pLGlobalMapping lives on father->pLGlobalMapping (Array-level).
+            // pLGhostMapping lives on trans (transformer-level).
+            stored.trans.pLGhostMapping = pair.trans.pLGhostMapping;
+            registerAdj(kind, std::move(adjVar));
+        }
 
         /// Register a GlobalOffsetsMapping for an EntityKind.
         void registerGlobalMapping(EntityKind kind, const ssp<GlobalOffsetsMapping> &gm);
 
-        /// Resolve an AdjKind to the registered tAdjPair.
+        /// Resolve an AdjKind to the registered AdjVariant.
         /// Returns nullptr if not registered.
-        tAdjPair *resolveAdj(AdjKind kind);
-        const tAdjPair *resolveAdj(AdjKind kind) const;
+        ssp<AdjVariant> resolveAdj(AdjKind kind) const;
 
         /// Resolve a GlobalOffsetsMapping for an EntityKind.
         /// Returns nullptr if not registered.
@@ -786,27 +909,34 @@ namespace DNDS::Geom
         bool hasSupport(int fromDepth, int toDepth) const;
 
         // -----------------------------------------------------------------
-        // Core DSL operations (static, pure-functional on tAdjPair)
+        // Core DSL operations (static, templated on adjacency row-size)
         // -----------------------------------------------------------------
-        // These operate on variable-width tAdjPair. Fixed-width adjacencies
-        // must be widened before use or the caller extracts tAdjPair from
-        // the variant.
+        // Input adjacencies can be any ArrayAdjacencyPair<rs> (fixed or variable).
+        // Output adjacencies are always tAdjPair (NonUniformSize) because the
+        // result width is generally unpredictable at compile time.
+        // Default template args = NonUniformSize for backward compatibility.
 
         /// Invert a cone to get its support (distributed, MPI push-back).
         ///
-        /// Given a cone adjacency A→B (CSR: for each A-entity, list of B-entities),
+        /// Given a cone adjacency A→B (for each A-entity, list of B-entities),
         /// compute the support adjacency B→A (for each B-entity, list of A-entities
         /// that reference it). Result is globally complete via MPI push-back.
         ///
-        /// @param cone         CSR adjacency: from → to (global indices).
+        /// The input cone can be any row-size (fixed or variable). The output
+        /// support is always variable-width (tAdjPair) because fan-in is not
+        /// known at compile time.
+        ///
+        /// @tparam cone_rs      Row-size of the input cone (NonUniformSize or fixed).
+        /// @param cone         Adjacency: from → to (global indices).
         /// @param nToLocal     Local number of "to" entities on this rank.
         /// @param mpi          MPI communicator.
         /// @param fromLocal2Global  Maps local from-entity index to global index.
         /// @param toLocal2Global    Maps local to-entity index to global index.
         /// @param toGlobalMapping   Global mapping for to-entities (ownership lookup).
         /// @return             CSR adjacency: to → from (global, complete). Father-only.
+        template <rowsize cone_rs = NonUniformSize>
         static tAdjPair Inverse(
-            const tAdjPair &cone,
+            const ArrayAdjacencyPair<cone_rs> &cone,
             index nToLocal,
             const MPIInfo &mpi,
             const std::function<index(index)> &fromLocal2Global,
@@ -815,9 +945,15 @@ namespace DNDS::Geom
 
         /// Compose two adjacencies: A→B + B→C → A→C (delegates to ComposeFiltered
         /// with SharedCountPredicate{1}).
-        static tAdjPair Compose(
-            const tAdjPair &AB,
-            const tAdjPair &BC,
+        ///
+        /// @tparam rs_AB  Row-size of AB adjacency.
+        /// @tparam rs_BC  Row-size of BC adjacency.
+        /// @tparam out_rs Row-size of output (NonUniformSize or fixed).
+        template <rowsize rs_AB = NonUniformSize, rowsize rs_BC = NonUniformSize,
+                  rowsize out_rs = NonUniformSize>
+        static ArrayAdjacencyPair<out_rs> Compose(
+            const ArrayAdjacencyPair<rs_AB> &AB,
+            const ArrayAdjacencyPair<rs_BC> &BC,
             index nALocal,
             const std::unordered_map<index, index> &bGlobal2Local,
             const std::function<index(index)> &aLocal2Global,
@@ -840,8 +976,11 @@ namespace DNDS::Geom
         /// BC (e.g., node2cell via Inverse), then ghost-pulls it for all
         /// off-rank B-entities referenced by local AB rows.
         ///
-        /// @param AB           CSR: A → B (father only, global B indices).
-        /// @param BC           CSR: B → C (father+son, global C indices).
+        /// @tparam rs_AB        Row-size of AB adjacency.
+        /// @tparam rs_BC        Row-size of BC adjacency.
+        /// @tparam Predicate    Predicate type.
+        /// @param AB           A → B (father only, global B indices).
+        /// @param BC           B → C (father+son, global C indices).
         /// @param nALocal      Number of local A-entities.
         /// @param bGlobal2Local Maps global B-index to local-appended index in BC.
         ///                      Must contain every B-global that appears in AB.
@@ -853,11 +992,16 @@ namespace DNDS::Geom
         ///                     which A and C are connected. If set and returns
         ///                     false, the (A, C) pair is rejected.
         ///                     Used for periodic pbi filtering.
-        /// @return             CSR: A → C (global C indices), father-only.
-        template <class Predicate>
-        static tAdjPair ComposeFiltered(
-            const tAdjPair &AB,
-            const tAdjPair &BC,
+        /// @return             A → C adjacency, father-only. Variable or fixed-width
+        ///                     depending on out_rs.
+        /// @tparam out_rs       Row-size of output (NonUniformSize = variable,
+        ///                      or fixed: rows shorter than out_rs are padded with
+        ///                      UnInitIndex, rows longer trigger assert).
+        template <rowsize rs_AB = NonUniformSize, rowsize rs_BC = NonUniformSize,
+                  rowsize out_rs = NonUniformSize, class Predicate = SharedCountPredicate>
+        static ArrayAdjacencyPair<out_rs> ComposeFiltered(
+            const ArrayAdjacencyPair<rs_AB> &AB,
+            const ArrayAdjacencyPair<rs_BC> &BC,
             index nALocal,
             const std::unordered_map<index, index> &bGlobal2Local,
             const std::function<index(index)> &aLocal2Global,
@@ -907,15 +1051,17 @@ namespace DNDS::Geom
         /// is left empty. InterpolateGlobal computes it in Step 2b after calling
         /// InterpolateLocal, using the parent2nodePbi input and extractPbi callback.
         ///
-        /// @param parent2node    CSR: parent → nodes (father-only or father+son).
+        /// @param parent2node    Parent → nodes (father-only or father+son).
         ///                       Accessed via operator[] for indices [0, nParent).
+        /// @tparam p2n_rs       Row-size of parent2node (NonUniformSize or fixed).
         /// @param query          User-provided callbacks describing sub-entity topology.
         /// @param nParent        Number of parent entities to process.
         /// @param nNode          Total number of nodes (for reverse-index sizing).
         /// @param mpi            MPI info (only for array allocation, no communication).
         /// @return               InterpolateResult with all adjacencies (local indices).
+        template <rowsize p2n_rs = NonUniformSize>
         static InterpolateResult Interpolate(
-            const tAdjPair &parent2node,
+            const ArrayAdjacencyPair<p2n_rs> &parent2node,
             const SubEntityQuery &query,
             index nParent,
             index nNode,
@@ -954,8 +1100,9 @@ namespace DNDS::Geom
         ///                          and back to local on the receiver.
         /// @param mpi               MPI communicator.
         /// @return InterpolateDistributedResult with owned + ghost entities.
+        template <rowsize p2n_rs = NonUniformSize>
         static InterpolateDistributedResult InterpolateDistributed(
-            const tAdjPair &parent2node,
+            const ArrayAdjacencyPair<p2n_rs> &parent2node,
             const OffsetAscendIndexMapping &parentGhostMapping,
             const SubEntityQuery &query,
             index nLocalParents,
@@ -1025,9 +1172,14 @@ namespace DNDS::Geom
         /// @param nNode             Total C (father + son).
         /// @param resolver          N-parent ownership callback.
         /// @param mpi               MPI communicator.
-        /// @return InterpolateGlobalResult with owned B entities in global indices.
-        static InterpolateGlobalResult InterpolateGlobal(
-            const tAdjPair &parent2node,
+        /// @return InterpolateGlobalResultT<e2p_rs> with owned B entities in global indices.
+        /// @tparam p2n_rs  Row-size of parent2node input.
+        /// @tparam e2p_rs  Row-size of entity2parent output (NonUniformSize = variable,
+        ///                 2 = fixed for faces). Fixed-width rows shorter than e2p_rs
+        ///                 are padded with UnInitIndex.
+        template <rowsize p2n_rs = NonUniformSize, rowsize e2p_rs = NonUniformSize>
+        static InterpolateGlobalResultT<e2p_rs> InterpolateGlobal(
+            const ArrayAdjacencyPair<p2n_rs> &parent2node,
             const tPbiPair &parent2nodePbi,
             const OffsetAscendIndexMapping &parentGhostMapping,
             const GlobalOffsetsMapping &parentGlobalMapping,
@@ -1067,10 +1219,10 @@ namespace DNDS::Geom
     // Template implementation: ComposeFiltered
     // =====================================================================
 
-    template <class Predicate>
-    tAdjPair MeshConnectivity::ComposeFiltered(
-        const tAdjPair &AB,
-        const tAdjPair &BC,
+    template <rowsize rs_AB, rowsize rs_BC, rowsize out_rs, class Predicate>
+    ArrayAdjacencyPair<out_rs> MeshConnectivity::ComposeFiltered(
+        const ArrayAdjacencyPair<rs_AB> &AB,
+        const ArrayAdjacencyPair<rs_BC> &BC,
         index nALocal,
         const std::unordered_map<index, index> &bGlobal2Local,
         const std::function<index(index)> &aLocal2Global,
@@ -1081,7 +1233,7 @@ namespace DNDS::Geom
     {
         const auto &mpi = AB.father->getMPI();
         const bool hasMatchExtra = bool(matchExtra);
-        tAdjPair result;
+        ArrayAdjacencyPair<out_rs> result;
         result.InitPair("ComposeFiltered_result", mpi);
         result.father->Resize(nALocal);
 
@@ -1095,6 +1247,13 @@ namespace DNDS::Geom
             std::unordered_map<index, std::vector<index>> candidateSharedBs;
             for (auto iB : AB.father->operator[](iA))
             {
+                // Fixed-width adjacencies may have UnInitIndex padding — skip.
+                if constexpr (rs_AB > 0)
+                {
+                    if (iB == UnInitIndex)
+                        continue;
+                }
+
                 auto it = bGlobal2Local.find(iB);
                 DNDS_assert_info(it != bGlobal2Local.end(),
                                  fmt::format("ComposeFiltered: B-entity global {} (referenced by A-entity "
@@ -1105,6 +1264,13 @@ namespace DNDS::Geom
                 index bLocal = it->second;
                 for (auto iC : BC[bLocal])
                 {
+                    // Fixed-width adjacencies may have UnInitIndex padding — skip.
+                    if constexpr (rs_BC > 0)
+                    {
+                        if (iC == UnInitIndex)
+                            continue;
+                    }
+
                     candidateSharedCount[iC]++;
                     if (hasMatchExtra)
                         candidateSharedBs[iC].push_back(iB);
@@ -1128,12 +1294,176 @@ namespace DNDS::Geom
             // Sort for deterministic output
             std::sort(accepted.begin(), accepted.end());
 
-            result.father->ResizeRow(iA, accepted.size());
-            for (rowsize j = 0; j < static_cast<rowsize>(accepted.size()); j++)
-                result.father->operator()(iA, j) = accepted[j];
+            if constexpr (out_rs == NonUniformSize)
+            {
+                result.father->ResizeRow(iA, accepted.size());
+                for (rowsize j = 0; j < static_cast<rowsize>(accepted.size()); j++)
+                    result.father->operator()(iA, j) = accepted[j];
+            }
+            else
+            {
+                // Fixed-width output: fill accepted entries, pad remainder with UnInitIndex.
+                DNDS_assert_info(static_cast<rowsize>(accepted.size()) <= out_rs,
+                                 fmt::format("ComposeFiltered: row {} has {} entries but out_rs={}",
+                                             iA, accepted.size(), out_rs));
+                for (rowsize j = 0; j < out_rs; j++)
+                    result.father->operator()(iA, j) =
+                        (j < static_cast<rowsize>(accepted.size())) ? accepted[j] : UnInitIndex;
+            }
+        }
+
+        return result;
+    }
+
+    // =====================================================================
+    // Template implementation: Compose
+    // =====================================================================
+
+    template <rowsize rs_AB, rowsize rs_BC, rowsize out_rs>
+    ArrayAdjacencyPair<out_rs> MeshConnectivity::Compose(
+        const ArrayAdjacencyPair<rs_AB> &AB,
+        const ArrayAdjacencyPair<rs_BC> &BC,
+        index nALocal,
+        const std::unordered_map<index, index> &bGlobal2Local,
+        const std::function<index(index)> &aLocal2Global,
+        bool removeSelf)
+    {
+        return ComposeFiltered<rs_AB, rs_BC, out_rs>(
+            AB, BC, nALocal, bGlobal2Local, aLocal2Global,
+            SharedCountPredicate{.minShared = 1, .removeSelf = removeSelf});
+    }
+
+    // =====================================================================
+    // Template implementation: Inverse
+    // =====================================================================
+
+    template <rowsize cone_rs>
+    tAdjPair MeshConnectivity::Inverse(
+        const ArrayAdjacencyPair<cone_rs> &cone,
+        index nToLocal,
+        const MPIInfo &mpi,
+        const std::function<index(index)> &fromLocal2Global,
+        const std::function<index(index)> &toLocal2Global,
+        const ssp<GlobalOffsetsMapping> &toGlobalMapping)
+    {
+        // ----- Step 1: Local inversion -----
+        std::unordered_map<index, std::unordered_set<index>> to2fromRecord;
+        std::vector<index> ghostToIndices;
+        std::unordered_set<index> ghostToSet;
+
+        index nFromLocal = cone.father->Size();
+        for (index iFrom = 0; iFrom < nFromLocal; iFrom++)
+        {
+            index fromGlobal = fromLocal2Global(iFrom);
+            for (auto iTo : cone.father->operator[](iFrom))
+            {
+                // Fixed-width adjacencies may have UnInitIndex padding — skip.
+                if constexpr (cone_rs > 0)
+                {
+                    if (iTo == UnInitIndex)
+                        continue;
+                }
+
+                to2fromRecord[iTo].insert(fromGlobal);
+
+                auto [ret, rank, val] = toGlobalMapping->search(iTo);
+                DNDS_assert_info(ret, fmt::format("Inverse: to-entity {} not found in global mapping", iTo));
+                if (rank != mpi.rank && ghostToSet.find(iTo) == ghostToSet.end())
+                {
+                    ghostToIndices.push_back(iTo);
+                    ghostToSet.insert(iTo);
+                }
+            }
+        }
+
+        // ----- Step 2: Build initial support pair -----
+        tAdjPair support;
+        support.InitPair("Inverse_support", mpi);
+        support.father->Resize(nToLocal);
+
+        for (index iTo = 0; iTo < nToLocal; iTo++)
+        {
+            index toGlobal = toLocal2Global(iTo);
+            auto it = to2fromRecord.find(toGlobal);
+            if (it != to2fromRecord.end())
+            {
+                support.father->ResizeRow(iTo, it->second.size());
+                rowsize j = 0;
+                for (auto fromG : it->second)
+                    support.father->operator()(iTo, j++) = fromG;
+            }
+        }
+
+        // Set up ghost communication
+        support.TransAttach();
+        support.trans.createFatherGlobalMapping();
+        support.trans.createGhostMapping(ghostToIndices);
+
+        support.son->Resize(support.trans.pLGhostMapping->ghostIndex.size());
+        for (auto &[toGlobal, fromSet] : to2fromRecord)
+        {
+            MPI_int rank{-1};
+            index val{-1};
+            if (!support.trans.pLGhostMapping->search(toGlobal, rank, val))
+                DNDS_check_throw_info(false, "Inverse: ghost search failed");
+            if (rank >= 0)
+            {
+                support.son->ResizeRow(val, fromSet.size());
+                rowsize j = 0;
+                for (auto fromG : fromSet)
+                    support.son->operator()(val, j++) = fromG;
+            }
+        }
+
+        // ----- Step 3: Reverse-push -----
+        using tSupportArr = typename decltype(support.son)::element_type;
+        ssp<tSupportArr> supportPast = make_ssp<tSupportArr>(ObjName{"Inverse_supportPast"}, mpi);
+
+        typename DNDS::ArrayTransformerType<tSupportArr>::Type supportPastTrans;
+        supportPastTrans.setFatherSon(support.son, supportPast);
+        supportPastTrans.createFatherGlobalMapping();
+
+        std::vector<index> pushSonSeries(support.son->Size());
+        for (index i = 0; i < support.son->Size(); i++)
+            pushSonSeries[i] = i;
+        supportPastTrans.createGhostMapping(pushSonSeries, support.trans.pLGhostMapping->ghostStart);
+        supportPastTrans.createMPITypes();
+        supportPastTrans.pullOnce();
+
+        // ----- Step 4: Merge remote contributions -----
+        DNDS_assert(DNDS::size_to_index(support.trans.pLGhostMapping->ghostIndex.size()) == support.son->Size());
+        DNDS_assert(DNDS::size_to_index(support.trans.pLGhostMapping->pushingIndexGlobal.size()) == supportPast->Size());
+
+        for (index i = 0; i < supportPast->Size(); i++)
+        {
+            index toGlobal = support.trans.pLGhostMapping->pushingIndexGlobal[i];
+            for (auto fromG : (*supportPast)[i])
+                to2fromRecord[toGlobal].insert(fromG);
+        }
+
+        // ----- Step 5: Rebuild father -----
+        tAdjPair result;
+        result.InitPair("Inverse_result", mpi);
+        result.father->Resize(nToLocal);
+
+        for (index iTo = 0; iTo < nToLocal; iTo++)
+        {
+            index toGlobal = toLocal2Global(iTo);
+            auto it = to2fromRecord.find(toGlobal);
+            if (it != to2fromRecord.end())
+            {
+                std::vector<index> fromVec(it->second.begin(), it->second.end());
+                std::sort(fromVec.begin(), fromVec.end());
+                result.father->ResizeRow(iTo, fromVec.size());
+                for (rowsize j = 0; j < static_cast<rowsize>(fromVec.size()); j++)
+                    result.father->operator()(iTo, j) = fromVec[j];
+            }
         }
 
         return result;
     }
 
 } // namespace DNDS::Geom
+
+// Template implementations for Interpolate family (too large for inline)
+#include "MeshConnectivity_Interpolate.hxx"
