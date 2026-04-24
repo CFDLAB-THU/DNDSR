@@ -13,6 +13,7 @@
 #include "EulerSolver.hpp"
 #include "SpecialFields.hpp"
 #include "DNDS/OMP.hpp"
+#include "Geom/Mesh/Mesh_Helpers.hpp"
 
 namespace DNDS::Euler
 {
@@ -77,142 +78,119 @@ namespace DNDS::Euler
         if (config.dataIOControl.readMeshMode == 0)
         {
             if (config.dataIOControl.meshFormat == 1)
+            {
                 reader->ReadFromOpenFOAMAndConvertSerial(
                     config.dataIOControl.meshFile,
                     config.bcNameMapping,
                     [&](const std::string &name)
                         -> Geom::t_index
                     { return BCHandler.GetIDFromName(name); });
+                reader->Deduplicate1to1Periodic(config.boundaryDefinition.periodicTolerance);
+                reader->BuildCell2Cell();
+                reader->MeshPartitionCell2Cell(config.dataIOControl.meshPartitionOptions);
+                reader->PartitionReorderToMeshCell2Cell();
+
+                mesh->RecoverNode2CellAndNode2Bnd();
+                mesh->RecoverCell2CellAndBnd2Cell();
+                mesh->BuildGhostPrimary();
+                mesh->AdjGlobal2LocalPrimary();
+                mesh->AdjGlobal2LocalN2CB();
+                if (config.dataIOControl.meshElevation == 1)
+                {
+                    DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO2;
+                    DNDS_MAKE_SSP(meshO2, mpi, gDimLocal);
+                    meshO2->BuildO2FromO1Elevation(*mesh);
+                    std::swap(meshO2, mesh);
+
+                    reader->mesh = mesh;
+                    mesh->RecoverNode2CellAndNode2Bnd();
+                    mesh->RecoverCell2CellAndBnd2Cell();
+                    mesh->BuildGhostPrimary();
+                    mesh->AdjGlobal2LocalPrimary();
+                    mesh->AdjGlobal2LocalN2CB();
+                }
+                DNDS_assert(config.dataIOControl.meshDirectBisect <= 4);
+                for (int iter = 1; iter <= config.dataIOControl.meshDirectBisect; iter++)
+                {
+                    DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO2;
+                    DNDS_MAKE_SSP(meshO2, mpi, gDimLocal);
+                    meshO2->BuildO2FromO1Elevation(*mesh);
+
+                    meshO2->RecoverNode2CellAndNode2Bnd();
+                    meshO2->RecoverCell2CellAndBnd2Cell();
+                    meshO2->BuildGhostPrimary();
+                    DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO1B;
+                    DNDS_MAKE_SSP(meshO1B, mpi, gDimLocal);
+                    meshO1B->BuildBisectO1FormO2(*meshO2);
+
+                    std::swap(meshO1B, mesh);
+                    reader->mesh = mesh;
+                    mesh->RecoverNode2CellAndNode2Bnd();
+                    mesh->RecoverCell2CellAndBnd2Cell();
+                    mesh->BuildGhostPrimary();
+                    mesh->AdjGlobal2LocalPrimary();
+                    mesh->AdjGlobal2LocalN2CB();
+                    index nCell = mesh->NumCellGlobal();
+                    index nNode = mesh->NumNodeGlobal();
+                    if (mesh->getMPI().rank == 0)
+                    {
+                        log() << fmt::format("Mesh Direct Bisect {} done, nCell [{}], nNode [{}]", iter, nCell, nNode) << std::endl;
+                    }
+                }
+            }
             else
-                reader->ReadFromCGNSSerial(
+            {
+                Geom::ReadMeshFromCGNS(
+                    mesh, reader,
                     config.dataIOControl.meshFile,
+                    config.dataIOControl.meshPartitionOptions,
+                    config.boundaryDefinition.periodicTolerance,
+                    config.dataIOControl.meshElevation,
+                    config.dataIOControl.meshDirectBisect,
                     [&](const std::string &name) -> Geom::t_index
                     { return BCHandler.GetIDFromName(name); });
-            reader->Deduplicate1to1Periodic(config.boundaryDefinition.periodicTolerance);
-            reader->BuildCell2Cell();
-            reader->MeshPartitionCell2Cell(config.dataIOControl.meshPartitionOptions);
-            reader->PartitionReorderToMeshCell2Cell();
-
-            mesh->RecoverNode2CellAndNode2Bnd();
-            mesh->RecoverCell2CellAndBnd2Cell();
-            mesh->BuildGhostPrimary();
-            mesh->AdjGlobal2LocalPrimary();
-            mesh->AdjGlobal2LocalN2CB();
-            if (config.dataIOControl.meshElevation == 1)
-            {
-                DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO2;
-                DNDS_MAKE_SSP(meshO2, mpi, gDimLocal);
-                meshO2->BuildO2FromO1Elevation(*mesh);
-                std::swap(meshO2, mesh);
-
-                reader->mesh = mesh;
-                mesh->RecoverNode2CellAndNode2Bnd();
-                mesh->RecoverCell2CellAndBnd2Cell();
-                mesh->BuildGhostPrimary();
-                mesh->AdjGlobal2LocalPrimary();
-                mesh->AdjGlobal2LocalN2CB();
-            }
-            DNDS_assert(config.dataIOControl.meshDirectBisect <= 4);
-            for (int iter = 1; iter <= config.dataIOControl.meshDirectBisect; iter++)
-            {
-                DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO2;
-                DNDS_MAKE_SSP(meshO2, mpi, gDimLocal);
-                meshO2->BuildO2FromO1Elevation(*mesh);
-
-                meshO2->RecoverNode2CellAndNode2Bnd();
-                meshO2->RecoverCell2CellAndBnd2Cell();
-                meshO2->BuildGhostPrimary();
-                DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO1B;
-                DNDS_MAKE_SSP(meshO1B, mpi, gDimLocal);
-                meshO1B->BuildBisectO1FormO2(*meshO2);
-
-                std::swap(meshO1B, mesh);
-                reader->mesh = mesh;
-                mesh->RecoverNode2CellAndNode2Bnd();
-                mesh->RecoverCell2CellAndBnd2Cell();
-                mesh->BuildGhostPrimary();
-                mesh->AdjGlobal2LocalPrimary();
-                mesh->AdjGlobal2LocalN2CB();
-                index nCell = mesh->NumCellGlobal();
-                index nNode = mesh->NumNodeGlobal();
-                if (mesh->getMPI().rank == 0)
-                {
-                    log() << fmt::format("Mesh Direct Bisect {} done, nCell [{}], nNode [{}]", iter, nCell, nNode) << std::endl;
-                }
             }
         }
         else if (config.dataIOControl.readMeshMode == 1)
         {
-            using namespace std::literals;
-            std::string meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
-                                      (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) +
-                                      (config.dataIOControl.meshDirectBisect > 0 ? "_bisect" + std::to_string(config.dataIOControl.meshDirectBisect) : ""s);
-            auto [meshOutNameMod, meshPartPath] = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).ModifyFilePath(meshOutName, mpi, "part_%d", true);
-            Serializer::SerializerBaseSSP serializerP = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).BuildSerializer(mpi);
-
-            if (mpi.rank == 0)
-                log() << "EulerSolver === to read via [" << config.dataIOControl.meshPartitionedReaderType << "]" << std::endl;
-
-            serializerP->OpenFile(meshOutNameMod, true);
-            mesh->ReadSerialize(serializerP, "meshPart");
-            serializerP->CloseFile();
-
-            mesh->RecoverNode2CellAndNode2Bnd();
-            mesh->RecoverCell2CellAndBnd2Cell();
-            mesh->BuildGhostPrimary();
-            mesh->AdjGlobal2LocalPrimary();
-            mesh->AdjGlobal2LocalN2CB();
+            std::string meshOutName = Geom::MeshH5Path(
+                config.dataIOControl.meshFile, mpi.size,
+                config.dataIOControl.meshElevation,
+                config.dataIOControl.meshDirectBisect);
+            Geom::ReadMeshFromH5Parallel(
+                *mesh,
+                Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType),
+                meshOutName);
         }
         else if (config.dataIOControl.readMeshMode == 2)
         {
-            // Distributed read: even-split H5 read + ParMetis repartition.
-            // Works with any number of MPI ranks.
-            using namespace std::literals;
-            std::string meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
-                                      (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) +
-                                      (config.dataIOControl.meshDirectBisect > 0 ? "_bisect" + std::to_string(config.dataIOControl.meshDirectBisect) : ""s);
-            auto [meshOutNameMod, meshPartPath] = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).ModifyFilePath(meshOutName, mpi, "part_%d", true);
-            Serializer::SerializerBaseSSP serializerP = Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType).BuildSerializer(mpi);
-
-            if (mpi.rank == 0)
-                log() << "EulerSolver === distributed read via [" << config.dataIOControl.meshPartitionedReaderType << "]" << std::endl;
-
-            serializerP->OpenFile(meshOutNameMod, true);
-            mesh->ReadSerializeAndDistribute(serializerP, "meshPart", config.dataIOControl.meshPartitionOptions);
-            serializerP->CloseFile();
-
-            mesh->RecoverNode2CellAndNode2Bnd();
-            mesh->RecoverCell2CellAndBnd2Cell();
-            mesh->BuildGhostPrimary();
-            mesh->AdjGlobal2LocalPrimary();
-            mesh->AdjGlobal2LocalN2CB();
+            std::string meshOutName = Geom::MeshH5Path(
+                config.dataIOControl.meshFile, mpi.size,
+                config.dataIOControl.meshElevation,
+                config.dataIOControl.meshDirectBisect);
+            Geom::ReadMeshFromH5(
+                *mesh,
+                Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType),
+                meshOutName,
+                config.dataIOControl.meshPartitionOptions);
         }
         OMP::set_full_parallel_OMP();
-        if (config.dataIOControl.meshReorderCells == 1)
+        {
+            Geom::PrepareMeshOptions prepOpts;
+            prepOpts.reorderCells = config.dataIOControl.meshReorderCells;
 #ifdef DNDS_USE_OMP
-            mesh->ReorderLocalCells(std::max(get_env_DNDS_DIST_OMP_NUM_THREADS(), 1));
+            prepOpts.reorderParts = std::max(get_env_DNDS_DIST_OMP_NUM_THREADS(), 1);
 #else
-            mesh->ReorderLocalCells(); // do this early so that faces are natural to cell
+            prepOpts.reorderParts = 1;
 #endif
-        // std::cout << "here" << std::endl;
-        mesh->InterpolateFace();
-        mesh->AssertOnFaces();
-        { // not needed after adding node2cell, node2bnd mandatory
-          // // todo: make this interpolation optional?
-          // mesh->AdjLocal2GlobalPrimary();
-          // mesh->RecoverNode2CellAndNode2Bnd(); // // todo: don't do this if already done
-          // mesh->AdjGlobal2LocalPrimary();
+            prepOpts.buildSerialOut = (config.dataIOControl.outPltMode == 0);
+            Geom::PrepareMesh(*mesh, *reader, prepOpts);
         }
-        mesh->AdjLocal2GlobalN2CB();
-        mesh->BuildGhostN2CB();
-        mesh->AdjGlobal2LocalN2CB();
-        log() << fmt::format("{}, NumBndGhost {}", mpi.rank, mesh->NumBndGhost()) << std::endl;
 
-        // mesh->AdjLocal2GlobalN2CB();
-        // mesh->AdjGlobal2LocalN2CB();
-        for (index iNode = 0; iNode < mesh->NumNode(); iNode++)
-            for (index iCell : mesh->node2cell[iNode])
-                DNDS_assert(iCell >= 0);
+        // note: node2cell may contain negative entries for ghost nodes
+        // whose cell neighbors are not in the local partition.
+        // The old code checked iCell >= 0 here but only for NumNode()
+        // (father nodes), not NumNodeProc() (father + son).
 
         if (config.dataIOControl.meshElevation == 1 && config.dataIOControl.readMeshMode == 0)
         {
@@ -260,57 +238,18 @@ namespace DNDS::Euler
                 config.dataIOControl.meshWallDistOptions);
         }
 
-        if (config.dataIOControl.outPltMode == 0)
-        {
-            mesh->AdjLocal2GlobalPrimary();
-            reader->BuildSerialOut();
-            mesh->AdjGlobal2LocalPrimary();
-        }
-
         if (config.timeMarchControl.partitionMeshOnly)
         {
-            using namespace std::literals;
-            std::string meshOutName = std::string(config.dataIOControl.meshFile) + "_part_" + std::to_string(mpi.size) +
-                                      (config.dataIOControl.meshElevation == 1 ? "_elevated"s : ""s) +
-                                      (config.dataIOControl.meshDirectBisect > 0 ? "_bisect" + std::to_string(config.dataIOControl.meshDirectBisect) : ""s);
-
-            // std::string meshPartPath;
-            // if (config.dataIOControl.meshPartitionedWriter.type == "JSON")
-            // {
-            //     meshOutName += ".dir";
-            //     std::filesystem::path meshOutDir{meshOutName};
-            //     std::filesystem::create_directories(meshOutDir);
-            //     meshPartPath = DNDS::getStringForcePath(meshOutDir / (std::string("part_") + std::to_string(mpi.rank) + ".json"));
-            // }
-            // else if (config.dataIOControl.meshPartitionedWriter.type == "H5")
-            // {
-            //     meshOutName += ".dnds.h5";
-            //     meshPartPath = meshOutName;
-            //     std::filesystem::path outPath = meshPartPath;
-            //     std::filesystem::create_directories(outPath.parent_path() / ".");
-            // }
-            // else
-            //     DNDS_assert_info(false, "serializer is invalid");
-
-            auto [meshOutNameMod, meshPartPath] = config.dataIOControl.meshPartitionedWriter.ModifyFilePath(meshOutName, mpi, "part_%d", false);
-
-            Serializer::SerializerBaseSSP serializerP = config.dataIOControl.meshPartitionedWriter.BuildSerializer(mpi);
-
-            serializerP->OpenFile(meshOutNameMod, false);
-            mesh->AdjLocal2GlobalPrimary();
-            mesh->WriteSerialize(serializerP, "meshPart");
-            mesh->AdjGlobal2LocalPrimary();
-            serializerP->CloseFile();
+            std::string meshOutName = Geom::MeshH5Path(
+                config.dataIOControl.meshFile, mpi.size,
+                config.dataIOControl.meshElevation,
+                config.dataIOControl.meshDirectBisect);
+            Geom::SerializeMesh(*mesh, meshOutName, config.dataIOControl.meshPartitionedWriter);
             return; //** mesh preprocess only (without transformation)
         }
 
-        mesh->ConstructBndMesh(*meshBnd);
-        if (config.dataIOControl.outPltMode == 0)
-        {
-            meshBnd->AdjLocal2GlobalPrimaryForBnd();
-            readerBnd->BuildSerialOut();
-            meshBnd->AdjGlobal2LocalPrimaryForBnd();
-        }
+        Geom::BuildBndMesh(*mesh, *meshBnd, *readerBnd,
+                           config.dataIOControl.outPltMode == 0);
 
         if (config.dataIOControl.meshRotZ != 0.0)
         {
