@@ -15,12 +15,21 @@ namespace DNDS::Geom
     // GhostSpec::defaultPrimary
     // =================================================================
 
-    GhostSpec GhostSpec::defaultPrimary()
+    GhostSpec GhostSpec::defaultPrimary(int nLayers)
     {
         using namespace Adj;
+        DNDS_assert(nLayers >= 1);
+
+        // Cell chain: nLayers hops of Cell2Cell
+        std::vector<AdjKind> cellHops(nLayers, Cell2Cell);
+
+        // Node chain: nLayers hops of Cell2Cell + Cell2Node
+        std::vector<AdjKind> nodeHops(nLayers, Cell2Cell);
+        nodeHops.push_back(Cell2Node);
+
         return GhostSpec{{
-            {EntityKind::Cell, {Cell2Cell}, EntityKind::Cell},
-            {EntityKind::Cell, {Cell2Cell, Cell2Node}, EntityKind::Node},
+            {EntityKind::Cell, cellHops, EntityKind::Cell},
+            {EntityKind::Cell, nodeHops, EntityKind::Node},
             {EntityKind::Bnd, {Bnd2Node, Node2Bnd}, EntityKind::Bnd},
             {EntityKind::Bnd, {Bnd2Node, Node2Bnd, Bnd2Node}, EntityKind::Node},
         }};
@@ -98,7 +107,10 @@ namespace DNDS::Geom
             }
 
             // If this is the last hop, mark as collect.
-            if (hi + 1 == chain.hops.size())
+            // Also mark intermediate hops whose entity kind matches the
+            // chain target -- this enables cumulative ghost collection for
+            // multi-hop same-kind chains (e.g., Cell2Cell -> Cell2Cell).
+            if (hi + 1 == chain.hops.size() || childKind == chain.target)
                 child->collect = true;
 
             current = child;
@@ -381,6 +393,21 @@ namespace DNDS::Geom
         // --- Per-node sets: flat vector indexed by node ID ---
         std::vector<std::vector<index>> nodeSets(tree.totalNodes);
 
+        // --- Scratch state: per-AdjKind temporary pair with ghost data ---
+        // Created lazily when a scratch pull is needed between levels.
+        // The scratch pair shares the same father as the registered adj
+        // but has its own son array and transformer.
+        std::unordered_map<AdjKind, ssp<AdjVariant>, AdjKindHash> scratchAdjs;
+
+        // Resolve adjacency, preferring scratch (ghost-populated) version.
+        auto resolveAdjLive = [&](AdjKind kind) -> ssp<AdjVariant>
+        {
+            auto sit = scratchAdjs.find(kind);
+            if (sit != scratchAdjs.end())
+                return sit->second;
+            return resolveAdj(kind);
+        };
+
         // --- Initialize roots (level 0) ---
         for (auto &entry : tree.levels[0])
         {
@@ -421,31 +448,106 @@ namespace DNDS::Geom
                 sortedMergeInto(result.ghostIndices[entry.kind], ghosts);
             }
 
-            // Step 2 + 4: Traverse children.
-            // (Step 3 — scratch pull — is the caller's responsibility for now.
-            //  The evaluator asserts that all entities are locally resolvable
-            //  when ghost data should be available, i.e., after level 0.)
-            if (level < tree.maxLevel)
+            if (level >= tree.maxLevel)
+                break;
+
+            // Step 2: Scratch pull -- collectively decide which adjacencies
+            // need ghost data, then create temp transformers and pull.
+            // createGhostMapping/pullOnce are MPI-collective, so ALL ranks
+            // must participate even if some have no ghosts to pull.
             {
-                auto &nextLevelEntries = tree.levels[level + 1];
-                for (auto &childEntry : nextLevelEntries)
+                // Collect unique (hop) at level+1 that need scratch pulls.
+                // Use a deterministic order based on the level+1 entries.
+                std::vector<AdjKind> hopsNeedingScratch;
+                for (auto &childEntry : tree.levels[level + 1])
                 {
-                    // childEntry.parentId points to the parent at this level.
-                    auto &parentSet = nodeSets[childEntry.parentId];
+                    AdjKind hop = childEntry.hop;
+                    EntityKind parentKind = hop.from;
 
-                    auto adjVar = resolveAdj(childEntry.hop);
-                    DNDS_assert_info(adjVar,
-                                     fmt::format("evaluateGhostTree: adjacency {} not resolved",
-                                                 adjKindName(childEntry.hop)));
+                    // Skip if already handled this hop.
+                    bool alreadyHandled = false;
+                    for (auto &h : hopsNeedingScratch)
+                        if (h == hop)
+                        {
+                            alreadyHandled = true;
+                            break;
+                        }
+                    if (alreadyHandled || scratchAdjs.count(hop))
+                        continue;
 
-                    // Assert ghost-not-found only after level 0 (level 0 is
-                    // owned entities, always local; later levels may have
-                    // ghost entities that need prior scratch pulls).
-                    bool assertFound = (level > 0);
+                    // Locally check if there are ghost indices for the parent kind.
+                    int localNeedsIt = 0;
+                    auto git = result.ghostIndices.find(parentKind);
+                    if (git != result.ghostIndices.end() && !git->second.empty())
+                        localNeedsIt = 1;
 
-                    nodeSets[childEntry.nodeId] = traverseHop(parentSet, *adjVar, assertFound);
+                    // Collectively decide: if ANY rank needs it, ALL participate.
+                    int globalNeedsIt = 0;
+                    MPI_Allreduce(&localNeedsIt, &globalNeedsIt, 1, MPI_INT, MPI_MAX, mpi.comm);
+
+                    if (globalNeedsIt)
+                        hopsNeedingScratch.push_back(hop);
+                }
+
+                // Create scratch transformers for all collectively-agreed hops.
+                for (auto &hop : hopsNeedingScratch)
+                {
+                    EntityKind parentKind = hop.from;
+                    auto origAdj = resolveAdj(hop);
+                    if (!origAdj)
+                        continue;
+
+                    // Ghost set for the parent entity kind (may be empty on some ranks).
+                    std::vector<index> ghostSet;
+                    auto git = result.ghostIndices.find(parentKind);
+                    if (git != result.ghostIndices.end())
+                        ghostSet = git->second;
+
+                    std::visit([&](const auto &adj)
+                               {
+                        using TPair = std::decay_t<decltype(adj)>;
+                        using TArray = typename TPair::t_arr;
+
+                        auto tempSon = make_ssp<TArray>(
+                            ObjName{"scratch_son"}, adj.father->getMPI());
+
+                        auto livePair = makeAdjVariant<TPair>();
+                        auto &live = std::get<TPair>(*livePair);
+                        live.father = adj.father;
+                        live.son = tempSon;
+                        live.trans.setFatherSon(adj.father, tempSon);
+
+                        DNDS_assert_info(adj.father->pLGlobalMapping,
+                                         "scratch pull: father must have pLGlobalMapping");
+                        live.trans.pLGlobalMapping = adj.father->pLGlobalMapping;
+
+                        live.trans.createGhostMapping(ghostSet);
+                        live.trans.createMPITypes();
+                        live.trans.pullOnce();
+
+                        scratchAdjs[hop] = std::move(livePair); }, *origAdj);
                 }
             }
+
+            // Step 3: Traverse children at level+1 using live adjacencies.
+            auto &nextLevelEntries = tree.levels[level + 1];
+            for (auto &childEntry : nextLevelEntries)
+            {
+                auto &parentSet = nodeSets[childEntry.parentId];
+
+                auto adjVar = resolveAdjLive(childEntry.hop);
+                DNDS_assert_info(adjVar,
+                                 fmt::format("evaluateGhostTree: adjacency {} not resolved",
+                                             adjKindName(childEntry.hop)));
+
+                // Don't assert-found: unresolvable entries are silently
+                // skipped (they are ghost candidates, not errors).
+                nodeSets[childEntry.nodeId] = traverseHop(parentSet, *adjVar, false);
+            }
+
+            // Clear scratch states so next level re-creates them with
+            // the expanded cumulative ghost set.
+            scratchAdjs.clear();
         }
 
         // --- Deduplicate ghost indices (already sorted from sortedMergeInto) ---

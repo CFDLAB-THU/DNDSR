@@ -73,7 +73,7 @@ namespace DNDS::Geom
         UnstructuredMesh_
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(RecoverNode2CellAndNode2Bnd)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(RecoverCell2CellAndBnd2Cell)
-            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildGhostPrimary)
+            .def("BuildGhostPrimary", &UnstructuredMesh::BuildGhostPrimary, py::arg("nGhostLayers") = 1)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjGlobal2LocalPrimary)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjLocal2GlobalPrimary)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjGlobal2LocalPrimaryForBnd)

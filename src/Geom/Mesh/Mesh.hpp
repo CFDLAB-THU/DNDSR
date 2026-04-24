@@ -432,7 +432,7 @@ namespace DNDS::Geom
          * faces/bnds: needed by all father cells
          *
          */
-        void BuildGhostPrimary();
+        void BuildGhostPrimary(int nGhostLayers = 1);
         void BuildGhostPrimaryLegacy();
         void AdjGlobal2LocalPrimary();
         void AdjLocal2GlobalPrimary();

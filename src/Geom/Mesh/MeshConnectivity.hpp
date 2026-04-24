@@ -223,12 +223,15 @@ namespace DNDS::Geom
     {
         std::vector<GhostChain> chains;
 
-        /// The current default pipeline specification.
+        /// The default pipeline specification for 1 ghost layer.
         /// Cell ghost: owned cells -> Cell2Cell -> cells
         /// Node ghost: owned cells -> Cell2Cell -> Cell2Node -> nodes
         /// Bnd ghost:  owned bnds  -> Bnd2Node -> Node2Bnd -> bnds
         /// Bnd-node ghost: owned bnds -> Bnd2Node -> Node2Bnd -> Bnd2Node -> nodes
-        static GhostSpec defaultPrimary();
+        static GhostSpec defaultPrimary() { return defaultPrimary(1); }
+
+        /// Parameterized default: nLayers hops of Cell2Cell for ghost cells.
+        static GhostSpec defaultPrimary(int nLayers);
     };
 
     // =================================================================
@@ -853,22 +856,16 @@ namespace DNDS::Geom
         void registerAdj(AdjKind kind, ssp<AdjVariant> adjPtr);
 
         /// Convenience: register a specific pair type (tAdjPair, tAdj2Pair, etc.).
-        /// Creates a shared AdjVariant wrapping a shallow-shared pair: the new
-        /// pair shares the same father, son, and ghost mapping without triggering
-        /// ArrayTransformer copy constructor side effects.
+        /// Stores a father-only shallow reference. The evaluator creates its
+        /// own scratch transformers internally for any ghost data it needs.
         template <class TPair>
         void registerAdj(AdjKind kind, TPair &pair)
         {
-            // Build a fresh AdjVariant holding a default TPair, then share
-            // the father/son/ghost-mapping from the source pair.
             auto adjVar = makeAdjVariant<TPair>();
             auto &stored = std::get<TPair>(*adjVar);
             stored.father = pair.father;
-            stored.son = pair.son;
-            // Share ghost mapping for evaluateGhostTree traversal.
-            // pLGlobalMapping lives on father->pLGlobalMapping (Array-level).
-            // pLGhostMapping lives on trans (transformer-level).
-            stored.trans.pLGhostMapping = pair.trans.pLGhostMapping;
+            // son and ghost mapping are NOT copied. The evaluator's scratch
+            // pull creates its own temporary son/transformer when needed.
             registerAdj(kind, std::move(adjVar));
         }
 

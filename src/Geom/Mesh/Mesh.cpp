@@ -699,42 +699,66 @@ namespace DNDS::Geom
     }
 
     void UnstructuredMesh::
-        BuildGhostPrimary()
+        BuildGhostPrimary(int nGhostLayers)
     {
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert(nGhostLayers >= 1);
         DNDS_assert(cell2cell.idx.state() == Adj_PointToGlobal || cell2cell.idx.state() == Adj_Unknown);
         DNDS_assert(bnd2cell.idx.state() == Adj_PointToGlobal || bnd2cell.idx.state() == Adj_Unknown);
         DNDS_assert(cell2cell.father && cell2cell.father->Size() == this->NumCell());
         DNDS_assert(bnd2cell.father && bnd2cell.father->Size() == this->NumBnd());
 
         /********************************/
-        // cells — use evaluateGhostTree for ghost cell set
+        // Attach transformers and create father global mappings.
+        cell2cell.TransAttach();
+        cell2node.TransAttach();
+        cell2cellOrig.TransAttach();
+        if (isPeriodic)
+            cell2nodePbi.TransAttach();
+        cellElemInfo.TransAttach();
+        coords.TransAttach();
+        node2nodeOrig.TransAttach();
+        bnd2cell.TransAttach();
+        bnd2node.TransAttach();
+        if (isPeriodic)
+            bnd2nodePbi.TransAttach();
+        bndElemInfo.TransAttach();
+        bnd2bndOrig.TransAttach();
+        node2bnd.TransAttach();
+
+        cell2cell.trans.createFatherGlobalMapping();
+        coords.trans.createFatherGlobalMapping();
+        bnd2cell.trans.createFatherGlobalMapping();
+        node2bnd.trans.createFatherGlobalMapping();
+
+        /********************************/
+        // Unified ghost evaluation: single DAG, all inputs father-only.
+        // The evaluator handles scratch pulls internally.
+        MeshConnectivity dag;
+        dag.meshDim = dim;
+        // Register father-only (no son, no ghost mapping).
+        dag.registerAdj(Adj::Cell2Cell, cell2cell);
+        dag.registerAdj(Adj::Cell2Node, cell2node);
+        dag.registerAdj(Adj::Bnd2Node, bnd2node);
+        dag.registerAdj(Adj::Node2Bnd, node2bnd);
+        dag.registerGlobalMapping(EntityKind::Cell, cell2cell.trans.pLGlobalMapping);
+        dag.registerGlobalMapping(EntityKind::Node, coords.trans.pLGlobalMapping);
+        dag.registerGlobalMapping(EntityKind::Bnd, bnd2cell.trans.pLGlobalMapping);
+
+        auto spec = GhostSpec::defaultPrimary(nGhostLayers);
+        auto tree = CompiledGhostTree::compile(spec);
+        auto ghostResult = dag.evaluateGhostTree(tree, mpi);
+
+        /********************************/
+        // Apply ghost sets to real arrays.
+
+        // --- Cells ---
         {
-            cell2cell.TransAttach();
-            cell2node.TransAttach();
-            cell2cellOrig.TransAttach();
-            if (isPeriodic)
-                cell2nodePbi.TransAttach();
-            cellElemInfo.TransAttach();
-
-            cell2cell.trans.createFatherGlobalMapping();
-
-            // Use MeshConnectivity ghost evaluator for cell ghost set.
-            MeshConnectivity dag;
-            dag.meshDim = dim;
-            dag.registerAdj(Adj::Cell2Cell, cell2cell);
-            dag.registerGlobalMapping(EntityKind::Cell, cell2cell.trans.pLGlobalMapping);
-
-            GhostSpec cellSpec{{{EntityKind::Cell, {Adj::Cell2Cell}, EntityKind::Cell}}};
-            auto cellResult = dag.evaluateGhostTree(
-                CompiledGhostTree::compile(cellSpec), mpi);
-
-            auto it = cellResult.ghostIndices.find(EntityKind::Cell);
+            auto it = ghostResult.ghostIndices.find(EntityKind::Cell);
             std::vector<DNDS::index> ghostCells;
-            if (it != cellResult.ghostIndices.end())
+            if (it != ghostResult.ghostIndices.end())
                 ghostCells = std::move(it->second);
             cell2cell.trans.createGhostMapping(ghostCells);
-
             cell2cell.trans.createMPITypes();
             cell2cell.trans.pullOnce();
             cell2node.BorrowAndPull(cell2cell);
@@ -744,31 +768,11 @@ namespace DNDS::Geom
             cellElemInfo.BorrowAndPull(cell2cell);
         }
 
-        /********************************/
-        // cells done, go on to nodes — use evaluateGhostTree with 2-hop chain
-        // Cell → Cell2Cell → Cell2Node → Node.
-        // cell2node now has son data (from BorrowAndPull above), so traverseHop
-        // can resolve ghost cell globals via the borrowed ghost mapping.
+        // --- Nodes ---
         {
-            coords.TransAttach();
-            node2nodeOrig.TransAttach();
-
-            coords.trans.createFatherGlobalMapping();
-
-            MeshConnectivity dagNode;
-            dagNode.meshDim = dim;
-            dagNode.registerAdj(Adj::Cell2Cell, cell2cell);
-            dagNode.registerAdj(Adj::Cell2Node, cell2node);
-            dagNode.registerGlobalMapping(EntityKind::Cell, cell2cell.trans.pLGlobalMapping);
-            dagNode.registerGlobalMapping(EntityKind::Node, coords.trans.pLGlobalMapping);
-
-            GhostSpec nodeSpec{{{EntityKind::Cell, {Adj::Cell2Cell, Adj::Cell2Node}, EntityKind::Node}}};
-            auto nodeResult = dagNode.evaluateGhostTree(
-                CompiledGhostTree::compile(nodeSpec), mpi);
-
-            auto itN = nodeResult.ghostIndices.find(EntityKind::Node);
+            auto itN = ghostResult.ghostIndices.find(EntityKind::Node);
             std::vector<DNDS::index> ghostNodes;
-            if (itN != nodeResult.ghostIndices.end())
+            if (itN != ghostResult.ghostIndices.end())
                 ghostNodes = std::move(itN->second);
             coords.trans.createGhostMapping(ghostNodes);
             coords.trans.createMPITypes();
@@ -776,39 +780,14 @@ namespace DNDS::Geom
             node2nodeOrig.BorrowAndPull(coords);
         }
 
-        /********************************/
-        // bnds — use evaluateGhostTree: Node → Node2Bnd → Bnd
-        // node2bnd is father-only (owned nodes), which is sufficient since
-        // ghost bnds are reachable from owned nodes' bnd references.
+        // --- Bnds ---
         {
             DNDS_assert(node2bnd.father);
             DNDS_assert(this->adjN2CBState == Adj_PointToGlobal);
-            bnd2cell.TransAttach();
-            bnd2node.TransAttach();
-            if (isPeriodic)
-                bnd2nodePbi.TransAttach();
-            bndElemInfo.TransAttach();
-            bnd2bndOrig.TransAttach();
 
-            bnd2cell.trans.createFatherGlobalMapping();
-
-            // Build node2bnd ghost mapping as father-only (needed for traverseHop).
-            node2bnd.TransAttach();
-            node2bnd.trans.createFatherGlobalMapping();
-
-            MeshConnectivity dagBnd;
-            dagBnd.meshDim = dim;
-            dagBnd.registerAdj(Adj::Node2Bnd, node2bnd);
-            dagBnd.registerGlobalMapping(EntityKind::Node, coords.trans.pLGlobalMapping);
-            dagBnd.registerGlobalMapping(EntityKind::Bnd, bnd2cell.trans.pLGlobalMapping);
-
-            GhostSpec bndSpec{{{EntityKind::Node, {Adj::Node2Bnd}, EntityKind::Bnd}}};
-            auto bndResult = dagBnd.evaluateGhostTree(
-                CompiledGhostTree::compile(bndSpec), mpi);
-
-            auto itB = bndResult.ghostIndices.find(EntityKind::Bnd);
+            auto itB = ghostResult.ghostIndices.find(EntityKind::Bnd);
             std::vector<DNDS::index> ghostBnds;
-            if (itB != bndResult.ghostIndices.end())
+            if (itB != ghostResult.ghostIndices.end())
                 ghostBnds = std::move(itB->second);
             bnd2cell.trans.createGhostMapping(ghostBnds);
             bnd2cell.trans.createMPITypes();
@@ -820,8 +799,6 @@ namespace DNDS::Geom
             bnd2bndOrig.BorrowAndPull(bnd2cell);
 
             // Ghost bnds may reference nodes not yet in the coord ghost layer.
-            // Add those nodes so that AdjGlobal2LocalPrimary can convert bnd2node.
-            // This is collective: all ranks must participate even if some have no extras.
             {
                 std::vector<DNDS::index> extraGhostNodes;
                 for (DNDS::index iBnd = bnd2node.father->Size(); iBnd < bnd2node.Size(); iBnd++)
@@ -838,7 +815,6 @@ namespace DNDS::Geom
                 MPI::Allreduce(&nExtraLocal, &nExtraGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
                 if (nExtraGlobal > 0)
                 {
-                    // Rebuild coord ghost mapping with the additional nodes
                     auto &existingGhost = coords.trans.pLGhostMapping->ghostIndex;
                     std::vector<DNDS::index> allGhostNodes(existingGhost.begin(), existingGhost.end());
                     allGhostNodes.insert(allGhostNodes.end(), extraGhostNodes.begin(), extraGhostNodes.end());
@@ -852,7 +828,7 @@ namespace DNDS::Geom
             }
         }
 
-        // === Wire per-adjacency target mappings for primary adjacencies ===
+        // === Wire per-adjacency target mappings ===
         {
             auto cellGhostMap = cellElemInfo.trans.pLGhostMapping;
             auto nodeGhostMap = coords.trans.pLGhostMapping;
