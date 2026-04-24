@@ -41,28 +41,23 @@ using namespace DNDS::Geom;
 // ---------------------------------------------------------------------------
 struct MeshConfig
 {
-    const char *name;         ///< Human-readable label
-    const char *file;         ///< Filename relative to data/mesh/
-    int dim;                  ///< Spatial dimension
-    bool periodic;            ///< Has periodic boundaries
-    tPoint translation1;      ///< Periodic translation axis 1
-    tPoint translation2;      ///< Periodic translation axis 2
-    tPoint translation3;      ///< Periodic translation axis 3
+    const char *name;          ///< Human-readable label
+    const char *file;          ///< Filename relative to data/mesh/
+    int dim;                   ///< Spatial dimension
+    bool periodic;             ///< Has periodic boundaries
+    tPoint translation1;       ///< Periodic translation axis 1
+    tPoint translation2;       ///< Periodic translation axis 2
+    tPoint translation3;       ///< Periodic translation axis 3
     DNDS::index expectedCells; ///< Expected global cell count (-1 = skip check)
     DNDS::index expectedBnds;  ///< Expected global bnd count (-1 = skip check)
 };
 
 static const MeshConfig g_configs[] = {
-    {"UniformSquare_10", "UniformSquare_10.cgns", 2, false,
-     {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 100, 40},
-    {"IV10_10", "IV10_10.cgns", 2, true,
-     {10, 0, 0}, {0, 10, 0}, {0, 0, 10}, 100, -1},
-    {"NACA0012_H2", "NACA0012_H2.cgns", 2, false,
-     {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 20816, 484},
-    {"IV10U_10", "IV10U_10.cgns", 2, true,
-     {10, 0, 0}, {0, 10, 0}, {0, 0, 10}, 322, -1},
-    {"Ball2", "Ball2.cgns", 3, false,
-     {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 958994, 16402}, // 3D mixed-element mesh (Ball2 is np=8 only)
+    {"UniformSquare_10", "UniformSquare_10.cgns", 2, false, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 100, 40},
+    {"IV10_10", "IV10_10.cgns", 2, true, {10, 0, 0}, {0, 10, 0}, {0, 0, 10}, 100, -1},
+    {"NACA0012_H2", "NACA0012_H2.cgns", 2, false, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 20816, 484},
+    {"IV10U_10", "IV10U_10.cgns", 2, true, {10, 0, 0}, {0, 10, 0}, {0, 0, 10}, 322, -1},
+    {"Ball2", "Ball2.cgns", 3, false, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 958994, 16402}, // 3D mixed-element mesh (Ball2 is np=8 only)
 };
 static constexpr int N_CONFIGS = sizeof(g_configs) / sizeof(g_configs[0]);
 
@@ -227,34 +222,32 @@ int main(int argc, char **argv)
 // Parameterized tests over all mesh configs (read-only)
 // ===========================================================================
 
-#define FOR_EACH_MESH_CONFIG(body)                                        \
-    for (int _ci = 0; _ci < N_CONFIGS; _ci++)                            \
-    {                                                                     \
-        /* Ball2 (index 4) is only tested with np=8 */                   \
-        if (_ci == 4 && g_mpi.size != 8) continue;                       \
-        CAPTURE(_ci);                                                     \
-        const auto &cfg = g_configs[_ci];                                \
-        auto m = g_full[_ci];                                             \
-        SUBCASE(cfg.name) { body }                                        \
+#define FOR_EACH_MESH_CONFIG(body)                     \
+    for (int _ci = 0; _ci < N_CONFIGS; _ci++)          \
+    {                                                  \
+        /* Ball2 (index 4) is only tested with np=8 */ \
+        if (_ci == 4 && g_mpi.size != 8)               \
+            continue;                                  \
+        CAPTURE(_ci);                                  \
+        const auto &cfg = g_configs[_ci];              \
+        auto m = g_full[_ci];                          \
+        SUBCASE(cfg.name) { body }                     \
     }
 
 // --- Pipeline state ---
 
-TEST_CASE("Pipeline: all five states are Local")
-{
+TEST_CASE("Pipeline: all five states are Local"){
     FOR_EACH_MESH_CONFIG({
         CHECK(m->adjPrimaryState == Adj_PointToLocal);
         CHECK(m->adjFacialState == Adj_PointToLocal);
         CHECK(m->adjC2FState == Adj_PointToLocal);
         CHECK(m->adjN2CBState == Adj_PointToLocal);
         CHECK(m->adjC2CFaceState == Adj_PointToLocal);
-    })
-}
+    })}
 
 // --- Global count conservation ---
 
-TEST_CASE("Pipeline: global cell count matches expected")
-{
+TEST_CASE("Pipeline: global cell count matches expected"){
     FOR_EACH_MESH_CONFIG({
         DNDS::index localCells = m->NumCell();
         DNDS::index globalCells = 0;
@@ -262,11 +255,9 @@ TEST_CASE("Pipeline: global cell count matches expected")
         CHECK(globalCells > 0);
         if (cfg.expectedCells > 0)
             CHECK(globalCells == cfg.expectedCells);
-    })
-}
+    })}
 
-TEST_CASE("Pipeline: global bnd count matches expected")
-{
+TEST_CASE("Pipeline: global bnd count matches expected"){
     FOR_EACH_MESH_CONFIG({
         DNDS::index localBnds = m->NumBnd();
         DNDS::index globalBnds = 0;
@@ -275,28 +266,22 @@ TEST_CASE("Pipeline: global bnd count matches expected")
             CHECK(globalBnds == cfg.expectedBnds);
         else if (!cfg.periodic)
             CHECK(globalBnds > 0); // non-periodic meshes must have boundaries
-    })
-}
+    })}
 
 // --- InterpolateFace topology ---
 
-TEST_CASE("InterpolateFace: face count is positive")
-{
+TEST_CASE("InterpolateFace: face count is positive"){
     FOR_EACH_MESH_CONFIG({
         CHECK(m->NumFace() > 0);
-    })
-}
+    })}
 
-TEST_CASE("InterpolateFace: face2cell has exactly 2 entries per face")
-{
+TEST_CASE("InterpolateFace: face2cell has exactly 2 entries per face"){
     FOR_EACH_MESH_CONFIG({
         for (DNDS::index iF = 0; iF < m->NumFace(); iF++)
             CHECK(m->face2cell.RowSize(iF) == 2);
-    })
-}
+    })}
 
-TEST_CASE("InterpolateFace: face2cell owner is a valid local cell")
-{
+TEST_CASE("InterpolateFace: face2cell owner is a valid local cell"){
     FOR_EACH_MESH_CONFIG({
         DNDS::index totalCells = m->NumCell() + m->NumCellGhost();
         for (DNDS::index iF = 0; iF < m->NumFace(); iF++)
@@ -305,11 +290,9 @@ TEST_CASE("InterpolateFace: face2cell owner is a valid local cell")
             CHECK(owner >= 0);
             CHECK(owner < totalCells);
         }
-    })
-}
+    })}
 
-TEST_CASE("InterpolateFace: face2node indices in valid range")
-{
+TEST_CASE("InterpolateFace: face2node indices in valid range"){
     FOR_EACH_MESH_CONFIG({
         DNDS::index totalNodes = m->NumNode() + m->NumNodeGhost();
         for (DNDS::index iF = 0; iF < m->NumFace(); iF++)
@@ -319,11 +302,9 @@ TEST_CASE("InterpolateFace: face2node indices in valid range")
                 CHECK(iN >= 0);
                 CHECK(iN < totalNodes);
             }
-    })
-}
+    })}
 
-TEST_CASE("InterpolateFace: cell2face row sizes match expected face count")
-{
+TEST_CASE("InterpolateFace: cell2face row sizes match expected face count"){
     FOR_EACH_MESH_CONFIG({
         for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
         {
@@ -331,11 +312,9 @@ TEST_CASE("InterpolateFace: cell2face row sizes match expected face count")
             int nFaceExpected = elem.GetNumFaces();
             CHECK(m->cell2face.RowSize(iC) == nFaceExpected);
         }
-    })
-}
+    })}
 
-TEST_CASE("InterpolateFace: cell2face entries are valid face indices")
-{
+TEST_CASE("InterpolateFace: cell2face entries are valid face indices"){
     FOR_EACH_MESH_CONFIG({
         DNDS::index totalFaces = m->NumFace() + m->NumFaceGhost();
         for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
@@ -345,11 +324,9 @@ TEST_CASE("InterpolateFace: cell2face entries are valid face indices")
                 CHECK(iF >= 0);
                 CHECK(iF < totalFaces);
             }
-    })
-}
+    })}
 
-TEST_CASE("InterpolateFace: bnd2face maps to valid faces")
-{
+TEST_CASE("InterpolateFace: bnd2face maps to valid faces"){
     FOR_EACH_MESH_CONFIG({
         for (DNDS::index ib = 0; ib < m->NumBnd(); ib++)
         {
@@ -358,8 +335,7 @@ TEST_CASE("InterpolateFace: bnd2face maps to valid faces")
             if (iFace >= 0)
                 CHECK(iFace < m->NumFace() + m->NumFaceGhost());
         }
-    })
-}
+    })}
 
 TEST_CASE("InterpolateFace: face element types are valid")
 {
@@ -534,9 +510,11 @@ TEST_CASE("Periodic: face pbi has uniform XOR between owner and neighbor (collab
 {
     for (int _ci = 0; _ci < N_CONFIGS; _ci++)
     {
-        if (_ci == 4 && g_mpi.size != 8) continue;
+        if (_ci == 4 && g_mpi.size != 8)
+            continue;
         const auto &cfg = g_configs[_ci];
-        if (!cfg.periodic) continue;
+        if (!cfg.periodic)
+            continue;
         auto m = g_full[_ci];
         CAPTURE(_ci);
         SUBCASE(cfg.name)
@@ -553,9 +531,17 @@ TEST_CASE("Periodic: face pbi has uniform XOR between owner and neighbor (collab
 
                 int slotL = -1, slotR = -1;
                 for (DNDS::rowsize j = 0; j < m->cell2face.RowSize(iCellL); j++)
-                    if (m->cell2face(iCellL, j) == iFace) { slotL = j; break; }
+                    if (m->cell2face(iCellL, j) == iFace)
+                    {
+                        slotL = j;
+                        break;
+                    }
                 for (DNDS::rowsize j = 0; j < m->cell2face.RowSize(iCellR); j++)
-                    if (m->cell2face(iCellR, j) == iFace) { slotR = j; break; }
+                    if (m->cell2face(iCellR, j) == iFace)
+                    {
+                        slotR = j;
+                        break;
+                    }
                 REQUIRE(slotL >= 0);
                 REQUIRE(slotR >= 0);
 
@@ -580,7 +566,8 @@ TEST_CASE("Periodic: face pbi has uniform XOR between owner and neighbor (collab
 
                 for (int k = 0; k < nFN; k++)
                 {
-                    CAPTURE(iFace); CAPTURE(k);
+                    CAPTURE(iFace);
+                    CAPTURE(k);
                     CHECK(pairsL[k].first == pairsR[k].first);
                 }
 
@@ -588,7 +575,10 @@ TEST_CASE("Periodic: face pbi has uniform XOR between owner and neighbor (collab
                 for (int k = 1; k < nFN; k++)
                 {
                     uint8_t vk = pairsL[k].second ^ pairsR[k].second;
-                    CAPTURE(iFace); CAPTURE(k); CAPTURE(v0); CAPTURE(vk);
+                    CAPTURE(iFace);
+                    CAPTURE(k);
+                    CAPTURE(v0);
+                    CAPTURE(vk);
                     CHECK(vk == v0);
                 }
             }
@@ -600,9 +590,11 @@ TEST_CASE("Periodic: face2nodePbi is consistent with owner cell's cell2nodePbi")
 {
     for (int _ci = 0; _ci < N_CONFIGS; _ci++)
     {
-        if (_ci == 4 && g_mpi.size != 8) continue;
+        if (_ci == 4 && g_mpi.size != 8)
+            continue;
         const auto &cfg = g_configs[_ci];
-        if (!cfg.periodic) continue;
+        if (!cfg.periodic)
+            continue;
         auto m = g_full[_ci];
         CAPTURE(_ci);
         SUBCASE(cfg.name)
@@ -614,7 +606,11 @@ TEST_CASE("Periodic: face2nodePbi is consistent with owner cell's cell2nodePbi")
 
                 int iSlot = -1;
                 for (DNDS::rowsize j = 0; j < m->cell2face.RowSize(iCellOwner); j++)
-                    if (m->cell2face(iCellOwner, j) == iFace) { iSlot = j; break; }
+                    if (m->cell2face(iCellOwner, j) == iFace)
+                    {
+                        iSlot = j;
+                        break;
+                    }
                 REQUIRE(iSlot >= 0);
 
                 auto eFace = eCell.ObtainFace(iSlot);
@@ -1089,8 +1085,7 @@ TEST_CASE("Benchmark: DSL vs Legacy pipeline steps")
 
 // --- N2CB ---
 
-TEST_CASE("N2CB: every local node has at least one adjacent cell")
-{
+TEST_CASE("N2CB: every local node has at least one adjacent cell"){
     FOR_EACH_MESH_CONFIG({
         for (DNDS::index iNode = 0; iNode < m->NumNode(); iNode++)
         {
@@ -1100,11 +1095,9 @@ TEST_CASE("N2CB: every local node has at least one adjacent cell")
                     hasCell = true;
             CHECK(hasCell);
         }
-    })
-}
+    })}
 
-TEST_CASE("N2CB: node2cell entries are valid local indices")
-{
+TEST_CASE("N2CB: node2cell entries are valid local indices"){
     FOR_EACH_MESH_CONFIG({
         DNDS::index totalCells = m->NumCell() + m->NumCellGhost();
         for (DNDS::index iNode = 0; iNode < m->NumNodeProc(); iNode++)
@@ -1114,21 +1107,17 @@ TEST_CASE("N2CB: node2cell entries are valid local indices")
                 if (iC >= 0)
                     CHECK(iC < totalCells);
             }
-    })
-}
+    })}
 
 // --- BuildCell2CellFace ---
 
-TEST_CASE("BuildCell2CellFace: row sizes match cell2face")
-{
+TEST_CASE("BuildCell2CellFace: row sizes match cell2face"){
     FOR_EACH_MESH_CONFIG({
         for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
             CHECK(m->cell2cellFace.RowSize(iC) == m->cell2face.RowSize(iC));
-    })
-}
+    })}
 
-TEST_CASE("BuildCell2CellFace: entries are valid cells or negative")
-{
+TEST_CASE("BuildCell2CellFace: entries are valid cells or negative"){
     FOR_EACH_MESH_CONFIG({
         DNDS::index totalCells = m->NumCell() + m->NumCellGhost();
         for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
@@ -1138,13 +1127,11 @@ TEST_CASE("BuildCell2CellFace: entries are valid cells or negative")
                 if (nb >= 0)
                     CHECK(nb < totalCells);
             }
-    })
-}
+    })}
 
 // --- ConstructBndMesh ---
 
-TEST_CASE("ConstructBndMesh: correct dimensions and state")
-{
+TEST_CASE("ConstructBndMesh: correct dimensions and state"){
     FOR_EACH_MESH_CONFIG({
         if (cfg.periodic)
             continue; // periodic meshes may have no real boundaries after deduplication
@@ -1153,11 +1140,9 @@ TEST_CASE("ConstructBndMesh: correct dimensions and state")
         CHECK(bMesh.dim == m->dim - 1);
         CHECK(bMesh.NumCell() == m->NumBnd());
         CHECK(bMesh.adjPrimaryState == Adj_PointToLocal);
-    })
-}
+    })}
 
-TEST_CASE("ConstructBndMesh: node2parentNode valid")
-{
+TEST_CASE("ConstructBndMesh: node2parentNode valid"){
     FOR_EACH_MESH_CONFIG({
         if (cfg.periodic)
             continue;
@@ -1171,13 +1156,11 @@ TEST_CASE("ConstructBndMesh: node2parentNode valid")
             CHECK(pn >= 0);
             CHECK(pn < m->NumNode() + m->NumNodeGhost());
         }
-    })
-}
+    })}
 
 // --- BuildVTKConnectivity ---
 
-TEST_CASE("BuildVTKConnectivity: arrays populated correctly")
-{
+TEST_CASE("BuildVTKConnectivity: arrays populated correctly"){
     FOR_EACH_MESH_CONFIG({
         CHECK(m->vtkCell2node.size() > 0);
         CHECK(m->vtkCell2nodeOffsets.size() == static_cast<size_t>(m->NumCell() + 1));
@@ -1186,15 +1169,13 @@ TEST_CASE("BuildVTKConnectivity: arrays populated correctly")
             CHECK(m->vtkCell2nodeOffsets[i] >= m->vtkCell2nodeOffsets[i - 1]);
         for (auto ct : m->vtkCellType)
             CHECK(ct != 0);
-    })
-}
+    })}
 
 // ===========================================================================
 // ReorderLocalCells (config 0 only)
 // ===========================================================================
 
-TEST_CASE("ReorderLocalCells: all states preserved")
-{
+TEST_CASE("ReorderLocalCells: all states preserved"){
     FOR_EACH_MESH_CONFIG({
         m->ReorderLocalCells(2);
         CHECK(m->adjPrimaryState == Adj_PointToLocal);
@@ -1202,8 +1183,7 @@ TEST_CASE("ReorderLocalCells: all states preserved")
         CHECK(m->adjC2FState == Adj_PointToLocal);
         CHECK(m->adjN2CBState == Adj_PointToLocal);
         CHECK(m->adjC2CFaceState == Adj_PointToLocal);
-    })
-}
+    })}
 
 TEST_CASE("ReorderLocalCells: cell count preserved")
 {
@@ -1215,12 +1195,10 @@ TEST_CASE("ReorderLocalCells: cell count preserved")
         m->ReorderLocalCells(2);
         DNDS::index loc2 = m->NumCell();
         MPI_Allreduce(&loc2, &g2, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
-        CHECK(g1 == g2);
-    )
+        CHECK(g1 == g2);)
 }
 
-TEST_CASE("ReorderLocalCells: partition starts valid")
-{
+TEST_CASE("ReorderLocalCells: partition starts valid"){
     FOR_EACH_MESH_CONFIG({
         m->ReorderLocalCells(2);
         int nParts = m->NLocalParts();
@@ -1229,11 +1207,9 @@ TEST_CASE("ReorderLocalCells: partition starts valid")
         CHECK(m->LocalPartEnd(nParts - 1) == m->NumCell());
         for (int ip = 0; ip < nParts; ip++)
             CHECK(m->LocalPartStart(ip) <= m->LocalPartEnd(ip));
-    })
-}
+    })}
 
-TEST_CASE("ReorderLocalCells: cell2node still valid")
-{
+TEST_CASE("ReorderLocalCells: cell2node still valid"){
     FOR_EACH_MESH_CONFIG({
         m->ReorderLocalCells(2);
         DNDS::index totalNodes = m->NumNode() + m->NumNodeGhost();
@@ -1244,8 +1220,7 @@ TEST_CASE("ReorderLocalCells: cell2node still valid")
                 CHECK(iN >= 0);
                 CHECK(iN < totalNodes);
             }
-    })
-}
+    })}
 
 TEST_CASE("ReorderLocalCells: face count preserved")
 {
@@ -1257,8 +1232,7 @@ TEST_CASE("ReorderLocalCells: face count preserved")
         m->ReorderLocalCells(2);
         DNDS::index loc2 = m->NumFace();
         MPI_Allreduce(&loc2, &g2, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
-        CHECK(g1 == g2);
-    )
+        CHECK(g1 == g2);)
 }
 
 // ===========================================================================
@@ -1276,16 +1250,14 @@ TEST_CASE("AdjFacial round-trip: face2node and face2cell identity")
         m->AdjLocal2GlobalFacial();
         CHECK(m->adjFacialState == Adj_PointToGlobal);
 
-        for (DNDS::index iF = 0; iF < m->NumFace(); iF++)
-            for (DNDS::rowsize j = 0; j < m->face2node.RowSize(iF); j++)
-                CHECK(m->face2node(iF, j) >= 0);
+        for (DNDS::index iF = 0; iF < m->NumFace(); iF++) for (DNDS::rowsize j = 0; j < m->face2node.RowSize(iF); j++)
+            CHECK(m->face2node(iF, j) >= 0);
 
         m->AdjGlobal2LocalFacial();
         CHECK(m->adjFacialState == Adj_PointToLocal);
 
         checkAdjMatchesSnapshot(m->face2node, m->NumFace(), f2nSnap);
-        for (DNDS::index iF = 0; iF < m->NumFace(); iF++)
-        {
+        for (DNDS::index iF = 0; iF < m->NumFace(); iF++) {
             CHECK(m->face2cell(iF, 0) == f2cSnap[iF].first);
             CHECK(m->face2cell(iF, 1) == f2cSnap[iF].second);
         }
@@ -1309,8 +1281,7 @@ TEST_CASE("AdjC2F round-trip: cell2face and bnd2face identity")
 
         checkAdjMatchesSnapshot(m->cell2face, m->NumCell(), c2fSnap);
         for (DNDS::index ib = 0; ib < m->NumBnd(); ib++)
-            CHECK(m->bnd2face(ib, 0) == b2fSnap[ib]);
-    )
+            CHECK(m->bnd2face(ib, 0) == b2fSnap[ib]);)
 }
 
 TEST_CASE("AdjN2CB round-trip: node2cell and node2bnd identity")
@@ -1328,8 +1299,7 @@ TEST_CASE("AdjN2CB round-trip: node2cell and node2bnd identity")
         CHECK(m->adjN2CBState == Adj_PointToLocal);
 
         checkAdjMatchesSnapshot(m->node2cell, m->NumNodeProc(), n2cSnap);
-        checkAdjMatchesSnapshot(m->node2bnd, m->NumNodeProc(), n2bSnap);
-    )
+        checkAdjMatchesSnapshot(m->node2bnd, m->NumNodeProc(), n2bSnap);)
 }
 
 TEST_CASE("AdjC2CFace round-trip: cell2cellFace identity")
@@ -1345,8 +1315,7 @@ TEST_CASE("AdjC2CFace round-trip: cell2cellFace identity")
         m->AdjGlobal2LocalC2CFace();
         CHECK(m->adjC2CFaceState == Adj_PointToLocal);
 
-        checkAdjMatchesSnapshot(m->cell2cellFace, m->NumCell(), c2cfSnap);
-    )
+        checkAdjMatchesSnapshot(m->cell2cellFace, m->NumCell(), c2cfSnap);)
 }
 
 TEST_CASE("AdjPrimary round-trip: serial-out pattern")
@@ -1363,13 +1332,11 @@ TEST_CASE("AdjPrimary round-trip: serial-out pattern")
         CHECK(m->adjPrimaryState == Adj_PointToGlobal);
 
         DNDS::index globalNodeSize = m->coords.father->globalSize();
-        for (DNDS::index iC = 0; iC < m->NumCell(); iC++)
-            for (DNDS::rowsize j = 0; j < m->cell2node.RowSize(iC); j++)
-            {
-                DNDS::index gN = m->cell2node(iC, j);
-                CHECK(gN >= 0);
-                CHECK(gN < globalNodeSize);
-            }
+        for (DNDS::index iC = 0; iC < m->NumCell(); iC++) for (DNDS::rowsize j = 0; j < m->cell2node.RowSize(iC); j++) {
+            DNDS::index gN = m->cell2node(iC, j);
+            CHECK(gN >= 0);
+            CHECK(gN < globalNodeSize);
+        }
 
         m->AdjGlobal2LocalPrimary();
         CHECK(m->adjPrimaryState == Adj_PointToLocal);
@@ -1377,12 +1344,10 @@ TEST_CASE("AdjPrimary round-trip: serial-out pattern")
         checkAdjMatchesSnapshot(m->cell2node, m->NumCell(), c2nSnap);
         checkAdjMatchesSnapshot(m->cell2cell, m->NumCell(), c2cSnap);
         checkAdjMatchesSnapshot(m->bnd2node, m->NumBnd(), b2nSnap);
-        for (DNDS::index ib = 0; ib < m->NumBnd(); ib++)
-        {
+        for (DNDS::index ib = 0; ib < m->NumBnd(); ib++) {
             CHECK(m->bnd2cell(ib, 0) == b2cSnap[ib].first);
             CHECK(m->bnd2cell(ib, 1) == b2cSnap[ib].second);
-        }
-    )
+        })
 }
 
 TEST_CASE("AdjForBnd round-trip: ConstructBndMesh + ForBnd")
@@ -1398,19 +1363,16 @@ TEST_CASE("AdjForBnd round-trip: ConstructBndMesh + ForBnd")
         CHECK(bMesh.adjPrimaryState == Adj_PointToGlobal);
 
         DNDS::index globalNodeSize = bMesh.coords.father->globalSize();
-        for (DNDS::index iC = 0; iC < bMesh.NumCell(); iC++)
-            for (DNDS::rowsize j = 0; j < bMesh.cell2node.RowSize(iC); j++)
-            {
-                DNDS::index gN = bMesh.cell2node(iC, j);
-                CHECK(gN >= 0);
-                CHECK(gN < globalNodeSize);
-            }
+        for (DNDS::index iC = 0; iC < bMesh.NumCell(); iC++) for (DNDS::rowsize j = 0; j < bMesh.cell2node.RowSize(iC); j++) {
+            DNDS::index gN = bMesh.cell2node(iC, j);
+            CHECK(gN >= 0);
+            CHECK(gN < globalNodeSize);
+        }
 
         bMesh.AdjGlobal2LocalPrimaryForBnd();
         CHECK(bMesh.adjPrimaryState == Adj_PointToLocal);
 
-        checkAdjMatchesSnapshot(bMesh.cell2node, bMesh.NumCell(), c2nSnap);
-    )
+        checkAdjMatchesSnapshot(bMesh.cell2node, bMesh.NumCell(), c2nSnap);)
 }
 
 // ===========================================================================
@@ -1436,7 +1398,7 @@ TEST_CASE("Ball2: mixed 3D element types")
 
     // Gather all unique element types from all ranks
     std::vector<int> localTypes;
-    for (const auto& [type, count] : typeCounts)
+    for (const auto &[type, count] : typeCounts)
         localTypes.push_back(static_cast<int>(type));
 
     int nLocalTypes = localTypes.size();
@@ -1496,14 +1458,14 @@ TEST_CASE("Ball2: mixed 3D element types")
     if (g_mpi.rank == 0)
     {
         std::cout << "\nBall2 element type counts:" << std::endl;
-        for (const auto& [type, count] : globalCounts)
+        for (const auto &[type, count] : globalCounts)
         {
             std::cout << "  Type " << static_cast<int>(type) << ": " << count << std::endl;
         }
 
         // Verify expected total
         int total = 0;
-        for (const auto& [type, count] : globalCounts)
+        for (const auto &[type, count] : globalCounts)
             total += count;
         CHECK(total == 958994);
     }
@@ -1516,7 +1478,7 @@ TEST_CASE("Ball2: mixed 3D element types")
 TEST_CASE("Elevation: O2 mesh cell count equals O1 cell count")
 {
     // Only test with config 0 (UniformSquare_10) for now
-    const auto& cfg = g_configs[0];
+    const auto &cfg = g_configs[0];
 
     // Build fresh O1 mesh
     auto mO1 = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
@@ -1571,7 +1533,7 @@ TEST_CASE("Elevation: O2 mesh cell count equals O1 cell count")
 
 TEST_CASE("Elevation: O2 mesh has more nodes than O1")
 {
-    const auto& cfg = g_configs[0];
+    const auto &cfg = g_configs[0];
 
     // Build fresh O1 mesh
     auto mO1 = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
@@ -1619,7 +1581,7 @@ TEST_CASE("Elevation: O2 mesh has more nodes than O1")
 
 TEST_CASE("Bisection: O1 mesh has more cells than O2")
 {
-    const auto& cfg = g_configs[0];
+    const auto &cfg = g_configs[0];
 
     // Build fresh O1 mesh
     auto mO1 = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
@@ -1677,7 +1639,7 @@ TEST_CASE("Bisection: O1 mesh has more cells than O2")
 
 TEST_CASE("Bisection: global node count is preserved from O2 mesh")
 {
-    const auto& cfg = g_configs[0];
+    const auto &cfg = g_configs[0];
 
     // Build fresh O1 mesh
     auto mO1 = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
@@ -1730,7 +1692,7 @@ TEST_CASE("Elevation+Bisection: exact cell count progression")
     // UniformSquare_10: 100 Quad4 cells
     // After elevation: 100 Quad9 cells (same count, higher order)
     // After bisection: 400 Quad4 cells (4 sub-cells per Quad9)
-    const auto& cfg = g_configs[0];
+    const auto &cfg = g_configs[0];
 
     // Build fresh O1 mesh
     auto mO1 = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
@@ -1991,5 +1953,139 @@ TEST_CASE("Elevation: O2 coordinates have no NaN")
                 for (int d = 0; d < 3; d++)
                     CHECK(std::isfinite(mO2->coords[i](d)));
         }
+    }
+}
+
+// ===========================================================================
+// Multi-layer ghost tests (UniformSquare_10, config 0)
+// ===========================================================================
+
+/// Build mesh through BuildGhostPrimary with a specific ghost layer count,
+/// then run the full prepare pipeline.
+static ssp<UnstructuredMesh> buildMeshWithGhostLayers(
+    const MeshConfig &cfg, int nGhostLayers)
+{
+    auto mesh = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
+    UnstructuredMeshSerialRW reader(mesh, 0);
+
+    if (cfg.periodic)
+    {
+        tPoint zero{0, 0, 0};
+        mesh->SetPeriodicGeometry(
+            cfg.translation1, zero, zero,
+            cfg.translation2, zero, zero,
+            cfg.translation3, zero, zero);
+    }
+
+    reader.ReadFromCGNSSerial(meshPath(cfg.file));
+    reader.Deduplicate1to1Periodic(1e-8);
+    reader.BuildCell2Cell();
+
+    UnstructuredMeshSerialRW::PartitionOptions pOpt;
+    pOpt.metisType = "KWAY";
+    pOpt.metisUfactor = 30;
+    pOpt.metisSeed = 42;
+    pOpt.metisNcuts = 1;
+    reader.MeshPartitionCell2Cell(pOpt);
+    reader.PartitionReorderToMeshCell2Cell();
+
+    mesh->RecoverNode2CellAndNode2Bnd();
+    mesh->RecoverCell2CellAndBnd2Cell();
+    mesh->BuildGhostPrimary(nGhostLayers);
+    mesh->AdjGlobal2LocalPrimary();
+    mesh->AdjGlobal2LocalN2CB();
+
+    mesh->InterpolateFace();
+    mesh->AssertOnFaces();
+
+    mesh->AdjLocal2GlobalN2CB();
+    mesh->BuildGhostN2CB();
+    mesh->AdjGlobal2LocalN2CB();
+
+    return mesh;
+}
+
+TEST_CASE("MultiLayerGhost: ghost counts increase with layer count")
+{
+    const auto &cfg = g_configs[0]; // UniformSquare_10
+
+    DNDS::index cellGhost[3], nodeGhost[3], bndGhost[3];
+
+    for (int nL = 1; nL <= 3; nL++)
+    {
+        auto m = buildMeshWithGhostLayers(cfg, nL);
+        cellGhost[nL - 1] = m->NumCellGhost();
+        nodeGhost[nL - 1] = m->NumNodeGhost();
+        bndGhost[nL - 1] = m->NumBndGhost();
+
+        if (g_mpi.rank == 0)
+            fmt::print("  nLayers={}: cellGhost={}, nodeGhost={}, bndGhost={}\n",
+                       nL, cellGhost[nL - 1], nodeGhost[nL - 1], bndGhost[nL - 1]);
+    }
+
+    // Monotonically non-decreasing.
+    for (int i = 0; i < 2; i++)
+    {
+        CHECK(cellGhost[i + 1] >= cellGhost[i]);
+        CHECK(nodeGhost[i + 1] >= nodeGhost[i]);
+        CHECK(bndGhost[i + 1] >= bndGhost[i]);
+    }
+
+    // With np >= 2, cell and node ghosts must strictly increase.
+    if (g_mpi.size >= 2)
+    {
+        CHECK(cellGhost[1] > cellGhost[0]);
+        CHECK(cellGhost[2] > cellGhost[1]);
+        CHECK(nodeGhost[1] > nodeGhost[0]);
+        CHECK(nodeGhost[2] > nodeGhost[1]);
+    }
+}
+
+TEST_CASE("MultiLayerGhost: 2-layer cell2cell neighbors are all local")
+{
+    if (g_mpi.size < 2)
+        return; // single-rank has no ghosts
+
+    const auto &cfg = g_configs[0]; // UniformSquare_10
+    auto m = buildMeshWithGhostLayers(cfg, 2);
+
+    DNDS::index nCellOwned = m->NumCell();
+    DNDS::index nCellProc = m->NumCellProc();
+
+    // Every owned cell's cell2cell neighbor's cell2cell neighbors
+    // must be within [0, nCellProc).
+    for (DNDS::index iCell = 0; iCell < nCellOwned; iCell++)
+    {
+        for (DNDS::rowsize j = 0; j < m->cell2cell.RowSize(iCell); j++)
+        {
+            DNDS::index iNeighbor = m->cell2cell(iCell, j);
+            if (iNeighbor < 0)
+                continue;
+            REQUIRE(iNeighbor < nCellProc);
+
+            for (DNDS::rowsize k = 0; k < m->cell2cell.RowSize(iNeighbor); k++)
+            {
+                DNDS::index iNeighbor2 = m->cell2cell(iNeighbor, k);
+                if (iNeighbor2 < 0)
+                    continue;
+                CHECK(iNeighbor2 < nCellProc);
+            }
+        }
+    }
+}
+
+TEST_CASE("MultiLayerGhost: global cell count preserved across layers")
+{
+    const auto &cfg = g_configs[0]; // UniformSquare_10
+
+    for (int nL = 1; nL <= 3; nL++)
+    {
+        CAPTURE(nL);
+        auto m = buildMeshWithGhostLayers(cfg, nL);
+
+        DNDS::index localCells = m->NumCell();
+        DNDS::index globalCells = 0;
+        MPI_Allreduce(&localCells, &globalCells, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+        CHECK(globalCells == cfg.expectedCells);
     }
 }
