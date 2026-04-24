@@ -231,21 +231,34 @@ namespace DNDS::Geom
         cellElemInfoSerialOutTrans.setFatherSon(mesh->cellElemInfo.father, cellElemInfoSerial);
         // bndElemInfoSerialOutTrans.setFatherSon(mesh->bndElemInfo.father, bndElemInfoSerial);
 
-        // Father could already have global mapping, result should be the same
-        coordSerialOutTrans.createFatherGlobalMapping();
-        cell2nodeSerialOutTrans.createFatherGlobalMapping();
+        // Reuse existing father global mappings to avoid side-effects on
+        // the mesh's own pLGlobalMapping pointers.  createFatherGlobalMapping()
+        // would call father->createGlobalMapping() which replaces the shared_ptr
+        // on the father array, affecting the mesh's own transformer.
+        auto reuseOrCreateFatherGlobalMapping = [](auto &trans)
+        {
+            if (trans.father->pLGlobalMapping)
+                trans.pLGlobalMapping = trans.father->pLGlobalMapping;
+            else
+                trans.createFatherGlobalMapping();
+        };
+        reuseOrCreateFatherGlobalMapping(coordSerialOutTrans);
+        reuseOrCreateFatherGlobalMapping(cell2nodeSerialOutTrans);
         if (mesh->isPeriodic)
-            cell2nodePbiSerialOutTrans.createFatherGlobalMapping();
-        // bnd2nodeSerialOutTrans.createFatherGlobalMapping();
-        cellElemInfoSerialOutTrans.createFatherGlobalMapping();
-        // bndElemInfoSerialOutTrans.createFatherGlobalMapping();
+            reuseOrCreateFatherGlobalMapping(cell2nodePbiSerialOutTrans);
+        // reuseOrCreateFatherGlobalMapping(bnd2nodeSerialOutTrans);
+        reuseOrCreateFatherGlobalMapping(cellElemInfoSerialOutTrans);
+        // reuseOrCreateFatherGlobalMapping(bndElemInfoSerialOutTrans);
 
         coordSerialOutTrans.createGhostMapping(serialPullNode);
         cell2nodeSerialOutTrans.createGhostMapping(serialPullCell);
         if (mesh->isPeriodic)
             cell2nodePbiSerialOutTrans.createGhostMapping(serialPullCell);
         // bnd2nodeSerialOutTrans.createGhostMapping(serialPullBnd);
-        cellElemInfoSerialOutTrans.BorrowGGIndexing(cell2nodeSerialOutTrans); // accidentally rewrites mesh->cellElemInfo.father's global mapping but ok
+        // cellElemInfo shares the same cell indexing as cell2node: copy
+        // ghost + global mappings without overwriting the father's pointer.
+        cellElemInfoSerialOutTrans.pLGhostMapping = cell2nodeSerialOutTrans.pLGhostMapping;
+        cellElemInfoSerialOutTrans.pLGlobalMapping = cell2nodeSerialOutTrans.pLGlobalMapping;
         // bndElemInfoSerialOutTrans.BorrowGGIndexing(bnd2nodeSerialOutTrans);
 
         coordSerialOutTrans.createMPITypes();
