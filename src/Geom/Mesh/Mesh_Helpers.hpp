@@ -218,6 +218,12 @@ namespace DNDS::Geom
         log() << fmt::format("{}, NumBndGhost {}", mpi.rank, mesh.NumBndGhost())
               << std::endl;
 
+        // Owned nodes must have all cell neighbors resolved to local indices.
+        // Ghost (son) nodes may have unresolved neighbors encoded as negative.
+        for (index iNode = 0; iNode < mesh.NumNode(); iNode++)
+            for (index iCell : mesh.node2cell.father->operator[](iNode))
+                DNDS_assert(iCell >= 0);
+
         if (opts.buildSerialOut)
         {
             mesh.AdjLocal2GlobalPrimary();
