@@ -26,12 +26,14 @@ namespace DNDS::Geom
      *
      *  This 5-step sequence is identical across all read paths (CGNS serial,
      *  H5 parallel, H5 distributed).
+     *
+     *  @param nGhostLayers  Number of cell2cell hops for ghost cells (default 1).
      */
-    inline void BuildGhostPrimary(UnstructuredMesh &mesh)
+    inline void BuildGhostPrimary(UnstructuredMesh &mesh, int nGhostLayers = 1)
     {
         mesh.RecoverNode2CellAndNode2Bnd();
         mesh.RecoverCell2CellAndBnd2Cell();
-        mesh.BuildGhostPrimary();
+        mesh.BuildGhostPrimary(nGhostLayers);
         mesh.AdjGlobal2LocalPrimary();
         mesh.AdjGlobal2LocalN2CB();
     }
