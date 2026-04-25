@@ -31,21 +31,21 @@
 // #endif
 
 #include "Gas.hpp"
-#include "Geom/Mesh.hpp"
+#include "Geom/Mesh/Mesh.hpp"
 #include "CFV/VariationalReconstruction.hpp"
-#include "DNDS/JsonUtil.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
 #include "Euler.hpp"
 #include "EulerBC.hpp"
 #include "EulerJacobian.hpp"
 #include "EulerEvaluatorSettings.hpp"
-#include "DNDS/SerializerBase.hpp"
+#include "DNDS/Serializer/SerializerBase.hpp"
 #include "RANS_ke.hpp"
 
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
 // #undef __DNDS_REALLY_COMPILING__
 // #endif
 
-#include "DNDS/JsonUtil.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
 #include "fmt/core.h"
 #include <iomanip>
 #include <functional>

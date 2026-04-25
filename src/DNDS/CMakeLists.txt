@@ -28,12 +28,12 @@ ${DNDS_EXTERNAL_LIBS}
 set(CPPS
 MPI.cpp
 Defines.cpp
-DeviceStorage.cpp
+Device/DeviceStorage.cpp
 Profiling.cpp
 HardEigen.cpp
-SerializerBase.cpp
-SerializerJSON.cpp
-SerializerH5.cpp
+Serializer/SerializerBase.cpp
+Serializer/SerializerJSON.cpp
+Serializer/SerializerH5.cpp
 ExprtkWrapper.cpp
 Vector.cpp
 )
@@ -42,7 +42,7 @@ file(GLOB ARRAYDOF_OP_SOURCES CONFIGURE_DEPENDS "ArrayDOF_inst/*.cpp")
 list(APPEND CPPS ${ARRAYDOF_OP_SOURCES})
 
 if (DNDS_USE_CUDA)
-    list(APPEND CPPS DeviceStorage_CUDA.cu)
+    list(APPEND CPPS Device/DeviceStorage_CUDA.cu)
     file(GLOB ARRAYDOF_OP_SOURCES_CUDA CONFIGURE_DEPENDS "ArrayDOF_inst/*.cu")
     list(APPEND CPPS ${ARRAYDOF_OP_SOURCES_CUDA})
 endif()
@@ -86,7 +86,7 @@ ArrayDerived/ArrayEigenMatrix_bind.cpp
 ArrayDerived/ArrayEigenUniMatrixBatch_bind.cpp
 ArrayDerived/ArrayEigenVector_bind.cpp
 ArrayDOF_bind.cpp
-Serializer_bind.cpp
+Serializer/Serializer_bind.cpp
 )
 
 file(GLOB ARRAY_BIND_OFFSET_SOURCES CONFIGURE_DEPENDS "Array_bind_offset/*.cpp")

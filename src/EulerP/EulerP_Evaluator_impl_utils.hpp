@@ -13,8 +13,8 @@
  */
 #pragma once
 
-#include "DNDS/DeviceStorage.hpp"
-#include "DNDS/CUDA_Utils.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
+#include "DNDS/Device/CUDA_Utils.hpp"
 
 /**
  * @brief Internal implementation detail namespace for EulerP Evaluator utilities.

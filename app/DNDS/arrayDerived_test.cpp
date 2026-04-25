@@ -3,7 +3,7 @@
 #include "DNDS/ArrayDerived/ArrayEigenMatrix.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenMatrixBatch.hpp"
-#include "DNDS/SerializerJSON.hpp"
+#include "DNDS/Serializer/SerializerJSON.hpp"
 
 #include <cstdlib>
 using namespace DNDS;

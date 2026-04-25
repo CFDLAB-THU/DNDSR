@@ -7,7 +7,14 @@ Compact Finite Volume methods with MPI parallelism and optional CUDA GPU support
 
 - `src/` — C++ and Python source, organized by module:
   - `DNDS/` — Core: MPI arrays, serialization (JSON, HDF5), profiling, CUDA
+    - `Config/` — Runtime configuration enums, parameters, registry
+    - `Device/` — Host-device memory transfer, CUDA utilities
+    - `Serializer/` — JSON and HDF5 serialization framework
+    - `ArrayDerived/` — Specialized array types (adjacency, Eigen matrices)
   - `Geom/` — Unstructured mesh, CGNS I/O, partitioning (Metis/ParMetis)
+    - `Mesh/` — Mesh data structures, connectivity, ghost management, state tracking
+    - `Elements/` — Per-element-type shape functions
+    - `Quadratures/` — Numerical integration rules
   - `CFV/` — Compact Finite Volume, variational reconstruction
   - `Euler/` — Compressible N-S solvers (2D/3D, SA, k-omega RANS)
   - `EulerP/` — Alternative evaluator with CUDA GPU support
@@ -55,16 +62,19 @@ cmake --build . -t dnds_pybind11 geom_pybind11 cfv_pybind11 -j32 && cmake --inst
 To use the pybind11-based Python module from a CMake build directory:
 
 1. **Build the pybind11 targets:**
+
    ```bash
-   cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j8
+   cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j32
    ```
 
 2. **Install the Python component** (copies `.so` files into `python/`):
+
    ```bash
    cmake --install build --component py
    ```
 
 3. **Run with the project venv and `PYTHONPATH`:**
+
    ```bash
    source venv/bin/activate
    PYTHONPATH=<project_root>/python python my_script.py
@@ -140,29 +150,63 @@ mpirun -np 2 python test/DNDS/test_basic.py
 
 C++ tests live under `test/cpp/` and use the [doctest](https://github.com/doctest/doctest)
 framework. They are built when `DNDS_BUILD_TESTS=ON` and registered with CTest.
-MPI tests are registered at np=1, np=2, np=4, and np=8.
+MPI tests are registered at np=1, np=2, np=4, and np=8 by default (configurable via
+`DNDS_TEST_NP_LIST` environment variable at configure time). All tests run with
+`OMP_NUM_THREADS=2` by default (configurable via `DNDS_TEST_OMP_THREADS` environment
+variable at configure time).
 
 ```bash
 # Configure with tests enabled (from build directory)
 cmake .. -DDNDS_BUILD_TESTS=ON
 
-# Build all C++ unit tests
-cmake --build . -t dnds_unit_tests -j8
+# Configure with custom OMP threads (optional)
+DNDS_TEST_OMP_THREADS=4 cmake .. -DDNDS_BUILD_TESTS=ON
+
+# Build all C++ unit tests (all categories)
+cmake --build . -t all_unit_tests -j8
+
+# Build only specific category
+cmake --build . -t dnds_unit_tests -j8   # DNDS/ tests only
+cmake --build . -t geom_unit_tests -j8   # Geom/ tests only
+cmake --build . -t cfv_unit_tests -j8    # CFV/ tests only
+cmake --build . -t euler_unit_tests -j8  # Euler/ tests only
+cmake --build . -t solver_unit_tests -j8 # Solver/ tests only
 
 # Run all C++ tests via CTest
-ctest --test-dir . -R dnds_ --output-on-failure
+ctest --test-dir . --output-on-failure
 
-# Run a specific test (e.g., only np=2 MPI tests)
-ctest --test-dir . -R dnds_mpi_np2 --output-on-failure
+# Run with aggregated doctest summary (shows total test cases + assertions)
+python scripts/ctest_summary.py --output-on-failure
+python scripts/ctest_summary.py -R "^dnds_"   # filter by category
+
+# Run tests by category prefix
+ctest --test-dir . -R "^dnds_" --output-on-failure   # DNDS tests
+ctest --test-dir . -R "^geom_" --output-on-failure   # Geom tests
+ctest --test-dir . -R "^cfv_" --output-on-failure    # CFV tests
+ctest --test-dir . -R "^euler_" --output-on-failure  # Euler tests
+ctest --test-dir . -R "^solver_" --output-on-failure # Solver tests
+
+# Run only np=2 MPI tests across all categories
+ctest --test-dir . -R "_np2$" --output-on-failure
 
 # Run a single test executable directly
 ./test/cpp/dnds_test_array
 mpirun -np 4 ./test/cpp/dnds_test_mpi
 ```
 
-Available test targets: `dnds_test_array`, `dnds_test_mpi`, `dnds_test_array_transformer`,
-`dnds_test_array_derived`, `dnds_test_array_dof`, `dnds_test_index_mapping`,
-`dnds_test_serializer`.
+**Test categories and targets:**
+
+- **DNDS:** `dnds_test_array`, `dnds_test_mpi`, `dnds_test_array_transformer`,
+  `dnds_test_array_derived`, `dnds_test_array_dof`, `dnds_test_index_mapping`,
+  `dnds_test_serializer`
+- **Geom:** `geom_test_elements`, `geom_test_quadrature`, `geom_test_mesh_index_conversion`,
+  `geom_test_mesh_pipeline`, `geom_test_mesh_distributed_read`, `geom_test_mesh_connectivity`,
+  `geom_test_mesh_connectivity_ghost`, `geom_test_mesh_connectivity_interpolate`
+- **CFV:** `cfv_test_reconstruction`, `cfv_test_limiters`, `cfv_test_reconstruction3d`,
+  `cfv_test_device_transferable` (CUDA only)
+- **Euler:** `euler_test_gas_thermo`, `euler_test_riemann_solvers`, `euler_test_rans`,
+  `euler_test_evaluator_pipeline`
+- **Solver:** `solver_test_ode`, `solver_test_linear`, `solver_test_direct`, `solver_test_scalar`
 
 **Note:** When writing new C++ tests with `using namespace DNDS;`, always qualify
 `DNDS::index`, `DNDS::real`, and `DNDS::rowsize` in declarations to avoid ambiguity
@@ -176,6 +220,7 @@ details, including all parameters, read modes, and notes on which C++ methods
 are (and are not) exposed in the Python bindings.
 
 **Quick Example:**
+
 ```python
 from DNDSR.Geom.utils import create_mesh_from_CGNS
 from DNDSR import DNDS
@@ -194,6 +239,7 @@ mesh, reader, name2ID = create_mesh_from_CGNS(
 ```
 
 **Key Features:**
+
 - CGNS mesh reading (`ReadFromCGNSSerial`)
 - Order elevation: Quad4→Quad9, Hex8→Hex27, etc. (`BuildO2FromO1Elevation`)
 - Mesh bisection for h-refinement (`BuildBisectO1FormO2`)
@@ -203,126 +249,57 @@ mesh, reader, name2ID = create_mesh_from_CGNS(
 - CUDA device offloading (`to_device` / `to_host`)
 - Three read modes: Serial, Parallel, Distributed
 
-## Formatting and Linting
+## Code Style
 
-### C++ — clang-format (config in `src/.clang-format`)
+Full style guide (naming, formatting, includes, error handling, Doxygen,
+Python conventions): **`docs/guides/style_guide.md`**
 
-- **Style:** LLVM-based with Allman braces
-- **Indent:** 4 spaces, no tabs
-- **Column limit:** none (unlimited line length)
-- **Includes:** not sorted by clang-format (`SortIncludes: Never`)
-- **Namespace indentation:** all content indented
-- **Access modifiers:** outdented 4 spaces from body
+Quick reference for C++:
 
-```bash
-clang-format -i src/DNDS/SomeFile.hpp    # format a file
-```
+- **Braces:** Allman (opening brace on its own line)
+- **Naming:** `PascalCase` classes/methods, `_` prefix for private members,
+  `DNDS_ALL_CAPS` macros, `t_` prefix type aliases
+- **Headers:** `#pragma once`, preserve include order (no auto-sort)
+- **Errors:** `DNDS_assert` (debug) / `DNDS_check_throw` (release) from
+  `DNDS/Errors.hpp`; never raw `assert()`
+- **Core types:** `real = double`, `index = int64_t`, `rowsize = int32_t`,
+  `ssp<T> = std::shared_ptr<T>`
 
-### C++ — clang-tidy (config in `src/.clang-tidy`)
+Quick reference for Python:
 
-Enabled check groups: `modernize-*`, `readability-*`, `bugprone-*`, `performance-*`,
-`cppcoreguidelines-*`, `google-build-using-namespace`, `mpi-*`, `openmp-*`.
+- `snake_case` functions/variables; C++ wrapper classes match C++ name
+- Plain `assert`; `@pytest.fixture` for MPI; numpy for array comparisons
 
-## Code Style — C++
+## Geom Module Architecture
 
-### Naming Conventions
+Mesh connectivity, ghost management, and the build pipeline are documented
+in **`docs/architecture/MeshConnectivity.md`**.
 
-| Element               | Convention       | Example                              |
-|-----------------------|------------------|--------------------------------------|
-| Namespace             | `PascalCase`     | `DNDS`, `DNDS::Geom`, `DNDS::CFV`   |
-| Class / Struct        | `PascalCase`     | `MPIInfo`, `VariationalReconstruction` |
-| Public method         | `PascalCase`     | `Resize()`, `ConstructMetrics()`     |
-| Private/protected member | `_` prefix    | `_size`, `_data`, `_pRowStart`       |
-| Type alias            | `t_` prefix or `using` | `t_IndexVec`, `tDiFj`          |
-| Template parameter    | `T`-prefix or PascalCase | `T`, `TOut`, `_row_size`      |
-| Constant              | `PascalCase`     | `UnInitReal`, `DynamicSize`          |
-| Macro                 | `DNDS_ALL_CAPS`  | `DNDS_INDEX_MAX`, `DNDS_MPI_REAL`    |
-| Enum value            | `PascalCase`     | `UnknownElem`, `Line2`, `Roe`        |
+Key concepts agents should know:
 
-### Core Type Aliases (from `Defines.hpp`)
+- **Adjacency state:** Each adjacency array (e.g. `cell2node`, `face2cell`)
+  is wrapped in `AdjPairTracked<TPair>` (inherits from `TPair`, adds an
+  `AdjIndexInfo idx` member). All `idx` fields are private; state
+  transitions go through `markGlobal()`, `markLocal()`,
+  `wireTargetMapping()`, `toLocal()`/`toGlobal()`, and
+  `bootstrapToLocal()`. See `src/Geom/Mesh/AdjIndexInfo.hpp`.
 
-```cpp
-using real = double;
-using index = int64_t;
-using rowsize = int32_t;
-template <typename T> using ssp = std::shared_ptr<T>;
-```
+- **Three-layer architecture:**
+  1. `MeshConnectivity` (DSL) -- bare `ArrayAdjacencyPair<rs>`, no state
+  2. `Mesh/MeshConnectivity_StateChecked.hpp` -- asserts `idx.state()`, forwards to DSL
+  3. `UnstructuredMesh` (Mesh/Mesh.cpp) -- owns `AdjPairTracked` members, calls checked wrappers
 
-### Header Guards
+- **Conversion methods:** `AdjGlobal2Local*` / `AdjLocal2Global*` delegate
+  to `adj.toLocal()` / `adj.toGlobal()`, which use the stored target
+  mapping. The five group state variables (`adjPrimaryState`, etc.)
+  still exist and are updated in parallel with per-adj states.
 
-Always use `#pragma once` — no `#ifndef` guards.
-
-### Include Order
-
-1. Project macros (`"DNDS/Macros.hpp"`, `"DNDS/Defines.hpp"`)
-2. Standard library headers
-3. External library headers (Eigen, fmt, nlohmann_json, etc.)
-4. Project headers (quoted, relative to `src/`): `"DNDS/Array.hpp"`, `"Geom/Mesh.hpp"`
-
-Includes are NOT auto-sorted. Preserve existing order.
-
-### Error Handling
-
-Use the project's assert/check macros from `DNDS/Errors.hpp`:
-
-```cpp
-DNDS_assert(expr);                         // debug-only, calls std::abort()
-DNDS_assert_info(expr, info_string);       // debug-only with message
-DNDS_assert_infof(expr, fmt_string, ...);  // debug-only with printf format
-DNDS_check_throw(expr);                    // always active, throws std::runtime_error
-DNDS_check_throw_info(expr, info_string);  // always active with message
-```
-
-Do NOT use raw `assert()`. Use `DNDS_assert` for debug checks and
-`DNDS_check_throw` for runtime validation that must remain in release builds.
-
-### Templates and Eigen
-
-- Heavy use of Eigen matrices; prefer `Eigen::Matrix<real, ...>` with project's `real` type
-- Use `if constexpr` for compile-time branching on template parameters
-- Explicit template instantiation goes in `_explicit_instantiation/` subdirectories
-
-### Brace Style
-
-Allman style — opening brace on its own line:
-
-```cpp
-if (condition)
-{
-    // ...
-}
-```
-
-## Code Style — Python
-
-### Naming
-
-- Functions/variables: `snake_case` (`test_all_reduce_scalar`, `meshFile`)
-- Classes wrapping C++ types: match C++ name (`MPIInfo`, `VariationalReconstruction_2`)
-- Private helpers: `_` prefix (`_pre_import`, `_init_mpi`)
-
-### Imports
-
-```python
-from __future__ import annotations      # when used
-import sys, os
-from DNDSR import DNDS, Geom, CFV, EulerP
-import numpy as np
-import pytest
-```
-
-Test files append `src/` to `sys.path` to find the `DNDSR` package:
-
-```python
-sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "src"))
-```
-
-### Testing Patterns
-
-- Use `@pytest.fixture` for MPI setup
-- Use plain `assert` statements (not unittest-style)
-- Tests may also run standalone: `if __name__ == "__main__":` block calling test functions
-- Use numpy for array comparisons: `assert np.all(...)`, `assert (arr == val).all()`
+- **State discipline:** Every site that sets a group state variable
+  (`adjXState = ...`) must also call the corresponding `idx` method
+  (`markGlobal()`, `markLocal()`) on the governed adjacencies. Every
+  site that builds ghost mappings must wire them to the relevant
+  adjacencies via `wireTargetMapping()`. Both DSL and legacy code
+  paths maintain this invariant.
 
 ## Key Dependencies
 

@@ -5,8 +5,8 @@
 // #define __DNDS_REALLY_COMPILING__HEADER_ON__
 // #endif
 #include "DNDS/Defines.hpp"
-#include "DNDS/JsonUtil.hpp"
-#include "DNDS/ConfigParam.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
+#include "DNDS/Config/ConfigParam.hpp"
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
 // #undef __DNDS_REALLY_COMPILING__
 // #endif

@@ -4,10 +4,8 @@
 
 from DNDSR import DNDS as DNDS
 from DNDSR import Geom as Geom
-from DNDSR.Geom.utils import create_mesh_from_CGNS, create_bnd_mesh
+from DNDSR.Geom.utils import create_mesh_from_CGNS, create_bnd_mesh, read_mesh, prepare_mesh
 import os
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 import numpy as np
 
 print(DNDS.__file__)
@@ -122,5 +120,104 @@ def test_mesh0():
     # plt.savefig(f"test_print_part_{mpi.rank}.png")
 
 
+def test_multi_layer_ghost():
+    """Test multi-layer ghost cell creation with nGhostLayers=1,2,3.
+
+    Verifies:
+    1. Ghost cell/node/bnd counts increase monotonically with layer count.
+    2. For nLayers=2, every layer-1 ghost cell's cell2cell neighbors are
+       in the local+ghost set (the defining property of 2-layer ghosts).
+    3. The full pipeline (read + prepare) works for each layer count.
+    """
+    mpi = DNDS.MPIInfo()
+    mpi.setWorld()
+
+    mesh_file = os.path.join(
+        os.path.dirname(__file__), "..", "..", "data", "mesh",
+        "Uniform32_Periodic.cgns",
+    )
+
+    ghost_counts = {}  # nLayers -> (nCellGhost, nNodeGhost, nBndGhost)
+
+    for nLayers in [1, 2, 3]:
+        mesh = Geom.UnstructuredMesh(mpi, 2)
+        reader = Geom.UnstructuredMeshSerialRW(mesh, 0)
+        reader.ReadFromCGNSSerial(mesh_file)
+        reader.Deduplicate1to1Periodic(1e-9)
+        reader.BuildCell2Cell()
+        reader.MeshPartitionCell2Cell({
+            "metisType": "KWAY",
+            "metisUfactor": 5,
+            "metisSeed": 0,
+            "metisNcuts": 3,
+        })
+        reader.PartitionReorderToMeshCell2Cell()
+
+        mesh.RecoverNode2CellAndNode2Bnd()
+        mesh.RecoverCell2CellAndBnd2Cell()
+        mesh.BuildGhostPrimary(nLayers)
+        mesh.AdjGlobal2LocalPrimary()
+        mesh.AdjGlobal2LocalN2CB()
+
+        nCellOwned = mesh.NumCell()
+        nCellGhost = mesh.NumCellGhost()
+        nNodeGhost = mesh.NumNodeGhost()
+        nBndGhost = mesh.NumBndGhost()
+
+        ghost_counts[nLayers] = (nCellGhost, nNodeGhost, nBndGhost)
+
+        if mpi.rank == 0:
+            print(f"  nLayers={nLayers}: owned={nCellOwned}, "
+                  f"cellGhost={nCellGhost}, nodeGhost={nNodeGhost}, "
+                  f"bndGhost={nBndGhost}")
+
+        # For nLayers >= 2: verify that every owned cell's cell2cell
+        # neighbor's cell2cell neighbors are all in the local+ghost set.
+        # This is the defining property of 2-layer ghosts.
+        if nLayers >= 2:
+            nCellProc = mesh.NumCellProc()  # father + son
+            for iCell in range(nCellOwned):
+                for iNeighbor in mesh.cell2cell[iCell].tolist():
+                    if iNeighbor < 0:
+                        continue  # not-found encoded, skip
+                    assert iNeighbor < nCellProc, (
+                        f"Layer-1 neighbor {iNeighbor} of owned cell {iCell} "
+                        f"is out of range [0, {nCellProc})")
+                    # Check that iNeighbor's own neighbors are also resolvable
+                    for iNeighbor2 in mesh.cell2cell[iNeighbor].tolist():
+                        if iNeighbor2 < 0:
+                            continue
+                        assert iNeighbor2 < nCellProc, (
+                            f"Layer-2 neighbor {iNeighbor2} of cell {iNeighbor} "
+                            f"(neighbor of owned cell {iCell}) is out of range "
+                            f"[0, {nCellProc})")
+
+        # Run the full prepare pipeline to make sure it doesn't crash.
+        prepare_mesh(mesh, reader, build_serial_out=False)
+
+        del mesh, reader
+
+    # Verify monotonic increase of ghost counts.
+    for key in ["cell", "node", "bnd"]:
+        idx = {"cell": 0, "node": 1, "bnd": 2}[key]
+        counts = [ghost_counts[n][idx] for n in [1, 2, 3]]
+        for i in range(len(counts) - 1):
+            assert counts[i + 1] >= counts[i], (
+                f"{key} ghost count should be monotonically non-decreasing: "
+                f"nLayers={i + 1}->{i + 2}: {counts[i]}->{counts[i + 1]}")
+        if mpi.rank == 0:
+            print(f"  {key} ghost counts: {counts}")
+
+    # With mpi.size >= 2, ghost counts should strictly increase.
+    if mpi.size >= 2:
+        for key in ["cell", "node"]:
+            idx = {"cell": 0, "node": 1}[key]
+            assert ghost_counts[2][idx] > ghost_counts[1][idx], (
+                f"{key} ghost count should increase from 1 to 2 layers "
+                f"with {mpi.size} ranks: "
+                f"{ghost_counts[1][idx]} vs {ghost_counts[2][idx]}")
+
+
 if __name__ == "__main__":
     test_mesh0()
+    test_multi_layer_ghost()

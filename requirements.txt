@@ -1,18 +1,35 @@
+# Runtime + development dependencies for DNDSR.
+#
+# This file is the single source of truth for the dev environment.
+# pyproject.toml (scikit-build-core) does not consume this file directly;
+# the [project.optional-dependencies].dev extra in pyproject.toml mirrors
+# the formatter tools below. Keep the two lists in sync when editing.
+
+# Core runtime
 numpy
 scipy
 sympy
 pandas
 matplotlib
+h5py
+jsonschema
+pyyaml
+mpi4py
+dash
+
+# Build / packaging
 scikit-build
 scikit-build-core
 auditwheel
 pybind11-stubgen
 typing_extensions
-dash
+compdb
+
+# Testing
 pytest
 pytest-mpi
-mpi4py
-compdb
-h5py
-jsonschema
-pyyaml
+
+# Formatting / pre-commit hook tools
+# (clang-format is installed via system package manager, not pip)
+autopep8
+nbstripout

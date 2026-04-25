@@ -2,7 +2,7 @@
 #include "DNDS/Defines.hpp"
 #include "DNDS/MPI.hpp"
 #include "Geom/Quadrature.hpp"
-#include "Geom/Mesh.hpp"
+#include "Geom/Mesh/Mesh.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenMatrix.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenVector.hpp"

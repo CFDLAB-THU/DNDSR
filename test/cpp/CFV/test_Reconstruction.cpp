@@ -59,7 +59,7 @@ static std::string meshPath(const std::string &name)
     return f + "/data/mesh/" + name;
 }
 
-static ssp<UnstructuredMesh> buildMesh(
+static ssp<UnstructuredMesh> buildMeshUpToGhost(
     const std::string &file, bool periodic,
     DNDS::real Lx, DNDS::real Ly, int nBisect = 0)
 {
@@ -109,6 +109,14 @@ static ssp<UnstructuredMesh> buildMesh(
         mesh = meshBis;
     }
 
+    return mesh;
+}
+
+static ssp<UnstructuredMesh> buildMesh(
+    const std::string &file, bool periodic,
+    DNDS::real Lx, DNDS::real Ly, int nBisect = 0)
+{
+    auto mesh = buildMeshUpToGhost(file, periodic, Lx, Ly, nBisect);
     mesh->InterpolateFace();
     mesh->AssertOnFaces();
     return mesh;
@@ -119,10 +127,10 @@ static ssp<UnstructuredMesh> buildMesh(
 // ===================================================================
 enum class RecMethod
 {
-    GaussGreen,   // explicit 2nd-order Gauss-Green gradient
-    VFV_P1_HQM,   // iterative VR, maxOrder=1, HQM weights
-    VFV_P2_HQM,   // iterative VR, maxOrder=2, HQM weights
-    VFV_P3_HQM,   // iterative VR, maxOrder=3, HQM weights
+    GaussGreen, // explicit 2nd-order Gauss-Green gradient
+    VFV_P1_HQM, // iterative VR, maxOrder=1, HQM weights
+    VFV_P2_HQM, // iterative VR, maxOrder=2, HQM weights
+    VFV_P3_HQM, // iterative VR, maxOrder=3, HQM weights
     VFV_P1_Default,
     VFV_P2_Default,
     VFV_P3_Default,
@@ -132,13 +140,20 @@ static const char *recMethodName(RecMethod m)
 {
     switch (m)
     {
-    case RecMethod::GaussGreen:    return "GG";
-    case RecMethod::VFV_P1_HQM:    return "P1-HQM";
-    case RecMethod::VFV_P2_HQM:    return "P2-HQM";
-    case RecMethod::VFV_P3_HQM:    return "P3-HQM";
-    case RecMethod::VFV_P1_Default: return "P1-Def";
-    case RecMethod::VFV_P2_Default: return "P2-Def";
-    case RecMethod::VFV_P3_Default: return "P3-Def";
+    case RecMethod::GaussGreen:
+        return "GG";
+    case RecMethod::VFV_P1_HQM:
+        return "P1-HQM";
+    case RecMethod::VFV_P2_HQM:
+        return "P2-HQM";
+    case RecMethod::VFV_P3_HQM:
+        return "P3-HQM";
+    case RecMethod::VFV_P1_Default:
+        return "P1-Def";
+    case RecMethod::VFV_P2_Default:
+        return "P2-Def";
+    case RecMethod::VFV_P3_Default:
+        return "P3-Def";
     }
     return "?";
 }
@@ -147,13 +162,17 @@ static int recMethodOrder(RecMethod m)
 {
     switch (m)
     {
-    case RecMethod::GaussGreen:     return 1;
+    case RecMethod::GaussGreen:
+        return 1;
     case RecMethod::VFV_P1_HQM:
-    case RecMethod::VFV_P1_Default: return 1;
+    case RecMethod::VFV_P1_Default:
+        return 1;
     case RecMethod::VFV_P2_HQM:
-    case RecMethod::VFV_P2_Default: return 2;
+    case RecMethod::VFV_P2_Default:
+        return 2;
     case RecMethod::VFV_P3_HQM:
-    case RecMethod::VFV_P3_Default: return 3;
+    case RecMethod::VFV_P3_Default:
+        return 3;
     }
     return 1;
 }
@@ -237,7 +256,7 @@ static DNDS::real runTest(
     const ScalarFunc &exactFunc,
     const tVR::TFBoundary<g_nv> &bc,
     int maxIters,
-    DNDS::real convTol,    // convergence threshold on increment; 0 = no early stop
+    DNDS::real convTol, // convergence threshold on increment; 0 = no early stop
     bool printProgress)
 {
     auto mesh = vr->mesh;
@@ -257,7 +276,7 @@ static DNDS::real runTest(
             [&](auto &vInc, int iG)
             {
                 vInc(0) = exactFunc(vr->GetCellQuadraturePPhys(iCell, iG)) *
-                           vr->GetCellJacobiDet(iCell, iG);
+                          vr->GetCellJacobiDet(iCell, iG);
             });
         u[iCell] = uc / vr->GetCellVol(iCell);
     }
@@ -287,8 +306,8 @@ static DNDS::real runTest(
                 {
                     tPoint pPhy = vr->GetCellQuadraturePPhys(iCell, iG);
                     DNDS::real uRecVal = u[iCell](0) +
-                        (uGrad[iCell].transpose() *
-                         (pPhy - vr->GetCellBary(iCell))(Seq012))(0);
+                                         (uGrad[iCell].transpose() *
+                                          (pPhy - vr->GetCellBary(iCell))(Seq012))(0);
                     DNDS::real uExact = exactFunc(pPhy);
                     vInc = std::abs(uRecVal - uExact) * vr->GetCellJacobiDet(iCell, iG);
                 });
@@ -432,44 +451,59 @@ static ScalarFunc cosPlusCos = [](const tPoint &p)
 // POLYNOMIAL EXACTNESS on wall mesh (Uniform_3x3_wall, [-1,2]^2)
 // ===================================================================
 
-#define POLY_TEST(testName, method, polyFunc, polyDeg)                          \
-    TEST_CASE("Wall/" testName "/" #method)                                     \
-    {                                                                           \
-        ScalarFunc f = polyFunc;                                                \
-        auto vr = buildVR(g_wall_mesh, RecMethod::method);                     \
-        auto bc = makeDirichletBC(f);                                          \
+#define POLY_TEST(testName, method, polyFunc, polyDeg)                             \
+    TEST_CASE("Wall/" testName "/" #method)                                        \
+    {                                                                              \
+        ScalarFunc f = polyFunc;                                                   \
+        auto vr = buildVR(g_wall_mesh, RecMethod::method);                         \
+        auto bc = makeDirichletBC(f);                                              \
         DNDS::real err = runTest(vr, RecMethod::method, f, bc, 100, 1e-15, false); \
-        if (g_mpi.rank == 0)                                                   \
-            std::cout << "[Wall/" testName "/" #method "] err = "               \
-                      << std::scientific << err << std::endl;                   \
-        if (polyDeg == 0)                                                       \
-            CHECK(err < 1e-12);                                                \
-        else                                                                    \
-            CHECK(err < 10.0); /* golden-value regression checked separately */ \
+        if (g_mpi.rank == 0)                                                       \
+            std::cout << "[Wall/" testName "/" #method "] err = "                  \
+                      << std::scientific << err << std::endl;                      \
+        if (polyDeg == 0)                                                          \
+            CHECK(err < 1e-12);                                                    \
+        else                                                                       \
+            CHECK(err < 10.0); /* golden-value regression checked separately */    \
     }
 
 // Constant (degree 0): exact for all methods
-POLY_TEST("const", GaussGreen,    [](const tPoint &) { return 1.0; }, 0)
-POLY_TEST("const", VFV_P1_HQM,    [](const tPoint &) { return 1.0; }, 0)
-POLY_TEST("const", VFV_P2_HQM,    [](const tPoint &) { return 1.0; }, 0)
-POLY_TEST("const", VFV_P3_HQM,    [](const tPoint &) { return 1.0; }, 0)
-POLY_TEST("const", VFV_P1_Default, [](const tPoint &) { return 1.0; }, 0)
+POLY_TEST("const", GaussGreen, [](const tPoint &)
+          { return 1.0; }, 0)
+POLY_TEST("const", VFV_P1_HQM, [](const tPoint &)
+          { return 1.0; }, 0)
+POLY_TEST("const", VFV_P2_HQM, [](const tPoint &)
+          { return 1.0; }, 0)
+POLY_TEST("const", VFV_P3_HQM, [](const tPoint &)
+          { return 1.0; }, 0)
+POLY_TEST("const", VFV_P1_Default, [](const tPoint &)
+          { return 1.0; }, 0)
 
 // Linear (degree 1): exact for GG and p>=1
-POLY_TEST("linear", GaussGreen,    [](const tPoint &p) { return p[0] + 2*p[1]; }, 1)
-POLY_TEST("linear", VFV_P1_HQM,    [](const tPoint &p) { return p[0] + 2*p[1]; }, 1)
-POLY_TEST("linear", VFV_P2_HQM,    [](const tPoint &p) { return p[0] + 2*p[1]; }, 1)
-POLY_TEST("linear", VFV_P3_HQM,    [](const tPoint &p) { return p[0] + 2*p[1]; }, 1)
-POLY_TEST("linear", VFV_P1_Default, [](const tPoint &p) { return p[0] + 2*p[1]; }, 1)
+POLY_TEST("linear", GaussGreen, [](const tPoint &p)
+          { return p[0] + 2 * p[1]; }, 1)
+POLY_TEST("linear", VFV_P1_HQM, [](const tPoint &p)
+          { return p[0] + 2 * p[1]; }, 1)
+POLY_TEST("linear", VFV_P2_HQM, [](const tPoint &p)
+          { return p[0] + 2 * p[1]; }, 1)
+POLY_TEST("linear", VFV_P3_HQM, [](const tPoint &p)
+          { return p[0] + 2 * p[1]; }, 1)
+POLY_TEST("linear", VFV_P1_Default, [](const tPoint &p)
+          { return p[0] + 2 * p[1]; }, 1)
 
 // Quadratic (degree 2): exact for p>=2
-POLY_TEST("quad", VFV_P2_HQM,    [](const tPoint &p) { return p[0]*p[0] + p[1]*p[1]; }, 2)
-POLY_TEST("quad", VFV_P3_HQM,    [](const tPoint &p) { return p[0]*p[0] + p[1]*p[1]; }, 2)
-POLY_TEST("quad", VFV_P2_Default, [](const tPoint &p) { return p[0]*p[0] + p[1]*p[1]; }, 2)
+POLY_TEST("quad", VFV_P2_HQM, [](const tPoint &p)
+          { return p[0] * p[0] + p[1] * p[1]; }, 2)
+POLY_TEST("quad", VFV_P3_HQM, [](const tPoint &p)
+          { return p[0] * p[0] + p[1] * p[1]; }, 2)
+POLY_TEST("quad", VFV_P2_Default, [](const tPoint &p)
+          { return p[0] * p[0] + p[1] * p[1]; }, 2)
 
 // Cubic (degree 3): exact for p>=3
-POLY_TEST("cubic", VFV_P3_HQM,    [](const tPoint &p) { return p[0]*p[0]*p[0] + p[0]*p[1]*p[1]; }, 3)
-POLY_TEST("cubic", VFV_P3_Default, [](const tPoint &p) { return p[0]*p[0]*p[0] + p[0]*p[1]*p[1]; }, 3)
+POLY_TEST("cubic", VFV_P3_HQM, [](const tPoint &p)
+          { return p[0] * p[0] * p[0] + p[0] * p[1] * p[1]; }, 3)
+POLY_TEST("cubic", VFV_P3_Default, [](const tPoint &p)
+          { return p[0] * p[0] * p[0] + p[0] * p[1] * p[1]; }, 3)
 
 #undef POLY_TEST
 
@@ -481,14 +515,14 @@ POLY_TEST("cubic", VFV_P3_Default, [](const tPoint &p) { return p[0]*p[0]*p[0] +
 
 struct PeriodicTestCase
 {
-    const char *meshName;       // "IV10" or "IV10U"
+    const char *meshName;             // "IV10" or "IV10U"
     ssp<UnstructuredMesh> *meshArray; // pointer to g_iv10 or g_iv10u
     RecMethod method;
     ScalarFunc func;
     const char *funcName;
     int maxIters;
     DNDS::real convTol;
-    DNDS::real golden[3]; // golden L1/vol for bisect 0,1,2 (0 = not yet acquired)
+    DNDS::real golden[3];  // golden L1/vol for bisect 0,1,2 (0 = not yet acquired)
     bool checkConvergence; // whether to also check the iteration converges
 };
 
@@ -496,32 +530,21 @@ struct PeriodicTestCase
 // Jacobi iteration ensures determinism across all np values.
 static PeriodicTestCase g_periodicTests[] = {
     // IV10 (quad) + sin*cos
-    {"IV10", g_iv10, RecMethod::GaussGreen, sinCos, "sincos", 1, 0,
-     {1.5599270188e-02, 3.4233789068e-03, 7.8943623278e-04}, false},
-    {"IV10", g_iv10, RecMethod::VFV_P1_HQM, sinCos, "sincos", 200, 1e-14,
-     {4.6604402914e-02, 9.2961629825e-03, 1.5347312301e-03}, true},
-    {"IV10", g_iv10, RecMethod::VFV_P2_HQM, sinCos, "sincos", 200, 1e-14,
-     {3.0528143687e-03, 2.3057099673e-04, 2.4367733525e-05}, true},
-    {"IV10", g_iv10, RecMethod::VFV_P3_HQM, sinCos, "sincos", 200, 1e-14,
-     {1.9105219870e-03, 4.6701352192e-05, 1.4890868814e-06}, false},
-    {"IV10", g_iv10, RecMethod::VFV_P1_Default, sinCos, "sincos", 200, 1e-14,
-     {4.6604402914e-02, 9.2961629825e-03, 1.5347312301e-03}, false},
-    {"IV10", g_iv10, RecMethod::VFV_P3_Default, sinCos, "sincos", 200, 1e-14,
-     {1.8840503911e-03, 2.4995731251e-05, 8.3670061853e-07}, false},
+    {"IV10", g_iv10, RecMethod::GaussGreen, sinCos, "sincos", 1, 0, {1.5599270188e-02, 3.4233789068e-03, 7.8943623278e-04}, false},
+    {"IV10", g_iv10, RecMethod::VFV_P1_HQM, sinCos, "sincos", 200, 1e-14, {4.6604402914e-02, 9.2961629825e-03, 1.5347312301e-03}, true},
+    {"IV10", g_iv10, RecMethod::VFV_P2_HQM, sinCos, "sincos", 200, 1e-14, {3.0528143687e-03, 2.3057099673e-04, 2.4367733525e-05}, true},
+    {"IV10", g_iv10, RecMethod::VFV_P3_HQM, sinCos, "sincos", 200, 1e-14, {1.9105219870e-03, 4.6701352192e-05, 1.4890868814e-06}, false},
+    {"IV10", g_iv10, RecMethod::VFV_P1_Default, sinCos, "sincos", 200, 1e-14, {4.6604402914e-02, 9.2961629825e-03, 1.5347312301e-03}, false},
+    {"IV10", g_iv10, RecMethod::VFV_P3_Default, sinCos, "sincos", 200, 1e-14, {1.8840503911e-03, 2.4995731251e-05, 8.3670061853e-07}, false},
 
     // IV10U (tri) + sin*cos
-    {"IV10U", g_iv10u, RecMethod::GaussGreen, sinCos, "sincos", 1, 0,
-     {1.3027440876e-02, 3.8074751503e-03, 1.0853979656e-03}, false},
-    {"IV10U", g_iv10u, RecMethod::VFV_P1_HQM, sinCos, "sincos", 200, 1e-14,
-     {1.2040354507e-02, 2.2707678072e-03, 4.6833420900e-04}, false},
-    {"IV10U", g_iv10u, RecMethod::VFV_P2_HQM, sinCos, "sincos", 200, 1e-14,
-     {5.5617445849e-04, 5.9964034731e-05, 6.4337896956e-06}, false},
-    {"IV10U", g_iv10u, RecMethod::VFV_P3_HQM, sinCos, "sincos", 200, 1e-14,
-     {1.5878119293e-04, 9.8836538778e-06, 4.3407055649e-07}, false},
+    {"IV10U", g_iv10u, RecMethod::GaussGreen, sinCos, "sincos", 1, 0, {1.3027440876e-02, 3.8074751503e-03, 1.0853979656e-03}, false},
+    {"IV10U", g_iv10u, RecMethod::VFV_P1_HQM, sinCos, "sincos", 200, 1e-14, {1.2040354507e-02, 2.2707678072e-03, 4.6833420900e-04}, false},
+    {"IV10U", g_iv10u, RecMethod::VFV_P2_HQM, sinCos, "sincos", 200, 1e-14, {5.5617445849e-04, 5.9964034731e-05, 6.4337896956e-06}, false},
+    {"IV10U", g_iv10u, RecMethod::VFV_P3_HQM, sinCos, "sincos", 200, 1e-14, {1.5878119293e-04, 9.8836538778e-06, 4.3407055649e-07}, false},
 
     // IV10 (quad) + cos+cos
-    {"IV10", g_iv10, RecMethod::VFV_P3_HQM, cosPlusCos, "cos+cos", 200, 1e-14,
-     {5.5612138851e-04, 1.6082305163e-05, 6.6188225747e-07}, false},
+    {"IV10", g_iv10, RecMethod::VFV_P3_HQM, cosPlusCos, "cos+cos", 200, 1e-14, {5.5612138851e-04, 1.6082305163e-05, 6.6188225747e-07}, false},
 };
 
 static const int g_nPeriodicTests = sizeof(g_periodicTests) / sizeof(g_periodicTests[0]);
@@ -583,7 +606,7 @@ TEST_CASE("VFV P2 HQM converges on IV10 base mesh")
             [&](auto &vInc, int iG)
             {
                 vInc(0) = sinCos(vr->GetCellQuadraturePPhys(iCell, iG)) *
-                           vr->GetCellJacobiDet(iCell, iG);
+                          vr->GetCellJacobiDet(iCell, iG);
             });
         u[iCell] = uc / vr->GetCellVol(iCell);
     }
@@ -621,6 +644,158 @@ TEST_CASE("VFV P2 HQM converges on IV10 base mesh")
 
     CHECK(convergedAt > 0);
     CHECK(convergedAt < 200);
+}
+
+// ===================================================================
+// DEBUG: Compare InterpolateFace (DSL) vs InterpolateFaceLegacy
+// ===================================================================
+
+TEST_CASE("DEBUG compare InterpolateFace vs Legacy face2cell")
+{
+    // Build a periodic mesh up to ghost primary, then run both methods
+    auto meshA = buildMeshUpToGhost("IV10_10.cgns", true, 10, 10, 0);
+    auto meshB = buildMeshUpToGhost("IV10_10.cgns", true, 10, 10, 0);
+
+    meshA->InterpolateFace();
+    meshA->AssertOnFaces();
+    meshB->InterpolateFaceLegacy();
+    meshB->AssertOnFaces();
+
+    DNDS::index nFaceA = meshA->NumFace();
+    DNDS::index nFaceB = meshB->NumFace();
+    DNDS::index nFaceProcA = meshA->NumFaceProc();
+    DNDS::index nFaceProcB = meshB->NumFaceProc();
+
+    if (g_mpi.rank == 0)
+        std::cout << "[DBG] nFaceOwned: DSL=" << nFaceA << " Legacy=" << nFaceB
+                  << "  nFaceProc: DSL=" << nFaceProcA << " Legacy=" << nFaceProcB << std::endl;
+
+    // For each local cell, compare the face data seen through cell2face
+    DNDS::index nLocalCells = meshA->cell2cell.father->Size();
+    DNDS::index nDiffF2C = 0;
+    DNDS::index nDiffF2N = 0;
+    DNDS::index nDiffZone = 0;
+    DNDS::index nSwappedF2C = 0;
+
+    for (DNDS::index iCell = 0; iCell < nLocalCells; iCell++)
+    {
+        DNDS::rowsize nFacesA = meshA->cell2face.RowSize(iCell);
+        DNDS::rowsize nFacesB = meshB->cell2face.RowSize(iCell);
+        if (nFacesA != nFacesB)
+        {
+            if (g_mpi.rank == 0)
+                std::cout << "[DBG] Cell " << iCell << " nFaces differ: " << nFacesA << " vs " << nFacesB << std::endl;
+            continue;
+        }
+
+        for (DNDS::rowsize ic2f = 0; ic2f < nFacesA; ic2f++)
+        {
+            DNDS::index iFaceA = meshA->cell2face(iCell, ic2f);
+            DNDS::index iFaceB = meshB->cell2face(iCell, ic2f);
+
+            // Get face2cell for both
+            DNDS::index f2cA0 = meshA->face2cell(iFaceA, 0);
+            DNDS::index f2cA1 = meshA->face2cell(iFaceA, 1);
+            DNDS::index f2cB0 = meshB->face2cell(iFaceB, 0);
+            DNDS::index f2cB1 = meshB->face2cell(iFaceB, 1);
+
+            // Convert to global cell indices for comparison
+            DNDS::index gA0 = (f2cA0 != DNDS::UnInitIndex) ? meshA->cell2node.trans.pLGhostMapping->operator()(-1, f2cA0) : DNDS::UnInitIndex;
+            DNDS::index gA1 = (f2cA1 != DNDS::UnInitIndex) ? meshA->cell2node.trans.pLGhostMapping->operator()(-1, f2cA1) : DNDS::UnInitIndex;
+            DNDS::index gB0 = (f2cB0 != DNDS::UnInitIndex) ? meshB->cell2node.trans.pLGhostMapping->operator()(-1, f2cB0) : DNDS::UnInitIndex;
+            DNDS::index gB1 = (f2cB1 != DNDS::UnInitIndex) ? meshB->cell2node.trans.pLGhostMapping->operator()(-1, f2cB1) : DNDS::UnInitIndex;
+
+            bool same = (gA0 == gB0 && gA1 == gB1);
+            bool swapped = (!same && gA0 == gB1 && gA1 == gB0);
+
+            if (!same)
+            {
+                nDiffF2C++;
+                if (swapped)
+                    nSwappedF2C++;
+                if (nDiffF2C <= 5)
+                    std::cout << "[DBG rank=" << g_mpi.rank << "] Cell " << iCell
+                              << " ic2f=" << ic2f
+                              << " f2c DSL=(" << gA0 << "," << gA1 << ")"
+                              << " Legacy=(" << gB0 << "," << gB1 << ")"
+                              << (swapped ? " SWAPPED" : " DIFF")
+                              << std::endl;
+            }
+
+            // Compare face2node ordered
+            auto f2nA = meshA->face2node[iFaceA];
+            auto f2nB = meshB->face2node[iFaceB];
+            if (f2nA.size() == f2nB.size())
+            {
+                std::vector<DNDS::index> gnAOrd(f2nA.size()), gnBOrd(f2nB.size());
+                for (int k = 0; k < (int)f2nA.size(); k++)
+                    gnAOrd[k] = meshA->coords.trans.pLGhostMapping->operator()(-1, f2nA[k]);
+                for (int k = 0; k < (int)f2nB.size(); k++)
+                    gnBOrd[k] = meshB->coords.trans.pLGhostMapping->operator()(-1, f2nB[k]);
+                if (gnAOrd != gnBOrd)
+                {
+                    nDiffF2N++;
+                    if (nDiffF2N <= 5)
+                    {
+                        std::cout << "[DBG rank=" << g_mpi.rank << "] Cell " << iCell
+                                  << " ic2f=" << ic2f
+                                  << " f2n DSL=(";
+                        for (auto v : gnAOrd)
+                            std::cout << v << " ";
+                        std::cout << ") Legacy=(";
+                        for (auto v : gnBOrd)
+                            std::cout << v << " ";
+                        std::cout << ")" << std::endl;
+                    }
+                }
+            }
+
+            // Compare zone
+            auto zoneA = meshA->faceElemInfo(iFaceA, 0).zone;
+            auto zoneB = meshB->faceElemInfo(iFaceB, 0).zone;
+            if (zoneA != zoneB)
+            {
+                nDiffZone++;
+                if (nDiffZone <= 5)
+                {
+                    std::vector<DNDS::index> gnAF, gnBF;
+                    for (int k = 0; k < (int)f2nA.size(); k++)
+                        gnAF.push_back(meshA->coords.trans.pLGhostMapping->operator()(-1, f2nA[k]));
+                    for (int k = 0; k < (int)f2nB.size(); k++)
+                        gnBF.push_back(meshB->coords.trans.pLGhostMapping->operator()(-1, f2nB[k]));
+                    std::cout << "[DBG rank=" << g_mpi.rank << "] Cell " << iCell
+                              << " ic2f=" << ic2f
+                              << " zone DSL=" << zoneA << " Legacy=" << zoneB
+                              << " f2c DSL=(" << gA0 << "," << gA1 << ")"
+                              << " f2n DSL=(";
+                    for (auto v : gnAF)
+                        std::cout << v << " ";
+                    std::cout << ") Legacy=(";
+                    for (auto v : gnBF)
+                        std::cout << v << " ";
+                    std::cout << ")" << std::endl;
+                }
+            }
+        }
+    }
+
+    DNDS::index totalDiffF2C = 0, totalSwapped = 0, totalDiffF2N = 0, totalDiffZone = 0;
+    MPI::Allreduce(&nDiffF2C, &totalDiffF2C, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+    MPI::Allreduce(&nSwappedF2C, &totalSwapped, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+    MPI::Allreduce(&nDiffF2N, &totalDiffF2N, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+    MPI::Allreduce(&nDiffZone, &totalDiffZone, 1, DNDS_MPI_INDEX, MPI_SUM, g_mpi.comm);
+
+    if (g_mpi.rank == 0)
+    {
+        std::cout << "[DBG] Total face2cell differences: " << totalDiffF2C
+                  << " (swapped: " << totalSwapped << ")" << std::endl;
+        std::cout << "[DBG] Total face2node order differences: " << totalDiffF2N << std::endl;
+        std::cout << "[DBG] Total zone differences: " << totalDiffZone << std::endl;
+    }
+
+    CHECK(totalDiffF2C == 0);
+    CHECK(totalDiffF2N == 0);
+    CHECK(totalDiffZone == 0);
 }
 
 // ===================================================================
@@ -676,7 +851,7 @@ static DNDS::real runLimitedTest(
             [&](auto &vInc, int iG)
             {
                 vInc(0) = exactFunc(vr->GetCellQuadraturePPhys(iCell, iG)) *
-                           vr->GetCellJacobiDet(iCell, iG);
+                          vr->GetCellJacobiDet(iCell, iG);
             });
         u[iCell] = uc / vr->GetCellVol(iCell);
     }
@@ -757,38 +932,28 @@ struct LimiterTestCase
     RecMethod method;
     ScalarFunc func;
     const char *funcName;
-    int limiterKind;       // 0 = WBAP_C, 1 = WBAP_3
+    int limiterKind; // 0 = WBAP_C, 1 = WBAP_3
     const char *limName;
-    bool ifAll;            // limiter applied to all cells (no smooth-indicator skip)
-    DNDS::real golden[3];  // golden L1/vol for bisect 0,1,2
-                           // 0.0 = not yet acquired (just print, CHECK >= 0)
+    bool ifAll;           // limiter applied to all cells (no smooth-indicator skip)
+    DNDS::real golden[3]; // golden L1/vol for bisect 0,1,2
+                          // 0.0 = not yet acquired (just print, CHECK >= 0)
 };
 
 static LimiterTestCase g_limiterTests[] = {
     // IV10 (quad), P2-HQM, sincos, WBAP_C (ifAll=true so every cell is limited)
-    {"IV10", g_iv10, RecMethod::VFV_P2_HQM, sinCos, "sincos",
-     0, "CWBAP", true,
-     {6.6975633577e-02, 2.2647765241e-02, 9.2028443979e-03}},
+    {"IV10", g_iv10, RecMethod::VFV_P2_HQM, sinCos, "sincos", 0, "CWBAP", true, {6.6975633577e-02, 2.2647765241e-02, 9.2028443979e-03}},
 
     // IV10 (quad), P3-HQM, sincos, WBAP_C (ifAll=true)
-    {"IV10", g_iv10, RecMethod::VFV_P3_HQM, sinCos, "sincos",
-     0, "CWBAP", true,
-     {7.1333971937e-02, 2.6226392939e-02, 1.1194383457e-02}},
+    {"IV10", g_iv10, RecMethod::VFV_P3_HQM, sinCos, "sincos", 0, "CWBAP", true, {7.1333971937e-02, 2.6226392939e-02, 1.1194383457e-02}},
 
     // IV10U (tri), P2-HQM, sincos, WBAP_C (ifAll=true)
-    {"IV10U", g_iv10u, RecMethod::VFV_P2_HQM, sinCos, "sincos",
-     0, "CWBAP", true,
-     {3.5176301510e-02, 1.4925026476e-02, 6.9002847378e-03}},
+    {"IV10U", g_iv10u, RecMethod::VFV_P2_HQM, sinCos, "sincos", 0, "CWBAP", true, {3.5176301510e-02, 1.4925026476e-02, 6.9002847378e-03}},
 
     // IV10 (quad), P2-HQM, sincos, WBAP_3 (ifAll=true)
-    {"IV10", g_iv10, RecMethod::VFV_P2_HQM, sinCos, "sincos",
-     1, "3WBAP", true,
-     {6.6488044323e-02, 2.2593150005e-02, 9.1963848358e-03}},
+    {"IV10", g_iv10, RecMethod::VFV_P2_HQM, sinCos, "sincos", 1, "3WBAP", true, {6.6488044323e-02, 2.2593150005e-02, 9.1963848358e-03}},
 
     // IV10 (quad), P3-HQM, sincos, WBAP_3 (ifAll=true)
-    {"IV10", g_iv10, RecMethod::VFV_P3_HQM, sinCos, "sincos",
-     1, "3WBAP", true,
-     {7.1372867657e-02, 2.6697894435e-02, 1.1593632890e-02}},
+    {"IV10", g_iv10, RecMethod::VFV_P3_HQM, sinCos, "sincos", 1, "3WBAP", true, {7.1372867657e-02, 2.6697894435e-02, 1.1593632890e-02}},
 };
 
 static const int g_nLimiterTests = sizeof(g_limiterTests) / sizeof(g_limiterTests[0]);

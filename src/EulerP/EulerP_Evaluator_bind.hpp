@@ -12,7 +12,7 @@
 #pragma once
 
 #include "DNDS/Defines_bind.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "DNDS/ObjectUtils.hpp"
 #include "EulerP_Evaluator.hpp"
 #include <pybind11/pytypes.h>

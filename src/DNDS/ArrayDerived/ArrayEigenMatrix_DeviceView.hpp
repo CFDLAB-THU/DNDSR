@@ -3,7 +3,7 @@
 /// @brief Device-callable view for @ref DNDS::ArrayEigenMatrix "ArrayEigenMatrix". `operator[]` returns
 /// an `Eigen::Map<Matrix<real, Ni, Nj>>`.
 
-#include "../DeviceView.hpp"
+#include "DNDS/Device/DeviceView.hpp"
 #include "../EigenUtil.hpp"
 
 namespace DNDS

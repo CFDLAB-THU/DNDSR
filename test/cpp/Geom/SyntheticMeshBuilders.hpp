@@ -2,8 +2,8 @@
 /// @file SyntheticMeshBuilders.hpp
 /// @brief Shared synthetic mesh builders for MeshConnectivity unit tests.
 
-#include "Geom/MeshConnectivity.hpp"
-#include "Geom/Mesh.hpp"
+#include "Geom/Mesh/MeshConnectivity.hpp"
+#include "Geom/Mesh/Mesh.hpp"
 #include <string>
 #include <vector>
 #include <set>

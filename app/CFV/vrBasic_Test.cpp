@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <omp.h>
 
-#include "DNDS/SerializerJSON.hpp"
+#include "DNDS/Serializer/SerializerJSON.hpp"
 
 #include <filesystem>
 

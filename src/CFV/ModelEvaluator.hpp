@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "DNDS/Defines.hpp"
-#include "DNDS/ConfigParam.hpp"
+#include "DNDS/Config/ConfigParam.hpp"
 #include "VariationalReconstruction.hpp"
 
 namespace DNDS::CFV

@@ -7,9 +7,9 @@
 /// variable-shaped matrices into a single flat buffer using 32-bit size-pair
 /// headers so each row can self-describe its matrix shapes.
 
-#include "../DeviceView.hpp"
+#include "DNDS/Device/DeviceView.hpp"
 #include "DNDS/Defines.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "Eigen/src/Core/Matrix.h"
 #include "Eigen/src/Core/util/Constants.h"
 #include <cstddef>

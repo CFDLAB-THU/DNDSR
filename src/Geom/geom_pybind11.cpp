@@ -1,7 +1,9 @@
 
 #include "Boundary_bind.hpp"
 #include "Elements_bind.hpp"
-#include "Mesh_bind.hpp"
+#include "Mesh/Mesh_bind.hpp"
+#include "Mesh/AdjPairTracked_bind.hpp"
+#include "Mesh/AdjPairTracked_bind_inst/AdjPairTracked_bind_fwd.hpp"
 
 PYBIND11_MODULE(geom_pybind11, m)
 {
@@ -16,6 +18,13 @@ PYBIND11_MODULE(geom_pybind11, m)
     pybind11_AutoAppendName2ID_define(m);
     pybind11_ElemInfo_define(m);
     pybind11_ArrayElemInfo_define(m);
+
+    // AdjPairTracked types (must precede UnstructuredMesh which exposes them)
+    pybind11_MeshAdjState_define(m);
+    pybind11_AdjIndexInfo_define(m);
+    pybind11_AdjPairTracked_I_I_N_define(m);
+    pybind11_AdjPairTracked_2_2_N_define(m);
+    pybind11_AdjPairTracked_1_1_N_define(m);
 
     pybind11_MeshLocDefine(m);
     pybind11_UnstructuredMesh_define(m);

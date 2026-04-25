@@ -37,7 +37,7 @@
 #include "doctest.h"
 
 #include "SyntheticMeshBuilders.hpp"
-#include "Geom/MeshConnectivity.hpp"
+#include "Geom/Mesh/MeshConnectivity.hpp"
 #include <string>
 #include <vector>
 #include <set>
@@ -153,7 +153,7 @@ TEST_CASE("GhostChain: defaultPrimary compiles")
     auto &b2nNode = bndRoot->children[0];
     CHECK(b2nNode.kind == EntityKind::Node);
     CHECK(b2nNode.hop == Adj::Bnd2Node);
-    CHECK(!b2nNode.collect);
+    CHECK(b2nNode.collect); // chain 4 marks intermediate Node as collect
     CHECK(b2nNode.level == 1);
 
     REQUIRE(b2nNode.children.size() == 1);
@@ -373,9 +373,9 @@ TEST_CASE("GhostChain: adjKindName")
 /// ghost counts are exact within this abstract partition.
 struct SyntheticTiledGrid
 {
-    DNDS::index N;           // tile size per rank
-    DNDS::index totalCols;   // np * N
-    DNDS::index totalRows;   // N
+    DNDS::index N;         // tile size per rank
+    DNDS::index totalCols; // np * N
+    DNDS::index totalRows; // N
     DNDS::index nCellLocal;
     DNDS::index nNodeLocal;
     DNDS::index colStart, colEnd; // column range for this rank's cells
