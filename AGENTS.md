@@ -151,21 +151,26 @@ mpirun -np 2 python test/DNDS/test_basic.py
 C++ tests live under `test/cpp/` and use the [doctest](https://github.com/doctest/doctest)
 framework. They are built when `DNDS_BUILD_TESTS=ON` and registered with CTest.
 MPI tests are registered at np=1, np=2, np=4, and np=8 by default (configurable via
-`DNDS_TEST_NP_LIST` environment variable).
+`DNDS_TEST_NP_LIST` environment variable at configure time). All tests run with
+`OMP_NUM_THREADS=2` by default (configurable via `DNDS_TEST_OMP_THREADS` environment
+variable at configure time).
 
 ```bash
 # Configure with tests enabled (from build directory)
 cmake .. -DDNDS_BUILD_TESTS=ON
 
+# Configure with custom OMP threads (optional)
+DNDS_TEST_OMP_THREADS=4 cmake .. -DDNDS_BUILD_TESTS=ON
+
 # Build all C++ unit tests (all categories)
-cmake --build . -t all_unit_tests -j32
+cmake --build . -t all_unit_tests -j8
 
 # Build only specific category
-cmake --build . -t dnds_unit_tests -j32   # DNDS/ tests only
-cmake --build . -t geom_unit_tests -j32   # Geom/ tests only
-cmake --build . -t cfv_unit_tests -j32    # CFV/ tests only
-cmake --build . -t euler_unit_tests -j32  # Euler/ tests only
-cmake --build . -t solver_unit_tests -j32 # Solver/ tests only
+cmake --build . -t dnds_unit_tests -j8   # DNDS/ tests only
+cmake --build . -t geom_unit_tests -j8   # Geom/ tests only
+cmake --build . -t cfv_unit_tests -j8    # CFV/ tests only
+cmake --build . -t euler_unit_tests -j8  # Euler/ tests only
+cmake --build . -t solver_unit_tests -j8 # Solver/ tests only
 
 # Run all C++ tests via CTest
 ctest --test-dir . --output-on-failure

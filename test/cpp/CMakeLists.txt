@@ -13,6 +13,10 @@
 # MPI tests are registered for each np in DNDS_TEST_NP_LIST.
 # Set via environment variable: DNDS_TEST_NP_LIST="1;2;4" cmake ..
 # Default: 1;2;4;8
+#
+# OpenMP threads can be configured via DNDS_TEST_OMP_THREADS (default: 2).
+# Override at ctest runtime: ctest --test-dir . -E "..." -- --overwrite OMP_NUM_THREADS=4
+# Or simply: OMP_NUM_THREADS=4 ctest --test-dir . --output-on-failure
 
 # --- Read NP list from env, default to 1;2;4;8 ---
 if(DEFINED ENV{DNDS_TEST_NP_LIST})
@@ -21,6 +25,14 @@ else()
     set(DNDS_TEST_NP_LIST "1;2;4;8")
 endif()
 message(STATUS "DNDS_TEST_NP_LIST: ${DNDS_TEST_NP_LIST}")
+
+# --- Read OMP threads from env, default to 2 ---
+if(DEFINED ENV{DNDS_TEST_OMP_THREADS})
+    set(DNDS_TEST_OMP_THREADS "$ENV{DNDS_TEST_OMP_THREADS}")
+else()
+    set(DNDS_TEST_OMP_THREADS "2")
+endif()
+message(STATUS "DNDS_TEST_OMP_THREADS: ${DNDS_TEST_OMP_THREADS}")
 
 # --- Detect OpenMPI and add --oversubscribe if needed ---
 # OpenMPI requires --oversubscribe when np > physical cores (common in CI/testing).
@@ -69,7 +81,9 @@ function(dnds_add_unit_test TEST_NAME SRC_FILE LIBS)
         EXCLUDE_FROM_ALL ON)
     # serial test
     add_test(NAME dnds_${TEST_NAME} COMMAND ${TARGET_NAME})
-    set_tests_properties(dnds_${TEST_NAME} PROPERTIES TIMEOUT 120)
+    set_tests_properties(dnds_${TEST_NAME} PROPERTIES
+        TIMEOUT 120
+        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
 # --- helper: add an MPI unit test executable (DNDS) ---
@@ -92,7 +106,10 @@ function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
         add_test(NAME dnds_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-        set_tests_properties(dnds_${TEST_NAME}_np${NP} PROPERTIES TIMEOUT ${_TIMEOUT} PROCESSORS ${NP})
+        set_tests_properties(dnds_${TEST_NAME}_np${NP} PROPERTIES
+            TIMEOUT ${_TIMEOUT}
+            PROCESSORS ${NP}
+            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
     endforeach()
 endfunction()
 
@@ -112,7 +129,9 @@ function(geom_add_unit_test TEST_NAME SRC_FILE LIBS)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
     add_test(NAME geom_${TEST_NAME} COMMAND ${TARGET_NAME})
-    set_tests_properties(geom_${TEST_NAME} PROPERTIES TIMEOUT 120)
+    set_tests_properties(geom_${TEST_NAME} PROPERTIES
+        TIMEOUT 120
+        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
 # --- helper: add an MPI unit test executable (Geom) ---
@@ -135,7 +154,10 @@ function(geom_add_mpi_test TEST_NAME SRC_FILE LIBS)
         add_test(NAME geom_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-        set_tests_properties(geom_${TEST_NAME}_np${NP} PROPERTIES TIMEOUT ${_TIMEOUT} PROCESSORS ${NP})
+        set_tests_properties(geom_${TEST_NAME}_np${NP} PROPERTIES
+            TIMEOUT ${_TIMEOUT}
+            PROCESSORS ${NP}
+            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
     endforeach()
 endfunction()
 
@@ -218,7 +240,9 @@ function(cfv_add_unit_test TEST_NAME SRC_FILE LIBS)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
     add_test(NAME cfv_${TEST_NAME} COMMAND ${TARGET_NAME})
-    set_tests_properties(cfv_${TEST_NAME} PROPERTIES TIMEOUT 120)
+    set_tests_properties(cfv_${TEST_NAME} PROPERTIES
+        TIMEOUT 120
+        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
 # --- helper: add an MPI unit test executable (CFV) ---
@@ -241,7 +265,10 @@ function(cfv_add_mpi_test TEST_NAME SRC_FILE LIBS)
         add_test(NAME cfv_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-        set_tests_properties(cfv_${TEST_NAME}_np${NP} PROPERTIES TIMEOUT ${_TIMEOUT} PROCESSORS ${NP})
+        set_tests_properties(cfv_${TEST_NAME}_np${NP} PROPERTIES
+            TIMEOUT ${_TIMEOUT}
+            PROCESSORS ${NP}
+            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
     endforeach()
 endfunction()
 
@@ -279,7 +306,10 @@ if(DNDS_USE_CUDA)
         add_test(NAME cfv_${TEST_NAME}_np1
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-        set_tests_properties(cfv_${TEST_NAME}_np1 PROPERTIES TIMEOUT 120 PROCESSORS 1)
+        set_tests_properties(cfv_${TEST_NAME}_np1 PROPERTIES
+            TIMEOUT 120
+            PROCESSORS 1
+            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
     endfunction()
 
     cfv_add_cuda_mpi_test(device_transferable "CFV/test_DeviceTransferable.cu" "cfv;geom;dnds")
@@ -311,7 +341,9 @@ function(euler_add_unit_test TEST_NAME SRC_FILE LIBS)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
     add_test(NAME euler_${TEST_NAME} COMMAND ${TARGET_NAME})
-    set_tests_properties(euler_${TEST_NAME} PROPERTIES TIMEOUT 120)
+    set_tests_properties(euler_${TEST_NAME} PROPERTIES
+        TIMEOUT 120
+        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
 # --- helper: add an MPI unit test executable (Euler) ---
@@ -334,7 +366,10 @@ function(euler_add_mpi_test TEST_NAME SRC_FILE LIBS)
         add_test(NAME euler_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-        set_tests_properties(euler_${TEST_NAME}_np${NP} PROPERTIES TIMEOUT ${_TIMEOUT} PROCESSORS ${NP})
+        set_tests_properties(euler_${TEST_NAME}_np${NP} PROPERTIES
+            TIMEOUT ${_TIMEOUT}
+            PROCESSORS ${NP}
+            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
     endforeach()
 endfunction()
 
@@ -387,7 +422,9 @@ function(solver_add_unit_test TEST_NAME SRC_FILE LIBS)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
     add_test(NAME solver_${TEST_NAME} COMMAND ${TARGET_NAME})
-    set_tests_properties(solver_${TEST_NAME} PROPERTIES TIMEOUT 60)
+    set_tests_properties(solver_${TEST_NAME} PROPERTIES
+        TIMEOUT 60
+        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
 solver_add_unit_test(ode "Solver/test_ODE.cpp" "dnds")
