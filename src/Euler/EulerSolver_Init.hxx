@@ -214,41 +214,6 @@ namespace DNDS::Euler
             for (index iCell : mesh->node2cell[iNode])
                 DNDS_assert(iCell >= 0);
 
-        if (config.dataIOControl.meshElevation == 1 && config.dataIOControl.readMeshMode == 0)
-        {
-            mesh->elevationInfo.nIter = config.dataIOControl.meshElevationIter;
-            mesh->elevationInfo.nSearch = config.dataIOControl.meshElevationNSearch;
-            mesh->elevationInfo.RBFRadius = config.dataIOControl.meshElevationRBFRadius;
-            mesh->elevationInfo.RBFPower = config.dataIOControl.meshElevationRBFPower;
-            mesh->elevationInfo.kernel = config.dataIOControl.meshElevationRBFKernel;
-            mesh->elevationInfo.MaxIncludedAngle = config.dataIOControl.meshElevationMaxIncludedAngle;
-            mesh->elevationInfo.refDWall = config.dataIOControl.meshElevationRefDWall;
-            mesh->ElevatedNodesGetBoundarySmooth(
-                [&](Geom::t_index bndId)
-                {
-                    auto bType = pBCHandler->GetTypeFromID(bndId);
-                    if (bType == BCWall || bType == BCWallIsothermal)
-                        return true;
-                    if (config.dataIOControl.meshElevationBoundaryMode == 1 &&
-                        (bType == BCWallInvis || bType == BCSym))
-                        return true;
-                    return false;
-                });
-            if (config.dataIOControl.meshElevationInternalSmoother == 0)
-                mesh->ElevatedNodesSolveInternalSmooth();
-            else if (config.dataIOControl.meshElevationInternalSmoother == 1)
-                mesh->ElevatedNodesSolveInternalSmoothV1();
-            else if (config.dataIOControl.meshElevationInternalSmoother == 2)
-                mesh->ElevatedNodesSolveInternalSmoothV2();
-            else if (config.dataIOControl.meshElevationInternalSmoother == -1)
-            {
-                if (mpi.rank == 0)
-                    log() << " WARNING !!! Not Smoothing internal, abandoning boundary smooth displacements" << std::endl;
-            }
-            else
-                DNDS_assert(false);
-        }
-
         if (config.dataIOControl.meshBuildWallDist)
         {
             mesh->BuildNodeWallDist(
