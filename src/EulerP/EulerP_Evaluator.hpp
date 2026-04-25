@@ -12,13 +12,13 @@
 #include "CFV/FiniteVolume.hpp"
 #include "DNDS/ArrayDOF.hpp"
 #include "DNDS/Defines.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "DNDS/Errors.hpp"
 #include "EulerP.hpp"
 #include "EulerP_BC.hpp"
 #include "EulerP_Physics.hpp"
 #include <vector>
-#include "DNDS/DeviceStorageHelper.hpp"
+#include "DNDS/Device/DeviceStorageHelper.hpp"
 #include "DNDS/ObjectUtils.hpp"
 
 namespace DNDS::EulerP

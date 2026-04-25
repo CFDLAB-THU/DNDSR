@@ -18,8 +18,8 @@
  *  and serialization/deserialization.
  */
 #pragma once
-#include "DNDS/JsonUtil.hpp"
-#include "DNDS/ConfigParam.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
+#include "DNDS/Config/ConfigParam.hpp"
 
 #include "Euler.hpp"
 #include "Gas.hpp"

@@ -14,11 +14,11 @@
  */
 #pragma once
 #include "DNDS/Defines.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "DNDS/Errors.hpp"
 #include "DNDS/IdealGasPhysics.hpp"
 #include "EulerP.hpp"
-#include "DNDS/JsonUtil.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
 #include <cmath>
 #include "Geom/Geometric.hpp"
 

@@ -175,6 +175,158 @@ toggle back and forth between Global and Local.
    cell2cell doesn't exist until `RecoverCell2CellAndBnd2Cell`, while cell2node
    exists from the partition step. They share the same state flag.
 
+### 4.2. Per-Adjacency State Tracking (`AdjPairTracked`)
+
+To address the weaknesses above, each adjacency array now carries its own
+`AdjIndexInfo` recording per-adjacency state and a shared pointer to the
+target entity's ghost mapping. This sits alongside (not replacing) the five
+group flags.
+
+**Files:**
+- `src/Geom/Mesh/AdjIndexInfo.hpp` — `AdjIndexInfo` struct + `AdjPairTracked<TPair>`
+- `src/Geom/Mesh/MeshConnectivity_StateChecked.hpp` — checked DSL wrappers
+
+#### `AdjIndexInfo`
+
+All fields are private. State transitions go through methods:
+
+```cpp
+struct AdjIndexInfo
+{
+private:
+    MeshAdjState    _state{Adj_Unknown};
+    t_pLGhostMapping _targetMapping;   // ghost mapping of the TARGET entity
+
+public:
+    // Queries
+    MeshAdjState state() const;
+    bool isLocal() const;
+    bool isGlobal() const;
+    bool isBuilt() const;
+    bool isWired() const;
+    const t_pLGhostMapping &mapping() const;
+
+    // State transitions
+    void markGlobal();                              // Unknown|Global -> Global
+    void markLocal();                               // Unknown -> Local (requires wired)
+    void wireTargetMapping(const t_pLGhostMapping&);// rejects Local state
+
+    // Conversion (requires wired)
+    void toLocal(adj, nRows);                       // Global -> Local
+    void toGlobal(adj, nRows);                      // Local -> Global
+    void toLocalOMP(adj, nRows);                    // Global -> Local (OMP)
+    void toGlobalOMP(adj, nRows);                   // Local -> Global (OMP)
+
+    // Bootstrap: wire + convert in one call (solves chicken-and-egg)
+    void bootstrapToLocal(mapping, adj, nRows);     // Unknown|Global -> Local
+    void bootstrapToLocalOMP(mapping, adj, nRows);
+};
+```
+
+- `_targetMapping` is the ghost mapping of the entity kind the indices
+  **point to**. For `cell2node`, that is the node ghost mapping
+  (`coords.trans.pLGhostMapping`). The target mapping always exists on
+  some other array pair's transformer — `wireTargetMapping` just stores
+  a shared pointer to it.
+- `wireTargetMapping()` asserts `_state != Adj_PointToLocal` — wiring a
+  mapping while indices are local is a logic error.
+- `markLocal()` is for adjacencies populated directly with local indices
+  (bypassing the global phase), e.g. `ConstructBndMesh`. Requires the
+  mapping to be wired first.
+- `toLocal()` encodes not-found entries as `(-1 - globalIndex)`, matching
+  `IndexGlobal2Local`.
+
+#### `AdjPairTracked<TPair>`
+
+Uses **inheritance** (not composition) from `TPair`:
+
+```cpp
+template <class TPair>
+struct AdjPairTracked : public TPair
+{
+    AdjIndexInfo idx;
+    void toLocal();             // idx.toLocal(*this, Size())
+    void toGlobal();
+    void toLocalOMP();
+    void toGlobalOMP();
+    void bootstrapToLocal(mapping);
+    void bootstrapToLocalOMP(mapping);
+    MeshAdjState state() const;
+    bool isLocal() const;
+    bool isGlobal() const;
+    bool isBuilt() const;
+    bool isWired() const;
+    const t_pLGhostMapping &mapping() const;
+};
+```
+
+Inheritance keeps all existing callers (`.father`, `.son`, `.trans`,
+`BorrowAndPull`, `operator[]`, etc.) working unchanged. All 12 adjacency
+members on `UnstructuredMesh` use `AdjPairTracked<T>`:
+
+| Member | Type | Target Entity |
+|--------|------|---------------|
+| `cell2node` | `AdjPairTracked<tAdjPair>` | node |
+| `bnd2node` | `AdjPairTracked<tAdjPair>` | node |
+| `bnd2cell` | `AdjPairTracked<tAdj2Pair>` | cell |
+| `cell2cell` | `AdjPairTracked<tAdjPair>` | cell |
+| `node2cell` | `AdjPairTracked<tAdjPair>` | cell |
+| `node2bnd` | `AdjPairTracked<tAdjPair>` | bnd |
+| `cell2face` | `AdjPairTracked<tAdjPair>` | face |
+| `face2node` | `AdjPairTracked<tAdjPair>` | node |
+| `face2cell` | `AdjPairTracked<tAdj2Pair>` | cell |
+| `bnd2face` | `AdjPairTracked<tAdj2Pair>` | face |
+| `face2bnd` | `AdjPairTracked<tAdj2Pair>` | bnd |
+| `cell2cellFace` | `AdjPairTracked<tAdjPair>` | cell |
+
+#### Wiring Protocol
+
+Target mappings are wired at these points in the mesh build pipeline:
+
+1. **After `BuildGhostPrimary`:** cell2node, bnd2node (target=node);
+   cell2cell, bnd2cell, node2cell (target=cell); node2bnd (target=bnd).
+
+2. **In `BuildGhostFace`:** face2node (target=node); face2cell
+   (target=cell); cell2face, bnd2face (target=face).
+
+3. **In `MatchFaceBoundary`:** face2bnd (target=bnd).
+
+4. **After `BuildCell2CellFace`:** cell2cellFace (target=cell).
+
+`markGlobal()` is called wherever `adjXState = Adj_PointToGlobal` is
+set. Conversion methods (`AdjGlobal2Local*` / `AdjLocal2Global*`)
+delegate to `adj.toLocal()` / `adj.toGlobal()` and update both the
+per-adj state and the group flag in parallel.
+
+Legacy methods (`BuildGhostPrimaryLegacy`, `InterpolateFaceLegacy`)
+mirror the same wiring and `markGlobal`/`markLocal` calls as their
+DSL counterparts.
+
+#### Three-Layer Architecture
+
+| Layer | File | Knows About State? |
+|-------|------|--------------------|
+| **DSL** | `MeshConnectivity.hpp` | No — operates on bare `ArrayAdjacencyPair<rs>` |
+| **Checked wrappers** | `MeshConnectivity_StateChecked.hpp` | Yes — asserts `idx.state`, then forwards to DSL |
+| **Mesh methods** | `Mesh.cpp` | Yes — owns `AdjPairTracked` members, calls checked wrappers |
+
+`CheckedInverse`, `CheckedComposeFiltered`, and `CheckedInterpolateGlobal`
+are stateless free function templates. They static-cast `AdjPairTracked<T>&`
+to `T&` before forwarding.
+
+#### Current Status
+
+The five group state variables still exist as real data members and are
+updated in parallel with per-adj states. They have NOT been converted to
+derived queries yet. All code paths (DSL and legacy) now maintain per-adj
+`idx` state consistently — `markGlobal()`, `wireTargetMapping()`,
+`markLocal()`, `toLocal()`/`toGlobal()` are called at every site where
+adjacency data or state changes. The `setStateUnchecked` escape hatch has
+been eliminated; all state transitions go through the `AdjIndexInfo` API.
+
+DeviceView does not read per-adj state yet (still uses group state
+variables). Python bindings do not expose `idx` yet.
+
 ---
 
 ## 5. Limitations and Inflexibility
@@ -403,6 +555,8 @@ void InterpolateEntities(
 | **Father** | Locally-owned (non-ghost) portion of an array |
 | **Son** | Ghost (remote-owned) portion of an array, pulled from other ranks |
 | **Ghost mapping** | `pLGhostMapping` on an ArrayTransformer — maps global indices to local father+son indices |
+| **Target mapping** | Ghost mapping of the entity kind an adjacency's indices point to (e.g., for `cell2node`, the node ghost mapping) |
+| **AdjPairTracked** | Wrapper that inherits from an ArrayPair and adds per-adjacency `AdjIndexInfo` (state + target mapping) |
 | **Node-neighbor** | Two cells that share at least one vertex |
 | **Face-neighbor** | Two cells that share a codimension-1 face (>= dim shared vertices) |
 | **Complemented** | A ghost entity has all its sub-entity data available locally |

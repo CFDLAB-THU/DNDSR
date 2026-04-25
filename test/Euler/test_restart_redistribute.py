@@ -39,10 +39,14 @@ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 PROJECT_ROOT = os.path.realpath(os.path.join(SCRIPT_DIR, "..", ".."))
 BUILD_DIR = os.path.join(PROJECT_ROOT, "build")
 EULER_EXE = os.path.join(BUILD_DIR, "app", "euler.exe")
-BASE_CONFIG = os.path.join(PROJECT_ROOT, "cases", "euler", "euler_config_IV.json")
-DEFAULT_CONFIG = os.path.join(PROJECT_ROOT, "cases", "euler", "euler_default_config.json")
-MESH_SMALL = os.path.join(PROJECT_ROOT, "data", "mesh", "IV10_10.cgns")   # 10x10 = 100 cells
-MESH_LARGE = os.path.join(PROJECT_ROOT, "data", "mesh", "IV10_20.cgns")   # 20x20 = 400 cells
+BASE_CONFIG = os.path.join(PROJECT_ROOT, "cases",
+                           "euler", "euler_config_IV.json")
+DEFAULT_CONFIG = os.path.join(
+    PROJECT_ROOT, "cases", "euler", "euler_default_config.json")
+MESH_SMALL = os.path.join(PROJECT_ROOT, "data", "mesh",
+                          "IV10_10.cgns")   # 10x10 = 100 cells
+MESH_LARGE = os.path.join(PROJECT_ROOT, "data", "mesh",
+                          "IV10_20.cgns")   # 20x20 = 400 cells
 
 
 def _strip_json_comments(text):
@@ -103,7 +107,8 @@ def _read_h5_u_data(h5_path):
         elif "array" in father_grp and "data" in father_grp["array"]:
             raw_data = father_grp["array"]["data"][:]
         else:
-            raise KeyError(f"Cannot find data in {h5_path}: /u/father/ contains {list(father_grp.keys())}")
+            raise KeyError(
+                f"Cannot find data in {h5_path}: /u/father/ contains {list(father_grp.keys())}")
 
     n_global = len(orig_idx)
     assert raw_data.size % n_global == 0, (
@@ -188,8 +193,8 @@ def _make_step2_config(work_dir, restart_h5_path, tag, np_count,
     """Config for the 1-step restart run."""
     cfg = _load_json(BASE_CONFIG)
 
-    # Time march: 0 steps from restart -- just load and write
-    cfg["timeMarchControl"]["nTimeStep"] = 0
+    # Time march: 1 step from restart -- load, run one step, and write
+    cfg["timeMarchControl"]["nTimeStep"] = 1
     cfg["timeMarchControl"]["tEnd"] = 1e10
     cfg["timeMarchControl"]["dtImplicit"] = 1.25e-3
     cfg["timeMarchControl"]["odeCode"] = 0
@@ -268,7 +273,8 @@ def _compare_restart_h5(restart_a, restart_b, tol=1e-10):
     )
 
     max_diff = np.max(np.abs(data_a_sorted - data_b_sorted))
-    rel_norm = np.linalg.norm(data_a_sorted - data_b_sorted) / (np.linalg.norm(data_a_sorted) + 1e-300)
+    rel_norm = np.linalg.norm(
+        data_a_sorted - data_b_sorted) / (np.linalg.norm(data_a_sorted) + 1e-300)
 
     print(f"  nGlobal cells: {len(orig_a_sorted)}")
     print(f"  nVars per cell: {data_a_sorted.shape[1]}")
@@ -284,7 +290,8 @@ def _compare_restart_h5(restart_a, restart_b, tol=1e-10):
 def _run_step1(work_dir, np_write, mesh_file=MESH_SMALL):
     """Run step 1: initial 20-step run producing a restart."""
     step1_config, _ = _make_step1_config(work_dir, mesh_file=mesh_file)
-    shutil.copy(DEFAULT_CONFIG, os.path.join(work_dir, "euler_default_config.json"))
+    shutil.copy(DEFAULT_CONFIG, os.path.join(
+        work_dir, "euler_default_config.json"))
     result, stdout = _run_solver(np_write, step1_config, work_dir)
     assert result.returncode == 0, f"Step 1 solver failed:\n{stdout[-2000:]}"
     restart_h5 = _find_restart_h5(os.path.join(work_dir, "step1"), "step1")
@@ -294,8 +301,10 @@ def _run_step1(work_dir, np_write, mesh_file=MESH_SMALL):
 
 def _run_step2(work_dir, restart_h5, tag, np_count, overrides=None, mesh_file=MESH_SMALL):
     """Run step 2: load restart and immediately write it back."""
-    step2_config, _ = _make_step2_config(work_dir, restart_h5, tag, np_count, mesh_file=mesh_file)
-    result, stdout = _run_solver(np_count, step2_config, work_dir, overrides=overrides)
+    step2_config, _ = _make_step2_config(
+        work_dir, restart_h5, tag, np_count, mesh_file=mesh_file)
+    result, stdout = _run_solver(
+        np_count, step2_config, work_dir, overrides=overrides)
     assert result.returncode == 0, f"Step 2 ({tag}) solver failed:\n{stdout[-2000:]}"
     restart_out = _find_restart_h5(os.path.join(work_dir, f"step2_{tag}"), tag)
     print(f"  Output restart: {restart_out}")
@@ -332,7 +341,8 @@ def test_restart_redistribute_same_np(work_dir):
     restart_h5 = _run_step1(work_dir, np_write, mesh_file=MESH_SMALL)
 
     print(f"\n=== Step 2a: load with np=2, same partition (reference) ===")
-    restart_a = _run_step2(work_dir, restart_h5, "ref", 2, mesh_file=MESH_SMALL)
+    restart_a = _run_step2(work_dir, restart_h5, "ref",
+                           2, mesh_file=MESH_SMALL)
 
     print(f"\n=== Step 2b: load with np=2, different Metis seed ===")
     restart_b = _run_step2(
@@ -351,13 +361,16 @@ def test_restart_redistribute_different_np(work_dir):
     assert os.path.isfile(EULER_EXE), f"euler.exe not found: {EULER_EXE}"
 
     # Reuse step1 restart from the same work_dir (written by previous test)
-    restart_h5 = _find_restart_h5(os.path.join(work_dir, "step1"), "step1 (reuse)")
+    restart_h5 = _find_restart_h5(
+        os.path.join(work_dir, "step1"), "step1 (reuse)")
     print(f"\n  Reusing Step 1 restart: {restart_h5}")
 
-    restart_ref = _find_restart_h5(os.path.join(work_dir, "step2_ref"), "ref (reuse)")
+    restart_ref = _find_restart_h5(os.path.join(
+        work_dir, "step2_ref"), "ref (reuse)")
 
     print(f"\n=== Step 2c: load with np=3 (cross-np redistribution) ===")
-    restart_c = _run_step2(work_dir, restart_h5, "np3", 3, mesh_file=MESH_SMALL)
+    restart_c = _run_step2(work_dir, restart_h5, "np3",
+                           3, mesh_file=MESH_SMALL)
 
     print("\n=== Comparing: cross-np redistribution ===")
     _compare_restart_h5(restart_ref, restart_c)
@@ -371,18 +384,21 @@ def test_restart_redistribute_large_mesh_multi_np(work_dir_large):
 
     np_write = 4
 
-    print(f"\n=== Step 1: 20-step run with np={np_write}, mesh=IV10_20 (400 cells) ===")
+    print(
+        f"\n=== Step 1: 20-step run with np={np_write}, mesh=IV10_20 (400 cells) ===")
     restart_h5 = _run_step1(work_dir_large, np_write, mesh_file=MESH_LARGE)
 
     print(f"\n=== Reference: load with np={np_write} ===")
-    restart_ref = _run_step2(work_dir_large, restart_h5, "ref", np_write, mesh_file=MESH_LARGE)
+    restart_ref = _run_step2(work_dir_large, restart_h5,
+                             "ref", np_write, mesh_file=MESH_LARGE)
 
     for np_read in [4, 5, 6, 7, 8]:
         tag = f"np{np_read}"
         overrides = None
         if np_read == np_write:
             # Same np: use different Metis seed to force redistribution
-            overrides = [("/dataIOControl/meshPartitionOptions/metisSeed", "99")]
+            overrides = [
+                ("/dataIOControl/meshPartitionOptions/metisSeed", "99")]
             tag = f"np{np_read}_reseed"
 
         print(f"\n=== Load with np={np_read} ({tag}) ===")

@@ -8,8 +8,8 @@
  */
 #pragma once
 
-#include "DNDS/JsonUtil.hpp"
-#include "DNDS/ConfigParam.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
+#include "DNDS/Config/ConfigParam.hpp"
 #include <set>
 #include "DNDS/Defines.hpp"
 #include "DNDS/MPI.hpp"

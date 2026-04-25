@@ -4,7 +4,7 @@
 #include "DNDS/ArrayPair.hpp"
 #include "Geometric.hpp"
 #include "BoundaryCondition.hpp"
-#include "DNDS/SerializerBase.hpp"
+#include "DNDS/Serializer/SerializerBase.hpp"
 
 namespace DNDS::Geom
 {

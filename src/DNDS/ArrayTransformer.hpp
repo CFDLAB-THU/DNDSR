@@ -18,7 +18,7 @@
 /// - getFatherSonData(DeviceBackend), AssertDataType, setDataType
 
 #include "Array.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "DNDS/Errors.hpp"
 #include "IndexMapping.hpp"
 #include "Profiling.hpp"

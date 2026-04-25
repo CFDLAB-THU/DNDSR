@@ -19,25 +19,25 @@ message(STATUS "DNDS_PCH_TARGETS: ${DNDS_PCH_TARGETS}")
 set(CPPS
 Elements.cpp
 PeriodicInfo.cpp
-MeshConnectivity.cpp
-MeshConnectivity_Interpolate.cpp
-MeshConnectivity_Ghost.cpp
-Mesh.cpp
-Mesh_Legacy.cpp
-Mesh_Plts.cpp
-Mesh_Serial_BuildCell2Cell.cpp
-Mesh_Serial_ReadFromCGNS.cpp
-Mesh_Serial_Partition.cpp
-Mesh_ReadSerializeDistributed.cpp
-Mesh_Elevation.cpp
-Mesh_Elevation_SmoothSolver.cpp
-Mesh_Elevation_SmoothV2.cpp
-Mesh_WallDist.cpp
-SerialAdjReordering.cpp
+Mesh/MeshConnectivity.cpp
+Mesh/MeshConnectivity_Interpolate.cpp
+Mesh/MeshConnectivity_Ghost.cpp
+Mesh/Mesh.cpp
+Mesh/Mesh_Legacy.cpp
+Mesh/Mesh_Plts.cpp
+Mesh/Mesh_Serial_BuildCell2Cell.cpp
+Mesh/Mesh_Serial_ReadFromCGNS.cpp
+Mesh/Mesh_Serial_Partition.cpp
+Mesh/Mesh_ReadSerializeDistributed.cpp
+Mesh/Mesh_Elevation.cpp
+Mesh/Mesh_Elevation_SmoothSolver.cpp
+Mesh/Mesh_Elevation_SmoothV2.cpp
+Mesh/Mesh_WallDist.cpp
+Mesh/SerialAdjReordering.cpp
 )
 
 if (DNDS_USE_CUDA)
-list(APPEND CPPS Mesh.cu PeriodicInfo.cu)
+list(APPEND CPPS Mesh/Mesh.cu PeriodicInfo.cu)
 endif()
 
 dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS}"
@@ -67,8 +67,11 @@ install(TARGETS ${LIBNAME}_shared
 set(CPPS_BIND
 geom_pybind11.cpp
 Elements_bind.cpp
-Mesh_bind.cpp
+Mesh/Mesh_bind.cpp
 )
+
+file(GLOB ADJPAIRTRACKED_BIND_SOURCES CONFIGURE_DEPENDS "Mesh/AdjPairTracked_bind_inst/*.cpp")
+list(APPEND CPPS_BIND ${ADJPAIRTRACKED_BIND_SOURCES})
 
 dnds_add_py_module(${LIBNAME}_pybind11 "${CPPS_BIND}" "${LIBNAME}_shared;${LINKS_SHARED}" "${DNDS_PCH_TARGETS_FAST}"
     ON ON ON)  # SHARED,FAST, EXCLUDE

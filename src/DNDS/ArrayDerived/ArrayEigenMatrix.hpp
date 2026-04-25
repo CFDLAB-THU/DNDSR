@@ -14,7 +14,7 @@
 #include "../ArrayTransformer.hpp"
 #include "ArrayEigenMatrix_DeviceView.hpp"
 #include "DNDS/Defines.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 
 namespace DNDS
 {

@@ -1,11 +1,19 @@
 from DNDSR import DNDS, Geom, CFV, EulerP
 import inspect
 import json
-from DNDSR.Geom.utils import *
+from DNDSR.Geom.utils import (
+    create_mesh_from_CGNS,
+    create_bnd_mesh,
+    build_fv,
+    read_mesh,
+    prepare_mesh,
+    build_bnd_mesh,
+)
 import numpy as np
 import pprint
 import math
 import copy
+import os
 
 
 class Solver:
@@ -24,51 +32,59 @@ class Solver:
         self._runningDevice = B
 
     def ReadMesh(self, mesh_file, dim, other_options={}):
-        self.mesh, self.reader, self.name2Id = create_mesh_from_CGNS(
-            mesh_file,
-            mpi=self.mpi,
-            dim=dim,
-            **other_options,
-        )
-        self.meshBnd, self.readerBnd = create_bnd_mesh(self.mesh)
+        # Translate legacy create_mesh_from_CGNS parameter names to new API
+        _LEGACY_TO_READ = {
+            "meshElevation": "elevation",
+            "meshDirectBisect": "bisect",
+            "periodic_tolerance": "periodic_tolerance",
+            "periodic_geometry": "periodic_geometry",
+            "readMeshMode": None,  # handled specially
+            "serializerFactory": "serializer_factory",
+        }
+        _LEGACY_TO_PREPARE = {
+            "inner_process_parts": "reorder_parts",
+            "second_level_parts": "reorder_inner_parts",
+            "outPltMode": None,  # handled specially
+        }
+
+        read_kw = {}
+        prep_kw = {}
+        for k, v in other_options.items():
+            if k in _LEGACY_TO_READ:
+                new_k = _LEGACY_TO_READ[k]
+                if new_k is not None:
+                    read_kw[new_k] = v
+                elif k == "readMeshMode":
+                    _mode = {"Serial": "cgns",
+                             "Parallel": "h5", "Distributed": "h5"}
+                    read_kw["read_mode"] = _mode.get(v, v)
+            elif k in _LEGACY_TO_PREPARE:
+                new_k = _LEGACY_TO_PREPARE[k]
+                if new_k is not None:
+                    prep_kw[new_k] = v
+                elif k == "outPltMode":
+                    prep_kw["build_serial_out"] = (v == "Serial")
+            elif k in ("periodic_geometry", "periodic_tolerance",
+                       "read_mode", "partition_options",
+                       "elevation", "bisect", "serializer_factory"):
+                read_kw[k] = v
+            elif k in ("reorder_parts", "reorder_inner_parts",
+                       "build_serial_out"):
+                prep_kw[k] = v
+            else:
+                raise ValueError(f"Unknown ReadMesh option: {k!r}")
+
+        result = read_mesh(mesh_file, mpi=self.mpi, dim=dim, **read_kw)
+        prepare_mesh(result.mesh, result.reader, **prep_kw)
+        self.mesh = result.mesh
+        self.reader = result.reader
+        self.name2Id = result.name_to_id
+        bnd = build_bnd_mesh(self.mesh)
+        self.meshBnd = bnd.mesh_bnd
+        self.readerBnd = bnd.reader_bnd
 
     def BuildFV(self, fv_settings):
-        mpi = self.mpi
-        mesh = self.mesh
-        fv = CFV.FiniteVolume(mpi, mesh)
-        if mpi.rank == 0:
-            print(fv.GetSettings())
-        settings = fv.GetSettings()
-        settings.update(fv_settings)
-        if mpi.rank == 0:
-            print(f"FV Settings: \n{settings}")
-        fv.ParseSettings(settings)
-        # construction: volume
-        fv.SetCellAtrBasic()
-        fv.ConstructCellVolume()
-        fv.ConstructCellBary()
-        fv.ConstructCellCent()
-        fv.ConstructCellIntJacobiDet()
-        fv.ConstructCellIntPPhysics()
-        fv.ConstructCellAlignedHBox()
-        fv.ConstructCellMajorHBoxCoordInertia()
-        # construction: face
-        fv.SetFaceAtrBasic()
-        fv.ConstructFaceCent()
-        fv.ConstructFaceArea()
-        fv.ConstructFaceIntJacobiDet()
-        fv.ConstructFaceIntPPhysics()
-        fv.ConstructFaceUnitNorm()
-        fv.ConstructFaceMeanNorm()
-
-        fv.ConstructCellSmoothScale()
-
-        self.fv = fv
-        nB = fv.getArrayBytes() / 1024**2
-        nBMesh = mesh.getArrayBytes() / 1024**2
-        if mpi.rank == 0:
-            print(f"Bytes     : {nB:.4g} MB")
-            print(f"Bytes mesh: {nBMesh:.4g} MB")
+        self.fv = build_fv(self.mpi, self.mesh, fv_settings)
 
     def BuildEval(self):
         mpi = self.mpi
@@ -244,7 +260,8 @@ class Solver:
                 if isinstance(val, list):
                     val_wrapped = []
                     for i in range(len(val)):
-                        val_wrapped.append(generate_wrapper(type(val[i]), True)(val[i]))
+                        val_wrapped.append(generate_wrapper(
+                            type(val[i]), True)(val[i]))
                 else:  # TODO check types here
                     val_wrapped = generate_wrapper(type(val), True)(val)
                 return super().__setitem__(key, (val, val_wrapped))
@@ -383,7 +400,7 @@ class Solver:
         # data = self.data
         data = (
             self.data.Wrapped()
-        )  #!caution, the wrapped objects cannot be put into pybind11 fields
+        )  # !caution, the wrapped objects cannot be put into pybind11 fields
         eval.RecGradient(solver.LoadArg_RecGradient())
         # print(data["p"].min())
         # _ = input()

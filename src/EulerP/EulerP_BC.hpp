@@ -14,8 +14,8 @@
  * on both Host and CUDA backends.
  */
 #pragma once
-#include "DNDS/DeviceStorage.hpp"
-#include "DNDS/ConfigEnum.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
+#include "DNDS/Config/ConfigEnum.hpp"
 #include "EulerP.hpp"
 #include "EulerP_Physics.hpp"
 #include "Geom/BoundaryCondition.hpp"

@@ -18,8 +18,8 @@
 
 #include <unordered_map>
 
-#include "DNDS/JsonUtil.hpp"
-#include "DNDS/ConfigEnum.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
+#include "DNDS/Config/ConfigEnum.hpp"
 
 namespace DNDS::Euler
 {

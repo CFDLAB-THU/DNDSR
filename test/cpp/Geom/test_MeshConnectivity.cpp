@@ -8,8 +8,8 @@
 #include "doctest.h"
 
 #include "SyntheticMeshBuilders.hpp"
-#include "Geom/MeshConnectivity.hpp"
-#include "Geom/Mesh.hpp"
+#include "Geom/Mesh/MeshConnectivity.hpp"
+#include "Geom/Mesh/Mesh.hpp"
 #include <string>
 #include <vector>
 #include <set>
@@ -546,17 +546,23 @@ TEST_CASE("ConeAdj: AdjVariant typed access")
     ConeAdj cone;
     cone.fromDepth = 2;
     cone.toDepth = 0;
-    // Default-constructed variant holds tAdjPair (index 0)
-    CHECK(std::holds_alternative<tAdjPair>(cone.adj));
+    // Default-constructed ConeAdj has adj == nullptr (ssp<AdjVariant>)
+    CHECK(!cone.adj);
     CHECK(!cone.initialized());
     CHECK(!cone.hasPbi());
+
+    // Initialize with a tAdjPair via makeAdjVariant
+    cone.adj = makeAdjVariant<tAdjPair>();
+    CHECK(cone.adj);
+    CHECK(std::holds_alternative<tAdjPair>(*cone.adj));
+    CHECK(!cone.initialized()); // father is still null inside the pair
 
     // Initialize with a tAdj2Pair variant
     ConeAdj cone2;
     cone2.fromDepth = 1;
     cone2.toDepth = 2;
-    cone2.adj = tAdj2Pair{};
-    CHECK(std::holds_alternative<tAdj2Pair>(cone2.adj));
+    cone2.adj = makeAdjVariant<tAdj2Pair>();
+    CHECK(std::holds_alternative<tAdj2Pair>(*cone2.adj));
 }
 
 TEST_CASE("SupportAdj: no pbi member")
@@ -568,6 +574,107 @@ TEST_CASE("SupportAdj: no pbi member")
     // SupportAdj has no pbi member -- compile-time check that it's absent
     // (this test just verifies the struct compiles correctly)
     CHECK(sup.fatherSize() == 0);
+}
+
+// ===========================================================================
+// Fixed-width template tests
+// ===========================================================================
+
+TEST_CASE("Inverse<2>: fixed-width face2cell input")
+{
+    // Build a tiny mesh: 2 triangles sharing an edge.
+    // face2cell: face0→{0}, face1→{0,1}, face2→{0}, face3→{1}, face4→{1}
+    // (face1 is the shared internal face with 2 parents.)
+    //
+    // We construct face2cell as a tAdj2Pair (fixed-2) and call Inverse<2>
+    // to produce cell2face (variable-width).
+
+    DNDS::index nFaces = (g_mpi.rank == 0) ? 5 : 0;
+    DNDS::index nCells = (g_mpi.rank == 0) ? 2 : 0;
+
+    tAdj2Pair f2c;
+    f2c.InitPair("f2c", g_mpi);
+    f2c.father->Resize(nFaces);
+    if (g_mpi.rank == 0)
+    {
+        // boundary face 0: cell 0 only
+        f2c.father->operator()(0, 0) = 0;
+        f2c.father->operator()(0, 1) = UnInitIndex;
+        // internal face 1: cells 0 and 1
+        f2c.father->operator()(1, 0) = 0;
+        f2c.father->operator()(1, 1) = 1;
+        // boundary faces 2, 3, 4
+        f2c.father->operator()(2, 0) = 0;
+        f2c.father->operator()(2, 1) = UnInitIndex;
+        f2c.father->operator()(3, 0) = 1;
+        f2c.father->operator()(3, 1) = UnInitIndex;
+        f2c.father->operator()(4, 0) = 1;
+        f2c.father->operator()(4, 1) = UnInitIndex;
+    }
+
+    auto cellGM = std::make_shared<GlobalOffsetsMapping>();
+    cellGM->setMPIAlignBcast(g_mpi, nCells);
+
+    // Call Inverse with fixed-width template param: Inverse<2>
+    auto c2f = MeshConnectivity::Inverse<2>(
+        f2c, nCells, g_mpi,
+        [&](DNDS::index i) -> DNDS::index
+        {
+            // face local2global: identity (rank 0 has all faces)
+            if (g_mpi.rank == 0) return i;
+            return -1;
+        },
+        [&](DNDS::index i) -> DNDS::index
+        {
+            // cell local2global: identity
+            if (g_mpi.rank == 0) return i;
+            return -1;
+        },
+        cellGM);
+
+    if (g_mpi.rank == 0)
+    {
+        // Verify: cell 0 should have faces {0, 1, 2}, cell 1 should have faces {1, 3, 4}
+        CHECK(c2f.father->Size() == 2);
+
+        std::set<DNDS::index> c0faces, c1faces;
+        for (auto f : c2f.father->operator[](0))
+            c0faces.insert(f);
+        for (auto f : c2f.father->operator[](1))
+            c1faces.insert(f);
+
+        CHECK(c0faces == std::set<DNDS::index>{0, 1, 2});
+        CHECK(c1faces == std::set<DNDS::index>{1, 3, 4});
+    }
+}
+
+TEST_CASE("narrowAdjToFixed: variable-to-fixed-2 conversion")
+{
+    // Build a variable-width adjacency with rows of sizes 1 and 2.
+    tAdjPair source;
+    source.InitPair("source", g_mpi);
+    source.father->Resize(3);
+    source.father->ResizeRow(0, 2);
+    source.father->operator()(0, 0) = 10;
+    source.father->operator()(0, 1) = 20;
+    source.father->ResizeRow(1, 1);
+    source.father->operator()(1, 0) = 30;
+    source.father->ResizeRow(2, 2);
+    source.father->operator()(2, 0) = 40;
+    source.father->operator()(2, 1) = 50;
+
+    tAdj2Pair target;
+    target.InitPair("target", g_mpi);
+    target.father->Resize(3);
+
+    narrowAdjToFixed<2>(source, target, 3);
+
+    CHECK(target.father->operator()(0, 0) == 10);
+    CHECK(target.father->operator()(0, 1) == 20);
+    CHECK(target.father->operator()(1, 0) == 30);
+    CHECK(target.father->operator()(1, 1) == UnInitIndex);
+    CHECK(target.father->operator()(2, 0) == 40);
+    CHECK(target.father->operator()(2, 1) == 50);
 }
 
 // ===========================================================================

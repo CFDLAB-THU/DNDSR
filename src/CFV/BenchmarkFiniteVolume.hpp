@@ -1,9 +1,9 @@
 #pragma once
 #include "DNDS/Defines.hpp"
-#include "DNDS/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
 #include "DNDS/Errors.hpp"
 #include "FiniteVolume.hpp"
-#include "DNDS/JsonUtil.hpp"
+#include "DNDS/Serializer/JsonUtil.hpp"
 #include "Geom/Geometric.hpp"
 
 namespace DNDS::CFV

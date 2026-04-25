@@ -10,8 +10,8 @@
 #include "doctest.h"
 
 #include "SyntheticMeshBuilders.hpp"
-#include "Geom/MeshConnectivity.hpp"
-#include "Geom/Mesh.hpp"
+#include "Geom/Mesh/MeshConnectivity.hpp"
+#include "Geom/Mesh/Mesh.hpp"
 
 using namespace DNDS;
 using namespace DNDS::Geom;

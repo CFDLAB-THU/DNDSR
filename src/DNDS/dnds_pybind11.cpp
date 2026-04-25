@@ -5,9 +5,9 @@
 /// component can register its own bindings in isolation. The resulting
 /// shared library is loaded by `DNDSR.DNDS` on the Python side.
 
-#include "DNDS/DeviceStorage_bind.hpp"
+#include "DNDS/Device/DeviceStorage_bind.hpp"
 #include "MPI_bind.hpp"
-#include "DeviceStorage_bind.hpp"
+#include "Device/DeviceStorage_bind.hpp"
 #include "IndexMapping_bind.hpp"
 #include "Array_bind.hpp"
 #include "ArrayDerived/ArrayAdjacency_bind.hpp"
@@ -17,7 +17,7 @@
 #include "ArrayDerived/ArrayEigenVector_bind.hpp"
 #include "ArrayDOF_bind.hpp"
 
-#include "Serializer_bind.hpp"
+#include "Serializer/Serializer_bind.hpp"
 
 /// @brief pybind11 module initialiser for `dnds_pybind11`.
 /// @details Calls each component's `pybind11_bind_*` function against the

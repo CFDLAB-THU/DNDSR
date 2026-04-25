@@ -1,5 +1,5 @@
 #include "VRDefines.hpp"
-#include "DNDS/DeviceStorage_CUDA.cuh"
+#include "DNDS/Device/DeviceStorage_CUDA.cuh"
 
 namespace DNDS
 {

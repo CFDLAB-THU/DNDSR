@@ -1,9 +1,9 @@
 #pragma once
-#include "DNDS/DeviceStorage.hpp"
-#include "DNDS/DeviceTransferable.hpp"
+#include "DNDS/Device/DeviceStorage.hpp"
+#include "DNDS/Device/DeviceTransferable.hpp"
 #include "DNDS/Errors.hpp"
 #include "FiniteVolumeSettings.hpp"
-#include "Geom/Mesh.hpp"
+#include "Geom/Mesh/Mesh.hpp"
 #include "VRDefines.hpp"
 #include "Geom/DiffTensors.hpp"
 #include "DOFFactory.hpp"

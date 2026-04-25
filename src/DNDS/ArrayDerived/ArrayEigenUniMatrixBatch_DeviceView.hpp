@@ -3,7 +3,7 @@
 /// @brief Device-callable view for @ref DNDS::ArrayEigenUniMatrixBatch "ArrayEigenUniMatrixBatch" (rows of
 /// identically-shaped matrix batches, variable batch count per row).
 
-#include "../DeviceView.hpp"
+#include "DNDS/Device/DeviceView.hpp"
 
 namespace DNDS
 {
