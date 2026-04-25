@@ -155,6 +155,10 @@ MPI tests are registered at np=1, np=2, np=4, and np=8 by default (configurable 
 `OMP_NUM_THREADS=2` by default (configurable via `DNDS_TEST_OMP_THREADS` environment
 variable at configure time).
 
+Serial tests use `doctest_discover_tests()` to register each `TEST_CASE` as a
+separate CTest test, enabling per-test-case pass/fail reporting in CTest output
+(e.g., "100% tests passed, 0 tests failed out of 45").
+
 ```bash
 # Configure with tests enabled (from build directory)
 cmake .. -DDNDS_BUILD_TESTS=ON
@@ -175,7 +179,7 @@ cmake --build . -t solver_unit_tests -j8 # Solver/ tests only
 # Run all C++ tests via CTest
 ctest --test-dir . --output-on-failure
 
-# Run tests by category prefix
+# Run tests by category prefix (serial tests use "prefix/" format)
 ctest --test-dir . -R "^dnds_" --output-on-failure   # DNDS tests
 ctest --test-dir . -R "^geom_" --output-on-failure   # Geom tests
 ctest --test-dir . -R "^cfv_" --output-on-failure    # CFV tests

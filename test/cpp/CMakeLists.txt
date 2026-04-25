@@ -15,8 +15,9 @@
 # Default: 1;2;4;8
 #
 # OpenMP threads can be configured via DNDS_TEST_OMP_THREADS (default: 2).
-# Override at ctest runtime: ctest --test-dir . -E "..." -- --overwrite OMP_NUM_THREADS=4
-# Or simply: OMP_NUM_THREADS=4 ctest --test-dir . --output-on-failure
+#
+# Serial tests use doctest_discover_tests() to register each TEST_CASE as a
+# separate CTest test, enabling per-test-case pass/fail reporting.
 
 # --- Read NP list from env, default to 1;2;4;8 ---
 if(DEFINED ENV{DNDS_TEST_NP_LIST})
@@ -33,6 +34,9 @@ else()
     set(DNDS_TEST_OMP_THREADS "2")
 endif()
 message(STATUS "DNDS_TEST_OMP_THREADS: ${DNDS_TEST_OMP_THREADS}")
+
+# --- Include doctest CMake module for test discovery ---
+include(${PROJECT_SOURCE_DIR}/cmake/doctest.cmake)
 
 # --- Detect OpenMPI and add --oversubscribe if needed ---
 # OpenMPI requires --oversubscribe when np > physical cores (common in CI/testing).
@@ -64,7 +68,7 @@ find_path(DNDS_EXTERNAL_INCLUDE_DOCTEST doctest.h PATHS
     "${PROJECT_SOURCE_DIR}/external/doctest"
     NO_DEFAULT_PATH REQUIRED)
 
-# --- helper: add a serial unit test executable (DNDS) ---
+# --- helper: add a serial unit test executable (DNDS) with test discovery ---
 function(dnds_add_unit_test TEST_NAME SRC_FILE LIBS)
     set(TARGET_NAME "dnds_test_${TEST_NAME}")
     add_executable(${TARGET_NAME} ${SRC_FILE})
@@ -79,11 +83,12 @@ function(dnds_add_unit_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    # serial test
-    add_test(NAME dnds_${TEST_NAME} COMMAND ${TARGET_NAME})
-    set_tests_properties(dnds_${TEST_NAME} PROPERTIES
-        TIMEOUT 120
-        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
+    # Use doctest_discover_tests to register each TEST_CASE separately
+    doctest_discover_tests(${TARGET_NAME}
+        TEST_PREFIX "dnds_${TEST_NAME}/"
+        PROPERTIES
+            TIMEOUT 120
+            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
 # --- helper: add an MPI unit test executable (DNDS) ---
@@ -113,7 +118,7 @@ function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
     endforeach()
 endfunction()
 
-# --- helper: add a serial unit test executable (Geom) ---
+# --- helper: add a serial unit test executable (Geom) with test discovery ---
 function(geom_add_unit_test TEST_NAME SRC_FILE LIBS)
     set(TARGET_NAME "geom_test_${TEST_NAME}")
     add_executable(${TARGET_NAME} ${SRC_FILE})
@@ -128,10 +133,12 @@ function(geom_add_unit_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    add_test(NAME geom_${TEST_NAME} COMMAND ${TARGET_NAME})
-    set_tests_properties(geom_${TEST_NAME} PROPERTIES
-        TIMEOUT 120
-        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
+    # Use doctest_discover_tests to register each TEST_CASE separately
+    doctest_discover_tests(${TARGET_NAME}
+        TEST_PREFIX "geom_${TEST_NAME}/"
+        PROPERTIES
+            TIMEOUT 120
+            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
 # --- helper: add an MPI unit test executable (Geom) ---
@@ -224,7 +231,7 @@ endforeach()
 # CFV tests
 # ===================================================================
 
-# --- helper: add a serial unit test executable (CFV) ---
+# --- helper: add a serial unit test executable (CFV) with test discovery ---
 function(cfv_add_unit_test TEST_NAME SRC_FILE LIBS)
     set(TARGET_NAME "cfv_test_${TEST_NAME}")
     add_executable(${TARGET_NAME} ${SRC_FILE})
@@ -239,10 +246,12 @@ function(cfv_add_unit_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    add_test(NAME cfv_${TEST_NAME} COMMAND ${TARGET_NAME})
-    set_tests_properties(cfv_${TEST_NAME} PROPERTIES
-        TIMEOUT 120
-        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
+    # Use doctest_discover_tests to register each TEST_CASE separately
+    doctest_discover_tests(${TARGET_NAME}
+        TEST_PREFIX "cfv_${TEST_NAME}/"
+        PROPERTIES
+            TIMEOUT 120
+            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
 # --- helper: add an MPI unit test executable (CFV) ---
@@ -324,7 +333,7 @@ endforeach()
 # Euler tests
 # ===================================================================
 
-# --- helper: add a serial unit test executable (Euler) ---
+# --- helper: add a serial unit test executable (Euler) with test discovery ---
 # Gas.hpp functions are header-only; link cfv;geom;dnds for types.
 function(euler_add_unit_test TEST_NAME SRC_FILE LIBS)
     set(TARGET_NAME "euler_test_${TEST_NAME}")
@@ -340,10 +349,12 @@ function(euler_add_unit_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    add_test(NAME euler_${TEST_NAME} COMMAND ${TARGET_NAME})
-    set_tests_properties(euler_${TEST_NAME} PROPERTIES
-        TIMEOUT 120
-        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
+    # Use doctest_discover_tests to register each TEST_CASE separately
+    doctest_discover_tests(${TARGET_NAME}
+        TEST_PREFIX "euler_${TEST_NAME}/"
+        PROPERTIES
+            TIMEOUT 120
+            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
 # --- helper: add an MPI unit test executable (Euler) ---
@@ -407,6 +418,7 @@ add_custom_target(solver_unit_tests)
 add_dependencies(all_unit_tests solver_unit_tests)
 
 # All Solver tests are serial (header-only, no MPI needed at runtime)
+# Uses doctest_discover_tests for per-test-case CTest registration
 function(solver_add_unit_test TEST_NAME SRC_FILE LIBS)
     set(TARGET_NAME "solver_test_${TEST_NAME}")
     add_executable(${TARGET_NAME} ${SRC_FILE})
@@ -421,10 +433,12 @@ function(solver_add_unit_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    add_test(NAME solver_${TEST_NAME} COMMAND ${TARGET_NAME})
-    set_tests_properties(solver_${TEST_NAME} PROPERTIES
-        TIMEOUT 60
-        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
+    # Use doctest_discover_tests to register each TEST_CASE separately
+    doctest_discover_tests(${TARGET_NAME}
+        TEST_PREFIX "solver_${TEST_NAME}/"
+        PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
 solver_add_unit_test(ode "Solver/test_ODE.cpp" "dnds")
