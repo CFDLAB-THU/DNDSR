@@ -927,8 +927,12 @@ namespace DNDS::Geom
         /**********************************/
         face2node.toLocalOMP();
         face2cell.toLocalOMP();
+        // face2bnd is not wired until MatchFaceBoundary runs; skip if not yet built.
         if (face2bnd.idx.isWired())
+        {
+            DNDS_assert(face2bnd.isGlobal());
             face2bnd.toLocal();
+        }
         /**********************************/
         adjFacialState = Adj_PointToLocal;
     }
@@ -1391,7 +1395,15 @@ namespace DNDS::Geom
         MatchBoundariesToFaces(
             bndElemInfo, bnd2cell, bnd2node, cell2face, face2node, cell2node,
             faceElemInfo, bnd2faceV, face2bndM, face2bnd, bnd2face);
+
+        // face2bnd.father now contains local bnd indices (from MatchBoundariesToFaces).
+        // Wire + markLocal, then convert to global before the ghost pull so that
+        // remote ranks receive rank-independent global bnd indices.
+        face2bnd.idx.wireTargetMapping(bndElemInfo.trans.pLGhostMapping);
+        face2bnd.idx.markLocal();
+        face2bnd.toGlobal();
         face2bnd.BorrowAndPull(face2cell);
+        face2bnd.toLocal(); // converts both father and son: global → local
 
         // Communicate cell2face and bnd2face ghost data.
         // cell2face/bnd2face are already wired (BuildGhostFace).
@@ -1404,12 +1416,6 @@ namespace DNDS::Geom
         bnd2face.trans.BorrowGGIndexing(bnd2node.trans);
         bnd2face.trans.createMPITypes();
         bnd2face.trans.pullOnce();
-
-        // Wire face2bnd target mapping (not wired in BuildGhostFace).
-        face2bnd.idx.wireTargetMapping(bndElemInfo.trans.pLGhostMapping);
-        // MatchBoundariesToFaces populated face2bnd with local bnd indices;
-        // markLocal now that the mapping is wired.
-        face2bnd.idx.markLocal();
 
         this->AdjGlobal2LocalC2F();
     }
