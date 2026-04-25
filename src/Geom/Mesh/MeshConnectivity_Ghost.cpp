@@ -426,45 +426,51 @@ namespace DNDS::Geom
         // --- Collect ghost results ---
         GhostResult result;
 
+        // --- Intermediate ghost tracking (all nodes, not just COLLECT).
+        // Scratch-pull decisions depend on this, not result.ghostIndices,
+        // so that non-collected intermediate nodes still seed scratch pulls
+        // for subsequent hops (e.g. Node in the Bnd→Bnd2Node→Node2Bnd→Bnd chain).
+        std::unordered_map<EntityKind, std::vector<index>> intermediateGhosts;
+
+        // --- Per-hop last-pulled ghost-set size, to avoid redundant pulls.
+        std::unordered_map<AdjKind, size_t, AdjKindHash> lastScratchSize;
+
         // --- Level-by-level evaluation ---
         for (int level = 0; level <= tree.maxLevel; level++)
         {
             auto &levelEntries = tree.levels[level];
 
-            // Step 1: Collect from COLLECT nodes at this level.
+            // Step 1: Collect ghosts from ALL nodes into intermediateGhosts;
+            // only COLLECT nodes feed the output result.ghostIndices.
             for (auto &entry : levelEntries)
             {
-                if (!entry.collect)
-                    continue;
                 auto gm = getGlobalMapping(entry.kind);
                 DNDS_assert_info(gm,
                                  fmt::format("evaluateGhostTree: no GlobalOffsetsMapping "
-                                             "for COLLECT kind {}",
+                                             "for node kind {}",
                                              entityKindName(entry.kind)));
                 index myOffset = gm->operator()(mpi.rank, 0);
                 index myEnd = myOffset + gm->RLengths()[mpi.rank];
 
                 auto ghosts = filterNonOwned(nodeSets[entry.nodeId], myOffset, myEnd);
-                sortedMergeInto(result.ghostIndices[entry.kind], ghosts);
+                sortedMergeInto(intermediateGhosts[entry.kind], ghosts);
+
+                if (entry.collect)
+                    sortedMergeInto(result.ghostIndices[entry.kind], ghosts);
             }
 
             if (level >= tree.maxLevel)
                 break;
 
-            // Step 2: Scratch pull -- collectively decide which adjacencies
-            // need ghost data, then create temp transformers and pull.
-            // createGhostMapping/pullOnce are MPI-collective, so ALL ranks
-            // must participate even if some have no ghosts to pull.
+            // Step 2: Scratch pull — create/expand scratch for hops where
+            // intermediateGhosts[parentKind] has grown beyond the last pull.
             {
-                // Collect unique (hop) at level+1 that need scratch pulls.
-                // Use a deterministic order based on the level+1 entries.
                 std::vector<AdjKind> hopsNeedingScratch;
                 for (auto &childEntry : tree.levels[level + 1])
                 {
                     AdjKind hop = childEntry.hop;
                     EntityKind parentKind = hop.from;
 
-                    // Skip if already handled this hop.
                     bool alreadyHandled = false;
                     for (auto &h : hopsNeedingScratch)
                         if (h == hop)
@@ -472,24 +478,28 @@ namespace DNDS::Geom
                             alreadyHandled = true;
                             break;
                         }
-                    if (alreadyHandled || scratchAdjs.count(hop))
+                    if (alreadyHandled)
                         continue;
 
-                    // Locally check if there are ghost indices for the parent kind.
-                    int localNeedsIt = 0;
-                    auto git = result.ghostIndices.find(parentKind);
-                    if (git != result.ghostIndices.end() && !git->second.empty())
-                        localNeedsIt = 1;
+                    size_t curSize = 0;
+                    auto git = intermediateGhosts.find(parentKind);
+                    if (git != intermediateGhosts.end())
+                        curSize = git->second.size();
 
-                    // Collectively decide: if ANY rank needs it, ALL participate.
+                    bool needsPull = (curSize > 0 &&
+                                      curSize > lastScratchSize[hop]);
+
+                    int localNeedsIt = needsPull ? 1 : 0;
                     int globalNeedsIt = 0;
                     MPI_Allreduce(&localNeedsIt, &globalNeedsIt, 1, MPI_INT, MPI_MAX, mpi.comm);
 
                     if (globalNeedsIt)
+                    {
                         hopsNeedingScratch.push_back(hop);
+                        lastScratchSize[hop] = curSize;
+                    }
                 }
 
-                // Create scratch transformers for all collectively-agreed hops.
                 for (auto &hop : hopsNeedingScratch)
                 {
                     EntityKind parentKind = hop.from;
@@ -497,10 +507,9 @@ namespace DNDS::Geom
                     if (!origAdj)
                         continue;
 
-                    // Ghost set for the parent entity kind (may be empty on some ranks).
                     std::vector<index> ghostSet;
-                    auto git = result.ghostIndices.find(parentKind);
-                    if (git != result.ghostIndices.end())
+                    auto git = intermediateGhosts.find(parentKind);
+                    if (git != intermediateGhosts.end())
                         ghostSet = git->second;
 
                     std::visit([&](const auto &adj)
@@ -540,14 +549,8 @@ namespace DNDS::Geom
                                  fmt::format("evaluateGhostTree: adjacency {} not resolved",
                                              adjKindName(childEntry.hop)));
 
-                // Don't assert-found: unresolvable entries are silently
-                // skipped (they are ghost candidates, not errors).
                 nodeSets[childEntry.nodeId] = traverseHop(parentSet, *adjVar, false);
             }
-
-            // Clear scratch states so next level re-creates them with
-            // the expanded cumulative ghost set.
-            scratchAdjs.clear();
         }
 
         // --- Deduplicate ghost indices (already sorted from sortedMergeInto) ---
