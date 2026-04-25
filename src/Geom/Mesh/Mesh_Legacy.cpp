@@ -139,6 +139,7 @@ namespace DNDS::Geom
         RecoverNode2CellAndNode2BndLegacy()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert(cell2node.isGlobal() && bnd2node.isGlobal());
         DNDS_assert(coords.father);
         DNDS_assert(cell2node.father);
         DNDS_assert(bnd2node.father);
@@ -194,7 +195,9 @@ namespace DNDS::Geom
     void UnstructuredMesh::RecoverCell2CellAndBnd2CellLegacy()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert(cell2node.isGlobal() && bnd2node.isGlobal());
         DNDS_assert(adjN2CBState == Adj_PointToGlobal);
+        DNDS_assert(node2cell.isGlobal() && node2bnd.isGlobal());
         DNDS_assert(coords.father);
         DNDS_assert(cell2node.father);
         DNDS_assert(bnd2node.father);
@@ -455,6 +458,7 @@ namespace DNDS::Geom
         BuildGhostPrimaryLegacy()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert(cell2node.isGlobal() && bnd2node.isGlobal());
         DNDS_assert(cell2cell.father && cell2cell.father->Size() == this->NumCell());
         DNDS_assert(bnd2cell.father && bnd2cell.father->Size() == this->NumBnd());
         /********************************/
@@ -527,6 +531,7 @@ namespace DNDS::Geom
         {
             DNDS_assert(node2bnd.father);
             DNDS_assert(this->adjN2CBState == Adj_PointToGlobal);
+            DNDS_assert(node2bnd.isGlobal());
             bnd2cell.TransAttach();
             bnd2node.TransAttach();
             if (isPeriodic)
@@ -605,6 +610,7 @@ namespace DNDS::Geom
         InterpolateFaceLegacy()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToLocal); // And also should have primary ghost comm
+        DNDS_assert(cell2node.isLocal() && cell2cell.isLocal() && bnd2node.isLocal());
 
         // Allocate face-related array pairs
         cell2face.InitPair("cell2face", mpi);

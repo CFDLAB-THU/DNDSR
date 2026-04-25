@@ -522,9 +522,9 @@ namespace DNDS::Geom
          */
         struct VTKCellTopology
         {
-            std::vector<int64_t> connectivity;  ///< Flat node-index list for all cells
-            std::vector<int64_t> offsets;        ///< Per-cell cumulative offset into connectivity
-            std::vector<uint8_t> cellTypes;      ///< VTK cell type per cell
+            std::vector<int64_t> connectivity; ///< Flat node-index list for all cells
+            std::vector<int64_t> offsets;      ///< Per-cell cumulative offset into connectivity
+            std::vector<uint8_t> cellTypes;    ///< VTK cell type per cell
         };
 
         /**
@@ -1562,6 +1562,7 @@ namespace DNDS::Geom
         /*     Data preparation:     */
         /*****************************/
         DNDS_assert(this->adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert(cell2node.isLocal() && bnd2node.isLocal() && cell2cell.isLocal() && bnd2cell.isLocal());
         this->AdjLocal2GlobalPrimary();
 
         const index nBnd = this->NumBnd();

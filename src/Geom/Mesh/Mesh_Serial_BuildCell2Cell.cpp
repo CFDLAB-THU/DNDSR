@@ -523,6 +523,7 @@ namespace DNDS::Geom
     void UnstructuredMesh::RecreatePeriodicNodes()
     {
         DNDS_assert(adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert(cell2node.isLocal());
         DNDS_assert(cell2node.trans.pLGhostMapping);
         DNDS_assert(coords.trans.pLGhostMapping && coords.trans.pLGlobalMapping);
         if (!isPeriodic)
@@ -640,6 +641,7 @@ namespace DNDS::Geom
         DNDS_assert(cell2node.father);
         DNDS_assert(coords.trans.pLGhostMapping); // for this->NodeIndexLocal2Global()
         DNDS_assert(adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert(cell2node.isLocal());
         if (isPeriodic)
         {
             DNDS_assert(cell2nodePeriodicRecreated.father);

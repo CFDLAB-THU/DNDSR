@@ -27,6 +27,7 @@ namespace DNDS::Geom
         DNDS_assert(O1MeshIsO1);
         // std::cout << "XXXXXXXXXXXXXXXXXXXXXXXXXXXXX Phase0" << std::endl;
         DNDS_assert(meshO1.adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert(meshO1.cell2node.isLocal() && meshO1.bnd2node.isLocal());
         mRank = meshO1.mRank;
         mpi = meshO1.mpi;
         dim = meshO1.dim;
@@ -477,6 +478,7 @@ namespace DNDS::Geom
         bool O2MeshIsO2 = meshO2.IsO2();
         DNDS_assert(O2MeshIsO2);
         DNDS_assert(meshO2.adjPrimaryState == Adj_PointToGlobal);
+        DNDS_assert(meshO2.cell2node.isGlobal() && meshO2.bnd2node.isGlobal());
         adjPrimaryState = meshO2.adjPrimaryState;
         cell2node.idx.markGlobal();
         bnd2node.idx.markGlobal();
@@ -706,8 +708,11 @@ namespace DNDS::Geom
         //     }
         DNDS_assert(elevState == Elevation_O1O2);
         DNDS_assert(adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert(cell2node.isLocal() && bnd2node.isLocal());
         DNDS_assert(adjFacialState == Adj_PointToLocal);
+        DNDS_assert(face2cell.isLocal() && face2node.isLocal());
         DNDS_assert(adjC2FState == Adj_PointToLocal);
+        DNDS_assert(cell2face.isLocal() && bnd2face.isLocal());
         DNDS_assert(face2node.father);
 
         coordsElevDisp.InitPair("ElevatedNodesGetBoundarySmooth::coordsElevDisp", mpi);
