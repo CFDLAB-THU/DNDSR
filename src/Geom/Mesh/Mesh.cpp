@@ -2123,6 +2123,20 @@ namespace DNDS::Geom
             cellElemInfo.trans.pullOnce();
         }
 
+        // Re-wire per-adjacency target mappings: ghost mappings were rebuilt
+        // above with new cell indices, so the previously captured pointers are
+        // stale.  All xxx2cell adjacencies use cellGhostMap; xxx2bnd use
+        // bndGhostMap; xxx2node use nodeGhostMap.
+        {
+            auto cellGhostMap = cellElemInfo.trans.pLGhostMapping;
+            auto bndGhostMap = bndElemInfo.trans.pLGhostMapping;
+
+            cell2cell.idx.wireTargetMapping(cellGhostMap);
+            bnd2cell.idx.wireTargetMapping(cellGhostMap);
+            node2cell.idx.wireTargetMapping(cellGhostMap);
+            node2bnd.idx.wireTargetMapping(bndGhostMap);
+        }
+
         // Section G: Restore all adjacencies to local indices
         if (this->adjFacialState != Adj_Unknown && this->face2cell.isBuilt())
         {
