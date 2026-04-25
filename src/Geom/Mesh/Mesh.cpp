@@ -1396,6 +1396,12 @@ namespace DNDS::Geom
             bndElemInfo, bnd2cell, bnd2node, cell2face, face2node, cell2node,
             faceElemInfo, bnd2faceV, face2bndM, face2bnd, bnd2face);
 
+        // Re-pull faceElemInfo so ghost faces inherit the owning rank's zone.
+        // MatchBoundariesToFaces assigns periodic zones (main vs donor) based
+        // on local boundary elements, which can disagree across ranks for the
+        // same physical face. The owning rank's assignment is authoritative.
+        faceElemInfo.trans.pullOnce();
+
         // face2bnd.father now contains local bnd indices (from MatchBoundariesToFaces).
         // Wire + markLocal, then convert to global before the ghost pull so that
         // remote ranks receive rank-independent global bnd indices.
