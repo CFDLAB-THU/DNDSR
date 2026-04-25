@@ -488,6 +488,7 @@ namespace DNDS::Geom
             for (rowsize j = 0; j < static_cast<rowsize>(row.size()); j++)
                 cell2cell.father->operator()(i, j) = row[j];
         }
+        cell2cell.idx.state = Adj_PointToGlobal;
 
         // bnd2cell via ComposeFiltered with per-bnd node-count predicate.
         // For periodic meshes, additionally uses pbi containment matchExtra.
@@ -987,6 +988,9 @@ namespace DNDS::Geom
 
         node2cell.idx.state = Adj_PointToGlobal;
         node2bnd.idx.state = Adj_PointToGlobal;
+
+        node2cell.idx.wireTargetMapping(cellElemInfo.trans.pLGhostMapping);
+        node2bnd.idx.wireTargetMapping(bndElemInfo.trans.pLGhostMapping);
     }
 
     void UnstructuredMesh::
@@ -1336,6 +1340,20 @@ namespace DNDS::Geom
             }
         }
 
+        // === Wire per-adjacency target mappings for facial/C2F adjacencies ===
+        {
+            auto cellGhostMap = cellElemInfo.trans.pLGhostMapping;
+            auto nodeGhostMap = coords.trans.pLGhostMapping;
+            auto faceGhostMap = face2node.trans.pLGhostMapping;
+            auto bndGhostMap  = bndElemInfo.trans.pLGhostMapping;
+
+            face2node.idx.wireTargetMapping(nodeGhostMap);
+            face2cell.idx.wireTargetMapping(cellGhostMap);
+            cell2face.idx.wireTargetMapping(faceGhostMap);
+            bnd2face.idx.wireTargetMapping(faceGhostMap);
+            face2bnd.idx.wireTargetMapping(bndGhostMap);
+        }
+
         // Convert face arrays to local indices.
         adjFacialState = Adj_PointToGlobal;
         face2node.idx.state = Adj_PointToGlobal;
@@ -1374,20 +1392,6 @@ namespace DNDS::Geom
         bnd2face.trans.createMPITypes();
         bnd2face.trans.pullOnce();
         this->AdjGlobal2LocalC2F();
-
-        // === Wire per-adjacency target mappings for facial/C2F adjacencies ===
-        {
-            auto cellGhostMap = cellElemInfo.trans.pLGhostMapping;
-            auto nodeGhostMap = coords.trans.pLGhostMapping;
-            auto faceGhostMap = face2node.trans.pLGhostMapping;
-            auto bndGhostMap  = bndElemInfo.trans.pLGhostMapping;
-
-            face2node.idx.wireTargetMapping(nodeGhostMap);
-            face2cell.idx.wireTargetMapping(cellGhostMap);
-            cell2face.idx.wireTargetMapping(faceGhostMap);
-            bnd2face.idx.wireTargetMapping(faceGhostMap);
-            face2bnd.idx.wireTargetMapping(bndGhostMap);
-        }
     }
 
     void UnstructuredMesh::
@@ -1734,6 +1738,8 @@ namespace DNDS::Geom
         bMesh.cell2cellOrig.father->createGlobalMapping();
 
         bMesh.adjPrimaryState = Adj_PointToLocal;
+        bMesh.cell2node.idx.wireTargetMapping(bMesh.coords.trans.pLGhostMapping);
+        bMesh.cell2node.idx.state = Adj_PointToLocal;
         if (mpi.rank == mRank)
             log() << "UnstructuredMesh === ConstructBndMesh Done" << std::endl;
     }
@@ -2074,6 +2080,20 @@ namespace DNDS::Geom
             cellElemInfo.trans.BorrowGGIndexing(cell2node.trans);
             cellElemInfo.trans.createMPITypes();
             cellElemInfo.trans.pullOnce();
+        }
+
+        // Re-wire per-adjacency target mappings: ghost mappings were rebuilt
+        // above with new cell indices, so the previously captured pointers are
+        // stale.  All xxx2cell adjacencies use cellGhostMap; xxx2bnd use
+        // bndGhostMap; xxx2node use nodeGhostMap.
+        {
+            auto cellGhostMap = cellElemInfo.trans.pLGhostMapping;
+            auto bndGhostMap  = bndElemInfo.trans.pLGhostMapping;
+
+            cell2cell.idx.wireTargetMapping(cellGhostMap);
+            bnd2cell.idx.wireTargetMapping(cellGhostMap);
+            node2cell.idx.wireTargetMapping(cellGhostMap);
+            node2bnd.idx.wireTargetMapping(bndGhostMap);
         }
 
         // Section G: Restore all adjacencies to local indices
