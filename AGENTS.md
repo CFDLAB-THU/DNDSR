@@ -62,16 +62,19 @@ cmake --build . -t dnds_pybind11 geom_pybind11 cfv_pybind11 -j32 && cmake --inst
 To use the pybind11-based Python module from a CMake build directory:
 
 1. **Build the pybind11 targets:**
+
    ```bash
-   cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j8
+   cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j32
    ```
 
 2. **Install the Python component** (copies `.so` files into `python/`):
+
    ```bash
    cmake --install build --component py
    ```
 
 3. **Run with the project venv and `PYTHONPATH`:**
+
    ```bash
    source venv/bin/activate
    PYTHONPATH=<project_root>/python python my_script.py
@@ -147,29 +150,54 @@ mpirun -np 2 python test/DNDS/test_basic.py
 
 C++ tests live under `test/cpp/` and use the [doctest](https://github.com/doctest/doctest)
 framework. They are built when `DNDS_BUILD_TESTS=ON` and registered with CTest.
-MPI tests are registered at np=1, np=2, np=4, and np=8.
+MPI tests are registered at np=1, np=2, np=4, and np=8 by default (configurable via
+`DNDS_TEST_NP_LIST` environment variable).
 
 ```bash
 # Configure with tests enabled (from build directory)
 cmake .. -DDNDS_BUILD_TESTS=ON
 
-# Build all C++ unit tests
-cmake --build . -t dnds_unit_tests -j8
+# Build all C++ unit tests (all categories)
+cmake --build . -t all_unit_tests -j32
+
+# Build only specific category
+cmake --build . -t dnds_unit_tests -j32   # DNDS/ tests only
+cmake --build . -t geom_unit_tests -j32   # Geom/ tests only
+cmake --build . -t cfv_unit_tests -j32    # CFV/ tests only
+cmake --build . -t euler_unit_tests -j32  # Euler/ tests only
+cmake --build . -t solver_unit_tests -j32 # Solver/ tests only
 
 # Run all C++ tests via CTest
-ctest --test-dir . -R dnds_ --output-on-failure
+ctest --test-dir . --output-on-failure
 
-# Run a specific test (e.g., only np=2 MPI tests)
-ctest --test-dir . -R dnds_mpi_np2 --output-on-failure
+# Run tests by category prefix
+ctest --test-dir . -R "^dnds_" --output-on-failure   # DNDS tests
+ctest --test-dir . -R "^geom_" --output-on-failure   # Geom tests
+ctest --test-dir . -R "^cfv_" --output-on-failure    # CFV tests
+ctest --test-dir . -R "^euler_" --output-on-failure  # Euler tests
+ctest --test-dir . -R "^solver_" --output-on-failure # Solver tests
+
+# Run only np=2 MPI tests across all categories
+ctest --test-dir . -R "_np2$" --output-on-failure
 
 # Run a single test executable directly
 ./test/cpp/dnds_test_array
 mpirun -np 4 ./test/cpp/dnds_test_mpi
 ```
 
-Available test targets: `dnds_test_array`, `dnds_test_mpi`, `dnds_test_array_transformer`,
-`dnds_test_array_derived`, `dnds_test_array_dof`, `dnds_test_index_mapping`,
-`dnds_test_serializer`.
+**Test categories and targets:**
+
+- **DNDS:** `dnds_test_array`, `dnds_test_mpi`, `dnds_test_array_transformer`,
+  `dnds_test_array_derived`, `dnds_test_array_dof`, `dnds_test_index_mapping`,
+  `dnds_test_serializer`
+- **Geom:** `geom_test_elements`, `geom_test_quadrature`, `geom_test_mesh_index_conversion`,
+  `geom_test_mesh_pipeline`, `geom_test_mesh_distributed_read`, `geom_test_mesh_connectivity`,
+  `geom_test_mesh_connectivity_ghost`, `geom_test_mesh_connectivity_interpolate`
+- **CFV:** `cfv_test_reconstruction`, `cfv_test_limiters`, `cfv_test_reconstruction3d`,
+  `cfv_test_device_transferable` (CUDA only)
+- **Euler:** `euler_test_gas_thermo`, `euler_test_riemann_solvers`, `euler_test_rans`,
+  `euler_test_evaluator_pipeline`
+- **Solver:** `solver_test_ode`, `solver_test_linear`, `solver_test_direct`, `solver_test_scalar`
 
 **Note:** When writing new C++ tests with `using namespace DNDS;`, always qualify
 `DNDS::index`, `DNDS::real`, and `DNDS::rowsize` in declarations to avoid ambiguity
@@ -183,6 +211,7 @@ details, including all parameters, read modes, and notes on which C++ methods
 are (and are not) exposed in the Python bindings.
 
 **Quick Example:**
+
 ```python
 from DNDSR.Geom.utils import create_mesh_from_CGNS
 from DNDSR import DNDS
@@ -201,6 +230,7 @@ mesh, reader, name2ID = create_mesh_from_CGNS(
 ```
 
 **Key Features:**
+
 - CGNS mesh reading (`ReadFromCGNSSerial`)
 - Order elevation: Quad4→Quad9, Hex8→Hex27, etc. (`BuildO2FromO1Elevation`)
 - Mesh bisection for h-refinement (`BuildBisectO1FormO2`)

@@ -76,8 +76,11 @@ namespace DNDS::Geom
     {
         DNDS_assert(mesh.elevState == Elevation_O1O2);
         DNDS_assert(mesh.adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert(mesh.cell2node.isLocal() && mesh.bnd2node.isLocal());
         DNDS_assert(mesh.adjFacialState == Adj_PointToLocal);
+        DNDS_assert(mesh.face2cell.isLocal() && mesh.face2node.isLocal());
         DNDS_assert(mesh.adjC2FState == Adj_PointToLocal);
+        DNDS_assert(mesh.cell2face.isLocal() && mesh.bnd2face.isLocal());
         DNDS_assert(mesh.face2node.father);
         DNDS_assert(mesh.nTotalMoved >= 0);
         if (!mesh.nTotalMoved)

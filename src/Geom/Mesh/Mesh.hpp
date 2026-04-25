@@ -605,7 +605,10 @@ namespace DNDS::Geom
             {
                 index iNode = c2n[i];
                 if (adjPrimaryState == Adj_PointToGlobal)
+                {
+                    DNDS_assert(cell2node.isGlobal() && adjPrimaryState == Adj_PointToGlobal);
                     iNode = NodeIndexGlobal2Local(iNode), DNDS_assert_info(iNode >= 0, "iNode not found in main/ghost pair");
+                }
                 cs(EigenAll, i) = coords[iNode];
             }
         }
@@ -621,7 +624,10 @@ namespace DNDS::Geom
             {
                 index iNode = c2n[i];
                 if (adjPrimaryState == Adj_PointToGlobal)
+                {
+                    DNDS_assert(cell2node.isGlobal() && adjPrimaryState == Adj_PointToGlobal);
                     iNode = NodeIndexGlobal2Local(iNode), DNDS_assert_info(iNode >= 0, "iNode not found in main/ghost pair");
+                }
                 cs(EigenAll, i) = coo[iNode];
             }
         }
@@ -637,7 +643,10 @@ namespace DNDS::Geom
             {
                 index iNode = c2n[i];
                 if (adjPrimaryState == Adj_PointToGlobal)
+                {
+                    DNDS_assert(cell2node.isGlobal() && adjPrimaryState == Adj_PointToGlobal);
                     iNode = NodeIndexGlobal2Local(iNode), DNDS_assert_info(iNode >= 0, "iNode not found in main/ghost pair");
+                }
                 cs(EigenAll, i) = periodicInfo.GetCoordByBits(coords[iNode], c2nPbi[i]);
             }
         }
@@ -653,7 +662,10 @@ namespace DNDS::Geom
             {
                 index iNode = c2n[i];
                 if (adjPrimaryState == Adj_PointToGlobal)
+                {
+                    DNDS_assert(cell2node.isGlobal() && adjPrimaryState == Adj_PointToGlobal);
                     iNode = NodeIndexGlobal2Local(iNode), DNDS_assert_info(iNode >= 0, "iNode not found in main/ghost pair");
+                }
                 cs(EigenAll, i) = periodicInfo.GetCoordByBits(coo[iNode], c2nPbi[i]);
             }
         }
@@ -891,11 +903,11 @@ namespace DNDS::Geom
         void op_on_device_arrays(F &&f)
         {
             for_each_member_list(this->device_array_list_primary(), f);
-            if (adjFacialState)
+            if (adjFacialState && face2cell.isBuilt())
                 for_each_member_list(this->device_array_list_facial(), f);
-            if (adjC2FState)
+            if (adjC2FState && cell2face.isBuilt())
                 for_each_member_list(this->device_array_list_C2F(), f);
-            if (adjN2CBState)
+            if (adjN2CBState && node2cell.isBuilt())
                 for_each_member_list(this->device_array_list_N2CB(), f);
         }
 

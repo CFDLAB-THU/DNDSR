@@ -181,9 +181,10 @@ namespace DNDS::Geom
         // if (onLocalPartition)
         //     DNDS_assert(this->localPartitionStarts.size() >= 2);
         DNDS_assert(this->adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert(cell2node.isLocal() && bnd2node.isLocal());
         std::vector<std::vector<index>> cell2cellFaceV;
         cell2cellFaceV.resize(this->NumCell());
-        if (this->adjFacialState == Adj_PointToLocal)
+        if (this->adjFacialState == Adj_PointToLocal && this->face2cell.isBuilt())
         {
             for (int iPart = 0; iPart < this->NLocalParts(); iPart++)
                 for (index iCell = this->LocalPartStart(iPart); iCell < this->LocalPartEnd(iPart); iCell++)
