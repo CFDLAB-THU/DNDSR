@@ -1,0 +1,164 @@
+# Manual CI: configure, build, and run all tests on ubuntu-latest (no GPU).
+#
+# Triggered via workflow_dispatch.  Caches external dependencies (header-only
+# libs, cfd_externals, pip) and test meshes so repeated runs are fast.
+#
+# Test matrix:
+#   - C++ unit tests (doctest + ctest, np=2,4 due to 4 vCPUs)
+#   - Python tests (pytest + pytest-mpi, excluding EulerP GPU module)
+#
+# External data:
+#   - harryzhou2000/cfd_meshes   → checked out into data/mesh/
+
+name: CI
+
+on:
+  workflow_dispatch:
+
+env:
+  HEADERONLYS_URL: https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/latest/download/external_headeronlys.tar.gz
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      # ------------------------------------------------------------------
+      # 1. Checkout source
+      # ------------------------------------------------------------------
+      - name: Checkout DNDSR
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Checkout test meshes
+        uses: actions/checkout@v4
+        with:
+          repository: harryzhou2000/cfd_meshes
+          path: data/mesh
+
+      # ------------------------------------------------------------------
+      # 2. System packages
+      # ------------------------------------------------------------------
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build \
+            libopenmpi-dev openmpi-bin
+
+      # ------------------------------------------------------------------
+      # 3. Python environment
+      # ------------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-ci-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-ci-
+
+      - name: Cache Python venv
+        id: cache-venv
+        uses: actions/cache@v4
+        with:
+          path: venv
+          key: venv-ci-${{ hashFiles('requirements.txt') }}
+
+      - name: Create venv and install dependencies
+        if: steps.cache-venv.outputs.cache-hit != 'true'
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+          pip install scikit-build-core pybind11
+
+      # ------------------------------------------------------------------
+      # 4. Header-only externals (Eigen, Boost, CGAL, fmt, pybind11, ...)
+      # ------------------------------------------------------------------
+      - name: Cache header-only externals
+        id: cache-headeronlys
+        uses: actions/cache@v4
+        with:
+          path: |
+            external/argparse
+            external/boost
+            external/CGAL
+            external/cppcodec
+            external/cpptrace
+            external/doctest
+            external/eigen
+            external/exprtk
+            external/fmt
+            external/nanoflann
+            external/nlohmann
+            external/pybind11
+            external/pybind11_json
+          key: headeronlys-v1
+
+      - name: Download and extract header-only externals
+        if: steps.cache-headeronlys.outputs.cache-hit != 'true'
+        run: |
+          curl -L -o external/external_headeronlys.tar.gz "$HEADERONLYS_URL"
+          cd external && tar -xzf external_headeronlys.tar.gz
+
+      # ------------------------------------------------------------------
+      # 5. cfd_externals (zlib, hdf5, cgns, parmetis)
+      # ------------------------------------------------------------------
+      - name: Cache cfd_externals install
+        id: cache-cfd-ext
+        uses: actions/cache@v4
+        with:
+          path: external/cfd_externals/install
+          key: cfd-ext-${{ runner.os }}-${{ hashFiles('external/cfd_externals/cfd_externals_build.py', '.gitmodules') }}
+
+      - name: Build cfd_externals
+        if: steps.cache-cfd-ext.outputs.cache-hit != 'true'
+        working-directory: external/cfd_externals
+        run: CC=mpicc CXX=mpicxx python cfd_externals_build.py
+
+      # ------------------------------------------------------------------
+      # 6. CMake configure
+      # ------------------------------------------------------------------
+      - name: CMake configure
+        run: |
+          CC=mpicc CXX=mpicxx cmake -B build -G Ninja \
+            -DDNDS_BUILD_TESTS=ON \
+            -DDNDS_TEST_NP_LIST="2;4"
+
+      # ------------------------------------------------------------------
+      # 7. Build C++ tests
+      # ------------------------------------------------------------------
+      - name: Build C++ unit tests
+        run: cmake --build build -t all_unit_tests -j4
+
+      # ------------------------------------------------------------------
+      # 8. Build pybind11 targets
+      # ------------------------------------------------------------------
+      - name: Build pybind11 modules
+        run: |
+          source venv/bin/activate
+          cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 -j4
+
+      - name: Install pybind11 modules
+        run: cmake --install build --component py
+
+      # ------------------------------------------------------------------
+      # 9. Run C++ tests
+      # ------------------------------------------------------------------
+      - name: Run C++ tests
+        run: ctest --test-dir build --output-on-failure
+
+      # ------------------------------------------------------------------
+      # 10. Run Python tests
+      # ------------------------------------------------------------------
+      - name: Run Python tests
+        run: |
+          source venv/bin/activate
+          PYTHONPATH=$PWD/python python -m pytest test/ \
+            --timeout=600 \
+            --ignore=test/EulerP \
+            -v
