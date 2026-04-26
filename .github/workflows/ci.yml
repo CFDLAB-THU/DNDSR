@@ -25,6 +25,7 @@ on:
 
 env:
   HEADERONLYS_URL: https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/latest/download/external_headeronlys.tar.gz
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
 
 jobs:
   build-and-test:
@@ -71,7 +72,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build \
+            cmake ninja-build ccache \
             libopenmpi-dev openmpi-bin
 
       # ------------------------------------------------------------------
@@ -149,7 +150,23 @@ jobs:
         run: CC=mpicc CXX=mpicxx python cfd_externals_build.py
 
       # ------------------------------------------------------------------
-      # 6. CMake configure
+      # 6. ccache
+      # ------------------------------------------------------------------
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
+      - name: Configure ccache
+        run: |
+          ccache --max-size=2G
+          ccache --zero-stats
+
+      # ------------------------------------------------------------------
+      # 7. CMake configure
       # ------------------------------------------------------------------
       - name: CMake configure
         run: |
@@ -158,18 +175,21 @@ jobs:
             -DDNDS_TEST_NP_LIST="2;4"
 
       # ------------------------------------------------------------------
-      # 7. Build C++ tests
+      # 8. Build C++ tests
       # ------------------------------------------------------------------
       - name: Build C++ unit tests
         run: cmake --build build -t all_unit_tests -j4
 
       # ------------------------------------------------------------------
-      # 8. Build pybind11 targets
+      # 9. Build pybind11 targets
       # ------------------------------------------------------------------
       - name: Build pybind11 modules
         run: |
           source venv/bin/activate
           cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j4
+
+      - name: Show ccache stats
+        run: ccache --show-stats
 
       - name: Install pybind11 modules
         run: cmake --install build --component py
