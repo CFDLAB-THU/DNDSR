@@ -33,7 +33,7 @@ jobs:
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event.label.name == 'ci-run'
-    runs-on: [ubuntu-latest, cpu704]
+    runs-on: [ubuntu-latest]
     steps:
       # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       # Remove the label so the PR author can trigger a re-run by
