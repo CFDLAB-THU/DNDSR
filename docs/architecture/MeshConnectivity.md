@@ -1,7 +1,7 @@
 # Mesh Connectivity and Ghost Management {#mesh_connectivity}
 
-**Status:** Current architecture analysis + future design direction
-**Date:** 2026-04-21
+**Status:** Current architecture reference
+**Date:** 2026-04-26
 
 ---
 
@@ -64,7 +64,8 @@ RecoverCell2CellAndBnd2Cell()
 
 BuildGhostPrimary()
   Builds: .son (ghost) for cells, nodes, bnds
-  Ghost criterion: one ring of node-neighbors from cell2cell
+  Ghost criterion: one or more rings of node-neighbors from cell2cell
+  Supports multi-layer ghost via nGhostLayers parameter (default 1)
   Also ghosts: all nodes touched by ghost cells; all bnds touching owned nodes
 
 AdjGlobal2LocalPrimary()
@@ -95,7 +96,7 @@ The current pipeline encodes specific connectivity depth assumptions:
 | What | Connectivity Depth | Meaning |
 |------|--------------------|---------|
 | `cell2cell` | cell → node → cell | All cells sharing any vertex (point-complete) |
-| Ghost cells | 1 ring of `cell2cell` | All cells reachable from any vertex of any local cell |
+| Ghost cells | N rings of `cell2cell` | All cells reachable by N hops (default N=1) |
 | Ghost nodes | cell2cell2node | All nodes of ghost cells (so local+ghost cells have all their nodes) |
 | Ghost bnds | node2bnd (owned nodes) | All boundaries touching any owned node |
 | `node2cell` ghost | Same as coords ghost | Every ghost node has its full cell list |
@@ -114,7 +115,7 @@ accessed. Some `node2cell` entries may reference cells NOT in father+son
 "Cell2cell2node complemented" means: for every ghost cell (in `cell2node.son`),
 ALL its nodes are present in the local node set (coords father+son). This is
 guaranteed because `BuildGhostPrimary` iterates over ALL cells (father+son)
-when collecting ghost nodes (line 858 of Mesh.cpp).
+when collecting ghost nodes (see `Mesh.cpp`, `BuildGhostPrimary`).
 
 Since `cell2cell = cell → node → cell`, and ghost cells = one ring of cell2cell,
 this means:
@@ -275,8 +276,8 @@ members on `UnstructuredMesh` use `AdjPairTracked<T>`:
 | `cell2face` | `AdjPairTracked<tAdjPair>` | face |
 | `face2node` | `AdjPairTracked<tAdjPair>` | node |
 | `face2cell` | `AdjPairTracked<tAdj2Pair>` | cell |
-| `bnd2face` | `AdjPairTracked<tAdj2Pair>` | face |
-| `face2bnd` | `AdjPairTracked<tAdj2Pair>` | bnd |
+| `bnd2face` | `AdjPairTracked<tAdj1Pair>` | face |
+| `face2bnd` | `AdjPairTracked<tAdj1Pair>` | bnd |
 | `cell2cellFace` | `AdjPairTracked<tAdjPair>` | cell |
 
 #### Wiring Protocol
@@ -325,16 +326,106 @@ adjacency data or state changes. The `setStateUnchecked` escape hatch has
 been eliminated; all state transitions go through the `AdjIndexInfo` API.
 
 DeviceView does not read per-adj state yet (still uses group state
-variables). Python bindings do not expose `idx` yet.
+variables).
+
+Python bindings expose `AdjPairTracked<T>` (with `idx` member),
+`AdjIndexInfo` (query methods only: `state()`, `isLocal()`, `isGlobal()`,
+`isBuilt()`, `isWired()`), and the `MeshAdjState` enum (`Unknown`,
+`PointToGlobal`, `PointToLocal`). State-mutation methods (`markGlobal`,
+`wireTargetMapping`, `toLocal`, etc.) are intentionally not exposed; Python
+code should not mutate adjacency state directly.
 
 ---
 
-## 5. Limitations and Inflexibility
+## 5. MeshConnectivity DSL
 
-### 5.1. Fixed Ghost Depth
+The `MeshConnectivity` struct (in `src/Geom/Mesh/MeshConnectivity.hpp`)
+provides a composable DSL for adjacency operations, independent of
+`UnstructuredMesh`. It stores adjacency data as shared pointers and
+provides the following static operations:
 
-The current ghost criterion is hardcoded to one ring of node-neighbors. This is
-appropriate for compact FV (stencil = face-neighbor cells + their node data) but:
+| Operation | Description |
+|-----------|-------------|
+| `Inverse<rs>` | Invert a cone to a support (distributed MPI push-back) |
+| `Compose<AB,BC,out>` | Compose A->B + B->C -> A->C |
+| `ComposeFiltered<AB,BC,out,Pred>` | Compose with predicate filtering |
+| `Interpolate<p2n_rs>` | Local sub-entity extraction (no MPI) |
+| `InterpolateGlobal<p2n_rs,e2p_rs>` | Distributed interpolation with global dedup |
+| `evaluateGhostTree(tree, mpi)` | BFS ghost evaluation from compiled ghost spec |
+
+### 5.1. Ghost Specification System
+
+Ghost requirements are specified as chains of adjacency hops:
+
+```cpp
+// GhostChain: anchor --hop1--> --hop2--> ... --> target
+GhostSpec spec;
+spec.chains = {
+    { Cell, {Cell2Cell, Cell2Cell}, Cell },  // 2-layer cell ghost
+    { Cell, {Cell2Cell, Cell2Cell, Cell2Node}, Node },  // nodes of 2-layer cells
+    { Bnd,  {Bnd2Node, Node2Bnd}, Bnd },    // bnds touching owned nodes
+};
+```
+
+`GhostSpec::defaultPrimary(nLayers)` builds the standard ghost spec:
+- Cell chain: `nLayers` hops of `Cell2Cell`
+- Node chain: `nLayers` hops of `Cell2Cell` + 1 hop of `Cell2Node`
+- Bnd chain: `Bnd2Node -> Node2Bnd`
+- Bnd-node chain: `Bnd2Node -> Node2Bnd -> Bnd2Node`
+
+### 5.2. Compiled Ghost Tree
+
+`CompiledGhostTree::compile(spec)` merges chains sharing common prefixes
+into a trie-forest and flattens it into BFS-ordered levels. The evaluator
+(`evaluateGhostTree`) then processes each level:
+
+1. **Collect** non-owned indices into intermediate ghost sets.
+2. **Scratch pull** any adjacency arrays whose ghost sets have grown (collective
+   MPI decision via `Allreduce`). This creates temporary transformers.
+3. **Traverse** the hop to populate the next level's entity sets.
+
+The result is a `GhostResult` containing per-`EntityKind` sorted,
+deduplicated global ghost indices, plus a collective `activeKinds` bitmask.
+
+### 5.3. Adjacency Registry
+
+`MeshConnectivity` maintains an `adjRegistry` mapping `AdjKind` keys to
+type-erased `AdjVariant` values. Mesh build methods register their
+adjacencies (e.g., `Cell2Node`, `Cell2Cell`) so `evaluateGhostTree` can
+look them up by kind. A `globalMappings` registry similarly stores
+per-`EntityKind` global offset mappings.
+
+### 5.4. Mesh Helpers
+
+`src/Geom/Mesh/Mesh_Helpers.hpp` provides high-level inline functions
+that compose multiple mesh-build steps:
+
+| Helper | Description |
+|--------|-------------|
+| `BuildGhostPrimary(mesh, nLayers)` | 5-step: recover N2C/C2C + ghost + G2L |
+| `ReadMeshFromCGNS(...)` | Full CGNS read + partition + elevation + bisection |
+| `ReadMeshFromH5(...)` | H5 distributed read with ParMetis repartition |
+| `ReadMeshFromH5Parallel(...)` | H5 pre-partitioned read (exact np match) |
+| `PrepareMesh(...)` | Cell reorder + face interp + ghost N2CB + serial out |
+| `BuildBndMesh(...)` | Extract boundary surface mesh |
+| `SerializeMesh(...)` | Write partitioned mesh to H5 |
+| `MeshH5Path(...)` | Build conventional H5 filename |
+
+---
+
+## 6. Limitations and Inflexibility
+
+### 6.1. Configurable Ghost Depth
+
+`BuildGhostPrimary` now accepts an `nGhostLayers` parameter (default 1),
+and uses `GhostSpec::defaultPrimary(nLayers)` + `evaluateGhostTree` to
+support N-layer node-neighbor ghost cells. The ghost tree evaluator performs
+BFS level-by-level with scratch pulls between levels, so intermediate hops
+can fetch remote data as needed.
+
+This addresses the compact FV use case (1 layer) and higher-order stencils
+(2+ layers). However, the adjacency definition is still node-neighbor
+(`cell2cell` via vertex-sharing). The remaining limitations are:
 
 - **FEM** only needs node2cell complemented (cell2node2cell stencil for
   assembly), which is a smaller ghost set than cell2cell node-neighbors.
@@ -346,7 +437,7 @@ appropriate for compact FV (stencil = face-neighbor cells + their node data) but
 
 - **High-order VFV** with wide stencils may need 2+ rings of face-neighbors.
 
-### 5.2. No Edge Entities
+### 6.2. No Edge Entities
 
 The current mesh only has 4 entity types: Node, Face (codimension 1), Cell
 (codimension 0), and Boundary (a special subset of faces). There are no edge
@@ -361,7 +452,7 @@ Adding edges would require new arrays (`edge2node`, `cell2edge`, `node2edge`,
 etc.) and new ghost/state management for them — significant code duplication
 under the current explicit-array approach.
 
-### 5.3. Face Generation is Not Configurable
+### 6.3. Face Generation is Not Configurable
 
 Faces are generated by `InterpolateFace` which enumerates topological faces from
 cell connectivity. This is fixed to the cell-face covering relation. To support
@@ -372,9 +463,9 @@ inter-entity relation.
 
 ---
 
-## 6. Design Direction: Configurable Ghost Connectivity
+## 7. Design Direction: Configurable Ghost Connectivity
 
-### 6.1. Connectivity Requirement Specification
+### 7.1. Connectivity Requirement Specification
 
 Instead of a hardcoded ghost pipeline, users should specify their ghost
 requirements as a set of **connectivity chains**:
@@ -395,7 +486,7 @@ Each chain specifies a traversal path through the adjacency graph. The ghost set
 is the union of all entities reachable by the specified chains from the local
 (father) entities.
 
-### 6.2. Inclusive Relations
+### 7.2. Inclusive Relations
 
 Some connectivity chains form inclusive relations:
 
@@ -405,7 +496,7 @@ Some connectivity chains form inclusive relations:
 
 Understanding these inclusions helps avoid redundant ghost communication.
 
-### 6.3. Current Ghost as a Configuration
+### 7.3. Current Ghost as a Configuration
 
 The current pipeline's ghost criterion can be expressed as:
 
@@ -419,7 +510,7 @@ Face ghost is determined by the face interpolation step and follows naturally
 from cell ghost: faces between a local cell and a ghost cell become ghost faces
 on the non-owning side.
 
-### 6.4. Abstract DAG Approach (PETSc DMPlex Inspiration)
+### 7.4. Abstract DAG Approach (PETSc DMPlex Inspiration)
 
 PETSc's DMPlex represents the entire mesh topology as a single Directed Acyclic
 Graph (DAG) where every entity (cell, face, edge, vertex) is a "point" with a
@@ -463,7 +554,7 @@ All other adjacencies are derived by transitive closure queries:
    A Section maps `(point) → (ndof, offset)` into a flat vector. This
    decouples topology from discretization.
 
-### 6.5. Practical Evolution Path for DNDSR
+### 7.5. Practical Evolution Path for DNDSR
 
 A full DMPlex-style DAG rewrite is a major undertaking. A practical evolution:
 
@@ -515,7 +606,7 @@ UnstructuredMesh (facade)
 
 ---
 
-## 7. Face and Edge Interpolation Pattern
+## 8. Face and Edge Interpolation Pattern
 
 The current `InterpolateFace` implements a general pattern that could be
 reused for edges:
@@ -548,7 +639,7 @@ void InterpolateEntities(
 
 ---
 
-## 8. Glossary
+## 9. Glossary
 
 | Term | Meaning |
 |------|---------|
@@ -561,6 +652,11 @@ void InterpolateEntities(
 | **Face-neighbor** | Two cells that share a codimension-1 face (>= dim shared vertices) |
 | **Complemented** | A ghost entity has all its sub-entity data available locally |
 | **Ring** | One hop of adjacency expansion. "1 ring of node-neighbors" = all cells reachable from any vertex of local cells |
+| **MeshConnectivity** | Standalone DSL struct providing composable adjacency operations (Inverse, Compose, Interpolate, evaluateGhostTree) |
+| **GhostSpec** | Collection of `GhostChain`s specifying ghost requirements as adjacency hop sequences |
+| **CompiledGhostTree** | Trie-forest compiled from GhostSpec, used by `evaluateGhostTree` for BFS ghost evaluation |
+| **EntityKind** | Scoped enum: `Cell`, `Face`, `Edge`, `Node`, `Bnd` |
+| **AdjKind** | Identifier for an adjacency relation (from, to, optional via entity) |
 | **Cone** (DMPlex) | Downward covering relation in the DAG (cell → faces → edges → vertices) |
 | **Support** (DMPlex) | Upward covering relation (vertex → edges → faces → cells) |
 | **Transitive closure** | All points reachable by repeated cone/support traversal |

@@ -28,6 +28,9 @@ ctest --test-dir build -R geom_elements --output-on-failure
 | `geom_test_mesh_index_conversion` | `geom_mesh_index_conversion_np{1,2,4}` | test_MeshIndexConversion.cpp | 120 s |
 | `geom_test_mesh_pipeline` | `geom_mesh_pipeline_np{1,2,4}` | test_MeshPipeline.cpp | 120 s |
 | `geom_test_mesh_distributed_read` | `geom_mesh_distributed_read_np{1,2,4}` | test_MeshDistributedRead.cpp | 120 s |
+| `geom_test_mesh_connectivity` | `geom_mesh_connectivity_np{1,2,4}` | test_MeshConnectivity.cpp | 120 s |
+| `geom_test_mesh_connectivity_ghost` | `geom_mesh_connectivity_ghost_np{1,2,4}` | test_MeshConnectivity_Ghost.cpp | 120 s |
+| `geom_test_mesh_connectivity_interpolate` | `geom_mesh_connectivity_interpolate_np{1,2,4}` | test_MeshConnectivity_Interpolate.cpp | 120 s |
 
 ---
 
@@ -69,3 +72,31 @@ reading, partitioning, ghost creation, and boundary extraction.
 
 MPI-parallel tests for reading CGNS mesh files in parallel and
 redistributing across different partition counts.
+
+---
+
+## MeshConnectivity DSL (test_MeshConnectivity.cpp) {#geom_test_mesh_connectivity}
+@see test_MeshConnectivity.cpp
+
+MPI-parallel tests for the `MeshConnectivity` standalone DSL operations:
+`Inverse`, `Compose`, `ComposeFiltered`, `Interpolate`, and adjacency
+registry management. Validates cone/support inversion, compose with
+predicates, and entity-kind registration.
+
+---
+
+## Ghost Tree Evaluation (test_MeshConnectivity_Ghost.cpp) {#geom_test_mesh_connectivity_ghost}
+@see test_MeshConnectivity_Ghost.cpp
+
+MPI-parallel tests for `evaluateGhostTree`, `GhostSpec`,
+`CompiledGhostTree`, and multi-layer ghost cell support. Tests include
+single-layer and multi-layer ghost chains, scratch-pull between BFS
+levels, and 2D tiled synthetic grids with analytical ghost formulas.
+
+---
+
+## Interpolation (test_MeshConnectivity_Interpolate.cpp) {#geom_test_mesh_connectivity_interpolate}
+@see test_MeshConnectivity_Interpolate.cpp
+
+MPI-parallel tests for `InterpolateGlobal` — distributed sub-entity
+extraction with global deduplication and periodic-aware matching.

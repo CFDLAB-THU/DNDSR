@@ -6,7 +6,12 @@
 DNDSR/
 ├── src/                        C++ source code
 │   ├── DNDS/                   Core: MPI arrays, serialization, profiling, CUDA
+│   │   ├── Config/             Runtime configuration enums, parameters, registry
+│   │   ├── Device/             Host-device memory transfer, CUDA utilities
+│   │   ├── Serializer/         JSON and HDF5 serialization framework
+│   │   └── ArrayDerived/       Specialized array types (adjacency, Eigen matrices)
 │   ├── Geom/                   Unstructured mesh, CGNS I/O, partitioning
+│   │   └── Mesh/               Mesh data structures, connectivity, ghost management
 │   ├── CFV/                    Compact Finite Volume, variational reconstruction
 │   ├── Euler/                  Compressible N-S solvers (2D/3D, SA, k-omega)
 │   ├── EulerP/                 Alternative evaluator with CUDA GPU support
@@ -40,7 +45,12 @@ DNDSR/
 │   └── CFV/                    FV test apps
 │
 ├── test/                       Tests
-│   ├── cpp/DNDS/               C++ unit tests (doctest, registered with CTest)
+│   ├── cpp/                    C++ unit tests (doctest, registered with CTest)
+│   │   ├── DNDS/               DNDS core tests
+│   │   ├── Geom/               Geom mesh tests
+│   │   ├── CFV/                CFV reconstruction tests
+│   │   ├── Euler/              Euler evaluator tests
+│   │   └── Solver/             Solver (ODE, linear, direct) tests
 │   ├── DNDS/                   Python tests (pytest)
 │   ├── Geom/                   Python Geom tests
 │   ├── CFV/                    Python CFV tests
@@ -56,9 +66,14 @@ DNDSR/
 │   └── ...                     boost, CGAL, nanoflann, exprtk, etc.
 │
 ├── docs/                       Documentation sources
-│   ├── Doxyfile                Doxygen configuration (cmake-configured)
-│   ├── main.dox                Doxygen main page
-│   └── *.md                    Documentation pages (rendered by Doxygen)
+│   ├── doxygen/                Doxygen configuration and main page
+│   ├── sphinx/                 Sphinx configuration, toctree stubs, extensions
+│   ├── architecture/           Architecture design documents
+│   ├── guides/                 Developer and usage guides
+│   ├── theory/                 Mathematical background
+│   ├── tests/                  Test suite documentation
+│   ├── dev/                    Development notes and design proposals
+│   └── index.md                Documentation root page
 │
 ├── cases/                      JSON configuration files for solver runs
 ├── scripts/                    Utility scripts
@@ -132,7 +147,11 @@ dependencies must be loaded.  `_loader.py` provides a single
 
 | Directory        | Framework | Runner            | What it tests          |
 |------------------|-----------|-------------------|------------------------|
-| `test/cpp/DNDS/` | doctest   | CTest (np=1,2,4)  | DNDS core C++ classes  |
+| `test/cpp/DNDS/` | doctest   | CTest (np=1,2,4,8) | DNDS core C++ classes  |
+| `test/cpp/Geom/` | doctest   | CTest (np=1,2,4,8) | Geom mesh C++ classes  |
+| `test/cpp/CFV/`  | doctest   | CTest (np=1,2,4,8) | CFV reconstruction     |
+| `test/cpp/Euler/`| doctest   | CTest (np=1,2,4,8) | Euler evaluator        |
+| `test/cpp/Solver/`| doctest  | CTest (np=1,2,4,8) | ODE, linear, direct    |
 | `test/DNDS/`     | pytest    | pytest             | DNDS Python bindings   |
 | `test/Geom/`     | pytest    | pytest             | Geom Python bindings   |
 | `test/CFV/`      | pytest    | pytest             | CFV Python bindings    |
@@ -154,4 +173,12 @@ See @ref dnds_unit_tests for the full C++ test suite documentation.
 | `geom_pybind11`     | Geom Python binding module                  |
 | `cfv_pybind11`      | CFV Python binding module                   |
 | `eulerP_pybind11`   | EulerP Python binding module                |
-| `dnds_unit_tests`   | All C++ unit test executables (aggregate)   |
+| `all_unit_tests`    | All C++ unit test executables (aggregate)   |
+| `dnds_unit_tests`   | DNDS C++ unit tests (aggregate)             |
+| `geom_unit_tests`   | Geom C++ unit tests (aggregate)             |
+| `cfv_unit_tests`    | CFV C++ unit tests (aggregate)              |
+| `euler_unit_tests`  | Euler C++ unit tests (aggregate)            |
+| `solver_unit_tests` | Solver C++ unit tests (aggregate)           |
+| `docs`              | Build all documentation (Doxygen + Sphinx)  |
+| `sphinx`            | Build Sphinx documentation only             |
+| `doxygen`           | Build Doxygen XML + HTML only               |

@@ -1,5 +1,11 @@
 # Unified Mesh Helper Design
 
+> **Status:** Implemented. C++ helpers are in `src/Geom/Mesh/Mesh_Helpers.hpp`.
+> Python helpers are in `python/DNDSR/Geom/utils.py` as `read_mesh`,
+> `prepare_mesh`, `build_bnd_mesh`, `build_fv`, `serialize_mesh`, and
+> `mesh_h5_path`. The legacy `create_mesh_from_CGNS` wrapper is preserved
+> for backward compatibility.
+
 ## Problem
 
 Mesh assembly logic is duplicated across at least 6 sites:

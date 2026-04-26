@@ -1,15 +1,27 @@
 # MeshConnectivity Implementation Plan {#mesh_connectivity_impl}
 
-**Status:** Implementation plan
-**Date:** 2026-04-21
-**Depends on:** [Mesh DAG Design](MeshDAGDesign.md)
+**Status:** Largely implemented (see notes below)
+**Date:** 2026-04-21 (updated 2026-04-26)
+**Depends on:** [Mesh DAG Design](/architecture/MeshDAGDesign.md)
+
+> **Implementation status:** Phases 0-3 (MeshConnectivity DSL, Inverse,
+> Compose, InterpolateGlobal, evaluateGhostTree) are implemented. Phase A
+> (AdjIndexInfo + AdjPairTracked) is implemented. The actual implementation
+> uses **inheritance** for `AdjPairTracked` (not composition as originally
+> designed in Section 10.2.2). Phase B (group state as derived queries)
+> remains future work. Phases D-E (simplify conversion methods, Python
+> bindings) are partially complete.
+>
+> **Note on file paths:** Source files were reorganized into
+> `src/Geom/Mesh/` subdirectory. Paths referencing `src/Geom/MeshConnectivity.hpp`
+> should read `src/Geom/Mesh/MeshConnectivity.hpp`.
 
 ---
 
 ## 1. Scope
 
-Implement `MeshConnectivity` as a standalone class in `src/DNDS/` (or
-`src/Geom/`) with its own unit tests, independent of `UnstructuredMesh`. The
+Implement `MeshConnectivity` as a standalone class in `src/Geom/Mesh/`
+with its own unit tests, independent of `UnstructuredMesh`. The
 class provides a small DSL of composable operations on layered adjacency
 graphs.
 
