@@ -153,8 +153,9 @@ jobs:
       # ------------------------------------------------------------------
       # 6. ccache
       # ------------------------------------------------------------------
-      - name: Cache ccache
-        uses: actions/cache@v4
+      - name: Restore ccache
+        id: restore-ccache
+        uses: actions/cache/restore@v4
         with:
           path: .ccache
           key: ccache-${{ runner.os }}-${{ github.run_id }}
@@ -211,3 +212,13 @@ jobs:
             --timeout=600 \
             --ignore=test/EulerP \
             -v
+
+      # ------------------------------------------------------------------
+      # Always save ccache regardless of build/test outcome
+      # ------------------------------------------------------------------
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ccache-${{ runner.os }}-${{ github.run_id }}
