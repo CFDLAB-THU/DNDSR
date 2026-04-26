@@ -38,7 +38,15 @@ message(STATUS "DNDS_TEST_OMP_THREADS: ${DNDS_TEST_OMP_THREADS}")
 # --- Detect OpenMPI and add --oversubscribe if needed ---
 # OpenMPI requires --oversubscribe when np > physical cores (common in CI/testing).
 # MPICH/Intel MPI do not need (or recognize) this flag.
-if(MPIEXEC_EXECUTABLE)
+#
+# Also support DNDS_TEST_MPIEXTRA: space-separated flags appended to every
+# add_test MPI command (e.g. "--oversubscribe").  On GitHub runners set
+# OMPI_MCA_rmaps_base_oversubscribe=1 as a belt-and-suspenders fallback.
+if(NOT "$ENV{DNDS_TEST_MPIEXTRA}" STREQUAL "")
+    separate_arguments(_DNDS_MPIEXTRA UNIX_COMMAND "$ENV{DNDS_TEST_MPIEXTRA}")
+    list(APPEND MPIEXEC_PREFLAGS ${_DNDS_MPIEXTRA})
+    message(STATUS "DNDS_TEST_MPIEXTRA: appending ${_DNDS_MPIEXTRA} to MPIEXEC_PREFLAGS")
+elseif(MPIEXEC_EXECUTABLE)
     execute_process(
         COMMAND ${MPIEXEC_EXECUTABLE} --version
         OUTPUT_VARIABLE _MPIEXEC_VERSION_OUTPUT
