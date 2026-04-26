@@ -1,12 +1,19 @@
 # Multi-Layer Ghost Cell Support
 
+> **Status:** Implemented. `evaluateGhostTree` supports multi-hop chains
+> with scratch pulls between BFS levels. `BuildGhostPrimary(nGhostLayers)`
+> passes through to `GhostSpec::defaultPrimary(nLayers)`.
+
 ## Current State
 
-`BuildGhostPrimary` creates exactly 1 layer of ghost cells by traversing
-`cell2cell` once via `evaluateGhostTree`:
+`BuildGhostPrimary` supports N layers of ghost cells by traversing
+`cell2cell` N times via `evaluateGhostTree`:
 
 ```
-GhostSpec{{{ EntityKind::Cell, {Adj::Cell2Cell}, EntityKind::Cell }}}
+GhostSpec::defaultPrimary(nLayers)
+  Cell chain: nLayers hops of Cell2Cell
+  Node chain: nLayers hops of Cell2Cell + Cell2Node
+  Bnd chain:  Bnd2Node -> Node2Bnd (unchanged)
 ```
 
 `cell2cell` uses node-sharing (minShared=1). Nodes, boundaries, and N2CB

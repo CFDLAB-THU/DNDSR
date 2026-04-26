@@ -222,32 +222,37 @@ are (and are not) exposed in the Python bindings.
 **Quick Example:**
 
 ```python
-from DNDSR.Geom.utils import create_mesh_from_CGNS
+from DNDSR.Geom.utils import read_mesh, prepare_mesh
 from DNDSR import DNDS
 
 mpi = DNDS.MPIInfo()
 mpi.setWorld()
 
 # Read mesh with elevation and bisection
-mesh, reader, name2ID = create_mesh_from_CGNS(
-    meshFile="data/mesh/UniformSquare_10.cgns",
+result = read_mesh(
+    "data/mesh/UniformSquare_10.cgns",
     mpi=mpi,
     dim=2,
-    meshElevation="O2",         # Elevate O1→O2
-    meshDirectBisect=1,         # Bisect once
+    elevation="O2",         # Elevate O1→O2
+    bisect=1,               # Bisect once
 )
+prepare_mesh(result.mesh, result.reader)
 ```
+
+The legacy `create_mesh_from_CGNS` wrapper is still available for backward
+compatibility.
 
 **Key Features:**
 
 - CGNS mesh reading (`ReadFromCGNSSerial`)
+- H5 distributed reading with ParMetis repartition
 - Order elevation: Quad4→Quad9, Hex8→Hex27, etc. (`BuildO2FromO1Elevation`)
 - Mesh bisection for h-refinement (`BuildBisectO1FormO2`)
-- Boundary mesh extraction (`create_bnd_mesh`)
+- Boundary mesh extraction (`build_bnd_mesh`)
+- Multi-layer ghost cells via `BuildGhostPrimary(nGhostLayers)`
 - VTK output generation
 - Wall distance computation (`BuildNodeWallDist`)
 - CUDA device offloading (`to_device` / `to_host`)
-- Three read modes: Serial, Parallel, Distributed
 
 ## Code Style
 
@@ -318,3 +323,5 @@ write operation** (creating/closing issues, creating/merging PRs, posting
 comments, approving reviews, creating releases, editing labels, etc.) **unless
 the user explicitly requests that specific write action.** One-time explicit
 permission does not carry over to other write actions — ask each time.
+
+**Draft PR by default** You must use --draft on new prs.

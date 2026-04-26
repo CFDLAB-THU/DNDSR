@@ -72,6 +72,8 @@
  * - @subpage paradigm
  * - @subpage array_infrastructure
  * - @subpage serialization
+ * - @subpage mesh_connectivity
+ * - @subpage mesh_dag_design
  */
 
 /**
@@ -90,6 +92,7 @@
  *
  * - @subpage test_overview
  * - @subpage dnds_unit_tests
+ * - @subpage geom_unit_tests
  * - @subpage cfv_unit_tests
  * - @subpage euler_unit_tests
  * - @subpage solver_unit_tests
@@ -109,4 +112,5 @@
  * - @subpage eulerp_tests
  * - @subpage initial_report
  * - @subpage review_dev_harry_refac1
+ * - @subpage mesh_connectivity_impl
  */

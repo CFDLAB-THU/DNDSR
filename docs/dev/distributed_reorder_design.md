@@ -1,5 +1,9 @@
 # Distributed Entity Reordering — Design Document
 
+> **Status:** Proposal (not yet implemented). The existing
+> `ReorderLocalCells` and `ReadDistributed_Redistribute` remain the
+> active code paths.
+
 ## Motivation
 
 The codebase has two separate reordering mechanisms:
