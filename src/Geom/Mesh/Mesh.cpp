@@ -2134,6 +2134,7 @@ namespace DNDS::Geom
             cell2cell.idx.wireTargetMapping(cellGhostMap);
             bnd2cell.idx.wireTargetMapping(cellGhostMap);
             node2cell.idx.wireTargetMapping(cellGhostMap);
+            face2cell.idx.wireTargetMapping(cellGhostMap);
             node2bnd.idx.wireTargetMapping(bndGhostMap);
         }
 

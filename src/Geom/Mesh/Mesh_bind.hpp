@@ -116,6 +116,8 @@ namespace DNDS::Geom
         UnstructuredMesh_
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildO2FromO1Elevation)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildBisectO1FormO2)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(IsO1)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(IsO2)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(RecreatePeriodicNodes)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildVTKConnectivity);
 
@@ -176,6 +178,25 @@ namespace DNDS::Geom
             .def("BuildNodeWallDist", &UnstructuredMesh::BuildNodeWallDist, py::arg("fBndIsWall"), py::arg("options") = UnstructuredMesh::WallDistOptions{});
 
         UnstructuredMesh_
+            .def(
+                "TransformCoords",
+                [](py::object self, py::function f)
+                {
+                    auto &mesh = self.cast<UnstructuredMesh &>();
+                    auto make_view = [&self](ssp<DNDS::ArrayEigenVector<3>> &arr) -> py::array_t<real>
+                    {
+                        index N = arr->Size();
+                        std::vector<py::ssize_t> shape = {py::ssize_t(N), py::ssize_t(3)};
+                        std::vector<py::ssize_t> strides = {py::ssize_t(sizeof(real) * 3),
+                                                            py::ssize_t(sizeof(real))};
+                        return py::array_t<real>(shape, strides, arr->data(), self);
+                    };
+                    if (mesh.coords.father->Size() > 0)
+                        f(make_view(mesh.coords.father));
+                    if (mesh.coords.son->Size() > 0)
+                        f(make_view(mesh.coords.son));
+                },
+                py::arg("func"))
             .def("to_device", [](UnstructuredMesh &self, const std::string &backend)
                  { self.to_device(device_backend_name_to_enum(backend)); }, py::arg("backend"))
             .def("to_host", &UnstructuredMesh::to_host);
