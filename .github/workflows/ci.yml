@@ -26,6 +26,7 @@ on:
 env:
   HEADERONLYS_URL: https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/latest/download/external_headeronlys.tar.gz
   CCACHE_DIR: ${{ github.workspace }}/.ccache
+  OMPI_MCA_rmaps_base_oversubscribe: "1"
 
 jobs:
   build-and-test:
@@ -59,11 +60,11 @@ jobs:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
           submodules: true
 
-      - name: Checkout test meshes
-        uses: actions/checkout@v4
-        with:
-          repository: harryzhou2000/cfd_meshes
-          path: data/mesh
+      - name: Fetch test meshes
+        run: |
+          mkdir -p data/mesh
+          git clone --depth=1 https://github.com/harryzhou2000/cfd_meshes.git /tmp/cfd_meshes
+          cp /tmp/cfd_meshes/data/mesh/* data/mesh/
 
       # ------------------------------------------------------------------
       # 2. System packages
@@ -161,9 +162,7 @@ jobs:
             ccache-${{ runner.os }}-
 
       - name: Configure ccache
-        run: |
-          ccache --max-size=2G
-          ccache --zero-stats
+        run: ccache --max-size=5G
 
       # ------------------------------------------------------------------
       # 7. CMake configure
@@ -173,6 +172,8 @@ jobs:
           CC=mpicc CXX=mpicxx cmake -B build -G Ninja \
             -DDNDS_BUILD_TESTS=ON \
             -DDNDS_TEST_NP_LIST="2;4"
+        env:
+          DNDS_TEST_MPIEXTRA: "--oversubscribe"
 
       # ------------------------------------------------------------------
       # 8. Build C++ tests
@@ -198,7 +199,7 @@ jobs:
       # 9. Run C++ tests
       # ------------------------------------------------------------------
       - name: Run C++ tests
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --timeout 300
 
       # ------------------------------------------------------------------
       # 10. Run Python tests
