@@ -169,7 +169,7 @@ jobs:
       - name: Build pybind11 modules
         run: |
           source venv/bin/activate
-          cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 -j4
+          cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j4
 
       - name: Install pybind11 modules
         run: cmake --install build --component py
