@@ -28,6 +28,7 @@ compdb
 # Testing
 pytest
 pytest-mpi
+pytest-timeout
 
 # Formatting / pre-commit hook tools
 # (clang-format is installed via system package manager, not pip)
