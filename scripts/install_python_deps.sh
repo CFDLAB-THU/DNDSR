@@ -73,7 +73,6 @@ CC="$MPI_CC" \
     MAKEFLAGS="-j$JOBS" \
     CMAKE_BUILD_PARALLEL_LEVEL="$JOBS" \
     "$PIP" install --no-binary mpi4py mpi4py --force-reinstall \
-    --no-build-isolation \
     --verbose
 
 # ---- 4. h5py — compiled against the project's HDF5 (MPI-enabled) ---------
@@ -85,7 +84,6 @@ CC="$MPI_CC" \
     MAKEFLAGS="-j$JOBS" \
     CMAKE_BUILD_PARALLEL_LEVEL="$JOBS" \
     "$PIP" install --no-binary h5py h5py --force-reinstall \
-    --no-build-isolation \
     --verbose
 
 echo ""
