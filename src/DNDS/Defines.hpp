@@ -80,6 +80,10 @@ namespace DNDS
 #    define DNDS_CONSTANT
 #endif
 
+// NOLINTBEGIN(bugprone-macro-parentheses)
+// Rationale: T and T_Self are type names used in constructor / assignment
+// operator signatures; parenthesizing a type in a parameter list is not
+// valid C++.
 #define DNDS_DEVICE_TRIVIAL_COPY_DEFINE(T, T_Self)               \
     DNDS_DEVICE_CALLABLE T() = default;                          \
     DNDS_DEVICE_CALLABLE T(const T_Self &) = default;            \
@@ -94,6 +98,7 @@ namespace DNDS
     DNDS_DEVICE_CALLABLE T &operator=(const T_Self &) = default; \
     DNDS_DEVICE_CALLABLE T &operator=(T_Self &&) = default;      \
     DNDS_DEVICE_CALLABLE ~T() = default;
+// NOLINTEND(bugprone-macro-parentheses)
 
 /***************/
 

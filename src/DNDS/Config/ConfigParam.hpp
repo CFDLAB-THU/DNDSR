@@ -681,6 +681,9 @@ namespace DNDS
 ///     }
 /// };
 /// @endcode
+// NOLINTBEGIN(bugprone-macro-parentheses)
+// Rationale: `Type_` is a type name used in function parameter lists and
+// template arguments; neither context permits parenthesization.
 #define DNDS_DECLARE_CONFIG(Type_)                                             \
     using T = Type_;                                                           \
     static void _dnds_ensure_registered()                                      \
@@ -724,3 +727,4 @@ namespace DNDS
         ::DNDS::ConfigRegistry<Type_>::validateKeys(j);                        \
     }                                                                          \
     static void _dnds_do_register(::DNDS::ConfigSectionBuilder<Type_> &config)
+// NOLINTEND(bugprone-macro-parentheses)
