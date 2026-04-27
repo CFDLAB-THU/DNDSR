@@ -11,7 +11,7 @@
 #
 # Test matrix:
 #   - C++ unit tests (doctest + ctest, np=2,4 due to 4 vCPUs)
-#   - Python tests (pytest + pytest-mpi, excluding EulerP GPU module)
+#   - Python tests (pytest + pytest-mpi)
 #
 # External data:
 #   - harryzhou2000/cfd_meshes   → checked out into data/mesh/
@@ -74,7 +74,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build ccache \
-            libopenmpi-dev openmpi-bin
+            libopenmpi-dev openmpi-bin \
+            libhdf5-dev
 
       # ------------------------------------------------------------------
       # 3. Python environment
@@ -200,9 +201,7 @@ jobs:
       # 9. Run C++ tests
       # ------------------------------------------------------------------
       - name: Run C++ tests
-        run: |
-          export LD_LIBRARY_PATH="$PWD/external/cfd_externals/install/lib:$LD_LIBRARY_PATH"
-          ctest --test-dir build --output-on-failure --timeout 300
+        run: ctest --test-dir build --output-on-failure --timeout 300
 
       # ------------------------------------------------------------------
       # 10. Run Python tests
@@ -210,10 +209,8 @@ jobs:
       - name: Run Python tests
         run: |
           source venv/bin/activate
-          export LD_LIBRARY_PATH="$PWD/external/cfd_externals/install/lib:$LD_LIBRARY_PATH"
           PYTHONPATH=$PWD/python python -m pytest test/ \
             --timeout=600 \
-            --ignore=test/EulerP \
             -v
 
       # ------------------------------------------------------------------
