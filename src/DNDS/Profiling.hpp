@@ -26,25 +26,25 @@ namespace DNDS
         enum TimerType
         {
             Unknown = 0,
-            RHS = 1,             ///< Total RHS evaluation.
-            Dt = 2,              ///< Time-step computation.
-            Reconstruction = 3,  ///< Variational reconstruction.
-            ReconstructionCR = 4,///< CR (compact reconstruction) branch.
-            Limiter = 5,         ///< Slope / variable limiter.
-            LimiterA = 6,        ///< Limiter sub-phase A.
-            LimiterB = 7,        ///< Limiter sub-phase B.
-            Basis = 8,           ///< Basis-function evaluation.
-            Comm = 9,            ///< Catch-all MPI comm.
-            Comm1 = 10,          ///< Comm phase 1 (e.g., cell-ghost).
-            Comm2 = 11,          ///< Comm phase 2 (e.g., face-ghost).
-            Comm3 = 12,          ///< Comm phase 3.
-            LinSolve = 13,       ///< Linear solve (total).
-            LinSolve1 = 14,      ///< Linear solve phase 1.
-            LinSolve2 = 15,      ///< Linear solve phase 2.
-            LinSolve3 = 16,      ///< Linear solve phase 3.
-            Positivity = 17,     ///< Positivity preservation.
-            PositivityOuter = 18,///< Outer-iteration positivity.
-            __EndTimerType = 64  ///< One past the last valid id.
+            RHS = 1,              ///< Total RHS evaluation.
+            Dt = 2,               ///< Time-step computation.
+            Reconstruction = 3,   ///< Variational reconstruction.
+            ReconstructionCR = 4, ///< CR (compact reconstruction) branch.
+            Limiter = 5,          ///< Slope / variable limiter.
+            LimiterA = 6,         ///< Limiter sub-phase A.
+            LimiterB = 7,         ///< Limiter sub-phase B.
+            Basis = 8,            ///< Basis-function evaluation.
+            Comm = 9,             ///< Catch-all MPI comm.
+            Comm1 = 10,           ///< Comm phase 1 (e.g., cell-ghost).
+            Comm2 = 11,           ///< Comm phase 2 (e.g., face-ghost).
+            Comm3 = 12,           ///< Comm phase 3.
+            LinSolve = 13,        ///< Linear solve (total).
+            LinSolve1 = 14,       ///< Linear solve phase 1.
+            LinSolve2 = 15,       ///< Linear solve phase 2.
+            LinSolve3 = 16,       ///< Linear solve phase 3.
+            Positivity = 17,      ///< Positivity preservation.
+            PositivityOuter = 18, ///< Outer-iteration positivity.
+            __EndTimerType = 64   ///< One past the last valid id.
         };
 
         static const int Ntype = __EndTimerType;

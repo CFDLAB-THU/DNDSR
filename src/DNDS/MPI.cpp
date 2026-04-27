@@ -24,7 +24,6 @@
 #    include <process.h>
 #endif
 
-
 #ifdef NDEBUG
 #    define NDEBUG_DISABLED
 #    undef NDEBUG

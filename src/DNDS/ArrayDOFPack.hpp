@@ -39,7 +39,5 @@ namespace DNDS
                 }
             }
         }
-
-
     };
 }

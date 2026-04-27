@@ -6,7 +6,7 @@
 
 #include "Defines.hpp"
 #ifdef DNDS_USE_OMP
-#include <omp.h>
+#    include <omp.h>
 #endif
 #include <pybind11/pybind11.h>
 #include <pybind11/iostream.h>
