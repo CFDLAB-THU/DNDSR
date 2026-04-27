@@ -47,6 +47,37 @@
 #                                           called in-place and
 #                                           must not be moved from;
 #                                           false positives dominate.
+#   -cppcoreguidelines-non-private-member-variables-in-classes
+#                                           Project uses struct-of-
+#                                           fields as data bags
+#                                           pervasively.
+#   -cppcoreguidelines-avoid-magic-numbers  Duplicate of the already-
+#                                           disabled readability-
+#                                           magic-numbers.
+#   -cppcoreguidelines-pro-bounds-pointer-arithmetic
+#   -cppcoreguidelines-pro-bounds-array-to-pointer-decay
+#   -cppcoreguidelines-pro-bounds-constant-array-index
+#                                           CSR storage and MPI byte
+#                                           buffers are fundamentally
+#                                           pointer arithmetic.
+#   -cppcoreguidelines-pro-type-vararg      MPI / printf-family APIs.
+#   -cppcoreguidelines-pro-type-reinterpret-cast
+#                                           MPI byte buffers,
+#                                           serialization.
+#   -cppcoreguidelines-pro-type-const-cast  C-API interop (MPI, CGNS,
+#                                           HDF5).
+#   -readability-redundant-access-specifiers
+#                                           Repeated public: is a
+#                                           project convention for
+#                                           large classes.
+#   -modernize-use-transparent-functors     Eigen expression
+#                                           templates break with
+#                                           std::less<> etc.
+#   -cppcoreguidelines-c-copy-assignment-signature
+#                                           Duplicate of
+#                                           misc-unconventional-assign-
+#                                           operator, and we already
+#                                           follow the canonical form.
 #
 # Notes on ExtraArgs:
 #   - -UDNDS_USE_OMP: skip #include <omp.h> which requires
@@ -84,6 +115,17 @@ Checks: >
   -performance-avoid-endl,
   -performance-enum-size,
   -cppcoreguidelines-missing-std-forward,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-type-const-cast,
+  -readability-redundant-access-specifiers,
+  -modernize-use-transparent-functors,
+  -cppcoreguidelines-c-copy-assignment-signature,
 
 WarningsAsErrors: ''
 

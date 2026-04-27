@@ -10,7 +10,14 @@ and `/.clang-tidy-fix` (auto-fix profile). See
 
 ## Status snapshot
 
-- Current module: **DNDS** (all others scheduled after DNDS is clean).
+- Current module: **DNDS**. Passes 1–5 complete, pass 6 deferred
+  (engineering task), pass 7 deferred (judgement per site).
+- Latest total: **19 390 diagnostics, 46 distinct checks** (down from
+  the 24 597 baseline, 21 % reduction). The remaining volume is
+  dominated by checks still scheduled for triage in the KA bucket
+  (non-private member vars, magic numbers, pointer arithmetic,
+  varargs, reinterpret_cast) which will drop to zero in one
+  config-only commit.
 - Baseline: `build/clang-tidy-logs/baseline-dnds.txt`.
 
 ## Table of contents
@@ -359,17 +366,95 @@ Commit: see `git log`.
 
 ### Pass 6 — cppcoreguidelines-special-member-functions
 
-*TODO*
+**Outcome.** Deferred. Still 1 645 hits after the preceding passes
+(no overlap with anything else).
+
+**Scope assessed.** 1 645 hits collapse to **32 unique class
+declarations**, each matching the pattern "defines a copy constructor
+and a copy assignment operator but does not define a destructor, a
+move constructor or a move assignment operator" — i.e. the classes
+are implicitly copy-only. Affected classes include `Array`,
+`ArrayAdjacency`, `ArrayDof`, `ArrayEigenMatrix*`, `ArrayTransformer`,
+`CommStrategy`, `DeviceStorageBase`, and ~20 others in the DNDS
+subtree.
+
+**Why deferred.** The canonical tidy is to add the three missing
+members as `= default`, but doing so **changes the public API**:
+classes that were implicitly copy-only become move-enabled, so
+callers using `std::move(x)` get a move where they previously got a
+copy. The existing copy ctor on every flagged class does a deep
+`clone(R)`; memberwise move would instead shallow-move the
+`shared_ptr` / `host_device_vector` / `std::vector` members, which
+is almost certainly the *right* behaviour but is a semantic change
+the author should sanction class-by-class.
+
+Auto-fix would also require choosing between `= default` and
+`= delete` per class. The check does not implement `--fix` and
+clang-tidy cannot infer the right choice.
+
+**Recommendation.** Schedule a dedicated session that:
+
+1. Audits each of the 32 classes for owning members (raw pointers,
+   custom deleters, virtual destructors).
+2. Adds all five special members explicitly (`= default`/`= delete`)
+   per class, keeping the existing copy-ctor / copy-assign semantics
+   but picking the appropriate move semantics.
+3. Builds after each batch of 5-6 classes to catch any
+   move-semantic regression early.
+4. Adds targeted tests where the copy-vs-move distinction matters
+   (e.g. `Array` move should drop the source's row-start pointer,
+   not deep-copy it).
+
+This is an engineering task on its own, not a "tidy pass."
 
 ### Pass 7 — bugprone-implicit-widening-of-multiplication-result
 
-*TODO*
+**Outcome.** Not reached — the check fell out of the top-20 after the
+preceding passes and is interleaved with real semantic decisions on
+each site. Deferred to a future session.
+
+**Notes.** After passes 1-5 the residue is ~298 hits across the
+project (count before passes; DNDS alone carries some). Each site
+needs a judgement call: is the `int * int` result at risk of 32-bit
+overflow once extents grow? If yes, cast the operand; if not,
+silence. A mass rewrite is unsafe.
 
 ## Disables applied
 
-*TODO: table of checks moved to `.clang-tidy` disables during this effort,
-each with one-sentence reason.*
+Added to `.clang-tidy` during this effort (all motivated by the
+triage table above):
+
+| Check | Reason |
+|---|---|
+| `cppcoreguidelines-missing-std-forward` | Functor `T&&` called in-place (Pass 4). |
+| `cppcoreguidelines-non-private-member-variables-in-classes` | Project uses struct-of-fields data bags. |
+| `cppcoreguidelines-avoid-magic-numbers` | Duplicate of already-disabled `readability-magic-numbers`. |
+| `cppcoreguidelines-pro-bounds-pointer-arithmetic` | CSR / MPI buffer idioms. |
+| `cppcoreguidelines-pro-bounds-array-to-pointer-decay` | Same. |
+| `cppcoreguidelines-pro-bounds-constant-array-index` | Same. |
+| `cppcoreguidelines-pro-type-vararg` | MPI / printf-family. |
+| `cppcoreguidelines-pro-type-reinterpret-cast` | MPI byte buffers, serialization. |
+| `cppcoreguidelines-pro-type-const-cast` | C-API interop (MPI, CGNS, HDF5). |
+| `readability-redundant-access-specifiers` | Repeated `public:` is a project convention. |
+| `modernize-use-transparent-functors` | Eigen expression templates break with `std::less<>` etc. |
+| `cppcoreguidelines-c-copy-assignment-signature` | Duplicate of `misc-unconventional-assign-operator`. |
+
+Rationale comments live in the `.clang-tidy` file header, not inside
+the `Checks: >` folded scalar (see Pass 4 / YAML trap).
 
 ## Next modules
 
-*TODO: Solver, Geom, CFV, Euler, EulerP — order and open questions.*
+Once DNDS is "clean" (= all KF passes done, all KA disables applied,
+all KS NOLINTs in place), repeat the recipe for:
+
+1. `src/Solver/` — small, limited blast radius; good next target.
+2. `src/Geom/` — largest module; expect a new set of checks specific
+   to mesh connectivity loops. Start with `clang-analyzer-optin.cplusplus.VirtualCall`
+   per the historical note in `.clang-tidy`.
+3. `src/CFV/` — follows Geom closely.
+4. `src/Euler/`, `src/EulerP/` — solver layer; `bugprone-branch-clone`
+   will matter here (exhaustive `if/else` cascades for enum handling).
+
+The `.clang-tidy` disables carry forward unchanged. Any new module-
+specific disables should be appended in the same table at the top of
+`.clang-tidy`, not inside the `Checks:` block.
