@@ -7,11 +7,11 @@
 #     "ci-run-self-hosted"       — runs on self-hosted (self-hosted)
 #
 # Runner matrix:
-#   github  — ubuntu-latest, ephemeral, uses actions/cache + actions/setup-python
-#   self-hosted  — self-hosted Docker container, persistent filesystem, skips caching
+#   github      — ubuntu-latest, ephemeral, uses actions/setup-python
+#   self-hosted — self-hosted Docker container, system python3, no sudo
 #
-# Caches (GitHub-hosted only) external dependencies (header-only libs,
-# cfd_externals, pip) so repeated runs are fast.
+# Both runners use actions/cache for externals, cfd_externals, and venv.
+# Only github uses ccache caching (self-hosted skips it).
 #
 # Test matrix:
 #   - C++ unit tests (doctest + ctest)
@@ -53,13 +53,13 @@ jobs:
           - runner-id: github
             runs-on: ubuntu-latest
             label: ci-run
-            use-cache: true
+            use-ccache: true
             setup-python: true
             install-sys-deps: true
           - runner-id: self-hosted
             runs-on: [self-hosted, Linux, X64]
             label: ci-run-self-hosted
-            use-cache: false
+            use-ccache: false
             setup-python: false
             install-sys-deps: false
     if: >
@@ -116,13 +116,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
-          submodules: recursive
 
       - name: Fetch test meshes
         if: steps.gate.outputs.run == 'true'
         run: |
           mkdir -p data/mesh
-          git clone --depth=1 https://github.com/harryzhou2000/cfd_meshes.git /tmp/cfd_meshes
+          if [ ! -d /tmp/cfd_meshes ]; then
+            git clone --depth=1 https://github.com/harryzhou2000/cfd_meshes.git /tmp/cfd_meshes
+          else
+            git -C /tmp/cfd_meshes pull --ff-only 2>/dev/null || true
+          fi
           cp /tmp/cfd_meshes/data/mesh/* data/mesh/
 
       # ------------------------------------------------------------------
@@ -151,12 +154,25 @@ jobs:
           python-version: "3.12"
 
       # ------------------------------------------------------------------
+      # Clean cached directories so actions/cache is the sole source of
+      # truth (matters on self-hosted runners with persistent filesystems)
+      # ------------------------------------------------------------------
+      - name: Clean cached directories
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          rm -rf external/argparse external/boost external/CGAL \
+                 external/cppcodec external/cpptrace external/doctest \
+                 external/eigen external/exprtk external/fmt \
+                 external/nanoflann external/nlohmann external/pybind11 \
+                 external/pybind11_json
+          rm -rf external/cfd_externals/install
+          rm -rf venv
+
+      # ------------------------------------------------------------------
       # 4. Header-only externals (Eigen, Boost, CGAL, fmt, pybind11, ...)
       # ------------------------------------------------------------------
       - name: Cache header-only externals
-        if: >
-          steps.gate.outputs.run == 'true' &&
-          matrix.use-cache
+        if: steps.gate.outputs.run == 'true'
         id: cache-headeronlys
         uses: actions/cache@v4
         with:
@@ -179,23 +195,16 @@ jobs:
       - name: Download and extract header-only externals
         if: >
           steps.gate.outputs.run == 'true' &&
-          (steps.cache-headeronlys.outputs.cache-hit != 'true' || !matrix.use-cache)
+          steps.cache-headeronlys.outputs.cache-hit != 'true'
         run: |
-          # Skip if already present (self-hosted persistent filesystem)
-          if [ -d external/eigen/Eigen ]; then
-            echo "Header-only externals already present, skipping download"
-          else
-            curl -L -o external/external_headeronlys.tar.gz "$HEADERONLYS_URL"
-            cd external && tar -xzf external_headeronlys.tar.gz
-          fi
+          curl -L -o external/external_headeronlys.tar.gz "$HEADERONLYS_URL"
+          cd external && tar -xzf external_headeronlys.tar.gz
 
       # ------------------------------------------------------------------
       # 5. cfd_externals (zlib, hdf5, cgns, parmetis)
       # ------------------------------------------------------------------
       - name: Cache cfd_externals install
-        if: >
-          steps.gate.outputs.run == 'true' &&
-          matrix.use-cache
+        if: steps.gate.outputs.run == 'true'
         id: cache-cfd-ext
         uses: actions/cache@v4
         with:
@@ -205,23 +214,17 @@ jobs:
       - name: Build cfd_externals
         if: >
           steps.gate.outputs.run == 'true' &&
-          (steps.cache-cfd-ext.outputs.cache-hit != 'true' || !matrix.use-cache)
-        working-directory: external/cfd_externals
+          steps.cache-cfd-ext.outputs.cache-hit != 'true'
         run: |
-          # Skip if already built (self-hosted persistent filesystem)
-          if [ -d install/include ]; then
-            echo "cfd_externals already built, skipping"
-          else
-            CC=mpicc CXX=mpicxx python3 cfd_externals_build.py
-          fi
+          git submodule update --init --recursive --depth=1
+          cd external/cfd_externals
+          CC=mpicc CXX=mpicxx python3 cfd_externals_build.py
 
       # ------------------------------------------------------------------
       # 6. Python venv
       # ------------------------------------------------------------------
       - name: Cache Python venv
-        if: >
-          steps.gate.outputs.run == 'true' &&
-          matrix.use-cache
+        if: steps.gate.outputs.run == 'true'
         id: cache-venv
         uses: actions/cache@v4
         with:
@@ -231,12 +234,9 @@ jobs:
       - name: Install Python dependencies
         if: >
           steps.gate.outputs.run == 'true' &&
-          (steps.cache-venv.outputs.cache-hit != 'true' || !matrix.use-cache)
+          steps.cache-venv.outputs.cache-hit != 'true'
         run: |
-          # On self-hosted, reuse existing venv if present
-          if [ ! -d venv ]; then
-            python3 -m venv venv
-          fi
+          python3 -m venv venv
           source venv/bin/activate
           pip install --upgrade pip
           PIP=$PWD/venv/bin/pip ./scripts/install_python_deps.sh
@@ -247,7 +247,7 @@ jobs:
       - name: Restore ccache
         if: >
           steps.gate.outputs.run == 'true' &&
-          matrix.use-cache
+          matrix.use-ccache
         id: restore-ccache
         uses: actions/cache/restore@v4
         with:
@@ -323,13 +323,12 @@ jobs:
 
       # ------------------------------------------------------------------
       # Always save ccache regardless of build/test outcome
-      # (GitHub-hosted only; self-hosted keeps .ccache on disk)
       # ------------------------------------------------------------------
       - name: Save ccache
         if: >
           always() &&
           steps.gate.outputs.run == 'true' &&
-          matrix.use-cache
+          matrix.use-ccache
         uses: actions/cache/save@v4
         with:
           path: .ccache
