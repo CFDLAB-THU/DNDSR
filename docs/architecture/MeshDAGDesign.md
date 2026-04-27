@@ -1,8 +1,18 @@
 # Mesh DAG Connectivity: Design Proposal {#mesh_dag_design}
 
-**Status:** Proposal
-**Date:** 2026-04-21
+**Status:** Proposal (partially implemented — see notes below)
+**Date:** 2026-04-21 (updated 2026-04-26)
 **Depends on:** [Mesh Connectivity Architecture](MeshConnectivity.md)
+
+> **Implementation status:** Phases A-B of the migration path (Section 7)
+> have been partially implemented. The `MeshConnectivity` DSL class exists
+> with `Inverse`, `Compose`, `ComposeFiltered`, `InterpolateGlobal`, and
+> `evaluateGhostTree`. Shared ownership via `ssp<>` is in use. Phases C-D
+> (full DAG abstraction, unified point numbering) remain future work. Some
+> design choices described below (e.g., move semantics in Section 3.2, label
+> system in Section 3.5, DAGState enum in Section 6) were superseded by the
+> actual implementation — see [MeshConnectivity.md](MeshConnectivity.md)
+> for current architecture.
 
 ---
 

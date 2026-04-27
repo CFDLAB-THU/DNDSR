@@ -7,6 +7,7 @@ bindings, initializes MPI, and provides factory functions for Array types.
 from __future__ import annotations
 
 import contextlib
+import os
 import typing
 import atexit
 import sys
@@ -43,17 +44,38 @@ def MPI_Context(
 def _init_mpi() -> None:
     """Initialize MPI at import time.
 
-    Without an MPI launcher (mpirun), OpenMPI starts in singleton mode
-    (np=1), which works fine.  The real conflict is with mpi4py: it
-    calls MPI_Init during its own import, which happens *before*
-    DNDSR.DNDS if the user does ``import mpi4py`` first.  In that
-    case, our Init_thread call will detect that MPI is already
-    initialized and return without error.
+    Uses ``mpi4py`` to perform the underlying ``MPI_Init_thread`` call,
+    then forwards to DNDSR's own ``MPI.Init_thread`` (which detects MPI
+    is already initialised and only queries the thread level).
 
-    If you need to control MPI initialization yourself (e.g., to use
-    mpi4py's MPI thread level), import and initialize mpi4py *before*
-    importing DNDSR.DNDS.
+    Why mpi4py first?
+      OpenMPI 4.x singleton mode (``MPI_Init`` without ``mpirun``)
+      can hang in Docker containers when ``orted`` fails to bind to
+      network interfaces.  ``mpi4py`` ships battle-tested workarounds
+      for this; our C++ ``MPI_Init_thread`` wrapper does not.
+      Letting ``mpi4py`` go first avoids the hang while keeping the
+      DNDSR side fully functional.
+
+    mpi4py defaults to ``MPI_THREAD_MULTIPLE``, which matches DNDSR's
+    requirement.  Both libraries' ``MPI_Finalize`` paths check
+    ``MPI_Finalized`` and are idempotent, so dual ``atexit`` handlers
+    are safe.
+
+    Set ``DNDSR_SKIP_MPI_INIT=1`` to skip MPI initialization entirely.
+    This is used by pybind11-stubgen (and similar introspection tools)
+    that import the module only to inspect type signatures.  Calling
+    MPI_Init in that context causes a double-free crash at exit because
+    MPI_Finalize (registered via atexit) runs before pybind11 and C++
+    static destructors release MPI resources.
     """
+    if os.environ.get("DNDSR_SKIP_MPI_INIT", "").strip() in ("1", "true", "yes"):
+        return
+
+    # Let mpi4py handle the raw MPI_Init_thread (robust singleton mode).
+    import mpi4py.MPI  # noqa: F401 — side-effect: calls MPI_Init_thread
+
+    # DNDSR's Init_thread detects MPI is already initialised, queries
+    # the thread level, and returns without calling MPI_Init again.
     err, argsNew = MPI.Init_thread(sys.argv)
     if err:
         raise RuntimeError(f"MPI.Init_thread returned error code {err}")
@@ -124,7 +146,8 @@ def _get_array_name(
         rs_name = _row_size_to_name(row_size)
         rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
         rs_name_n = _row_size_to_name(row_size_n)
-        rm_name_n = rs_name_n if row_max_n is None else _row_size_to_name(row_max_n)
+        rm_name_n = rs_name_n if row_max_n is None else _row_size_to_name(
+            row_max_n)
         align_name = "N"
         className = (
             f"{prepend}_{rs_name}x{rs_name_n}_{rm_name}x{rm_name_n}_{align_name}"
@@ -162,19 +185,22 @@ def Array(type: str, row_size: int | str, row_max: int | str = None,
 
 def ParArray(type: str, row_size: int | str, row_max: int | str = None,
              init_args: tuple = (), *, name: str | None = None):
-    cls = globals()[_get_array_name(type, row_size, row_max, prepend="ParArray")]
+    cls = globals()[_get_array_name(
+        type, row_size, row_max, prepend="ParArray")]
     return cls(*_named_init_args(name, init_args))
 
 
 def ParArrayPair(type: str, row_size: int | str, row_max: int | str = None,
                  init_args: tuple = ()):
-    cls = globals()[_get_array_name(type, row_size, row_max, prepend="ParArrayPair")]
+    cls = globals()[_get_array_name(type, row_size,
+                                    row_max, prepend="ParArrayPair")]
     return cls(*init_args)
 
 
 def ArrayTransformer(type: str, row_size: int | str, row_max: int | str = None,
                      init_args: tuple = ()):
-    cls = globals()[_get_array_name(type, row_size, row_max, prepend="ArrayTransformer")]
+    cls = globals()[_get_array_name(type, row_size,
+                                    row_max, prepend="ArrayTransformer")]
     return cls(*init_args)
 
 

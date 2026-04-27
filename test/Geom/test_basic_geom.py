@@ -78,8 +78,11 @@ def test_mesh0():
         print(f"mesh  num  cell: {mesh_nCell}")
         print(f"mesh size total: {mesh_bytes / (1024 * 1024):.4g} MB")
 
-    mesh.coords.to_device("CUDA")
-    mesh.to_device("CUDA")
+    try:
+        mesh.coords.to_device("CUDA")
+        mesh.to_device("CUDA")
+    except RuntimeError:
+        pass  # CUDA not available, skip device transfer
     # while True:
     #     pass
 

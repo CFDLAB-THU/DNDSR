@@ -148,12 +148,17 @@ def _read_cgns(
 
     # --- Optional O2 elevation ------------------------------------------------
     if elevation == "O2":
-        mesh_o2 = Geom.UnstructuredMesh(mpi, dim)
-        mesh_o2.BuildO2FromO1Elevation(mesh)
-        # swap: mesh_o2 is the old O1, mesh is the new O2
-        mesh_o2, mesh = mesh, mesh_o2  # noqa: F841 (mesh_o2 is garbage-collected)
-        reader.mesh = mesh
-        _build_ghost_primary(mesh)
+        if bisect:
+            raise ValueError(
+                "bisect must be 0 when elevation='O2'.  "
+                "Elevation and bisection are mutually exclusive."
+            )
+        if not mesh.IsO2():
+            mesh_o2 = Geom.UnstructuredMesh(mpi, dim)
+            mesh_o2.BuildO2FromO1Elevation(mesh)
+            mesh_o2, mesh = mesh, mesh_o2  # noqa: F841
+            reader.mesh = mesh
+            _build_ghost_primary(mesh)
 
     # --- Optional bisection ---------------------------------------------------
     if not (0 <= bisect <= 4):
@@ -321,15 +326,15 @@ def prepare_mesh(
         reader.BuildSerialOut()
         mesh.AdjGlobal2LocalPrimary()
 
-    # 6. Periodic nodes + VTK
-    mesh.RecreatePeriodicNodes()
-    mesh.BuildVTKConnectivity()
-
-    # 7. Coordinate transforms (all default to no-op)
+    # 6. Coordinate transforms (all default to no-op)
     _apply_coord_transforms(
         mesh, coord_scale, coord_rot_z_deg,
         rectify_near_plane, rectify_threshold,
     )
+
+    # 7. Periodic nodes + VTK
+    mesh.RecreatePeriodicNodes()
+    mesh.BuildVTKConnectivity()
 
 
 def _apply_coord_transforms(
@@ -340,7 +345,6 @@ def _apply_coord_transforms(
     rectify_threshold: float,
 ) -> None:
     """Apply coordinate transforms matching the C++ solver order."""
-    # Only import numpy if transforms are actually requested.
     if rot_z_deg == 0.0 and scale == 1.0 and rectify_near_plane == 0:
         return
 
@@ -351,24 +355,25 @@ def _apply_coord_transforms(
         rz = rot_z_deg / 180.0 * math.pi
         c, s = math.cos(rz), math.sin(rz)
         rot_z = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=np.float64)
-        mesh.TransformCoords(lambda p: rot_z @ p)
+        mesh.TransformCoords(lambda c: np.matmul(c, rot_z.T, out=c))
         # TODO: also rotate periodicInfo (rotation, rotationCenter, translation)
         # once the Python bindings for periodicInfo are available.
 
     if scale != 1.0:
-        mesh.TransformCoords(lambda p: p * scale)
+        mesh.TransformCoords(lambda c: np.multiply(c, scale, out=c))
         # TODO: also scale periodicInfo.translation and rotationCenter
 
     if rectify_near_plane != 0:
-        def rectify(p):
-            ret = p.copy()
-            if rectify_near_plane & 1 and abs(ret[0]) < rectify_threshold:
-                ret[0] = 0.0
-            if rectify_near_plane & 2 and abs(ret[1]) < rectify_threshold:
-                ret[1] = 0.0
-            if rectify_near_plane & 4 and abs(ret[2]) < rectify_threshold:
-                ret[2] = 0.0
-            return ret
+        def rectify(c):
+            if rectify_near_plane & 1:
+                c[:, 0] = np.where(
+                    np.abs(c[:, 0]) < rectify_threshold, 0.0, c[:, 0])
+            if rectify_near_plane & 2:
+                c[:, 1] = np.where(
+                    np.abs(c[:, 1]) < rectify_threshold, 0.0, c[:, 1])
+            if rectify_near_plane & 4:
+                c[:, 2] = np.where(
+                    np.abs(c[:, 2]) < rectify_threshold, 0.0, c[:, 2])
         mesh.TransformCoords(rectify)
 
 
