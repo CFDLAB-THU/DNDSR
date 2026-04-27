@@ -128,6 +128,14 @@ jobs:
           fi
           cp /tmp/cfd_meshes/data/mesh/* data/mesh/
 
+      # The submodule commit is tracked by the parent repo's tree object,
+      # NOT by .gitmodules (which only stores URL/path).  Capture the
+      # pinned SHA so cache keys invalidate when the submodule advances.
+      - name: Get cfd_externals submodule commit
+        if: steps.gate.outputs.run == 'true'
+        id: submod
+        run: echo "cfd_ext_sha=$(git rev-parse HEAD:external/cfd_externals)" >> "$GITHUB_OUTPUT"
+
       # ------------------------------------------------------------------
       # 2. System packages (skipped if already present)
       # ------------------------------------------------------------------
@@ -209,7 +217,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: external/cfd_externals/install
-          key: cfd-ext-${{ runner.os }}-${{ hashFiles('external/cfd_externals/cfd_externals_build.py', '.gitmodules') }}
+          key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('external/cfd_externals/cfd_externals_build.py') }}
 
       - name: Build cfd_externals
         if: >
@@ -229,7 +237,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: venv
-          key: venv-ci-${{ runner.os }}-${{ hashFiles('requirements.txt', 'scripts/install_python_deps.sh', 'external/cfd_externals/cfd_externals_build.py', '.gitmodules') }}
+          key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'scripts/install_python_deps.sh') }}
 
       - name: Install Python dependencies
         if: >
@@ -252,9 +260,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .ccache
-          key: ccache-${{ matrix.runner-id }}-${{ github.run_id }}
+          key: ccache-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
-            ccache-${{ matrix.runner-id }}-
+            ccache-${{ runner.os }}-
 
       - name: Configure ccache
         if: steps.gate.outputs.run == 'true'
@@ -332,4 +340,5 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .ccache
-          key: ccache-${{ matrix.runner-id }}-${{ github.run_id }}
+          key: ccache-${{ runner.os }}-${{ github.run_id }}
+
