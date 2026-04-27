@@ -23,6 +23,11 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STUBS_DIR="${PROJECT_ROOT}/stubs"
 PYTHON_DIR="${PROJECT_ROOT}/python"
 
+# Stub generation only introspects type signatures; it must not call
+# MPI_Init because MPI_Finalize (via atexit) would run before pybind11
+# and C++ static destructors, causing a double-free crash.
+export DNDSR_SKIP_MPI_INIT=1
+
 # Clean previous output
 rm -rf "${STUBS_DIR}"
 mkdir -p "${STUBS_DIR}"
