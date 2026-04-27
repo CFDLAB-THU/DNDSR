@@ -1,9 +1,17 @@
 # cmake/DndsStdlibSetup.cmake
-# Detect and bundle the C++ standard library (libstdc++ or libc++).
+# Detect the C++ standard library (libstdc++ or libc++).
 #
-# We package the runtime so that the correct version is found at load time
-# without depending on the host's LD_LIBRARY_PATH.  fmt is static and
-# libdnds.so is the first consumer, so this usually works out of the box.
+# Detection is still performed so that downstream code can check
+# DNDS_STDLIB_FOUND and DNDS_USING_LIBCXX.  However, the runtime
+# library is NO LONGER bundled into dndsr_external/:
+#
+# - libstdc++/libc++ are system-provided and must not be duplicated.
+#   Bundling them with RTLD_DEEPBIND caused dual-allocator double-free
+#   crashes when system libraries (e.g. libmpi) used the system copy
+#   while DNDSR used the bundled copy.
+#
+# For conda/anaconda environments with an older libstdc++, users
+# should set LD_LIBRARY_PATH or DNDSR_USE_DEEPBIND=1 instead.
 
 if(NOT UNIX)
     return()
@@ -50,7 +58,8 @@ if(DNDS_USING_LIBCXX)
 
     if(LIBCXX_PATH)
         message(STATUS "Found libc++: ${LIBCXX_PATH}")
-        file(INSTALL "${LIBCXX_PATH}" DESTINATION ${CMAKE_INSTALL_PREFIX}/DNDSR/lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
+        # Not bundled — see header comment for rationale.
+        # file(INSTALL "${LIBCXX_PATH}" DESTINATION ${CMAKE_INSTALL_PREFIX}/DNDSR/lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
         set(DNDS_STDLIB_FOUND ON)
         # Also try to find libc++abi.so which is often needed alongside libc++.so
         if(NOT DEFINED LIBCXXABI_PATH)
@@ -58,7 +67,7 @@ if(DNDS_USING_LIBCXX)
         endif()
         if(LIBCXXABI_PATH)
             message(STATUS "Found libc++abi: ${LIBCXXABI_PATH}")
-            file(INSTALL "${LIBCXXABI_PATH}" DESTINATION ${CMAKE_INSTALL_PREFIX}/DNDSR/lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
+            # file(INSTALL "${LIBCXXABI_PATH}" DESTINATION ${CMAKE_INSTALL_PREFIX}/DNDSR/lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
         endif()
     else()
         message(STATUS "libc++.so not found via find_library")
@@ -80,8 +89,9 @@ else()
 
     if(EXISTS "${LIBSTDCXX_PATH}")
         message(STATUS "Found libstdc++.so: ${LIBSTDCXX_PATH}")
-        file(INSTALL "${LIBSTDCXX_PATH}" DESTINATION ${CMAKE_INSTALL_PREFIX}/DNDSR/lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
-        file(INSTALL "${LIBSTDCXX_PATH}" DESTINATION ${PROJECT_SOURCE_DIR}/python/DNDSR/_lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
+        # Not bundled — see header comment for rationale.
+        # file(INSTALL "${LIBSTDCXX_PATH}" DESTINATION ${CMAKE_INSTALL_PREFIX}/DNDSR/lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
+        # file(INSTALL "${LIBSTDCXX_PATH}" DESTINATION ${PROJECT_SOURCE_DIR}/python/DNDSR/_lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
         set(DNDS_STDLIB_FOUND ON)
     else()
         message(STATUS "libstdc++.so not found at: ${LIBSTDCXX_PATH}")

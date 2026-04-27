@@ -238,6 +238,21 @@ endif()
 message(DEBUG "DNDS_EXTERNAL_LIBS external files (to be installed):  ${DNDS_EXTERNAL_LIBS}")
 
 # -------------------------------------------------------------------
+# Bundled libs: subset of DNDS_EXTERNAL_LIBS that are installed into
+# dndsr_external/.  System-provided libraries (MPI, libstdc++) are
+# linked but NOT bundled — they are tightly coupled to the host
+# runtime and bundling them causes symbol conflicts (e.g., dual
+# libstdc++ allocators leading to double-free crashes).
+# -------------------------------------------------------------------
+set(DNDS_BUNDLED_LIBS
+    ${DNDS_EXTERNAL_LIB_CGNS}
+    ${DNDS_EXTERNAL_LIB_HDF5}
+    ${DNDS_EXTERNAL_LIB_PARMETIS}
+    ${DNDS_EXTERNAL_LIB_METIS}
+    ${DNDS_EXTERNAL_LIB_ZLIB}
+)
+
+# -------------------------------------------------------------------
 # Resolve real paths and directories for external libs
 # -------------------------------------------------------------------
 set(DNDS_EXTERNAL_LIBS_REAL "" CACHE INTERNAL
@@ -254,12 +269,12 @@ foreach(LIB ${DNDS_EXTERNAL_LIBS})
     list(APPEND DNDS_EXTERNAL_LIBS_REAL ${LIB_REAL})
 endforeach()
 
-# now DNDS_EXTERNAL_LIBS contains externally built libraries
-foreach(LIB ${DNDS_EXTERNAL_LIBS})
+# Install only the bundled libs (not MPI/libstdc++) into dndsr_external/
+foreach(LIB ${DNDS_BUNDLED_LIBS})
     file(INSTALL ${LIB} DESTINATION ${CMAKE_INSTALL_PREFIX}/DNDSR/lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
 endforeach()
-# Also copy external libs into python package tree for editable installs
-foreach(LIB ${DNDS_EXTERNAL_LIBS})
+# Also copy bundled libs into python package tree for editable installs
+foreach(LIB ${DNDS_BUNDLED_LIBS})
     file(INSTALL ${LIB} DESTINATION ${PROJECT_SOURCE_DIR}/python/DNDSR/_lib/dndsr_external FOLLOW_SYMLINK_CHAIN)
 endforeach()
 
