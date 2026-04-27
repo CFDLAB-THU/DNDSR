@@ -389,51 +389,34 @@ namespace DNDS::Geom
         if (!cell2node.father->pLGlobalMapping)
             cell2node.father->createGlobalMapping();
 
-        // node2cell via DSL Inverse (cell2node must be in global state)
-        auto dslN2C = CheckedInverse(
-            cell2node, coords.father->Size(), mpi,
-            [this](index i)
-            { return this->CellIndexLocal2Global_NoSon(i); },
-            [this](index i)
-            { return this->NodeIndexLocal2Global_NoSon(i); },
-            coords.father->pLGlobalMapping);
+        // Ensure ghost mappings exist so IndexLocal2Global / IndexGlobal2Local work
+        // (father-only at this stage — no ghost cells/nodes yet).
+        coords.TransAttach();
+        coords.trans.createFatherGlobalMapping();
+        EnsureGhostMapping(coords);
+        cell2node.TransAttach();
+        cell2node.trans.createFatherGlobalMapping();
+        EnsureGhostMapping(cell2node);
 
-        // Copy DSL result into node2cell pair (father only)
-        node2cell.InitPair("node2cell", mpi);
-        node2cell.father->Resize(coords.father->Size());
-        for (index iNode = 0; iNode < coords.father->Size(); iNode++)
-        {
-            auto row = dslN2C.father->operator[](iNode);
-            node2cell.father->ResizeRow(iNode, row.size());
-            for (rowsize j = 0; j < static_cast<rowsize>(row.size()); j++)
-                node2cell.father->operator()(iNode, j) = row[j];
-        }
+        // node2cell via DSL Inverse (cell2node must be in global state)
+        // Result is already AdjPairTracked with father adopted, state = Global.
+        node2cell = CheckedInverse(
+            cell2node, coords,
+            coords.father->Size(), mpi);
 
         // node2bnd via DSL Inverse (bnd2node must be in global state)
         if (!bnd2node.father->pLGlobalMapping)
             bnd2node.father->createGlobalMapping();
+        bnd2node.TransAttach();
+        bnd2node.trans.createFatherGlobalMapping();
+        EnsureGhostMapping(bnd2node);
 
-        auto dslN2B = CheckedInverse(
-            bnd2node, coords.father->Size(), mpi,
-            [this](index i)
-            { return this->BndIndexLocal2Global_NoSon(i); },
-            [this](index i)
-            { return this->NodeIndexLocal2Global_NoSon(i); },
-            coords.father->pLGlobalMapping);
-
-        node2bnd.InitPair("node2bnd", mpi);
-        node2bnd.father->Resize(coords.father->Size());
-        for (index iNode = 0; iNode < coords.father->Size(); iNode++)
-        {
-            auto row = dslN2B.father->operator[](iNode);
-            node2bnd.father->ResizeRow(iNode, row.size());
-            for (rowsize j = 0; j < static_cast<rowsize>(row.size()); j++)
-                node2bnd.father->operator()(iNode, j) = row[j];
-        }
+        node2bnd = CheckedInverse(
+            bnd2node, coords,
+            coords.father->Size(), mpi);
 
         this->adjN2CBState = Adj_PointToGlobal;
-        node2cell.idx.markGlobal();
-        node2bnd.idx.markGlobal();
+        // markGlobal already done by CheckedInverse
     }
 
     void UnstructuredMesh::RecoverCell2CellAndBnd2Cell()
@@ -449,21 +432,19 @@ namespace DNDS::Geom
 
         coords.TransAttach();
         coords.trans.createFatherGlobalMapping();
+        EnsureGhostMapping(coords);
         cell2node.TransAttach();
         cell2node.trans.createFatherGlobalMapping();
+        EnsureGhostMapping(cell2node);
         bnd2node.TransAttach();
         bnd2node.trans.createFatherGlobalMapping();
+        EnsureGhostMapping(bnd2node);
 
         // Ghost-pull node2cell for off-rank nodes referenced by local cells and bnds.
         // Use evaluateGhostTree: Cell → Cell2Node → Node ∪ Bnd → Bnd2Node → Node.
         {
             MeshConnectivity dagN2CB;
-            dagN2CB.meshDim = dim;
-            dagN2CB.registerAdj(Adj::Cell2Node, cell2node);
-            dagN2CB.registerAdj(Adj::Bnd2Node, bnd2node);
-            dagN2CB.registerGlobalMapping(EntityKind::Cell, cell2node.trans.pLGlobalMapping);
-            dagN2CB.registerGlobalMapping(EntityKind::Bnd, bnd2node.trans.pLGlobalMapping);
-            dagN2CB.registerGlobalMapping(EntityKind::Node, coords.trans.pLGlobalMapping);
+            fillRegistry(dagN2CB);
 
             GhostSpec n2cbSpec{{
                 {EntityKind::Cell, {Adj::Cell2Node}, EntityKind::Node},
@@ -491,23 +472,11 @@ namespace DNDS::Geom
             nodeG2L[node2cell.trans.pLGhostMapping->operator()(-1, i)] = i;
 
         // cell2cell via DSL ComposeFiltered (inputs must be in global state)
-        auto dslC2C = CheckedComposeFiltered(
+        // Result is AdjPairTracked with father adopted, state = Global.
+        cell2cell = CheckedComposeFiltered(
             cell2node, node2cell,
-            cell2node.father->Size(),
             nodeG2L,
-            [this](index i)
-            { return this->CellIndexLocal2Global_NoSon(i); },
             SharedCountPredicate{.minShared = 1, .removeSelf = true});
-
-        cell2cell.InitPair("cell2cell", mpi);
-        cell2cell.father->Resize(cell2node.father->Size());
-        for (index i = 0; i < cell2node.father->Size(); i++)
-        {
-            auto row = dslC2C.father->operator[](i);
-            cell2cell.father->ResizeRow(i, row.size());
-            for (rowsize j = 0; j < static_cast<rowsize>(row.size()); j++)
-                cell2cell.father->operator()(i, j) = row[j];
-        }
 
         // bnd2cell via ComposeFiltered with per-bnd node-count predicate.
         // For periodic meshes, additionally uses pbi containment matchExtra.
@@ -547,7 +516,7 @@ namespace DNDS::Geom
         auto bndAllNodesPred = [this](index aBndGlobal, index cCellGlobal, int nShared) -> bool
         {
             // Map aBndGlobal to local bnd index to get row size
-            index aBndLocal = this->BndIndexGlobal2Local_NoSon(aBndGlobal);
+            index aBndLocal = this->BndIndexGlobal2Local(aBndGlobal);
             DNDS_assert(aBndLocal >= 0);
             return nShared >= bnd2node.father->RowSize(aBndLocal);
         };
@@ -588,21 +557,12 @@ namespace DNDS::Geom
         }
 
         // bnd2cell via ComposeFiltered (inputs must be in global state)
-        auto dslB2C = CheckedComposeFiltered<NonUniformSize, NonUniformSize, 2>(
+        // Result is AdjPairTracked<tAdj2Pair> with father adopted, state = Global.
+        bnd2cell = CheckedComposeFiltered<NonUniformSize, NonUniformSize, 2>(
             bnd2node, node2cell,
-            bnd2node.father->Size(),
             nodeG2L,
-            [this](index i)
-            { return this->BndIndexLocal2Global_NoSon(i); },
             bndAllNodesPred,
             bndMatchExtra);
-
-        // Adopt directly — ComposeFiltered<..., 2> already produced tAdj2Pair.
-        // Non-periodic bnds: slot 0 = cell, slot 1 = UnInitIndex (from ComposeFiltered padding).
-        // Periodic bnds: slot 0 = donor cell, slot 1 = partner cell (if found) or UnInitIndex.
-        // The pbi filter in bndMatchExtra typically rejects the periodic partner, so
-        // periodic bnds usually have slot 1 = UnInitIndex (1 match only).
-        bnd2cell.father = dslB2C.father;
 
         // Periodic fixup: when a periodic bnd has only 1 matching cell (slot 1 == UnInitIndex),
         // fill slot 1 with slot 0 (self-reference) to match legacy behavior.
@@ -698,8 +658,7 @@ namespace DNDS::Geom
                 }
         }
 
-        cell2cell.idx.markGlobal();
-        bnd2cell.idx.markGlobal();
+        // markGlobal already done by CheckedComposeFiltered
     }
 
     void UnstructuredMesh::
@@ -740,15 +699,7 @@ namespace DNDS::Geom
         // Unified ghost evaluation: single DAG, all inputs father-only.
         // The evaluator handles scratch pulls internally.
         MeshConnectivity dag;
-        dag.meshDim = dim;
-        // Register father-only (no son, no ghost mapping).
-        dag.registerAdj(Adj::Cell2Cell, cell2cell);
-        dag.registerAdj(Adj::Cell2Node, cell2node);
-        dag.registerAdj(Adj::Bnd2Node, bnd2node);
-        dag.registerAdj(Adj::Node2Bnd, node2bnd);
-        dag.registerGlobalMapping(EntityKind::Cell, cell2cell.trans.pLGlobalMapping);
-        dag.registerGlobalMapping(EntityKind::Node, coords.trans.pLGlobalMapping);
-        dag.registerGlobalMapping(EntityKind::Bnd, bnd2cell.trans.pLGlobalMapping);
+        fillRegistry(dag);
 
         auto spec = GhostSpec::defaultPrimary(nGhostLayers);
         auto tree = CompiledGhostTree::compile(spec);
@@ -1313,17 +1264,12 @@ namespace DNDS::Geom
         BuildGhostFace()
     {
         // Determine ghost faces via evaluateGhostTree(Cell → Cell2Face → Face).
-        // The tree traverses owned cells only (single hop), so cell2faceAdj
-        // only needs father with cell global mapping.
+        // cell2face is cell-indexed but has no own pLGlobalMapping — borrow from cell2node.
+        if (!cell2face.father->pLGlobalMapping)
+            cell2face.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
         {
             MeshConnectivity dag;
-            dag.meshDim = dim;
-            tAdjPair cell2faceAdj;
-            cell2faceAdj.father = cell2face.father;
-            cell2faceAdj.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
-            dag.registerAdj(Adj::Cell2Face, cell2faceAdj);
-            dag.registerGlobalMapping(EntityKind::Cell, cell2node.father->pLGlobalMapping);
-            dag.registerGlobalMapping(EntityKind::Face, face2node.trans.pLGlobalMapping);
+            fillRegistry(dag);
 
             GhostSpec ghostSpec;
             ghostSpec.chains.push_back(GhostChain{
@@ -1788,6 +1734,99 @@ namespace DNDS::Geom
                 cell2cellFaceVLocalParts,
                 this->localPartitionStarts,
                 control.getILUCode());
+    }
+
+    void UnstructuredMesh::fillRegistry(
+        MeshConnectivity &dag) const
+    {
+        fillRegistry(dag, {});
+    }
+
+    void UnstructuredMesh::fillRegistry(
+        MeshConnectivity &dag,
+        const std::unordered_set<AdjKind, AdjKindHash> &skip) const
+    {
+        dag.meshDim = dim;
+
+        // --- Register adjacency arrays (father-only shallow copy) ---
+        auto tryAdj = [&](AdjKind kind, const auto &pair)
+        {
+            if (pair.father && skip.find(kind) == skip.end())
+                dag.registerAdj(kind, pair);
+        };
+
+        // Primary
+        tryAdj(Adj::Cell2Node, cell2node);
+        tryAdj(Adj::Cell2Cell, cell2cell);
+        tryAdj(Adj::Bnd2Node, bnd2node);
+        tryAdj(Adj::Bnd2Cell, bnd2cell);
+        // N2CB
+        tryAdj(Adj::Node2Cell, node2cell);
+        tryAdj(Adj::Node2Bnd, node2bnd);
+        // Facial
+        tryAdj(Adj::Cell2Face, cell2face);
+        tryAdj(Adj::Face2Node, face2node);
+        tryAdj(Adj::Face2Cell, face2cell);
+        tryAdj(Adj::Face2Bnd, face2bnd);
+        tryAdj(Adj::Bnd2Face, bnd2face);
+        // C2CFace
+        tryAdj(Adj::Cell2CellFace, cell2cellFace);
+
+        // --- Register global mappings ---
+        // For each entity kind, find the first adj array whose father
+        // carries a valid pLGlobalMapping.  All adj arrays for the same
+        // entity kind share equivalent offsets (same father Size), so
+        // any one suffices.  check_throw if a mapping is needed (i.e.,
+        // at least one adj was registered whose .from is this kind) but
+        // none is found.
+
+        // Candidate sources per entity kind (ordered by typical availability).
+        // All adj arrays for the same entity kind have equivalent offsets
+        // (same father Size), so any one suffices.
+        auto firstValid = [](std::initializer_list<ssp<GlobalOffsetsMapping>> candidates)
+            -> ssp<GlobalOffsetsMapping>
+        {
+            for (auto &gm : candidates)
+                if (gm)
+                    return gm;
+            return nullptr;
+        };
+
+        auto getGM = [](const auto &pair) -> ssp<GlobalOffsetsMapping>
+        {
+            if (pair.father && pair.father->pLGlobalMapping)
+                return pair.father->pLGlobalMapping;
+            return nullptr;
+        };
+
+        auto cellMap = firstValid({getGM(cell2node), getGM(cell2cell), getGM(cell2face)});
+        auto nodeMap = coords.father ? coords.father->pLGlobalMapping : nullptr;
+        auto bndMap = firstValid({getGM(bnd2node), getGM(bnd2cell), getGM(bnd2face)});
+        auto faceMap = firstValid({getGM(face2node), getGM(face2cell), getGM(face2bnd)});
+
+        // Register if found; check_throw if any registered adj needs it
+        auto regMap = [&](EntityKind kind, const ssp<GlobalOffsetsMapping> &gm)
+        {
+            if (gm)
+            {
+                dag.registerGlobalMapping(kind, gm);
+            }
+            else
+            {
+                // Verify no registered adj has this kind as its from-entity
+                for (auto &[adjKind, _] : dag.adjRegistry)
+                    DNDS_check_throw_info(
+                        adjKind.from != kind,
+                        fmt::format("fillRegistry: no pLGlobalMapping found for EntityKind {} "
+                                    "but adj {} requires it",
+                                    static_cast<int>(kind), adjKindName(adjKind)));
+            }
+        };
+
+        regMap(EntityKind::Cell, cellMap);
+        regMap(EntityKind::Node, nodeMap);
+        regMap(EntityKind::Bnd, bndMap);
+        regMap(EntityKind::Face, faceMap);
     }
 
     // =================================================================

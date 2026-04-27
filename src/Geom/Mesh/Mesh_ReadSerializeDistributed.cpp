@@ -196,9 +196,7 @@ namespace DNDS::Geom
             cell2cell.trans.createFatherGlobalMapping();
 
             MeshConnectivity dagTmp;
-            dagTmp.meshDim = dim;
-            dagTmp.registerAdj(Adj::Cell2Cell, cell2cell);
-            dagTmp.registerGlobalMapping(EntityKind::Cell, cell2cell.trans.pLGlobalMapping);
+            fillRegistry(dagTmp);
 
             GhostSpec cellSpec{{{EntityKind::Cell, {Adj::Cell2Cell}, EntityKind::Cell}}};
             auto cellResult = dagTmp.evaluateGhostTree(
