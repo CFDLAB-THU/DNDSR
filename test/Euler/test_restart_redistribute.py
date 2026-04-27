@@ -41,8 +41,6 @@ BUILD_DIR = os.path.join(PROJECT_ROOT, "build")
 EULER_EXE = os.path.join(BUILD_DIR, "app", "euler.exe")
 BASE_CONFIG = os.path.join(PROJECT_ROOT, "cases",
                            "euler", "euler_config_IV.json")
-DEFAULT_CONFIG = os.path.join(
-    PROJECT_ROOT, "cases", "euler", "euler_default_config.json")
 MESH_SMALL = os.path.join(PROJECT_ROOT, "data", "mesh",
                           "IV10_10.cgns")   # 10x10 = 100 cells
 MESH_LARGE = os.path.join(PROJECT_ROOT, "data", "mesh",
@@ -290,8 +288,6 @@ def _compare_restart_h5(restart_a, restart_b, tol=1e-10):
 def _run_step1(work_dir, np_write, mesh_file=MESH_SMALL):
     """Run step 1: initial 20-step run producing a restart."""
     step1_config, _ = _make_step1_config(work_dir, mesh_file=mesh_file)
-    shutil.copy(DEFAULT_CONFIG, os.path.join(
-        work_dir, "euler_default_config.json"))
     result, stdout = _run_solver(np_write, step1_config, work_dir)
     assert result.returncode == 0, f"Step 1 solver failed:\n{stdout[-2000:]}"
     restart_h5 = _find_restart_h5(os.path.join(work_dir, "step1"), "step1")
