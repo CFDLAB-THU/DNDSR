@@ -423,7 +423,7 @@ namespace DNDS
         }
 
     protected:
-        DNDS_DEVICE_CALLABLE const T &at_compressed(index iRow, rowsize iCol) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] const T &at_compressed(index iRow, rowsize iCol) const
         {
             DNDS_HD_assert(isCompressed());
             DNDS_HD_assert_infof(iRow < _size && iRow >= 0,
@@ -458,7 +458,7 @@ namespace DNDS
         /// @brief Bounds-checked element read (not device-callable because CSR
         /// decompressed uses `std::vector::at` which throws on the host).
         // not device callable
-        const T &at(index iRow, rowsize iCol) const
+        [[nodiscard]] const T &at(index iRow, rowsize iCol) const
         {
             if constexpr (_dataLayout == CSR)
             {
@@ -554,7 +554,7 @@ namespace DNDS
         }
 
         /// @brief Size of the flat data buffer in `T` elements.
-        DNDS_DEVICE_CALLABLE size_t DataSize() const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] size_t DataSize() const
         {
             if (this->Size() == 0)
                 return 0;
@@ -659,7 +659,7 @@ namespace DNDS
             // DNDS_HD_assert(iRow >= -1 && iRow <= getView().Size()); //! view in derived class is uninitialized here!
         }
 
-        DNDS_DEVICE_CALLABLE index RowSize() const { return getView().RowSize(iRow); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index RowSize() const { return getView().RowSize(iRow); }
 
         DNDS_DEVICE_CALLABLE Derived &operator++()
         {

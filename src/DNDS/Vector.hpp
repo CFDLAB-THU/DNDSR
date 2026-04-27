@@ -34,7 +34,7 @@ namespace DNDS
         /// @brief Typed byte pointer to the current allocation.
         virtual uint8_t *get() = 0;
         /// @brief Allocation size in bytes.
-        virtual size_t bytes() const = 0;
+        [[nodiscard]] virtual size_t bytes() const = 0;
         /// @brief Which backend currently owns the allocation.
         virtual DeviceBackend device() = 0;
         /// @brief Copy `n` bytes from `host_src` into this allocation.
@@ -81,7 +81,7 @@ namespace DNDS
             device_storage = nullptr;
             host_data.clear();
         }
-        size_t bytes() const override { return bytes_; }
+        [[nodiscard]] size_t bytes() const override { return bytes_; }
         uint8_t *get() override
         {
             if (B_ == DeviceBackend::Unknown)
@@ -185,7 +185,7 @@ namespace DNDS
 
         const T &operator[](size_t i) const { return static_cast<const Derived *>(this)->data()[i]; }
 
-        const T &at(size_t i) const
+        [[nodiscard]] const T &at(size_t i) const
         {
             auto *dThis = static_cast<const Derived *>(this);
             DNDS_check_throw_info(dThis->size() > i, std::to_string(i) + " --- " + std::to_string(dThis->size()));
@@ -263,7 +263,7 @@ namespace DNDS
             this->operator=(v);
         }
 
-        DNDS_HOST size_t size() const { return size_; }
+        DNDS_HOST [[nodiscard]] size_t size() const { return size_; }
 
         DNDS_HOST void resize(size_t new_size)
         {
@@ -288,18 +288,18 @@ namespace DNDS
         }
 
         DNDS_HOST T *data() { return host_ptr; }
-        DNDS_HOST const T *data() const { return host_ptr; }
+        DNDS_HOST [[nodiscard]] const T *data() const { return host_ptr; }
 
         DNDS_HOST T *dataDevice() { return device_ptr; }
-        DNDS_HOST const T *dataDevice() const { return device_ptr; }
+        DNDS_HOST [[nodiscard]] const T *dataDevice() const { return device_ptr; }
 
         DNDS_HOST auto begin() { return host_ptr; }
         DNDS_HOST auto end() { return host_ptr + size_; }
-        DNDS_HOST auto begin() const { return host_ptr; }
-        DNDS_HOST auto end() const { return host_ptr + size_; }
+        DNDS_HOST [[nodiscard]] auto begin() const { return host_ptr; }
+        DNDS_HOST [[nodiscard]] auto end() const { return host_ptr + size_; }
 
-        DNDS_HOST auto cbegin() const { return host_ptr; }
-        DNDS_HOST auto cend() const { return host_ptr + size_; }
+        DNDS_HOST [[nodiscard]] auto cbegin() const { return host_ptr; }
+        DNDS_HOST [[nodiscard]] auto cend() const { return host_ptr + size_; }
 
         DNDS_HOST explicit operator std::vector<T>() const
         {

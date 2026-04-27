@@ -171,7 +171,55 @@ Commit: see `git log -- docs/dev/clang_tidy_plan.md`.
 
 ### Pass 2 — modernize-use-nodiscard
 
-*TODO*
+**Outcome.** 1 572 hits → 0. Total diagnostics 24 067 → 22 495.
+
+**Method.** Single-check override config at `/tmp/pass2.clang-tidy`:
+
+```yaml
+Checks: "-*,modernize-use-nodiscard"
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*/DNDSR/(src|app|test/cpp)/.*'
+ExtraArgs: [-UDNDS_USE_OMP, -Wno-unknown-warning-option, -Wno-unused-command-line-argument]
+FormatStyle: file
+```
+
+Driven by `scripts/run_clang_tidy.py --fix --config-file /tmp/pass2.clang-tidy DNDS`.
+
+**Incident & fix.** The first `--fix` attempt ran with 64 parallel
+workers and produced syntax-error corruption in `Vector.hpp`,
+`Array.hpp`, `ArrayPair.hpp`, and several other headers because the
+parallel workers race when the same header is edited from multiple
+TUs (observed: interleaved `[[nodiscard]]` insertions in mid-token
+positions).
+
+Reverted via `git checkout HEAD -- src/DNDS/` and patched the driver
+to force `jobs=1` whenever `--fix` is set (with
+`--unsafe-parallel-fix` escape hatch). Serialized run completed
+cleanly. Committed as a separate `fix(tooling)` commit so the pass's
+diff stays pure.
+
+**Diff footprint.** 11 files, 32 line-replacements (one `[[nodiscard]]`
+prefix each). 1 572 repeated hits collapsed to 32 unique decls
+because each header declaration is reported once per including TU.
+
+**Sample review.** 4 spot-checks:
+
+- `Array.hpp:570` `at() const` — const getter, value return.
+- `ArrayBasic.hpp:423` `at_compressed(...) const` with
+  `DNDS_DEVICE_CALLABLE` prefix — attribute order is valid.
+- `EigenUtil.hpp:278..294` `rows()/cols()/size() const` — Eigen
+  dimension wrappers, pure reads.
+- `SerializerH5.cpp:180` `get_indent() const` — local helper,
+  string-builder, no side effects.
+
+All good; no call sites in DNDS were found that call these functions
+for side effects.
+
+**Verification.** `cmake --build build -t dnds --clean-first -j32`
+succeeds; `euler` target builds. Pre-commit clang-format ran on 11
+modified files, no drift.
+
+Commits: `7502b8d` (driver serialize-on-fix) + pass 2 commit.
 
 ### Pass 3 — cppcoreguidelines-init-variables
 

@@ -570,7 +570,7 @@ namespace DNDS
         /// row size into account, not just the stride). Works for every layout.
         /// @param iRow Row index in `[0, Size())`.
         /// @param iCol Column index in `[0, RowSize(iRow))`.
-        const T &at(index iRow, rowsize iCol) const
+        [[nodiscard]] const T &at(index iRow, rowsize iCol) const
         {
             DNDS_assert_info(iRow < _size && iRow >= 0,
                              fmt::format(
@@ -685,7 +685,7 @@ namespace DNDS
 
         /// @brief Total number of `T` elements currently stored in the flat buffer.
         /// @details For CSR, requires the array to be compressed.
-        size_t DataSize() const
+        [[nodiscard]] size_t DataSize() const
         {
             if (this->Size() == 0)
                 return 0;
@@ -695,7 +695,7 @@ namespace DNDS
         }
 
         /// @brief Flat buffer size in bytes (= `DataSize() * sizeof(T)`).
-        size_t DataSizeBytes() const
+        [[nodiscard]] size_t DataSizeBytes() const
         {
             return this->DataSize() * sizeof_T;
         }
@@ -732,7 +732,7 @@ namespace DNDS
         /// @details Sums the flat data buffer, `_pRowStart` (if any), and
         /// `_pRowSizes` (if any). Approximate because shared-ownership of row
         /// structures is not deduplicated.
-        size_t FullSizeBytes() const
+        [[nodiscard]] size_t FullSizeBytes() const
         {
             size_t b = this->DataSize() * sizeof_T;
             if (_pRowStart)
