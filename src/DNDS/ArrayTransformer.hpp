@@ -309,8 +309,8 @@ namespace DNDS
         void AssertDataType()
         {
             DNDS_check_throw(dataType != MPI_DATATYPE_NULL);
-            MPI_Aint lb;
-            MPI_Aint extent;
+            MPI_Aint lb = 0;
+            MPI_Aint extent = 0;
             MPI_Type_get_extent(dataType, &lb, &extent);
             DNDS_check_throw(lb == 0 && extent * typeMult == sizeof(T));
         }
@@ -835,7 +835,7 @@ namespace DNDS
                         // }
                         // std::cout << "=== PUSH TYPE : " << mpi.rank << " from " << r << std::endl;
 
-                        MPI_Datatype dtype;
+                        MPI_Datatype dtype = MPI_DATATYPE_NULL;
                         int sizeof_T = MPI_UNDEFINED;
                         MPI_Type_size(father->getDataType(), &sizeof_T);
                         DNDS_check_throw(sizeof_T != MPI_UNDEFINED);
@@ -864,7 +864,7 @@ namespace DNDS
                     if (pullSizes[0] > 0)
                     {
                         // std::cout << "=== PULL TYPE : " << mpi.rank << " from " << r << std::endl;
-                        MPI_Datatype dtype;
+                        MPI_Datatype dtype = MPI_DATATYPE_NULL;
 
                         MPI_Type_create_hindexed(1, pullSizes.data(), pullDisp.data(), father->getDataType(), &dtype);
 
@@ -1122,8 +1122,8 @@ namespace DNDS
             for (MPI_int r = 0; r < mpi.size; r++)
             {
                 // pull
-                MPI_Aint pullDisp;
-                MPI_int pullSize; // same as pushSizes
+                MPI_Aint pullDisp = 0;
+                MPI_int pullSize = 0; // same as pushSizes
                 auto gRPtr = son->operator[](index(pLGhostMapping->ghostStart[r + 1]));
                 auto gLPtr = son->operator[](index(pLGhostMapping->ghostStart[r]));
                 auto ghostSpan = gRPtr - gLPtr;
@@ -1179,8 +1179,8 @@ namespace DNDS
             for (MPI_int r = 0; r < mpi.size; r++)
             {
                 // pull
-                MPI_Aint pullDisp;
-                MPI_int pullSize; // same as pushSizes
+                MPI_Aint pullDisp = 0;
+                MPI_int pullSize = 0; // same as pushSizes
                 auto gRPtr = son->operator[](index(pLGhostMapping->ghostStart[r + 1]));
                 auto gLPtr = son->operator[](index(pLGhostMapping->ghostStart[r]));
                 auto ghostSpan = gRPtr - gLPtr;

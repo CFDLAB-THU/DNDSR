@@ -237,7 +237,7 @@ namespace DNDS
         MPIInfo(MPI_Comm ncomm)
         {
             comm = ncomm;
-            int ierr;
+            int ierr = 0;
             ierr = MPI_Comm_rank(comm, &rank), DNDS_assert(ierr == MPI_SUCCESS);
             ierr = MPI_Comm_size(comm, &size), DNDS_assert(ierr == MPI_SUCCESS);
         }
@@ -253,7 +253,7 @@ namespace DNDS
         void setWorld()
         {
             comm = MPI_COMM_WORLD;
-            int ierr;
+            int ierr = 0;
             ierr = MPI_Comm_rank(comm, &rank), DNDS_assert(ierr == MPI_SUCCESS);
             ierr = MPI_Comm_size(comm, &size), DNDS_assert(ierr == MPI_SUCCESS);
         }
@@ -484,8 +484,8 @@ namespace DNDS // TODO: get a concurrency header
         /// @brief Return the MPI thread-support level the current process was initialised with.
         inline int GetMPIThreadLevel()
         {
-            int ret;
-            int ierr;
+            int ret = 0;
+            int ierr = 0;
             ierr = MPI_Query_thread(&ret), DNDS_assert(ierr == MPI_SUCCESS);
             return ret;
         }
@@ -582,8 +582,8 @@ namespace DNDS
     private:
         MPIBufferHandler()
         {
-            uint8_t *obuf;
-            int osize;
+            uint8_t *obuf = nullptr;
+            int osize = 0;
             MPI_Buffer_detach(reinterpret_cast<void *>(&obuf) /* caution */, &osize);
 
             buf.resize(1024ULL * 1024ULL);
@@ -608,8 +608,8 @@ namespace DNDS
             if (buf.size() - claimed < static_cast<size_type>(cs))
             {
                 // std::cout << "claim in " << std::endl;
-                uint8_t *obuf;
-                int osize;
+                uint8_t *obuf = nullptr;
+                int osize = 0;
                 MPI_Buffer_detach(reinterpret_cast<void *>(&obuf) /* caution */, &osize);
 #ifdef MPIBufferHandler_REPORT_CHANGE
                 std::cout << "MPIBufferHandler: New BUf at " << reportRank << std::endl

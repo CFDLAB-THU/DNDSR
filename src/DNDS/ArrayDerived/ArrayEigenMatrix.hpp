@@ -181,7 +181,7 @@ namespace DNDS
         t_EigenMap
         operator[](index i)
         {
-            rowsize c_nRow;
+            rowsize c_nRow = 0;
             if constexpr (_mat_ni == NonUniformSize)
                 c_nRow = (*_mat_nRows)[i];
             else if constexpr (_mat_ni == DynamicSize)
@@ -196,7 +196,7 @@ namespace DNDS
         t_EigenMap_const
         operator[](index i) const
         {
-            rowsize c_nRow;
+            rowsize c_nRow = 0;
             if constexpr (_mat_ni == NonUniformSize)
                 c_nRow = (*_mat_nRows)[i];
             else if constexpr (_mat_ni == DynamicSize)

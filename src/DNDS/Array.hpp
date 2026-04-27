@@ -747,7 +747,7 @@ namespace DNDS
         /// equality diagnostics; not guaranteed cryptographically strong.
         std::size_t hash()
         {
-            std::size_t hashData;
+            std::size_t hashData = 0;
             if constexpr (_dataLayout == CSR)
             {
                 if (IfCompressed())

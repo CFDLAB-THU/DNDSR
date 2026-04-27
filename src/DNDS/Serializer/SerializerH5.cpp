@@ -188,7 +188,7 @@ namespace DNDS::Serializer
 
     static herr_t link_iterate_cb(hid_t group_id, const char *name, const H5L_info_t *info, void *op_data)
     {
-        herr_t herr;
+        herr_t herr = 0;
         auto *data = static_cast<TraverseData *>(op_data);
         bool coll_on_meta = data->coll_on_meta;
         std::string full_name = data->current_path + "/" + name;
@@ -859,7 +859,7 @@ namespace DNDS::Serializer
     void SerializerH5::ReadSharedIndexVector(const std::string &name, ssp<host_device_vector<index>> &v, ArrayGlobalOffset &offset)
     {
         using tValue = host_device_vector<index>;
-        herr_t herr;
+        herr_t herr = 0;
         std::string refPath;
         hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
         htri_t exists_ref = H5Aexists(group_id, (name + "::ref").c_str());
@@ -882,7 +882,7 @@ namespace DNDS::Serializer
             v = std::make_shared<tValue>();
             pth_2_ssp[refPath] = &v;
 
-            size_t size;
+            size_t size = 0;
             index dummy{};
             ReadDataVector<index>(refPath, nullptr, size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
             v->resize(size);
@@ -893,7 +893,7 @@ namespace DNDS::Serializer
     void SerializerH5::ReadSharedRowsizeVector(const std::string &name, ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset &offset)
     {
         using tValue = host_device_vector<rowsize>;
-        herr_t herr;
+        herr_t herr = 0;
         std::string refPath;
         hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
         htri_t exists_ref = H5Aexists(group_id, (name + "::ref").c_str());
@@ -916,7 +916,7 @@ namespace DNDS::Serializer
             v = std::make_shared<tValue>();
             pth_2_ssp[refPath] = &v;
 
-            size_t size;
+            size_t size = 0;
             rowsize dummy{};
             ReadDataVector<rowsize>(refPath, nullptr, size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
             v->resize(size);
