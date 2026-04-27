@@ -74,38 +74,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build ccache \
-            libopenmpi-dev openmpi-bin \
-            libhdf5-dev
+            libopenmpi-dev openmpi-bin
 
       # ------------------------------------------------------------------
-      # 3. Python environment
+      # 3. Python interpreter
       # ------------------------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
-      - name: Cache pip packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-ci-${{ hashFiles('requirements.txt') }}
-          restore-keys: pip-ci-
-
-      - name: Cache Python venv
-        id: cache-venv
-        uses: actions/cache@v4
-        with:
-          path: venv
-          key: venv-ci-${{ hashFiles('requirements.txt') }}
-
-      - name: Create venv and install dependencies
-        if: steps.cache-venv.outputs.cache-hit != 'true'
-        run: |
-          python -m venv venv
-          source venv/bin/activate
-          pip install -r requirements.txt
-          pip install scikit-build-core pybind11
 
       # ------------------------------------------------------------------
       # 4. Header-only externals (Eigen, Boost, CGAL, fmt, pybind11, ...)
@@ -152,7 +129,27 @@ jobs:
         run: CC=mpicc CXX=mpicxx python cfd_externals_build.py
 
       # ------------------------------------------------------------------
-      # 6. ccache
+      # 6. Python venv (cached; keyed on requirements.txt, the install
+      #    script, AND cfd_externals so h5py/mpi4py are rebuilt when any
+      #    of these change)
+      # ------------------------------------------------------------------
+      - name: Cache Python venv
+        id: cache-venv
+        uses: actions/cache@v4
+        with:
+          path: venv
+          key: venv-ci-${{ runner.os }}-${{ hashFiles('requirements.txt', 'scripts/install_python_deps.sh', 'external/cfd_externals/cfd_externals_build.py', '.gitmodules') }}
+
+      - name: Install Python dependencies
+        if: steps.cache-venv.outputs.cache-hit != 'true'
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          PIP=$PWD/venv/bin/pip ./scripts/install_python_deps.sh
+
+      # ------------------------------------------------------------------
+      # 7. ccache
       # ------------------------------------------------------------------
       - name: Restore ccache
         id: restore-ccache
@@ -167,7 +164,7 @@ jobs:
         run: ccache --max-size=5G
 
       # ------------------------------------------------------------------
-      # 7. CMake configure
+      # 8. CMake configure
       # ------------------------------------------------------------------
       - name: CMake configure
         run: |
@@ -178,13 +175,13 @@ jobs:
           DNDS_TEST_MPIEXTRA: "--oversubscribe"
 
       # ------------------------------------------------------------------
-      # 8. Build C++ tests
+      # 9. Build C++ tests
       # ------------------------------------------------------------------
       - name: Build C++ unit tests
         run: cmake --build build -t all_unit_tests -j4
 
       # ------------------------------------------------------------------
-      # 9. Build pybind11 targets
+      # 10. Build pybind11 targets
       # ------------------------------------------------------------------
       - name: Build pybind11 modules
         run: |
@@ -198,13 +195,13 @@ jobs:
         run: cmake --install build --component py
 
       # ------------------------------------------------------------------
-      # 9. Run C++ tests
+      # 11. Run C++ tests
       # ------------------------------------------------------------------
       - name: Run C++ tests
         run: ctest --test-dir build --output-on-failure --timeout 300
 
       # ------------------------------------------------------------------
-      # 10. Run Python tests
+      # 12. Run Python tests
       # ------------------------------------------------------------------
       - name: Run Python tests
         run: |
