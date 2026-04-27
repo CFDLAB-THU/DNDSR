@@ -613,7 +613,7 @@ namespace DNDS
         return false;
     }
 
-        ///@todo //TODO: overflow_assign_int64_to_32
+    ///@todo //TODO: overflow_assign_int64_to_32
 
     /// @brief Narrow #index to `int32_t` with range check; dies on overflow.
     inline int32_t checkedIndexTo32(index v)

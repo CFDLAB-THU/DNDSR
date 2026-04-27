@@ -92,7 +92,8 @@ namespace DNDS
         DNDS_assert_info(nGlobal > 0, "Redistribution requires nGlobal > 0");
         auto directoryRank = [&](index origIdx) -> int
         {
-            if (nGlobal == 0) return 0;
+            if (nGlobal == 0)
+                return 0;
             return static_cast<int>(std::min(index(nRanks - 1), origIdx * index(nRanks) / nGlobal));
         };
 
@@ -143,8 +144,8 @@ namespace DNDS
 
         std::vector<index> recvBuf(index(recvDisps[nRanks]) * 2);
         MPI_Alltoallv(sendBuf.data(), sendCounts2.data(), sendDisps2.data(), DNDS_MPI_INDEX,
-                       recvBuf.data(), recvCounts2.data(), recvDisps2.data(), DNDS_MPI_INDEX,
-                       mpi.comm);
+                      recvBuf.data(), recvCounts2.data(), recvDisps2.data(), DNDS_MPI_INDEX,
+                      mpi.comm);
 
         // Step 4: Build directory lookup: origIdx -> globalReadIdx
         std::unordered_map<index, index> directoryMap;
@@ -190,8 +191,8 @@ namespace DNDS
         // Alltoallv queries
         std::vector<index> queryRecvBuf(queryRecvDisps[nRanks]);
         MPI_Alltoallv(querySendBuf.data(), querySendCounts.data(), querySendDisps.data(), DNDS_MPI_INDEX,
-                       queryRecvBuf.data(), queryRecvCounts.data(), queryRecvDisps.data(), DNDS_MPI_INDEX,
-                       mpi.comm);
+                      queryRecvBuf.data(), queryRecvCounts.data(), queryRecvDisps.data(), DNDS_MPI_INDEX,
+                      mpi.comm);
 
         // Step 6: Directory ranks look up and reply with globalReadIdx.
         std::vector<index> queryReplyBuf(queryRecvDisps[nRanks]);
@@ -206,8 +207,8 @@ namespace DNDS
         // Alltoallv replies back (reverse direction)
         std::vector<index> replyRecvBuf(querySendDisps[nRanks]);
         MPI_Alltoallv(queryReplyBuf.data(), queryRecvCounts.data(), queryRecvDisps.data(), DNDS_MPI_INDEX,
-                       replyRecvBuf.data(), querySendCounts.data(), querySendDisps.data(), DNDS_MPI_INDEX,
-                       mpi.comm);
+                      replyRecvBuf.data(), querySendCounts.data(), querySendDisps.data(), DNDS_MPI_INDEX,
+                      mpi.comm);
 
         // Step 7: Build pullingIndexGlobal in newOrigIndex order.
         std::vector<index> pullingIndexGlobal(newOrigIndex.size());

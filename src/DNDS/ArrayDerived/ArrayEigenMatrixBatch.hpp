@@ -51,7 +51,6 @@ namespace DNDS
             this->operator=(R);
         }
 
-
         template <class t_matrices_elem>
         void InitializeWriteRow(index i, const std::vector<t_matrices_elem> &matrices)
         {

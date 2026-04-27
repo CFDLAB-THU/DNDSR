@@ -192,8 +192,8 @@ namespace DNDS::IdealGas
      */
     DNDS_DEVICE_CALLABLE inline void
     EntropyFix_HCorrHY(real aL, real aR, real vnL, real vnR,
-                        real dLambda, real fixScale,
-                        real &lam0, real &lam123, real &lam4)
+                       real dLambda, real fixScale,
+                       real &lam0, real &lam123, real &lam4)
     {
         const real scaleHartenYee = kScaleHartenYee * fixScale;
         const real scaleHFix = kScaleHFix * fixScale;

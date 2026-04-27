@@ -381,9 +381,9 @@ namespace DNDS
          */
         [[nodiscard]] index globalSize() const
         {
-            DNDS_assert_info(pLGlobalMapping, 
-                "globalSize() requires global mapping. "
-                "Ensure createGlobalMapping() was called first (typically via ArrayPair operations).");
+            DNDS_assert_info(pLGlobalMapping,
+                             "globalSize() requires global mapping. "
+                             "Ensure createGlobalMapping() was called first (typically via ArrayPair operations).");
             return pLGlobalMapping->globalSize();
         }
     };

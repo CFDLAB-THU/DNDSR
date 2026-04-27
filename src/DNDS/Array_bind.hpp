@@ -342,10 +342,8 @@ namespace DNDS // ParArrayPair
                      return new_pair;
                  });
         Pair_
-            .def("InitPair",
-                 [](TPair &self, const std::string &name, const MPIInfo &mpi)
-                 { self.InitPair(name, mpi); },
-                 py::arg("name"), py::arg("mpi"))
+            .def("InitPair", [](TPair &self, const std::string &name, const MPIInfo &mpi)
+                 { self.InitPair(name, mpi); }, py::arg("name"), py::arg("mpi"))
             .def("TransAttach", &TPair::TransAttach)
             .def("hash", &TPair::hash)
             .def("Size", &TPair::Size);

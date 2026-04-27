@@ -76,77 +76,77 @@ namespace DNDS::Euler
         int nVars = getNVars(model); ///< Runtime number of conserved variables.
 
     public:
-        typedef EulerEvaluator<model> TEval;                    ///< Evaluator type for this model.
-        static const int nVarsFixed = TEval::nVarsFixed;        ///< Compile-time number of conserved variables.
+        typedef EulerEvaluator<model> TEval;             ///< Evaluator type for this model.
+        static const int nVarsFixed = TEval::nVarsFixed; ///< Compile-time number of conserved variables.
 
-        static const int dim = TEval::dim;                      ///< Spatial dimension (2 or 3).
+        static const int dim = TEval::dim; ///< Spatial dimension (2 or 3).
         // static const int gdim = TEval::gdim;
-        static const int gDim = TEval::gDim;                    ///< Geometric dimension of the mesh.
-        static const int I4 = TEval::I4;                        ///< Energy equation index (= dim + 1).
+        static const int gDim = TEval::gDim; ///< Geometric dimension of the mesh.
+        static const int I4 = TEval::I4;     ///< Energy equation index (= dim + 1).
 
-        typedef typename TEval::TU TU;                          ///< Conservative variable vector type.
-        typedef typename TEval::TDiffU TDiffU;                  ///< Gradient of conserved variables type.
-        typedef typename TEval::TJacobianU TJacobianU;          ///< Flux Jacobian matrix type.
-        typedef typename TEval::TVec TVec;                      ///< Spatial vector type.
-        typedef typename TEval::TMat TMat;                      ///< Spatial matrix type.
-        typedef typename TEval::TDof TDof;                      ///< Cell-centered DOF array type.
-        typedef typename TEval::TRec TRec;                      ///< Reconstruction coefficient array type.
-        typedef typename TEval::TScalar TScalar;                ///< Scalar reconstruction coefficient array type.
-        typedef typename TEval::TVFV TVFV;                      ///< Variational reconstruction type.
-        typedef typename TEval::TpVFV TpVFV;                    ///< Shared pointer to VFV type.
+        typedef typename TEval::TU TU;                 ///< Conservative variable vector type.
+        typedef typename TEval::TDiffU TDiffU;         ///< Gradient of conserved variables type.
+        typedef typename TEval::TJacobianU TJacobianU; ///< Flux Jacobian matrix type.
+        typedef typename TEval::TVec TVec;             ///< Spatial vector type.
+        typedef typename TEval::TMat TMat;             ///< Spatial matrix type.
+        typedef typename TEval::TDof TDof;             ///< Cell-centered DOF array type.
+        typedef typename TEval::TRec TRec;             ///< Reconstruction coefficient array type.
+        typedef typename TEval::TScalar TScalar;       ///< Scalar reconstruction coefficient array type.
+        typedef typename TEval::TVFV TVFV;             ///< Variational reconstruction type.
+        typedef typename TEval::TpVFV TpVFV;           ///< Shared pointer to VFV type.
 
-        using tGMRES_u = Linear::GMRES_LeftPreconditioned<TDof>;    ///< GMRES solver type for conservative DOFs.
-        using tGMRES_uRec = Linear::GMRES_LeftPreconditioned<TRec>; ///< GMRES solver type for reconstruction coefficients.
+        using tGMRES_u = Linear::GMRES_LeftPreconditioned<TDof>;                                      ///< GMRES solver type for conservative DOFs.
+        using tGMRES_uRec = Linear::GMRES_LeftPreconditioned<TRec>;                                   ///< GMRES solver type for reconstruction coefficients.
         using tPCG_uRec = Linear::PCG_PreconditionedRes<TRec, Eigen::Array<real, 1, Eigen::Dynamic>>; ///< PCG solver type for reconstruction.
 
     private:
-        MPIInfo mpi;                                        ///< MPI communicator and rank information.
-        ssp<Geom::UnstructuredMesh> mesh, meshBnd;          ///< Volume mesh and (optional) boundary surface mesh.
-        TpVFV vfv; // ! gDim -> 3 for intellisense          ///< Variational reconstruction object.
+        MPIInfo mpi;                                           ///< MPI communicator and rank information.
+        ssp<Geom::UnstructuredMesh> mesh, meshBnd;             ///< Volume mesh and (optional) boundary surface mesh.
+        TpVFV vfv;                                             // ! gDim -> 3 for intellisense          ///< Variational reconstruction object.
         ssp<Geom::UnstructuredMeshSerialRW> reader, readerBnd; ///< Mesh reader for volume and boundary meshes.
-        ssp<EulerEvaluator<model>> pEval;                   ///< Spatial evaluator instance.
+        ssp<EulerEvaluator<model>> pEval;                      ///< Spatial evaluator instance.
 
-        ArrayDOFV<nVarsFixed> u, uIncBufODE, wAveraged, uAveraged; ///< DOF arrays: solution, ODE increment buffer, time-averaged fields.
-        ObjectPool<ArrayDOFV<nVarsFixed>> uPool; ///< Object pool for temporary DOF arrays (used by ODE integrators).
+        ArrayDOFV<nVarsFixed> u, uIncBufODE, wAveraged, uAveraged;                                                    ///< DOF arrays: solution, ODE increment buffer, time-averaged fields.
+        ObjectPool<ArrayDOFV<nVarsFixed>> uPool;                                                                      ///< Object pool for temporary DOF arrays (used by ODE integrators).
         ArrayRECV<nVarsFixed> uRec, uRecLimited, uRecNew, uRecNew1, uRecOld, uRec1, uRecInc, uRecInc1, uRecB, uRecB1; ///< Reconstruction arrays (current, limited, new, old, increment, etc.).
-        JacobianDiagBlock<nVarsFixed> JD, JD1, JDTmp, JSource, JSource1, JSourceTmp; ///< Diagonal Jacobian blocks for implicit methods.
-        ssp<JacobianLocalLU<nVarsFixed>> JLocalLU; ///< Local LU factorization for direct preconditioner.
-        ArrayDOFV<1> alphaPP, alphaPP1, betaPP, betaPP1, alphaPP_tmp, dTauTmp; ///< Positivity-preserving limiter scalars and time-step buffer.
+        JacobianDiagBlock<nVarsFixed> JD, JD1, JDTmp, JSource, JSource1, JSourceTmp;                                  ///< Diagonal Jacobian blocks for implicit methods.
+        ssp<JacobianLocalLU<nVarsFixed>> JLocalLU;                                                                    ///< Local LU factorization for direct preconditioner.
+        ArrayDOFV<1> alphaPP, alphaPP1, betaPP, betaPP1, alphaPP_tmp, dTauTmp;                                        ///< Positivity-preserving limiter scalars and time-step buffer.
 
-        int nOUTS = {-1};      ///< Number of output scalars per cell in volume output.
-        int nOUTSPoint{-1};    ///< Number of output scalars per node in point output.
-        int nOUTSBnd{-1};      ///< Number of output scalars per face in boundary output.
+        int nOUTS = {-1};   ///< Number of output scalars per cell in volume output.
+        int nOUTSPoint{-1}; ///< Number of output scalars per node in point output.
+        int nOUTSBnd{-1};   ///< Number of output scalars per face in boundary output.
         // rho u v w p T M ifUseLimiter RHS
-        ssp<ArrayEigenVector<Eigen::Dynamic>> outDist;   ///< Distributed cell output array.
-        ssp<ArrayEigenVector<Eigen::Dynamic>> outSerial;  ///< Serial (gathered) cell output array.
+        ssp<ArrayEigenVector<Eigen::Dynamic>> outDist;                                    ///< Distributed cell output array.
+        ssp<ArrayEigenVector<Eigen::Dynamic>> outSerial;                                  ///< Serial (gathered) cell output array.
         ArrayTransformerType<ArrayEigenVector<Eigen::Dynamic>>::Type outDist2SerialTrans; ///< Transformer for distributed-to-serial cell output.
 
-        ssp<ArrayEigenVector<Eigen::Dynamic>> outDistPoint;   ///< Distributed node output array.
-        ssp<ArrayEigenVector<Eigen::Dynamic>> outGhostPoint;  ///< Ghost-node output array.
-        ssp<ArrayEigenVector<Eigen::Dynamic>> outSerialPoint;  ///< Serial (gathered) node output array.
+        ssp<ArrayEigenVector<Eigen::Dynamic>> outDistPoint;                                    ///< Distributed node output array.
+        ssp<ArrayEigenVector<Eigen::Dynamic>> outGhostPoint;                                   ///< Ghost-node output array.
+        ssp<ArrayEigenVector<Eigen::Dynamic>> outSerialPoint;                                  ///< Serial (gathered) node output array.
         ArrayTransformerType<ArrayEigenVector<Eigen::Dynamic>>::Type outDist2SerialTransPoint; ///< Transformer for distributed-to-serial node output.
-        ArrayPair<ArrayEigenVector<Eigen::Dynamic>> outDistPointPair; ///< Array pair for async node output.
-        static const int maxOutFutures{3};              ///< Maximum number of concurrent async output futures.
-        std::mutex outArraysMutex;                       ///< Mutex protecting output arrays during async writes.
-        std::array<std::future<void>, maxOutFutures> outFuture; ///< Futures for async volume output. Mind the order, relies on the arrays and the mutex.
+        ArrayPair<ArrayEigenVector<Eigen::Dynamic>> outDistPointPair;                          ///< Array pair for async node output.
+        static const int maxOutFutures{3};                                                     ///< Maximum number of concurrent async output futures.
+        std::mutex outArraysMutex;                                                             ///< Mutex protecting output arrays during async writes.
+        std::array<std::future<void>, maxOutFutures> outFuture;                                ///< Futures for async volume output. Mind the order, relies on the arrays and the mutex.
 
-        ssp<ArrayEigenVector<Eigen::Dynamic>> outDistBnd;   ///< Distributed boundary output array.
+        ssp<ArrayEigenVector<Eigen::Dynamic>> outDistBnd; ///< Distributed boundary output array.
         // ssp<ArrayEigenVector<Eigen::Dynamic>> outGhostBnd;
-        ssp<ArrayEigenVector<Eigen::Dynamic>> outSerialBnd;  ///< Serial (gathered) boundary output array.
+        ssp<ArrayEigenVector<Eigen::Dynamic>> outSerialBnd;                                  ///< Serial (gathered) boundary output array.
         ArrayTransformerType<ArrayEigenVector<Eigen::Dynamic>>::Type outDist2SerialTransBnd; ///< Transformer for distributed-to-serial boundary output.
         // ArrayPair<ArrayEigenVector<Eigen::Dynamic>> outDistBndPair;
-        std::mutex outBndArraysMutex;   ///< Mutex protecting boundary output arrays during async writes.
+        std::mutex outBndArraysMutex;                              ///< Mutex protecting boundary output arrays during async writes.
         std::array<std::future<void>, maxOutFutures> outBndFuture; ///< Futures for async boundary output. Mind the order, relies on the arrays and the mutex.
-        std::future<void> outSeqFuture; ///< Future for sequential (non-parallel) output operations.
+        std::future<void> outSeqFuture;                            ///< Future for sequential (non-parallel) output operations.
 
         // std::vector<uint32_t> ifUseLimiter;
-        CFV::tScalarPair ifUseLimiter;  ///< Per-cell flag indicating whether the limiter was active.
+        CFV::tScalarPair ifUseLimiter; ///< Per-cell flag indicating whether the limiter was active.
 
         ssp<BoundaryHandler<model>> pBCHandler; ///< Boundary condition handler (shared with evaluator).
 
     public:
-        nlohmann::ordered_json gSetting;  ///< Full JSON configuration (read from file, may be modified at runtime).
-        std::string output_stamp = "";    ///< Unique stamp appended to output filenames for this run.
+        nlohmann::ordered_json gSetting; ///< Full JSON configuration (read from file, may be modified at runtime).
+        std::string output_stamp = "";   ///< Unique stamp appended to output filenames for this run.
 
         /**
          * @brief Complete solver configuration, serializable to/from JSON.
@@ -194,6 +194,7 @@ namespace DNDS::Euler
                 real dtPPLimitScale = 1;
                 DNDS_DECLARE_CONFIG(TimeMarchControl)
                 {
+                    // clang-format off
                     DNDS_FIELD(dtImplicit,          "Max implicit time step; 1e100 for steady",
                                DNDS::Config::range(0.0));
                     DNDS_FIELD(dtImplicitMin,       "Minimum implicit time step",
@@ -227,6 +228,7 @@ namespace DNDS::Euler
                                DNDS::Config::range(0.0, 1.0));
                     DNDS_FIELD(dtPPLimitScale,      "PP dt limiter scale",
                                DNDS::Config::range(0.0));
+                    // clang-format on
                 }
                 bool timeMarchIsTwoStage()
                 {
@@ -263,6 +265,7 @@ namespace DNDS::Euler
                 int zeroRecForStepsInternal = 0;
                 DNDS_DECLARE_CONFIG(ImplicitReconstructionControl)
                 {
+                    // clang-format off
                     DNDS_FIELD(useExplicit,                "Use explicit reconstruction (no implicit)");
                     DNDS_FIELD(nInternalRecStep,           "Number of internal reconstruction sub-steps",
                                DNDS::Config::range(1));
@@ -291,6 +294,7 @@ namespace DNDS::Euler
                                DNDS::Config::range(0));
                     DNDS_FIELD(zeroRecForStepsInternal,    "Zero reconstruction for N internal steps",
                                DNDS::Config::range(0));
+                    // clang-format on
                 }
             } implicitReconstructionControl;
 
@@ -345,6 +349,7 @@ namespace DNDS::Euler
 
                 DNDS_DECLARE_CONFIG(OutputControl)
                 {
+                    // clang-format off
                     DNDS_FIELD(nConsoleCheck,                    "Console output interval (outer steps)",
                                DNDS::Config::range(1));
                     DNDS_FIELD(nConsoleCheckInternal,            "Console output interval (internal steps)",
@@ -376,6 +381,7 @@ namespace DNDS::Euler
                     DNDS_FIELD(tDataOut,                        "Output data at simulation time interval");
                     DNDS_FIELD(lazyCoverDataOutput,             "Overwrite previous data output files");
                     DNDS_FIELD(useCollectiveTimer,              "Use collective MPI timer for profiling");
+                    // clang-format on
                 }
             } outputControl;
 
@@ -397,6 +403,7 @@ namespace DNDS::Euler
                 real RANSRelax = 1;
                 DNDS_DECLARE_CONFIG(ImplicitCFLControl)
                 {
+                    // clang-format off
                     DNDS_FIELD(CFL,                    "CFL number for implicit time stepping",
                                DNDS::Config::range(0.0));
                     DNDS_FIELD(nForceLocalStartStep,   "Step to force local time stepping",
@@ -411,6 +418,7 @@ namespace DNDS::Euler
                                DNDS::Config::range(0));
                     DNDS_FIELD(RANSRelax,              "RANS equation under-relaxation factor",
                                DNDS::Config::range(0.0, 1.0));
+                    // clang-format on
                 }
             } implicitCFLControl;
 
@@ -435,6 +443,7 @@ namespace DNDS::Euler
                 bool useCLDriver = false;
                 DNDS_DECLARE_CONFIG(ConvergenceControl)
                 {
+                    // clang-format off
                     DNDS_FIELD(nTimeStepInternal,       "Max internal iterations per time step (0 = unlimited)",
                                DNDS::Config::range(0));
                     DNDS_FIELD(nTimeStepInternalMin,    "Min internal iterations per time step",
@@ -452,6 +461,7 @@ namespace DNDS::Euler
                                DNDS::Config::range(1));
                     DNDS_FIELD(useVolWiseResidual,      "Volume-weighted residual");
                     DNDS_FIELD(useCLDriver,             "Enable CL-driven AoA adaptation");
+                    // clang-format on
                 }
             } convergenceControl;
 
@@ -532,6 +542,7 @@ namespace DNDS::Euler
 
                 DNDS_DECLARE_CONFIG(DataIOControl)
                 {
+                    // clang-format off
                     DNDS_FIELD(uniqueStamps,                "Use unique output stamps per run");
                     DNDS_FIELD(meshRotZ,                    "Mesh rotation around Z axis (degrees)");
                     DNDS_FIELD(meshScale,                   "Mesh coordinate scaling factor",
@@ -589,6 +600,7 @@ namespace DNDS::Euler
                     config.field_section(&T::meshPartitionedWriter, "meshPartitionedWriter", "Partitioned mesh serializer settings");
                     DNDS_FIELD(meshPartitionedReaderType,   "Partitioned mesh reader type",
                                DNDS::Config::enum_values({"JSON", "H5"}));
+                    // clang-format on
                 }
             } dataIOControl;
 
@@ -628,6 +640,7 @@ namespace DNDS::Euler
 
                 DNDS_DECLARE_CONFIG(BoundaryDefinition)
                 {
+                    // clang-format off
                     DNDS_FIELD(PeriodicTranslation1,          "Periodic translation vector for pair 1");
                     DNDS_FIELD(PeriodicTranslation2,          "Periodic translation vector for pair 2");
                     DNDS_FIELD(PeriodicTranslation3,          "Periodic translation vector for pair 3");
@@ -639,6 +652,7 @@ namespace DNDS::Euler
                     DNDS_FIELD(PeriodicRotationEulerAngles3,  "Rotation Euler angles (deg) for periodic pair 3");
                     DNDS_FIELD(periodicTolerance,             "Tolerance for periodic node matching",
                                DNDS::Config::range(0.0));
+                    // clang-format on
                 }
             } boundaryDefinition;
 
@@ -663,6 +677,7 @@ namespace DNDS::Euler
 
                 DNDS_DECLARE_CONFIG(LimiterControl)
                 {
+                    // clang-format off
                     DNDS_FIELD(useLimiter,                 "Enable slope limiter");
                     DNDS_FIELD(usePPRecLimiter,            "Enable positivity-preserving reconstruction limiter");
                     DNDS_FIELD(useViscousLimited,          "Apply limiter to viscous reconstruction");
@@ -672,6 +687,7 @@ namespace DNDS::Euler
                     DNDS_FIELD(nPartialLimiterStartLocal,  "Time step to begin local partial limiting");
                     DNDS_FIELD(preserveLimited,            "Preserve limited reconstruction across steps");
                     DNDS_FIELD(ppRecLimiterCompressToMean, "PP limiter compresses toward cell mean");
+                    // clang-format on
                 }
             } limiterControl;
 
@@ -713,6 +729,7 @@ namespace DNDS::Euler
 
                     DNDS_DECLARE_CONFIG(CoarseGridLinearSolverControl)
                     {
+                        // clang-format off
                         DNDS_FIELD(jacobiCode,                  "Preconditioner: 0=jacobi, 1=GS, 2=ILU");
                         DNDS_FIELD(sgsIter,                     "SGS iteration count",
                                    DNDS::Config::range(0));
@@ -728,6 +745,7 @@ namespace DNDS::Euler
                         DNDS_FIELD(multiGridNIterPost,          "Multi-grid post-smooth iterations",
                                    DNDS::Config::range(0));
                         DNDS_FIELD(centralSmoothInputResidual,  "Smooth input residual on coarse grid");
+                        // clang-format on
                     }
                 };
                 std::map<std::string, CoarseGridLinearSolverControl> coarseGridLinearSolverControlList{
@@ -738,6 +756,7 @@ namespace DNDS::Euler
 
                 DNDS_DECLARE_CONFIG(LinearSolverControl)
                 {
+                    // clang-format off
                     DNDS_FIELD(jacobiCode,               "Preconditioner: 0=jacobi, 1=GS, 2=ILU");
                     DNDS_FIELD(sgsIter,                  "SGS iteration count",
                                DNDS::Config::range(0));
@@ -766,6 +785,7 @@ namespace DNDS::Euler
                         "Per-level coarse grid linear solver settings");
                     config.field_section(&T::directPrecControl, "directPrecControl",
                                         "Direct preconditioner settings");
+                    // clang-format on
                 }
             } linearSolverControl;
 
@@ -786,12 +806,14 @@ namespace DNDS::Euler
                 std::vector<int> otherRestartStoreDim;
                 DNDS_DECLARE_CONFIG(RestartState)
                 {
+                    // clang-format off
                     DNDS_FIELD(iStep,                   "Restart step index");
                     DNDS_FIELD(iStepInternal,           "Restart internal step index");
                     DNDS_FIELD(odeCodePrev,             "Previous ODE code for restart");
                     DNDS_FIELD(lastRestartFile,         "Path to last restart file");
                     DNDS_FIELD(otherRestartFile,        "Path to alternate restart file");
                     DNDS_FIELD(otherRestartStoreDim,    "Dimension mapping for alternate restart");
+                    // clang-format on
                 }
                 RestartState()
                 {
@@ -808,7 +830,9 @@ namespace DNDS::Euler
 
                 DNDS_DECLARE_CONFIG(TimeAverageControl)
                 {
+                    // clang-format off
                     DNDS_FIELD(enabled, "Enable time-averaging of solution fields");
+                    // clang-format on
                 }
             } timeAverageControl;
 
@@ -822,22 +846,25 @@ namespace DNDS::Euler
 
                 DNDS_DECLARE_CONFIG(Others)
                 {
+                    // clang-format off
                     DNDS_FIELD(nFreezePassiveInner,  "Freeze passive scalars for N inner steps",
                                DNDS::Config::range(0));
                     DNDS_FIELD(axisSymmetric,        "Axisymmetric mode: 0=off");
                     DNDS_FIELD(printRecMatrix,       "Print reconstruction matrix to file");
                     config.field_section(&T::recMatrixWriter, "recMatrixWriter",
                                         "Serializer for reconstruction matrix output");
+                    // clang-format on
                 }
             } others;
 
-            EulerEvaluatorSettings<model> eulerSettings;           ///< Physics settings passed to the EulerEvaluator.
-            CFV::VRSettings vfvSettings;                           ///< Variational reconstruction settings.
+            EulerEvaluatorSettings<model> eulerSettings;                         ///< Physics settings passed to the EulerEvaluator.
+            CFV::VRSettings vfvSettings;                                         ///< Variational reconstruction settings.
             nlohmann::ordered_json bcSettings = nlohmann::ordered_json::array(); ///< Boundary condition definitions (JSON array).
-            std::map<std::string, std::string> bcNameMapping;      ///< Mapping from mesh BC names to solver BC type names.
+            std::map<std::string, std::string> bcNameMapping;                    ///< Mapping from mesh BC names to solver BC type names.
 
             DNDS_DECLARE_CONFIG(Configuration)
             {
+                // clang-format off
                 config.field_section(&T::timeMarchControl,               "timeMarchControl",               "Time marching settings");
                 config.field_section(&T::implicitReconstructionControl,   "implicitReconstructionControl",   "Implicit reconstruction settings");
                 config.field_section(&T::outputControl,                  "outputControl",                  "Output settings");
@@ -861,6 +888,7 @@ namespace DNDS::Euler
                 {
                     return s.bcSettings.is_array();
                 });
+                // clang-format on
             }
 
             /// @brief Backward-compatible bidirectional JSON read/write.
@@ -1115,8 +1143,8 @@ namespace DNDS::Euler
         /// @brief Output mode selector for PrintData.
         enum PrintDataMode
         {
-            PrintDataLatest = 0,       ///< Output the current (latest) solution.
-            PrintDataTimeAverage = 1,  ///< Output the time-averaged solution.
+            PrintDataLatest = 0,      ///< Output the current (latest) solution.
+            PrintDataTimeAverage = 1, ///< Output the time-averaged solution.
         };
 
         /**
@@ -1341,7 +1369,7 @@ namespace DNDS::Euler
                                                                \
     DNDS_EULERSOLVER_RUNNINGENV_GET_REF(addOutList);
 
-            RunningEnvironment() {};
+            RunningEnvironment(){};
         };
         /// @brief Populate a RunningEnvironment with allocated solvers, loggers, and initial state.
         void InitializeRunningEnvironment(RunningEnvironment &env);
@@ -1376,25 +1404,25 @@ namespace DNDS::Euler
 
         /// @name Accessors
         /// @{
-        auto getMPI() const { return mpi; }          ///< Get MPI communicator info.
-        auto getMesh() const { return mesh; }         ///< Get shared pointer to the mesh.
-        auto getVFV() const { return vfv; }           ///< Get shared pointer to the VFV reconstruction.
+        auto getMPI() const { return mpi; }   ///< Get MPI communicator info.
+        auto getMesh() const { return mesh; } ///< Get shared pointer to the mesh.
+        auto getVFV() const { return vfv; }   ///< Get shared pointer to the VFV reconstruction.
         /// @}
 
         /// @name Test accessors (for unit testing the evaluator pipeline)
         /// @{
-        auto &getU() { return u; }                     ///< Get mutable reference to the DOF array.
-        auto &getURec() { return uRec; }               ///< Get mutable reference to the reconstruction array.
-        auto &getURecNew() { return uRecNew; }         ///< Get mutable reference to the new reconstruction array.
-        auto &getURecLimited() { return uRecLimited; } ///< Get mutable reference to the limited reconstruction array.
-        auto &getEval() { return *pEval; }             ///< Get mutable reference to the evaluator.
-        auto &getConfiguration() { return config; }     ///< Get mutable reference to the configuration.
-        auto &getJSource() { return JSource; }          ///< Get mutable reference to the source Jacobian.
-        auto &getBetaPP() { return betaPP; }            ///< Get mutable reference to the PP beta array.
-        auto &getAlphaPP() { return alphaPP; }          ///< Get mutable reference to the PP alpha array.
-        auto &getDTauTmp() { return dTauTmp; }          ///< Get mutable reference to the dTau temporary.
-        auto &getIfUseLimiter() { return ifUseLimiter; }///< Get mutable reference to the limiter flag array.
-        auto &getBCHandler() { return pBCHandler; }     ///< Get mutable reference to the BC handler.
+        auto &getU() { return u; }                       ///< Get mutable reference to the DOF array.
+        auto &getURec() { return uRec; }                 ///< Get mutable reference to the reconstruction array.
+        auto &getURecNew() { return uRecNew; }           ///< Get mutable reference to the new reconstruction array.
+        auto &getURecLimited() { return uRecLimited; }   ///< Get mutable reference to the limited reconstruction array.
+        auto &getEval() { return *pEval; }               ///< Get mutable reference to the evaluator.
+        auto &getConfiguration() { return config; }      ///< Get mutable reference to the configuration.
+        auto &getJSource() { return JSource; }           ///< Get mutable reference to the source Jacobian.
+        auto &getBetaPP() { return betaPP; }             ///< Get mutable reference to the PP beta array.
+        auto &getAlphaPP() { return alphaPP; }           ///< Get mutable reference to the PP alpha array.
+        auto &getDTauTmp() { return dTauTmp; }           ///< Get mutable reference to the dTau temporary.
+        auto &getIfUseLimiter() { return ifUseLimiter; } ///< Get mutable reference to the limiter flag array.
+        auto &getBCHandler() { return pBCHandler; }      ///< Get mutable reference to the BC handler.
         /// @}
     };
 }

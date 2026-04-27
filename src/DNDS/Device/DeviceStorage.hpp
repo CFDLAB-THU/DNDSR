@@ -29,7 +29,7 @@ namespace DNDS
         Unknown = 0, ///< Unset / sentinel.
         Host = 1,    ///< Plain CPU memory.
 #ifdef DNDS_USE_CUDA
-        CUDA = 2,    ///< NVIDIA CUDA device memory.
+        CUDA = 2, ///< NVIDIA CUDA device memory.
 #endif
         Custom1 = 101, ///< Reserved slot for a project-specific backend.
     };

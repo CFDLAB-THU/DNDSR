@@ -130,7 +130,7 @@ namespace DNDS
                  {
                 auto arr = std::make_shared<TArrayEigenMatrix>(self);
                 return arr; });
-                
+
         ArrayEigenMatrix_
             .def("MatRowSize", [](const TArrayEigenMatrix &self, index iMat)
                  { return self.MatRowSize(iMat); }, py::arg("iMat") = 0)

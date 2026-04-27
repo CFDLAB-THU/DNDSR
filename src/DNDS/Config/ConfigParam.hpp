@@ -102,8 +102,16 @@ namespace DNDS
         static constexpr ConfigTypeTag value = ConfigTypeTag::Object;
     };
 
-    template <> struct ConfigTypeTagOf<bool>       { static constexpr ConfigTypeTag value = ConfigTypeTag::Bool; };
-    template <> struct ConfigTypeTagOf<std::string> { static constexpr ConfigTypeTag value = ConfigTypeTag::String; };
+    template <>
+    struct ConfigTypeTagOf<bool>
+    {
+        static constexpr ConfigTypeTag value = ConfigTypeTag::Bool;
+    };
+    template <>
+    struct ConfigTypeTagOf<std::string>
+    {
+        static constexpr ConfigTypeTag value = ConfigTypeTag::String;
+    };
 
     template <typename T>
     struct ConfigTypeTagOf<T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>>>
@@ -148,13 +156,17 @@ namespace DNDS
     namespace detail
     {
         template <typename T, typename = void>
-        struct is_eigen_type : std::false_type {};
+        struct is_eigen_type : std::false_type
+        {
+        };
 
         template <typename T>
         struct is_eigen_type<T, std::void_t<
-            typename T::Scalar,
-            decltype(static_cast<int>(T::RowsAtCompileTime)),
-            decltype(static_cast<int>(T::ColsAtCompileTime))>> : std::true_type {};
+                                    typename T::Scalar,
+                                    decltype(static_cast<int>(T::RowsAtCompileTime)),
+                                    decltype(static_cast<int>(T::ColsAtCompileTime))>> : std::true_type
+        {
+        };
     } // namespace detail
 
     template <typename T>
@@ -167,16 +179,26 @@ namespace DNDS
     {
         switch (tag)
         {
-        case ConfigTypeTag::Bool:           return "boolean";
-        case ConfigTypeTag::Int:            return "integer";
-        case ConfigTypeTag::Real:           return "number";
-        case ConfigTypeTag::String:         return "string";
-        case ConfigTypeTag::Enum:           return "string";
-        case ConfigTypeTag::Array:          return "array";
-        case ConfigTypeTag::Object:         return "object";
-        case ConfigTypeTag::ArrayOfObjects: return "array";
-        case ConfigTypeTag::MapOfObjects:   return "object";
-        case ConfigTypeTag::Json:           return {};
+        case ConfigTypeTag::Bool:
+            return "boolean";
+        case ConfigTypeTag::Int:
+            return "integer";
+        case ConfigTypeTag::Real:
+            return "number";
+        case ConfigTypeTag::String:
+            return "string";
+        case ConfigTypeTag::Enum:
+            return "string";
+        case ConfigTypeTag::Array:
+            return "array";
+        case ConfigTypeTag::Object:
+            return "object";
+        case ConfigTypeTag::ArrayOfObjects:
+            return "array";
+        case ConfigTypeTag::MapOfObjects:
+            return "object";
+        case ConfigTypeTag::Json:
+            return {};
         }
         return {};
     }
@@ -659,45 +681,46 @@ namespace DNDS
 ///     }
 /// };
 /// @endcode
-#define DNDS_DECLARE_CONFIG(Type_)                                                            \
-    using T = Type_;                                                                          \
-    static void _dnds_ensure_registered()                                                     \
-    {                                                                                         \
-        static bool done = false;                                                             \
-        if (done) return;                                                                     \
-        done = true;                                                                          \
-        ::DNDS::ConfigSectionBuilder<Type_> config;                                           \
-        _dnds_do_register(config);                                                            \
-    }                                                                                         \
-    friend void to_json(nlohmann::ordered_json &j, const Type_ &t)                            \
-    {                                                                                         \
-        Type_::_dnds_ensure_registered();                                                     \
-        ::DNDS::ConfigRegistry<Type_>::writeToJson(j, t);                                     \
-    }                                                                                         \
-    friend void from_json(const nlohmann::ordered_json &j, Type_ &t)                          \
-    {                                                                                         \
-        Type_::_dnds_ensure_registered();                                                     \
-        ::DNDS::ConfigRegistry<Type_>::readFromJson(j, t);                                    \
-    }                                                                                         \
-    static nlohmann::ordered_json schema(const std::string &desc = "")                        \
-    {                                                                                         \
-        Type_::_dnds_ensure_registered();                                                     \
-        return ::DNDS::ConfigRegistry<Type_>::emitSchema(desc);                               \
-    }                                                                                         \
-    std::vector<::DNDS::CheckResult> validate() const                                         \
-    {                                                                                         \
-        Type_::_dnds_ensure_registered();                                                     \
-        return ::DNDS::ConfigRegistry<Type_>::validate(*this);                                \
-    }                                                                                         \
-    std::vector<::DNDS::CheckResult> validateWithContext(                                      \
-        const ::DNDS::ConfigContext &ctx) const                                               \
-    {                                                                                         \
-        Type_::_dnds_ensure_registered();                                                     \
-        return ::DNDS::ConfigRegistry<Type_>::validateWithContext(*this, ctx);                 \
-    }                                                                                         \
-    static void validateKeys(const nlohmann::ordered_json &j)                                 \
-    {                                                                                         \
-        Type_::_dnds_ensure_registered();                                                     \
-        ::DNDS::ConfigRegistry<Type_>::validateKeys(j);                                       \
-    }                                                                                         \
+#define DNDS_DECLARE_CONFIG(Type_)                                             \
+    using T = Type_;                                                           \
+    static void _dnds_ensure_registered()                                      \
+    {                                                                          \
+        static bool done = false;                                              \
+        if (done)                                                              \
+            return;                                                            \
+        done = true;                                                           \
+        ::DNDS::ConfigSectionBuilder<Type_> config;                            \
+        _dnds_do_register(config);                                             \
+    }                                                                          \
+    friend void to_json(nlohmann::ordered_json &j, const Type_ &t)             \
+    {                                                                          \
+        Type_::_dnds_ensure_registered();                                      \
+        ::DNDS::ConfigRegistry<Type_>::writeToJson(j, t);                      \
+    }                                                                          \
+    friend void from_json(const nlohmann::ordered_json &j, Type_ &t)           \
+    {                                                                          \
+        Type_::_dnds_ensure_registered();                                      \
+        ::DNDS::ConfigRegistry<Type_>::readFromJson(j, t);                     \
+    }                                                                          \
+    static nlohmann::ordered_json schema(const std::string &desc = "")         \
+    {                                                                          \
+        Type_::_dnds_ensure_registered();                                      \
+        return ::DNDS::ConfigRegistry<Type_>::emitSchema(desc);                \
+    }                                                                          \
+    std::vector<::DNDS::CheckResult> validate() const                          \
+    {                                                                          \
+        Type_::_dnds_ensure_registered();                                      \
+        return ::DNDS::ConfigRegistry<Type_>::validate(*this);                 \
+    }                                                                          \
+    std::vector<::DNDS::CheckResult> validateWithContext(                      \
+        const ::DNDS::ConfigContext &ctx) const                                \
+    {                                                                          \
+        Type_::_dnds_ensure_registered();                                      \
+        return ::DNDS::ConfigRegistry<Type_>::validateWithContext(*this, ctx); \
+    }                                                                          \
+    static void validateKeys(const nlohmann::ordered_json &j)                  \
+    {                                                                          \
+        Type_::_dnds_ensure_registered();                                      \
+        ::DNDS::ConfigRegistry<Type_>::validateKeys(j);                        \
+    }                                                                          \
     static void _dnds_do_register(::DNDS::ConfigSectionBuilder<Type_> &config)

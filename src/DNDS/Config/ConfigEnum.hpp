@@ -83,8 +83,10 @@ namespace DNDS
 
             EnumStringPair(EnumType v, const char *s)
                 : value(v), str(s ? s : ""), isNull(s == nullptr) {}
-            EnumStringPair(EnumType v, std::nullptr_t)  // NOLINT(bugprone-macro-parentheses)
-                : value(v), isNull(true) {}
+            EnumStringPair(EnumType v, std::nullptr_t) // NOLINT(bugprone-macro-parentheses)
+                : value(v), isNull(true)
+            {
+            }
         };
 
         /// @brief Extract non-null string values from a list of enum-string pairs.
@@ -123,13 +125,13 @@ namespace DNDS
 ///   1. `NLOHMANN_JSON_SERIALIZE_ENUM(EnumType_, ...)` — standard serialization.
 ///   2. `inline std::vector<std::string> _dnds_enum_values_<mangled>()` — allowed values.
 ///      Accessed via `DNDS_ENUM_ALLOWED_VALUES(EnumType_)`.
-#define DNDS_DEFINE_ENUM_JSON(EnumType_, ...)                                                 \
-    /* (1) Standard nlohmann enum serialization */                                             \
-    NLOHMANN_JSON_SERIALIZE_ENUM(EnumType_, __VA_ARGS__)                                      \
-    /* (2) Allowed-values function for schema generation */                                    \
-    inline std::vector<std::string> _dnds_enum_allowed_values_fn(EnumType_ *)                 \
-    {                                                                                         \
-        return ::DNDS::detail::extractEnumStrings<EnumType_>(__VA_ARGS__);                     \
+#define DNDS_DEFINE_ENUM_JSON(EnumType_, ...)                                 \
+    /* (1) Standard nlohmann enum serialization */                            \
+    NLOHMANN_JSON_SERIALIZE_ENUM(EnumType_, __VA_ARGS__)                      \
+    /* (2) Allowed-values function for schema generation */                   \
+    inline std::vector<std::string> _dnds_enum_allowed_values_fn(EnumType_ *) \
+    {                                                                         \
+        return ::DNDS::detail::extractEnumStrings<EnumType_>(__VA_ARGS__);    \
     }
 
 // ============================================================================

@@ -139,10 +139,10 @@ namespace DNDS
     /// Checks registered via `config.check_ctx()` receive it as a second argument.
     struct ConfigContext
     {
-        int nVars = -1;       ///< Number of solution variables (model-dependent).
-        int dim = -1;         ///< Spatial dimension (2 or 3).
-        int gDim = -1;        ///< Geometric dimension (2 or 3).
-        int modelCode = -1;   ///< Integer code identifying the EulerModel enum value.
+        int nVars = -1;     ///< Number of solution variables (model-dependent).
+        int dim = -1;       ///< Spatial dimension (2 or 3).
+        int gDim = -1;      ///< Geometric dimension (2 or 3).
+        int modelCode = -1; ///< Integer code identifying the EulerModel enum value.
     };
 
     /// @brief Descriptor for a single configuration field.

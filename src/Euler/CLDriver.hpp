@@ -39,17 +39,18 @@ namespace DNDS::Euler
         real CLIncrementRelax = 0.25;    ///< Under-relaxation factor applied to each AoA increment (0,1]. // reduce each alpha increment
         real thresholdTargetRatio = 0.5; ///< Fraction of |targetCL - lastCL| used to tighten the convergence threshold near the target. // reduce CL convergence threshold when close to the target CL
 
-        index nIterStartDrive = INT32_MAX;  ///< Solver iteration at which the CL driver becomes active.
-        index nIterConvergeMin = 50;        ///< Minimum number of iterations before the CL convergence window is evaluated.
-        real CLconvergeThreshold = 1e-3;    ///< Maximum deviation within the sliding window for CL to be considered converged.
-        index CLconvergeWindow = 10;        ///< Number of most-recent CL samples in the sliding convergence window.
+        index nIterStartDrive = INT32_MAX; ///< Solver iteration at which the CL driver becomes active.
+        index nIterConvergeMin = 50;       ///< Minimum number of iterations before the CL convergence window is evaluated.
+        real CLconvergeThreshold = 1e-3;   ///< Maximum deviation within the sliding window for CL to be considered converged.
+        index CLconvergeWindow = 10;       ///< Number of most-recent CL samples in the sliding convergence window.
 
-        index CLconvergeLongWindow = 100;       ///< Number of consecutive iterations within tolerance required for final (long-window) convergence. // for converged-at-target exit of main iteration loop
-        real CLconvergeLongThreshold = 1e-4;    ///< CL error tolerance for the long-window converged-at-target check.
-        bool CLconvergeLongStrictAoA = false;   ///< If true, reset the long-window counter whenever the AoA is updated.
+        index CLconvergeLongWindow = 100;     ///< Number of consecutive iterations within tolerance required for final (long-window) convergence. // for converged-at-target exit of main iteration loop
+        real CLconvergeLongThreshold = 1e-4;  ///< CL error tolerance for the long-window converged-at-target check.
+        bool CLconvergeLongStrictAoA = false; ///< If true, reset the long-window counter whenever the AoA is updated.
 
         DNDS_DECLARE_CONFIG(CLDriverSettings)
         {
+            // clang-format off
             DNDS_FIELD(AOAInit,                   "Initial angle of attack (degrees)");
             DNDS_FIELD(AOAAxis,                   "Rotation axis for AoA",
                        DNDS::Config::enum_values({"x", "y", "z"}));
@@ -79,6 +80,7 @@ namespace DNDS::Euler
             DNDS_FIELD(CLconvergeLongThreshold,   "Long-window CL tolerance",
                        DNDS::Config::range(0.0));
             DNDS_FIELD(CLconvergeLongStrictAoA,   "Reset long counter on AoA update");
+            // clang-format on
         }
     };
 
@@ -99,13 +101,13 @@ namespace DNDS::Euler
      */
     class CLDriver
     {
-        CLDriverSettings settings;       ///< Configuration parameters for this driver instance.
-        real lastCL{veryLargeReal};      ///< CL value from the previous converged window (sentinel = not yet set).
-        real lastAOA{veryLargeReal};     ///< AoA corresponding to @ref lastCL (sentinel = not yet set).
-        Eigen::VectorXd CLHistory;       ///< Circular buffer holding the most recent CL samples.
-        index CLHistorySize = 0;         ///< Total number of CL samples pushed (may exceed window size).
-        index CLHistoryHead = 0;         ///< Current write position (head) in the circular buffer.
-        index CLAtTargetAcc = 0;         ///< Consecutive-iteration counter for the long-window convergence check.
+        CLDriverSettings settings;   ///< Configuration parameters for this driver instance.
+        real lastCL{veryLargeReal};  ///< CL value from the previous converged window (sentinel = not yet set).
+        real lastAOA{veryLargeReal}; ///< AoA corresponding to @ref lastCL (sentinel = not yet set).
+        Eigen::VectorXd CLHistory;   ///< Circular buffer holding the most recent CL samples.
+        index CLHistorySize = 0;     ///< Total number of CL samples pushed (may exceed window size).
+        index CLHistoryHead = 0;     ///< Current write position (head) in the circular buffer.
+        index CLAtTargetAcc = 0;     ///< Consecutive-iteration counter for the long-window convergence check.
 
         /**
          * @brief Push a new CL sample into the circular history buffer.

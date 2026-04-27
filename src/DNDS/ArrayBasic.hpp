@@ -16,12 +16,12 @@ namespace DNDS
      */
     enum DataLayout
     {
-        ErrorLayout,        ///< Invalid combination of template parameters.
-        TABLE_StaticFixed,  ///< Fixed row width, known at compile time.
-        TABLE_Fixed,        ///< Fixed row width, set at runtime (uniform across rows).
-        TABLE_Max,          ///< Padded variable rows; max width set at runtime.
-        TABLE_StaticMax,    ///< Padded variable rows; max width fixed at compile time.
-        CSR,                ///< Compressed Sparse Row (flat buffer + row-start index).
+        ErrorLayout,       ///< Invalid combination of template parameters.
+        TABLE_StaticFixed, ///< Fixed row width, known at compile time.
+        TABLE_Fixed,       ///< Fixed row width, set at runtime (uniform across rows).
+        TABLE_Max,         ///< Padded variable rows; max width set at runtime.
+        TABLE_StaticMax,   ///< Padded variable rows; max width fixed at compile time.
+        CSR,               ///< Compressed Sparse Row (flat buffer + row-start index).
     };
 
     /// @brief Whether the layout uses a TABLE (padded) representation (vs CSR).
