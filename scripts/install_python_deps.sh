@@ -56,7 +56,7 @@ echo ""
 REQ_FILE="$PROJECT_ROOT/requirements.txt"
 if [ -f "$REQ_FILE" ]; then
     echo "--- Installing packages from requirements.txt ---"
-    "$PIP" install --quiet -r "$REQ_FILE"
+    "$PIP" install -r "$REQ_FILE"
 else
     echo "Warning: $REQ_FILE not found, skipping" >&2
 fi
@@ -64,14 +64,14 @@ fi
 # ---- 2. Build tools needed for pybind11 modules --------------------------
 echo ""
 echo "--- Installing build tools (scikit-build-core, pybind11) ---"
-"$PIP" install --quiet scikit-build-core pybind11
+"$PIP" install scikit-build-core pybind11
 
 # ---- 3. mpi4py — compiled against the project's MPI ----------------------
 echo ""
 echo "--- Installing mpi4py (from source, CC=$MPI_CC) ---"
 CC="$MPI_CC" \
     MAKEFLAGS="-j$JOBS" \
-    "$PIP" install --no-binary mpi4py mpi4py --force-reinstall \
+    "$PIP" install --no-binary mpi4py mpi4py --force-reinstall -v \
     2>&1 | tail -5
 
 # ---- 4. h5py — compiled against the project's HDF5 (MPI-enabled) ---------
@@ -81,7 +81,7 @@ CC="$MPI_CC" \
     HDF5_DIR="$HDF5_DIR" \
     HDF5_MPI="ON" \
     MAKEFLAGS="-j$JOBS" \
-    "$PIP" install --no-binary h5py h5py --force-reinstall \
+    "$PIP" install --no-binary h5py h5py --force-reinstall  -v \
     2>&1 | tail -5
 
 echo ""
