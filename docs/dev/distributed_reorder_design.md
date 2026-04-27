@@ -3,6 +3,10 @@
 > **Status:** Proposal (not yet implemented). The existing
 > `ReorderLocalCells` and `ReadDistributed_Redistribute` remain the
 > active code paths.
+>
+> **Last reviewed:** 2026-04-27 against PR #6 merge (commit 13b4e7b1).
+> All 4 plans re-evaluated; no fundamental changes needed. See
+> "Re-evaluation Notes" section at bottom.
 
 ## Motivation
 
@@ -453,3 +457,68 @@ supports it — just add Face to the reorder maps.
 - Remove or deprecate the old ad-hoc helpers in `Mesh_PartitionHelpers.hpp`
 - Remove redundant code in `ReorderLocalCells` and
   `ReadDistributed_Redistribute` (they become thin wrappers)
+
+---
+
+## Re-evaluation Notes (2026-04-27, post PR #6)
+
+Reviewed against the merged PR #6 changes (InterpolateGlobal, face pipeline
+split, templatization, pybind11 bindings, file reorganization into
+`src/Geom/Mesh/`).
+
+### What changed
+
+1. **`InterpolateFace` split** into `InterpolateFace` + `BuildGhostFace` +
+   `MatchFaceBoundary`. Ghost faces now via `evaluateGhostTree(Cell ->
+   Cell2Face -> Face)`. This creates a 5th `registerAdj` call site.
+
+2. **`InterpolateGlobal`** added: N-parent distributed interpolation with
+   pbi, ownership resolution, and template `e2p_rs` (face2cell uses rs=2).
+   `parent2entityPbi` computed locally (no MPI push needed).
+
+3. **File reorganization**: All mesh source moved to `src/Geom/Mesh/`.
+   `MeshConnectivity.cpp` created for non-template implementations.
+
+4. **`AdjPairTracked_bind.hpp`** added: Python bindings for tracked pairs
+   via pybind11 inheritance from base `ArrayAdjacencyPair`.
+
+5. **Implementation plan updated** (1786 lines): Sections 9 (templatization)
+   and 10 (per-adj state tracking) with detailed migration plans.
+
+### Impact on Plan 1 (makeFatherOnlyMapping)
+
+**No changes.** `AdjIndexInfo.hpp` is unchanged. `wireTargetMapping` still
+accepts null. The factory and non-null assertion are still needed.
+
+### Impact on Plan 2 (fillRegistry)
+
+**Minor adjustment.** Now 5 call sites (was 4). The new `BuildGhostFace`
+site borrows `cell2face`'s global mapping from `cell2node`, confirming the
+need to document canonical global mapping sources per entity kind.
+
+### Impact on Plan 3 (device view)
+
+**Confirmed.** The inheritance pattern used for `AdjPairTracked` and
+`AdjPairTracked_bind.hpp` validates the device view inheritance approach.
+The `AdjStateView` struct for the mesh device view remains the pragmatic
+choice (avoids changing 12 member type declarations).
+
+### Impact on Plan 4 (distributed reordering)
+
+**Mostly unchanged.** Key updates:
+
+- **Face reconstruction** after reorder should use the modular
+  `InterpolateFace -> BuildGhostFace -> MatchFaceBoundary` pipeline
+  (which internally uses `InterpolateGlobal`), not `InterpolateFaceLegacy`.
+
+- **`parent2entityPbi`** is computed locally from `cell2nodePbi` +
+  `entity2nodePbi` — no need to preserve across reorder. Destroyed with
+  faces, recomputed after.
+
+- **`PermutationTransfer`** should handle `AdjVariant` via `std::visit`
+  for type-erased transfer (same pattern as `evaluateGhostTree`).
+
+- The list of arrays destroyed before reorder and reconstructed after
+  should include: `cell2face`, `face2cell`, `face2node`, `face2bnd`,
+  `bnd2face`, `faceElemInfo`, `face2nodePbi`, `cell2facePbi` (when
+  periodic), and any `parent2entityPbi` stored on the mesh.

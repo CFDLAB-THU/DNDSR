@@ -182,6 +182,8 @@ namespace DNDS::Geom
         inline constexpr AdjKind Edge2Face{EntityKind::Edge, EntityKind::Face};
         inline constexpr AdjKind Edge2Cell{EntityKind::Edge, EntityKind::Cell};
         inline constexpr AdjKind Bnd2Cell{EntityKind::Bnd, EntityKind::Cell};
+        inline constexpr AdjKind Bnd2Face{EntityKind::Bnd, EntityKind::Face};
+        inline constexpr AdjKind Face2Bnd{EntityKind::Face, EntityKind::Bnd};
 
         // Intra-level (composed), default via Node
         inline constexpr AdjKind Cell2Cell{EntityKind::Cell, EntityKind::Cell, EntityKind::Node};
@@ -869,11 +871,29 @@ namespace DNDS::Geom
             registerAdj(kind, std::move(adjVar));
         }
 
+        /// Const overload: same as above but accepts a const reference.
+        /// Safe because we only copy the father shared_ptr (no mutation).
+        template <class TPair>
+        void registerAdj(AdjKind kind, const TPair &pair)
+        {
+            auto adjVar = makeAdjVariant<TPair>();
+            auto &stored = std::get<TPair>(*adjVar);
+            stored.father = pair.father;
+            registerAdj(kind, std::move(adjVar));
+        }
+
         /// Overload for AdjPairTracked<TPair>: unwrap to base TPair.
         template <class TPair>
         void registerAdj(AdjKind kind, AdjPairTracked<TPair> &pair)
         {
             registerAdj(kind, static_cast<TPair &>(pair));
+        }
+
+        /// Const overload for AdjPairTracked<TPair>.
+        template <class TPair>
+        void registerAdj(AdjKind kind, const AdjPairTracked<TPair> &pair)
+        {
+            registerAdj(kind, static_cast<const TPair &>(pair));
         }
 
         /// Register a GlobalOffsetsMapping for an EntityKind.

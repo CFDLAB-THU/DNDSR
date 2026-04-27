@@ -99,6 +99,64 @@ namespace DNDS::Geom
         Elevation_O1O2,
     };
 
+    // =================================================================
+    // Device-side views for AdjPairTracked (trivially copyable)
+    // =================================================================
+    // Defined here (not in AdjIndexInfo.hpp) because they only depend on
+    // MeshAdjState and ArrayPairDeviceView, both available at this point.
+    // AdjIndexInfo.hpp includes this header, so AdjPairTracked can use them.
+
+    /// \brief Device-side state for an adjacency (trivially copyable).
+    struct AdjIndexInfoDeviceView
+    {
+        MeshAdjState state{Adj_Unknown};
+
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(AdjIndexInfoDeviceView, AdjIndexInfoDeviceView)
+
+        DNDS_DEVICE_CALLABLE bool isLocal() const { return state == Adj_PointToLocal; }
+        DNDS_DEVICE_CALLABLE bool isGlobal() const { return state == Adj_PointToGlobal; }
+        DNDS_DEVICE_CALLABLE bool isBuilt() const { return state != Adj_Unknown; }
+    };
+
+    /// \brief Mutable device view for AdjPairTracked.
+    ///
+    /// Inherits from ArrayPairDeviceView (providing operator[], operator(),
+    /// Size(), RowSize()) and adds per-adj state.
+    template <DeviceBackend B, class TArray>
+    struct AdjPairTrackedDeviceView : public ArrayPairDeviceView<B, TArray>
+    {
+        using t_base = ArrayPairDeviceView<B, TArray>;
+        using t_arrayDeviceView = typename t_base::t_arrayDeviceView;
+        AdjIndexInfoDeviceView idx;
+
+        using t_self = AdjPairTrackedDeviceView<B, TArray>;
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(AdjPairTrackedDeviceView, t_self)
+
+        DNDS_DEVICE_CALLABLE AdjPairTrackedDeviceView(
+            const t_arrayDeviceView &n_father,
+            const t_arrayDeviceView &n_son,
+            AdjIndexInfoDeviceView n_idx)
+            : t_base(n_father, n_son), idx(n_idx) {}
+    };
+
+    /// \brief Const device view for AdjPairTracked.
+    template <DeviceBackend B, class TArray>
+    struct AdjPairTrackedDeviceViewConst : public ArrayPairDeviceViewConst<B, TArray>
+    {
+        using t_base = ArrayPairDeviceViewConst<B, TArray>;
+        using t_arrayDeviceView = typename t_base::t_arrayDeviceView;
+        AdjIndexInfoDeviceView idx;
+
+        using t_self = AdjPairTrackedDeviceViewConst<B, TArray>;
+        DNDS_DEVICE_TRIVIAL_COPY_DEFINE(AdjPairTrackedDeviceViewConst, t_self)
+
+        DNDS_DEVICE_CALLABLE AdjPairTrackedDeviceViewConst(
+            const t_arrayDeviceView &n_father,
+            const t_arrayDeviceView &n_son,
+            AdjIndexInfoDeviceView n_idx)
+            : t_base(n_father, n_son), idx(n_idx) {}
+    };
+
 #define DNDS_COPY_MEMBER_VIEW(obj, member) \
     member = (obj).member.template deviceView<B>();
 #define DNDS_COPY_MEMBER(obj, member) \
@@ -123,15 +181,12 @@ namespace DNDS::Geom
 
         /// reader
         tCoordPair::t_deviceView<B> coords;
-        tAdjPair::t_deviceView<B> cell2node;
-        tAdjPair::t_deviceView<B> bnd2node;
-        tAdj2Pair::t_deviceView<B> bnd2cell;
-        tAdjPair::t_deviceView<B> cell2cell;
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> cell2node;
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> bnd2node;
+        AdjPairTrackedDeviceView<B, tAdj2Pair::t_arr> bnd2cell;
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> cell2cell;
         tElemInfoArrayPair::t_deviceView<B> cellElemInfo;
         tElemInfoArrayPair::t_deviceView<B> bndElemInfo;
-        // tAdj1Pair::t_deviceView<B> cell2cellOrig; // no device
-        // tAdj1Pair::t_deviceView<B> node2nodeOrig; // no device
-        // tAdj1Pair::t_deviceView<B> bnd2bndOrig; // no device
         /// periodic only, after reader
         tPbiPair::t_deviceView<B> cell2nodePbi;
         tPbiPair::t_deviceView<B> bnd2nodePbi;
@@ -167,8 +222,8 @@ namespace DNDS::Geom
             }
         }
 
-        tAdjPair::t_deviceView<B> node2cell;
-        tAdjPair::t_deviceView<B> node2bnd;
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> node2cell;
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> node2bnd;
 
         auto device_array_list_N2CB()
         {
@@ -185,12 +240,12 @@ namespace DNDS::Geom
         }
 
         /// interpolated
-        tAdjPair::t_deviceView<B> cell2face;
-        tAdjPair::t_deviceView<B> face2node;
-        tAdj2Pair::t_deviceView<B> face2cell;
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> cell2face;
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> face2node;
+        AdjPairTrackedDeviceView<B, tAdj2Pair::t_arr> face2cell;
         tElemInfoArrayPair::t_deviceView<B> faceElemInfo;
-        tAdj1Pair::t_deviceView<B> face2bnd;
-        tAdj1Pair::t_deviceView<B> bnd2face;
+        AdjPairTrackedDeviceView<B, tAdj1Pair::t_arr> face2bnd;
+        AdjPairTrackedDeviceView<B, tAdj1Pair::t_arr> bnd2face;
         // std::vector<index> bnd2faceV; // no device
         // std::unordered_map<index, index> face2bndM; // no device
         /// periodic only, after interpolated

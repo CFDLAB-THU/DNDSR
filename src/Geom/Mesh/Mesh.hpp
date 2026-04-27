@@ -12,6 +12,7 @@
 #include "DNDS/ObjectUtils.hpp"
 #include "DNDS/Config/ConfigParam.hpp"
 #include "AdjIndexInfo.hpp"
+#include "MeshConnectivity.hpp"
 
 namespace DNDS::Direct
 {
@@ -212,6 +213,31 @@ namespace DNDS::Geom
         // unchanged.
 
         /**
+         * \brief Ensure a pair has a ghost mapping on its transformer.
+         *
+         * If `trans.pLGhostMapping` is already set, does nothing.
+         * Otherwise, creates a father-only ghost mapping (empty ghost set)
+         * so that `IndexGlobal2Local` / `IndexLocal2Global` work even
+         * before ghost layers are built.
+         *
+         * \pre `trans.pLGlobalMapping` must be set (call
+         *      `createFatherGlobalMapping` first).
+         * \warning Collective — calls MPI_Alltoall internally when creating
+         *          the mapping.
+         */
+        template <class TPair>
+        void EnsureGhostMapping(TPair &pair)
+        {
+            if (pair.trans.pLGhostMapping)
+                return;
+            DNDS_assert_info(pair.trans.pLGlobalMapping,
+                             "EnsureGhostMapping: pLGlobalMapping must be set first");
+            pair.trans.pLGhostMapping = AdjIndexInfo::makeFatherOnlyMapping(
+                pair.trans.pLGlobalMapping,
+                pair.father->Size(), mpi);
+        }
+
+        /**
          * \brief Global-to-local conversion using father+son ghost mapping.
          * \return local index, or (-1 - iGlobal) when not found in the pair.
          *         UnInitIndex passes through unchanged.
@@ -298,16 +324,16 @@ namespace DNDS::Geom
         // =================================================================
         // Named wrappers — Cell
         // =================================================================
-        index CellIndexGlobal2Local(DNDS::index i) { return IndexGlobal2Local(cellElemInfo, i); }
-        index CellIndexLocal2Global(DNDS::index i) { return IndexLocal2Global(cellElemInfo, i); }
+        index CellIndexGlobal2Local(DNDS::index i) { return IndexGlobal2Local(cell2node, i); }
+        index CellIndexLocal2Global(DNDS::index i) { return IndexLocal2Global(cell2node, i); }
         index CellIndexLocal2Global_NoSon(index i) { return IndexLocal2Global_NoSon(cell2node, i); }
         index CellIndexGlobal2Local_NoSon(index i) { return IndexGlobal2Local_NoSon(cell2node, i); }
 
         // =================================================================
         // Named wrappers — Bnd
         // =================================================================
-        index BndIndexGlobal2Local(DNDS::index i) { return IndexGlobal2Local(bndElemInfo, i); }
-        index BndIndexLocal2Global(DNDS::index i) { return IndexLocal2Global(bndElemInfo, i); }
+        index BndIndexGlobal2Local(DNDS::index i) { return IndexGlobal2Local(bnd2node, i); }
+        index BndIndexLocal2Global(DNDS::index i) { return IndexLocal2Global(bnd2node, i); }
         index BndIndexLocal2Global_NoSon(index i) { return IndexLocal2Global_NoSon(bnd2node, i); }
         index BndIndexGlobal2Local_NoSon(index i) { return IndexGlobal2Local_NoSon(bnd2node, i); }
 
@@ -462,6 +488,33 @@ namespace DNDS::Geom
         void AssertOnFaces();
 
         void ConstructBndMesh(UnstructuredMesh &bMesh);
+
+        // =================================================================
+        // Registry
+        // =================================================================
+
+        /**
+         * \brief Populate a MeshConnectivity registry from this mesh's
+         *        currently-built adjacencies.
+         *
+         * Registers all adjacency arrays whose father is non-null.
+         * For each entity kind that appears as a source (.from) of any
+         * registered adjacency, finds a pLGlobalMapping from any adj
+         * array for that entity kind.
+         *
+         * \pre All entity kinds that have registered adjacencies must
+         *      have at least one adj array with a valid pLGlobalMapping
+         *      on its father.  Throws if this is not satisfied.
+         *
+         * \param dag   MeshConnectivity to populate (meshDim is set).
+         */
+        void fillRegistry(MeshConnectivity &dag) const;
+
+        /// \overload Overload with an explicit skip set.
+        /// AdjKinds in \p skip are excluded from registration.
+        void fillRegistry(
+            MeshConnectivity &dag,
+            const std::unordered_set<AdjKind, AdjKindHash> &skip) const;
 
         // void ReorderCellLocal();
 
