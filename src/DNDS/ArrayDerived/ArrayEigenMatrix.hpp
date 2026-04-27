@@ -74,7 +74,7 @@ namespace DNDS
         rowsize _mat_nRow_dynamic = 0; //! extra data
 
     public:
-        size_t FullSizeBytes() const
+        [[nodiscard]] size_t FullSizeBytes() const
         {
             size_t b = this->t_base::FullSizeBytes();
             if (_mat_nRows)
@@ -339,7 +339,7 @@ namespace DNDS
         }
 
         template <DeviceBackend B>
-        auto deviceView() const
+        [[nodiscard]] auto deviceView() const
         {
             auto base_view = t_base::template deviceView<B>();
             return t_deviceViewConst<B>(base_view,

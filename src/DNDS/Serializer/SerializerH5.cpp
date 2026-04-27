@@ -180,7 +180,7 @@ namespace DNDS::Serializer
         H5Contents &contents;
         std::string current_path;
         bool coll_on_meta;
-        std::string get_indent() const
+        [[nodiscard]] std::string get_indent() const
         {
             return std::string(std::count(current_path.begin(), current_path.end(), '/') * 2, ' ');
         }

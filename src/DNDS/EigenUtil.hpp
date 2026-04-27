@@ -275,7 +275,7 @@ namespace DNDS
             h_data.resize(this->size());
         }
 
-        rowsize rows() const
+        [[nodiscard]] rowsize rows() const
         {
             if constexpr (M >= 0)
                 return M;
@@ -283,7 +283,7 @@ namespace DNDS
                 return M_dynamic;
         }
 
-        rowsize cols() const
+        [[nodiscard]] rowsize cols() const
         {
             if constexpr (N >= 0)
                 return N;
@@ -291,7 +291,7 @@ namespace DNDS
                 return N_dynamic;
         }
 
-        rowsize size() const
+        [[nodiscard]] rowsize size() const
         {
             return rows() * cols();
         }

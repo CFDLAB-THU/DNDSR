@@ -254,7 +254,7 @@ namespace DNDS
         }
 
         template <DeviceBackend B>
-        auto deviceView() const
+        [[nodiscard]] auto deviceView() const
         {
             return t_deviceView<B>{t_base::template deviceView<B>(), _row_dynamic, _col_dynamic, _m_size};
         }

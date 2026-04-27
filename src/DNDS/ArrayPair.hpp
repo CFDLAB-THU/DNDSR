@@ -255,13 +255,13 @@ namespace DNDS
         }
 
         /// @brief Uniform row width (delegates to father).
-        auto RowSize() const
+        [[nodiscard]] auto RowSize() const
         {
             return father->RowSize();
         }
 
         /// @brief Per-row width in the combined address space.
-        auto RowSize(index i) const
+        [[nodiscard]] auto RowSize(index i) const
         {
             if (i >= 0 && i < father->Size())
                 return father->RowSize(i);
@@ -670,7 +670,7 @@ namespace DNDS
 
         /// @brief Produce a const device view.
         template <DeviceBackend B>
-        auto deviceView() const
+        [[nodiscard]] auto deviceView() const
         {
             DNDS_check_throw_info(father && son,
                                   fmt::format("need both father and son to exist for device view: {}",

@@ -72,8 +72,8 @@ namespace DNDS
 
         DNDS_DEVICE_CALLABLE index_T *begin() { return __p_indices; }
         DNDS_DEVICE_CALLABLE index_T *end() { return __p_indices + __Row_size; } // past-end
-        DNDS_DEVICE_CALLABLE index_T *cbegin() const { return __p_indices; }
-        DNDS_DEVICE_CALLABLE index_T *cend() const { return __p_indices + __Row_size; } // past-end
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index_T *cbegin() const { return __p_indices; }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index_T *cend() const { return __p_indices + __Row_size; } // past-end
         /// @brief Row width in number of `index_T` elements.
         DNDS_DEVICE_CALLABLE [[nodiscard]] rowsize size() const { return __Row_size; }
     };
