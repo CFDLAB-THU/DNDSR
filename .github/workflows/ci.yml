@@ -255,7 +255,8 @@ jobs:
           source venv/bin/activate
           CC=mpicc CXX=mpicxx cmake -B build -G Ninja \
             -DDNDS_BUILD_TESTS=ON \
-            -DDNDS_TEST_NP_LIST="2;4"
+            -DPython_EXECUTABLE="$VIRTUAL_ENV/bin/python" \
+            -DPython3_EXECUTABLE="$VIRTUAL_ENV/bin/python"
         env:
           DNDS_TEST_MPIEXTRA: "--oversubscribe"
 
