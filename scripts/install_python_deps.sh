@@ -68,21 +68,25 @@ echo "--- Installing build tools (scikit-build-core, pybind11) ---"
 
 # ---- 3. mpi4py — compiled against the project's MPI ----------------------
 echo ""
-echo "--- Installing mpi4py (from source, CC=$MPI_CC) ---"
+echo "--- Installing mpi4py (from source, CC=$MPI_CC, -j$JOBS) ---"
 CC="$MPI_CC" \
     MAKEFLAGS="-j$JOBS" \
-    "$PIP" install --no-binary mpi4py mpi4py --force-reinstall -v \
-    2>&1 | tail -5
+    CMAKE_BUILD_PARALLEL_LEVEL="$JOBS" \
+    "$PIP" install --no-binary mpi4py mpi4py --force-reinstall \
+    --no-build-isolation \
+    --verbose
 
 # ---- 4. h5py — compiled against the project's HDF5 (MPI-enabled) ---------
 echo ""
-echo "--- Installing h5py (from source, HDF5_DIR=$HDF5_DIR, HDF5_MPI=ON) ---"
+echo "--- Installing h5py (from source, HDF5_DIR=$HDF5_DIR, HDF5_MPI=ON, -j$JOBS) ---"
 CC="$MPI_CC" \
     HDF5_DIR="$HDF5_DIR" \
     HDF5_MPI="ON" \
     MAKEFLAGS="-j$JOBS" \
-    "$PIP" install --no-binary h5py h5py --force-reinstall  -v \
-    2>&1 | tail -5
+    CMAKE_BUILD_PARALLEL_LEVEL="$JOBS" \
+    "$PIP" install --no-binary h5py h5py --force-reinstall \
+    --no-build-isolation \
+    --verbose
 
 echo ""
 echo "=== Done ==="
