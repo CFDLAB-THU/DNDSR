@@ -11,7 +11,7 @@
 #   only ONE "build-and-test" job is launched (no wasted matrix entries).
 #
 #   github      — ubuntu-latest, ephemeral, uses actions/setup-python + ccache
-#   self-hosted — self-hosted Docker container, system python3, no sudo, no ccache
+#   self-hosted — self-hosted Docker container, system python3, no sudo, persistent ccache
 #
 # Test matrix:
 #   - C++ unit tests (doctest + ctest)
@@ -37,7 +37,6 @@ on:
 
 env:
   HEADERONLYS_URL: https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/latest/download/external_headeronlys.tar.gz
-  CCACHE_DIR: ${{ github.workspace }}/.ccache
   OMPI_MCA_rmaps_base_oversubscribe: "1"
 
 jobs:
@@ -54,6 +53,8 @@ jobs:
     outputs:
       runs-on: ${{ steps.pick.outputs.runs_on }}
       use-ccache: ${{ steps.pick.outputs.use_ccache }}
+      cache-ccache: ${{ steps.pick.outputs.cache_ccache }}
+      ccache-dir: ${{ steps.pick.outputs.ccache_dir }}
       setup-python: ${{ steps.pick.outputs.setup_python }}
       install-sys-deps: ${{ steps.pick.outputs.install_sys_deps }}
       label: ${{ steps.pick.outputs.label }}
@@ -72,13 +73,17 @@ jobs:
 
           if [[ "$RUNNER" == "self-hosted" ]]; then
             echo 'runs_on=["self-hosted","Linux","X64"]' >> "$GITHUB_OUTPUT"
-            echo "use_ccache=false"       >> "$GITHUB_OUTPUT"
+            echo "use_ccache=true"        >> "$GITHUB_OUTPUT"
+            echo "cache_ccache=false"     >> "$GITHUB_OUTPUT"
+            echo "ccache_dir=/home/runner/.ccache" >> "$GITHUB_OUTPUT"
             echo "setup_python=false"     >> "$GITHUB_OUTPUT"
             echo "install_sys_deps=false" >> "$GITHUB_OUTPUT"
             echo "label=ci-run-self-hosted" >> "$GITHUB_OUTPUT"
           else
             echo 'runs_on="ubuntu-latest"' >> "$GITHUB_OUTPUT"
             echo "use_ccache=true"        >> "$GITHUB_OUTPUT"
+            echo "cache_ccache=true"      >> "$GITHUB_OUTPUT"
+            echo "ccache_dir=${{ github.workspace }}/.ccache" >> "$GITHUB_OUTPUT"
             echo "setup_python=true"      >> "$GITHUB_OUTPUT"
             echo "install_sys_deps=true"  >> "$GITHUB_OUTPUT"
             echo "label=ci-run"           >> "$GITHUB_OUTPUT"
@@ -90,6 +95,8 @@ jobs:
   build-and-test:
     needs: resolve
     runs-on: ${{ fromJSON(needs.resolve.outputs.runs-on) }}
+    env:
+      CCACHE_DIR: ${{ needs.resolve.outputs.ccache-dir }}
     steps:
       # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       # Remove the label so the PR author can trigger a re-run by
@@ -235,16 +242,17 @@ jobs:
       # 7. ccache
       # ------------------------------------------------------------------
       - name: Restore ccache
-        if: needs.resolve.outputs.use-ccache == 'true'
+        if: needs.resolve.outputs.cache-ccache == 'true'
         id: restore-ccache
         uses: actions/cache/restore@v4
         with:
-          path: .ccache
+          path: ${{ needs.resolve.outputs.ccache-dir }}
           key: ccache-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             ccache-${{ runner.os }}-
 
       - name: Configure ccache
+        if: needs.resolve.outputs.use-ccache == 'true'
         run: ccache --max-size=5G
 
       # ------------------------------------------------------------------
@@ -278,6 +286,7 @@ jobs:
           cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j$(nproc)
 
       - name: Show ccache stats
+        if: needs.resolve.outputs.use-ccache == 'true'
         run: ccache --show-stats
 
       - name: Install pybind11 modules
@@ -303,12 +312,13 @@ jobs:
 
       # ------------------------------------------------------------------
       # Always save ccache regardless of build/test outcome
+      # (only on github-hosted — self-hosted persists ccache on disk)
       # ------------------------------------------------------------------
       - name: Save ccache
         if: >
           always() &&
-          needs.resolve.outputs.use-ccache == 'true'
+          needs.resolve.outputs.cache-ccache == 'true'
         uses: actions/cache/save@v4
         with:
-          path: .ccache
+          path: ${{ needs.resolve.outputs.ccache-dir }}
           key: ccache-${{ runner.os }}-${{ github.run_id }}
