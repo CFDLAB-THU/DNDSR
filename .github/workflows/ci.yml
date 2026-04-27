@@ -1,16 +1,20 @@
-# CI: configure, build, and run all tests on ubuntu-latest (no GPU).
+# CI: configure, build, and run all tests.
 #
 # Triggers:
 #   workflow_dispatch       — manual, any branch
-#   pull_request_target     — when a maintainer adds the "ci-run" label to a PR
-#     (runs in the context of the base branch so secrets / caches are accessible
-#      from forks safely)
+#   pull_request_target     — when a maintainer adds a CI label to a PR:
+#     "ci-run"              — runs on ubuntu-latest (GitHub-hosted)
+#     "ci-run-cpu704"       — runs on cpu704 (self-hosted)
 #
-# Caches external dependencies (header-only libs, cfd_externals, pip) and
-# test meshes so repeated runs are fast.
+# Runner matrix:
+#   github  — ubuntu-latest, ephemeral, uses actions/cache + actions/setup-python
+#   cpu704  — self-hosted Docker container, persistent filesystem, skips caching
+#
+# Caches (GitHub-hosted only) external dependencies (header-only libs,
+# cfd_externals, pip) so repeated runs are fast.
 #
 # Test matrix:
-#   - C++ unit tests (doctest + ctest, np=2,4 due to 4 vCPUs)
+#   - C++ unit tests (doctest + ctest)
 #   - Python tests (pytest + pytest-mpi)
 #
 # External data:
@@ -20,6 +24,14 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner to use"
+        type: choice
+        options:
+          - github
+          - cpu704
+        default: github
   pull_request_target:
     types: [labeled]
 
@@ -30,17 +42,62 @@ env:
 
 jobs:
   build-and-test:
+    # Run when:
+    #   - workflow_dispatch with matching runner (or default 'github')
+    #   - pull_request_target with 'ci-run' label  → github runner
+    #   - pull_request_target with 'ci-run-cpu704' → cpu704 runner
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner-id: github
+            runs-on: ubuntu-latest
+            label: ci-run
+            use-cache: true
+            setup-python: true
+            install-sys-deps: true
+          - runner-id: cpu704
+            runs-on: [self-hosted, Linux, X64, cpu704]
+            label: ci-run-cpu704
+            use-cache: false
+            setup-python: false
+            install-sys-deps: false
     if: >
       github.event_name == 'workflow_dispatch' ||
-      github.event.label.name == 'ci-run'
-    runs-on: [ubuntu-latest]
+      github.event.label.name == 'ci-run' ||
+      github.event.label.name == 'ci-run-cpu704'
+    runs-on: ${{ matrix.runs-on }}
+    # Skip matrix entries that don't match the trigger
+    # - workflow_dispatch: only run the selected runner
+    # - pull_request_target: only run the runner whose label was applied
+    env:
+      _SHOULD_RUN: ""
     steps:
+      - name: Check if this matrix entry should run
+        id: gate
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ inputs.runner }}" == "${{ matrix.runner-id }}" ]]; then
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "run=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            if [[ "${{ github.event.label.name }}" == "${{ matrix.label }}" ]]; then
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "run=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
       # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       # Remove the label so the PR author can trigger a re-run by
-      # re-adding "ci-run".
+      # re-adding it.
       # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       - name: Clear CI label
-        if: github.event_name == 'pull_request_target'
+        if: >
+          steps.gate.outputs.run == 'true' &&
+          github.event_name == 'pull_request_target'
         uses: actions/github-script@v7
         with:
           script: |
@@ -48,28 +105,33 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.pull_request.number,
-              name: 'ci-run',
+              name: '${{ matrix.label }}',
             });
 
       # ------------------------------------------------------------------
       # 1. Checkout source
       # ------------------------------------------------------------------
       - name: Checkout DNDSR
+        if: steps.gate.outputs.run == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
           submodules: true
 
       - name: Fetch test meshes
+        if: steps.gate.outputs.run == 'true'
         run: |
           mkdir -p data/mesh
           git clone --depth=1 https://github.com/harryzhou2000/cfd_meshes.git /tmp/cfd_meshes
           cp /tmp/cfd_meshes/data/mesh/* data/mesh/
 
       # ------------------------------------------------------------------
-      # 2. System packages
+      # 2. System packages (skipped if already present)
       # ------------------------------------------------------------------
       - name: Install system dependencies
+        if: >
+          steps.gate.outputs.run == 'true' &&
+          matrix.install-sys-deps
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -77,9 +139,13 @@ jobs:
             libopenmpi-dev openmpi-bin
 
       # ------------------------------------------------------------------
-      # 3. Python interpreter
+      # 3. Python interpreter (GitHub-hosted: actions/setup-python;
+      #    self-hosted: use whatever python3 is available)
       # ------------------------------------------------------------------
-      - name: Set up Python
+      - name: Set up Python (GitHub-hosted)
+        if: >
+          steps.gate.outputs.run == 'true' &&
+          matrix.setup-python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -88,6 +154,9 @@ jobs:
       # 4. Header-only externals (Eigen, Boost, CGAL, fmt, pybind11, ...)
       # ------------------------------------------------------------------
       - name: Cache header-only externals
+        if: >
+          steps.gate.outputs.run == 'true' &&
+          matrix.use-cache
         id: cache-headeronlys
         uses: actions/cache@v4
         with:
@@ -108,15 +177,25 @@ jobs:
           key: headeronlys-v1
 
       - name: Download and extract header-only externals
-        if: steps.cache-headeronlys.outputs.cache-hit != 'true'
+        if: >
+          steps.gate.outputs.run == 'true' &&
+          (steps.cache-headeronlys.outputs.cache-hit != 'true' || !matrix.use-cache)
         run: |
-          curl -L -o external/external_headeronlys.tar.gz "$HEADERONLYS_URL"
-          cd external && tar -xzf external_headeronlys.tar.gz
+          # Skip if already present (self-hosted persistent filesystem)
+          if [ -d external/eigen/Eigen ]; then
+            echo "Header-only externals already present, skipping download"
+          else
+            curl -L -o external/external_headeronlys.tar.gz "$HEADERONLYS_URL"
+            cd external && tar -xzf external_headeronlys.tar.gz
+          fi
 
       # ------------------------------------------------------------------
       # 5. cfd_externals (zlib, hdf5, cgns, parmetis)
       # ------------------------------------------------------------------
       - name: Cache cfd_externals install
+        if: >
+          steps.gate.outputs.run == 'true' &&
+          matrix.use-cache
         id: cache-cfd-ext
         uses: actions/cache@v4
         with:
@@ -124,16 +203,25 @@ jobs:
           key: cfd-ext-${{ runner.os }}-${{ hashFiles('external/cfd_externals/cfd_externals_build.py', '.gitmodules') }}
 
       - name: Build cfd_externals
-        if: steps.cache-cfd-ext.outputs.cache-hit != 'true'
+        if: >
+          steps.gate.outputs.run == 'true' &&
+          (steps.cache-cfd-ext.outputs.cache-hit != 'true' || !matrix.use-cache)
         working-directory: external/cfd_externals
-        run: CC=mpicc CXX=mpicxx python cfd_externals_build.py
+        run: |
+          # Skip if already built (self-hosted persistent filesystem)
+          if [ -d install/include ]; then
+            echo "cfd_externals already built, skipping"
+          else
+            CC=mpicc CXX=mpicxx python3 cfd_externals_build.py
+          fi
 
       # ------------------------------------------------------------------
-      # 6. Python venv (cached; keyed on requirements.txt, the install
-      #    script, AND cfd_externals so h5py/mpi4py are rebuilt when any
-      #    of these change)
+      # 6. Python venv
       # ------------------------------------------------------------------
       - name: Cache Python venv
+        if: >
+          steps.gate.outputs.run == 'true' &&
+          matrix.use-cache
         id: cache-venv
         uses: actions/cache@v4
         with:
@@ -141,9 +229,14 @@ jobs:
           key: venv-ci-${{ runner.os }}-${{ hashFiles('requirements.txt', 'scripts/install_python_deps.sh', 'external/cfd_externals/cfd_externals_build.py', '.gitmodules') }}
 
       - name: Install Python dependencies
-        if: steps.cache-venv.outputs.cache-hit != 'true'
+        if: >
+          steps.gate.outputs.run == 'true' &&
+          (steps.cache-venv.outputs.cache-hit != 'true' || !matrix.use-cache)
         run: |
-          python -m venv venv
+          # On self-hosted, reuse existing venv if present
+          if [ ! -d venv ]; then
+            python3 -m venv venv
+          fi
           source venv/bin/activate
           pip install --upgrade pip
           PIP=$PWD/venv/bin/pip ./scripts/install_python_deps.sh
@@ -152,21 +245,26 @@ jobs:
       # 7. ccache
       # ------------------------------------------------------------------
       - name: Restore ccache
+        if: >
+          steps.gate.outputs.run == 'true' &&
+          matrix.use-cache
         id: restore-ccache
         uses: actions/cache/restore@v4
         with:
           path: .ccache
-          key: ccache-${{ runner.os }}-${{ github.run_id }}
+          key: ccache-${{ matrix.runner-id }}-${{ github.run_id }}
           restore-keys: |
-            ccache-${{ runner.os }}-
+            ccache-${{ matrix.runner-id }}-
 
       - name: Configure ccache
+        if: steps.gate.outputs.run == 'true'
         run: ccache --max-size=5G
 
       # ------------------------------------------------------------------
       # 8. CMake configure
       # ------------------------------------------------------------------
       - name: CMake configure
+        if: steps.gate.outputs.run == 'true'
         run: |
           source venv/bin/activate
           CC=mpicc CXX=mpicxx cmake -B build -G Ninja \
@@ -179,23 +277,28 @@ jobs:
       # 9. Build C++ tests and solver executables
       # ------------------------------------------------------------------
       - name: Build C++ unit tests
+        if: steps.gate.outputs.run == 'true'
         run: cmake --build build -t all_unit_tests -j$(nproc)
 
       - name: Build Euler solvers
+        if: steps.gate.outputs.run == 'true'
         run: cmake --build build -t euler euler3D eulerSA eulerSA3D euler2EQ euler2EQ3D -j$(nproc)
 
       # ------------------------------------------------------------------
       # 10. Build pybind11 targets
       # ------------------------------------------------------------------
       - name: Build pybind11 modules
+        if: steps.gate.outputs.run == 'true'
         run: |
           source venv/bin/activate
           cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j$(nproc)
 
       - name: Show ccache stats
+        if: steps.gate.outputs.run == 'true'
         run: ccache --show-stats
 
       - name: Install pybind11 modules
+        if: steps.gate.outputs.run == 'true'
         run: |
           source venv/bin/activate
           cmake --install build --component py
@@ -204,12 +307,14 @@ jobs:
       # 11. Run C++ tests
       # ------------------------------------------------------------------
       - name: Run C++ tests
+        if: steps.gate.outputs.run == 'true'
         run: ctest --test-dir build --output-on-failure --timeout 300
 
       # ------------------------------------------------------------------
       # 12. Run Python tests
       # ------------------------------------------------------------------
       - name: Run Python tests
+        if: steps.gate.outputs.run == 'true'
         run: |
           source venv/bin/activate
           PYTHONPATH=$PWD/python python -m pytest test/ \
@@ -218,10 +323,14 @@ jobs:
 
       # ------------------------------------------------------------------
       # Always save ccache regardless of build/test outcome
+      # (GitHub-hosted only; self-hosted keeps .ccache on disk)
       # ------------------------------------------------------------------
       - name: Save ccache
-        if: always()
+        if: >
+          always() &&
+          steps.gate.outputs.run == 'true' &&
+          matrix.use-cache
         uses: actions/cache/save@v4
         with:
           path: .ccache
-          key: ccache-${{ runner.os }}-${{ github.run_id }}
+          key: ccache-${{ matrix.runner-id }}-${{ github.run_id }}
