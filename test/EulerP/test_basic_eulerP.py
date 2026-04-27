@@ -15,7 +15,8 @@ def get_fv(mpi):
     #     os.path.dirname(__file__), "..", "..", "data", "mesh", "Uniform_3x3.cgns"
     # )
     meshFile = os.path.join(
-        os.path.dirname(__file__), "..", "..", "data", "mesh", "Uniform32_Periodic.cgns"
+        os.path.dirname(
+            __file__), "..", "..", "data", "mesh", "Uniform32_Periodic.cgns"
     )
     mesh, reader, name2Id = create_mesh_from_CGNS(
         meshFile,
@@ -140,7 +141,8 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo, isCuda=False):
     for iCell in range(mesh.NumCell()):
         x = fv.GetCellBary(iCell)
         if np.linalg.norm(np.array([0.5, 0.5, 0]) - x, 2) < 0.25:
-            u[iCell] = np.array([1, 4, 0, 0, 10.5], dtype=np.float64).reshape(-1, 1)
+            u[iCell] = np.array([1, 4, 0, 0, 10.5],
+                                dtype=np.float64).reshape(-1, 1)
 
         uu = 1
         vv = 1
@@ -269,7 +271,7 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo, isCuda=False):
     Flux2nd_Arg.pFR = data["pFR"]
 
     Flux2nd_Arg.uGradFF = data["uGradFF"]
-    Flux2nd_Arg.deltaLamFaceFF = data["deltaLamFace"]
+    Flux2nd_Arg.deltaLamCell = data["deltaLamCell"]
 
     Flux2nd_Arg.fluxFF = data["fluxFF"]
     Flux2nd_Arg.rhs = data["rhs"]
@@ -322,7 +324,7 @@ if __name__ == "__main__":
     mpi = DNDS.MPIInfo()
     mpi.setWorld()
 
-    ## debug py
+    # debug py
 
     # MPIDebugHold()
 
