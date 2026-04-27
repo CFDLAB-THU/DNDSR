@@ -7,6 +7,7 @@ bindings, initializes MPI, and provides factory functions for Array types.
 from __future__ import annotations
 
 import contextlib
+import os
 import typing
 import atexit
 import sys
@@ -53,7 +54,16 @@ def _init_mpi() -> None:
     If you need to control MPI initialization yourself (e.g., to use
     mpi4py's MPI thread level), import and initialize mpi4py *before*
     importing DNDSR.DNDS.
+
+    Set ``DNDSR_SKIP_MPI_INIT=1`` to skip MPI initialization entirely.
+    This is used by pybind11-stubgen (and similar introspection tools)
+    that import the module only to inspect type signatures.  Calling
+    MPI_Init in that context causes a double-free crash at exit because
+    MPI_Finalize (registered via atexit) runs before pybind11 and C++
+    static destructors release MPI resources.
     """
+    if os.environ.get("DNDSR_SKIP_MPI_INIT", "").strip() in ("1", "true", "yes"):
+        return
     err, argsNew = MPI.Init_thread(sys.argv)
     if err:
         raise RuntimeError(f"MPI.Init_thread returned error code {err}")
@@ -124,7 +134,8 @@ def _get_array_name(
         rs_name = _row_size_to_name(row_size)
         rm_name = rs_name if row_max is None else _row_size_to_name(row_max)
         rs_name_n = _row_size_to_name(row_size_n)
-        rm_name_n = rs_name_n if row_max_n is None else _row_size_to_name(row_max_n)
+        rm_name_n = rs_name_n if row_max_n is None else _row_size_to_name(
+            row_max_n)
         align_name = "N"
         className = (
             f"{prepend}_{rs_name}x{rs_name_n}_{rm_name}x{rm_name_n}_{align_name}"
@@ -162,19 +173,22 @@ def Array(type: str, row_size: int | str, row_max: int | str = None,
 
 def ParArray(type: str, row_size: int | str, row_max: int | str = None,
              init_args: tuple = (), *, name: str | None = None):
-    cls = globals()[_get_array_name(type, row_size, row_max, prepend="ParArray")]
+    cls = globals()[_get_array_name(
+        type, row_size, row_max, prepend="ParArray")]
     return cls(*_named_init_args(name, init_args))
 
 
 def ParArrayPair(type: str, row_size: int | str, row_max: int | str = None,
                  init_args: tuple = ()):
-    cls = globals()[_get_array_name(type, row_size, row_max, prepend="ParArrayPair")]
+    cls = globals()[_get_array_name(type, row_size,
+                                    row_max, prepend="ParArrayPair")]
     return cls(*init_args)
 
 
 def ArrayTransformer(type: str, row_size: int | str, row_max: int | str = None,
                      init_args: tuple = ()):
-    cls = globals()[_get_array_name(type, row_size, row_max, prepend="ArrayTransformer")]
+    cls = globals()[_get_array_name(type, row_size,
+                                    row_max, prepend="ArrayTransformer")]
     return cls(*init_args)
 
 
