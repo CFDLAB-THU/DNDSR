@@ -332,8 +332,10 @@ def work_dir_large():
 
 def test_restart_redistribute_same_np(work_dir):
     """Write restart at np=2, read at np=2 with different Metis seed."""
-    assert os.path.isfile(EULER_EXE), f"euler.exe not found: {EULER_EXE}"
-    assert os.path.isfile(MESH_SMALL), f"Mesh file not found: {MESH_SMALL}"
+    if not os.path.isfile(EULER_EXE):
+        pytest.skip(f"euler.exe not found: {EULER_EXE}")
+    if not os.path.isfile(MESH_SMALL):
+        pytest.skip(f"Mesh file not found: {MESH_SMALL}")
 
     np_write = 2
 
@@ -358,7 +360,8 @@ def test_restart_redistribute_same_np(work_dir):
 
 def test_restart_redistribute_different_np(work_dir):
     """Write restart at np=2, read at np=3 (cross-np redistribution)."""
-    assert os.path.isfile(EULER_EXE), f"euler.exe not found: {EULER_EXE}"
+    if not os.path.isfile(EULER_EXE):
+        pytest.skip(f"euler.exe not found: {EULER_EXE}")
 
     # Reuse step1 restart from the same work_dir (written by previous test)
     restart_h5 = _find_restart_h5(
@@ -379,8 +382,10 @@ def test_restart_redistribute_different_np(work_dir):
 
 def test_restart_redistribute_large_mesh_multi_np(work_dir_large):
     """Write restart at np=4 with 20x20 mesh, read at np=4..8."""
-    assert os.path.isfile(EULER_EXE), f"euler.exe not found: {EULER_EXE}"
-    assert os.path.isfile(MESH_LARGE), f"Mesh file not found: {MESH_LARGE}"
+    if not os.path.isfile(EULER_EXE):
+        pytest.skip(f"euler.exe not found: {EULER_EXE}")
+    if not os.path.isfile(MESH_LARGE):
+        pytest.skip(f"Mesh file not found: {MESH_LARGE}")
 
     np_write = 4
 
