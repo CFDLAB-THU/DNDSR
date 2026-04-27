@@ -1,14 +1,14 @@
 # CI: configure, build, and run all tests.
 #
 # Triggers:
-#   workflow_dispatch       — manual, any branch
-#   pull_request_target     — when a maintainer adds a CI label to a PR:
-#     "ci-run"              — runs on ubuntu-latest (GitHub-hosted)
-#     "ci-run-cpu704"       — runs on cpu704 (self-hosted)
+#   workflow_dispatch            — manual, any branch
+#   pull_request_target          — when a maintainer adds a CI label to a PR:
+#     "ci-run"                   — runs on ubuntu-latest (GitHub-hosted)
+#     "ci-run-self-hosted"       — runs on self-hosted (self-hosted)
 #
 # Runner matrix:
 #   github  — ubuntu-latest, ephemeral, uses actions/cache + actions/setup-python
-#   cpu704  — self-hosted Docker container, persistent filesystem, skips caching
+#   self-hosted  — self-hosted Docker container, persistent filesystem, skips caching
 #
 # Caches (GitHub-hosted only) external dependencies (header-only libs,
 # cfd_externals, pip) so repeated runs are fast.
@@ -30,7 +30,7 @@ on:
         type: choice
         options:
           - github
-          - cpu704
+          - self-hosted
         default: github
   pull_request_target:
     types: [labeled]
@@ -45,7 +45,7 @@ jobs:
     # Run when:
     #   - workflow_dispatch with matching runner (or default 'github')
     #   - pull_request_target with 'ci-run' label  → github runner
-    #   - pull_request_target with 'ci-run-cpu704' → cpu704 runner
+    #   - pull_request_target with 'ci-run-self-hosted' → self-hosted runner
     strategy:
       fail-fast: false
       matrix:
@@ -56,16 +56,16 @@ jobs:
             use-cache: true
             setup-python: true
             install-sys-deps: true
-          - runner-id: cpu704
-            runs-on: [self-hosted, Linux, X64, cpu704]
-            label: ci-run-cpu704
+          - runner-id: self-hosted
+            runs-on: [self-hosted, Linux, X64]
+            label: ci-run-self-hosted
             use-cache: false
             setup-python: false
             install-sys-deps: false
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event.label.name == 'ci-run' ||
-      github.event.label.name == 'ci-run-cpu704'
+      github.event.label.name == 'ci-run-self-hosted'
     runs-on: ${{ matrix.runs-on }}
     # Skip matrix entries that don't match the trigger
     # - workflow_dispatch: only run the selected runner
