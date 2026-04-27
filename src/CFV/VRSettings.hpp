@@ -61,8 +61,10 @@ namespace DNDS::CFV
 
             DNDS_DECLARE_CONFIG(BaseSettings)
             {
+                // clang-format off
                 DNDS_FIELD(localOrientation,   "Use local orientation for basis");
                 DNDS_FIELD(anisotropicLengths,  "Use anisotropic length scales");
+                // clang-format on
             }
         } baseSettings;
 
@@ -130,6 +132,7 @@ namespace DNDS::CFV
 
             DNDS_DECLARE_CONFIG(FunctionalSettings)
             {
+                // clang-format off
                 DNDS_FIELD(scaleType,                "Functional scale type");
                 DNDS_FIELD(scaleMultiplier,          "Functional scale multiplier",
                            DNDS::Config::range(0.0));
@@ -149,6 +152,7 @@ namespace DNDS::CFV
                 DNDS_FIELD(greenGauss1Bias,           "Green-Gauss type-1 bias");
                 DNDS_FIELD(greenGauss1Penalty,        "Green-Gauss type-1 penalty");
                 DNDS_FIELD(greenGaussSpacial,         "Green-Gauss spatial mode: 0=default, 1=uniform");
+                // clang-format on
             }
             DNDS_DEVICE_CALLABLE FunctionalSettings() = default;
         } functionalSettings;
@@ -165,6 +169,7 @@ namespace DNDS::CFV
 
         DNDS_DECLARE_CONFIG(VRSettings)
         {
+            // clang-format off
             // Base class fields (FiniteVolumeSettings) — flattened into the same JSON object.
             // Cast base-class pointer-to-member to derived type for template deduction.
             config.field(static_cast<int T::*>(&T::maxOrder),                     "maxOrder",
@@ -203,6 +208,7 @@ namespace DNDS::CFV
                                  "Functional/weight settings");
             DNDS_FIELD(bcWeight,              "Boundary condition weight",
                        DNDS::Config::range(0.0));
+            // clang-format on
         }
 
         /// @brief Backward-compatible write (used by Python bindings).

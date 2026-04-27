@@ -1,0 +1,68 @@
+# DNDSR clang-tidy configuration.
+#
+# Single source of truth for BOTH command-line clang-tidy runs
+# (via scripts/run_clang_tidy.py) AND clangd's in-editor tidy
+# diagnostics. The project-root .clangd only adds CompileFlags
+# tweaks and no longer carries its own ClangTidy check list;
+# clangd discovers this file automatically.
+#
+# Notes on check selection:
+#   - "Warning: clang-analyzer-optin.cplusplus.VirtualCall is
+#     important and should be addressed!" -- historical note kept
+#     from the original config.
+#   - The disables mirror (and extend) the list previously carried
+#     in .clangd's ClangTidy.Remove so CLI and IDE agree.
+#   - WarningsAsErrors is intentionally empty: tidy runs are
+#     advisory reports, not build gates. If we later want a CI
+#     gate, apply it as an overlay config on top of this file.
+#
+# Notes on ExtraArgs:
+#   - -UDNDS_USE_OMP: skip #include <omp.h> which requires
+#     libomp-<ver>-dev matched to the tidy/clangd clang version.
+#   - -Wno-unknown-warning-option: our Warnings.hpp uses GCC-only
+#     warning names inside GCC pragmas (e.g. -Wclass-memaccess);
+#     clang warns on these and -Werror would turn them into errors.
+#   - -Wno-unused-command-line-argument: compile_commands.json
+#     sometimes carries flags irrelevant for the tidy pass.
+
+Checks: >
+  modernize-*,
+  readability-*,
+  bugprone-*,
+  performance-*,
+  cppcoreguidelines-*,
+  google-build-using-namespace,
+  mpi-*,
+  openmp-*,
+  -clang-diagnostic-unused-command-line-argument,
+  -modernize-use-trailing-return-type,
+  -modernize-type-traits,
+  -modernize-avoid-c-arrays,
+  -readability-braces-around-statements,
+  -readability-identifier-length,
+  -readability-implicit-bool-conversion,
+  -readability-else-after-return,
+  -readability-isolate-declaration,
+  -readability-magic-numbers,
+  -readability-math-missing-parentheses,
+  -readability-convert-member-functions-to-static,
+  -readability-avoid-nested-conditional-operator,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-casting-through-void,
+  -performance-avoid-endl,
+  -performance-enum-size,
+
+WarningsAsErrors: ''
+
+HeaderFilterRegex: '.*/DNDSR/(src|app|test/cpp)/.*'
+
+ExtraArgs:
+  - -UDNDS_USE_OMP
+  - -Wno-unknown-warning-option
+  - -Wno-unused-command-line-argument
+
+CheckOptions:
+  - key: readability-function-cognitive-complexity.Threshold
+    value: 125
+
+FormatStyle: file

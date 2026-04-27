@@ -938,6 +938,7 @@ namespace DNDS::Geom
 
             DNDS_DECLARE_CONFIG(WallDistOptions)
             {
+                // clang-format off
                 DNDS_FIELD(subdivide_quad, "Subdivide quads for wall distance computation",
                            DNDS::Config::range(0));
                 DNDS_FIELD(method, "Wall distance computation method (0: brute, 1: tree)",
@@ -948,6 +949,7 @@ namespace DNDS::Geom
                            DNDS::Config::range(0.0));
                 DNDS_FIELD(verbose, "Verbosity level for wall distance computation",
                            DNDS::Config::range(0));
+                // clang-format on
             }
         };
         void BuildNodeWallDist(const std::function<bool(Geom::t_index)> &fBndIsWall, WallDistOptions options = WallDistOptions{});
@@ -1032,6 +1034,7 @@ namespace DNDS::Geom
 
         DNDS_DECLARE_CONFIG(PartitionOptions)
         {
+            // clang-format off
             DNDS_FIELD(metisType, "METIS partitioning method",
                        DNDS::Config::enum_values({"KWAY", "RB"}));
             DNDS_FIELD(metisUfactor, "METIS imbalance factor (ufactor)",
@@ -1041,6 +1044,7 @@ namespace DNDS::Geom
                        DNDS::Config::range(0, 1));
             DNDS_FIELD(metisNcuts, "Number of cuts for METIS to try",
                        DNDS::Config::range(1));
+            // clang-format on
         }
     };
 
