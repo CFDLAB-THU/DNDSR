@@ -2,5 +2,5 @@
 
 namespace DNDS
 {
-    const char *__EigenPCH = "EigenPCH";
+    const char *EigenPCH_tag = "EigenPCH";
 }

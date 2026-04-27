@@ -37,7 +37,7 @@ namespace DNDS::Serializer
     public:
         static_assert(UnInitIndex < 0);
         /// @brief Construct with explicit local size and global offset.
-        ArrayGlobalOffset(index __size, index __offset) : _size(__size), _offset(__offset) {}
+        ArrayGlobalOffset(index sz, index ofs) : _size(sz), _offset(ofs) {}
 
         /// @brief Local size this rank owns (in element units of the caller's choosing).
         [[nodiscard]] index size() const { return _size; }

@@ -79,7 +79,7 @@ namespace DNDS
      * Used by @ref DNDS_MPI_INDEX.
      */
     template <class Tbasic>
-    constexpr MPI_Datatype __DNDSToMPITypeInt()
+    constexpr MPI_Datatype DNDSToMPITypeInt()
     {
         static_assert(sizeof(Tbasic) == 8 || sizeof(Tbasic) == 4, "DNDS::Tbasic is not right size");
         return sizeof(Tbasic) == 8 ? MPI_INT64_T : (sizeof(Tbasic) == 4 ? MPI_INT32_T : MPI_DATATYPE_NULL);
@@ -91,16 +91,16 @@ namespace DNDS
      * Used by #DNDS_MPI_REAL.
      */
     template <class Tbasic>
-    constexpr MPI_Datatype __DNDSToMPITypeFloat()
+    constexpr MPI_Datatype DNDSToMPITypeFloat()
     {
         static_assert(sizeof(Tbasic) == 8 || sizeof(Tbasic) == 4, "DNDS::Tbasic is not right size");
         return sizeof(Tbasic) == 8 ? MPI_REAL8 : (sizeof(Tbasic) == 4 ? MPI_REAL4 : MPI_DATATYPE_NULL);
     }
 
     /// @brief MPI datatype matching #index (= `MPI_INT64_T`).
-    const MPI_Datatype DNDS_MPI_INDEX = __DNDSToMPITypeInt<index>();
+    const MPI_Datatype DNDS_MPI_INDEX = DNDSToMPITypeInt<index>();
     /// @brief MPI datatype matching #real (= `MPI_REAL8`).
-    const MPI_Datatype DNDS_MPI_REAL = __DNDSToMPITypeFloat<real>();
+    const MPI_Datatype DNDS_MPI_REAL = DNDSToMPITypeFloat<real>();
 
     //! here are some reasons to upgrade to C++20...
     // detect if have CommMult and CommType static methods

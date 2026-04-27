@@ -1087,7 +1087,7 @@ namespace DNDS
         }
         /******************************************************************************************************************************/
 
-        void __InSituPackStartPush(DeviceBackend B)
+        void InSituPackStartPush(DeviceBackend B)
         {
             if (B != DeviceBackend::Unknown)
                 DNDS_check_throw_info(false, "in-situ pack not yet implemented for device");
@@ -1157,7 +1157,7 @@ namespace DNDS
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
-                __InSituPackStartPush(B);
+                InSituPackStartPush(B);
             }
             else
             {
@@ -1171,7 +1171,7 @@ namespace DNDS
             PerformanceTimer::Instance().StopTimer(PerformanceTimer::TimerType::Comm);
         }
 
-        void __InSituPackStartPull(DeviceBackend B)
+        void InSituPackStartPull(DeviceBackend B)
         {
             if (B != DeviceBackend::Unknown)
                 DNDS_check_throw_info(false, "in-situ pack not yet implemented for device");
@@ -1258,7 +1258,7 @@ namespace DNDS
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
-                __InSituPackStartPull(B);
+                InSituPackStartPull(B);
             }
             else
             {

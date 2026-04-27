@@ -44,17 +44,17 @@ namespace DNDS
     template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
               rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
     class ArrayEigenMatrix : public ParArray<real,
-                                             __OneMatGetRowSize<_mat_ni, _mat_nj>(),
-                                             __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
+                                             OneMatGetRowSize<_mat_ni, _mat_nj>(),
+                                             OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
                                              _align>
     {
     public:
-        static const rowsize _row_size = __OneMatGetRowSize<_mat_ni, _mat_nj>();
-        static const rowsize _row_size_max = __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>();
+        static const rowsize _row_size = OneMatGetRowSize<_mat_ni, _mat_nj>();
+        static const rowsize _row_size_max = OneMatGetRowSize<_mat_ni_max, _mat_nj_max>();
         using t_self = ArrayEigenMatrix<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>;
         using t_base = ParArray<real,
-                                __OneMatGetRowSize<_mat_ni, _mat_nj>(),
-                                __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
+                                OneMatGetRowSize<_mat_ni, _mat_nj>(),
+                                OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
                                 _align>;
         using t_base::t_base;
         // using t_pRowSizes = typename t_base::t_pRowSizes;
