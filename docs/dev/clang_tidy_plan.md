@@ -137,7 +137,37 @@ verification (build + any ctests), commit hash, post-pass delta.
 
 ### Pass 1 — bugprone-macro-parentheses
 
-*TODO*
+**Outcome.** 530 hits → 0. Total diagnostics 24 597 → 24 067.
+
+All 530 hits collapsed to **17 unique source locations in 3 files**:
+
+| File | Lines (col) | Distinct sites | Dupes per site |
+|---|---|---|---|
+| `src/DNDS/Defines.hpp` | 86:28, 88:39, 93:28, 95:39 | 4 | 66 |
+| `src/DNDS/ArrayDOF.hpp` | 68..79:5 | 12 | 22 |
+| `src/DNDS/Config/ConfigParam.hpp` | 700:60 | 1 | 2 |
+
+**Decision.** All 17 are false positives: every flagged token is a
+C++ *type name* or *storage-class specifier* in a context where
+parenthesization is not valid syntax:
+
+- `DNDS_DEVICE_TRIVIAL_COPY_DEFINE(T, T_Self)` — `T` and `T_Self` appear
+  as parameter types in constructor and assignment-operator signatures.
+- `DNDS_ARRAY_DOF_OP_FUNC_LIST(..., spec)` — `spec` is always passed
+  `static`; it's the leading storage-class specifier of a function
+  declaration.
+- `DNDS_DECLARE_CONFIG(Type_)` — `Type_` is used as a parameter type
+  and as a template argument.
+
+**Fix.** Three `NOLINTBEGIN` / `NOLINTEND` pairs around the macro
+definitions, each with a one-sentence rationale comment. 13 lines
+of comments replace 530 diagnostics.
+
+**Verification.** `cmake --build build -t dnds -j32` succeeds; the
+summary drop of 530 exactly matches the decrement in the total
+(no secondary effects).
+
+Commit: see `git log -- docs/dev/clang_tidy_plan.md`.
 
 ### Pass 2 — modernize-use-nodiscard
 
