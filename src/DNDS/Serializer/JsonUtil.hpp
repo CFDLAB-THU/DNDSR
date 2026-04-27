@@ -90,12 +90,12 @@ namespace DNDS
  * @details Used in the common pattern of mirroring a config struct between
  * JSON and C++:
  * ```cpp
- * #define __F(v) __DNDS__json_to_config(v)
+ * #define __F(v) DNDS_json_to_config(v)
  * __F(gamma); __F(CFL); __F(maxIter);
  * ```
  * Errors during reading are surfaced via @ref DNDS_assert_info with the member name.
  */
-#define __DNDS__json_to_config(name)                                         \
+#define DNDS_json_to_config(name)                                            \
     {                                                                        \
         if (read)                                                            \
             try                                                              \

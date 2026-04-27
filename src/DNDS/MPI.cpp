@@ -143,13 +143,13 @@ namespace DNDS
 namespace DNDS::MPI
 {
 
-#define __start_timer PerformanceTimer::Instance().StartTimer(PerformanceTimer::Comm)
-#define __stop_timer PerformanceTimer::Instance().StopTimer(PerformanceTimer::Comm)
+#define start_timer PerformanceTimer::Instance().StartTimer(PerformanceTimer::Comm)
+#define stop_timer PerformanceTimer::Instance().StopTimer(PerformanceTimer::Comm)
     /// @brief dumb wrapper
     MPI_int Bcast(void *buf, MPI_int num, MPI_Datatype type, MPI_int source_rank, MPI_Comm comm)
     {
         int ret{0};
-        __start_timer;
+        start_timer;
         if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
             ret = MPI_Bcast(buf, num, type, source_rank, comm);
         else
@@ -158,14 +158,14 @@ namespace DNDS::MPI
             ret = MPI_Ibcast(buf, num, type, source_rank, comm, &req);
             ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
         }
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
     MPI_int Alltoall(void *send, MPI_int sendNum, MPI_Datatype typeSend, void *recv, MPI_int recvNum, MPI_Datatype typeRecv, MPI_Comm comm)
     {
         int ret{0};
-        __start_timer;
+        start_timer;
         if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
             ret = MPI_Alltoall(send, sendNum, typeSend, recv, recvNum, typeRecv, comm);
         else
@@ -174,7 +174,7 @@ namespace DNDS::MPI
             ret = MPI_Ialltoall(send, sendNum, typeSend, recv, recvNum, typeRecv, comm, &req);
             ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
         }
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
@@ -183,7 +183,7 @@ namespace DNDS::MPI
         void *recv, MPI_int *recvSizes, MPI_int *recvStarts, MPI_Datatype recvType, MPI_Comm comm)
     {
         int ret{0};
-        __start_timer;
+        start_timer;
         if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
             ret = MPI_Alltoallv(
                 send, sendSizes, sendStarts, sendType,
@@ -195,7 +195,7 @@ namespace DNDS::MPI
                                  recv, recvSizes, recvStarts, recvType, comm, &req);
             ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
         }
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
@@ -203,7 +203,7 @@ namespace DNDS::MPI
                       MPI_Datatype datatype, MPI_Op op, MPI_Comm comm)
     {
         int ret{0};
-        __start_timer;
+        start_timer;
         if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
             ret = MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm);
         else
@@ -212,7 +212,7 @@ namespace DNDS::MPI
             ret = MPI_Iallreduce(sendbuf, recvbuf, count, datatype, op, comm, &req);
             ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
         }
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
@@ -220,9 +220,9 @@ namespace DNDS::MPI
                  MPI_Datatype datatype, MPI_Op op, MPI_Comm comm)
     {
         int ret{0}; // todo: add wait lazy?
-        __start_timer;
+        start_timer;
         ret = MPI_Scan(sendbuf, recvbuf, count, datatype, op, comm);
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
@@ -231,7 +231,7 @@ namespace DNDS::MPI
                       MPI_Datatype recvtype, MPI_Comm comm)
     {
         int ret{0};
-        __start_timer;
+        start_timer;
         if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
             ret = MPI_Allgather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm);
         else
@@ -240,19 +240,19 @@ namespace DNDS::MPI
             ret = MPI_Iallgather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm, &req);
             ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
         }
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
     MPI_int Barrier(MPI_Comm comm)
     {
         int ret{0};
-        __start_timer;
+        start_timer;
         if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
             ret = MPI_Barrier(comm);
         else
             ret = MPI::BarrierLazy(comm, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
@@ -287,8 +287,8 @@ namespace DNDS::MPI
             return MPI::WaitallLazy(count, reqs, statuses, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
     }
 
-#undef __start_timer
-#undef __stop_timer
+#undef start_timer
+#undef stop_timer
 
 }
 

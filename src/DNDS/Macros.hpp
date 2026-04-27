@@ -73,8 +73,8 @@ static const std::string DNDS_Defines_state =
 #endif
 
 /// @brief Stringize a macro value after a round of expansion. `DNDS_MACRO_TO_STRING(FOO)` yields the textual value of `FOO`.
-#define DNDS_MACRO_TO_STRING(V) __DNDS_str(V)
-#define __DNDS_str(V) #V
+#define DNDS_MACRO_TO_STRING(V) DNDS_str(V)
+#define DNDS_str(V) #V
 
 #if defined(__DNDS_REALLY_COMPILING__)
 /// @brief Pick between "real compilation" and "IntelliSense preview" tokens.

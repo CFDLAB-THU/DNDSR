@@ -127,7 +127,7 @@ namespace DNDS
 namespace DNDS
 {
     template <rowsize mat_n, size_t N, std::array<int, N> const &Arr, size_t... Is>
-    void __pybind11_callBindArrayDOFs_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
+    void pybind11_callBindArrayDOFs_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
     {
         (_pybind11_ArrayDOF_define_dispatch<Arr[Is], mat_n>(m), ...);
         pybind11_ArrayDOF_define<DynamicSize, mat_n>(m);
@@ -138,7 +138,7 @@ namespace DNDS
     void pybind11_callBindArrayDOF_rowsizes(py::module_ &m)
     {
         static constexpr auto seq = pybind11_arrayRowsizeInstantiationList;
-        __pybind11_callBindArrayDOFs_rowsizes_sequence<
+        pybind11_callBindArrayDOFs_rowsizes_sequence<
             mat_n,
             seq.size(),
             seq>(m, std::make_index_sequence<seq.size()>{});

@@ -97,7 +97,7 @@ namespace DNDS
         static_assert(s_T >= sizeof_T && s_T - sizeof_T < (al == NoAlign ? 1 : al), "I1");
 
         /// @brief Deduce the @ref DataLayout tag from the template parameters.
-        static constexpr DataLayout _GetDataLayout()
+        static constexpr DataLayout ComputeDataLayout()
         {
             if constexpr (rs != DynamicSize && rs != NonUniformSize && rs >= 0)
                 return TABLE_StaticFixed;
@@ -117,7 +117,7 @@ namespace DNDS
             else
                 return ErrorLayout;
         }
-        static const DataLayout _dataLayout = _GetDataLayout();
+        static const DataLayout _dataLayout = ComputeDataLayout();
         static_assert(_dataLayout != ErrorLayout, "Layout Error");
         static const bool isCSR = _dataLayout == CSR;
 
@@ -250,7 +250,7 @@ namespace DNDS
             t_Layout::rm,
             t_Layout::sizeof_T,
             t_Layout::s_T,
-            t_Layout::_GetDataLayout,
+            t_Layout::ComputeDataLayout,
             t_Layout::_dataLayout,
             t_Layout::isCSR;
         using t_Layout::GetArrayName,

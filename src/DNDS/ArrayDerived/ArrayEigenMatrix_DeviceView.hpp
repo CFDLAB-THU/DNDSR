@@ -17,7 +17,7 @@ namespace DNDS
      * for the remaining runtime-determined cases.
      */
     template <rowsize _mat_ni, rowsize _mat_nj>
-    constexpr rowsize __OneMatGetRowSize()
+    constexpr rowsize OneMatGetRowSize()
     {
         if constexpr (_mat_ni >= 0 && _mat_nj >= 0)
         {
@@ -45,14 +45,14 @@ namespace DNDS
     template <DeviceBackend B, class real_T, rowsize _mat_ni = 1, rowsize _mat_nj = 1,
               rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
     class ArrayEigenMatrixDeviceView : public ArrayDeviceView<B, real_T,
-                                                              __OneMatGetRowSize<_mat_ni, _mat_nj>(),
-                                                              __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
+                                                              OneMatGetRowSize<_mat_ni, _mat_nj>(),
+                                                              OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
                                                               _align>
     {
     public:
         using t_base = ArrayDeviceView<B, real_T,
-                                       __OneMatGetRowSize<_mat_ni, _mat_nj>(),
-                                       __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
+                                       OneMatGetRowSize<_mat_ni, _mat_nj>(),
+                                       OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
                                        _align>;
         // using t_base::t_base;
         using t_self = ArrayEigenMatrixDeviceView<B, real_T, _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>;

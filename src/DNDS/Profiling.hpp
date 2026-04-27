@@ -22,7 +22,7 @@ namespace DNDS
     class PerformanceTimer // cxx11 + thread-safe singleton
     {
     public:
-        /// @brief Named timer slots. New categories can be added before `__EndTimerType`.
+        /// @brief Named timer slots. New categories can be added before `EndTimerType`.
         enum TimerType
         {
             Unknown = 0,
@@ -44,10 +44,10 @@ namespace DNDS
             LinSolve3 = 16,       ///< Linear solve phase 3.
             Positivity = 17,      ///< Positivity preservation.
             PositivityOuter = 18, ///< Outer-iteration positivity.
-            __EndTimerType = 64   ///< One past the last valid id.
+            EndTimerType = 64     ///< One past the last valid id.
         };
 
-        static const int Ntype = __EndTimerType;
+        static const int Ntype = EndTimerType;
         static const int Ntype_Past = 64;
         static const int Ntype_All = Ntype + Ntype_Past;
 

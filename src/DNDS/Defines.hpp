@@ -686,8 +686,8 @@ namespace DNDS::Meta
     {
     };
 
-    template <typename _Tp>
-    inline constexpr bool is_std_array_v = is_std_array<_Tp>::value;
+    template <typename Tp>
+    inline constexpr bool is_std_array_v = is_std_array<Tp>::value;
 
     static_assert(is_std_array_v<std::array<real, 5>> && (!is_std_array_v<std::vector<real>>)); // basic test
 
@@ -725,8 +725,8 @@ namespace DNDS::Meta
                                        (max_m > 0 && max_n > 0));
     };
 
-    template <typename _Tp>
-    inline constexpr bool is_fixed_data_real_eigen_matrix_v = is_fixed_data_real_eigen_matrix<_Tp>::value;
+    template <typename Tp>
+    inline constexpr bool is_fixed_data_real_eigen_matrix_v = is_fixed_data_real_eigen_matrix<Tp>::value;
 
     static_assert(!is_fixed_data_real_eigen_matrix_v<std::array<real, 10>> &&
                       is_fixed_data_real_eigen_matrix_v<Eigen::Matrix<real, 2, 2>> &&

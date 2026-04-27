@@ -314,7 +314,48 @@ Commit: see `git log`.
 
 ### Pass 5 — bugprone-reserved-identifier
 
-*TODO*
+**Outcome.** 1 404 hits → 0. Total diagnostics 20 794 → 19 390.
+
+**Method.** Manual; this check has no auto-fix. The 1 404 hits
+collapsed to ~25 unique identifiers, each flagged because it starts
+with `__` or `_[A-Z]` or contains `__` (all reserved-name patterns
+per [lex.name]/3.2).
+
+**Renames applied (leading underscores dropped):**
+
+| Before | After | Notes |
+|---|---|---|
+| `_Tp` | `Tp` | Template parameter in 2 sites (Defines.hpp). |
+| `__DNDS_str` | `DNDS_str` | Token-stringize helper macro. |
+| `__DNDS__json_to_config` | `DNDS_json_to_config` | Both leading and internal `__` removed. |
+| `__DNDSToMPITypeInt`, `__DNDSToMPITypeFloat` | drop leading `__`. |  |
+| `__EndTimerType` | `EndTimerType` | Timer callback type. |
+| `__InSituPackStartPull`, `__InSituPackStartPush` | drop leading `__`. |  |
+| `__OneMatGetRowSize` | `OneMatGetRowSize` | Template helper. |
+| `__ReadSerializerData`, `__ReadSerializerDataAndPropagateOffset`, `__ReadSerializerStructuralAndResolveDataOffset`, `__WriteSerializerData` | drop leading `__`. | Serializer internals. |
+| `__Row_size` | `Row_size` | Template metafunction. |
+| `__p_indices` | `p_indices` | Helper in bind module. |
+| `__start_timer`, `__stop_timer` | `start_timer`, `stop_timer` | Timer API. |
+| `__pybind11_callBind*s_rowsizes_sequence` (×8) | drop leading `__`. | Our own template helpers that happened to live next to pybind11 code. |
+| `__EigenPCH`, `__ExprtkPCH` | `EigenPCH_tag`, `ExprtkPCH_tag` | Module-tag strings; avoided colliding with the class / filename. |
+
+**Collision-handled:**
+
+| Before | After | Rationale |
+|---|---|---|
+| `__size`, `__offset` (SerializerBase.hpp:40) | `sz`, `ofs` | Ctor params; `size`/`offset` have 521 / 302 existing uses. |
+| `_GetDataLayout` (ArrayBasic.hpp / Array.hpp) | `ComputeDataLayout` | `GetDataLayout` already exists as a different member. |
+
+**Verification.** `cmake --build build -t dnds -j32` succeeds;
+`cmake --build build -t euler -j32` succeeds (catches cross-module
+consumers in Euler/CFV); clang-tidy re-summary shows 0 hits for
+`bugprone-reserved-identifier`.
+
+**Lesson.** A plain leading-underscore strip is not enough when the
+identifier also has an internal `__`; re-running the check after each
+bulk sed pass catches the residue quickly.
+
+Commit: see `git log`.
 
 ### Pass 6 — cppcoreguidelines-special-member-functions
 
