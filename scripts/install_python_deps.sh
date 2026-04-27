@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# install_python_deps.sh — Install Python dependencies that need source builds.
+# install_python_deps.sh — Install ALL Python dependencies for DNDSR.
 #
-# mpi4py and h5py must be compiled from source against the project's MPI
-# and HDF5 libraries.  Binary wheels from PyPI link the wrong libraries
-# and fail at import time.
+# This is the single entry point for setting up the Python environment.
+# It installs:
+#   1. Binary-wheel packages from requirements.txt  (numpy, scipy, pytest, …)
+#   2. mpi4py compiled from source against the project's MPI
+#   3. h5py   compiled from source against the project's HDF5 (cfd_externals)
+#   4. scikit-build-core and pybind11 for building the C++ Python modules
+#
+# h5py and mpi4py MUST be compiled from source.  Binary wheels from PyPI
+# bundle their own HDF5/MPI libraries, which conflict with the versions
+# linked by the DNDSR pybind11 modules and cause crashes at import time.
 #
 # Usage:
 #   ./scripts/install_python_deps.sh          # uses venv/bin/pip, auto-detect jobs
@@ -45,27 +52,39 @@ echo "  HDF5_DIR  = $HDF5_DIR"
 echo "  MPI_CC    = $MPI_CC"
 echo ""
 
-# Standard test/runtime deps (binary wheels are fine)
-echo "--- Installing binary deps ---"
-"$PIP" install --quiet numpy scipy pytest pytest-mpi pytest-subtests
+# ---- 1. Binary-wheel packages from requirements.txt ----------------------
+REQ_FILE="$PROJECT_ROOT/requirements.txt"
+if [ -f "$REQ_FILE" ]; then
+    echo "--- Installing packages from requirements.txt ---"
+    "$PIP" install -r "$REQ_FILE"
+else
+    echo "Warning: $REQ_FILE not found, skipping" >&2
+fi
 
-# mpi4py — must be compiled against the project's MPI
+# ---- 2. Build tools needed for pybind11 modules --------------------------
 echo ""
-echo "--- Installing mpi4py (from source, CC=$MPI_CC) ---"
+echo "--- Installing build tools (scikit-build-core, pybind11) ---"
+"$PIP" install scikit-build-core pybind11
+
+# ---- 3. mpi4py — compiled against the project's MPI ----------------------
+echo ""
+echo "--- Installing mpi4py (from source, CC=$MPI_CC, -j$JOBS) ---"
 CC="$MPI_CC" \
     MAKEFLAGS="-j$JOBS" \
+    CMAKE_BUILD_PARALLEL_LEVEL="$JOBS" \
     "$PIP" install --no-binary mpi4py mpi4py --force-reinstall \
-    2>&1 | tail -5
+    --verbose
 
-# h5py — must be compiled against the project's HDF5 (which is MPI-enabled)
+# ---- 4. h5py — compiled against the project's HDF5 (MPI-enabled) ---------
 echo ""
-echo "--- Installing h5py (from source, HDF5_DIR=$HDF5_DIR, HDF5_MPI=ON) ---"
+echo "--- Installing h5py (from source, HDF5_DIR=$HDF5_DIR, HDF5_MPI=ON, -j$JOBS) ---"
 CC="$MPI_CC" \
     HDF5_DIR="$HDF5_DIR" \
     HDF5_MPI="ON" \
     MAKEFLAGS="-j$JOBS" \
+    CMAKE_BUILD_PARALLEL_LEVEL="$JOBS" \
     "$PIP" install --no-binary h5py h5py --force-reinstall \
-    2>&1 | tail -5
+    --verbose
 
 echo ""
 echo "=== Done ==="

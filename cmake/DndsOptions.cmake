@@ -24,7 +24,7 @@ set(DNDS_UNSAFE_MATH_OPT OFF CACHE BOOL "use -funsafe-math-optimizations")
 set(DNDS_NATIVE_ARCH     OFF CACHE BOOL "use -march=native")
 set(DNDS_LTO OFF CACHE BOOL "use -flto")
 set(DNDS_LTO_THIN OFF CACHE BOOL "use -flto=thin")
-set(DNDS_PYBIND11_NO_LTO OFF CACHE BOOL "disable lto in pybind11")
+set(DNDS_PYBIND11_NO_LTO ON CACHE BOOL "disable lto in pybind11")
 cmake_host_system_information(RESULT NPROC
                               QUERY NUMBER_OF_PHYSICAL_CORES)
 set(DNDS_LTO_N ${NPROC} CACHE STRING "n in -flto=<n>")

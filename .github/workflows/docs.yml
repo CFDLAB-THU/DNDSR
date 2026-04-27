@@ -8,7 +8,7 @@
 # Cache layers:
 #   1. pip packages        — keyed by requirements.txt hash
 #   2. Header-only libs    — keyed by tarball URL (changes ~never)
-#   3. cfd_externals build — keyed by build script + .gitmodules hash
+#   3. cfd_externals build — keyed by build script + submodule commit
 
 name: Deploy Documentation
 
@@ -49,6 +49,10 @@ jobs:
       # ------------------------------------------------------------------
       # 2. System packages
       # ------------------------------------------------------------------
+      - name: Get cfd_externals submodule commit
+        id: submod
+        run: echo "cfd_ext_sha=$(git rev-parse HEAD:external/cfd_externals)" >> "$GITHUB_OUTPUT"
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -112,7 +116,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: external/cfd_externals/install
-          key: cfd-ext-${{ runner.os }}-${{ hashFiles('external/cfd_externals/cfd_externals_build.py', '.gitmodules') }}
+          key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('external/cfd_externals/cfd_externals_build.py') }}
 
       - name: Build cfd_externals
         if: steps.cache-cfd-ext.outputs.cache-hit != 'true'

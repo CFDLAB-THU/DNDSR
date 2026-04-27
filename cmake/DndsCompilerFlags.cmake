@@ -81,17 +81,20 @@ if(UNIX OR MINGW)
         -Wall -Wno-unused-but-set-variable -Wno-unused-variable  -Wno-sign-compare
         $<$<NOT:$<COMPILE_LANGUAGE:CUDA>>:-Werror=return-type>
         )
-    # Force RPATH (not RUNPATH) so bundled libstdc++ takes precedence
-    # over LD_LIBRARY_PATH (e.g. from conda environments).
+    # Force RPATH (not RUNPATH) so bundled cfd_externals libraries
+    # (hdf5, cgns, metis, parmetis, zlib) take precedence over any
+    # system copies found via LD_LIBRARY_PATH.
     # OpenMPI's mpicxx passes --enable-new-dtags; we override it.
     #
     # RPATH is searched before LD_LIBRARY_PATH, which means the package's
-    # own bundled libraries (under _lib/) are found first.  This prevents
-    # conda/anaconda's older libstdc++ (loaded at Python startup) from
-    # overriding the version shipped with DNDSR.  RPATH directories are
-    # baked into the binary at link time, so only the package maintainer
-    # controls them — unlike LD_LIBRARY_PATH, which any script or module
-    # system can modify.  For this use case, RPATH is the safer choice.
+    # own bundled libraries (under _lib/) are found first.  RPATH
+    # directories are baked into the binary at link time, so only the
+    # package maintainer controls them — unlike LD_LIBRARY_PATH, which
+    # any script or module system can modify.
+    #
+    # Note: libstdc++ and libmpi are NOT bundled (they must come from
+    # the system to avoid dual-allocator crashes).  See
+    # DndsStdlibSetup.cmake and DndsExternalDeps.cmake for details.
     add_link_options("-Wl,--disable-new-dtags")
     add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=128>)
     add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=177>) # declared but never referenced

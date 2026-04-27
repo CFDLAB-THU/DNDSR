@@ -4,10 +4,11 @@ from DNDSR.Geom.utils import *
 import numpy as np
 
 from DNDSR.EulerP.EulerP_Solver import Solver
-import cProfile, time
+import cProfile
+import time
 
 
-def test_solver(
+def run_test_solver(
     mpi: DNDS.MPIInfo,
     ifCuda=False,
 ):
@@ -161,4 +162,4 @@ if __name__ == "__main__":
         # curuntime.deviceSynchronize()
         pass
 
-    test_solver(mpi, ifCuda=ifCuda)
+    run_test_solver(mpi, ifCuda=ifCuda)

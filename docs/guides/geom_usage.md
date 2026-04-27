@@ -35,11 +35,11 @@ B--D add the CFV layer.
 ### C++ Pipeline (Phase A)
 
 Each step is explained with *why* it is needed.
-(Source: `Geom/Mesh.hpp` for declarations;
-`Geom/Mesh_Serial_ReadFromCGNS.cpp` for the CGNS reader implementation.)
+(Source: `Geom/Mesh/Mesh.hpp` for declarations;
+`Geom/Mesh/Mesh_Serial_ReadFromCGNS.cpp` for the CGNS reader implementation.)
 
 ```cpp
-#include "Geom/Mesh.hpp"
+#include "Geom/Mesh/Mesh.hpp"
 using namespace DNDS;
 using namespace DNDS::Geom;
 
@@ -98,7 +98,7 @@ mesh->AssertOnFaces();
 
 After these 8 steps the mesh is ready.  Optional steps
 (order elevation, h-bisection) can be inserted between steps 7 and 8;
-see `Mesh.hpp:490` for `BuildO2FromO1Elevation` and `Mesh.hpp:497` for
+see `Mesh/Mesh.hpp` for `BuildO2FromO1Elevation` and
 `BuildBisectO1FormO2`.
 
 ### Python Pipeline
@@ -124,7 +124,7 @@ mesh, reader, name2ID = create_mesh_from_CGNS(
 
 `name2ID` maps boundary zone names (from the CGNS file) to integer IDs,
 which you use when setting boundary conditions.
-(Source: `python/DNDSR/Geom/utils.py:23`.)
+(Source: `python/DNDSR/Geom/utils.py`.)
 
 ## Part 2: Mesh Topology -- Arrays and Access Patterns
 
@@ -133,7 +133,7 @@ stores owned entities; son stores ghosts from neighboring ranks.
 
 ### Primary Connectivity
 
-(Source: `Geom/Mesh.hpp:54-66`.)
+(Source: `Geom/Mesh/Mesh.hpp`.)
 
 | Array | Row entity | Column content | Row width |
 |---|---|---|---|
@@ -145,7 +145,7 @@ stores owned entities; son stores ghosts from neighboring ranks.
 
 ### Face Connectivity (After `InterpolateFace`)
 
-(Source: `Geom/Mesh.hpp:94-104`.)
+(Source: `Geom/Mesh/Mesh.hpp`.)
 
 | Array | Row entity | Column content | Row width |
 |---|---|---|---|
@@ -156,7 +156,7 @@ stores owned entities; son stores ghosts from neighboring ranks.
 
 ### Size Queries
 
-(Source: `Geom/Mesh.hpp:456-478`.)
+(Source: `Geom/Mesh/Mesh.hpp`.)
 
 ```cpp
 mesh->NumCell()        // owned cells
@@ -238,7 +238,7 @@ int nFaces = elem.GetNumFaces();     // 4 for Quad, 6 for Hex
 ### Node Coordinates
 
 Coordinates are always 3D (`Eigen::Vector3d`), even for 2D meshes
-(z=0).  `GetCoordsOnCell` at `Geom/Mesh.hpp:566` applies periodic
+(z=0).  `GetCoordsOnCell` (in `Geom/Mesh/Mesh.hpp`) applies periodic
 coordinate transformations when a cell straddles a periodic boundary;
 always use it instead of manually reading `coords[cell2node[iCell][j]]`
 unless you know the mesh is not periodic.
@@ -303,7 +303,7 @@ which *inherits* from `FiniteVolume` and adds reconstruction matrices
 
 The minimum configuration is `maxOrder` (polynomial order of
 reconstruction) and `intOrder` (quadrature order).  Additional settings
-(`FiniteVolume/FiniteVolumeSettings.hpp:22-65` for FV,
+(`CFV/FiniteVolumeSettings.hpp` for FV,
 `CFV/VRSettings.hpp:32-239` for the VR-extended struct) control caching,
 anisotropic functionals, limiter behavior, and more.
 

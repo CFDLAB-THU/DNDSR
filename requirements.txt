@@ -1,9 +1,16 @@
-# Runtime + development dependencies for DNDSR.
+# Python dependencies installable from binary wheels.
 #
-# This file is the single source of truth for the dev environment.
-# pyproject.toml (scikit-build-core) does not consume this file directly;
-# the [project.optional-dependencies].dev extra in pyproject.toml mirrors
-# the formatter tools below. Keep the two lists in sync when editing.
+# To set up the full dev environment, run:
+#
+#   ./scripts/install_python_deps.sh
+#
+# The script installs everything in this file, then builds h5py and mpi4py
+# from source against the project's HDF5 (cfd_externals) and MPI.  Those
+# two packages are deliberately excluded here because their PyPI wheels
+# bundle incompatible library versions that crash at import time.
+#
+# pyproject.toml [project.optional-dependencies].dev mirrors the formatter
+# tools below — keep the two lists in sync when editing.
 
 # Core runtime
 numpy
@@ -11,10 +18,10 @@ scipy
 sympy
 pandas
 matplotlib
-h5py
+# h5py        — source build required, see scripts/install_python_deps.sh
 jsonschema
 pyyaml
-mpi4py
+# mpi4py      — source build required, see scripts/install_python_deps.sh
 dash
 
 # Build / packaging
@@ -28,6 +35,7 @@ compdb
 # Testing
 pytest
 pytest-mpi
+pytest-timeout
 
 # Formatting / pre-commit hook tools
 # (clang-format is installed via system package manager, not pip)

@@ -72,27 +72,40 @@ def _load_so(path: Path) -> None:
     import ctypes
     if path.exists():
         # RTLD_GLOBAL: make symbols available for subsequent DT_NEEDED resolution.
-        # os.RTLD_DEEPBIND: prefer this library's own dependencies over
-        # already-loaded ones (works around conda/anaconda providing an older
-        # libstdc++ that was loaded at Python startup).
         #
-        # RTLD_DEEPBIND can interfere with libraries that use dlopen and
-        # expect to share symbols (e.g., some MPI implementations).  Set
-        # the environment variable DNDSR_NO_DEEPBIND=1 to disable it for
-        # debugging.  When disabled, LD_LIBRARY_PATH and RPATH control
-        # symbol resolution as usual.
-        use_deepbind = getattr(os, "RTLD_DEEPBIND", 0)
-        if os.environ.get("DNDSR_NO_DEEPBIND", "").strip() in ("1", "true", "yes"):
-            use_deepbind = 0
+        # RTLD_DEEPBIND is OFF by default.  It makes each library prefer its
+        # own dependencies over already-loaded ones, which was intended to
+        # work around conda/anaconda shipping an older libstdc++ that gets
+        # loaded at Python startup.  However, when the bundled and system
+        # libstdc++ are the same (or close) version, RTLD_DEEPBIND creates
+        # two separate allocator instances that cause double-free crashes
+        # (e.g., "free(): double free detected in tcache 2") because MPI
+        # and other system libraries use the system libstdc++ while DNDSR
+        # uses the bundled copy.
+        #
+        # Set DNDSR_USE_DEEPBIND=1 to enable it (only needed when running
+        # under conda/anaconda with an incompatible libstdc++).
+        use_deepbind = 0
+        if os.environ.get("DNDSR_USE_DEEPBIND", "").strip() in ("1", "true", "yes"):
+            use_deepbind = getattr(os, "RTLD_DEEPBIND", 0)
         mode = ctypes.RTLD_GLOBAL | use_deepbind
         CDLL(str(path), mode=mode)
 
 
 # Library dependency graph (order matters: load dependencies first).
-# libstdc++ must be loaded first if bundled, to override the (potentially
-# older) version provided by conda/anaconda's Python runtime.
+#
+# Only libraries built by cfd_externals are preloaded here.  System-provided
+# libraries (libstdc++, libmpi) must NOT be bundled or preloaded:
+#
+# - libstdc++: bundling it causes dual-allocator double-free crashes when
+#   system libraries (e.g. libmpi) use the system copy while DNDSR uses
+#   the bundled copy.  If conda provides an older libstdc++, use
+#   LD_LIBRARY_PATH or DNDSR_USE_DEEPBIND=1 instead.
+#
+# - libmpi: MPI libraries are tightly coupled to the system MPI runtime
+#   (orted/prte, PMIx, fabric drivers).  A bundled copy from one machine
+#   will not work on another and conflicts with the system mpirun.
 _EXTERNAL_LIBS: Sequence[str] = [
-    "libstdc++.so",
     "libz.so",
     "libhdf5.so",
     "libcgns.so",

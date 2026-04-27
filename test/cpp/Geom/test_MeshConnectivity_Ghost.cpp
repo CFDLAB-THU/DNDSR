@@ -373,60 +373,102 @@ TEST_CASE("GhostChain: adjKindName")
 /// ghost counts are exact within this abstract partition.
 struct SyntheticTiledGrid
 {
-    DNDS::index N;         // tile size per rank
-    DNDS::index totalCols; // np * N
-    DNDS::index totalRows; // N
-    DNDS::index nCellLocal;
-    DNDS::index nNodeLocal;
-    DNDS::index colStart, colEnd; // column range for this rank's cells
+    bool periodic{false};
+    DNDS::index N, totalCols, totalRows;
+    DNDS::index nCellLocal, nNodeLocal;
+    DNDS::index colStart, colEnd, rowStart, rowEnd;
+    DNDS::index rankCol, rankRow, ranksPerRow, ranksPerCol;
+    std::vector<DNDS::index> ownerNodeOffsets; // pre-computed, no MPI
     tAdjPair cell2cell, cell2node;
     ssp<GlobalOffsetsMapping> cellGM, nodeGM;
 
-    /// Cell global index: rank-contiguous. Rank p's cells are [p*N², (p+1)*N²).
-    /// Cell at physical (r, c) where c is in [colStart, colEnd) for rank p.
-    DNDS::index cellGlobal(DNDS::index rank, DNDS::index r, DNDS::index localCol) const
+    DNDS::index cellGlobal(DNDS::index rank, DNDS::index localRow, DNDS::index localCol) const
     {
-        return rank * N * N + r * N + localCol;
+        return rank * N * N + localRow * N + localCol;
     }
-    /// Find owning rank from physical column.
-    DNDS::index cellOwnerRank(DNDS::index globalCol) const { return globalCol / N; }
-    /// Node global index (non-periodic, row-major across full grid).
-    DNDS::index nodeGlobal(DNDS::index r, DNDS::index c) const { return r * (totalCols + 1) + c; }
+    DNDS::index cellOwnerRank(DNDS::index gr, DNDS::index gc) const
+    {
+        DNDS::index rc = std::min(gc / N, ranksPerRow - 1);
+        DNDS::index rr = std::min(gr / N, ranksPerCol - 1);
+        return rr * ranksPerRow + rc;
+    }
+    /// Node global index via per-rank local matrix.  Node at (r,c) belongs to
+    /// cellOwnerRank(r,c).  Its local (row,col) within that rank and its
+    /// rank's offset give the 1-D global index.  Periodic nodes wrap.
+    DNDS::index nodeGlobal(DNDS::index r, DNDS::index c) const
+    {
+        DNDS::index wr = r, wc = c;
+        if (periodic)
+        {
+            wr = ((r % totalRows) + totalRows) % totalRows;
+            wc = ((c % totalCols) + totalCols) % totalCols;
+        }
+        DNDS::index owner = cellOwnerRank(wr, wc);
+        DNDS::index ownerRC = (owner % ranksPerRow) * N;
+        DNDS::index ownerRR = (owner / ranksPerRow) * N;
+        DNDS::index ownerNCW = periodic ? N
+                                        : N + ((owner % ranksPerRow == ranksPerRow - 1) ? 1 : 0);
+        DNDS::index ownerNRH = periodic ? N
+                                        : N + ((owner / ranksPerRow == ranksPerCol - 1) ? 1 : 0);
+        DNDS::index localCol = wc - ownerRC;
+        DNDS::index localRow = wr - ownerRR;
+        return ownerNodeOffsets[owner] + localRow * ownerNCW + localCol;
+    }
 
     void build(DNDS::index tileN, const MPIInfo &mpi)
     {
         N = tileN;
-        totalCols = mpi.size * N;
-        totalRows = N;
-        colStart = mpi.rank * N;
-        colEnd = (mpi.rank + 1) * N;
+
+        ranksPerRow = DNDS::index(std::sqrt(double(mpi.size)));
+        ranksPerCol = mpi.size / ranksPerRow;
+        while (ranksPerRow * ranksPerCol != mpi.size && ranksPerRow > 1)
+            ranksPerRow--, ranksPerCol = mpi.size / ranksPerRow;
+        if (ranksPerRow * ranksPerCol != mpi.size)
+            ranksPerRow = mpi.size, ranksPerCol = 1;
+
+        rankCol = mpi.rank % ranksPerRow;
+        rankRow = mpi.rank / ranksPerRow;
+
+        totalCols = ranksPerRow * N;
+        totalRows = ranksPerCol * N;
+        colStart = rankCol * N;
+        colEnd = (rankCol + 1) * N;
+        rowStart = rankRow * N;
+        rowEnd = (rankRow + 1) * N;
         nCellLocal = N * N;
 
-        // Node partition: rank r owns node columns [rank*N, (rank+1)*N).
-        // The rightmost rank also owns column np*N (the +1 boundary).
-        // Actually, simpler: each rank owns nodes in its cell tile's column
-        // range, plus the right boundary column if it's the last rank.
-        DNDS::index nodeColStart = colStart;
-        DNDS::index nodeColEnd = colEnd + ((mpi.rank == mpi.size - 1) ? 1 : 0);
-        nNodeLocal = (N + 1) * (nodeColEnd - nodeColStart);
+        bool lastInRow = (rankCol == ranksPerRow - 1);
+        bool lastInCol = (rankRow == ranksPerCol - 1);
 
-        // Global mappings.
+        // Node partition: pre-compute offsets from known shapes.
+        ownerNodeOffsets.resize(mpi.size);
+        {
+            DNDS::index off = 0;
+            for (DNDS::index ri = 0; ri < mpi.size; ri++)
+            {
+                ownerNodeOffsets[ri] = off;
+                DNDS::index rc = ri % ranksPerRow;
+                DNDS::index rr = ri / ranksPerRow;
+                DNDS::index ncw = N + (periodic ? 0 : (rc == ranksPerRow - 1 ? 1 : 0));
+                DNDS::index nrh = N + (periodic ? 0 : (rr == ranksPerCol - 1 ? 1 : 0));
+                off += nrh * ncw;
+            }
+        }
+        nNodeLocal = (periodic ? N * N
+                               : (N + (lastInRow ? 1 : 0)) * (N + (lastInCol ? 1 : 0)));
+
         cellGM = std::make_shared<GlobalOffsetsMapping>();
         cellGM->setMPIAlignBcast(mpi, nCellLocal);
 
         nodeGM = std::make_shared<GlobalOffsetsMapping>();
         nodeGM->setMPIAlignBcast(mpi, nNodeLocal);
 
-        DNDS::index cellOffset = cellGM->operator()(mpi.rank, 0);
-
-        // Build cell2node.
         cell2node.InitPair("tiled_c2n", mpi);
         cell2node.father->Resize(nCellLocal);
         for (DNDS::index iLocal = 0; iLocal < nCellLocal; iLocal++)
         {
-            DNDS::index r = iLocal / N;
-            DNDS::index localCol = iLocal % N;
-            DNDS::index c = colStart + localCol;
+            DNDS::index r = rowStart + iLocal / N;
+            DNDS::index c = colStart + iLocal % N;
             cell2node.father->ResizeRow(iLocal, 4);
             cell2node.father->operator()(iLocal, 0) = nodeGlobal(r, c);
             cell2node.father->operator()(iLocal, 1) = nodeGlobal(r, c + 1);
@@ -435,17 +477,15 @@ struct SyntheticTiledGrid
         }
         cell2node.father->pLGlobalMapping = cellGM;
 
-        // Build cell2cell (node-neighbor, exclude self).
         cell2cell.InitPair("tiled_c2c", mpi);
         cell2cell.father->Resize(nCellLocal);
         for (DNDS::index iLocal = 0; iLocal < nCellLocal; iLocal++)
         {
-            DNDS::index r = iLocal / N;
-            DNDS::index localCol = iLocal % N;
-            DNDS::index c = colStart + localCol;
-            DNDS::index myGlobal = cellGlobal(mpi.rank, r, localCol);
+            DNDS::index r = rowStart + iLocal / N;
+            DNDS::index c = colStart + iLocal % N;
+            DNDS::index myGlobal = cellGlobal(mpi.rank, iLocal / N, iLocal % N);
 
-            std::vector<DNDS::index> neighbors;
+            std::set<DNDS::index> neighbors;
             for (DNDS::index dr = -1; dr <= 1; dr++)
             {
                 for (DNDS::index dc = -1; dc <= 1; dc++)
@@ -454,59 +494,82 @@ struct SyntheticTiledGrid
                         continue;
                     DNDS::index nr = r + dr;
                     DNDS::index nc = c + dc;
-                    if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols)
+                    if (periodic)
                     {
-                        DNDS::index ownerRank = cellOwnerRank(nc);
-                        DNDS::index neighborLocalCol = nc - ownerRank * N;
-                        DNDS::index nbGlobal = cellGlobal(ownerRank, nr, neighborLocalCol);
-                        if (nbGlobal != myGlobal)
-                            neighbors.push_back(nbGlobal);
+                        nr = ((nr % totalRows) + totalRows) % totalRows;
+                        nc = ((nc % totalCols) + totalCols) % totalCols;
                     }
+                    else if (nr < 0 || nr >= totalRows || nc < 0 || nc >= totalCols)
+                        continue;
+                    DNDS::index owner = cellOwnerRank(nr, nc);
+                    DNDS::index nbr = nr - (owner / ranksPerRow) * N;
+                    DNDS::index nbc = nc - (owner % ranksPerRow) * N;
+                    DNDS::index nbGlobal = cellGlobal(owner, nbr, nbc);
+                    if (nbGlobal != myGlobal)
+                        neighbors.insert(nbGlobal);
                 }
             }
-            cell2cell.father->ResizeRow(iLocal, neighbors.size());
-            for (DNDS::rowsize j = 0; j < static_cast<DNDS::rowsize>(neighbors.size()); j++)
-                cell2cell.father->operator()(iLocal, j) = neighbors[j];
+            std::vector<DNDS::index> nbVec(neighbors.begin(), neighbors.end());
+            cell2cell.father->ResizeRow(iLocal, nbVec.size());
+            for (DNDS::rowsize j = 0; j < static_cast<DNDS::rowsize>(nbVec.size()); j++)
+                cell2cell.father->operator()(iLocal, j) = nbVec[j];
         }
         cell2cell.father->pLGlobalMapping = cellGM;
     }
 
-    /// Compute expected ghost cell set analytically.
+    DNDS::index expectedGhostNodesN(DNDS::index nLayers) const
+    {
+        DNDS::index dx = std::min(N + 2 * nLayers + 1, totalRows);
+        DNDS::index dy = std::min(N + 2 * nLayers + 1, totalCols);
+        DNDS::index total = (periodic ? N * N : nNodeLocal);
+        return dx * dy - total;
+    }
+
     std::set<DNDS::index> expectedGhostCells(const MPIInfo &mpi) const
     {
         DNDS::index cellOffset = cellGM->operator()(mpi.rank, 0);
         std::set<DNDS::index> ghosts;
         for (DNDS::index iLocal = 0; iLocal < nCellLocal; iLocal++)
-        {
             for (DNDS::rowsize j = 0; j < cell2cell.father->operator[](iLocal).size(); j++)
             {
                 DNDS::index nb = cell2cell.father->operator()(iLocal, j);
                 if (nb < cellOffset || nb >= cellOffset + nCellLocal)
                     ghosts.insert(nb);
             }
-        }
         return ghosts;
     }
 
-    /// Compute expected ghost node set from Cell→Cell2Node on owned cells.
     std::set<DNDS::index> expectedGhostNodesFromOwnedCells(const MPIInfo &mpi) const
     {
         DNDS::index nodeOffset = nodeGM->operator()(mpi.rank, 0);
         DNDS::index nodeEnd = nodeOffset + nNodeLocal;
         std::set<DNDS::index> ghosts;
         for (DNDS::index iLocal = 0; iLocal < nCellLocal; iLocal++)
-        {
             for (DNDS::rowsize j = 0; j < 4; j++)
             {
                 DNDS::index n = cell2node.father->operator()(iLocal, j);
                 if (n < nodeOffset || n >= nodeEnd)
                     ghosts.insert(n);
             }
-        }
         return ghosts;
     }
-};
 
+    /// Analytical n-layer cell ghost count.
+    DNDS::index expectedGhostCellsN(DNDS::index nLayers) const
+    {
+        if (periodic)
+        {
+            DNDS::index dx = std::min(N + 2 * nLayers, totalCols);
+            DNDS::index dy = std::min(N + 2 * nLayers, totalRows);
+            return dx * dy - N * N;
+        }
+        DNDS::index rMin = std::max(DNDS::index(0), rowStart - nLayers * N);
+        DNDS::index rMax = std::min(totalRows, rowEnd + nLayers * N);
+        DNDS::index cMin = std::max(DNDS::index(0), colStart - nLayers * N);
+        DNDS::index cMax = std::min(totalCols, colEnd + nLayers * N);
+        return (rMax - rMin) * (cMax - cMin) - N * N;
+    }
+};
 TEST_CASE("evaluateGhostTree: performance benchmark")
 {
     if (g_mpi.size < 2)
@@ -868,162 +931,8 @@ TEST_CASE("evaluateGhostTree: np=1 produces no ghosts")
 
 /// Generate a doubly-periodic NxN-per-rank tiled grid.
 ///
-/// Same layout as SyntheticTiledGrid but with periodic wrapping:
-///   - Row-periodic: row 0 ↔ row N-1 (top-bottom)
-///   - Column-periodic: global col 0 ↔ global col (np*N - 1) (left-right)
-///
-/// After periodic node deduplication:
-///   - Node rows: 0..N-1 (row N wraps to row 0)
-///   - Node cols: 0..np*N-1 (col np*N wraps to col 0)
-///   - Total nodes: N * (np*N)
-///   - Node (r, c) global index: r * totalCols + c
-///     where r = r_cell % N, c = c_cell % totalCols
-///
-/// cell2cell includes wrap-around neighbors through periodic boundaries.
-/// cell2node uses deduplicated (wrapped) node indices.
-struct PeriodicTiledGrid
-{
-    DNDS::index N;
-    DNDS::index totalCols; // np * N
-    DNDS::index totalRows; // N
-    DNDS::index nCellLocal;
-    DNDS::index nNodeLocal;
-    DNDS::index colStart, colEnd;
-    tAdjPair cell2cell, cell2node;
-    ssp<GlobalOffsetsMapping> cellGM, nodeGM;
-
-    /// Cell global index: rank-local tiling. Rank p's cells are
-    /// [p*N*N, (p+1)*N*N). Within a rank, cell at local (r, localCol)
-    /// has global index p*N*N + r*N + localCol.
-    DNDS::index cellGlobal(DNDS::index rank, DNDS::index r, DNDS::index localCol) const
-    {
-        return rank * N * N + r * N + localCol;
-    }
-    /// Deduplicated node index: wraps row and col.
-    /// Total nodes = totalRows * totalCols (periodic in both directions).
-    /// Node (r, c) → (r % totalRows) * totalCols + (c % totalCols).
-    DNDS::index nodeGlobal(DNDS::index r, DNDS::index c) const
-    {
-        DNDS::index wr = ((r % totalRows) + totalRows) % totalRows;
-        DNDS::index wc = ((c % totalCols) + totalCols) % totalCols;
-        return wr * totalCols + wc;
-    }
-
-    /// Reverse: given a cell's global column c, find which rank owns it.
-    DNDS::index cellOwnerRank(DNDS::index globalCol) const
-    {
-        return globalCol / N;
-    }
-
-    void build(DNDS::index tileN, const MPIInfo &mpi)
-    {
-        N = tileN;
-        totalCols = mpi.size * N;
-        totalRows = N;
-        colStart = mpi.rank * N;
-        colEnd = (mpi.rank + 1) * N;
-        nCellLocal = N * N;
-
-        // Node partition: each rank owns N*N nodes (same count as cells
-        // because of periodic wrapping — N node rows × N node cols per rank).
-        nNodeLocal = N * N;
-
-        cellGM = std::make_shared<GlobalOffsetsMapping>();
-        cellGM->setMPIAlignBcast(mpi, nCellLocal);
-
-        nodeGM = std::make_shared<GlobalOffsetsMapping>();
-        nodeGM->setMPIAlignBcast(mpi, nNodeLocal);
-
-        // Build cell2node with deduplicated periodic nodes.
-        cell2node.InitPair("periodic_c2n", mpi);
-        cell2node.father->Resize(nCellLocal);
-        for (DNDS::index iLocal = 0; iLocal < nCellLocal; iLocal++)
-        {
-            DNDS::index r = iLocal / N;
-            DNDS::index localCol = iLocal % N;
-            DNDS::index c = colStart + localCol;
-            cell2node.father->ResizeRow(iLocal, 4);
-            cell2node.father->operator()(iLocal, 0) = nodeGlobal(r, c);
-            cell2node.father->operator()(iLocal, 1) = nodeGlobal(r, c + 1);
-            cell2node.father->operator()(iLocal, 2) = nodeGlobal(r + 1, c + 1);
-            cell2node.father->operator()(iLocal, 3) = nodeGlobal(r + 1, c);
-        }
-        cell2node.father->pLGlobalMapping = cellGM;
-
-        // Build cell2cell: node-neighbors with periodic wrapping.
-        // For each owned cell, find all cells sharing a deduped node.
-        // Since the mesh is periodic in both directions, a cell at (r, c)
-        // has node-neighbors at (r+dr, c+dc) for dr,dc in {-1,0,1},
-        // all wrapped periodically.
-        cell2cell.InitPair("periodic_c2c", mpi);
-        cell2cell.father->Resize(nCellLocal);
-        for (DNDS::index iLocal = 0; iLocal < nCellLocal; iLocal++)
-        {
-            DNDS::index r = iLocal / N;
-            DNDS::index localCol = iLocal % N;
-            DNDS::index c = colStart + localCol;
-            DNDS::index myGlobal = cellGlobal(mpi.rank, r, localCol);
-
-            std::set<DNDS::index> neighbors;
-            for (DNDS::index dr = -1; dr <= 1; dr++)
-            {
-                for (DNDS::index dc = -1; dc <= 1; dc++)
-                {
-                    if (dr == 0 && dc == 0)
-                        continue;
-                    DNDS::index nr = ((r + dr) % totalRows + totalRows) % totalRows;
-                    DNDS::index nc = ((c + dc) % totalCols + totalCols) % totalCols;
-                    // Find which rank and local position this cell belongs to.
-                    DNDS::index ownerRank = cellOwnerRank(nc);
-                    DNDS::index neighborLocalCol = nc - ownerRank * N;
-                    neighbors.insert(cellGlobal(ownerRank, nr, neighborLocalCol));
-                }
-            }
-            neighbors.erase(myGlobal);
-
-            std::vector<DNDS::index> nbVec(neighbors.begin(), neighbors.end());
-            cell2cell.father->ResizeRow(iLocal, nbVec.size());
-            for (DNDS::rowsize j = 0; j < static_cast<DNDS::rowsize>(nbVec.size()); j++)
-                cell2cell.father->operator()(iLocal, j) = nbVec[j];
-        }
-        cell2cell.father->pLGlobalMapping = cellGM;
-    }
-
-    /// Expected ghost cells: all non-owned node-neighbors (including periodic wrap).
-    std::set<DNDS::index> expectedGhostCells(const MPIInfo &mpi) const
-    {
-        DNDS::index cellOffset = cellGM->operator()(mpi.rank, 0);
-        std::set<DNDS::index> ghosts;
-        for (DNDS::index iLocal = 0; iLocal < nCellLocal; iLocal++)
-        {
-            for (DNDS::rowsize j = 0; j < cell2cell.father->operator[](iLocal).size(); j++)
-            {
-                DNDS::index nb = cell2cell.father->operator()(iLocal, j);
-                if (nb < cellOffset || nb >= cellOffset + nCellLocal)
-                    ghosts.insert(nb);
-            }
-        }
-        return ghosts;
-    }
-
-    /// Expected ghost nodes: from Cell→Cell2Node on owned cells.
-    std::set<DNDS::index> expectedGhostNodesFromOwnedCells(const MPIInfo &mpi) const
-    {
-        DNDS::index nodeOffset = nodeGM->operator()(mpi.rank, 0);
-        DNDS::index nodeEnd = nodeOffset + nNodeLocal;
-        std::set<DNDS::index> ghosts;
-        for (DNDS::index iLocal = 0; iLocal < nCellLocal; iLocal++)
-        {
-            for (DNDS::rowsize j = 0; j < 4; j++)
-            {
-                DNDS::index n = cell2node.father->operator()(iLocal, j);
-                if (n < nodeOffset || n >= nodeEnd)
-                    ghosts.insert(n);
-            }
-        }
-        return ghosts;
-    }
-};
+/// Tiled rectangular grid with optional periodic wrapping in both directions.
+/// 2D rank decomposition per sqrt(np); falls back to 1×np when not factorable.
 
 TEST_CASE("evaluateGhostTree: doubly-periodic tiled grid")
 {
@@ -1031,7 +940,8 @@ TEST_CASE("evaluateGhostTree: doubly-periodic tiled grid")
         return;
 
     DNDS::index N = 32;
-    PeriodicTiledGrid grid;
+    SyntheticTiledGrid grid;
+    grid.periodic = true;
     grid.build(N, g_mpi);
 
     MeshConnectivity dag;
@@ -1041,63 +951,99 @@ TEST_CASE("evaluateGhostTree: doubly-periodic tiled grid")
     dag.registerGlobalMapping(EntityKind::Cell, grid.cellGM);
     dag.registerGlobalMapping(EntityKind::Node, grid.nodeGM);
 
-    // --- Cell ghost: 1-ring via cell2cell ---
-    GhostSpec specCells{{{EntityKind::Cell, {Adj::Cell2Cell}, EntityKind::Cell}}};
-    auto resultCells = dag.evaluateGhostTree(
-        CompiledGhostTree::compile(specCells), g_mpi);
+    // --- Cell + node ghost via defaultPrimary-style unified spec ---
+    for (int nL = 1; nL <= 4; nL++)
+    {
+        std::vector<AdjKind> cellHops(nL, Adj::Cell2Cell);
+        std::vector<AdjKind> nodeHops(nL, Adj::Cell2Cell);
+        nodeHops.push_back(Adj::Cell2Node);
+
+        GhostSpec spec{{
+            {EntityKind::Cell, cellHops, EntityKind::Cell},
+            {EntityKind::Cell, nodeHops, EntityKind::Node},
+        }};
+        auto result = dag.evaluateGhostTree(
+            CompiledGhostTree::compile(spec), g_mpi);
+
+        auto &gcL = result.ghostIndices[EntityKind::Cell];
+        auto &gnL = result.ghostIndices[EntityKind::Node];
+        CHECK(gcL.size() == grid.expectedGhostCellsN(nL));
+        CHECK(gnL.size() == grid.expectedGhostNodesN(nL));
+
+        const char *pos = (grid.rankCol == 0 || grid.rankCol == grid.ranksPerRow - 1 ||
+                           grid.rankRow == 0 || grid.rankRow == grid.ranksPerCol - 1)
+                              ? "boundary"
+                              : "inner";
+        fmt::print("  [{}] {} Periodic N={}: nLayers={}: cell_ghost={} (expected={}), "
+                   "node_ghost={} (expected={})\n",
+                   g_mpi.rank, pos, N, nL,
+                   gcL.size(), grid.expectedGhostCellsN(nL),
+                   gnL.size(), grid.expectedGhostNodesN(nL));
+    }
+
+    // --- n-layer cell ghost ---
+    for (int nL = 2; nL <= 4; nL++)
+    {
+        std::vector<AdjKind> hops(nL, Adj::Cell2Cell);
+        GhostSpec specML{{{EntityKind::Cell, hops, EntityKind::Cell}}};
+        auto resultML = dag.evaluateGhostTree(
+            CompiledGhostTree::compile(specML), g_mpi);
+        auto &gcL = resultML.ghostIndices[EntityKind::Cell];
+        CHECK(gcL.size() == grid.expectedGhostCellsN(nL));
+
+        fmt::print("  [{}] Periodic N={}: {}-layer cell ghost: size={}\n",
+                   g_mpi.rank, N, nL, gcL.size());
+    }
+}
+
+TEST_CASE("evaluateGhostTree: small periodic tiled grid")
+{
+    if (g_mpi.size != 4 && g_mpi.size != 8)
+        return;
+
+    DNDS::index N = 2;
+    SyntheticTiledGrid grid;
+    grid.periodic = true;
+    grid.build(N, g_mpi);
+
+    MeshConnectivity dag;
+    dag.meshDim = 2;
+    dag.registerAdj(Adj::Cell2Cell, grid.cell2cell);
+    dag.registerAdj(Adj::Cell2Node, grid.cell2node);
+    dag.registerGlobalMapping(EntityKind::Cell, grid.cellGM);
+    dag.registerGlobalMapping(EntityKind::Node, grid.nodeGM);
+
+    // 1-hop cell ghost.
+    GhostSpec spec1{{{EntityKind::Cell, {Adj::Cell2Cell}, EntityKind::Cell}}};
+    auto result1 = dag.evaluateGhostTree(CompiledGhostTree::compile(spec1), g_mpi);
+    auto &ghostCells = result1.ghostIndices[EntityKind::Cell];
+    DNDS::index expected1 = grid.expectedGhostCellsN(1);
+    CHECK(ghostCells.size() == expected1);
 
     auto expectedCells = grid.expectedGhostCells(g_mpi);
-    auto &ghostCells = resultCells.ghostIndices[EntityKind::Cell];
-    std::set<DNDS::index> actualCells(ghostCells.begin(), ghostCells.end());
+    CHECK(ghostCells.size() == expectedCells.size());
 
-    // Exact match: no waste.
-    CHECK(actualCells.size() == expectedCells.size());
-    CHECK(actualCells == expectedCells);
-
-    CHECK(resultCells.hasGhosts(EntityKind::Cell));
-
-    // Periodic-specific: rank 0 should have ghost cells from last rank
-    // through column-periodic wrapping. Cell (0, totalCols-1) is on the
-    // last rank and is a node-neighbor of rank 0's cell (0, 0) through
-    // the periodic node (0, 0) = nodeGlobal(0, totalCols).
-    if (g_mpi.rank == 0 && g_mpi.size >= 2)
+    // 2-hop cell ghost: check via brute-force expected set.
     {
-        DNDS::index lastRank = g_mpi.size - 1;
-        // Cell at row 0, localCol N-1 on last rank.
-        DNDS::index wrapCell = grid.cellGlobal(lastRank, 0, N - 1);
-        CHECK(actualCells.count(wrapCell) == 1);
+        GhostSpec spec2{{{EntityKind::Cell, {Adj::Cell2Cell, Adj::Cell2Cell}, EntityKind::Cell}}};
+        auto result2 = dag.evaluateGhostTree(CompiledGhostTree::compile(spec2), g_mpi);
+        auto &gc2 = result2.ghostIndices[EntityKind::Cell];
+        CHECK(gc2.size() == grid.expectedGhostCellsN(2));
     }
 
-    // All ghost cells must be from other ranks.
-    {
-        DNDS::index cellOffset = grid.cellGM->operator()(g_mpi.rank, 0);
-        for (auto gc : ghostCells)
-            CHECK((gc < cellOffset || gc >= cellOffset + grid.nCellLocal));
-    }
-
-    // --- Node ghost: Cell→Cell2Node on owned cells ---
+    // Node ghost.
     GhostSpec specNodes{{
-        {EntityKind::Cell, {Adj::Cell2Cell}, EntityKind::Cell},
-        {EntityKind::Cell, {Adj::Cell2Node}, EntityKind::Node},
+        {EntityKind::Cell, {Adj::Cell2Cell, Adj::Cell2Node}, EntityKind::Node},
     }};
-    auto resultNodes = dag.evaluateGhostTree(
-        CompiledGhostTree::compile(specNodes), g_mpi);
-
-    auto expectedNodes = grid.expectedGhostNodesFromOwnedCells(g_mpi);
+    auto resultNodes = dag.evaluateGhostTree(CompiledGhostTree::compile(specNodes), g_mpi);
     auto &ghostNodes = resultNodes.ghostIndices[EntityKind::Node];
-    std::set<DNDS::index> actualNodes(ghostNodes.begin(), ghostNodes.end());
+    CHECK(ghostNodes.size() == grid.expectedGhostNodesN(1));
 
-    CHECK(actualNodes.size() == expectedNodes.size());
-    CHECK(actualNodes == expectedNodes);
-
-    if (g_mpi.rank == 0)
-    {
-        fmt::print("  Periodic N={}: cells/rank={}, ghost_cells={} (expected={}), "
-                   "ghost_nodes={} (expected={})\n",
-                   N, grid.nCellLocal,
-                   ghostCells.size(), expectedCells.size(),
-                   ghostNodes.size(), expectedNodes.size());
-    }
+    fmt::print("  [{}] np={} Periodic N=2: 1-hop cells={} (expected={}), "
+               "nodes={} (expected={})\n",
+               g_mpi.rank, g_mpi.size,
+               ghostCells.size(), expected1,
+               ghostNodes.size(), grid.expectedGhostNodesN(1));
 }
 
 // ---------------------------------------------------------------------------

@@ -62,7 +62,7 @@ endif()
 # by earlier ones.
 # ===================================================================
 
-# 1. Detect and bundle the C++ standard library (libstdc++ or libc++)
+# 1. Detect the C++ standard library (libstdc++ or libc++; no longer bundled)
 include(cmake/DndsStdlibSetup.cmake)
 
 # 2. User-facing cache options, commit recording, verbose/tidy toggles

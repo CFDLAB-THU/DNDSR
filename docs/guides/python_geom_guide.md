@@ -188,7 +188,32 @@ mesh.BuildNodeWallDist(lambda bnd_id: bnd_id == wall_id, opts)
 
 ### Using the High-Level API (Recommended)
 
-The `create_mesh_from_CGNS` function handles the complete mesh pipeline:
+The recommended API uses `read_mesh` + `prepare_mesh` from
+`DNDSR.Geom.utils`:
+
+```python
+from DNDSR.Geom.utils import read_mesh, prepare_mesh
+from DNDSR import DNDS
+
+mpi = DNDS.MPIInfo()
+mpi.setWorld()
+
+result = read_mesh(
+    "data/mesh/UniformSquare_10.cgns",
+    mpi=mpi,
+    dim=2,
+)
+prepare_mesh(result.mesh, result.reader)
+mesh = result.mesh
+```
+
+`read_mesh` returns a `MeshReadResult` dataclass with `mesh`, `reader`,
+and `name_to_id` fields. `prepare_mesh` mutates the mesh in-place (cell
+reorder, face interpolation, ghost N2CB, serial output, periodic nodes,
+VTK connectivity).
+
+The legacy `create_mesh_from_CGNS` function is still available as a
+backward-compatible wrapper:
 
 ```python
 from DNDSR.Geom.utils import create_mesh_from_CGNS
@@ -204,22 +229,36 @@ mesh, reader, name2ID = create_mesh_from_CGNS(
 )
 ```
 
-**Full parameter list:**
+**`read_mesh` parameter list:**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `meshFile` | `str` | required | Path to CGNS mesh file |
+| `mesh_file` | `str` | required | Path to CGNS or H5 mesh file |
 | `mpi` | `MPIInfo` | required | MPI context |
 | `dim` | `int` | `2` | Mesh dimension (2 or 3) |
-| `periodic_tolerance` | `float` | `1e-9` | Tolerance for periodic dedup |
-| `inner_process_parts` | `int` | `1` | Cell reordering partitions |
-| `second_level_parts` | `int` | `1` | Second-level reordering partitions |
 | `periodic_geometry` | `dict` | see below | Periodic transform parameters |
-| `readMeshMode` | `str` | `"Serial"` | `"Serial"`, `"Parallel"`, or `"Distributed"` |
-| `meshElevation` | `str` | `""` | `""` or `"O2"` for quadratic elevation |
-| `meshDirectBisect` | `int` | `0` | Number of bisection levels (0–4) |
-| `serializerFactory` | `SerializerFactory` | H5 factory | Serializer for Parallel/Distributed mode |
-| `outPltMode` | `str` | `"Serial"` | `"Serial"` to build serial output |
+| `periodic_tolerance` | `float` | `1e-9` | Tolerance for periodic dedup |
+| `read_mode` | `str` | auto | `"cgns"` or `"h5"` (auto-detected from extension) |
+| `partition_options` | `dict` | Metis defaults | Metis/ParMetis partitioning options |
+| `elevation` | `str` | `""` | `""` or `"O2"` for quadratic elevation |
+| `bisect` | `int` | `0` | Number of bisection levels (0-4) |
+| `serializer_factory` | `SerializerFactory` | H5 factory | For H5 read modes |
+
+**`prepare_mesh` parameter list:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `mesh` | `UnstructuredMesh` | required | Mesh to prepare (mutated in-place) |
+| `reader` | `UnstructuredMeshSerialRW` | required | Reader from `read_mesh` |
+| `reorder_parts` | `int` | `1` | Cell reordering partitions |
+| `reorder_inner_parts` | `int` | `1` | Second-level reordering partitions |
+| `build_serial_out` | `bool` | `True` | Build serial output data |
+| `wall_dist_predicate` | `callable` | `None` | `f(bnd_id) -> bool` for wall distance |
+| `wall_dist_options` | `WallDistOptions` | `None` | Wall distance settings |
+| `coord_scale` | `float` | `None` | Scale coordinates |
+| `coord_rot_z_deg` | `float` | `None` | Rotate coordinates around Z axis |
+| `rectify_near_plane` | `str` | `None` | Rectify near-plane coords (`"x"`, `"y"`, `"z"`) |
+| `rectify_threshold` | `float` | `1e-10` | Threshold for rectification |
 
 **Periodic geometry default:**
 
@@ -240,103 +279,102 @@ periodic_geometry={
 These are passed directly to `mesh.SetPeriodicGeometry()`, which accepts up to
 three periodic direction triples (translation, rotationCenter, eulerAngle).
 
-### readMeshMode Options
+### Read Mode Options
 
-| Mode | Description |
-|------|-------------|
-| `"Serial"` | Read CGNS on rank 0, partition with Metis, distribute. Returns `name2ID`. |
-| `"Parallel"` | Read pre-partitioned H5 files (one per rank). `name2ID` may be `None`. |
-| `"Distributed"` | Read H5 with even-split + ParMetis repartition. Works with any MPI rank count. `name2ID` may be `None`. |
+`read_mesh` auto-detects the mode from the file extension (`.cgns` -> CGNS
+serial read, `.h5` -> H5 distributed read). Override with the `read_mode`
+parameter:
 
-> **Warning:** In `"Parallel"` and `"Distributed"` modes, `name2ID` is not read
-> from the serializer and will be `None`.  Only `"Serial"` mode returns a valid
+| Mode | Extension | Description |
+|------|-----------|-------------|
+| `"cgns"` | `.cgns` | Read CGNS on rank 0, partition with Metis, distribute. Returns `name_to_id`. |
+| `"h5"` | `.h5` | Read H5 with even-split + ParMetis repartition. Works with any MPI rank count. |
+
+> **Warning:** In H5 mode, `name_to_id` (boundary name mapping) is not read
+> from the serializer and will be `None`. Only CGNS mode returns a valid
 > `AutoAppendName2ID`.
 
 ### Common Usage Patterns
 
 ```python
+from DNDSR.Geom.utils import read_mesh, prepare_mesh
+
 # Basic read
-mesh, reader, name2ID = create_mesh_from_CGNS(
-    meshFile="data/mesh/UniformSquare_10.cgns",
-    mpi=mpi,
-    dim=2,
-)
+result = read_mesh("data/mesh/UniformSquare_10.cgns", mpi=mpi, dim=2)
+prepare_mesh(result.mesh, result.reader)
 
 # With order elevation (O1 → O2)
-mesh, reader, name2ID = create_mesh_from_CGNS(
-    meshFile="data/mesh/UniformSquare_10.cgns",
-    mpi=mpi,
-    dim=2,
-    meshElevation="O2",
+result = read_mesh(
+    "data/mesh/UniformSquare_10.cgns", mpi=mpi, dim=2,
+    elevation="O2",
 )
+prepare_mesh(result.mesh, result.reader)
 
 # With bisection (h-refinement)
-mesh, reader, name2ID = create_mesh_from_CGNS(
-    meshFile="data/mesh/UniformSquare_10.cgns",
-    mpi=mpi,
-    dim=2,
-    meshDirectBisect=1,
+result = read_mesh(
+    "data/mesh/UniformSquare_10.cgns", mpi=mpi, dim=2,
+    bisect=1,
 )
+prepare_mesh(result.mesh, result.reader)
 
 # Combined elevation + bisection
-mesh, reader, name2ID = create_mesh_from_CGNS(
-    meshFile="data/mesh/UniformSquare_10.cgns",
-    mpi=mpi,
-    dim=2,
-    meshElevation="O2",
-    meshDirectBisect=2,
+result = read_mesh(
+    "data/mesh/UniformSquare_10.cgns", mpi=mpi, dim=2,
+    elevation="O2", bisect=2,
 )
+prepare_mesh(result.mesh, result.reader)
 
 # With cell reordering for cache locality
+result = read_mesh("data/mesh/UniformSquare_10.cgns", mpi=mpi, dim=2)
+prepare_mesh(result.mesh, result.reader, reorder_parts=4, reorder_inner_parts=4)
+
+# H5 distributed read with auto-repartitioning
+result = read_mesh("mesh.dnds.h5", mpi=mpi, dim=3)
+prepare_mesh(result.mesh, result.reader)
+```
+
+#### Legacy API (backward-compatible)
+
+```python
+from DNDSR.Geom.utils import create_mesh_from_CGNS
+
+# create_mesh_from_CGNS wraps read_mesh + prepare_mesh
 mesh, reader, name2ID = create_mesh_from_CGNS(
     meshFile="data/mesh/UniformSquare_10.cgns",
-    mpi=mpi,
-    dim=2,
-    inner_process_parts=4,
-    second_level_parts=4,
-)
-
-# Pre-partitioned H5 read
-mesh, reader, name2ID = create_mesh_from_CGNS(
-    meshFile="mesh.cgns",
-    mpi=mpi,
-    dim=3,
-    readMeshMode="Parallel",
-)
-
-# Distributed H5 read with auto-repartitioning
-mesh, reader, name2ID = create_mesh_from_CGNS(
-    meshFile="mesh.cgns",
-    mpi=mpi,
-    dim=3,
-    readMeshMode="Distributed",
+    mpi=mpi, dim=2,
+    meshElevation="O2",
+    meshDirectBisect=1,
+    readMeshMode="Serial",
 )
 ```
 
-### What `create_mesh_from_CGNS` Does
+### What the Pipeline Does
 
-The function runs the complete mesh pipeline so you do not need to call these
-steps manually.  For reference, the Serial-mode pipeline is:
+`read_mesh` + `prepare_mesh` run the complete mesh pipeline so you do not
+need to call these steps manually. For reference, the CGNS-mode pipeline is:
+
+**`read_mesh` (CGNS mode):**
 
 1. `reader.ReadFromCGNSSerial(meshFile)` — read CGNS on rank 0
 2. `reader.Deduplicate1to1Periodic(tolerance)` — merge periodic connections
 3. `reader.BuildCell2Cell()` — build serial cell adjacency
 4. `reader.MeshPartitionCell2Cell({...})` — partition with Metis
 5. `reader.PartitionReorderToMeshCell2Cell()` — reorder to match partition
-6. `mesh.RecoverNode2CellAndNode2Bnd()` — build node→cell/bnd
-7. `mesh.RecoverCell2CellAndBnd2Cell()` — build cell→cell/bnd
-8. `mesh.BuildGhostPrimary()` — ghost cell communication
-9. `mesh.AdjGlobal2LocalPrimary()` — global→local index
-10. `mesh.AdjGlobal2LocalN2CB()` — global→local node→cell/bnd
-11. (If `meshElevation == "O2"`) Build O2 mesh and swap
-12. (If `meshDirectBisect > 0`) Elevate→bisect loop
-13. `mesh.ReorderLocalCells(nParts, nPartsInner)` — cell reordering
-14. `mesh.InterpolateFace()` — build face data
-15. `mesh.AssertOnFaces()` — validate faces
-16. `mesh.AdjLocal2GlobalN2CB()` / `BuildGhostN2CB()` / `AdjGlobal2LocalN2CB()`
-17. (If `outPltMode == "Serial"`) Build serial output
-18. `mesh.RecreatePeriodicNodes()` — reconstruct periodic mapping
-19. `mesh.BuildVTKConnectivity()` — prepare VTK output
+6. Ghost + connectivity build (RecoverN2C, RecoverC2C, BuildGhostPrimary, G2L)
+7. (If `elevation == "O2"`) Build O2 mesh and swap
+8. (If `bisect > 0`) Elevate→bisect loop
+
+**`prepare_mesh`:**
+
+1. `mesh.ReorderLocalCells(nParts, nPartsInner)` — cell reordering
+2. `mesh.InterpolateFace()` — build face data
+3. `mesh.AssertOnFaces()` — validate faces
+4. `AdjLocal2GlobalN2CB()` / `BuildGhostN2CB()` / `AdjGlobal2LocalN2CB()`
+5. (If `build_serial_out`) Build serial output
+6. `mesh.RecreatePeriodicNodes()` — reconstruct periodic mapping
+7. `mesh.BuildVTKConnectivity()` — prepare VTK output
+8. (If `wall_dist_predicate`) Compute wall distances
+9. (If coord transforms specified) Apply scale/rotation/rectification
 
 ### Low-Level Serial Read (Manual Pipeline)
 
@@ -461,9 +499,15 @@ mesh, reader, name2ID = create_mesh_from_CGNS(
 ## Boundary Mesh Extraction
 
 ```python
-from DNDSR.Geom.utils import create_bnd_mesh
+from DNDSR.Geom.utils import build_bnd_mesh
 
-meshBnd, readerBnd = create_bnd_mesh(mesh)
+bnd = build_bnd_mesh(mesh)
+meshBnd = bnd.mesh_bnd
+readerBnd = bnd.reader_bnd
+
+# Legacy wrapper (backward-compatible):
+# from DNDSR.Geom.utils import create_bnd_mesh
+# meshBnd, readerBnd = create_bnd_mesh(mesh)
 
 # Access boundary information
 n2id = name2ID.n2id_map
@@ -557,15 +601,18 @@ nGhost = mesh.NumCellGhost()
 > **not** exposed in the Python bindings.  To check whether a mesh uses O2
 > elements, inspect the element types via `cellElemInfo[i][0].getElemType()`.
 
-> **Note:** The `MeshAdjState` enum values (`Adj_Unknown`, `Adj_PointToLocal`,
-> `Adj_PointToGlobal`) are **not** exposed in the Python bindings.  The
-> `adjPrimaryState` member is accessible but its integer values should be
-> compared against the C++ enum: 0 = Unknown, 1 = Local, 2 = Global.
+> **Note:** The `MeshAdjState` enum is exposed in Python as
+> `Geom.MeshAdjState` with values `Unknown`, `PointToGlobal`, and
+> `PointToLocal`. Each adjacency member (e.g. `mesh.cell2node`) is an
+> `AdjPairTracked` object whose `idx` member exposes read-only state query
+> methods: `state()`, `isLocal()`, `isGlobal()`, `isBuilt()`, `isWired()`.
+> The group state variables (e.g. `adjPrimaryState`) are still accessible
+> as integers for backward compatibility.
 
 ## References
 
 - See `test/Geom/test_basic_geom.py` for Python usage examples
 - See `python/DNDSR/Geom/utils.py` for the Python API implementation
-- See `src/Geom/Mesh_bind.hpp` for the complete list of Python-exposed methods
+- See `src/Geom/Mesh/Mesh_bind.hpp` for the complete list of Python-exposed methods
 - See `src/Geom/Elements_bind.hpp` for the `ElemType` enum bindings
 - See `docs/architecture/Paradigm.md` for overall design philosophy
