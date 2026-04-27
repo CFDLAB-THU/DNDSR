@@ -168,6 +168,7 @@ jobs:
       # ------------------------------------------------------------------
       - name: CMake configure
         run: |
+          source venv/bin/activate
           CC=mpicc CXX=mpicxx cmake -B build -G Ninja \
             -DDNDS_BUILD_TESTS=ON \
             -DDNDS_TEST_NP_LIST="2;4"
@@ -175,10 +176,13 @@ jobs:
           DNDS_TEST_MPIEXTRA: "--oversubscribe"
 
       # ------------------------------------------------------------------
-      # 9. Build C++ tests
+      # 9. Build C++ tests and solver executables
       # ------------------------------------------------------------------
       - name: Build C++ unit tests
-        run: cmake --build build -t all_unit_tests -j4
+        run: cmake --build build -t all_unit_tests -j$(nproc)
+
+      - name: Build Euler solvers
+        run: cmake --build build -t euler euler3D eulerSA eulerSA3D euler2EQ euler2EQ3D -j$(nproc)
 
       # ------------------------------------------------------------------
       # 10. Build pybind11 targets
@@ -186,13 +190,15 @@ jobs:
       - name: Build pybind11 modules
         run: |
           source venv/bin/activate
-          cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j4
+          cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j$(nproc)
 
       - name: Show ccache stats
         run: ccache --show-stats
 
       - name: Install pybind11 modules
-        run: cmake --install build --component py
+        run: |
+          source venv/bin/activate
+          cmake --install build --component py
 
       # ------------------------------------------------------------------
       # 11. Run C++ tests
