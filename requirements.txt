@@ -11,7 +11,7 @@ scipy
 sympy
 pandas
 matplotlib
-h5py<3.12
+h5py
 jsonschema
 pyyaml
 mpi4py
