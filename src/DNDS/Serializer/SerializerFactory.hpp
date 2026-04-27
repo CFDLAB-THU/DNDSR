@@ -41,6 +41,7 @@ namespace DNDS::Serializer
 
         DNDS_DECLARE_CONFIG(SerializerFactory)
         {
+            // clang-format off
             DNDS_FIELD(type,                    "Serializer backend: \"JSON\" or \"H5\"",
                        DNDS::Config::enum_values({"JSON", "H5"}));
             DNDS_FIELD(hdfDeflateLevel,         "HDF5 deflate compression level",
@@ -52,6 +53,7 @@ namespace DNDS::Serializer
             DNDS_FIELD(jsonBinaryDeflateLevel,  "JSON binary deflate level",
                        DNDS::Config::range(0, 9));
             DNDS_FIELD(jsonUseCodecOnUInt8,     "Apply codec on uint8 arrays in JSON");
+            // clang-format on
         }
 
         /// @brief Instantiate the selected serializer and apply its tunables.
