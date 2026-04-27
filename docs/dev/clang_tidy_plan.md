@@ -223,7 +223,38 @@ Commits: `7502b8d` (driver serialize-on-fix) + pass 2 commit.
 
 ### Pass 3 — cppcoreguidelines-init-variables
 
-*TODO*
+**Outcome.** 1 198 hits → 0. Total diagnostics 22 495 → 21 297.
+
+**Method.** Same recipe as Pass 2; single-check config at
+`/tmp/pass3.clang-tidy`, `--fix`, serialized. One full run fixed all
+1 198 hits in one shot (no stragglers).
+
+**Diff footprint.** 8 files, ~30 line-replacements. Most are the
+classic "declare-then-immediately-MPI-writes" pattern; `int x; MPI_*(&x)`
+now `int x = 0; MPI_*(&x)`.
+
+**Sample review found two corrections needed:**
+
+1. `ArrayTransformer.hpp:838,867` — clang-tidy initialised
+   `MPI_Datatype dtype` to `nullptr`. That's only valid on MPI
+   implementations where `MPI_Datatype` is a pointer typedef
+   (OpenMPI). MPICH defines it as `int`, so `nullptr` would not
+   compile. Manually corrected to `MPI_DATATYPE_NULL`, the canonical
+   sentinel that works on both.
+2. `ArrayDOF_op.hxx` — clang-tidy inserted `#include <math.h>` and
+   initialised `real sqrSumAll = NAN;`. The sibling function on
+   line 228 initialises the same variable to `0`. Corrected to
+   match the sibling and removed the unnecessary include.
+
+**Verification.** `cmake --build build -t dnds -j32` succeeds after
+both corrections. Pre-commit clang-format re-ran, no drift.
+
+**Lesson learned.** `cppcoreguidelines-init-variables` with `--fix`
+picks unusual sentinel values (`nullptr` based on typedef, `NAN` for
+floats). Always review auto-fix output for semantic appropriateness,
+not just build success.
+
+Commit: see `git log`.
 
 ### Pass 4 — cppcoreguidelines-missing-std-forward
 

@@ -70,7 +70,7 @@ namespace DNDS::Debug
         {
             for (MPI_int ir = 0; ir < mpi.size; ir++)
             {
-                int newDebugFlag;
+                int newDebugFlag = 0;
                 if (mpi.rank == ir)
                 {
                     newDebugFlag = int(IsDebugged());
@@ -270,7 +270,7 @@ namespace DNDS::MPI
     MPI_int WaitallLazy(MPI_int count, MPI_Request *reqs, MPI_Status *statuses, uint64_t checkNanoSecs)
     {
         MPI_int flag = 0;
-        MPI_int ret;
+        MPI_int ret = 0;
         while (!flag)
         {
             ret = MPI_Testall(count, reqs, &flag, statuses);
