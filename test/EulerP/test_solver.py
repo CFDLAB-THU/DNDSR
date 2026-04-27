@@ -162,4 +162,4 @@ if __name__ == "__main__":
         # curuntime.deviceSynchronize()
         pass
 
-    test_solver(mpi, ifCuda=ifCuda)
+    run_test_solver(mpi, ifCuda=ifCuda)
