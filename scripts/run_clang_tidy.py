@@ -416,6 +416,16 @@ def _build_parser() -> argparse.ArgumentParser:
             "script exits 0 regardless of diagnostics (advisory mode)."
         ),
     )
+    p.add_argument(
+        "--unsafe-parallel-fix",
+        action="store_true",
+        help=(
+            "Allow --fix to run with jobs>1. Unsafe: parallel fix passes "
+            "on the same header race and can corrupt files. Use only on "
+            "disjoint scopes (e.g. one TU) or with serialized fanout "
+            "handled by the caller."
+        ),
+    )
     return p
 
 
@@ -492,11 +502,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     version = subprocess.run(
         [clang_tidy, "--version"], capture_output=True, text=True, check=False
     ).stdout.splitlines()[:1]
+
+    # --fix cannot run in parallel safely: multiple TUs editing the same
+    # header concurrently will race and corrupt the file (interleaved
+    # insertions). Force -j 1 unless the user explicitly opts in with
+    # --unsafe-parallel-fix.
+    effective_jobs = args.jobs
+    if args.fix and not args.unsafe_parallel_fix and args.jobs > 1:
+        print("note: --fix forces jobs=1 (parallel --fix is unsafe); "
+              "pass --unsafe-parallel-fix to override.")
+        effective_jobs = 1
+
     print(version[0] if version else "(clang-tidy version unknown)")
     print(f"clang-tidy   : {clang_tidy}")
     print(f"config       : {config}")
     print(f"compile db   : {build_dir / 'compile_commands.json'}")
-    print(f"jobs         : {args.jobs}")
+    print(f"jobs         : {effective_jobs}")
     print(f"files        : {len(selected)}")
     if header_filter:
         print(f"header filter: {header_filter}")
@@ -513,7 +534,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     quiet = args.quiet or args.summary
     exit_code, counts = _run_parallel(
-        selected, base, jobs=args.jobs, quiet=quiet, log_path=log_path,
+        selected, base, jobs=effective_jobs, quiet=quiet, log_path=log_path,
     )
 
     print()
