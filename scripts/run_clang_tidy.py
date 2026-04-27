@@ -46,7 +46,12 @@ DEFAULT_ROOTS = ("src", "app", "test/cpp")
 TU_EXTS = (".c", ".cc", ".cpp", ".cxx")
 CUDA_EXTS = (".cu",)
 
-CHECK_RE = re.compile(r"\[([a-z][a-z0-9.-]+)(?:,-warnings-as-errors)?\]")
+CHECK_RE = re.compile(
+    # Check names always have a '-' somewhere (category-name-...).
+    # This excludes noise like [loc], [pos], [name], [nodiscard] that
+    # can appear in clang-tidy notes/hints.
+    r"\[([a-z][a-z0-9]*(?:[.-][a-z0-9]+)+)(?:,-warnings-as-errors)?\]"
+)
 
 
 def _resolve_build_dir(arg: str | None) -> Path:
