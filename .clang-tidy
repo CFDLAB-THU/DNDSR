@@ -15,6 +15,38 @@
 #   - WarningsAsErrors is intentionally empty: tidy runs are
 #     advisory reports, not build gates. If we later want a CI
 #     gate, apply it as an overlay config on top of this file.
+#   - CAUTION: the Checks: block uses YAML folded scalar (>) and
+#     therefore cannot contain inline '#' comments -- '#' is only a
+#     comment at the start of a line, and not inside a folded scalar.
+#     All disable rationales are kept in the table below instead.
+#
+# Disable rationale (kept out of the Checks: block because YAML
+# folded scalars eat '#' as literal text):
+#
+#   -clang-diagnostic-unused-command-line-argument
+#     Extra flags in compile_commands.json for the tidy pass.
+#   -modernize-use-trailing-return-type     Project style.
+#   -modernize-type-traits                  Churn without benefit.
+#   -modernize-avoid-c-arrays               MPI buffers, templates.
+#   -readability-braces-around-statements   Project style.
+#   -readability-identifier-length          Too noisy on math symbols.
+#   -readability-implicit-bool-conversion   Noisy on index/size_t.
+#   -readability-else-after-return          Project style.
+#   -readability-isolate-declaration        Project style.
+#   -readability-magic-numbers              Handled case-by-case.
+#   -readability-math-missing-parentheses   Eigen expressions.
+#   -readability-convert-member-functions-to-static
+#                                           Virtual dispatch patterns.
+#   -readability-avoid-nested-conditional-operator
+#                                           Short ternaries OK.
+#   -bugprone-easily-swappable-parameters   Dimension-tuple APIs.
+#   -bugprone-casting-through-void          Needed for MPI types.
+#   -performance-avoid-endl                 Style-only.
+#   -performance-enum-size                  Negligible in practice.
+#   -cppcoreguidelines-missing-std-forward  T&& functor params are
+#                                           called in-place and
+#                                           must not be moved from;
+#                                           false positives dominate.
 #
 # Notes on ExtraArgs:
 #   - -UDNDS_USE_OMP: skip #include <omp.h> which requires
@@ -51,6 +83,7 @@ Checks: >
   -bugprone-casting-through-void,
   -performance-avoid-endl,
   -performance-enum-size,
+  -cppcoreguidelines-missing-std-forward,
 
 WarningsAsErrors: ''
 

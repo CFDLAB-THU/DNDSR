@@ -258,7 +258,59 @@ Commit: see `git log`.
 
 ### Pass 4 — cppcoreguidelines-missing-std-forward
 
-*TODO*
+**Outcome.** 503 hits → 0, by reclassifying as **KA (keep & accept)**
+and adding to `.clang-tidy` disables.
+
+**Method.** Single-check `--fix` attempt produced 0 edits: this check
+does not implement auto-fix. Switched to manual review.
+
+**Sample analysis (all 9 unique sites in DNDS):**
+
+1. `Array.hpp:477` — `Resize(index, TFRowSize&& FRowSize)`. FRowSize
+   is a **functor called in-place**. Forwarding-ref was chosen only
+   to accept both lvalue and rvalue callables; `std::forward` on a
+   functor that the body keeps calling directly would move-from on
+   first call and break subsequent ones.
+2. `Array.hpp:723` — `ResizeRowsAndCompress(TRowSizeFunc&&)`. Same
+   pattern (functor called inside a loop).
+3. `ArrayPair.hpp:249` — `runFunctionAppendedIndex(index, TF&& F)`.
+   Same pattern (`F(*father, i)` inside the body).
+4. `ArrayEigenUniMatrixBatch.hpp:110` — `Resize(..., TFRowSize&& rsf)`.
+   Functor called twice inside a lambda capturing it by reference.
+5. `Defines.hpp:834` (×2 columns) — hash functor
+   `operator()(TBegin&& begin, TEnd&& end)`. Iterators used for
+   random access; no forwarding semantics apply.
+6. `IndexMapping.hpp:215` — `OffsetAscendIndexMapping(...)` taking
+   `TpullSet&& pullingIndexGlobal`. The body mutates the collection
+   in place (`sort`, `unique`, `erase`, `shrink_to_fit`) but never
+   moves it elsewhere. Should be `TpullSet&`, but the author's
+   commented-out `// std::forward<...>(...); // might delete` shows
+   they considered it and decided against.
+7. `IndexMapping.hpp:298-299` — analogous ctor overload taking two
+   collections, used read-only.
+
+**Decision.** All nine sites are either functor-called-in-place
+(cannot be forwarded without breaking repeated calls) or
+collection-used-by-reference (should be `T&`/`const T&`, not `T&&`).
+The latter is an API change that ripples through call sites and is
+outside the scope of "tidy passes." The check cannot distinguish
+legitimate forwarding-template usage from these patterns, so it
+produces a steady stream of false positives.
+
+**Action.** Bucket moved from KF → KA. Added to `.clang-tidy`
+disables; Checks list now has an `-cppcoreguidelines-missing-std-forward`
+line.
+
+**Secondary fix: YAML folded-scalar trap.** During this pass I
+discovered that rationale comments placed *inside* the `Checks: >`
+folded scalar are parsed as text (YAML `#` is only a comment at
+line start, not inside a folded block), which silently concatenated
+my commentary into a malformed check name and the subsequent
+disables were ignored. Fixed by moving all rationale comments into
+the file header as a table; the Checks: block is kept comment-free.
+A warning note was added to the header explaining this.
+
+Commit: see `git log`.
 
 ### Pass 5 — bugprone-reserved-identifier
 
