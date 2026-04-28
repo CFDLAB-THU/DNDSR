@@ -492,8 +492,14 @@ namespace DNDS // ArrayTransformer
                  {
                     std::vector<index> pullIndexVec;
                     pullIndexVec.reserve(pullIndexGlobal.size());
+                    // NOLINTBEGIN(modernize-loop-convert)
+                    // Index-based loop is required here: pybind11 `array_t` iterators
+                    // yield `pybind11::handle`, not `long`. The implicit numpy-to-long
+                    // conversion is performed by `pullIndexGlobal.at(i)`, which does
+                    // not have a range-based-for equivalent.
                     for(ssize_t i = 0; i < pullIndexGlobal.size(); i++)
                         pullIndexVec.push_back(pullIndexGlobal.at(i)); // only 1D
+                    // NOLINTEND(modernize-loop-convert)
                     self.createGhostMapping(pullIndexVec); }, py::arg("pullIndexGlobal"))
             .def("createGhostMapping", [](TArrayTransformer &self, std::vector<index> pushingIndexLocal, std::vector<index> pushingStarts) -> void
                  { self.createGhostMapping(pushingIndexLocal, pushingStarts); }, py::arg("pushingIndexLocal"), py::arg("pushingStarts"));

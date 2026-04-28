@@ -102,9 +102,9 @@ namespace DNDS
 
         // Count entries per directory rank
         std::vector<int> sendCounts(nRanks, 0);
-        for (index i = 0; i < index(readOrigIndex.size()); i++)
+        for (long i : readOrigIndex)
         {
-            int dr = directoryRank(readOrigIndex[i]);
+            int dr = directoryRank(i);
             sendCounts[dr]++;
         }
 
@@ -158,9 +158,9 @@ namespace DNDS
         // Step 5: Send queries from newOrigIndex to directory, get back globalReadIdx.
         // Count queries per directory rank
         std::vector<int> querySendCounts(nRanks, 0);
-        for (index i = 0; i < index(newOrigIndex.size()); i++)
+        for (long i : newOrigIndex)
         {
-            int dr = directoryRank(newOrigIndex[i]);
+            int dr = directoryRank(i);
             querySendCounts[dr]++;
         }
 
