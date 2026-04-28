@@ -265,7 +265,7 @@ namespace DNDS
         /// @details Typical use: multiply state DOFs by per-cell values such as
         /// inverse mass. Only enabled for non-scalar DOF shapes.
         template <int n_m_T = n_m>
-        std::enable_if_t<!(n_m_T == 1 && n_n == 1)>
+        std::enable_if_t<n_m_T != 1 || n_n != 1>
         operator*=(const ArrayDof<1, 1> &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_mult_assign_scalar_arr(*this, R));
