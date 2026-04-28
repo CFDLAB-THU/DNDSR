@@ -39,7 +39,7 @@ namespace DNDS
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayDofDeviceView, ArrayDofDeviceView)
 
         DNDS_DEVICE_CALLABLE ArrayDofDeviceView(const t_base &base_view) : t_base(base_view) {}
-        DNDS_DEVICE_CALLABLE ArrayDofDeviceView(t_base &&base_view) : t_base(base_view) {}
+        DNDS_DEVICE_CALLABLE ArrayDofDeviceView(t_base &&base_view) : t_base(std::move(base_view)) {}
     };
 
     /// @brief Const device view of an ArrayDof father/son pair.
@@ -53,7 +53,7 @@ namespace DNDS
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayDofDeviceViewConst, ArrayDofDeviceViewConst)
 
         DNDS_DEVICE_CALLABLE ArrayDofDeviceViewConst(const t_base &base_view) : t_base(base_view) {}
-        DNDS_DEVICE_CALLABLE ArrayDofDeviceViewConst(t_base &&base_view) : t_base(base_view) {}
+        DNDS_DEVICE_CALLABLE ArrayDofDeviceViewConst(t_base &&base_view) : t_base(std::move(base_view)) {}
     };
 
     template <int n_m, int n_n>
