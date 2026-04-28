@@ -275,6 +275,19 @@ Quick reference for Python:
 - `snake_case` functions/variables; C++ wrapper classes match C++ name
 - Plain `assert`; `@pytest.fixture` for MPI; numpy for array comparisons
 
+### Clang-tidy sanitation
+
+DNDS is clean as of 2026-04-29 (26-pass cleanup, 24 597 → 1
+diagnostics; the remaining one is an unrelated Eigen PCH
+`omp.h` include issue). Full per-pass record, `.clang-tidy`
+disable rationale, and NOLINT placement gotchas:
+**`docs/dev/clang_tidy_plan.md`**.
+
+Other modules (`Solver`, `Geom`, `CFV`, `Euler`, `EulerP`) are
+not yet sanitised. Apply the same recipe in that order. Run
+`scripts/run_clang_tidy.py <module>` to get the per-check
+histogram; the `.clang-tidy` disables carry forward unchanged.
+
 ## Geom Module Architecture
 
 Mesh connectivity, ghost management, and the build pipeline are documented
