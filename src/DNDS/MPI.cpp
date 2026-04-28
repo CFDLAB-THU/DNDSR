@@ -315,7 +315,7 @@ namespace DNDS::MPI
     void ResourceRecycler::RegisterCleaner(void *p, std::function<void()> nCleaner)
     {
         DNDS_assert(cleaners.count(p) == 0);
-        cleaners.emplace(std::make_pair(p, std::move(nCleaner)));
+        cleaners.emplace(p, std::move(nCleaner));
     }
 
     void ResourceRecycler::RemoveCleaner(void *p)

@@ -858,7 +858,7 @@ namespace DNDS
                         // MPI_Type_create_hindexed(PushDispsMPI.size(), PushSizesMPI.data(), PushDispsMPI.data(), father->getDataType(), &dtype);
 
                         MPI_Type_commit(&dtype);
-                        pPushTypeVec->push_back(std::make_pair(r, dtype));
+                        pPushTypeVec->emplace_back(r, dtype);
                         // OPT: could use MPI_Type_create_hindexed_block to save some space
                     }
                     /************************************************************/
@@ -883,7 +883,7 @@ namespace DNDS
 
                         // std::cout << mpi.rank << " pullSlice " << pullDisp[0] << outputDelim << pullBytes[0] << std::endl;
                         MPI_Type_commit(&dtype);
-                        pPullTypeVec->push_back(std::make_pair(r, dtype));
+                        pPullTypeVec->emplace_back(r, dtype);
                     }
                 }
                 pPullTypeVec->shrink_to_fit();
