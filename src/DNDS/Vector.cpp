@@ -2,5 +2,5 @@
 
 namespace DNDS
 {
-    DeviceHostSingleAllocationBase::~DeviceHostSingleAllocationBase() {}
+    DeviceHostSingleAllocationBase::~DeviceHostSingleAllocationBase() = default;
 }
