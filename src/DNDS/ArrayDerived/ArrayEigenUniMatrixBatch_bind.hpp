@@ -53,7 +53,7 @@ namespace DNDS
         DNDS_assert_info(row_info.shape.size() == 2, "need to pass a 2-d array");
         DNDS_assert_info(row_info.shape[0] == mat.rows(), "row size not matching");
         DNDS_assert_info(row_info.shape[1] == mat.cols(), "col size not matching");
-        auto row_start_ptr = reinterpret_cast<tElem *>(row_info.ptr);
+        auto *row_start_ptr = reinterpret_cast<tElem *>(row_info.ptr);
         DNDS_assert(row_info.strides.size() == 2);
         auto row_mat_map = Eigen::Map<
             const Eigen::Matrix<tElem, Eigen::Dynamic, Eigen::Dynamic, Eigen::DontAlign | Eigen::ColMajor>,
@@ -90,7 +90,7 @@ namespace DNDS
         DNDS_assert_info(row_info.shape[0] == self.BatchSize(index_), "batch size not matching");
         DNDS_assert_info(row_info.shape[1] == self.Rows(), "row size not matching");
         DNDS_assert_info(row_info.shape[2] == self.Cols(), "col size not matching");
-        auto row_start_ptr = reinterpret_cast<tElem *>(row_info.ptr);
+        auto *row_start_ptr = reinterpret_cast<tElem *>(row_info.ptr);
         DNDS_assert(row_info.strides.size() == 3);
         for (index iB = 0; iB < row_info.shape[0]; iB++)
         {

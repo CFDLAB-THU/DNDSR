@@ -67,7 +67,7 @@ namespace DNDS
         DNDS_assert_info(row_info.shape[0] == mat.rows(), "row size not matching");
         DNDS_assert_info(row_info.shape[1] == mat.cols(), "col size not matching");
 
-        auto row_start_ptr = reinterpret_cast<tElem *>(row_info.ptr);
+        auto *row_start_ptr = reinterpret_cast<tElem *>(row_info.ptr);
 
         DNDS_assert(row_info.strides.size() == 2);
 
