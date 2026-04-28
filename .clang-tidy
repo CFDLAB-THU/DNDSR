@@ -78,6 +78,25 @@
 #                                           misc-unconventional-assign-
 #                                           operator, and we already
 #                                           follow the canonical form.
+#   -cppcoreguidelines-macro-usage          All 41 macros in DNDS
+#                                           require __FILE__/__LINE__
+#                                           capture, token pasting,
+#                                           code generation, or
+#                                           define-before-include
+#                                           behaviour that constexpr
+#                                           template functions cannot
+#                                           express. Examples:
+#                                             DNDS_assert*, DNDS_check_throw* (need line info)
+#                                             DNDS_DECLARE_CONFIG, DNDS_FIELD, DNDS_json_to_config (code gen)
+#                                             DNDS_NLOHMANN_DEFINE_* (nlohmann_json DSL)
+#                                             pybind11_bind_Array_All_X_* (name-based pybind11 generator)
+#                                             DNDS_DEVICE_TRIVIAL_COPY_DEFINE* (declare class members)
+#                                             DNDS_ARRAY_OP_SWITCHER (device/backend dispatch)
+#                                             DNDS_likely / DNDS_unlikely / DNDS_FORCEINLINE (builtins/attrs)
+#                                             DISABLE_WARNING (_Pragma wrappers)
+#                                             MPICH_SKIP_MPICXX, OMPI_SKIP_MPICXX,
+#                                             EIGEN_DONT_PARALLELIZE (define-before-include)
+#                                             DNDS_VERSION_STRING (from CMake configure_file).
 #
 # Notes on ExtraArgs:
 #   - -UDNDS_USE_OMP: skip #include <omp.h> which requires
@@ -126,6 +145,7 @@ Checks: >
   -readability-redundant-access-specifiers,
   -modernize-use-transparent-functors,
   -cppcoreguidelines-c-copy-assignment-signature,
+  -cppcoreguidelines-macro-usage,
 
 WarningsAsErrors: ''
 
