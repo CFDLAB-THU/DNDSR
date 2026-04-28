@@ -68,7 +68,7 @@ namespace DNDS::MPI
                 // Capture the modified arguments into output_args:
                 std::vector<std::string> pArgvOut;
                 for (int i = 0; i < *pargc; ++i)
-                    pArgvOut.push_back(std::string(argv_array[i]));
+                    pArgvOut.emplace_back(argv_array[i]);
 
                 // Cleanup all dynamically allocated memory
                 // Note: Even if MPI changes entries in the array, our pointers still point to

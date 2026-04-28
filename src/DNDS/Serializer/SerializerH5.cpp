@@ -196,7 +196,7 @@ namespace DNDS::Serializer
         // std::cout << "name is " << name << std::endl;
         if (info->type == H5L_TYPE_HARD)
         {
-            data->contents.groups.push_back(name);
+            data->contents.groups.emplace_back(name);
             return 0;
             //! now it seems obj_info is not correctly retrieved with type=Unknown
             //! TODO: fix this and get actual object type
@@ -218,13 +218,13 @@ namespace DNDS::Serializer
                 {
                 case H5O_TYPE_GROUP:
                 {
-                    data->contents.groups.push_back(name);
+                    data->contents.groups.emplace_back(name);
                     // std::cout << data->get_indent() << "Group: " << full_name << std::endl;
                     break;
                 }
                 case H5O_TYPE_DATASET:
                 {
-                    data->contents.datasets.push_back(name);
+                    data->contents.datasets.emplace_back(name);
                     // std::cout << data->get_indent() << "Dataset: " << full_name << std::endl;
                     break;
                 }
@@ -252,7 +252,7 @@ namespace DNDS::Serializer
     static herr_t attribute_iterate_cb(hid_t obj_id, const char *attr_name, const H5A_info_t *info, void *op_data)
     {
         TraverseData *data = static_cast<TraverseData *>(op_data);
-        data->contents.attributes.push_back(attr_name);
+        data->contents.attributes.emplace_back(attr_name);
         // std::string full_attr_name = data->current_path + "@" + attr_name; // Common convention for attribute paths
         // std::cout << data->get_indent() << "  Attribute: " << full_attr_name << std::endl; // Indent more for attributes
         return 0; // Continue iteration
