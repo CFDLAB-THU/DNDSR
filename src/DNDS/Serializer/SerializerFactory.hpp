@@ -99,9 +99,9 @@ namespace DNDS::Serializer
                 outPath = {fname + ".dir"};
                 if (!read)
                     std::filesystem::create_directories(outPath);
-                char BUF[512];
-                std::sprintf(BUF, rank_part_fmt.c_str(), mpi.rank);
-                fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
+                std::array<char, 512> BUF{};
+                std::sprintf(BUF.data(), rank_part_fmt.c_str(), mpi.rank);
+                fname = getStringForcePath(outPath / (std::string(BUF.data()) + ".json"));
                 return std::make_tuple(fname, getStringForcePath(outPath));
             }
             else if (type == "H5")
