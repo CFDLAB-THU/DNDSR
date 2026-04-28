@@ -185,6 +185,10 @@ namespace DNDS
             return "integer";
         case ConfigTypeTag::Real:
             return "number";
+        // NOLINTBEGIN(bugprone-branch-clone): JSON Schema has no distinct
+        // `enum` / `ArrayOfObjects` / `MapOfObjects` types; each maps to
+        // the closest built-in kind (string / array / object). Keeping
+        // the cases explicit documents the mapping at the call site.
         case ConfigTypeTag::String:
             return "string";
         case ConfigTypeTag::Enum:
@@ -197,6 +201,7 @@ namespace DNDS
             return "array";
         case ConfigTypeTag::MapOfObjects:
             return "object";
+        // NOLINTEND(bugprone-branch-clone)
         case ConfigTypeTag::Json:
             return {};
         }

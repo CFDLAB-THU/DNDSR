@@ -41,10 +41,14 @@ namespace DNDS
         using t_base = ParArray<real, NonUniformSize>;
         using t_base::t_base;
 
+        // NOLINTBEGIN(bugprone-branch-clone): both non-row-vector arms of
+        // the options ternary intentionally select ColMajor; mirrors the
+        // pattern in EigenUtil.hpp::MatrixFMTSafe.
         using t_EigenMatrix = Eigen::Matrix<real, _n_row, _n_col,
                                             Eigen::AutoAlign |
                                                 ((_n_row == 1 && _n_col != 1) ? Eigen ::RowMajor : (_n_col == 1 && _n_row != 1) ? Eigen ::ColMajor // ColMajor except for row-vector
                                                                                                                                 : Eigen ::ColMajor)>;
+        // NOLINTEND(bugprone-branch-clone)
         using t_EigenMap = Eigen::Map<t_EigenMatrix, Eigen::Unaligned>;             // default no buffer align and stride
         using t_EigenMap_const = Eigen::Map<const t_EigenMatrix, Eigen::Unaligned>; // default no buffer align and stride
 

@@ -437,10 +437,15 @@ namespace DNDS
                 pos = iRow * rs + iCol;
             else if constexpr (_dataLayout == TABLE_StaticMax)
                 pos = iRow * rm + iCol;
+            // NOLINTBEGIN(bugprone-branch-clone): TABLE_Fixed and TABLE_Max happen
+            // to share the runtime expression (both use `_row_size_dynamic`) but
+            // are conceptually distinct layout flavours and may diverge in future
+            // (e.g. padded rows).
             else if constexpr (_dataLayout == TABLE_Fixed)
                 pos = iRow * _row_size_dynamic + iCol;
             else if constexpr (_dataLayout == TABLE_Max)
                 pos = iRow * _row_size_dynamic + iCol;
+            // NOLINTEND(bugprone-branch-clone)
             else if constexpr (_dataLayout == CSR)
             {
                 DNDS_HD_assert_infof(0 <= iRow && iRow + 1 < _size + 1,
@@ -492,10 +497,14 @@ namespace DNDS
                 return _data + iRow * rs;
             else if constexpr (_dataLayout == TABLE_StaticMax)
                 return _data + iRow * rm;
+            // NOLINTBEGIN(bugprone-branch-clone): TABLE_Fixed and TABLE_Max share
+            // the runtime expression but are conceptually distinct layouts
+            // (see #operator[](iRow, iCol)).
             else if constexpr (_dataLayout == TABLE_Fixed)
                 return _data + iRow * _row_size_dynamic;
             else if constexpr (_dataLayout == TABLE_Max)
                 return _data + iRow * _row_size_dynamic;
+            // NOLINTEND(bugprone-branch-clone)
             else if constexpr (_dataLayout == CSR)
             {
                 DNDS_HD_assert_infof(0 <= iRow && iRow < _size + 1,
