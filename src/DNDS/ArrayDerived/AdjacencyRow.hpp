@@ -71,8 +71,13 @@ namespace DNDS
         }
 
         /// @brief Copy contents of another span (same size required).
+        /// @details Guarded against self-assignment: when `&r == this`,
+        /// `p_indices` and `r.cbegin()` point into the same buffer, and
+        /// `std::copy` on overlapping ranges is undefined behaviour.
         DNDS_DEVICE_CALLABLE void operator=(const AdjacencyRow &r)
         {
+            if (this == &r)
+                return;
             DNDS_assert(Row_size == r.size());
             std::copy(r.cbegin(), r.cend(), p_indices);
         }
