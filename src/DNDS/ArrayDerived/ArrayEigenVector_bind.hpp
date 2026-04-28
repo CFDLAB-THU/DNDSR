@@ -193,7 +193,7 @@ namespace DNDS
 namespace DNDS
 {
     template <size_t N, std::array<int, N> const &Arr, size_t... Is>
-    void pybind11_callBindArrayEigenVectors_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
+    void pybind11_callBindArrayEigenVectors_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...> /*unused*/)
     {
         (_pybind11_ArrayEigenVector_define_dispatch<Arr[Is]>(m), ...);
         (_pybind11_ArrayEigenVectorPair_define_dispatch<Arr[Is]>(m), ...);
