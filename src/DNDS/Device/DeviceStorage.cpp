@@ -53,7 +53,7 @@ namespace DNDS
         void copy_host_to_device(uint8_t *host_ptr, size_t n_bytes) override
         {
             DNDS_assert_info(n_bytes == bytes(), "bytes size mismatch");
-            auto *host_T_ptr = reinterpret_cast<uint8_t *>(host_ptr);
+            auto *host_T_ptr = host_ptr;
             // std::copy(host_T_ptr, host_T_ptr + data.size(), data.begin());
             // ! point-back design:
             data = host_T_ptr;
@@ -61,7 +61,7 @@ namespace DNDS
         void copy_device_to_host(uint8_t *host_ptr, size_t n_bytes) override
         {
             DNDS_assert_info(n_bytes == bytes(), "bytes size mismatch");
-            auto *host_T_ptr = reinterpret_cast<uint8_t *>(host_ptr);
+            auto *host_T_ptr = host_ptr;
             // std::copy(data.begin(), data.end(), host_T_ptr);
             // ! point-back design:
             // do nothing
@@ -69,7 +69,7 @@ namespace DNDS
         void copy_to_device(uint8_t *device_ptr_dst, size_t n_bytes) override
         {
             DNDS_assert_info(n_bytes == bytes(), "bytes size mismatch");
-            auto *device_T_ptr_dst = reinterpret_cast<uint8_t *>(device_ptr_dst);
+            auto *device_T_ptr_dst = device_ptr_dst;
             // ! point-back design:
             // do nothing
         }

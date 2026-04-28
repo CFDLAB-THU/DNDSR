@@ -159,33 +159,33 @@ namespace DNDS
     //! Warning, not const-expr since OpenMPI disallows it
     std::pair<MPI_Datatype, MPI_int> BasicType_To_MPIIntType()
     {
-        static const auto badReturn = std::make_pair(MPI_Datatype(MPI_DATATYPE_NULL), MPI_int(-1));
+        static const auto badReturn = std::make_pair(MPI_DATATYPE_NULL, MPI_int(-1));
         if constexpr (std::is_scalar_v<T>)
         {
             if constexpr (std::is_same_v<T, float>)
-                return std::make_pair(MPI_Datatype(MPI_FLOAT), MPI_int(1));
+                return std::make_pair(MPI_FLOAT, MPI_int(1));
             if constexpr (std::is_same_v<T, double>)
-                return std::make_pair(MPI_Datatype(MPI_DOUBLE), MPI_int(1));
+                return std::make_pair(MPI_DOUBLE, MPI_int(1));
             if constexpr (std::is_same_v<T, long double>)
-                return std::make_pair(MPI_Datatype(MPI_LONG_DOUBLE), MPI_int(1));
+                return std::make_pair(MPI_LONG_DOUBLE, MPI_int(1));
 
             if constexpr (std::is_same_v<T, int8_t>)
-                return std::make_pair(MPI_Datatype(MPI_INT8_T), MPI_int(1));
+                return std::make_pair(MPI_INT8_T, MPI_int(1));
             if constexpr (std::is_same_v<T, int16_t>)
-                return std::make_pair(MPI_Datatype(MPI_INT16_T), MPI_int(1));
+                return std::make_pair(MPI_INT16_T, MPI_int(1));
             if constexpr (std::is_same_v<T, int32_t>)
-                return std::make_pair(MPI_Datatype(MPI_INT32_T), MPI_int(1));
+                return std::make_pair(MPI_INT32_T, MPI_int(1));
             if constexpr (std::is_same_v<T, int64_t>)
-                return std::make_pair(MPI_Datatype(MPI_INT64_T), MPI_int(1));
+                return std::make_pair(MPI_INT64_T, MPI_int(1));
 
             if constexpr (sizeof(T) == 1)
-                return std::make_pair(MPI_Datatype(MPI_UINT8_T), MPI_int(1));
+                return std::make_pair(MPI_UINT8_T, MPI_int(1));
             else if constexpr (sizeof(T) == 2)
-                return std::make_pair(MPI_Datatype(MPI_UINT16_T), MPI_int(1));
+                return std::make_pair(MPI_UINT16_T, MPI_int(1));
             else if constexpr (sizeof(T) == 4)
-                return std::make_pair(MPI_Datatype(MPI_UINT32_T), MPI_int(1));
+                return std::make_pair(MPI_UINT32_T, MPI_int(1));
             else if constexpr (sizeof(T) == 8)
-                return std::make_pair(MPI_Datatype(MPI_UINT64_T), MPI_int(1));
+                return std::make_pair(MPI_UINT64_T, MPI_int(1));
             else
                 return BasicType_To_MPIIntType_Custom<T>();
         }
