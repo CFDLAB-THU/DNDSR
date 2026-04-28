@@ -623,7 +623,7 @@ namespace DNDS
     /// @brief Narrow #index to `int32_t` with range check; dies on overflow.
     inline int32_t checkedIndexTo32(index v)
     {
-        DNDS_assert_info(!(v > static_cast<index>(INT32_MAX) || v < static_cast<index>(INT32_MIN)),
+        DNDS_assert_info(v >= static_cast<index>(INT32_MIN) && v <= static_cast<index>(INT32_MAX),
                          fmt::format("Index {} to int32 overflow", v));
         return static_cast<int32_t>(v);
     }

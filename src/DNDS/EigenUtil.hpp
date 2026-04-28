@@ -55,8 +55,8 @@ namespace Eigen
      * Use this type (or its @ref VectorFMTSafe / @ref RowVectorFMTSafe aliases) wherever
      * Eigen objects need to pass through `fmt::format`.
      */
-    template <class T, int M, int N, int options = AutoAlign | ((M == 1 && N != 1) ? Eigen ::RowMajor : !(M == 1 && N != 1) ? Eigen ::ColMajor
-                                                                                                                            : Eigen ::ColMajor),
+    template <class T, int M, int N, int options = AutoAlign | ((M == 1 && N != 1) ? Eigen ::RowMajor : M != 1 || N == 1 ? Eigen ::ColMajor
+                                                                                                                         : Eigen ::ColMajor),
               int max_m = M, int max_n = N>
     struct MatrixFMTSafe : public Matrix<T, M, N, options, max_m, max_n>
     {

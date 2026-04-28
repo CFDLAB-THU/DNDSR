@@ -80,7 +80,7 @@ namespace DNDS
             .def("__imul__", [](TArr &self, const TArr &R)
                  { self *= R;return self; }, py::arg("R"));
 
-        if constexpr (!(n_m == 1 && n_n == 1))
+        if constexpr (n_m != 1 || n_n != 1)
         {
             Arr_
                 .def("__imul__", [](TArr &self, ArrayDof<1, 1> &R)
