@@ -93,7 +93,7 @@ namespace DNDS::Serializer
         auto v = jObj[cPointer];
         DNDS_assert_info(v.is_object(), fmt::format("current path is not an object " + cP));
         std::set<std::string> ret;
-        for (auto &[key, value] : v.items())
+        for (const auto &[key, value] : v.items())
             ret.insert(key);
         return ret;
     }

@@ -54,7 +54,7 @@ namespace DNDS
         DNDS_assert(row_info.item_type_is_equivalent_to<real>());
         auto [count, row_style] = py_buffer_get_contigious_size(row_info); // todo: upgrade to accept any 1D array
         DNDS_assert(self.RowSize(index_) == count);
-        auto row_start_ptr = reinterpret_cast<real *>(row_info.ptr);
+        auto *row_start_ptr = reinterpret_cast<real *>(row_info.ptr);
         std::copy(row_start_ptr, row_start_ptr + count, self[index_].data());
     }
 }

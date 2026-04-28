@@ -39,7 +39,7 @@ namespace DNDS
             auto buf_info = buf.request(false);
             DNDS_assert(buf_info.item_type_is_equivalent_to<tElem>());
             DNDS_assert_info(buf_info.shape.size() == 2, "need to pass a 2-d array");
-            auto buf_start_ptr = reinterpret_cast<tElem *>(buf_info.ptr);
+            auto *buf_start_ptr = reinterpret_cast<tElem *>(buf_info.ptr);
             DNDS_assert(buf_info.strides.size() == 2);
 
             auto c_mat_map = tReadMap(
@@ -93,7 +93,7 @@ namespace DNDS
         DNDS_assert_info(row_info.shape[0] == mat.rows(), "row size not matching");
         DNDS_assert_info(row_info.shape[1] == mat.cols(), "col size not matching");
 
-        auto row_start_ptr = reinterpret_cast<tElem *>(row_info.ptr);
+        auto *row_start_ptr = reinterpret_cast<tElem *>(row_info.ptr);
         DNDS_assert(row_info.strides.size() == 2);
         auto row_mat_map = Eigen::Map<
             const Eigen::Matrix<tElem, Eigen::Dynamic, Eigen::Dynamic, Eigen::DontAlign | Eigen::ColMajor>,
