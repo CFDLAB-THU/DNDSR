@@ -234,9 +234,9 @@ namespace DNDS
         MPIInfo() = default;
 
         /// @brief Wrap an existing MPI communicator; queries rank and size.
-        MPIInfo(MPI_Comm ncomm)
+        MPIInfo(MPI_Comm ncomm) : comm(ncomm)
         {
-            comm = ncomm;
+
             int ierr = 0;
             ierr = MPI_Comm_rank(comm, &rank), DNDS_assert(ierr == MPI_SUCCESS);
             ierr = MPI_Comm_size(comm, &size), DNDS_assert(ierr == MPI_SUCCESS);
