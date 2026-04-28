@@ -264,8 +264,8 @@ namespace DNDS::Serializer
         H5Contents contents;
         TraverseData data{contents, cP, collectiveMetadataRW};
         herr_t herr{0};
-        herr = H5Aiterate(group_id, H5_INDEX_NAME, H5_ITER_INC, NULL, attribute_iterate_cb, &data), H5CHECK_Iter;
-        herr = H5Literate(group_id, H5_INDEX_NAME, H5_ITER_INC, NULL, link_iterate_cb, &data), H5CHECK_Iter;
+        herr = H5Aiterate(group_id, H5_INDEX_NAME, H5_ITER_INC, nullptr, attribute_iterate_cb, &data), H5CHECK_Iter;
+        herr = H5Literate(group_id, H5_INDEX_NAME, H5_ITER_INC, nullptr, link_iterate_cb, &data), H5CHECK_Iter;
         H5Gclose(group_id), H5CHECK_Close; // don't forget this
         std::set<std::string> ret;
         for (auto &v : contents.attributes)
@@ -363,7 +363,7 @@ namespace DNDS::Serializer
         std::array<hsize_t, 2> ranksFullUnlim{chunksize > 0 ? H5S_UNLIMITED : hsize_t(nGlobal), hsize_t(dim2)};
         std::array<hsize_t, 2> offset{hsize_t(nOffset), 0};
         std::array<hsize_t, 2> siz{hsize_t(nLocal), hsize_t(dim2)};
-        hid_t memSpace = H5Screate_simple(rank, siz.data(), NULL);
+        hid_t memSpace = H5Screate_simple(rank, siz.data(), nullptr);
         hid_t fileSpace = H5Screate_simple(rank, ranksFull.data(), ranksFullUnlim.data());
         std::array<hsize_t, 2> chunk_dims{hsize_t(chunksize > 0 ? chunksize : 0), dim2 >= 0 ? hsize_t(dim2) : 0};
         hid_t dcpl_id = H5Pcreate(H5P_DATASET_CREATE);
@@ -378,7 +378,7 @@ namespace DNDS::Serializer
         DNDS_assert_info(H5I_INVALID_HID != dset_id, "dataset create failed");
         herr = H5Sclose(fileSpace);
         fileSpace = H5Dget_space(dset_id);
-        herr |= H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), NULL, siz.data(), NULL);
+        herr |= H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), nullptr, siz.data(), nullptr);
         herr |= H5Dwrite(dset_id, mem_dataType, memSpace, fileSpace, dxpl_id, buf);
         herr |= H5Dclose(dset_id);
         herr |= H5Pclose(dcpl_id);
@@ -649,9 +649,9 @@ namespace DNDS::Serializer
             int rank = dim2 >= 0 ? 2 : 1;
             std::array<hsize_t, 2> offset{hsize_t(nOffset), 0};
             std::array<hsize_t, 2> siz{hsize_t(nLocal), hsize_t(dim2)};
-            hid_t memSpace = H5Screate_simple(rank, siz.data(), NULL);
+            hid_t memSpace = H5Screate_simple(rank, siz.data(), nullptr);
             DNDS_assert(memSpace > 0);
-            herr = H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), NULL, siz.data(), NULL), H5CHECK_Set;
+            herr = H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), nullptr, siz.data(), nullptr), H5CHECK_Set;
             herr = H5Dread(dset_id, mem_dataType, memSpace, fileSpace, dxpl_id, buf), H5CHECK_Set;
             herr = H5Sclose(memSpace), H5CHECK_Close;
         }

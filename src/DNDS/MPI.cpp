@@ -338,7 +338,7 @@ namespace DNDS::MPI
         try
         {
             auto *ret = std::getenv("DNDS_USE_LAZY_WAIT");
-            if (ret != NULL && (std::stod(ret) != 0))
+            if (ret != nullptr && (std::stod(ret) != 0))
             {
                 _use_lazy_wait = std::stod(ret);
                 auto mpi = MPIInfo();
@@ -355,7 +355,7 @@ namespace DNDS::MPI
         try
         {
             auto *ret = std::getenv("DNDS_ARRAY_STRATEGY_USE_IN_SITU");
-            if (ret != NULL && (std::stoi(ret) != 0))
+            if (ret != nullptr && (std::stoi(ret) != 0))
             {
                 _array_strategy = InSituPack;
                 auto mpi = MPIInfo();
@@ -374,7 +374,7 @@ namespace DNDS::MPI
         try
         {
             auto *ret = std::getenv("DNDS_USE_STRONG_SYNC_WAIT");
-            if (ret != NULL && (std::stoi(ret) != 0))
+            if (ret != nullptr && (std::stoi(ret) != 0))
             {
                 _use_strong_sync_wait = true;
                 auto mpi = MPIInfo();
@@ -393,7 +393,7 @@ namespace DNDS::MPI
         try
         {
             auto *ret = std::getenv("DNDS_USE_ASYNC_ONE_BY_ONE");
-            if (ret != NULL && (std::stoi(ret) != 0))
+            if (ret != nullptr && (std::stoi(ret) != 0))
             {
                 _use_async_one_by_one = true;
                 auto mpi = MPIInfo();
