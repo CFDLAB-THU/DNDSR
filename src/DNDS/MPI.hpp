@@ -712,12 +712,18 @@ namespace DNDS::MPI
     /// @brief Single-scalar Allreduce helper for reals (in-place, count = 1).
     inline void AllreduceOneReal(real &v, MPI_Op op, const MPIInfo &mpi)
     {
+        // MPI_IN_PLACE is a library-defined sentinel macro (OpenMPI: `((void *)1)`)
+        // whose internal C-style cast is outside project control.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
         Allreduce(MPI_IN_PLACE, &v, 1, DNDS_MPI_REAL, op, mpi.comm);
     }
 
     /// @brief Single-scalar Allreduce helper for indices (in-place, count = 1).
     inline void AllreduceOneIndex(index &v, MPI_Op op, const MPIInfo &mpi)
     {
+        // MPI_IN_PLACE is a library-defined sentinel macro (OpenMPI: `((void *)1)`)
+        // whose internal C-style cast is outside project control.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
         Allreduce(MPI_IN_PLACE, &v, 1, DNDS_MPI_INDEX, op, mpi.comm);
     }
 
