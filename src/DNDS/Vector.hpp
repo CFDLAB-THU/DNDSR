@@ -27,6 +27,14 @@ namespace DNDS
         DeviceHostSingleAllocationBase() = default;
         virtual ~DeviceHostSingleAllocationBase();
 
+        // Polymorphic base: delete copy / move to prevent slicing. Concrete
+        // subclasses (`DeviceHostSingleAllocationDirect`) own a device buffer;
+        // callers manipulate them via `unique_ptr<DeviceHostSingleAllocationBase>`.
+        DeviceHostSingleAllocationBase(const DeviceHostSingleAllocationBase &) = delete;
+        DeviceHostSingleAllocationBase &operator=(const DeviceHostSingleAllocationBase &) = delete;
+        DeviceHostSingleAllocationBase(DeviceHostSingleAllocationBase &&) = delete;
+        DeviceHostSingleAllocationBase &operator=(DeviceHostSingleAllocationBase &&) = delete;
+
         /// @brief Allocate `bytes` on backend `B` (or on the host when @ref Unknown).
         virtual void allocate(size_t bytes, DeviceBackend B = DeviceBackend::Unknown) = 0;
         /// @brief Release the allocation.
@@ -62,6 +70,13 @@ namespace DNDS
         DeviceHostSingleAllocationDirect() = default;
 
         ~DeviceHostSingleAllocationDirect() override {}
+
+        // Inherited copy / move are `= delete` (polymorphic base owns a
+        // device buffer). Re-declare explicitly for the rule-of-five.
+        DeviceHostSingleAllocationDirect(const DeviceHostSingleAllocationDirect &) = delete;
+        DeviceHostSingleAllocationDirect &operator=(const DeviceHostSingleAllocationDirect &) = delete;
+        DeviceHostSingleAllocationDirect(DeviceHostSingleAllocationDirect &&) = delete;
+        DeviceHostSingleAllocationDirect &operator=(DeviceHostSingleAllocationDirect &&) = delete;
 
         void allocate(size_t bytes, DeviceBackend B = DeviceBackend::Unknown) override
         {
@@ -387,6 +402,14 @@ namespace DNDS
             this->sync_device_ptr();
         }
 
+        // Rule-of-five closure. Members are `unique_ptr` + raw-cache
+        // pointers + size_t; the default move transfers the unique_ptrs
+        // and copies the cache pointers, which is correct because the
+        // moved-from object is reset to empty.
+        host_device_vector_r1(t_self &&) noexcept = default;
+        t_self &operator=(t_self &&) noexcept = default;
+        ~host_device_vector_r1() = default;
+
         DeviceBackend device()
         {
             return device_data ? device_data->device() : DeviceBackend::Unknown;
@@ -503,6 +526,12 @@ namespace DNDS
                     this->to_device(DeviceBackend::Host);
             }
         }
+
+        // Rule-of-five closure. `deviceStorage` is a `unique_ptr`; default
+        // move transfers it correctly. Dtor is trivial.
+        host_device_vector_r0(t_self &&) noexcept = default;
+        t_self &operator=(t_self &&) noexcept = default;
+        ~host_device_vector_r0() = default;
 
         DeviceBackend device()
         {

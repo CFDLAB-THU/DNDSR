@@ -823,6 +823,14 @@ namespace DNDS
             this->clone(R);
         }
 
+        /// @brief Rule-of-five closure: members are all value-semantic
+        /// (`shared_ptr`, `host_device_vector`, PODs), so the compiler-synthesised
+        /// move and destructor do the right thing — a shallow move of the
+        /// shared storage, identical in observable behaviour to copy + reset.
+        Array(self_type &&) noexcept = default;
+        self_type &operator=(self_type &&) noexcept = default;
+        ~Array() = default;
+
         /// @brief Swap the storage of two arrays in-place.
         /// @details Both arrays must already have identical logical size and
         /// flat-buffer size. Swaps only what the current layout uses (flat buffer
@@ -1313,6 +1321,9 @@ namespace DNDS
         public:
             auto getView() const { return view; }
             DNDS_DEVICE_CALLABLE iterator(const iterator &) = default;
+            DNDS_DEVICE_CALLABLE iterator &operator=(const iterator &) = default;
+            DNDS_DEVICE_CALLABLE iterator(iterator &&) noexcept = default;
+            DNDS_DEVICE_CALLABLE iterator &operator=(iterator &&) noexcept = default;
             DNDS_DEVICE_CALLABLE ~iterator() = default;
             DNDS_DEVICE_CALLABLE iterator(const view_type &n_view, index n_iRow) : view(n_view), t_base_iter(n_iRow)
             {

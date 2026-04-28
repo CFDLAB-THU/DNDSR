@@ -105,6 +105,15 @@ namespace DNDS
     class DeviceStorageBase
     {
     public:
+        // Polymorphic RAII base: each concrete subclass owns a device
+        // allocation. Callers manipulate instances via `unique_ptr` /
+        // `shared_ptr`, so slicing-unsafe copy / move are deleted.
+        DeviceStorageBase() = default;
+        DeviceStorageBase(const DeviceStorageBase &) = delete;
+        DeviceStorageBase &operator=(const DeviceStorageBase &) = delete;
+        DeviceStorageBase(DeviceStorageBase &&) = delete;
+        DeviceStorageBase &operator=(DeviceStorageBase &&) = delete;
+
         /// @brief Raw byte pointer to the underlying storage.
         virtual uint8_t *raw_ptr() = 0;
         /// @brief Copy `n_bytes` from `host_ptr` into this device buffer.

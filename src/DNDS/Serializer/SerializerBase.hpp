@@ -190,6 +190,14 @@ namespace DNDS::Serializer
 
     public:
         virtual ~SerializerBase(); // define in CPP
+
+        // Polymorphic RAII base (subclasses hold file handles / H5 IDs):
+        // delete copy / move to prevent slicing and double-close.
+        SerializerBase() = default;
+        SerializerBase(const SerializerBase &) = delete;
+        SerializerBase &operator=(const SerializerBase &) = delete;
+        SerializerBase(SerializerBase &&) = delete;
+        SerializerBase &operator=(SerializerBase &&) = delete;
         /// @brief Open a backing file (H5 file or JSON file depending on subclass).
         /// @param read `true` for reading, `false` for writing.
         virtual void OpenFile(const std::string &fName, bool read) = 0;

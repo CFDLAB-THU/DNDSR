@@ -85,6 +85,10 @@ namespace DNDS
         // default copy
         ArrayEigenMatrix(const t_self &R) = default;
         t_self &operator=(const t_self &R) = default;
+        // Rule-of-five closure: all value-semantic members.
+        ArrayEigenMatrix(t_self &&) noexcept = default;
+        t_self &operator=(t_self &&) noexcept = default;
+        ~ArrayEigenMatrix() = default;
         // operator= handled automatically
 
         void clone(const t_self &R)

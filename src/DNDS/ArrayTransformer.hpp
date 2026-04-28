@@ -77,6 +77,11 @@ namespace DNDS
         // default copy
         ParArray(const t_self &R) = default;
         t_self &operator=(const t_self &R) = default;
+        // Rule-of-five closure: base + added members are all value-semantic,
+        // so default move/dtor do a shallow move of the shared storage.
+        ParArray(t_self &&) noexcept = default;
+        t_self &operator=(t_self &&) noexcept = default;
+        ~ParArray() = default;
 
         // operator= handled automatically
 
@@ -552,6 +557,14 @@ namespace DNDS
             // initial-safe operator= call
             this->operator=(R);
         }
+
+        /// @brief Rule-of-five closure. All non-trivial members are held via
+        /// `shared_ptr` (`pLGhostMapping`, `father`, `son`, `pPushTypeVec`,
+        /// `pPullTypeVec`, `PushReqVec`, `PullReqVec`), so default move /
+        /// destructor are correct — they shallow-move the handles.
+        ArrayTransformer(TSelf &&) noexcept = default;
+        TSelf &operator=(TSelf &&) noexcept = default;
+        ~ArrayTransformer() = default;
 
         /**
          * @brief Attach father and son arrays. First setup step.
