@@ -10,6 +10,7 @@
 // #endif
 #include <codecvt>
 #include <boost/stacktrace.hpp>
+#include <utility>
 // #include <cpptrace.hpp>
 
 #ifdef DNDS_UNIX_LIKE
@@ -50,7 +51,7 @@ namespace DNDS
 
     bool logIsTTY() { return ostreamIsTTY(*logStream); }
 
-    void setLogStream(ssp<std::ostream> nstream) { useCout = false, logStream = nstream; }
+    void setLogStream(ssp<std::ostream> nstream) { useCout = false, logStream = std::move(nstream); }
 
     void setLogStreamCout() { useCout = true, logStream.reset(); }
 

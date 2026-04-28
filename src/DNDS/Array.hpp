@@ -1109,7 +1109,7 @@ namespace DNDS
         /// @param name         Sub-path name for this array.
         /// @return Metadata: array_sig, row_size_dynamic, size (local size for
         ///         per-rank; 0 for collective without ParArray).
-        ReadSerializerMetaResult ReadSerializerMeta(Serializer::SerializerBaseSSP serializerP, const std::string &name)
+        ReadSerializerMetaResult ReadSerializerMeta(const Serializer::SerializerBaseSSP &serializerP, const std::string &name)
         {
             auto cwd = serializerP->GetCurrentPath();
             serializerP->GoToPath(name);

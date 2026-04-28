@@ -56,7 +56,7 @@ namespace DNDS
     }
 
     template <class TArrayEigenMatrix = ArrayEigenMatrix<3, 3>>
-    auto pybind11_ArrayEigenMatrix_setitem(TArrayEigenMatrix &self, index index_, py::buffer row)
+    auto pybind11_ArrayEigenMatrix_setitem(TArrayEigenMatrix &self, index index_, const py::buffer &row)
     {
         using tElem = real;
         auto row_info = row.request(false);
@@ -153,7 +153,7 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
-                [](TArrayEigenMatrix &self, index index_, py::buffer row)
+                [](TArrayEigenMatrix &self, index index_, const py::buffer &row)
                 {
                     return pybind11_ArrayEigenMatrix_setitem(self, index_, row);
                 });
@@ -224,7 +224,7 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
-                [](TPair &self, index index_, py::buffer row)
+                [](TPair &self, index index_, const py::buffer &row)
                 {
                     return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenMatrix_setitem(ar, iC, row); });

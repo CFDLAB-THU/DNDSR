@@ -15,20 +15,22 @@ namespace py = pybind11;
 #include "SerializerFactory.hpp"
 #include <pybind11/stl.h>
 
+#include <utility>
+
 namespace DNDS::Serializer
 {
     inline auto pybind11_SerializerBase_declare(py::module_ m)
     {
-        return py_class_ssp<SerializerBase>(m, "SerializerBase");
+        return py_class_ssp<SerializerBase>(std::move(m), "SerializerBase");
     }
 
-    inline auto pybind11_SerializerBase_get_class(py::module_ m)
+    inline auto pybind11_SerializerBase_get_class(const py::module_ &m)
     {
         return py_class_ssp<SerializerBase>(m.attr("SerializerBase"));
     }
     inline void pybind11_SerializerBase_define(py::module_ m)
     {
-        auto Serializer_ = pybind11_SerializerBase_declare(m);
+        auto Serializer_ = pybind11_SerializerBase_declare(std::move(m));
         using tSerializer = SerializerBase;
         // Serializer_ //! no initializer (ctor) as this is virtual base
         //     .def(py::init<>());
@@ -42,13 +44,13 @@ namespace DNDS::Serializer
             .def("IsPerRank", &tSerializer::IsPerRank);
     }
 
-    inline auto pybind11_SerializerJSON_declare(py::module_ m)
+    inline auto pybind11_SerializerJSON_declare(const py::module_ &m)
     {
         return py_class_ssp<SerializerJSON>(m, "SerializerJSON", pybind11_SerializerBase_get_class(m));
     }
-    inline void pybind11_SerializerJSON_define(py::module_ m)
+    inline void pybind11_SerializerJSON_define(const py::module_ &m)
     {
-        auto Serializer_ = pybind11_SerializerJSON_declare(m);
+        auto Serializer_ = pybind11_SerializerJSON_declare(std::move(m));
         using tSerializer = SerializerJSON;
         Serializer_
             .def(py::init<>());
@@ -57,13 +59,13 @@ namespace DNDS::Serializer
             .def("SetUseCodecOnUint8", &tSerializer::SetUseCodecOnUint8);
     }
 
-    inline auto pybind11_SerializerH5_declare(py::module_ m)
+    inline auto pybind11_SerializerH5_declare(const py::module_ &m)
     {
         return py_class_ssp<SerializerH5>(m, "SerializerH5", pybind11_SerializerBase_get_class(m));
     }
-    inline void pybind11_SerializerH5_define(py::module_ m)
+    inline void pybind11_SerializerH5_define(const py::module_ &m)
     {
-        auto Serializer_ = pybind11_SerializerH5_declare(m);
+        auto Serializer_ = pybind11_SerializerH5_declare(std::move(m));
         using tSerializer = SerializerH5;
         Serializer_
             .def(py::init<const MPIInfo &>(), py::arg("mpi"));
@@ -74,11 +76,11 @@ namespace DNDS::Serializer
 
     inline auto pybind11_SerializerFactory_declare(py::module_ m)
     {
-        return py_class_ssp<SerializerFactory>(m, "SerializerFactory");
+        return py_class_ssp<SerializerFactory>(std::move(m), "SerializerFactory");
     }
     inline void pybind11_SerializerFactory_define(py::module_ m)
     {
-        auto SerializerFactory_ = pybind11_SerializerFactory_declare(m);
+        auto SerializerFactory_ = pybind11_SerializerFactory_declare(std::move(m));
         SerializerFactory_
             .def(py::init<>())
             // .def(py::init<const std::string &>(), py::arg("type"))
@@ -96,7 +98,7 @@ namespace DNDS::Serializer
                 })
             .def(
                 "from_dict",
-                [](SerializerFactory &self, py::object options_in) -> void
+                [](SerializerFactory &self, const py::object &options_in) -> void
                 {
                     nlohmann::json j(options_in);
                     from_json(j, self);

@@ -187,7 +187,7 @@ namespace DNDS // Array
             Array_
                 .def(
                     "Resize",
-                    [](TArray &self, index nRow, py::array_t<int, pybind11::array::c_style | pybind11::array::forcecast> rowsizes)
+                    [](TArray &self, index nRow, const py::array_t<int, pybind11::array::c_style | pybind11::array::forcecast> &rowsizes)
                     {
                         DNDS_assert_info(rowsizes.size() >= nRow, fmt::format("rowsizes is of size {}, not enough", rowsizes.size()));
                         self.Resize(nRow, [&](index iRow)
@@ -488,7 +488,7 @@ namespace DNDS // ArrayTransformer
             .def("createFatherGlobalMapping", &TArrayTransformer::createFatherGlobalMapping)
             .def("createGhostMapping", [](TArrayTransformer &self, std::vector<index> pullIndexGlobal) -> void
                  { self.createGhostMapping(pullIndexGlobal); }, py::arg("pullIndexGlobal"))
-            .def("createGhostMapping", [](TArrayTransformer &self, py::array_t<index> pullIndexGlobal)
+            .def("createGhostMapping", [](TArrayTransformer &self, const py::array_t<index> &pullIndexGlobal)
                  {
                     std::vector<index> pullIndexVec;
                     pullIndexVec.reserve(pullIndexGlobal.size());
@@ -502,7 +502,7 @@ namespace DNDS // ArrayTransformer
             .def("clearMPITypes", &TArrayTransformer::clearMPITypes)
             .def(
                 "BorrowGGIndexing",
-                [](TArrayTransformer &self, py::object other)
+                [](TArrayTransformer &self, const py::object &other)
                 {
                     auto other_father = other.attr("father");
                     auto other_father_size = other_father.attr("Size")().cast<index>();
@@ -634,7 +634,7 @@ namespace DNDS
     pybind11_bind_Array_All_X_declare(7);
     // definitions are offloaded to Array_bind_offset/*.cpp
 
-    inline void pybind11_bind_Array_Offsets(py::module_ m)
+    inline void pybind11_bind_Array_Offsets(const py::module_ &m)
     {
         pybind11_bind_Array_All_X_call(1, m);
         pybind11_bind_Array_All_X_call(2, m);
