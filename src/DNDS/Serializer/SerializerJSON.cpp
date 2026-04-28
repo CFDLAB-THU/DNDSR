@@ -220,7 +220,9 @@ namespace DNDS::Serializer
 
         if (pth_2_ssp.count(refPath))
         {
-            v = *((ssp<tValue> *)(pth_2_ssp[refPath]));
+            // Dedup registry stores type-erased `ssp<tValue> *`; caller
+            // guarantees the stored type matches tValue.
+            v = *reinterpret_cast<ssp<tValue> *>(pth_2_ssp[refPath]);
         }
         else
         {
@@ -249,7 +251,9 @@ namespace DNDS::Serializer
 
         if (pth_2_ssp.count(refPath))
         {
-            v = *((ssp<tValue> *)(pth_2_ssp[refPath]));
+            // Dedup registry stores type-erased `ssp<tValue> *`; caller
+            // guarantees the stored type matches tValue.
+            v = *reinterpret_cast<ssp<tValue> *>(pth_2_ssp[refPath]);
         }
         else
         {
