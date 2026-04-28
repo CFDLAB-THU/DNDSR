@@ -728,7 +728,7 @@ namespace DNDS
             auto fatherDataStart = father->operator[](0);
             if (commTypeCurrent == MPI::CommStrategy::InSituPack)
                 pushingIndexLocal.resize(nSend);
-            for (index i = 0; i < index(nSend); i++)
+            for (index i = 0; i < nSend; i++)
             {
                 MPI_int rank = -1;
                 index loc = -1;
