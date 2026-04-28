@@ -69,7 +69,7 @@ namespace DNDS
     public:
         DeviceHostSingleAllocationDirect() = default;
 
-        ~DeviceHostSingleAllocationDirect() override {}
+        ~DeviceHostSingleAllocationDirect() override = default;
 
         // Inherited copy / move are `= delete` (polymorphic base owns a
         // device buffer). Re-declare explicitly for the rule-of-five.
