@@ -636,7 +636,7 @@ namespace DNDS::Serializer
         DNDS_assert_info(fileSpace >= 0, fmt::format("dataset [{}] filespace open failed", name));
         int ndims = H5Sget_simple_extent_ndims(fileSpace);
         DNDS_assert_info(ndims == 1 || ndims == 2, fmt::format("dataset [{}] not having 1 or 2 dims!", name));
-        std::array<hsize_t, 2> sizes;
+        std::array<hsize_t, 2> sizes{};
         ndims = H5Sget_simple_extent_dims(fileSpace, sizes.data(), nullptr);
         if (ndims == 2)
             dim2 = sizes[1];

@@ -25,7 +25,7 @@ namespace DNDS
     class AdjacencyRow // instead of std::vector<index> for building on raw buffer as a "mapping" object
     {
         index_T *p_indices;
-        rowsize Row_size;
+        rowsize Row_size{};
 
     public:
         //! the copy is not trivial!
