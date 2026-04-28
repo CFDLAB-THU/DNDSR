@@ -93,7 +93,7 @@ namespace DNDS::MPI
         auto m_MPI = m.def_submodule("MPI");
         m_MPI.def(
             "Allreduce",
-            [](py::buffer py_sendbuf, py::buffer py_recvbuf, const std::string &op, const MPIInfo &mpi)
+            [](const py::buffer &py_sendbuf, const py::buffer &py_recvbuf, const std::string &op, const MPIInfo &mpi)
             {
                 auto send_info = py_sendbuf.request(false);
                 auto recv_info = py_recvbuf.request(true);

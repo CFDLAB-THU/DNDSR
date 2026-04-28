@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 #include "ArrayEigenMatrixBatch.hpp"
 #include "../Array_bind.hpp"
 
@@ -83,7 +85,7 @@ namespace DNDS
             false);
     }
 
-    inline auto pybind11_ArrayEigenMatrixBatch_setitem(ArrayEigenMatrixBatch &self, std::tuple<index, rowsize> index_, py::buffer row)
+    inline auto pybind11_ArrayEigenMatrixBatch_setitem(ArrayEigenMatrixBatch &self, std::tuple<index, rowsize> index_, const py::buffer &row)
     {
         using tElem = real;
         auto row_info = row.request(false);
@@ -167,9 +169,9 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
-                [](TArrayEigenMatrixBatch &self, std::tuple<index, rowsize> index_, py::buffer row)
+                [](TArrayEigenMatrixBatch &self, std::tuple<index, rowsize> index_, const py::buffer &row)
                 {
-                    return pybind11_ArrayEigenMatrixBatch_setitem(self, index_, row);
+                    return pybind11_ArrayEigenMatrixBatch_setitem(self, index_, std::move(row));
                 });
 
         ArrayEigenMatrixBatch_
@@ -215,7 +217,7 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "InitializeWriteRow",
-                [](TPair &self, index index_, py::buffer row)
+                [](TPair &self, index index_, const py::buffer &row)
                 {
                     return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenMatrixBatch_setitem_row(ar, iC, row); });
@@ -232,7 +234,7 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
-                [](TPair &self, std::tuple<index, rowsize> index_, py::buffer row)
+                [](TPair &self, std::tuple<index, rowsize> index_, const py::buffer &row)
                 {
                     return self.runFunctionAppendedIndex(std::get<0>(index_), [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenMatrixBatch_setitem(ar, std::make_tuple(iC, std::get<1>(index_)), row); });

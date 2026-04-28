@@ -36,7 +36,7 @@ namespace DNDS
 namespace DNDS
 {
     template <class TArray = ArrayAdjacency<1>>
-    auto pybind11_ArrayAdjacency_setitem(TArray &self, index index_, py::buffer row)
+    auto pybind11_ArrayAdjacency_setitem(TArray &self, index index_, const py::buffer &row)
     {
         auto row_info = row.request(false);
         DNDS_assert(row_info.item_type_is_equivalent_to<index>());
@@ -105,7 +105,7 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
-                [](TArrayAdjacency &self, index index_, py::buffer row)
+                [](TArrayAdjacency &self, index index_, const py::buffer &row)
                 {
                     return pybind11_ArrayAdjacency_setitem(self, index_, row);
                 });
@@ -180,7 +180,7 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
-                [](TPair &self, index index_, py::buffer row)
+                [](TPair &self, index index_, const py::buffer &row)
                 {
                     return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayAdjacency_setitem(ar, iC, row); });

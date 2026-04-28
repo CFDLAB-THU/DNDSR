@@ -91,7 +91,7 @@ namespace DNDS::Serializer
          * @return Tuple `(finalFilePath, displayPath)` -- the display path is
          *         the JSON dir or the H5 file, depending on backend.
          */
-        std::tuple<std::string, std::string> ModifyFilePath(std::string fname, const MPIInfo &mpi, std::string rank_part_fmt = "%06d", bool read = false)
+        std::tuple<std::string, std::string> ModifyFilePath(std::string fname, const MPIInfo &mpi, const std::string &rank_part_fmt = "%06d", bool read = false)
         {
             if (type == "JSON")
             {
