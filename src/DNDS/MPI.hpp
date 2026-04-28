@@ -535,7 +535,7 @@ namespace DNDS // TODO: get a concurrency header
             int needed_MPI_THREAD_LEVEL = MPI_THREAD_MULTIPLE;
 
             auto *env = std::getenv("DNDS_DISABLE_ASYNC_MPI");
-            if (env != NULL && (std::stod(env) != 0))
+            if (env != nullptr && (std::stod(env) != 0))
             {
                 int ienv = static_cast<int>(std::stod(env));
                 if (ienv >= 1)

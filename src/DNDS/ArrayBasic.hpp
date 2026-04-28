@@ -525,8 +525,8 @@ namespace DNDS
                     return this->get_rowstart_pointer_compressed(iRow);
                 else if (_size == 0)
                 {
-                    static_assert(((T *)(NULL) - (T *)(NULL)) == 0);
-                    return (T *)(NULL); // used for past-the-end inquiry of size 0 array
+                    static_assert(((T *)nullptr - (T *)nullptr) == 0);
+                    return (T *)nullptr; // used for past-the-end inquiry of size 0 array
                 }
                 else
                 {
