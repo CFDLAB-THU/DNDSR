@@ -63,7 +63,9 @@ namespace DNDS
             return csbi.srWindow.Right - csbi.srWindow.Left + 1;
         }
 #else
-        struct winsize w;
+        struct winsize w
+        {
+        };
         if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0)
         {
             return w.ws_col;

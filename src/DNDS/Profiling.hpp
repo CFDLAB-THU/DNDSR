@@ -53,7 +53,7 @@ namespace DNDS
 
     private:
         std::array<real, Ntype_All> timer = {0};
-        std::array<real, Ntype_All> tStart;
+        std::array<real, Ntype_All> tStart{};
         PerformanceTimer() = default;
 
     public:

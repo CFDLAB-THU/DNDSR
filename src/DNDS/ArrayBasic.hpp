@@ -260,7 +260,7 @@ namespace DNDS
             t_Layout::ArraySignatureIsCompatible;
         using typename t_Layout::value_type;
 
-        index _size;
+        index _size{};
         T *_data = nullptr;
         index _data_size = 0;
         std::conditional_t<_dataLayout == CSR, const index *,

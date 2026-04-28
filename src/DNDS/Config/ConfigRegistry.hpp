@@ -159,7 +159,7 @@ namespace DNDS
     {
         std::string name;        ///< JSON key name (may differ from C++ member name for aliased fields).
         std::string description; ///< Human-readable description, used in JSON Schema and generated docs.
-        ConfigTypeTag typeTag;   ///< JSON Schema type category.
+        ConfigTypeTag typeTag{}; ///< JSON Schema type category (zero-init = `Bool`; always overwritten by the builder).
 
         /// @brief Read this field from a JSON object into a struct instance.
         /// @param j   The JSON object to read from (must contain `name` as a key).

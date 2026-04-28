@@ -484,9 +484,9 @@ namespace DNDS
         /// @brief Status buffer for pull completion.
         tMPI_statVec PullStatVec;
         /// @brief Total bytes sent per push call (for buffer sizing).
-        MPI_Aint pushSendSize;
+        MPI_Aint pushSendSize{};
         /// @brief Total bytes sent per pull call.
-        MPI_Aint pullSendSize;
+        MPI_Aint pullSendSize{};
 
         tMPI_intVec pushingSizes;                 ///< temp: per-peer count for #createMPITypes.
         tMPI_AintVec pushingDisps;                ///< temp: per-peer byte displacements for #createMPITypes.
@@ -863,9 +863,9 @@ namespace DNDS
                     }
                     /************************************************************/
                     // pull
-                    std::array<MPI_Aint, 1> pullDisp;
+                    std::array<MPI_Aint, 1> pullDisp{};
 
-                    std::array<MPI_int, 1> pullSizes; // same as pushSizes
+                    std::array<MPI_int, 1> pullSizes{}; // same as pushSizes
                     auto gRPtr = son->operator[](index(pLGhostMapping->ghostStart[r + 1]));
                     auto gLPtr = son->operator[](index(pLGhostMapping->ghostStart[r]));
                     auto gStartPtr = son->operator[](index(0));

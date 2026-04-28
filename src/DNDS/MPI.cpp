@@ -115,8 +115,8 @@ namespace DNDS
     std::string getTimeStamp(const MPIInfo &mpi)
     {
         auto result = static_cast<int64_t>(std::time(nullptr));
-        std::array<char, 512> bufTime;
-        std::array<char, 512 + 32> buf;
+        std::array<char, 512> bufTime{};
+        std::array<char, 512 + 32> buf{};
         int64_t pid = 0;
 #ifdef DNDS_UNIX_LIKE
         // pid = Debug::getpid();
