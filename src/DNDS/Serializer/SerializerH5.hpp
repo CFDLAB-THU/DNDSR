@@ -67,7 +67,7 @@ namespace DNDS::Serializer
         bool collectiveDataRW = false;
 
     public:
-        SerializerH5(const MPIInfo &_mpi) : SerializerBase(), mpi(_mpi)
+        SerializerH5(const MPIInfo &_mpi) : mpi(_mpi)
         {
             MPI_Comm_dup(mpi.comm, &commDup);
         }

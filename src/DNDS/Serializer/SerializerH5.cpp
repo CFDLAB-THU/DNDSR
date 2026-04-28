@@ -177,11 +177,19 @@ namespace DNDS::Serializer
 
     struct TraverseData
     {
+        // TraverseData is a short-lived per-call aggregate passed through the
+        // HDF5 H5Literate callback; the reference is intentional so that the
+        // callback mutates the caller's H5Contents directly.
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
         H5Contents &contents;
         std::string current_path;
         bool coll_on_meta;
         [[nodiscard]] std::string get_indent() const
         {
+            // Brace-init `{n, ' '}` is ambiguous with std::string's
+            // initializer_list<char> ctor and triggers -Wnarrowing; keep
+            // the explicit std::string(n, ch) form.
+            // NOLINTNEXTLINE(modernize-return-braced-init-list)
             return std::string(std::count(current_path.begin(), current_path.end(), '/') * 2, ' ');
         }
     };
@@ -251,7 +259,7 @@ namespace DNDS::Serializer
     // Callback for H5Aiterate (iterating attributes)
     static herr_t attribute_iterate_cb(hid_t obj_id, const char *attr_name, const H5A_info_t *info, void *op_data)
     {
-        TraverseData *data = static_cast<TraverseData *>(op_data);
+        auto *data = static_cast<TraverseData *>(op_data);
         data->contents.attributes.emplace_back(attr_name);
         // std::string full_attr_name = data->current_path + "@" + attr_name; // Common convention for attribute paths
         // std::cout << data->get_indent() << "  Attribute: " << full_attr_name << std::endl; // Indent more for attributes
@@ -297,6 +305,10 @@ namespace DNDS::Serializer
         else
             static_assert(std::is_same_v<T, real>);
 
+        // `vV` is addressed via `&vV` in the non-string `if constexpr` branch
+        // below; clang-tidy's check misses the template instantiation for
+        // `T != std::string`.
+        // NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
         T vV = v;
 
         if constexpr (!std::is_same_v<T, std::string>)
@@ -526,6 +538,10 @@ namespace DNDS::Serializer
         else
             static_assert(std::is_same_v<T, real>);
 
+        // `vV` is addressed via `&vV` in the non-string `if constexpr` branch
+        // below; clang-tidy's check misses the template instantiation for
+        // `T != std::string`.
+        // NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
         T vV = v;
 
         if constexpr (!std::is_same_v<T, std::string>)
@@ -568,6 +584,10 @@ namespace DNDS::Serializer
             {
                 // Variable-length string: HDF5 will allocate memory
                 char *attr_value = nullptr;
+                // H5Aread wants `void *buf`; the multi-level-implicit-pointer
+                // check requires an explicit reinterpret to silence the
+                // `char ** -> void *` conversion inside the argument parens.
+                // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
                 herr = H5Aread(attr_id, dtype_id, &attr_value), H5CHECK_Set;
                 // std::cout << "Read Attribute (Variable-Length): " << attr_value << "\n";
                 v = attr_value;            // copy as null-terminated string

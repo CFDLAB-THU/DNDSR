@@ -9,6 +9,8 @@
 #include "JsonUtil.hpp"
 #include "DNDS/Config/ConfigParam.hpp"
 
+#include <utility>
+
 namespace DNDS::Serializer
 {
     /**
@@ -37,7 +39,7 @@ namespace DNDS::Serializer
 
         SerializerFactory() = default;
         /// @brief Construct with a specific backend name; other fields stay at defaults.
-        SerializerFactory(const std::string &_type) : type(_type) {}
+        SerializerFactory(std::string _type) : type(std::move(_type)) {}
 
         DNDS_DECLARE_CONFIG(SerializerFactory)
         {
@@ -58,7 +60,7 @@ namespace DNDS::Serializer
 
         /// @brief Instantiate the selected serializer and apply its tunables.
         /// @param mpi MPI context (used only by the H5 backend).
-        SerializerBaseSSP BuildSerializer(const MPIInfo &mpi)
+        [[nodiscard]] SerializerBaseSSP BuildSerializer(const MPIInfo &mpi) const
         {
             SerializerBaseSSP serializerP;
             if (type == "JSON")
@@ -91,7 +93,7 @@ namespace DNDS::Serializer
          * @return Tuple `(finalFilePath, displayPath)` -- the display path is
          *         the JSON dir or the H5 file, depending on backend.
          */
-        std::tuple<std::string, std::string> ModifyFilePath(std::string fname, const MPIInfo &mpi, const std::string &rank_part_fmt = "%06d", bool read = false)
+        [[nodiscard]] std::tuple<std::string, std::string> ModifyFilePath(std::string fname, const MPIInfo &mpi, const std::string &rank_part_fmt = "%06d", bool read = false) const
         {
             if (type == "JSON")
             {

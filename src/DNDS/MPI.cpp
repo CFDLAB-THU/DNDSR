@@ -349,9 +349,14 @@ namespace DNDS::MPI
                 MPI::BarrierLazy(mpi.comm, static_cast<uint64_t>(_use_lazy_wait));
             }
         }
+        // NOLINTBEGIN(bugprone-empty-catch)
+        // Empty catch intentional: env var contains a malformed
+        // number (stod/stoi throws); treat as "unset" and leave the
+        // default. Logging here would fail inside static-ctor phase.
         catch (...)
         {
         }
+        // NOLINTEND(bugprone-empty-catch)
         try
         {
             auto *ret = std::getenv("DNDS_ARRAY_STRATEGY_USE_IN_SITU");
@@ -368,9 +373,14 @@ namespace DNDS::MPI
                     MPI_Barrier(mpi.comm);
             }
         }
+        // NOLINTBEGIN(bugprone-empty-catch)
+        // Empty catch intentional: env var contains a malformed
+        // number (stod/stoi throws); treat as "unset" and leave the
+        // default. Logging here would fail inside static-ctor phase.
         catch (...)
         {
         }
+        // NOLINTEND(bugprone-empty-catch)
         try
         {
             auto *ret = std::getenv("DNDS_USE_STRONG_SYNC_WAIT");
@@ -387,9 +397,14 @@ namespace DNDS::MPI
                     MPI_Barrier(mpi.comm);
             }
         }
+        // NOLINTBEGIN(bugprone-empty-catch)
+        // Empty catch intentional: env var contains a malformed
+        // number (stod/stoi throws); treat as "unset" and leave the
+        // default. Logging here would fail inside static-ctor phase.
         catch (...)
         {
         }
+        // NOLINTEND(bugprone-empty-catch)
         try
         {
             auto *ret = std::getenv("DNDS_USE_ASYNC_ONE_BY_ONE");
@@ -406,9 +421,14 @@ namespace DNDS::MPI
                     MPI_Barrier(mpi.comm);
             }
         }
+        // NOLINTBEGIN(bugprone-empty-catch)
+        // Empty catch intentional: env var contains a malformed
+        // number (stod/stoi throws); treat as "unset" and leave the
+        // default. Logging here would fail inside static-ctor phase.
         catch (...)
         {
         }
+        // NOLINTEND(bugprone-empty-catch)
     }
 
     CommStrategy &CommStrategy::Instance()
