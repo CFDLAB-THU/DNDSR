@@ -118,6 +118,37 @@ excludes `.cu` files by default; headers included from CUDA TUs are
 still tidied transitively via their `.cpp` includers. Pass `--include-cu`
 to opt in anyway.
 
+**NOLINT placement.** `NOLINTNEXTLINE(check)` applies to the
+*immediately following* line. Put any rationale comment *before*
+the NOLINT directive, not between it and the offending code. When
+`--fix` can rewrite the flagged line, use block-form
+`NOLINTBEGIN(check) ... NOLINTEND(check)` so the directive
+survives the rewrite. Every NOLINT marker in the tree is paired
+with a rationale comment explaining why the check is wrong or
+inapplicable at that site.
+
+**Per-module sanitation status.**
+
+| Module | Status | Diagnostics |
+|---|---|---:|
+| `src/DNDS/` | Clean (2026-04-29) | 1 (unrelated Eigen PCH `omp.h`) |
+| `src/Solver/` | Not started | — |
+| `src/Geom/` | Not started | — |
+| `src/CFV/` | Not started | — |
+| `src/Euler/` | Not started | — |
+| `src/EulerP/` | Not started | — |
+
+The full cleanup history for DNDS — 26 passes, 24 597 → 1
+diagnostics — is recorded in
+[`docs/dev/clang_tidy_plan.md`](../dev/clang_tidy_plan.md).
+That document is the reference for the per-pass recipe, the
+`.clang-tidy` disable rationales, and the NOLINT placement
+gotchas. Use the same recipe for the other modules in the order
+Solver → Geom → CFV → Euler → EulerP. The existing `.clang-tidy`
+disables carry forward unchanged; any new module-specific disables
+go in the file-header table, not inside the `Checks:` folded
+scalar.
+
 ### C++ Docstrings (Doxygen)
 
 Source comments are processed by **Doxygen** (for the standalone C++ API docs)
