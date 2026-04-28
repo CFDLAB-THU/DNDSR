@@ -584,10 +584,13 @@ namespace DNDS
                 return _data.at(iRow * rs + iCol);
             else if constexpr (_dataLayout == TABLE_StaticMax)
                 return _data.at(iRow * rm + iCol);
+            // NOLINTBEGIN(bugprone-branch-clone): TABLE_Fixed and TABLE_Max share
+            // the runtime expression but are conceptually distinct layouts.
             else if constexpr (_dataLayout == TABLE_Fixed)
                 return _data.at(iRow * _row_size_dynamic + iCol);
             else if constexpr (_dataLayout == TABLE_Max)
                 return _data.at(iRow * _row_size_dynamic + iCol);
+            // NOLINTEND(bugprone-branch-clone)
             else if constexpr (_dataLayout == CSR)
             {
                 if (IfCompressed())
