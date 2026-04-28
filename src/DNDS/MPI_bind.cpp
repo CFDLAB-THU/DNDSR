@@ -11,7 +11,11 @@ namespace DNDS
     {
         py_class_ssp<MPIInfo>(m, "MPIInfo")
             .def(py::init<>())
+            // Python side passes an opaque `uintptr_t` handle produced by
+            // `MPI_Comm_c2f`/ctypes; the reverse conversion back into
+            // `MPI_Comm` is intentionally an integer-to-pointer reinterpretation.
             .def(py::init([](uintptr_t pComm)
+                          // NOLINTNEXTLINE(performance-no-int-to-ptr)
                           { return std::make_unique<MPIInfo>(MPI_Comm(pComm)); }))
             .def("setWorld", &MPIInfo::setWorld)
             .def_readonly("rank", &MPIInfo::rank)
@@ -45,6 +49,12 @@ namespace DNDS::MPI
                 int initial_argc = static_cast<int>(pArgv.size());
                 int initial_argc_mine = initial_argc;
 
+                // NOLINTBEGIN(cppcoreguidelines-owning-memory): MPI_Init_thread
+                // requires a mutable `char ***argv` with ownership retained by
+                // the caller through the lifetime of Init/Finalize. Smart
+                // pointers would require reshaping the MPI-C API contract.
+                // Paired `delete[]` at the end of this block.
+                //
                 // Create an array of pointers to C-style strings:
                 char **argv_array = new char *[initial_argc + 1]; // +1 for NULL terminator
                 char **argv_array_mine = argv_array;
@@ -67,6 +77,7 @@ namespace DNDS::MPI
 
                 // Capture the modified arguments into output_args:
                 std::vector<std::string> pArgvOut;
+                pArgvOut.reserve(*pargc);
                 for (int i = 0; i < *pargc; ++i)
                     pArgvOut.emplace_back(argv_array[i]);
 
@@ -76,6 +87,7 @@ namespace DNDS::MPI
                 for (int i = 0; i <= initial_argc_mine; ++i)
                     delete[] argv_array_mine[i]; // Free each string buffer
                 delete[] argv_array_mine;        // Free the pointer array
+                // NOLINTEND(cppcoreguidelines-owning-memory)
 
                 return std::make_tuple(ret, pArgvOut);
             });

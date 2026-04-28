@@ -94,7 +94,18 @@ namespace DNDS::Serializer
 
         ~SerializerJSON() override
         {
-            CloseFileNonVirtual();
+            // Destructors must not throw; swallow any exception from the
+            // close path (fstream flush, bad-path cleanup). A failure here
+            // is reported when the user invoked CloseFile() explicitly.
+            // NOLINTBEGIN(bugprone-empty-catch)
+            try
+            {
+                CloseFileNonVirtual();
+            }
+            catch (...)
+            {
+            }
+            // NOLINTEND(bugprone-empty-catch)
         }
     };
 }

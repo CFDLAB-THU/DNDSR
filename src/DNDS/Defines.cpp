@@ -175,7 +175,7 @@ namespace DNDS
     std::string GetSetVersionName(const std::string &ver)
     {
         static std::string ver_name = "UNKNOWN";
-        if (ver.length())
+        if (!ver.empty())
             ver_name = ver;
         return ver_name;
     }

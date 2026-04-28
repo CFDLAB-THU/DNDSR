@@ -62,8 +62,9 @@ namespace DNDS
         va_start(args, info);
         std::cerr << getTraceString() << "\n";
         std::cerr << "\033[91m DNDS_assertion failed\033[39m: \"" << expr << "\"  at [  " << file << ":" << line << "  ]\n";
-        // NOLINTNEXTLINE(bugprone-implicit-widening-of-multiplication-result): compile-time
-        // constant 1024*512 = 524288 fits in int32_t; no runtime overflow is possible.
+        // Compile-time constant 1024 * 512 = 524288 fits in int32_t;
+        // no runtime overflow is possible.
+        // NOLINTNEXTLINE(bugprone-implicit-widening-of-multiplication-result)
         std::array<char, 1024 * 512> format_buf{};
         std::vsnprintf(format_buf.data(), format_buf.size(), info, args);
         va_end(args);

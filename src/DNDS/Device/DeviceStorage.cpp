@@ -11,6 +11,10 @@ namespace DNDS
 
     void deviceStorageBase_deleter(DeviceStorageBase *p)
     {
+        // Deleter callback passed to `std::shared_ptr`; the caller guarantees
+        // `p` was allocated with `new`. Smart-pointer ownership is tracked
+        // upstream.
+        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
         delete p;
     }
 

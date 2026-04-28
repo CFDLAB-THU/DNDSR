@@ -50,7 +50,7 @@ namespace DNDS::Serializer
     }
     inline void pybind11_SerializerJSON_define(const py::module_ &m)
     {
-        auto Serializer_ = pybind11_SerializerJSON_declare(std::move(m));
+        auto Serializer_ = pybind11_SerializerJSON_declare(m);
         using tSerializer = SerializerJSON;
         Serializer_
             .def(py::init<>());
@@ -65,7 +65,7 @@ namespace DNDS::Serializer
     }
     inline void pybind11_SerializerH5_define(const py::module_ &m)
     {
-        auto Serializer_ = pybind11_SerializerH5_declare(std::move(m));
+        auto Serializer_ = pybind11_SerializerH5_declare(m);
         using tSerializer = SerializerH5;
         Serializer_
             .def(py::init<const MPIInfo &>(), py::arg("mpi"));

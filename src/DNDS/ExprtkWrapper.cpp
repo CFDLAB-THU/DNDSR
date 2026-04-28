@@ -17,6 +17,12 @@ namespace DNDS
     {
         this->Clear();
 
+        // NOLINTBEGIN(cppcoreguidelines-owning-memory): the three `new`-ed
+        // objects (symbol_table, expression, parser) are immediately cast to
+        // `void*` to type-erase the exprtk dependency from the public header
+        // (forward-declared `_ptr_*` members). They are freed symmetrically
+        // in `Clear()` via the same void* handles. A `unique_ptr` would
+        // require re-exposing the exprtk types in the header.
         auto *pst = new symbol_table_t;
         symbol_table_t &st = *pst;
         _ptr_st = static_cast<void *>(pst);
@@ -42,6 +48,7 @@ namespace DNDS
         auto *pparser = new parser_t;
         parser_t &parser = *pparser;
         _ptr_parser = static_cast<void *>(pparser);
+        // NOLINTEND(cppcoreguidelines-owning-memory)
 
         auto compile_ok = parser.compile(expr, exp);
         std::string error_info = parser.error() + "\n";
