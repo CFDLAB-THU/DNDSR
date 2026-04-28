@@ -295,6 +295,14 @@ namespace DNDS
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_assign(*this, R));
         }
 
+        /// @brief Rule-of-five closure. The class's custom `operator=(const t_self&)`
+        /// suppresses the implicit move operations; re-enable the compiler-
+        /// synthesised ones (shallow move of `shared_ptr` members in the base).
+        ArrayDof(const ArrayDof &) = default;
+        ArrayDof(ArrayDof &&) noexcept = default;
+        ArrayDof &operator=(ArrayDof &&) noexcept = default;
+        ~ArrayDof() = default;
+
         /// @brief AXPY: `this += r * R`. One of the hot-path solver primitives.
         void addTo(const t_self &R, real r)
         {

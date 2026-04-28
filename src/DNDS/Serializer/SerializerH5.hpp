@@ -72,6 +72,13 @@ namespace DNDS::Serializer
             MPI_Comm_dup(mpi.comm, &commDup);
         }
 
+        // Rule-of-five closure. Owns a duplicated MPI communicator and HDF5
+        // file/plist IDs; copy / move are deleted (would double-close).
+        SerializerH5(const SerializerH5 &) = delete;
+        SerializerH5 &operator=(const SerializerH5 &) = delete;
+        SerializerH5(SerializerH5 &&) = delete;
+        SerializerH5 &operator=(SerializerH5 &&) = delete;
+
         void SetChunkAndDeflate(int64_t n_chunksize, int n_deflateLevel)
         {
             if (n_deflateLevel > 0)

@@ -928,6 +928,9 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE EmptyNoDefault(EmptyNoDefault &&v) = default;
         DNDS_DEVICE_CALLABLE EmptyNoDefault(const EmptyNoDefault &v) = default;
         DNDS_DEVICE_CALLABLE EmptyNoDefault &operator=(const EmptyNoDefault &) = default;
+        // Rule-of-five closure — trivial type.
+        DNDS_DEVICE_CALLABLE EmptyNoDefault &operator=(EmptyNoDefault &&) noexcept = default;
+        DNDS_DEVICE_CALLABLE ~EmptyNoDefault() = default;
         template <class T>
         DNDS_DEVICE_CALLABLE EmptyNoDefault &operator=(T v) { return *this; };
         template <class T>

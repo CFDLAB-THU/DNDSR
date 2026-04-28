@@ -34,6 +34,13 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE AdjacencyRow() = default;
         DNDS_DEVICE_CALLABLE AdjacencyRow(const AdjacencyRow &) = default;
         DNDS_DEVICE_CALLABLE ~AdjacencyRow() = default;
+        // Rule-of-five closure. The custom `operator=(const AdjacencyRow&)`
+        // below returns `void` (it copies the pointed-to contents, not the
+        // pointer), so the compiler does not synthesise the canonical move
+        // operations. Restore them explicitly — moving this view wrapper is
+        // just a pointer + size copy.
+        DNDS_DEVICE_CALLABLE AdjacencyRow(AdjacencyRow &&) noexcept = default;
+        DNDS_DEVICE_CALLABLE AdjacencyRow &operator=(AdjacencyRow &&) noexcept = default;
         /// @brief Construct a span from raw pointer and size.
         DNDS_DEVICE_CALLABLE AdjacencyRow(index_T *ptr, rowsize siz) : p_indices(ptr), Row_size(siz) {} // default actually
 

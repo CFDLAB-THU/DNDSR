@@ -286,10 +286,17 @@ namespace DNDS
             std::unordered_map<void *, std::function<void()>> cleaners;
 
             ResourceRecycler(){}; // implemented
-            ResourceRecycler(const ResourceRecycler &);
-            ResourceRecycler &operator=(const ResourceRecycler &);
 
         public:
+            // Singleton: explicitly delete all copy / move operations so
+            // the only instance is obtained via `Instance()`. Replaces the
+            // pre-C++11 private-unimplemented idiom previously used here.
+            ResourceRecycler(const ResourceRecycler &) = delete;
+            ResourceRecycler &operator=(const ResourceRecycler &) = delete;
+            ResourceRecycler(ResourceRecycler &&) = delete;
+            ResourceRecycler &operator=(ResourceRecycler &&) = delete;
+            ~ResourceRecycler() = default;
+
             /// @brief Access the process-wide singleton.
             static ResourceRecycler &Instance();
             /**
@@ -375,6 +382,14 @@ namespace DNDS
             this->clear();
             MPI::ResourceRecycler::Instance().RemoveCleaner(this);
         }
+
+        // Rule-of-five closure. Owns a ResourceRecycler registration keyed
+        // by `this`; copying or moving would either leave the original
+        // registration dangling or register twice for the same `this`.
+        MPITypePairHolder(const MPITypePairHolder &) = delete;
+        MPITypePairHolder &operator=(const MPITypePairHolder &) = delete;
+        MPITypePairHolder(MPITypePairHolder &&) = delete;
+        MPITypePairHolder &operator=(MPITypePairHolder &&) = delete;
         /// @brief Free every committed datatype and empty the vector.
         void clear()
         {
@@ -427,6 +442,14 @@ namespace DNDS
             this->clear();
             MPI::ResourceRecycler::Instance().RemoveCleaner(this);
         }
+
+        // Rule-of-five closure. Owns a ResourceRecycler registration keyed
+        // by `this`; copying or moving would leave the original registration
+        // dangling or register twice for the same `this`.
+        MPIReqHolder(const MPIReqHolder &) = delete;
+        MPIReqHolder &operator=(const MPIReqHolder &) = delete;
+        MPIReqHolder(MPIReqHolder &&) = delete;
+        MPIReqHolder &operator=(MPIReqHolder &&) = delete;
         /// @brief Free every non-null request and empty the vector.
         void clear()
         {
@@ -589,10 +612,16 @@ namespace DNDS
             buf.resize(1024ULL * 1024ULL);
             MPI_Buffer_attach(buf.data(), int(buf.size())); //! warning, bufsize could overflow
         }
-        MPIBufferHandler(const MPIBufferHandler &);
-        MPIBufferHandler &operator=(const MPIBufferHandler &);
 
     public:
+        // Singleton: explicitly delete all copy / move operations so the
+        // only instance is obtained via `Instance()`.
+        MPIBufferHandler(const MPIBufferHandler &) = delete;
+        MPIBufferHandler &operator=(const MPIBufferHandler &) = delete;
+        MPIBufferHandler(MPIBufferHandler &&) = delete;
+        MPIBufferHandler &operator=(MPIBufferHandler &&) = delete;
+        ~MPIBufferHandler() = default;
+
         /// @brief Access the process-wide singleton.
         static MPIBufferHandler &Instance();
         /// @brief Current buffer size in bytes (fits in `MPI_int`; asserted).
@@ -756,10 +785,16 @@ namespace DNDS::MPI
         double _use_lazy_wait = 0;
 
         CommStrategy();
-        CommStrategy(const CommStrategy &);
-        CommStrategy &operator=(const CommStrategy &);
 
     public:
+        // Singleton: explicitly delete all copy / move operations so the
+        // only instance is obtained via `Instance()`.
+        CommStrategy(const CommStrategy &) = delete;
+        CommStrategy &operator=(const CommStrategy &) = delete;
+        CommStrategy(CommStrategy &&) = delete;
+        CommStrategy &operator=(CommStrategy &&) = delete;
+        ~CommStrategy() = default;
+
         /// @brief Access the process-wide singleton.
         static CommStrategy &Instance();
         /// @brief Current array-pack strategy.

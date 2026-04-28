@@ -45,6 +45,16 @@ namespace DNDS
         bool _compiled = false;
 
     public:
+        // Rule-of-five closure. Holds raw `new`/`delete`-owned Exprtk
+        // parser/symbol-table/expression pointers (opaque forward-declared
+        // types); copy / move are deleted because they would alias the
+        // same `new`-ed objects and double-delete on destruction.
+        ExprtkWrapperEvaluator() = default;
+        ExprtkWrapperEvaluator(const ExprtkWrapperEvaluator &) = delete;
+        ExprtkWrapperEvaluator &operator=(const ExprtkWrapperEvaluator &) = delete;
+        ExprtkWrapperEvaluator(ExprtkWrapperEvaluator &&) = delete;
+        ExprtkWrapperEvaluator &operator=(ExprtkWrapperEvaluator &&) = delete;
+
         /// @brief Register a scalar variable. `init` is accepted for API
         /// symmetry but currently ignored (scalars default to 0).
         /// @note Calling any `Add*` invalidates a previously compiled expression.

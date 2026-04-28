@@ -37,6 +37,15 @@ namespace DNDS::Serializer
         MPIInfo mpi; // NULL
 
     public:
+        // Rule-of-five closure. Owns `fstream` + JSON DOM; copy / move
+        // are inherited-deleted from SerializerBase but must be re-declared
+        // explicitly because the non-trivial dtor suppresses implicit defaults.
+        SerializerJSON() = default;
+        SerializerJSON(const SerializerJSON &) = delete;
+        SerializerJSON &operator=(const SerializerJSON &) = delete;
+        SerializerJSON(SerializerJSON &&) = delete;
+        SerializerJSON &operator=(SerializerJSON &&) = delete;
+
         void SetUseCodecOnUint8(bool v) { useCodecOnUint8 = v; }
         void SetDeflateLevel(int v) { deflateLevel = v; }
 

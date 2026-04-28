@@ -55,10 +55,16 @@ namespace DNDS
         std::array<real, Ntype_All> timer = {0};
         std::array<real, Ntype_All> tStart;
         PerformanceTimer() = default;
-        PerformanceTimer(const PerformanceTimer &);
-        PerformanceTimer &operator=(const PerformanceTimer &);
 
     public:
+        // Singleton: explicitly delete all copy / move operations so the
+        // only instance is obtained via `Instance()`.
+        PerformanceTimer(const PerformanceTimer &) = delete;
+        PerformanceTimer &operator=(const PerformanceTimer &) = delete;
+        PerformanceTimer(PerformanceTimer &&) = delete;
+        PerformanceTimer &operator=(PerformanceTimer &&) = delete;
+        ~PerformanceTimer() = default;
+
         /// @brief Access the process-wide singleton.
         static PerformanceTimer &Instance();
         /// @brief Record the current wall time in the "start" slot for timer `t`.

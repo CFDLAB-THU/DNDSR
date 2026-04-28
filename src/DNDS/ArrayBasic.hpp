@@ -586,6 +586,9 @@ namespace DNDS
 
             DNDS_DEVICE_CALLABLE RowView() = default;
             DNDS_DEVICE_CALLABLE RowView(const RowView &) = default;
+            DNDS_DEVICE_CALLABLE RowView &operator=(const RowView &) = default;
+            DNDS_DEVICE_CALLABLE RowView(RowView &&) noexcept = default;
+            DNDS_DEVICE_CALLABLE RowView &operator=(RowView &&) noexcept = default;
             DNDS_DEVICE_CALLABLE ~RowView() = default;
             DNDS_DEVICE_CALLABLE RowView(T *n_ptr, rowsize siz) : ptr(n_ptr), row_size(siz) {} // default actually
 

@@ -48,6 +48,11 @@ namespace DNDS
         // default copy
         ArrayAdjacency(const t_self &R) = default;
         t_self &operator=(const t_self &R) = default;
+        // Rule-of-five closure: members are all value-semantic; default
+        // move/destructor give a shallow move of the shared storage.
+        ArrayAdjacency(t_self &&) noexcept = default;
+        t_self &operator=(t_self &&) noexcept = default;
+        ~ArrayAdjacency() = default;
         // operator= handled automatically
 
         /// @brief Shallow copy (same semantics as assignment).
@@ -114,6 +119,9 @@ namespace DNDS
         public:
             auto getView() const { return view; }
             DNDS_DEVICE_CALLABLE iterator(const iterator &) = default;
+            DNDS_DEVICE_CALLABLE iterator &operator=(const iterator &) = default;
+            DNDS_DEVICE_CALLABLE iterator(iterator &&) noexcept = default;
+            DNDS_DEVICE_CALLABLE iterator &operator=(iterator &&) noexcept = default;
             DNDS_DEVICE_CALLABLE ~iterator() = default;
             DNDS_DEVICE_CALLABLE iterator(const view_type &n_view, index n_iRow) : view(n_view), t_base_iter(n_iRow)
             {
