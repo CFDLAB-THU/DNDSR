@@ -97,6 +97,20 @@
 #                                             MPICH_SKIP_MPICXX, OMPI_SKIP_MPICXX,
 #                                             EIGEN_DONT_PARALLELIZE (define-before-include)
 #                                             DNDS_VERSION_STRING (from CMake configure_file).
+#   -cppcoreguidelines-avoid-non-const-global-variables
+#                                           Every DNDS global mutable
+#                                           is intentional:
+#                                             logStream       — runtime log redirection
+#                                             useCout         — runtime switch
+#                                             outputDelim     — global config
+#                                             HDF_mutex       — library-wide mutex (must be mutable)
+#                                             isDebugging     — runtime debugger-attach probe
+#                                             EigenPCH_tag,
+#                                             ExprtkPCH_tag   — PCH presence probes
+#                                           Moving any of these to
+#                                           thread_local, singletons,
+#                                           or class members is out of
+#                                           scope for a tidy pass.
 #
 # Notes on ExtraArgs:
 #   - -UDNDS_USE_OMP: skip #include <omp.h> which requires
@@ -146,6 +160,7 @@ Checks: >
   -modernize-use-transparent-functors,
   -cppcoreguidelines-c-copy-assignment-signature,
   -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-avoid-non-const-global-variables,
 
 WarningsAsErrors: ''
 
