@@ -222,7 +222,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: external/cfd_externals/install
-          key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('external/cfd_externals/cfd_externals_build.py') }}
+          key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
 
       - name: Build cfd_externals
         if: steps.cache-cfd-ext.outputs.cache-hit != 'true'
