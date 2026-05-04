@@ -260,7 +260,7 @@ namespace DNDS
             t_Layout::ArraySignatureIsCompatible;
         using typename t_Layout::value_type;
 
-        index _size{};
+        index _size;
         T *_data = nullptr;
         index _data_size = 0;
         std::conditional_t<_dataLayout == CSR, const index *,
@@ -437,15 +437,10 @@ namespace DNDS
                 pos = iRow * rs + iCol;
             else if constexpr (_dataLayout == TABLE_StaticMax)
                 pos = iRow * rm + iCol;
-            // NOLINTBEGIN(bugprone-branch-clone): TABLE_Fixed and TABLE_Max happen
-            // to share the runtime expression (both use `_row_size_dynamic`) but
-            // are conceptually distinct layout flavours and may diverge in future
-            // (e.g. padded rows).
             else if constexpr (_dataLayout == TABLE_Fixed)
                 pos = iRow * _row_size_dynamic + iCol;
             else if constexpr (_dataLayout == TABLE_Max)
                 pos = iRow * _row_size_dynamic + iCol;
-            // NOLINTEND(bugprone-branch-clone)
             else if constexpr (_dataLayout == CSR)
             {
                 DNDS_HD_assert_infof(0 <= iRow && iRow + 1 < _size + 1,
@@ -497,14 +492,10 @@ namespace DNDS
                 return _data + iRow * rs;
             else if constexpr (_dataLayout == TABLE_StaticMax)
                 return _data + iRow * rm;
-            // NOLINTBEGIN(bugprone-branch-clone): TABLE_Fixed and TABLE_Max share
-            // the runtime expression but are conceptually distinct layouts
-            // (see #operator[](iRow, iCol)).
             else if constexpr (_dataLayout == TABLE_Fixed)
                 return _data + iRow * _row_size_dynamic;
             else if constexpr (_dataLayout == TABLE_Max)
                 return _data + iRow * _row_size_dynamic;
-            // NOLINTEND(bugprone-branch-clone)
             else if constexpr (_dataLayout == CSR)
             {
                 DNDS_HD_assert_infof(0 <= iRow && iRow < _size + 1,
@@ -534,8 +525,8 @@ namespace DNDS
                     return this->get_rowstart_pointer_compressed(iRow);
                 else if (_size == 0)
                 {
-                    static_assert(((T *)nullptr - (T *)nullptr) == 0);
-                    return (T *)nullptr; // used for past-the-end inquiry of size 0 array
+                    static_assert(((T *)(NULL) - (T *)(NULL)) == 0);
+                    return (T *)(NULL); // used for past-the-end inquiry of size 0 array
                 }
                 else
                 {
@@ -595,9 +586,6 @@ namespace DNDS
 
             DNDS_DEVICE_CALLABLE RowView() = default;
             DNDS_DEVICE_CALLABLE RowView(const RowView &) = default;
-            DNDS_DEVICE_CALLABLE RowView &operator=(const RowView &) = default;
-            DNDS_DEVICE_CALLABLE RowView(RowView &&) noexcept = default;
-            DNDS_DEVICE_CALLABLE RowView &operator=(RowView &&) noexcept = default;
             DNDS_DEVICE_CALLABLE ~RowView() = default;
             DNDS_DEVICE_CALLABLE RowView(T *n_ptr, rowsize siz) : ptr(n_ptr), row_size(siz) {} // default actually
 

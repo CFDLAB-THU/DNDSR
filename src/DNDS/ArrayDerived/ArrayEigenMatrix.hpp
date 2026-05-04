@@ -85,10 +85,6 @@ namespace DNDS
         // default copy
         ArrayEigenMatrix(const t_self &R) = default;
         t_self &operator=(const t_self &R) = default;
-        // Rule-of-five closure: all value-semantic members.
-        ArrayEigenMatrix(t_self &&) noexcept = default;
-        t_self &operator=(t_self &&) noexcept = default;
-        ~ArrayEigenMatrix() = default;
         // operator= handled automatically
 
         void clone(const t_self &R)
@@ -214,7 +210,7 @@ namespace DNDS
 
         static std::string GetDerivedArraySignature()
         {
-            std::array<char, 1024> buf{};
+            std::array<char, 1024> buf;
             std::sprintf(buf.data(), "ArrayEigenMatrix__%d_%d_%d_%d", _mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max);
             return buf.data();
         }

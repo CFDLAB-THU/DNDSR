@@ -25,7 +25,7 @@ namespace DNDS
     class AdjacencyRow // instead of std::vector<index> for building on raw buffer as a "mapping" object
     {
         index_T *p_indices;
-        rowsize Row_size{};
+        rowsize Row_size;
 
     public:
         //! the copy is not trivial!
@@ -34,13 +34,6 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE AdjacencyRow() = default;
         DNDS_DEVICE_CALLABLE AdjacencyRow(const AdjacencyRow &) = default;
         DNDS_DEVICE_CALLABLE ~AdjacencyRow() = default;
-        // Rule-of-five closure. The custom `operator=(const AdjacencyRow&)`
-        // below returns `void` (it copies the pointed-to contents, not the
-        // pointer), so the compiler does not synthesise the canonical move
-        // operations. Restore them explicitly — moving this view wrapper is
-        // just a pointer + size copy.
-        DNDS_DEVICE_CALLABLE AdjacencyRow(AdjacencyRow &&) noexcept = default;
-        DNDS_DEVICE_CALLABLE AdjacencyRow &operator=(AdjacencyRow &&) noexcept = default;
         /// @brief Construct a span from raw pointer and size.
         DNDS_DEVICE_CALLABLE AdjacencyRow(index_T *ptr, rowsize siz) : p_indices(ptr), Row_size(siz) {} // default actually
 
@@ -71,13 +64,8 @@ namespace DNDS
         }
 
         /// @brief Copy contents of another span (same size required).
-        /// @details Guarded against self-assignment: when `&r == this`,
-        /// `p_indices` and `r.cbegin()` point into the same buffer, and
-        /// `std::copy` on overlapping ranges is undefined behaviour.
         DNDS_DEVICE_CALLABLE void operator=(const AdjacencyRow &r)
         {
-            if (this == &r)
-                return;
             DNDS_assert(Row_size == r.size());
             std::copy(r.cbegin(), r.cend(), p_indices);
         }

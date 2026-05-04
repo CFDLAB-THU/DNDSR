@@ -623,7 +623,7 @@ namespace DNDS
     /// @brief Narrow #index to `int32_t` with range check; dies on overflow.
     inline int32_t checkedIndexTo32(index v)
     {
-        DNDS_assert_info(v >= static_cast<index>(INT32_MIN) && v <= static_cast<index>(INT32_MAX),
+        DNDS_assert_info(!(v > static_cast<index>(INT32_MAX) || v < static_cast<index>(INT32_MIN)),
                          fmt::format("Index {} to int32 overflow", v));
         return static_cast<int32_t>(v);
     }
@@ -928,9 +928,6 @@ namespace DNDS
         DNDS_DEVICE_CALLABLE EmptyNoDefault(EmptyNoDefault &&v) = default;
         DNDS_DEVICE_CALLABLE EmptyNoDefault(const EmptyNoDefault &v) = default;
         DNDS_DEVICE_CALLABLE EmptyNoDefault &operator=(const EmptyNoDefault &) = default;
-        // Rule-of-five closure — trivial type.
-        DNDS_DEVICE_CALLABLE EmptyNoDefault &operator=(EmptyNoDefault &&) noexcept = default;
-        DNDS_DEVICE_CALLABLE ~EmptyNoDefault() = default;
         template <class T>
         DNDS_DEVICE_CALLABLE EmptyNoDefault &operator=(T v) { return *this; };
         template <class T>

@@ -39,7 +39,7 @@ namespace DNDS
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayDofDeviceView, ArrayDofDeviceView)
 
         DNDS_DEVICE_CALLABLE ArrayDofDeviceView(const t_base &base_view) : t_base(base_view) {}
-        DNDS_DEVICE_CALLABLE ArrayDofDeviceView(t_base &&base_view) : t_base(std::move(base_view)) {}
+        DNDS_DEVICE_CALLABLE ArrayDofDeviceView(t_base &&base_view) : t_base(base_view) {}
     };
 
     /// @brief Const device view of an ArrayDof father/son pair.
@@ -53,7 +53,7 @@ namespace DNDS
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(ArrayDofDeviceViewConst, ArrayDofDeviceViewConst)
 
         DNDS_DEVICE_CALLABLE ArrayDofDeviceViewConst(const t_base &base_view) : t_base(base_view) {}
-        DNDS_DEVICE_CALLABLE ArrayDofDeviceViewConst(t_base &&base_view) : t_base(std::move(base_view)) {}
+        DNDS_DEVICE_CALLABLE ArrayDofDeviceViewConst(t_base &&base_view) : t_base(base_view) {}
     };
 
     template <int n_m, int n_n>
@@ -265,7 +265,7 @@ namespace DNDS
         /// @details Typical use: multiply state DOFs by per-cell values such as
         /// inverse mass. Only enabled for non-scalar DOF shapes.
         template <int n_m_T = n_m>
-        std::enable_if_t<n_m_T != 1 || n_n != 1>
+        std::enable_if_t<!(n_m_T == 1 && n_n == 1)>
         operator*=(const ArrayDof<1, 1> &R)
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_mult_assign_scalar_arr(*this, R));
@@ -294,14 +294,6 @@ namespace DNDS
         {
             DNDS_ARRAY_OP_SWITCHER(this->father->device(), operator_assign(*this, R));
         }
-
-        /// @brief Rule-of-five closure. The class's custom `operator=(const t_self&)`
-        /// suppresses the implicit move operations; re-enable the compiler-
-        /// synthesised ones (shallow move of `shared_ptr` members in the base).
-        ArrayDof(const ArrayDof &) = default;
-        ArrayDof(ArrayDof &&) noexcept = default;
-        ArrayDof &operator=(ArrayDof &&) noexcept = default;
-        ~ArrayDof() = default;
 
         /// @brief AXPY: `this += r * R`. One of the hot-path solver primitives.
         void addTo(const t_self &R, real r)
