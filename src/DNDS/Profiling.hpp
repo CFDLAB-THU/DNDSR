@@ -22,43 +22,49 @@ namespace DNDS
     class PerformanceTimer // cxx11 + thread-safe singleton
     {
     public:
-        /// @brief Named timer slots. New categories can be added before `__EndTimerType`.
+        /// @brief Named timer slots. New categories can be added before `EndTimerType`.
         enum TimerType
         {
             Unknown = 0,
-            RHS = 1,             ///< Total RHS evaluation.
-            Dt = 2,              ///< Time-step computation.
-            Reconstruction = 3,  ///< Variational reconstruction.
-            ReconstructionCR = 4,///< CR (compact reconstruction) branch.
-            Limiter = 5,         ///< Slope / variable limiter.
-            LimiterA = 6,        ///< Limiter sub-phase A.
-            LimiterB = 7,        ///< Limiter sub-phase B.
-            Basis = 8,           ///< Basis-function evaluation.
-            Comm = 9,            ///< Catch-all MPI comm.
-            Comm1 = 10,          ///< Comm phase 1 (e.g., cell-ghost).
-            Comm2 = 11,          ///< Comm phase 2 (e.g., face-ghost).
-            Comm3 = 12,          ///< Comm phase 3.
-            LinSolve = 13,       ///< Linear solve (total).
-            LinSolve1 = 14,      ///< Linear solve phase 1.
-            LinSolve2 = 15,      ///< Linear solve phase 2.
-            LinSolve3 = 16,      ///< Linear solve phase 3.
-            Positivity = 17,     ///< Positivity preservation.
-            PositivityOuter = 18,///< Outer-iteration positivity.
-            __EndTimerType = 64  ///< One past the last valid id.
+            RHS = 1,              ///< Total RHS evaluation.
+            Dt = 2,               ///< Time-step computation.
+            Reconstruction = 3,   ///< Variational reconstruction.
+            ReconstructionCR = 4, ///< CR (compact reconstruction) branch.
+            Limiter = 5,          ///< Slope / variable limiter.
+            LimiterA = 6,         ///< Limiter sub-phase A.
+            LimiterB = 7,         ///< Limiter sub-phase B.
+            Basis = 8,            ///< Basis-function evaluation.
+            Comm = 9,             ///< Catch-all MPI comm.
+            Comm1 = 10,           ///< Comm phase 1 (e.g., cell-ghost).
+            Comm2 = 11,           ///< Comm phase 2 (e.g., face-ghost).
+            Comm3 = 12,           ///< Comm phase 3.
+            LinSolve = 13,        ///< Linear solve (total).
+            LinSolve1 = 14,       ///< Linear solve phase 1.
+            LinSolve2 = 15,       ///< Linear solve phase 2.
+            LinSolve3 = 16,       ///< Linear solve phase 3.
+            Positivity = 17,      ///< Positivity preservation.
+            PositivityOuter = 18, ///< Outer-iteration positivity.
+            EndTimerType = 64     ///< One past the last valid id.
         };
 
-        static const int Ntype = __EndTimerType;
+        static const int Ntype = EndTimerType;
         static const int Ntype_Past = 64;
         static const int Ntype_All = Ntype + Ntype_Past;
 
     private:
         std::array<real, Ntype_All> timer = {0};
-        std::array<real, Ntype_All> tStart;
+        std::array<real, Ntype_All> tStart{};
         PerformanceTimer() = default;
-        PerformanceTimer(const PerformanceTimer &);
-        PerformanceTimer &operator=(const PerformanceTimer &);
 
     public:
+        // Singleton: explicitly delete all copy / move operations so the
+        // only instance is obtained via `Instance()`.
+        PerformanceTimer(const PerformanceTimer &) = delete;
+        PerformanceTimer &operator=(const PerformanceTimer &) = delete;
+        PerformanceTimer(PerformanceTimer &&) = delete;
+        PerformanceTimer &operator=(PerformanceTimer &&) = delete;
+        ~PerformanceTimer() = default;
+
         /// @brief Access the process-wide singleton.
         static PerformanceTimer &Instance();
         /// @brief Record the current wall time in the "start" slot for timer `t`.

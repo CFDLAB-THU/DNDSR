@@ -19,23 +19,49 @@ namespace DNDS::Geom
 
     /// State-checked wrapper for MeshConnectivity::Inverse.
     ///
-    /// Asserts that the cone adjacency is in Adj_PointToGlobal state
-    /// (Inverse requires global indices).
+    /// Extracts L2G callbacks from cone and toPair ghost mappings.
+    /// Returns an AdjPairTracked with:
+    ///   - father adopted from the DSL result (no copy)
+    ///   - idx.state() == Adj_PointToGlobal
     ///
-    /// @tparam cone_rs  Row-size of the cone adjacency.
-    /// @param cone      AdjPairTracked cone (A → B, global indices).
-    /// @param args      Remaining arguments forwarded to MeshConnectivity::Inverse.
-    /// @return          Same as MeshConnectivity::Inverse.
-    template <rowsize cone_rs = NonUniformSize, class... TArgs>
-    tAdjPair CheckedInverse(
+    /// @param cone    A → B (global state, from-entity = A).
+    /// @param toPair  Any ArrayPair for entity B (must have trans.pLGhostMapping).
+    /// @param nToLocal  Number of local B-entities.
+    /// @param mpi       MPI communicator.
+    template <rowsize cone_rs = NonUniformSize, class ToPair>
+    AdjPairTracked<tAdjPair> CheckedInverse(
         const AdjPairTracked<ArrayAdjacencyPair<cone_rs>> &cone,
-        TArgs &&...args)
+        const ToPair &toPair,
+        index nToLocal,
+        const MPIInfo &mpi)
     {
         DNDS_assert_info(cone.idx.state() == Adj_PointToGlobal,
                          "CheckedInverse: cone must be in Adj_PointToGlobal state");
-        return MeshConnectivity::Inverse<cone_rs>(
+        DNDS_assert_info(cone.trans.pLGhostMapping,
+                         "CheckedInverse: cone.trans.pLGhostMapping must be set");
+        DNDS_assert_info(toPair.trans.pLGhostMapping,
+                         "CheckedInverse: toPair.trans.pLGhostMapping must be set");
+        DNDS_assert_info(toPair.father->pLGlobalMapping,
+                         "CheckedInverse: toPair.father->pLGlobalMapping must be set");
+
+        auto fromL2G = [&](index i) -> index
+        { return cone.trans.pLGhostMapping->operator()(-1, i); };
+        auto toL2G = [&](index i) -> index
+        { return toPair.trans.pLGhostMapping->operator()(-1, i); };
+
+        auto dslResult = MeshConnectivity::Inverse<cone_rs>(
             static_cast<const ArrayAdjacencyPair<cone_rs> &>(cone),
-            std::forward<TArgs>(args)...);
+            nToLocal, mpi,
+            std::function<index(index)>(fromL2G),
+            std::function<index(index)>(toL2G),
+            toPair.father->pLGlobalMapping);
+
+        AdjPairTracked<tAdjPair> result;
+        result.father = std::move(dslResult.father);
+        result.son = make_ssp<tAdjPair::t_arr>(
+            ObjName{"CheckedInverse.son"}, result.father->getMPI());
+        result.idx.markGlobal();
+        return result;
     }
 
     // =================================================================
@@ -44,15 +70,18 @@ namespace DNDS::Geom
 
     /// State-checked wrapper for MeshConnectivity::ComposeFiltered.
     ///
-    /// Asserts that both input adjacencies are in Adj_PointToGlobal state.
+    /// Extracts aLocal2Global from AB's ghost mapping.
+    /// Returns an AdjPairTracked with:
+    ///   - father adopted from the DSL result (no copy)
+    ///   - idx.state() == Adj_PointToGlobal
+    ///
+    /// AB must have a valid trans.pLGhostMapping (e.g., via EnsureGhostMapping).
     template <rowsize rs_AB = NonUniformSize, rowsize rs_BC = NonUniformSize,
               rowsize out_rs = NonUniformSize, class Predicate, class... TArgs>
-    ArrayAdjacencyPair<out_rs> CheckedComposeFiltered(
+    AdjPairTracked<ArrayAdjacencyPair<out_rs>> CheckedComposeFiltered(
         const AdjPairTracked<ArrayAdjacencyPair<rs_AB>> &AB,
         const AdjPairTracked<ArrayAdjacencyPair<rs_BC>> &BC,
-        index nALocal,
         const std::unordered_map<index, index> &bGlobal2Local,
-        const std::function<index(index)> &aLocal2Global,
         Predicate &&pred,
         TArgs &&...args)
     {
@@ -60,12 +89,26 @@ namespace DNDS::Geom
                          "CheckedComposeFiltered: AB must be in Adj_PointToGlobal state");
         DNDS_assert_info(BC.idx.state() == Adj_PointToGlobal,
                          "CheckedComposeFiltered: BC must be in Adj_PointToGlobal state");
-        return MeshConnectivity::ComposeFiltered<rs_AB, rs_BC, out_rs>(
+        DNDS_assert_info(AB.trans.pLGhostMapping,
+                         "CheckedComposeFiltered: AB.trans.pLGhostMapping must be set");
+
+        auto aL2G = [&](index i) -> index
+        { return AB.trans.pLGhostMapping->operator()(-1, i); };
+
+        auto dslResult = MeshConnectivity::ComposeFiltered<rs_AB, rs_BC, out_rs>(
             static_cast<const ArrayAdjacencyPair<rs_AB> &>(AB),
             static_cast<const ArrayAdjacencyPair<rs_BC> &>(BC),
-            nALocal, bGlobal2Local, aLocal2Global,
+            AB.father->Size(), bGlobal2Local,
+            std::function<index(index)>(aL2G),
             std::forward<Predicate>(pred),
             std::forward<TArgs>(args)...);
+
+        AdjPairTracked<ArrayAdjacencyPair<out_rs>> result;
+        result.father = std::move(dslResult.father);
+        result.son = make_ssp<typename ArrayAdjacencyPair<out_rs>::t_arr>(
+            ObjName{"CheckedComposeFiltered.son"}, result.father->getMPI());
+        result.idx.markGlobal();
+        return result;
     }
 
     // =================================================================

@@ -37,7 +37,7 @@ namespace DNDS::Serializer
     public:
         static_assert(UnInitIndex < 0);
         /// @brief Construct with explicit local size and global offset.
-        ArrayGlobalOffset(index __size, index __offset) : _size(__size), _offset(__offset) {}
+        ArrayGlobalOffset(index sz, index ofs) : _size(sz), _offset(ofs) {}
 
         /// @brief Local size this rank owns (in element units of the caller's choosing).
         [[nodiscard]] index size() const { return _size; }
@@ -190,6 +190,14 @@ namespace DNDS::Serializer
 
     public:
         virtual ~SerializerBase(); // define in CPP
+
+        // Polymorphic RAII base (subclasses hold file handles / H5 IDs):
+        // delete copy / move to prevent slicing and double-close.
+        SerializerBase() = default;
+        SerializerBase(const SerializerBase &) = delete;
+        SerializerBase &operator=(const SerializerBase &) = delete;
+        SerializerBase(SerializerBase &&) = delete;
+        SerializerBase &operator=(SerializerBase &&) = delete;
         /// @brief Open a backing file (H5 file or JSON file depending on subclass).
         /// @param read `true` for reading, `false` for writing.
         virtual void OpenFile(const std::string &fName, bool read) = 0;
@@ -211,7 +219,7 @@ namespace DNDS::Serializer
         /// @brief Rank count cached by the serializer.
         virtual int GetMPISize() = 0;
         /// @brief MPI context the serializer was opened with.
-        virtual const MPIInfo& getMPI() = 0;
+        virtual const MPIInfo &getMPI() = 0;
 
         /// @brief Write a scalar int under `name` at the current path.
         virtual void WriteInt(const std::string &name, int v) = 0;

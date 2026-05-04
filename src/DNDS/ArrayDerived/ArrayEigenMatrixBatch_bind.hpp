@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 #include "ArrayEigenMatrixBatch.hpp"
 #include "../Array_bind.hpp"
 
@@ -23,7 +25,7 @@ namespace DNDS
 
 namespace DNDS
 {
-    inline auto pybind11_ArrayEigenMatrixBatch_setitem_row(ArrayEigenMatrixBatch &self, index i, const py::list &matList)
+    inline void pybind11_ArrayEigenMatrixBatch_setitem_row(ArrayEigenMatrixBatch &self, index i, const py::list &matList)
     {
         using tElem = real;
         using tReadMap = Eigen::Map<
@@ -35,11 +37,11 @@ namespace DNDS
         {
             if (!py::isinstance<py::buffer>(v))
                 throw std::runtime_error("All elements must be buffer-compatible objects.");
-            py::buffer buf = v.cast<py::buffer>();
+            auto buf = v.cast<py::buffer>();
             auto buf_info = buf.request(false);
             DNDS_assert(buf_info.item_type_is_equivalent_to<tElem>());
             DNDS_assert_info(buf_info.shape.size() == 2, "need to pass a 2-d array");
-            auto buf_start_ptr = reinterpret_cast<tElem *>(buf_info.ptr);
+            auto *buf_start_ptr = reinterpret_cast<tElem *>(buf_info.ptr);
             DNDS_assert(buf_info.strides.size() == 2);
 
             auto c_mat_map = tReadMap(
@@ -49,7 +51,7 @@ namespace DNDS
                 Eigen::Stride<Eigen::Dynamic, Eigen::Dynamic>(buf_info.strides[1] / sizeof(tElem) /*col stride*/, buf_info.strides[0] / sizeof(tElem) /*row stride*/));
             mat_maps.push_back(c_mat_map);
         }
-        return self.InitializeWriteRow(i, mat_maps);
+        self.InitializeWriteRow(i, mat_maps);
     }
 
     inline auto pybind11_ArrayEigenMatrixBatch_getitem_row(ArrayEigenMatrixBatch &self, index index_)
@@ -83,7 +85,7 @@ namespace DNDS
             false);
     }
 
-    inline auto pybind11_ArrayEigenMatrixBatch_setitem(ArrayEigenMatrixBatch &self, std::tuple<index, rowsize> index_, py::buffer row)
+    inline void pybind11_ArrayEigenMatrixBatch_setitem(ArrayEigenMatrixBatch &self, std::tuple<index, rowsize> index_, const py::buffer &row)
     {
         using tElem = real;
         auto row_info = row.request(false);
@@ -93,7 +95,7 @@ namespace DNDS
         DNDS_assert_info(row_info.shape[0] == mat.rows(), "row size not matching");
         DNDS_assert_info(row_info.shape[1] == mat.cols(), "col size not matching");
 
-        auto row_start_ptr = reinterpret_cast<tElem *>(row_info.ptr);
+        auto *row_start_ptr = reinterpret_cast<tElem *>(row_info.ptr);
         DNDS_assert(row_info.strides.size() == 2);
         auto row_mat_map = Eigen::Map<
             const Eigen::Matrix<tElem, Eigen::Dynamic, Eigen::Dynamic, Eigen::DontAlign | Eigen::ColMajor>,
@@ -142,7 +144,7 @@ namespace DNDS
                 "InitializeWriteRow",
                 [](TArrayEigenMatrixBatch &self, index i, const py::list &matList)
                 {
-                    return pybind11_ArrayEigenMatrixBatch_setitem_row(self, i, matList);
+                    pybind11_ArrayEigenMatrixBatch_setitem_row(self, i, matList);
                 },
                 py::arg("i"), py::arg("matList"));
         ArrayEigenMatrixBatch_
@@ -167,9 +169,9 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
-                [](TArrayEigenMatrixBatch &self, std::tuple<index, rowsize> index_, py::buffer row)
+                [](TArrayEigenMatrixBatch &self, std::tuple<index, rowsize> index_, const py::buffer &row)
                 {
-                    return pybind11_ArrayEigenMatrixBatch_setitem(self, index_, row);
+                    pybind11_ArrayEigenMatrixBatch_setitem(self, index_, row);
                 });
 
         ArrayEigenMatrixBatch_
@@ -215,10 +217,10 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "InitializeWriteRow",
-                [](TPair &self, index index_, py::buffer row)
+                [](TPair &self, index index_, const py::buffer &row)
                 {
-                    return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
-                                                         { return pybind11_ArrayEigenMatrixBatch_setitem_row(ar, iC, row); });
+                    self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
+                                                  { pybind11_ArrayEigenMatrixBatch_setitem_row(ar, iC, row); });
                 });
 
         Pair_
@@ -232,10 +234,10 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
-                [](TPair &self, std::tuple<index, rowsize> index_, py::buffer row)
+                [](TPair &self, std::tuple<index, rowsize> index_, const py::buffer &row)
                 {
-                    return self.runFunctionAppendedIndex(std::get<0>(index_), [&](auto &ar, index iC) //*note the auto&& reference here!!!
-                                                         { return pybind11_ArrayEigenMatrixBatch_setitem(ar, std::make_tuple(iC, std::get<1>(index_)), row); });
+                    self.runFunctionAppendedIndex(std::get<0>(index_), [&](auto &ar, index iC) //*note the auto&& reference here!!!
+                                                  { pybind11_ArrayEigenMatrixBatch_setitem(ar, std::make_tuple(iC, std::get<1>(index_)), row); });
                 });
     }
 }

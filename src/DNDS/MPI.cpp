@@ -24,7 +24,6 @@
 #    include <process.h>
 #endif
 
-
 #ifdef NDEBUG
 #    define NDEBUG_DISABLED
 #    undef NDEBUG
@@ -71,7 +70,7 @@ namespace DNDS::Debug
         {
             for (MPI_int ir = 0; ir < mpi.size; ir++)
             {
-                int newDebugFlag;
+                int newDebugFlag = 0;
                 if (mpi.rank == ir)
                 {
                     newDebugFlag = int(IsDebugged());
@@ -116,8 +115,8 @@ namespace DNDS
     std::string getTimeStamp(const MPIInfo &mpi)
     {
         auto result = static_cast<int64_t>(std::time(nullptr));
-        std::array<char, 512> bufTime;
-        std::array<char, 512 + 32> buf;
+        std::array<char, 512> bufTime{};
+        std::array<char, 512 + 32> buf{};
         int64_t pid = 0;
 #ifdef DNDS_UNIX_LIKE
         // pid = Debug::getpid();
@@ -144,13 +143,13 @@ namespace DNDS
 namespace DNDS::MPI
 {
 
-#define __start_timer PerformanceTimer::Instance().StartTimer(PerformanceTimer::Comm)
-#define __stop_timer PerformanceTimer::Instance().StopTimer(PerformanceTimer::Comm)
+#define start_timer PerformanceTimer::Instance().StartTimer(PerformanceTimer::Comm)
+#define stop_timer PerformanceTimer::Instance().StopTimer(PerformanceTimer::Comm)
     /// @brief dumb wrapper
     MPI_int Bcast(void *buf, MPI_int num, MPI_Datatype type, MPI_int source_rank, MPI_Comm comm)
     {
         int ret{0};
-        __start_timer;
+        start_timer;
         if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
             ret = MPI_Bcast(buf, num, type, source_rank, comm);
         else
@@ -159,14 +158,14 @@ namespace DNDS::MPI
             ret = MPI_Ibcast(buf, num, type, source_rank, comm, &req);
             ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
         }
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
     MPI_int Alltoall(void *send, MPI_int sendNum, MPI_Datatype typeSend, void *recv, MPI_int recvNum, MPI_Datatype typeRecv, MPI_Comm comm)
     {
         int ret{0};
-        __start_timer;
+        start_timer;
         if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
             ret = MPI_Alltoall(send, sendNum, typeSend, recv, recvNum, typeRecv, comm);
         else
@@ -175,7 +174,7 @@ namespace DNDS::MPI
             ret = MPI_Ialltoall(send, sendNum, typeSend, recv, recvNum, typeRecv, comm, &req);
             ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
         }
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
@@ -184,7 +183,7 @@ namespace DNDS::MPI
         void *recv, MPI_int *recvSizes, MPI_int *recvStarts, MPI_Datatype recvType, MPI_Comm comm)
     {
         int ret{0};
-        __start_timer;
+        start_timer;
         if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
             ret = MPI_Alltoallv(
                 send, sendSizes, sendStarts, sendType,
@@ -196,7 +195,7 @@ namespace DNDS::MPI
                                  recv, recvSizes, recvStarts, recvType, comm, &req);
             ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
         }
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
@@ -204,7 +203,7 @@ namespace DNDS::MPI
                       MPI_Datatype datatype, MPI_Op op, MPI_Comm comm)
     {
         int ret{0};
-        __start_timer;
+        start_timer;
         if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
             ret = MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm);
         else
@@ -213,7 +212,7 @@ namespace DNDS::MPI
             ret = MPI_Iallreduce(sendbuf, recvbuf, count, datatype, op, comm, &req);
             ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
         }
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
@@ -221,9 +220,9 @@ namespace DNDS::MPI
                  MPI_Datatype datatype, MPI_Op op, MPI_Comm comm)
     {
         int ret{0}; // todo: add wait lazy?
-        __start_timer;
+        start_timer;
         ret = MPI_Scan(sendbuf, recvbuf, count, datatype, op, comm);
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
@@ -232,7 +231,7 @@ namespace DNDS::MPI
                       MPI_Datatype recvtype, MPI_Comm comm)
     {
         int ret{0};
-        __start_timer;
+        start_timer;
         if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
             ret = MPI_Allgather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm);
         else
@@ -241,19 +240,19 @@ namespace DNDS::MPI
             ret = MPI_Iallgather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm, &req);
             ret = MPI::WaitallLazy(1, &req, MPI_STATUSES_IGNORE, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
         }
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
     MPI_int Barrier(MPI_Comm comm)
     {
         int ret{0};
-        __start_timer;
+        start_timer;
         if (MPI::CommStrategy::Instance().GetUseLazyWait() == 0)
             ret = MPI_Barrier(comm);
         else
             ret = MPI::BarrierLazy(comm, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
-        __stop_timer;
+        stop_timer;
         return ret;
     }
 
@@ -271,7 +270,7 @@ namespace DNDS::MPI
     MPI_int WaitallLazy(MPI_int count, MPI_Request *reqs, MPI_Status *statuses, uint64_t checkNanoSecs)
     {
         MPI_int flag = 0;
-        MPI_int ret;
+        MPI_int ret = 0;
         while (!flag)
         {
             ret = MPI_Testall(count, reqs, &flag, statuses);
@@ -288,8 +287,8 @@ namespace DNDS::MPI
             return MPI::WaitallLazy(count, reqs, statuses, static_cast<uint64_t>(MPI::CommStrategy::Instance().GetUseLazyWait()));
     }
 
-#undef __start_timer
-#undef __stop_timer
+#undef start_timer
+#undef stop_timer
 
 }
 
@@ -316,7 +315,7 @@ namespace DNDS::MPI
     void ResourceRecycler::RegisterCleaner(void *p, std::function<void()> nCleaner)
     {
         DNDS_assert(cleaners.count(p) == 0);
-        cleaners.emplace(std::make_pair(p, std::move(nCleaner)));
+        cleaners.emplace(p, std::move(nCleaner));
     }
 
     void ResourceRecycler::RemoveCleaner(void *p)
@@ -339,7 +338,7 @@ namespace DNDS::MPI
         try
         {
             auto *ret = std::getenv("DNDS_USE_LAZY_WAIT");
-            if (ret != NULL && (std::stod(ret) != 0))
+            if (ret != nullptr && (std::stod(ret) != 0))
             {
                 _use_lazy_wait = std::stod(ret);
                 auto mpi = MPIInfo();
@@ -350,13 +349,18 @@ namespace DNDS::MPI
                 MPI::BarrierLazy(mpi.comm, static_cast<uint64_t>(_use_lazy_wait));
             }
         }
+        // NOLINTBEGIN(bugprone-empty-catch)
+        // Empty catch intentional: env var contains a malformed
+        // number (stod/stoi throws); treat as "unset" and leave the
+        // default. Logging here would fail inside static-ctor phase.
         catch (...)
         {
         }
+        // NOLINTEND(bugprone-empty-catch)
         try
         {
             auto *ret = std::getenv("DNDS_ARRAY_STRATEGY_USE_IN_SITU");
-            if (ret != NULL && (std::stoi(ret) != 0))
+            if (ret != nullptr && (std::stoi(ret) != 0))
             {
                 _array_strategy = InSituPack;
                 auto mpi = MPIInfo();
@@ -369,13 +373,18 @@ namespace DNDS::MPI
                     MPI_Barrier(mpi.comm);
             }
         }
+        // NOLINTBEGIN(bugprone-empty-catch)
+        // Empty catch intentional: env var contains a malformed
+        // number (stod/stoi throws); treat as "unset" and leave the
+        // default. Logging here would fail inside static-ctor phase.
         catch (...)
         {
         }
+        // NOLINTEND(bugprone-empty-catch)
         try
         {
             auto *ret = std::getenv("DNDS_USE_STRONG_SYNC_WAIT");
-            if (ret != NULL && (std::stoi(ret) != 0))
+            if (ret != nullptr && (std::stoi(ret) != 0))
             {
                 _use_strong_sync_wait = true;
                 auto mpi = MPIInfo();
@@ -388,13 +397,18 @@ namespace DNDS::MPI
                     MPI_Barrier(mpi.comm);
             }
         }
+        // NOLINTBEGIN(bugprone-empty-catch)
+        // Empty catch intentional: env var contains a malformed
+        // number (stod/stoi throws); treat as "unset" and leave the
+        // default. Logging here would fail inside static-ctor phase.
         catch (...)
         {
         }
+        // NOLINTEND(bugprone-empty-catch)
         try
         {
             auto *ret = std::getenv("DNDS_USE_ASYNC_ONE_BY_ONE");
-            if (ret != NULL && (std::stoi(ret) != 0))
+            if (ret != nullptr && (std::stoi(ret) != 0))
             {
                 _use_async_one_by_one = true;
                 auto mpi = MPIInfo();
@@ -407,9 +421,14 @@ namespace DNDS::MPI
                     MPI_Barrier(mpi.comm);
             }
         }
+        // NOLINTBEGIN(bugprone-empty-catch)
+        // Empty catch intentional: env var contains a malformed
+        // number (stod/stoi throws); treat as "unset" and leave the
+        // default. Logging here would fail inside static-ctor phase.
         catch (...)
         {
         }
+        // NOLINTEND(bugprone-empty-catch)
     }
 
     CommStrategy &CommStrategy::Instance()

@@ -77,6 +77,10 @@ namespace DNDS
         // default copy
         ParArray(const t_self &R) = default;
         t_self &operator=(const t_self &R) = default;
+        // Move (suppressed by explicit copy above, re-declare).
+        ParArray(t_self &&) noexcept = default;
+        t_self &operator=(t_self &&) noexcept = default;
+        ~ParArray() = default;
 
         // operator= handled automatically
 
@@ -309,8 +313,8 @@ namespace DNDS
         void AssertDataType()
         {
             DNDS_check_throw(dataType != MPI_DATATYPE_NULL);
-            MPI_Aint lb;
-            MPI_Aint extent;
+            MPI_Aint lb = 0;
+            MPI_Aint extent = 0;
             MPI_Type_get_extent(dataType, &lb, &extent);
             DNDS_check_throw(lb == 0 && extent * typeMult == sizeof(T));
         }
@@ -381,9 +385,9 @@ namespace DNDS
          */
         [[nodiscard]] index globalSize() const
         {
-            DNDS_assert_info(pLGlobalMapping, 
-                "globalSize() requires global mapping. "
-                "Ensure createGlobalMapping() was called first (typically via ArrayPair operations).");
+            DNDS_assert_info(pLGlobalMapping,
+                             "globalSize() requires global mapping. "
+                             "Ensure createGlobalMapping() was called first (typically via ArrayPair operations).");
             return pLGlobalMapping->globalSize();
         }
     };
@@ -552,6 +556,12 @@ namespace DNDS
             // initial-safe operator= call
             this->operator=(R);
         }
+
+        /// @brief Move constructor: transfers all handles (shared_ptrs, MPI
+        /// request holders). Source is left in a valid but uninitialized state.
+        ArrayTransformer(TSelf &&) noexcept = default;
+        TSelf &operator=(TSelf &&) noexcept = default;
+        ~ArrayTransformer() = default;
 
         /**
          * @brief Attach father and son arrays. First setup step.
@@ -835,7 +845,7 @@ namespace DNDS
                         // }
                         // std::cout << "=== PUSH TYPE : " << mpi.rank << " from " << r << std::endl;
 
-                        MPI_Datatype dtype;
+                        MPI_Datatype dtype = MPI_DATATYPE_NULL;
                         int sizeof_T = MPI_UNDEFINED;
                         MPI_Type_size(father->getDataType(), &sizeof_T);
                         DNDS_check_throw(sizeof_T != MPI_UNDEFINED);
@@ -864,7 +874,7 @@ namespace DNDS
                     if (pullSizes[0] > 0)
                     {
                         // std::cout << "=== PULL TYPE : " << mpi.rank << " from " << r << std::endl;
-                        MPI_Datatype dtype;
+                        MPI_Datatype dtype = MPI_DATATYPE_NULL;
 
                         MPI_Type_create_hindexed(1, pullSizes.data(), pullDisp.data(), father->getDataType(), &dtype);
 
@@ -1087,7 +1097,7 @@ namespace DNDS
         }
         /******************************************************************************************************************************/
 
-        void __InSituPackStartPush(DeviceBackend B)
+        void InSituPackStartPush(DeviceBackend B)
         {
             if (B != DeviceBackend::Unknown)
                 DNDS_check_throw_info(false, "in-situ pack not yet implemented for device");
@@ -1122,8 +1132,8 @@ namespace DNDS
             for (MPI_int r = 0; r < mpi.size; r++)
             {
                 // pull
-                MPI_Aint pullDisp;
-                MPI_int pullSize; // same as pushSizes
+                MPI_Aint pullDisp = 0;
+                MPI_int pullSize = 0; // same as pushSizes
                 auto gRPtr = son->operator[](index(pLGhostMapping->ghostStart[r + 1]));
                 auto gLPtr = son->operator[](index(pLGhostMapping->ghostStart[r]));
                 auto ghostSpan = gRPtr - gLPtr;
@@ -1157,7 +1167,7 @@ namespace DNDS
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
-                __InSituPackStartPush(B);
+                InSituPackStartPush(B);
             }
             else
             {
@@ -1171,7 +1181,7 @@ namespace DNDS
             PerformanceTimer::Instance().StopTimer(PerformanceTimer::TimerType::Comm);
         }
 
-        void __InSituPackStartPull(DeviceBackend B)
+        void InSituPackStartPull(DeviceBackend B)
         {
             if (B != DeviceBackend::Unknown)
                 DNDS_check_throw_info(false, "in-situ pack not yet implemented for device");
@@ -1179,8 +1189,8 @@ namespace DNDS
             for (MPI_int r = 0; r < mpi.size; r++)
             {
                 // pull
-                MPI_Aint pullDisp;
-                MPI_int pullSize; // same as pushSizes
+                MPI_Aint pullDisp = 0;
+                MPI_int pullSize = 0; // same as pushSizes
                 auto gRPtr = son->operator[](index(pLGhostMapping->ghostStart[r + 1]));
                 auto gLPtr = son->operator[](index(pLGhostMapping->ghostStart[r]));
                 auto ghostSpan = gRPtr - gLPtr;
@@ -1258,7 +1268,7 @@ namespace DNDS
             }
             else if (commTypeCurrent == MPI::CommStrategy::InSituPack)
             {
-                __InSituPackStartPull(B);
+                InSituPackStartPull(B);
             }
             else
             {

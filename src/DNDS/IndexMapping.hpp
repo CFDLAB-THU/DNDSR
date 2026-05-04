@@ -244,8 +244,8 @@ namespace DNDS
             ghostIndex.reserve(ghostStart[ghostSizes.size()]);
             for (auto i : pullingIndexGlobal)
             {
-                MPI_int rank;
-                index loc; // dummy here
+                MPI_int rank = 0;
+                index loc = 0; // dummy here
                 bool search_result = LGlobalMapping.search(i, rank, loc);
                 DNDS_assert_info(search_result, "Search Failed");
                 // if (rank != mpi.rank)

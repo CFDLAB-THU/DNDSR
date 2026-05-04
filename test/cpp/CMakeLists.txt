@@ -190,6 +190,7 @@ dnds_add_mpi_test(array_transformer "DNDS/test_ArrayTransformer.cpp" "dnds")
 dnds_add_mpi_test(array_derived "DNDS/test_ArrayDerived.cpp" "dnds")
 dnds_add_mpi_test(array_dof "DNDS/test_ArrayDOF.cpp" "dnds")
 dnds_add_mpi_test(index_mapping "DNDS/test_IndexMapping.cpp" "dnds")
+dnds_add_mpi_test(permutation_transfer "DNDS/test_PermutationTransfer.cpp" "dnds")
 
 set(DNDS_TEST_TARGETS
     dnds_test_array
@@ -199,6 +200,7 @@ set(DNDS_TEST_TARGETS
     dnds_test_array_derived
     dnds_test_array_dof
     dnds_test_index_mapping
+    dnds_test_permutation_transfer
 )
 foreach(T ${DNDS_TEST_TARGETS})
     add_dependencies(dnds_unit_tests ${T})
@@ -215,6 +217,7 @@ geom_add_mpi_test(mesh_distributed_read "Geom/test_MeshDistributedRead.cpp" "geo
 geom_add_mpi_test(mesh_connectivity "Geom/test_MeshConnectivity.cpp" "geom;dnds")
 geom_add_mpi_test(mesh_connectivity_ghost "Geom/test_MeshConnectivity_Ghost.cpp" "geom;dnds")
 geom_add_mpi_test(mesh_connectivity_interpolate "Geom/test_MeshConnectivity_Interpolate.cpp" "geom;dnds")
+geom_add_mpi_test(mesh_reorder "Geom/test_MeshReorder.cpp" "geom;dnds")
 
 set(GEOM_TEST_TARGETS
     geom_test_elements
@@ -225,6 +228,7 @@ set(GEOM_TEST_TARGETS
     geom_test_mesh_connectivity
     geom_test_mesh_connectivity_ghost
     geom_test_mesh_connectivity_interpolate
+    geom_test_mesh_reorder
 )
 foreach(T ${GEOM_TEST_TARGETS})
     add_dependencies(geom_unit_tests ${T})

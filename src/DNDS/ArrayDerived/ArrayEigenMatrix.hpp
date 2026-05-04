@@ -44,17 +44,17 @@ namespace DNDS
     template <rowsize _mat_ni = 1, rowsize _mat_nj = 1,
               rowsize _mat_ni_max = _mat_ni, rowsize _mat_nj_max = _mat_nj, rowsize _align = NoAlign>
     class ArrayEigenMatrix : public ParArray<real,
-                                             __OneMatGetRowSize<_mat_ni, _mat_nj>(),
-                                             __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
+                                             OneMatGetRowSize<_mat_ni, _mat_nj>(),
+                                             OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
                                              _align>
     {
     public:
-        static const rowsize _row_size = __OneMatGetRowSize<_mat_ni, _mat_nj>();
-        static const rowsize _row_size_max = __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>();
+        static const rowsize _row_size = OneMatGetRowSize<_mat_ni, _mat_nj>();
+        static const rowsize _row_size_max = OneMatGetRowSize<_mat_ni_max, _mat_nj_max>();
         using t_self = ArrayEigenMatrix<_mat_ni, _mat_nj, _mat_ni_max, _mat_nj_max, _align>;
         using t_base = ParArray<real,
-                                __OneMatGetRowSize<_mat_ni, _mat_nj>(),
-                                __OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
+                                OneMatGetRowSize<_mat_ni, _mat_nj>(),
+                                OneMatGetRowSize<_mat_ni_max, _mat_nj_max>(),
                                 _align>;
         using t_base::t_base;
         // using t_pRowSizes = typename t_base::t_pRowSizes;
@@ -74,7 +74,7 @@ namespace DNDS
         rowsize _mat_nRow_dynamic = 0; //! extra data
 
     public:
-        size_t FullSizeBytes() const
+        [[nodiscard]] size_t FullSizeBytes() const
         {
             size_t b = this->t_base::FullSizeBytes();
             if (_mat_nRows)
@@ -181,7 +181,7 @@ namespace DNDS
         t_EigenMap
         operator[](index i)
         {
-            rowsize c_nRow;
+            rowsize c_nRow = 0;
             if constexpr (_mat_ni == NonUniformSize)
                 c_nRow = (*_mat_nRows)[i];
             else if constexpr (_mat_ni == DynamicSize)
@@ -196,7 +196,7 @@ namespace DNDS
         t_EigenMap_const
         operator[](index i) const
         {
-            rowsize c_nRow;
+            rowsize c_nRow = 0;
             if constexpr (_mat_ni == NonUniformSize)
                 c_nRow = (*_mat_nRows)[i];
             else if constexpr (_mat_ni == DynamicSize)
@@ -339,7 +339,7 @@ namespace DNDS
         }
 
         template <DeviceBackend B>
-        auto deviceView() const
+        [[nodiscard]] auto deviceView() const
         {
             auto base_view = t_base::template deviceView<B>();
             return t_deviceViewConst<B>(base_view,

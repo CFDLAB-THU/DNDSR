@@ -70,12 +70,84 @@ Avoid raw `assert()`. Use `DNDS_assert` for debug checks and
 - Use `if constexpr` for compile-time branching on template parameters.
 - Explicit template instantiation goes in `_explicit_instantiation/` subdirectories.
 
-### clang-tidy
+### clang-tidy and clang-format
 
-The clang-tidy configuration lives at `src/.clang-tidy`.
-Enabled check groups include: `modernize-*`, `readability-*`, `bugprone-*`,
-`performance-*`, `cppcoreguidelines-*`, `google-build-using-namespace`,
-`mpi-*`, `openmp-*`.
+Configuration lives at the project root:
+
+- `/.clang-tidy` — enabled check groups: `modernize-*`, `readability-*`,
+  `bugprone-*`, `performance-*`, `cppcoreguidelines-*`,
+  `google-build-using-namespace`, `mpi-*`, `openmp-*` (with a curated
+  list of disabled checks). Used by both command-line `clang-tidy` and
+  clangd in editors.
+- `/.clang-tidy-fix` — narrow subset intended to be run with `--fix`.
+- `/.clang-format` — formatting rules.
+- `/.clangd` — editor-only flag tweaks (CUDA/OpenMP handling);
+  intentionally does **not** duplicate the tidy check list.
+
+Run the checkers via the scripts in `scripts/`:
+
+```bash
+# clang-tidy
+scripts/run_clang_tidy.py                  # all default modules
+scripts/run_clang_tidy.py Geom CFV         # selected modules
+scripts/run_clang_tidy.py src/Geom/Mesh    # any path
+scripts/run_clang_tidy.py --changed        # only files dirty vs HEAD
+scripts/run_clang_tidy.py --summary        # just the per-check totals
+scripts/run_clang_tidy.py --fix src/DNDS   # apply .clang-tidy-fix
+
+# clang-format
+scripts/run_clang_format.py                # format all default modules
+scripts/run_clang_format.py --check        # CI-style: exit 1 if any drift
+scripts/run_clang_format.py --changed      # only files dirty vs HEAD
+```
+
+Both scripts use `concurrent.futures` internally to parallelize across
+cores; no external `run-clang-tidy` helper is needed.  The legacy
+`scripts/run-clang-tidy.sh`, `run-clang-tidy-fix.sh`, and
+`run-clang-format.sh` still work — they are thin shims that forward to
+the Python drivers.
+
+**Column-aligned macro blocks.** Some `DNDS_FIELD(...)` blocks inside
+`DNDS_DECLARE_CONFIG` bodies are hand-aligned for readability.  These
+blocks must be wrapped in `// clang-format off` / `// clang-format on`
+so that automated formatting does not destroy the alignment.
+
+**CUDA note.** `clang-tidy` cannot parse nvcc-driven `.cu` compile
+commands (nvcc-only flags break clang's CUDA frontend). The runner
+excludes `.cu` files by default; headers included from CUDA TUs are
+still tidied transitively via their `.cpp` includers. Pass `--include-cu`
+to opt in anyway.
+
+**NOLINT placement.** `NOLINTNEXTLINE(check)` applies to the
+*immediately following* line. Put any rationale comment *before*
+the NOLINT directive, not between it and the offending code. When
+`--fix` can rewrite the flagged line, use block-form
+`NOLINTBEGIN(check) ... NOLINTEND(check)` so the directive
+survives the rewrite. Every NOLINT marker in the tree is paired
+with a rationale comment explaining why the check is wrong or
+inapplicable at that site.
+
+**Per-module sanitation status.**
+
+| Module | Status | Diagnostics |
+|---|---|---:|
+| `src/DNDS/` | Clean (2026-04-29) | 1 (unrelated Eigen PCH `omp.h`) |
+| `src/Solver/` | Not started | — |
+| `src/Geom/` | Not started | — |
+| `src/CFV/` | Not started | — |
+| `src/Euler/` | Not started | — |
+| `src/EulerP/` | Not started | — |
+
+The full cleanup history for DNDS — 26 passes, 24 597 → 1
+diagnostics — is recorded in
+[`docs/dev/clang_tidy_plan.md`](../dev/clang_tidy_plan.md).
+That document is the reference for the per-pass recipe, the
+`.clang-tidy` disable rationales, and the NOLINT placement
+gotchas. Use the same recipe for the other modules in the order
+Solver → Geom → CFV → Euler → EulerP. The existing `.clang-tidy`
+disables carry forward unchanged; any new module-specific disables
+go in the file-header table, not inside the `Checks:` folded
+scalar.
 
 ### C++ Docstrings (Doxygen)
 

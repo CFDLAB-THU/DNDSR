@@ -79,7 +79,7 @@ namespace DNDS
      * Used by @ref DNDS_MPI_INDEX.
      */
     template <class Tbasic>
-    constexpr MPI_Datatype __DNDSToMPITypeInt()
+    constexpr MPI_Datatype DNDSToMPITypeInt()
     {
         static_assert(sizeof(Tbasic) == 8 || sizeof(Tbasic) == 4, "DNDS::Tbasic is not right size");
         return sizeof(Tbasic) == 8 ? MPI_INT64_T : (sizeof(Tbasic) == 4 ? MPI_INT32_T : MPI_DATATYPE_NULL);
@@ -91,16 +91,16 @@ namespace DNDS
      * Used by #DNDS_MPI_REAL.
      */
     template <class Tbasic>
-    constexpr MPI_Datatype __DNDSToMPITypeFloat()
+    constexpr MPI_Datatype DNDSToMPITypeFloat()
     {
         static_assert(sizeof(Tbasic) == 8 || sizeof(Tbasic) == 4, "DNDS::Tbasic is not right size");
         return sizeof(Tbasic) == 8 ? MPI_REAL8 : (sizeof(Tbasic) == 4 ? MPI_REAL4 : MPI_DATATYPE_NULL);
     }
 
     /// @brief MPI datatype matching #index (= `MPI_INT64_T`).
-    const MPI_Datatype DNDS_MPI_INDEX = __DNDSToMPITypeInt<index>();
+    const MPI_Datatype DNDS_MPI_INDEX = DNDSToMPITypeInt<index>();
     /// @brief MPI datatype matching #real (= `MPI_REAL8`).
-    const MPI_Datatype DNDS_MPI_REAL = __DNDSToMPITypeFloat<real>();
+    const MPI_Datatype DNDS_MPI_REAL = DNDSToMPITypeFloat<real>();
 
     //! here are some reasons to upgrade to C++20...
     // detect if have CommMult and CommType static methods
@@ -159,33 +159,33 @@ namespace DNDS
     //! Warning, not const-expr since OpenMPI disallows it
     std::pair<MPI_Datatype, MPI_int> BasicType_To_MPIIntType()
     {
-        static const auto badReturn = std::make_pair(MPI_Datatype(MPI_DATATYPE_NULL), MPI_int(-1));
+        static const auto badReturn = std::make_pair(MPI_DATATYPE_NULL, MPI_int(-1));
         if constexpr (std::is_scalar_v<T>)
         {
             if constexpr (std::is_same_v<T, float>)
-                return std::make_pair(MPI_Datatype(MPI_FLOAT), MPI_int(1));
+                return std::make_pair(MPI_FLOAT, MPI_int(1));
             if constexpr (std::is_same_v<T, double>)
-                return std::make_pair(MPI_Datatype(MPI_DOUBLE), MPI_int(1));
+                return std::make_pair(MPI_DOUBLE, MPI_int(1));
             if constexpr (std::is_same_v<T, long double>)
-                return std::make_pair(MPI_Datatype(MPI_LONG_DOUBLE), MPI_int(1));
+                return std::make_pair(MPI_LONG_DOUBLE, MPI_int(1));
 
             if constexpr (std::is_same_v<T, int8_t>)
-                return std::make_pair(MPI_Datatype(MPI_INT8_T), MPI_int(1));
+                return std::make_pair(MPI_INT8_T, MPI_int(1));
             if constexpr (std::is_same_v<T, int16_t>)
-                return std::make_pair(MPI_Datatype(MPI_INT16_T), MPI_int(1));
+                return std::make_pair(MPI_INT16_T, MPI_int(1));
             if constexpr (std::is_same_v<T, int32_t>)
-                return std::make_pair(MPI_Datatype(MPI_INT32_T), MPI_int(1));
+                return std::make_pair(MPI_INT32_T, MPI_int(1));
             if constexpr (std::is_same_v<T, int64_t>)
-                return std::make_pair(MPI_Datatype(MPI_INT64_T), MPI_int(1));
+                return std::make_pair(MPI_INT64_T, MPI_int(1));
 
             if constexpr (sizeof(T) == 1)
-                return std::make_pair(MPI_Datatype(MPI_UINT8_T), MPI_int(1));
+                return std::make_pair(MPI_UINT8_T, MPI_int(1));
             else if constexpr (sizeof(T) == 2)
-                return std::make_pair(MPI_Datatype(MPI_UINT16_T), MPI_int(1));
+                return std::make_pair(MPI_UINT16_T, MPI_int(1));
             else if constexpr (sizeof(T) == 4)
-                return std::make_pair(MPI_Datatype(MPI_UINT32_T), MPI_int(1));
+                return std::make_pair(MPI_UINT32_T, MPI_int(1));
             else if constexpr (sizeof(T) == 8)
-                return std::make_pair(MPI_Datatype(MPI_UINT64_T), MPI_int(1));
+                return std::make_pair(MPI_UINT64_T, MPI_int(1));
             else
                 return BasicType_To_MPIIntType_Custom<T>();
         }
@@ -234,10 +234,10 @@ namespace DNDS
         MPIInfo() = default;
 
         /// @brief Wrap an existing MPI communicator; queries rank and size.
-        MPIInfo(MPI_Comm ncomm)
+        MPIInfo(MPI_Comm ncomm) : comm(ncomm)
         {
-            comm = ncomm;
-            int ierr;
+
+            int ierr = 0;
             ierr = MPI_Comm_rank(comm, &rank), DNDS_assert(ierr == MPI_SUCCESS);
             ierr = MPI_Comm_size(comm, &size), DNDS_assert(ierr == MPI_SUCCESS);
         }
@@ -253,7 +253,7 @@ namespace DNDS
         void setWorld()
         {
             comm = MPI_COMM_WORLD;
-            int ierr;
+            int ierr = 0;
             ierr = MPI_Comm_rank(comm, &rank), DNDS_assert(ierr == MPI_SUCCESS);
             ierr = MPI_Comm_size(comm, &size), DNDS_assert(ierr == MPI_SUCCESS);
         }
@@ -286,10 +286,17 @@ namespace DNDS
             std::unordered_map<void *, std::function<void()>> cleaners;
 
             ResourceRecycler(){}; // implemented
-            ResourceRecycler(const ResourceRecycler &);
-            ResourceRecycler &operator=(const ResourceRecycler &);
 
         public:
+            // Singleton: explicitly delete all copy / move operations so
+            // the only instance is obtained via `Instance()`. Replaces the
+            // pre-C++11 private-unimplemented idiom previously used here.
+            ResourceRecycler(const ResourceRecycler &) = delete;
+            ResourceRecycler &operator=(const ResourceRecycler &) = delete;
+            ResourceRecycler(ResourceRecycler &&) = delete;
+            ResourceRecycler &operator=(ResourceRecycler &&) = delete;
+            ~ResourceRecycler() = default;
+
             /// @brief Access the process-wide singleton.
             static ResourceRecycler &Instance();
             /**
@@ -375,6 +382,14 @@ namespace DNDS
             this->clear();
             MPI::ResourceRecycler::Instance().RemoveCleaner(this);
         }
+
+        // Rule-of-five closure. Owns a ResourceRecycler registration keyed
+        // by `this`; copying or moving would either leave the original
+        // registration dangling or register twice for the same `this`.
+        MPITypePairHolder(const MPITypePairHolder &) = delete;
+        MPITypePairHolder &operator=(const MPITypePairHolder &) = delete;
+        MPITypePairHolder(MPITypePairHolder &&) = delete;
+        MPITypePairHolder &operator=(MPITypePairHolder &&) = delete;
         /// @brief Free every committed datatype and empty the vector.
         void clear()
         {
@@ -427,6 +442,14 @@ namespace DNDS
             this->clear();
             MPI::ResourceRecycler::Instance().RemoveCleaner(this);
         }
+
+        // Rule-of-five closure. Owns a ResourceRecycler registration keyed
+        // by `this`; copying or moving would leave the original registration
+        // dangling or register twice for the same `this`.
+        MPIReqHolder(const MPIReqHolder &) = delete;
+        MPIReqHolder &operator=(const MPIReqHolder &) = delete;
+        MPIReqHolder(MPIReqHolder &&) = delete;
+        MPIReqHolder &operator=(MPIReqHolder &&) = delete;
         /// @brief Free every non-null request and empty the vector.
         void clear()
         {
@@ -484,8 +507,8 @@ namespace DNDS // TODO: get a concurrency header
         /// @brief Return the MPI thread-support level the current process was initialised with.
         inline int GetMPIThreadLevel()
         {
-            int ret;
-            int ierr;
+            int ret = 0;
+            int ierr = 0;
             ierr = MPI_Query_thread(&ret), DNDS_assert(ierr == MPI_SUCCESS);
             return ret;
         }
@@ -512,7 +535,7 @@ namespace DNDS // TODO: get a concurrency header
             int needed_MPI_THREAD_LEVEL = MPI_THREAD_MULTIPLE;
 
             auto *env = std::getenv("DNDS_DISABLE_ASYNC_MPI");
-            if (env != NULL && (std::stod(env) != 0))
+            if (env != nullptr && (std::stod(env) != 0))
             {
                 int ienv = static_cast<int>(std::stod(env));
                 if (ienv >= 1)
@@ -582,17 +605,23 @@ namespace DNDS
     private:
         MPIBufferHandler()
         {
-            uint8_t *obuf;
-            int osize;
+            uint8_t *obuf = nullptr;
+            int osize = 0;
             MPI_Buffer_detach(reinterpret_cast<void *>(&obuf) /* caution */, &osize);
 
             buf.resize(1024ULL * 1024ULL);
             MPI_Buffer_attach(buf.data(), int(buf.size())); //! warning, bufsize could overflow
         }
-        MPIBufferHandler(const MPIBufferHandler &);
-        MPIBufferHandler &operator=(const MPIBufferHandler &);
 
     public:
+        // Singleton: explicitly delete all copy / move operations so the
+        // only instance is obtained via `Instance()`.
+        MPIBufferHandler(const MPIBufferHandler &) = delete;
+        MPIBufferHandler &operator=(const MPIBufferHandler &) = delete;
+        MPIBufferHandler(MPIBufferHandler &&) = delete;
+        MPIBufferHandler &operator=(MPIBufferHandler &&) = delete;
+        ~MPIBufferHandler() = default;
+
         /// @brief Access the process-wide singleton.
         static MPIBufferHandler &Instance();
         /// @brief Current buffer size in bytes (fits in `MPI_int`; asserted).
@@ -608,8 +637,8 @@ namespace DNDS
             if (buf.size() - claimed < static_cast<size_type>(cs))
             {
                 // std::cout << "claim in " << std::endl;
-                uint8_t *obuf;
-                int osize;
+                uint8_t *obuf = nullptr;
+                int osize = 0;
                 MPI_Buffer_detach(reinterpret_cast<void *>(&obuf) /* caution */, &osize);
 #ifdef MPIBufferHandler_REPORT_CHANGE
                 std::cout << "MPIBufferHandler: New BUf at " << reportRank << std::endl
@@ -683,12 +712,18 @@ namespace DNDS::MPI
     /// @brief Single-scalar Allreduce helper for reals (in-place, count = 1).
     inline void AllreduceOneReal(real &v, MPI_Op op, const MPIInfo &mpi)
     {
+        // MPI_IN_PLACE is a library-defined sentinel macro (OpenMPI: `((void *)1)`)
+        // whose internal C-style cast is outside project control.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
         Allreduce(MPI_IN_PLACE, &v, 1, DNDS_MPI_REAL, op, mpi.comm);
     }
 
     /// @brief Single-scalar Allreduce helper for indices (in-place, count = 1).
     inline void AllreduceOneIndex(index &v, MPI_Op op, const MPIInfo &mpi)
     {
+        // MPI_IN_PLACE is a library-defined sentinel macro (OpenMPI: `((void *)1)`)
+        // whose internal C-style cast is outside project control.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
         Allreduce(MPI_IN_PLACE, &v, 1, DNDS_MPI_INDEX, op, mpi.comm);
     }
 
@@ -756,10 +791,16 @@ namespace DNDS::MPI
         double _use_lazy_wait = 0;
 
         CommStrategy();
-        CommStrategy(const CommStrategy &);
-        CommStrategy &operator=(const CommStrategy &);
 
     public:
+        // Singleton: explicitly delete all copy / move operations so the
+        // only instance is obtained via `Instance()`.
+        CommStrategy(const CommStrategy &) = delete;
+        CommStrategy &operator=(const CommStrategy &) = delete;
+        CommStrategy(CommStrategy &&) = delete;
+        CommStrategy &operator=(CommStrategy &&) = delete;
+        ~CommStrategy() = default;
+
         /// @brief Access the process-wide singleton.
         static CommStrategy &Instance();
         /// @brief Current array-pack strategy.

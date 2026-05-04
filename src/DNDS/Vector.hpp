@@ -34,7 +34,7 @@ namespace DNDS
         /// @brief Typed byte pointer to the current allocation.
         virtual uint8_t *get() = 0;
         /// @brief Allocation size in bytes.
-        virtual size_t bytes() const = 0;
+        [[nodiscard]] virtual size_t bytes() const = 0;
         /// @brief Which backend currently owns the allocation.
         virtual DeviceBackend device() = 0;
         /// @brief Copy `n` bytes from `host_src` into this allocation.
@@ -81,7 +81,7 @@ namespace DNDS
             device_storage = nullptr;
             host_data.clear();
         }
-        size_t bytes() const override { return bytes_; }
+        [[nodiscard]] size_t bytes() const override { return bytes_; }
         uint8_t *get() override
         {
             if (B_ == DeviceBackend::Unknown)
@@ -185,7 +185,7 @@ namespace DNDS
 
         const T &operator[](size_t i) const { return static_cast<const Derived *>(this)->data()[i]; }
 
-        const T &at(size_t i) const
+        [[nodiscard]] const T &at(size_t i) const
         {
             auto *dThis = static_cast<const Derived *>(this);
             DNDS_check_throw_info(dThis->size() > i, std::to_string(i) + " --- " + std::to_string(dThis->size()));
@@ -263,7 +263,7 @@ namespace DNDS
             this->operator=(v);
         }
 
-        DNDS_HOST size_t size() const { return size_; }
+        DNDS_HOST [[nodiscard]] size_t size() const { return size_; }
 
         DNDS_HOST void resize(size_t new_size)
         {
@@ -288,18 +288,18 @@ namespace DNDS
         }
 
         DNDS_HOST T *data() { return host_ptr; }
-        DNDS_HOST const T *data() const { return host_ptr; }
+        DNDS_HOST [[nodiscard]] const T *data() const { return host_ptr; }
 
         DNDS_HOST T *dataDevice() { return device_ptr; }
-        DNDS_HOST const T *dataDevice() const { return device_ptr; }
+        DNDS_HOST [[nodiscard]] const T *dataDevice() const { return device_ptr; }
 
         DNDS_HOST auto begin() { return host_ptr; }
         DNDS_HOST auto end() { return host_ptr + size_; }
-        DNDS_HOST auto begin() const { return host_ptr; }
-        DNDS_HOST auto end() const { return host_ptr + size_; }
+        DNDS_HOST [[nodiscard]] auto begin() const { return host_ptr; }
+        DNDS_HOST [[nodiscard]] auto end() const { return host_ptr + size_; }
 
-        DNDS_HOST auto cbegin() const { return host_ptr; }
-        DNDS_HOST auto cend() const { return host_ptr + size_; }
+        DNDS_HOST [[nodiscard]] auto cbegin() const { return host_ptr; }
+        DNDS_HOST [[nodiscard]] auto cend() const { return host_ptr + size_; }
 
         DNDS_HOST explicit operator std::vector<T>() const
         {
@@ -387,6 +387,37 @@ namespace DNDS
             this->sync_device_ptr();
         }
 
+        /// @brief Move constructor: transfers ownership, source left empty.
+        host_device_vector_r1(t_self &&R) noexcept
+            : host_data(std::move(R.host_data)),
+              device_data(std::move(R.device_data)),
+              host_ptr(R.host_ptr),
+              device_ptr(R.device_ptr),
+              size_(R.size_)
+        {
+            R.host_ptr = nullptr;
+            R.device_ptr = nullptr;
+            R.size_ = 0;
+        }
+
+        /// @brief Move assignment: transfers ownership, source left empty.
+        t_self &operator=(t_self &&R) noexcept
+        {
+            if (this == &R)
+                return *this;
+            host_data = std::move(R.host_data);
+            device_data = std::move(R.device_data);
+            host_ptr = R.host_ptr;
+            device_ptr = R.device_ptr;
+            size_ = R.size_;
+            R.host_ptr = nullptr;
+            R.device_ptr = nullptr;
+            R.size_ = 0;
+            return *this;
+        }
+
+        ~host_device_vector_r1() = default;
+
         DeviceBackend device()
         {
             return device_data ? device_data->device() : DeviceBackend::Unknown;
@@ -421,6 +452,12 @@ namespace DNDS
         t_supDeviceStorageBase deviceStorage = null_supDeviceStorageBase();
 
         DNDS_HOST host_device_vector_r0(const std::vector<T> &v) : t_base(v) {}
+
+        /// @brief Move constructor: moves vector data + transfers device storage.
+        DNDS_HOST host_device_vector_r0(t_self &&R) noexcept = default;
+        /// @brief Move assignment.
+        DNDS_HOST t_self &operator=(t_self &&R) noexcept = default;
+        ~host_device_vector_r0() = default;
 
         DNDS_HOST t_self &operator=(const std::vector<T> &v)
         {

@@ -60,8 +60,8 @@ namespace DNDS
     struct MemberPtr
     {
         using t_member_ptr = T Class::*;
-        t_member_ptr ptr;  ///< Pointer-to-member.
-        const char *name;  ///< Compile-time-known member name.
+        t_member_ptr ptr; ///< Pointer-to-member.
+        const char *name; ///< Compile-time-known member name.
     };
 
     template <typename Class, typename T>

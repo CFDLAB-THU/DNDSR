@@ -48,13 +48,13 @@ namespace DNDS
     }
 
     template <class TArrayEigenVector = ArrayEigenVector<1>>
-    auto pybind11_ArrayEigenVector_setitem(TArrayEigenVector &self, index index_, py::buffer row)
+    auto pybind11_ArrayEigenVector_setitem(TArrayEigenVector &self, index index_, const py::buffer &row)
     {
         auto row_info = row.request(false);
         DNDS_assert(row_info.item_type_is_equivalent_to<real>());
         auto [count, row_style] = py_buffer_get_contigious_size(row_info); // todo: upgrade to accept any 1D array
         DNDS_assert(self.RowSize(index_) == count);
-        auto row_start_ptr = reinterpret_cast<real *>(row_info.ptr);
+        auto *row_start_ptr = reinterpret_cast<real *>(row_info.ptr);
         std::copy(row_start_ptr, row_start_ptr + count, self[index_].data());
     }
 }
@@ -105,7 +105,7 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
-                [](TArrayEigenVector &self, index index_, py::buffer row)
+                [](TArrayEigenVector &self, index index_, const py::buffer &row)
                 {
                     return pybind11_ArrayEigenVector_setitem(self, index_, row);
                 });
@@ -173,7 +173,7 @@ namespace DNDS
                 py::keep_alive<0, 1>())
             .def(
                 "__setitem__",
-                [](TPair &self, index index_, py::buffer row)
+                [](TPair &self, index index_, const py::buffer &row)
                 {
                     return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenVector_setitem(ar, iC, row); });
@@ -193,7 +193,7 @@ namespace DNDS
 namespace DNDS
 {
     template <size_t N, std::array<int, N> const &Arr, size_t... Is>
-    void __pybind11_callBindArrayEigenVectors_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
+    void pybind11_callBindArrayEigenVectors_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...> /*unused*/)
     {
         (_pybind11_ArrayEigenVector_define_dispatch<Arr[Is]>(m), ...);
         (_pybind11_ArrayEigenVectorPair_define_dispatch<Arr[Is]>(m), ...);
@@ -202,7 +202,7 @@ namespace DNDS
     inline void pybind11_callBindArrayEigenVectors_rowsizes(py::module_ &m)
     {
         static constexpr auto seq = pybind11_arrayRowsizeInstantiationList;
-        __pybind11_callBindArrayEigenVectors_rowsizes_sequence<
+        pybind11_callBindArrayEigenVectors_rowsizes_sequence<
             seq.size(), seq>(m, std::make_index_sequence<seq.size()>{});
     }
 

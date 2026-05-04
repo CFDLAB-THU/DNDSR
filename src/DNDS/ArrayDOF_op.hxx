@@ -346,7 +346,7 @@ namespace DNDS
     {
         DNDS_assert(self.father && self.son);
         DNDS_assert(R.father && R.son);
-        real sqrSum{0}, sqrSumAll;
+        real sqrSum{0}, sqrSumAll{0};
         index iTop = self.father->Size();
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static) reduction(+ : sqrSum)

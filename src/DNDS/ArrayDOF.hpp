@@ -63,6 +63,9 @@ namespace DNDS
     class ArrayDofOp;
 
 #define DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n)
+// NOLINTBEGIN(bugprone-macro-parentheses)
+// Rationale: `spec` is a C++ storage-class specifier token (e.g. `static`)
+// placed at the start of a function declaration; it cannot be parenthesized.
 #define DNDS_ARRAY_DOF_OP_FUNC_LIST(B, n_m, n_n, spec)                                                                                            \
     spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) setConstant(t_self &self, real R);                                                   \
     spec void DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) setConstant(t_self &self, const Eigen::Ref<const t_element_mat> &R);                 \
@@ -83,6 +86,7 @@ namespace DNDS
     spec ArrayDofOp<B, n_m, n_n>::t_element_mat DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) componentWiseNorm1(t_self &self);                  \
     spec ArrayDofOp<B, n_m, n_n>::t_element_mat DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) componentWiseNorm1(t_self &self, const t_self &R); \
     spec real DNDS_ARRAY_DOF_OP_FUNC_LIST_SCOPE(B, n_m, n_n) dot(t_self &self, const t_self &R);
+    // NOLINTEND(bugprone-macro-parentheses)
 
     /**
      * @brief Host-side static dispatcher: implements every vector-space operation
