@@ -696,9 +696,85 @@ After migration, the existing helpers become dead code.
 
 ## ReorderEntities -- Top-Level Algorithm
 
-### API
+### API (two-layer design)
 
 ```cpp
+// =================================================================
+// Companion callback: type-erased row relocation for non-adj arrays
+// =================================================================
+
+/// Callback invoked during the RELOCATE phase for a companion array.
+/// The framework passes the PermutationTransfer for the entity kind
+/// that this companion belongs to. The callback calls transferRows
+/// on its own array.
+using CompanionRelocateFn = std::function<void(
+    const PermutationTransfer &transfer, const MPIInfo &mpi)>;
+
+/// One registered companion entry.
+struct CompanionEntry
+{
+    EntityKind kind;          // entity kind this array is parallel to
+    CompanionRelocateFn fn;   // callback to relocate the array
+    std::string name;         // diagnostic name (optional)
+};
+
+// =================================================================
+// Adj entry: type-erased adjacency operation
+// =================================================================
+
+/// Callback invoked during the REMAP phase for an adjacency array.
+/// The framework passes the LookupResult for the target entity kind.
+/// The callback calls ConvertAdjEntries on its own array.
+using AdjRemapFn = std::function<void(
+    const LookupResult &lookup)>;
+
+/// Callback invoked during the RELOCATE phase for an adjacency array.
+using AdjRelocateFn = std::function<void(
+    const PermutationTransfer &transfer, const MPIInfo &mpi)>;
+
+/// One registered adjacency entry.
+struct AdjEntry
+{
+    AdjKind kind;             // adjacency kind (from -> to)
+    AdjRemapFn remapFn;      // remap entries (may be null if no remap needed)
+    AdjRelocateFn relocateFn; // relocate rows (may be null if no relocate needed)
+    std::string name;         // diagnostic name (optional)
+};
+
+// =================================================================
+// ReorderRegistry: the dynamic set of arrays to operate on
+// =================================================================
+
+/// Collects all adjacencies and companions that participate in a reorder.
+/// Built by UnstructuredMesh::buildReorderRegistry() for mesh members,
+/// and extended by external code for solver/evaluator arrays.
+struct ReorderRegistry
+{
+    /// All adjacency entries (mesh members + external).
+    std::vector<AdjEntry> adjs;
+
+    /// All companion entries (mesh members + external).
+    std::vector<CompanionEntry> companions;
+
+    /// Global offsets mappings per entity kind (for PermutationTransfer).
+    std::unordered_map<EntityKind, ssp<GlobalOffsetsMapping>> globalMappings;
+
+    /// Register an adjacency with type-erased callbacks.
+    void registerAdj(AdjKind kind, AdjRemapFn remap, AdjRelocateFn relocate,
+                     std::string name = {});
+
+    /// Register a companion with a type-erased relocate callback.
+    void registerCompanion(EntityKind kind, CompanionRelocateFn fn,
+                           std::string name = {});
+
+    /// Register a GlobalOffsetsMapping for an entity kind.
+    void registerGlobalMapping(EntityKind kind, ssp<GlobalOffsetsMapping> gm);
+};
+
+// =================================================================
+// ReorderInput and ReorderPlan
+// =================================================================
+
 struct ReorderInput
 {
     /// Explicit reorder maps (caller-provided).
@@ -712,8 +788,47 @@ struct ReorderInput
     std::unordered_set<EntityKind> destroyKinds;
 };
 
-/// Post-condition: all adj in Adj_PointToGlobal, ghost mappings stale.
-void UnstructuredMesh::ReorderEntities(const ReorderInput &input);
+// Layer 1: Standalone plan (no mesh dependency after construction)
+struct ReorderPlan
+{
+    std::unordered_map<EntityKind, PermutationTransfer> transfers;
+    std::unordered_map<EntityKind, LookupResult> lookups;
+    std::unordered_set<EntityKind> reorderedKinds;
+    bool isLocalOnly{false};
+
+    /// Build plan from input + registry.
+    static ReorderPlan build(const ReorderInput &input,
+                             const ReorderRegistry &registry,
+                             const MPIInfo &mpi);
+
+    /// Apply the plan to all entries in the registry.
+    void apply(ReorderRegistry &registry, const MPIInfo &mpi) const;
+
+    /// Standalone operations for external arrays:
+    template <class TPair>
+    void remapEntries(TPair &pair, EntityKind targetKind) const;
+
+    template <class TPair>
+    void relocateRows(TPair &pair, EntityKind sourceKind,
+                      const MPIInfo &mpi) const;
+};
+
+// Layer 2: Mesh methods
+class UnstructuredMesh
+{
+    /// Build a ReorderRegistry containing all mesh members.
+    /// Registers all built adj arrays (as callbacks) and all
+    /// companion arrays (coords, cellElemInfo, pbi arrays, etc.).
+    /// Skips adjacencies involving destroyKinds.
+    ReorderRegistry buildReorderRegistry(
+        const std::unordered_set<EntityKind> &destroyKinds = {}) const;
+
+    /// Build plan from input (uses buildReorderRegistry internally).
+    ReorderPlan buildReorderPlan(const ReorderInput &input) const;
+
+    /// Build plan AND apply to all mesh members.
+    void ReorderEntities(const ReorderInput &input);
+};
 ```
 
 ### Precondition
@@ -867,21 +982,92 @@ ReorderEntities(input):
 | Entity kind | Companion arrays |
 |-------------|-----------------|
 | Cell | `cellElemInfo`, `cell2cellOrig`, `cell2nodePbi` (if periodic) |
-| Node | `coords`, `node2nodeOrig`, `coordsElevDisp` (if elevation) |
+| Node | `coords`, `node2nodeOrig`, `coordsElevDisp` (if elevation), `nodeWallDist` |
 | Bnd | `bndElemInfo`, `bnd2bndOrig`, `bnd2nodePbi` (if periodic) |
 | Face | `faceElemInfo`, `face2nodePbi` (if periodic) |
 
-### Treatment
+### Callback-based registration
 
-Companions are treated as RELOCATE-only: their rows are moved with
-their entity kind, but they have no entries to remap (they don't
-store entity indices).
+Companions are registered into the `ReorderRegistry` via type-erased
+callbacks. Each callback captures a reference to its array and calls
+`transferRows` on it when invoked:
+
+```cpp
+// Inside UnstructuredMesh::buildReorderRegistry():
+auto reg = ReorderRegistry{};
+
+// Register cell companions
+reg.registerCompanion(EntityKind::Cell,
+    [&](const PermutationTransfer &t, const MPIInfo &m) {
+        t.transferRows(cellElemInfo, m);
+    }, "cellElemInfo");
+
+reg.registerCompanion(EntityKind::Cell,
+    [&](const PermutationTransfer &t, const MPIInfo &m) {
+        t.transferRows(cell2cellOrig, m);
+    }, "cell2cellOrig");
+
+if (isPeriodic && cell2nodePbi.father)
+    reg.registerCompanion(EntityKind::Cell,
+        [&](const PermutationTransfer &t, const MPIInfo &m) {
+            t.transferRows(cell2nodePbi, m);
+        }, "cell2nodePbi");
+
+// Register node companions
+reg.registerCompanion(EntityKind::Node,
+    [&](const PermutationTransfer &t, const MPIInfo &m) {
+        t.transferRows(coords, m);
+    }, "coords");
+
+reg.registerCompanion(EntityKind::Node,
+    [&](const PermutationTransfer &t, const MPIInfo &m) {
+        t.transferRows(node2nodeOrig, m);
+    }, "node2nodeOrig");
+
+// ... etc for Bnd, Face
+```
+
+### External companion registration (solver arrays)
+
+External code appends its own companions to the registry before
+the reorder is applied:
+
+```cpp
+auto registry = mesh.buildReorderRegistry(input.destroyKinds);
+
+// Solver registers its cell-parallel DOF arrays:
+registry.registerCompanion(EntityKind::Cell,
+    [&](const PermutationTransfer &t, const MPIInfo &m) {
+        t.transferRows(cellSolution, m);
+    }, "cellSolution");
+
+registry.registerCompanion(EntityKind::Cell,
+    [&](const PermutationTransfer &t, const MPIInfo &m) {
+        t.transferRows(cellGradient, m);
+    }, "cellGradient");
+
+// Now build plan and apply:
+auto plan = ReorderPlan::build(input, registry, mpi);
+plan.apply(registry, mpi);
+```
+
+This is the **recommended pattern for solver participation**.
+The mesh's `ReorderEntities` convenience method does the same
+thing internally (builds registry, builds plan, applies).
+
+### Treatment during apply
+
+During `ReorderPlan::apply`:
 
 ```
-for each reordered kind:
-    for each companion of that kind:
-        transfers[kind].transferRows(companion, mpi);
+Phase 1 (REMAP): invoke adjEntry.remapFn for all classified REMAP/SELF adjs
+Phase 2 (RELOCATE): invoke adjEntry.relocateFn for all classified RELOCATE/SELF adjs
+Phase 3 (COMPANIONS): invoke companion.fn for all companions of reordered kinds
 ```
+
+Companions always run after adj relocation (Phase 3), but since they
+have no ordering dependency on adj arrays, they could also run in
+parallel with Phase 2.
 
 ### Pbi arrays as companions
 
@@ -899,45 +1085,260 @@ and VTK output, which are called later).
 
 ---
 
+## Dynamic Reorder Registry (Decoupled from UnstructuredMesh)
+
+### Problem
+
+A naive design ties the reorder operation to `UnstructuredMesh`'s
+hardcoded member list. The solver, CFV evaluator, or other subsystems
+may own arrays parallel to mesh entities (solution DOFs per cell,
+gradient arrays per node, etc.) that also need relocation or remapping.
+
+### Solution: ReorderRegistry + callback-based participation
+
+The `ReorderRegistry` (defined in the API section above) is the
+dynamic set of arrays that participate in a reorder. It is built by
+`UnstructuredMesh::buildReorderRegistry()` for mesh members, and
+extended by external code before plan application.
+
+### How `buildReorderRegistry` works
+
+```cpp
+ReorderRegistry UnstructuredMesh::buildReorderRegistry(
+    const std::unordered_set<EntityKind> &destroyKinds) const
+{
+    ReorderRegistry reg;
+
+    // ---- Adjacency registration (with callbacks) ----
+    auto shouldSkip = [&](AdjKind kind) {
+        return destroyKinds.count(kind.from) || destroyKinds.count(kind.to);
+    };
+
+    // Helper: register a tracked adj member with remap + relocate callbacks.
+    auto regAdj = [&](AdjKind kind, auto &trackedPair) {
+        if (!trackedPair.father || shouldSkip(kind)) return;
+
+        AdjRemapFn remap = [&trackedPair](const LookupResult &lookup) {
+            ConvertAdjEntries(trackedPair, trackedPair.father->Size(),
+                [&](index g) -> index {
+                    if (g == UnInitIndex) return UnInitIndex;
+                    return lookup.resolve(g);
+                });
+        };
+
+        AdjRelocateFn relocate = [&trackedPair](
+            const PermutationTransfer &t, const MPIInfo &m) {
+            t.transferRows(trackedPair, m);
+        };
+
+        reg.registerAdj(kind, remap, relocate,
+                        adjKindName(kind));
+    };
+
+    // Register all 12 tracked adj members
+    regAdj(Adj::Cell2Node, cell2node);
+    regAdj(Adj::Cell2Cell, cell2cell);
+    regAdj(Adj::Bnd2Node,  bnd2node);
+    regAdj(Adj::Bnd2Cell,  bnd2cell);
+    regAdj(Adj::Node2Cell, node2cell);
+    regAdj(Adj::Node2Bnd,  node2bnd);
+    regAdj(Adj::Cell2Face, cell2face);
+    regAdj(Adj::Face2Node, face2node);
+    regAdj(Adj::Face2Cell, face2cell);
+    regAdj(Adj::Face2Bnd,  face2bnd);
+    regAdj(Adj::Bnd2Face,  bnd2face);
+    regAdj(Adj::Cell2CellFace, cell2cellFace);
+
+    // ---- Companion registration (with callbacks) ----
+    auto regComp = [&](EntityKind kind, auto &pair, const char *name) {
+        if (!pair.father) return;
+        reg.registerCompanion(kind,
+            [&pair](const PermutationTransfer &t, const MPIInfo &m) {
+                t.transferRows(pair, m);
+            }, name);
+    };
+
+    regComp(EntityKind::Cell, cellElemInfo, "cellElemInfo");
+    regComp(EntityKind::Cell, cell2cellOrig, "cell2cellOrig");
+    regComp(EntityKind::Node, coords, "coords");
+    regComp(EntityKind::Node, node2nodeOrig, "node2nodeOrig");
+    regComp(EntityKind::Bnd,  bndElemInfo, "bndElemInfo");
+    regComp(EntityKind::Bnd,  bnd2bndOrig, "bnd2bndOrig");
+
+    if (isPeriodic) {
+        regComp(EntityKind::Cell, cell2nodePbi, "cell2nodePbi");
+        regComp(EntityKind::Bnd,  bnd2nodePbi, "bnd2nodePbi");
+    }
+    if (faceElemInfo.father && !destroyKinds.count(EntityKind::Face))
+        regComp(EntityKind::Face, faceElemInfo, "faceElemInfo");
+    if (coordsElevDisp.father)
+        regComp(EntityKind::Node, coordsElevDisp, "coordsElevDisp");
+    if (nodeWallDist.father)
+        regComp(EntityKind::Node, nodeWallDist, "nodeWallDist");
+
+    // ---- Global mappings ----
+    // Source from adj arrays (same as fillRegistry logic)
+    auto getGM = [](const auto &pair) -> ssp<GlobalOffsetsMapping> {
+        if (pair.father && pair.father->pLGlobalMapping)
+            return pair.father->pLGlobalMapping;
+        return nullptr;
+    };
+    if (auto gm = getGM(cell2node)) reg.registerGlobalMapping(EntityKind::Cell, gm);
+    if (auto gm = coords.father ? coords.father->pLGlobalMapping : nullptr)
+        reg.registerGlobalMapping(EntityKind::Node, gm);
+    if (auto gm = getGM(bnd2node)) reg.registerGlobalMapping(EntityKind::Bnd, gm);
+    if (auto gm = getGM(face2node)) reg.registerGlobalMapping(EntityKind::Face, gm);
+
+    return reg;
+}
+```
+
+### External code extends the registry
+
+```cpp
+// Solver extends the mesh's registry with its own arrays:
+auto registry = mesh.buildReorderRegistry(input.destroyKinds);
+
+// Add solver cell-parallel arrays:
+registry.registerCompanion(EntityKind::Cell,
+    [&](const PermutationTransfer &t, const MPIInfo &m) {
+        t.transferRows(cellSolution, m);
+    }, "solver::cellSolution");
+
+registry.registerCompanion(EntityKind::Cell,
+    [&](const PermutationTransfer &t, const MPIInfo &m) {
+        t.transferRows(cellGradient, m);
+    }, "solver::cellGradient");
+
+// Add solver node-parallel arrays:
+registry.registerCompanion(EntityKind::Node,
+    [&](const PermutationTransfer &t, const MPIInfo &m) {
+        t.transferRows(nodeWallDist, m);
+    }, "solver::nodeWallDist");
+
+// Add an external adjacency (e.g., a DOF connectivity array):
+registry.registerAdj(
+    AdjKind{EntityKind::Cell, EntityKind::Node},  // same kind as cell2node
+    [&](const LookupResult &lookup) {
+        ConvertAdjEntries(myDOFConn, myDOFConn.father->Size(),
+            [&](index g) { return g == UnInitIndex ? g : lookup.resolve(g); });
+    },
+    [&](const PermutationTransfer &t, const MPIInfo &m) {
+        t.transferRows(myDOFConn, m);
+    },
+    "solver::dofConnectivity"
+);
+
+// Build plan from the extended registry:
+auto plan = ReorderPlan::build(input, registry, mpi);
+plan.apply(registry, mpi);
+```
+
+### How ReorderPlan::apply works with the registry
+
+```cpp
+void ReorderPlan::apply(ReorderRegistry &registry, const MPIInfo &mpi) const
+{
+    // Phase 1: REMAP all adj entries
+    for (auto &adj : registry.adjs)
+    {
+        auto action = classifyAdj(adj.kind, reorderedKinds);
+        if (action == REMAP || action == RELOCATE_REMAP || action == SELF)
+        {
+            EntityKind targetKind = adj.kind.isIntraLevel()
+                ? adj.kind.from : adj.kind.to;
+            if (adj.remapFn)
+                adj.remapFn(lookups.at(targetKind));
+        }
+    }
+
+    // Phase 2: RELOCATE all adj rows
+    for (auto &adj : registry.adjs)
+    {
+        auto action = classifyAdj(adj.kind, reorderedKinds);
+        if (action == RELOCATE || action == RELOCATE_REMAP || action == SELF)
+        {
+            EntityKind sourceKind = adj.kind.from;
+            if (adj.relocateFn)
+                adj.relocateFn(transfers.at(sourceKind), mpi);
+        }
+    }
+
+    // Phase 3: RELOCATE all companions
+    for (auto &comp : registry.companions)
+    {
+        if (reorderedKinds.count(comp.kind))
+            comp.fn(transfers.at(comp.kind), mpi);
+    }
+}
+```
+
+### Relationship to existing fillRegistry
+
+The existing `fillRegistry(MeshConnectivity &dag)` method remains
+for ghost tree evaluation (it fills a `MeshConnectivity` DAG for
+`evaluateGhostTree`). The new `buildReorderRegistry` is a separate
+method for reorder operations. They share the same discovery logic
+(which adj arrays exist) but produce different output types:
+
+| Method | Output | Purpose |
+|--------|--------|---------|
+| `fillRegistry(dag)` | `MeshConnectivity` with `ssp<AdjVariant>` | Ghost tree evaluation |
+| `buildReorderRegistry()` | `ReorderRegistry` with callbacks | Reorder operations |
+
+Both use the same underlying member-existence checks. The reorder
+registry additionally captures companions and type-erased callbacks.
+
+### Summary: decoupling layers
+
+```
+   Caller (solver, evaluator, etc.)
+      |
+      | extends ReorderRegistry with own arrays
+      v
+   ReorderRegistry (dynamic set of callbacks)
+      |
+      | consumed by ReorderPlan::build + apply
+      v
+   ReorderPlan (standalone, computed transfers + lookups)
+      |
+      | invokes callbacks during apply()
+      v
+   PermutationTransfer + LookupResult (MPI primitives)
+      |
+      | wraps ArrayTransformer / PermuteRows
+      v
+   DNDS array infrastructure
+```
+
+The mesh is just one contributor to the registry. Any code that owns
+entity-parallel arrays can register callbacks and participate in the
+same reorder operation.
+
+---
+
 ## Integration with AdjPairTracked and fillRegistry
 
 ### How the framework discovers adjacencies
 
-`fillRegistry` registers all built adjacencies into a `MeshConnectivity`
-registry. The reorder algorithm uses this registry to enumerate every
-adjacency that exists, classify it, and operate on it.
+`buildReorderRegistry()` replaces the role previously played by
+`fillRegistry` for reorder operations. It iterates all mesh members,
+checks if their father is non-null, and registers them with type-erased
+callbacks. The callbacks capture references to the actual
+`AdjPairTracked` members, so the plan operates on live mesh data.
 
-The registry stores `ssp<AdjVariant>` (type-erased father-only shallow
-copy). But the reorder algorithm needs to operate on the actual mesh
-member (to modify the father in-place and update the idx state). So the
-registry is used only for **discovery and classification**. The actual
-operations are performed on the mesh's `AdjPairTracked` members.
+The existing `fillRegistry(MeshConnectivity &dag)` remains unchanged
+for ghost tree evaluation. The two methods coexist:
+- `fillRegistry` -> `MeshConnectivity` (for `evaluateGhostTree`)
+- `buildReorderRegistry` -> `ReorderRegistry` (for `ReorderEntities`)
 
-### Mapping from AdjKind to mesh member
+### No explicit AdjKind-to-member dispatch needed
 
-The framework needs a mapping:
-
-```cpp
-AdjKind -> AdjPairTracked<T> & (reference to mesh member)
-```
-
-This can be implemented as a visitor pattern or a dispatch table:
-
-```cpp
-// In UnstructuredMesh:
-void visitAdj(AdjKind kind, auto &&visitor)
-{
-    if (kind == Adj::Cell2Node) visitor(cell2node);
-    else if (kind == Adj::Cell2Cell) visitor(cell2cell);
-    else if (kind == Adj::Bnd2Node) visitor(bnd2node);
-    // ... etc for all 12 tracked adj members
-}
-```
-
-Alternatively, `fillRegistry` can store references (but the current
-design uses shared_ptr copies, not references). The simplest approach
-is a `switch`/`if` dispatch in `ReorderEntities` since the set of
-adjacencies is fixed and small.
+Because `buildReorderRegistry` registers callbacks that already
+capture member references, there is no need for a `visitAdj` dispatch
+table. The plan invokes callbacks directly during `apply()`. This
+eliminates the coupling between `ReorderPlan` and `UnstructuredMesh`'s
+specific member layout.
 
 ### Idx state transitions during reorder
 
@@ -949,7 +1350,7 @@ During reorder:
 - No idx transitions happen. Entries are remapped (still global, just
   different globals). Rows are relocated (still global).
 
-After reorder:
+After reorder (handled by mesh's `ReorderEntities` wrapper):
 - `idx.markGlobal()` is called on all affected adj (idempotent if
   already global, resets from Unknown if the adj was destroyed and
   recreated).
@@ -957,25 +1358,41 @@ After reorder:
   entity was invalidated by the reorder). It will be re-wired after
   the caller rebuilds ghosts.
 
-### fillRegistry skip set
+The mesh wrapper also updates the group state variables
+(`adjPrimaryState`, `adjFacialState`, etc.) to `Adj_PointToGlobal`.
 
-When `destroyKinds` is specified (e.g., {Face}), the fillRegistry call
-should skip adjacencies involving Face:
+### Post-reorder idx state update (mesh wrapper responsibility)
 
 ```cpp
-std::unordered_set<AdjKind, AdjKindHash> skip;
-for (auto kind : input.destroyKinds)
-{
-    // Skip all adjacencies where kind is source or target
-    for (auto &adjKind : allAdjKinds)
-        if (adjKind.from == kind || adjKind.to == kind)
-            skip.insert(adjKind);
-}
-fillRegistry(dag, skip);
+// Inside UnstructuredMesh::ReorderEntities, after plan.apply():
+auto updateIdx = [&](auto &trackedPair) {
+    if (trackedPair.father)
+        trackedPair.idx.markGlobal();
+};
+updateIdx(cell2node);
+updateIdx(cell2cell);
+updateIdx(bnd2node);
+updateIdx(bnd2cell);
+// ... etc for all tracked adj members
+
+adjPrimaryState = Adj_PointToGlobal;
+// adjFacialState, adjC2FState, adjN2CBState: set to Unknown if destroyed,
+// or Adj_PointToGlobal if still present.
 ```
 
-This prevents the registry from containing stale or soon-to-be-destroyed
-adjacencies.
+### buildReorderRegistry skip logic
+
+When `destroyKinds` is specified (e.g., {Face}), `buildReorderRegistry`
+skips adjacencies involving that kind:
+
+```cpp
+auto shouldSkip = [&](AdjKind kind) {
+    return destroyKinds.count(kind.from) || destroyKinds.count(kind.to);
+};
+```
+
+This prevents registering callbacks for adjacencies that will be
+destroyed before the reorder runs.
 
 ---
 
@@ -1096,6 +1513,61 @@ mesh.ReorderEntities(input);
 // => REMAP. bnd2node same. node2cell => RELOCATE. coords => companion RELOCATE.
 ```
 
+### Use case 4: Solver-participates redistribution (external arrays)
+
+```cpp
+// Solver owns DOF arrays parallel to cells:
+tDOFPair cellSolution;   // father->Size() == mesh.NumCell()
+tDOFPair cellGradient;
+
+// Step 1: Build plan (does MPI communication for lookups)
+ReorderInput input;
+input.explicitMaps = {cellMap};
+input.follows = {
+    {EntityKind::Node, EntityKind::Cell, Adj::Node2Cell},
+    {EntityKind::Bnd,  EntityKind::Cell, Adj::Bnd2Cell},
+};
+input.destroyKinds = {EntityKind::Face};
+
+auto plan = mesh.buildReorderPlan(input);
+
+// Step 2: Reorder mesh
+mesh.ReorderEntities(input);
+
+// Step 3: Reorder solver arrays using the same plan
+plan.relocateRows(cellSolution, EntityKind::Cell, mpi);
+plan.relocateRows(cellGradient, EntityKind::Cell, mpi);
+
+// Step 4: If solver has node-parallel arrays:
+plan.relocateRows(nodeWallDist, EntityKind::Node, mpi);
+
+// Step 5: Rebuild global mappings on solver arrays
+cellSolution.TransAttach();
+cellSolution.trans.createFatherGlobalMapping();
+// ... etc
+```
+
+### Use case 5: Node-only reorder with solver participation
+
+```cpp
+// Hypothetical: RCM reorder on node graph for FEM bandwidth reduction
+
+EntityReorderMap nodeMap{EntityKind::Node, /*all local*/};
+ReorderInput input;
+input.explicitMaps = {nodeMap};
+input.destroyKinds = {EntityKind::Face};
+
+auto plan = mesh.buildReorderPlan(input);
+mesh.ReorderEntities(input);
+
+// Solver has node-based arrays:
+plan.relocateRows(nodeSolution, EntityKind::Node, mpi);
+plan.relocateRows(nodeRHS, EntityKind::Node, mpi);
+
+// Mesh's cell2node entries are already remapped (REMAP action)
+// so cells now reference new node globals. No cell rows moved.
+```
+
 ---
 
 ## Implementation Plan
@@ -1114,26 +1586,28 @@ mesh.ReorderEntities(input);
   - Local-only: create N entities, permute, verify
   - Distributed: create N entities across 2 ranks, redistribute, verify
 
-### Phase 2: ReorderEntities framework
+### Phase 2: ReorderPlan + ReorderEntities framework
 
-**File**: `src/Geom/Mesh/Mesh_Reorder.cpp` (new, or extend Mesh.cpp)
+**Files**:
+- `src/Geom/Mesh/ReorderPlan.hpp` — `ReorderPlan`, `ReorderInput`,
+  `EntityReorderMap`, `FollowSpec`, `AdjAction`, classification logic
+- `src/Geom/Mesh/Mesh_Reorder.cpp` — `UnstructuredMesh::ReorderEntities`,
+  `buildReorderPlan`, mesh-member dispatch
 
-- `EntityReorderMap`, `FollowSpec`, `ReorderInput` structs (in Mesh.hpp)
-- `ComputeFollowMap` free function
+Contents:
+- `EntityReorderMap`, `FollowSpec`, `ReorderInput` structs
+- `ReorderPlan` with `build()`, `remapEntries()`, `relocateRows()`
 - `classifyAdj` free function
+- `ComputeFollowMap` free function
 - `collectPullSet` free function
-- `ReorderEntities` method on UnstructuredMesh
-  - Step 0: validate + fill registry
-  - Step 1: compute follows
-  - Step 2: build transfers
-  - Step 3: classify
-  - Step 4: build lookups
-  - Step 5: remap entries
-  - Step 6: relocate rows + companions
-  - Step 7: rebuild global mappings
-  - Step 8: update idx states
-  - Step 9: update mesh state variables
-- `visitAdj` dispatch helper
+- `UnstructuredMesh::ReorderEntities` (wrapper that builds plan + applies)
+- `UnstructuredMesh::buildReorderPlan` (builds plan without applying)
+- `visitAdj` dispatch helper (AdjKind -> mesh member reference)
+
+Unit tests:
+- Single-entity remap (node-only): verify cell2node entries updated
+- Single-entity relocate (cell-only): verify cell rows permuted
+- Multi-entity (cell + node + bnd): verify full redistribution
 
 ### Phase 3: Migrate ReorderLocalCells
 
