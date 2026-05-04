@@ -42,6 +42,7 @@ namespace DNDS::CFV
 
         DNDS_DECLARE_CONFIG(FiniteVolumeSettings)
         {
+            // clang-format off
             DNDS_FIELD(maxOrder,                      "Polynomial degree of reconstruction",
                        DNDS::Config::range(0));
             DNDS_FIELD(intOrder,                      "Global integration degree",
@@ -49,6 +50,7 @@ namespace DNDS::CFV
             DNDS_FIELD(ignoreMeshGeometryDeficiency,  "Ignore mesh geometry deficiency warnings");
             DNDS_FIELD(nIterCellSmoothScale,          "Cell smooth scale iterations",
                        DNDS::Config::range(0));
+            // clang-format on
         }
 
         /// @brief Backward-compatible write (used by Python bindings and VRSettings).

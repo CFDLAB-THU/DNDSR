@@ -196,9 +196,7 @@ namespace DNDS::Geom
             cell2cell.trans.createFatherGlobalMapping();
 
             MeshConnectivity dagTmp;
-            dagTmp.meshDim = dim;
-            dagTmp.registerAdj(Adj::Cell2Cell, cell2cell);
-            dagTmp.registerGlobalMapping(EntityKind::Cell, cell2cell.trans.pLGlobalMapping);
+            fillRegistry(dagTmp);
 
             GhostSpec cellSpec{{{EntityKind::Cell, {Adj::Cell2Cell}, EntityKind::Cell}}};
             auto cellResult = dagTmp.evaluateGhostTree(
@@ -450,6 +448,38 @@ namespace DNDS::Geom
 
     void UnstructuredMesh::
         ReadDistributed_Redistribute(
+            const EntityPartitions &partitions)
+    {
+        if (mpi.rank == 0)
+            log() << "UnstructuredMesh === ReadSerializeAndDistribute: redistributing" << std::endl;
+
+        // Free temporary adjacencies no longer needed (same as legacy).
+        cell2cell.father.reset();
+        cell2cell.son.reset();
+        node2cell.father.reset();
+        node2cell.son.reset();
+        node2bnd.father.reset();
+        node2bnd.son.reset();
+        bnd2cell.father.reset();
+        bnd2cell.son.reset();
+
+        // Use ReorderEntities with all three partitions as explicit maps.
+        // (No follow computation needed — partitions are pre-computed by
+        //  ReadDistributed_DeriveEntityPartitions.)
+        ReorderInput input;
+        input.explicitMaps.push_back(EntityReorderMap{EntityKind::Cell, partitions.cellPartition});
+        input.explicitMaps.push_back(EntityReorderMap{EntityKind::Node, partitions.nodePartition});
+        input.explicitMaps.push_back(EntityReorderMap{EntityKind::Bnd, partitions.bndPartition});
+        // No follows (all explicit). No destroyKinds (no faces at this stage).
+
+        this->ReorderEntities(input);
+
+        if (mpi.rank == 0)
+            log() << "UnstructuredMesh === ReadSerializeAndDistribute: redistribute done" << std::endl;
+    }
+
+    void UnstructuredMesh::
+        ReadDistributed_RedistributeLegacy(
             const EntityPartitions &partitions)
     {
         if (mpi.rank == 0)

@@ -90,6 +90,8 @@ namespace DNDS::Geom
         /// already local w.r.t. some (possibly different) mapping, and
         /// replacing the mapping silently would make toGlobal() produce
         /// garbage.
+        ///
+        /// \param mapping  Must be non-null.
         void wireTargetMapping(const t_pLGhostMapping &mapping)
         {
             DNDS_assert_info(
@@ -97,7 +99,39 @@ namespace DNDS::Geom
                 "wireTargetMapping called while indices are local — "
                 "convert to global first, or the stored mapping will "
                 "be inconsistent with the index values");
+            DNDS_assert_info(
+                mapping != nullptr,
+                "wireTargetMapping: mapping must be non-null");
             _targetMapping = mapping;
+        }
+
+        // ============================================================
+        // Factory: father-only mapping (empty ghost set)
+        // ============================================================
+
+        /// \brief Create a ghost mapping with no ghost entries (father-only).
+        ///
+        /// The resulting OffsetAscendIndexMapping maps owned globals to
+        /// [0, fatherSize) via search_indexAppend, and returns false for
+        /// anything off-rank (encoded as -1 - globalIndex by toLocal).
+        ///
+        /// Useful for wiring adjacencies that will never have ghost data
+        /// (e.g., boundary mesh cell2node).
+        ///
+        /// \warning Collective — calls MPI_Alltoall internally.
+        static t_pLGhostMapping makeFatherOnlyMapping(
+            const ssp<GlobalOffsetsMapping> &globalMapping,
+            index fatherSize,
+            const MPIInfo &mpi)
+        {
+            DNDS_assert_info(globalMapping, "makeFatherOnlyMapping: globalMapping must be non-null");
+            std::vector<index> emptyGhosts;
+            return std::make_shared<OffsetAscendIndexMapping>(
+                (*globalMapping)(mpi.rank, 0), // mainOffset
+                fatherSize,                    // mainSize
+                emptyGhosts,                   // empty pull set
+                *globalMapping,
+                mpi);
         }
 
         // ============================================================
@@ -278,6 +312,32 @@ namespace DNDS::Geom
         bool isBuilt() const { return idx.isBuilt(); }
         bool isWired() const { return idx.isWired(); }
         const t_pLGhostMapping &mapping() const { return idx.mapping(); }
+
+        // =============================================================
+        // Device views
+        // =============================================================
+
+        template <DeviceBackend B>
+        using t_deviceView = AdjPairTrackedDeviceView<B, typename TPair::t_arr>;
+
+        /// Create a device view that carries the per-adj state alongside
+        /// the father/son array views.
+        template <DeviceBackend B>
+        auto deviceView()
+        {
+            auto base = TPair::template deviceView<B>();
+            return t_deviceView<B>{base.father, base.son,
+                                   AdjIndexInfoDeviceView{idx.state()}};
+        }
+
+        template <DeviceBackend B>
+        auto deviceView() const
+        {
+            auto base = TPair::template deviceView<B>();
+            return AdjPairTrackedDeviceViewConst<B, typename TPair::t_arr>{
+                base.father, base.son,
+                AdjIndexInfoDeviceView{idx.state()}};
+        }
     };
 
 } // namespace DNDS::Geom

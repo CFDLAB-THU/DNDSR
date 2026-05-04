@@ -23,10 +23,12 @@ namespace DNDS::CFV
 
         DNDS_DECLARE_CONFIG(ModelSettings)
         {
+            // clang-format off
             DNDS_FIELD(ax,    "Advection velocity x-component");
             DNDS_FIELD(ay,    "Advection velocity y-component");
             DNDS_FIELD(sigma, "Diffusion coefficient",
                        DNDS::Config::range(0.0));
+            // clang-format on
         }
     };
 

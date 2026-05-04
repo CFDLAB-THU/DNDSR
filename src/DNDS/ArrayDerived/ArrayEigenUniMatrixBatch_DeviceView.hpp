@@ -45,10 +45,13 @@ namespace DNDS
 
         using t_base_const = const ArrayDeviceView<B, real_T, NonUniformSize>;
 
+        // NOLINTBEGIN(bugprone-branch-clone): both non-row-vector arms of
+        // the options ternary intentionally select ColMajor.
         using t_EigenMatrix = Eigen::Matrix<std::remove_cv_t<real_T>, _n_row, _n_col,
                                             Eigen::AutoAlign |
                                                 ((_n_row == 1 && _n_col != 1) ? Eigen ::RowMajor : (_n_col == 1 && _n_row != 1) ? Eigen ::ColMajor // ColMajor except for row-vector
                                                                                                                                 : Eigen ::ColMajor)>;
+        // NOLINTEND(bugprone-branch-clone)
         using t_EigenMap_const = Eigen::Map<const t_EigenMatrix, Eigen::Unaligned>; // default no buffer align and stride
         using t_EigenMap =
             std::conditional_t<std::is_const_v<real_T>,

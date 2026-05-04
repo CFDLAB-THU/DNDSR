@@ -2,5 +2,5 @@
 
 namespace DNDS
 {
-    const char *__ExprtkPCH = "ExprtkPCH";
+    const char *ExprtkPCH_tag = "ExprtkPCH";
 }

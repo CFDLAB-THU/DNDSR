@@ -12,6 +12,8 @@
 #include "DNDS/ObjectUtils.hpp"
 #include "DNDS/Config/ConfigParam.hpp"
 #include "AdjIndexInfo.hpp"
+#include "MeshConnectivity.hpp"
+#include "ReorderPlan.hpp"
 
 namespace DNDS::Direct
 {
@@ -212,6 +214,31 @@ namespace DNDS::Geom
         // unchanged.
 
         /**
+         * \brief Ensure a pair has a ghost mapping on its transformer.
+         *
+         * If `trans.pLGhostMapping` is already set, does nothing.
+         * Otherwise, creates a father-only ghost mapping (empty ghost set)
+         * so that `IndexGlobal2Local` / `IndexLocal2Global` work even
+         * before ghost layers are built.
+         *
+         * \pre `trans.pLGlobalMapping` must be set (call
+         *      `createFatherGlobalMapping` first).
+         * \warning Collective — calls MPI_Alltoall internally when creating
+         *          the mapping.
+         */
+        template <class TPair>
+        void EnsureGhostMapping(TPair &pair)
+        {
+            if (pair.trans.pLGhostMapping)
+                return;
+            DNDS_assert_info(pair.trans.pLGlobalMapping,
+                             "EnsureGhostMapping: pLGlobalMapping must be set first");
+            pair.trans.pLGhostMapping = AdjIndexInfo::makeFatherOnlyMapping(
+                pair.trans.pLGlobalMapping,
+                pair.father->Size(), mpi);
+        }
+
+        /**
          * \brief Global-to-local conversion using father+son ghost mapping.
          * \return local index, or (-1 - iGlobal) when not found in the pair.
          *         UnInitIndex passes through unchanged.
@@ -298,16 +325,16 @@ namespace DNDS::Geom
         // =================================================================
         // Named wrappers — Cell
         // =================================================================
-        index CellIndexGlobal2Local(DNDS::index i) { return IndexGlobal2Local(cellElemInfo, i); }
-        index CellIndexLocal2Global(DNDS::index i) { return IndexLocal2Global(cellElemInfo, i); }
+        index CellIndexGlobal2Local(DNDS::index i) { return IndexGlobal2Local(cell2node, i); }
+        index CellIndexLocal2Global(DNDS::index i) { return IndexLocal2Global(cell2node, i); }
         index CellIndexLocal2Global_NoSon(index i) { return IndexLocal2Global_NoSon(cell2node, i); }
         index CellIndexGlobal2Local_NoSon(index i) { return IndexGlobal2Local_NoSon(cell2node, i); }
 
         // =================================================================
         // Named wrappers — Bnd
         // =================================================================
-        index BndIndexGlobal2Local(DNDS::index i) { return IndexGlobal2Local(bndElemInfo, i); }
-        index BndIndexLocal2Global(DNDS::index i) { return IndexLocal2Global(bndElemInfo, i); }
+        index BndIndexGlobal2Local(DNDS::index i) { return IndexGlobal2Local(bnd2node, i); }
+        index BndIndexLocal2Global(DNDS::index i) { return IndexLocal2Global(bnd2node, i); }
         index BndIndexLocal2Global_NoSon(index i) { return IndexLocal2Global_NoSon(bnd2node, i); }
         index BndIndexGlobal2Local_NoSon(index i) { return IndexGlobal2Local_NoSon(bnd2node, i); }
 
@@ -463,6 +490,74 @@ namespace DNDS::Geom
 
         void ConstructBndMesh(UnstructuredMesh &bMesh);
 
+        // =================================================================
+        // Registry
+        // =================================================================
+
+        /**
+         * \brief Populate a MeshConnectivity registry from this mesh's
+         *        currently-built adjacencies.
+         *
+         * Registers all adjacency arrays whose father is non-null.
+         * For each entity kind that appears as a source (.from) of any
+         * registered adjacency, finds a pLGlobalMapping from any adj
+         * array for that entity kind.
+         *
+         * \pre All entity kinds that have registered adjacencies must
+         *      have at least one adj array with a valid pLGlobalMapping
+         *      on its father.  Throws if this is not satisfied.
+         *
+         * \param dag   MeshConnectivity to populate (meshDim is set).
+         */
+        void fillRegistry(MeshConnectivity &dag) const;
+
+        /// \overload Overload with an explicit skip set.
+        /// AdjKinds in \p skip are excluded from registration.
+        void fillRegistry(
+            MeshConnectivity &dag,
+            const std::unordered_set<AdjKind, AdjKindHash> &skip) const;
+
+        // =================================================================
+        // Reorder (distributed entity reordering framework)
+        // =================================================================
+
+        /**
+         * \brief Build a ReorderRegistry containing all mesh members.
+         *
+         * Registers all built adj arrays (as type-erased callbacks) and all
+         * companion arrays (coords, cellElemInfo, pbi, etc.).
+         * Skips adjacencies involving destroyKinds.
+         *
+         * External code may extend the returned registry with its own arrays
+         * before passing to ReorderPlan::build.
+         */
+        ReorderRegistry buildReorderRegistry(
+            const std::unordered_set<EntityKind> &destroyKinds = {});
+
+        /**
+         * \brief Reorder entities using the general framework.
+         *
+         * Builds a ReorderRegistry, computes follow maps, builds a
+         * ReorderPlan, applies it, rebuilds global mappings, and updates
+         * idx states.
+         *
+         * \pre All adjacencies in Adj_PointToGlobal state.
+         * \post All (non-destroyed) adjacencies in Adj_PointToGlobal.
+         *       Ghost mappings stale (caller must rebuild ghosts).
+         *       Global mappings fresh on reordered entities.
+         *
+         * \warning Collective.
+         */
+        void ReorderEntities(const ReorderInput &input);
+
+        /**
+         * \brief Build a ReorderPlan without applying it.
+         *
+         * Useful for external code to obtain the plan and apply it to
+         * its own arrays after the mesh reorder.
+         */
+        ReorderPlan buildReorderPlan(const ReorderInput &input);
+
         // void ReorderCellLocal();
 
         /**
@@ -479,6 +574,9 @@ namespace DNDS::Geom
          * \warning bnd mesh's cell2parentCell is invalid after this
          */
         void ReorderLocalCells(int nParts = 1, int nPartsInner = 1);
+
+        /// Legacy implementation preserved for reference/fallback.
+        void ReorderLocalCellsLegacy(int nParts = 1, int nPartsInner = 1);
 
         int NLocalParts() const { return localPartitionStarts.size() ? localPartitionStarts.size() - 1 : 1; }
         index LocalPartStart(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart) : 0; }
@@ -809,21 +907,14 @@ namespace DNDS::Geom
             Serializer::SerializerBaseSSP serializerP);
 
         /// Build facial cell2cell from the even-split data.
-        /// Calls RecoverNode2CellAndNode2Bnd + RecoverCell2CellAndBnd2Cell,
-        /// then ghost-pulls cell2node/cellElemInfo and filters cell2cell
-        /// to face-sharing neighbors (O1 vertex intersection >= dim).
-        /// Returns the facial cell2cell as a compressed father-only array.
         ssp<tAdj::element_type> ReadDistributed_BuildFacialCell2Cell();
 
         /// Run ParMetis on the facial cell2cell graph.
-        /// Returns per-cell partition assignment (indexed by local cell).
         std::vector<MPI_int> ReadDistributed_PartitionParMetis(
             const ssp<tAdj::element_type> &cell2cellFacial,
             const PartitionOptions &partitionOptions);
 
         /// Derive node and bnd partitions from cell partition.
-        /// Node partition: min cell partition over all cells referencing the node.
-        /// Bnd partition: same rank as bnd's owner cell (bnd2cell(iBnd, 0)).
         struct EntityPartitions
         {
             std::vector<MPI_int> cellPartition;
@@ -834,9 +925,11 @@ namespace DNDS::Geom
             std::vector<MPI_int> cellPartition);
 
         /// Redistribute all primary arrays to the new partition.
-        /// Frees temporary adjacencies (cell2cell, node2cell, etc.).
-        /// Sets adjPrimaryState = Adj_PointToGlobal.
         void ReadDistributed_Redistribute(
+            const EntityPartitions &partitions);
+
+        /// Legacy implementation preserved for reference/fallback.
+        void ReadDistributed_RedistributeLegacy(
             const EntityPartitions &partitions);
 
     public:
@@ -885,6 +978,7 @@ namespace DNDS::Geom
 
             DNDS_DECLARE_CONFIG(WallDistOptions)
             {
+                // clang-format off
                 DNDS_FIELD(subdivide_quad, "Subdivide quads for wall distance computation",
                            DNDS::Config::range(0));
                 DNDS_FIELD(method, "Wall distance computation method (0: brute, 1: tree)",
@@ -895,6 +989,7 @@ namespace DNDS::Geom
                            DNDS::Config::range(0.0));
                 DNDS_FIELD(verbose, "Verbosity level for wall distance computation",
                            DNDS::Config::range(0));
+                // clang-format on
             }
         };
         void BuildNodeWallDist(const std::function<bool(Geom::t_index)> &fBndIsWall, WallDistOptions options = WallDistOptions{});
@@ -979,6 +1074,7 @@ namespace DNDS::Geom
 
         DNDS_DECLARE_CONFIG(PartitionOptions)
         {
+            // clang-format off
             DNDS_FIELD(metisType, "METIS partitioning method",
                        DNDS::Config::enum_values({"KWAY", "RB"}));
             DNDS_FIELD(metisUfactor, "METIS imbalance factor (ufactor)",
@@ -988,6 +1084,7 @@ namespace DNDS::Geom
                        DNDS::Config::range(0, 1));
             DNDS_FIELD(metisNcuts, "Number of cuts for METIS to try",
                        DNDS::Config::range(1));
+            // clang-format on
         }
     };
 

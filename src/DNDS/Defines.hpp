@@ -80,6 +80,10 @@ namespace DNDS
 #    define DNDS_CONSTANT
 #endif
 
+// NOLINTBEGIN(bugprone-macro-parentheses)
+// Rationale: T and T_Self are type names used in constructor / assignment
+// operator signatures; parenthesizing a type in a parameter list is not
+// valid C++.
 #define DNDS_DEVICE_TRIVIAL_COPY_DEFINE(T, T_Self)               \
     DNDS_DEVICE_CALLABLE T() = default;                          \
     DNDS_DEVICE_CALLABLE T(const T_Self &) = default;            \
@@ -94,6 +98,7 @@ namespace DNDS
     DNDS_DEVICE_CALLABLE T &operator=(const T_Self &) = default; \
     DNDS_DEVICE_CALLABLE T &operator=(T_Self &&) = default;      \
     DNDS_DEVICE_CALLABLE ~T() = default;
+// NOLINTEND(bugprone-macro-parentheses)
 
 /***************/
 
@@ -613,7 +618,7 @@ namespace DNDS
         return false;
     }
 
-        ///@todo //TODO: overflow_assign_int64_to_32
+    ///@todo //TODO: overflow_assign_int64_to_32
 
     /// @brief Narrow #index to `int32_t` with range check; dies on overflow.
     inline int32_t checkedIndexTo32(index v)
@@ -681,8 +686,8 @@ namespace DNDS::Meta
     {
     };
 
-    template <typename _Tp>
-    inline constexpr bool is_std_array_v = is_std_array<_Tp>::value;
+    template <typename Tp>
+    inline constexpr bool is_std_array_v = is_std_array<Tp>::value;
 
     static_assert(is_std_array_v<std::array<real, 5>> && (!is_std_array_v<std::vector<real>>)); // basic test
 
@@ -720,8 +725,8 @@ namespace DNDS::Meta
                                        (max_m > 0 && max_n > 0));
     };
 
-    template <typename _Tp>
-    inline constexpr bool is_fixed_data_real_eigen_matrix_v = is_fixed_data_real_eigen_matrix<_Tp>::value;
+    template <typename Tp>
+    inline constexpr bool is_fixed_data_real_eigen_matrix_v = is_fixed_data_real_eigen_matrix<Tp>::value;
 
     static_assert(!is_fixed_data_real_eigen_matrix_v<std::array<real, 10>> &&
                       is_fixed_data_real_eigen_matrix_v<Eigen::Matrix<real, 2, 2>> &&

@@ -187,7 +187,7 @@ namespace DNDS // Array
             Array_
                 .def(
                     "Resize",
-                    [](TArray &self, index nRow, py::array_t<int, pybind11::array::c_style | pybind11::array::forcecast> rowsizes)
+                    [](TArray &self, index nRow, const py::array_t<int, pybind11::array::c_style | pybind11::array::forcecast> &rowsizes)
                     {
                         DNDS_assert_info(rowsizes.size() >= nRow, fmt::format("rowsizes is of size {}, not enough", rowsizes.size()));
                         self.Resize(nRow, [&](index iRow)
@@ -342,10 +342,8 @@ namespace DNDS // ParArrayPair
                      return new_pair;
                  });
         Pair_
-            .def("InitPair",
-                 [](TPair &self, const std::string &name, const MPIInfo &mpi)
-                 { self.InitPair(name, mpi); },
-                 py::arg("name"), py::arg("mpi"))
+            .def("InitPair", [](TPair &self, const std::string &name, const MPIInfo &mpi)
+                 { self.InitPair(name, mpi); }, py::arg("name"), py::arg("mpi"))
             .def("TransAttach", &TPair::TransAttach)
             .def("hash", &TPair::hash)
             .def("Size", &TPair::Size);
@@ -490,12 +488,18 @@ namespace DNDS // ArrayTransformer
             .def("createFatherGlobalMapping", &TArrayTransformer::createFatherGlobalMapping)
             .def("createGhostMapping", [](TArrayTransformer &self, std::vector<index> pullIndexGlobal) -> void
                  { self.createGhostMapping(pullIndexGlobal); }, py::arg("pullIndexGlobal"))
-            .def("createGhostMapping", [](TArrayTransformer &self, py::array_t<index> pullIndexGlobal)
+            .def("createGhostMapping", [](TArrayTransformer &self, const py::array_t<index> &pullIndexGlobal)
                  {
                     std::vector<index> pullIndexVec;
                     pullIndexVec.reserve(pullIndexGlobal.size());
+                    // NOLINTBEGIN(modernize-loop-convert)
+                    // Index-based loop is required here: pybind11 `array_t` iterators
+                    // yield `pybind11::handle`, not `long`. The implicit numpy-to-long
+                    // conversion is performed by `pullIndexGlobal.at(i)`, which does
+                    // not have a range-based-for equivalent.
                     for(ssize_t i = 0; i < pullIndexGlobal.size(); i++)
                         pullIndexVec.push_back(pullIndexGlobal.at(i)); // only 1D
+                    // NOLINTEND(modernize-loop-convert)
                     self.createGhostMapping(pullIndexVec); }, py::arg("pullIndexGlobal"))
             .def("createGhostMapping", [](TArrayTransformer &self, std::vector<index> pushingIndexLocal, std::vector<index> pushingStarts) -> void
                  { self.createGhostMapping(pushingIndexLocal, pushingStarts); }, py::arg("pushingIndexLocal"), py::arg("pushingStarts"));
@@ -504,7 +508,7 @@ namespace DNDS // ArrayTransformer
             .def("clearMPITypes", &TArrayTransformer::clearMPITypes)
             .def(
                 "BorrowGGIndexing",
-                [](TArrayTransformer &self, py::object other)
+                [](TArrayTransformer &self, const py::object &other)
                 {
                     auto other_father = other.attr("father");
                     auto other_father_size = other_father.attr("Size")().cast<index>();
@@ -561,7 +565,7 @@ namespace DNDS
     static constexpr auto pybind11_arrayRowsizeInstantiationList = _get_pybind11_arrayRowsizeInstantiationList();
 
     template <class T, size_t N, std::array<int, N> const &Arr, size_t... Is>
-    void __pybind11_callBindArrays_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
+    void pybind11_callBindArrays_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...> /*unused*/)
     {
         (_pybind11_Array_define_dispatch<T, Arr[Is]>(m), ...);
     }
@@ -570,12 +574,12 @@ namespace DNDS
     void pybind11_callBindArrays_rowsizes(py::module_ &m)
     {
         static constexpr auto seq = _get_pybind11_arrayRowsizeInstantiationList<offset>();
-        __pybind11_callBindArrays_rowsizes_sequence<
+        pybind11_callBindArrays_rowsizes_sequence<
             T, seq.size(), seq>(m, std::make_index_sequence<seq.size()>{});
     }
 
     template <class T, size_t N, std::array<int, N> const &Arr, size_t... Is>
-    void __pybind11_callBindParArrays_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
+    void pybind11_callBindParArrays_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...> /*unused*/)
     {
         (_pybind11_ParArray_define_dispatch<T, Arr[Is]>(m), ...);
     }
@@ -584,12 +588,12 @@ namespace DNDS
     void pybind11_callBindParArrays_rowsizes(py::module_ &m)
     {
         static constexpr auto seq = _get_pybind11_arrayRowsizeInstantiationList<offset>();
-        __pybind11_callBindParArrays_rowsizes_sequence<
+        pybind11_callBindParArrays_rowsizes_sequence<
             T, seq.size(), seq>(m, std::make_index_sequence<seq.size()>{});
     }
 
     template <class T, size_t N, std::array<int, N> const &Arr, size_t... Is>
-    void __pybind11_callBindArrayTransformers_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
+    void pybind11_callBindArrayTransformers_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...> /*unused*/)
     {
         (_pybind11_ArrayTransformer_define_dispatch<T, Arr[Is]>(m), ...);
     }
@@ -598,12 +602,12 @@ namespace DNDS
     void pybind11_callBindArrayTransformers_rowsizes(py::module_ &m)
     {
         static constexpr auto seq = _get_pybind11_arrayRowsizeInstantiationList<offset>();
-        __pybind11_callBindArrayTransformers_rowsizes_sequence<
+        pybind11_callBindArrayTransformers_rowsizes_sequence<
             T, seq.size(), seq>(m, std::make_index_sequence<seq.size()>{});
     }
 
     template <class T, size_t N, std::array<int, N> const &Arr, size_t... Is>
-    void __pybind11_callBindParArrayPairs_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...>)
+    void pybind11_callBindParArrayPairs_rowsizes_sequence(py::module_ &m, std::index_sequence<Is...> /*unused*/)
     {
         (_pybind11_ParArrayPair_define_dispatch<T, Arr[Is]>(m), ...);
     }
@@ -612,7 +616,7 @@ namespace DNDS
     void pybind11_callBindParArrayPairs_rowsizes(py::module_ &m)
     {
         static constexpr auto seq = _get_pybind11_arrayRowsizeInstantiationList<offset>();
-        __pybind11_callBindParArrayPairs_rowsizes_sequence<
+        pybind11_callBindParArrayPairs_rowsizes_sequence<
             T, seq.size(), seq>(m, std::make_index_sequence<seq.size()>{});
     }
 }
@@ -636,7 +640,7 @@ namespace DNDS
     pybind11_bind_Array_All_X_declare(7);
     // definitions are offloaded to Array_bind_offset/*.cpp
 
-    inline void pybind11_bind_Array_Offsets(py::module_ m)
+    inline void pybind11_bind_Array_Offsets(const py::module_ &m)
     {
         pybind11_bind_Array_All_X_call(1, m);
         pybind11_bind_Array_All_X_call(2, m);

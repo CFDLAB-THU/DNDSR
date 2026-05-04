@@ -23,9 +23,11 @@ namespace DNDS::Direct
 
         DNDS_DECLARE_CONFIG(DirectPrecControl)
         {
+            // clang-format off
             DNDS_FIELD(useDirectPrec, "Enable direct preconditioner");
             DNDS_FIELD(iluCode,       "ILU fill level: 0=no fill, -1=complete");
             DNDS_FIELD(orderingCode,  "Ordering: INT32_MIN=auto, 0=natural, 1=metis, 2=MMD");
+            // clang-format on
         }
 
         [[nodiscard]] int getOrderingCode() const
@@ -57,7 +59,7 @@ namespace DNDS::Direct
 
         std::vector<index> localPartStarts;
 
-        SerialSymLUStructure(const MPIInfo &nMpi, index nN) : mpi(nMpi), N(nN) {};
+        SerialSymLUStructure(const MPIInfo &nMpi, index nN) : mpi(nMpi), N(nN){};
 
         [[nodiscard]] index Num() const { return N; }
 
@@ -313,7 +315,7 @@ namespace DNDS::Direct
             const auto &localPartStarts = symLU->localPartStarts;
             int nParts = localPartStarts.size() - 1;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (int iPart = 0; iPart < nParts; iPart++)
                 for (index iP = localPartStarts.at(iPart); iP < localPartStarts.at(iPart + 1); iP++)
@@ -470,7 +472,7 @@ namespace DNDS::Direct
             auto dThis = static_cast<Derived *>(this);
             DNDS_assert(!isDecomposed);
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (index iCell = 0; iCell < symLU->Num(); iCell++)
             {
@@ -489,7 +491,7 @@ namespace DNDS::Direct
             const auto &localPartStarts = symLU->localPartStarts;
             int nParts = localPartStarts.size() - 1;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (int iPart = 0; iPart < nParts; iPart++)
                 for (index iP = localPartStarts.at(iPart); iP < localPartStarts.at(iPart + 1); iP++)
@@ -504,7 +506,7 @@ namespace DNDS::Direct
                     }
                 }
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (int iPart = 0; iPart < nParts; iPart++)
                 for (index iP = localPartStarts.at(iPart + 1) - 1; iP >= localPartStarts.at(iPart); iP--)
@@ -541,8 +543,8 @@ namespace DNDS::Direct
 
         void InPlaceDecompose()
         {
-            //todo: add pseudo code
-            //todo: make multithread
+            // todo: add pseudo code
+            // todo: make multithread
             auto dThis = static_cast<Derived *>(this);
             std::vector<tComponent> diagNoInv(symLU->Num());
             for (index iP = 0; iP < symLU->Num(); iP++)
@@ -600,7 +602,7 @@ namespace DNDS::Direct
             auto dThis = static_cast<Derived *>(this);
             DNDS_assert(!isDecomposed); // being before the decomposition
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (index iCell = 0; iCell < symLU->Num(); iCell++)
             {
@@ -609,7 +611,7 @@ namespace DNDS::Direct
                     result[iCell] += dThis->GetLower(iCell, ij) * x[symLU->lowerTriStructure[iCell][ij]];
             }
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (index iCell = 0; iCell < symLU->Num(); iCell++)
             {
@@ -625,7 +627,7 @@ namespace DNDS::Direct
             const auto &localPartStarts = symLU->localPartStarts;
             int nParts = localPartStarts.size() - 1;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (int iPart = 0; iPart < nParts; iPart++)
                 for (index iP = localPartStarts.at(iPart); iP < localPartStarts.at(iPart + 1); iP++)
@@ -640,14 +642,14 @@ namespace DNDS::Direct
                     }
                 }
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (index i = 0; i < symLU->Num(); i++)
             {
                 result[i] = dThis->GetDiag(i) * result[i];
             }
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (int iPart = 0; iPart < nParts; iPart++)
                 for (index iP = localPartStarts.at(iPart + 1) - 1; iP >= localPartStarts.at(iPart); iP--)

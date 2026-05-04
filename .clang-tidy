@@ -1,0 +1,178 @@
+# DNDSR clang-tidy configuration.
+#
+# Single source of truth for BOTH command-line clang-tidy runs
+# (via scripts/run_clang_tidy.py) AND clangd's in-editor tidy
+# diagnostics. The project-root .clangd only adds CompileFlags
+# tweaks and no longer carries its own ClangTidy check list;
+# clangd discovers this file automatically.
+#
+# Notes on check selection:
+#   - "Warning: clang-analyzer-optin.cplusplus.VirtualCall is
+#     important and should be addressed!" -- historical note kept
+#     from the original config.
+#   - The disables mirror (and extend) the list previously carried
+#     in .clangd's ClangTidy.Remove so CLI and IDE agree.
+#   - WarningsAsErrors is intentionally empty: tidy runs are
+#     advisory reports, not build gates. If we later want a CI
+#     gate, apply it as an overlay config on top of this file.
+#   - CAUTION: the Checks: block uses YAML folded scalar (>) and
+#     therefore cannot contain inline '#' comments -- '#' is only a
+#     comment at the start of a line, and not inside a folded scalar.
+#     All disable rationales are kept in the table below instead.
+#
+# Disable rationale (kept out of the Checks: block because YAML
+# folded scalars eat '#' as literal text):
+#
+#   -clang-diagnostic-unused-command-line-argument
+#     Extra flags in compile_commands.json for the tidy pass.
+#   -modernize-use-trailing-return-type     Project style.
+#   -modernize-type-traits                  Churn without benefit.
+#   -modernize-avoid-c-arrays               MPI buffers, templates.
+#   -readability-braces-around-statements   Project style.
+#   -readability-identifier-length          Too noisy on math symbols.
+#   -readability-implicit-bool-conversion   Noisy on index/size_t.
+#   -readability-else-after-return          Project style.
+#   -readability-isolate-declaration        Project style.
+#   -readability-magic-numbers              Handled case-by-case.
+#   -readability-math-missing-parentheses   Eigen expressions.
+#   -readability-convert-member-functions-to-static
+#                                           Virtual dispatch patterns.
+#   -readability-avoid-nested-conditional-operator
+#                                           Short ternaries OK.
+#   -bugprone-easily-swappable-parameters   Dimension-tuple APIs.
+#   -bugprone-casting-through-void          Needed for MPI types.
+#   -performance-avoid-endl                 Style-only.
+#   -performance-enum-size                  Negligible in practice.
+#   -cppcoreguidelines-missing-std-forward  T&& functor params are
+#                                           called in-place and
+#                                           must not be moved from;
+#                                           false positives dominate.
+#   -cppcoreguidelines-non-private-member-variables-in-classes
+#                                           Project uses struct-of-
+#                                           fields as data bags
+#                                           pervasively.
+#   -cppcoreguidelines-avoid-magic-numbers  Duplicate of the already-
+#                                           disabled readability-
+#                                           magic-numbers.
+#   -cppcoreguidelines-pro-bounds-pointer-arithmetic
+#   -cppcoreguidelines-pro-bounds-array-to-pointer-decay
+#   -cppcoreguidelines-pro-bounds-constant-array-index
+#                                           CSR storage and MPI byte
+#                                           buffers are fundamentally
+#                                           pointer arithmetic.
+#   -cppcoreguidelines-pro-type-vararg      MPI / printf-family APIs.
+#   -cppcoreguidelines-pro-type-reinterpret-cast
+#                                           MPI byte buffers,
+#                                           serialization.
+#   -cppcoreguidelines-pro-type-const-cast  C-API interop (MPI, CGNS,
+#                                           HDF5).
+#   -readability-redundant-access-specifiers
+#                                           Repeated public: is a
+#                                           project convention for
+#                                           large classes.
+#   -modernize-use-transparent-functors     Eigen expression
+#                                           templates break with
+#                                           std::less<> etc.
+#   -cppcoreguidelines-c-copy-assignment-signature
+#                                           Duplicate of
+#                                           misc-unconventional-assign-
+#                                           operator, and we already
+#                                           follow the canonical form.
+#   -cppcoreguidelines-macro-usage          All 41 macros in DNDS
+#                                           require __FILE__/__LINE__
+#                                           capture, token pasting,
+#                                           code generation, or
+#                                           define-before-include
+#                                           behaviour that constexpr
+#                                           template functions cannot
+#                                           express. Examples:
+#                                             DNDS_assert*, DNDS_check_throw* (need line info)
+#                                             DNDS_DECLARE_CONFIG, DNDS_FIELD, DNDS_json_to_config (code gen)
+#                                             DNDS_NLOHMANN_DEFINE_* (nlohmann_json DSL)
+#                                             pybind11_bind_Array_All_X_* (name-based pybind11 generator)
+#                                             DNDS_DEVICE_TRIVIAL_COPY_DEFINE* (declare class members)
+#                                             DNDS_ARRAY_OP_SWITCHER (device/backend dispatch)
+#                                             DNDS_likely / DNDS_unlikely / DNDS_FORCEINLINE (builtins/attrs)
+#                                             DISABLE_WARNING (_Pragma wrappers)
+#                                             MPICH_SKIP_MPICXX, OMPI_SKIP_MPICXX,
+#                                             EIGEN_DONT_PARALLELIZE (define-before-include)
+#                                             DNDS_VERSION_STRING (from CMake configure_file).
+#   -cppcoreguidelines-avoid-non-const-global-variables
+#                                           Every DNDS global mutable
+#                                           is intentional:
+#                                             logStream       — runtime log redirection
+#                                             useCout         — runtime switch
+#                                             outputDelim     — global config
+#                                             HDF_mutex       — library-wide mutex (must be mutable)
+#                                             isDebugging     — runtime debugger-attach probe
+#                                             EigenPCH_tag,
+#                                             ExprtkPCH_tag   — PCH presence probes
+#                                           Moving any of these to
+#                                           thread_local, singletons,
+#                                           or class members is out of
+#                                           scope for a tidy pass.
+#
+# Notes on ExtraArgs:
+#   - -UDNDS_USE_OMP: skip #include <omp.h> which requires
+#     libomp-<ver>-dev matched to the tidy/clangd clang version.
+#   - -Wno-unknown-warning-option: our Warnings.hpp uses GCC-only
+#     warning names inside GCC pragmas (e.g. -Wclass-memaccess);
+#     clang warns on these and -Werror would turn them into errors.
+#   - -Wno-unused-command-line-argument: compile_commands.json
+#     sometimes carries flags irrelevant for the tidy pass.
+
+Checks: >
+  modernize-*,
+  readability-*,
+  bugprone-*,
+  performance-*,
+  cppcoreguidelines-*,
+  google-build-using-namespace,
+  mpi-*,
+  openmp-*,
+  -clang-diagnostic-unused-command-line-argument,
+  -modernize-use-trailing-return-type,
+  -modernize-type-traits,
+  -modernize-avoid-c-arrays,
+  -readability-braces-around-statements,
+  -readability-identifier-length,
+  -readability-implicit-bool-conversion,
+  -readability-else-after-return,
+  -readability-isolate-declaration,
+  -readability-magic-numbers,
+  -readability-math-missing-parentheses,
+  -readability-convert-member-functions-to-static,
+  -readability-avoid-nested-conditional-operator,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-casting-through-void,
+  -performance-avoid-endl,
+  -performance-enum-size,
+  -cppcoreguidelines-missing-std-forward,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-type-const-cast,
+  -readability-redundant-access-specifiers,
+  -modernize-use-transparent-functors,
+  -cppcoreguidelines-c-copy-assignment-signature,
+  -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+
+WarningsAsErrors: ''
+
+HeaderFilterRegex: '.*/DNDSR/(src|app|test/cpp)/.*'
+
+ExtraArgs:
+  - -UDNDS_USE_OMP
+  - -Wno-unknown-warning-option
+  - -Wno-unused-command-line-argument
+
+CheckOptions:
+  - key: readability-function-cognitive-complexity.Threshold
+    value: 125
+
+FormatStyle: file

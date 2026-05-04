@@ -1,0 +1,36 @@
+# DNDSR clang-tidy "fix" profile.
+#
+# A narrow, low-risk subset of checks intended to be run with
+# --fix / --fix-errors to make safe mechanical improvements in
+# bulk. Use via:
+#
+#     scripts/run_clang_tidy.py --fix [scope ...]
+#
+# Anything that requires judgement belongs in .clang-tidy instead,
+# not here.
+
+Checks: >
+  -*,
+  modernize-use-nodiscard,
+  modernize-use-equals-default,
+  modernize-use-using,
+  modernize-concat-nested-namespaces,
+  modernize-use-auto,
+  readability-make-member-function-const,
+  readability-uppercase-literal-suffix,
+  readability-qualified-auto,
+
+WarningsAsErrors: ''
+
+HeaderFilterRegex: '.*/DNDSR/(src|app|test/cpp)/.*'
+
+ExtraArgs:
+  - -UDNDS_USE_OMP
+  - -Wno-unknown-warning-option
+  - -Wno-unused-command-line-argument
+
+CheckOptions:
+  - key: readability-function-cognitive-complexity.Threshold
+    value: 125
+
+FormatStyle: file

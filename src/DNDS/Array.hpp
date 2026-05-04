@@ -104,7 +104,7 @@ namespace DNDS
             t_Layout::rm,
             t_Layout::sizeof_T,
             t_Layout::s_T,
-            t_Layout::_GetDataLayout,
+            t_Layout::ComputeDataLayout,
             t_Layout::_dataLayout,
             t_Layout::isCSR;
         using t_Layout::GetArrayName,
@@ -570,7 +570,7 @@ namespace DNDS
         /// row size into account, not just the stride). Works for every layout.
         /// @param iRow Row index in `[0, Size())`.
         /// @param iCol Column index in `[0, RowSize(iRow))`.
-        const T &at(index iRow, rowsize iCol) const
+        [[nodiscard]] const T &at(index iRow, rowsize iCol) const
         {
             DNDS_assert_info(iRow < _size && iRow >= 0,
                              fmt::format(
@@ -685,7 +685,7 @@ namespace DNDS
 
         /// @brief Total number of `T` elements currently stored in the flat buffer.
         /// @details For CSR, requires the array to be compressed.
-        size_t DataSize() const
+        [[nodiscard]] size_t DataSize() const
         {
             if (this->Size() == 0)
                 return 0;
@@ -695,7 +695,7 @@ namespace DNDS
         }
 
         /// @brief Flat buffer size in bytes (= `DataSize() * sizeof(T)`).
-        size_t DataSizeBytes() const
+        [[nodiscard]] size_t DataSizeBytes() const
         {
             return this->DataSize() * sizeof_T;
         }
@@ -732,7 +732,7 @@ namespace DNDS
         /// @details Sums the flat data buffer, `_pRowStart` (if any), and
         /// `_pRowSizes` (if any). Approximate because shared-ownership of row
         /// structures is not deduplicated.
-        size_t FullSizeBytes() const
+        [[nodiscard]] size_t FullSizeBytes() const
         {
             size_t b = this->DataSize() * sizeof_T;
             if (_pRowStart)
@@ -747,7 +747,7 @@ namespace DNDS
         /// equality diagnostics; not guaranteed cryptographically strong.
         std::size_t hash()
         {
-            std::size_t hashData;
+            std::size_t hashData = 0;
             if constexpr (_dataLayout == CSR)
             {
                 if (IfCompressed())
@@ -823,6 +823,13 @@ namespace DNDS
             this->clone(R);
         }
 
+        /// @brief Move constructor: shallow transfer of storage.
+        /// All members (host_device_vector, shared_ptrs, PODs) have correct
+        /// move semantics. Source is left in a valid empty state.
+        Array(self_type &&) noexcept = default;
+        self_type &operator=(self_type &&) noexcept = default;
+        ~Array() = default;
+
         /// @brief Swap the storage of two arrays in-place.
         /// @details Both arrays must already have identical logical size and
         /// flat-buffer size. Swaps only what the current layout uses (flat buffer
@@ -854,7 +861,7 @@ namespace DNDS
             }
         }
 
-        void __WriteSerializerData(const Serializer::SerializerBaseSSP &serializerP, Serializer::ArrayGlobalOffset offset)
+        void WriteSerializerData(const Serializer::SerializerBaseSSP &serializerP, Serializer::ArrayGlobalOffset offset)
         {
             auto treatAsBytes = [&]()
             { serializerP->WriteUint8Array("data", (uint8_t *)_data.data(), _data.size() * sizeof_T, offset * sizeof_T); };
@@ -876,7 +883,7 @@ namespace DNDS
                 treatAsBytes();
         }
 
-        void __ReadSerializerData(const Serializer::SerializerBaseSSP &serializerP, Serializer::ArrayGlobalOffset &offset)
+        void ReadSerializerData(const Serializer::SerializerBaseSSP &serializerP, Serializer::ArrayGlobalOffset &offset)
         {
             auto treatAsBytes = [&]()
             {
@@ -982,7 +989,7 @@ namespace DNDS
             {
             }
             // doing data
-            this->__WriteSerializerData(serializerP, offset);
+            this->WriteSerializerData(serializerP, offset);
 
             serializerP->GoToPath(cwd);
         }
@@ -1067,10 +1074,10 @@ namespace DNDS
                 _row_size_dynamic = rmR; // TODO: fix this! need a _row_max_dynamic ?
 
             // --- Phase 2: Read structural data and resolve dataOffset ---
-            __ReadSerializerStructuralAndResolveDataOffset(serializerP, offset, dataOffset);
+            ReadSerializerStructuralAndResolveDataOffset(serializerP, offset, dataOffset);
 
             // --- Phase 3: Read flat data and propagate offsets ---
-            __ReadSerializerDataAndPropagateOffset(serializerP, offset, dataOffset);
+            ReadSerializerDataAndPropagateOffset(serializerP, offset, dataOffset);
             // TODO: check data validity
 
             serializerP->GoToPath(cwd);
@@ -1127,7 +1134,7 @@ namespace DNDS
         ///                     dataOffset could be derived.
         /// @param dataOffset   [out] Element-level data offset resolved from structural
         ///                     data (CSR: from global pRowStart; non-CSR: offset * DataStride).
-        void __ReadSerializerStructuralAndResolveDataOffset(
+        void ReadSerializerStructuralAndResolveDataOffset(
             const Serializer::SerializerBaseSSP &serializerP,
             Serializer::ArrayGlobalOffset &offset,
             Serializer::ArrayGlobalOffset &dataOffset)
@@ -1172,8 +1179,8 @@ namespace DNDS
         /// @param serializerP  Serializer instance (already at the array's sub-path).
         /// @param offset       [in/out] Row-level offset; updated from dataOffset for non-CSR.
         /// @param dataOffset   [in/out] Element-level data offset; may be updated from
-        ///                     Unknown to Parts-resolved by __ReadSerializerData.
-        void __ReadSerializerDataAndPropagateOffset(
+        ///                     Unknown to Parts-resolved by ReadSerializerData.
+        void ReadSerializerDataAndPropagateOffset(
             const Serializer::SerializerBaseSSP &serializerP,
             Serializer::ArrayGlobalOffset &offset,
             Serializer::ArrayGlobalOffset &dataOffset)
@@ -1181,7 +1188,7 @@ namespace DNDS
             Serializer::ArrayGlobalOffset dataReadOffset = Serializer::ArrayGlobalOffset_Unknown;
             if (dataOffset.isDist())
                 dataReadOffset = dataOffset;
-            this->__ReadSerializerData(serializerP, dataReadOffset);
+            this->ReadSerializerData(serializerP, dataReadOffset);
             dataOffset = dataReadOffset;
             if constexpr (_dataLayout != CSR)
             {

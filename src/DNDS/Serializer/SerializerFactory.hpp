@@ -9,6 +9,8 @@
 #include "JsonUtil.hpp"
 #include "DNDS/Config/ConfigParam.hpp"
 
+#include <utility>
+
 namespace DNDS::Serializer
 {
     /**
@@ -37,10 +39,11 @@ namespace DNDS::Serializer
 
         SerializerFactory() = default;
         /// @brief Construct with a specific backend name; other fields stay at defaults.
-        SerializerFactory(const std::string &_type) : type(_type) {}
+        SerializerFactory(std::string _type) : type(std::move(_type)) {}
 
         DNDS_DECLARE_CONFIG(SerializerFactory)
         {
+            // clang-format off
             DNDS_FIELD(type,                    "Serializer backend: \"JSON\" or \"H5\"",
                        DNDS::Config::enum_values({"JSON", "H5"}));
             DNDS_FIELD(hdfDeflateLevel,         "HDF5 deflate compression level",
@@ -52,11 +55,12 @@ namespace DNDS::Serializer
             DNDS_FIELD(jsonBinaryDeflateLevel,  "JSON binary deflate level",
                        DNDS::Config::range(0, 9));
             DNDS_FIELD(jsonUseCodecOnUInt8,     "Apply codec on uint8 arrays in JSON");
+            // clang-format on
         }
 
         /// @brief Instantiate the selected serializer and apply its tunables.
         /// @param mpi MPI context (used only by the H5 backend).
-        SerializerBaseSSP BuildSerializer(const MPIInfo &mpi)
+        [[nodiscard]] SerializerBaseSSP BuildSerializer(const MPIInfo &mpi) const
         {
             SerializerBaseSSP serializerP;
             if (type == "JSON")
@@ -89,7 +93,7 @@ namespace DNDS::Serializer
          * @return Tuple `(finalFilePath, displayPath)` -- the display path is
          *         the JSON dir or the H5 file, depending on backend.
          */
-        std::tuple<std::string, std::string> ModifyFilePath(std::string fname, const MPIInfo &mpi, std::string rank_part_fmt = "%06d", bool read = false)
+        [[nodiscard]] std::tuple<std::string, std::string> ModifyFilePath(std::string fname, const MPIInfo &mpi, const std::string &rank_part_fmt = "%06d", bool read = false) const
         {
             if (type == "JSON")
             {
@@ -97,9 +101,9 @@ namespace DNDS::Serializer
                 outPath = {fname + ".dir"};
                 if (!read)
                     std::filesystem::create_directories(outPath);
-                char BUF[512];
-                std::sprintf(BUF, rank_part_fmt.c_str(), mpi.rank);
-                fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
+                std::array<char, 512> BUF{};
+                std::sprintf(BUF.data(), rank_part_fmt.c_str(), mpi.rank);
+                fname = getStringForcePath(outPath / (std::string(BUF.data()) + ".json"));
                 return std::make_tuple(fname, getStringForcePath(outPath));
             }
             else if (type == "H5")

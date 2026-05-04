@@ -177,18 +177,26 @@ namespace DNDS::Serializer
 
     struct TraverseData
     {
+        // TraverseData is a short-lived per-call aggregate passed through the
+        // HDF5 H5Literate callback; the reference is intentional so that the
+        // callback mutates the caller's H5Contents directly.
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
         H5Contents &contents;
         std::string current_path;
         bool coll_on_meta;
-        std::string get_indent() const
+        [[nodiscard]] std::string get_indent() const
         {
+            // Brace-init `{n, ' '}` is ambiguous with std::string's
+            // initializer_list<char> ctor and triggers -Wnarrowing; keep
+            // the explicit std::string(n, ch) form.
+            // NOLINTNEXTLINE(modernize-return-braced-init-list)
             return std::string(std::count(current_path.begin(), current_path.end(), '/') * 2, ' ');
         }
     };
 
     static herr_t link_iterate_cb(hid_t group_id, const char *name, const H5L_info_t *info, void *op_data)
     {
-        herr_t herr;
+        herr_t herr = 0;
         auto *data = static_cast<TraverseData *>(op_data);
         bool coll_on_meta = data->coll_on_meta;
         std::string full_name = data->current_path + "/" + name;
@@ -196,7 +204,7 @@ namespace DNDS::Serializer
         // std::cout << "name is " << name << std::endl;
         if (info->type == H5L_TYPE_HARD)
         {
-            data->contents.groups.push_back(name);
+            data->contents.groups.emplace_back(name);
             return 0;
             //! now it seems obj_info is not correctly retrieved with type=Unknown
             //! TODO: fix this and get actual object type
@@ -218,13 +226,13 @@ namespace DNDS::Serializer
                 {
                 case H5O_TYPE_GROUP:
                 {
-                    data->contents.groups.push_back(name);
+                    data->contents.groups.emplace_back(name);
                     // std::cout << data->get_indent() << "Group: " << full_name << std::endl;
                     break;
                 }
                 case H5O_TYPE_DATASET:
                 {
-                    data->contents.datasets.push_back(name);
+                    data->contents.datasets.emplace_back(name);
                     // std::cout << data->get_indent() << "Dataset: " << full_name << std::endl;
                     break;
                 }
@@ -251,8 +259,8 @@ namespace DNDS::Serializer
     // Callback for H5Aiterate (iterating attributes)
     static herr_t attribute_iterate_cb(hid_t obj_id, const char *attr_name, const H5A_info_t *info, void *op_data)
     {
-        TraverseData *data = static_cast<TraverseData *>(op_data);
-        data->contents.attributes.push_back(attr_name);
+        auto *data = static_cast<TraverseData *>(op_data);
+        data->contents.attributes.emplace_back(attr_name);
         // std::string full_attr_name = data->current_path + "@" + attr_name; // Common convention for attribute paths
         // std::cout << data->get_indent() << "  Attribute: " << full_attr_name << std::endl; // Indent more for attributes
         return 0; // Continue iteration
@@ -264,8 +272,8 @@ namespace DNDS::Serializer
         H5Contents contents;
         TraverseData data{contents, cP, collectiveMetadataRW};
         herr_t herr{0};
-        herr = H5Aiterate(group_id, H5_INDEX_NAME, H5_ITER_INC, NULL, attribute_iterate_cb, &data), H5CHECK_Iter;
-        herr = H5Literate(group_id, H5_INDEX_NAME, H5_ITER_INC, NULL, link_iterate_cb, &data), H5CHECK_Iter;
+        herr = H5Aiterate(group_id, H5_INDEX_NAME, H5_ITER_INC, nullptr, attribute_iterate_cb, &data), H5CHECK_Iter;
+        herr = H5Literate(group_id, H5_INDEX_NAME, H5_ITER_INC, nullptr, link_iterate_cb, &data), H5CHECK_Iter;
         H5Gclose(group_id), H5CHECK_Close; // don't forget this
         std::set<std::string> ret;
         for (auto &v : contents.attributes)
@@ -297,6 +305,10 @@ namespace DNDS::Serializer
         else
             static_assert(std::is_same_v<T, real>);
 
+        // `vV` is addressed via `&vV` in the non-string `if constexpr` branch
+        // below; clang-tidy's check misses the template instantiation for
+        // `T != std::string`.
+        // NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
         T vV = v;
 
         if constexpr (!std::is_same_v<T, std::string>)
@@ -363,7 +375,7 @@ namespace DNDS::Serializer
         std::array<hsize_t, 2> ranksFullUnlim{chunksize > 0 ? H5S_UNLIMITED : hsize_t(nGlobal), hsize_t(dim2)};
         std::array<hsize_t, 2> offset{hsize_t(nOffset), 0};
         std::array<hsize_t, 2> siz{hsize_t(nLocal), hsize_t(dim2)};
-        hid_t memSpace = H5Screate_simple(rank, siz.data(), NULL);
+        hid_t memSpace = H5Screate_simple(rank, siz.data(), nullptr);
         hid_t fileSpace = H5Screate_simple(rank, ranksFull.data(), ranksFullUnlim.data());
         std::array<hsize_t, 2> chunk_dims{hsize_t(chunksize > 0 ? chunksize : 0), dim2 >= 0 ? hsize_t(dim2) : 0};
         hid_t dcpl_id = H5Pcreate(H5P_DATASET_CREATE);
@@ -378,7 +390,7 @@ namespace DNDS::Serializer
         DNDS_assert_info(H5I_INVALID_HID != dset_id, "dataset create failed");
         herr = H5Sclose(fileSpace);
         fileSpace = H5Dget_space(dset_id);
-        herr |= H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), NULL, siz.data(), NULL);
+        herr |= H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), nullptr, siz.data(), nullptr);
         herr |= H5Dwrite(dset_id, mem_dataType, memSpace, fileSpace, dxpl_id, buf);
         herr |= H5Dclose(dset_id);
         herr |= H5Pclose(dcpl_id);
@@ -526,6 +538,10 @@ namespace DNDS::Serializer
         else
             static_assert(std::is_same_v<T, real>);
 
+        // `vV` is addressed via `&vV` in the non-string `if constexpr` branch
+        // below; clang-tidy's check misses the template instantiation for
+        // `T != std::string`.
+        // NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
         T vV = v;
 
         if constexpr (!std::is_same_v<T, std::string>)
@@ -568,6 +584,10 @@ namespace DNDS::Serializer
             {
                 // Variable-length string: HDF5 will allocate memory
                 char *attr_value = nullptr;
+                // H5Aread wants `void *buf`; the multi-level-implicit-pointer
+                // check requires an explicit reinterpret to silence the
+                // `char ** -> void *` conversion inside the argument parens.
+                // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
                 herr = H5Aread(attr_id, dtype_id, &attr_value), H5CHECK_Set;
                 // std::cout << "Read Attribute (Variable-Length): " << attr_value << "\n";
                 v = attr_value;            // copy as null-terminated string
@@ -636,7 +656,7 @@ namespace DNDS::Serializer
         DNDS_assert_info(fileSpace >= 0, fmt::format("dataset [{}] filespace open failed", name));
         int ndims = H5Sget_simple_extent_ndims(fileSpace);
         DNDS_assert_info(ndims == 1 || ndims == 2, fmt::format("dataset [{}] not having 1 or 2 dims!", name));
-        std::array<hsize_t, 2> sizes;
+        std::array<hsize_t, 2> sizes{};
         ndims = H5Sget_simple_extent_dims(fileSpace, sizes.data(), nullptr);
         if (ndims == 2)
             dim2 = sizes[1];
@@ -649,9 +669,9 @@ namespace DNDS::Serializer
             int rank = dim2 >= 0 ? 2 : 1;
             std::array<hsize_t, 2> offset{hsize_t(nOffset), 0};
             std::array<hsize_t, 2> siz{hsize_t(nLocal), hsize_t(dim2)};
-            hid_t memSpace = H5Screate_simple(rank, siz.data(), NULL);
+            hid_t memSpace = H5Screate_simple(rank, siz.data(), nullptr);
             DNDS_assert(memSpace > 0);
-            herr = H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), NULL, siz.data(), NULL), H5CHECK_Set;
+            herr = H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), nullptr, siz.data(), nullptr), H5CHECK_Set;
             herr = H5Dread(dset_id, mem_dataType, memSpace, fileSpace, dxpl_id, buf), H5CHECK_Set;
             herr = H5Sclose(memSpace), H5CHECK_Close;
         }
@@ -859,7 +879,7 @@ namespace DNDS::Serializer
     void SerializerH5::ReadSharedIndexVector(const std::string &name, ssp<host_device_vector<index>> &v, ArrayGlobalOffset &offset)
     {
         using tValue = host_device_vector<index>;
-        herr_t herr;
+        herr_t herr = 0;
         std::string refPath;
         hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
         htri_t exists_ref = H5Aexists(group_id, (name + "::ref").c_str());
@@ -875,14 +895,16 @@ namespace DNDS::Serializer
 
         if (pth_2_ssp.count(refPath))
         {
-            v = *((ssp<tValue> *)(pth_2_ssp[refPath])); // ! reform this (and in json counterpart) to use reinterpret_cast or use STL's tools
+            // Dedup registry stores type-erased `ssp<tValue> *`; caller
+            // guarantees the stored type matches tValue.
+            v = *reinterpret_cast<ssp<tValue> *>(pth_2_ssp[refPath]);
         }
         else
         {
             v = std::make_shared<tValue>();
             pth_2_ssp[refPath] = &v;
 
-            size_t size;
+            size_t size = 0;
             index dummy{};
             ReadDataVector<index>(refPath, nullptr, size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
             v->resize(size);
@@ -893,7 +915,7 @@ namespace DNDS::Serializer
     void SerializerH5::ReadSharedRowsizeVector(const std::string &name, ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset &offset)
     {
         using tValue = host_device_vector<rowsize>;
-        herr_t herr;
+        herr_t herr = 0;
         std::string refPath;
         hid_t group_id = GetGroupOfFileIfExist(h5file, reading, cP, collectiveMetadataRW);
         htri_t exists_ref = H5Aexists(group_id, (name + "::ref").c_str());
@@ -909,14 +931,16 @@ namespace DNDS::Serializer
 
         if (pth_2_ssp.count(refPath))
         {
-            v = *((ssp<tValue> *)(pth_2_ssp[refPath])); // ! reform this (and in json counterpart) to use reinterpret_cast or use STL's tools
+            // Dedup registry stores type-erased `ssp<tValue> *`; caller
+            // guarantees the stored type matches tValue.
+            v = *reinterpret_cast<ssp<tValue> *>(pth_2_ssp[refPath]);
         }
         else
         {
             v = std::make_shared<tValue>();
             pth_2_ssp[refPath] = &v;
 
-            size_t size;
+            size_t size = 0;
             rowsize dummy{};
             ReadDataVector<rowsize>(refPath, nullptr, size, offset, h5file, reading, "/", mpi, collectiveMetadataRW, collectiveDataRW);
             v->resize(size);

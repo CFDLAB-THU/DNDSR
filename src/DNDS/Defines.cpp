@@ -10,6 +10,7 @@
 // #endif
 #include <codecvt>
 #include <boost/stacktrace.hpp>
+#include <utility>
 // #include <cpptrace.hpp>
 
 #ifdef DNDS_UNIX_LIKE
@@ -50,7 +51,7 @@ namespace DNDS
 
     bool logIsTTY() { return ostreamIsTTY(*logStream); }
 
-    void setLogStream(ssp<std::ostream> nstream) { useCout = false, logStream = nstream; }
+    void setLogStream(ssp<std::ostream> nstream) { useCout = false, logStream = std::move(nstream); }
 
     void setLogStreamCout() { useCout = true, logStream.reset(); }
 
@@ -63,7 +64,9 @@ namespace DNDS
             return csbi.srWindow.Right - csbi.srWindow.Left + 1;
         }
 #else
-        struct winsize w;
+        struct winsize w
+        {
+        };
         if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0)
         {
             return w.ws_col;
@@ -172,7 +175,7 @@ namespace DNDS
     std::string GetSetVersionName(const std::string &ver)
     {
         static std::string ver_name = "UNKNOWN";
-        if (ver.length())
+        if (!ver.empty())
             ver_name = ver;
         return ver_name;
     }

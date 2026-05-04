@@ -139,10 +139,10 @@ namespace DNDS
     /// Checks registered via `config.check_ctx()` receive it as a second argument.
     struct ConfigContext
     {
-        int nVars = -1;       ///< Number of solution variables (model-dependent).
-        int dim = -1;         ///< Spatial dimension (2 or 3).
-        int gDim = -1;        ///< Geometric dimension (2 or 3).
-        int modelCode = -1;   ///< Integer code identifying the EulerModel enum value.
+        int nVars = -1;     ///< Number of solution variables (model-dependent).
+        int dim = -1;       ///< Spatial dimension (2 or 3).
+        int gDim = -1;      ///< Geometric dimension (2 or 3).
+        int modelCode = -1; ///< Integer code identifying the EulerModel enum value.
     };
 
     /// @brief Descriptor for a single configuration field.
@@ -159,7 +159,7 @@ namespace DNDS
     {
         std::string name;        ///< JSON key name (may differ from C++ member name for aliased fields).
         std::string description; ///< Human-readable description, used in JSON Schema and generated docs.
-        ConfigTypeTag typeTag;   ///< JSON Schema type category.
+        ConfigTypeTag typeTag{}; ///< JSON Schema type category (zero-init = `Bool`; always overwritten by the builder).
 
         /// @brief Read this field from a JSON object into a struct instance.
         /// @param j   The JSON object to read from (must contain `name` as a key).

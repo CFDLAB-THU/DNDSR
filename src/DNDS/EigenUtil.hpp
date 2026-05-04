@@ -55,10 +55,14 @@ namespace Eigen
      * Use this type (or its @ref VectorFMTSafe / @ref RowVectorFMTSafe aliases) wherever
      * Eigen objects need to pass through `fmt::format`.
      */
-    template <class T, int M, int N, int options = AutoAlign | ((M == 1 && N != 1) ? Eigen ::RowMajor : !(M == 1 && N != 1) ? Eigen ::ColMajor
-                                                                                                                            : Eigen ::ColMajor),
+    // NOLINTBEGIN(bugprone-branch-clone): both non-row-vector arms of the
+    // options ternary intentionally select ColMajor. Keeping the two arms
+    // explicit documents the intent at the declaration site.
+    template <class T, int M, int N, int options = AutoAlign | ((M == 1 && N != 1) ? Eigen ::RowMajor : M != 1 || N == 1 ? Eigen ::ColMajor
+                                                                                                                         : Eigen ::ColMajor),
               int max_m = M, int max_n = N>
     struct MatrixFMTSafe : public Matrix<T, M, N, options, max_m, max_n>
+    // NOLINTEND(bugprone-branch-clone)
     {
         using Base = Matrix<T, M, N, options, max_m, max_n>;
         using Base::Base;
@@ -275,7 +279,7 @@ namespace DNDS
             h_data.resize(this->size());
         }
 
-        rowsize rows() const
+        [[nodiscard]] rowsize rows() const
         {
             if constexpr (M >= 0)
                 return M;
@@ -283,7 +287,7 @@ namespace DNDS
                 return M_dynamic;
         }
 
-        rowsize cols() const
+        [[nodiscard]] rowsize cols() const
         {
             if constexpr (N >= 0)
                 return N;
@@ -291,7 +295,7 @@ namespace DNDS
                 return N_dynamic;
         }
 
-        rowsize size() const
+        [[nodiscard]] rowsize size() const
         {
             return rows() * cols();
         }

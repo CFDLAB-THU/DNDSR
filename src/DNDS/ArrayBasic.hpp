@@ -16,12 +16,12 @@ namespace DNDS
      */
     enum DataLayout
     {
-        ErrorLayout,        ///< Invalid combination of template parameters.
-        TABLE_StaticFixed,  ///< Fixed row width, known at compile time.
-        TABLE_Fixed,        ///< Fixed row width, set at runtime (uniform across rows).
-        TABLE_Max,          ///< Padded variable rows; max width set at runtime.
-        TABLE_StaticMax,    ///< Padded variable rows; max width fixed at compile time.
-        CSR,                ///< Compressed Sparse Row (flat buffer + row-start index).
+        ErrorLayout,       ///< Invalid combination of template parameters.
+        TABLE_StaticFixed, ///< Fixed row width, known at compile time.
+        TABLE_Fixed,       ///< Fixed row width, set at runtime (uniform across rows).
+        TABLE_Max,         ///< Padded variable rows; max width set at runtime.
+        TABLE_StaticMax,   ///< Padded variable rows; max width fixed at compile time.
+        CSR,               ///< Compressed Sparse Row (flat buffer + row-start index).
     };
 
     /// @brief Whether the layout uses a TABLE (padded) representation (vs CSR).
@@ -97,7 +97,7 @@ namespace DNDS
         static_assert(s_T >= sizeof_T && s_T - sizeof_T < (al == NoAlign ? 1 : al), "I1");
 
         /// @brief Deduce the @ref DataLayout tag from the template parameters.
-        static constexpr DataLayout _GetDataLayout()
+        static constexpr DataLayout ComputeDataLayout()
         {
             if constexpr (rs != DynamicSize && rs != NonUniformSize && rs >= 0)
                 return TABLE_StaticFixed;
@@ -117,7 +117,7 @@ namespace DNDS
             else
                 return ErrorLayout;
         }
-        static const DataLayout _dataLayout = _GetDataLayout();
+        static const DataLayout _dataLayout = ComputeDataLayout();
         static_assert(_dataLayout != ErrorLayout, "Layout Error");
         static const bool isCSR = _dataLayout == CSR;
 
@@ -250,7 +250,7 @@ namespace DNDS
             t_Layout::rm,
             t_Layout::sizeof_T,
             t_Layout::s_T,
-            t_Layout::_GetDataLayout,
+            t_Layout::ComputeDataLayout,
             t_Layout::_dataLayout,
             t_Layout::isCSR;
         using t_Layout::GetArrayName,
@@ -423,7 +423,7 @@ namespace DNDS
         }
 
     protected:
-        DNDS_DEVICE_CALLABLE const T &at_compressed(index iRow, rowsize iCol) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] const T &at_compressed(index iRow, rowsize iCol) const
         {
             DNDS_HD_assert(isCompressed());
             DNDS_HD_assert_infof(iRow < _size && iRow >= 0,
@@ -458,7 +458,7 @@ namespace DNDS
         /// @brief Bounds-checked element read (not device-callable because CSR
         /// decompressed uses `std::vector::at` which throws on the host).
         // not device callable
-        const T &at(index iRow, rowsize iCol) const
+        [[nodiscard]] const T &at(index iRow, rowsize iCol) const
         {
             if constexpr (_dataLayout == CSR)
             {
@@ -554,7 +554,7 @@ namespace DNDS
         }
 
         /// @brief Size of the flat data buffer in `T` elements.
-        DNDS_DEVICE_CALLABLE size_t DataSize() const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] size_t DataSize() const
         {
             if (this->Size() == 0)
                 return 0;
@@ -659,7 +659,7 @@ namespace DNDS
             // DNDS_HD_assert(iRow >= -1 && iRow <= getView().Size()); //! view in derived class is uninitialized here!
         }
 
-        DNDS_DEVICE_CALLABLE index RowSize() const { return getView().RowSize(iRow); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index RowSize() const { return getView().RowSize(iRow); }
 
         DNDS_DEVICE_CALLABLE Derived &operator++()
         {
