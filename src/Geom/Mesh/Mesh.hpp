@@ -575,6 +575,9 @@ namespace DNDS::Geom
          */
         void ReorderLocalCells(int nParts = 1, int nPartsInner = 1);
 
+        /// Legacy implementation preserved for reference/fallback.
+        void ReorderLocalCellsLegacy(int nParts = 1, int nPartsInner = 1);
+
         int NLocalParts() const { return localPartitionStarts.size() ? localPartitionStarts.size() - 1 : 1; }
         index LocalPartStart(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart) : 0; }
         index LocalPartEnd(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart + 1) : this->NumCell(); }

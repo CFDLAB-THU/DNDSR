@@ -4,6 +4,7 @@
 
 #include "ReorderPlan.hpp"
 #include "Mesh.hpp"
+#include "Mesh_CellPermutation.hpp"
 
 #include <algorithm>
 #include <set>
@@ -769,6 +770,209 @@ namespace DNDS::Geom
         vtkCell2node.clear();
         nodeRecreated2nodeLocal.clear();
         localPartitionStarts.clear();
+    }
+
+    // =================================================================
+    // UnstructuredMesh::ReorderLocalCells (new, using ReorderEntities)
+    // =================================================================
+
+    void UnstructuredMesh::ReorderLocalCells(int nParts, int nPartsInner)
+    {
+        DNDS_assert(this->adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert(cell2node.isLocal() && bnd2node.isLocal() &&
+                    cell2cell.isLocal() && bnd2cell.isLocal());
+        nParts = std::max(nParts, 1);
+        nPartsInner = std::max(nPartsInner, 1);
+
+        // --- Section A: Compute cell permutation (same as legacy) ---
+        // We need the local face-adjacency graph and cell2cell.
+        // Convert to global first to get the permutation computation right,
+        // then convert back and redo with the framework.
+        // Actually: ComputeCellPermutation works on LOCAL indices (it uses
+        // cell2cell in local state). So compute the permutation first.
+        auto cell2cellFaceV = this->GetCell2CellFaceVLocal();
+
+        auto perm = detail::ComputeCellPermutation(
+            cell2cellFaceV, cell2cell, NumCell(), nParts, nPartsInner);
+        this->localPartitionStarts = std::move(perm.localPartitionStarts);
+
+        MPI::AllreduceOneIndex(perm.bwOld, MPI_MAX, mpi);
+        MPI::AllreduceOneIndex(perm.bwNew, MPI_MAX, mpi);
+        if (mpi.rank == mRank)
+            log() << fmt::format("UnstructuredMesh === ReorderLocalCells, nPart0 [{}], "
+                                 "got reordering, bw [{}] to [{}]",
+                                 nParts, perm.bwOld, perm.bwNew)
+                  << std::endl;
+
+        // --- Convert to global ---
+        if (this->adjFacialState == Adj_PointToLocal && face2cell.isBuilt())
+            this->AdjLocal2GlobalFacial();
+        if (this->adjC2FState == Adj_PointToLocal && cell2face.isBuilt())
+            this->AdjLocal2GlobalC2F();
+        if (this->adjN2CBState == Adj_PointToLocal && node2cell.isBuilt())
+            this->AdjLocal2GlobalN2CB();
+        this->AdjLocal2GlobalPrimary();
+
+        // --- Build cell partition map (all local, use permutation) ---
+        // fromLocalPermutation expects old2new. perm.cellOld2New is that.
+        std::vector<MPI_int> cellPartition(NumCell(), mpi.rank);
+
+        // We need to communicate the permutation to ReorderEntities.
+        // The framework's fromPartition computes new globals automatically,
+        // but for a local permutation we want a specific ordering.
+        // Use fromLocalPermutation by overriding the transfer after build.
+        //
+        // Actually, the simplest approach: call ReorderEntities with the
+        // all-same-rank partition (which is an identity from the framework's
+        // perspective), then separately apply the local permutation.
+        //
+        // Better: don't use ReorderEntities here. Instead, use the framework
+        // components directly with fromLocalPermutation.
+
+        // Build a PermutationTransfer from the computed permutation
+        auto cellGM = cell2node.father->pLGlobalMapping;
+        DNDS_assert(cellGM);
+        auto cellTransfer = PermutationTransfer::fromLocalPermutation(
+            perm.cellOld2New, cellGM, mpi);
+        DNDS_assert(cellTransfer.isLocalOnly);
+
+        // Build lookup for cell entry remapping
+        // Collect off-rank cell globals from adj entries targeting cells
+        std::set<index> cellPullSet;
+        auto addCellRefs = [&](const auto &adj, index nRows)
+        {
+            for (index i = 0; i < nRows; i++)
+                for (rowsize j = 0; j < adj.RowSize(i); j++)
+                {
+                    index v = adj(i, j);
+                    if (v == UnInitIndex)
+                        continue;
+                    auto [found, rank, val] = cellGM->search(v);
+                    if (found && rank != mpi.rank)
+                        cellPullSet.insert(v);
+                }
+        };
+        addCellRefs(cell2cell, NumCell());
+        addCellRefs(bnd2cell, NumBnd());
+        if (node2cell.father)
+            addCellRefs(node2cell, NumNode());
+        if (face2cell.father)
+            addCellRefs(face2cell, NumFace());
+
+        std::vector<index> pullVec(cellPullSet.begin(), cellPullSet.end());
+        auto cellLookup = cellTransfer.buildLookup(pullVec, mpi);
+
+        // --- REMAP: update cell indices in xxx2cell adjacencies ---
+        auto remapCellEntries = [&](auto &adj, index nRows)
+        {
+            for (index i = 0; i < nRows; i++)
+                for (rowsize j = 0; j < adj.RowSize(i); j++)
+                {
+                    index &v = adj(i, j);
+                    if (v != UnInitIndex)
+                        v = cellLookup.resolve(v);
+                }
+        };
+
+        remapCellEntries(cell2cell, NumCell());
+        remapCellEntries(bnd2cell, NumBnd());
+        if (node2cell.father)
+            remapCellEntries(node2cell, NumNode());
+        if (face2cell.father)
+            remapCellEntries(face2cell, NumFace());
+
+        // --- RELOCATE: permute cell2xxx rows ---
+        cellTransfer.transferRows(cell2node, mpi);
+        cellTransfer.transferRows(cell2cell, mpi);
+        cellTransfer.transferRows(cellElemInfo, mpi);
+        cellTransfer.transferRows(cell2cellOrig, mpi);
+        if (cell2face.father)
+            cellTransfer.transferRows(cell2face, mpi);
+        if (isPeriodic && cell2nodePbi.father)
+            cellTransfer.transferRows(cell2nodePbi, mpi);
+
+        // --- Rebuild global mapping ---
+        cell2node.father->createGlobalMapping();
+        if (cell2cell.father)
+            cell2cell.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
+        if (cellElemInfo.father)
+            cellElemInfo.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
+        if (cell2cellOrig.father)
+            cell2cellOrig.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
+
+        // --- Rebuild ghost mappings (local-only optimization) ---
+        // Permute the ghost index list to match new cell globals
+        {
+            std::vector<index> ghostCellGlobalsNew;
+            if (cell2node.trans.pLGhostMapping)
+            {
+                ghostCellGlobalsNew = cell2node.trans.pLGhostMapping->ghostIndex;
+                for (index &g : ghostCellGlobalsNew)
+                    g = cellLookup.resolve(g);
+            }
+            // Reattach son and create ghost mapping
+            if (!cell2node.son)
+                cell2node.son = make_ssp<tAdjPair::t_arr>(ObjName{"reorder.son"}, mpi);
+            cell2node.TransAttach();
+            cell2node.trans.createFatherGlobalMapping();
+            cell2node.trans.createGhostMapping(ghostCellGlobalsNew);
+            cell2node.trans.createMPITypes();
+            cell2node.trans.pullOnce();
+        }
+        // Borrow ghost indexing for other cell arrays
+        {
+            auto borrowAndPull = [&](auto &pair)
+            {
+                if (!pair.father)
+                    return;
+                if (!pair.son)
+                {
+                    using TArr = typename std::remove_reference_t<decltype(pair)>::t_arr;
+                    pair.son = make_ssp<TArr>(ObjName{"reorder.son"}, mpi);
+                }
+                pair.TransAttach();
+                pair.trans.BorrowGGIndexing(cell2node.trans);
+                pair.trans.createMPITypes();
+                pair.trans.pullOnce();
+            };
+            borrowAndPull(cell2cell);
+            borrowAndPull(cell2cellOrig);
+            borrowAndPull(cellElemInfo);
+            if (cell2face.father)
+                borrowAndPull(cell2face);
+            if (isPeriodic && cell2nodePbi.father)
+                borrowAndPull(cell2nodePbi);
+        }
+
+        // --- Re-wire target mappings ---
+        {
+            auto cellGhostMap = cell2node.trans.pLGhostMapping;
+            cell2cell.idx.wireTargetMapping(cellGhostMap);
+            bnd2cell.idx.wireTargetMapping(cellGhostMap);
+            if (node2cell.father && node2cell.idx.isWired())
+                node2cell.idx.wireTargetMapping(cellGhostMap);
+            if (face2cell.father && face2cell.idx.isWired())
+                face2cell.idx.wireTargetMapping(cellGhostMap);
+        }
+
+        // --- Pull ghost data for non-cell adjacencies (face2cell, node2cell) ---
+        if (face2cell.father && face2cell.trans.pLGhostMapping)
+            face2cell.trans.pullOnce();
+        if (node2cell.father && node2cell.trans.pLGhostMapping)
+            node2cell.trans.pullOnce();
+        bnd2cell.trans.pullOnce();
+
+        // --- Convert back to local ---
+        if (this->adjFacialState == Adj_PointToGlobal && face2cell.isBuilt())
+            this->AdjGlobal2LocalFacial();
+        if (this->adjC2FState == Adj_PointToGlobal && cell2face.isBuilt())
+            this->AdjGlobal2LocalC2F();
+        if (this->adjN2CBState == Adj_PointToGlobal && node2cell.isBuilt())
+            this->AdjGlobal2LocalN2CB();
+        this->AdjGlobal2LocalPrimary();
+
+        if (mpi.rank == mRank)
+            log() << fmt::format("UnstructuredMesh === ReorderLocalCells finished") << std::endl;
     }
 
 } // namespace DNDS::Geom
