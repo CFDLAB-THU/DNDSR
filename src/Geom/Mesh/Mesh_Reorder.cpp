@@ -303,4 +303,404 @@ namespace DNDS::Geom
         }
     }
 
+    // =================================================================
+    // UnstructuredMesh::buildReorderRegistry
+    // =================================================================
+
+    ReorderRegistry UnstructuredMesh::buildReorderRegistry(
+        const std::unordered_set<EntityKind> &destroyKinds)
+    {
+        ReorderRegistry reg;
+
+        auto shouldSkip = [&](AdjKind kind)
+        {
+            return destroyKinds.count(kind.from) || destroyKinds.count(kind.to);
+        };
+
+        // --- Helper: register a tracked adj member ---
+        auto regAdj = [&](AdjKind kind, auto &trackedPair)
+        {
+            if (!trackedPair.father || shouldSkip(kind))
+                return;
+
+            AdjRemapFn remap = [&trackedPair](const PermutationTransfer::LookupResult &lookup)
+            {
+                index nRows = trackedPair.father->Size();
+                for (index i = 0; i < nRows; i++)
+                    for (rowsize j = 0; j < trackedPair.RowSize(i); j++)
+                    {
+                        index &v = trackedPair(i, j);
+                        if (v != UnInitIndex)
+                            v = lookup.resolve(v);
+                    }
+            };
+
+            AdjRelocateFn relocate = [&trackedPair](
+                                         const PermutationTransfer &t, const MPIInfo &m)
+            {
+                t.transferRows(trackedPair, m);
+            };
+
+            reg.registerAdj(kind, std::move(remap), std::move(relocate),
+                            adjKindName(kind));
+        };
+
+        // Register tracked adj members
+        regAdj(Adj::Cell2Node, cell2node);
+        regAdj(Adj::Cell2Cell, cell2cell);
+        regAdj(Adj::Bnd2Node, bnd2node);
+        regAdj(Adj::Bnd2Cell, bnd2cell);
+        regAdj(Adj::Node2Cell, node2cell);
+        regAdj(Adj::Node2Bnd, node2bnd);
+        regAdj(Adj::Cell2Face, cell2face);
+        regAdj(Adj::Face2Node, face2node);
+        regAdj(Adj::Face2Cell, face2cell);
+        regAdj(Adj::Face2Bnd, face2bnd);
+        regAdj(Adj::Bnd2Face, bnd2face);
+        regAdj(Adj::Cell2CellFace, cell2cellFace);
+
+        // --- Helper: register a companion ---
+        auto regComp = [&](EntityKind kind, auto &pair, const char *name)
+        {
+            if (!pair.father || destroyKinds.count(kind))
+                return;
+            reg.registerCompanion(kind, [&pair](const PermutationTransfer &t, const MPIInfo &m)
+                                  { t.transferRows(pair, m); }, name);
+        };
+
+        // Register companions
+        regComp(EntityKind::Cell, cellElemInfo, "cellElemInfo");
+        regComp(EntityKind::Cell, cell2cellOrig, "cell2cellOrig");
+        regComp(EntityKind::Node, coords, "coords");
+        regComp(EntityKind::Node, node2nodeOrig, "node2nodeOrig");
+        regComp(EntityKind::Bnd, bndElemInfo, "bndElemInfo");
+        regComp(EntityKind::Bnd, bnd2bndOrig, "bnd2bndOrig");
+
+        if (isPeriodic)
+        {
+            regComp(EntityKind::Cell, cell2nodePbi, "cell2nodePbi");
+            regComp(EntityKind::Bnd, bnd2nodePbi, "bnd2nodePbi");
+            if (!destroyKinds.count(EntityKind::Face))
+                regComp(EntityKind::Face, face2nodePbi, "face2nodePbi");
+        }
+        if (!destroyKinds.count(EntityKind::Face))
+            regComp(EntityKind::Face, faceElemInfo, "faceElemInfo");
+        if (coordsElevDisp.father)
+            regComp(EntityKind::Node, coordsElevDisp, "coordsElevDisp");
+        if (nodeWallDist.father)
+            regComp(EntityKind::Node, nodeWallDist, "nodeWallDist");
+
+        // --- Register global mappings ---
+        auto getGM = [](const auto &pair) -> ssp<GlobalOffsetsMapping>
+        {
+            if (pair.father && pair.father->pLGlobalMapping)
+                return pair.father->pLGlobalMapping;
+            return nullptr;
+        };
+
+        auto firstValid = [](std::initializer_list<ssp<GlobalOffsetsMapping>> candidates)
+            -> ssp<GlobalOffsetsMapping>
+        {
+            for (auto &gm : candidates)
+                if (gm)
+                    return gm;
+            return nullptr;
+        };
+
+        if (auto gm = firstValid({getGM(cell2node), getGM(cell2cell), getGM(cell2face)}))
+            reg.registerGlobalMapping(EntityKind::Cell, gm);
+        if (auto gm = coords.father ? coords.father->pLGlobalMapping : nullptr)
+            reg.registerGlobalMapping(EntityKind::Node, gm);
+        if (auto gm = firstValid({getGM(bnd2node), getGM(bnd2cell), getGM(bnd2face)}))
+            reg.registerGlobalMapping(EntityKind::Bnd, gm);
+        if (auto gm = firstValid({getGM(face2node), getGM(face2cell), getGM(face2bnd)}))
+            reg.registerGlobalMapping(EntityKind::Face, gm);
+
+        return reg;
+    }
+
+    // =================================================================
+    // UnstructuredMesh::buildReorderPlan
+    // =================================================================
+
+    ReorderPlan UnstructuredMesh::buildReorderPlan(const ReorderInput &input)
+    {
+        auto reg = buildReorderRegistry(input.destroyKinds);
+
+        // Augment input with default follows: Node, Bnd follow Cell
+        // if Cell is explicit and Node/Bnd are not.
+        ReorderInput augmented = input;
+        std::unordered_set<EntityKind> explicitKinds;
+        for (auto &em : augmented.explicitMaps)
+            explicitKinds.insert(em.kind);
+
+        // Add default follows
+        if (explicitKinds.count(EntityKind::Cell))
+        {
+            if (!explicitKinds.count(EntityKind::Node) && node2cell.father)
+            {
+                augmented.follows.push_back(
+                    FollowSpec{EntityKind::Node, EntityKind::Cell, Adj::Node2Cell});
+            }
+            if (!explicitKinds.count(EntityKind::Bnd) && bnd2cell.father)
+            {
+                augmented.follows.push_back(
+                    FollowSpec{EntityKind::Bnd, EntityKind::Cell, Adj::Bnd2Cell});
+            }
+        }
+
+        // Compute follow maps and merge into the input
+        std::unordered_map<EntityKind, std::vector<MPI_int>> allMaps;
+        for (auto &em : augmented.explicitMaps)
+            allMaps[em.kind] = em.targetRanks;
+
+        for (auto &spec : augmented.follows)
+        {
+            if (allMaps.count(spec.follower))
+                continue; // explicit takes precedence
+
+            auto leaderIt = allMaps.find(spec.leader);
+            DNDS_assert_info(leaderIt != allMaps.end(),
+                             fmt::format("buildReorderPlan: follow spec references leader {} "
+                                         "which has no map",
+                                         entityKindName(spec.leader)));
+
+            // Use the raw adj data for follow computation
+            // We need the follower->leader adj data. Dispatch by known kinds:
+            std::vector<MPI_int> followMap;
+            auto followerGM = reg.getGlobalMapping(spec.follower);
+            DNDS_assert_info(followerGM,
+                             fmt::format("buildReorderPlan: no global mapping for follower {}",
+                                         entityKindName(spec.follower)));
+            index nFollower = followerGM->RLengths()[mpi.rank];
+
+            if (spec.follower2leader == Adj::Node2Cell && node2cell.father)
+            {
+                followMap = ComputeFollowMapFromAdj(
+                    static_cast<const tAdjPair &>(node2cell),
+                    nFollower, reg.getGlobalMapping(spec.leader),
+                    leaderIt->second, mpi);
+            }
+            else if (spec.follower2leader == Adj::Bnd2Cell && bnd2cell.father)
+            {
+                followMap = ComputeFollowMapFromAdj(
+                    static_cast<const tAdj2Pair &>(bnd2cell),
+                    nFollower, reg.getGlobalMapping(spec.leader),
+                    leaderIt->second, mpi);
+            }
+            else if (spec.follower2leader == Adj::Node2Bnd && node2bnd.father)
+            {
+                followMap = ComputeFollowMapFromAdj(
+                    static_cast<const tAdjPair &>(node2bnd),
+                    nFollower, reg.getGlobalMapping(spec.leader),
+                    leaderIt->second, mpi);
+            }
+            else
+            {
+                DNDS_assert_info(false,
+                                 fmt::format("buildReorderPlan: unsupported follow adj {}",
+                                             adjKindName(spec.follower2leader)));
+            }
+
+            allMaps[spec.follower] = std::move(followMap);
+        }
+
+        // Now build the plan with all maps (explicit + follow)
+        // We need to pass allMaps into ReorderPlan::build.
+        // Convert allMaps to explicitMaps format for build:
+        ReorderInput finalInput;
+        for (auto &[kind, ranks] : allMaps)
+            finalInput.explicitMaps.push_back(EntityReorderMap{kind, ranks});
+        finalInput.destroyKinds = input.destroyKinds;
+
+        return ReorderPlan::build(finalInput, reg, mpi);
+    }
+
+    // =================================================================
+    // UnstructuredMesh::ReorderEntities
+    // =================================================================
+
+    void UnstructuredMesh::ReorderEntities(const ReorderInput &input)
+    {
+        // Step 0: Validate precondition
+        DNDS_assert_info(adjPrimaryState == Adj_PointToGlobal,
+                         "ReorderEntities: adjPrimaryState must be Adj_PointToGlobal");
+
+        // Step 1: Build registry (with destroy skip)
+        auto reg = buildReorderRegistry(input.destroyKinds);
+
+        // Step 2: Build plan (with follows computed)
+        // We replicate the logic from buildReorderPlan but use the mutable registry
+        ReorderInput augmented = input;
+        std::unordered_set<EntityKind> explicitKinds;
+        for (auto &em : augmented.explicitMaps)
+            explicitKinds.insert(em.kind);
+
+        if (explicitKinds.count(EntityKind::Cell))
+        {
+            if (!explicitKinds.count(EntityKind::Node) && node2cell.father)
+                augmented.follows.push_back(
+                    FollowSpec{EntityKind::Node, EntityKind::Cell, Adj::Node2Cell});
+            if (!explicitKinds.count(EntityKind::Bnd) && bnd2cell.father)
+                augmented.follows.push_back(
+                    FollowSpec{EntityKind::Bnd, EntityKind::Cell, Adj::Bnd2Cell});
+        }
+
+        // Compute follows
+        std::unordered_map<EntityKind, std::vector<MPI_int>> allMaps;
+        for (auto &em : augmented.explicitMaps)
+            allMaps[em.kind] = em.targetRanks;
+
+        for (auto &spec : augmented.follows)
+        {
+            if (allMaps.count(spec.follower))
+                continue;
+            auto leaderIt = allMaps.find(spec.leader);
+            DNDS_assert(leaderIt != allMaps.end());
+
+            auto followerGM = reg.getGlobalMapping(spec.follower);
+            DNDS_assert(followerGM);
+            index nFollower = followerGM->RLengths()[mpi.rank];
+
+            std::vector<MPI_int> followMap;
+            if (spec.follower2leader == Adj::Node2Cell && node2cell.father)
+                followMap = ComputeFollowMapFromAdj(
+                    static_cast<const tAdjPair &>(node2cell),
+                    nFollower, reg.getGlobalMapping(spec.leader),
+                    leaderIt->second, mpi);
+            else if (spec.follower2leader == Adj::Bnd2Cell && bnd2cell.father)
+                followMap = ComputeFollowMapFromAdj(
+                    static_cast<const tAdj2Pair &>(bnd2cell),
+                    nFollower, reg.getGlobalMapping(spec.leader),
+                    leaderIt->second, mpi);
+            else if (spec.follower2leader == Adj::Node2Bnd && node2bnd.father)
+                followMap = ComputeFollowMapFromAdj(
+                    static_cast<const tAdjPair &>(node2bnd),
+                    nFollower, reg.getGlobalMapping(spec.leader),
+                    leaderIt->second, mpi);
+            else
+                DNDS_assert(false);
+
+            allMaps[spec.follower] = std::move(followMap);
+        }
+
+        // Build plan
+        ReorderInput finalInput;
+        for (auto &[kind, ranks] : allMaps)
+            finalInput.explicitMaps.push_back(EntityReorderMap{kind, ranks});
+        finalInput.destroyKinds = input.destroyKinds;
+
+        auto plan = ReorderPlan::build(finalInput, reg, mpi);
+
+        // Step 3: Destroy adjacencies for destroyKinds
+        auto destroyAdj = [&](auto &trackedPair)
+        {
+            trackedPair.father.reset();
+            trackedPair.son.reset();
+            trackedPair.idx = AdjIndexInfo{};
+        };
+        for (auto kind : input.destroyKinds)
+        {
+            if (kind == EntityKind::Face)
+            {
+                destroyAdj(cell2face);
+                destroyAdj(face2node);
+                destroyAdj(face2cell);
+                destroyAdj(face2bnd);
+                destroyAdj(bnd2face);
+                destroyAdj(cell2cellFace);
+                faceElemInfo.father.reset();
+                faceElemInfo.son.reset();
+                if (isPeriodic)
+                {
+                    face2nodePbi.father.reset();
+                    face2nodePbi.son.reset();
+                }
+                adjFacialState = Adj_Unknown;
+                adjC2FState = Adj_Unknown;
+                adjC2CFaceState = Adj_Unknown;
+            }
+        }
+
+        // Step 4: Apply plan (REMAP entries, RELOCATE rows + companions)
+        plan.apply(reg, mpi);
+
+        // Step 5: Rebuild global mappings for reordered entities
+        for (auto kind : plan.reorderedKinds)
+        {
+            if (kind == EntityKind::Cell && cell2node.father)
+            {
+                cell2node.TransAttach();
+                cell2node.trans.createFatherGlobalMapping();
+                // Borrow to other cell-parallel arrays
+                if (cell2cell.father)
+                    cell2cell.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
+                if (cellElemInfo.father)
+                    cellElemInfo.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
+                if (cell2cellOrig.father)
+                    cell2cellOrig.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
+            }
+            else if (kind == EntityKind::Node && coords.father)
+            {
+                coords.TransAttach();
+                coords.trans.createFatherGlobalMapping();
+                if (node2nodeOrig.father)
+                    node2nodeOrig.father->pLGlobalMapping = coords.father->pLGlobalMapping;
+            }
+            else if (kind == EntityKind::Bnd && bnd2node.father)
+            {
+                bnd2node.TransAttach();
+                bnd2node.trans.createFatherGlobalMapping();
+                if (bndElemInfo.father)
+                    bndElemInfo.father->pLGlobalMapping = bnd2node.father->pLGlobalMapping;
+                if (bnd2bndOrig.father)
+                    bnd2bndOrig.father->pLGlobalMapping = bnd2node.father->pLGlobalMapping;
+            }
+            else if (kind == EntityKind::Face && face2node.father)
+            {
+                face2node.TransAttach();
+                face2node.trans.createFatherGlobalMapping();
+                if (faceElemInfo.father)
+                    faceElemInfo.father->pLGlobalMapping = face2node.father->pLGlobalMapping;
+            }
+        }
+
+        // Step 6: Update idx states
+        auto markGlobalIfBuilt = [](auto &trackedPair)
+        {
+            if (trackedPair.father && trackedPair.idx.state() != Adj_Unknown)
+                trackedPair.idx.markGlobal();
+        };
+        // For all tracked adj that were affected (non-SKIP), mark global.
+        // Simplification: mark all existing adj as global since we're in
+        // Adj_PointToGlobal state overall.
+        if (cell2node.father)
+            cell2node.idx.markGlobal();
+        if (cell2cell.father)
+            cell2cell.idx.markGlobal();
+        if (bnd2node.father)
+            bnd2node.idx.markGlobal();
+        if (bnd2cell.father)
+            bnd2cell.idx.markGlobal();
+        if (node2cell.father)
+            node2cell.idx.markGlobal();
+        if (node2bnd.father)
+            node2bnd.idx.markGlobal();
+
+        // Step 7: Update mesh-level state
+        adjPrimaryState = Adj_PointToGlobal;
+        if (node2cell.father)
+            adjN2CBState = Adj_PointToGlobal;
+
+        // Invalidate local vectors
+        cell2parentCell.clear();
+        node2parentNode.clear();
+        node2bndNode.clear();
+        vtkCell2nodeOffsets.clear();
+        vtkCellType.clear();
+        vtkCell2node.clear();
+        nodeRecreated2nodeLocal.clear();
+        localPartitionStarts.clear();
+    }
+
 } // namespace DNDS::Geom

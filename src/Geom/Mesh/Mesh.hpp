@@ -13,6 +13,7 @@
 #include "DNDS/Config/ConfigParam.hpp"
 #include "AdjIndexInfo.hpp"
 #include "MeshConnectivity.hpp"
+#include "ReorderPlan.hpp"
 
 namespace DNDS::Direct
 {
@@ -515,6 +516,47 @@ namespace DNDS::Geom
         void fillRegistry(
             MeshConnectivity &dag,
             const std::unordered_set<AdjKind, AdjKindHash> &skip) const;
+
+        // =================================================================
+        // Reorder (distributed entity reordering framework)
+        // =================================================================
+
+        /**
+         * \brief Build a ReorderRegistry containing all mesh members.
+         *
+         * Registers all built adj arrays (as type-erased callbacks) and all
+         * companion arrays (coords, cellElemInfo, pbi, etc.).
+         * Skips adjacencies involving destroyKinds.
+         *
+         * External code may extend the returned registry with its own arrays
+         * before passing to ReorderPlan::build.
+         */
+        ReorderRegistry buildReorderRegistry(
+            const std::unordered_set<EntityKind> &destroyKinds = {});
+
+        /**
+         * \brief Reorder entities using the general framework.
+         *
+         * Builds a ReorderRegistry, computes follow maps, builds a
+         * ReorderPlan, applies it, rebuilds global mappings, and updates
+         * idx states.
+         *
+         * \pre All adjacencies in Adj_PointToGlobal state.
+         * \post All (non-destroyed) adjacencies in Adj_PointToGlobal.
+         *       Ghost mappings stale (caller must rebuild ghosts).
+         *       Global mappings fresh on reordered entities.
+         *
+         * \warning Collective.
+         */
+        void ReorderEntities(const ReorderInput &input);
+
+        /**
+         * \brief Build a ReorderPlan without applying it.
+         *
+         * Useful for external code to obtain the plan and apply it to
+         * its own arrays after the mesh reorder.
+         */
+        ReorderPlan buildReorderPlan(const ReorderInput &input);
 
         // void ReorderCellLocal();
 
