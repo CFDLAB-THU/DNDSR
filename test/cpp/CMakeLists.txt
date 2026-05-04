@@ -190,6 +190,7 @@ dnds_add_mpi_test(array_transformer "DNDS/test_ArrayTransformer.cpp" "dnds")
 dnds_add_mpi_test(array_derived "DNDS/test_ArrayDerived.cpp" "dnds")
 dnds_add_mpi_test(array_dof "DNDS/test_ArrayDOF.cpp" "dnds")
 dnds_add_mpi_test(index_mapping "DNDS/test_IndexMapping.cpp" "dnds")
+dnds_add_mpi_test(permutation_transfer "DNDS/test_PermutationTransfer.cpp" "dnds")
 
 set(DNDS_TEST_TARGETS
     dnds_test_array
@@ -199,6 +200,7 @@ set(DNDS_TEST_TARGETS
     dnds_test_array_derived
     dnds_test_array_dof
     dnds_test_index_mapping
+    dnds_test_permutation_transfer
 )
 foreach(T ${DNDS_TEST_TARGETS})
     add_dependencies(dnds_unit_tests ${T})
