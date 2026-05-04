@@ -2,9 +2,8 @@
 #
 # Triggers:
 #   workflow_dispatch            — manual, any branch
-#   pull_request_target          — when a maintainer adds a CI label to a PR:
-#     "ci-run"                   — runs on ubuntu-latest (GitHub-hosted)
-#     "ci-run-self-hosted"       — runs on self-hosted (self-hosted)
+#   issue_comment               — when a maintainer comments /ci-run or
+#                                 /ci-run-self-hosted on a PR
 #
 # Runner selection:
 #   A lightweight "resolve" job picks the runner and feature flags so that
@@ -32,8 +31,8 @@ on:
           - github
           - self-hosted
         default: github
-  pull_request_target:
-    types: [labeled]
+  issue_comment:
+    types: [created]
 
 env:
   HEADERONLYS_URL: https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/latest/download/external_headeronlys.tar.gz
@@ -48,8 +47,10 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       github.event_name == 'workflow_dispatch' ||
-      github.event.label.name == 'ci-run' ||
-      github.event.label.name == 'ci-run-self-hosted'
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       (contains(github.event.comment.body, '/ci-run-self-hosted') ||
+        contains(github.event.comment.body, '/ci-run')))
     outputs:
       runs-on: ${{ steps.pick.outputs.runs_on }}
       use-ccache: ${{ steps.pick.outputs.use_ccache }}
@@ -57,37 +58,48 @@ jobs:
       ccache-dir: ${{ steps.pick.outputs.ccache_dir }}
       setup-python: ${{ steps.pick.outputs.setup_python }}
       install-sys-deps: ${{ steps.pick.outputs.install_sys_deps }}
-      label: ${{ steps.pick.outputs.label }}
+      pr-sha: ${{ steps.pick.outputs.pr_sha }}
     steps:
       - name: Pick runner
         id: pick
-        run: |
-          # Determine which runner was requested
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            RUNNER="${{ inputs.runner }}"
-          elif [[ "${{ github.event.label.name }}" == "ci-run-self-hosted" ]]; then
-            RUNNER="self-hosted"
-          else
-            RUNNER="github"
-          fi
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let runner = 'github';
+            let prSha = '';
 
-          if [[ "$RUNNER" == "self-hosted" ]]; then
-            echo 'runs_on=["self-hosted","Linux","X64"]' >> "$GITHUB_OUTPUT"
-            echo "use_ccache=true"        >> "$GITHUB_OUTPUT"
-            echo "cache_ccache=false"     >> "$GITHUB_OUTPUT"
-            echo "ccache_dir=/home/runner/.ccache" >> "$GITHUB_OUTPUT"
-            echo "setup_python=false"     >> "$GITHUB_OUTPUT"
-            echo "install_sys_deps=false" >> "$GITHUB_OUTPUT"
-            echo "label=ci-run-self-hosted" >> "$GITHUB_OUTPUT"
-          else
-            echo 'runs_on="ubuntu-latest"' >> "$GITHUB_OUTPUT"
-            echo "use_ccache=true"        >> "$GITHUB_OUTPUT"
-            echo "cache_ccache=true"      >> "$GITHUB_OUTPUT"
-            echo "ccache_dir=${{ github.workspace }}/.ccache" >> "$GITHUB_OUTPUT"
-            echo "setup_python=true"      >> "$GITHUB_OUTPUT"
-            echo "install_sys_deps=true"  >> "$GITHUB_OUTPUT"
-            echo "label=ci-run"           >> "$GITHUB_OUTPUT"
-          fi
+            if (context.eventName === 'workflow_dispatch') {
+              runner = '${{ inputs.runner }}' || 'github';
+            } else if (context.eventName === 'issue_comment') {
+              const body = context.payload.comment.body || '';
+              if (body.includes('/ci-run-self-hosted')) runner = 'self-hosted';
+              else runner = 'github';
+
+              // Get the PR head SHA for checkout
+              const pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              });
+              prSha = pr.data.head.sha;
+            }
+
+            if (runner === 'self-hosted') {
+              core.setOutput('runs_on', '["self-hosted","Linux","X64"]');
+              core.setOutput('use_ccache', 'true');
+              core.setOutput('cache_ccache', 'false');
+              core.setOutput('ccache_dir', '/home/runner/.ccache');
+              core.setOutput('setup_python', 'false');
+              core.setOutput('install_sys_deps', 'false');
+            } else {
+              core.setOutput('runs_on', '"ubuntu-latest"');
+              core.setOutput('use_ccache', 'true');
+              core.setOutput('cache_ccache', 'true');
+              core.setOutput('ccache_dir', process.env.GITHUB_WORKSPACE + '/.ccache');
+              core.setOutput('setup_python', 'true');
+              core.setOutput('install_sys_deps', 'true');
+            }
+            core.setOutput('pr_sha', prSha);
 
   # ------------------------------------------------------------------
   # Single build-and-test job — runner chosen by the resolve job above.
@@ -98,29 +110,13 @@ jobs:
     env:
       CCACHE_DIR: ${{ needs.resolve.outputs.ccache-dir }}
     steps:
-      # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      # Remove the label so the PR author can trigger a re-run by
-      # re-adding it.
-      # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      - name: Clear CI label
-        if: github.event_name == 'pull_request_target'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.removeLabel({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              name: '${{ needs.resolve.outputs.label }}',
-            });
-
       # ------------------------------------------------------------------
       # 1. Checkout source
       # ------------------------------------------------------------------
       - name: Checkout DNDSR
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
+          ref: ${{ needs.resolve.outputs.pr-sha || '' }}
 
       - name: Fetch test meshes
         run: |
