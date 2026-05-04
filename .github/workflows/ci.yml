@@ -188,9 +188,9 @@ jobs:
       # ------------------------------------------------------------------
       # 4. Header-only externals (Eigen, Boost, CGAL, fmt, pybind11, ...)
       # ------------------------------------------------------------------
-      - name: Cache header-only externals
+      - name: Restore header-only externals cache
         id: cache-headeronlys
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             external/argparse
@@ -214,12 +214,32 @@ jobs:
           curl -L -o external/external_headeronlys.tar.gz "$HEADERONLYS_URL"
           cd external && tar -xzf external_headeronlys.tar.gz
 
+      - name: Save header-only externals cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            external/argparse
+            external/boost
+            external/CGAL
+            external/cppcodec
+            external/cpptrace
+            external/doctest
+            external/eigen
+            external/exprtk
+            external/fmt
+            external/nanoflann
+            external/nlohmann
+            external/pybind11
+            external/pybind11_json
+          key: headeronlys-v1
+
       # ------------------------------------------------------------------
       # 5. cfd_externals (zlib, hdf5, cgns, parmetis)
       # ------------------------------------------------------------------
-      - name: Cache cfd_externals install
+      - name: Restore cfd_externals cache
         id: cache-cfd-ext
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: external/cfd_externals/install
           key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
@@ -236,14 +256,21 @@ jobs:
           git submodule update --init --recursive --depth=1
           cd external/cfd_externals
           CC=mpicc CXX=mpicxx python3 cfd_externals_build.py
+
+      - name: Save cfd_externals cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: external/cfd_externals/install
+          key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
           CC=mpicc CXX=mpicxx python3 cfd_externals_build.py
 
       # ------------------------------------------------------------------
       # 6. Python venv
       # ------------------------------------------------------------------
-      - name: Cache Python venv
+      - name: Restore Python venv cache
         id: cache-venv
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: venv
           key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'scripts/install_python_deps.sh') }}
@@ -255,6 +282,13 @@ jobs:
           source venv/bin/activate
           pip install --upgrade pip
           PIP=$PWD/venv/bin/pip ./scripts/install_python_deps.sh
+
+      - name: Save Python venv cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: venv
+          key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'scripts/install_python_deps.sh') }}
 
       # ------------------------------------------------------------------
       # 7. ccache
