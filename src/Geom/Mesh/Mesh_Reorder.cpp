@@ -212,33 +212,12 @@ namespace DNDS::Geom
             std::set<index> pullSetCollector;
             auto gm = registry.getGlobalMapping(kind);
 
-            // Scan all registered adjs for entries pointing to this kind
-            for (auto &adjEntry : registry.adjs)
-            {
-                EntityKind targetKind = adjEntry.kind.isIntraLevel()
-                                            ? adjEntry.kind.from
-                                            : adjEntry.kind.to;
-                if (targetKind != kind)
-                    continue;
-                // We cannot iterate raw adj data here (type-erased callbacks).
-                // The pull set must be pre-collected by the mesh wrapper and
-                // passed via an extended mechanism.
-                //
-                // Alternative: the mesh wrapper collects pull sets and stores
-                // them in the registry. For now, we use a simpler approach:
-                // pull ALL off-rank globals that this rank's adjs reference.
-                // This is done by the mesh wrapper before calling build.
-            }
+            // Use pre-collected pull sets from the registry
+            std::vector<index> pullSet;
+            auto psIt = registry.pullSets.find(kind);
+            if (psIt != registry.pullSets.end())
+                pullSet = psIt->second;
 
-            // For simplicity in the initial implementation: if the transfer
-            // is local-only, no ghost-pull is needed (all lookups are local).
-            // For distributed, the mesh wrapper must pre-collect the pull set
-            // and store it. We accept a pull set from the registry.
-            //
-            // Store empty pull set for now — the mesh wrapper will populate
-            // lookups directly.
-
-            std::vector<index> pullSet(pullSetCollector.begin(), pullSetCollector.end());
             plan.lookups[kind] = plan.transfers.at(kind).buildLookup(pullSet, mpi);
         }
 
@@ -415,6 +394,54 @@ namespace DNDS::Geom
             reg.registerGlobalMapping(EntityKind::Bnd, gm);
         if (auto gm = firstValid({getGM(face2node), getGM(face2cell), getGM(face2bnd)}))
             reg.registerGlobalMapping(EntityKind::Face, gm);
+
+        // --- Pre-collect pull sets ---
+        // For each entity kind, collect off-rank globals from adj entries targeting it.
+        auto collectPS = [&](EntityKind targetKind, const auto &adjPair, auto targetGM)
+        {
+            if (!adjPair.father || !targetGM)
+                return;
+            auto &ps = reg.pullSets[targetKind];
+            DNDS::index nRows = adjPair.father->Size();
+            for (DNDS::index i = 0; i < nRows; i++)
+                for (rowsize j = 0; j < adjPair.RowSize(i); j++)
+                {
+                    DNDS::index v = adjPair(i, j);
+                    if (v == UnInitIndex)
+                        continue;
+                    auto [found, rank, val] = targetGM->search(v);
+                    if (found && rank != mpi.rank)
+                        ps.push_back(v);
+                }
+        };
+
+        // Cell as target (from: bnd2cell, face2cell, node2cell, cell2cell)
+        auto cellGM = reg.getGlobalMapping(EntityKind::Cell);
+        collectPS(EntityKind::Cell, bnd2cell, cellGM);
+        collectPS(EntityKind::Cell, node2cell, cellGM);
+        collectPS(EntityKind::Cell, cell2cell, cellGM);
+        if (!shouldSkip(Adj::Face2Cell))
+            collectPS(EntityKind::Cell, face2cell, cellGM);
+
+        // Node as target (from: cell2node, bnd2node, face2node)
+        auto nodeGM = reg.getGlobalMapping(EntityKind::Node);
+        collectPS(EntityKind::Node, cell2node, nodeGM);
+        collectPS(EntityKind::Node, bnd2node, nodeGM);
+        if (!shouldSkip(Adj::Face2Node))
+            collectPS(EntityKind::Node, face2node, nodeGM);
+
+        // Bnd as target (from: node2bnd, face2bnd)
+        auto bndGM = reg.getGlobalMapping(EntityKind::Bnd);
+        collectPS(EntityKind::Bnd, node2bnd, bndGM);
+        if (!shouldSkip(Adj::Face2Bnd))
+            collectPS(EntityKind::Bnd, face2bnd, bndGM);
+
+        // Deduplicate and sort pull sets
+        for (auto &[kind, ps] : reg.pullSets)
+        {
+            std::sort(ps.begin(), ps.end());
+            ps.erase(std::unique(ps.begin(), ps.end()), ps.end());
+        }
 
         return reg;
     }
@@ -630,8 +657,7 @@ namespace DNDS::Geom
         {
             if (kind == EntityKind::Cell && cell2node.father)
             {
-                cell2node.TransAttach();
-                cell2node.trans.createFatherGlobalMapping();
+                cell2node.father->createGlobalMapping();
                 // Borrow to other cell-parallel arrays
                 if (cell2cell.father)
                     cell2cell.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
@@ -642,15 +668,13 @@ namespace DNDS::Geom
             }
             else if (kind == EntityKind::Node && coords.father)
             {
-                coords.TransAttach();
-                coords.trans.createFatherGlobalMapping();
+                coords.father->createGlobalMapping();
                 if (node2nodeOrig.father)
                     node2nodeOrig.father->pLGlobalMapping = coords.father->pLGlobalMapping;
             }
             else if (kind == EntityKind::Bnd && bnd2node.father)
             {
-                bnd2node.TransAttach();
-                bnd2node.trans.createFatherGlobalMapping();
+                bnd2node.father->createGlobalMapping();
                 if (bndElemInfo.father)
                     bndElemInfo.father->pLGlobalMapping = bnd2node.father->pLGlobalMapping;
                 if (bnd2bndOrig.father)
@@ -658,12 +682,56 @@ namespace DNDS::Geom
             }
             else if (kind == EntityKind::Face && face2node.father)
             {
-                face2node.TransAttach();
-                face2node.trans.createFatherGlobalMapping();
+                face2node.father->createGlobalMapping();
                 if (faceElemInfo.father)
                     faceElemInfo.father->pLGlobalMapping = face2node.father->pLGlobalMapping;
             }
         }
+
+        // Step 5b: Re-attach transformers with empty sons (prepare for ghost rebuild)
+        // After transferRows, sons are null. The rebuild pipeline
+        // (RecoverNode2CellAndNode2Bnd, etc.) needs TransAttach-ready pairs.
+        auto reattach = [&](auto &pair)
+        {
+            if (!pair.father)
+                return;
+            using TArr = typename std::remove_reference_t<decltype(pair)>::t_arr;
+            if (!pair.son)
+                pair.son = make_ssp<TArr>(ObjName{"reorder.son"}, mpi);
+            pair.TransAttach();
+        };
+
+        for (auto kind : plan.reorderedKinds)
+        {
+            if (kind == EntityKind::Cell)
+            {
+                reattach(cell2node);
+                reattach(cell2cell);
+                reattach(cellElemInfo);
+                reattach(cell2cellOrig);
+                if (isPeriodic)
+                    reattach(cell2nodePbi);
+            }
+            else if (kind == EntityKind::Node)
+            {
+                reattach(coords);
+                reattach(node2nodeOrig);
+            }
+            else if (kind == EntityKind::Bnd)
+            {
+                reattach(bnd2node);
+                reattach(bnd2cell);
+                reattach(bndElemInfo);
+                reattach(bnd2bndOrig);
+                if (isPeriodic)
+                    reattach(bnd2nodePbi);
+            }
+        }
+        // Also reattach inverse adjacencies if they exist
+        if (node2cell.father)
+            reattach(node2cell);
+        if (node2bnd.father)
+            reattach(node2bnd);
 
         // Step 6: Update idx states
         auto markGlobalIfBuilt = [](auto &trackedPair)
