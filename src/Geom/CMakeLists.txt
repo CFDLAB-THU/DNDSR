@@ -33,6 +33,7 @@ Mesh/Mesh_Elevation.cpp
 Mesh/Mesh_Elevation_SmoothSolver.cpp
 Mesh/Mesh_Elevation_SmoothV2.cpp
 Mesh/Mesh_WallDist.cpp
+Mesh/Mesh_Reorder.cpp
 Mesh/SerialAdjReordering.cpp
 )
 
