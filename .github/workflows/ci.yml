@@ -227,8 +227,15 @@ jobs:
       - name: Build cfd_externals
         if: steps.cache-cfd-ext.outputs.cache-hit != 'true'
         run: |
+          # Double-check: skip if install already restored via prefix match
+          if [ -f external/cfd_externals/install/lib/libcgns.a ]; then
+            echo "cfd_externals install present (cache prefix match), skipping build"
+            exit 0
+          fi
+          rm -rf external/cfd_externals
           git submodule update --init --recursive --depth=1
           cd external/cfd_externals
+          CC=mpicc CXX=mpicxx python3 cfd_externals_build.py
           CC=mpicc CXX=mpicxx python3 cfd_externals_build.py
 
       # ------------------------------------------------------------------
