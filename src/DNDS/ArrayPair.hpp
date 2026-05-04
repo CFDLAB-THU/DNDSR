@@ -192,6 +192,10 @@ namespace DNDS
                 trans.father = father;
             if (R.trans.son)
                 trans.son = son;
+            //! Re-create persistent MPI requests pointing to the NEW arrays.
+            //! Without this, persistent requests still reference R's buffers.
+            if (R.trans.father && R.trans.son && trans.pLGhostMapping)
+                trans.createMPITypes();
         }
 
         /// @brief Read-only row-pointer access in the combined address space.

@@ -584,13 +584,10 @@ namespace DNDS
                 return _data.at(iRow * rs + iCol);
             else if constexpr (_dataLayout == TABLE_StaticMax)
                 return _data.at(iRow * rm + iCol);
-            // NOLINTBEGIN(bugprone-branch-clone): TABLE_Fixed and TABLE_Max share
-            // the runtime expression but are conceptually distinct layouts.
             else if constexpr (_dataLayout == TABLE_Fixed)
                 return _data.at(iRow * _row_size_dynamic + iCol);
             else if constexpr (_dataLayout == TABLE_Max)
                 return _data.at(iRow * _row_size_dynamic + iCol);
-            // NOLINTEND(bugprone-branch-clone)
             else if constexpr (_dataLayout == CSR)
             {
                 if (IfCompressed())
@@ -826,10 +823,9 @@ namespace DNDS
             this->clone(R);
         }
 
-        /// @brief Rule-of-five closure: members are all value-semantic
-        /// (`shared_ptr`, `host_device_vector`, PODs), so the compiler-synthesised
-        /// move and destructor do the right thing — a shallow move of the
-        /// shared storage, identical in observable behaviour to copy + reset.
+        /// @brief Move constructor: shallow transfer of storage.
+        /// All members (host_device_vector, shared_ptrs, PODs) have correct
+        /// move semantics. Source is left in a valid empty state.
         Array(self_type &&) noexcept = default;
         self_type &operator=(self_type &&) noexcept = default;
         ~Array() = default;
@@ -1112,7 +1108,7 @@ namespace DNDS
         /// @param name         Sub-path name for this array.
         /// @return Metadata: array_sig, row_size_dynamic, size (local size for
         ///         per-rank; 0 for collective without ParArray).
-        ReadSerializerMetaResult ReadSerializerMeta(const Serializer::SerializerBaseSSP &serializerP, const std::string &name)
+        ReadSerializerMetaResult ReadSerializerMeta(Serializer::SerializerBaseSSP serializerP, const std::string &name)
         {
             auto cwd = serializerP->GetCurrentPath();
             serializerP->GoToPath(name);
@@ -1324,9 +1320,6 @@ namespace DNDS
         public:
             auto getView() const { return view; }
             DNDS_DEVICE_CALLABLE iterator(const iterator &) = default;
-            DNDS_DEVICE_CALLABLE iterator &operator=(const iterator &) = default;
-            DNDS_DEVICE_CALLABLE iterator(iterator &&) noexcept = default;
-            DNDS_DEVICE_CALLABLE iterator &operator=(iterator &&) noexcept = default;
             DNDS_DEVICE_CALLABLE ~iterator() = default;
             DNDS_DEVICE_CALLABLE iterator(const view_type &n_view, index n_iRow) : view(n_view), t_base_iter(n_iRow)
             {

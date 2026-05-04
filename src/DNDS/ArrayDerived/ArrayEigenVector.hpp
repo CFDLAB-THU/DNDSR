@@ -60,10 +60,6 @@ namespace DNDS
         // default copy
         ArrayEigenVector(const t_self &R) = default;
         t_self &operator=(const t_self &R) = default;
-        // Rule-of-five closure: all value-semantic members.
-        ArrayEigenVector(t_self &&) noexcept = default;
-        t_self &operator=(t_self &&) noexcept = default;
-        ~ArrayEigenVector() = default;
         // operator= handled automatically
 
         /// @brief Shallow clone (same semantics as assignment).
@@ -118,9 +114,6 @@ namespace DNDS
         public:
             auto getView() const { return view; }
             DNDS_DEVICE_CALLABLE iterator(const iterator &) = default;
-            DNDS_DEVICE_CALLABLE iterator &operator=(const iterator &) = default;
-            DNDS_DEVICE_CALLABLE iterator(iterator &&) noexcept = default;
-            DNDS_DEVICE_CALLABLE iterator &operator=(iterator &&) noexcept = default;
             DNDS_DEVICE_CALLABLE ~iterator() = default;
             DNDS_DEVICE_CALLABLE explicit iterator(const view_type &n_view, index n_iRow) : view(n_view), t_base_iter(n_iRow)
             {

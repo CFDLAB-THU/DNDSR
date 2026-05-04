@@ -77,8 +77,7 @@ namespace DNDS
         // default copy
         ParArray(const t_self &R) = default;
         t_self &operator=(const t_self &R) = default;
-        // Rule-of-five closure: base + added members are all value-semantic,
-        // so default move/dtor do a shallow move of the shared storage.
+        // Move (suppressed by explicit copy above, re-declare).
         ParArray(t_self &&) noexcept = default;
         t_self &operator=(t_self &&) noexcept = default;
         ~ParArray() = default;
@@ -484,9 +483,9 @@ namespace DNDS
         /// @brief Status buffer for pull completion.
         tMPI_statVec PullStatVec;
         /// @brief Total bytes sent per push call (for buffer sizing).
-        MPI_Aint pushSendSize{};
+        MPI_Aint pushSendSize;
         /// @brief Total bytes sent per pull call.
-        MPI_Aint pullSendSize{};
+        MPI_Aint pullSendSize;
 
         tMPI_intVec pushingSizes;                 ///< temp: per-peer count for #createMPITypes.
         tMPI_AintVec pushingDisps;                ///< temp: per-peer byte displacements for #createMPITypes.
@@ -558,10 +557,8 @@ namespace DNDS
             this->operator=(R);
         }
 
-        /// @brief Rule-of-five closure. All non-trivial members are held via
-        /// `shared_ptr` (`pLGhostMapping`, `father`, `son`, `pPushTypeVec`,
-        /// `pPullTypeVec`, `PushReqVec`, `PullReqVec`), so default move /
-        /// destructor are correct — they shallow-move the handles.
+        /// @brief Move constructor: transfers all handles (shared_ptrs, MPI
+        /// request holders). Source is left in a valid but uninitialized state.
         ArrayTransformer(TSelf &&) noexcept = default;
         TSelf &operator=(TSelf &&) noexcept = default;
         ~ArrayTransformer() = default;
@@ -728,7 +725,7 @@ namespace DNDS
             auto fatherDataStart = father->operator[](0);
             if (commTypeCurrent == MPI::CommStrategy::InSituPack)
                 pushingIndexLocal.resize(nSend);
-            for (index i = 0; i < nSend; i++)
+            for (index i = 0; i < index(nSend); i++)
             {
                 MPI_int rank = -1;
                 index loc = -1;
@@ -858,14 +855,14 @@ namespace DNDS
                         // MPI_Type_create_hindexed(PushDispsMPI.size(), PushSizesMPI.data(), PushDispsMPI.data(), father->getDataType(), &dtype);
 
                         MPI_Type_commit(&dtype);
-                        pPushTypeVec->emplace_back(r, dtype);
+                        pPushTypeVec->push_back(std::make_pair(r, dtype));
                         // OPT: could use MPI_Type_create_hindexed_block to save some space
                     }
                     /************************************************************/
                     // pull
-                    std::array<MPI_Aint, 1> pullDisp{};
+                    std::array<MPI_Aint, 1> pullDisp;
 
-                    std::array<MPI_int, 1> pullSizes{}; // same as pushSizes
+                    std::array<MPI_int, 1> pullSizes; // same as pushSizes
                     auto gRPtr = son->operator[](index(pLGhostMapping->ghostStart[r + 1]));
                     auto gLPtr = son->operator[](index(pLGhostMapping->ghostStart[r]));
                     auto gStartPtr = son->operator[](index(0));
@@ -883,7 +880,7 @@ namespace DNDS
 
                         // std::cout << mpi.rank << " pullSlice " << pullDisp[0] << outputDelim << pullBytes[0] << std::endl;
                         MPI_Type_commit(&dtype);
-                        pPullTypeVec->emplace_back(r, dtype);
+                        pPullTypeVec->push_back(std::make_pair(r, dtype));
                     }
                 }
                 pPullTypeVec->shrink_to_fit();
