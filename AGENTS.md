@@ -333,8 +333,19 @@ Key concepts agents should know:
 **Read-only by default.** You may use `gh` freely for read operations (viewing
 issues, PRs, checks, releases, diffs, comments). **Do NOT use `gh` for any
 write operation** (creating/closing issues, creating/merging PRs, posting
-comments, approving reviews, creating releases, editing labels, etc.) **unless
-the user explicitly requests that specific write action.** One-time explicit
-permission does not carry over to other write actions — ask each time.
+comments, approving reviews, creating releases, editing labels, deleting
+caches, etc.) **unless the user explicitly requests that specific write
+action.** One-time explicit permission does not carry over to other write
+actions — ask each time.
+
+**Operations requiring explicit user authorization (non-exhaustive):**
+- `gh pr create/merge/close/edit`
+- `gh issue create/close/edit`
+- `gh pr comment` / `gh issue comment`
+- `gh pr review`
+- `gh release create/delete`
+- `gh cache delete`
+- `gh api` with non-GET methods (POST, PUT, PATCH, DELETE)
+- `git push --force` / `git push --force-with-lease`
 
 **Draft PR by default** You must use --draft on new prs.
