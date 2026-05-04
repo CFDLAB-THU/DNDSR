@@ -263,7 +263,6 @@ jobs:
         with:
           path: external/cfd_externals/install
           key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
-          CC=mpicc CXX=mpicxx python3 cfd_externals_build.py
 
       # ------------------------------------------------------------------
       # 6. Python venv
