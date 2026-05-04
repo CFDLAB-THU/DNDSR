@@ -274,8 +274,16 @@ namespace DNDS
         if (isLocalOnly)
         {
             // In-place permutation
+            DNDS_assert_info(static_cast<index>(localOld2New.size()) == size(),
+                             "transferRows: localOld2New size mismatch");
             using TArr = typename decltype(pair.father)::element_type;
             auto tmp = std::make_shared<TArr>(*pair.father); // deep copy
+#ifndef NDEBUG
+            for (index i = 0; i < size(); i++)
+                DNDS_assert_info(localOld2New[i] >= 0 && localOld2New[i] < size(),
+                                 fmt::format("transferRows: localOld2New[{}] = {} out of [0, {})",
+                                             i, localOld2New[i], size()));
+#endif
             if constexpr (TPair::IsCSR())
                 pair.father->Decompress();
             for (index i = 0; i < size(); i++)
