@@ -140,6 +140,11 @@ namespace DNDS::Geom
         /// Global offsets mappings per entity kind (for PermutationTransfer).
         std::unordered_map<EntityKind, ssp<GlobalOffsetsMapping>> globalMappings;
 
+        /// Pre-collected pull sets per entity kind: off-rank globals that adj
+        /// entries reference as targets. Populated by buildReorderRegistry or
+        /// by the caller before ReorderPlan::build.
+        std::unordered_map<EntityKind, std::vector<index>> pullSets;
+
         /// Register an adjacency with type-erased callbacks.
         void registerAdj(AdjKind kind, AdjRemapFn remap, AdjRelocateFn relocate,
                          std::string name = {})
