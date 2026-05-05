@@ -454,14 +454,10 @@ namespace DNDS::Geom
             log() << "UnstructuredMesh === ReadSerializeAndDistribute: redistributing" << std::endl;
 
         // Free temporary adjacencies no longer needed (same as legacy).
-        cell2cell.father.reset();
-        cell2cell.son.reset();
-        node2cell.father.reset();
-        node2cell.son.reset();
-        node2bnd.father.reset();
-        node2bnd.son.reset();
-        bnd2cell.father.reset();
-        bnd2cell.son.reset();
+        cell2cell.reset();
+        node2cell.reset();
+        node2bnd.reset();
+        bnd2cell.reset();
 
         // Use ReorderEntities with all three partitions as explicit maps.
         // (No follow computation needed — partitions are pre-computed by
@@ -486,14 +482,10 @@ namespace DNDS::Geom
             log() << "UnstructuredMesh === ReadSerializeAndDistribute: redistributing" << std::endl;
 
         // Free temporary adjacencies no longer needed.
-        cell2cell.father.reset();
-        cell2cell.son.reset();
-        node2cell.father.reset();
-        node2cell.son.reset();
-        node2bnd.father.reset();
-        node2bnd.son.reset();
-        bnd2cell.father.reset();
-        bnd2cell.son.reset();
+        cell2cell.reset();
+        node2cell.reset();
+        node2bnd.reset();
+        bnd2cell.reset();
 
         // Compute push indices and serial-to-global reordering.
         std::vector<index> cell_push, cell_pushStart;
