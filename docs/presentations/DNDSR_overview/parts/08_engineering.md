@@ -275,7 +275,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "DNDSR"
-version = "0.1.0"              # synchronized with VERSION file + git describe
+version = "0.2.0"              # synchronized with VERSION file + git describe
 
 [tool.scikit-build]
 cmake.args = ["-DDNDS_BUILD_PYTHON=ON", "-DDNDS_PYBIND11_NO_LTO=ON"]
@@ -431,7 +431,7 @@ cmake --build build -t serve-docs
 
 ### Version string
 
-- `VERSION` file at repo root (`0.1.0`).
+- `VERSION` file at repo root (`0.2.0`).
 - CMake combines it with `git describe --tags --long`.
 - Exposed as:
   - C++ macro `DNDS_VERSION_STRING`.

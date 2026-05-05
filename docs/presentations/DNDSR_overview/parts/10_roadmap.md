@@ -2,7 +2,7 @@
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
-<div class="ch-num">CHAPTER 9</div>
+<div class="ch-num">CHAPTER 10</div>
 
 # Roadmap & Close
 
@@ -151,7 +151,7 @@ mpirun -np 4 ./build/app/euler.exe cases/euler_config_IV.json
 
 <br>
 
-**Code** · [github.com/CFDLAB-THU/DNDSR](https://github.com/CFDLAB-THU/DNDSR) **Docs** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR) **Release notes** · `RELEASE_NOTES.md` (v0.1.0)
+**Code** · [github.com/CFDLAB-THU/DNDSR](https://github.com/CFDLAB-THU/DNDSR) **Docs** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR) **Release notes** · `RELEASE_NOTES.md` (v0.2.0)
 
 <br>
 

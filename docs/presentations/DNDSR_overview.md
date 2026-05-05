@@ -5,7 +5,7 @@ paginate: true
 math: mathjax
 size: 16:9
 header: "DNDSR — CFD Research Code"
-footer: "v0.1.0 · CFD Lab, Tsinghua University"
+footer: "v0.2.0 · CFD Lab, Tsinghua University"
 ---
 
 <!--
@@ -41,8 +41,8 @@ footer: "v0.1.0 · CFD Lab, Tsinghua University"
   :root {
     --gh-fg:        #1f2328;
     --gh-fg-muted:  #656d76;
-    --gh-accent:    #0969da;
-    --gh-accent-2:  #1f6feb;
+    --gh-accent:    #660874;
+    --gh-accent-2:  #8b1a9e;
     --gh-bg:        #ffffff;
     --gh-code-bg:   #f6f8fa;
     --gh-border:    #d0d7de;
@@ -248,6 +248,17 @@ footer: "v0.1.0 · CFD Lab, Tsinghua University"
   }
   section.denser img[src*="mermaid_"] { max-height: 420px; }
   section.tight  img[src*="mermaid_"] { max-height: 380px; }
+
+  /* Cap external images (GitHub raw URLs) to prevent overflow.
+     Marp cannot introspect remote image sizes, so the overflow
+     checker may miss tall images without this constraint. */
+  img[src*="raw.githubusercontent.com"] {
+    max-width: 100%;
+    max-height: 480px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
 </style>
 
 <!-- _class: lead -->
@@ -258,11 +269,13 @@ footer: "v0.1.0 · CFD Lab, Tsinghua University"
 
 ## A C++17 / Python CFD Research Code
 
-**Compact Finite Volume · Variational Reconstruction** **MPI · OpenMP · CUDA · pybind11**
+**Compact Finite Volume · Variational Reconstruction**
+
+**MPI · OpenMP · CUDA · pybind11**
 
 <br>
 
-`v0.1.0` — 241 commits · 701 files · ~110 k insertions
+`v0.2.0`
 
 ---
 <!-- _class: chapter -->
@@ -367,9 +380,8 @@ Shared code path, eight binaries.
 
 ### Code
 
-- **~110 k** insertions (v0.1.0)
-- **701** files changed
-- **241** commits in the tagged release
+- **~72k** LOC C++ (346 files)
+- **~1.9k** LOC Python (17 files)
 - **6** C++ modules + header-only Solver
 - **4** pybind11 extension modules
 - **8** solver executables
@@ -1943,7 +1955,7 @@ trans.clearPersistentPull();
 
 <div class="callout callout-bug">
 
-🐛 **v0.1.0 bug-fix:** `globalSize()` used to be collective and could deadlock when some ranks took short-cut paths. It's now cached at `createFatherGlobalMapping` time — fully local.
+🐛 **v0.2.0 bug-fix:** `globalSize()` used to be collective and could deadlock when some ranks took short-cut paths. It's now cached at `createFatherGlobalMapping` time — fully local.
 
 </div>
 
@@ -2034,7 +2046,7 @@ recTrans.initPersistentPull();
 
 ### Where OMP is already applied
 
-- **ILU-OMP preconditioner** — parallel forward/backward sweeps (new in v0.1.0).
+- **ILU-OMP preconditioner** — parallel forward/backward sweeps (new in v0.2.0).
 - **Eigen reductions** — `EigenVecMin`, `EigenVecSum` fold per thread, then combine.
 - **State transitions** — `toLocalOMP` / `toGlobalOMP` / `bootstrapToLocalOMP` parallelize over the rows of adjacency arrays.
 - **FV metric construction** — many `ConstructX()` methods in `FiniteVolume` loop over cells / faces with `#pragma omp parallel for`.
@@ -2194,7 +2206,7 @@ public:
 ### Pitfalls avoided
 
 - **Thrust + CMake:** `CMAKE_CUDA_ARCHITECTURE=native` fixes a class of compile errors in Thrust's internal machinery.
-- **Accidental `to_device`:** a bug in the face-buffer creation path was copying host buffers to device needlessly; fixed in v0.1.0.
+- **Accidental `to_device`:** a bug in the face-buffer creation path was copying host buffers to device needlessly; fixed in v0.2.0.
 - **`py::classh` holders:** ensure safe Python↔C++ ownership when CUDA pointers survive across Python GC boundaries.
 
 ### Work in progress
@@ -2906,7 +2918,7 @@ This pattern also stresses `ReadSerializeRedistributed` across different rank co
 <!-- _footer: "RELEASE_NOTES.md:9-21" -->
 <!-- _class: dense -->
 
-## New solver features in v0.1.0
+## New solver features in v0.2.0
 
 <div class="cols">
 <div>
@@ -3261,7 +3273,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "DNDSR"
-version = "0.1.0"              # synchronized with VERSION file + git describe
+version = "0.2.0"              # synchronized with VERSION file + git describe
 
 [tool.scikit-build]
 cmake.args = ["-DDNDS_BUILD_PYTHON=ON", "-DDNDS_PYBIND11_NO_LTO=ON"]
@@ -3407,7 +3419,7 @@ cmake --build build -t serve-docs
 
 ### Version string
 
-- `VERSION` file at repo root (`0.1.0`).
+- `VERSION` file at repo root (`0.2.0`).
 - CMake combines it with `git describe --tags --long`.
 - Exposed as:
   - C++ macro `DNDS_VERSION_STRING`.
@@ -3432,6 +3444,394 @@ git push --tags
 <!-- _paginate: false -->
 
 <div class="ch-num">CHAPTER 9</div>
+
+# Results
+
+## Selected 2D / 3D Euler & NS cases
+
+---
+<!-- _class:  -->
+
+## NACA 0012 (SA RANS)
+
+<div class="cols">
+
+<div>
+
+![NACA mesh](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/01_naca0012_mesh.png)
+
+*mesh*
+
+</div>
+
+<div>
+
+![Mach AOA=5°](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/01_naca0012_mach_aoa5.png)
+
+*AOA = 5°, Mach number*
+
+</div>
+
+</div>
+
+---
+<!-- _class:  -->
+
+## NACA 0012 — AOA 15°
+
+<div class="cols">
+
+<div>
+
+![Mach AOA=15°](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/01_naca0012_mach_aoa15.png)
+
+*AOA = 15°, Mach number*
+
+</div>
+
+<div>
+
+![ν̃ field](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/01_naca0012_nutilde.png)
+
+*AOA = 15°, $\rho\tilde{\nu}$ field*
+
+</div>
+
+</div>
+
+---
+## Double Mach Reflection (2D Euler)
+
+Density at *t* = 0.2, Mach 10 shock on 30° wedge.
+
+<div class="cols">
+
+<div>
+
+![DITR U2R2](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/02_dm480_hm3_field.png)
+
+*DITR U2R2, $c_2 = 0.55$*
+
+</div>
+
+<div>
+
+![BDF2](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/02_dm480_bdf2.png)
+
+*BDF2*
+
+</div>
+
+</div>
+
+---
+<!-- _class:  -->
+
+## Supersonic Wedge (2D Euler)
+Mach 3 inviscid flow over a 15° compression corner.
+
+<div class="cols">
+
+<div>
+
+![Wedge mesh](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/12_wedge_mesh.png)
+
+*mesh*
+
+</div>
+
+<div>
+
+![Wedge density](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/12_wedge_density.png)
+
+*Density, Re $= \infty$*
+
+</div>
+
+</div>
+
+---
+<!-- _class:  -->
+
+## Wedge — viscous (Re = 100) + pressure
+
+<div class="cols">
+
+<div>
+
+![Wedge pressure](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/12_wedge_pressure.png)
+
+*Pressure, Re $= \infty$*
+
+</div>
+
+<div>
+
+![Wedge viscous](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/12_wedge_viscous_density.png)
+
+*Density, Re = 100*
+
+</div>
+
+</div>
+
+---
+<!-- _class:  -->
+
+## Hypersonic Cavity (2D Navier–Stokes)
+
+Time-averaged results.
+
+<div class="cols">
+
+<div>
+
+![Cavity mesh](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/03_cavity_mesh.png)
+
+*mesh*
+
+</div>
+
+<div>
+
+![Cavity pressure](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/03_cavity_pressure.png)
+
+*Time-averaged $p/(\rho_\infty U_\infty^2)$, 27 isolines*
+
+</div>
+
+</div>
+
+---
+<!-- _class:  -->
+
+## Hypersonic Cavity — time step + Ma = 0.1
+
+<div class="cols">
+
+<div>
+
+![Cavity dt comparison](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/03_cavity_dt_compare.png)
+
+*Explicit time step comparison*
+
+</div>
+
+<div>
+
+![Cavity Ma=0.1](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/03_cavity_mach01.png)
+
+*t = 0.1 Mach, 32 isolines (explicit 2nd-order FV)*
+
+</div>
+
+</div>
+
+---
+<!-- _class:  -->
+
+## Cylinder Re = 1200 (2D NS, unsteady)
+
+<div class="cols">
+
+<div>
+
+![Cyl mesh](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/05_cylinder_re1200_mesh.png)
+
+*Mesh*
+
+</div>
+
+<div>
+
+![Cyl vorticity](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/05_cylinder_re1200.png)
+
+*Vorticity*
+
+</div>
+
+</div>
+
+---
+<!-- _class:  -->
+
+## 3D Turbulent Cylinder (ILES, Re = 1.2 × 10³)
+
+Q-criterion iso-surfaces coloured by Mach number.
+
+<div class="cols">
+
+<div>
+
+![3D cylinder mesh](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/13_cylinder3d_mesh.png)
+
+*mesh*
+
+</div>
+
+<div>
+
+![Q-criterion, ΔT=0.05](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/13_cylinder3d_qcrit.png)
+
+*Q-criterion iso-surfaces*
+
+</div>
+
+</div>
+
+---
+## Sedov Blast Wave (2D Euler)
+
+<div class="cols">
+
+<div>
+
+![Sedov density](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/08_sedov.png)
+
+*Density*
+
+</div>
+
+<div>
+
+![Sedov profile](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/08_sedov_profile.png)
+
+*Density along diagonal*
+
+</div>
+
+</div>
+
+---
+## Noh Problem
+
+<div class="cols">
+
+<div>
+
+![Noh density](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/09_noh.png)
+
+*Density at t = 0.6*
+
+</div>
+
+<div>
+
+![Noh profile](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/09_noh_profile.png)
+
+*Density along diagonal*
+
+</div>
+
+</div>
+
+---
+<!-- _class:  -->
+
+## M2000 Relativistic Jet (2D Euler)
+
+Mach 2000 jet
+
+<div class="cols">
+
+<div>
+
+![M2000 pressure](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/10_m2000jet_pressure.png)
+
+*$\log_{10}(p)$, Re = 100*
+
+</div>
+
+<div>
+
+![M2000 density](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/10_m2000jet_density.png)
+
+*$\log_{10}(\rho)$, Re = 100*
+
+</div>
+
+</div>
+
+---
+<!-- _class:  -->
+
+## Isentropic Vortex (2D Euler) — error convergence
+
+<div class="cols">
+
+<div>
+
+![IV L1 error](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/07_iv_err.png)
+
+*$L^1$ density error vs. grid size*
+
+</div>
+
+<div>
+
+![IV residual](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/07_iv_res.png)
+
+*Residual convergence*
+
+</div>
+
+</div>
+
+---
+## NASA CRM (3D SA RANS)
+
+Wing-body
+
+<div class="cols">
+
+<div>
+
+![CRM mesh](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/11_crm_mesh.png)
+
+*Surface mesh*
+
+</div>
+
+<div>
+
+![CRM Cp](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/11_crm_cp.png)
+
+*Surface $C_p$*
+
+</div>
+
+</div>
+
+---
+<!-- _class:  -->
+
+## NASA CRM — $C_f$ + $C_L/C_D$
+
+<div class="cols">
+
+<div>
+
+![CRM Cf](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/11_crm_cf.png)
+
+*Surface $C_f$*
+
+</div>
+
+<div>
+
+![CRM CLCD](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/11_crm_clcd.png)
+
+*Force-coefficient convergence*
+
+</div>
+
+</div>
+
+---
+<!-- _class: chapter -->
+<!-- _paginate: false -->
+
+<div class="ch-num">CHAPTER 10</div>
 
 # Roadmap & Close
 
@@ -3580,7 +3980,7 @@ mpirun -np 4 ./build/app/euler.exe cases/euler_config_IV.json
 
 <br>
 
-**Code** · [github.com/CFDLAB-THU/DNDSR](https://github.com/CFDLAB-THU/DNDSR) **Docs** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR) **Release notes** · `RELEASE_NOTES.md` (v0.1.0)
+**Code** · [github.com/CFDLAB-THU/DNDSR](https://github.com/CFDLAB-THU/DNDSR) **Docs** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR) **Release notes** · `RELEASE_NOTES.md` (v0.2.0)
 
 <br>
 

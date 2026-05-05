@@ -309,7 +309,7 @@ This pattern also stresses `ReadSerializeRedistributed` across different rank co
 <!-- _footer: "RELEASE_NOTES.md:9-21" -->
 <!-- _class: dense -->
 
-## New solver features in v0.1.0
+## New solver features in v0.2.0
 
 <div class="cols">
 <div>
