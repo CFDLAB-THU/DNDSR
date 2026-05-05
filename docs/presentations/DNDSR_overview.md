@@ -1,14 +1,3 @@
-<!--
-  DNDSR comprehensive overview deck (expanded edition).
-
-  Render (PDF):      marp --pdf    DNDSR_overview.md
-  Render (HTML):     marp --html   DNDSR_overview.md
-  With Mermaid:      marp --html --mermaid DNDSR_overview.md
-  Best viewer:       "Marp for VS Code" extension (Mermaid + MathJax built-in).
-
-  Paths to images are relative to this file: ../elements/... ../theory/...
--->
-
 ---
 marp: true
 theme: default
@@ -18,6 +7,34 @@ size: 16:9
 header: "DNDSR — CFD Research Code"
 footer: "v0.1.0 · CFD Lab, Tsinghua University"
 ---
+
+<!--
+  DNDSR comprehensive overview deck.
+
+  This file is GENERATED. Source lives in:
+      docs/presentations/DNDSR_overview/
+          00_frontmatter.md
+          parts/00_title.md
+          parts/01_chapter_1.md
+          ...
+          parts/09_chapter_9.md
+
+  To rebuild:
+      bash docs/presentations/DNDSR_overview/build.sh
+
+  To render directly from source (PDF):
+      bash docs/presentations/DNDSR_overview/build.sh --pdf
+
+  Best viewer:   "Marp for VS Code" extension (Mermaid + MathJax built-in).
+
+  Paths to images are relative to the final DNDSR_overview.md location:
+      ../elements/... and ../theory/...
+
+  Overflow-control classes (append per-slide as Marp directives):
+      _class: dense     -- 18px base  (tighter tables / lots of bullets)
+      _class: denser    -- 16px base  (very dense reference slides)
+      _class: tight     -- 14px base  (maximum density; use sparingly)
+-->
 
 <style>
   /* --- Light-GitHub palette overrides ------------------------------------ */
@@ -176,6 +193,61 @@ footer: "v0.1.0 · CFD Lab, Tsinghua University"
 
   .small { font-size: 17px; }
   .tiny  { font-size: 14px; color: var(--gh-fg-muted); }
+
+  /* --- Overflow control -------------------------------------------------- */
+  /* Per-slide density classes: append one of these to any slide that
+     overflows at the default 21px base.
+        _class: dense     - 18px base, tighter tables / lots of bullets
+        _class: denser    - 16px base, very dense reference slides
+        _class: tight     - 14px base, maximum density; use sparingly
+  */
+  section.dense          { font-size: 18px; padding: 38px 50px 46px 50px; }
+  section.dense h2       { font-size: 25px; }
+  section.dense h3       { font-size: 18px; }
+  section.dense pre      { font-size: 13px; padding: 6px 10px; }
+  section.dense table    { font-size: 15px; }
+  section.dense td, section.dense th { padding: 3px 8px; }
+
+  section.denser         { font-size: 16px; padding: 34px 46px 42px 46px; }
+  section.denser h2      { font-size: 22px; padding-bottom: 4px; }
+  section.denser h3      { font-size: 16px; }
+  section.denser pre     { font-size: 12px; padding: 5px 8px; line-height: 1.3; }
+  section.denser table   { font-size: 14px; }
+  section.denser td, section.denser th { padding: 2px 6px; }
+  section.denser .cols, section.denser .cols-60-40,
+  section.denser .cols-40-60, section.denser .cols-3 { gap: 16px; }
+
+  section.tight          { font-size: 14px; padding: 28px 40px 36px 40px; }
+  section.tight h2       { font-size: 20px; padding-bottom: 3px; }
+  section.tight h3       { font-size: 14px; margin-top: 8px; }
+  section.tight pre      { font-size: 11px; padding: 4px 8px; line-height: 1.25; }
+  section.tight table    { font-size: 13px; }
+  section.tight td, section.tight th { padding: 2px 6px; }
+  section.tight .cols, section.tight .cols-60-40,
+  section.tight .cols-40-60, section.tight .cols-3 { gap: 12px; }
+  section.tight ul, section.tight ol { margin: 4px 0; padding-left: 20px; }
+  section.tight li       { margin: 1px 0; }
+  section.tight p        { margin: 4px 0; }
+
+  /* -----------------------------------------------------------------
+     Mermaid-rendered SVG diagrams (filename pattern: res/mermaid_*.svg).
+     mmdc emits SVGs with inline width="100%" and a viewBox whose height
+     reflects the natural diagram size. On a 720 px slide this overflows
+     vertically for flowcharts with many nodes. Cap the rendered height
+     and let width scale proportionally, so Mermaid diagrams fit the
+     slide without shrinking the slide font-size class.
+  */
+  img[src*="mermaid_"] {
+    max-width: 100%;
+    max-height: 460px;
+    height: auto;
+    width: auto;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
+  }
+  section.denser img[src*="mermaid_"] { max-height: 420px; }
+  section.tight  img[src*="mermaid_"] { max-height: 380px; }
 </style>
 
 <!-- _class: lead -->
@@ -193,8 +265,8 @@ footer: "v0.1.0 · CFD Lab, Tsinghua University"
 
 `v0.1.0` — 241 commits · 701 files · ~110 k insertions
 
----
 
+---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
@@ -205,7 +277,6 @@ footer: "v0.1.0 · CFD Lab, Tsinghua University"
 ## Motivation · feature set · positioning
 
 ---
-
 <!-- _footer: "docs/architecture/Paradigm.md:4,119,161" -->
 
 ## Why another CFD code?
@@ -262,7 +333,6 @@ std::vector<vec>  faceCent;
 </div>
 
 ---
-
 <!-- _footer: "README.md:11-26 · app/Euler/*.cpp" -->
 
 ## DNDSR at a glance
@@ -300,7 +370,6 @@ Shared code path, eight binaries.
 </div>
 
 ---
-
 <!-- _footer: "RELEASE_NOTES.md · docs/architecture/ · docs/dev/" -->
 
 ## Project shape in numbers
@@ -348,29 +417,13 @@ Shared code path, eight binaries.
 > **24 597 → 1** diagnostic across 26 cleanup passes.
 
 ---
-
 <!-- _footer: "docs/guides/project_structure.md:101-114" -->
+<!-- _class: denser -->
 
 ## The one-slide map
 
-```mermaid
-flowchart LR
-    subgraph core [Core infrastructure]
-        DNDS["DNDS<br/>arrays · MPI · HDF5 · CUDA"]
-        Solver["Solver (header-only)<br/>ODE · GMRES · PCG"]
-    end
-    subgraph discr [Discretization]
-        Geom["Geom<br/>mesh · CGNS · Metis"]
-        CFV["CFV<br/>finite volume · VR"]
-    end
-    subgraph app [Application]
-        Euler["Euler<br/>compressible N-S"]
-        EulerP["EulerP<br/>CUDA evaluator"]
-    end
-    DNDS --> Geom --> CFV --> Euler
-    CFV --> EulerP
-    DNDS -.-> Solver -.-> Euler
-```
+![](res/mermaid_01_b490bd70.svg)
+
 
 <div class="callout">
 
@@ -383,7 +436,6 @@ scalar loops.
 </div>
 
 ---
-
 <!-- _footer: "README.md:28-68 · docs/guides/building.md" -->
 
 ## From zero to a running solver in six commands
@@ -413,8 +465,8 @@ mpirun -np 4 ./build/app/euler.exe cases/euler_config_IV.json
 Presets available: `release-test`, `debug`, `cuda`, `ci`. Python path:
 `pip install -e .` uses `scikit-build-core` under the hood.
 
----
 
+---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
@@ -425,7 +477,6 @@ Presets available: `release-test`, `debug`, `cuda`, `ci`. Python path:
 ## Arrays, MPI, ghosts, state machines
 
 ---
-
 <!-- _footer: "docs/guides/project_structure.md:5-17 · docs/index.md:10-17" -->
 
 ## Six modules — responsibilities
@@ -452,8 +503,8 @@ replacing the flux kernel with device-callable scalar loops.
 </div>
 
 ---
-
 <!-- _footer: "docs/architecture/Paradigm.md:119-161" -->
+<!-- _class: dense -->
 
 ## Delayed abstraction ⇒ independent comm patterns
 
@@ -504,8 +555,8 @@ communication phases are **independent and composable**:
 </div>
 
 ---
-
 <!-- _footer: "src/DNDS/ArrayBasic.hpp:17-25 · array_infrastructure.md:50-95" -->
+<!-- _class: denser -->
 
 ## `Array<T, rs, rm>` — five layouts in one template
 
@@ -540,8 +591,8 @@ enum DataLayout {
 Alignment stub exists but only `NoAlign` is implemented today.</div>
 
 ---
-
 <!-- _footer: "src/DNDS/Array.hpp · array_infrastructure.md:82-95" -->
+<!-- _class: denser -->
 
 ## CSR has two internal modes
 
@@ -594,8 +645,8 @@ No `std::string` rows, no `std::vector` rows — it would break MPI.
 </div>
 
 ---
-
 <!-- _footer: "src/DNDS/ArrayTransformer.hpp:429-1496" -->
+<!-- _class: denser -->
 
 ## `ArrayTransformer` — anatomy
 
@@ -653,7 +704,6 @@ trans.clearMPITypes();
 </div>
 
 ---
-
 <!-- _footer: "src/DNDS/ArrayTransformer.hpp · array_infrastructure.md:115-184" -->
 
 ## Father / son addressing
@@ -704,7 +754,6 @@ ghost copies back into the father.
 > the MPI datatypes depend on element size.
 
 ---
-
 <!-- _footer: "src/DNDS/ArrayPair.hpp · src/DNDS/ArrayDerived/*.hpp" -->
 
 ## Typed wrappers: `ArrayDerived`
@@ -750,8 +799,8 @@ struct ArrayPair {
 </div>
 
 ---
-
 <!-- _footer: "src/DNDS/ArrayDOF.hpp:174-395 · CFV/VRDefines.hpp:27" -->
+<!-- _class: dense -->
 
 ## `ArrayDof` — the solver's vector space
 
@@ -809,8 +858,8 @@ Explicit instantiation covers `(n_m ∈ {1..8, Dynamic, NonUniform}, n_n ∈ {1.
 </div>
 
 ---
-
 <!-- _footer: "src/DNDS/ArrayDOF_op.hxx · ArrayDOF_op_CUDA.cuh" -->
+<!-- _class: dense -->
 
 ## Host / CUDA dispatch for DOF ops
 
@@ -847,8 +896,8 @@ same in C++ regardless of where the data lives — the host code just checks
 </div>
 
 ---
-
 <!-- _footer: "docs/architecture/MeshConnectivity.md:179-336 · Mesh_DeviceView.hpp:89-94" -->
+<!-- _class: tight -->
 
 ## State-tracked mesh adjacency (1 / 2)
 
@@ -864,20 +913,12 @@ enum MeshAdjState {
 };
 ```
 
-```mermaid
-stateDiagram-v2
-    [*] --> Unknown
-    Unknown --> PointToGlobal : markGlobal()
-    Unknown --> PointToLocal  : bootstrapToLocal(mapping)
-    PointToGlobal --> PointToLocal : wireTargetMapping(map)<br/>+ toLocal()
-    PointToLocal --> PointToGlobal : toGlobal()
-    PointToLocal --> PointToLocal  : idempotent
-    PointToGlobal --> PointToGlobal: idempotent
-```
+![](res/mermaid_02_d1eda804.svg)
+
 
 ---
-
 <!-- _footer: "src/Geom/Mesh/AdjIndexInfo.hpp:27-341" -->
+<!-- _class: denser -->
 
 ## State-tracked mesh adjacency (2 / 2)
 
@@ -942,8 +983,8 @@ struct AdjPairTracked : public TPair {
 </div>
 </div>
 
----
 
+---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
@@ -954,25 +995,24 @@ struct AdjPairTracked : public TPair {
 ## Elements · mesh build · ghosts · DSL
 
 ---
-
 <!-- _footer: "docs/elements/ · src/Geom/Elements/" -->
 
 ## Supported elements — O1 / O2 pairs
 
 <div class="elem-grid">
-<figure><img src="../elements/Tri3_nodes.png"      alt="Tri3"      style="height:120px;"/><figcaption>Tri3</figcaption></figure>
-<figure><img src="../elements/Quad4_nodes.png"     alt="Quad4"     style="height:120px;"/><figcaption>Quad4</figcaption></figure>
-<figure><img src="../elements/Tet4_nodes.png"      alt="Tet4"      style="height:120px;"/><figcaption>Tet4</figcaption></figure>
-<figure><img src="../elements/Hex8_nodes.png"      alt="Hex8"      style="height:120px;"/><figcaption>Hex8</figcaption></figure>
-<figure><img src="../elements/Prism6_nodes.png"    alt="Prism6"    style="height:120px;"/><figcaption>Prism6</figcaption></figure>
-<figure><img src="../elements/Pyramid5_nodes.png"  alt="Pyramid5"  style="height:120px;"/><figcaption>Pyramid5</figcaption></figure>
+<figure><img src="res/Tri3_nodes.png"      alt="Tri3"      style="height:120px;"/><figcaption>Tri3</figcaption></figure>
+<figure><img src="res/Quad4_nodes.png"     alt="Quad4"     style="height:120px;"/><figcaption>Quad4</figcaption></figure>
+<figure><img src="res/Tet4_nodes.png"      alt="Tet4"      style="height:120px;"/><figcaption>Tet4</figcaption></figure>
+<figure><img src="res/Hex8_nodes.png"      alt="Hex8"      style="height:120px;"/><figcaption>Hex8</figcaption></figure>
+<figure><img src="res/Prism6_nodes.png"    alt="Prism6"    style="height:120px;"/><figcaption>Prism6</figcaption></figure>
+<figure><img src="res/Pyramid5_nodes.png"  alt="Pyramid5"  style="height:120px;"/><figcaption>Pyramid5</figcaption></figure>
 
-<figure><img src="../elements/Tri6_nodes.png"      alt="Tri6"      style="height:120px;"/><figcaption>Tri6</figcaption></figure>
-<figure><img src="../elements/Quad9_nodes.png"     alt="Quad9"     style="height:120px;"/><figcaption>Quad9</figcaption></figure>
-<figure><img src="../elements/Tet10_nodes.png"     alt="Tet10"     style="height:120px;"/><figcaption>Tet10</figcaption></figure>
-<figure><img src="../elements/Hex27_nodes.png"     alt="Hex27"     style="height:120px;"/><figcaption>Hex27</figcaption></figure>
-<figure><img src="../elements/Prism18_nodes.png"   alt="Prism18"   style="height:120px;"/><figcaption>Prism18</figcaption></figure>
-<figure><img src="../elements/Pyramid14_nodes.png" alt="Pyramid14" style="height:120px;"/><figcaption>Pyramid14</figcaption></figure>
+<figure><img src="res/Tri6_nodes.png"      alt="Tri6"      style="height:120px;"/><figcaption>Tri6</figcaption></figure>
+<figure><img src="res/Quad9_nodes.png"     alt="Quad9"     style="height:120px;"/><figcaption>Quad9</figcaption></figure>
+<figure><img src="res/Tet10_nodes.png"     alt="Tet10"     style="height:120px;"/><figcaption>Tet10</figcaption></figure>
+<figure><img src="res/Hex27_nodes.png"     alt="Hex27"     style="height:120px;"/><figcaption>Hex27</figcaption></figure>
+<figure><img src="res/Prism18_nodes.png"   alt="Prism18"   style="height:120px;"/><figcaption>Prism18</figcaption></figure>
+<figure><img src="res/Pyramid14_nodes.png" alt="Pyramid14" style="height:120px;"/><figcaption>Pyramid14</figcaption></figure>
 </div>
 
 <div class="cols">
@@ -993,8 +1033,8 @@ struct AdjPairTracked : public TPair {
 </div>
 
 ---
-
 <!-- _footer: "src/Geom/Mesh/Mesh.hpp:57-127" -->
+<!-- _class: denser -->
 
 ## `UnstructuredMesh` — what it owns
 
@@ -1035,24 +1075,13 @@ flags**. Group flags remain as a coarse assertion tool.
 </div>
 
 ---
-
 <!-- _footer: "docs/architecture/MeshConnectivity.md:46-90 · src/Geom/Mesh/Mesh.hpp:442-1011" -->
+<!-- _class: denser -->
 
 ## Mesh build pipeline — end-to-end
 
-```mermaid
-flowchart TD
-    A["ReadFromCGNSSerial<br/>or ReadSerializeAndDistribute"] --> B["PartitionReorderToMeshCell2Cell<br/>Metis (KWAY/RB) + RCM reorder"]
-    B --> C["RecoverNode2CellAndNode2Bnd<br/>MPI push-back · node → [cells]"]
-    C --> D["RecoverCell2CellAndBnd2Cell<br/>node-neighbor cell adjacency"]
-    D --> E["BuildGhostPrimary(nGhostLayers)<br/>GhostSpec · CompiledGhostTree · BFS"]
-    E --> F["AdjGlobal2LocalPrimary<br/>state: Global → Local"]
-    F --> G["InterpolateFace<br/>face2cell · cell2face · face2node"]
-    G --> H["BuildGhostFace + MatchFaceBoundary"]
-    H --> I["BuildCell2CellFace<br/>face-neighbor (⊆ cell2cell)"]
-    I --> J["BuildNodeWallDist (RANS only)"]
-    J --> K["ReorderLocalCells(nParts, nPartsInner)<br/>cache-locality pass"]
-```
+![](res/mermaid_03_1a883fa1.svg)
+
 
 <div class="callout callout-warn">
 
@@ -1064,8 +1093,8 @@ takes over. This motivates the DMPlex-style evolution on the roadmap.
 </div>
 
 ---
-
 <!-- _footer: "src/Geom/Mesh/Mesh.hpp:1083-1105" -->
+<!-- _class: dense -->
 
 ## Partitioning — `PartitionOptions`
 
@@ -1108,8 +1137,8 @@ values** across re-runs at any `np`.
 </div>
 
 ---
-
 <!-- _footer: "src/Geom/Mesh/MeshConnectivity.hpp:43-237" -->
+<!-- _class: dense -->
 
 ## The ghost specification DSL — types
 
@@ -1146,8 +1175,8 @@ struct GhostSpec   { std::vector<GhostChain> chains;
 ```
 
 ---
-
 <!-- _footer: "src/Geom/Mesh/MeshConnectivity.hpp:244-335,1241" -->
+<!-- _class: dense -->
 
 ## The ghost DSL — compile & evaluate
 
@@ -1198,8 +1227,8 @@ struct GhostResult {
 </div>
 
 ---
-
 <!-- _footer: "src/Geom/Mesh/MeshConnectivity.hpp:858-1220" -->
+<!-- _class: tight -->
 
 ## DSL primitives on `MeshConnectivity`
 
@@ -1250,7 +1279,6 @@ each hop's adjacency by kind at runtime.
 </div>
 
 ---
-
 <!-- _footer: "src/Geom/Mesh/Mesh.hpp:699-709 · RELEASE_NOTES.md:45" -->
 
 ## Order elevation & bisection
@@ -1300,7 +1328,6 @@ Used in practice for:
 - **h-refinement benchmarks** via bisection, while keeping the same topology file.
 
 ---
-
 <!-- _footer: "src/Geom/Mesh/Mesh.hpp:986-1011" -->
 
 ## Wall-distance computation
@@ -1343,7 +1370,6 @@ Distance is also computed *per face* for use in the SST blending functions.
 </div>
 
 ---
-
 <!-- _footer: "docs/architecture/Serialization.md:107-172 · src/Geom/Mesh/Mesh.hpp:912-949" -->
 
 ## Cross-`np` restart
@@ -1392,8 +1418,8 @@ Array → ParArray → ArrayPair → ArrayRedistributor
 > Write from 4 ranks, restart on 8 — `EulerSolver::ReadRestart` handles all
 > three cases transparently.
 
----
 
+---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
@@ -1404,7 +1430,6 @@ Array → ParArray → ArrayPair → ArrayRedistributor
 ## CFV · VR · flux · limiters · ODE · Krylov
 
 ---
-
 <!-- _footer: "src/CFV/VRDefines.hpp:27 · docs/theory/Variational_Reconstruction.md:21-30" -->
 
 ## Compact Finite Volume — the reconstruction
@@ -1439,7 +1464,7 @@ maxNeighbour   = 7;
 </div>
 <div>
 
-<img src="../theory/PyramidShow.png" alt="pyramid shape functions" style="width:100%;"/>
+<img src="res/PyramidShow.png" alt="pyramid shape functions" style="width:100%;"/>
 
 <br>
 
@@ -1451,8 +1476,8 @@ The stencil is **one ring of node-neighbors** — which is exactly what
 </div>
 
 ---
-
 <!-- _footer: "docs/theory/Variational_Reconstruction.md:33-106" -->
+<!-- _class: denser -->
 
 ## Variational Reconstruction — the functional
 
@@ -1511,8 +1536,8 @@ Solved iteratively — options below.
 </div>
 
 ---
-
 <!-- _footer: "src/CFV/VariationalReconstruction.hpp:282-289" -->
+<!-- _class: denser -->
 
 ## VR setup — the three `Construct*` calls
 
@@ -1564,8 +1589,8 @@ Eigen maps over an MPI-aware distributed memory block.
 </div>
 
 ---
-
 <!-- _footer: "src/CFV/FiniteVolume.hpp:38-86" -->
+<!-- _class: denser -->
 
 ## `FiniteVolume` — the metric cache
 
@@ -1601,8 +1626,8 @@ migrates the entire metric cache to the GPU as a device-side view.
 </div>
 
 ---
-
 <!-- _footer: "src/Euler/Gas.hpp:61-95,230" -->
+<!-- _class: tight -->
 
 ## 13 Riemann solvers
 
@@ -1637,8 +1662,8 @@ RoePreamble<dim> ComputeRoePreamble(ULm, URm, gamma, dumpInfo);
 ```
 
 ---
-
 <!-- _footer: "src/Euler/Gas.hpp:200-230" -->
+<!-- _class: dense -->
 
 ## `RoePreamble` — the shared middle
 
@@ -1693,8 +1718,8 @@ dissipation / entropy-fix strategy.
 </div>
 
 ---
-
 <!-- _footer: "src/CFV/Limiters.hpp:28-577" -->
+<!-- _class: denser -->
 
 ## Limiters — the FWBAP L2 family
 
@@ -1740,8 +1765,8 @@ dissipation / entropy-fix strategy.
 > `EvaluateCellRHSAlpha` enforces CFL-consistent per-cell RHS scaling.
 
 ---
-
 <!-- _footer: "src/CFV/VariationalReconstruction.hpp:1071-1086" -->
+<!-- _class: denser -->
 
 ## VR's own limiter — WBAP with characteristic transform
 
@@ -1786,8 +1811,8 @@ void DoLimiterWBAP_3(...);                      // 3-mode variant
 </div>
 
 ---
-
 <!-- _footer: "src/Solver/ODE.hpp · RELEASE_NOTES.md:11,14" -->
+<!-- _class: denser -->
 
 ## Time integration — the ODE zoo
 
@@ -1818,9 +1843,8 @@ class ImplicitDualTimeStep {
 `SetExtraParams(json)` exposes scheme-specific knobs (e.g. `nMG`, `incFScale`).
 
 ---
-
 <!-- _footer: "src/Solver/ODE.hpp:123-363,917-1438" -->
-
+<!-- _class: denser -->
 ## HM3 + p-Multigrid
 
 **HM3** (Hermite-3) is a 3rd-order A-stable implicit scheme with three modes:
@@ -1870,8 +1894,8 @@ uRec, downCastMethod)` to project reconstruction coefficients between orders.
 </div>
 
 ---
-
 <!-- _footer: "src/Solver/Linear.hpp · src/Euler/EulerEvaluator.hpp:427-580" -->
+<!-- _class: denser -->
 
 ## Linear solvers — Krylov + LU-SGS preconditioner
 
@@ -1931,8 +1955,8 @@ void UpdateSGSWithRec(alphaDiag, t, rhs, u, uRec, uInc, uRecInc,
 Direct path for small blocks: `src/Solver/Direct.hpp` (LU / LDLT).
 Optional **SuperLU_dist** via the `cfd_externals` submodule.
 
----
 
+---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
@@ -1943,8 +1967,8 @@ Optional **SuperLU_dist** via the `cfd_externals` submodule.
 ## MPI · OpenMP · CUDA
 
 ---
-
 <!-- _footer: "src/DNDS/ArrayTransformer.hpp · array_infrastructure.md" -->
+<!-- _class: dense -->
 
 ## MPI — the "set up once" discipline
 
@@ -2004,7 +2028,6 @@ when some ranks took short-cut paths. It's now cached at
 </div>
 
 ---
-
 <!-- _footer: "src/DNDS/ArrayTransformer.hpp · HIndexed vs InSituPack" -->
 
 ## Two communication strategies
@@ -2050,7 +2073,6 @@ MPI_Isend(inSituBuffer[rank].data(), ...);
 > — no application-level changes needed.
 
 ---
-
 <!-- _footer: "src/DNDS/ArrayTransformer.hpp:606" -->
 
 ## `BorrowGGIndexing` — avoid collective setup twice
@@ -2082,8 +2104,8 @@ size of each array.
 </div>
 
 ---
-
 <!-- _footer: "AGENTS.md · src/Geom/Mesh/AdjIndexInfo.hpp:218-223" -->
+<!-- _class: tight -->
 
 ## OpenMP in the stack
 
@@ -2109,14 +2131,8 @@ size of each array.
 
 ### Hybrid model
 
-```text
-      ┌────────── NUMA node ───────────┐
-      │  MPI rank                       │
-      │  ├── OMP thread 0               │
-      │  ├── OMP thread 1               │
-      │  └── OMP thread N-1             │
-      └─────────────────────────────────┘
-```
+![](res/mermaid_04_e32cfdd6.svg)
+
 
 **CI default** `OMP_NUM_THREADS=2` (override at configure time via
 `DNDS_TEST_OMP_THREADS`).
@@ -2129,8 +2145,8 @@ within. MPI handles cross-socket / cross-node; OMP handles within.
 </div>
 
 ---
-
 <!-- _footer: "src/DNDS/Device/ · CMakePresets.json:37-44" -->
+<!-- _class: denser -->
 
 ## CUDA path — `DeviceTransferable` CRTP
 
@@ -2184,8 +2200,8 @@ Build: `cmake --preset cuda` → `-DDNDS_USE_CUDA=ON` · Thrust fixes via
 `CMAKE_CUDA_ARCHITECTURE=native`.
 
 ---
-
 <!-- _footer: "src/EulerP/EulerP_Evaluator.hpp · EulerP_Evaluator_impl.{hpp,cpp,cu}" -->
+<!-- _class: denser -->
 
 ## EulerP — the purpose-built GPU evaluator
 
@@ -2216,8 +2232,8 @@ Python driver: `python/DNDSR/EulerP/EulerP_Solver.py` orchestrates the full
 EulerP pipeline from Python with CUDA selected by runtime flag.
 
 ---
-
 <!-- _footer: "src/EulerP/EulerP_Evaluator.hpp:149-918" -->
+<!-- _class: denser -->
 
 ## EulerP — the kernel pipeline
 
@@ -2253,7 +2269,6 @@ public:
   of backend.
 
 ---
-
 <!-- _footer: "docs/dev/cudaNotes.md · RELEASE_NOTES.md:50-52" -->
 
 ## GPU engineering notes
@@ -2294,8 +2309,8 @@ public:
 </div>
 </div>
 
----
 
+---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
@@ -2306,7 +2321,6 @@ public:
 ## Serializer · JSON config · Python · VTK · CGNS
 
 ---
-
 <!-- _footer: "docs/architecture/Serialization.md:11-172" -->
 
 ## Serialization — a five-layer cake
@@ -2330,8 +2344,8 @@ Failing to participate causes a hang, not a crash.
 </div>
 
 ---
-
 <!-- _footer: "src/DNDS/Serializer/SerializerBase.hpp:153-303" -->
+<!-- _class: denser -->
 
 ## `SerializerBase` — the public interface
 
@@ -2367,8 +2381,8 @@ virtual void ReadUint8Array (const std::string &name, uint8_t *data,
 ```
 
 ---
-
 <!-- _footer: "src/DNDS/Serializer/SerializerBase.hpp:14-124" -->
+<!-- _class: dense -->
 
 ## `ArrayGlobalOffset` — five offset modes
 
@@ -2404,7 +2418,6 @@ extern ArrayGlobalOffset ArrayGlobalOffset_Unknown, _One, _Parts, _EvenSplit;
 | `isDist()`           | Explicit `{localSize, globalStart}`                  |
 
 ---
-
 <!-- _footer: "docs/architecture/Serialization.md:60-83" -->
 
 ## Zero-size partition safety
@@ -2453,27 +2466,12 @@ application-level branching.
 </div>
 
 ---
-
 <!-- _footer: "docs/architecture/Serialization.md:87-172" -->
 
 ## Write-N-read-M — the rendezvous pattern
 
-```text
-WRITER (np = 4):                           READER (np = 8):
-  rank i writes its rows + origIndex        rank i EvenSplit-reads ~1/8 of rows
-                                            ↓
-                                  ┌────────────────────────────────────┐
-                                  │ BuildRedistributionPullingIndex     │
-                                  │   3 × MPI_Alltoallv rounds:         │
-                                  │     1. hash origIndex → ownerRank   │
-                                  │     2. send origIndex to owners     │
-                                  │     3. scatter globalReadIdx back   │
-                                  │   → directory: origIdx → globalRead │
-                                  └────────────────────────────────────┘
-                                            ↓
-                                  ArrayTransformer pull placed rows
-                                  on the correct target ranks
-```
+![](res/mermaid_05_9c76b2a3.svg)
+
 
 <div class="callout callout-ok">
 
@@ -2485,8 +2483,8 @@ collective with empty buffers.
 </div>
 
 ---
-
 <!-- _footer: "src/DNDS/Config/ConfigParam.hpp:47-176 · ConfigRegistry.hpp:228-465" -->
+<!-- _class: dense -->
 
 ## Typed JSON configs — `DNDS_DECLARE_CONFIG`
 
@@ -2523,8 +2521,8 @@ data — the struct stays a POD safe for CUDA. Underneath, a static
 </div>
 
 ---
-
 <!-- _footer: "src/DNDS/Config/ConfigParam.hpp:71-81" -->
+<!-- _class: denser -->
 
 ## Configs — field kinds & cross-field checks
 
@@ -2559,8 +2557,8 @@ config.field_alias (&T::rsType,   "riemannSolverType", "Riemann solver type");
 ```
 
 ---
-
 <!-- _footer: "src/DNDS/Config/ConfigRegistry.hpp:379-441" -->
+<!-- _class: dense -->
 
 ## Configs — auto-generated JSON Schema & validation
 
@@ -2615,7 +2613,6 @@ reg.validateKeys(userJson);          // throws on unknown keys
 </div>
 
 ---
-
 <!-- _footer: "python/DNDSR/ · docs/guides/project_structure.md:116-145" -->
 
 ## Python bindings — the import chain
@@ -2640,11 +2637,8 @@ python/DNDSR/DNDS/__init__.py
 pybind11 extension opens. If they were loaded later with the default
 `RTLD_LOCAL`, the extension would not find the symbols it depends on.
 
-```text
-libstdc++ → libz → libhdf5 → libcgns
-         → libmetis → libparmetis
-         → libdnds_shared → libgeom_shared → …
-```
+![](res/mermaid_06_7c2b2844.svg)
+
 
 </div>
 <div>
@@ -2663,8 +2657,8 @@ Top-level `__init__.py` imports all four so a single
 </div>
 
 ---
-
 <!-- _footer: "docs/guides/python_geom_guide.md" -->
+<!-- _class: dense -->
 
 ## Python mesh-read — the demo case
 
@@ -2701,8 +2695,8 @@ mypy, and Pylance see full C++ type signatures.
 </div>
 
 ---
-
 <!-- _footer: "src/CFV/ModelEvaluator.hpp · RELEASE_NOTES.md:25" -->
+<!-- _class: denser -->
 
 ## CFV Python — Fourier dissipation-dispersion analysis
 
@@ -2737,8 +2731,8 @@ Other Python-exposed bits:
 - The full `MeshAdjState` enum and `AdjPairTracked::idx` queries
   (query-only, no mutation from Python — intentional)
 
----
 
+---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
@@ -2749,8 +2743,8 @@ Other Python-exposed bits:
 ## Euler family · EulerEvaluator · cases
 
 ---
-
 <!-- _footer: "src/Euler/Euler.hpp:874-905 · app/Euler/*.cpp" -->
+<!-- _class: denser -->
 
 ## The Euler / N-S family — one binary per model
 
@@ -2807,8 +2801,8 @@ terms, and spectral radius.
 </div>
 
 ---
-
 <!-- _footer: "src/Euler/EulerSolver.hpp:73-148" -->
+<!-- _class: denser -->
 
 ## `EulerSolver` — the top-level conductor
 
@@ -2845,8 +2839,8 @@ class EulerSolver {
 ```
 
 ---
-
 <!-- _footer: "src/Euler/EulerSolver.hpp:160-246 · nested Configuration struct" -->
+<!-- _class: tight -->
 
 ## `Configuration` — everything that tunes a run
 
@@ -2885,9 +2879,8 @@ auto-generated.
 > `euler_schema.json` / `eulerSA3D_schema.json` / etc., each ~107 KB.
 
 ---
-
 <!-- _footer: "src/Euler/EulerEvaluator.hpp:399-612" -->
-
+<!-- _class: denser -->
 ## `EulerEvaluator<model>` — the spatial operator
 
 ```cpp
@@ -2938,8 +2931,8 @@ and PP sub-steps.
 </div>
 
 ---
-
 <!-- _footer: "src/Euler/BoundaryConditions/ · BoundaryHandler<model>" -->
+<!-- _class: denser -->
 
 ## Boundary conditions — strategy pattern
 
@@ -2965,8 +2958,8 @@ Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`,
 (`pCLDriver` in the evaluator).
 
 ---
-
 <!-- _footer: "cases/euler/ · cases/euler3D/" -->
+<!-- _class: denser -->
 
 ## Canonical benchmarks — Riemann, shocks, smooth
 
@@ -3014,8 +3007,8 @@ Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`,
 </div>
 
 ---
-
 <!-- _footer: "cases/eulerSA/ · cases/eulerSA3D/ · cases/euler2EQ/" -->
+<!-- _class: tight -->
 
 ## Aerospace & industrial benchmarks
 
@@ -3043,11 +3036,8 @@ Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`,
 
 ### Industry workflow — "partition on login, run on compute"
 
-```text
-cases/eulerSA3D/config_CRM_PartitionBoeing.json   # serial Metis
-              ↓ writes mesh.h5 + origIndex
-   cases/eulerSA3D/config_CRM_RunBoeing.json      # parallel read + ParMetis
-```
+![](res/mermaid_07_e51c75c5.svg)
+
 
 This pattern also stresses `ReadSerializeRedistributed` across different
 rank counts.
@@ -3056,8 +3046,8 @@ rank counts.
 </div>
 
 ---
-
 <!-- _footer: "RELEASE_NOTES.md:9-21" -->
+<!-- _class: denser -->
 
 ## New solver features in v0.1.0
 
@@ -3104,8 +3094,8 @@ rank counts.
 </div>
 
 ---
-
 <!-- _footer: "src/Euler/EulerSolver.hpp:1270-1486" -->
+<!-- _class: dense -->
 
 ## The main loop — `RunImplicitEuler`
 
@@ -3142,8 +3132,8 @@ The lambdas above are where `EulerEvaluator`, `GMRES_LeftPreconditioned`, and
 `LUSGSMatrix*` plug in — the ODE integrator never knows which solver is
 instantiating it.
 
----
 
+---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
@@ -3154,7 +3144,6 @@ instantiating it.
 ## Testing · build · docs · code hygiene
 
 ---
-
 <!-- _footer: "docs/tests/overview.md:11-40" -->
 
 ## Test suite at a glance
@@ -3183,8 +3172,8 @@ ctest --test-dir build --output-on-failure
 ```
 
 ---
-
 <!-- _footer: "test/cpp/DNDS/ · test/cpp/Geom/" -->
+<!-- _class: denser -->
 
 ## C++ test catalogue (1 / 2)
 
@@ -3243,7 +3232,6 @@ TEST_CASE("ArrayTransformer: round-trip ghost pull" *
 </div>
 
 ---
-
 <!-- _footer: "test/cpp/CFV/ · test/cpp/Euler/ · test/cpp/Solver/" -->
 
 ## C++ test catalogue (2 / 2)
@@ -3294,7 +3282,6 @@ TEST_CASE("ArrayTransformer: round-trip ghost pull" *
 </div>
 
 ---
-
 <!-- _footer: "docs/tests/overview.md:87-111" -->
 
 ## Determinism — how golden values stay stable
@@ -3340,8 +3327,8 @@ and the developer updates the golden in a follow-up commit.
 </div>
 
 ---
-
 <!-- _footer: "docs/tests/overview.md:104-124" -->
+<!-- _class: dense -->
 
 ## Python tests — pytest + pytest-mpi
 
@@ -3401,8 +3388,8 @@ files and produces misleading segfaults that look like code bugs.
 </div>
 
 ---
-
 <!-- _footer: "CMakePresets.json" -->
+<!-- _class: dense -->
 
 ## Build system — presets
 
@@ -3436,8 +3423,8 @@ Aggregate targets: `dnds_unit_tests`, `geom_unit_tests`, `cfv_unit_tests`,
 `EXCLUDE_FROM_ALL` so plain `cmake --build` stays fast.
 
 ---
-
 <!-- _footer: "pyproject.toml · RELEASE_NOTES.md:32-40" -->
+<!-- _class: dense -->
 
 ## Python packaging — `scikit-build-core`
 
@@ -3488,8 +3475,8 @@ macOS has a dedicated fmtlib workaround, also shipped.
 </div>
 
 ---
-
 <!-- _footer: "docs/dev/clang_tidy_plan.md · RELEASE_NOTES.md:32-40" -->
+<!-- _class: denser -->
 
 ## Clang-tidy sanitation
 
@@ -3535,23 +3522,13 @@ to apply. The `.clang-tidy` disables carry forward.
 </div>
 
 ---
-
 <!-- _footer: "docs/sphinx/conf.py · docs/doxygen/ · RELEASE_NOTES.md:61-70" -->
+<!-- _class: dense -->
 
 ## Documentation system — architecture
 
-```mermaid
-flowchart LR
-    MD["Markdown sources<br/>docs/architecture/<br/>docs/guides/<br/>docs/theory/<br/>docs/tests/"]
-    SRC["C++ / Python<br/>source tree"]
-    MD --> translate["doxygen_compat.py<br/>(shared MD translator)"]
-    translate --> SPHINX["Sphinx + Breathe<br/>(sphinxawesome-theme)"]
-    translate --> DOX["Doxygen<br/>+ Graphviz"]
-    SRC --> DOX
-    SPHINX --> SITE["Static HTML site<br/>cfdlab-thu.github.io/DNDSR"]
-    DOX --> DOXHTML["Doxygen HTML<br/>(class · call · include graphs)"]
-    DOXHTML --> SITE
-```
+![](res/mermaid_08_f1cc87c1.svg)
+
 
 <div class="cols">
 <div>
@@ -3584,8 +3561,8 @@ cmake --build build -t serve-docs
 </div>
 
 ---
-
 <!-- _footer: ".github/workflows/ · RELEASE_NOTES.md:68-70" -->
+<!-- _class: denser -->
 
 ## CI & release automation
 
@@ -3633,8 +3610,8 @@ git push --tags
 </div>
 </div>
 
----
 
+---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
@@ -3645,8 +3622,8 @@ git push --tags
 ## What's next · pointers · acknowledgements
 
 ---
-
 <!-- _footer: "docs/architecture/MeshConnectivity.md:416-458 · MeshDAGDesign.md" -->
+<!-- _class: denser -->
 
 ## Roadmap — mesh & topology
 
@@ -3692,8 +3669,8 @@ struct GhostRequirement {
 </div>
 
 ---
-
 <!-- _footer: "RELEASE_NOTES.md:20 · src/EulerP/ · docs/dev/ideas.md" -->
+<!-- _class: denser -->
 
 ## Roadmap — solvers, parallelism, V&V
 
@@ -3738,8 +3715,8 @@ struct GhostRequirement {
 </div>
 
 ---
-
 <!-- _footer: "docs/architecture/ · docs/theory/ · docs/guides/" -->
+<!-- _class: denser -->
 
 ## Where to read next
 
@@ -3784,7 +3761,6 @@ struct GhostRequirement {
 </div>
 
 ---
-
 <!-- _class: lead -->
 <!-- _paginate: false -->
 <!-- _footer: "github.com/CFDLAB-THU/DNDSR · cfdlab-thu.github.io/DNDSR" -->

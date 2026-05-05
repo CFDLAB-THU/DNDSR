@@ -65,4 +65,5 @@ Once built, the full Doxygen reference is at
 /sphinx/dev
 /sphinx/api_cpp
 /sphinx/api_python
+/sphinx/presentations
 ```

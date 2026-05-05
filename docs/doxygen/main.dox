@@ -11,6 +11,7 @@
  * - @subpage page_theory
  * - @subpage page_tests
  * - @subpage page_dev
+ * - @subpage page_presentations
  *
  * @section modules Core Modules
  *
@@ -113,4 +114,52 @@
  * - @subpage initial_report
  * - @subpage review_dev_harry_refac1
  * - @subpage mesh_connectivity_impl
+ */
+
+/**
+ * @page page_presentations Presentations
+ *
+ * Slide decks introducing DNDSR. Each deck is authored in Markdown and
+ * rendered with [Marp](https://marp.app/); the CMake docs pipeline
+ * builds the HTML and PDF outputs and stages them into the unified
+ * documentation site under `/presentations/`.
+ *
+ * @section deck_dndsr_overview DNDSR Overview
+ *
+ * An 89-slide technical introduction for software and CS engineers,
+ * covering architecture, the Geom pipeline, numerics, parallelism,
+ * I/O and interop, solvers, engineering quality, and roadmap.
+ *
+ * <ul>
+ *   <li><b>Open slideshow:</b>
+ *       <a href="../presentations/DNDSR_overview.html" target="_blank">
+ *       DNDSR_overview.html</a></li>
+ *   <li><b>Download PDF:</b>
+ *       <a href="../presentations/DNDSR_overview.pdf" target="_blank">
+ *       DNDSR_overview.pdf</a></li>
+ *   <li><b>Source tree:</b> <code>docs/presentations/DNDSR_overview/</code></li>
+ * </ul>
+ *
+ * @note The slideshow and PDF links above resolve against the unified
+ * Sphinx site layout (Doxygen HTML lives at `/doxygen/`, slides live at
+ * `/presentations/`). They will be broken when browsing the Doxygen
+ * output in isolation; use `cmake --build build -t serve-docs` to view
+ * the full site.
+ *
+ * @section deck_building Building the decks
+ *
+ * Decks are rebuilt as part of the documentation target:
+ *
+ * @code{.sh}
+ * cmake --build build -t docs
+ * @endcode
+ *
+ * To render a single deck manually (requires `marp-cli`):
+ *
+ * @code{.sh}
+ * bash docs/presentations/DNDSR_overview/build.sh --html --pdf
+ * @endcode
+ *
+ * See `docs/presentations/DNDSR_overview/README.md` for editing
+ * workflow, overflow-detection tooling, and density-class conventions.
  */

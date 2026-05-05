@@ -944,7 +944,10 @@ EXCLUDE_SYMLINKS       = NO
 # exclude all test directories for example use the pattern */test/*
 
 EXCLUDE_PATTERNS       = */docs/sphinx/* \
-                         */docs/reports/*
+                         */docs/reports/* \
+                         */docs/presentations/*/* \
+                         */docs/presentations/*.md \
+                         */docs/_scripts/*
 
 # The EXCLUDE_SYMBOLS tag can be used to specify one or more symbol names
 # (namespaces, classes, functions, etc.) that should be excluded from the
