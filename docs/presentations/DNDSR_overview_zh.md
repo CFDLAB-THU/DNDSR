@@ -3377,6 +3377,34 @@ cmake --build build -t serve-docs
 ## 精选 2D / 3D Euler 与 NS 算例
 
 ---
+
+## MPI 弱扩展 — TGV 基准测试
+
+<div class="cols-60-40">
+<div>
+
+可压缩 Taylor–Green 涡，Re = 1600，100 次迭代，单 HPC 节点上固定 **~4k 单元/rank**。
+
+| 系列       | 求解器       |                 |
+|------------|-------------|-----------------|
+| **BSSCA**  | DNDSR /BSSCA| 64 → 10240 ranks |
+| BSSCT      | DNDSR /BSSCA| 96 → 1920 ranks  |
+| CS         | DNDSR /JS   | 32 → 256 ranks   |
+
+- **吞吐量**从 548 kCI/s（64 ranks）扩展到 **71.8 MCI/s**（10240 ranks）。
+- 单核效率在两个数量级的并行度上保持在 **82–102%**。
+
+*kCI/s = 千单元-迭代/秒；一次单元-迭代为该单元上的一次 RHS 计算。*
+
+</div>
+<div>
+
+![](res/tgv_weak_scaling.svg)
+
+</div>
+</div>
+
+---
 <!-- _class:  -->
 
 ## NACA 0012 (SA RANS)
