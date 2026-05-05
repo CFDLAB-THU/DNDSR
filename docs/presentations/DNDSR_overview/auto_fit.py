@@ -42,9 +42,16 @@ MAX_ITER = 6
 TOL_PX = 2
 
 # A slide with a density class can be relaxed one step when it has at
-# least this many pixels of unused vertical space. Large enough that
-# we don't flip-flop across the overflow threshold on subsequent runs.
-DOWNGRADE_SLACK_PX = 200
+# least this many pixels of unused vertical space. Must exceed the
+# height that one density step adds (observed 100–150 px, but can be
+# 200+ px for content-heavy slides because padding and list margins
+# scale together with font-size). Setting this too low produces
+# oscillation: the downgrade overflows, the next iteration upgrades,
+# the iteration after that sees the same slack again, ad infinitum.
+#
+# 250 px is conservative — it fires only for slides that are clearly
+# over-classed (e.g. a 'tight' slide with half the real-estate empty).
+DOWNGRADE_SLACK_PX = 250
 
 
 def run(cmd, **kw):
@@ -185,6 +192,11 @@ def main():
     deck_map = deck_slide_map()
     print(f"Deck has {len(deck_map)} slides (per source split)")
 
+    # Slides that have been upgraded at least once this run are locked
+    # against downgrade, so an upgrade → downgrade → upgrade oscillation
+    # cannot occur. Keyed by deck index (1-based).
+    upgraded_ever: set[int] = set()
+
     for it in range(1, MAX_ITER + 1):
         print(f"\n=== iteration {it} ===")
         build_html()
@@ -205,6 +217,7 @@ def main():
                     unfixable.append((idx, s["title"], cur, s["overflowY"]))
                     continue
                 changes.append((fname, local, up))
+                upgraded_ever.add(idx)
                 print(
                     f"  UP   deck#{idx:3d} ({fname}[{local}]) "
                     f"{cur or '(none)'} -> {up}  "
@@ -217,14 +230,12 @@ def main():
 
         # ---- Phase 2: downgrade over-classed slides when the deck fits ----
         else:
-            # Only content slides are candidates; chapter/lead cards don't
-            # carry density classes.
             candidates = [
                 s for s in report["slides"]
-                if s["kind"] == "content" and s["slackY"] >= DOWNGRADE_SLACK_PX
+                if s["kind"] == "content"
+                and s["slackY"] >= DOWNGRADE_SLACK_PX
+                and s["index"] not in upgraded_ever
             ]
-            # Relax the slackiest first so one or two pass per iteration
-            # dominates; the next iteration re-measures.
             candidates.sort(key=lambda s: -s["slackY"])
             for s in candidates:
                 idx = s["index"]

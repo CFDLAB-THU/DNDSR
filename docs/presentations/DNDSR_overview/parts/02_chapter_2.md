@@ -26,22 +26,17 @@
 
 <div class="callout">
 
-**Why the split.** Each layer depends only on those above. `Solver` depends on
-DNDS data types only — the Krylov and ODE code knows nothing about CFD; this is
-how the same `GMRES_LeftPreconditioned` works across Euler, VR's `uRec` system,
-and the k-ω equations. `EulerP` sits alongside `Euler`, reusing all of `CFV` but
-replacing the flux kernel with device-callable scalar loops.
+**Why the split.** Each layer depends only on those above. `Solver` depends on DNDS data types only — the Krylov and ODE code knows nothing about CFD; this is how the same `GMRES_LeftPreconditioned` works across Euler, VR's `uRec` system, and the k-ω equations. `EulerP` sits alongside `Euler`, reusing all of `CFV` but replacing the flux kernel with device-callable scalar loops.
 
 </div>
 
 ---
 <!-- _footer: "docs/architecture/Paradigm.md:119-161" -->
-<!-- _class: dense -->
+<!-- _class:  -->
 
 ## Delayed abstraction ⇒ independent comm patterns
 
-Different field genres need different communication patterns.
-**Baking them into one class forces a monolithic serializer.**
+Different field genres need different communication patterns. **Baking them into one class forces a monolithic serializer.**
 
 <div class="cols">
 <div>
@@ -61,8 +56,7 @@ public:
 std::vector<Solution> sols;
 ```
 
-A single `WriteStream` can't express *which* fields participate in *which*
-MPI phase — any new field requires editing both methods.
+A single `WriteStream` can't express *which* fields participate in *which* MPI phase — any new field requires editing both methods.
 
 </div>
 <div>
@@ -76,8 +70,7 @@ ArrayDof<2, 5>          grad_u;  // gradients, 2D × 5 vars
 ArrayDof<DynamicSize,5> uRec;    // variable-order reconstruction
 ```
 
-Each array owns its own `ArrayTransformer`. Ghost footprints and
-communication phases are **independent and composable**:
+Each array owns its own `ArrayTransformer`. Ghost footprints and communication phases are **independent and composable**:
 
 - `u` and `u_prev` share the same ghost map → `BorrowGGIndexing`.
 - `uRec` may have a different row size — new MPI types, same map.
@@ -124,7 +117,7 @@ Alignment stub exists but only `NoAlign` is implemented today.</div>
 
 ---
 <!-- _footer: "src/DNDS/Array.hpp · array_infrastructure.md:82-95" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## CSR has two internal modes
 
@@ -162,17 +155,14 @@ Flat `std::vector<T>` + `pRowStart[n+1]` index.
 
 ### ArrayView
 
-A device-callable non-owning view (`ArrayView<T, rs, rm>`) implements
-`operator[]` and `at()` for every layout — this is what ships to the GPU.
+A device-callable non-owning view (`ArrayView<T, rs, rm>`) implements `operator[]` and `at()` for every layout — this is what ships to the GPU.
 
 </div>
 </div>
 
 <div class="callout callout-warn">
 
-⚠ **Element-type constraint:** `array_comp_acceptable<T>()` requires
-`std::is_trivially_copyable_v<T>` **or** `is_fixed_data_real_eigen_matrix_v<T>`.
-No `std::string` rows, no `std::vector` rows — it would break MPI.
+⚠ **Element-type constraint:** `array_comp_acceptable<T>()` requires `std::is_trivially_copyable_v<T>` **or** `is_fixed_data_real_eigen_matrix_v<T>`. No `std::string` rows, no `std::vector` rows — it would break MPI.
 
 </div>
 
@@ -274,24 +264,19 @@ trans.startPersistentPush();
 trans.waitPersistentPush();
 ```
 
-Typical in node-based FEM-style assembly: accumulate partial sums from
-ghost copies back into the father.
+Typical in node-based FEM-style assembly: accumulate partial sums from ghost copies back into the father.
 
 </div>
 </div>
 
-> **Sharing ghost structure across arrays.** `BorrowGGIndexing(primary)`
-> skips the expensive collective `createFatherGlobalMapping` +
-> `createGhostMapping` phase; only `createMPITypes()` is rebuilt because
-> the MPI datatypes depend on element size.
+> **Sharing ghost structure across arrays.** `BorrowGGIndexing(primary)` skips the expensive collective `createFatherGlobalMapping` + `createGhostMapping` phase; only `createMPITypes()` is rebuilt because the MPI datatypes depend on element size.
 
 ---
 <!-- _footer: "src/DNDS/ArrayPair.hpp · src/DNDS/ArrayDerived/*.hpp" -->
 
 ## Typed wrappers: `ArrayDerived`
 
-Each derived class inherits from `ParArray<T, rs, rm>` and overrides `operator[]`
-to return a **typed row view** instead of a raw pointer.
+Each derived class inherits from `ParArray<T, rs, rm>` and overrides `operator[]` to return a **typed row view** instead of a raw pointer.
 
 | Type                              | `operator[](i)` returns              | Use                                |
 |-----------------------------------|--------------------------------------|------------------------------------|
@@ -341,8 +326,7 @@ template <int n_m, int n_n>
 class ArrayDof : public ArrayEigenMatrixPair<n_m, n_n>;
 ```
 
-Wraps `father + son + transformer` and adds **MPI-collective vector-space ops** —
-directly consumable by the Krylov solvers in `src/Solver`.
+Wraps `father + son + transformer` and adds **MPI-collective vector-space ops** — directly consumable by the Krylov solvers in `src/Solver`.
 
 <div class="cols">
 <div>
@@ -421,9 +405,7 @@ class ArrayDofOp<DeviceBackend::CUDA, n_m, n_n> { /* thrust / raw kernels */ };
 
 <div class="callout callout-ok">
 
-**Consequence.** The solver's `norm2()` / `dot()` / `addTo()` calls are the
-same in C++ regardless of where the data lives — the host code just checks
-`father->device()` and routes. No `#ifdef CUDA` in Euler or Solver.
+**Consequence.** The solver's `norm2()` / `dot()` / `addTo()` calls are the same in C++ regardless of where the data lives — the host code just checks `father->device()` and routes. No `#ifdef CUDA` in Euler or Solver.
 
 </div>
 
@@ -433,9 +415,7 @@ same in C++ regardless of where the data lives — the host code just checks
 
 ## State-tracked mesh adjacency (1 / 2)
 
-12+ adjacency arrays (`cell2node`, `face2cell`, `cell2cell`, `node2bnd`, …)
-must each be **globally or locally indexed** at any given moment — a classic
-bug surface.
+12+ adjacency arrays (`cell2node`, `face2cell`, `cell2cell`, `node2bnd`, …) must each be **globally or locally indexed** at any given moment — a classic bug surface.
 
 ```cpp
 enum MeshAdjState {
@@ -446,19 +426,21 @@ enum MeshAdjState {
 ```
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Unknown
-    Unknown --> PointToGlobal : markGlobal()
-    Unknown --> PointToLocal  : bootstrapToLocal(mapping)
-    PointToGlobal --> PointToLocal : wireTargetMapping(map)<br/>+ toLocal()
-    PointToLocal --> PointToGlobal : toGlobal()
-    PointToLocal --> PointToLocal  : idempotent
-    PointToGlobal --> PointToGlobal: idempotent
+flowchart LR
+    S(( )) --> U["Unknown"]
+    U  -- "markGlobal()" --> G["PointToGlobal"]
+    U  -- "markLocal()*" --> L["PointToLocal"]
+    U  -- "bootstrapToLocal(map)" --> L
+    G  -- "wireTargetMapping(map)<br/>+ toLocal()" --> L
+    L  -- "toGlobal()" --> G
 ```
+
+<small>\* `markLocal()` requires the target mapping to already be wired.
+`markGlobal()` is an idempotent no-op when already in `PointToGlobal`.</small>
 
 ---
 <!-- _footer: "src/Geom/Mesh/AdjIndexInfo.hpp:27-341" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## State-tracked mesh adjacency (2 / 2)
 
@@ -488,8 +470,7 @@ public:
 };
 ```
 
-Not-found entries after `toLocal` are encoded as `(-1 - globalIdx)` so they
-survive round-trips and remain distinguishable from valid local indices.
+Not-found entries after `toLocal` are encoded as `(-1 - globalIdx)` so they survive round-trips and remain distinguishable from valid local indices.
 
 </div>
 <div>
@@ -522,4 +503,3 @@ struct AdjPairTracked : public TPair {
 
 </div>
 </div>
-

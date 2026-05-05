@@ -16,8 +16,7 @@
 <div class="cols-60-40">
 <div>
 
-Reconstruct a piecewise polynomial from cell means with a
-**zero-mean basis** per cell:
+Reconstruct a piecewise polynomial from cell means with a **zero-mean basis** per cell:
 
 $$
 u_i(\mathbf{x})
@@ -27,8 +26,7 @@ $$
 
 - $\overline{u}_i$ — cell-mean, lives in `tUDof<N> = ArrayDof<N,1>`.
 - $u^l_i$ — reconstruction coefficients, in `tURec<N> = ArrayDof<Dyn,N>`.
-- Basis $\varphi^l_i$ is orthogonalized locally, normalized by cell scale;
-  degree chosen at runtime per cell.
+- Basis $\varphi^l_i$ is orthogonalized locally, normalized by cell scale; degree chosen at runtime per cell.
 
 **Supported polynomial orders: 1 – 3** (linear, quadratic, cubic).
 
@@ -47,16 +45,14 @@ maxNeighbour   = 7;
 
 <br>
 
-The stencil is **one ring of node-neighbors** — which is exactly what
-`BuildGhostPrimary(1)` provides by default. Wider stencils
-(`nGhostLayers ≥ 2`) are available for higher-order variants.
+The stencil is **one ring of node-neighbors** — which is exactly what `BuildGhostPrimary(1)` provides by default. Wider stencils (`nGhostLayers ≥ 2`) are available for higher-order variants.
 
 </div>
 </div>
 
 ---
 <!-- _footer: "docs/theory/Variational_Reconstruction.md:33-106" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Variational Reconstruction — the functional
 
@@ -75,10 +71,8 @@ $$
 **Weights**
 
 - $w_g(f)$ — geometric weight; default $w_g = S_f^{-1}$ (area-inverse).
-- $w_d(p)$ — dimensionless derivative weight; selects how aggressively each
-  derivative order contributes.
-- $\mathcal{D}_p u$ — the $p$-th derivative tensor
-  (covariant only under linear coordinate changes).
+- $w_d(p)$ — dimensionless derivative weight; selects how aggressively each derivative order contributes.
+- $\mathcal{D}_p u$ — the $p$-th derivative tensor (covariant only under linear coordinate changes).
 
 **Local system**
 
@@ -96,13 +90,9 @@ Solved iteratively — options below.
 
 **Three inner-product choices**
 
-- **Wang (normal):**
-  $\langle\mathcal{D}_3 u,\mathcal{D}_3 v\rangle = d_f^6\,\partial_{nnn}u\,\partial_{nnn}v$
-- **Pan (X-Y aligned):**
-  $\sum (\Delta_x^a\Delta_y^b\partial^{\cdot}_{xy} u)\,
-        (\Delta_x^a\Delta_y^b\partial^{\cdot}_{xy} v)$
-- **Huang (pre-isotropic):**
-  $d_f^{2p}$ weighting, directionally isotropic.
+- **Wang (normal):** $\langle\mathcal{D}_3 u,\mathcal{D}_3 v\rangle = d_f^6\,\partial_{nnn}u\,\partial_{nnn}v$
+- **Pan (X-Y aligned):** $\sum (\Delta_x^a\Delta_y^b\partial^{\cdot}_{xy} u)\, (\Delta_x^a\Delta_y^b\partial^{\cdot}_{xy} v)$
+- **Huang (pre-isotropic):** $d_f^{2p}$ weighting, directionally isotropic.
 
 **Reconstruction iteration schemes** (`VariationalReconstruction.hpp:938-1031`)
 
@@ -145,8 +135,7 @@ public:
 
 - `cellBaseMoment` — basis moments per cell.
 - `faceAlignedScales`, `faceMajorCoordScale`.
-- `cellDiffBaseCache`, `faceDiffBaseCache` — cached derivative values at all
-  quadrature points, for every neighbour in the stencil.
+- `cellDiffBaseCache`, `faceDiffBaseCache` — cached derivative values at all quadrature points, for every neighbour in the stencil.
 - `bndVRCaches` — boundary-face caches for BC-weighted VR.
 
 </div>
@@ -155,21 +144,18 @@ public:
 ### What `ConstructRecCoeff` builds
 
 - `matrixAB`, `vectorB` — per-neighbor RHS blocks.
-- `matrixAAInvB`, `vectorAInvB` — precomputed $A^{-1}B$ to accelerate
-  Jacobi / SOR iterations.
+- `matrixAAInvB`, `vectorAInvB` — precomputed $A^{-1}B$ to accelerate Jacobi / SOR iterations.
 - `matrixSecondary`, `matrixAHalf_GG` — auxiliary reconstruction systems.
-- `matrixA`, `matrixACholeskyL`, `volIntCholeskyL` — full system + Cholesky
-  factor for dense local solves.
+- `matrixA`, `matrixACholeskyL`, `volIntCholeskyL` — full system + Cholesky factor for dense local solves.
 
-All arrays are `ArrayEigenMatrix*` or `ArrayEigenUniMatrixBatch*` — i.e.,
-Eigen maps over an MPI-aware distributed memory block.
+All arrays are `ArrayEigenMatrix*` or `ArrayEigenUniMatrixBatch*` — i.e., Eigen maps over an MPI-aware distributed memory block.
 
 </div>
 </div>
 
 ---
 <!-- _footer: "src/CFV/FiniteVolume.hpp:38-86" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## `FiniteVolume` — the metric cache
 
@@ -198,9 +184,7 @@ class FiniteVolume : public DeviceTransferable<FiniteVolume> {
 
 <div class="callout callout-ok">
 
-**CUDA-transferable.** `FiniteVolume` (and therefore `VariationalReconstruction`)
-inherits from `DeviceTransferable<FiniteVolume>`. One call to `fv.to_device()`
-migrates the entire metric cache to the GPU as a device-side view.
+**CUDA-transferable.** `FiniteVolume` (and therefore `VariationalReconstruction`) inherits from `DeviceTransferable<FiniteVolume>`. One call to `fv.to_device()` migrates the entire metric cache to the GPU as a device-side view.
 
 </div>
 
@@ -284,21 +268,18 @@ void HLLCFlux(UL, UR, ULm, URm, n, vgN, …);
 
 ### Why this factoring
 
-All 13 variants share `ComputeRoePreamble` — the Roe average, $H_{\text{Roe}}$,
-$a_{\text{Roe}}$, etc. The `eigScheme` template parameter then selects the
-dissipation / entropy-fix strategy.
+All 13 variants share `ComputeRoePreamble` — the Roe average, $H_{\text{Roe}}$, $a_{\text{Roe}}$, etc. The `eigScheme` template parameter then selects the dissipation / entropy-fix strategy.
 
 - **One template instantiation per (`dim`, `eigScheme`)** keeps code size bounded.
 - **Compile-time dispatch** — no indirect calls in the flux kernel.
-- **Same interface** for inviscid and full Navier-Stokes flux:
-  `NSFluxInvis<dim>`, `NSFluxVis<dim>(U, gradU, T, mu, n, flux, adiabaticWall, useQCR)`.
+- **Same interface** for inviscid and full Navier-Stokes flux: `NSFluxInvis<dim>`, `NSFluxVis<dim>(U, gradU, T, mu, n, flux, adiabaticWall, useQCR)`.
 
 </div>
 </div>
 
 ---
 <!-- _footer: "src/CFV/Limiters.hpp:28-577" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Limiters — the FWBAP L2 family
 
@@ -312,8 +293,7 @@ dissipation / entropy-fix strategy.
 - `FWBAP_L2_Multiway_PolynomialOrth` — orthogonal variant.
 - `FMEMM_Multiway_Polynomial2D` — Modified Extremum-Monotone Mixer.
 
-**Power parameter:** `p = 4`;
-`verySmallReal_pDiP = std::pow(verySmallReal, 1.0/p)` stabilises near zero.
+**Power parameter:** `p = 4`; `verySmallReal_pDiP = std::pow(verySmallReal, 1.0/p)` stabilises near zero.
 
 </div>
 <div>
@@ -339,13 +319,11 @@ dissipation / entropy-fix strategy.
 </div>
 </div>
 
-> **Positivity preservation** — `LimiterUGrad` (Euler side) clamps gradients;
-> `EvaluateURecBeta` enforces cell-mean positivity on reconstructed values;
-> `EvaluateCellRHSAlpha` enforces CFL-consistent per-cell RHS scaling.
+> **Positivity preservation** — `LimiterUGrad` (Euler side) clamps gradients; `EvaluateURecBeta` enforces cell-mean positivity on reconstructed values; `EvaluateCellRHSAlpha` enforces CFL-consistent per-cell RHS scaling.
 
 ---
 <!-- _footer: "src/CFV/VariationalReconstruction.hpp:1071-1086" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## VR's own limiter — WBAP with characteristic transform
 
@@ -381,17 +359,15 @@ void DoLimiterWBAP_3(...);                      // 3-mode variant
 
 ### Smoothness indicators
 
-- `DoCalculateSmoothIndicator<nVarsFixed, nVarsSee=2>(si, uRec, u, varsSee)` —
-  classical indicator over a subset of variables.
-- `DoCalculateSmoothIndicatorV1<nVarsFixed>(si, uRec, u, varsSee, FPost)` —
-  V1 with user-provided post-processing.
+- `DoCalculateSmoothIndicator<nVarsFixed, nVarsSee=2>(si, uRec, u, varsSee)` — classical indicator over a subset of variables.
+- `DoCalculateSmoothIndicatorV1<nVarsFixed>(si, uRec, u, varsSee, FPost)` — V1 with user-provided post-processing.
 
 </div>
 </div>
 
 ---
 <!-- _footer: "src/Solver/ODE.hpp · RELEASE_NOTES.md:11,14" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Time integration — the ODE zoo
 
@@ -437,8 +413,7 @@ class ImplicitDualTimeStep {
 
 ### p-MG inside the time step
 
-Inside `ImplicitHermite3SimpleJacobianDualStep::Step()` a **nonzero `nMG`**
-triggers p-multigrid smoothing cycles:
+Inside `ImplicitHermite3SimpleJacobianDualStep::Step()` a **nonzero `nMG`** triggers p-multigrid smoothing cycles:
 
 ```cpp
 // pseudocode inside the inner solve (lines 1250-1251)
@@ -446,9 +421,7 @@ fdt (xMG, dTau, 1.0, /*upos=*/2);      // lower-order pseudo-timestep
 frhs(rhsbuf[1], xMG, dTau, iter, 1.0, /*upos=*/2);
 ```
 
-The `upos=2` argument tells the evaluator to evaluate at a **lower polynomial
-order** (level-transition). VR provides `DownCastURecOrder(curOrder, iCell,
-uRec, downCastMethod)` to project reconstruction coefficients between orders.
+The `upos=2` argument tells the evaluator to evaluate at a **lower polynomial order** (level-transition). VR provides `DownCastURecOrder(curOrder, iCell, uRec, downCastMethod)` to project reconstruction coefficients between orders.
 
 </div>
 <div>
@@ -456,10 +429,8 @@ uRec, downCastMethod)` to project reconstruction coefficients between orders.
 ### Companions
 
 - **`tpMG`** — toggle for multigrid in the outer dual-time loop.
-- **`incFScale`** — incremental flux scaling on lower MG levels; integrated
-  into the entropy fix path (`RELEASE_NOTES.md`).
-- **Positivity-preserving limiters in `LimiterUGrad`** — prevent the lower-order
-  coarse-grid correction from producing negative density / pressure.
+- **`incFScale`** — incremental flux scaling on lower MG levels; integrated into the entropy fix path (`RELEASE_NOTES.md`).
+- **Positivity-preserving limiters in `LimiterUGrad`** — prevent the lower-order coarse-grid correction from producing negative density / pressure.
 
 ### Other `SDIRK4` codes
 
@@ -474,7 +445,7 @@ uRec, downCastMethod)` to project reconstruction coefficients between orders.
 
 ---
 <!-- _footer: "src/Solver/Linear.hpp · src/Euler/EulerEvaluator.hpp:427-580" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Linear solvers — Krylov + LU-SGS preconditioner
 
@@ -531,6 +502,4 @@ void UpdateSGSWithRec(alphaDiag, t, rhs, u, uRec, uInc, uRecInc,
 "gmresCode": 2  // LUSGS + GMRES    (LUSGS as PC for GMRES)
 ```
 
-Direct path for small blocks: `src/Solver/Direct.hpp` (LU / LDLT).
-Optional **SuperLU_dist** via the `cfd_externals` submodule.
-
+Direct path for small blocks: `src/Solver/Direct.hpp` (LU / LDLT). Optional **SuperLU_dist** via the `cfd_externals` submodule.

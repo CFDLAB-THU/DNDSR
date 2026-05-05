@@ -18,20 +18,14 @@
 
 **The unstructured-CFD design space sits awkwardly:**
 
-- **CG/CAD** — complex polymorphic topology, small compute per
-  element (Blender, FreeCAD, Gmsh).
-- **Deep-learning frameworks** — massive homogeneous arrays,
-  simple fixed-width tensors (PyTorch, JAX).
-- **Unstructured CFD needs both** — heterogeneous topology + dense
-  numeric kernels.
+- **CG/CAD** — complex polymorphic topology, small compute per element (Blender, FreeCAD, Gmsh).
+- **Deep-learning frameworks** — massive homogeneous arrays, simple fixed-width tensors (PyTorch, JAX).
+- **Unstructured CFD needs both** — heterogeneous topology + dense numeric kernels.
 
 **Two dominant existing paradigms leak abstractions:**
 
-- **OpenFOAM-style** — `primitiveMesh` owns topology + geometry
-  inside a monolithic class hierarchy; communication lives at
-  the class level.
-- **SU2-style** — polymorphic `CDualGrid` / `CVertex` objects
-  carry per-entity geometric and solution state.
+- **OpenFOAM-style** — `primitiveMesh` owns topology + geometry inside a monolithic class hierarchy; communication lives at the class level.
+- **SU2-style** — polymorphic `CDualGrid` / `CVertex` objects carry per-entity geometric and solution state.
 
 Every new communicated field forces an edit to the object model.
 
@@ -40,9 +34,7 @@ Every new communicated field forces an edit to the object model.
 
 **DNDSR thesis**
 
-> *"DNDS is dedicated to providing c-like random-access arrays*
-> *without the concern of MPI communication. Higher-level*
-> *abstraction is left for the caller."*
+> *"DNDS is dedicated to providing c-like random-access arrays without the concern of MPI communication. Higher-level abstraction is left for the caller."*
 > — `docs/architecture/Paradigm.md:161`
 
 ```cpp
@@ -92,9 +84,7 @@ std::vector<vec>  faceCent;
 | `euler2EQ` / `euler2EQ3D`    | k-ω two-equation RANS              |
 | `eulerEX` / `eulerEX3D`      | Reactive / multi-species           |
 
-Each `app/Euler/euler*.cpp` is a **one-line `main`** that instantiates
-`DNDS::Euler::RunSingleBlockConsoleApp<Model>` — a template dispatch on
-the `EulerModel` enum.
+Each `app/Euler/euler*.cpp` is a **one-line `main`** that instantiates `DNDS::Euler::RunSingleBlockConsoleApp<Model>` — a template dispatch on the `EulerModel` enum.
 
 Shared code path, eight binaries.
 
@@ -145,8 +135,7 @@ Shared code path, eight binaries.
 
 <br>
 
-> 🧹 Clang-tidy milestone: the DNDS core module dropped from
-> **24 597 → 1** diagnostic across 26 cleanup passes.
+> 🧹 Clang-tidy milestone: the DNDS core module dropped from **24 597 → 1** diagnostic across 26 cleanup passes.
 
 ---
 <!-- _footer: "docs/guides/project_structure.md:101-114" -->
@@ -175,11 +164,7 @@ flowchart LR
 
 <div class="callout">
 
-**Reading this graph.** Every module depends only on those above it. `Solver`
-is header-only and depends only on `DNDS` data types — the Krylov and ODE code
-knows nothing about CFD. `EulerP` is a parallel-track CUDA evaluator alongside
-`Euler`, reusing `CFV` but replacing the flux/limiter pipeline with device-callable
-scalar loops.
+**Reading this graph.** Every module depends only on those above it. `Solver` is header-only and depends only on `DNDS` data types — the Krylov and ODE code knows nothing about CFD. `EulerP` is a parallel-track CUDA evaluator alongside `Euler`, reusing `CFV` but replacing the flux/limiter pipeline with device-callable scalar loops.
 
 </div>
 
@@ -210,6 +195,4 @@ cmake --build build -t euler -j32
 mpirun -np 4 ./build/app/euler.exe cases/euler_config_IV.json
 ```
 
-Presets available: `release-test`, `debug`, `cuda`, `ci`. Python path:
-`pip install -e .` uses `scikit-build-core` under the hood.
-
+Presets available: `release-test`, `debug`, `cuda`, `ci`. Python path: `pip install -e .` uses `scikit-build-core` under the hood.

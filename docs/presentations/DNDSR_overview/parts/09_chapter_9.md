@@ -10,7 +10,7 @@
 
 ---
 <!-- _footer: "docs/architecture/MeshConnectivity.md:416-458 · MeshDAGDesign.md" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Roadmap — mesh & topology
 
@@ -30,18 +30,15 @@ struct GhostRequirement {
 
 - FEM needs a **smaller** ghost set than compact FV.
 - Wide-stencil FV (2+ layers) needs a **larger** set.
-- Current default ghost is hard-coded — `nGhostLayers` only adjusts depth,
-  not the *kind* of neighbor.
+- Current default ghost is hard-coded — `nGhostLayers` only adjusts depth, not the *kind* of neighbor.
 
 </div>
 <div>
 
 ### Medium-term: edge entities
 
-- Add `edge2node`, `cell2edge`, `node2edge` with the same
-  `AdjPairTracked` discipline.
-- Extract the face-interpolation algorithm into a **generic** codim-K
-  template.
+- Add `edge2node`, `cell2edge`, `node2edge` with the same `AdjPairTracked` discipline.
+- Extract the face-interpolation algorithm into a **generic** codim-K template.
 - Needed for **node-based FV** and **FEM** workflows.
 
 ### Long-term: DMPlex-style DAG
@@ -57,7 +54,7 @@ struct GhostRequirement {
 
 ---
 <!-- _footer: "RELEASE_NOTES.md:20 · src/EulerP/ · docs/dev/ideas.md" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Roadmap — solvers, parallelism, V&V
 
@@ -66,13 +63,9 @@ struct GhostRequirement {
 
 ### Solvers
 
-- **Reactive / multi-species** (`NS_EX`) — maturity pass, published
-  validation cases.
-- **Overset grids** — 2D demo exists (hole creation, distance map,
-  cell-cell connectivity); extend to 3D and add full transfer operators.
-- **Full (assembled) Jacobian** — currently matrix-free + LU-SGS only.
-  Assembling a block CSR Jacobian opens up AMG + SuperLU_dist + PETSc
-  as preconditioners.
+- **Reactive / multi-species** (`NS_EX`) — maturity pass, published validation cases.
+- **Overset grids** — 2D demo exists (hole creation, distance map, cell-cell connectivity); extend to 3D and add full transfer operators.
+- **Full (assembled) Jacobian** — currently matrix-free + LU-SGS only. Assembling a block CSR Jacobian opens up AMG + SuperLU_dist + PETSc as preconditioners.
 
 ### Parallelism
 
@@ -86,16 +79,14 @@ struct GhostRequirement {
 
 ### V&V workflow
 
-- Standardized **verification & validation** harness running a fixed case
-  set on every release, publishing convergence plots to the doc site.
+- Standardized **verification & validation** harness running a fixed case set on every release, publishing convergence plots to the doc site.
 - More turbomachinery cases: NASA Rotor 67, low-speed fan stage.
 - Noise-source diagnostics for aeroacoustics.
 
 ### Documentation & dev-UX
 
 - **Expand Python examples** to match current C++ coverage.
-- **Clang-tidy sanitation** for remaining modules (Solver, Geom, CFV,
-  Euler, EulerP) — same recipe as DNDS.
+- **Clang-tidy sanitation** for remaining modules (Solver, Geom, CFV, Euler, EulerP) — same recipe as DNDS.
 - **Contributor on-boarding** guide, already outlined in `docs/dev/`.
 
 </div>
@@ -103,7 +94,7 @@ struct GhostRequirement {
 
 ---
 <!-- _footer: "docs/architecture/ · docs/theory/ · docs/guides/" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Where to read next
 
@@ -112,18 +103,14 @@ struct GhostRequirement {
 
 ### Architecture
 
-- **`array_infrastructure.md`** — bottom-up tour of `Array` →
-  `ArrayTransformer` → `ArrayPair` → `ArrayDof`.
-- **`MeshConnectivity.md`** — the AdjPairTracked state machine, the
-  ghost-spec DSL, the DAG roadmap.
+- **`array_infrastructure.md`** — bottom-up tour of `Array` → `ArrayTransformer` → `ArrayPair` → `ArrayDof`.
+- **`MeshConnectivity.md`** — the AdjPairTracked state machine, the ghost-spec DSL, the DAG roadmap.
 - **`Serialization.md`** — layer-cake I/O, cross-np restart, offset modes.
-- **`Paradigm.md`** — the delayed-abstraction philosophy contrasted with
-  OpenFOAM / SU2.
+- **`Paradigm.md`** — the delayed-abstraction philosophy contrasted with OpenFOAM / SU2.
 
 ### Theory
 
-- **`Variational_Reconstruction.md`** / `.pdf` — full derivation of the
-  facial functional, inner-product choices, and local system.
+- **`Variational_Reconstruction.md`** / `.pdf` — full derivation of the facial functional, inner-product choices, and local system.
 - **`Shape_Functions.md`** — per-element shape functions and quadrature.
 
 </div>
@@ -164,9 +151,7 @@ mpirun -np 4 ./build/app/euler.exe cases/euler_config_IV.json
 
 <br>
 
-**Code** · [github.com/CFDLAB-THU/DNDSR](https://github.com/CFDLAB-THU/DNDSR)
-**Docs** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR)
-**Release notes** · `RELEASE_NOTES.md` (v0.1.0)
+**Code** · [github.com/CFDLAB-THU/DNDSR](https://github.com/CFDLAB-THU/DNDSR) **Docs** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR) **Release notes** · `RELEASE_NOTES.md` (v0.1.0)
 
 <br>
 

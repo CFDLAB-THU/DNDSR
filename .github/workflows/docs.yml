@@ -6,8 +6,8 @@
 # dependencies are cached to avoid rebuilding on every run.
 #
 # Cache layers:
-#   1. pip packages        — keyed by requirements.txt + element generator
-#   2. npm global packages — keyed by marp-cli cache key
+#   1. pip packages        — keyed by docs/sphinx/requirements.txt hash
+#   2. npm global packages — keyed by cache version (marp + mermaid)
 #   3. Header-only libs    — keyed by tarball URL (changes ~never)
 #   4. cfd_externals build — keyed by build script + submodule commit
 #
@@ -123,8 +123,8 @@ jobs:
 
       - name: Smoke-test mmdc
         # Fail fast (before the long docs build) if puppeteer can't launch.
-        env:
-          MERMAID_CHROME: ${{ env.MERMAID_CHROME }}
+        # MERMAID_CHROME is inherited from GITHUB_ENV set by the previous
+        # step ("Resolve Chrome for Puppeteer").
         run: |
           set -e
           cat > /tmp/smoke.mmd <<'EOF'

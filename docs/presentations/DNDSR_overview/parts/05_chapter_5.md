@@ -40,8 +40,7 @@ trans.initPersistentPull();
   // local: MPI_Recv_init + MPI_Send_init
 ```
 
-The derived MPI datatypes persist with the transformer — teardown costs
-them nothing until destruction.
+The derived MPI datatypes persist with the transformer — teardown costs them nothing until destruction.
 
 </div>
 <div>
@@ -60,9 +59,7 @@ trans.clearPersistentPull();
 
 <div class="callout callout-bug">
 
-🐛 **v0.1.0 bug-fix:** `globalSize()` used to be collective and could deadlock
-when some ranks took short-cut paths. It's now cached at
-`createFatherGlobalMapping` time — fully local.
+🐛 **v0.1.0 bug-fix:** `globalSize()` used to be collective and could deadlock when some ranks took short-cut paths. It's now cached at `createFatherGlobalMapping` time — fully local.
 
 </div>
 
@@ -104,15 +101,13 @@ MPI_Isend(inSituBuffer[rank].data(), ...);
 ```
 
 - Explicit pack into contiguous buffers.
-- Beats `HIndexed` on some **older MPI stacks** and on **CUDA-aware MPI** with
-  GPU-Direct where the driver prefers flat buffers.
+- Beats `HIndexed` on some **older MPI stacks** and on **CUDA-aware MPI** with GPU-Direct where the driver prefers flat buffers.
 - One extra memory pass per phase — tradeoff.
 
 </div>
 </div>
 
-> Both strategies live behind the same public API. The choice is a tuning knob
-> — no application-level changes needed.
+> Both strategies live behind the same public API. The choice is a tuning knob — no application-level changes needed.
 
 ---
 <!-- _footer: "src/DNDS/ArrayTransformer.hpp:606" -->
@@ -138,10 +133,7 @@ recTrans.initPersistentPull();
 
 <div class="callout callout-ok">
 
-**Consequence.** In the Euler pipeline every DOF array (`u`, `uPrev`, `uInc`,
-`uRec`, `uRecInc`, `uRecB`, …) shares a single ghost map established from
-the `cell2cell` adjacency. Only the MPI datatypes differ, keyed on the row
-size of each array.
+**Consequence.** In the Euler pipeline every DOF array (`u`, `uPrev`, `uInc`, `uRec`, `uRecInc`, `uRecB`, …) shares a single ghost map established from the `cell2cell` adjacency. Only the MPI datatypes differ, keyed on the row size of each array.
 
 </div>
 
@@ -159,13 +151,9 @@ size of each array.
 ### Where OMP is already applied
 
 - **ILU-OMP preconditioner** — parallel forward/backward sweeps (new in v0.1.0).
-- **Eigen reductions** — `EigenVecMin`, `EigenVecSum` fold per thread, then
-  combine.
-- **State transitions** —
-  `toLocalOMP` / `toGlobalOMP` / `bootstrapToLocalOMP` parallelize over the
-  rows of adjacency arrays.
-- **FV metric construction** — many `ConstructX()` methods in `FiniteVolume`
-  loop over cells / faces with `#pragma omp parallel for`.
+- **Eigen reductions** — `EigenVecMin`, `EigenVecSum` fold per thread, then combine.
+- **State transitions** — `toLocalOMP` / `toGlobalOMP` / `bootstrapToLocalOMP` parallelize over the rows of adjacency arrays.
+- **FV metric construction** — many `ConstructX()` methods in `FiniteVolume` loop over cells / faces with `#pragma omp parallel for`.
 - **VR iteration** — `DoReconstructionIter` has an OMP variant.
 
 </div>
@@ -188,12 +176,9 @@ flowchart TB
     end
 ```
 
-**CI default** `OMP_NUM_THREADS=2` (override at configure time via
-`DNDS_TEST_OMP_THREADS`).
-MPI-rank count per test configurable via `DNDS_TEST_NP_LIST`.
+**CI default** `OMP_NUM_THREADS=2` (override at configure time via `DNDS_TEST_OMP_THREADS`). MPI-rank count per test configurable via `DNDS_TEST_NP_LIST`.
 
-Typical production deployment: **1 MPI rank per NUMA node × OMP threads**
-within. MPI handles cross-socket / cross-node; OMP handles within.
+Typical production deployment: **1 MPI rank per NUMA node × OMP threads** within. MPI handles cross-socket / cross-node; OMP handles within.
 
 </div>
 </div>
@@ -250,28 +235,21 @@ fv.to_host();
 </div>
 </div>
 
-Build: `cmake --preset cuda` → `-DDNDS_USE_CUDA=ON` · Thrust fixes via
-`CMAKE_CUDA_ARCHITECTURE=native`.
+Build: `cmake --preset cuda` → `-DDNDS_USE_CUDA=ON` · Thrust fixes via `CMAKE_CUDA_ARCHITECTURE=native`.
 
 ---
 <!-- _footer: "src/EulerP/EulerP_Evaluator.hpp · EulerP_Evaluator_impl.{hpp,cpp,cu}" -->
-<!-- _class: denser -->
+<!-- _class:  -->
 
 ## EulerP — the purpose-built GPU evaluator
 
-**Problem:** the stock `Euler` evaluator uses Eigen with compile-time `nVars`;
-Eigen matrix ops do not cleanly lower to device-callable scalar loops. CUDA
-kernel launches over tiny matrices cost more than the math.
+**Problem:** the stock `Euler` evaluator uses Eigen with compile-time `nVars`; Eigen matrix ops do not cleanly lower to device-callable scalar loops. CUDA kernel launches over tiny matrices cost more than the math.
 
 **Solution:** a parallel-track evaluator in `src/EulerP/` that:
 
 1. Drops the Eigen matrix abstraction inside kernels — scalar loops over `nVars`.
-2. Splits into `EvaluatorDeviceView<B>` with `B ∈ {Host, CUDA}` — same
-   interface, two implementations compiled in separate translation units
-   (`.cpp` and `.cu`).
-3. Bundles per-call arguments into `*_Arg` structs (e.g. `RecGradient_Arg`,
-   `Flux2nd_Arg`) so the launching host code doesn't need to know argument
-   order.
+2. Splits into `EvaluatorDeviceView<B>` with `B ∈ {Host, CUDA}` — same interface, two implementations compiled in separate translation units (`.cpp` and `.cu`).
+3. Bundles per-call arguments into `*_Arg` structs (e.g. `RecGradient_Arg`, `Flux2nd_Arg`) so the launching host code doesn't need to know argument order.
 
 ```cpp
 template <DeviceBackend B>
@@ -282,12 +260,11 @@ struct EvaluatorDeviceView {
 };
 ```
 
-Python driver: `python/DNDSR/EulerP/EulerP_Solver.py` orchestrates the full
-EulerP pipeline from Python with CUDA selected by runtime flag.
+Python driver: `python/DNDSR/EulerP/EulerP_Solver.py` orchestrates the full EulerP pipeline from Python with CUDA selected by runtime flag.
 
 ---
 <!-- _footer: "src/EulerP/EulerP_Evaluator.hpp:149-918" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## EulerP — the kernel pipeline
 
@@ -319,8 +296,7 @@ public:
 
 - All array references in one place → simple to serialize for a device kernel.
 - Host/CUDA dispatch happens at a single call site (`Evaluator_impl<B>`).
-- The launching host code sees the same identifier `EvaluateRHS` regardless
-  of backend.
+- The launching host code sees the same identifier `EvaluateRHS` regardless of backend.
 
 ---
 <!-- _footer: "docs/dev/cudaNotes.md · RELEASE_NOTES.md:50-52" -->
@@ -332,15 +308,12 @@ public:
 
 ### Benchmarks already shipped
 
-- **Block-sparse MatVec** — `src/Geom/Mesh/BenchmarkFiniteVolume.cu` exercises
-  the metric arrays on-device with varied block sizes.
-- **SoA vs AoS** — multiple layout variants benchmarked for the per-cell DOF
-  blocks.
+- **Block-sparse MatVec** — `src/Geom/Mesh/BenchmarkFiniteVolume.cu` exercises the metric arrays on-device with varied block sizes.
+- **SoA vs AoS** — multiple layout variants benchmarked for the per-cell DOF blocks.
 
 ### Memory model
 
-- `host_device_vector<T>` — a vector that can shadow itself on device; used
-  throughout `FiniteVolume` / `UnstructuredMesh`.
+- `host_device_vector<T>` — a vector that can shadow itself on device; used throughout `FiniteVolume` / `UnstructuredMesh`.
 - Transfers are explicit (`to_device` / `to_host`) — no hidden synchronization.
 
 </div>
@@ -348,12 +321,9 @@ public:
 
 ### Pitfalls avoided
 
-- **Thrust + CMake:** `CMAKE_CUDA_ARCHITECTURE=native` fixes a class of
-  compile errors in Thrust's internal machinery.
-- **Accidental `to_device`:** a bug in the face-buffer creation path was
-  copying host buffers to device needlessly; fixed in v0.1.0.
-- **`py::classh` holders:** ensure safe Python↔C++ ownership when CUDA
-  pointers survive across Python GC boundaries.
+- **Thrust + CMake:** `CMAKE_CUDA_ARCHITECTURE=native` fixes a class of compile errors in Thrust's internal machinery.
+- **Accidental `to_device`:** a bug in the face-buffer creation path was copying host buffers to device needlessly; fixed in v0.1.0.
+- **`py::classh` holders:** ensure safe Python↔C++ ownership when CUDA pointers survive across Python GC boundaries.
 
 ### Work in progress
 
@@ -362,4 +332,3 @@ public:
 
 </div>
 </div>
-
