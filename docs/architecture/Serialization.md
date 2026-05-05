@@ -18,6 +18,13 @@ through a layered design:
 | `ArrayPair`        | `ArrayPair.hpp`       | Father-son pair: WriteSerialize, ReadSerialize, ReadSerializeRedistributed. |
 | `ArrayRedistributor` | `ArrayRedistributor.hpp` | Rendezvous redistribution via ArrayTransformer. |
 
+**TL;DR:** Use `ArrayPair::WriteSerialize` to write checkpoint data; use
+`ReadSerialize` when restarting with the **same** MPI rank count, and
+`ReadSerializeRedistributed` when restarting with a **different** rank count
+(or when `origIndex` is present). All HDF5 calls are MPI-collective — every
+rank must participate, even with zero local rows. `EvenSplit` reads divide
+the global dataset evenly across current ranks.
+
 ## Serializer interface
 
 ### Offset modes

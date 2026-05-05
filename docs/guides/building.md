@@ -338,7 +338,7 @@ Available test executables: `dnds_test_array`, `dnds_test_mpi`,
 
 ### Python Tests
 
-Python tests use pytest and live under `test/`.  The root
+Python tests use pytest with pytest-mpi and pytest-timeout, and live under `test/`.  The root
 `test/conftest.py` adds `python/` to `sys.path` so tests work with
 both `PYTHONPATH=python` and `pip install -e .`.
 

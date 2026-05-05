@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent / "_ext"))
 
 project = "DNDSR"
 author = "DNDSR Team"
-copyright = "2024, DNDSR Team"
+copyright = "2026, DNDSR Team"
 version = os.environ.get("DNDS_VERSION_FULL", "dev")
 release = version
 

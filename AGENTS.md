@@ -19,11 +19,15 @@ Compact Finite Volume methods with MPI parallelism and optional CUDA GPU support
   - `Euler/` — Compressible N-S solvers (2D/3D, SA, k-omega RANS)
   - `EulerP/` — Alternative evaluator with CUDA GPU support
 - `app/` — C++ application entry points (solver executables)
-- `test/` — Python tests (pytest + pytest-mpi)
+- `test/` — Python tests (pytest + pytest-mpi + pytest-timeout)
 - `cases/` — JSON configuration files for solver runs
 - `external/` — Git submodule (`cfd_externals`) and header-only libraries
 
 ## Build Commands
+
+> **For humans:** The canonical build guide with full explanations,
+> troubleshooting, and platform notes lives in `docs/guides/building.md`.
+> This section is a condensed agent reference.
 
 ### C++ (CMake)
 
@@ -126,7 +130,7 @@ tree is clean or that all valuable changes are committed/stashed. These
 commands silently overwrite uncommitted modifications and delete untracked
 files, discarding work with no way to recover it.
 
-Tests use **pytest** with **pytest-mpi**. Test files live under `test/`.
+Tests use **pytest** with **pytest-mpi** and **pytest-timeout**. Test files live under `test/`. A default 120-second timeout is configured in `pyproject.toml` to prevent hung MPI tests from blocking CI.
 
 ```bash
 # Run all tests

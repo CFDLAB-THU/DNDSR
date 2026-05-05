@@ -12,6 +12,16 @@
 >
 > **Last updated:** 2026-05-05.
 
+**TL;DR:** When mesh entities are reordered (local permutation for cache
+locality, or cross-rank redistribution after partitioning), every adjacency
+array must be updated: entries pointing to reordered entities are remapped to
+new global indices, and rows belonging to reordered entities are relocated.
+The framework classifies each adjacency into one of five actions (`SKIP`,
+`RELOCATE`, `REMAP`, `RELOCATE_REMAP`, `SELF`), builds `PermutationTransfer`
+objects for both local and distributed cases, and handles companion arrays
+(solution DOFs, element info) via a callback-based registry. Solver code can
+register its own arrays so they participate in the same reorder operation.
+
 ## Table of Contents
 
 1. [Motivation](#motivation)

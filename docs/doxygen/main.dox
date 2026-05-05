@@ -7,6 +7,7 @@
  * CUDA GPU support.
  *
  * - @subpage page_guides
+ * - @subpage page_solver_guide
  * - @subpage page_architecture
  * - @subpage page_theory
  * - @subpage page_tests
@@ -66,6 +67,16 @@
  */
 
 /**
+ * @page page_solver_guide Solver Guide
+ *
+ * End-user guides for running DNDSR CFD simulations.
+ *
+ * - @subpage user_guide
+ * - @subpage solver_config
+ * - @subpage troubleshooting
+ */
+
+/**
  * @page page_architecture Architecture
  *
  * Design documents describing the internal structure of DNDSR.
@@ -102,18 +113,33 @@
 /**
  * @page page_dev Development Notes
  *
- * Internal notes, plans, reviews, and benchmarks.
+ * Design documents, implementation plans, and active task tracking.
+ *
+ * @section dev_active Active Design Documents
+ *
+ * These documents describe implemented or in-progress architecture:
  *
  * - @subpage todo_list
- * - @subpage ideas
- * - @subpage dev_notes
+ * - @subpage mesh_connectivity_impl
+ * - @subpage mesh_helpers_design
+ * - @subpage multi_layer_ghost_design
+ * - @subpage distributed_reorder_design
+ * - @subpage mesh_refactoring
  * - @subpage cfv_refactoring
  * - @subpage euler_refactoring
+ * - @subpage review_dev_harry_refac1
+ *
+ * @section dev_historical Historical Notes and Benchmarks
+ *
+ * The following files are preserved for reference but are not actively
+ * maintained. They contain early brainstorming, personal observations,
+ * and one-off benchmarks.
+ *
+ * - @subpage ideas
+ * - @subpage dev_notes
  * - @subpage cuda_notes
  * - @subpage eulerp_tests
  * - @subpage initial_report
- * - @subpage review_dev_harry_refac1
- * - @subpage mesh_connectivity_impl
  */
 
 /**
