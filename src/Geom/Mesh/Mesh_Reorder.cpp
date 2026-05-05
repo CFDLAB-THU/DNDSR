@@ -855,6 +855,8 @@ namespace DNDS::Geom
             face2cell.trans.pullOnce();
         if (node2cell.father && node2cell.trans.pLGhostMapping)
             node2cell.trans.pullOnce();
+        DNDS_check_throw_info(bnd2cell.father && bnd2cell.trans.pLGhostMapping,
+                              "ReorderLocalCells: bnd2cell must have ghost mapping for pull");
         bnd2cell.trans.pullOnce();
 
         // --- Convert back to local ---

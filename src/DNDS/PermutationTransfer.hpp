@@ -213,7 +213,8 @@ namespace DNDS
         // --- Build local permutation if local-only ---
         if (pt.isLocalOnly)
         {
-            index myOffset = (*oldGlobalMapping)(mpi.rank, 0);
+            index myOffset = pt.newGlobalOffsets[mpi.rank];
+            DNDS_assert(myOffset == (*oldGlobalMapping)(mpi.rank, 0));
             pt.localOld2New.resize(nLocal);
             for (index i = 0; i < nLocal; i++)
                 pt.localOld2New[i] = pt.newGlobalIndices[i] - myOffset;
@@ -325,7 +326,9 @@ namespace DNDS
             trans.createGhostMapping(pushIndex, pushStart);
             trans.createMPITypes();
             trans.pullOnce();
-            // pair.father is now the new array with redistributed data
+            // pair.father is now the new array with redistributed data.
+            // Rebuild its global mapping so the result is self-contained.
+            pair.father->createGlobalMapping();
         }
 
         // Son is stale after either path — reset it
