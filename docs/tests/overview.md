@@ -4,7 +4,8 @@
 
 DNDSR uses [doctest](https://github.com/doctest/doctest) for C++ unit
 tests and [pytest](https://docs.pytest.org/) (with
-[pytest-mpi](https://pypi.org/project/pytest-mpi/)) for Python tests.
+[pytest-mpi](https://pypi.org/project/pytest-mpi/) and
+[pytest-timeout](https://pypi.org/project/pytest-timeout/)) for Python tests.
 MPI-aware C++ tests are registered with CTest at multiple process counts
 to verify parallel correctness.
 

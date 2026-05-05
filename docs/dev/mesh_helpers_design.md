@@ -1,4 +1,4 @@
-# Unified Mesh Helper Design
+# Unified Mesh Helper Design {#mesh_helpers_design}
 
 > **Status:** Implemented. C++ helpers are in `src/Geom/Mesh/Mesh_Helpers.hpp`.
 > Python helpers are in `python/DNDSR/Geom/utils.py` as `read_mesh`,

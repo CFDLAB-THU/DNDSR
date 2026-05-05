@@ -5,6 +5,17 @@
 
 ---
 
+**TL;DR:** A distributed mesh is built from a small set of source arrays
+(`cell2node`, `bnd2node`, `coords`, element info). Everything else is derived
+via a fixed pipeline: invert node adjacency, compose cell-cell neighbours,
+gather ghost cells by node-sharing rings, convert to local indices, then
+interpolate faces. Each adjacency now carries its own state (`AdjIndexInfo`)
+so the five legacy group flags are gradually being replaced. The document also
+describes the `MeshConnectivity` DSL (Inverse, Compose, Interpolate,
+evaluateGhostTree) and a future DAG-based design inspired by DMPlex.
+
+---
+
 ## 1. Overview
 
 DNDSR's `UnstructuredMesh` manages distributed mesh topology through a system
