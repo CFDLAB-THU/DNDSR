@@ -9,6 +9,34 @@
 ## Selected 2D / 3D Euler & NS cases
 
 ---
+
+## MPI weak scaling — TGV benchmark
+
+<div class="cols-60-40">
+<div>
+
+Compressible Taylor–Green vortex at Re = 1600, 100 iterations, fixed **~4k cells per rank** on a single HPC node.
+
+| Series     | Solver      |                 |
+|------------|-------------|-----------------|
+| **BSSCA**  | DNDSR /BSSCA| 64 → 10240 ranks |
+| BSSCT      | DNDSR /BSSCA| 96 → 1920 ranks  |
+| CS         | DNDSR /JS   | 32 → 256 ranks   |
+
+- **Throughput** scales from 548 kCI/s (64 ranks) to **71.8 MCI/s** (10240 ranks).
+- Per-core efficiency holds at **82–102%** across two orders of magnitude of parallelism.
+
+*kCI/s = kilo cell-iterations per second; one cell-iteration is one RHS evaluation on one cell.*
+
+</div>
+<div>
+
+![](res/tgv_weak_scaling.svg)
+
+</div>
+</div>
+
+---
 <!-- _class:  -->
 
 ## NACA 0012 (SA RANS)
