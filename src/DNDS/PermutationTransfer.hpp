@@ -68,8 +68,8 @@ namespace DNDS
         /// @param old2new        Local permutation: old local index -> new local index.
         ///                       Must be a valid permutation of [0, N).
         /// @param oldGlobalMapping  Current global offsets mapping.
-        /// @param mpi            MPI communicator.
-        /// @warning Collective (MPI_Allreduce for isLocalOnly detection).
+        /// @param mpi            MPI communicator (used only for rank/size, no communication).
+        /// @note Non-collective: performs zero MPI communication.
         static PermutationTransfer fromLocalPermutation(
             const std::vector<index> &old2new,
             const ssp<GlobalOffsetsMapping> &oldGlobalMapping,
@@ -234,6 +234,21 @@ namespace DNDS
         DNDS_assert(oldGlobalMapping);
         PermutationTransfer pt;
         const index nLocal = static_cast<index>(old2new.size());
+
+#ifndef NDEBUG
+        // Validate that old2new is a valid permutation of [0, nLocal)
+        std::vector<bool> seen(nLocal, false);
+        for (index i = 0; i < nLocal; i++)
+        {
+            DNDS_assert_info(old2new[i] >= 0 && old2new[i] < nLocal,
+                             fmt::format("fromLocalPermutation: old2new[{}] = {} out of [0, {})",
+                                         i, old2new[i], nLocal));
+            DNDS_assert_info(!seen[old2new[i]],
+                             fmt::format("fromLocalPermutation: duplicate mapping to {}",
+                                         old2new[i]));
+            seen[old2new[i]] = true;
+        }
+#endif
 
         pt.isLocalOnly = true;
         pt.localOld2New = old2new;
