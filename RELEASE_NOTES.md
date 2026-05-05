@@ -54,9 +54,9 @@ Major milestone release — 701 files changed, ~110k insertions across 241 commi
 
 ## ✅ Testing (new)
 
-- 🧪 **C++ (doctest)**: CFV limiters/reconstruction (43 tests), Euler gas/thermo/Riemann/RANS (59 tests), Solver ODE/linear/direct (24 tests), Geom elements/quadrature/mesh pipeline
-- 🐍 **Python (pytest)**: FV/VR correctness (32 tests), MPI communication
-- 🔁 CTest registration at np=1, 2, 4 for all MPI-aware tests
+- 🧪 **C++ (doctest)**: 29 executables, 600 test cases across DNDS (249), Geom (193), CFV (67), Euler (62), Solver (29)
+- 🐍 **Python (pytest)**: 58 test functions across 10 files — CFV FV/VR (43), DNDS MPI (9), Euler restart (3), Geom CGNS (2), EulerP CUDA (1)
+- 🔁 CTest registration at np=1, 2, 4, 8 for all MPI-aware tests (82 registrations total)
 
 ## 📖 Documentation System (new)
 

@@ -4,36 +4,39 @@ theme: default
 paginate: true
 math: mathjax
 size: 16:9
-header: "DNDSR — CFD Research Code"
-footer: "v0.2.0 · CFD Lab, Tsinghua University"
+header: "DNDSR — CFD 研究代码"
+footer: "v0.2.0 · 清华大学 CFD 实验室"
+lang: zh-CN
 ---
 
 <!--
-  DNDSR comprehensive overview deck.
+  DNDSR 全面概述演示文稿 (中文版)。
 
-  This file is GENERATED. Source lives in:
+  此文件为自动生成。源文件位于：
       docs/presentations/DNDSR_overview/
-          00_frontmatter.md
-          parts/00_title.md
-          parts/01_chapter_1.md
+          00_frontmatter_zh.md
+          parts/zh/00_title.md
+          parts/zh/01_opening.md
           ...
-          parts/09_chapter_9.md
+          parts/zh/10_roadmap.md
 
-  To rebuild:
-      bash docs/presentations/DNDSR_overview/build.sh
+  重新构建：
+      bash docs/presentations/DNDSR_overview/build.sh --lang zh
 
-  To render directly from source (PDF):
-      bash docs/presentations/DNDSR_overview/build.sh --pdf
+  直接渲染为 PDF：
+      bash docs/presentations/DNDSR_overview/build.sh --lang zh --pdf
 
-  Best viewer:   "Marp for VS Code" extension (Mermaid + MathJax built-in).
+  推荐查看器："Marp for VS Code" 扩展 (内建 Mermaid + MathJax 支持)。
 
-  Paths to images are relative to the final DNDSR_overview.md location:
-      ../elements/... and ../theory/...
+  图片路径相对于最终 DNDSR_overview_zh.md 位置：
+      ../elements/... 和 ../theory/...
 
-  Overflow-control classes (append per-slide as Marp directives):
-      _class: dense     -- 18px base  (tighter tables / lots of bullets)
-      _class: denser    -- 16px base  (very dense reference slides)
-      _class: tight     -- 14px base  (maximum density; use sparingly)
+  溢出控制类 (按幻灯片追加为 Marp 指令)：
+      _class: dense     -- 18px 基准字重 (紧凑表格 / 大量列表)
+      _class: denser    -- 16px 基准字重 (高密度参考幻灯片)
+      _class: tight     -- 14px 基准字重 (最大密度；谨慎使用)
+
+  注意：请保持 <style> 部分与 00_frontmatter.md 同步。
 -->
 
 <style>
@@ -195,12 +198,6 @@ footer: "v0.2.0 · CFD Lab, Tsinghua University"
   .tiny  { font-size: 14px; color: var(--gh-fg-muted); }
 
   /* --- Overflow control -------------------------------------------------- */
-  /* Per-slide density classes: append one of these to any slide that
-     overflows at the default 21px base.
-        _class: dense     - 18px base, tighter tables / lots of bullets
-        _class: denser    - 16px base, very dense reference slides
-        _class: tight     - 14px base, maximum density; use sparingly
-  */
   section.dense          { font-size: 18px; padding: 38px 50px 46px 50px; }
   section.dense h2       { font-size: 25px; }
   section.dense h3       { font-size: 18px; }
@@ -230,12 +227,7 @@ footer: "v0.2.0 · CFD Lab, Tsinghua University"
   section.tight p        { margin: 4px 0; }
 
   /* -----------------------------------------------------------------
-     Mermaid-rendered SVG diagrams (filename pattern: res/mermaid_*.svg).
-     mmdc emits SVGs with inline width="100%" and a viewBox whose height
-     reflects the natural diagram size. On a 720 px slide this overflows
-     vertically for flowcharts with many nodes. Cap the rendered height
-     and let width scale proportionally, so Mermaid diagrams fit the
-     slide without shrinking the slide font-size class.
+     Mermaid-rendered SVG diagrams.
   */
   img[src*="mermaid_"] {
     max-width: 100%;
@@ -249,9 +241,6 @@ footer: "v0.2.0 · CFD Lab, Tsinghua University"
   section.denser img[src*="mermaid_"] { max-height: 420px; }
   section.tight  img[src*="mermaid_"] { max-height: 380px; }
 
-  /* Cap external images (GitHub raw URLs) to prevent overflow.
-     Marp cannot introspect remote image sizes, so the overflow
-     checker may miss tall images without this constraint. */
   img[src*="raw.githubusercontent.com"] {
     max-width: 100%;
     max-height: 480px;
@@ -267,9 +256,9 @@ footer: "v0.2.0 · CFD Lab, Tsinghua University"
 
 # DNDSR
 
-## A C++17 / Python CFD Research Code
+## C++17 / Python CFD 研究框架
 
-**Compact Finite Volume · Variational Reconstruction**
+**紧致有限体积 · 变分重构**
 
 **MPI · OpenMP · CUDA · pybind11**
 
@@ -283,37 +272,37 @@ footer: "v0.2.0 · CFD Lab, Tsinghua University"
 
 <div class="ch-num">CHAPTER 1</div>
 
-# Opening
+# 引言
 
-## Motivation · feature set · positioning
+## 动机 · 特性集 · 定位
 
 ---
 <!-- _footer: "docs/architecture/Paradigm.md:4,119,161" -->
 
-## Why another CFD code?
+## 为何又写一个CFD框架？
 
 <div class="cols-60-40">
 <div>
 
-**The unstructured-CFD design space sits awkwardly:**
+**非结构CFD的设计空间处境：**
 
-- **CG/CAD** — complex polymorphic topology, small compute per element (Blender, FreeCAD, Gmsh).
-- **Deep-learning frameworks** — massive homogeneous arrays, simple fixed-width tensors (PyTorch, JAX).
-- **Unstructured CFD needs both** — heterogeneous topology + dense numeric kernels.
+- **CG/CAD** — 复杂的多态拓扑，每单元计算量小（Blender、FreeCAD、Gmsh）。
+- **深度学习框架** — 大规模同构数组，简单的定宽张量（PyTorch、JAX）。
+- **非结构CFD两者都需要** — 异构拓扑 + 密集数值内核。
 
-**Two dominant existing paradigms leak abstractions:**
+**两大主流范式存在抽象泄漏：**
 
-- **OpenFOAM-style** — `primitiveMesh` owns topology + geometry inside a monolithic class hierarchy; communication lives at the class level.
-- **SU2-style** — polymorphic `CDualGrid` / `CVertex` objects carry per-entity geometric and solution state.
+- **OpenFOAM风格** — `primitiveMesh` 在单一类层级中同时拥有拓扑与几何；通信逻辑内嵌在类层面。
+- **SU2风格** — 多态 `CDualGrid` / `CVertex` 对象承载每个实体的几何和求解状态。
 
-Every new communicated field forces an edit to the object model.
+每增加一个需通信的场，就要修改对象模型。
 
 </div>
 <div>
 
-**DNDSR thesis**
+**DNDS: Distributed Numerical Data Structure**
 
-> *"DNDS is dedicated to providing c-like random-access arrays without the concern of MPI communication. Higher-level abstraction is left for the caller."*
+> *"DNDS致力于提供类C的随机访问数组，无需关心MPI通信。更高层的抽象留给调用者处理。"*
 > — `docs/architecture/Paradigm.md:161`
 
 ```cpp
@@ -338,34 +327,34 @@ std::vector<vec>  faceCent;
 ---
 <!-- _footer: "README.md:11-26 · app/Euler/*.cpp" -->
 
-## DNDSR at a glance
+## DNDSR概览
 
 <div class="cols">
 <div>
 
-### Capabilities
+### 功能特性
 
-- **Solvers** — Euler / N-S (2D/3D), SA-IDDES, k-ω RANS (Wilcox & SST), reactive `NS_EX`, realizable k-ε.
-- **Numerics** — CFV + variational reconstruction (orders 1–3), 13 Riemann variants, ESDIRK / HM3 / BDF2, p-Multigrid, WBAP / CWBAP limiters.
-- **Parallelism** — persistent MPI + OpenMP throughout; CUDA via `DeviceTransferable` CRTP; EulerP purpose-built GPU evaluator.
-- **Bindings** — pybind11 for DNDS · Geom · CFV · EulerP; PEP-561 typed (`.pyi` auto-generated).
-- **Config** — typed JSON + auto-generated JSON Schema (`--emit-schema`); unknown-key detection built in.
+- **求解器** — Euler / N-S (2D/3D), SA-IDDES, k-ω RANS (Wilcox & SST), 反应流 `NS_EX`, realizable k-ε。
+- **数值方法** — CFV + 变分重构（1—3阶）, 13种Riemann变体, ESDIRK / HM3 / BDF2, p-多重网格, WBAP / CWBAP 限制器。
+- **并行计算** — 全流程持久化 MPI + OpenMP；CUDA 通过 `DeviceTransferable` CRTP 实现；EulerP 专用GPU求解器。
+- **Python绑定** — pybind11 封装 DNDS · Geom · CFV · EulerP；PEP-561 类型标注（`.pyi` 自动生成）。
+- **Configuration系统** — 带类型的 JSON + 自动生成 JSON Schema（`--emit-schema`）；内建未知键检测。
 
 </div>
 <div>
 
-### Solver executables
+### 求解器可执行文件
 
-| Executable                   | Model                              |
+| 可执行文件                   | 模型                                |
 |------------------------------|------------------------------------|
-| `euler` / `euler3D`          | Compressible Navier–Stokes         |
+| `euler` / `euler3D`          | 可压缩 Navier–Stokes               |
 | `eulerSA` / `eulerSA3D`      | Spalart–Allmaras RANS (IDDES)      |
-| `euler2EQ` / `euler2EQ3D`    | k-ω two-equation RANS              |
-| `eulerEX` / `eulerEX3D`      | Reactive / multi-species           |
+| `euler2EQ` / `euler2EQ3D`    | k-ω 二方程 RANS                     |
+| `eulerEX` / `eulerEX3D`      | 反应流 / 多组分                     |
 
-Each `app/Euler/euler*.cpp` is a **one-line `main`** that instantiates `DNDS::Euler::RunSingleBlockConsoleApp<Model>` — a template dispatch on the `EulerModel` enum.
+每个 `app/Euler/euler*.cpp` 都是一行式的 `main` 函数，实例化 `DNDS::Euler::RunSingleBlockConsoleApp<Model>` — 对 `EulerModel` 枚举的模板分发。
 
-Shared code path, eight binaries.
+共享代码路径，八个二进制文件。
 
 </div>
 </div>
@@ -373,69 +362,69 @@ Shared code path, eight binaries.
 ---
 <!-- _footer: "RELEASE_NOTES.md · docs/architecture/ · docs/dev/" -->
 
-## Project shape in numbers
+## 项目数据概览
 
 <div class="cols-3">
 <div>
 
-### Code
+### 代码
 
-- **~72k** LOC C++ (346 files)
-- **~1.9k** LOC Python (17 files)
-- **6** C++ modules + header-only Solver
-- **4** pybind11 extension modules
-- **8** solver executables
+- **~72k** 行 C++（346 个文件）
+- **~1.9k** 行 Python（17 个文件）
+- **6** 个 C++ 模块 + header-only Solver
+- **4** 个 pybind11 扩展模块
+- **8** 个求解器可执行文件
 
 </div>
 <div>
 
-### Tests
+### 测试
 
-- **82** CTest registrations (29 executables)
-- **np ∈ {1, 2, 4, 8}** for every MPI-aware test
-- **~600** doctest test cases total
+- **82** 项 CTest 注册（29 个可执行文件）
+- 所有 MPI 测试 **np ∈ {1, 2, 4, 8}**
+- 总计 **~600** 个 doctest 测试用例
   - 249 DNDS · 193 Geom · 62 CFV
   - 62 Euler · 29 Solver
-- **58** Python pytest functions (DNDS, CFV)
-- **Metis seed = 42** → deterministic golden values
+- **58** 个 Python pytest 函数（DNDS, CFV）
+- **Metis seed = 42** → 确定性参考值
 
 </div>
 <div>
 
-### Docs
+### 文档
 
 - **Sphinx + Breathe + Doxygen**
-- Full class / call / include graphs (Graphviz)
-- Incremental build < 1 s (no-op), ~2.5 min (full)
-- Live at `cfdlab-thu.github.io/DNDSR`
-- One-source Markdown for both engines via `doxygen_compat.py`
+- 完整的类/调用/包含关系图（Graphviz）
+- 增量构建 < 1 s（无变更），完整构建 ~2.5 min
+- 在线地址 `cfdlab-thu.github.io/DNDSR`
+- 通过 `doxygen_compat.py` 实现双引擎同源 Markdown
 
 </div>
 </div>
 
 <br>
 
-> 🧹 Clang-tidy milestone: the DNDS core module dropped from **24 597 → 1** diagnostic across 26 cleanup passes.
+> 🧹 Clang-tidy 里程碑：DNDS 核心模块经过 26 轮清理，诊断数从 **24 597 → 1**。
 
 ---
 <!-- _footer: "docs/guides/project_structure.md:101-114" -->
 <!-- _class: denser -->
 
-## The one-slide map
+## 模块架构
 
-![](res/mermaid_01_b490bd70.svg)
+![](res/zh/mermaid_01_b490bd70.svg)
 
 
 <div class="callout">
 
-**Reading this graph.** Every module depends only on those above it. `Solver` is header-only and depends only on `DNDS` data types — the Krylov and ODE code knows nothing about CFD. `EulerP` is a parallel-track CUDA evaluator alongside `Euler`, reusing `CFV` but replacing the flux/limiter pipeline with device-callable scalar loops.
+**如何解读此图。** 每个模块仅依赖于其上层模块。`Solver` 是 header-only 的，仅依赖 `DNDS` 数据类型 — Krylov 和 ODE 代码对 CFD 一无所知。`EulerP` 是与 `Euler` 平行的 CUDA 求解器轨道，复用 `CFV` 但将通量/限制器管线替换为可在设备上调用的标量循环。
 
 </div>
 
 ---
 <!-- _footer: "README.md:28-68 · docs/guides/building.md" -->
 
-## From zero to a running solver in six commands
+## 从零运行求解器
 
 ```bash
 # 1. Fetch code and submodules
@@ -459,37 +448,37 @@ cmake --build build -t euler -j32
 mpirun -np 4 ./build/app/euler.exe cases/euler_config_IV.json
 ```
 
-Presets available: `release-test`, `debug`, `cuda`, `ci`. Python path: `pip install -e .` uses `scikit-build-core` under the hood.
+可用预设：`release-test`、`debug`、`cuda`、`ci`。Python 路径：`pip install -e .` 底层使用 `scikit-build-core`。
 
 ---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
-<div class="ch-num">CHAPTER 2</div>
+<div class="ch-num">第二章</div>
 
-# Architecture
+# 架构
 
-## Arrays, MPI, ghosts, state machines
+## 数组、MPI、Ghost、状态机
 
 ---
 <!-- _footer: "docs/guides/project_structure.md:5-17 · docs/index.md:10-17" -->
 
-## Six modules — responsibilities
+## 六大模块 — 职责划分
 
-| Module     | Directory    | Role                                                              | LoC   |
-|------------|--------------|-------------------------------------------------------------------|-------|
-| **DNDS**   | `src/DNDS`   | MPI arrays, serialization (JSON + HDF5), profiling, CUDA, config  | large |
-| **Geom**   | `src/Geom`   | Unstructured mesh, CGNS I/O, Metis/ParMetis partitioning          | large |
-| **CFV**    | `src/CFV`    | Compact Finite Volume, Variational Reconstruction, limiters       | medium |
-| **Euler**  | `src/Euler`  | Compressible N-S, SA, k-ω, dual-time orchestration                | large |
-| **EulerP** | `src/EulerP` | Alternative CUDA-optimized evaluator                              | medium |
-| **Solver** | `src/Solver` | ODE integrators + Krylov — **header-only**                        | small |
+| 模块       | 目录          | 职责                                                                | 代码量 |
+|------------|--------------|---------------------------------------------------------------------|--------|
+| **DNDS**   | `src/DNDS`   | MPI 数组，序列化（JSON + HDF5），性能分析，CUDA，Configuration                | 大     |
+| **Geom**   | `src/Geom`   | 非结构化网格，CGNS I/O，Metis/ParMetis 分区                         | 大     |
+| **CFV**    | `src/CFV`    | Compact Finite Volume，变分重构，限制器                             | 中     |
+| **Euler**  | `src/Euler`  | 可压缩 N-S，SA，k-ω，双时间步编排                                   | 大     |
+| **EulerP** | `src/EulerP` | 替代方案 CUDA 优化Evaluator                                            | 中     |
+| **Solver** | `src/Solver` | ODE 积分器 + Krylov — **纯头文件**                                  | 小     |
 
 <br>
 
 <div class="callout">
 
-**Why the split.** Each layer depends only on those above. `Solver` depends on DNDS data types only — the Krylov and ODE code knows nothing about CFD; this is how the same `GMRES_LeftPreconditioned` works across Euler, VR's `uRec` system, and the k-ω equations. `EulerP` sits alongside `Euler`, reusing all of `CFV` but replacing the flux kernel with device-callable scalar loops.
+**为什么要分层。** 每一层只依赖其上层。`Solver` 仅依赖 DNDS 的数据类型——Krylov 和 ODE 代码对 CFD 一无所知；这就是为什么同一个 `GMRES_LeftPreconditioned` 可以在 Euler、VR 的 `uRec` 系统和 k-ω 方程之间通用。`EulerP` 与 `Euler` 并列，复用全部 `CFV`，但将通量核替换为可在设备上调用的标量循环。
 
 </div>
 
@@ -497,14 +486,14 @@ Presets available: `release-test`, `debug`, `cuda`, `ci`. Python path: `pip inst
 <!-- _footer: "docs/architecture/Paradigm.md:119-161" -->
 <!-- _class:  -->
 
-## Delayed abstraction ⇒ independent comm patterns
+## 延迟抽象 ⇒ 独立的通信模式
 
-Different field genres need different communication patterns. **Baking them into one class forces a monolithic serializer.**
+不同类型的场需要不同的通信模式。**将它们封装在一个类中会强制产生一个单体序列化器。**
 
 <div class="cols">
 <div>
 
-**Fragile: combined struct**
+**脆弱方案：合并结构体**
 
 ```cpp
 class Solution {
@@ -519,12 +508,12 @@ public:
 std::vector<Solution> sols;
 ```
 
-A single `WriteStream` can't express *which* fields participate in *which* MPI phase — any new field requires editing both methods.
+单个 `WriteStream` 无法表达*哪些*场参与*哪个* MPI 阶段——任何新场都需要同时修改两个方法。
 
 </div>
 <div>
 
-**DNDSR: split by genre**
+**DNDSR：按类型分离**
 
 ```cpp
 ArrayDof<5, 1>          u;       // conservative now
@@ -533,11 +522,11 @@ ArrayDof<2, 5>          grad_u;  // gradients, 2D × 5 vars
 ArrayDof<DynamicSize,5> uRec;    // variable-order reconstruction
 ```
 
-Each array owns its own `ArrayTransformer`. Ghost footprints and communication phases are **independent and composable**:
+每个数组拥有自己的 `ArrayTransformer`。Ghost覆盖范围和通信阶段**独立且可组合**：
 
-- `u` and `u_prev` share the same ghost map → `BorrowGGIndexing`.
-- `uRec` may have a different row size — new MPI types, same map.
-- `grad_u` lives in a larger halo for gradient stencils.
+- `u` 和 `u_prev` 共享相同的Ghost映射 → `BorrowGGIndexing`。
+- `uRec` 可能有不同的行大小——新的 MPI 类型，相同的映射。
+- `grad_u` 位于更大的Halo区中，用于梯度模板。
 
 </div>
 </div>
@@ -546,7 +535,7 @@ Each array owns its own `ArrayTransformer`. Ghost footprints and communication p
 <!-- _footer: "src/DNDS/ArrayBasic.hpp:17-25 · array_infrastructure.md:50-95" -->
 <!-- _class: denser -->
 
-## `Array<T, rs, rm>` — five layouts in one template
+## `Array<T, rs, rm>` — 一个模板五种布局
 
 ```cpp
 template <class T,
@@ -565,31 +554,31 @@ enum DataLayout {
 };
 ```
 
-**`ComputeDataLayout()` maps `(rs, rm)` → layout tag:**
+**`ComputeDataLayout()` 将 `(rs, rm)` 映射为布局标签：**
 
-| `_row_size`      | `_row_max`      | Layout              | Use case                                            |
-|------------------|-----------------|---------------------|-----------------------------------------------------|
-| `>= 0`           | —               | `TABLE_StaticFixed` | Cell volume (1 real), Euler state (5 reals)         |
-| `DynamicSize`    | —               | `TABLE_Fixed`       | VR coefficients (order decided at runtime)          |
-| `NonUniformSize` | `>= 0`          | `TABLE_StaticMax`   | Per-face node counts for a single element type    |
-| `NonUniformSize` | `DynamicSize`   | `TABLE_Max`         | Padded variable rows, runtime max                   |
-| `NonUniformSize` | `NonUniformSize`| `CSR`               | `cell2node`, `cell2cell`, wide-stencil adjacency   |
+| `_row_size`      | `_row_max`       | 布局               | 用例                                                  |
+|------------------|------------------|---------------------|-------------------------------------------------------|
+| `>= 0`           | —                | `TABLE_StaticFixed` | 单元体积（1 个实数），Euler 状态（5 个实数）          |
+| `DynamicSize`    | —                | `TABLE_Fixed`       | VR 系数（阶数在运行时决定）                            |
+| `NonUniformSize` | `>= 0`           | `TABLE_StaticMax`   | 单个单元类型的每面节点数                               |
+| `NonUniformSize` | `DynamicSize`    | `TABLE_Max`         | 可变行填充，运行时最大值                               |
+| `NonUniformSize` | `NonUniformSize` | `CSR`               | `cell2node`、`cell2cell`、宽模板邻接                   |
 
-<div class="tiny">`rowsize = int32_t`. Sentinels: `DynamicSize = -1`, `NonUniformSize = -2`.
-Alignment stub exists but only `NoAlign` is implemented today.</div>
+<div class="tiny">`rowsize = int32_t`。哨兵值：`DynamicSize = -1`，`NonUniformSize = -2`。
+对齐flag存在但目前只实现了 `NoAlign`。</div>
 
 ---
 <!-- _footer: "src/DNDS/Array.hpp · array_infrastructure.md:82-95" -->
 <!-- _class: dense -->
 
-## CSR has two internal modes
+## CSR 有两种内部模式
 
 <div class="cols">
 <div>
 
-### Decompressed mode
+### 未压缩模式
 
-`std::vector<std::vector<T>>` — one inner vector per row.
+`std::vector<std::vector<T>>`——每行一个内层 vector。
 
 ```cpp
 ArrayAdjacency<NonUniformSize, NonUniformSize> c2n;
@@ -602,30 +591,30 @@ for (index iCell = 0; iCell < nCell; ++iCell) {
 c2n.Compress();             // required before MPI
 ```
 
-**Use during mesh construction** — rows grow incrementally.
+**在网格构建期间使用**——行增量增长。
 
 </div>
 <div>
 
-### Compressed mode
+### 压缩模式
 
-Flat `std::vector<T>` + `pRowStart[n+1]` index.
+平坦的 `std::vector<T>` + `pRowStart[n+1]` 索引。
 
-- O(1) row access via `pRowStart[i]`.
-- Zero overhead after construction.
-- **Required** before any MPI call or serialization.
-- Retains row-resizing only through `Decompress()` → edit → `Compress()`.
+- 通过 `pRowStart[i]` 实现 O(1) 行访问。
+- 构建后零开销。
+- 任何 MPI 调用或序列化之前**必须使用**。
+- 仅通过 `Decompress()` → 编辑 → `Compress()` 保留行调整功能。
 
 ### ArrayView
 
-A device-callable non-owning view (`ArrayView<T, rs, rm>`) implements `operator[]` and `at()` for every layout — this is what ships to the GPU.
+一个可在设备上调用的非拥有视图（`ArrayView<T, rs, rm>`）为每种布局实现 `operator[]` 和 `at()`——这是发送到 GPU 的内容。
 
 </div>
 </div>
 
 <div class="callout callout-warn">
 
-⚠ **Element-type constraint:** `array_comp_acceptable<T>()` requires `std::is_trivially_copyable_v<T>` **or** `is_fixed_data_real_eigen_matrix_v<T>`. No `std::string` rows, no `std::vector` rows — it would break MPI.
+⚠ **元素类型约束：** `array_comp_acceptable<T>()` 要求 `std::is_trivially_copyable_v<T>` **或** `is_fixed_data_real_eigen_matrix_v<T>`。不允许 `std::string` 行、`std::vector` 行——这会破坏 MPI。
 
 </div>
 
@@ -633,32 +622,32 @@ A device-callable non-owning view (`ArrayView<T, rs, rm>`) implements `operator[
 <!-- _footer: "src/DNDS/ArrayTransformer.hpp:429-1496" -->
 <!-- _class: denser -->
 
-## `ArrayTransformer` — anatomy
+## `ArrayTransformer` — 解剖
 
 <div class="cols-40-60">
 <div>
 
-**Members**
+**成员**
 
 - `MPIInfo mpi;`
 - `t_pArray father, son;`
-- `pLGlobalMapping`   — local row → global index
-- `pLGhostMapping`    — global index → local father+son
-- `pPushTypeVec / pPullTypeVec` — cached `(rank, MPI_Datatype)`
-- `PushReqVec / PullReqVec` — persistent request handles
-- `pushDevice / pullDevice` — Host or CUDA
+- `pLGlobalMapping`   — 局部行 → 全局索引
+- `pLGhostMapping`    — 全局索引 → 局部 father+son
+- `pPushTypeVec / pPullTypeVec` — 缓存的 `(rank, MPI_Datatype)`
+- `PushReqVec / PullReqVec` — 持久请求句柄
+- `pushDevice / pullDevice` — Host 或 CUDA
 
-**Two strategies**
+**两种策略**
 
-- `HIndexed` — `MPI_Type_create_hindexed` scatter/gather (default).
-- `InSituPack` — contiguous pack buffers, `MPI_Isend/Irecv` on packed memory.
+- `HIndexed` — `MPI_Type_create_hindexed` scatter/gather（默认）。
+- `InSituPack` — 连续打包缓冲区，对打包内存执行 `MPI_Isend/Irecv`。
 
-Chosen per-process via `MPI::CommStrategy::Instance().GetArrayStrategy()`.
+通过 `MPI::CommStrategy::Instance().GetArrayStrategy()` 逐进程选择。
 
 </div>
 <div>
 
-**Lifecycle**
+**生命周期**
 
 ```cpp
 // Setup — all collective
@@ -691,21 +680,21 @@ trans.clearMPITypes();
 ---
 <!-- _footer: "src/DNDS/ArrayTransformer.hpp · array_infrastructure.md:115-184" -->
 
-## Father / son addressing
+## Father / son 寻址
 
 ```
- index:   0 .......... fatherSize-1  | fatherSize ...... fatherSize+sonSize-1
-          └───── owned (father) ─────┘ └─ ghost (son, copies from other ranks) ─┘
+ 索引:   0 .......... fatherSize-1  | fatherSize ...... fatherSize+sonSize-1
+           └──── 自有 (father) ─────┘ └─ Ghost (son, 从其他 rank 复制) ─┘
 
-  • father owns data — writes are legal
-  • son  mirrors remote data — writes are ignored after the next pull
-  • operator[](i) routes to father or son by index range
+   • father 拥有数据——写入合法
+   • son  镜像远程数据——下次 pull 后写入被忽略
+   • operator[](i) 按索引范围路由到 father 或 son
 ```
 
 <div class="cols">
 <div>
 
-**Pull = father → son (read ghosts)**
+**Pull = father → son（读取Ghost数据）**
 
 ```cpp
 trans.initPersistentPull();
@@ -714,12 +703,12 @@ trans.startPersistentPull();      // non-blocking
 trans.waitPersistentPull();
 ```
 
-Typical in flux-evaluation loops: read neighbor cell values.
+典型用于通量计算循环：读取相邻单元值。
 
 </div>
 <div>
 
-**Push = son → father (accumulate)**
+**Push = son → father（累加归约）**
 
 ```cpp
 trans.initPersistentPush();
@@ -727,31 +716,31 @@ trans.startPersistentPush();
 trans.waitPersistentPush();
 ```
 
-Typical in node-based FEM-style assembly: accumulate partial sums from ghost copies back into the father.
+典型用于基于节点的 FEM 风格装配：将Ghost副本的部分累加归约回 father。
 
 </div>
 </div>
 
-> **Sharing ghost structure across arrays.** `BorrowGGIndexing(primary)` skips the expensive collective `createFatherGlobalMapping` + `createGhostMapping` phase; only `createMPITypes()` is rebuilt because the MPI datatypes depend on element size.
+> **跨数组共享Ghost结构。** `BorrowGGIndexing(primary)` 跳过昂贵的集合 `createFatherGlobalMapping` + `createGhostMapping` 阶段；仅重建 `createMPITypes()`，因为 MPI 数据类型取决于元素大小。
 
 ---
 <!-- _footer: "src/DNDS/ArrayPair.hpp · src/DNDS/ArrayDerived/*.hpp" -->
 
-## Typed wrappers: `ArrayDerived`
+## 类型化包装器：`ArrayDerived`
 
-Each derived class inherits from `ParArray<T, rs, rm>` and overrides `operator[]` to return a **typed row view** instead of a raw pointer.
+每个派生类继承 `ParArray<T, rs, rm>` 并重写 `operator[]` 以返回**类型化行视图**而非裸指针。
 
-| Type                              | `operator[](i)` returns              | Use                                |
-|-----------------------------------|--------------------------------------|------------------------------------|
-| `ArrayAdjacency<rs, rm>`          | `AdjacencyRow` — lightweight span    | mesh topology (`cell2node`, …)     |
-| `ArrayEigenVector<N>`             | `Eigen::Map<Vector<real, N>>`        | node coordinates (`coords`)        |
-| `ArrayEigenMatrix<M, N>`          | `Eigen::Map<Matrix<real, M, N>>`     | per-cell Jacobians, gradients      |
-| `ArrayEigenUniMatrixBatch<M, N>`  | `j`-th matrix of a per-row batch     | quadrature-point data              |
+| 类型                               | `operator[](i)` 返回               | 用途                              |
+|------------------------------------|-------------------------------------|-----------------------------------|
+| `ArrayAdjacency<rs, rm>`           | `AdjacencyRow` — 轻量级跨度         | 网格拓扑（`cell2node` 等）        |
+| `ArrayEigenVector<N>`              | `Eigen::Map<Vector<real, N>>`       | 节点坐标（`coords`）              |
+| `ArrayEigenMatrix<M, N>`           | `Eigen::Map<Matrix<real, M, N>>`    | 每单元 Jacobian、梯度             |
+| `ArrayEigenUniMatrixBatch<M, N>`   | 每行批次的第 `j` 个矩阵             | 积分点数据                        |
 
 <div class="cols">
 <div>
 
-### `ArrayPair<TArray>` — the convenience bundle
+### `ArrayPair<TArray>` — 便捷封装
 
 ```cpp
 template <class TArray = ParArray<real, 1>>
@@ -766,14 +755,14 @@ struct ArrayPair {
 </div>
 <div>
 
-### Common type aliases
+### 常用类型别名
 
-| Alias                              | Purpose                           |
-|------------------------------------|-----------------------------------|
-| `ArrayAdjacencyPair<rs, rm>`       | mesh connectivity                 |
-| `ArrayEigenVectorPair<N>`          | coords                            |
-| `ArrayEigenMatrixPair<M, N>`       | per-entity matrices               |
-| `ArrayEigenUniMatrixBatchPair<M,N>`| quadrature data                   |
+| 别名                                | 用途                             |
+|-------------------------------------|----------------------------------|
+| `ArrayAdjacencyPair<rs, rm>`        | 网格连通性                       |
+| `ArrayEigenVectorPair<N>`           | coords                           |
+| `ArrayEigenMatrixPair<M, N>`        | 每实体矩阵                       |
+| `ArrayEigenUniMatrixBatchPair<M,N>` | 积分数据                         |
 
 </div>
 </div>
@@ -782,19 +771,19 @@ struct ArrayPair {
 <!-- _footer: "src/DNDS/ArrayDOF.hpp:174-395 · CFV/VRDefines.hpp:27" -->
 <!-- _class: dense -->
 
-## `ArrayDof` — the solver's vector space
+## `ArrayDof` — 求解器的向量空间
 
 ```cpp
 template <int n_m, int n_n>
 class ArrayDof : public ArrayEigenMatrixPair<n_m, n_n>;
 ```
 
-Wraps `father + son + transformer` and adds **MPI-collective vector-space ops** — directly consumable by the Krylov solvers in `src/Solver`.
+包装了 `father + son + transformer` 并添加了 **MPI 集合向量空间操作**——可直接被 `src/Solver` 中的 Krylov 求解器使用。
 
 <div class="cols">
 <div>
 
-### Operations (CPU + CUDA specializations)
+### 操作（CPU + CUDA 特化）
 
 ```cpp
 void setConstant(real R);
@@ -817,7 +806,7 @@ real min();                    real max();    real sum();
 </div>
 <div>
 
-### CFV aliases
+### CFV 别名
 
 ```cpp
 // src/CFV/VRDefines.hpp
@@ -827,11 +816,11 @@ template <int N,
           int d>  using tUGrad   = ArrayDof<d, N>;
 ```
 
-- `tUDof<N>` — cell-mean conservative variables (ρ, ρu, ρv, ρw, ρE).
-- `tURec<N>` — reconstruction coefficients (nDOF chosen at runtime per order).
-- `tUGrad<N, d>` — dim × N gradient matrix per cell.
+- `tUDof<N>` — 单元平均守恒变量（ρ, ρu, ρv, ρw, ρE）。
+- `tURec<N>` — 重构系数（nDOF 按阶数在运行时选择）。
+- `tUGrad<N, d>` — 每单元 dim × N 梯度矩阵。
 
-Explicit instantiation covers `(n_m ∈ {1..8, Dynamic, NonUniform}, n_n ∈ {1..5})`.
+显式实例化覆盖 `(n_m ∈ {1..8, Dynamic, NonUniform}, n_n ∈ {1..5})`。
 
 </div>
 </div>
@@ -840,7 +829,7 @@ Explicit instantiation covers `(n_m ∈ {1..8, Dynamic, NonUniform}, n_n ∈ {1.
 <!-- _footer: "src/DNDS/ArrayDOF_op.hxx · ArrayDOF_op_CUDA.cuh" -->
 <!-- _class: dense -->
 
-## Host / CUDA dispatch for DOF ops
+## DOF 操作的 Host / CUDA 分发
 
 ```cpp
 template <DeviceBackend B, int n_m, int n_n>
@@ -855,7 +844,7 @@ class ArrayDofOp<DeviceBackend::CUDA, n_m, n_n> { /* thrust / raw kernels */ };
 #endif
 ```
 
-**Runtime dispatch:**
+**运行时分发：**
 
 ```cpp
 #define DNDS_ARRAY_OP_SWITCHER(backend, expr)  \
@@ -868,7 +857,7 @@ class ArrayDofOp<DeviceBackend::CUDA, n_m, n_n> { /* thrust / raw kernels */ };
 
 <div class="callout callout-ok">
 
-**Consequence.** The solver's `norm2()` / `dot()` / `addTo()` calls are the same in C++ regardless of where the data lives — the host code just checks `father->device()` and routes. No `#ifdef CUDA` in Euler or Solver.
+**效果：** 无论数据位于何处，求解器的 `norm2()` / `dot()` / `addTo()` 调用在 C++ 中都相同——主机代码只需检查 `father->device()` 并路由。Euler 或 Solver 中没有 `#ifdef CUDA`。
 
 </div>
 
@@ -876,9 +865,9 @@ class ArrayDofOp<DeviceBackend::CUDA, n_m, n_n> { /* thrust / raw kernels */ };
 <!-- _footer: "docs/architecture/MeshConnectivity.md:179-336 · Mesh_DeviceView.hpp:89-94" -->
 <!-- _class: tight -->
 
-## State-tracked mesh adjacency (1 / 2)
+## 状态跟踪的网格邻接（1 / 2）
 
-12+ adjacency arrays (`cell2node`, `face2cell`, `cell2cell`, `node2bnd`, …) must each be **globally or locally indexed** at any given moment — a classic bug surface.
+12 个以上的邻接数组（`cell2node`、`face2cell`、`cell2cell`、`node2bnd` 等）在任何时刻都必须处于**全局或局部索引**状态——这是一个经典的 bug 高发区。
 
 ```cpp
 enum MeshAdjState {
@@ -888,22 +877,22 @@ enum MeshAdjState {
 };
 ```
 
-![](res/mermaid_02_701fd3bd.svg)
+![](res/zh/mermaid_02_701fd3bd.svg)
 
 
-<small>\* `markLocal()` requires the target mapping to already be wired.
-`markGlobal()` is an idempotent no-op when already in `PointToGlobal`.</small>
+<small>\* `markLocal()` 要求目标映射已经wired。
+`markGlobal()` 在已处于 `PointToGlobal` 时是幂等的空操作。</small>
 
 ---
 <!-- _footer: "src/Geom/Mesh/AdjIndexInfo.hpp:27-341" -->
 <!-- _class: dense -->
 
-## State-tracked mesh adjacency (2 / 2)
+## 状态跟踪的网格邻接（2 / 2）
 
 <div class="cols">
 <div>
 
-### `AdjIndexInfo` — private state + target map
+### `AdjIndexInfo` — 私有状态 + 目标映射
 
 ```cpp
 struct AdjIndexInfo {
@@ -926,7 +915,7 @@ public:
 };
 ```
 
-Not-found entries after `toLocal` are encoded as `(-1 - globalIdx)` so they survive round-trips and remain distinguishable from valid local indices.
+`toLocal` 后未找到的条目编码为 `(-1 - globalIdx)`，使其能经受往返转换并保持与有效局部索引的可区分性。
 
 </div>
 <div>
@@ -949,13 +938,13 @@ struct AdjPairTracked : public TPair {
 };
 ```
 
-**Three-layer DSL**
+**三层 DSL**
 
-| Layer | File | State-aware? |
+| 层 | 文件 | 状态感知？ |
 |---|---|---|
 | DSL | `MeshConnectivity.hpp` | ❌ |
-| Checked wrappers | `MeshConnectivity_StateChecked.hpp` | ✅ asserts `idx.state()` |
-| `UnstructuredMesh` | `Mesh.cpp` | ✅ owns `AdjPairTracked` members |
+| 检查包装器 | `MeshConnectivity_StateChecked.hpp` | ✅ 断言 `idx.state()` |
+| `UnstructuredMesh` | `Mesh.cpp` | ✅ 拥有 `AdjPairTracked` 成员 |
 
 </div>
 </div>
@@ -964,16 +953,16 @@ struct AdjPairTracked : public TPair {
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
-<div class="ch-num">CHAPTER 3</div>
+<div class="ch-num">第3章</div>
 
-# Geometry pipeline
+# 几何流水线
 
-## Elements · mesh build · ghosts · DSL
+## 元素 · 网格构建 · Ghost · DSL
 
 ---
 <!-- _footer: "docs/elements/ · src/Geom/Elements/" -->
 
-## Supported elements — O1 / O2 pairs
+## 支持的元素 — O1 / O2 对
 
 <div class="elem-grid">
 <figure><img src="res/Tri3_nodes.png"      alt="Tri3"      style="height:120px;"/><figcaption>Tri3</figcaption></figure>
@@ -994,15 +983,15 @@ struct AdjPairTracked : public TPair {
 <div class="cols">
 <div>
 
-- **2D cells:** Tri3, Tri6, Quad4, Quad9.
-- **3D cells:** Tet4, Tet10, Hex8, Hex27, Prism6, Prism18, Pyramid5, Pyramid14.
-- **1D (BC / boundary meshes):** Line2, Line3.
+- **2D 单元：** Tri3、Tri6、Quad4、Quad9。
+- **3D 单元：** Tet4、Tet10、Hex8、Hex27、Prism6、Prism18、Pyramid5、Pyramid14。
+- **1D（BC / 边界网格）：** Line2、Line3。
 
 </div>
 <div>
 
-- **Order elevation:** `BuildO2FromO1Elevation()` — Tri3→Tri6, Quad4→Quad9, Tet4→Tet10, Hex8→Hex27, Prism6→Prism18, Pyramid5→Pyramid14.
-- **h-refinement:** `BuildBisectO1FormO2()` — one-step bisection from an O2 mesh.
+- **升阶：** `BuildO2FromO1Elevation()` — Tri3→Tri6、Quad4→Quad9、Tet4→Tet10、Hex8→Hex27、Prism6→Prism18、Pyramid5→Pyramid14。
+- **h-细化：** `BuildBisectO1FormO2()` — 从 O2 网格进行一步二分。
 
 </div>
 </div>
@@ -1011,7 +1000,7 @@ struct AdjPairTracked : public TPair {
 <!-- _footer: "src/Geom/Mesh/Mesh.hpp:57-127" -->
 <!-- _class: denser -->
 
-## `UnstructuredMesh` — what it owns
+## `UnstructuredMesh` — 它拥有什么
 
 ```cpp
 class UnstructuredMesh : public DeviceTransferable<UnstructuredMesh> {
@@ -1043,7 +1032,7 @@ class UnstructuredMesh : public DeviceTransferable<UnstructuredMesh> {
 
 <div class="callout">
 
-Every `AdjPairTracked` member carries its own `AdjIndexInfo idx` — so each adjacency knows whether it is global or local, **independently of the 5 group flags**. Group flags remain as a coarse assertion tool.
+每个 `AdjPairTracked` 成员都携带自己的 `AdjIndexInfo idx`——因此每个邻接关系都知道自己是全局的还是局部的，**独立于 5 个组标志**。组标志保留作为粗粒度的断言工具。
 
 </div>
 
@@ -1051,22 +1040,22 @@ Every `AdjPairTracked` member carries its own `AdjIndexInfo idx` — so each adj
 <!-- _footer: "docs/architecture/MeshConnectivity.md:46-90 · src/Geom/Mesh/Mesh.hpp:442-1011" -->
 <!-- _class: denser -->
 
-## Mesh build pipeline — end-to-end
+## 网格构建流水线 — 端到端
 
 <div class="cols">
 <div>
 
-**Setup & adjacency**
+**设置与邻接关系**
 
-![](res/mermaid_03_56b5f6d5.svg)
+![](res/zh/mermaid_03_56b5f6d5.svg)
 
 
 </div>
 <div>
 
-**Faces & finalization**
+**面与最终化**
 
-![](res/mermaid_04_75f7fe51.svg)
+![](res/zh/mermaid_04_75f7fe51.svg)
 
 
 </div>
@@ -1074,7 +1063,7 @@ Every `AdjPairTracked` member carries its own `AdjIndexInfo idx` — so each adj
 
 <div class="callout callout-warn">
 
-⚠ **`cell2cell` audit** — every runtime call in CFV / Euler / EulerP was surveyed; `cell2cell` is queried **zero times** in hot loops. It exists exclusively to determine the ghost set, after which face-based traversal takes over. This motivates the DMPlex-style evolution on the roadmap.
+⚠ **`cell2cell` 审计** — 对 CFV / Euler / EulerP 中的每个运行时调用进行了调查；`cell2cell` 在热循环中被查询了**零次**。它专门用于确定Ghost集合，之后基于面的遍历接管。这推动了展望中的 DMPlex 风格演进。
 
 </div>
 
@@ -1082,7 +1071,7 @@ Every `AdjPairTracked` member carries its own `AdjIndexInfo idx` — so each adj
 <!-- _footer: "src/Geom/Mesh/Mesh.hpp:1083-1105" -->
 <!-- _class:  -->
 
-## Partitioning — `PartitionOptions`
+## 分区 — `PartitionOptions`
 
 ```cpp
 struct PartitionOptions {
@@ -1097,21 +1086,21 @@ struct PartitionOptions {
 <div class="cols">
 <div>
 
-### Two partitioners
+### 两种分区器
 
-- **Metis (serial)** — initial cell partition after a serial CGNS read. `MeshPartitionCell2Cell(options)` drives it, then `PartitionReorderToMeshCell2Cell` reorders cells using the partition.
-- **ParMetis (distributed)** — used inside `ReadSerializeAndDistribute` to **refine** an even-split load after an H5 restart or cross-np read.
+- **Metis（串行）** — 串行 CGNS 读取后的初始单元分区。由 `MeshPartitionCell2Cell(options)` 驱动，然后 `PartitionReorderToMeshCell2Cell` 使用分区对单元进行重新排序。
+- **ParMetis（分布式）** — 用于 `ReadSerializeAndDistribute` 内部，在 H5 重启或跨 np 读取后**细化**均匀分割的负载。
 
 </div>
 <div>
 
-### Determinism
+### 确定性
 
-Tests fix `metisSeed = 42`. Combined with the `Jacobi` iteration in VR (instead of SOR) and the deterministic LU-SGS replacement, this yields **byte-stable golden values** across re-runs at any `np`.
+测试固定 `metisSeed = 42`。结合 VR 中的 `Jacobi` 迭代（而非 SOR）以及确定性的 LU-SGS 替代，这能在任意 `np` 下产生跨重新运行的**字节稳定黄金值**。
 
-### Ordering
+### 排序
 
-`ReorderLocalCells(nParts, nPartsInner)` runs a two-level cache-locality pass (inner + outer); `ObtainLocalFactFillOrdering` runs AMD / MMD for ILU.
+`ReorderLocalCells(nParts, nPartsInner)` 运行两级缓存局部性遍历（内部 + 外部）；`ObtainLocalFactFillOrdering` 为 ILU 运行 AMD / MMD。
 
 </div>
 </div>
@@ -1120,7 +1109,7 @@ Tests fix `metisSeed = 42`. Combined with the `Jacobi` iteration in VR (instead 
 <!-- _footer: "src/Geom/Mesh/MeshConnectivity.hpp:43-237" -->
 <!-- _class: dense -->
 
-## The ghost specification DSL — types
+## Ghost规范 DSL — 类型
 
 ```cpp
 enum class EntityKind : int8_t {
@@ -1158,7 +1147,7 @@ struct GhostSpec   { std::vector<GhostChain> chains;
 <!-- _footer: "src/Geom/Mesh/MeshConnectivity.hpp:244-335,1241" -->
 <!-- _class:  -->
 
-## The ghost DSL — compile & evaluate
+## Ghost DSL — 编译与计算
 
 ```cpp
 GhostSpec spec = GhostSpec::defaultPrimary(nLayers);
@@ -1176,7 +1165,7 @@ GhostResult       result = dag.evaluateGhostTree(tree, mpi);
 <div class="cols">
 <div>
 
-### Evaluator pseudocode (BFS per level)
+### 求值器伪代码（每层 BFS）
 
 ```text
 for level in 0..tree.maxLevel:
@@ -1210,18 +1199,18 @@ struct GhostResult {
 <!-- _footer: "src/Geom/Mesh/MeshConnectivity.hpp:858-1220" -->
 <!-- _class: dense -->
 
-## DSL primitives on `MeshConnectivity`
+## `MeshConnectivity` 上的 DSL 原语
 
-Beyond the ghost evaluator, `MeshConnectivity` is a reusable DSL for distributed adjacency operations — used in many mesh-build steps.
+除了Ghost求值器之外，`MeshConnectivity` 还是一个用于分布式邻接操作的可复用 DSL——在许多网格构建步骤中使用。
 
-| Primitive | Signature | What it does |
+| 原语 | 签名 | 功能 |
 |---|---|---|
-| `Inverse<cone_rs>` | `(cone, nToLocal, mpi, fromL2G, toL2G, toGlobalMap) → tAdjPair` | A→B cone to B→A support, MPI push-back |
+| `Inverse<cone_rs>` | `(cone, nToLocal, mpi, fromL2G, toL2G, toGlobalMap) → tAdjPair` | A→B Cone 到 B→A Support，MPI 推送回传 |
 | `Compose<rs_AB, rs_BC, out_rs>` | `(AB, BC, ...) → tAdjPair` | A→B ∘ B→C → A→C |
-| `ComposeFiltered` | `... pred, matchExtra=nullptr` | Compose with `SharedCountPredicate` filter |
-| `Interpolate<p2n_rs>` | `(parent2node, SubEntityQuery, nParent, nNode, mpi)` | Local-only sub-entity extraction |
-| `InterpolateGlobal<p2n_rs, e2p_rs>` | | N-parent distributed interpolation with pbi-aware dedup |
-| `evaluateGhostTree` | `(tree, mpi) → GhostResult` | BFS ghost evaluation |
+| `ComposeFiltered` | `... pred, matchExtra=nullptr` | 使用 `SharedCountPredicate` 过滤器进行组合 |
+| `Interpolate<p2n_rs>` | `(parent2node, SubEntityQuery, nParent, nNode, mpi)` | 仅局部的子实体提取 |
+| `InterpolateGlobal<p2n_rs, e2p_rs>` | | N-父分布式插值，具备 pbi 感知去重 |
+| `evaluateGhostTree` | `(tree, mpi) → GhostResult` | BFS Ghost求值 |
 
 <div class="cols">
 <div>
@@ -1235,12 +1224,12 @@ struct SharedCountPredicate {
 };
 ```
 
-Used to implement Jacobian-like stencils, e.g. "cells sharing ≥ 2 nodes" to filter face-neighbors from node-neighbors.
+用于实现类似 Jacobian 的模板，例如"共享 ≥ 2 个节点的单元"，用于从节点邻居中过滤出面邻居。
 
 </div>
 <div>
 
-### Adjacency registry
+### 邻接注册表
 
 ```cpp
 void registerAdj(AdjKind, ssp<AdjVariant>);
@@ -1250,7 +1239,7 @@ ssp<AdjVariant> resolveAdj(AdjKind) const;
 bool            hasAdj(AdjKind) const;
 ```
 
-Mesh build methods populate this registry so `evaluateGhostTree` can look up each hop's adjacency by kind at runtime.
+网格构建方法填充此注册表，以便 `evaluateGhostTree` 可以在运行时按类型查找每跳的邻接关系。
 
 </div>
 </div>
@@ -1258,12 +1247,12 @@ Mesh build methods populate this registry so `evaluateGhostTree` can look up eac
 ---
 <!-- _footer: "src/Geom/Mesh/Mesh.hpp:699-709 · RELEASE_NOTES.md:45" -->
 
-## Order elevation & bisection
+## 升阶与二分
 
 <div class="cols">
 <div>
 
-### O1 → O2 elevation
+### O1 → O2 升阶
 
 ```cpp
 void BuildO2FromO1Elevation(UnstructuredMesh &meshO1);
@@ -1274,13 +1263,13 @@ void ElevatedNodesSolveInternalSmoothV1Old();
 void ElevatedNodesSolveInternalSmoothV2();
 ```
 
-- **Boundary smooth** — RBF-based placement of added nodes on curved surfaces.
-- **Internal smooth** — V1/V1Old/V2 variants of a Laplace-like solve to interpolate interior added-node positions.
+- **边界平滑** — 基于 RBF 的弯曲表面上新增节点的放置。
+- **内部平滑** — V1/V1Old/V2 变体的类拉普拉斯求解，用于插值内部新增节点的位置。
 
 </div>
 <div>
 
-### O2 → O1 bisection
+### O2 → O1 二分
 
 ```cpp
 void BuildBisectO1FormO2(UnstructuredMesh &meshO2);
@@ -1288,32 +1277,32 @@ bool IsO1() const;
 bool IsO2() const;
 ```
 
-**Per element type** (see `docs/elements/*_nodes.png`):
+**每种元素类型**（参见 `docs/elements/*_nodes.png`）：
 
-- Tri3 **→** (elevate) **→** Tri6 **→** (bisect) **→** 4× Tri3.
-- Quad4 **→** (elevate) **→** Quad9 **→** (bisect) **→** 4× Quad4.
-- Hex8 **→** (elevate) **→** Hex27 **→** (bisect) **→** 8× Hex8.
-- Prism6 / Pyramid5 — elevated + bisected analogously.
+- Tri3 **→**（升阶） **→** Tri6 **→**（二分） **→** 4× Tri3。
+- Quad4 **→**（升阶） **→** Quad9 **→**（二分） **→** 4× Quad4。
+- Hex8 **→**（升阶） **→** Hex27 **→**（二分） **→** 8× Hex8。
+- Prism6 / Pyramid5 — 类似地升阶和二分。
 
 </div>
 </div>
 
-Used in practice for:
+实际用于：
 
-- **p-adaptivity studies** via order elevation, and
-- **h-refinement benchmarks** via bisection, while keeping the same topology file.
+- 通过升阶进行 **p-自适应研究**，以及
+- 通过二分进行 **h-细化基准测试**，同时保持相同的拓扑文件。
 
 ---
 <!-- _footer: "src/Geom/Mesh/Mesh.hpp:986-1011" -->
 
-## Wall-distance computation
+## 壁面距离计算
 
-`BuildNodeWallDist(fBndIsWall, WallDistOptions = {})` (`Mesh.hpp:1011`). Used by SA / k-ω / DDES / IDDES models.
+`BuildNodeWallDist(fBndIsWall, WallDistOptions = {})`（`Mesh.hpp:1011`）。用于 SA / k-ω / DDES / IDDES 模型。
 
 <div class="cols-40-60">
 <div>
 
-### Options
+### 选项
 
 ```cpp
 struct WallDistOptions {
@@ -1330,14 +1319,14 @@ struct WallDistOptions {
 </div>
 <div>
 
-### Strategies
+### 策略
 
-- **Brute force** — O(N · M) pair loop; trivially vectorizable; used for small cases.
-- **CGAL AABB tree** — per-rank tree over wall faces; O(log M) per query.
-- **Batched** — mitigate single-rank-memory ceiling by doing the tree build on subsets of ranks (`wallDistExecution > 1`).
-- **Poisson** — `GetWallDist_Poisson()` in EulerEvaluator; p-Poisson solve on the mesh, gradient inverted → distance.
+- **暴力法** — O(N · M) 对循环；易于向量化；用于小型案例。
+- **CGAL AABB 树** — 每个 rank 在壁面上的树；每次查询 O(log M)。
+- **批量法** — 通过在 rank 的子集上构建树（`wallDistExecution > 1`）来缓解单 rank 内存上限。
+- **Poisson** — EulerEvaluator 中的 `GetWallDist_Poisson()`；在网格上求解 p-Poisson，梯度取反 → 距离。
 
-Distance is also computed *per face* for use in the SST blending functions.
+距离也按*每个面*计算，用于 SST 混合函数。
 
 </div>
 </div>
@@ -1345,12 +1334,12 @@ Distance is also computed *per face* for use in the SST blending functions.
 ---
 <!-- _footer: "docs/architecture/Serialization.md:107-172 · src/Geom/Mesh/Mesh.hpp:912-949" -->
 
-## Cross-`np` restart
+## 跨 `np` 重启
 
 <div class="cols-40-60">
 <div>
 
-### Offset sentinels
+### 偏移哨兵
 
 ```cpp
 static const index Offset_Parts     = -1;
@@ -1359,22 +1348,22 @@ static const index Offset_EvenSplit = -3;
 static const index Offset_Unknown   = UnInitIndex;
 ```
 
-| Mode              | Meaning                           |
+| 模式               | 含义                           |
 |-------------------|-----------------------------------|
-| `Unknown`         | Auto-detect from `rank_offsets`                    |
-| `Parts`           | `MPI_Scan` over local sizes                        |
-| `One`             | Rank 0 owns the whole dataset                      |
-| `EvenSplit`       | Read-time split into `~N/np`                       |
-| (explicit)        | `isDist()` → `true`; `{localSize, globalStart}`    |
+| `Unknown`         | 从 `rank_offsets` 自动检测                    |
+| `Parts`           | 对局部大小进行 `MPI_Scan`                        |
+| `One`             | Rank 0 拥有整个数据集                      |
+| `EvenSplit`       | 读取时分割为 `~N/np`                       |
+| (explicit)        | `isDist()` → `true`；`{localSize, globalStart}`    |
 
 </div>
 <div>
 
-### `ReadSerializeRedistributed` — three cases
+### `ReadSerializeRedistributed` — 三种情况
 
-1. **No `origIndex`, same `np`** → falls back to `ReadSerialize`.
-2. **`origIndex` present, same `np`** → normal read + local remap.
-3. **`origIndex` present, different `np`** → `EvenSplit` read, then **3-round `MPI_Alltoallv` rendezvous** to build the directory `origIdx → globalReadIdx`, followed by one `ArrayTransformer` pull.
+1. **无 `origIndex`，相同 `np`** → 回退到 `ReadSerialize`。
+2. **存在 `origIndex`，相同 `np`** → 正常读取 + 局部重映射。
+3. **存在 `origIndex`，不同 `np`** → `EvenSplit` 读取，然后进行**3 轮 `MPI_Alltoallv` 集合**以构建目录 `origIdx → globalReadIdx`，随后进行一次 `ArrayTransformer` 拉取。
 
 ```text
 SerializerBase            (abstract)
@@ -1386,24 +1375,24 @@ Array → ParArray → ArrayPair → ArrayRedistributor
 </div>
 </div>
 
-> Write from 4 ranks, restart on 8 — `EulerSolver::ReadRestart` handles all three cases transparently.
+> 从 4 个 rank 写入，在 8 个 rank 上重启 — `EulerSolver::ReadRestart` 透明地处理所有三种情况。
 
 ---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
-<div class="ch-num">CHAPTER 4</div>
+<div class="ch-num">第4章</div>
 
-# Numerics
+# 数值方法
 
-## CFV · VR · flux · limiters · ODE · Krylov
+## CFV · VR · Flux · 限制器 · ODE · Krylov
 
 ---
 <!-- _footer: "src/CFV/VRDefines.hpp:27 · docs/theory/Variational_Reconstruction.md:21-30" -->
 
-## Compact Finite Volume — the reconstruction
+## Compact Finite Volume — 重构
 
-Reconstruct a piecewise polynomial from cell means with a **zero-mean basis** per cell:
+从单元均值出发，在每个单元上以**零均值基**重构分段多项式：
 
 $$
 u_i(\mathbf{x})
@@ -1411,11 +1400,11 @@ u_i(\mathbf{x})
 + \sum_{l=1}^{N_{\text{base}}} u^l_i\, \varphi^l_i(\mathbf{x})
 $$
 
-- $\overline{u}_i$ — cell-mean, lives in `tUDof<N> = ArrayDof<N,1>`.
-- $u^l_i$ — reconstruction coefficients, in `tURec<N> = ArrayDof<Dyn,N>`.
-- Basis $\varphi^l_i$ is orthogonalized locally, normalized by cell scale; degree chosen at runtime per cell.
+- $\overline{u}_i$ — 单元均值，存储在 `tUDof<N> = ArrayDof<N,1>` 中。
+- $u^l_i$ — 重构系数，存储在 `tURec<N> = ArrayDof<Dyn,N>` 中。
+- 基 $\varphi^l_i$ 局部正交化，按单元尺度归一化；每个单元的多项式阶数在运行时选择。
 
-**Supported polynomial orders: 1 – 3** (linear, quadratic, cubic).
+**支持的多项式阶数：1 – 3**（线性、二次、三次）。
 
 ```cpp
 // Static capacities (src/CFV/VariationalReconstruction.hpp:1051-1054)
@@ -1425,15 +1414,15 @@ maxNDiff       = (dim == 2) ? 10 : 20;
 maxNeighbour   = 7;
 ```
 
-The stencil is **one ring of node-neighbors** — which is exactly what `BuildGhostPrimary(1)` provides by default. Wider stencils (`nGhostLayers ≥ 2`) are available for higher-order variants.
+模板为**一圈节点邻居**——这正是 `BuildGhostPrimary(1)` 默认提供的内容。更宽的模板（`nGhostLayers ≥ 2`）可用于高阶变体。
 
 ---
 <!-- _footer: "docs/theory/Variational_Reconstruction.md:33-106" -->
 <!-- _class: dense -->
 
-## Variational Reconstruction — the functional
+## Variational Reconstruction — 泛函
 
-Minimize the jumps of **all derivatives up to order k** across each face:
+最小化每个面上**所有至 k 阶导数**的跳跃：
 
 $$
 I_f
@@ -1445,13 +1434,13 @@ $$
 <div class="cols">
 <div>
 
-**Weights**
+**权重**
 
-- $w_g(f)$ — geometric weight; default $w_g = S_f^{-1}$ (area-inverse).
-- $w_d(p)$ — dimensionless derivative weight; selects how aggressively each derivative order contributes.
-- $\mathcal{D}_p u$ — the $p$-th derivative tensor (covariant only under linear coordinate changes).
+- $w_g(f)$ — 几何权重；默认 $w_g = S_f^{-1}$（面积倒数）。
+- $w_d(p)$ — 无量纲导数权重；控制各阶导数的贡献强度。
+- $\mathcal{D}_p u$ — 第 $p$ 阶导数张量（仅在坐标线性变化下保持协变）。
 
-**Local system**
+**局部系统**
 
 $$
 A^{i}_{mn} u^{n}_{i}
@@ -1460,23 +1449,23 @@ A^{i}_{mn} u^{n}_{i}
         + b^{i{\leftarrow}j}_{m}(\overline{u}_j-\overline{u}_i)\bigr)
 $$
 
-Solved iteratively — options below.
+迭代求解——方案见下文。
 
 </div>
 <div>
 
-**Three inner-product choices**
+**三种内积选择**
 
-- **Wang (normal):** $\langle\mathcal{D}_3 u,\mathcal{D}_3 v\rangle = d_f^6\,\partial_{nnn}u\,\partial_{nnn}v$
-- **Pan (X-Y aligned):** $\sum (\Delta_x^a\Delta_y^b\partial^{\cdot}_{xy} u)\, (\Delta_x^a\Delta_y^b\partial^{\cdot}_{xy} v)$
-- **Huang (pre-isotropic):** $d_f^{2p}$ weighting, directionally isotropic.
+- **Wang（法向）：** $\langle\mathcal{D}_3 u,\mathcal{D}_3 v\rangle = d_f^6\,\partial_{nnn}u\,\partial_{nnn}v$
+- **Pan（X-Y 对齐）：** $\sum (\Delta_x^a\Delta_y^b\partial^{\cdot}_{xy} u)\, (\Delta_x^a\Delta_y^b\partial^{\cdot}_{xy} v)$
+- **Huang（预各向同性）：** $d_f^{2p}$ 加权，方向各向同性。
 
-**Reconstruction iteration schemes** (`VariationalReconstruction.hpp:938-1031`)
+**重构迭代方案**（`VariationalReconstruction.hpp:938-1031`）
 
-- `DoReconstructionIter` — Jacobi / SOR sweep (tests use Jacobi).
-- `DoReconstructionIterDiff` — Jacobian-vector product (GMRES inner).
-- `DoReconstructionIterSOR` — SOR with optional reverse pass.
-- Fallbacks: `DoReconstruction2nd`, `DoReconstruction2ndGrad`.
+- `DoReconstructionIter` — Jacobi / SOR 扫描（测试使用 Jacobi）。
+- `DoReconstructionIterDiff` — Jacobian-向量乘积（GMRES 内层）。
+- `DoReconstructionIterSOR` — SOR，可选反向扫描。
+- 回退方案：`DoReconstruction2nd`、`DoReconstruction2ndGrad`。
 
 </div>
 </div>
@@ -1485,15 +1474,15 @@ Solved iteratively — options below.
 <!-- _footer: "src/CFV/VariationalReconstruction.hpp:282-289" -->
 <!-- _class: denser -->
 
-## VR setup — the three `Construct*` calls
+## VR 设置 — 三个 `Construct*` 调用
 
 ```cpp
 template <int dim = 2>
 class VariationalReconstruction : public FiniteVolume {
 public:
-    void ConstructMetrics();                                                      // via FiniteVolume
-    void ConstructBaseAndWeight(tFGetBoundaryWeight id2faceDircWeight = …);      // basis + cached diff values
-    void ConstructRecCoeff();                                                    // A, B, A^-1 B, secondary
+    void ConstructMetrics();                                                      // 通过 FiniteVolume
+    void ConstructBaseAndWeight(tFGetBoundaryWeight id2faceDircWeight = …);      // 基 + 缓存的导数值
+    void ConstructRecCoeff();                                                    // A, B, A^{-1} B, 辅助矩阵
     // …
 };
 ```
@@ -1501,31 +1490,31 @@ public:
 <div class="cols">
 <div>
 
-### What `ConstructMetrics` builds
+### `ConstructMetrics` 构建的内容
 
-- Cell volumes, face areas, unit normals, quadrature Jacobians.
-- Inertia tensors, major-axis frames, bounding-box scales.
-- Physical coords of every quadrature point.
-- Smoothness scales for each cell.
+- 单元体积、面面积、单位法向量、求积 Jacobian。
+- 惯性张量、主轴坐标系、包围盒尺度。
+- 每个求积点的物理坐标。
+- 每个单元的光滑性尺度。
 
-### What `ConstructBaseAndWeight` builds
+### `ConstructBaseAndWeight` 构建的内容
 
-- `cellBaseMoment` — basis moments per cell.
-- `faceAlignedScales`, `faceMajorCoordScale`.
-- `cellDiffBaseCache`, `faceDiffBaseCache` — cached derivative values at all quadrature points, for every neighbour in the stencil.
-- `bndVRCaches` — boundary-face caches for BC-weighted VR.
+- `cellBaseMoment` — 每个单元的基矩。
+- `faceAlignedScales`、`faceMajorCoordScale`。
+- `cellDiffBaseCache`、`faceDiffBaseCache` — 所有求积点上、模板中每个邻居的缓存导数值。
+- `bndVRCaches` — 用于 BC 加权 VR 的边界面缓存。
 
 </div>
 <div>
 
-### What `ConstructRecCoeff` builds
+### `ConstructRecCoeff` 构建的内容
 
-- `matrixAB`, `vectorB` — per-neighbor RHS blocks.
-- `matrixAAInvB`, `vectorAInvB` — precomputed $A^{-1}B$ to accelerate Jacobi / SOR iterations.
-- `matrixSecondary`, `matrixAHalf_GG` — auxiliary reconstruction systems.
-- `matrixA`, `matrixACholeskyL`, `volIntCholeskyL` — full system + Cholesky factor for dense local solves.
+- `matrixAB`、`vectorB` — 每个邻居的右端项块。
+- `matrixAAInvB`、`vectorAInvB` — 预计算的 $A^{-1}B$，用于加速 Jacobi / SOR 迭代。
+- `matrixSecondary`、`matrixAHalf_GG` — 辅助重构系统。
+- `matrixA`、`matrixACholeskyL`、`volIntCholeskyL` — 完整系统 + 稠密局部求解的 Cholesky 分解。
 
-All arrays are `ArrayEigenMatrix*` or `ArrayEigenUniMatrixBatch*` — i.e., Eigen maps over an MPI-aware distributed memory block.
+所有数组均为 `ArrayEigenMatrix*` 或 `ArrayEigenUniMatrixBatch*`——即在支持 MPI 的分布式内存块上的 Eigen 映射。
 
 </div>
 </div>
@@ -1534,17 +1523,17 @@ All arrays are `ArrayEigenMatrix*` or `ArrayEigenUniMatrixBatch*` — i.e., Eige
 <!-- _footer: "src/CFV/FiniteVolume.hpp:38-86" -->
 <!-- _class: dense -->
 
-## `FiniteVolume` — the metric cache
+## `FiniteVolume` — 度量缓存
 
 ```cpp
 class FiniteVolume : public DeviceTransferable<FiniteVolume> {
     real sumVolume, minVolume{veryLargeReal}, maxVolume, volGlobal;
 
-    tScalarPair  volumeLocal;         // per-cell volume
-    tScalarPair  faceArea;            // per-face area
+    tScalarPair  volumeLocal;         // 每个单元的 volume
+    tScalarPair  faceArea;            // 每个面的 area
     tRecAtrPair  cellAtr,  faceAtr;   // (NDOF, NDIFF, Order, intOrder)
     tCoeffPair   cellIntJacobiDet, faceIntJacobiDet;
-    t3VecsPair   faceUnitNorm;        // normal at each face quadrature pt
+    t3VecsPair   faceUnitNorm;        // 每个面求积点处的 normal
     t3VecPair    faceMeanNorm;
     t3VecPair    cellBary,  faceCent,  cellCent;
     t3VecsPair   cellIntPPhysics, faceIntPPhysics;
@@ -1552,7 +1541,7 @@ class FiniteVolume : public DeviceTransferable<FiniteVolume> {
     t3MatPair    cellMajorCoord, cellInertia;
     tScalarPair  cellSmoothScale;
 
-    int axisSymmetric = 0;            // wedge axisymmetry
+    int axisSymmetric = 0;            // 楔形轴对称
     std::set<index> axisFaces;
 
     // CRTP: to_device(), to_host(), device(), deviceView<B>()
@@ -1561,7 +1550,7 @@ class FiniteVolume : public DeviceTransferable<FiniteVolume> {
 
 <div class="callout callout-ok">
 
-**CUDA-transferable.** `FiniteVolume` (and therefore `VariationalReconstruction`) inherits from `DeviceTransferable<FiniteVolume>`. One call to `fv.to_device()` migrates the entire metric cache to the GPU as a device-side view.
+**支持 CUDA 传输。** `FiniteVolume`（以及 `VariationalReconstruction`）继承自 `DeviceTransferable<FiniteVolume>`。调用一次 `fv.to_device()` 即可将整个度量缓存迁移到 GPU 作为设备端视图。
 
 </div>
 
@@ -1569,7 +1558,7 @@ class FiniteVolume : public DeviceTransferable<FiniteVolume> {
 <!-- _footer: "src/Euler/Gas.hpp:61-95,230" -->
 <!-- _class: tight -->
 
-## 13 Riemann solvers
+## 13 种 Riemann 求解器
 
 ```cpp
 enum RiemannSolverType {
@@ -1580,24 +1569,24 @@ enum RiemannSolverType {
 };
 ```
 
-| Variant | Entropy-fix / eigenvalue scheme |
+| 变体 | 熵修正 / 特征值策略 |
 |---------|---------------------------------|
-| `Roe`    | standard Roe + Harten–Yee |
-| `Roe_M1` | cLLF (central + Local Lax–Friedrichs) |
+| `Roe`    | 标准 Roe + Harten–Yee |
+| `Roe_M1` | cLLF（中心 + 局部 Lax–Friedrichs） |
 | `Roe_M2` | Lax–Friedrichs |
-| `Roe_M3` | LD Roe (low-dissipation) |
-| `Roe_M4` | ID Roe (intermediate dissipation) |
+| `Roe_M3` | LD Roe（低耗散） |
+| `Roe_M4` | ID Roe（中等耗散） |
 | `Roe_M5` | LD cLLF |
-| `Roe_M6` | H-correction only |
-| `Roe_M7` | Harten–Yee only, no H-correction |
-| `Roe_M8` | H-correction + Harten–Yee |
-| `Roe_M9` | Reserved (eigScheme 9, currently asserts false) |
+| `Roe_M6` | 仅 H-修正 |
+| `Roe_M7` | 仅 Harten–Yee，无 H-修正 |
+| `Roe_M8` | H-修正 + Harten–Yee |
+| `Roe_M9` | 保留（eigScheme 9，当前 assert false） |
 | `HLLC`   | Harten–Lax–van Leer–Contact |
-| `HLLEP`  | HLLE with pressure fix |
-| `HLLEP_V1` | HLLEP variant 1 |
+| `HLLEP`  | HLLE，带压力修正 |
+| `HLLEP_V1` | HLLEP 变体 1 |
 
 ```cpp
-// Shared helper
+// 共享辅助函数
 template <int dim>
 RoePreamble<dim> ComputeRoePreamble(ULm, URm, gamma, dumpInfo);
 ```
@@ -1606,16 +1595,16 @@ RoePreamble<dim> ComputeRoePreamble(ULm, URm, gamma, dumpInfo);
 <!-- _footer: "src/Euler/Gas.hpp:200-230" -->
 <!-- _class: dense -->
 
-## `RoePreamble` — the shared middle
+## `RoePreamble` — 共享中间层
 
 ```cpp
 template <int dim>
 struct RoePreamble {
-    TVec veloLm, veloRm;                     // primitive velocities
-    real rhoLm, rhoRm, pLm, pRm, HLm, HRm;   // primitive state
-    real veloLm0, veloRm0;                   // normal velocity components
+    TVec veloLm, veloRm;                     // 原始速度
+    real rhoLm, rhoRm, pLm, pRm, HLm, HRm;   // 原始状态
+    real veloLm0, veloRm0;                   // 法向速度分量
 
-    TVec veloRoe;                            // Roe-averaged velocity
+    TVec veloRoe;                            // Roe 平均速度
     real sqrtRhoLm, sqrtRhoRm;
     real vsqrRoe, HRoe, asqrRoe, rhoRoe, aRoe;
 };
@@ -1624,7 +1613,7 @@ struct RoePreamble {
 <div class="cols">
 <div>
 
-### Flux signature
+### Flux 签名
 
 ```cpp
 template <int dim, int eigScheme>
@@ -1644,13 +1633,13 @@ void HLLCFlux(UL, UR, ULm, URm, n, vgN, …);
 </div>
 <div>
 
-### Why this factoring
+### 为什么要这样分解
 
-All 13 variants share `ComputeRoePreamble` — the Roe average, $H_{\text{Roe}}$, $a_{\text{Roe}}$, etc. The `eigScheme` template parameter then selects the dissipation / entropy-fix strategy.
+所有 13 种变体共享 `ComputeRoePreamble`——Roe 平均、$H_{\text{Roe}}$、$a_{\text{Roe}}$ 等。随后由 `eigScheme` 模板参数选择耗散/熵修正策略。
 
-- **One template instantiation per (`dim`, `eigScheme`)** keeps code size bounded.
-- **Compile-time dispatch** — no indirect calls in the flux kernel.
-- **Same interface** for inviscid and full Navier-Stokes flux: `NSFluxInvis<dim>`, `NSFluxVis<dim>(U, gradU, T, mu, n, flux, adiabaticWall, useQCR)`.
+- **每个 (`dim`, `eigScheme`) 一次模板实例化**，保持代码体积可控。
+- **编译期分发**——Flux 核函数中无间接调用。
+- **统一接口**，适用于无粘及完整 Navier-Stokes Flux：`NSFluxInvis<dim>`、`NSFluxVis<dim>(U, gradU, T, mu, n, flux, adiabaticWall, useQCR)`。
 
 </div>
 </div>
@@ -1659,27 +1648,27 @@ All 13 variants share `ComputeRoePreamble` — the Roe average, $H_{\text{Roe}}$
 <!-- _footer: "src/CFV/Limiters.hpp:28-577" -->
 <!-- _class: dense -->
 
-## Limiters — the FWBAP L2 family
+## 限制器 — FWBAP L2 系列
 
 <div class="cols">
 <div>
 
-### Multi-way (≥ 2 directions)
+### 多方向（≥ 2 方向）
 
-- `FWBAP_L2_Multiway` — generic Eigen arrays.
-- `FWBAP_L2_Multiway_Polynomial2D` — 2D polynomial-weighted norm.
-- `FWBAP_L2_Multiway_PolynomialOrth` — orthogonal variant.
-- `FMEMM_Multiway_Polynomial2D` — Modified Extremum-Monotone Mixer.
+- `FWBAP_L2_Multiway` — 通用 Eigen 数组。
+- `FWBAP_L2_Multiway_Polynomial2D` — 2D 多项式加权范数。
+- `FWBAP_L2_Multiway_PolynomialOrth` — 正交变体。
+- `FMEMM_Multiway_Polynomial2D` — 修正极值-单调混合器。
 
-**Power parameter:** `p = 4`; `verySmallReal_pDiP = std::pow(verySmallReal, 1.0/p)` stabilises near zero.
+**幂参数：** `p = 4`；`verySmallReal_pDiP = std::pow(verySmallReal, 1.0/p)` 稳定化零点附近的值。
 
 </div>
 <div>
 
-### Biway (pair)
+### 双向（成对）
 
 - `FWBAP_L2_Biway`
-- `FWBAP_L2_Cut_Biway` — sign-cutoff
+- `FWBAP_L2_Cut_Biway` — 符号截断
 - `FMINMOD_Biway`
 - `FVanLeer_Biway`
 - `FWBAP_L2_Biway_PolynomialNorm<dim, nVarsFixed>`
@@ -1690,20 +1679,20 @@ All 13 variants share `ComputeRoePreamble` — the Roe average, $H_{\text{Roe}}$
 
 ```jsonc
 "limiterProcedure":  0   // WBAP (V2)
-"limiterProcedure":  1   // CWBAP (V3)  ← recommended
+"limiterProcedure":  1   // CWBAP (V3)  ← 推荐
 "usePPRecLimiter":   true
 ```
 
 </div>
 </div>
 
-> **Positivity preservation** — `LimiterUGrad` (Euler side) clamps gradients; `EvaluateURecBeta` enforces cell-mean positivity on reconstructed values; `EvaluateCellRHSAlpha` enforces CFL-consistent per-cell RHS scaling.
+> **正性保持**——`LimiterUGrad`（Euler 侧）钳制梯度；`EvaluateURecBeta` 强制重构值的单元均值正性；`EvaluateCellRHSAlpha` 强制 CFL 一致的单单元右端项缩放。
 
 ---
 <!-- _footer: "src/CFV/VariationalReconstruction.hpp:1071-1086" -->
 <!-- _class: dense -->
 
-## VR's own limiter — WBAP with characteristic transform
+## VR 内置限制器 — 带特征变换的 WBAP
 
 ```cpp
 template <int nVarsFixed>
@@ -1713,32 +1702,32 @@ void DoLimiterWBAP_C(tUDof<nVarsFixed>  &u,
                      tURec<nVarsFixed>  &uRecBuf,
                      tSmoothIndicator   &si,
                      bool                ifAll,
-                     tFM   FM,                  // cons → char transform
-                     tFMI  FMI,                 // char → cons transform
+                     tFM   FM,                  // 守恒 → 特征变换
+                     tFMI  FMI,                 // 特征 → 守恒变换
                      bool  putIntoNew = false);
 
 template <int nVarsFixed>
-void DoLimiterWBAP_3(...);                      // 3-mode variant
+void DoLimiterWBAP_3(...);                      // 三模态变体
 ```
 
 <div class="cols">
 <div>
 
-### Flow
+### 流程
 
-1. Compute per-face smoothness indicator `si`.
-2. Transform reconstruction coefficients to characteristic variables (`FM`).
-3. Apply WBAP limiter per characteristic, across the multi-way neighborhood.
-4. Transform back (`FMI`).
-5. Optionally write into `uRecNew` (double-buffer for iterative schemes).
+1. 计算每个面的光滑性指示器 `si`。
+2. 将重构系数变换到特征变量（`FM`）。
+3. 逐特征地、跨多方向邻域应用 WBAP 限制器。
+4. 变换回来（`FMI`）。
+5. 可选地写入 `uRecNew`（迭代方案的双缓冲）。
 
 </div>
 <div>
 
-### Smoothness indicators
+### 光滑性指示器
 
-- `DoCalculateSmoothIndicator<nVarsFixed, nVarsSee=2>(si, uRec, u, varsSee)` — classical indicator over a subset of variables.
-- `DoCalculateSmoothIndicatorV1<nVarsFixed>(si, uRec, u, varsSee, FPost)` — V1 with user-provided post-processing.
+- `DoCalculateSmoothIndicator<nVarsFixed, nVarsSee=2>(si, uRec, u, varsSee)` — 变量子集上的经典指示器。
+- `DoCalculateSmoothIndicatorV1<nVarsFixed>(si, uRec, u, varsSee, FPost)` — V1，支持用户提供的后处理。
 
 </div>
 </div>
@@ -1747,9 +1736,9 @@ void DoLimiterWBAP_3(...);                      // 3-mode variant
 <!-- _footer: "src/Solver/ODE.hpp · RELEASE_NOTES.md:11,14" -->
 <!-- _class: dense -->
 
-## Time integration — the ODE zoo
+## 时间积分 — ODE 系列
 
-All integrators descend from:
+所有积分器继承自：
 
 ```cpp
 template <class TDATA, class TDTAU>
@@ -1764,59 +1753,59 @@ class ImplicitDualTimeStep {
 };
 ```
 
-| `odeCode` | Class                                             | Scheme                |
+| `odeCode` | 类                                                | 格式                   |
 |-----------|---------------------------------------------------|-----------------------|
-| `103`     | `ImplicitEulerDualTimeStep`                       | Backward Euler        |
+| `103`     | `ImplicitEulerDualTimeStep`                       | 后向 Euler             |
 | `0`       | `ImplicitBDFDualTimeStep`                         | BDF2 / BDF-k          |
-| —         | `ImplicitVBDFDualTimeStep`                        | Variable-step BDF-k   |
-| `1`       | `ImplicitSDIRK4DualTimeStep` (`schemeCode` 0…4)   | SDIRK-4 · ESDIRK2/3 · Trapezoidal |
-| `101`     | (alias for `1`)                                    | (backward-compat `odeCode`)      |
+| —         | `ImplicitVBDFDualTimeStep`                        | 变步长 BDF-k           |
+| `1`       | `ImplicitSDIRK4DualTimeStep` (`schemeCode` 0…4)   | SDIRK-4 · ESDIRK2/3 · 梯形 |
+| `101`     | (`1` 的别名)                                       | （向后兼容 `odeCode`） |
 | **`401`** | `ImplicitHermite3SimpleJacobianDualStep`          | **HM3 + p-Multigrid** |
 | `2`       | `ExplicitSSPRK3TimeStepAsImplicitDualTimeStep`    | SSP-RK3               |
 
-`SetExtraParams(json)` exposes scheme-specific knobs (e.g. `nMG`, `incFScale`).
+`SetExtraParams(json)` 暴露特定格式的参数（如 `nMG`、`incFScale`）。
 
 ---
 <!-- _footer: "src/Solver/ODE.hpp:123-363,917-1438" -->
 <!-- _class: denser -->
 ## HM3 + p-Multigrid
 
-**HM3** (Hermite-3) is a 3rd-order A-stable implicit scheme with three modes:
+**HM3**（Hermite-3）是一种三阶 A-稳定隐式格式，有三种模式：
 
-- **U2R2** — 2 solution states + 2 residual states.
-- **U2R1** — 2 solution states + 1 residual state.
-- **U3R1** — 3 solution states + 1 residual state.
+- **U2R2** — 2 个解状态 + 2 个残差状态。
+- **U2R1** — 2 个解状态 + 1 个残差状态。
+- **U3R1** — 3 个解状态 + 1 个残差状态。
 
 <div class="cols">
 <div>
 
-### p-MG inside the time step
+### 时间步内的 p-MG
 
-Inside `ImplicitHermite3SimpleJacobianDualStep::Step()` a **nonzero `nMG`** triggers p-multigrid smoothing cycles:
+在 `ImplicitHermite3SimpleJacobianDualStep::Step()` 内部，**非零 `nMG`** 触发 p-Multigrid 光滑循环：
 
 ```cpp
-// pseudocode inside the inner solve (lines 1250-1251)
-fdt (xMG, dTau, 1.0, /*upos=*/2);      // lower-order pseudo-timestep
+// 内层求解中的伪代码（第1250-1251行）
+fdt (xMG, dTau, 1.0, /*upos=*/2);      // 低阶伪时间步
 frhs(rhsbuf[1], xMG, dTau, iter, 1.0, /*upos=*/2);
 ```
 
-The `upos=2` argument tells the evaluator to evaluate at a **lower polynomial order** (level-transition). VR provides `DownCastURecOrder(curOrder, iCell, uRec, downCastMethod)` to project reconstruction coefficients between orders.
+`upos=2` 参数告诉求值器在**较低多项式阶**上进行求值（层级过渡）。VR 提供 `DownCastURecOrder(curOrder, iCell, uRec, downCastMethod)` 在不同阶之间投影重构系数。
 
 </div>
 <div>
 
-### Companions
+### 配套功能
 
-- **`tpMG`** — toggle for multigrid in the outer dual-time loop.
-- **`incFScale`** — incremental flux scaling on lower MG levels; integrated into the entropy fix path (`RELEASE_NOTES.md`).
-- **Positivity-preserving limiters in `LimiterUGrad`** — prevent the lower-order coarse-grid correction from producing negative density / pressure.
+- **`tpMG`** — 外部双时间循环中多重网格的开关。
+- **`incFScale`** — 较低 MG 层级上的增量 Flux 缩放；已集成至熵修正路径（`RELEASE_NOTES.md`）。
+- **`LimiterUGrad` 中的正性保持限制器**——防止低阶粗网格修正产生负密度/压力。
 
-### Other `SDIRK4` codes
+### 其他 `SDIRK4` 编码
 
-- `schemeCode = 0` — Nørsett 3-stage SDIRK-4
-- `schemeCode = 1` — 6-stage ARK-family SDIRK
+- `schemeCode = 0` — Nørsett 3 级 SDIRK-4
+- `schemeCode = 1` — 6 级 ARK 族 SDIRK
 - `schemeCode = 2` — Kennedy–Carpenter ESDIRK3
-- `schemeCode = 3` — Trapezoidal
+- `schemeCode = 3` — 梯形
 - `schemeCode = 4` — ESDIRK2, `γ = 1 − √2/2`
 
 </div>
@@ -1826,12 +1815,12 @@ The `upos=2` argument tells the evaluator to evaluate at a **lower polynomial or
 <!-- _footer: "src/Solver/Linear.hpp · src/Euler/EulerEvaluator.hpp:427-580" -->
 <!-- _class: dense -->
 
-## Linear solvers — Krylov + LU-SGS preconditioner
+## 线性求解器 — Krylov + LU-SGS 预条件子
 
 <div class="cols">
 <div>
 
-### Krylov methods
+### Krylov 方法
 
 ```cpp
 template <class TDATA>
@@ -1848,14 +1837,14 @@ template <class TDATA, class TScalar>
 class PCG_PreconditionedRes { … };
 ```
 
-Matrix-free: the caller supplies `Ax` and `PC` functors.
+无矩阵：调用方提供 `Ax` 和 `PC` 函子。
 
 </div>
 <div>
 
-### Matrix-free LU-SGS preconditioner
+### 无矩阵 LU-SGS 预条件子
 
-Provided by `EulerEvaluator`:
+由 `EulerEvaluator` 提供：
 
 ```cpp
 void LUSGSMatrixInit(JDiag, JSource, dTau, dt, alphaDiag, u, uRec, jacCode, t);
@@ -1873,23 +1862,23 @@ void UpdateSGSWithRec(alphaDiag, t, rhs, u, uRec, uInc, uRecInc,
 </div>
 </div>
 
-**Selector**
+**选择器**
 
 ```jsonc
-"gmresCode": 0  // LUSGS only      (cheap, robust)
-"gmresCode": 1  // GMRES            (matrix-free Krylov)
-"gmresCode": 2  // LUSGS + GMRES    (LUSGS as PC for GMRES)
+"gmresCode": 0  // 仅 LUSGS      （廉价、鲁棒）
+"gmresCode": 1  // GMRES          （无矩阵 Krylov）
+"gmresCode": 2  // LUSGS + GMRES  （LUSGS 作为 GMRES 预条件子）
 ```
 
-Direct path for small blocks: `src/Solver/Direct.hpp` (LU / LDLT). Optional **SuperLU_dist** via the `cfd_externals` submodule.
+小块的直接路径：`src/Solver/Direct.hpp`（LU / LDLT）。可通过 `cfd_externals` 子模块启用可选的 **SuperLU_dist**。
 
 ---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
-<div class="ch-num">CHAPTER 5</div>
+<div class="ch-num">第5章</div>
 
-# Parallelism
+# 并行
 
 ## MPI · OpenMP · CUDA
 
@@ -1897,14 +1886,14 @@ Direct path for small blocks: `src/Solver/Direct.hpp` (LU / LDLT). Optional **Su
 <!-- _footer: "src/DNDS/ArrayTransformer.hpp · array_infrastructure.md" -->
 <!-- _class: dense -->
 
-## MPI — the "set up once" discipline
+## MPI — "一次Configuration"规范
 
-> *Setup is collective and expensive. Communication is local and cheap.*
+> *Configuration是集体且昂贵的。通信是本地且廉价的。*
 
 <div class="cols">
 <div>
 
-**Build-once phase — collective**
+**一次性构建阶段 — 集体操作**
 
 ```cpp
 trans.setFatherSon(father, son);
@@ -1925,12 +1914,12 @@ trans.initPersistentPull();
   // local: MPI_Recv_init + MPI_Send_init
 ```
 
-The derived MPI datatypes persist with the transformer — teardown costs them nothing until destruction.
+派生的MPI数据类型随着transformer持久存在——销毁前的拆卸成本为零。
 
 </div>
 <div>
 
-**Hot-loop phase — local only**
+**热循环阶段 — 仅本地操作**
 
 ```cpp
 for (int step = 0; step < N; ++step) {
@@ -1944,7 +1933,7 @@ trans.clearPersistentPull();
 
 <div class="callout callout-bug">
 
-🐛 **v0.2.0 bug-fix:** `globalSize()` used to be collective and could deadlock when some ranks took short-cut paths. It's now cached at `createFatherGlobalMapping` time — fully local.
+🐛 **v0.2.0 错误修复：** `globalSize()` 曾经是集体操作，当某些进程走捷径时可能死锁。现在在 `createFatherGlobalMapping` 时缓存——完全本地化。
 
 </div>
 
@@ -1954,24 +1943,24 @@ trans.clearPersistentPull();
 ---
 <!-- _footer: "src/DNDS/ArrayTransformer.hpp · HIndexed vs InSituPack" -->
 
-## Two communication strategies
+## 两种通信策略
 
-`MPI::CommStrategy::Instance().GetArrayStrategy()` selects:
+`MPI::CommStrategy::Instance().GetArrayStrategy()` 选择：
 
 <div class="cols">
 <div>
 
-### `HIndexed` — default
+### `HIndexed` — 默认
 
 ```cpp
 MPI_Type_create_hindexed(count, blocklengths, displacements,
                          base_type, &new_type);
 ```
 
-- Describes **scattered rows** directly in MPI's datatype system.
-- MPI library + driver are free to pipeline and vectorize the pack.
-- Zero-copy on the application side.
-- Best on well-tuned MPI stacks over InfiniBand / Slingshot.
+- 直接在MPI的数据类型系统中描述**分散的行**。
+- MPI库和驱动可以自由地进行流水线和向量化打包。
+- 应用端零拷贝。
+- 在InfiniBand / Slingshot上调优良好的MPI栈上表现最佳。
 
 </div>
 <div>
@@ -1985,19 +1974,19 @@ for (index i : pushingIndexLocal[rank])
 MPI_Isend(inSituBuffer[rank].data(), ...);
 ```
 
-- Explicit pack into contiguous buffers.
-- Beats `HIndexed` on some **older MPI stacks** and on **CUDA-aware MPI** with GPU-Direct where the driver prefers flat buffers.
-- One extra memory pass per phase — tradeoff.
+- 显式打包到连续缓冲区。
+- 在某些**较旧的MPI栈**和使用GPU-Direct的**CUDA感知MPI**上优于 `HIndexed`，驱动更倾向于平坦缓冲区。
+- 每次阶段额外一次内存遍历——这是权衡。
 
 </div>
 </div>
 
-> Both strategies live behind the same public API. The choice is a tuning knob — no application-level changes needed.
+> 两种策略共用同一个公共API。选择是一个调优开关——不需要应用层更改。
 
 ---
 <!-- _footer: "src/DNDS/ArrayTransformer.hpp:606" -->
 
-## `BorrowGGIndexing` — avoid collective setup twice
+## `BorrowGGIndexing` — 避免重复集体Configuration
 
 ```cpp
 // Primary array: does the full collective setup
@@ -2018,7 +2007,7 @@ recTrans.initPersistentPull();
 
 <div class="callout callout-ok">
 
-**Consequence.** In the Euler pipeline every DOF array (`u`, `uPrev`, `uInc`, `uRec`, `uRecInc`, `uRecB`, …) shares a single ghost map established from the `cell2cell` adjacency. Only the MPI datatypes differ, keyed on the row size of each array.
+**效果：** 在Euler流水线中，每个DOF数组（`u`、`uPrev`、`uInc`、`uRec`、`uRecInc`、`uRecB`……）共享一个从 `cell2cell` 邻接关系建立的Ghost映射。只有MPI数据类型不同，取决于各数组的行大小。
 
 </div>
 
@@ -2026,32 +2015,32 @@ recTrans.initPersistentPull();
 <!-- _footer: "AGENTS.md · src/Geom/Mesh/AdjIndexInfo.hpp:218-223" -->
 <!-- _class: tight -->
 
-## OpenMP in the stack
+## 栈中的OpenMP
 
-`-DDNDS_DIST_MT_USE_OMP=ON` activates threaded paths throughout:
+`-DDNDS_DIST_MT_USE_OMP=ON` 在整个调用链中激活线程化路径：
 
 <div class="cols">
 <div>
 
-### Where OMP is already applied
+### OpenMP已应用的场景
 
-- **ILU-OMP preconditioner** — parallel forward/backward sweeps (new in v0.2.0).
-- **Eigen reductions** — `EigenVecMin`, `EigenVecSum` fold per thread, then combine.
-- **State transitions** — `toLocalOMP` / `toGlobalOMP` / `bootstrapToLocalOMP` parallelize over the rows of adjacency arrays.
-- **FV metric construction** — many `ConstructX()` methods in `FiniteVolume` loop over cells / faces with `#pragma omp parallel for`.
-- **VR iteration** — `DoReconstructionIter` has an OMP variant.
+- **ILU-OMP预条件子** — 并行前向/后向扫描（v0.2.0新增）。
+- **Eigen归约** — `EigenVecMin`、`EigenVecSum` 按线程折叠，然后合并。
+- **状态转换** — `toLocalOMP` / `toGlobalOMP` / `bootstrapToLocalOMP` 在邻接数组的行上并行化。
+- **FV度量构建** — `FiniteVolume` 中的许多 `ConstructX()` 方法通过 `#pragma omp parallel for` 在单元/面上循环。
+- **VR迭代** — `DoReconstructionIter` 有OpenMP变体。
 
 </div>
 <div>
 
-### Hybrid model
+### 混合模型
 
-![](res/mermaid_05_e32cfdd6.svg)
+![](res/zh/mermaid_05_e32cfdd6.svg)
 
 
-**CI default** `OMP_NUM_THREADS=2` (override at configure time via `DNDS_TEST_OMP_THREADS`). MPI-rank count per test configurable via `DNDS_TEST_NP_LIST`.
+**CI默认值** `OMP_NUM_THREADS=2`（可通过 `DNDS_TEST_OMP_THREADS` 在Configuration时覆盖）。每个测试的MPI进程数可通过 `DNDS_TEST_NP_LIST` Configuration。
 
-Typical production deployment: **1 MPI rank per NUMA node × OMP threads** within. MPI handles cross-socket / cross-node; OMP handles within.
+典型生产部署：**每个NUMA节点1个MPI进程 × 内部OpenMP线程。** MPI处理跨socket/跨节点；OpenMP处理节点内部。
 
 </div>
 </div>
@@ -2060,7 +2049,7 @@ Typical production deployment: **1 MPI rank per NUMA node × OMP threads** withi
 <!-- _footer: "src/DNDS/Device/ · CMakePresets.json:37-44" -->
 <!-- _class: denser -->
 
-## CUDA path — `DeviceTransferable` CRTP
+## CUDA路径 — `DeviceTransferable` CRTP
 
 ```cpp
 template <class TDerived>
@@ -2085,7 +2074,7 @@ class FiniteVolume : public DeviceTransferable<FiniteVolume> {
 <div class="cols">
 <div>
 
-### Usage
+### 用法
 
 ```cpp
 fv.to_device();
@@ -2097,32 +2086,32 @@ fv.to_host();
 </div>
 <div>
 
-### Already transferable
+### 已支持的类型
 
-- `UnstructuredMesh` (connectivity)
-- `FiniteVolume` (metrics)
-- `VariationalReconstruction` (via base)
-- `VRDefines` DOF arrays
-- Per-element shape function tables
+- `UnstructuredMesh`（连通性）
+- `FiniteVolume`（度量）
+- `VariationalReconstruction`（通过基类）
+- `VRDefines` DOF数组
+- 逐单元形函数表
 
 </div>
 </div>
 
-Build: `cmake --preset cuda` → `-DDNDS_USE_CUDA=ON` · Thrust fixes via `CMAKE_CUDA_ARCHITECTURE=native`.
+构建：`cmake --preset cuda` → `-DDNDS_USE_CUDA=ON` · Thrust修复通过 `CMAKE_CUDA_ARCHITECTURE=native`。
 
 ---
 <!-- _footer: "src/EulerP/EulerP_Evaluator.hpp · EulerP_Evaluator_impl.{hpp,cpp,cu}" -->
 <!-- _class:  -->
 
-## EulerP — the purpose-built GPU evaluator
+## EulerP — 专用的GPU求值器
 
-**Problem:** the stock `Euler` evaluator uses Eigen with compile-time `nVars`; Eigen matrix ops do not cleanly lower to device-callable scalar loops. CUDA kernel launches over tiny matrices cost more than the math.
+**问题：** 标准的 `Euler` 求值器使用带编译时 `nVars` 的Eigen；Eigen矩阵运算无法清晰地降级为设备可调用的标量循环。在微小矩阵上启动CUDA内核的开销比数学运算本身还大。
 
-**Solution:** a parallel-track evaluator in `src/EulerP/` that:
+**解决方案：** 在 `src/EulerP/` 中实现的并行路径求值器：
 
-1. Drops the Eigen matrix abstraction inside kernels — scalar loops over `nVars`.
-2. Splits into `EvaluatorDeviceView<B>` with `B ∈ {Host, CUDA}` — same interface, two implementations compiled in separate translation units (`.cpp` and `.cu`).
-3. Bundles per-call arguments into `*_Arg` structs (e.g. `RecGradient_Arg`, `Flux2nd_Arg`) so the launching host code doesn't need to know argument order.
+1. 在内核中放弃Eigen矩阵抽象——对 `nVars` 进行标量循环。
+2. 拆分为 `EvaluatorDeviceView<B>`，其中 `B ∈ {Host, CUDA}`——相同接口，两个实现分别在独立的翻译单元中编译（`.cpp` 和 `.cu`）。
+3. 将每次调用的参数打包进 `*_Arg` 结构体（如 `RecGradient_Arg`、`Flux2nd_Arg`），使启动代码无需知道参数顺序。
 
 ```cpp
 template <DeviceBackend B>
@@ -2133,13 +2122,13 @@ struct EvaluatorDeviceView {
 };
 ```
 
-Python driver: `python/DNDSR/EulerP/EulerP_Solver.py` orchestrates the full EulerP pipeline from Python with CUDA selected by runtime flag.
+Python驱动：`python/DNDSR/EulerP/EulerP_Solver.py` 从Python编排完整的EulerP流水线，通过运行时标志选择CUDA。
 
 ---
 <!-- _footer: "src/EulerP/EulerP_Evaluator.hpp:149-918" -->
 <!-- _class: dense -->
 
-## EulerP — the kernel pipeline
+## EulerP — 内核流水线
 
 ```cpp
 class Evaluator {
@@ -2165,43 +2154,43 @@ public:
 };
 ```
 
-### Why the arg-bundle struct
+### 为什么需要参数包结构体
 
-- All array references in one place → simple to serialize for a device kernel.
-- Host/CUDA dispatch happens at a single call site (`Evaluator_impl<B>`).
-- The launching host code sees the same identifier `EvaluateRHS` regardless of backend.
+- 所有数组引用集中在一处 → 便于序列化为设备内核。
+- Host/CUDA分发在单一调用点发生（`Evaluator_impl<B>`）。
+- 启动代码无论后端如何都看到相同的标识符 `EvaluateRHS`。
 
 ---
 <!-- _footer: "docs/dev/cudaNotes.md · RELEASE_NOTES.md:50-52" -->
 
-## GPU engineering notes
+## GPU工程笔记
 
 <div class="cols">
 <div>
 
-### Benchmarks already shipped
+### 已交付的基准测试
 
-- **Block-sparse MatVec** — `src/Geom/Mesh/BenchmarkFiniteVolume.cu` exercises the metric arrays on-device with varied block sizes.
-- **SoA vs AoS** — multiple layout variants benchmarked for the per-cell DOF blocks.
+- **块稀疏MatVec** — `src/Geom/Mesh/BenchmarkFiniteVolume.cu` 在设备上使用不同的块大小对度量数组进行测试。
+- **SoA vs AoS** — 针对逐单元DOF块对多种布局变体进行了基准测试。
 
-### Memory model
+### 内存模型
 
-- `host_device_vector<T>` — a vector that can shadow itself on device; used throughout `FiniteVolume` / `UnstructuredMesh`.
-- Transfers are explicit (`to_device` / `to_host`) — no hidden synchronization.
+- `host_device_vector<T>` — 可在设备上镜像自身的向量；广泛应用于 `FiniteVolume` / `UnstructuredMesh`。
+- 传输是显式的（`to_device` / `to_host`）——无隐藏同步。
 
 </div>
 <div>
 
-### Pitfalls avoided
+### 已避免的陷阱
 
-- **Thrust + CMake:** `CMAKE_CUDA_ARCHITECTURE=native` fixes a class of compile errors in Thrust's internal machinery.
-- **Accidental `to_device`:** a bug in the face-buffer creation path was copying host buffers to device needlessly; fixed in v0.2.0.
-- **`py::classh` holders:** ensure safe Python↔C++ ownership when CUDA pointers survive across Python GC boundaries.
+- **Thrust + CMake：** `CMAKE_CUDA_ARCHITECTURE=native` 修复了Thrust内部机制中的一类编译错误。
+- **意外的 `to_device`：** 面缓冲区创建路径中的一个错误曾不必要地将主机缓冲区复制到设备；在v0.2.0中修复。
+- **`py::classh` 持有者：** 确保CUDA指针在跨Python GC边界存活时Python↔C++所有权安全。
 
-### Work in progress
+### 进行中的工作
 
-- Extend full `Euler` evaluator to CUDA (not just `EulerP`).
-- GPU-aware MPI via `MPI_Type_create_hindexed` over pinned device memory.
+- 将完整的 `Euler` 求值器扩展到CUDA（不仅仅是 `EulerP`）。
+- 通过 `MPI_Type_create_hindexed` 在固定设备内存上实现GPU可知MPI。
 
 </div>
 </div>
@@ -2210,30 +2199,30 @@ public:
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
-<div class="ch-num">CHAPTER 6</div>
+<div class="ch-num">第六章</div>
 
-# I/O & Interoperability
+# I/O 与互操作性
 
-## Serializer · JSON config · Python · VTK · CGNS
+## Serializer · JSON Configuration · Python · VTK · CGNS
 
 ---
 <!-- _footer: "docs/architecture/Serialization.md:11-172" -->
 
-## Serialization layer stack
+## 序列化层栈
 
-| Layer                  | Responsibility                                              |
-|------------------------|-------------------------------------------------------------|
-| `SerializerBase`       | Abstract scalar / vector / byte-array interface             |
-| `SerializerH5`         | MPI-parallel HDF5 (collective I/O)                          |
-| `SerializerJSON`       | Per-rank JSON (`IsPerRank() == true`), no MPI coordination  |
-| `Array`                | Per-array metadata, structure tags, flat data buffer        |
-| `ParArray`             | Global offsets, `EvenSplit`, CSR global row-starts          |
-| `ArrayPair`            | Father-son bundle · `ReadSerializeRedistributed`            |
-| `ArrayRedistributor`   | Rendezvous redistribution via `ArrayTransformer`            |
+| 层                      | 职责                                                         |
+|------------------------|--------------------------------------------------------------|
+| `SerializerBase`       | 抽象标量 / 向量 / 字节数组接口                                   |
+| `SerializerH5`         | MPI 并行 HDF5（Collective I/O）                                      |
+| `SerializerJSON`       | 每进程 JSON（`IsPerRank() == true`），无 MPI 协调              |
+| `Array`                | 每数组元数据、结构标记、平铺数据缓冲区                              |
+| `ParArray`             | 全局偏移、`EvenSplit`、CSR 全局行起始                            |
+| `ArrayPair`            | 父子捆绑 · `ReadSerializeRedistributed`                      |
+| `ArrayRedistributor`   | 通过 `ArrayTransformer` 的 rendezvous 再分配                    |
 
 <div class="callout">
 
-**Key property.** Every method in `SerializerH5` is **MPI-collective** — every rank must call them in the same order, even when that rank has `size == 0`. Failing to participate causes a hang, not a crash.
+**关键特性。** `SerializerH5` 中的每个方法都是 **MPI-Collective** 的 — 每个进程必须依相同顺序调用它们，即使该进程的 `size == 0`。未参与会导致挂起，而非崩溃。
 
 </div>
 
@@ -2241,7 +2230,7 @@ public:
 <!-- _footer: "src/DNDS/Serializer/SerializerBase.hpp:153-303" -->
 <!-- _class: dense -->
 
-## `SerializerBase` — the public interface
+## `SerializerBase` — 公共接口
 
 ```cpp
 // File lifecycle
@@ -2278,7 +2267,7 @@ virtual void ReadUint8Array (const std::string &name, uint8_t *data,
 <!-- _footer: "src/DNDS/Serializer/SerializerBase.hpp:14-124" -->
 <!-- _class: dense -->
 
-## `ArrayGlobalOffset` — five offset modes
+## `ArrayGlobalOffset` — 五种偏移模式
 
 ```cpp
 static const index Offset_Parts     = -1;
@@ -2303,39 +2292,39 @@ public:
 extern ArrayGlobalOffset ArrayGlobalOffset_Unknown, _One, _Parts, _EvenSplit;
 ```
 
-| Sentinel             | Meaning                                              |
-|----------------------|------------------------------------------------------|
-| `Unknown`            | Auto-detect from companion `rank_offsets` dataset    |
-| `Parts`              | Compute offset via `MPI_Scan` over local sizes       |
-| `One`                | Rank 0 writes / reads the whole dataset              |
-| `EvenSplit`          | Read: each rank gets `~nGlobal / nRanks` rows        |
-| `isDist()`           | Explicit `{localSize, globalStart}`                  |
+| 哨兵                  | 含义                                                     |
+|----------------------|----------------------------------------------------------|
+| `Unknown`            | 从关联的 `rank_offsets` 数据集自动检测                      |
+| `Parts`              | 通过对本地大小的 `MPI_Scan` 计算偏移                        |
+| `One`                | 进程 0 写入 / 读取整个数据集                                |
+| `EvenSplit`          | 读：每个进程获取 `~nGlobal / nRanks` 行                    |
+| `isDist()`           | 显式 `{localSize, globalStart}`                           |
 
 ---
 <!-- _footer: "docs/architecture/Serialization.md:60-83" -->
 
-## Zero-size partition safety
+## 零大小分区安全性
 
 <div class="cols">
 <div>
 
-### The trap
+### 陷阱
 
-When `nGlobal < nRanks` (5 entries across 8 ranks), `EvenSplitRange` assigns 0 rows to some ranks. Collective HDF5 calls still demand every rank participates — and `std::vector<>::data()` on an empty vector may return `nullptr`.
+当 `nGlobal < nRanks`（5 条记录分布在 8 个进程上）时，`EvenSplitRange` 会为某些进程分配 0 行。Collective的 HDF5 调用仍然要求每个进程都参与 — 而对空向量调用 `std::vector<>::data()` 可能返回 `nullptr`。
 
 ```cpp
 std::vector<index> v(size);        // size may be 0
 ReadDataVector<index>(name, v.data(), ...);  // may pass nullptr → hang
 ```
 
-Caller-side helpers like `__ReadSerializerData` and `ReadUint8Array` would skip the `H5Dread` when `buf == nullptr`, and the collective hangs.
+调用侧的辅助函数如 `__ReadSerializerData` 和 `ReadUint8Array` 在 `buf == nullptr` 时会跳过 `H5Dread`，导致Collective操作挂起。
 
 </div>
 <div>
 
-### The fix
+### 修复方案
 
-Every caller in `SerializerBase.cpp` passes a **stack-allocated dummy pointer** when `size == 0`:
+`SerializerBase.cpp` 中的每个调用者当 `size == 0` 时传递一个**栈分配的虚拟指针**：
 
 ```cpp
 index dummy;
@@ -2344,12 +2333,12 @@ ReadDataVector<index>(name,
     ...);
 ```
 
-`ReadUint8Array` exposes the two-pass pattern:
+`ReadUint8Array` 暴露了两阶段模式：
 
-1. First call: `data = nullptr`, returns the size.
-2. Second call: allocate + call again with a real (or dummy) pointer.
+1. 第一次调用：`data = nullptr`，返回大小。
+2. 第二次调用：分配 + 用真实（或虚拟）指针再次调用。
 
-All collectives proceed with 0-count hyperslabs on the empty ranks — no application-level branching.
+所有Collective操作在空进程上以 0 计数的 hyperslab 继续 — 无需应用级分支。
 
 </div>
 </div>
@@ -2357,14 +2346,14 @@ All collectives proceed with 0-count hyperslabs on the empty ranks — no applic
 ---
 <!-- _footer: "docs/architecture/Serialization.md:87-172" -->
 
-## Write-N-read-M — the rendezvous pattern
+## 写入 N 读取 M — rendezvous 模式
 
-![](res/mermaid_06_9c76b2a3.svg)
+![](res/zh/mermaid_06_08452f0b.svg)
 
 
 <div class="callout callout-ok">
 
-**Consequence.** `EulerSolver::ReadRestart` is a single call. The user writes from 4 ranks on a login node, restarts on 1024 ranks on a compute partition, and the same JSON config runs. Ranks with `localRows == 0` participate in every collective with empty buffers.
+**效果：** `EulerSolver::ReadRestart` 只需一次调用。用户在登录节点用 4 个进程写入，在计算分区用 1024 个进程重启，同一份 JSON Configuration即可运行。`localRows == 0` 的进程用空缓冲区参与每次Collective操作。
 
 </div>
 
@@ -2372,7 +2361,7 @@ All collectives proceed with 0-count hyperslabs on the empty ranks — no applic
 <!-- _footer: "src/DNDS/Config/ConfigParam.hpp:47-176 · ConfigRegistry.hpp:228-465" -->
 <!-- _class: dense -->
 
-## Typed JSON configs — `DNDS_DECLARE_CONFIG`
+## 类型化 JSON Configuration — `DNDS_DECLARE_CONFIG`
 
 ```cpp
 struct ImplicitCFLControl {
@@ -2399,7 +2388,7 @@ struct ImplicitCFLControl {
 
 <div class="callout">
 
-**What the macro gives you.** No base class, no virtual members, no per-instance data — the struct stays a POD safe for CUDA. Underneath, a static `_dnds_do_register()` method is generated that fills a `ConfigRegistry<T>` singleton with `FieldMeta` records.
+**宏提供的内容。** 无基类、无虚成员、无逐实例数据 — 结构体保持 POD 形态，对 CUDA 安全。底层生成静态 `_dnds_do_register()` 方法，将 `FieldMeta` 记录填充到 `ConfigRegistry<T>` 单例中。
 
 </div>
 
@@ -2407,7 +2396,7 @@ struct ImplicitCFLControl {
 <!-- _footer: "src/DNDS/Config/ConfigParam.hpp:71-81" -->
 <!-- _class: dense -->
 
-## Configs — field kinds & cross-field checks
+## Configuration — 字段种类与跨字段校验
 
 ```cpp
 // Simple scalars & bounded scalars
@@ -2443,7 +2432,7 @@ config.field_alias (&T::rsType,   "riemannSolverType", "Riemann solver type");
 <!-- _footer: "src/DNDS/Config/ConfigRegistry.hpp:379-441" -->
 <!-- _class: dense -->
 
-## Configs — auto-generated JSON Schema & validation
+## Configuration — 自动生成的 JSON Schema 与验证
 
 ```cpp
 // Emit the schema (run-time or ahead-of-time)
@@ -2466,29 +2455,29 @@ nlohmann::ordered_json schema = ConfigRegistry<EulerConfig>::Instance().emitSche
 <div class="cols">
 <div>
 
-### CLI + tooling
+### CLI + 工具
 
 ```bash
 ./build/app/euler.exe --emit-schema > euler_schema.json
-# drops ~107 KB per-solver schema
+# 每个求解器输出约 107 KB 的模式
 ```
 
-VS Code + any JSON-schema-aware editor give autocompletion and in-line validation. Pre-computed schemas ship in `cases/euler_schema.json`, `eulerSA3D_schema.json`, etc.
+VS Code 及任何支持 JSON Schema 的编辑器可提供自动补全和内联验证。预计算的模式文件位于 `cases/euler_schema.json`、`eulerSA3D_schema.json` 等。
 
 </div>
 <div>
 
-### Runtime validation
+### 运行时验证
 
 ```cpp
 auto &reg = ConfigRegistry<EulerConfig>::Instance();
-reg.readFromJson(j, cfg);            // deserialize + range checks
-reg.validate(cfg);                   // cross-field
-reg.validateWithContext(cfg, ctx);   // uses nVars, dim, modelCode
-reg.validateKeys(userJson);          // throws on unknown keys
+reg.readFromJson(j, cfg);            // 反序列化 + 范围检查
+reg.validate(cfg);                   // 跨字段
+reg.validateWithContext(cfg, ctx);   // 使用 nVars、dim、modelCode
+reg.validateKeys(userJson);          // 对未知键抛出异常
 ```
 
-**`validateKeys`** is automatic — no hand-maintained list of allowed fields.
+**`validateKeys`** 是自动的 — 无需手动维护允许字段列表。
 
 </div>
 </div>
@@ -2496,7 +2485,7 @@ reg.validateKeys(userJson);          // throws on unknown keys
 ---
 <!-- _footer: "python/DNDSR/ · docs/guides/project_structure.md:116-145" -->
 
-## Python bindings — the import chain
+## Python 绑定 — 导入链
 
 ```text
 from DNDSR import DNDS
@@ -2505,31 +2494,31 @@ python/DNDSR/__init__.py
   ↓
 python/DNDSR/DNDS/__init__.py
   ├── _loader.preload("dnds")                    # ctypes.CDLL · RTLD_GLOBAL
-  ├── from ._ext.dnds_pybind11 import *          # pybind11 extension
-  └── _init_mpi()                                # MPI_Init_thread AT IMPORT TIME
+  ├── from ._ext.dnds_pybind11 import *          # pybind11 扩展
+  └── _init_mpi()                                # 导入时执行 MPI_Init_thread
 ```
 
 <div class="cols">
 <div>
 
-### The preload order matters
+### 预加载顺序至关重要
 
-`_loader.py` loads external dependencies with `RTLD_GLOBAL` **before** the pybind11 extension opens. If they were loaded later with the default `RTLD_LOCAL`, the extension would not find the symbols it depends on.
+`_loader.py` 在 pybind11 扩展打开**之前**以 `RTLD_GLOBAL` 加载外部依赖。如果之后以默认的 `RTLD_LOCAL` 加载，扩展将找不到其依赖的符号。
 
-![](res/mermaid_07_7c2b2844.svg)
+![](res/zh/mermaid_07_7c2b2844.svg)
 
 
 </div>
 <div>
 
-### Four modules, one package
+### 四个模块，一个包
 
-- `DNDSR.DNDS` — arrays, MPI, serializer
-- `DNDSR.Geom` — mesh reading & manipulation
-- `DNDSR.CFV`  — finite volume / VR / Fourier analysis
-- `DNDSR.EulerP` — GPU-friendly Euler evaluator
+- `DNDSR.DNDS` — 数组、MPI、serializer
+- `DNDSR.Geom` — 网格读取与操作
+- `DNDSR.CFV`  — 有限体积 / VR / Fourier 分析
+- `DNDSR.EulerP` — GPU 友好的 Euler 求值器
 
-Top-level `__init__.py` imports all four so a single `from DNDSR import *` works.
+顶层 `__init__.py` 导入全部四个模块，使得单个 `from DNDSR import *` 即可工作。
 
 </div>
 </div>
@@ -2538,7 +2527,7 @@ Top-level `__init__.py` imports all four so a single `from DNDSR import *` works
 <!-- _footer: "docs/guides/python_geom_guide.md" -->
 <!-- _class: dense -->
 
-## Python mesh-read — the demo case
+## Python 网格读取 — 演示用例
 
 ```python
 from DNDSR import DNDS
@@ -2566,7 +2555,7 @@ result.mesh.BuildVTKConnectivity()
 
 <div class="callout callout-ok">
 
-**PEP 561 compliant.** A `py.typed` marker ships in the package; `.pyi` stubs are auto-generated by `pybind11-stubgen` during `cmake --install`. Pyright, mypy, and Pylance see full C++ type signatures.
+**PEP 561 兼容。** 包中附带 `py.typed` 标记；`.pyi` 存根在 `cmake --install` 期间由 `pybind11-stubgen` 自动生成。Pyright、mypy 和 Pylance 可看到完整的 C++ 类型签名。
 
 </div>
 
@@ -2574,7 +2563,7 @@ result.mesh.BuildVTKConnectivity()
 <!-- _footer: "src/CFV/ModelEvaluator.hpp · RELEASE_NOTES.md:25" -->
 <!-- _class: dense -->
 
-## CFV Python — Fourier dissipation-dispersion analysis
+## CFV Python — Fourier 耗散-色散分析
 
 ```python
 from DNDSR.CFV import ModelEvaluator  # pure-Python wrapper over pybind11 class
@@ -2591,32 +2580,32 @@ for kx in kx_range:
 
 <div class="callout">
 
-**Why this matters for a research code.** VR's dispersion/dissipation properties depend on order, limiter, and inner-product choice. Having a Python harness to sweep them over a discrete Fourier spectrum means parameter studies (limiter combinations, inner-product choices, derivative weights) are done in hours, not weeks.
+**这对研究代码的意义。** VR 的色散/耗散特性取决于阶数、限制器和内积选择。用 Python 框架在离散 Fourier 谱上扫描这些参数，意味着参数研究（限制器组合、内积选择、导数权重）可在数小时内完成，而非数周。
 
 </div>
 
-Other Python-exposed bits:
+其他 Python 暴露的功能：
 
-- `ArrayPair`, `ArrayEigenMatrix/Vector/Batch`
-- `BuildUDof / BuildURec / BuildUGrad` (typed constructors)
-- VTK output, wall-distance, `to_device / to_host`
-- The full `MeshAdjState` enum and `AdjPairTracked::idx` queries (query-only, no mutation from Python — intentional)
+- `ArrayPair`、`ArrayEigenMatrix/Vector/Batch`
+- `BuildUDof / BuildURec / BuildUGrad`（类型化构造函数）
+- VTK 输出、壁面距离、`to_device / to_host`
+- 完整的 `MeshAdjState` 枚举和 `AdjPairTracked::idx` 查询（仅查询，不从 Python 变更 — 有意为之）
 
 ---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
-<div class="ch-num">CHAPTER 7</div>
+<div class="ch-num">第7章</div>
 
-# Solvers & Validation
+# 求解器与验证
 
-## Euler family · EulerEvaluator · cases
+## Euler 系列 · EulerEvaluator · 算例
 
 ---
 <!-- _footer: "src/Euler/Euler.hpp:874-905 · app/Euler/*.cpp" -->
 <!-- _class: dense -->
 
-## The Euler / N-S family — one binary per model
+## Euler / N-S 系列 — 每种模型一个可执行文件
 
 ```cpp
 // app/Euler/euler.cpp — the entire file
@@ -2630,7 +2619,7 @@ int main(int argc, char *argv[]) {
 <div class="cols">
 <div>
 
-### Model enum (`EulerModel`)
+### 模型枚举 (`EulerModel`)
 
 ```cpp
 enum EulerModel {
@@ -2646,12 +2635,12 @@ enum EulerModel {
 };
 ```
 
-Template dispatch on `EulerModel` produces one binary per solver — shared source, separated object files.
+通过 `EulerModel` 模板派发，每个求解器生成一个可执行文件 — 共享源码，分离目标文件。
 
 </div>
 <div>
 
-### RANS model enum
+### RANS 模型枚举
 
 ```cpp
 enum RANSModel {
@@ -2663,7 +2652,7 @@ enum RANSModel {
 };
 ```
 
-Each has a `RANSModelTraits<>` specialization with its own wall BC, source terms, and spectral radius.
+每种模型都有对应的 `RANSModelTraits<>` 特化，包含其壁面边界条件、源项和谱半径。
 
 </div>
 </div>
@@ -2672,14 +2661,14 @@ Each has a `RANSModelTraits<>` specialization with its own wall BC, source terms
 <!-- _footer: "src/Euler/EulerSolver.hpp:73-148" -->
 <!-- _class: tight -->
 
-## `EulerSolver` — the top-level conductor
+## `EulerSolver` — 顶层调度器
 
-The Euler module extends CFV's generic `tUDof`/`tURec` aliases with
-solver-specific array types that add higher-level operators
-(initialization, boundary anchors, positivity-preserving limiters):
+Euler 模块扩展了 CFV 的通用 `tUDof`/`tURec` 别名，添加了
+求解器专用的数组类型，提供更高级的算子（初始化、边界锚定、
+保正限制器）：
 
-- `ArrayDOFV<N>` inherits from `CFV::tUDof<N>` (= `ArrayDof<N,1>`).
-- `ArrayRECV<N>` inherits from `CFV::tURec<N>` (= `ArrayDof<DynamicSize,N>`).
+- `ArrayDOFV<N>` 继承自 `CFV::tUDof<N>` (= `ArrayDof<N,1>`)。
+- `ArrayRECV<N>` 继承自 `CFV::tURec<N>` (= `ArrayDof<DynamicSize,N>`)。
 
 ```cpp
 template <EulerModel model>
@@ -2717,39 +2706,39 @@ class EulerSolver {
 <!-- _footer: "src/Euler/EulerSolver.hpp:160-246 · nested Configuration struct" -->
 <!-- _class: dense -->
 
-## `Configuration` — everything that tunes a run
+## `Configuration` — 调节运行的一切参数
 
-Every sub-section uses `DNDS_DECLARE_CONFIG` so the full JSON schema is auto-generated.
+每个小节都使用 `DNDS_DECLARE_CONFIG`，因此完整的 JSON Schema 会自动生成。
 
 <div class="cols">
 <div>
 
-- **`TimeMarchControl`** — `dtImplicit`, `nTimeStep`, `steadyQuit`, `useRestart`, `useImplicitPP`, `odeCode`, `odeSetting1..4`, `odeSettingsExtra` (opaque JSON), `dtCFLLimitScale`, …
-- **`ImplicitReconstructionControl`** — `useExplicit`, `nInternalRecStep`, `recLinearScheme` (0 = SOR, 1 = GMRES), `nGmresSpace/Iter`, `fpcgReset*`, `recThreshold`.
-- **`OutputControl`** — `outputIntervalStep`, `outputFormat` (VTK, PLT, VTKHDF, series), parallel vs serial write.
-- **`CFLControl`** — initial / max CFL, ramping schedule.
+- **TimeMarchControl** — `dtImplicit`、`nTimeStep`、`steadyQuit`、`useRestart`、`useImplicitPP`、`odeCode`、`odeSetting1..4`、`odeSettingsExtra`（不透明 JSON）、`dtCFLLimitScale`、…
+- **ImplicitReconstructionControl** — `useExplicit`、`nInternalRecStep`、`recLinearScheme`（0 = SOR, 1 = GMRES）、`nGmresSpace/Iter`、`fpcgReset*`、`recThreshold`。
+- **OutputControl** — `outputIntervalStep`、`outputFormat`（VTK、PLT、VTKHDF、series）、并行与串行写入。
+- **CFLControl** — 初始 / 最大 CFL、攀升计划。
 
 </div>
 <div>
 
-- **`ConvergenceControl`** — residual thresholds, monitor variables.
-- **`DataIOControl`** — read/write paths, restart checkpointing.
-- **`BoundaryDefinition`** — per-face-zone BC types, free-stream state.
-- **`LimiterControl`** — `limiterProcedure`, `usePPRecLimiter`, WBAP order.
-- **`LinearSolverControl`** — `gmresCode`, Krylov sub-space, iterations.
-- **`TimeAverageControl`** — long-time averaging for statistics.
-- **`EvaluatorSettings`** wraps `EulerEvaluatorSettings<model>`.
-- **`VFVSettings`** wraps `VRSettings`.
+- **ConvergenceControl** — 残差阈值、监控变量。
+- **DataIOControl** — 读写路径、restart 检查点。
+- **BoundaryDefinition** — 每面区域 BC 类型、自由来流状态。
+- **LimiterControl** — `limiterProcedure`、`usePPRecLimiter`、WBAP 阶数。
+- **LinearSolverControl** — `gmresCode`、Krylov 子空间、迭代次数。
+- **TimeAverageControl** — 用于统计的长时间平均。
+- **EvaluatorSettings** 包装 `EulerEvaluatorSettings<model>`。
+- **VFVSettings** 包装 `VRSettings`。
 
 </div>
 </div>
 
-> `--emit-schema` dumps the entire tree as a single JSON Schema document — `euler_schema.json` / `eulerSA3D_schema.json` / etc., each ~107 KB.
+> `--emit-schema` 将整个Configuration树导出为单个 JSON Schema 文档 — `euler_schema.json` / `eulerSA3D_schema.json` / 等，每个约 107 KB。
 
 ---
 <!-- _footer: "src/Euler/EulerEvaluator.hpp:399-612" -->
 <!-- _class: denser -->
-## `EulerEvaluator<model>` — the spatial operator
+## `EulerEvaluator<model>` — 空间算子
 
 ```cpp
 void EvaluateRHS(ArrayDOFV<nVarsFixed>            &rhs,
@@ -2767,31 +2756,31 @@ void EvaluateRHS(ArrayDOFV<nVarsFixed>            &rhs,
 <div class="cols">
 <div>
 
-### Flags
+### 标志位
 
 - `RHS_Ignore_Viscosity`
 - `RHS_Dont_Update_Integration`
 - `RHS_Dont_Record_Bud_Flux`
-- `RHS_Direct_2nd_Rec` — bypass VR, use GG-based 2nd-order
-- `RHS_Direct_2nd_Rec_1st_Conv` — 2nd-order rec but 1st-order convective
+- `RHS_Direct_2nd_Rec` — 绕过 VR，使用基于 GG 的二阶
+- `RHS_Direct_2nd_Rec_1st_Conv` — 二阶重构但一阶对流
 - `RHS_Direct_2nd_Rec_use_limiter`
 - `RHS_Direct_2nd_Rec_already_have_uGradBufNoLim`
 - `RHS_Recover_IncFScale`
 
-Flags compose bitwise — they cover fallback / diagnostic modes used by p-MG and PP sub-steps.
+标志位按位组合 — 覆盖 p-MG 和 PP 子步骤使用的回退/诊断模式。
 
 </div>
 <div>
 
-### Other top-level calls
+### 其他顶层调用
 
-- `EvaluateDt(...)` — CFL-based local dt, spectral-radius based.
-- `EvaluateURecBeta` — PP limiter β per cell.
-- `EvaluateCellRHSAlpha` — per-cell RHS scaling for PP.
-- `LimiterUGrad` — gradient limiter, optional shock detection.
-- `LUSGSMatrixInit/Vec/ToJacobianLU` and `UpdateSGS(WithRec)`.
-- Wall distance: `GetWallDist_AABB`, `GetWallDist_BatchedAABB`, `GetWallDist_Poisson`.
-- Viscosity: `muEff(U, T)` with Sutherland or constant models.
+- `EvaluateDt(...)` — 基于 CFL 的局部 dt，基于谱半径。
+- `EvaluateURecBeta` — 每个单元的 PP 限制器 β。
+- `EvaluateCellRHSAlpha` — 每个单元的 RHS 缩放，用于 PP。
+- `LimiterUGrad` — 梯度限制器，可选激波检测。
+- `LUSGSMatrixInit/Vec/ToJacobianLU` 和 `UpdateSGS(WithRec)`。
+- 壁面距离：`GetWallDist_AABB`、`GetWallDist_BatchedAABB`、`GetWallDist_Poisson`。
+- 粘性：`muEff(U, T)`，使用 Sutherland 或常数模型。
 
 </div>
 </div>
@@ -2800,69 +2789,69 @@ Flags compose bitwise — they cover fallback / diagnostic modes used by p-MG an
 <!-- _footer: "src/Euler/BoundaryConditions/ · BoundaryHandler<model>" -->
 <!-- _class: dense -->
 
-## Boundary conditions — strategy pattern
+## 边界条件 — 策略模式
 
-Each BC is a class implementing a common interface; `BoundaryHandler<model>` routes face-zone IDs to BC instances at runtime.
+每种 BC 都是一个实现通用接口的类；`BoundaryHandler<model>` 在运行时将面区域 ID 路由到 BC 实例。
 
-| BC                   | Use                                         |
+| BC                   | 用途                                         |
 |----------------------|---------------------------------------------|
-| `BCWall`             | No-slip wall (adiabatic)                    |
-| `BCWallIsothermal`   | No-slip wall at fixed temperature           |
-| `BCWallInvis`        | Slip / symmetry                             |
-| `BCSym`              | Explicit symmetry plane                     |
-| `BCFarField`         | Riemann-invariant farfield                  |
-| `BCIn`               | Specified inflow                            |
-| `BCOut` / `BCOutP`   | Specified outflow / pressure-outflow        |
-| `BCPeriodic`         | Standard periodic                           |
-| `BCPeriodicRot`      | Rotating periodic (turbomachinery)          |
-| `BCProfileIn`        | Tabulated profile (boundary layer, RANS)    |
-| `BCActuator`         | Actuator disk source term                   |
+| `BCWall`             | 无滑移壁面（绝热）                          |
+| `BCWallIsothermal`   | 无滑移壁面，固定温度                        |
+| `BCWallInvis`        | 滑移 / 对称                                 |
+| `BCSym`              | 显式对称面                                  |
+| `BCFarField`         | Riemann 不变量远场                          |
+| `BCIn`               | 指定入口                                    |
+| `BCOut` / `BCOutP`   | 指定出口 / 压力出口                         |
+| `BCPeriodic`         | 标准周期                                    |
+| `BCPeriodicRot`      | 旋转周期（叶轮机械）                        |
+| `BCProfileIn`        | 表格化剖面（边界层, RANS）                  |
+| `BCActuator`         | 致动盘源项                                  |
 
-Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`, `BCMixingPlane`, and the **CL driver** for AoA-adaptive lift matching (`pCLDriver` in the evaluator).
+专用叶轮机械 BC：`BCTotalInlet`、`BCRadialEqOutlet`、`BCMixingPlane`，以及用于攻角自适应升力匹配的 **CL 驱动**（evaluator 中的 `pCLDriver`）。
 
 ---
 <!-- _footer: "cases/euler/ · cases/euler3D/" -->
 <!-- _class: dense -->
 
-## Canonical benchmarks — Riemann, shocks, smooth
+## 经典基准算例 — Riemann、激波、光滑流
 
 <div class="cols">
 <div>
 
-### Riemann / blast
+### Riemann / 爆炸
 
 - **Sod** `euler_config_1DRiemann.json`
 - **LeBlanc** `euler_config_1DRiemann_LeBlanc.json`
 - **Sedov 1D** `euler_config_1DSedov.json`
 - **Sedov 2D** `euler_config_2DSedov.json`
 - **Noh (3D)** `euler3D_config_Noh.json`
-- **Cylindrical blast** `euler_config_blast.json`
-- **M2000 astrophysical jet** `euler_config_M2000Jet.json`
+- **圆柱爆炸** `euler_config_blast.json`
+- **M2000 天体物理射流** `euler_config_M2000Jet.json`
 
-### Hypersonic / shock interaction
+### 高超声速 / 激波干扰
 
-- **Double Mach Reflection** 2D + 3D
-- **M5 shock diffraction** `euler_config_M5Diffraction.json`
-- **Hypersonic cylinder** `euler_config_cylinderHS.json`
-- **Double ellipse / double cone** 3D
-- **Sphere shock** `euler3D_config_SphereShock.json`
+- **双马赫反射** 2D + 3D
+- **M5 激波衍射** `euler_config_M5Diffraction.json`
+- **高超声速圆柱** `euler_config_cylinderHS.json`
+- **双椭圆 / 双锥** 3D
+- **球激波** `euler3D_config_SphereShock.json`
 
 </div>
 <div>
 
-### Smooth / steady / unsteady
+### 光滑 / 定常 / 非定常
 
-- **Isentropic Vortex** `euler_config_IV.json` — convergence study
-- **Taylor-Green Vortex 3D** `euler3D_config_TGV.json`, `euler3D_config_BenchTGV.json`
-- **Lid-driven cavity** (incl. hypersonic variant)
-- **Von Kármán vortex street** 2D + 3D
-- **Laminar flat-plate BL**
-- **Inviscid cylinder (MG bench)** `config_cylinderInvis_mg_bench.json`
+- **等熵涡** `euler_config_IV.json` — 收敛性研究
+- **Taylor-Green 涡 3D** `euler3D_config_TGV.json`、`euler3D_config_BenchTGV.json`
+- **顶盖驱动空腔**（含高超声速变体）
+- **冯·卡门涡街** 2D + 3D
+- **层流平板边界层**
+- **无粘圆柱 (MG 基准)** `config_cylinderInvis_mg_bench.json`
 
-### Rotating / periodic frames
+### 旋转 / 周期坐标系
 
-- Rotating-frame simple convergence test
-- Rotating-periodic Isentropic Vortex
+- 旋转坐标系简单收敛测试
+- 旋转周期等熵涡
 
 </div>
 </div>
@@ -2871,27 +2860,27 @@ Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`, `BCMixingPla
 <!-- _footer: "cases/eulerSA/ · cases/eulerSA3D/ · cases/euler2EQ/" -->
 <!-- _class: tight -->
 
-## Aerospace & industrial benchmarks
+## 航空航天与工业基准算例
 
 <div class="cols">
 <div>
 
-### External aerodynamics
+### 外部空气动力学
 
-- **NACA 0012** — SA (`eulerSA_config_0012_AOA15.json`) and k-ω (`euler2EQ/...`) variants, with O2 elevation (`..._Elev.json`) and MG benchmarks (`config_0012_mg_bench.json`).
-- **30p30n** high-lift `eulerSA_config_30p30n.json`.
-- **NASA CRM** — regular + CRM-HL high-lift.
-- **DLR-F6** transport wing-body.
-- **DPW-W1** drag-prediction wing.
-- **Periodic hill** — LES vs RANS comparison.
+- **NACA 0012** — SA（`eulerSA_config_0012_AOA15.json`）和 k-ω（`euler2EQ/...`）变体，含 O2 升阶（`..._Elev.json`）和 MG 基准（`config_0012_mg_bench.json`）。
+- **30p30n** 高升力 `eulerSA_config_30p30n.json`。
+- **NASA CRM** — 常规和 CRM-HL 高升力。
+- **DLR-F6** 运输机翼身组合体。
+- **DPW-W1** 阻力预测机翼。
+- **周期山** — LES 与 RANS 对比。
 
 </div>
 <div>
 
-### Turbomachinery
+### 叶轮机械
 
-- **Rotor 37** transonic compressor `eulerSA3D_config_Rotor37.json`.
-- **Axial fan A1** `eulerSA3D_config_FanA1.json`.
+- **Rotor 37** 跨音速压气机 `eulerSA3D_config_Rotor37.json`。
+- **轴流风扇 A1** `eulerSA3D_config_FanA1.json`。
 
 </div>
 </div>
@@ -2900,43 +2889,43 @@ Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`, `BCMixingPla
 <!-- _footer: "RELEASE_NOTES.md:9-21" -->
 <!-- _class: dense -->
 
-## New solver features in v0.2.0
+## v0.2.0 中新增的求解器功能
 
 <div class="cols">
 <div>
 
-### ODE & preconditioning
+### ODE 与预处理
 
-- **HM3 revamp** — U2R2 / U2R1 / U3R1 modes, `tpMG`, `incFScale`, positivity-preserving coupling with `LimiterUGrad`.
-- **ESDIRK2 / ESDIRK3 / Trapezoidal** added.
-- **ILU-OMP** preconditioner.
+- **HM3 重构** — U2R2 / U2R1 / U3R1 模式、`tpMG`、`incFScale`、与 `LimiterUGrad` 的保正耦合。
+- 新增 **ESDIRK2 / ESDIRK3 / Trapezoidal**。
+- **ILU-OMP** 预处理器。
 
-### Turbulence
+### 湍流
 
-- **DES → DDES → IDDES** progression on SA.
-- **ψ-term fixes**, rotation correction variants, ft2 toggle.
-- **k-ω two-equation** model with dedicated `euler2EQ / euler2EQ3D` executables.
-- **BCProfileIn** for RANS inlet profiles.
+- SA 上的 **DES → DDES → IDDES** 进展。
+- **ψ 项修复**、旋转修正变体、ft2 开关。
+- **k-ω 两方程**模型，配有专用的 `euler2EQ / euler2EQ3D` 可执行文件。
+- **BCProfileIn** 用于 RANS 入口剖面。
 
 </div>
 <div>
 
-### Flux / limiter / BC
+### 通量 / 限制器 / BC
 
-- **Roe_M8** flux; **HLLE+** (experimental).
-- **incFScale** (incremental flux scaling) integrated into entropy fix.
-- **Isothermal wall BC** (`BCWallIsothermal`).
-- **Axisymmetric wedge** metric in reconstruction.
-- **Positivity-preserving** reconstruction limiter in `LimiterUGrad`.
+- **Roe_M8** 通量；**HLLE+**（实验性）。
+- **incFScale**（增量通量缩放）集成到熵修正中。
+- **等温壁面 BC** (`BCWallIsothermal`)。
+- 重构中的**轴对称楔**度量。
+- `LimiterUGrad` 中的**保正重构**限制器。
 
-### Physics
+### 物理
 
-- **Rotating frames** (periodic + simple convergence).
-- **Overset grid exploration** — hole cutting, distance map, cell-cell connectivity (2D demo).
+- **旋转坐标系**（周期 + 简单收敛）。
+- **重叠网格探索** — 挖洞、距离图、单元-单元连通性（二维演示）。
 
-### Workflow
+### 工作流
 
-- `source2nd`, `mergeMultiResidual`, `normOrd`, `restartOutAtInit`, `resBaseType` options.
+- `source2nd`、`mergeMultiResidual`、`normOrd`、`restartOutAtInit`、`resBaseType` 选项。
 
 </div>
 </div>
@@ -2945,7 +2934,7 @@ Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`, `BCMixingPla
 <!-- _footer: "src/Euler/EulerSolver.hpp:1270-1486" -->
 <!-- _class: dense -->
 
-## The main loop — `RunImplicitEuler`
+## 主循环 — `RunImplicitEuler`
 
 ```cpp
 void RunImplicitEuler() {
@@ -2976,34 +2965,34 @@ void RunImplicitEuler() {
 }
 ```
 
-The lambdas above are where `EulerEvaluator`, `GMRES_LeftPreconditioned`, and `LUSGSMatrix*` plug in — the ODE integrator never knows which solver is instantiating it.
+上述 lambda 函数是 `EulerEvaluator`、`GMRES_LeftPreconditioned` 和 `LUSGSMatrix*` 的接入点 — ODE 积分器不知道是哪个求解器在实例化它。
 
 ---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
-<div class="ch-num">CHAPTER 8</div>
+<div class="ch-num">第八章</div>
 
-# Engineering Quality
+# 工程质量
 
-## Testing · build · docs · code hygiene
+## 测试 · 构建 · 文档 · 代码卫生
 
 ---
 <!-- _footer: "docs/tests/overview.md:11-40" -->
 
-## Test suite at a glance
+## 测试套件概览
 
-| Module  | C++ executables | test cases | Python tests | np values         |
-|---------|------------------|------------|--------------|-------------------|
-| DNDS    | 8                | 249        | 9            | 1, 2, 4, 8        |
-| Geom    | 9                | 193        | 2            | 1, 2, 4, 8        |
-| CFV     | 4                | 67         | 43           | 1, 2, 4, 8        |
-| Euler   | 4                | 62         | 4            | 1, 2, 4, 8        |
-| Solver  | 4                | 29         | —            | 1                  |
+| 模块   | C++ 可执行文件 | 测试用例 | Python 测试 | np 值             |
+|--------|---------------|----------|-------------|-------------------|
+| DNDS   | 8             | 249      | 9           | 1, 2, 4, 8        |
+| Geom   | 9             | 193      | 2           | 1, 2, 4, 8        |
+| CFV    | 4             | 67       | 43          | 1, 2, 4, 8        |
+| Euler  | 4             | 62       | 4           | 1, 2, 4, 8        |
+| Solver | 4             | 29       | —           | 1                  |
 
 <div class="callout">
 
-**Totals.** 29 C++ executables, 600 test cases, 58 Python tests across 82 CTest registrations. All MPI-aware tests are CTest-registered at each np value. Serial tests have a 60–120 s timeout; parallel tests 120–600 s depending on module.
+**总计：** 29 个 C++ 可执行文件，600 个测试用例，58 个 Python 测试，涵盖 82 个 CTest 注册项。所有支持 MPI 的测试均按各 np 值在 CTest 中注册。串行测试超时 60–120 秒；并行测试超时 120–600 秒，视模块而定。
 
 </div>
 
@@ -3018,38 +3007,38 @@ ctest --test-dir build --output-on-failure
 <!-- _footer: "test/cpp/DNDS/ · test/cpp/Geom/" -->
 <!-- _class: tight -->
 
-## C++ test catalogue (1 / 2)
+## C++ 测试目录 (1/2)
 
 <div class="cols">
 <div>
 
 ### DNDS
 
-- `test_array` — layouts, row views, iterators
-- `test_mpi` — MPI wrapper, collective ops
-- `test_array_transformer` — father/son ghost exchange
-- `test_array_derived` — AdjacencyRow, EigenMap rows
-- `test_array_dof` — vector-space ops, norms, AXPY
-- `test_index_mapping` — global ↔ local, EvenSplit
-- `test_serializer` — H5 + JSON, redistribute
-- `test_permutation_transfer` — MPL renumber compression / decompression
+- `test_array` — 布局、行视图、迭代器
+- `test_mpi` — MPI 封装、集合操作
+- `test_array_transformer` — 父/子 ghost 交换
+- `test_array_derived` — AdjacencyRow、EigenMap 行
+- `test_array_dof` — 向量空间操作、范数、AXPY
+- `test_index_mapping` — 全局 ↔ 局部、EvenSplit
+- `test_serializer` — H5 + JSON、重分布
+- `test_permutation_transfer` — MPL 重编号压缩/解压
 
 ### Geom
 
-- `test_elements` — shape functions, jacobians
-- `test_quadrature` — orders, weights
-- `test_mesh_index_conversion` — state transitions
-- `test_mesh_pipeline` — full build chain
-- `test_mesh_distributed_read` — ParMetis repartition
-- `test_mesh_connectivity` — Inverse / Compose DSL
+- `test_elements` — 形函数、雅可比矩阵
+- `test_quadrature` — 阶数、权重
+- `test_mesh_index_conversion` — 状态转换
+- `test_mesh_pipeline` — 完整构建链
+- `test_mesh_distributed_read` — ParMetis 重分区
+- `test_mesh_connectivity` — Inverse/Compose DSL
 - `test_mesh_connectivity_ghost` — GhostSpec BFS
-- `test_mesh_connectivity_interpolate` — face interp
-- `test_mesh_reorder` — reverse Cuthill-McKee / Hilbert ordering
+- `test_mesh_connectivity_interpolate` — 面插值
+- `test_mesh_reorder` — 逆 Cuthill-McKee/Hilbert 排序
 
 </div>
 <div>
 
-### Typical test structure
+### 典型测试结构
 
 ```cpp
 TEST_CASE("ArrayTransformer: round-trip ghost pull" *
@@ -3079,37 +3068,37 @@ TEST_CASE("ArrayTransformer: round-trip ghost pull" *
 ---
 <!-- _footer: "test/cpp/CFV/ · test/cpp/Euler/ · test/cpp/Solver/" -->
 
-## C++ test catalogue (2 / 2)
+## C++ 测试目录 (2/2)
 
 <div class="cols-3">
 <div>
 
 ### CFV
 
-- `test_reconstruction` · tests of VR convergence on analytic fields.
-- `test_reconstruction3d` · 3D variants; Jacobi/SOR comparison.
-- `test_limiters` · WBAP / CWBAP on contrived data; exercises the full limiter menu.
-- `test_device_transferable` *(CUDA only)* · round-trip of `FiniteVolume` to GPU and back.
+- `test_reconstruction` · 解析场上的 VR 收敛性测试。
+- `test_reconstruction3d` · 3D 变体；Jacobi/SOR 对比。
+- `test_limiters` · WBAP/CWBAP 在构造数据上的测试；覆盖全部限制器选项。
+- `test_device_transferable` *（仅 CUDA）* · `FiniteVolume` 到 GPU 的往返传输。
 
 </div>
 <div>
 
 ### Euler
 
-- `test_gas_thermo` · ideal gas Cv/Cp, T/p relations, Mach→state.
-- `test_riemann_solvers` · 13 variants, exact-solution agreement on 1D Riemann problems.
-- `test_rans` · SA + k-ω source terms, wall distance integration, trip location.
-- `test_evaluator_pipeline` · full `EvaluateRHS` on a fixed mesh — **golden values**.
+- `test_gas_thermo` · 理想气体 Cv/Cp、T/p 关系、Mach→状态。
+- `test_riemann_solvers` · 13 种变体，一维 Riemann 问题的精确解一致性。
+- `test_rans` · SA + k-ω 源项、壁面距离积分、转捩位置。
+- `test_evaluator_pipeline` · 在固定网格上的完整 `EvaluateRHS` — **golden values**。
 
 </div>
 <div>
 
 ### Solver
 
-- `test_ode` · BDF / SDIRK / HM3 on ODE benchmarks (Van der Pol, stiff scalar).
-- `test_linear` · GMRES + PCG convergence on canonical matrices.
-- `test_direct` · small-block LU / LDLT correctness.
-- `test_scalar` · scalar transport advection-diffusion regression.
+- `test_ode` · ODE 基准测试上的 BDF/SDIRK/HM3（Van der Pol、刚性标量）。
+- `test_linear` · 标准矩阵上的 GMRES + PCG 收敛性。
+- `test_direct` · 小块 LU/LDLT 正确性。
+- `test_scalar` · 标量输运对流-扩散回归测试。
 
 </div>
 </div>
@@ -3117,26 +3106,26 @@ TEST_CASE("ArrayTransformer: round-trip ghost pull" *
 ---
 <!-- _footer: "docs/tests/overview.md:87-111" -->
 
-## Determinism — how golden values stay stable
+## 确定性 — golden values 如何保持稳定
 
-Many tests compare computed results against pre-captured **golden values** with relative tolerance `1e-6` to `1e-8`. For this to be meaningful, runs must be byte-stable across re-executions.
+许多测试将计算结果与预先捕获的 **golden values** 进行比较，相对容差为 `1e-6` 到 `1e-8`。为了使这一点有意义，每次运行的结果必须字节级一致。
 
 <div class="cols">
 <div>
 
-### Sources of non-determinism — eliminated
+### 非确定性来源 — 已消除
 
-- **Partitioning order** → `metisSeed = 42` (fixed).
-- **SOR update order** (depends on partition) → Jacobi iteration used instead in VR tests.
-- **LU-SGS sweep direction** (partition-ordered) → Jacobi-style updates in Euler pipeline tests.
-- **OMP reduction order** (thread count) → scalar reductions are deterministic at fixed thread count.
+- **分区顺序** → `metisSeed = 42`（固定值）。
+- **SOR 更新顺序**（依赖分区）→ VR 测试中改用 Jacobi 迭代。
+- **LU-SGS 扫描方向**（分区有序）→ Euler 管线测试中使用 Jacobi 风格的更新。
+- **OMP 归约顺序**（线程数）→ 在固定线程数下标量归约是确定性的。
 
 </div>
 <div>
 
-### Sentinel value pattern
+### 哨兵值模式
 
-When a golden value **has not yet been captured**, the test stores the sentinel `1e300`:
+当 golden value **尚未捕获**时，测试存储哨兵值 `1e300`：
 
 ```cpp
 const real gold_kinetic = 1e300;           // TODO: capture
@@ -3147,7 +3136,7 @@ else
     CHECK(std::isfinite(computed) && computed >= 0);
 ```
 
-So the first run of a new test is a finite/non-negative sanity check, and the developer updates the golden in a follow-up commit.
+因此，新测试的首次运行是一个有限/非负的合理性检查，开发者随后在跟进提交中更新 golden value。
 
 </div>
 </div>
@@ -3156,22 +3145,22 @@ So the first run of a new test is a finite/non-negative sanity check, and the de
 <!-- _footer: "docs/tests/overview.md:104-124" -->
 <!-- _class: tight -->
 
-## Python tests — pytest + pytest-mpi
+## Python 测试 — pytest + pytest-mpi
 
 <div class="cols">
 <div>
 
-### What's covered
+### 覆盖内容
 
-- `test/DNDS/test_basic.py` (9 tests) — import chain, MPIInfo, small array round-trip.
-- `test/Geom/test_basic_geom.py` (2 tests) — CGNS read, elevation, bisection.
-- `test/CFV/test_fv_correctness.py` (16 tests) — cell volume / face area / jacobian correctness on wall meshes.
-- `test/CFV/test_vr_correctness.py` (16 tests) — VR order convergence on sin(x)sin(y).
-- `test/CFV/test_basic_fv.py` + `test_basic_cfv.py` + `test_cfv_dissdisp.py` (11 tests) — FV/CFV smoke tests and dissipation-dispersion analysis.
-- `test/EulerP/test_basic_eulerP.py` (1 test) — host + CUDA round-trip.
-- `test/Euler/test_restart_redistribute.py` (3 tests) — solver restart with MPI repartition.
+- `test/DNDS/test_basic.py`（9 个测试）— import 链、MPIInfo、小数组往返。
+- `test/Geom/test_basic_geom.py`（2 个测试）— CGNS 读取、升阶、对分。
+- `test/CFV/test_fv_correctness.py`（16 个测试）— 壁面网格上的单元体积/面面积/雅可比正确性。
+- `test/CFV/test_vr_correctness.py`（16 个测试）— sin(x)sin(y) 上的 VR 阶收敛。
+- `test/CFV/test_basic_fv.py` + `test_basic_cfv.py` + `test_cfv_dissdisp.py`（11 个测试）— FV/CFV 冒烟测试与耗散-色散分析。
+- `test/EulerP/test_basic_eulerP.py`（1 个测试）— 主机 + CUDA 往返。
+- `test/Euler/test_restart_redistribute.py`（3 个测试）— 含 MPI 重分区的求解器重启。
 
-### Running
+### 运行
 
 ```bash
 # Serial
@@ -3188,7 +3177,7 @@ mpirun -np 2 python test/DNDS/test_basic.py
 </div>
 <div>
 
-### Critical rebuild dance
+### 关键的重建步骤
 
 ```bash
 # 1. Rebuild pybind11 shared libs
@@ -3205,7 +3194,7 @@ PYTHONPATH=<root>/python pytest test/ -v
 
 <div class="callout callout-warn">
 
-⚠ Skipping the install step after changing C++ source leaves stale `.so` files and produces misleading segfaults that look like code bugs. `git checkout` changes source but does **not** rebuild binaries.
+⚠ 在修改 C++ 源码后跳过安装步骤会导致残留的 `.so` 文件，并产生误导性的段错误，看起来像代码 bug。`git checkout` 会变更源码，但**不会**重新构建二进制文件。
 
 </div>
 
@@ -3216,7 +3205,7 @@ PYTHONPATH=<root>/python pytest test/ -v
 <!-- _footer: "CMakePresets.json" -->
 <!-- _class: dense -->
 
-## Build system — presets
+## 构建系统 — 预设
 
 ```jsonc
 {
@@ -3243,13 +3232,13 @@ PYTHONPATH=<root>/python pytest test/ -v
 }
 ```
 
-Aggregate targets: `dnds_unit_tests`, `geom_unit_tests`, `cfv_unit_tests`, `euler_unit_tests`, `solver_unit_tests`, `all_unit_tests` — all `EXCLUDE_FROM_ALL` so plain `cmake --build` stays fast.
+Collective目标：`dnds_unit_tests`、`geom_unit_tests`、`cfv_unit_tests`、`euler_unit_tests`、`solver_unit_tests`、`all_unit_tests` — 均设置为 `EXCLUDE_FROM_ALL`，因此普通的 `cmake --build` 仍能快速完成。
 
 ---
 <!-- _footer: "pyproject.toml · RELEASE_NOTES.md:32-40" -->
 <!-- _class: dense -->
 
-## Python packaging — `scikit-build-core`
+## Python 打包 — `scikit-build-core`
 
 ```toml
 # pyproject.toml
@@ -3269,7 +3258,7 @@ install.components = ["py"]     # only install the py component
 <div class="cols">
 <div>
 
-### Build & install
+### 构建与安装
 
 ```bash
 CC=mpicc CXX=mpicxx \
@@ -3277,20 +3266,20 @@ CC=mpicc CXX=mpicxx \
     pip install -e .
 ```
 
-- Builds all `*_pybind11` targets.
-- Copies them into `python/DNDSR/*/_ext/`.
-- Runs `pybind11-stubgen` to produce `.pyi` files.
-- Copies external shared libs into `python/DNDSR/_lib/`.
+- 构建全部 `*_pybind11` 目标。
+- 将其复制到 `python/DNDSR/*/_ext/`。
+- 运行 `pybind11-stubgen` 生成 `.pyi` 文件。
+- 将外部共享库复制到 `python/DNDSR/_lib/`。
 
 </div>
 <div>
 
-### Why system Python (not conda)
+### 为什么使用系统 Python（而非 conda）
 
-> Conda/Anaconda Python embeds an `RPATH` to conda's bundled libstdc++, which may be older than what the MPI compiler produces. System Python uses the system libstdc++ and avoids this conflict.
+> Conda/Anaconda Python 在二进制中嵌入了指向 conda 自带 libstdc++ 的 RPATH，其版本可能低于 MPI 编译器产生的版本。系统 Python 使用系统 libstdc++，避免了这种冲突。
 > — `README.md`
 
-macOS has a dedicated fmtlib workaround, also shipped.
+macOS 有专门的 fmtlib 变通方案，也已包含。
 
 </div>
 </div>
@@ -3299,29 +3288,29 @@ macOS has a dedicated fmtlib workaround, also shipped.
 <!-- _footer: "docs/dev/clang_tidy_plan.md · RELEASE_NOTES.md:32-40" -->
 <!-- _class: dense -->
 
-## Clang-tidy sanitation
+## Clang-tidy 清理
 
 <div class="cols">
 <div>
 
-### DNDS core — the cleanup
+### DNDS 核心 — 清理成果
 
-- **24 597 diagnostics** at start of the sweep.
-- **26 passes** applied in careful slice order.
-- **1 remaining** — an unrelated Eigen PCH `omp.h` include issue.
-- Full per-pass record and `.clang-tidy` rationale preserved in `docs/dev/clang_tidy_plan.md`.
+- **24,597 个诊断**在清理开始时存在。
+- **26 轮**按仔细划分的顺序进行修复。
+- **剩余 1 个** — 一个不相关的 Eigen PCH `omp.h` 包含问题。
+- 完整的逐轮记录和 `.clang-tidy` Configuration理由保存在 `docs/dev/clang_tidy_plan.md` 中。
 
-### The `.clang-tidy` disables (representative)
+### `.clang-tidy` 禁用项（代表性）
 
-- `cppcoreguidelines-pro-bounds-pointer-arithmetic` — unavoidable in CSR / row-flat arrays.
-- `fuchsia-default-arguments-declarations` — MPI defaults.
-- `llvm-header-guard` — we use `#pragma once`.
-- `modernize-use-trailing-return-type` — style preference.
+- `cppcoreguidelines-pro-bounds-pointer-arithmetic` — 在 CSR/行扁平数组中不可避免。
+- `fuchsia-default-arguments-declarations` — MPI 默认值。
+- `llvm-header-guard` — 我们使用 `#pragma once`。
+- `modernize-use-trailing-return-type` — 风格偏好。
 
 </div>
 <div>
 
-### Running it yourself
+### 自行运行
 
 ```bash
 # Per-module histogram
@@ -3332,9 +3321,9 @@ python scripts/run_clang_tidy.py Euler
 python scripts/run_clang_tidy.py Solver
 ```
 
-### What's next
+### 下一步
 
-Solver / Geom / CFV / Euler / EulerP are **not yet sanitised** — same recipe to apply. The `.clang-tidy` disables carry forward.
+Solver/Geom/CFV/Euler/EulerP **尚未清理** — 可应用相同的流程。`.clang-tidy` 的禁用Configuration可直接沿用。
 
 </div>
 </div>
@@ -3343,31 +3332,31 @@ Solver / Geom / CFV / Euler / EulerP are **not yet sanitised** — same recipe t
 <!-- _footer: "docs/sphinx/conf.py · docs/doxygen/ · RELEASE_NOTES.md:61-70" -->
 <!-- _class: dense -->
 
-## Documentation system — architecture
+## 文档系统 — 架构
 
-![](res/mermaid_08_f1cc87c1.svg)
+![](res/zh/mermaid_08_f1cc87c1.svg)
 
 
 <div class="cols">
 <div>
 
-### Key features
+### 关键特性
 
-- **One Markdown source** renders in both Sphinx and Doxygen via `doxygen_compat.py`.
-- **Doxygen HTML** is embedded at `/doxygen/` on the Sphinx site.
-- **Graphviz** class inheritance, call graphs, include graphs.
-- **sphinxawesome-theme** with rich code highlighting.
+- **单一 Markdown 源**通过 `doxygen_compat.py` 同时在 Sphinx 和 Doxygen 中渲染。
+- **Doxygen HTML** 嵌入在 Sphinx 站点的 `/doxygen/` 路径下。
+- **Graphviz** 类继承图、调用图、包含图。
+- **sphinxawesome-theme** 主题，具有丰富的代码高亮。
 
 </div>
 <div>
 
-### Build speeds
+### 构建速度
 
-| Trigger | Time |
-|---|---|
-| No-op rebuild | **< 1 s** |
-| Markdown-only edit | ~10 s |
-| Full (Doxygen + Sphinx) | ~2.5 min |
+| 触发条件             | 耗时     |
+|---------------------|---------|
+| 无变动重建            | **< 1 s**  |
+| 仅修改 Markdown       | ~10 s   |
+| 完整（Doxygen + Sphinx）| ~2.5 min |
 
 ```bash
 cmake --build build -t serve-docs
@@ -3381,38 +3370,38 @@ cmake --build build -t serve-docs
 <!-- _footer: ".github/workflows/ · RELEASE_NOTES.md:68-70" -->
 <!-- _class: dense -->
 
-## CI & release automation
+## CI 与发布自动化
 
 <div class="cols">
 <div>
 
-### GitHub Actions — Pages deployment
+### GitHub Actions — Pages 部署
 
-- **Manual dispatch** workflow (avoid spending minutes on every push).
-- **3-layer caching:**
-  1. Ubuntu apt packages (doxygen, graphviz, libmpich-dev).
-  2. External `cfd_externals` binary libraries (HDF5, CGNS, Metis, ParMetis).
-  3. Python venv + Sphinx build cache.
-- Cache hit → full docs build in ~3 minutes; cache miss → ~20 minutes.
+- **手动触发**工作流（避免每次推送都花费几分钟时间）。
+- **三层缓存：**
+  1. Ubuntu apt 包（doxygen, graphviz, libmpich-dev）。
+  2. 外部 `cfd_externals` 二进制库（HDF5, CGNS, Metis, ParMetis）。
+  3. Python venv + Sphinx 构建缓存。
+- 缓存命中 → 完整文档构建约 3 分钟；缓存未命中 → 约 20 分钟。
 
-### Style + hygiene
+### 风格与卫生
 
-- `.clang-format` ships at repo root; CI checks a diff in a separate job.
-- `POSIX index()` ambiguity guard — code style requires `DNDS::index` whenever `using namespace DNDS;` is active (documented in `docs/tests/overview.md`).
+- `.clang-format` 随仓库根目录发布；CI 在单独作业中检查差异。
+- POSIX `index()` 歧义防护 — 当 `using namespace DNDS;` 处于活动状态时，代码风格要求使用 `DNDS::index`（文档见 `docs/tests/overview.md`）。
 
 </div>
 <div>
 
-### Version string
+### 版本字符串
 
-- `VERSION` file at repo root (`0.2.0`).
-- CMake combines it with `git describe --tags --long`.
-- Exposed as:
-  - C++ macro `DNDS_VERSION_STRING`.
-  - Python `DNDSR.__version__` (PEP 440 compliant).
-  - JSON schema `x-version` field.
+- `VERSION` 文件位于仓库根目录（`0.2.0`）。
+- CMake 将其与 `git describe --tags --long` 组合。
+- 暴露方式：
+  - C++ 宏 `DNDS_VERSION_STRING`。
+  - Python `DNDSR.__version__`（符合 PEP 440）。
+  - JSON Schema `x-version` 字段。
 
-### Release workflow
+### 发布流程
 
 ```bash
 # Bump VERSION file
@@ -3429,11 +3418,11 @@ git push --tags
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
-<div class="ch-num">CHAPTER 9</div>
+<div class="ch-num">第 9 章</div>
 
-# Results
+# 结果
 
-## Selected 2D / 3D Euler & NS cases
+## 精选 2D / 3D Euler 与 NS 算例
 
 ---
 <!-- _class:  -->
@@ -3446,7 +3435,7 @@ git push --tags
 
 ![NACA mesh](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/01_naca0012_mesh.png)
 
-*mesh*
+*网格*
 
 </div>
 
@@ -3454,7 +3443,7 @@ git push --tags
 
 ![Mach AOA=5°](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/01_naca0012_mach_aoa5.png)
 
-*AOA = 5°, Mach number*
+*AOA = 5°, 马赫数*
 
 </div>
 
@@ -3471,7 +3460,7 @@ git push --tags
 
 ![Mach AOA=15°](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/01_naca0012_mach_aoa15.png)
 
-*AOA = 15°, Mach number*
+*AOA = 15°, 马赫数*
 
 </div>
 
@@ -3479,16 +3468,16 @@ git push --tags
 
 ![ν̃ field](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/01_naca0012_nutilde.png)
 
-*AOA = 15°, $\rho\tilde{\nu}$ field*
+*AOA = 15°, $\rho\tilde{\nu}$ 场*
 
 </div>
 
 </div>
 
 ---
-## Double Mach Reflection (2D Euler)
+## 双马赫反射 (2D Euler)
 
-Density at *t* = 0.2, Mach 10 shock on 30° wedge.
+*t* = 0.2 时的密度，马赫 10 激波在 30° 楔上。
 
 <div class="cols">
 
@@ -3513,8 +3502,9 @@ Density at *t* = 0.2, Mach 10 shock on 30° wedge.
 ---
 <!-- _class:  -->
 
-## Supersonic Wedge (2D Euler)
-Mach 3 inviscid flow over a 15° compression corner.
+## 超音速楔 (2D Euler)
+
+马赫 3 无粘流，15° 压缩拐角。
 
 <div class="cols">
 
@@ -3522,7 +3512,7 @@ Mach 3 inviscid flow over a 15° compression corner.
 
 ![Wedge mesh](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/12_wedge_mesh.png)
 
-*mesh*
+*网格*
 
 </div>
 
@@ -3530,7 +3520,7 @@ Mach 3 inviscid flow over a 15° compression corner.
 
 ![Wedge density](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/12_wedge_density.png)
 
-*Density, Re $= \infty$*
+*密度，Re $= \infty$*
 
 </div>
 
@@ -3539,7 +3529,7 @@ Mach 3 inviscid flow over a 15° compression corner.
 ---
 <!-- _class:  -->
 
-## Wedge — viscous (Re = 100) + pressure
+## 楔 — 粘性 (Re = 100) + 压力
 
 <div class="cols">
 
@@ -3547,7 +3537,7 @@ Mach 3 inviscid flow over a 15° compression corner.
 
 ![Wedge pressure](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/12_wedge_pressure.png)
 
-*Pressure, Re $= \infty$*
+*压力，Re $= \infty$*
 
 </div>
 
@@ -3555,7 +3545,7 @@ Mach 3 inviscid flow over a 15° compression corner.
 
 ![Wedge viscous](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/12_wedge_viscous_density.png)
 
-*Density, Re = 100*
+*密度，Re = 100*
 
 </div>
 
@@ -3564,9 +3554,9 @@ Mach 3 inviscid flow over a 15° compression corner.
 ---
 <!-- _class:  -->
 
-## Hypersonic Cavity (2D Navier–Stokes)
+## 高超声速空腔 (2D Navier–Stokes)
 
-Time-averaged results.
+时间平均效果：
 
 <div class="cols">
 
@@ -3574,7 +3564,7 @@ Time-averaged results.
 
 ![Cavity mesh](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/03_cavity_mesh.png)
 
-*mesh*
+*网格*
 
 </div>
 
@@ -3582,7 +3572,7 @@ Time-averaged results.
 
 ![Cavity pressure](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/03_cavity_pressure.png)
 
-*Time-averaged $p/(\rho_\infty U_\infty^2)$, 27 isolines*
+*时间平均 $p/(\rho_\infty U_\infty^2)$，27 条等值线*
 
 </div>
 
@@ -3591,7 +3581,7 @@ Time-averaged results.
 ---
 <!-- _class:  -->
 
-## Hypersonic Cavity — time step + Ma = 0.1
+## 高超声速空腔 — 时间步长 + Ma = 0.1
 
 <div class="cols">
 
@@ -3599,7 +3589,7 @@ Time-averaged results.
 
 ![Cavity dt comparison](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/03_cavity_dt_compare.png)
 
-*Explicit time step comparison*
+*显式时间步长对比*
 
 </div>
 
@@ -3607,7 +3597,7 @@ Time-averaged results.
 
 ![Cavity Ma=0.1](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/03_cavity_mach01.png)
 
-*t = 0.1 Mach, 32 isolines (explicit 2nd-order FV)*
+*马赫 0.1，32 条等值线（显式 2 阶 FV）*
 
 </div>
 
@@ -3616,7 +3606,7 @@ Time-averaged results.
 ---
 <!-- _class:  -->
 
-## Cylinder Re = 1200 (2D NS, unsteady)
+## 圆柱 Re = 1200 (2D NS, 非定常)
 
 <div class="cols">
 
@@ -3624,7 +3614,7 @@ Time-averaged results.
 
 ![Cyl mesh](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/05_cylinder_re1200_mesh.png)
 
-*Mesh*
+*网格*
 
 </div>
 
@@ -3632,7 +3622,7 @@ Time-averaged results.
 
 ![Cyl vorticity](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/05_cylinder_re1200.png)
 
-*Vorticity*
+*涡量*
 
 </div>
 
@@ -3641,9 +3631,9 @@ Time-averaged results.
 ---
 <!-- _class:  -->
 
-## 3D Turbulent Cylinder (ILES, Re = 1.2 × 10³)
+## 3D 湍流圆柱 (ILES, Re = 1.2 × 10³)
 
-Q-criterion iso-surfaces coloured by Mach number.
+Q-criterion 等值面，按马赫数着色。
 
 <div class="cols">
 
@@ -3651,7 +3641,7 @@ Q-criterion iso-surfaces coloured by Mach number.
 
 ![3D cylinder mesh](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/13_cylinder3d_mesh.png)
 
-*mesh*
+*网格*
 
 </div>
 
@@ -3659,14 +3649,14 @@ Q-criterion iso-surfaces coloured by Mach number.
 
 ![Q-criterion, ΔT=0.05](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/13_cylinder3d_qcrit.png)
 
-*Q-criterion iso-surfaces*
+*Q-criterion 等值面*
 
 </div>
 
 </div>
 
 ---
-## Sedov Blast Wave (2D Euler)
+## Sedov 爆炸波 (2D Euler)
 
 <div class="cols">
 
@@ -3674,7 +3664,7 @@ Q-criterion iso-surfaces coloured by Mach number.
 
 ![Sedov density](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/08_sedov.png)
 
-*Density*
+*密度*
 
 </div>
 
@@ -3682,14 +3672,14 @@ Q-criterion iso-surfaces coloured by Mach number.
 
 ![Sedov profile](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/08_sedov_profile.png)
 
-*Density along diagonal*
+*对角线上的密度*
 
 </div>
 
 </div>
 
 ---
-## Noh Problem
+## Noh 问题
 
 <div class="cols">
 
@@ -3697,7 +3687,7 @@ Q-criterion iso-surfaces coloured by Mach number.
 
 ![Noh density](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/09_noh.png)
 
-*Density at t = 0.6*
+*t = 0.6 时的密度*
 
 </div>
 
@@ -3705,7 +3695,7 @@ Q-criterion iso-surfaces coloured by Mach number.
 
 ![Noh profile](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/09_noh_profile.png)
 
-*Density along diagonal*
+*对角线上的密度*
 
 </div>
 
@@ -3714,9 +3704,9 @@ Q-criterion iso-surfaces coloured by Mach number.
 ---
 <!-- _class:  -->
 
-## M2000 Relativistic Jet (2D Euler)
+## M2000 相对论射流 (2D Euler)
 
-Mach 2000 jet
+马赫 2000 射流
 
 <div class="cols">
 
@@ -3741,7 +3731,7 @@ Mach 2000 jet
 ---
 <!-- _class:  -->
 
-## Isentropic Vortex (2D Euler) — error convergence
+## 等熵涡 (2D Euler) — 误差收敛
 
 <div class="cols">
 
@@ -3749,7 +3739,7 @@ Mach 2000 jet
 
 ![IV L1 error](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/07_iv_err.png)
 
-*$L^1$ density error vs. grid size*
+*$L^1$ 密度误差随网格尺寸变化*
 
 </div>
 
@@ -3757,7 +3747,7 @@ Mach 2000 jet
 
 ![IV residual](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/07_iv_res.png)
 
-*Residual convergence*
+*残差收敛*
 
 </div>
 
@@ -3766,7 +3756,7 @@ Mach 2000 jet
 ---
 ## NASA CRM (3D SA RANS)
 
-Wing-body
+翼身组合体
 
 <div class="cols">
 
@@ -3774,7 +3764,7 @@ Wing-body
 
 ![CRM mesh](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/11_crm_mesh.png)
 
-*Surface mesh*
+*表面网格*
 
 </div>
 
@@ -3782,7 +3772,7 @@ Wing-body
 
 ![CRM Cp](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/11_crm_cp.png)
 
-*Surface $C_p$*
+*表面 $C_p$*
 
 </div>
 
@@ -3799,7 +3789,7 @@ Wing-body
 
 ![CRM Cf](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/11_crm_cf.png)
 
-*Surface $C_f$*
+*表面 $C_f$*
 
 </div>
 
@@ -3807,9 +3797,7 @@ Wing-body
 
 ![CRM CLCD](https://raw.githubusercontent.com/harryzhou2000/resources-0/main/demos/11_crm_clcd.png)
 
-*Force-coefficient convergence*
-
-</div>
+*力系数收敛*
 
 </div>
 
@@ -3819,20 +3807,20 @@ Wing-body
 
 <div class="ch-num">CHAPTER 10</div>
 
-# Roadmap & Close
+# 展望与结语
 
-## What's next · pointers · acknowledgements
+## 展望 · 指引 · 致谢
 
 ---
 <!-- _footer: "docs/architecture/MeshConnectivity.md:416-458 · MeshDAGDesign.md" -->
 <!-- _class: dense -->
 
-## Roadmap — mesh & topology
+## 展望 — 网格与拓扑
 
 <div class="cols">
 <div>
 
-### Near-term: configurable ghost
+### 近期：可配置的 ghost
 
 ```cpp
 struct GhostRequirement {
@@ -3843,26 +3831,26 @@ struct GhostRequirement {
 };
 ```
 
-- FEM needs a **smaller** ghost set than compact FV.
-- Wide-stencil FV (2+ layers) needs a **larger** set.
-- Current default ghost is hard-coded — `nGhostLayers` only adjusts depth, not the *kind* of neighbor.
+- FEM 需要的 ghost 集合比 compact FV **更小**。
+- 宽模板 FV（2+ 层）需要**更大**的集合。
+- 当前默认 ghost 是硬编码的 — `nGhostLayers` 只调整深度，不调整邻居的*类型*。
 
 </div>
 <div>
 
-### Medium-term: edge entities
+### 中期：边实体
 
-- Add `edge2node`, `cell2edge`, `node2edge` with the same `AdjPairTracked` discipline.
-- Extract the face-interpolation algorithm into a **generic** codim-K template.
-- Needed for **node-based FV** and **FEM** workflows.
+- 添加 `edge2node`、`cell2edge`、`node2edge`，遵循相同的 `AdjPairTracked` 规范。
+- 将面插值算法提取为**通用**的 codim-K 模板。
+- 用于**基于节点的 FV** 和 **FEM** 工作流。
 
-### Long-term: DMPlex-style DAG
+### 长期：DMPlex 风格的 DAG
 
-- Unified point numbering across nodes / edges / faces / cells.
-- Parameterized adjacency — `useCone` × `useClosure` Boolean matrix.
-- PetscSF-style communication structure.
-- PetscSection-style decoupling of topology from discretization.
-- Proposal in `docs/architecture/MeshDAGDesign.md` (765 lines).
+- 跨节点/边/面/单元的统一点编号。
+- 参数化邻接关系 — `useCone` × `useClosure` 布尔矩阵。
+- PetscSF 风格的通信结构。
+- PetscSection 风格的拓扑与离散化解耦。
+- 提案见 `docs/architecture/MeshDAGDesign.md`（765 行）。
 
 </div>
 </div>
@@ -3871,38 +3859,38 @@ struct GhostRequirement {
 <!-- _footer: "RELEASE_NOTES.md:20 · src/EulerP/ · docs/dev/ideas.md" -->
 <!-- _class: dense -->
 
-## Roadmap — solvers, parallelism, V&V
+## 展望 — 求解器、并行、V&V
 
 <div class="cols">
 <div>
 
-### Solvers
+### 求解器
 
-- **Reactive / multi-species** (`NS_EX`) — maturity pass, published validation cases.
-- **Overset grids** — 2D demo exists (hole creation, distance map, cell-cell connectivity); extend to 3D and add full transfer operators.
-- **Full (assembled) Jacobian** — currently matrix-free + LU-SGS only. Assembling a block CSR Jacobian opens up AMG + SuperLU_dist + PETSc as preconditioners.
+- **反应/多组分**（`NS_EX`）— 成熟度提升，发布验证算例。
+- **重叠网格** — 已有 2D 演示（挖洞、距离图、单元-单元连通性）；扩展到 3D 并添加完整的传递算子。
+- **完整（组装）Jacobian** — 目前仅支持无矩阵 + LU-SGS。组装分块 CSR Jacobian 后可启用 AMG + SuperLU_dist + PETSc 作为预条件子。
 
-### Parallelism
+### 并行
 
-- Extend CUDA coverage from `EulerP` to the full `Euler` evaluator.
-- More SoA kernels; GPU-aware MPI over pinned device memory.
-- Broader device coverage for VR reconstruction.
-- Task-based execution experiments.
+- 将 CUDA 覆盖从 `EulerP` 扩展到完整的 `Euler` 求值器。
+- 更多 SoA 核函数；通过固定设备内存进行 GPU 可知的 MPI。
+- 为 VR 重构提供更广泛的设备覆盖。
+- Task-based execution实验。
 
 </div>
 <div>
 
-### V&V workflow
+### V&V 工作流
 
-- Standardized **verification & validation** harness running a fixed case set on every release, publishing convergence plots to the doc site.
-- More turbomachinery cases: NASA Rotor 67, low-speed fan stage.
-- Noise-source diagnostics for aeroacoustics.
+- 标准化的**验证与确认**工具链，每次发布时运行固定算例集，向文档站发布收敛图。
+- 更多叶轮机械算例：NASA Rotor 67、低速风扇级。
+- 气动声学的噪声源诊断。
 
-### Documentation & dev-UX
+### 文档与开发体验
 
-- **Expand Python examples** to match current C++ coverage.
-- **Clang-tidy sanitation** for remaining modules (Solver, Geom, CFV, Euler, EulerP) — same recipe as DNDS.
-- **Contributor on-boarding** guide, already outlined in `docs/dev/`.
+- **扩展 Python 示例**以匹配当前 C++ 覆盖。
+- 对剩余模块（Solver、Geom、CFV、Euler、EulerP）进行 **Clang-tidy 清理** — 与 DNDS 相同的方案。
+- **贡献者入门**指南，已在 `docs/dev/` 中拟定大纲。
 
 </div>
 </div>
@@ -3911,40 +3899,40 @@ struct GhostRequirement {
 <!-- _footer: "docs/architecture/ · docs/theory/ · docs/guides/" -->
 <!-- _class: dense -->
 
-## Where to read next
+## 延伸阅读
 
 <div class="cols">
 <div>
 
-### Architecture
+### 架构
 
-- **`array_infrastructure.md`** — bottom-up tour of `Array` → `ArrayTransformer` → `ArrayPair` → `ArrayDof`.
-- **`MeshConnectivity.md`** — the AdjPairTracked state machine, the ghost-spec DSL, the DAG roadmap.
-- **`Serialization.md`** — layer-cake I/O, cross-np restart, offset modes.
-- **`Paradigm.md`** — the delayed-abstraction philosophy contrasted with OpenFOAM / SU2.
+- **`array_infrastructure.md`** — 自底向上遍历 `Array` → `ArrayTransformer` → `ArrayPair` → `ArrayDof`。
+- **`MeshConnectivity.md`** — AdjPairTracked 状态机、ghost 规格 DSL、DAG 展望。
+- **`Serialization.md`** — 分层 I/O、跨进程重启、偏移模式。
+- **`Paradigm.md`** — 延迟抽象哲学，与 OpenFOAM/SU2 对比。
 
-### Theory
+### 理论
 
-- **`Variational_Reconstruction.md`** / `.pdf` — full derivation of the facial functional, inner-product choices, and local system.
-- **`Shape_Functions.md`** — per-element shape functions and quadrature.
+- **`Variational_Reconstruction.md`** / `.pdf` — 面泛函、内积选择及局部系统的完整推导。
+- **`Shape_Functions.md`** — 逐单元形函数与积分。
 
 </div>
 <div>
 
-### Guides
+### 指南
 
-- **`building.md`** — externals, headers, CMake presets.
-- **`array_usage.md`** — how to write code with `Array` / `ArrayDof`.
-- **`geom_usage.md`** — mesh construction and VR pipeline.
-- **`python_geom_guide.md`** — full Python Geom API reference.
-- **`serialization_usage.md`** — HDF5 checkpoints, redistribution.
-- **`style_guide.md`** — C++ and Python conventions.
-- **`examples.md`** — runnable `examples/ex_*.cpp` programs.
+- **`building.md`** — 外部依赖、头文件、CMake 预设。
+- **`array_usage.md`** — 如何使用 `Array`/`ArrayDof` 编写代码。
+- **`geom_usage.md`** — 网格构建与 VR 流水线。
+- **`python_geom_guide.md`** — 完整的 Python Geom API 参考。
+- **`serialization_usage.md`** — HDF5 检查点、重分布。
+- **`style_guide.md`** — C++ 和 Python 规范。
+- **`examples.md`** — 可运行的 `examples/ex_*.cpp` 程序。
 
-### Tests
+### 测试
 
-- **`docs/tests/overview.md`** — golden values, determinism, suite totals.
-- Per-module test pages under `docs/tests/{dnds,geom,cfv,euler,solver}_unit_tests.md`.
+- **`docs/tests/overview.md`** — 黄金值、确定性、测试套件汇总。
+- 各模块测试页面：`docs/tests/{dnds,geom,cfv,euler,solver}_unit_tests.md`。
 
 </div>
 </div>
@@ -3954,9 +3942,9 @@ struct GhostRequirement {
 <!-- _paginate: false -->
 <!-- _footer: "github.com/CFDLAB-THU/DNDSR · cfdlab-thu.github.io/DNDSR" -->
 
-# Thank you
+# 谢谢
 
-**Try it in three commands**
+**三条命令即可运行**
 
 ```bash
 cmake --preset release-test
@@ -3966,8 +3954,8 @@ mpirun -np 4 ./build/app/euler.exe cases/euler_config_IV.json
 
 <br>
 
-**Code** · [github.com/CFDLAB-THU/DNDSR](https://github.com/CFDLAB-THU/DNDSR) **Docs** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR) **Release notes** · `RELEASE_NOTES.md` (v0.2.0)
+**代码** · [github.com/CFDLAB-THU/DNDSR](https://github.com/CFDLAB-THU/DNDSR) **文档** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR) **发布说明** · `RELEASE_NOTES.md` (v0.2.0)
 
 <br>
 
-*CFD Lab, Tsinghua University*
+*清华大学 CFD 实验室*

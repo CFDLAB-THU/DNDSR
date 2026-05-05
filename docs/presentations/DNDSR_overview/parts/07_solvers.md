@@ -289,19 +289,6 @@ Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`, `BCMixingPla
 - **Rotor 37** transonic compressor `eulerSA3D_config_Rotor37.json`.
 - **Axial fan A1** `eulerSA3D_config_FanA1.json`.
 
-### Industry workflow — "partition on login, run on compute"
-
-```mermaid
-flowchart TB
-    A["cases/eulerSA3D/<br/>config_CRM_PartitionBoeing.json<br/><i>serial Metis</i>"]
-    B["mesh.h5 + origIndex"]
-    C["cases/eulerSA3D/<br/>config_CRM_RunBoeing.json<br/><i>parallel read + ParMetis</i>"]
-    A -- writes --> B
-    B --> C
-```
-
-This pattern also stresses `ReadSerializeRedistributed` across different rank counts.
-
 </div>
 </div>
 

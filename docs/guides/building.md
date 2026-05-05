@@ -334,7 +334,7 @@ mpirun -np 4 ./build/test/cpp/dnds_test_mpi
 Available test executables: `dnds_test_array`, `dnds_test_mpi`,
 `dnds_test_array_transformer`, `dnds_test_array_derived`,
 `dnds_test_array_dof`, `dnds_test_index_mapping`,
-`dnds_test_serializer`.
+`dnds_test_serializer`, `dnds_test_permutation_transfer`.
 
 ### Python Tests
 

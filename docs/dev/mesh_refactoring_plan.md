@@ -271,8 +271,8 @@ Existing tests that guard correctness:
 
 | Test File | Tests | np | Coverage |
 |-----------|-------|-----|---------|
-| `test_MeshPipeline.cpp` | 25 test cases | 1,2,4,8 | Full pipeline, Adj round-trips, elevation, bisection |
-| `test_MeshIndexConversion.cpp` | Index conversion correctness | 1,2,4,8 | All 12 named wrappers |
-| `test_MeshDistributedRead.cpp` | Distributed read + repartition | 1,2,4,8 | ReadSerializeAndDistribute |
+| `test_MeshPipeline.cpp` | 50 test cases | 1,2,4,8 | Full pipeline, Adj round-trips, elevation, bisection |
+| `test_MeshIndexConversion.cpp` | 24 test cases | 1,2,4,8 | All 12 named wrappers |
+| `test_MeshDistributedRead.cpp` | 18 test cases | 1,2,4,8 | ReadSerializeAndDistribute |
 
 New tests added in Phase 0 specifically guard elevation + smooth solver paths.

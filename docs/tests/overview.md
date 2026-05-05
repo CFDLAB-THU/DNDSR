@@ -11,13 +11,14 @@ to verify parallel correctness.
 
 ## Module Test Pages
 
-| Module | Page | C++ tests | Python tests | Assertions |
-|---|---|---|---|---|
-| **DNDS** (core) | @ref dnds_unit_tests | 8 executables | 2 pytest files (~10 tests) | ~400 |
-| **Geom** | @ref geom_unit_tests | 9 executables | 1 pytest file (1 test) | — |
-| **CFV** | @ref cfv_unit_tests | 3 executables | 2 pytest files (32 tests) | ~340 |
-| **Euler** | @ref euler_unit_tests | 4 executables | — | ~310 |
-| **Solver** | @ref solver_unit_tests | 4 executables | — | ~65 |
+| Module | Page | C++ tests | Python tests | Test cases |
+|---|---|---|---|---|---|
+| **DNDS** (core) | @ref dnds_unit_tests | 8 executables | 1 file (9 tests) | 249 |
+| **Geom** | @ref geom_unit_tests | 9 executables | 1 file (2 tests) | 193 |
+| **CFV** | @ref cfv_unit_tests | 4 executables | 5 files (43 tests) | 67 |
+| **Euler** | @ref euler_unit_tests | 4 executables | 2 files (4 tests) | 62 |
+| **Solver** | @ref solver_unit_tests | 4 executables | — | 29 |
+| | | **29 executables** | **58 tests** | **600** |
 
 ## Quick Start
 
@@ -57,11 +58,11 @@ MPI-aware tests are registered at multiple process counts.  The CTest
 name encodes the count:
 
 | Module | Process counts | Timeout |
-|---|---|---|
+|---|---|---|---|
 | DNDS | np = 1, 2, 4, 8 | 120-240 s |
 | Geom | np = 1, 2, 4, 8 | 120-240 s |
-| CFV | np = 1, 2, 4 | 120-180 s |
-| Euler | np = 1, 2, 4 | 600 s |
+| CFV | np = 1, 2, 4, 8 | 120-180 s |
+| Euler | np = 1, 2, 4, 8 | 600 s |
 
 Serial tests have a single CTest entry with a 60-120 s timeout.
 
