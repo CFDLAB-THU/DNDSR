@@ -28,8 +28,9 @@ set(DOCS_SLIDES_STAMP  "${CMAKE_CURRENT_BINARY_DIR}/docs/.docs_slides_stamp")
 #  0. Element diagrams — regenerate from tools/elements/gen_diagrams.py
 # ===================================================================
 #
-# Outputs land in ${DOCS_ELEMENTS_DIR} (NOT in the source tree). Both
-# Doxygen and Sphinx mount this directory via the asset-copy step.
+# Outputs land in ${DOCS_ELEMENTS_DIR}, then are copied back to the
+# source tree at docs/elements/ so that presentation build.sh and
+# other offline consumers can pick them up without a CMake build.
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
@@ -46,10 +47,13 @@ if(Python3_FOUND)
             ${Python3_EXECUTABLE} -m tools.elements.gen_diagrams
                 --outdir "${DOCS_ELEMENTS_DIR}"
                 --format png
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${DOCS_ELEMENTS_DIR}"
+            "${PROJECT_SOURCE_DIR}/docs/elements"
         COMMAND ${CMAKE_COMMAND} -E touch "${DOCS_ELEMENTS_STAMP}"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         DEPENDS ${_ELEMENT_TOOL_DEPS}
-        COMMENT "Docs: generating element topology diagrams"
+        COMMENT "Docs: generating element topology diagrams → docs/elements/"
         VERBATIM
     )
 
