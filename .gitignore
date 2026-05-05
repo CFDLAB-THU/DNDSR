@@ -3,6 +3,7 @@ running
 # building
 build*
 !docs/building.md
+!docs/presentations/*/build.sh
 *.exe
 *.so
 # external
