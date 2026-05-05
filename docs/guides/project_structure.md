@@ -182,3 +182,6 @@ See @ref dnds_unit_tests for the full C++ test suite documentation.
 | `docs`              | Build all documentation (Doxygen + Sphinx)  |
 | `sphinx`            | Build Sphinx documentation only             |
 | `doxygen`           | Build Doxygen XML + HTML only               |
+
+> **See also:** @ref building for full build instructions, CMake preset
+> descriptions, and troubleshooting.

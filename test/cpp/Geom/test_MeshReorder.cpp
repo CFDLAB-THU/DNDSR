@@ -643,3 +643,444 @@ TEST_CASE("ReorderEntities node-only local on UniformSquare_10")
     mesh->InterpolateFace();
     mesh->AssertOnFaces();
 }
+
+// =================================================================
+// Test: Expected-value verification with non-identity local cell
+// reverse permutation (uses fromLocalPermutation path directly)
+// =================================================================
+
+TEST_CASE("PermutationTransfer + buildLookup: reverse permutation value tracking")
+{
+    auto mpi = worldMPI();
+    const DNDS::index nLocal = 6;
+
+    // Build a simple cell2node-like adj with known values
+    ArrayAdjacencyPair<2> cell2node;
+    cell2node.InitPair("cell2node", mpi);
+    cell2node.father->Resize(nLocal);
+    cell2node.father->createGlobalMapping();
+
+    DNDS::index cellOffset = (*cell2node.father->pLGlobalMapping)(mpi.rank, 0);
+
+    // Fill with tracker values: cell i stores (100 + cellOffset + i, 200 + cellOffset + i)
+    for (DNDS::index i = 0; i < nLocal; i++)
+    {
+        cell2node(i, 0) = 100 + cellOffset + i;
+        cell2node(i, 1) = 200 + cellOffset + i;
+    }
+
+    // Snapshot original values for verification
+    std::vector<DNDS::index> origCol0(nLocal), origCol1(nLocal);
+    for (DNDS::index i = 0; i < nLocal; i++)
+    {
+        origCol0[i] = cell2node(i, 0);
+        origCol1[i] = cell2node(i, 1);
+    }
+
+    // Build a reverse permutation: old i -> new (nLocal-1-i)
+    std::vector<DNDS::index> old2new(nLocal);
+    for (DNDS::index i = 0; i < nLocal; i++)
+        old2new[i] = nLocal - 1 - i;
+
+    auto pt = PermutationTransfer::fromLocalPermutation(
+        old2new, cell2node.father->pLGlobalMapping, mpi);
+    CHECK(pt.isLocalOnly);
+
+    // Verify newGlobalIndices[i] = myOffset + old2new[i] = cellOffset + (nLocal-1-i)
+    for (DNDS::index i = 0; i < nLocal; i++)
+        CHECK(pt.newGlobalIndices[i] == cellOffset + (nLocal - 1 - i));
+
+    // Transfer rows: after permutation, row (nLocal-1-i) should contain old row i's data
+    pt.transferRows(cell2node, mpi);
+
+    for (DNDS::index i = 0; i < nLocal; i++)
+    {
+        DNDS::index newSlot = old2new[i];
+        CHECK(cell2node(newSlot, 0) == origCol0[i]);
+        CHECK(cell2node(newSlot, 1) == origCol1[i]);
+    }
+
+    // Build lookup and verify resolve() produces the correct new globals
+    auto lookup = pt.buildLookup({}, mpi);
+
+    for (DNDS::index i = 0; i < nLocal; i++)
+    {
+        DNDS::index oldGlobal = cellOffset + i;
+        DNDS::index expectedNewGlobal = cellOffset + (nLocal - 1 - i);
+        CHECK(lookup.resolve(oldGlobal) == expectedNewGlobal);
+    }
+}
+
+// =================================================================
+// Test: Distributed fromPartition with cross-rank value tracking
+// =================================================================
+
+TEST_CASE("PermutationTransfer distributed value tracking cross-rank")
+{
+    auto mpi = worldMPI();
+    if (mpi.size < 2)
+        return;
+
+    const DNDS::index nLocal = 4;
+
+    ArrayAdjacencyPair<1> arr;
+    arr.InitPair("arr", mpi);
+    arr.father->Resize(nLocal);
+    arr.father->createGlobalMapping();
+
+    DNDS::index myOffset = (*arr.father->pLGlobalMapping)(mpi.rank, 0);
+    DNDS::index globalSize = arr.father->pLGlobalMapping->globalSize();
+
+    // Tag each entry with a unique global-based sentinel
+    const DNDS::index TAG_BASE = 100000;
+    for (DNDS::index i = 0; i < nLocal; i++)
+        arr(i, 0) = TAG_BASE + myOffset + i;
+
+    // Round-robin partition: entry i goes to rank (i % mpi.size)
+    std::vector<MPI_int> partition(nLocal);
+    for (DNDS::index i = 0; i < nLocal; i++)
+        partition[i] = static_cast<MPI_int>(i % mpi.size);
+
+    auto pt = PermutationTransfer::fromPartition(
+        partition, arr.father->pLGlobalMapping, mpi);
+    CHECK_FALSE(pt.isLocalOnly);
+
+    pt.transferRows(arr, mpi);
+
+    // After transfer: every entry on this rank carries a valid tag
+    DNDS::index nAfter = arr.father->Size();
+    std::set<DNDS::index> receivedTags;
+    for (DNDS::index i = 0; i < nAfter; i++)
+    {
+        DNDS::index v = arr(i, 0);
+        CHECK(v >= TAG_BASE);
+        CHECK(v < TAG_BASE + globalSize);
+        receivedTags.insert(v);
+    }
+    // All received tags are unique (no duplicates)
+    CHECK(receivedTags.size() == static_cast<size_t>(nAfter));
+
+    // Sum of nAfter across all ranks must equal original global size
+    DNDS::index totalAfter = 0;
+    MPI_Allreduce(&nAfter, &totalAfter, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
+    CHECK(totalAfter == globalSize);
+}
+
+// =================================================================
+// Test: buildLookup with pullSet (cross-rank resolve verification)
+// =================================================================
+
+TEST_CASE("PermutationTransfer::buildLookup cross-rank resolve with pullSet")
+{
+    auto mpi = worldMPI();
+    if (mpi.size < 2)
+        return;
+
+    const DNDS::index nLocal = 4;
+
+    auto gm = make_ssp<GlobalOffsetsMapping>();
+    gm->setMPIAlignBcast(mpi, nLocal);
+
+    DNDS::index myOffset = (*gm)(mpi.rank, 0);
+
+    // Round-robin partition: entry i stays if i%size==myRank, else moves
+    std::vector<MPI_int> partition(nLocal);
+    for (DNDS::index i = 0; i < nLocal; i++)
+        partition[i] = static_cast<MPI_int>((mpi.rank + i) % mpi.size);
+
+    auto pt = PermutationTransfer::fromPartition(partition, gm, mpi);
+
+    // Build a pull set: globals on the next rank
+    int nextRank = (mpi.rank + 1) % mpi.size;
+    DNDS::index nextOffset = (*gm)(nextRank, 0);
+    std::vector<DNDS::index> pullSet;
+    for (DNDS::index i = 0; i < nLocal; i++)
+        pullSet.push_back(nextOffset + i);
+    std::sort(pullSet.begin(), pullSet.end());
+
+    auto lookup = pt.buildLookup(pullSet, mpi);
+
+    // For each old global in pullSet, resolve should give some valid new global
+    // within [0, globalSize).
+    DNDS::index globalSize = gm->globalSize();
+    for (auto oldG : pullSet)
+    {
+        DNDS::index newG = lookup.resolve(oldG);
+        CHECK(newG >= 0);
+        CHECK(newG < globalSize);
+    }
+
+    // Verify my own locals resolve too
+    for (DNDS::index i = 0; i < nLocal; i++)
+    {
+        DNDS::index oldG = myOffset + i;
+        DNDS::index newG = lookup.resolve(oldG);
+        CHECK(newG >= 0);
+        CHECK(newG < globalSize);
+    }
+
+    // UnInitIndex passthrough
+    CHECK(lookup.resolve(UnInitIndex) == UnInitIndex);
+}
+
+// =================================================================
+// Test: ReorderEntities with external companion array
+// (solver-like use case: external array extends the registry)
+// =================================================================
+
+TEST_CASE("ReorderEntities with external companion array (solver-like)")
+{
+    auto mpi = worldMPI();
+    auto mesh = buildMeshPrimary(mpi, "UniformSquare_10.cgns", 2, false);
+
+    DNDS::index nCellBefore = mesh->NumCell();
+
+    // Create an "external" array (like a solver DOF array), parallel to cells
+    // Each entry is tagged with the cell's current global index
+    ArrayAdjacencyPair<3> solverDOF;
+    solverDOF.InitPair("solverDOF", mpi);
+    solverDOF.father->Resize(nCellBefore);
+    // Borrow global mapping from cell2node
+    solverDOF.father->pLGlobalMapping = mesh->cell2node.father->pLGlobalMapping;
+
+    mesh->AdjLocal2GlobalPrimary();
+    DNDS::index cellOffset = (*mesh->cell2node.father->pLGlobalMapping)(mpi.rank, 0);
+
+    // Tag each DOF with a pattern: (cellGlobal*10+0, cellGlobal*10+1, cellGlobal*10+2)
+    for (DNDS::index i = 0; i < nCellBefore; i++)
+    {
+        solverDOF(i, 0) = (cellOffset + i) * 10 + 0;
+        solverDOF(i, 1) = (cellOffset + i) * 10 + 1;
+        solverDOF(i, 2) = (cellOffset + i) * 10 + 2;
+    }
+
+    // Snapshot pre-reorder: map oldGlobal -> expected tag pattern
+    std::map<DNDS::index, std::array<DNDS::index, 3>> expectedByOldGlobal;
+    for (DNDS::index i = 0; i < nCellBefore; i++)
+    {
+        DNDS::index g = cellOffset + i;
+        expectedByOldGlobal[g] = {g * 10, g * 10 + 1, g * 10 + 2};
+    }
+
+    // Plan + register external companion + apply
+    // Use round-robin partition to force distributed movement (when np>=2)
+    std::vector<MPI_int> cellPartition(nCellBefore);
+    for (DNDS::index i = 0; i < nCellBefore; i++)
+        cellPartition[i] = static_cast<MPI_int>((mpi.rank + i) % mpi.size);
+
+    ReorderInput input;
+    input.explicitMaps.push_back(EntityReorderMap{EntityKind::Cell, cellPartition});
+
+    // Build the plan (with default Node/Bnd follows)
+    auto plan = mesh->buildReorderPlan(input);
+
+    // Build registry and register the EXTERNAL companion BEFORE applying
+    auto reg = mesh->buildReorderRegistry(input.destroyKinds);
+    reg.registerCompanion(
+        EntityKind::Cell,
+        [&](const PermutationTransfer &t, const MPIInfo &m)
+        { t.transferRows(solverDOF, m); },
+        "solverDOF");
+
+    // Call the full mesh reorder (which uses its own registry internally;
+    // for external companion we must use buildReorderPlan + apply + manual rebuild).
+    //
+    // Simpler: apply plan to our extended registry directly, then rebuild mesh ghosts.
+    // However ReorderEntities does a lot of rebuild work. To test just the external
+    // companion path, we exercise it through the synthetic pattern:
+    plan.apply(reg, mpi);
+
+    // After apply, solverDOF has been relocated. Verify values preserved per old-global.
+    // New cells live at new globals — compute new-global -> old-global via plan transfer
+    const auto &transfer = plan.transfers.at(EntityKind::Cell);
+
+    // Build reverse map: new global -> old global (on this rank, post-reorder)
+    // After transferRows, solverDOF row i is at new local slot i with new global
+    // (myNewOffset + i). We need to know which old global was sent to new local slot i.
+    //
+    // The sender info isn't directly exposed; we use the tag pattern to verify.
+    // The received tag % 10 == 0,1,2 (col 0,1,2), and tag / 10 == oldGlobal.
+    DNDS::index nAfter = solverDOF.father->Size();
+    for (DNDS::index i = 0; i < nAfter; i++)
+    {
+        DNDS::index v0 = solverDOF(i, 0);
+        DNDS::index v1 = solverDOF(i, 1);
+        DNDS::index v2 = solverDOF(i, 2);
+        // All three entries must come from the same source cell
+        CHECK(v0 % 10 == 0);
+        CHECK(v1 % 10 == 1);
+        CHECK(v2 % 10 == 2);
+        CHECK(v0 / 10 == v1 / 10);
+        CHECK(v0 / 10 == v2 / 10);
+    }
+}
+
+// =================================================================
+// Test: RELOCATE_REMAP — both source and target reordered
+// (cell2node where BOTH cells and nodes move)
+// =================================================================
+
+TEST_CASE("ReorderPlan::apply RELOCATE_REMAP (both source and target reordered)")
+{
+    auto mpi = worldMPI();
+    const DNDS::index nCell = 4;
+    const DNDS::index nNode = 6;
+
+    // cell2node: Cell -> Node. Both will be reordered.
+    ArrayAdjacencyPair<2> cell2node;
+    cell2node.InitPair("cell2node", mpi);
+    cell2node.father->Resize(nCell);
+    cell2node.father->createGlobalMapping();
+
+    ArrayAdjacencyPair<1> nodeArr;
+    nodeArr.InitPair("nodeArr", mpi);
+    nodeArr.father->Resize(nNode);
+    nodeArr.father->createGlobalMapping();
+
+    DNDS::index cellOffset = (*cell2node.father->pLGlobalMapping)(mpi.rank, 0);
+    DNDS::index nodeOffset = (*nodeArr.father->pLGlobalMapping)(mpi.rank, 0);
+
+    // Fill: cell i references nodes i and i+1 (in local indexing converted to global)
+    for (DNDS::index i = 0; i < nCell; i++)
+    {
+        cell2node(i, 0) = nodeOffset + i;
+        cell2node(i, 1) = nodeOffset + i + 1;
+    }
+
+    // Snapshot pre-reorder cell2node for each cell by its old global
+    std::map<DNDS::index, std::array<DNDS::index, 2>> oldCell2NodeByGlobal;
+    for (DNDS::index i = 0; i < nCell; i++)
+        oldCell2NodeByGlobal[cellOffset + i] = {cell2node(i, 0), cell2node(i, 1)};
+
+    // Build registry
+    ReorderRegistry reg;
+    reg.registerGlobalMapping(EntityKind::Cell, cell2node.father->pLGlobalMapping);
+    reg.registerGlobalMapping(EntityKind::Node, nodeArr.father->pLGlobalMapping);
+
+    reg.registerAdj(
+        Adj::Cell2Node,
+        [&](const PermutationTransfer::LookupResult &lookup)
+        {
+            for (DNDS::index i = 0; i < cell2node.father->Size(); i++)
+                for (rowsize j = 0; j < 2; j++)
+                {
+                    DNDS::index &v = cell2node(i, j);
+                    if (v != UnInitIndex)
+                        v = lookup.resolve(v);
+                }
+        },
+        [&](const PermutationTransfer &t, const MPIInfo &m)
+        { t.transferRows(cell2node, m); },
+        "cell2node");
+
+    // Identity partitions (local-only) but with REMAP logic exercised
+    std::vector<MPI_int> cellPartition(nCell, mpi.rank);
+    std::vector<MPI_int> nodePartition(nNode, mpi.rank);
+
+    ReorderInput input;
+    input.explicitMaps.push_back(EntityReorderMap{EntityKind::Cell, cellPartition});
+    input.explicitMaps.push_back(EntityReorderMap{EntityKind::Node, nodePartition});
+
+    auto plan = ReorderPlan::build(input, reg, mpi);
+    CHECK(plan.reorderedKinds.count(EntityKind::Cell));
+    CHECK(plan.reorderedKinds.count(EntityKind::Node));
+    CHECK(classifyAdj(Adj::Cell2Node, plan.reorderedKinds) == AdjAction::RELOCATE_REMAP);
+
+    plan.apply(reg, mpi);
+
+    // With identity partitions, new globals == old globals, so values should be unchanged.
+    for (DNDS::index i = 0; i < nCell; i++)
+    {
+        CHECK(cell2node(i, 0) == nodeOffset + i);
+        CHECK(cell2node(i, 1) == nodeOffset + i + 1);
+    }
+}
+
+// =================================================================
+// Test: pullSets population in buildReorderRegistry
+// =================================================================
+
+TEST_CASE("buildReorderRegistry populates pullSets for off-rank references")
+{
+    auto mpi = worldMPI();
+    if (mpi.size < 2)
+        return;
+
+    auto mesh = buildMeshPrimary(mpi, "UniformSquare_10.cgns", 2, false);
+    mesh->AdjLocal2GlobalPrimary();
+
+    auto reg = mesh->buildReorderRegistry({});
+
+    // Cell pullSet: should contain off-rank cell globals referenced by
+    // cell2cell, bnd2cell, or node2cell ghost rows.
+    auto cellGMIt = reg.globalMappings.find(EntityKind::Cell);
+    REQUIRE(cellGMIt != reg.globalMappings.end());
+    auto cellGM = cellGMIt->second;
+    DNDS::index myCellOffset = (*cellGM)(mpi.rank, 0);
+    DNDS::index myCellCount = cellGM->RLengths()[mpi.rank];
+
+    auto psIt = reg.pullSets.find(EntityKind::Cell);
+    if (psIt != reg.pullSets.end())
+    {
+        const auto &ps = psIt->second;
+        // All entries must be off-rank
+        for (auto g : ps)
+        {
+            bool isOffRank = !(g >= myCellOffset && g < myCellOffset + myCellCount);
+            CHECK(isOffRank);
+            // Must be valid global
+            CHECK(g >= 0);
+            CHECK(g < cellGM->globalSize());
+        }
+        // Must be sorted and unique
+        for (size_t i = 1; i < ps.size(); i++)
+        {
+            CHECK(ps[i] > ps[i - 1]);
+        }
+    }
+
+    // Node pullSet: off-rank node globals referenced by cell2node, bnd2node
+    auto nodeGMIt = reg.globalMappings.find(EntityKind::Node);
+    REQUIRE(nodeGMIt != reg.globalMappings.end());
+    auto nodeGM = nodeGMIt->second;
+    DNDS::index myNodeOffset = (*nodeGM)(mpi.rank, 0);
+    DNDS::index myNodeCount = nodeGM->RLengths()[mpi.rank];
+
+    auto nodePsIt = reg.pullSets.find(EntityKind::Node);
+    if (nodePsIt != reg.pullSets.end())
+    {
+        const auto &ps = nodePsIt->second;
+        for (auto g : ps)
+        {
+            bool isOffRank = !(g >= myNodeOffset && g < myNodeOffset + myNodeCount);
+            CHECK(isOffRank);
+            CHECK(g >= 0);
+            CHECK(g < nodeGM->globalSize());
+        }
+        for (size_t i = 1; i < ps.size(); i++)
+        {
+            CHECK(ps[i] > ps[i - 1]);
+        }
+    }
+
+    // Confirm all expected adj entries are registered
+    auto hasAdj = [&](AdjKind k)
+    {
+        for (auto &adj : reg.adjs)
+            if (adj.kind == k)
+                return true;
+        return false;
+    };
+    CHECK(hasAdj(Adj::Cell2Node));
+    CHECK(hasAdj(Adj::Cell2Cell));
+    CHECK(hasAdj(Adj::Bnd2Node));
+    CHECK(hasAdj(Adj::Bnd2Cell));
+
+    // Confirm companions are registered (coords, cellElemInfo, bndElemInfo)
+    std::set<std::string> compNames;
+    for (auto &c : reg.companions)
+        compNames.insert(c.name);
+    CHECK(compNames.count("coords"));
+    CHECK(compNames.count("cellElemInfo"));
+    CHECK(compNames.count("bndElemInfo"));
+}

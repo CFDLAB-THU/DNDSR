@@ -58,8 +58,13 @@ namespace DNDS::Geom
         std::vector<EntityReorderMap> explicitMaps;
 
         /// Follow specifications (framework computes follow maps from these).
-        /// Default follows (Node, Bnd follow Cell) are added automatically
-        /// when Cell is in explicitMaps and Node/Bnd are not.
+        ///
+        /// When empty (default), the mesh wrapper applies the default policy:
+        /// all non-explicit entity kinds with a support adjacency to an
+        /// explicit kind follow it (currently: Node and Bnd follow Cell).
+        ///
+        /// When non-empty, only the listed follows are computed (overrides
+        /// the default policy — allows selective follow or custom adj routes).
         std::vector<FollowSpec> follows;
 
         /// Entity kinds whose adjacencies should be destroyed before reorder

@@ -1,4 +1,4 @@
-# Multi-Layer Ghost Cell Support
+# Multi-Layer Ghost Cell Support {#multi_layer_ghost_design}
 
 > **Status:** Implemented. `evaluateGhostTree` supports multi-hop chains
 > with scratch pulls between BFS levels. `BuildGhostPrimary(nGhostLayers)`

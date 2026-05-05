@@ -14,6 +14,15 @@
 > actual implementation — see [MeshConnectivity.md](MeshConnectivity.md)
 > for current architecture.
 
+**TL;DR:** This is the original design proposal for replacing ~15 explicit
+adjacency arrays and 12 global/local conversion methods with a single DAG
+abstraction. The DAG stores cone (cell→face→edge→node) and support
+(face→cell, node→cell) relations as shared `tAdjPair` slots. Ghost
+generation becomes configurable traversal chains (e.g. `cell→face→cell` for
+face-neighbours instead of hard-coded `cell→node→cell`). Phases A–B
+(MeshConnectivity DSL + `AdjPairTracked` state) are implemented; Phases
+C–D (unified point numbering, full DAG abstraction) are future work.
+
 ---
 
 ## 1. Motivation

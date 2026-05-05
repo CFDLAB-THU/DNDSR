@@ -12,7 +12,7 @@
 namespace DNDS::Geom
 {
     // =================================================================
-    // ComputeFollowMap: derive follower placement from leader
+    // ComputeFollowMapFromAdj: derive follower placement from leader
     // =================================================================
 
     /// Compute a follow map for `follower` based on `leader`'s explicit map.
@@ -21,73 +21,13 @@ namespace DNDS::Geom
     /// determine: for each follower entity, go to min(leader.targetRank)
     /// over all leaders referencing it.
     ///
-    /// @param followerGM   Global mapping for the follower entity kind.
-    /// @param leaderGM     Global mapping for the leader entity kind.
-    /// @param follower2leader  Support adj: follower -> leader (father-only,
-    ///                         global entries). Must cover all follower entities.
+    /// @param follower2leader  Raw follower->leader adj (father-only, global entries).
+    /// @param nFollower        Number of follower entities (father size).
+    /// @param leaderGM         Global mapping for the leader entity kind.
     /// @param leaderTargetRanks  Per-leader-slot target rank (the explicit map).
-    /// @param mpi          MPI communicator.
+    /// @param mpi              MPI communicator.
     /// @return Per-follower-slot target rank.
     /// @warning Collective.
-    static std::vector<MPI_int> ComputeFollowMap(
-        const ssp<GlobalOffsetsMapping> &followerGM,
-        const ssp<GlobalOffsetsMapping> &leaderGM,
-        const ReorderRegistry &registry,
-        AdjKind follower2leaderKind,
-        const std::vector<MPI_int> &leaderTargetRanks,
-        const MPIInfo &mpi)
-    {
-        DNDS_assert(followerGM);
-        DNDS_assert(leaderGM);
-
-        index nFollower = followerGM->RLengths()[mpi.rank];
-
-        // Step 1: Build a ghost-pullable lookup of leader's targetRanks.
-        // lookup(leaderLocalSlot, 0) = leaderTargetRanks[leaderLocalSlot]
-        ArrayAdjacencyPair<1> leaderLookup;
-        leaderLookup.InitPair("followMap_leaderLookup", mpi);
-        leaderLookup.father->Resize(static_cast<index>(leaderTargetRanks.size()));
-        for (index i = 0; i < static_cast<index>(leaderTargetRanks.size()); i++)
-            leaderLookup(i, 0) = static_cast<index>(leaderTargetRanks[i]);
-        leaderLookup.TransAttach();
-        leaderLookup.trans.createFatherGlobalMapping();
-
-        // Step 2: Collect leader globals referenced by follower2leader
-        // (need ghost-pull for off-rank leaders)
-        // Find the adj in the registry
-        const AdjEntry *f2lEntry = nullptr;
-        for (auto &adj : registry.adjs)
-            if (adj.kind == follower2leaderKind)
-            {
-                f2lEntry = &adj;
-                break;
-            }
-
-        // If follower2leader is not in registry, we need to look at the mesh data.
-        // For now, we require it to be registered. The caller should ensure node2cell
-        // or bnd2cell is built and registered before calling.
-        DNDS_assert_info(f2lEntry != nullptr,
-                         fmt::format("ComputeFollowMap: follower2leader adj {} not in registry",
-                                     adjKindName(follower2leaderKind)));
-
-        // We cannot directly iterate the adj via the registry (callbacks are type-erased).
-        // Instead, we use a different approach: the registry has globalMappings for the
-        // leader, and the follower2leader adj stores leader globals. We ghost-pull the
-        // leaderLookup for all off-rank leader globals referenced.
-        //
-        // Problem: we can't access the adj data through callbacks. We need the raw data.
-        // Solution: the caller passes the adj data directly to ComputeFollowMap.
-        // For now, return empty — this will be connected in buildReorderRegistry.
-        //
-        // Actually, we redesign: ComputeFollowMap takes a direct reference to the
-        // follower2leader pair data.
-
-        // This function should not be called from here — see the overload below.
-        DNDS_assert_info(false, "ComputeFollowMap: internal error — use the pair-based overload");
-        return {};
-    }
-
-    /// Overload that takes raw follower2leader data (father-only, global entries).
     template <rowsize f2l_rs>
     static std::vector<MPI_int> ComputeFollowMapFromAdj(
         const ArrayAdjacencyPair<f2l_rs> &follower2leader,
@@ -171,17 +111,14 @@ namespace DNDS::Geom
             allMaps[em.kind] = em.targetRanks;
 
         // --- Step 2: Compute follow maps ---
-        // (Follow computation requires raw adj data. This is handled by
-        //  the mesh's buildReorderRegistry which populates follow maps
-        //  before calling build. For now, we accept pre-computed follows
-        //  in the input.follows and note that the mesh wrapper handles
-        //  the actual computation.)
-        //
-        // Note: follow maps that are already in allMaps (explicit) take
-        // precedence. Follows are skipped for kinds already explicit.
-
-        // Follow maps will be inserted by the mesh wrapper before calling build.
-        // (See UnstructuredMesh::ReorderEntities in the mesh wrapper section.)
+        // Follow computation is handled by the mesh wrapper (resolveFollows)
+        // before calling build. By the time we reach here, all entity kinds
+        // should be in explicitMaps. The input.follows field is not processed
+        // here — it is a mesh-wrapper-level concept.
+        DNDS_assert_info(input.follows.empty(),
+                         "ReorderPlan::build: input.follows must be empty; "
+                         "use UnstructuredMesh::resolveFollows to compute follow maps "
+                         "before calling build");
 
         // --- Step 3: Build PermutationTransfer per entity kind ---
         plan.reorderedKinds.clear();
@@ -448,36 +385,35 @@ namespace DNDS::Geom
     }
 
     // =================================================================
-    // UnstructuredMesh::buildReorderPlan
+    // UnstructuredMesh::resolveFollows
     // =================================================================
 
-    ReorderPlan UnstructuredMesh::buildReorderPlan(const ReorderInput &input)
+    ReorderInput UnstructuredMesh::resolveFollows(
+        const ReorderInput &input,
+        const ReorderRegistry &reg)
     {
-        auto reg = buildReorderRegistry(input.destroyKinds);
-
-        // Augment input with default follows: Node, Bnd follow Cell
-        // if Cell is explicit and Node/Bnd are not.
         ReorderInput augmented = input;
         std::unordered_set<EntityKind> explicitKinds;
         for (auto &em : augmented.explicitMaps)
             explicitKinds.insert(em.kind);
 
-        // Add default follows
-        if (explicitKinds.count(EntityKind::Cell))
+        // When follows is empty, apply default policy: all non-explicit
+        // entity kinds with a support adjacency to an explicit kind follow it.
+        // Currently: Node and Bnd follow Cell if Cell is explicit.
+        if (augmented.follows.empty())
         {
-            if (!explicitKinds.count(EntityKind::Node) && node2cell.father)
+            if (explicitKinds.count(EntityKind::Cell))
             {
-                augmented.follows.push_back(
-                    FollowSpec{EntityKind::Node, EntityKind::Cell, Adj::Node2Cell});
-            }
-            if (!explicitKinds.count(EntityKind::Bnd) && bnd2cell.father)
-            {
-                augmented.follows.push_back(
-                    FollowSpec{EntityKind::Bnd, EntityKind::Cell, Adj::Bnd2Cell});
+                if (!explicitKinds.count(EntityKind::Node) && node2cell.father)
+                    augmented.follows.push_back(
+                        FollowSpec{EntityKind::Node, EntityKind::Cell, Adj::Node2Cell});
+                if (!explicitKinds.count(EntityKind::Bnd) && bnd2cell.father)
+                    augmented.follows.push_back(
+                        FollowSpec{EntityKind::Bnd, EntityKind::Cell, Adj::Bnd2Cell});
             }
         }
 
-        // Compute follow maps and merge into the input
+        // Compute follow maps and merge into explicit maps
         std::unordered_map<EntityKind, std::vector<MPI_int>> allMaps;
         for (auto &em : augmented.explicitMaps)
             allMaps[em.kind] = em.targetRanks;
@@ -489,19 +425,17 @@ namespace DNDS::Geom
 
             auto leaderIt = allMaps.find(spec.leader);
             DNDS_assert_info(leaderIt != allMaps.end(),
-                             fmt::format("buildReorderPlan: follow spec references leader {} "
+                             fmt::format("resolveFollows: follow spec references leader {} "
                                          "which has no map",
                                          entityKindName(spec.leader)));
 
-            // Use the raw adj data for follow computation
-            // We need the follower->leader adj data. Dispatch by known kinds:
-            std::vector<MPI_int> followMap;
             auto followerGM = reg.getGlobalMapping(spec.follower);
             DNDS_assert_info(followerGM,
-                             fmt::format("buildReorderPlan: no global mapping for follower {}",
+                             fmt::format("resolveFollows: no global mapping for follower {}",
                                          entityKindName(spec.follower)));
             index nFollower = followerGM->RLengths()[mpi.rank];
 
+            std::vector<MPI_int> followMap;
             if (spec.follower2leader == Adj::Node2Cell && node2cell.father)
             {
                 followMap = ComputeFollowMapFromAdj(
@@ -526,21 +460,29 @@ namespace DNDS::Geom
             else
             {
                 DNDS_assert_info(false,
-                                 fmt::format("buildReorderPlan: unsupported follow adj {}",
+                                 fmt::format("resolveFollows: unsupported follow adj {}",
                                              adjKindName(spec.follower2leader)));
             }
 
             allMaps[spec.follower] = std::move(followMap);
         }
 
-        // Now build the plan with all maps (explicit + follow)
-        // We need to pass allMaps into ReorderPlan::build.
-        // Convert allMaps to explicitMaps format for build:
+        // Build finalised input with all maps explicit
         ReorderInput finalInput;
         for (auto &[kind, ranks] : allMaps)
             finalInput.explicitMaps.push_back(EntityReorderMap{kind, ranks});
         finalInput.destroyKinds = input.destroyKinds;
+        return finalInput;
+    }
 
+    // =================================================================
+    // UnstructuredMesh::buildReorderPlan
+    // =================================================================
+
+    ReorderPlan UnstructuredMesh::buildReorderPlan(const ReorderInput &input)
+    {
+        auto reg = buildReorderRegistry(input.destroyKinds);
+        auto finalInput = resolveFollows(input, reg);
         return ReorderPlan::build(finalInput, reg, mpi);
     }
 
@@ -557,67 +499,8 @@ namespace DNDS::Geom
         // Step 1: Build registry (with destroy skip)
         auto reg = buildReorderRegistry(input.destroyKinds);
 
-        // Step 2: Build plan (with follows computed)
-        // We replicate the logic from buildReorderPlan but use the mutable registry
-        ReorderInput augmented = input;
-        std::unordered_set<EntityKind> explicitKinds;
-        for (auto &em : augmented.explicitMaps)
-            explicitKinds.insert(em.kind);
-
-        if (explicitKinds.count(EntityKind::Cell))
-        {
-            if (!explicitKinds.count(EntityKind::Node) && node2cell.father)
-                augmented.follows.push_back(
-                    FollowSpec{EntityKind::Node, EntityKind::Cell, Adj::Node2Cell});
-            if (!explicitKinds.count(EntityKind::Bnd) && bnd2cell.father)
-                augmented.follows.push_back(
-                    FollowSpec{EntityKind::Bnd, EntityKind::Cell, Adj::Bnd2Cell});
-        }
-
-        // Compute follows
-        std::unordered_map<EntityKind, std::vector<MPI_int>> allMaps;
-        for (auto &em : augmented.explicitMaps)
-            allMaps[em.kind] = em.targetRanks;
-
-        for (auto &spec : augmented.follows)
-        {
-            if (allMaps.count(spec.follower))
-                continue;
-            auto leaderIt = allMaps.find(spec.leader);
-            DNDS_assert(leaderIt != allMaps.end());
-
-            auto followerGM = reg.getGlobalMapping(spec.follower);
-            DNDS_assert(followerGM);
-            index nFollower = followerGM->RLengths()[mpi.rank];
-
-            std::vector<MPI_int> followMap;
-            if (spec.follower2leader == Adj::Node2Cell && node2cell.father)
-                followMap = ComputeFollowMapFromAdj(
-                    static_cast<const tAdjPair &>(node2cell),
-                    nFollower, reg.getGlobalMapping(spec.leader),
-                    leaderIt->second, mpi);
-            else if (spec.follower2leader == Adj::Bnd2Cell && bnd2cell.father)
-                followMap = ComputeFollowMapFromAdj(
-                    static_cast<const tAdj2Pair &>(bnd2cell),
-                    nFollower, reg.getGlobalMapping(spec.leader),
-                    leaderIt->second, mpi);
-            else if (spec.follower2leader == Adj::Node2Bnd && node2bnd.father)
-                followMap = ComputeFollowMapFromAdj(
-                    static_cast<const tAdjPair &>(node2bnd),
-                    nFollower, reg.getGlobalMapping(spec.leader),
-                    leaderIt->second, mpi);
-            else
-                DNDS_assert(false);
-
-            allMaps[spec.follower] = std::move(followMap);
-        }
-
-        // Build plan
-        ReorderInput finalInput;
-        for (auto &[kind, ranks] : allMaps)
-            finalInput.explicitMaps.push_back(EntityReorderMap{kind, ranks});
-        finalInput.destroyKinds = input.destroyKinds;
-
+        // Step 2: Resolve follows and build plan
+        auto finalInput = resolveFollows(input, reg);
         auto plan = ReorderPlan::build(finalInput, reg, mpi);
 
         // Step 3: Destroy adjacencies for destroyKinds
@@ -809,6 +692,8 @@ namespace DNDS::Geom
             this->AdjLocal2GlobalFacial();
         if (this->adjC2FState == Adj_PointToLocal && cell2face.isBuilt())
             this->AdjLocal2GlobalC2F();
+        if (this->adjC2CFaceState == Adj_PointToLocal && cell2cellFace.isBuilt())
+            this->AdjLocal2GlobalC2CFace();
         if (this->adjN2CBState == Adj_PointToLocal && node2cell.isBuilt())
             this->AdjLocal2GlobalN2CB();
         this->AdjLocal2GlobalPrimary();
@@ -858,6 +743,8 @@ namespace DNDS::Geom
             addCellRefs(node2cell, NumNode());
         if (face2cell.father)
             addCellRefs(face2cell, NumFace());
+        if (cell2cellFace.father)
+            addCellRefs(cell2cellFace, NumCell());
 
         std::vector<index> pullVec(cellPullSet.begin(), cellPullSet.end());
         auto cellLookup = cellTransfer.buildLookup(pullVec, mpi);
@@ -880,6 +767,8 @@ namespace DNDS::Geom
             remapCellEntries(node2cell, NumNode());
         if (face2cell.father)
             remapCellEntries(face2cell, NumFace());
+        if (cell2cellFace.father)
+            remapCellEntries(cell2cellFace, NumCell());
 
         // --- RELOCATE: permute cell2xxx rows ---
         cellTransfer.transferRows(cell2node, mpi);
@@ -888,6 +777,8 @@ namespace DNDS::Geom
         cellTransfer.transferRows(cell2cellOrig, mpi);
         if (cell2face.father)
             cellTransfer.transferRows(cell2face, mpi);
+        if (cell2cellFace.father)
+            cellTransfer.transferRows(cell2cellFace, mpi);
         if (isPeriodic && cell2nodePbi.father)
             cellTransfer.transferRows(cell2nodePbi, mpi);
 
@@ -940,6 +831,8 @@ namespace DNDS::Geom
             borrowAndPull(cellElemInfo);
             if (cell2face.father)
                 borrowAndPull(cell2face);
+            if (cell2cellFace.father)
+                borrowAndPull(cell2cellFace);
             if (isPeriodic && cell2nodePbi.father)
                 borrowAndPull(cell2nodePbi);
         }
@@ -949,6 +842,8 @@ namespace DNDS::Geom
             auto cellGhostMap = cell2node.trans.pLGhostMapping;
             cell2cell.idx.wireTargetMapping(cellGhostMap);
             bnd2cell.idx.wireTargetMapping(cellGhostMap);
+            if (cell2cellFace.father && cell2cellFace.idx.isWired())
+                cell2cellFace.idx.wireTargetMapping(cellGhostMap);
             if (node2cell.father && node2cell.idx.isWired())
                 node2cell.idx.wireTargetMapping(cellGhostMap);
             if (face2cell.father && face2cell.idx.isWired())
@@ -960,6 +855,8 @@ namespace DNDS::Geom
             face2cell.trans.pullOnce();
         if (node2cell.father && node2cell.trans.pLGhostMapping)
             node2cell.trans.pullOnce();
+        DNDS_check_throw_info(bnd2cell.father && bnd2cell.trans.pLGhostMapping,
+                              "ReorderLocalCells: bnd2cell must have ghost mapping for pull");
         bnd2cell.trans.pullOnce();
 
         // --- Convert back to local ---
@@ -967,6 +864,8 @@ namespace DNDS::Geom
             this->AdjGlobal2LocalFacial();
         if (this->adjC2FState == Adj_PointToGlobal && cell2face.isBuilt())
             this->AdjGlobal2LocalC2F();
+        if (this->adjC2CFaceState == Adj_PointToGlobal && cell2cellFace.isBuilt())
+            this->AdjGlobal2LocalC2CFace();
         if (this->adjN2CBState == Adj_PointToGlobal && node2cell.isBuilt())
             this->AdjGlobal2LocalN2CB();
         this->AdjGlobal2LocalPrimary();

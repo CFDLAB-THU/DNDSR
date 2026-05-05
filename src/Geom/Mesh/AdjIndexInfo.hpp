@@ -305,13 +305,25 @@ namespace DNDS::Geom
             idx.bootstrapToLocalOMP(mapping, *this, this->Size());
         }
 
-        // State queries (delegate to idx)
+        // State queries (delegate to idx, with data-presence checks)
         MeshAdjState state() const { return idx.state(); }
         bool isLocal() const { return idx.isLocal(); }
         bool isGlobal() const { return idx.isGlobal(); }
-        bool isBuilt() const { return idx.isBuilt(); }
+        /// Whether this adjacency is built and has live data.
+        /// Unlike AdjIndexInfo::isBuilt(), this also checks that the
+        /// father array is non-null, catching stale states after reset.
+        bool isBuilt() const { return this->father && idx.isBuilt(); }
         bool isWired() const { return idx.isWired(); }
         const t_pLGhostMapping &mapping() const { return idx.mapping(); }
+
+        /// Tear down both the array data and the per-adj state atomically.
+        /// After this call, isBuilt() returns false.
+        void reset()
+        {
+            this->father.reset();
+            this->son.reset();
+            idx = AdjIndexInfo{};
+        }
 
         // =============================================================
         // Device views

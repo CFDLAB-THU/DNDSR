@@ -1,5 +1,9 @@
 # DNDSR Ideas {#ideas}
 
+**Status:** Historical brainstorming document (circa 2023–2024). Many items
+have been implemented; remaining open items may be out of date. For current
+active tasks, see @ref todo_list.
+
 ## Next Step:
 
 - [x] wrap mesh for better access

@@ -334,11 +334,11 @@ mpirun -np 4 ./build/test/cpp/dnds_test_mpi
 Available test executables: `dnds_test_array`, `dnds_test_mpi`,
 `dnds_test_array_transformer`, `dnds_test_array_derived`,
 `dnds_test_array_dof`, `dnds_test_index_mapping`,
-`dnds_test_serializer`.
+`dnds_test_serializer`, `dnds_test_permutation_transfer`.
 
 ### Python Tests
 
-Python tests use pytest and live under `test/`.  The root
+Python tests use pytest with pytest-mpi and pytest-timeout, and live under `test/`.  The root
 `test/conftest.py` adds `python/` to `sys.path` so tests work with
 both `PYTHONPATH=python` and `pip install -e .`.
 

@@ -1,6 +1,8 @@
-# Distributed Entity Reordering — Design Document (v2)
+# Distributed Entity Reordering — Design Document (v2) {#distributed_reorder_design}
 
-> **Status:** Detailed design, not yet implemented.
+> **Status:** Implemented (Phases 1–4 complete). See
+> [Implementation Notes](#implementation-notes) for divergences from the
+> original design pseudocode.
 >
 > **Supersedes:** The original v1 design (same file, git history).
 > v2 adds: placement-follow semantics, automatic adj conversion rules
@@ -8,7 +10,17 @@
 > companion propagation, and full integration with `AdjPairTracked` /
 > `fillRegistry` / checked-wrapper infrastructure.
 >
-> **Last updated:** 2026-04-28.
+> **Last updated:** 2026-05-05.
+
+**TL;DR:** When mesh entities are reordered (local permutation for cache
+locality, or cross-rank redistribution after partitioning), every adjacency
+array must be updated: entries pointing to reordered entities are remapped to
+new global indices, and rows belonging to reordered entities are relocated.
+The framework classifies each adjacency into one of five actions (`SKIP`,
+`RELOCATE`, `REMAP`, `RELOCATE_REMAP`, `SELF`), builds `PermutationTransfer`
+objects for both local and distributed cases, and handles companion arrays
+(solution DOFs, element info) via a callback-based registry. Solver code can
+register its own arrays so they participate in the same reorder operation.
 
 ## Table of Contents
 
@@ -25,6 +37,7 @@
 11. [Concrete Use Cases](#concrete-use-cases)
 12. [Implementation Plan](#implementation-plan)
 13. [Appendix: Re-evaluation Notes (v1)](#appendix-re-evaluation-notes-v1)
+14. [Implementation Notes](#implementation-notes)
 
 ---
 
@@ -1674,3 +1687,65 @@ split, templatization, pybind11 bindings, file reorganization into
 - Arrays destroyed before reorder and reconstructed after:
   `cell2face`, `face2cell`, `face2node`, `face2bnd`, `bnd2face`,
   `faceElemInfo`, `face2nodePbi`, `cell2facePbi` (when periodic).
+
+---
+
+## Implementation Notes
+
+> **Added 2026-05-05** after full implementation of Phases 1–4.
+
+### Divergences from Design Pseudocode
+
+| Aspect | Design Doc | Actual Implementation | Rationale |
+|--------|-----------|----------------------|-----------|
+| `fromPartition` | Delegates to `Partition2LocalIdx` helper | Self-contained: inline prefix-sum + scatter loop | Avoids extra abstraction; single function is easier to reason about |
+| `transferRows` local path | Uses `PermuteRows` (in-place cycle-follow) | Deep-copies father, then writes permuted entries | Simpler for CSR arrays where in-place row reordering is complex; trades memory for correctness |
+| `buildLookup` | Takes `oldGlobalMapping` param | Builds mapping internally via `createFatherGlobalMapping` | Encapsulates ghost mapping construction; caller doesn't need to precompute |
+| Follow computation | Done inside `ReorderPlan::build` | Done in mesh wrapper (`buildReorderPlan`/`ReorderEntities`) before `build` | `ReorderPlan::build` has no access to adjacency data; follows require adj traversal |
+| `ReorderLocalCells` (Phase 3) | Full migration to `ReorderEntities` | Uses `PermutationTransfer::fromLocalPermutation` directly + manual remap | Partial migration only; avoids destroy/rebuild cycle for local-only case |
+| `ReadDistributed_Redistribute` (Phase 4) | Use `ReorderEntities` | Calls `ReorderEntities` with explicit `EntityReorderMap`s | Fully migrated as designed |
+
+### Key Architectural Observations
+
+1. **`ReorderPlan::build` ignores `input.follows`** — the `follows` field in
+   `ReorderInput` is consumed by the mesh wrapper to compute follow maps; by
+   the time `build` is called, all entities have explicit `EntityReorderMap`s.
+   The `follows` field on `ReorderInput` is effectively a mesh-wrapper-level
+   concept, not a plan-level concept.
+
+2. **`fromLocalPermutation` is NOT MPI-collective** — unlike `fromPartition`,
+   which uses `MPI_Allreduce` to detect all-local status and `Alltoall` for
+   distributed transfer, `fromLocalPermutation` performs zero MPI.
+
+3. **`ReorderLocalCells` vs `ReorderEntities`** — these have opposite
+   preconditions: `ReorderLocalCells` requires `Adj_PointToLocal` (converts
+   to global internally), while `ReorderEntities` requires
+   `Adj_PointToGlobal`. This is because `ReorderLocalCells` is called after
+   the full mesh pipeline (faces built, ghosts attached), while
+   `ReorderEntities` is called during redistribution before faces exist.
+
+4. **Pull-set collection** — `buildReorderRegistry` collects pull sets (ghost
+   entries that reference reordered entities) by iterating ghost rows of
+   relevant adjacencies. These are passed to `buildLookup` for ghost mapping
+   reconstruction after the plan is applied.
+
+### Known Limitations
+
+- **`cell2cellFace` not handled by `ReorderLocalCells`** — the manual remap
+  block does not include `cell2cellFace`. An assertion should guard that it
+  is not built when entering this path.
+- **No periodic mesh test coverage** — the `isPeriodic` branches in
+  `buildReorderRegistry` and `ReorderEntities` are untested.
+- **No 3D or non-identity real-mesh reorder test** — all real-mesh tests use
+  `UniformSquare_10.cgns` (2D) with identity partitions.
+- **Code duplication** — ~80 lines of follow-computation logic are duplicated
+  between `buildReorderPlan` and `ReorderEntities`.
+
+### Recommended Next Steps
+
+1. Deduplicate follow logic into a shared helper.
+2. Add debug-mode permutation validation in `fromLocalPermutation`.
+3. Add non-identity, 3D, and periodic mesh reorder tests.
+4. Add external-companion participation test (solver arrays).
+5. Consider full `ReorderLocalCells` migration to `ReorderEntities` (would
+   unify preconditions but requires handling the faces-already-built case).
