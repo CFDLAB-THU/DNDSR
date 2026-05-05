@@ -21,7 +21,7 @@ cmake -B build -DDNDS_BUILD_TESTS=ON
 # Build all test executables at once
 cmake --build build -t dnds_unit_tests -j8
 
-# Run every registered test (serial + MPI np=1,2,4)
+# Run every registered test (serial + MPI np=1,2,4,8)
 ctest --test-dir build -R dnds_ --output-on-failure
 
 # Run a single test suite

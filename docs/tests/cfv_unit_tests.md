@@ -11,7 +11,7 @@ Tests for the Compact Finite Volume module (`src/CFV/`).  C++ tests use
 # Build all CFV C++ test executables
 cmake --build build -t cfv_unit_tests -j8
 
-# Run every CFV CTest (serial + MPI np=1,2,4)
+# Run every CFV CTest (serial + MPI np=1,2,4,8)
 ctest --test-dir build -R cfv_ --output-on-failure
 
 # Python tests (requires pybind11 .so to be installed first)
@@ -23,12 +23,16 @@ PYTHONPATH=python pytest test/CFV/ -v
 ## Target Summary
 
 | CMake target | CTest names | Source file | Type |
-|---|---|---|---|
+|---|---|---|---|---|
 | `cfv_test_limiters` | `cfv_limiters` | test_Limiters.cpp | Serial |
-| `cfv_test_reconstruction` | `cfv_reconstruction_np{1,2,4}` | test_Reconstruction.cpp | MPI |
-| `cfv_test_reconstruction3d` | `cfv_reconstruction3d_np{1,2,4}` | test_Reconstruction3D.cpp | MPI |
+| `cfv_test_reconstruction` | `cfv_reconstruction_np{1,2,4,8}` | test_Reconstruction.cpp | MPI |
+| `cfv_test_reconstruction3d` | `cfv_reconstruction3d_np{1,2,4,8}` | test_Reconstruction3D.cpp | MPI |
+| `cfv_test_device_transferable` | `cfv_device_transferable_np1` | test_DeviceTransferable.cu | MPI (CUDA) |
 | — | — | test_fv_correctness.py | pytest |
 | — | — | test_vr_correctness.py | pytest |
+| — | — | test_basic_fv.py | pytest |
+| — | — | test_basic_cfv.py | pytest |
+| — | — | test_cfv_dissdisp.py | pytest |
 
 ---
 
@@ -36,7 +40,7 @@ PYTHONPATH=python pytest test/CFV/ -v
 @see test_Limiters.cpp
 
 Serial tests for every standalone limiter function in `CFV/Limiters.hpp`.
-36 test cases, 306 assertions.  No mesh or MPI required — pure Eigen array
+36 test cases.  No mesh or MPI required — pure Eigen array
 computations.
 
 ### PolynomialSquaredNorm
@@ -127,7 +131,7 @@ Weighted squared norms used internally by polynomial-aware limiters.
 ## Variational Reconstruction 2D (test_Reconstruction.cpp) {#cfv_test_reconstruction}
 @see test_Reconstruction.cpp
 
-MPI tests (np=1,2,4) exercising the full VR pipeline for scalar fields on
+MPI tests (np=1,2,4,8) exercising the full VR pipeline for scalar fields on
 2D meshes.  Uses Jacobi iteration (SOR disabled) for MPI-deterministic
 golden values.
 
@@ -207,7 +211,7 @@ field is scalar (nVars=1).
 ## Variational Reconstruction 3D (test_Reconstruction3D.cpp) {#cfv_test_reconstruction3d}
 @see test_Reconstruction3D.cpp
 
-MPI tests (np=1,2,4) exercising the 3D VR template instantiation.
+MPI tests (np=1,2,4,8) exercising the 3D VR template instantiation.
 Uses `Uniform32_3D_Periodic.cgns` (32768 hex cells on the unit cube).
 7 test cases.
 

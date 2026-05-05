@@ -32,7 +32,7 @@ Every new communicated field forces an edit to the object model.
 </div>
 <div>
 
-**DNDSR thesis**
+**DNDS: Distributed Numerical Data Structure**
 
 > *"DNDS is dedicated to providing c-like random-access arrays without the concern of MPI communication. Higher-level abstraction is left for the caller."*
 > — `docs/architecture/Paradigm.md:161`
@@ -112,11 +112,13 @@ Shared code path, eight binaries.
 
 ### Tests
 
-- **25+** C++ doctest executables
+- **82** CTest registrations (29 executables)
 - **np ∈ {1, 2, 4, 8}** for every MPI-aware test
-- **~32** Python FV/VR regression tests
+- **~600** doctest test cases total
+  - 249 DNDS · 193 Geom · 62 CFV
+  - 62 Euler · 29 Solver
+- **58** Python pytest functions (DNDS, CFV)
 - **Metis seed = 42** → deterministic golden values
-- 43 CFV · 59 Euler · 24 Solver assertions
 
 </div>
 <div>

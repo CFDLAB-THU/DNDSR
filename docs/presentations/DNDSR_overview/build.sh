@@ -62,6 +62,7 @@ DO_HTML=0
 DO_RES=1
 DO_MERMAID=1
 VERBOSE=0
+LANG="en"
 
 for arg in "$@"; do
     case "$arg" in
@@ -70,8 +71,17 @@ for arg in "$@"; do
         --no-res)     DO_RES=0 ;;
         --no-mermaid) DO_MERMAID=0 ;;
         --verbose|-v) VERBOSE=1 ;;
+        --lang)
+            echo "ERROR: --lang requires a value (en or zh)" >&2
+            exit 2
+            ;;
+        --lang=*)
+            LANG="${arg#*=}"
+            ;;
         --help|-h)
             sed -n '2,46p' "$0"
+            echo ""
+            echo "  --lang=zh    Build Chinese edition (default: en)"
             exit 0
             ;;
         *)
@@ -81,11 +91,32 @@ for arg in "$@"; do
     esac
 done
 
+# Language-specific setup
+if [[ "$LANG" == "zh" ]]; then
+    FRONTMATTER="${SRC_DIR}/00_frontmatter_zh.md"
+    PARTS_DIR="${SRC_DIR}/parts/zh"
+    LANG_SUFFIX="_zh"
+    MERMAID_PREFIX="mermaid"
+    MERMAID_OUTDIR="${RES_DIR}/zh"
+    MERMAID_IMG_PREFIX="res/zh"
+else
+    FRONTMATTER="${SRC_DIR}/00_frontmatter.md"
+    PARTS_DIR="${SRC_DIR}/parts"
+    LANG_SUFFIX=""
+    MERMAID_PREFIX="mermaid"
+    MERMAID_OUTDIR="${RES_DIR}"
+    MERMAID_IMG_PREFIX="res"
+fi
+
+OUT_MD="${OUT_DIR}/DNDSR_overview${LANG_SUFFIX}.md"
+OUT_PDF="${OUT_DIR}/DNDSR_overview${LANG_SUFFIX}.pdf"
+OUT_HTML="${OUT_DIR}/DNDSR_overview${LANG_SUFFIX}.html"
+
 log() { [[ "$VERBOSE" == "1" ]] && echo "  $*" >&2 || true; }
 
 # ---------------------------------------------------------------- sanity
-if [[ ! -f "${SRC_DIR}/00_frontmatter.md" ]]; then
-    echo "ERROR: missing ${SRC_DIR}/00_frontmatter.md" >&2
+if [[ ! -f "${FRONTMATTER}" ]]; then
+    echo "ERROR: missing ${FRONTMATTER}" >&2
     exit 1
 fi
 if [[ ! -d "${PARTS_DIR}" ]]; then
@@ -163,7 +194,7 @@ echo "Assembling ${#PARTS[@]} parts into ${OUT_MD}"
 
 {
     # 1. Frontmatter + CSS (ends with </style>).
-    cat "${SRC_DIR}/00_frontmatter.md"
+    cat "${FRONTMATTER}"
 
     # 2. Each part. Every part is expected to begin with a slide
     #    (either "---\n<!-- _class: chapter -->" for chapter cards, or a
@@ -216,12 +247,12 @@ if [[ "$DO_MERMAID" == "1" ]]; then
         fi
         log "using chrome: $chrome_path"
 
-        echo "Rendering Mermaid diagrams → ${RES_DIR}/"
+        echo "Rendering Mermaid diagrams → ${MERMAID_OUTDIR}/"
         python3 "${SRC_DIR}/render_mermaid.py" \
             --input  "${OUT_MD}" \
-            --outdir "${RES_DIR}" \
-            --prefix mermaid \
-            --image-path-prefix res \
+            --outdir "${MERMAID_OUTDIR}" \
+            --prefix "${MERMAID_PREFIX}" \
+            --image-path-prefix "${MERMAID_IMG_PREFIX}" \
             --chrome "${chrome_path}"
     fi
 fi

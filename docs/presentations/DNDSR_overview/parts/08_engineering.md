@@ -13,17 +13,17 @@
 
 ## Test suite at a glance
 
-| Module  | C++ executables | C++ assertions | Python tests | np values         |
-|---------|------------------|----------------|--------------|-------------------|
-| DNDS    | 7                | ~400           | ~10          | 1, 2, 4, 8        |
-| Geom    | 8                | —              | 1            | 1, 2, 4, 8        |
-| CFV     | 3 (+1 CUDA)      | ~340 (43 tests)| 32           | 1, 2, 4           |
-| Euler   | 4                | ~310 (59 tests)| —            | 1, 2, 4           |
-| Solver  | 4                | ~65 (24 tests) | —            | 1                 |
+| Module  | C++ executables | test cases | Python tests | np values         |
+|---------|------------------|------------|--------------|-------------------|
+| DNDS    | 8                | 249        | 9            | 1, 2, 4, 8        |
+| Geom    | 9                | 193        | 2            | 1, 2, 4, 8        |
+| CFV     | 4                | 67         | 43           | 1, 2, 4, 8        |
+| Euler   | 4                | 62         | 4            | 1, 2, 4, 8        |
+| Solver  | 4                | 29         | —            | 1                  |
 
 <div class="callout">
 
-**Totals.** 25+ C++ executables, ~1100 assertions, ~32 Python tests. All MPI-aware tests are CTest-registered at each np value. Serial tests have a 60–120 s timeout; parallel tests 120–600 s depending on module.
+**Totals.** 29 C++ executables, 600 test cases, 58 Python tests across 82 CTest registrations. All MPI-aware tests are CTest-registered at each np value. Serial tests have a 60–120 s timeout; parallel tests 120–600 s depending on module.
 
 </div>
 
@@ -36,7 +36,7 @@ ctest --test-dir build --output-on-failure
 
 ---
 <!-- _footer: "test/cpp/DNDS/ · test/cpp/Geom/" -->
-<!-- _class: denser -->
+<!-- _class: tight -->
 
 ## C++ test catalogue (1 / 2)
 
@@ -52,6 +52,7 @@ ctest --test-dir build --output-on-failure
 - `test_array_dof` — vector-space ops, norms, AXPY
 - `test_index_mapping` — global ↔ local, EvenSplit
 - `test_serializer` — H5 + JSON, redistribute
+- `test_permutation_transfer` — MPL renumber compression / decompression
 
 ### Geom
 
@@ -63,6 +64,7 @@ ctest --test-dir build --output-on-failure
 - `test_mesh_connectivity` — Inverse / Compose DSL
 - `test_mesh_connectivity_ghost` — GhostSpec BFS
 - `test_mesh_connectivity_interpolate` — face interp
+- `test_mesh_reorder` — reverse Cuthill-McKee / Hilbert ordering
 
 </div>
 <div>
@@ -172,7 +174,7 @@ So the first run of a new test is a finite/non-negative sanity check, and the de
 
 ---
 <!-- _footer: "docs/tests/overview.md:104-124" -->
-<!-- _class: dense -->
+<!-- _class: tight -->
 
 ## Python tests — pytest + pytest-mpi
 
@@ -181,11 +183,13 @@ So the first run of a new test is a finite/non-negative sanity check, and the de
 
 ### What's covered
 
-- `test/DNDS/test_basic.py` — import chain, MPIInfo, small array round-trip.
-- `test/Geom/test_read_mesh.py` — CGNS read, elevation, bisection.
-- `test/CFV/test_fv_correctness.py` — cell volume / face area / jacobian correctness on wall meshes (~32 tests).
-- `test/CFV/test_reconstruction.py` — VR order convergence on sin(x)sin(y).
-- `test/EulerP/test_eulerP_pipeline.py` — host + CUDA round-trip.
+- `test/DNDS/test_basic.py` (9 tests) — import chain, MPIInfo, small array round-trip.
+- `test/Geom/test_basic_geom.py` (2 tests) — CGNS read, elevation, bisection.
+- `test/CFV/test_fv_correctness.py` (16 tests) — cell volume / face area / jacobian correctness on wall meshes.
+- `test/CFV/test_vr_correctness.py` (16 tests) — VR order convergence on sin(x)sin(y).
+- `test/CFV/test_basic_fv.py` + `test_basic_cfv.py` + `test_cfv_dissdisp.py` (11 tests) — FV/CFV smoke tests and dissipation-dispersion analysis.
+- `test/EulerP/test_basic_eulerP.py` (1 test) — host + CUDA round-trip.
+- `test/Euler/test_restart_redistribute.py` (3 tests) — solver restart with MPI repartition.
 
 ### Running
 

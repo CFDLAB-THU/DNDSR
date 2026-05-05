@@ -13,9 +13,6 @@
 
 ## Compact Finite Volume — the reconstruction
 
-<div class="cols-60-40">
-<div>
-
 Reconstruct a piecewise polynomial from cell means with a **zero-mean basis** per cell:
 
 $$
@@ -38,17 +35,7 @@ maxNDiff       = (dim == 2) ? 10 : 20;
 maxNeighbour   = 7;
 ```
 
-</div>
-<div>
-
-<img src="res/PyramidShow.png" alt="pyramid shape functions" style="width:100%;"/>
-
-<br>
-
 The stencil is **one ring of node-neighbors** — which is exactly what `BuildGhostPrimary(1)` provides by default. Wider stencils (`nGhostLayers ≥ 2`) are available for higher-order variants.
-
-</div>
-</div>
 
 ---
 <!-- _footer: "docs/theory/Variational_Reconstruction.md:33-106" -->

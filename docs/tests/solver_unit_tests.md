@@ -33,7 +33,7 @@ ctest --test-dir build -R solver_ode --output-on-failure
 ## ODE Time Integrators (test_ODE.cpp) {#solver_test_ode}
 @see test_ODE.cpp
 
-13 test cases, 25 assertions.  Tests use the harmonic oscillator
+13 test cases.  Tests use the harmonic oscillator
 
     du/dt = A * u,  A = [[0, -w], [w, 0]],  u(0) = [1, 0]
 
@@ -106,7 +106,7 @@ methods in the Hermite-Multistep family).
 ## Iterative Linear Solvers (test_Linear.cpp) {#solver_test_linear}
 @see test_Linear.cpp
 
-4 test cases, 8 assertions.  Tests use a thin `DVec` wrapper around
+4 test cases.  Tests use a thin `DVec` wrapper around
 `Eigen::VectorXd` satisfying the TDATA interface.
 
 ### GMRES
@@ -128,7 +128,7 @@ methods in the Hermite-Multistep family).
 ## Block-Sparse Direct Solvers (test_Direct.cpp) {#solver_test_direct}
 @see test_Direct.cpp
 
-7 test cases, 26 assertions.  Uses a 2D periodic 4x4 Laplacian with 2x2
+7 test cases.  Uses a 2D periodic 4x4 Laplacian with 2x2
 blocks (16 cells, 5-point stencil with wrap-around).
 
 ### Problem Setup
@@ -166,7 +166,7 @@ adjacency entries carry -I blocks.
 ## Scalar Utilities (test_Scalar.cpp) {#solver_test_scalar}
 @see test_Scalar.cpp
 
-5 test cases, 6 assertions.  Tests `BisectSolveLower` from
+5 test cases.  Tests `BisectSolveLower` from
 `Solver/Scalar.hpp`, a bisection root-finder for monotonic functions.
 
 | Test case | Description |

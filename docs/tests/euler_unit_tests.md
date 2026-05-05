@@ -11,7 +11,7 @@ All C++ tests use [doctest](https://github.com/doctest/doctest).
 # Build all Euler C++ test executables
 cmake --build build -t euler_unit_tests -j8
 
-# Run every Euler CTest (serial + MPI np=1,2,4)
+# Run every Euler CTest (serial + MPI np=1,2,4,8)
 ctest --test-dir build -R euler_ --output-on-failure
 
 # Run a single test
@@ -33,7 +33,7 @@ ctest --test-dir build -R euler_gas_thermo --output-on-failure
 @see test_GasThermo.cpp
 
 Serial tests for ideal-gas thermodynamics and Euler eigenvector routines
-in `Gas.hpp`.  22 test cases, 93 assertions.  No MPI or mesh; all
+in `Gas.hpp`.  22 test cases.  No MPI or mesh; all
 functions are pure.
 
 ### IdealGasThermal
@@ -112,7 +112,7 @@ eigenvectors.
 @see test_RiemannSolvers.cpp
 
 Serial tests for Roe, HLLC, and HLLEP Riemann solvers in `Gas.hpp`.
-11 test cases, 147 assertions.
+11 test cases.
 
 ### Consistency (F(U,U) = exact flux)
 
@@ -161,7 +161,7 @@ Serial tests for Roe, HLLC, and HLLEP Riemann solvers in `Gas.hpp`.
 @see test_RANS.cpp
 
 Serial tests for k-omega Wilcox 2006, k-omega SST, and Realizable k-epsilon
-model functions in `RANS_ke.hpp`.  26 test cases, 48 assertions.
+model functions in `RANS_ke.hpp`.  26 test cases.
 
 The SA model is excluded because `GetSource_SA` references
 `EulerEvaluator::settings` (evaluator context) and cannot be tested

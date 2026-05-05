@@ -231,7 +231,7 @@ trans.clearMPITypes();
 ## Father / son addressing
 
 ```
- index:   0 .......... fatherSize-1 | fatherSize ...... fatherSize+sonSize-1
+ index:   0 .......... fatherSize-1  | fatherSize ...... fatherSize+sonSize-1
           └───── owned (father) ─────┘ └─ ghost (son, copies from other ranks) ─┘
 
   • father owns data — writes are legal
