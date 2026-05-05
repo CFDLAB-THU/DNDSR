@@ -8,13 +8,23 @@ for Marp decks where the original authoring style soft-wrapped prose at
 render time, single-line paragraphs are easier to edit, diff, and do
 not risk downstream tools inserting accidental `<br>` on word breaks.
 
+Scope:
+
+    This script only unwraps ORDINARY prose paragraphs (and list-item
+    continuations). Blockquotes (lines starting with `>`) are emitted
+    verbatim — each `>` line preserved as-is, never merged. Blockquotes
+    often carry deliberate authorial line structure (quote body vs.
+    attribution, multi-speaker exchanges, line-preserved poetry, etc.)
+    that a mechanical join would destroy. Merge blockquote lines by
+    hand if and when you want them joined.
+
 Preserves the following block types exactly as-is:
 
   - fenced code fences (``` ... ```)
   - indented code blocks (>= 4 spaces after a blank line)
   - HTML blocks opened at column 0 (<div>, <style>, <script>, <!-- -->,
     and similar); tracked with a simple tag-depth counter
-  - blockquotes (lines starting with `>`)
+  - blockquotes (lines starting with `>`) — emitted line-for-line
   - tables (lines containing `|` with a separator row)
   - horizontal rules and setext underlines (--- / ===)
   - ATX headings (# …)
@@ -206,48 +216,18 @@ def unwrap_text(text: str) -> str:
             continue
 
         # --- structural lines: emit verbatim ---
+        # Blockquote lines (`> ...`) are included here: the script
+        # deliberately does NOT merge them (see module docstring).
         if (
             ATX_HEADING_RE.match(line)
             or HR_RE.match(line)
             or SETEXT_UNDERLINE_RE.match(line)
             or TABLE_SEP_RE.match(line)
+            or BLOCKQUOTE_RE.match(line)
             or is_blank(line)
         ):
             out.append(line)
             i += 1
-            continue
-
-        # --- blockquotes: merge consecutive `>` lines into one ---
-        # Each soft-wrapped continuation inside a blockquote is emitted
-        # by CommonMark as a separate text line, producing visible line
-        # breaks in some renderers (and always brittle wrapping). Join
-        # them so one blockquote paragraph = one source line.
-        if BLOCKQUOTE_RE.match(line):
-            # Extract the `>` prefix (preserving leading spaces + > + space)
-            m_q = re.match(r"^(\s{0,3}>\s?)", line)
-            prefix = m_q.group(1) if m_q else "> "
-            buf = [line[len(prefix):].rstrip()]
-            i += 1
-            while i < n:
-                nxt = lines[i]
-                if is_blank(nxt):
-                    break
-                if not BLOCKQUOTE_RE.match(nxt):
-                    break
-                # Structural starts inside a blockquote terminate the
-                # current paragraph (heading, hr, list item).
-                body = re.sub(r"^\s{0,3}>\s?", "", nxt)
-                if (
-                    ATX_HEADING_RE.match(body)
-                    or HR_RE.match(body)
-                    or LIST_ITEM_RE.match(body)
-                    or FENCE_RE.match(body)
-                ):
-                    break
-                buf.append(body.rstrip())
-                i += 1
-            out.append(prefix + " ".join(s.strip() if k > 0 else s
-                                         for k, s in enumerate(buf)))
             continue
 
         # --- table rows (contain pipes at depth 0) ---

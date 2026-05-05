@@ -66,9 +66,16 @@ Each has a `RANSModelTraits<>` specialization with its own wall BC, source terms
 
 ---
 <!-- _footer: "src/Euler/EulerSolver.hpp:73-148" -->
-<!-- _class: dense -->
+<!-- _class: tight -->
 
 ## `EulerSolver` — the top-level conductor
+
+The Euler module extends CFV's generic `tUDof`/`tURec` aliases with
+solver-specific array types that add higher-level operators
+(initialization, boundary anchors, positivity-preserving limiters):
+
+- `ArrayDOFV<N>` inherits from `CFV::tUDof<N>` (= `ArrayDof<N,1>`).
+- `ArrayRECV<N>` inherits from `CFV::tURec<N>` (= `ArrayDof<DynamicSize,N>`).
 
 ```cpp
 template <EulerModel model>

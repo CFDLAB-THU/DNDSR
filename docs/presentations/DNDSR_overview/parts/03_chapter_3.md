@@ -339,10 +339,10 @@ bool IsO2() const;
 
 **Per element type** (see `docs/elements/*_nodes.png`):
 
-- Tri3 → Tri6 → 4× Tri3 (bisect).
-- Quad4 → Quad9 → 4× Quad4.
-- Hex8 → Hex27 → 8× Hex8.
-- Prism6 / Pyramid5 elevated + bisected analogously.
+- Tri3 **→** (elevate) **→** Tri6 **→** (bisect) **→** 4× Tri3.
+- Quad4 **→** (elevate) **→** Quad9 **→** (bisect) **→** 4× Quad4.
+- Hex8 **→** (elevate) **→** Hex27 **→** (bisect) **→** 8× Hex8.
+- Prism6 / Pyramid5 — elevated + bisected analogously.
 
 </div>
 </div>
@@ -405,16 +405,16 @@ Distance is also computed *per face* for use in the SST blending functions.
 static const index Offset_Parts     = -1;
 static const index Offset_One       = -2;
 static const index Offset_EvenSplit = -3;
-static const index Offset_Unknown   = UnInit;
+static const index Offset_Unknown   = UnInitIndex;
 ```
 
 | Mode              | Meaning                           |
 |-------------------|-----------------------------------|
-| `Unknown`         | auto-detect from `rank_offsets`   |
-| `Parts`           | `MPI_Scan` over local sizes       |
-| `One`             | rank 0 owns the whole dataset     |
-| `EvenSplit`       | read-time split into `~N/np`      |
-| `isDist()`        | explicit `{localSize, globalStart}` |
+| `Unknown`         | Auto-detect from `rank_offsets`                    |
+| `Parts`           | `MPI_Scan` over local sizes                        |
+| `One`             | Rank 0 owns the whole dataset                      |
+| `EvenSplit`       | Read-time split into `~N/np`                       |
+| (explicit)        | `isDist()` → `true`; `{localSize, globalStart}`    |
 
 </div>
 <div>

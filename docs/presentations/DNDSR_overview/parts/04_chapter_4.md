@@ -214,6 +214,7 @@ enum RiemannSolverType {
 | `Roe_M6` | H-correction only |
 | `Roe_M7` | Harten–Yee only, no H-correction |
 | `Roe_M8` | H-correction + Harten–Yee |
+| `Roe_M9` | Reserved (eigScheme 9, currently asserts false) |
 | `HLLC`   | Harten–Lax–van Leer–Contact |
 | `HLLEP`  | HLLE with pressure fix |
 | `HLLEP_V1` | HLLEP variant 1 |
@@ -391,7 +392,8 @@ class ImplicitDualTimeStep {
 | `103`     | `ImplicitEulerDualTimeStep`                       | Backward Euler        |
 | `0`       | `ImplicitBDFDualTimeStep`                         | BDF2 / BDF-k          |
 | —         | `ImplicitVBDFDualTimeStep`                        | Variable-step BDF-k   |
-| `1 / 101` | `ImplicitSDIRK4DualTimeStep` (`schemeCode` 0…4)   | SDIRK-4 · ESDIRK2/3 · trapezoid |
+| `1`       | `ImplicitSDIRK4DualTimeStep` (`schemeCode` 0…4)   | SDIRK-4 · ESDIRK2/3 · Trapezoidal |
+| `101`     | (alias for `1`)                                    | (backward-compat `odeCode`)      |
 | **`401`** | `ImplicitHermite3SimpleJacobianDualStep`          | **HM3 + p-Multigrid** |
 | `2`       | `ExplicitSSPRK3TimeStepAsImplicitDualTimeStep`    | SSP-RK3               |
 
@@ -437,7 +439,7 @@ The `upos=2` argument tells the evaluator to evaluate at a **lower polynomial or
 - `schemeCode = 0` — Nørsett 3-stage SDIRK-4
 - `schemeCode = 1` — 6-stage ARK-family SDIRK
 - `schemeCode = 2` — Kennedy–Carpenter ESDIRK3
-- `schemeCode = 3` — Trapezoid
+- `schemeCode = 3` — Trapezoidal
 - `schemeCode = 4` — ESDIRK2, `γ = 1 − √2/2`
 
 </div>

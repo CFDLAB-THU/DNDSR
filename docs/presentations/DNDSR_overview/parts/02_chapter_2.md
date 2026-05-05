@@ -108,9 +108,9 @@ enum DataLayout {
 |------------------|-----------------|---------------------|-----------------------------------------------------|
 | `>= 0`           | —               | `TABLE_StaticFixed` | Cell volume (1 real), Euler state (5 reals)         |
 | `DynamicSize`    | —               | `TABLE_Fixed`       | VR coefficients (order decided at runtime)          |
-| `NonUniformSize` | `>= 0`          | `TABLE_StaticMax`   | `cell2node` (tri=3, quad=4, compile-time max)       |
+| `NonUniformSize` | `>= 0`          | `TABLE_StaticMax`   | Per-face node counts for a single element type    |
 | `NonUniformSize` | `DynamicSize`   | `TABLE_Max`         | Padded variable rows, runtime max                   |
-| `NonUniformSize` | `NonUniformSize`| `CSR`               | Truly sparse rows (wide-stencil adjacency)          |
+| `NonUniformSize` | `NonUniformSize`| `CSR`               | `cell2node`, `cell2cell`, wide-stencil adjacency   |
 
 <div class="tiny">`rowsize = int32_t`. Sentinels: `DynamicSize = -1`, `NonUniformSize = -2`.
 Alignment stub exists but only `NoAlign` is implemented today.</div>

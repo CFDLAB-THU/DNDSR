@@ -11,7 +11,7 @@
 ---
 <!-- _footer: "docs/architecture/Serialization.md:11-172" -->
 
-## Serialization — a five-layer cake
+## Serialization layer stack
 
 | Layer                  | Responsibility                                              |
 |------------------------|-------------------------------------------------------------|
