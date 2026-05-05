@@ -9,7 +9,7 @@
 #   1. pip packages        — keyed by docs/sphinx/requirements.txt hash
 #   2. npm global packages — keyed by cache version (marp + mermaid)
 #   3. Header-only libs    — keyed by tarball URL (changes ~never)
-#   4. cfd_externals build — keyed by build script + submodule commit
+#   4. cfd_externals build — keyed by submodule commit SHA
 #
 # Build dependencies (beyond C++ toolchain):
 #   - Doxygen + Graphviz                      (C++ API reference)
@@ -75,7 +75,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Cache npm global packages
         id: cache-npm
@@ -194,12 +194,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: external/cfd_externals/install
-          key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('external/cfd_externals/cfd_externals_build.py') }}
+          key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
 
       - name: Build cfd_externals
         if: steps.cache-cfd-ext.outputs.cache-hit != 'true'
-        working-directory: external/cfd_externals
-        run: CC=mpicc CXX=mpicxx python cfd_externals_build.py
+        run: |
+          # Double-check: skip if install already restored via prefix match
+          if [ -f external/cfd_externals/install/lib/libcgns.a ]; then
+            echo "cfd_externals install present (cache prefix match), skipping build"
+            exit 0
+          fi
+          rm -rf external/cfd_externals
+          git submodule update --init --recursive --depth=1
+          cd external/cfd_externals
+          CC=mpicc CXX=mpicxx python3 cfd_externals_build.py
 
       # ------------------------------------------------------------------
       # 7. CMake configure
