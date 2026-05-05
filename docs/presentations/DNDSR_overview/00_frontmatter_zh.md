@@ -4,7 +4,7 @@ theme: default
 paginate: true
 math: mathjax
 size: 16:9
-header: "DNDSR — CFD 研究代码"
+header: "DNDSR — CFD 研究框架"
 footer: "v0.2.0 · 清华大学 CFD 实验室"
 lang: zh-CN
 ---
