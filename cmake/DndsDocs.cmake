@@ -191,6 +191,8 @@ if(MARP_EXECUTABLE)
         set(_deck_build "${PROJECT_SOURCE_DIR}/docs/presentations/${_deck}/build.sh")
         set(_deck_out_html "${PROJECT_SOURCE_DIR}/docs/presentations/${_deck}.html")
         set(_deck_out_pdf  "${PROJECT_SOURCE_DIR}/docs/presentations/${_deck}.pdf")
+        set(_deck_out_html_zh "${PROJECT_SOURCE_DIR}/docs/presentations/${_deck}_zh.html")
+        set(_deck_out_pdf_zh  "${PROJECT_SOURCE_DIR}/docs/presentations/${_deck}_zh.pdf")
 
         file(GLOB_RECURSE _deck_deps CONFIGURE_DEPENDS
             "${PROJECT_SOURCE_DIR}/docs/presentations/${_deck}/*.md"
@@ -200,13 +202,16 @@ if(MARP_EXECUTABLE)
 
         add_custom_command(
             OUTPUT "${_deck_out_html}" "${_deck_out_pdf}"
+                   "${_deck_out_html_zh}" "${_deck_out_pdf_zh}"
             COMMAND bash "${_deck_build}" --html --pdf
+            COMMAND bash "${_deck_build}" --lang=zh --html --pdf
             DEPENDS ${_deck_deps}
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
-            COMMENT "Marp: rendering ${_deck} (HTML + PDF)"
+            COMMENT "Marp: rendering ${_deck} (EN + ZH, HTML + PDF)"
             VERBATIM
         )
-        list(APPEND _SLIDE_OUTPUTS "${_deck_out_html}" "${_deck_out_pdf}")
+        list(APPEND _SLIDE_OUTPUTS "${_deck_out_html}" "${_deck_out_pdf}"
+             "${_deck_out_html_zh}" "${_deck_out_pdf_zh}")
     endforeach()
 
     # After all decks are rendered, stage them into DOCS_PRESENTATIONS_DIR
@@ -220,6 +225,12 @@ if(MARP_EXECUTABLE)
         list(APPEND _SLIDE_COPY_COMMANDS COMMAND ${CMAKE_COMMAND} -E copy
             "${PROJECT_SOURCE_DIR}/docs/presentations/${_deck}.pdf"
             "${DOCS_PRESENTATIONS_DIR}/${_deck}.pdf")
+        list(APPEND _SLIDE_COPY_COMMANDS COMMAND ${CMAKE_COMMAND} -E copy
+            "${PROJECT_SOURCE_DIR}/docs/presentations/${_deck}_zh.html"
+            "${DOCS_PRESENTATIONS_DIR}/${_deck}_zh.html")
+        list(APPEND _SLIDE_COPY_COMMANDS COMMAND ${CMAKE_COMMAND} -E copy
+            "${PROJECT_SOURCE_DIR}/docs/presentations/${_deck}_zh.pdf"
+            "${DOCS_PRESENTATIONS_DIR}/${_deck}_zh.pdf")
     endforeach()
 
     add_custom_command(
