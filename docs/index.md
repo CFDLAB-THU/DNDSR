@@ -40,6 +40,9 @@ pytest test/DNDS/test_basic.py -v                      # Python
 cmake --build build -t serve-docs
 ```
 
+> **See also:** @ref building for the complete build guide (CMake presets,
+> Python editable installs, external dependencies, and common issues).
+
 ## C++ API (Doxygen)
 
 The Sphinx C++ API pages provide namespace outlines and key class documentation
@@ -59,10 +62,12 @@ Once built, the full Doxygen reference is at
 :caption: Contents
 
 /sphinx/guides
+/sphinx/solver-guide
 /sphinx/architecture
 /sphinx/theory
 /sphinx/tests
 /sphinx/dev
 /sphinx/api_cpp
 /sphinx/api_python
+/sphinx/presentations
 ```

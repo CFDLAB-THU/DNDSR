@@ -558,6 +558,22 @@ namespace DNDS::Geom
          */
         ReorderPlan buildReorderPlan(const ReorderInput &input);
 
+        /**
+         * \brief Augment a ReorderInput with default follows and compute follow maps.
+         *
+         * When `input.follows` is empty and Cell is explicitly reordered,
+         * default follows (Node/Bnd follow Cell) are added automatically.
+         * Returns a finalised ReorderInput with all follows resolved to
+         * explicit maps (ready for ReorderPlan::build).
+         *
+         * \param input    Original input (may have empty follows).
+         * \param reg      Registry with global mappings and adj data.
+         * \return ReorderInput with all entity kinds as explicit maps.
+         */
+        ReorderInput resolveFollows(
+            const ReorderInput &input,
+            const ReorderRegistry &reg);
+
         // void ReorderCellLocal();
 
         /**

@@ -1,18 +1,33 @@
 # Python API Reference
 
-This section is auto-generated from the Python package `DNDSR` using
-`sphinx.ext.autodoc`. It documents both the pure-Python wrappers and
-the pybind11 extension modules (via their `.pyi` stub files).
+This section documents the `DNDSR` Python package, which wraps the C++ core
+via pybind11 and provides high-level utilities for mesh I/O and solver setup.
+
+The reference is generated from a combination of:
+- `.pyi` stub files (produced by `pybind11-stubgen` from the compiled modules)
+- Pure-Python wrapper docstrings
+- `sphinx.ext.autodoc` runtime introspection (when the package is importable)
 
 ```{note}
-Python autodoc requires the `DNDSR` package to be importable.
-Either install the package (`pip install -e .`) or set
-`PYTHONPATH` to the `python/` directory before building Sphinx.
-
-If the pybind11 `.so` files are not built, autodoc will still
-generate pages from the `.pyi` stubs, but runtime introspection
-will be unavailable.
+To build this reference with full autodoc support:
+1. Build and install the pybind11 modules:
+   `cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j32`
+   `cmake --install build --component py`
+2. Install the package: `pip install -e .`
+3. Build docs: `cmake --build build -t docs`
 ```
+
+## Overview by Module
+
+| Module | Purpose | Key Classes / Functions |
+|--------|---------|------------------------|
+| `DNDSR.DNDS` | MPI, arrays, serialization | `MPIInfo`, `Array`, `ArrayPair`, `SerializerFactory` |
+| `DNDSR.Geom` | Mesh I/O and topology | `UnstructuredMesh`, `UnstructuredMeshSerialRW`, `ElemType`, `read_mesh`, `prepare_mesh` |
+| `DNDSR.CFV` | Finite volume and reconstruction | `FiniteVolume`, `VariationalReconstruction`, `ModelEvaluator` |
+| `DNDSR.EulerP` | GPU-enabled solver evaluator | `EulerPEvaluator`, `EulerP_Solver` |
+
+> **TODO:** Expand each module section below with detailed class and method
+documentation as the stub generation pipeline matures.
 
 ## DNDSR Package
 

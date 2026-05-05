@@ -19,11 +19,15 @@ Compact Finite Volume methods with MPI parallelism and optional CUDA GPU support
   - `Euler/` — Compressible N-S solvers (2D/3D, SA, k-omega RANS)
   - `EulerP/` — Alternative evaluator with CUDA GPU support
 - `app/` — C++ application entry points (solver executables)
-- `test/` — Python tests (pytest + pytest-mpi)
+- `test/` — Python tests (pytest + pytest-mpi + pytest-timeout)
 - `cases/` — JSON configuration files for solver runs
 - `external/` — Git submodule (`cfd_externals`) and header-only libraries
 
 ## Build Commands
+
+> **For humans:** The canonical build guide with full explanations,
+> troubleshooting, and platform notes lives in `docs/guides/building.md`.
+> This section is a condensed agent reference.
 
 ### C++ (CMake)
 
@@ -126,7 +130,7 @@ tree is clean or that all valuable changes are committed/stashed. These
 commands silently overwrite uncommitted modifications and delete untracked
 files, discarding work with no way to recover it.
 
-Tests use **pytest** with **pytest-mpi**. Test files live under `test/`.
+Tests use **pytest** with **pytest-mpi** and **pytest-timeout**. Test files live under `test/`. A default 120-second timeout is configured in `pyproject.toml` to prevent hung MPI tests from blocking CI.
 
 ```bash
 # Run all tests
@@ -198,10 +202,11 @@ mpirun -np 4 ./test/cpp/dnds_test_mpi
 
 - **DNDS:** `dnds_test_array`, `dnds_test_mpi`, `dnds_test_array_transformer`,
   `dnds_test_array_derived`, `dnds_test_array_dof`, `dnds_test_index_mapping`,
-  `dnds_test_serializer`
+  `dnds_test_serializer`, `dnds_test_permutation_transfer`
 - **Geom:** `geom_test_elements`, `geom_test_quadrature`, `geom_test_mesh_index_conversion`,
   `geom_test_mesh_pipeline`, `geom_test_mesh_distributed_read`, `geom_test_mesh_connectivity`,
-  `geom_test_mesh_connectivity_ghost`, `geom_test_mesh_connectivity_interpolate`
+  `geom_test_mesh_connectivity_ghost`, `geom_test_mesh_connectivity_interpolate`,
+  `geom_test_mesh_reorder`
 - **CFV:** `cfv_test_reconstruction`, `cfv_test_limiters`, `cfv_test_reconstruction3d`,
   `cfv_test_device_transferable` (CUDA only)
 - **Euler:** `euler_test_gas_thermo`, `euler_test_riemann_solvers`, `euler_test_rans`,

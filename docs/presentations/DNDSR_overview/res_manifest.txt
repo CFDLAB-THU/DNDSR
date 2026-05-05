@@ -1,0 +1,27 @@
+# res_manifest.txt — images copied into docs/presentations/res/ at build time.
+#
+# Format:  SOURCE_PATH   TARGET_FILENAME
+#   SOURCE_PATH is relative to the repo root.
+#   TARGET_FILENAME is placed under docs/presentations/res/.
+#
+# Blank lines and lines starting with '#' are ignored.
+# Whitespace between the two fields can be any number of spaces or tabs.
+
+# 2D element node diagrams
+docs/elements/Tri3_nodes.png       Tri3_nodes.png
+docs/elements/Tri6_nodes.png       Tri6_nodes.png
+docs/elements/Quad4_nodes.png      Quad4_nodes.png
+docs/elements/Quad9_nodes.png      Quad9_nodes.png
+
+# 3D element node diagrams
+docs/elements/Tet4_nodes.png       Tet4_nodes.png
+docs/elements/Tet10_nodes.png      Tet10_nodes.png
+docs/elements/Hex8_nodes.png       Hex8_nodes.png
+docs/elements/Hex27_nodes.png      Hex27_nodes.png
+docs/elements/Prism6_nodes.png     Prism6_nodes.png
+docs/elements/Prism18_nodes.png    Prism18_nodes.png
+docs/elements/Pyramid5_nodes.png   Pyramid5_nodes.png
+docs/elements/Pyramid14_nodes.png  Pyramid14_nodes.png
+
+# Theory / shape-function illustrations
+docs/theory/PyramidShow.png        PyramidShow.png

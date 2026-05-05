@@ -1,11 +1,15 @@
 # TODO {#todo_list}
 
-> **Note (2026-04-20):** This file was audited. Several items previously
-> listed as open have been verified as complete and are now struck through.
-> Remaining high-priority open items include: replacing global
-> `add_compile_options` (still present in `DndsCompilerFlags.cmake`),
-> removing duplicate `#include` directives in Euler headers, and replacing
-> raw `assert()` calls in `Solver/ODE.hpp`.
+**Status:** Living document tracking active development tasks and recently
+completed work. Items are grouped by topic, not by priority.
+
+> **Last audited:** 2026-04-20. Struck-through items have been verified as
+> complete. For historical brainstorming (not actively maintained), see
+> @ref ideas.
+>
+> **Current active themes:** CMake modernization (per-target compile flags),
+> EulerEvaluator/EulerSolver decomposition, RANS model deduplication, and
+> expanding C++ test coverage.
 
 ## Miscellaneous
 

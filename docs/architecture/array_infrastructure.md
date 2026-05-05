@@ -12,6 +12,14 @@ Eigen interoperability.
 This page explains the design from bottom to top.  For working code
 examples, see @ref array_usage.
 
+**TL;DR:** DNDSR stores all mesh and solver data in a single `Array<T,rs,rm>`
+template family. The hierarchy is: `Array` (local storage) → `ParArray` (+MPI)
+→ `ArrayPair` (+ghost son + transformer) → derived types (`ArrayAdjacency`,
+`ArrayEigenVector`, `ArrayEigenMatrix`, `ArrayDof`). Ghost exchange uses
+persistent MPI requests (`init/start/wait`). `ArrayDof` adds vector-space ops
+(`norm2`, `dot`, AXPY). Pick `ArrayDof<N,1>` for cell means, `ArrayDof<DynamicSize,N>`
+for reconstruction coefficients.
+
 ## Design Goals
 
 1. **One container for all per-entity data** -- cell volumes (fixed 1
