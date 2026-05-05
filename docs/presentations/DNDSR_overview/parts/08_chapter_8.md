@@ -23,9 +23,7 @@
 
 <div class="callout">
 
-**Totals.** 25+ C++ executables, ~1100 assertions, ~32 Python tests.
-All MPI-aware tests are CTest-registered at each np value. Serial tests have
-a 60–120 s timeout; parallel tests 120–600 s depending on module.
+**Totals.** 25+ C++ executables, ~1100 assertions, ~32 Python tests. All MPI-aware tests are CTest-registered at each np value. Serial tests have a 60–120 s timeout; parallel tests 120–600 s depending on module.
 
 </div>
 
@@ -106,42 +104,30 @@ TEST_CASE("ArrayTransformer: round-trip ghost pull" *
 
 ### CFV
 
-- `test_reconstruction`
-  · tests of VR convergence on analytic fields.
-- `test_reconstruction3d`
-  · 3D variants; Jacobi/SOR comparison.
-- `test_limiters`
-  · WBAP / CWBAP on contrived data; exercises the full limiter menu.
-- `test_device_transferable`
-  *(CUDA only)* · round-trip of `FiniteVolume` to GPU and back.
+- `test_reconstruction` · tests of VR convergence on analytic fields.
+- `test_reconstruction3d` · 3D variants; Jacobi/SOR comparison.
+- `test_limiters` · WBAP / CWBAP on contrived data; exercises the full limiter menu.
+- `test_device_transferable` *(CUDA only)* · round-trip of `FiniteVolume` to GPU and back.
 
 </div>
 <div>
 
 ### Euler
 
-- `test_gas_thermo`
-  · ideal gas Cv/Cp, T/p relations, Mach→state.
-- `test_riemann_solvers`
-  · 13 variants, exact-solution agreement on 1D Riemann problems.
-- `test_rans`
-  · SA + k-ω source terms, wall distance integration, trip location.
-- `test_evaluator_pipeline`
-  · full `EvaluateRHS` on a fixed mesh — **golden values**.
+- `test_gas_thermo` · ideal gas Cv/Cp, T/p relations, Mach→state.
+- `test_riemann_solvers` · 13 variants, exact-solution agreement on 1D Riemann problems.
+- `test_rans` · SA + k-ω source terms, wall distance integration, trip location.
+- `test_evaluator_pipeline` · full `EvaluateRHS` on a fixed mesh — **golden values**.
 
 </div>
 <div>
 
 ### Solver
 
-- `test_ode`
-  · BDF / SDIRK / HM3 on ODE benchmarks (Van der Pol, stiff scalar).
-- `test_linear`
-  · GMRES + PCG convergence on canonical matrices.
-- `test_direct`
-  · small-block LU / LDLT correctness.
-- `test_scalar`
-  · scalar transport advection-diffusion regression.
+- `test_ode` · BDF / SDIRK / HM3 on ODE benchmarks (Van der Pol, stiff scalar).
+- `test_linear` · GMRES + PCG convergence on canonical matrices.
+- `test_direct` · small-block LU / LDLT correctness.
+- `test_scalar` · scalar transport advection-diffusion regression.
 
 </div>
 </div>
@@ -151,9 +137,7 @@ TEST_CASE("ArrayTransformer: round-trip ghost pull" *
 
 ## Determinism — how golden values stay stable
 
-Many tests compare computed results against pre-captured **golden values**
-with relative tolerance `1e-6` to `1e-8`. For this to be meaningful, runs
-must be byte-stable across re-executions.
+Many tests compare computed results against pre-captured **golden values** with relative tolerance `1e-6` to `1e-8`. For this to be meaningful, runs must be byte-stable across re-executions.
 
 <div class="cols">
 <div>
@@ -161,20 +145,16 @@ must be byte-stable across re-executions.
 ### Sources of non-determinism — eliminated
 
 - **Partitioning order** → `metisSeed = 42` (fixed).
-- **SOR update order** (depends on partition) → Jacobi iteration used
-  instead in VR tests.
-- **LU-SGS sweep direction** (partition-ordered) → Jacobi-style updates
-  in Euler pipeline tests.
-- **OMP reduction order** (thread count) → scalar reductions are
-  deterministic at fixed thread count.
+- **SOR update order** (depends on partition) → Jacobi iteration used instead in VR tests.
+- **LU-SGS sweep direction** (partition-ordered) → Jacobi-style updates in Euler pipeline tests.
+- **OMP reduction order** (thread count) → scalar reductions are deterministic at fixed thread count.
 
 </div>
 <div>
 
 ### Sentinel value pattern
 
-When a golden value **has not yet been captured**, the test stores the
-sentinel `1e300`:
+When a golden value **has not yet been captured**, the test stores the sentinel `1e300`:
 
 ```cpp
 const real gold_kinetic = 1e300;           // TODO: capture
@@ -185,8 +165,7 @@ else
     CHECK(std::isfinite(computed) && computed >= 0);
 ```
 
-So the first run of a new test is a finite/non-negative sanity check,
-and the developer updates the golden in a follow-up commit.
+So the first run of a new test is a finite/non-negative sanity check, and the developer updates the golden in a follow-up commit.
 
 </div>
 </div>
@@ -204,8 +183,7 @@ and the developer updates the golden in a follow-up commit.
 
 - `test/DNDS/test_basic.py` — import chain, MPIInfo, small array round-trip.
 - `test/Geom/test_read_mesh.py` — CGNS read, elevation, bisection.
-- `test/CFV/test_fv_correctness.py` — cell volume / face area / jacobian
-  correctness on wall meshes (~32 tests).
+- `test/CFV/test_fv_correctness.py` — cell volume / face area / jacobian correctness on wall meshes (~32 tests).
 - `test/CFV/test_reconstruction.py` — VR order convergence on sin(x)sin(y).
 - `test/EulerP/test_eulerP_pipeline.py` — host + CUDA round-trip.
 
@@ -243,9 +221,7 @@ PYTHONPATH=<root>/python pytest test/ -v
 
 <div class="callout callout-warn">
 
-⚠ Skipping the install step after changing C++ source leaves stale `.so`
-files and produces misleading segfaults that look like code bugs.
-`git checkout` changes source but does **not** rebuild binaries.
+⚠ Skipping the install step after changing C++ source leaves stale `.so` files and produces misleading segfaults that look like code bugs. `git checkout` changes source but does **not** rebuild binaries.
 
 </div>
 
@@ -283,9 +259,7 @@ files and produces misleading segfaults that look like code bugs.
 }
 ```
 
-Aggregate targets: `dnds_unit_tests`, `geom_unit_tests`, `cfv_unit_tests`,
-`euler_unit_tests`, `solver_unit_tests`, `all_unit_tests` — all
-`EXCLUDE_FROM_ALL` so plain `cmake --build` stays fast.
+Aggregate targets: `dnds_unit_tests`, `geom_unit_tests`, `cfv_unit_tests`, `euler_unit_tests`, `solver_unit_tests`, `all_unit_tests` — all `EXCLUDE_FROM_ALL` so plain `cmake --build` stays fast.
 
 ---
 <!-- _footer: "pyproject.toml · RELEASE_NOTES.md:32-40" -->
@@ -329,9 +303,7 @@ CC=mpicc CXX=mpicxx \
 
 ### Why system Python (not conda)
 
-> Conda/Anaconda Python embeds an `RPATH` to conda's bundled libstdc++, which
-> may be older than what the MPI compiler produces. System Python uses the
-> system libstdc++ and avoids this conflict.
+> Conda/Anaconda Python embeds an `RPATH` to conda's bundled libstdc++, which may be older than what the MPI compiler produces. System Python uses the system libstdc++ and avoids this conflict.
 > — `README.md`
 
 macOS has a dedicated fmtlib workaround, also shipped.
@@ -341,7 +313,7 @@ macOS has a dedicated fmtlib workaround, also shipped.
 
 ---
 <!-- _footer: "docs/dev/clang_tidy_plan.md · RELEASE_NOTES.md:32-40" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Clang-tidy sanitation
 
@@ -353,13 +325,11 @@ macOS has a dedicated fmtlib workaround, also shipped.
 - **24 597 diagnostics** at start of the sweep.
 - **26 passes** applied in careful slice order.
 - **1 remaining** — an unrelated Eigen PCH `omp.h` include issue.
-- Full per-pass record and `.clang-tidy` rationale preserved in
-  `docs/dev/clang_tidy_plan.md`.
+- Full per-pass record and `.clang-tidy` rationale preserved in `docs/dev/clang_tidy_plan.md`.
 
 ### The `.clang-tidy` disables (representative)
 
-- `cppcoreguidelines-pro-bounds-pointer-arithmetic` — unavoidable in
-  CSR / row-flat arrays.
+- `cppcoreguidelines-pro-bounds-pointer-arithmetic` — unavoidable in CSR / row-flat arrays.
 - `fuchsia-default-arguments-declarations` — MPI defaults.
 - `llvm-header-guard` — we use `#pragma once`.
 - `modernize-use-trailing-return-type` — style preference.
@@ -380,8 +350,7 @@ python scripts/run_clang_tidy.py Solver
 
 ### What's next
 
-Solver / Geom / CFV / Euler / EulerP are **not yet sanitised** — same recipe
-to apply. The `.clang-tidy` disables carry forward.
+Solver / Geom / CFV / Euler / EulerP are **not yet sanitised** — same recipe to apply. The `.clang-tidy` disables carry forward.
 
 </div>
 </div>
@@ -410,8 +379,7 @@ flowchart LR
 
 ### Key features
 
-- **One Markdown source** renders in both Sphinx and Doxygen via
-  `doxygen_compat.py`.
+- **One Markdown source** renders in both Sphinx and Doxygen via `doxygen_compat.py`.
 - **Doxygen HTML** is embedded at `/doxygen/` on the Sphinx site.
 - **Graphviz** class inheritance, call graphs, include graphs.
 - **sphinxawesome-theme** with rich code highlighting.
@@ -437,7 +405,7 @@ cmake --build build -t serve-docs
 
 ---
 <!-- _footer: ".github/workflows/ · RELEASE_NOTES.md:68-70" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## CI & release automation
 
@@ -456,9 +424,7 @@ cmake --build build -t serve-docs
 ### Style + hygiene
 
 - `.clang-format` ships at repo root; CI checks a diff in a separate job.
-- `POSIX index()` ambiguity guard — code style requires `DNDS::index`
-  whenever `using namespace DNDS;` is active (documented in
-  `docs/tests/overview.md`).
+- `POSIX index()` ambiguity guard — code style requires `DNDS::index` whenever `using namespace DNDS;` is active (documented in `docs/tests/overview.md`).
 
 </div>
 <div>
@@ -484,4 +450,3 @@ git push --tags
 
 </div>
 </div>
-

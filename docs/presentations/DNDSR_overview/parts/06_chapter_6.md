@@ -25,15 +25,13 @@
 
 <div class="callout">
 
-**Key property.** Every method in `SerializerH5` is **MPI-collective** — every
-rank must call them in the same order, even when that rank has `size == 0`.
-Failing to participate causes a hang, not a crash.
+**Key property.** Every method in `SerializerH5` is **MPI-collective** — every rank must call them in the same order, even when that rank has `size == 0`. Failing to participate causes a hang, not a crash.
 
 </div>
 
 ---
 <!-- _footer: "src/DNDS/Serializer/SerializerBase.hpp:153-303" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## `SerializerBase` — the public interface
 
@@ -115,25 +113,21 @@ extern ArrayGlobalOffset ArrayGlobalOffset_Unknown, _One, _Parts, _EvenSplit;
 
 ### The trap
 
-When `nGlobal < nRanks` (5 entries across 8 ranks), `EvenSplitRange` assigns
-0 rows to some ranks. Collective HDF5 calls still demand every rank
-participates — and `std::vector<>::data()` on an empty vector may return `nullptr`.
+When `nGlobal < nRanks` (5 entries across 8 ranks), `EvenSplitRange` assigns 0 rows to some ranks. Collective HDF5 calls still demand every rank participates — and `std::vector<>::data()` on an empty vector may return `nullptr`.
 
 ```cpp
 std::vector<index> v(size);        // size may be 0
 ReadDataVector<index>(name, v.data(), ...);  // may pass nullptr → hang
 ```
 
-Caller-side helpers like `__ReadSerializerData` and `ReadUint8Array` would
-skip the `H5Dread` when `buf == nullptr`, and the collective hangs.
+Caller-side helpers like `__ReadSerializerData` and `ReadUint8Array` would skip the `H5Dread` when `buf == nullptr`, and the collective hangs.
 
 </div>
 <div>
 
 ### The fix
 
-Every caller in `SerializerBase.cpp` passes a **stack-allocated dummy pointer**
-when `size == 0`:
+Every caller in `SerializerBase.cpp` passes a **stack-allocated dummy pointer** when `size == 0`:
 
 ```cpp
 index dummy;
@@ -147,8 +141,7 @@ ReadDataVector<index>(name,
 1. First call: `data = nullptr`, returns the size.
 2. Second call: allocate + call again with a real (or dummy) pointer.
 
-All collectives proceed with 0-count hyperslabs on the empty ranks — no
-application-level branching.
+All collectives proceed with 0-count hyperslabs on the empty ranks — no application-level branching.
 
 </div>
 </div>
@@ -171,10 +164,7 @@ flowchart LR
 
 <div class="callout callout-ok">
 
-**Consequence.** `EulerSolver::ReadRestart` is a single call. The user writes
-from 4 ranks on a login node, restarts on 1024 ranks on a compute partition,
-and the same JSON config runs. Ranks with `localRows == 0` participate in every
-collective with empty buffers.
+**Consequence.** `EulerSolver::ReadRestart` is a single call. The user writes from 4 ranks on a login node, restarts on 1024 ranks on a compute partition, and the same JSON config runs. Ranks with `localRows == 0` participate in every collective with empty buffers.
 
 </div>
 
@@ -209,16 +199,13 @@ struct ImplicitCFLControl {
 
 <div class="callout">
 
-**What the macro gives you.** No base class, no virtual members, no per-instance
-data — the struct stays a POD safe for CUDA. Underneath, a static
-`_dnds_do_register()` method is generated that fills a
-`ConfigRegistry<T>` singleton with `FieldMeta` records.
+**What the macro gives you.** No base class, no virtual members, no per-instance data — the struct stays a POD safe for CUDA. Underneath, a static `_dnds_do_register()` method is generated that fills a `ConfigRegistry<T>` singleton with `FieldMeta` records.
 
 </div>
 
 ---
 <!-- _footer: "src/DNDS/Config/ConfigParam.hpp:71-81" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Configs — field kinds & cross-field checks
 
@@ -286,9 +273,7 @@ nlohmann::ordered_json schema = ConfigRegistry<EulerConfig>::Instance().emitSche
 # drops ~107 KB per-solver schema
 ```
 
-VS Code + any JSON-schema-aware editor give autocompletion and in-line
-validation. Pre-computed schemas ship in `cases/euler_schema.json`,
-`eulerSA3D_schema.json`, etc.
+VS Code + any JSON-schema-aware editor give autocompletion and in-line validation. Pre-computed schemas ship in `cases/euler_schema.json`, `eulerSA3D_schema.json`, etc.
 
 </div>
 <div>
@@ -329,9 +314,7 @@ python/DNDSR/DNDS/__init__.py
 
 ### The preload order matters
 
-`_loader.py` loads external dependencies with `RTLD_GLOBAL` **before** the
-pybind11 extension opens. If they were loaded later with the default
-`RTLD_LOCAL`, the extension would not find the symbols it depends on.
+`_loader.py` loads external dependencies with `RTLD_GLOBAL` **before** the pybind11 extension opens. If they were loaded later with the default `RTLD_LOCAL`, the extension would not find the symbols it depends on.
 
 ```mermaid
 flowchart LR
@@ -356,8 +339,7 @@ flowchart LR
 - `DNDSR.CFV`  — finite volume / VR / Fourier analysis
 - `DNDSR.EulerP` — GPU-friendly Euler evaluator
 
-Top-level `__init__.py` imports all four so a single
-`from DNDSR import *` works.
+Top-level `__init__.py` imports all four so a single `from DNDSR import *` works.
 
 </div>
 </div>
@@ -394,15 +376,13 @@ result.mesh.BuildVTKConnectivity()
 
 <div class="callout callout-ok">
 
-**PEP 561 compliant.** A `py.typed` marker ships in the package; `.pyi` stubs
-are auto-generated by `pybind11-stubgen` during `cmake --install`. Pyright,
-mypy, and Pylance see full C++ type signatures.
+**PEP 561 compliant.** A `py.typed` marker ships in the package; `.pyi` stubs are auto-generated by `pybind11-stubgen` during `cmake --install`. Pyright, mypy, and Pylance see full C++ type signatures.
 
 </div>
 
 ---
 <!-- _footer: "src/CFV/ModelEvaluator.hpp · RELEASE_NOTES.md:25" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## CFV Python — Fourier dissipation-dispersion analysis
 
@@ -421,11 +401,7 @@ for kx in kx_range:
 
 <div class="callout">
 
-**Why this matters for a research code.** VR's dispersion/dissipation properties
-depend on order, limiter, and inner-product choice. Having a Python harness to
-sweep them over a discrete Fourier spectrum means parameter studies
-(limiter combinations, inner-product choices, derivative weights) are done in
-hours, not weeks.
+**Why this matters for a research code.** VR's dispersion/dissipation properties depend on order, limiter, and inner-product choice. Having a Python harness to sweep them over a discrete Fourier spectrum means parameter studies (limiter combinations, inner-product choices, derivative weights) are done in hours, not weeks.
 
 </div>
 
@@ -434,6 +410,4 @@ Other Python-exposed bits:
 - `ArrayPair`, `ArrayEigenMatrix/Vector/Batch`
 - `BuildUDof / BuildURec / BuildUGrad` (typed constructors)
 - VTK output, wall-distance, `to_device / to_host`
-- The full `MeshAdjState` enum and `AdjPairTracked::idx` queries
-  (query-only, no mutation from Python — intentional)
-
+- The full `MeshAdjState` enum and `AdjPairTracked::idx` queries (query-only, no mutation from Python — intentional)

@@ -10,7 +10,7 @@
 
 ---
 <!-- _footer: "src/Euler/Euler.hpp:874-905 · app/Euler/*.cpp" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## The Euler / N-S family — one binary per model
 
@@ -42,8 +42,7 @@ enum EulerModel {
 };
 ```
 
-Template dispatch on `EulerModel` produces one binary per solver
-— shared source, separated object files.
+Template dispatch on `EulerModel` produces one binary per solver — shared source, separated object files.
 
 </div>
 <div>
@@ -60,15 +59,14 @@ enum RANSModel {
 };
 ```
 
-Each has a `RANSModelTraits<>` specialization with its own wall BC, source
-terms, and spectral radius.
+Each has a `RANSModelTraits<>` specialization with its own wall BC, source terms, and spectral radius.
 
 </div>
 </div>
 
 ---
 <!-- _footer: "src/Euler/EulerSolver.hpp:73-148" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## `EulerSolver` — the top-level conductor
 
@@ -106,24 +104,18 @@ class EulerSolver {
 
 ---
 <!-- _footer: "src/Euler/EulerSolver.hpp:160-246 · nested Configuration struct" -->
-<!-- _class: tight -->
+<!-- _class: dense -->
 
 ## `Configuration` — everything that tunes a run
 
-Every sub-section uses `DNDS_DECLARE_CONFIG` so the full JSON schema is
-auto-generated.
+Every sub-section uses `DNDS_DECLARE_CONFIG` so the full JSON schema is auto-generated.
 
 <div class="cols">
 <div>
 
-- **`TimeMarchControl`** — `dtImplicit`, `nTimeStep`, `steadyQuit`,
-  `useRestart`, `useImplicitPP`, `odeCode`, `odeSetting1..4`,
-  `odeSettingsExtra` (opaque JSON), `dtCFLLimitScale`, …
-- **`ImplicitReconstructionControl`** — `useExplicit`, `nInternalRecStep`,
-  `recLinearScheme` (0 = SOR, 1 = GMRES), `nGmresSpace/Iter`, `fpcgReset*`,
-  `recThreshold`.
-- **`OutputControl`** — `outputIntervalStep`, `outputFormat` (VTK, PLT,
-  VTKHDF, series), parallel vs serial write.
+- **`TimeMarchControl`** — `dtImplicit`, `nTimeStep`, `steadyQuit`, `useRestart`, `useImplicitPP`, `odeCode`, `odeSetting1..4`, `odeSettingsExtra` (opaque JSON), `dtCFLLimitScale`, …
+- **`ImplicitReconstructionControl`** — `useExplicit`, `nInternalRecStep`, `recLinearScheme` (0 = SOR, 1 = GMRES), `nGmresSpace/Iter`, `fpcgReset*`, `recThreshold`.
+- **`OutputControl`** — `outputIntervalStep`, `outputFormat` (VTK, PLT, VTKHDF, series), parallel vs serial write.
 - **`CFLControl`** — initial / max CFL, ramping schedule.
 
 </div>
@@ -141,8 +133,7 @@ auto-generated.
 </div>
 </div>
 
-> `--emit-schema` dumps the entire tree as a single JSON Schema document —
-> `euler_schema.json` / `eulerSA3D_schema.json` / etc., each ~107 KB.
+> `--emit-schema` dumps the entire tree as a single JSON Schema document — `euler_schema.json` / `eulerSA3D_schema.json` / etc., each ~107 KB.
 
 ---
 <!-- _footer: "src/Euler/EulerEvaluator.hpp:399-612" -->
@@ -176,8 +167,7 @@ void EvaluateRHS(ArrayDOFV<nVarsFixed>            &rhs,
 - `RHS_Direct_2nd_Rec_already_have_uGradBufNoLim`
 - `RHS_Recover_IncFScale`
 
-Flags compose bitwise — they cover fallback / diagnostic modes used by p-MG
-and PP sub-steps.
+Flags compose bitwise — they cover fallback / diagnostic modes used by p-MG and PP sub-steps.
 
 </div>
 <div>
@@ -189,8 +179,7 @@ and PP sub-steps.
 - `EvaluateCellRHSAlpha` — per-cell RHS scaling for PP.
 - `LimiterUGrad` — gradient limiter, optional shock detection.
 - `LUSGSMatrixInit/Vec/ToJacobianLU` and `UpdateSGS(WithRec)`.
-- Wall distance: `GetWallDist_AABB`, `GetWallDist_BatchedAABB`,
-  `GetWallDist_Poisson`.
+- Wall distance: `GetWallDist_AABB`, `GetWallDist_BatchedAABB`, `GetWallDist_Poisson`.
 - Viscosity: `muEff(U, T)` with Sutherland or constant models.
 
 </div>
@@ -198,12 +187,11 @@ and PP sub-steps.
 
 ---
 <!-- _footer: "src/Euler/BoundaryConditions/ · BoundaryHandler<model>" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Boundary conditions — strategy pattern
 
-Each BC is a class implementing a common interface; `BoundaryHandler<model>`
-routes face-zone IDs to BC instances at runtime.
+Each BC is a class implementing a common interface; `BoundaryHandler<model>` routes face-zone IDs to BC instances at runtime.
 
 | BC                   | Use                                         |
 |----------------------|---------------------------------------------|
@@ -219,13 +207,11 @@ routes face-zone IDs to BC instances at runtime.
 | `BCProfileIn`        | Tabulated profile (boundary layer, RANS)    |
 | `BCActuator`         | Actuator disk source term                   |
 
-Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`,
-`BCMixingPlane`, and the **CL driver** for AoA-adaptive lift matching
-(`pCLDriver` in the evaluator).
+Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`, `BCMixingPlane`, and the **CL driver** for AoA-adaptive lift matching (`pCLDriver` in the evaluator).
 
 ---
 <!-- _footer: "cases/euler/ · cases/euler3D/" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Canonical benchmarks — Riemann, shocks, smooth
 
@@ -256,13 +242,11 @@ Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`,
 ### Smooth / steady / unsteady
 
 - **Isentropic Vortex** `euler_config_IV.json` — convergence study
-- **Taylor-Green Vortex 3D** `euler3D_config_TGV.json`,
-  `euler3D_config_BenchTGV.json`
+- **Taylor-Green Vortex 3D** `euler3D_config_TGV.json`, `euler3D_config_BenchTGV.json`
 - **Lid-driven cavity** (incl. hypersonic variant)
 - **Von Kármán vortex street** 2D + 3D
 - **Laminar flat-plate BL**
-- **Inviscid cylinder (MG bench)**
-  `config_cylinderInvis_mg_bench.json`
+- **Inviscid cylinder (MG bench)** `config_cylinderInvis_mg_bench.json`
 
 ### Rotating / periodic frames
 
@@ -283,9 +267,7 @@ Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`,
 
 ### External aerodynamics
 
-- **NACA 0012** — SA (`eulerSA_config_0012_AOA15.json`) and k-ω (`euler2EQ/...`)
-  variants, with O2 elevation (`..._Elev.json`) and MG benchmarks
-  (`config_0012_mg_bench.json`).
+- **NACA 0012** — SA (`eulerSA_config_0012_AOA15.json`) and k-ω (`euler2EQ/...`) variants, with O2 elevation (`..._Elev.json`) and MG benchmarks (`config_0012_mg_bench.json`).
 - **30p30n** high-lift `eulerSA_config_30p30n.json`.
 - **NASA CRM** — regular + CRM-HL high-lift.
 - **DLR-F6** transport wing-body.
@@ -311,15 +293,14 @@ flowchart TB
     B --> C
 ```
 
-This pattern also stresses `ReadSerializeRedistributed` across different
-rank counts.
+This pattern also stresses `ReadSerializeRedistributed` across different rank counts.
 
 </div>
 </div>
 
 ---
 <!-- _footer: "RELEASE_NOTES.md:9-21" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## New solver features in v0.1.0
 
@@ -328,8 +309,7 @@ rank counts.
 
 ### ODE & preconditioning
 
-- **HM3 revamp** — U2R2 / U2R1 / U3R1 modes, `tpMG`, `incFScale`,
-  positivity-preserving coupling with `LimiterUGrad`.
+- **HM3 revamp** — U2R2 / U2R1 / U3R1 modes, `tpMG`, `incFScale`, positivity-preserving coupling with `LimiterUGrad`.
 - **ESDIRK2 / ESDIRK3 / Trapezoidal** added.
 - **ILU-OMP** preconditioner.
 
@@ -354,13 +334,11 @@ rank counts.
 ### Physics
 
 - **Rotating frames** (periodic + simple convergence).
-- **Overset grid exploration** — hole cutting, distance map,
-  cell-cell connectivity (2D demo).
+- **Overset grid exploration** — hole cutting, distance map, cell-cell connectivity (2D demo).
 
 ### Workflow
 
-- `source2nd`, `mergeMultiResidual`, `normOrd`, `restartOutAtInit`,
-  `resBaseType` options.
+- `source2nd`, `mergeMultiResidual`, `normOrd`, `restartOutAtInit`, `resBaseType` options.
 
 </div>
 </div>
@@ -400,7 +378,4 @@ void RunImplicitEuler() {
 }
 ```
 
-The lambdas above are where `EulerEvaluator`, `GMRES_LeftPreconditioned`, and
-`LUSGSMatrix*` plug in — the ODE integrator never knows which solver is
-instantiating it.
-
+The lambdas above are where `EulerEvaluator`, `GMRES_LeftPreconditioned`, and `LUSGSMatrix*` plug in — the ODE integrator never knows which solver is instantiating it.

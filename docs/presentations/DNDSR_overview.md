@@ -258,13 +258,11 @@ footer: "v0.1.0 · CFD Lab, Tsinghua University"
 
 ## A C++17 / Python CFD Research Code
 
-**Compact Finite Volume · Variational Reconstruction**
-**MPI · OpenMP · CUDA · pybind11**
+**Compact Finite Volume · Variational Reconstruction** **MPI · OpenMP · CUDA · pybind11**
 
 <br>
 
 `v0.1.0` — 241 commits · 701 files · ~110 k insertions
-
 
 ---
 <!-- _class: chapter -->
@@ -286,20 +284,14 @@ footer: "v0.1.0 · CFD Lab, Tsinghua University"
 
 **The unstructured-CFD design space sits awkwardly:**
 
-- **CG/CAD** — complex polymorphic topology, small compute per
-  element (Blender, FreeCAD, Gmsh).
-- **Deep-learning frameworks** — massive homogeneous arrays,
-  simple fixed-width tensors (PyTorch, JAX).
-- **Unstructured CFD needs both** — heterogeneous topology + dense
-  numeric kernels.
+- **CG/CAD** — complex polymorphic topology, small compute per element (Blender, FreeCAD, Gmsh).
+- **Deep-learning frameworks** — massive homogeneous arrays, simple fixed-width tensors (PyTorch, JAX).
+- **Unstructured CFD needs both** — heterogeneous topology + dense numeric kernels.
 
 **Two dominant existing paradigms leak abstractions:**
 
-- **OpenFOAM-style** — `primitiveMesh` owns topology + geometry
-  inside a monolithic class hierarchy; communication lives at
-  the class level.
-- **SU2-style** — polymorphic `CDualGrid` / `CVertex` objects
-  carry per-entity geometric and solution state.
+- **OpenFOAM-style** — `primitiveMesh` owns topology + geometry inside a monolithic class hierarchy; communication lives at the class level.
+- **SU2-style** — polymorphic `CDualGrid` / `CVertex` objects carry per-entity geometric and solution state.
 
 Every new communicated field forces an edit to the object model.
 
@@ -308,9 +300,7 @@ Every new communicated field forces an edit to the object model.
 
 **DNDSR thesis**
 
-> *"DNDS is dedicated to providing c-like random-access arrays*
-> *without the concern of MPI communication. Higher-level*
-> *abstraction is left for the caller."*
+> *"DNDS is dedicated to providing c-like random-access arrays without the concern of MPI communication. Higher-level abstraction is left for the caller."*
 > — `docs/architecture/Paradigm.md:161`
 
 ```cpp
@@ -360,9 +350,7 @@ std::vector<vec>  faceCent;
 | `euler2EQ` / `euler2EQ3D`    | k-ω two-equation RANS              |
 | `eulerEX` / `eulerEX3D`      | Reactive / multi-species           |
 
-Each `app/Euler/euler*.cpp` is a **one-line `main`** that instantiates
-`DNDS::Euler::RunSingleBlockConsoleApp<Model>` — a template dispatch on
-the `EulerModel` enum.
+Each `app/Euler/euler*.cpp` is a **one-line `main`** that instantiates `DNDS::Euler::RunSingleBlockConsoleApp<Model>` — a template dispatch on the `EulerModel` enum.
 
 Shared code path, eight binaries.
 
@@ -413,8 +401,7 @@ Shared code path, eight binaries.
 
 <br>
 
-> 🧹 Clang-tidy milestone: the DNDS core module dropped from
-> **24 597 → 1** diagnostic across 26 cleanup passes.
+> 🧹 Clang-tidy milestone: the DNDS core module dropped from **24 597 → 1** diagnostic across 26 cleanup passes.
 
 ---
 <!-- _footer: "docs/guides/project_structure.md:101-114" -->
@@ -427,11 +414,7 @@ Shared code path, eight binaries.
 
 <div class="callout">
 
-**Reading this graph.** Every module depends only on those above it. `Solver`
-is header-only and depends only on `DNDS` data types — the Krylov and ODE code
-knows nothing about CFD. `EulerP` is a parallel-track CUDA evaluator alongside
-`Euler`, reusing `CFV` but replacing the flux/limiter pipeline with device-callable
-scalar loops.
+**Reading this graph.** Every module depends only on those above it. `Solver` is header-only and depends only on `DNDS` data types — the Krylov and ODE code knows nothing about CFD. `EulerP` is a parallel-track CUDA evaluator alongside `Euler`, reusing `CFV` but replacing the flux/limiter pipeline with device-callable scalar loops.
 
 </div>
 
@@ -462,9 +445,7 @@ cmake --build build -t euler -j32
 mpirun -np 4 ./build/app/euler.exe cases/euler_config_IV.json
 ```
 
-Presets available: `release-test`, `debug`, `cuda`, `ci`. Python path:
-`pip install -e .` uses `scikit-build-core` under the hood.
-
+Presets available: `release-test`, `debug`, `cuda`, `ci`. Python path: `pip install -e .` uses `scikit-build-core` under the hood.
 
 ---
 <!-- _class: chapter -->
@@ -494,22 +475,17 @@ Presets available: `release-test`, `debug`, `cuda`, `ci`. Python path:
 
 <div class="callout">
 
-**Why the split.** Each layer depends only on those above. `Solver` depends on
-DNDS data types only — the Krylov and ODE code knows nothing about CFD; this is
-how the same `GMRES_LeftPreconditioned` works across Euler, VR's `uRec` system,
-and the k-ω equations. `EulerP` sits alongside `Euler`, reusing all of `CFV` but
-replacing the flux kernel with device-callable scalar loops.
+**Why the split.** Each layer depends only on those above. `Solver` depends on DNDS data types only — the Krylov and ODE code knows nothing about CFD; this is how the same `GMRES_LeftPreconditioned` works across Euler, VR's `uRec` system, and the k-ω equations. `EulerP` sits alongside `Euler`, reusing all of `CFV` but replacing the flux kernel with device-callable scalar loops.
 
 </div>
 
 ---
 <!-- _footer: "docs/architecture/Paradigm.md:119-161" -->
-<!-- _class: dense -->
+<!-- _class:  -->
 
 ## Delayed abstraction ⇒ independent comm patterns
 
-Different field genres need different communication patterns.
-**Baking them into one class forces a monolithic serializer.**
+Different field genres need different communication patterns. **Baking them into one class forces a monolithic serializer.**
 
 <div class="cols">
 <div>
@@ -529,8 +505,7 @@ public:
 std::vector<Solution> sols;
 ```
 
-A single `WriteStream` can't express *which* fields participate in *which*
-MPI phase — any new field requires editing both methods.
+A single `WriteStream` can't express *which* fields participate in *which* MPI phase — any new field requires editing both methods.
 
 </div>
 <div>
@@ -544,8 +519,7 @@ ArrayDof<2, 5>          grad_u;  // gradients, 2D × 5 vars
 ArrayDof<DynamicSize,5> uRec;    // variable-order reconstruction
 ```
 
-Each array owns its own `ArrayTransformer`. Ghost footprints and
-communication phases are **independent and composable**:
+Each array owns its own `ArrayTransformer`. Ghost footprints and communication phases are **independent and composable**:
 
 - `u` and `u_prev` share the same ghost map → `BorrowGGIndexing`.
 - `uRec` may have a different row size — new MPI types, same map.
@@ -592,7 +566,7 @@ Alignment stub exists but only `NoAlign` is implemented today.</div>
 
 ---
 <!-- _footer: "src/DNDS/Array.hpp · array_infrastructure.md:82-95" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## CSR has two internal modes
 
@@ -630,17 +604,14 @@ Flat `std::vector<T>` + `pRowStart[n+1]` index.
 
 ### ArrayView
 
-A device-callable non-owning view (`ArrayView<T, rs, rm>`) implements
-`operator[]` and `at()` for every layout — this is what ships to the GPU.
+A device-callable non-owning view (`ArrayView<T, rs, rm>`) implements `operator[]` and `at()` for every layout — this is what ships to the GPU.
 
 </div>
 </div>
 
 <div class="callout callout-warn">
 
-⚠ **Element-type constraint:** `array_comp_acceptable<T>()` requires
-`std::is_trivially_copyable_v<T>` **or** `is_fixed_data_real_eigen_matrix_v<T>`.
-No `std::string` rows, no `std::vector` rows — it would break MPI.
+⚠ **Element-type constraint:** `array_comp_acceptable<T>()` requires `std::is_trivially_copyable_v<T>` **or** `is_fixed_data_real_eigen_matrix_v<T>`. No `std::string` rows, no `std::vector` rows — it would break MPI.
 
 </div>
 
@@ -742,24 +713,19 @@ trans.startPersistentPush();
 trans.waitPersistentPush();
 ```
 
-Typical in node-based FEM-style assembly: accumulate partial sums from
-ghost copies back into the father.
+Typical in node-based FEM-style assembly: accumulate partial sums from ghost copies back into the father.
 
 </div>
 </div>
 
-> **Sharing ghost structure across arrays.** `BorrowGGIndexing(primary)`
-> skips the expensive collective `createFatherGlobalMapping` +
-> `createGhostMapping` phase; only `createMPITypes()` is rebuilt because
-> the MPI datatypes depend on element size.
+> **Sharing ghost structure across arrays.** `BorrowGGIndexing(primary)` skips the expensive collective `createFatherGlobalMapping` + `createGhostMapping` phase; only `createMPITypes()` is rebuilt because the MPI datatypes depend on element size.
 
 ---
 <!-- _footer: "src/DNDS/ArrayPair.hpp · src/DNDS/ArrayDerived/*.hpp" -->
 
 ## Typed wrappers: `ArrayDerived`
 
-Each derived class inherits from `ParArray<T, rs, rm>` and overrides `operator[]`
-to return a **typed row view** instead of a raw pointer.
+Each derived class inherits from `ParArray<T, rs, rm>` and overrides `operator[]` to return a **typed row view** instead of a raw pointer.
 
 | Type                              | `operator[](i)` returns              | Use                                |
 |-----------------------------------|--------------------------------------|------------------------------------|
@@ -809,8 +775,7 @@ template <int n_m, int n_n>
 class ArrayDof : public ArrayEigenMatrixPair<n_m, n_n>;
 ```
 
-Wraps `father + son + transformer` and adds **MPI-collective vector-space ops** —
-directly consumable by the Krylov solvers in `src/Solver`.
+Wraps `father + son + transformer` and adds **MPI-collective vector-space ops** — directly consumable by the Krylov solvers in `src/Solver`.
 
 <div class="cols">
 <div>
@@ -889,9 +854,7 @@ class ArrayDofOp<DeviceBackend::CUDA, n_m, n_n> { /* thrust / raw kernels */ };
 
 <div class="callout callout-ok">
 
-**Consequence.** The solver's `norm2()` / `dot()` / `addTo()` calls are the
-same in C++ regardless of where the data lives — the host code just checks
-`father->device()` and routes. No `#ifdef CUDA` in Euler or Solver.
+**Consequence.** The solver's `norm2()` / `dot()` / `addTo()` calls are the same in C++ regardless of where the data lives — the host code just checks `father->device()` and routes. No `#ifdef CUDA` in Euler or Solver.
 
 </div>
 
@@ -901,9 +864,7 @@ same in C++ regardless of where the data lives — the host code just checks
 
 ## State-tracked mesh adjacency (1 / 2)
 
-12+ adjacency arrays (`cell2node`, `face2cell`, `cell2cell`, `node2bnd`, …)
-must each be **globally or locally indexed** at any given moment — a classic
-bug surface.
+12+ adjacency arrays (`cell2node`, `face2cell`, `cell2cell`, `node2bnd`, …) must each be **globally or locally indexed** at any given moment — a classic bug surface.
 
 ```cpp
 enum MeshAdjState {
@@ -913,12 +874,15 @@ enum MeshAdjState {
 };
 ```
 
-![](res/mermaid_02_d1eda804.svg)
+![](res/mermaid_02_701fd3bd.svg)
 
+
+<small>\* `markLocal()` requires the target mapping to already be wired.
+`markGlobal()` is an idempotent no-op when already in `PointToGlobal`.</small>
 
 ---
 <!-- _footer: "src/Geom/Mesh/AdjIndexInfo.hpp:27-341" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## State-tracked mesh adjacency (2 / 2)
 
@@ -948,8 +912,7 @@ public:
 };
 ```
 
-Not-found entries after `toLocal` are encoded as `(-1 - globalIdx)` so they
-survive round-trips and remain distinguishable from valid local indices.
+Not-found entries after `toLocal` are encoded as `(-1 - globalIdx)` so they survive round-trips and remain distinguishable from valid local indices.
 
 </div>
 <div>
@@ -982,7 +945,6 @@ struct AdjPairTracked : public TPair {
 
 </div>
 </div>
-
 
 ---
 <!-- _class: chapter -->
@@ -1025,8 +987,7 @@ struct AdjPairTracked : public TPair {
 </div>
 <div>
 
-- **Order elevation:** `BuildO2FromO1Elevation()` — Tri3→Tri6, Quad4→Quad9,
-  Tet4→Tet10, Hex8→Hex27, Prism6→Prism18, Pyramid5→Pyramid14.
+- **Order elevation:** `BuildO2FromO1Elevation()` — Tri3→Tri6, Quad4→Quad9, Tet4→Tet10, Hex8→Hex27, Prism6→Prism18, Pyramid5→Pyramid14.
 - **h-refinement:** `BuildBisectO1FormO2()` — one-step bisection from an O2 mesh.
 
 </div>
@@ -1068,9 +1029,7 @@ class UnstructuredMesh : public DeviceTransferable<UnstructuredMesh> {
 
 <div class="callout">
 
-Every `AdjPairTracked` member carries its own `AdjIndexInfo idx` — so each
-adjacency knows whether it is global or local, **independently of the 5 group
-flags**. Group flags remain as a coarse assertion tool.
+Every `AdjPairTracked` member carries its own `AdjIndexInfo idx` — so each adjacency knows whether it is global or local, **independently of the 5 group flags**. Group flags remain as a coarse assertion tool.
 
 </div>
 
@@ -1080,21 +1039,34 @@ flags**. Group flags remain as a coarse assertion tool.
 
 ## Mesh build pipeline — end-to-end
 
-![](res/mermaid_03_1a883fa1.svg)
+<div class="cols">
+<div>
 
+**Setup & adjacency**
+
+![](res/mermaid_03_56b5f6d5.svg)
+
+
+</div>
+<div>
+
+**Faces & finalization**
+
+![](res/mermaid_04_75f7fe51.svg)
+
+
+</div>
+</div>
 
 <div class="callout callout-warn">
 
-⚠ **`cell2cell` audit** — every runtime call in CFV / Euler / EulerP was
-surveyed; `cell2cell` is queried **zero times** in hot loops. It exists
-exclusively to determine the ghost set, after which face-based traversal
-takes over. This motivates the DMPlex-style evolution on the roadmap.
+⚠ **`cell2cell` audit** — every runtime call in CFV / Euler / EulerP was surveyed; `cell2cell` is queried **zero times** in hot loops. It exists exclusively to determine the ghost set, after which face-based traversal takes over. This motivates the DMPlex-style evolution on the roadmap.
 
 </div>
 
 ---
 <!-- _footer: "src/Geom/Mesh/Mesh.hpp:1083-1105" -->
-<!-- _class: dense -->
+<!-- _class:  -->
 
 ## Partitioning — `PartitionOptions`
 
@@ -1113,25 +1085,19 @@ struct PartitionOptions {
 
 ### Two partitioners
 
-- **Metis (serial)** — initial cell partition after a serial CGNS read.
-  `MeshPartitionCell2Cell(options)` drives it, then
-  `PartitionReorderToMeshCell2Cell` reorders cells using the partition.
-- **ParMetis (distributed)** — used inside `ReadSerializeAndDistribute` to
-  **refine** an even-split load after an H5 restart or cross-np read.
+- **Metis (serial)** — initial cell partition after a serial CGNS read. `MeshPartitionCell2Cell(options)` drives it, then `PartitionReorderToMeshCell2Cell` reorders cells using the partition.
+- **ParMetis (distributed)** — used inside `ReadSerializeAndDistribute` to **refine** an even-split load after an H5 restart or cross-np read.
 
 </div>
 <div>
 
 ### Determinism
 
-Tests fix `metisSeed = 42`. Combined with the `Jacobi` iteration in VR (instead
-of SOR) and the deterministic LU-SGS replacement, this yields **byte-stable golden
-values** across re-runs at any `np`.
+Tests fix `metisSeed = 42`. Combined with the `Jacobi` iteration in VR (instead of SOR) and the deterministic LU-SGS replacement, this yields **byte-stable golden values** across re-runs at any `np`.
 
 ### Ordering
 
-`ReorderLocalCells(nParts, nPartsInner)` runs a two-level cache-locality pass
-(inner + outer); `ObtainLocalFactFillOrdering` runs AMD / MMD for ILU.
+`ReorderLocalCells(nParts, nPartsInner)` runs a two-level cache-locality pass (inner + outer); `ObtainLocalFactFillOrdering` runs AMD / MMD for ILU.
 
 </div>
 </div>
@@ -1176,7 +1142,7 @@ struct GhostSpec   { std::vector<GhostChain> chains;
 
 ---
 <!-- _footer: "src/Geom/Mesh/MeshConnectivity.hpp:244-335,1241" -->
-<!-- _class: dense -->
+<!-- _class:  -->
 
 ## The ghost DSL — compile & evaluate
 
@@ -1228,12 +1194,11 @@ struct GhostResult {
 
 ---
 <!-- _footer: "src/Geom/Mesh/MeshConnectivity.hpp:858-1220" -->
-<!-- _class: tight -->
+<!-- _class: dense -->
 
 ## DSL primitives on `MeshConnectivity`
 
-Beyond the ghost evaluator, `MeshConnectivity` is a reusable DSL for distributed
-adjacency operations — used in many mesh-build steps.
+Beyond the ghost evaluator, `MeshConnectivity` is a reusable DSL for distributed adjacency operations — used in many mesh-build steps.
 
 | Primitive | Signature | What it does |
 |---|---|---|
@@ -1256,8 +1221,7 @@ struct SharedCountPredicate {
 };
 ```
 
-Used to implement Jacobian-like stencils, e.g. "cells sharing ≥ 2 nodes" to
-filter face-neighbors from node-neighbors.
+Used to implement Jacobian-like stencils, e.g. "cells sharing ≥ 2 nodes" to filter face-neighbors from node-neighbors.
 
 </div>
 <div>
@@ -1272,8 +1236,7 @@ ssp<AdjVariant> resolveAdj(AdjKind) const;
 bool            hasAdj(AdjKind) const;
 ```
 
-Mesh build methods populate this registry so `evaluateGhostTree` can look up
-each hop's adjacency by kind at runtime.
+Mesh build methods populate this registry so `evaluateGhostTree` can look up each hop's adjacency by kind at runtime.
 
 </div>
 </div>
@@ -1298,8 +1261,7 @@ void ElevatedNodesSolveInternalSmoothV2();
 ```
 
 - **Boundary smooth** — RBF-based placement of added nodes on curved surfaces.
-- **Internal smooth** — V1/V1Old/V2 variants of a Laplace-like solve to
-  interpolate interior added-node positions.
+- **Internal smooth** — V1/V1Old/V2 variants of a Laplace-like solve to interpolate interior added-node positions.
 
 </div>
 <div>
@@ -1332,8 +1294,7 @@ Used in practice for:
 
 ## Wall-distance computation
 
-`BuildNodeWallDist(fBndIsWall, WallDistOptions = {})` (`Mesh.hpp:1011`).
-Used by SA / k-ω / DDES / IDDES models.
+`BuildNodeWallDist(fBndIsWall, WallDistOptions = {})` (`Mesh.hpp:1011`). Used by SA / k-ω / DDES / IDDES models.
 
 <div class="cols-40-60">
 <div>
@@ -1359,10 +1320,8 @@ struct WallDistOptions {
 
 - **Brute force** — O(N · M) pair loop; trivially vectorizable; used for small cases.
 - **CGAL AABB tree** — per-rank tree over wall faces; O(log M) per query.
-- **Batched** — mitigate single-rank-memory ceiling by doing the tree build
-  on subsets of ranks (`wallDistExecution > 1`).
-- **Poisson** — `GetWallDist_Poisson()` in EulerEvaluator; p-Poisson solve on the
-  mesh, gradient inverted → distance.
+- **Batched** — mitigate single-rank-memory ceiling by doing the tree build on subsets of ranks (`wallDistExecution > 1`).
+- **Poisson** — `GetWallDist_Poisson()` in EulerEvaluator; p-Poisson solve on the mesh, gradient inverted → distance.
 
 Distance is also computed *per face* for use in the SST blending functions.
 
@@ -1401,9 +1360,7 @@ static const index Offset_Unknown   = UnInit;
 
 1. **No `origIndex`, same `np`** → falls back to `ReadSerialize`.
 2. **`origIndex` present, same `np`** → normal read + local remap.
-3. **`origIndex` present, different `np`** →
-   `EvenSplit` read, then **3-round `MPI_Alltoallv` rendezvous** to build the
-   directory `origIdx → globalReadIdx`, followed by one `ArrayTransformer` pull.
+3. **`origIndex` present, different `np`** → `EvenSplit` read, then **3-round `MPI_Alltoallv` rendezvous** to build the directory `origIdx → globalReadIdx`, followed by one `ArrayTransformer` pull.
 
 ```text
 SerializerBase            (abstract)
@@ -1415,9 +1372,7 @@ Array → ParArray → ArrayPair → ArrayRedistributor
 </div>
 </div>
 
-> Write from 4 ranks, restart on 8 — `EulerSolver::ReadRestart` handles all
-> three cases transparently.
-
+> Write from 4 ranks, restart on 8 — `EulerSolver::ReadRestart` handles all three cases transparently.
 
 ---
 <!-- _class: chapter -->
@@ -1437,8 +1392,7 @@ Array → ParArray → ArrayPair → ArrayRedistributor
 <div class="cols-60-40">
 <div>
 
-Reconstruct a piecewise polynomial from cell means with a
-**zero-mean basis** per cell:
+Reconstruct a piecewise polynomial from cell means with a **zero-mean basis** per cell:
 
 $$
 u_i(\mathbf{x})
@@ -1448,8 +1402,7 @@ $$
 
 - $\overline{u}_i$ — cell-mean, lives in `tUDof<N> = ArrayDof<N,1>`.
 - $u^l_i$ — reconstruction coefficients, in `tURec<N> = ArrayDof<Dyn,N>`.
-- Basis $\varphi^l_i$ is orthogonalized locally, normalized by cell scale;
-  degree chosen at runtime per cell.
+- Basis $\varphi^l_i$ is orthogonalized locally, normalized by cell scale; degree chosen at runtime per cell.
 
 **Supported polynomial orders: 1 – 3** (linear, quadratic, cubic).
 
@@ -1468,16 +1421,14 @@ maxNeighbour   = 7;
 
 <br>
 
-The stencil is **one ring of node-neighbors** — which is exactly what
-`BuildGhostPrimary(1)` provides by default. Wider stencils
-(`nGhostLayers ≥ 2`) are available for higher-order variants.
+The stencil is **one ring of node-neighbors** — which is exactly what `BuildGhostPrimary(1)` provides by default. Wider stencils (`nGhostLayers ≥ 2`) are available for higher-order variants.
 
 </div>
 </div>
 
 ---
 <!-- _footer: "docs/theory/Variational_Reconstruction.md:33-106" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Variational Reconstruction — the functional
 
@@ -1496,10 +1447,8 @@ $$
 **Weights**
 
 - $w_g(f)$ — geometric weight; default $w_g = S_f^{-1}$ (area-inverse).
-- $w_d(p)$ — dimensionless derivative weight; selects how aggressively each
-  derivative order contributes.
-- $\mathcal{D}_p u$ — the $p$-th derivative tensor
-  (covariant only under linear coordinate changes).
+- $w_d(p)$ — dimensionless derivative weight; selects how aggressively each derivative order contributes.
+- $\mathcal{D}_p u$ — the $p$-th derivative tensor (covariant only under linear coordinate changes).
 
 **Local system**
 
@@ -1517,13 +1466,9 @@ Solved iteratively — options below.
 
 **Three inner-product choices**
 
-- **Wang (normal):**
-  $\langle\mathcal{D}_3 u,\mathcal{D}_3 v\rangle = d_f^6\,\partial_{nnn}u\,\partial_{nnn}v$
-- **Pan (X-Y aligned):**
-  $\sum (\Delta_x^a\Delta_y^b\partial^{\cdot}_{xy} u)\,
-        (\Delta_x^a\Delta_y^b\partial^{\cdot}_{xy} v)$
-- **Huang (pre-isotropic):**
-  $d_f^{2p}$ weighting, directionally isotropic.
+- **Wang (normal):** $\langle\mathcal{D}_3 u,\mathcal{D}_3 v\rangle = d_f^6\,\partial_{nnn}u\,\partial_{nnn}v$
+- **Pan (X-Y aligned):** $\sum (\Delta_x^a\Delta_y^b\partial^{\cdot}_{xy} u)\, (\Delta_x^a\Delta_y^b\partial^{\cdot}_{xy} v)$
+- **Huang (pre-isotropic):** $d_f^{2p}$ weighting, directionally isotropic.
 
 **Reconstruction iteration schemes** (`VariationalReconstruction.hpp:938-1031`)
 
@@ -1566,8 +1511,7 @@ public:
 
 - `cellBaseMoment` — basis moments per cell.
 - `faceAlignedScales`, `faceMajorCoordScale`.
-- `cellDiffBaseCache`, `faceDiffBaseCache` — cached derivative values at all
-  quadrature points, for every neighbour in the stencil.
+- `cellDiffBaseCache`, `faceDiffBaseCache` — cached derivative values at all quadrature points, for every neighbour in the stencil.
 - `bndVRCaches` — boundary-face caches for BC-weighted VR.
 
 </div>
@@ -1576,21 +1520,18 @@ public:
 ### What `ConstructRecCoeff` builds
 
 - `matrixAB`, `vectorB` — per-neighbor RHS blocks.
-- `matrixAAInvB`, `vectorAInvB` — precomputed $A^{-1}B$ to accelerate
-  Jacobi / SOR iterations.
+- `matrixAAInvB`, `vectorAInvB` — precomputed $A^{-1}B$ to accelerate Jacobi / SOR iterations.
 - `matrixSecondary`, `matrixAHalf_GG` — auxiliary reconstruction systems.
-- `matrixA`, `matrixACholeskyL`, `volIntCholeskyL` — full system + Cholesky
-  factor for dense local solves.
+- `matrixA`, `matrixACholeskyL`, `volIntCholeskyL` — full system + Cholesky factor for dense local solves.
 
-All arrays are `ArrayEigenMatrix*` or `ArrayEigenUniMatrixBatch*` — i.e.,
-Eigen maps over an MPI-aware distributed memory block.
+All arrays are `ArrayEigenMatrix*` or `ArrayEigenUniMatrixBatch*` — i.e., Eigen maps over an MPI-aware distributed memory block.
 
 </div>
 </div>
 
 ---
 <!-- _footer: "src/CFV/FiniteVolume.hpp:38-86" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## `FiniteVolume` — the metric cache
 
@@ -1619,9 +1560,7 @@ class FiniteVolume : public DeviceTransferable<FiniteVolume> {
 
 <div class="callout callout-ok">
 
-**CUDA-transferable.** `FiniteVolume` (and therefore `VariationalReconstruction`)
-inherits from `DeviceTransferable<FiniteVolume>`. One call to `fv.to_device()`
-migrates the entire metric cache to the GPU as a device-side view.
+**CUDA-transferable.** `FiniteVolume` (and therefore `VariationalReconstruction`) inherits from `DeviceTransferable<FiniteVolume>`. One call to `fv.to_device()` migrates the entire metric cache to the GPU as a device-side view.
 
 </div>
 
@@ -1705,21 +1644,18 @@ void HLLCFlux(UL, UR, ULm, URm, n, vgN, …);
 
 ### Why this factoring
 
-All 13 variants share `ComputeRoePreamble` — the Roe average, $H_{\text{Roe}}$,
-$a_{\text{Roe}}$, etc. The `eigScheme` template parameter then selects the
-dissipation / entropy-fix strategy.
+All 13 variants share `ComputeRoePreamble` — the Roe average, $H_{\text{Roe}}$, $a_{\text{Roe}}$, etc. The `eigScheme` template parameter then selects the dissipation / entropy-fix strategy.
 
 - **One template instantiation per (`dim`, `eigScheme`)** keeps code size bounded.
 - **Compile-time dispatch** — no indirect calls in the flux kernel.
-- **Same interface** for inviscid and full Navier-Stokes flux:
-  `NSFluxInvis<dim>`, `NSFluxVis<dim>(U, gradU, T, mu, n, flux, adiabaticWall, useQCR)`.
+- **Same interface** for inviscid and full Navier-Stokes flux: `NSFluxInvis<dim>`, `NSFluxVis<dim>(U, gradU, T, mu, n, flux, adiabaticWall, useQCR)`.
 
 </div>
 </div>
 
 ---
 <!-- _footer: "src/CFV/Limiters.hpp:28-577" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Limiters — the FWBAP L2 family
 
@@ -1733,8 +1669,7 @@ dissipation / entropy-fix strategy.
 - `FWBAP_L2_Multiway_PolynomialOrth` — orthogonal variant.
 - `FMEMM_Multiway_Polynomial2D` — Modified Extremum-Monotone Mixer.
 
-**Power parameter:** `p = 4`;
-`verySmallReal_pDiP = std::pow(verySmallReal, 1.0/p)` stabilises near zero.
+**Power parameter:** `p = 4`; `verySmallReal_pDiP = std::pow(verySmallReal, 1.0/p)` stabilises near zero.
 
 </div>
 <div>
@@ -1760,13 +1695,11 @@ dissipation / entropy-fix strategy.
 </div>
 </div>
 
-> **Positivity preservation** — `LimiterUGrad` (Euler side) clamps gradients;
-> `EvaluateURecBeta` enforces cell-mean positivity on reconstructed values;
-> `EvaluateCellRHSAlpha` enforces CFL-consistent per-cell RHS scaling.
+> **Positivity preservation** — `LimiterUGrad` (Euler side) clamps gradients; `EvaluateURecBeta` enforces cell-mean positivity on reconstructed values; `EvaluateCellRHSAlpha` enforces CFL-consistent per-cell RHS scaling.
 
 ---
 <!-- _footer: "src/CFV/VariationalReconstruction.hpp:1071-1086" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## VR's own limiter — WBAP with characteristic transform
 
@@ -1802,17 +1735,15 @@ void DoLimiterWBAP_3(...);                      // 3-mode variant
 
 ### Smoothness indicators
 
-- `DoCalculateSmoothIndicator<nVarsFixed, nVarsSee=2>(si, uRec, u, varsSee)` —
-  classical indicator over a subset of variables.
-- `DoCalculateSmoothIndicatorV1<nVarsFixed>(si, uRec, u, varsSee, FPost)` —
-  V1 with user-provided post-processing.
+- `DoCalculateSmoothIndicator<nVarsFixed, nVarsSee=2>(si, uRec, u, varsSee)` — classical indicator over a subset of variables.
+- `DoCalculateSmoothIndicatorV1<nVarsFixed>(si, uRec, u, varsSee, FPost)` — V1 with user-provided post-processing.
 
 </div>
 </div>
 
 ---
 <!-- _footer: "src/Solver/ODE.hpp · RELEASE_NOTES.md:11,14" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Time integration — the ODE zoo
 
@@ -1858,8 +1789,7 @@ class ImplicitDualTimeStep {
 
 ### p-MG inside the time step
 
-Inside `ImplicitHermite3SimpleJacobianDualStep::Step()` a **nonzero `nMG`**
-triggers p-multigrid smoothing cycles:
+Inside `ImplicitHermite3SimpleJacobianDualStep::Step()` a **nonzero `nMG`** triggers p-multigrid smoothing cycles:
 
 ```cpp
 // pseudocode inside the inner solve (lines 1250-1251)
@@ -1867,9 +1797,7 @@ fdt (xMG, dTau, 1.0, /*upos=*/2);      // lower-order pseudo-timestep
 frhs(rhsbuf[1], xMG, dTau, iter, 1.0, /*upos=*/2);
 ```
 
-The `upos=2` argument tells the evaluator to evaluate at a **lower polynomial
-order** (level-transition). VR provides `DownCastURecOrder(curOrder, iCell,
-uRec, downCastMethod)` to project reconstruction coefficients between orders.
+The `upos=2` argument tells the evaluator to evaluate at a **lower polynomial order** (level-transition). VR provides `DownCastURecOrder(curOrder, iCell, uRec, downCastMethod)` to project reconstruction coefficients between orders.
 
 </div>
 <div>
@@ -1877,10 +1805,8 @@ uRec, downCastMethod)` to project reconstruction coefficients between orders.
 ### Companions
 
 - **`tpMG`** — toggle for multigrid in the outer dual-time loop.
-- **`incFScale`** — incremental flux scaling on lower MG levels; integrated
-  into the entropy fix path (`RELEASE_NOTES.md`).
-- **Positivity-preserving limiters in `LimiterUGrad`** — prevent the lower-order
-  coarse-grid correction from producing negative density / pressure.
+- **`incFScale`** — incremental flux scaling on lower MG levels; integrated into the entropy fix path (`RELEASE_NOTES.md`).
+- **Positivity-preserving limiters in `LimiterUGrad`** — prevent the lower-order coarse-grid correction from producing negative density / pressure.
 
 ### Other `SDIRK4` codes
 
@@ -1895,7 +1821,7 @@ uRec, downCastMethod)` to project reconstruction coefficients between orders.
 
 ---
 <!-- _footer: "src/Solver/Linear.hpp · src/Euler/EulerEvaluator.hpp:427-580" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Linear solvers — Krylov + LU-SGS preconditioner
 
@@ -1952,9 +1878,7 @@ void UpdateSGSWithRec(alphaDiag, t, rhs, u, uRec, uInc, uRecInc,
 "gmresCode": 2  // LUSGS + GMRES    (LUSGS as PC for GMRES)
 ```
 
-Direct path for small blocks: `src/Solver/Direct.hpp` (LU / LDLT).
-Optional **SuperLU_dist** via the `cfd_externals` submodule.
-
+Direct path for small blocks: `src/Solver/Direct.hpp` (LU / LDLT). Optional **SuperLU_dist** via the `cfd_externals` submodule.
 
 ---
 <!-- _class: chapter -->
@@ -1998,8 +1922,7 @@ trans.initPersistentPull();
   // local: MPI_Recv_init + MPI_Send_init
 ```
 
-The derived MPI datatypes persist with the transformer — teardown costs
-them nothing until destruction.
+The derived MPI datatypes persist with the transformer — teardown costs them nothing until destruction.
 
 </div>
 <div>
@@ -2018,9 +1941,7 @@ trans.clearPersistentPull();
 
 <div class="callout callout-bug">
 
-🐛 **v0.1.0 bug-fix:** `globalSize()` used to be collective and could deadlock
-when some ranks took short-cut paths. It's now cached at
-`createFatherGlobalMapping` time — fully local.
+🐛 **v0.1.0 bug-fix:** `globalSize()` used to be collective and could deadlock when some ranks took short-cut paths. It's now cached at `createFatherGlobalMapping` time — fully local.
 
 </div>
 
@@ -2062,15 +1983,13 @@ MPI_Isend(inSituBuffer[rank].data(), ...);
 ```
 
 - Explicit pack into contiguous buffers.
-- Beats `HIndexed` on some **older MPI stacks** and on **CUDA-aware MPI** with
-  GPU-Direct where the driver prefers flat buffers.
+- Beats `HIndexed` on some **older MPI stacks** and on **CUDA-aware MPI** with GPU-Direct where the driver prefers flat buffers.
 - One extra memory pass per phase — tradeoff.
 
 </div>
 </div>
 
-> Both strategies live behind the same public API. The choice is a tuning knob
-> — no application-level changes needed.
+> Both strategies live behind the same public API. The choice is a tuning knob — no application-level changes needed.
 
 ---
 <!-- _footer: "src/DNDS/ArrayTransformer.hpp:606" -->
@@ -2096,10 +2015,7 @@ recTrans.initPersistentPull();
 
 <div class="callout callout-ok">
 
-**Consequence.** In the Euler pipeline every DOF array (`u`, `uPrev`, `uInc`,
-`uRec`, `uRecInc`, `uRecB`, …) shares a single ghost map established from
-the `cell2cell` adjacency. Only the MPI datatypes differ, keyed on the row
-size of each array.
+**Consequence.** In the Euler pipeline every DOF array (`u`, `uPrev`, `uInc`, `uRec`, `uRecInc`, `uRecB`, …) shares a single ghost map established from the `cell2cell` adjacency. Only the MPI datatypes differ, keyed on the row size of each array.
 
 </div>
 
@@ -2117,13 +2033,9 @@ size of each array.
 ### Where OMP is already applied
 
 - **ILU-OMP preconditioner** — parallel forward/backward sweeps (new in v0.1.0).
-- **Eigen reductions** — `EigenVecMin`, `EigenVecSum` fold per thread, then
-  combine.
-- **State transitions** —
-  `toLocalOMP` / `toGlobalOMP` / `bootstrapToLocalOMP` parallelize over the
-  rows of adjacency arrays.
-- **FV metric construction** — many `ConstructX()` methods in `FiniteVolume`
-  loop over cells / faces with `#pragma omp parallel for`.
+- **Eigen reductions** — `EigenVecMin`, `EigenVecSum` fold per thread, then combine.
+- **State transitions** — `toLocalOMP` / `toGlobalOMP` / `bootstrapToLocalOMP` parallelize over the rows of adjacency arrays.
+- **FV metric construction** — many `ConstructX()` methods in `FiniteVolume` loop over cells / faces with `#pragma omp parallel for`.
 - **VR iteration** — `DoReconstructionIter` has an OMP variant.
 
 </div>
@@ -2131,15 +2043,12 @@ size of each array.
 
 ### Hybrid model
 
-![](res/mermaid_04_e32cfdd6.svg)
+![](res/mermaid_05_e32cfdd6.svg)
 
 
-**CI default** `OMP_NUM_THREADS=2` (override at configure time via
-`DNDS_TEST_OMP_THREADS`).
-MPI-rank count per test configurable via `DNDS_TEST_NP_LIST`.
+**CI default** `OMP_NUM_THREADS=2` (override at configure time via `DNDS_TEST_OMP_THREADS`). MPI-rank count per test configurable via `DNDS_TEST_NP_LIST`.
 
-Typical production deployment: **1 MPI rank per NUMA node × OMP threads**
-within. MPI handles cross-socket / cross-node; OMP handles within.
+Typical production deployment: **1 MPI rank per NUMA node × OMP threads** within. MPI handles cross-socket / cross-node; OMP handles within.
 
 </div>
 </div>
@@ -2196,28 +2105,21 @@ fv.to_host();
 </div>
 </div>
 
-Build: `cmake --preset cuda` → `-DDNDS_USE_CUDA=ON` · Thrust fixes via
-`CMAKE_CUDA_ARCHITECTURE=native`.
+Build: `cmake --preset cuda` → `-DDNDS_USE_CUDA=ON` · Thrust fixes via `CMAKE_CUDA_ARCHITECTURE=native`.
 
 ---
 <!-- _footer: "src/EulerP/EulerP_Evaluator.hpp · EulerP_Evaluator_impl.{hpp,cpp,cu}" -->
-<!-- _class: denser -->
+<!-- _class:  -->
 
 ## EulerP — the purpose-built GPU evaluator
 
-**Problem:** the stock `Euler` evaluator uses Eigen with compile-time `nVars`;
-Eigen matrix ops do not cleanly lower to device-callable scalar loops. CUDA
-kernel launches over tiny matrices cost more than the math.
+**Problem:** the stock `Euler` evaluator uses Eigen with compile-time `nVars`; Eigen matrix ops do not cleanly lower to device-callable scalar loops. CUDA kernel launches over tiny matrices cost more than the math.
 
 **Solution:** a parallel-track evaluator in `src/EulerP/` that:
 
 1. Drops the Eigen matrix abstraction inside kernels — scalar loops over `nVars`.
-2. Splits into `EvaluatorDeviceView<B>` with `B ∈ {Host, CUDA}` — same
-   interface, two implementations compiled in separate translation units
-   (`.cpp` and `.cu`).
-3. Bundles per-call arguments into `*_Arg` structs (e.g. `RecGradient_Arg`,
-   `Flux2nd_Arg`) so the launching host code doesn't need to know argument
-   order.
+2. Splits into `EvaluatorDeviceView<B>` with `B ∈ {Host, CUDA}` — same interface, two implementations compiled in separate translation units (`.cpp` and `.cu`).
+3. Bundles per-call arguments into `*_Arg` structs (e.g. `RecGradient_Arg`, `Flux2nd_Arg`) so the launching host code doesn't need to know argument order.
 
 ```cpp
 template <DeviceBackend B>
@@ -2228,12 +2130,11 @@ struct EvaluatorDeviceView {
 };
 ```
 
-Python driver: `python/DNDSR/EulerP/EulerP_Solver.py` orchestrates the full
-EulerP pipeline from Python with CUDA selected by runtime flag.
+Python driver: `python/DNDSR/EulerP/EulerP_Solver.py` orchestrates the full EulerP pipeline from Python with CUDA selected by runtime flag.
 
 ---
 <!-- _footer: "src/EulerP/EulerP_Evaluator.hpp:149-918" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## EulerP — the kernel pipeline
 
@@ -2265,8 +2166,7 @@ public:
 
 - All array references in one place → simple to serialize for a device kernel.
 - Host/CUDA dispatch happens at a single call site (`Evaluator_impl<B>`).
-- The launching host code sees the same identifier `EvaluateRHS` regardless
-  of backend.
+- The launching host code sees the same identifier `EvaluateRHS` regardless of backend.
 
 ---
 <!-- _footer: "docs/dev/cudaNotes.md · RELEASE_NOTES.md:50-52" -->
@@ -2278,15 +2178,12 @@ public:
 
 ### Benchmarks already shipped
 
-- **Block-sparse MatVec** — `src/Geom/Mesh/BenchmarkFiniteVolume.cu` exercises
-  the metric arrays on-device with varied block sizes.
-- **SoA vs AoS** — multiple layout variants benchmarked for the per-cell DOF
-  blocks.
+- **Block-sparse MatVec** — `src/Geom/Mesh/BenchmarkFiniteVolume.cu` exercises the metric arrays on-device with varied block sizes.
+- **SoA vs AoS** — multiple layout variants benchmarked for the per-cell DOF blocks.
 
 ### Memory model
 
-- `host_device_vector<T>` — a vector that can shadow itself on device; used
-  throughout `FiniteVolume` / `UnstructuredMesh`.
+- `host_device_vector<T>` — a vector that can shadow itself on device; used throughout `FiniteVolume` / `UnstructuredMesh`.
 - Transfers are explicit (`to_device` / `to_host`) — no hidden synchronization.
 
 </div>
@@ -2294,12 +2191,9 @@ public:
 
 ### Pitfalls avoided
 
-- **Thrust + CMake:** `CMAKE_CUDA_ARCHITECTURE=native` fixes a class of
-  compile errors in Thrust's internal machinery.
-- **Accidental `to_device`:** a bug in the face-buffer creation path was
-  copying host buffers to device needlessly; fixed in v0.1.0.
-- **`py::classh` holders:** ensure safe Python↔C++ ownership when CUDA
-  pointers survive across Python GC boundaries.
+- **Thrust + CMake:** `CMAKE_CUDA_ARCHITECTURE=native` fixes a class of compile errors in Thrust's internal machinery.
+- **Accidental `to_device`:** a bug in the face-buffer creation path was copying host buffers to device needlessly; fixed in v0.1.0.
+- **`py::classh` holders:** ensure safe Python↔C++ ownership when CUDA pointers survive across Python GC boundaries.
 
 ### Work in progress
 
@@ -2308,7 +2202,6 @@ public:
 
 </div>
 </div>
-
 
 ---
 <!-- _class: chapter -->
@@ -2337,15 +2230,13 @@ public:
 
 <div class="callout">
 
-**Key property.** Every method in `SerializerH5` is **MPI-collective** — every
-rank must call them in the same order, even when that rank has `size == 0`.
-Failing to participate causes a hang, not a crash.
+**Key property.** Every method in `SerializerH5` is **MPI-collective** — every rank must call them in the same order, even when that rank has `size == 0`. Failing to participate causes a hang, not a crash.
 
 </div>
 
 ---
 <!-- _footer: "src/DNDS/Serializer/SerializerBase.hpp:153-303" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## `SerializerBase` — the public interface
 
@@ -2427,25 +2318,21 @@ extern ArrayGlobalOffset ArrayGlobalOffset_Unknown, _One, _Parts, _EvenSplit;
 
 ### The trap
 
-When `nGlobal < nRanks` (5 entries across 8 ranks), `EvenSplitRange` assigns
-0 rows to some ranks. Collective HDF5 calls still demand every rank
-participates — and `std::vector<>::data()` on an empty vector may return `nullptr`.
+When `nGlobal < nRanks` (5 entries across 8 ranks), `EvenSplitRange` assigns 0 rows to some ranks. Collective HDF5 calls still demand every rank participates — and `std::vector<>::data()` on an empty vector may return `nullptr`.
 
 ```cpp
 std::vector<index> v(size);        // size may be 0
 ReadDataVector<index>(name, v.data(), ...);  // may pass nullptr → hang
 ```
 
-Caller-side helpers like `__ReadSerializerData` and `ReadUint8Array` would
-skip the `H5Dread` when `buf == nullptr`, and the collective hangs.
+Caller-side helpers like `__ReadSerializerData` and `ReadUint8Array` would skip the `H5Dread` when `buf == nullptr`, and the collective hangs.
 
 </div>
 <div>
 
 ### The fix
 
-Every caller in `SerializerBase.cpp` passes a **stack-allocated dummy pointer**
-when `size == 0`:
+Every caller in `SerializerBase.cpp` passes a **stack-allocated dummy pointer** when `size == 0`:
 
 ```cpp
 index dummy;
@@ -2459,8 +2346,7 @@ ReadDataVector<index>(name,
 1. First call: `data = nullptr`, returns the size.
 2. Second call: allocate + call again with a real (or dummy) pointer.
 
-All collectives proceed with 0-count hyperslabs on the empty ranks — no
-application-level branching.
+All collectives proceed with 0-count hyperslabs on the empty ranks — no application-level branching.
 
 </div>
 </div>
@@ -2470,15 +2356,12 @@ application-level branching.
 
 ## Write-N-read-M — the rendezvous pattern
 
-![](res/mermaid_05_9c76b2a3.svg)
+![](res/mermaid_06_9c76b2a3.svg)
 
 
 <div class="callout callout-ok">
 
-**Consequence.** `EulerSolver::ReadRestart` is a single call. The user writes
-from 4 ranks on a login node, restarts on 1024 ranks on a compute partition,
-and the same JSON config runs. Ranks with `localRows == 0` participate in every
-collective with empty buffers.
+**Consequence.** `EulerSolver::ReadRestart` is a single call. The user writes from 4 ranks on a login node, restarts on 1024 ranks on a compute partition, and the same JSON config runs. Ranks with `localRows == 0` participate in every collective with empty buffers.
 
 </div>
 
@@ -2513,16 +2396,13 @@ struct ImplicitCFLControl {
 
 <div class="callout">
 
-**What the macro gives you.** No base class, no virtual members, no per-instance
-data — the struct stays a POD safe for CUDA. Underneath, a static
-`_dnds_do_register()` method is generated that fills a
-`ConfigRegistry<T>` singleton with `FieldMeta` records.
+**What the macro gives you.** No base class, no virtual members, no per-instance data — the struct stays a POD safe for CUDA. Underneath, a static `_dnds_do_register()` method is generated that fills a `ConfigRegistry<T>` singleton with `FieldMeta` records.
 
 </div>
 
 ---
 <!-- _footer: "src/DNDS/Config/ConfigParam.hpp:71-81" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Configs — field kinds & cross-field checks
 
@@ -2590,9 +2470,7 @@ nlohmann::ordered_json schema = ConfigRegistry<EulerConfig>::Instance().emitSche
 # drops ~107 KB per-solver schema
 ```
 
-VS Code + any JSON-schema-aware editor give autocompletion and in-line
-validation. Pre-computed schemas ship in `cases/euler_schema.json`,
-`eulerSA3D_schema.json`, etc.
+VS Code + any JSON-schema-aware editor give autocompletion and in-line validation. Pre-computed schemas ship in `cases/euler_schema.json`, `eulerSA3D_schema.json`, etc.
 
 </div>
 <div>
@@ -2633,11 +2511,9 @@ python/DNDSR/DNDS/__init__.py
 
 ### The preload order matters
 
-`_loader.py` loads external dependencies with `RTLD_GLOBAL` **before** the
-pybind11 extension opens. If they were loaded later with the default
-`RTLD_LOCAL`, the extension would not find the symbols it depends on.
+`_loader.py` loads external dependencies with `RTLD_GLOBAL` **before** the pybind11 extension opens. If they were loaded later with the default `RTLD_LOCAL`, the extension would not find the symbols it depends on.
 
-![](res/mermaid_06_7c2b2844.svg)
+![](res/mermaid_07_7c2b2844.svg)
 
 
 </div>
@@ -2650,8 +2526,7 @@ pybind11 extension opens. If they were loaded later with the default
 - `DNDSR.CFV`  — finite volume / VR / Fourier analysis
 - `DNDSR.EulerP` — GPU-friendly Euler evaluator
 
-Top-level `__init__.py` imports all four so a single
-`from DNDSR import *` works.
+Top-level `__init__.py` imports all four so a single `from DNDSR import *` works.
 
 </div>
 </div>
@@ -2688,15 +2563,13 @@ result.mesh.BuildVTKConnectivity()
 
 <div class="callout callout-ok">
 
-**PEP 561 compliant.** A `py.typed` marker ships in the package; `.pyi` stubs
-are auto-generated by `pybind11-stubgen` during `cmake --install`. Pyright,
-mypy, and Pylance see full C++ type signatures.
+**PEP 561 compliant.** A `py.typed` marker ships in the package; `.pyi` stubs are auto-generated by `pybind11-stubgen` during `cmake --install`. Pyright, mypy, and Pylance see full C++ type signatures.
 
 </div>
 
 ---
 <!-- _footer: "src/CFV/ModelEvaluator.hpp · RELEASE_NOTES.md:25" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## CFV Python — Fourier dissipation-dispersion analysis
 
@@ -2715,11 +2588,7 @@ for kx in kx_range:
 
 <div class="callout">
 
-**Why this matters for a research code.** VR's dispersion/dissipation properties
-depend on order, limiter, and inner-product choice. Having a Python harness to
-sweep them over a discrete Fourier spectrum means parameter studies
-(limiter combinations, inner-product choices, derivative weights) are done in
-hours, not weeks.
+**Why this matters for a research code.** VR's dispersion/dissipation properties depend on order, limiter, and inner-product choice. Having a Python harness to sweep them over a discrete Fourier spectrum means parameter studies (limiter combinations, inner-product choices, derivative weights) are done in hours, not weeks.
 
 </div>
 
@@ -2728,9 +2597,7 @@ Other Python-exposed bits:
 - `ArrayPair`, `ArrayEigenMatrix/Vector/Batch`
 - `BuildUDof / BuildURec / BuildUGrad` (typed constructors)
 - VTK output, wall-distance, `to_device / to_host`
-- The full `MeshAdjState` enum and `AdjPairTracked::idx` queries
-  (query-only, no mutation from Python — intentional)
-
+- The full `MeshAdjState` enum and `AdjPairTracked::idx` queries (query-only, no mutation from Python — intentional)
 
 ---
 <!-- _class: chapter -->
@@ -2744,7 +2611,7 @@ Other Python-exposed bits:
 
 ---
 <!-- _footer: "src/Euler/Euler.hpp:874-905 · app/Euler/*.cpp" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## The Euler / N-S family — one binary per model
 
@@ -2776,8 +2643,7 @@ enum EulerModel {
 };
 ```
 
-Template dispatch on `EulerModel` produces one binary per solver
-— shared source, separated object files.
+Template dispatch on `EulerModel` produces one binary per solver — shared source, separated object files.
 
 </div>
 <div>
@@ -2794,15 +2660,14 @@ enum RANSModel {
 };
 ```
 
-Each has a `RANSModelTraits<>` specialization with its own wall BC, source
-terms, and spectral radius.
+Each has a `RANSModelTraits<>` specialization with its own wall BC, source terms, and spectral radius.
 
 </div>
 </div>
 
 ---
 <!-- _footer: "src/Euler/EulerSolver.hpp:73-148" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## `EulerSolver` — the top-level conductor
 
@@ -2840,24 +2705,18 @@ class EulerSolver {
 
 ---
 <!-- _footer: "src/Euler/EulerSolver.hpp:160-246 · nested Configuration struct" -->
-<!-- _class: tight -->
+<!-- _class: dense -->
 
 ## `Configuration` — everything that tunes a run
 
-Every sub-section uses `DNDS_DECLARE_CONFIG` so the full JSON schema is
-auto-generated.
+Every sub-section uses `DNDS_DECLARE_CONFIG` so the full JSON schema is auto-generated.
 
 <div class="cols">
 <div>
 
-- **`TimeMarchControl`** — `dtImplicit`, `nTimeStep`, `steadyQuit`,
-  `useRestart`, `useImplicitPP`, `odeCode`, `odeSetting1..4`,
-  `odeSettingsExtra` (opaque JSON), `dtCFLLimitScale`, …
-- **`ImplicitReconstructionControl`** — `useExplicit`, `nInternalRecStep`,
-  `recLinearScheme` (0 = SOR, 1 = GMRES), `nGmresSpace/Iter`, `fpcgReset*`,
-  `recThreshold`.
-- **`OutputControl`** — `outputIntervalStep`, `outputFormat` (VTK, PLT,
-  VTKHDF, series), parallel vs serial write.
+- **`TimeMarchControl`** — `dtImplicit`, `nTimeStep`, `steadyQuit`, `useRestart`, `useImplicitPP`, `odeCode`, `odeSetting1..4`, `odeSettingsExtra` (opaque JSON), `dtCFLLimitScale`, …
+- **`ImplicitReconstructionControl`** — `useExplicit`, `nInternalRecStep`, `recLinearScheme` (0 = SOR, 1 = GMRES), `nGmresSpace/Iter`, `fpcgReset*`, `recThreshold`.
+- **`OutputControl`** — `outputIntervalStep`, `outputFormat` (VTK, PLT, VTKHDF, series), parallel vs serial write.
 - **`CFLControl`** — initial / max CFL, ramping schedule.
 
 </div>
@@ -2875,8 +2734,7 @@ auto-generated.
 </div>
 </div>
 
-> `--emit-schema` dumps the entire tree as a single JSON Schema document —
-> `euler_schema.json` / `eulerSA3D_schema.json` / etc., each ~107 KB.
+> `--emit-schema` dumps the entire tree as a single JSON Schema document — `euler_schema.json` / `eulerSA3D_schema.json` / etc., each ~107 KB.
 
 ---
 <!-- _footer: "src/Euler/EulerEvaluator.hpp:399-612" -->
@@ -2910,8 +2768,7 @@ void EvaluateRHS(ArrayDOFV<nVarsFixed>            &rhs,
 - `RHS_Direct_2nd_Rec_already_have_uGradBufNoLim`
 - `RHS_Recover_IncFScale`
 
-Flags compose bitwise — they cover fallback / diagnostic modes used by p-MG
-and PP sub-steps.
+Flags compose bitwise — they cover fallback / diagnostic modes used by p-MG and PP sub-steps.
 
 </div>
 <div>
@@ -2923,8 +2780,7 @@ and PP sub-steps.
 - `EvaluateCellRHSAlpha` — per-cell RHS scaling for PP.
 - `LimiterUGrad` — gradient limiter, optional shock detection.
 - `LUSGSMatrixInit/Vec/ToJacobianLU` and `UpdateSGS(WithRec)`.
-- Wall distance: `GetWallDist_AABB`, `GetWallDist_BatchedAABB`,
-  `GetWallDist_Poisson`.
+- Wall distance: `GetWallDist_AABB`, `GetWallDist_BatchedAABB`, `GetWallDist_Poisson`.
 - Viscosity: `muEff(U, T)` with Sutherland or constant models.
 
 </div>
@@ -2932,12 +2788,11 @@ and PP sub-steps.
 
 ---
 <!-- _footer: "src/Euler/BoundaryConditions/ · BoundaryHandler<model>" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Boundary conditions — strategy pattern
 
-Each BC is a class implementing a common interface; `BoundaryHandler<model>`
-routes face-zone IDs to BC instances at runtime.
+Each BC is a class implementing a common interface; `BoundaryHandler<model>` routes face-zone IDs to BC instances at runtime.
 
 | BC                   | Use                                         |
 |----------------------|---------------------------------------------|
@@ -2953,13 +2808,11 @@ routes face-zone IDs to BC instances at runtime.
 | `BCProfileIn`        | Tabulated profile (boundary layer, RANS)    |
 | `BCActuator`         | Actuator disk source term                   |
 
-Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`,
-`BCMixingPlane`, and the **CL driver** for AoA-adaptive lift matching
-(`pCLDriver` in the evaluator).
+Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`, `BCMixingPlane`, and the **CL driver** for AoA-adaptive lift matching (`pCLDriver` in the evaluator).
 
 ---
 <!-- _footer: "cases/euler/ · cases/euler3D/" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Canonical benchmarks — Riemann, shocks, smooth
 
@@ -2990,13 +2843,11 @@ Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`,
 ### Smooth / steady / unsteady
 
 - **Isentropic Vortex** `euler_config_IV.json` — convergence study
-- **Taylor-Green Vortex 3D** `euler3D_config_TGV.json`,
-  `euler3D_config_BenchTGV.json`
+- **Taylor-Green Vortex 3D** `euler3D_config_TGV.json`, `euler3D_config_BenchTGV.json`
 - **Lid-driven cavity** (incl. hypersonic variant)
 - **Von Kármán vortex street** 2D + 3D
 - **Laminar flat-plate BL**
-- **Inviscid cylinder (MG bench)**
-  `config_cylinderInvis_mg_bench.json`
+- **Inviscid cylinder (MG bench)** `config_cylinderInvis_mg_bench.json`
 
 ### Rotating / periodic frames
 
@@ -3017,9 +2868,7 @@ Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`,
 
 ### External aerodynamics
 
-- **NACA 0012** — SA (`eulerSA_config_0012_AOA15.json`) and k-ω (`euler2EQ/...`)
-  variants, with O2 elevation (`..._Elev.json`) and MG benchmarks
-  (`config_0012_mg_bench.json`).
+- **NACA 0012** — SA (`eulerSA_config_0012_AOA15.json`) and k-ω (`euler2EQ/...`) variants, with O2 elevation (`..._Elev.json`) and MG benchmarks (`config_0012_mg_bench.json`).
 - **30p30n** high-lift `eulerSA_config_30p30n.json`.
 - **NASA CRM** — regular + CRM-HL high-lift.
 - **DLR-F6** transport wing-body.
@@ -3036,18 +2885,17 @@ Specialized turbomachinery BCs: `BCTotalInlet`, `BCRadialEqOutlet`,
 
 ### Industry workflow — "partition on login, run on compute"
 
-![](res/mermaid_07_e51c75c5.svg)
+![](res/mermaid_08_e51c75c5.svg)
 
 
-This pattern also stresses `ReadSerializeRedistributed` across different
-rank counts.
+This pattern also stresses `ReadSerializeRedistributed` across different rank counts.
 
 </div>
 </div>
 
 ---
 <!-- _footer: "RELEASE_NOTES.md:9-21" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## New solver features in v0.1.0
 
@@ -3056,8 +2904,7 @@ rank counts.
 
 ### ODE & preconditioning
 
-- **HM3 revamp** — U2R2 / U2R1 / U3R1 modes, `tpMG`, `incFScale`,
-  positivity-preserving coupling with `LimiterUGrad`.
+- **HM3 revamp** — U2R2 / U2R1 / U3R1 modes, `tpMG`, `incFScale`, positivity-preserving coupling with `LimiterUGrad`.
 - **ESDIRK2 / ESDIRK3 / Trapezoidal** added.
 - **ILU-OMP** preconditioner.
 
@@ -3082,13 +2929,11 @@ rank counts.
 ### Physics
 
 - **Rotating frames** (periodic + simple convergence).
-- **Overset grid exploration** — hole cutting, distance map,
-  cell-cell connectivity (2D demo).
+- **Overset grid exploration** — hole cutting, distance map, cell-cell connectivity (2D demo).
 
 ### Workflow
 
-- `source2nd`, `mergeMultiResidual`, `normOrd`, `restartOutAtInit`,
-  `resBaseType` options.
+- `source2nd`, `mergeMultiResidual`, `normOrd`, `restartOutAtInit`, `resBaseType` options.
 
 </div>
 </div>
@@ -3128,10 +2973,7 @@ void RunImplicitEuler() {
 }
 ```
 
-The lambdas above are where `EulerEvaluator`, `GMRES_LeftPreconditioned`, and
-`LUSGSMatrix*` plug in — the ODE integrator never knows which solver is
-instantiating it.
-
+The lambdas above are where `EulerEvaluator`, `GMRES_LeftPreconditioned`, and `LUSGSMatrix*` plug in — the ODE integrator never knows which solver is instantiating it.
 
 ---
 <!-- _class: chapter -->
@@ -3158,9 +3000,7 @@ instantiating it.
 
 <div class="callout">
 
-**Totals.** 25+ C++ executables, ~1100 assertions, ~32 Python tests.
-All MPI-aware tests are CTest-registered at each np value. Serial tests have
-a 60–120 s timeout; parallel tests 120–600 s depending on module.
+**Totals.** 25+ C++ executables, ~1100 assertions, ~32 Python tests. All MPI-aware tests are CTest-registered at each np value. Serial tests have a 60–120 s timeout; parallel tests 120–600 s depending on module.
 
 </div>
 
@@ -3241,42 +3081,30 @@ TEST_CASE("ArrayTransformer: round-trip ghost pull" *
 
 ### CFV
 
-- `test_reconstruction`
-  · tests of VR convergence on analytic fields.
-- `test_reconstruction3d`
-  · 3D variants; Jacobi/SOR comparison.
-- `test_limiters`
-  · WBAP / CWBAP on contrived data; exercises the full limiter menu.
-- `test_device_transferable`
-  *(CUDA only)* · round-trip of `FiniteVolume` to GPU and back.
+- `test_reconstruction` · tests of VR convergence on analytic fields.
+- `test_reconstruction3d` · 3D variants; Jacobi/SOR comparison.
+- `test_limiters` · WBAP / CWBAP on contrived data; exercises the full limiter menu.
+- `test_device_transferable` *(CUDA only)* · round-trip of `FiniteVolume` to GPU and back.
 
 </div>
 <div>
 
 ### Euler
 
-- `test_gas_thermo`
-  · ideal gas Cv/Cp, T/p relations, Mach→state.
-- `test_riemann_solvers`
-  · 13 variants, exact-solution agreement on 1D Riemann problems.
-- `test_rans`
-  · SA + k-ω source terms, wall distance integration, trip location.
-- `test_evaluator_pipeline`
-  · full `EvaluateRHS` on a fixed mesh — **golden values**.
+- `test_gas_thermo` · ideal gas Cv/Cp, T/p relations, Mach→state.
+- `test_riemann_solvers` · 13 variants, exact-solution agreement on 1D Riemann problems.
+- `test_rans` · SA + k-ω source terms, wall distance integration, trip location.
+- `test_evaluator_pipeline` · full `EvaluateRHS` on a fixed mesh — **golden values**.
 
 </div>
 <div>
 
 ### Solver
 
-- `test_ode`
-  · BDF / SDIRK / HM3 on ODE benchmarks (Van der Pol, stiff scalar).
-- `test_linear`
-  · GMRES + PCG convergence on canonical matrices.
-- `test_direct`
-  · small-block LU / LDLT correctness.
-- `test_scalar`
-  · scalar transport advection-diffusion regression.
+- `test_ode` · BDF / SDIRK / HM3 on ODE benchmarks (Van der Pol, stiff scalar).
+- `test_linear` · GMRES + PCG convergence on canonical matrices.
+- `test_direct` · small-block LU / LDLT correctness.
+- `test_scalar` · scalar transport advection-diffusion regression.
 
 </div>
 </div>
@@ -3286,9 +3114,7 @@ TEST_CASE("ArrayTransformer: round-trip ghost pull" *
 
 ## Determinism — how golden values stay stable
 
-Many tests compare computed results against pre-captured **golden values**
-with relative tolerance `1e-6` to `1e-8`. For this to be meaningful, runs
-must be byte-stable across re-executions.
+Many tests compare computed results against pre-captured **golden values** with relative tolerance `1e-6` to `1e-8`. For this to be meaningful, runs must be byte-stable across re-executions.
 
 <div class="cols">
 <div>
@@ -3296,20 +3122,16 @@ must be byte-stable across re-executions.
 ### Sources of non-determinism — eliminated
 
 - **Partitioning order** → `metisSeed = 42` (fixed).
-- **SOR update order** (depends on partition) → Jacobi iteration used
-  instead in VR tests.
-- **LU-SGS sweep direction** (partition-ordered) → Jacobi-style updates
-  in Euler pipeline tests.
-- **OMP reduction order** (thread count) → scalar reductions are
-  deterministic at fixed thread count.
+- **SOR update order** (depends on partition) → Jacobi iteration used instead in VR tests.
+- **LU-SGS sweep direction** (partition-ordered) → Jacobi-style updates in Euler pipeline tests.
+- **OMP reduction order** (thread count) → scalar reductions are deterministic at fixed thread count.
 
 </div>
 <div>
 
 ### Sentinel value pattern
 
-When a golden value **has not yet been captured**, the test stores the
-sentinel `1e300`:
+When a golden value **has not yet been captured**, the test stores the sentinel `1e300`:
 
 ```cpp
 const real gold_kinetic = 1e300;           // TODO: capture
@@ -3320,8 +3142,7 @@ else
     CHECK(std::isfinite(computed) && computed >= 0);
 ```
 
-So the first run of a new test is a finite/non-negative sanity check,
-and the developer updates the golden in a follow-up commit.
+So the first run of a new test is a finite/non-negative sanity check, and the developer updates the golden in a follow-up commit.
 
 </div>
 </div>
@@ -3339,8 +3160,7 @@ and the developer updates the golden in a follow-up commit.
 
 - `test/DNDS/test_basic.py` — import chain, MPIInfo, small array round-trip.
 - `test/Geom/test_read_mesh.py` — CGNS read, elevation, bisection.
-- `test/CFV/test_fv_correctness.py` — cell volume / face area / jacobian
-  correctness on wall meshes (~32 tests).
+- `test/CFV/test_fv_correctness.py` — cell volume / face area / jacobian correctness on wall meshes (~32 tests).
 - `test/CFV/test_reconstruction.py` — VR order convergence on sin(x)sin(y).
 - `test/EulerP/test_eulerP_pipeline.py` — host + CUDA round-trip.
 
@@ -3378,9 +3198,7 @@ PYTHONPATH=<root>/python pytest test/ -v
 
 <div class="callout callout-warn">
 
-⚠ Skipping the install step after changing C++ source leaves stale `.so`
-files and produces misleading segfaults that look like code bugs.
-`git checkout` changes source but does **not** rebuild binaries.
+⚠ Skipping the install step after changing C++ source leaves stale `.so` files and produces misleading segfaults that look like code bugs. `git checkout` changes source but does **not** rebuild binaries.
 
 </div>
 
@@ -3418,9 +3236,7 @@ files and produces misleading segfaults that look like code bugs.
 }
 ```
 
-Aggregate targets: `dnds_unit_tests`, `geom_unit_tests`, `cfv_unit_tests`,
-`euler_unit_tests`, `solver_unit_tests`, `all_unit_tests` — all
-`EXCLUDE_FROM_ALL` so plain `cmake --build` stays fast.
+Aggregate targets: `dnds_unit_tests`, `geom_unit_tests`, `cfv_unit_tests`, `euler_unit_tests`, `solver_unit_tests`, `all_unit_tests` — all `EXCLUDE_FROM_ALL` so plain `cmake --build` stays fast.
 
 ---
 <!-- _footer: "pyproject.toml · RELEASE_NOTES.md:32-40" -->
@@ -3464,9 +3280,7 @@ CC=mpicc CXX=mpicxx \
 
 ### Why system Python (not conda)
 
-> Conda/Anaconda Python embeds an `RPATH` to conda's bundled libstdc++, which
-> may be older than what the MPI compiler produces. System Python uses the
-> system libstdc++ and avoids this conflict.
+> Conda/Anaconda Python embeds an `RPATH` to conda's bundled libstdc++, which may be older than what the MPI compiler produces. System Python uses the system libstdc++ and avoids this conflict.
 > — `README.md`
 
 macOS has a dedicated fmtlib workaround, also shipped.
@@ -3476,7 +3290,7 @@ macOS has a dedicated fmtlib workaround, also shipped.
 
 ---
 <!-- _footer: "docs/dev/clang_tidy_plan.md · RELEASE_NOTES.md:32-40" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Clang-tidy sanitation
 
@@ -3488,13 +3302,11 @@ macOS has a dedicated fmtlib workaround, also shipped.
 - **24 597 diagnostics** at start of the sweep.
 - **26 passes** applied in careful slice order.
 - **1 remaining** — an unrelated Eigen PCH `omp.h` include issue.
-- Full per-pass record and `.clang-tidy` rationale preserved in
-  `docs/dev/clang_tidy_plan.md`.
+- Full per-pass record and `.clang-tidy` rationale preserved in `docs/dev/clang_tidy_plan.md`.
 
 ### The `.clang-tidy` disables (representative)
 
-- `cppcoreguidelines-pro-bounds-pointer-arithmetic` — unavoidable in
-  CSR / row-flat arrays.
+- `cppcoreguidelines-pro-bounds-pointer-arithmetic` — unavoidable in CSR / row-flat arrays.
 - `fuchsia-default-arguments-declarations` — MPI defaults.
 - `llvm-header-guard` — we use `#pragma once`.
 - `modernize-use-trailing-return-type` — style preference.
@@ -3515,8 +3327,7 @@ python scripts/run_clang_tidy.py Solver
 
 ### What's next
 
-Solver / Geom / CFV / Euler / EulerP are **not yet sanitised** — same recipe
-to apply. The `.clang-tidy` disables carry forward.
+Solver / Geom / CFV / Euler / EulerP are **not yet sanitised** — same recipe to apply. The `.clang-tidy` disables carry forward.
 
 </div>
 </div>
@@ -3527,7 +3338,7 @@ to apply. The `.clang-tidy` disables carry forward.
 
 ## Documentation system — architecture
 
-![](res/mermaid_08_f1cc87c1.svg)
+![](res/mermaid_09_f1cc87c1.svg)
 
 
 <div class="cols">
@@ -3535,8 +3346,7 @@ to apply. The `.clang-tidy` disables carry forward.
 
 ### Key features
 
-- **One Markdown source** renders in both Sphinx and Doxygen via
-  `doxygen_compat.py`.
+- **One Markdown source** renders in both Sphinx and Doxygen via `doxygen_compat.py`.
 - **Doxygen HTML** is embedded at `/doxygen/` on the Sphinx site.
 - **Graphviz** class inheritance, call graphs, include graphs.
 - **sphinxawesome-theme** with rich code highlighting.
@@ -3562,7 +3372,7 @@ cmake --build build -t serve-docs
 
 ---
 <!-- _footer: ".github/workflows/ · RELEASE_NOTES.md:68-70" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## CI & release automation
 
@@ -3581,9 +3391,7 @@ cmake --build build -t serve-docs
 ### Style + hygiene
 
 - `.clang-format` ships at repo root; CI checks a diff in a separate job.
-- `POSIX index()` ambiguity guard — code style requires `DNDS::index`
-  whenever `using namespace DNDS;` is active (documented in
-  `docs/tests/overview.md`).
+- `POSIX index()` ambiguity guard — code style requires `DNDS::index` whenever `using namespace DNDS;` is active (documented in `docs/tests/overview.md`).
 
 </div>
 <div>
@@ -3610,7 +3418,6 @@ git push --tags
 </div>
 </div>
 
-
 ---
 <!-- _class: chapter -->
 <!-- _paginate: false -->
@@ -3623,7 +3430,7 @@ git push --tags
 
 ---
 <!-- _footer: "docs/architecture/MeshConnectivity.md:416-458 · MeshDAGDesign.md" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Roadmap — mesh & topology
 
@@ -3643,18 +3450,15 @@ struct GhostRequirement {
 
 - FEM needs a **smaller** ghost set than compact FV.
 - Wide-stencil FV (2+ layers) needs a **larger** set.
-- Current default ghost is hard-coded — `nGhostLayers` only adjusts depth,
-  not the *kind* of neighbor.
+- Current default ghost is hard-coded — `nGhostLayers` only adjusts depth, not the *kind* of neighbor.
 
 </div>
 <div>
 
 ### Medium-term: edge entities
 
-- Add `edge2node`, `cell2edge`, `node2edge` with the same
-  `AdjPairTracked` discipline.
-- Extract the face-interpolation algorithm into a **generic** codim-K
-  template.
+- Add `edge2node`, `cell2edge`, `node2edge` with the same `AdjPairTracked` discipline.
+- Extract the face-interpolation algorithm into a **generic** codim-K template.
 - Needed for **node-based FV** and **FEM** workflows.
 
 ### Long-term: DMPlex-style DAG
@@ -3670,7 +3474,7 @@ struct GhostRequirement {
 
 ---
 <!-- _footer: "RELEASE_NOTES.md:20 · src/EulerP/ · docs/dev/ideas.md" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Roadmap — solvers, parallelism, V&V
 
@@ -3679,13 +3483,9 @@ struct GhostRequirement {
 
 ### Solvers
 
-- **Reactive / multi-species** (`NS_EX`) — maturity pass, published
-  validation cases.
-- **Overset grids** — 2D demo exists (hole creation, distance map,
-  cell-cell connectivity); extend to 3D and add full transfer operators.
-- **Full (assembled) Jacobian** — currently matrix-free + LU-SGS only.
-  Assembling a block CSR Jacobian opens up AMG + SuperLU_dist + PETSc
-  as preconditioners.
+- **Reactive / multi-species** (`NS_EX`) — maturity pass, published validation cases.
+- **Overset grids** — 2D demo exists (hole creation, distance map, cell-cell connectivity); extend to 3D and add full transfer operators.
+- **Full (assembled) Jacobian** — currently matrix-free + LU-SGS only. Assembling a block CSR Jacobian opens up AMG + SuperLU_dist + PETSc as preconditioners.
 
 ### Parallelism
 
@@ -3699,16 +3499,14 @@ struct GhostRequirement {
 
 ### V&V workflow
 
-- Standardized **verification & validation** harness running a fixed case
-  set on every release, publishing convergence plots to the doc site.
+- Standardized **verification & validation** harness running a fixed case set on every release, publishing convergence plots to the doc site.
 - More turbomachinery cases: NASA Rotor 67, low-speed fan stage.
 - Noise-source diagnostics for aeroacoustics.
 
 ### Documentation & dev-UX
 
 - **Expand Python examples** to match current C++ coverage.
-- **Clang-tidy sanitation** for remaining modules (Solver, Geom, CFV,
-  Euler, EulerP) — same recipe as DNDS.
+- **Clang-tidy sanitation** for remaining modules (Solver, Geom, CFV, Euler, EulerP) — same recipe as DNDS.
 - **Contributor on-boarding** guide, already outlined in `docs/dev/`.
 
 </div>
@@ -3716,7 +3514,7 @@ struct GhostRequirement {
 
 ---
 <!-- _footer: "docs/architecture/ · docs/theory/ · docs/guides/" -->
-<!-- _class: denser -->
+<!-- _class: dense -->
 
 ## Where to read next
 
@@ -3725,18 +3523,14 @@ struct GhostRequirement {
 
 ### Architecture
 
-- **`array_infrastructure.md`** — bottom-up tour of `Array` →
-  `ArrayTransformer` → `ArrayPair` → `ArrayDof`.
-- **`MeshConnectivity.md`** — the AdjPairTracked state machine, the
-  ghost-spec DSL, the DAG roadmap.
+- **`array_infrastructure.md`** — bottom-up tour of `Array` → `ArrayTransformer` → `ArrayPair` → `ArrayDof`.
+- **`MeshConnectivity.md`** — the AdjPairTracked state machine, the ghost-spec DSL, the DAG roadmap.
 - **`Serialization.md`** — layer-cake I/O, cross-np restart, offset modes.
-- **`Paradigm.md`** — the delayed-abstraction philosophy contrasted with
-  OpenFOAM / SU2.
+- **`Paradigm.md`** — the delayed-abstraction philosophy contrasted with OpenFOAM / SU2.
 
 ### Theory
 
-- **`Variational_Reconstruction.md`** / `.pdf` — full derivation of the
-  facial functional, inner-product choices, and local system.
+- **`Variational_Reconstruction.md`** / `.pdf` — full derivation of the facial functional, inner-product choices, and local system.
 - **`Shape_Functions.md`** — per-element shape functions and quadrature.
 
 </div>
@@ -3777,9 +3571,7 @@ mpirun -np 4 ./build/app/euler.exe cases/euler_config_IV.json
 
 <br>
 
-**Code** · [github.com/CFDLAB-THU/DNDSR](https://github.com/CFDLAB-THU/DNDSR)
-**Docs** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR)
-**Release notes** · `RELEASE_NOTES.md` (v0.1.0)
+**Code** · [github.com/CFDLAB-THU/DNDSR](https://github.com/CFDLAB-THU/DNDSR) **Docs** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR) **Release notes** · `RELEASE_NOTES.md` (v0.1.0)
 
 <br>
 

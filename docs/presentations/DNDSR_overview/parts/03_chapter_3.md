@@ -39,8 +39,7 @@
 </div>
 <div>
 
-- **Order elevation:** `BuildO2FromO1Elevation()` — Tri3→Tri6, Quad4→Quad9,
-  Tet4→Tet10, Hex8→Hex27, Prism6→Prism18, Pyramid5→Pyramid14.
+- **Order elevation:** `BuildO2FromO1Elevation()` — Tri3→Tri6, Quad4→Quad9, Tet4→Tet10, Hex8→Hex27, Prism6→Prism18, Pyramid5→Pyramid14.
 - **h-refinement:** `BuildBisectO1FormO2()` — one-step bisection from an O2 mesh.
 
 </div>
@@ -82,9 +81,7 @@ class UnstructuredMesh : public DeviceTransferable<UnstructuredMesh> {
 
 <div class="callout">
 
-Every `AdjPairTracked` member carries its own `AdjIndexInfo idx` — so each
-adjacency knows whether it is global or local, **independently of the 5 group
-flags**. Group flags remain as a coarse assertion tool.
+Every `AdjPairTracked` member carries its own `AdjIndexInfo idx` — so each adjacency knows whether it is global or local, **independently of the 5 group flags**. Group flags remain as a coarse assertion tool.
 
 </div>
 
@@ -94,32 +91,45 @@ flags**. Group flags remain as a coarse assertion tool.
 
 ## Mesh build pipeline — end-to-end
 
+<div class="cols">
+<div>
+
+**Setup & adjacency**
+
 ```mermaid
-flowchart TD
+flowchart TB
     A["ReadFromCGNSSerial<br/>or ReadSerializeAndDistribute"] --> B["PartitionReorderToMeshCell2Cell<br/>Metis (KWAY/RB) + RCM reorder"]
     B --> C["RecoverNode2CellAndNode2Bnd<br/>MPI push-back · node → [cells]"]
     C --> D["RecoverCell2CellAndBnd2Cell<br/>node-neighbor cell adjacency"]
     D --> E["BuildGhostPrimary(nGhostLayers)<br/>GhostSpec · CompiledGhostTree · BFS"]
     E --> F["AdjGlobal2LocalPrimary<br/>state: Global → Local"]
-    F --> G["InterpolateFace<br/>face2cell · cell2face · face2node"]
-    G --> H["BuildGhostFace + MatchFaceBoundary"]
+```
+
+</div>
+<div>
+
+**Faces & finalization**
+
+```mermaid
+flowchart TB
+    G["InterpolateFace<br/>face2cell · cell2face · face2node"] --> H["BuildGhostFace<br/>+ MatchFaceBoundary"]
     H --> I["BuildCell2CellFace<br/>face-neighbor (⊆ cell2cell)"]
     I --> J["BuildNodeWallDist (RANS only)"]
     J --> K["ReorderLocalCells(nParts, nPartsInner)<br/>cache-locality pass"]
 ```
 
+</div>
+</div>
+
 <div class="callout callout-warn">
 
-⚠ **`cell2cell` audit** — every runtime call in CFV / Euler / EulerP was
-surveyed; `cell2cell` is queried **zero times** in hot loops. It exists
-exclusively to determine the ghost set, after which face-based traversal
-takes over. This motivates the DMPlex-style evolution on the roadmap.
+⚠ **`cell2cell` audit** — every runtime call in CFV / Euler / EulerP was surveyed; `cell2cell` is queried **zero times** in hot loops. It exists exclusively to determine the ghost set, after which face-based traversal takes over. This motivates the DMPlex-style evolution on the roadmap.
 
 </div>
 
 ---
 <!-- _footer: "src/Geom/Mesh/Mesh.hpp:1083-1105" -->
-<!-- _class: dense -->
+<!-- _class:  -->
 
 ## Partitioning — `PartitionOptions`
 
@@ -138,25 +148,19 @@ struct PartitionOptions {
 
 ### Two partitioners
 
-- **Metis (serial)** — initial cell partition after a serial CGNS read.
-  `MeshPartitionCell2Cell(options)` drives it, then
-  `PartitionReorderToMeshCell2Cell` reorders cells using the partition.
-- **ParMetis (distributed)** — used inside `ReadSerializeAndDistribute` to
-  **refine** an even-split load after an H5 restart or cross-np read.
+- **Metis (serial)** — initial cell partition after a serial CGNS read. `MeshPartitionCell2Cell(options)` drives it, then `PartitionReorderToMeshCell2Cell` reorders cells using the partition.
+- **ParMetis (distributed)** — used inside `ReadSerializeAndDistribute` to **refine** an even-split load after an H5 restart or cross-np read.
 
 </div>
 <div>
 
 ### Determinism
 
-Tests fix `metisSeed = 42`. Combined with the `Jacobi` iteration in VR (instead
-of SOR) and the deterministic LU-SGS replacement, this yields **byte-stable golden
-values** across re-runs at any `np`.
+Tests fix `metisSeed = 42`. Combined with the `Jacobi` iteration in VR (instead of SOR) and the deterministic LU-SGS replacement, this yields **byte-stable golden values** across re-runs at any `np`.
 
 ### Ordering
 
-`ReorderLocalCells(nParts, nPartsInner)` runs a two-level cache-locality pass
-(inner + outer); `ObtainLocalFactFillOrdering` runs AMD / MMD for ILU.
+`ReorderLocalCells(nParts, nPartsInner)` runs a two-level cache-locality pass (inner + outer); `ObtainLocalFactFillOrdering` runs AMD / MMD for ILU.
 
 </div>
 </div>
@@ -201,7 +205,7 @@ struct GhostSpec   { std::vector<GhostChain> chains;
 
 ---
 <!-- _footer: "src/Geom/Mesh/MeshConnectivity.hpp:244-335,1241" -->
-<!-- _class: dense -->
+<!-- _class:  -->
 
 ## The ghost DSL — compile & evaluate
 
@@ -253,12 +257,11 @@ struct GhostResult {
 
 ---
 <!-- _footer: "src/Geom/Mesh/MeshConnectivity.hpp:858-1220" -->
-<!-- _class: tight -->
+<!-- _class: dense -->
 
 ## DSL primitives on `MeshConnectivity`
 
-Beyond the ghost evaluator, `MeshConnectivity` is a reusable DSL for distributed
-adjacency operations — used in many mesh-build steps.
+Beyond the ghost evaluator, `MeshConnectivity` is a reusable DSL for distributed adjacency operations — used in many mesh-build steps.
 
 | Primitive | Signature | What it does |
 |---|---|---|
@@ -281,8 +284,7 @@ struct SharedCountPredicate {
 };
 ```
 
-Used to implement Jacobian-like stencils, e.g. "cells sharing ≥ 2 nodes" to
-filter face-neighbors from node-neighbors.
+Used to implement Jacobian-like stencils, e.g. "cells sharing ≥ 2 nodes" to filter face-neighbors from node-neighbors.
 
 </div>
 <div>
@@ -297,8 +299,7 @@ ssp<AdjVariant> resolveAdj(AdjKind) const;
 bool            hasAdj(AdjKind) const;
 ```
 
-Mesh build methods populate this registry so `evaluateGhostTree` can look up
-each hop's adjacency by kind at runtime.
+Mesh build methods populate this registry so `evaluateGhostTree` can look up each hop's adjacency by kind at runtime.
 
 </div>
 </div>
@@ -323,8 +324,7 @@ void ElevatedNodesSolveInternalSmoothV2();
 ```
 
 - **Boundary smooth** — RBF-based placement of added nodes on curved surfaces.
-- **Internal smooth** — V1/V1Old/V2 variants of a Laplace-like solve to
-  interpolate interior added-node positions.
+- **Internal smooth** — V1/V1Old/V2 variants of a Laplace-like solve to interpolate interior added-node positions.
 
 </div>
 <div>
@@ -357,8 +357,7 @@ Used in practice for:
 
 ## Wall-distance computation
 
-`BuildNodeWallDist(fBndIsWall, WallDistOptions = {})` (`Mesh.hpp:1011`).
-Used by SA / k-ω / DDES / IDDES models.
+`BuildNodeWallDist(fBndIsWall, WallDistOptions = {})` (`Mesh.hpp:1011`). Used by SA / k-ω / DDES / IDDES models.
 
 <div class="cols-40-60">
 <div>
@@ -384,10 +383,8 @@ struct WallDistOptions {
 
 - **Brute force** — O(N · M) pair loop; trivially vectorizable; used for small cases.
 - **CGAL AABB tree** — per-rank tree over wall faces; O(log M) per query.
-- **Batched** — mitigate single-rank-memory ceiling by doing the tree build
-  on subsets of ranks (`wallDistExecution > 1`).
-- **Poisson** — `GetWallDist_Poisson()` in EulerEvaluator; p-Poisson solve on the
-  mesh, gradient inverted → distance.
+- **Batched** — mitigate single-rank-memory ceiling by doing the tree build on subsets of ranks (`wallDistExecution > 1`).
+- **Poisson** — `GetWallDist_Poisson()` in EulerEvaluator; p-Poisson solve on the mesh, gradient inverted → distance.
 
 Distance is also computed *per face* for use in the SST blending functions.
 
@@ -426,9 +423,7 @@ static const index Offset_Unknown   = UnInit;
 
 1. **No `origIndex`, same `np`** → falls back to `ReadSerialize`.
 2. **`origIndex` present, same `np`** → normal read + local remap.
-3. **`origIndex` present, different `np`** →
-   `EvenSplit` read, then **3-round `MPI_Alltoallv` rendezvous** to build the
-   directory `origIdx → globalReadIdx`, followed by one `ArrayTransformer` pull.
+3. **`origIndex` present, different `np`** → `EvenSplit` read, then **3-round `MPI_Alltoallv` rendezvous** to build the directory `origIdx → globalReadIdx`, followed by one `ArrayTransformer` pull.
 
 ```text
 SerializerBase            (abstract)
@@ -440,6 +435,4 @@ Array → ParArray → ArrayPair → ArrayRedistributor
 </div>
 </div>
 
-> Write from 4 ranks, restart on 8 — `EulerSolver::ReadRestart` handles all
-> three cases transparently.
-
+> Write from 4 ranks, restart on 8 — `EulerSolver::ReadRestart` handles all three cases transparently.
