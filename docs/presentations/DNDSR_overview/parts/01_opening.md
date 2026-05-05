@@ -101,9 +101,8 @@ Shared code path, eight binaries.
 
 ### Code
 
-- **~110 k** insertions (v0.1.0)
-- **701** files changed
-- **241** commits in the tagged release
+- **~72k** LOC C++ (346 files)
+- **~1.9k** LOC Python (17 files)
 - **6** C++ modules + header-only Solver
 - **4** pybind11 extension modules
 - **8** solver executables

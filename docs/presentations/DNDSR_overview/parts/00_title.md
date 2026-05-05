@@ -6,8 +6,10 @@
 
 ## A C++17 / Python CFD Research Code
 
-**Compact Finite Volume · Variational Reconstruction** **MPI · OpenMP · CUDA · pybind11**
+**Compact Finite Volume · Variational Reconstruction**
+
+**MPI · OpenMP · CUDA · pybind11**
 
 <br>
 
-`v0.1.0` — 241 commits · 701 files · ~110 k insertions
+`v0.2.0`

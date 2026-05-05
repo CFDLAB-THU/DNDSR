@@ -59,7 +59,7 @@ trans.clearPersistentPull();
 
 <div class="callout callout-bug">
 
-🐛 **v0.1.0 bug-fix:** `globalSize()` used to be collective and could deadlock when some ranks took short-cut paths. It's now cached at `createFatherGlobalMapping` time — fully local.
+🐛 **v0.2.0 bug-fix:** `globalSize()` used to be collective and could deadlock when some ranks took short-cut paths. It's now cached at `createFatherGlobalMapping` time — fully local.
 
 </div>
 
@@ -150,7 +150,7 @@ recTrans.initPersistentPull();
 
 ### Where OMP is already applied
 
-- **ILU-OMP preconditioner** — parallel forward/backward sweeps (new in v0.1.0).
+- **ILU-OMP preconditioner** — parallel forward/backward sweeps (new in v0.2.0).
 - **Eigen reductions** — `EigenVecMin`, `EigenVecSum` fold per thread, then combine.
 - **State transitions** — `toLocalOMP` / `toGlobalOMP` / `bootstrapToLocalOMP` parallelize over the rows of adjacency arrays.
 - **FV metric construction** — many `ConstructX()` methods in `FiniteVolume` loop over cells / faces with `#pragma omp parallel for`.
@@ -322,7 +322,7 @@ public:
 ### Pitfalls avoided
 
 - **Thrust + CMake:** `CMAKE_CUDA_ARCHITECTURE=native` fixes a class of compile errors in Thrust's internal machinery.
-- **Accidental `to_device`:** a bug in the face-buffer creation path was copying host buffers to device needlessly; fixed in v0.1.0.
+- **Accidental `to_device`:** a bug in the face-buffer creation path was copying host buffers to device needlessly; fixed in v0.2.0.
 - **`py::classh` holders:** ensure safe Python↔C++ ownership when CUDA pointers survive across Python GC boundaries.
 
 ### Work in progress

@@ -5,7 +5,7 @@ paginate: true
 math: mathjax
 size: 16:9
 header: "DNDSR — CFD Research Code"
-footer: "v0.1.0 · CFD Lab, Tsinghua University"
+footer: "v0.2.0 · CFD Lab, Tsinghua University"
 ---
 
 <!--
@@ -41,8 +41,8 @@ footer: "v0.1.0 · CFD Lab, Tsinghua University"
   :root {
     --gh-fg:        #1f2328;
     --gh-fg-muted:  #656d76;
-    --gh-accent:    #0969da;
-    --gh-accent-2:  #1f6feb;
+    --gh-accent:    #660874;
+    --gh-accent-2:  #8b1a9e;
     --gh-bg:        #ffffff;
     --gh-code-bg:   #f6f8fa;
     --gh-border:    #d0d7de;
@@ -248,4 +248,15 @@ footer: "v0.1.0 · CFD Lab, Tsinghua University"
   }
   section.denser img[src*="mermaid_"] { max-height: 420px; }
   section.tight  img[src*="mermaid_"] { max-height: 380px; }
+
+  /* Cap external images (GitHub raw URLs) to prevent overflow.
+     Marp cannot introspect remote image sizes, so the overflow
+     checker may miss tall images without this constraint. */
+  img[src*="raw.githubusercontent.com"] {
+    max-width: 100%;
+    max-height: 480px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
 </style>
