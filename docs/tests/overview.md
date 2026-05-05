@@ -12,8 +12,8 @@ to verify parallel correctness.
 
 | Module | Page | C++ tests | Python tests | Assertions |
 |---|---|---|---|---|
-| **DNDS** (core) | @ref dnds_unit_tests | 7 executables | 2 pytest files (~10 tests) | ~400 |
-| **Geom** | @ref geom_unit_tests | 5 executables | 1 pytest file (1 test) | — |
+| **DNDS** (core) | @ref dnds_unit_tests | 8 executables | 2 pytest files (~10 tests) | ~400 |
+| **Geom** | @ref geom_unit_tests | 9 executables | 1 pytest file (1 test) | — |
 | **CFV** | @ref cfv_unit_tests | 3 executables | 2 pytest files (32 tests) | ~340 |
 | **Euler** | @ref euler_unit_tests | 4 executables | — | ~310 |
 | **Solver** | @ref solver_unit_tests | 4 executables | — | ~65 |

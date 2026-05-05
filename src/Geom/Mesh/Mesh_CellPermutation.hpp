@@ -10,7 +10,6 @@
 #include "SerialAdjReordering.hpp"
 
 #include <vector>
-#include <unordered_set>
 
 #include <fmt/core.h>
 
@@ -61,7 +60,7 @@ namespace DNDS::Geom::detail
 
         if (nPartsInner > 1)
         {
-            auto dbgCheckSubGraphRanges = [&](const char *tag)
+            auto dbgCheckSubGraphRanges = [&]([[maybe_unused]] const char *tag)
             {
                 for (int p = 0; p < static_cast<int>(result.localPartitionStarts.size()) - 1; p++)
                 {
@@ -76,7 +75,7 @@ namespace DNDS::Geom::detail
                                 (long long)iC, (long long)jC, (long long)nCell);
                 }
             };
-            auto dbgCheckBidir = [&](const char *tag)
+            auto dbgCheckBidir = [&]([[maybe_unused]] const char *tag)
             {
                 for (index iC = 0; iC < nCell; iC++)
                     for (auto jC : cell2cellFaceV[iC])
@@ -94,8 +93,10 @@ namespace DNDS::Geom::detail
                     }
             };
 
+#ifndef DNDS_NDEBUG
             dbgCheckSubGraphRanges("before inner partitioning");
             dbgCheckBidir("before inner partitioning");
+#endif
 
             for (int iPart = 0; iPart < static_cast<int>(result.localPartitionStarts.size()) - 1; iPart++)
             {
@@ -111,10 +112,14 @@ namespace DNDS::Geom::detail
                 result.bwOld = std::max(result.bwOld, bwOldC);
                 result.bwNew = std::max(result.bwNew, bwNewC);
 
+#ifndef DNDS_NDEBUG
                 dbgCheckSubGraphRanges(fmt::format("after inner part {}", iPart).c_str());
+#endif
             }
 
+#ifndef DNDS_NDEBUG
             dbgCheckBidir("after all inner partitioning");
+#endif
         }
 
         // Contiguous sorting: within each partition, put interior cells before
@@ -158,13 +163,15 @@ namespace DNDS::Geom::detail
         }
 
         // Build inverse permutation
-        std::unordered_set<index> set;
-        set.reserve(result.cellNew2Old.size());
-        for (index i = 0; i < nCell; i++)
         {
-            DNDS_assert(set.count(result.cellNew2Old[i]) == 0);
-            set.insert(result.cellNew2Old[i]);
-            result.cellOld2New.at(result.cellNew2Old[i]) = i;
+            std::vector<bool> seen(nCell, false);
+            for (index i = 0; i < nCell; i++)
+            {
+                DNDS_assert(result.cellNew2Old[i] >= 0 && result.cellNew2Old[i] < nCell);
+                DNDS_assert(!seen[result.cellNew2Old[i]]);
+                seen[result.cellNew2Old[i]] = true;
+                result.cellOld2New.at(result.cellNew2Old[i]) = i;
+            }
         }
         return result;
     }

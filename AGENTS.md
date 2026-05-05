@@ -198,10 +198,11 @@ mpirun -np 4 ./test/cpp/dnds_test_mpi
 
 - **DNDS:** `dnds_test_array`, `dnds_test_mpi`, `dnds_test_array_transformer`,
   `dnds_test_array_derived`, `dnds_test_array_dof`, `dnds_test_index_mapping`,
-  `dnds_test_serializer`
+  `dnds_test_serializer`, `dnds_test_permutation_transfer`
 - **Geom:** `geom_test_elements`, `geom_test_quadrature`, `geom_test_mesh_index_conversion`,
   `geom_test_mesh_pipeline`, `geom_test_mesh_distributed_read`, `geom_test_mesh_connectivity`,
-  `geom_test_mesh_connectivity_ghost`, `geom_test_mesh_connectivity_interpolate`
+  `geom_test_mesh_connectivity_ghost`, `geom_test_mesh_connectivity_interpolate`,
+  `geom_test_mesh_reorder`
 - **CFV:** `cfv_test_reconstruction`, `cfv_test_limiters`, `cfv_test_reconstruction3d`,
   `cfv_test_device_transferable` (CUDA only)
 - **Euler:** `euler_test_gas_thermo`, `euler_test_riemann_solvers`, `euler_test_rans`,

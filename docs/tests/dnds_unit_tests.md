@@ -42,6 +42,7 @@ mpirun -np 4 ./build/test/cpp/dnds_test_array_transformer
 | `dnds_test_array_dof`     | `dnds_array_dof_np{1,2,4}`               | test_ArrayDOF.cpp                  |
 | `dnds_test_index_mapping` | `dnds_index_mapping_np{1,2,4}`           | test_IndexMapping.cpp              |
 | `dnds_test_serializer`    | `dnds_serializer_np{1,2,4}`              | test_Serializer.cpp                |
+| `dnds_test_permutation_transfer` | `dnds_permutation_transfer_np{1,2,4}` | test_PermutationTransfer.cpp   |
 
 @subsection test_note Note on POSIX `index()` Ambiguity
 
@@ -216,3 +217,45 @@ Round-trip write/read verification at np = 1, 2, 4, 8.
 - **SerializerH5 paths** — `GoToPath`, `GetCurrentPath`,
   `ListCurrentPath` (groups materialized by writing content).
 - **SerializerH5 string** — fixed-length HDF5 string attributes.
+
+---
+
+@section test_permutation_transfer PermutationTransfer Tests (test_PermutationTransfer.cpp)
+
+@see test_PermutationTransfer.cpp
+
+Tests for @ref DNDS::PermutationTransfer, the MPI primitive underlying the
+distributed entity reordering framework (see
+@ref distributed_reorder_design "Distributed Reorder Design" for the
+full architecture). Runs at np = 1, 2, 4, 8.
+
+@subsection pt_construction Construction
+
+- **`fromLocalPermutation` reverse** — builds from an `old2new` local
+  permutation (reverse), verifies `isLocalOnly == true`,
+  `newGlobalIndices` reflect the permutation, and `transferRows` places
+  source data at the permuted slot.
+- **`fromLocalPermutation` identity** — no-op permutation; data unchanged.
+- **`fromPartition` all-local** — partition where every entity stays on
+  its current rank; validates `isLocalOnly == true` via `MPI_Allreduce`.
+- **`fromPartition` round-robin** — cross-rank partition (`i % size`);
+  validates counts received per rank and that all tags arrive uniquely.
+
+@subsection pt_lookup buildLookup and resolve
+
+- **`buildLookup` resolve** — construct lookup from a transfer;
+  `resolve()` for local globals returns correct new globals;
+  `resolve(UnInitIndex)` passes through.
+- **Distributed `buildLookup` cross-rank** — with non-empty `pullSet`,
+  `resolve()` correctly maps off-rank old globals to their new globals
+  after ghost-pull.
+
+@subsection pt_transfer transferRows
+
+- **CSR local permutation** — variable-row-size CSR array, reverse
+  permutation preserves every row's size and contents at the permuted
+  slot.
+- **Distributed transfer tag tracking** — each entry tagged with a
+  unique `TAG_BASE + globalIdx` sentinel; after round-robin transfer,
+  all received tags are within the valid range, unique on each rank,
+  and the total count across ranks matches the original global size.
