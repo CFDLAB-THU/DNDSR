@@ -137,7 +137,7 @@ struct GhostRequirement {
 ---
 <!-- _class: lead -->
 <!-- _paginate: false -->
-<!-- _footer: "github.com/CFDLAB-THU/DNDSR · cfdlab-thu.github.io/DNDSR" -->
+<!-- _footer: "<repo/DNDSR> · cfdlab-thu.github.io/DNDSR" -->
 
 # 谢谢
 
@@ -151,7 +151,7 @@ mpirun -np 4 ./build/app/euler.exe cases/euler_config_IV.json
 
 <br>
 
-**代码** · [github.com/CFDLAB-THU/DNDSR](https://github.com/CFDLAB-THU/DNDSR) **文档** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR) **发布说明** · `RELEASE_NOTES.md` (v0.2.0)
+**代码** · [<repo/DNDSR>](https://<repo/DNDSR>) **文档** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR) **发布说明** · `RELEASE_NOTES.md` (v0.2.0)
 
 <br>
 

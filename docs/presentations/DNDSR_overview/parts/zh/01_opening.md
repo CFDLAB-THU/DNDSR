@@ -176,7 +176,7 @@ flowchart LR
 
 ```bash
 # 1. Fetch code and submodules
-git clone --recursive https://github.com/CFDLAB-THU/DNDSR.git && cd DNDSR
+git clone --recursive https://<repo/DNDSR>.git && cd DNDSR
 
 # 2. Build binary external libraries (HDF5, CGNS, Metis, ParMetis, zlib, ...)
 cd external/cfd_externals && CC=mpicc CXX=mpicxx python cfd_externals_build.py && cd ../..

@@ -207,6 +207,30 @@ echo "Assembling ${#PARTS[@]} parts into ${OUT_MD}"
     done
 } > "${OUT_MD}"
 
+# ---------------------------------------------------------------- lang filter
+# Strip slides marked with <!-- _no_zh --> when building the Chinese edition.
+# The directive lives anywhere within the slide block (between two ---).
+if [[ "$LANG" == "zh" ]]; then
+    python3 -c "
+import sys, re
+blocks = re.split(r'\n(?=---\n)', sys.stdin.read())
+out = [blocks[0]]           # frontmatter (starts at pos 0, has leading ---)
+skipped = False              # track whether previous_was_a_skip
+for b in blocks[1:]:
+    if '_no_zh' in b:
+        skipped = True
+        continue
+    if skipped:
+        out.append('\n' + b)   # rejoin the \n consumed by split
+        skipped = False
+    else:
+        out.append('\n' + b)
+sys.stdout.write(''.join(out))
+" < "${OUT_MD}" > "${OUT_MD}.tmp"
+    mv "${OUT_MD}.tmp" "${OUT_MD}"
+    log "  filtered _no_zh slides"
+fi
+
 # ---------------------------------------------------------------- mermaid
 # Pre-render fenced ```mermaid blocks into SVG files under res/, and
 # rewrite the combined deck in-place to reference them via ![](res/*.svg).

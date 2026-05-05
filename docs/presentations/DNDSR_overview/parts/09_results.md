@@ -59,6 +59,7 @@
 </div>
 
 ---
+
 ## Double Mach Reflection (2D Euler)
 
 Density at *t* = 0.2, Mach 10 shock on 30° wedge.
@@ -87,6 +88,7 @@ Density at *t* = 0.2, Mach 10 shock on 30° wedge.
 <!-- _class:  -->
 
 ## Supersonic Wedge (2D Euler)
+
 Mach 3 inviscid flow over a 15° compression corner.
 
 <div class="cols">
@@ -239,6 +241,7 @@ Q-criterion iso-surfaces coloured by Mach number.
 </div>
 
 ---
+
 ## Sedov Blast Wave (2D Euler)
 
 <div class="cols">
@@ -262,6 +265,7 @@ Q-criterion iso-surfaces coloured by Mach number.
 </div>
 
 ---
+
 ## Noh Problem
 
 <div class="cols">
@@ -287,7 +291,7 @@ Q-criterion iso-surfaces coloured by Mach number.
 ---
 <!-- _class:  -->
 
-## M2000 Relativistic Jet (2D Euler)
+## M2000 Jet (2D Euler)
 
 Mach 2000 jet
 
@@ -337,6 +341,7 @@ Mach 2000 jet
 </div>
 
 ---
+
 ## NASA CRM (3D SA RANS)
 
 Wing-body

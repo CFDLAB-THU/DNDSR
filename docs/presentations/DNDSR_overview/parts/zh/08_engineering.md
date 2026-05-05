@@ -413,6 +413,8 @@ cmake --build build -t serve-docs
 
 ## CI 与发布自动化
 
+<!-- _no_zh -->
+
 <div class="cols">
 <div>
 

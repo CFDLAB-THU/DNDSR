@@ -311,7 +311,7 @@ Every new communicated field forces an edit to the object model.
 </div>
 <div>
 
-**DNDSR thesis**
+**DNDS: Distributed Numerical Data Structure**
 
 > *"DNDS is dedicated to providing c-like random-access arrays without the concern of MPI communication. Higher-level abstraction is left for the caller."*
 > — `docs/architecture/Paradigm.md:161`

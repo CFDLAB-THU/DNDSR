@@ -4,7 +4,7 @@ theme: default
 paginate: true
 math: mathjax
 size: 16:9
-header: "DNDSR — CFD 研究代码"
+header: "DNDSR — CFD 研究框架"
 footer: "v0.2.0 · 清华大学 CFD 实验室"
 lang: zh-CN
 ---
@@ -252,7 +252,7 @@ lang: zh-CN
 
 <!-- _class: lead -->
 <!-- _paginate: false -->
-<!-- _footer: "github.com/CFDLAB-THU/DNDSR · cfdlab-thu.github.io/DNDSR" -->
+<!-- _footer: "<repo/DNDSR> · cfdlab-thu.github.io/DNDSR" -->
 
 # DNDSR
 
@@ -428,7 +428,7 @@ std::vector<vec>  faceCent;
 
 ```bash
 # 1. Fetch code and submodules
-git clone --recursive https://github.com/CFDLAB-THU/DNDSR.git && cd DNDSR
+git clone --recursive https://<repo/DNDSR>.git && cd DNDSR
 
 # 2. Build binary external libraries (HDF5, CGNS, Metis, ParMetis, zlib, ...)
 cd external/cfd_externals && CC=mpicc CXX=mpicxx python cfd_externals_build.py && cd ../..
@@ -2580,7 +2580,7 @@ for kx in kx_range:
 
 <div class="callout">
 
-**这对研究代码的意义。** VR 的色散/耗散特性取决于阶数、限制器和内积选择。用 Python 框架在离散 Fourier 谱上扫描这些参数，意味着参数研究（限制器组合、内积选择、导数权重）可在数小时内完成，而非数周。
+**这对研究框架的意义。** VR 的色散/耗散特性取决于阶数、限制器和内积选择。用 Python 框架在离散 Fourier 谱上扫描这些参数，意味着参数研究（限制器组合、内积选择、导数权重）可在数小时内完成，而非数周。
 
 </div>
 
@@ -3367,54 +3367,6 @@ cmake --build build -t serve-docs
 </div>
 
 ---
-<!-- _footer: ".github/workflows/ · RELEASE_NOTES.md:68-70" -->
-<!-- _class: dense -->
-
-## CI 与发布自动化
-
-<div class="cols">
-<div>
-
-### GitHub Actions — Pages 部署
-
-- **手动触发**工作流（避免每次推送都花费几分钟时间）。
-- **三层缓存：**
-  1. Ubuntu apt 包（doxygen, graphviz, libmpich-dev）。
-  2. 外部 `cfd_externals` 二进制库（HDF5, CGNS, Metis, ParMetis）。
-  3. Python venv + Sphinx 构建缓存。
-- 缓存命中 → 完整文档构建约 3 分钟；缓存未命中 → 约 20 分钟。
-
-### 风格与卫生
-
-- `.clang-format` 随仓库根目录发布；CI 在单独作业中检查差异。
-- POSIX `index()` 歧义防护 — 当 `using namespace DNDS;` 处于活动状态时，代码风格要求使用 `DNDS::index`（文档见 `docs/tests/overview.md`）。
-
-</div>
-<div>
-
-### 版本字符串
-
-- `VERSION` 文件位于仓库根目录（`0.2.0`）。
-- CMake 将其与 `git describe --tags --long` 组合。
-- 暴露方式：
-  - C++ 宏 `DNDS_VERSION_STRING`。
-  - Python `DNDSR.__version__`（符合 PEP 440）。
-  - JSON Schema `x-version` 字段。
-
-### 发布流程
-
-```bash
-# Bump VERSION file
-echo 0.2.0 > VERSION
-git tag v0.2.0
-git push --tags
-# Pages workflow + release notes kick off.
-```
-
-</div>
-</div>
-
----
 <!-- _class: chapter -->
 <!-- _paginate: false -->
 
@@ -3704,7 +3656,7 @@ Q-criterion 等值面，按马赫数着色。
 ---
 <!-- _class:  -->
 
-## M2000 相对论射流 (2D Euler)
+## M2000 射流 (2D Euler)
 
 马赫 2000 射流
 
@@ -3940,7 +3892,7 @@ struct GhostRequirement {
 ---
 <!-- _class: lead -->
 <!-- _paginate: false -->
-<!-- _footer: "github.com/CFDLAB-THU/DNDSR · cfdlab-thu.github.io/DNDSR" -->
+<!-- _footer: "<repo/DNDSR> · cfdlab-thu.github.io/DNDSR" -->
 
 # 谢谢
 
@@ -3954,7 +3906,7 @@ mpirun -np 4 ./build/app/euler.exe cases/euler_config_IV.json
 
 <br>
 
-**代码** · [github.com/CFDLAB-THU/DNDSR](https://github.com/CFDLAB-THU/DNDSR) **文档** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR) **发布说明** · `RELEASE_NOTES.md` (v0.2.0)
+**代码** · [<repo/DNDSR>](https://<repo/DNDSR>) **文档** · [cfdlab-thu.github.io/DNDSR](https://cfdlab-thu.github.io/DNDSR) **发布说明** · `RELEASE_NOTES.md` (v0.2.0)
 
 <br>
 

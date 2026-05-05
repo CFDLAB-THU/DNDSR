@@ -1,6 +1,6 @@
 <!-- _class: lead -->
 <!-- _paginate: false -->
-<!-- _footer: "github.com/CFDLAB-THU/DNDSR · cfdlab-thu.github.io/DNDSR" -->
+<!-- _footer: "<repo/DNDSR> · cfdlab-thu.github.io/DNDSR" -->
 
 # DNDSR
 
