@@ -253,6 +253,8 @@ if [[ "$DO_PDF" == "1" || "$DO_HTML" == "1" ]]; then
     if [[ "$DO_HTML" == "1" ]]; then
         echo "Rendering HTML → ${OUT_HTML}"
         marp --html --allow-local-files "${OUT_MD}" -o "${OUT_HTML}"
+        python3 "${SRC_DIR}/add_toc_nav.py" "${OUT_HTML}"
+        echo "  injected slide TOC sidebar"
     fi
 fi
 

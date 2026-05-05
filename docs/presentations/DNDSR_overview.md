@@ -557,9 +557,9 @@ enum DataLayout {
 |------------------|-----------------|---------------------|-----------------------------------------------------|
 | `>= 0`           | —               | `TABLE_StaticFixed` | Cell volume (1 real), Euler state (5 reals)         |
 | `DynamicSize`    | —               | `TABLE_Fixed`       | VR coefficients (order decided at runtime)          |
-| `NonUniformSize` | `>= 0`          | `TABLE_StaticMax`   | `cell2node` (tri=3, quad=4, compile-time max)       |
+| `NonUniformSize` | `>= 0`          | `TABLE_StaticMax`   | Per-face node counts for a single element type    |
 | `NonUniformSize` | `DynamicSize`   | `TABLE_Max`         | Padded variable rows, runtime max                   |
-| `NonUniformSize` | `NonUniformSize`| `CSR`               | Truly sparse rows (wide-stencil adjacency)          |
+| `NonUniformSize` | `NonUniformSize`| `CSR`               | `cell2node`, `cell2cell`, wide-stencil adjacency   |
 
 <div class="tiny">`rowsize = int32_t`. Sentinels: `DynamicSize = -1`, `NonUniformSize = -2`.
 Alignment stub exists but only `NoAlign` is implemented today.</div>
@@ -1276,10 +1276,10 @@ bool IsO2() const;
 
 **Per element type** (see `docs/elements/*_nodes.png`):
 
-- Tri3 → Tri6 → 4× Tri3 (bisect).
-- Quad4 → Quad9 → 4× Quad4.
-- Hex8 → Hex27 → 8× Hex8.
-- Prism6 / Pyramid5 elevated + bisected analogously.
+- Tri3 **→** (elevate) **→** Tri6 **→** (bisect) **→** 4× Tri3.
+- Quad4 **→** (elevate) **→** Quad9 **→** (bisect) **→** 4× Quad4.
+- Hex8 **→** (elevate) **→** Hex27 **→** (bisect) **→** 8× Hex8.
+- Prism6 / Pyramid5 — elevated + bisected analogously.
 
 </div>
 </div>
@@ -1342,16 +1342,16 @@ Distance is also computed *per face* for use in the SST blending functions.
 static const index Offset_Parts     = -1;
 static const index Offset_One       = -2;
 static const index Offset_EvenSplit = -3;
-static const index Offset_Unknown   = UnInit;
+static const index Offset_Unknown   = UnInitIndex;
 ```
 
 | Mode              | Meaning                           |
 |-------------------|-----------------------------------|
-| `Unknown`         | auto-detect from `rank_offsets`   |
-| `Parts`           | `MPI_Scan` over local sizes       |
-| `One`             | rank 0 owns the whole dataset     |
-| `EvenSplit`       | read-time split into `~N/np`      |
-| `isDist()`        | explicit `{localSize, globalStart}` |
+| `Unknown`         | Auto-detect from `rank_offsets`                    |
+| `Parts`           | `MPI_Scan` over local sizes                        |
+| `One`             | Rank 0 owns the whole dataset                      |
+| `EvenSplit`       | Read-time split into `~N/np`                       |
+| (explicit)        | `isDist()` → `true`; `{localSize, globalStart}`    |
 
 </div>
 <div>
@@ -1590,6 +1590,7 @@ enum RiemannSolverType {
 | `Roe_M6` | H-correction only |
 | `Roe_M7` | Harten–Yee only, no H-correction |
 | `Roe_M8` | H-correction + Harten–Yee |
+| `Roe_M9` | Reserved (eigScheme 9, currently asserts false) |
 | `HLLC`   | Harten–Lax–van Leer–Contact |
 | `HLLEP`  | HLLE with pressure fix |
 | `HLLEP_V1` | HLLEP variant 1 |
@@ -1767,7 +1768,8 @@ class ImplicitDualTimeStep {
 | `103`     | `ImplicitEulerDualTimeStep`                       | Backward Euler        |
 | `0`       | `ImplicitBDFDualTimeStep`                         | BDF2 / BDF-k          |
 | —         | `ImplicitVBDFDualTimeStep`                        | Variable-step BDF-k   |
-| `1 / 101` | `ImplicitSDIRK4DualTimeStep` (`schemeCode` 0…4)   | SDIRK-4 · ESDIRK2/3 · trapezoid |
+| `1`       | `ImplicitSDIRK4DualTimeStep` (`schemeCode` 0…4)   | SDIRK-4 · ESDIRK2/3 · Trapezoidal |
+| `101`     | (alias for `1`)                                    | (backward-compat `odeCode`)      |
 | **`401`** | `ImplicitHermite3SimpleJacobianDualStep`          | **HM3 + p-Multigrid** |
 | `2`       | `ExplicitSSPRK3TimeStepAsImplicitDualTimeStep`    | SSP-RK3               |
 
@@ -1813,7 +1815,7 @@ The `upos=2` argument tells the evaluator to evaluate at a **lower polynomial or
 - `schemeCode = 0` — Nørsett 3-stage SDIRK-4
 - `schemeCode = 1` — 6-stage ARK-family SDIRK
 - `schemeCode = 2` — Kennedy–Carpenter ESDIRK3
-- `schemeCode = 3` — Trapezoid
+- `schemeCode = 3` — Trapezoidal
 - `schemeCode = 4` — ESDIRK2, `γ = 1 − √2/2`
 
 </div>
@@ -2216,7 +2218,7 @@ public:
 ---
 <!-- _footer: "docs/architecture/Serialization.md:11-172" -->
 
-## Serialization — a five-layer cake
+## Serialization layer stack
 
 | Layer                  | Responsibility                                              |
 |------------------------|-------------------------------------------------------------|
@@ -2667,9 +2669,16 @@ Each has a `RANSModelTraits<>` specialization with its own wall BC, source terms
 
 ---
 <!-- _footer: "src/Euler/EulerSolver.hpp:73-148" -->
-<!-- _class: dense -->
+<!-- _class: tight -->
 
 ## `EulerSolver` — the top-level conductor
+
+The Euler module extends CFV's generic `tUDof`/`tURec` aliases with
+solver-specific array types that add higher-level operators
+(initialization, boundary anchors, positivity-preserving limiters):
+
+- `ArrayDOFV<N>` inherits from `CFV::tUDof<N>` (= `ArrayDof<N,1>`).
+- `ArrayRECV<N>` inherits from `CFV::tURec<N>` (= `ArrayDof<DynamicSize,N>`).
 
 ```cpp
 template <EulerModel model>
