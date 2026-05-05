@@ -79,6 +79,13 @@ source_suffix = {
 root_doc = "index"
 
 # Directories / patterns to skip.
+#
+# NOTE: `exclude_patterns` is also applied to files copied via
+# `html_extra_path`; any pattern placed here must not match files in
+# the staged presentations directory (under /presentations/ in the
+# rendered site). We only exclude source-tree markdown files Sphinx
+# would otherwise render; .html/.pdf are non-source files and Sphinx
+# does not scan them anyway.
 exclude_patterns = [
     "_build",
     "Thumbs.db",
@@ -91,6 +98,14 @@ exclude_patterns = [
     "getAllAttachForDox.py",
     "clean_doxygen_xml.py",
     "serve_docs.sh",
+    "_scripts",
+    # Deck source trees (per-chapter markdown fragments authored for
+    # Marp, not for Sphinx). The assembled deck is built by Marp and
+    # staged under /presentations/ via html_extra_path.
+    "presentations/DNDSR_overview/*.md",
+    "presentations/DNDSR_overview/parts/*.md",
+    "presentations/DNDSR_overview/README.md",
+    "presentations/DNDSR_overview.md",
 ]
 
 # -- Breathe configuration (C++ API from Doxygen XML) -----------------------
@@ -131,6 +146,16 @@ html_theme_options = {
 }
 html_static_path = []
 html_title = f"DNDSR {version}"
+
+# -- Extra files copied verbatim into the build output --------------------
+# Generated assets (Marp slideshows, element diagrams, etc.) live outside
+# the Sphinx source tree. CMake populates them at build time; we mount
+# the root into the site so links like /presentations/DNDSR_overview.html
+# resolve directly.
+_extra_generated = os.environ.get("DNDS_DOCS_GENERATED_DIR")
+html_extra_path: list[str] = []
+if _extra_generated and Path(_extra_generated).is_dir():
+    html_extra_path.append(_extra_generated)
 
 # Syntax highlighting — use a colorful Pygments style for code blocks.
 # "friendly" is readable on both light backgrounds and print.

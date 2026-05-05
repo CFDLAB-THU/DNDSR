@@ -7,3 +7,8 @@ breathe>=4.35
 myst-parser>=3.0
 sphinxawesome-theme>=6.0
 sphinx-copybutton>=0.5
+
+# Element-topology diagram generator (tools/elements/gen_diagrams.py).
+# Produces the 34 PNGs that the Doxygen and Sphinx pipelines embed.
+matplotlib>=3.7
+numpy>=1.24
