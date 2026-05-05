@@ -106,6 +106,7 @@ exclude_patterns = [
     "presentations/DNDSR_overview/parts/*.md",
     "presentations/DNDSR_overview/README.md",
     "presentations/DNDSR_overview.md",
+    "presentations/DNDSR_overview_zh.md",
 ]
 
 # -- Breathe configuration (C++ API from Doxygen XML) -----------------------
