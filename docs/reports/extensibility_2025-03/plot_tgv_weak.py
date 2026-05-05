@@ -65,7 +65,7 @@ COLOR = "#660874"
 # Figure
 # ---------------------------------------------------------------------------
 fig, (ax_tput, ax_eff) = plt.subplots(
-    1, 2, figsize=(12, 5.2), constrained_layout=True)
+    2, 1, figsize=(10, 8.0), constrained_layout=True)
 fig.patch.set_facecolor("white")
 
 # --- Throughput panel (log–log) -------------------------------------------
