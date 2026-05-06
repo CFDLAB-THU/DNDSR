@@ -307,19 +307,19 @@ namespace DNDS::Geom::Elem
             switch (scheme)
             {
             case INT_SCHEME_Quad_1:
-                GLData = &(GaussLegendre_1[0][0]);
+                GLData = GaussLegendre_1.front().data();
                 GLSize = 1;
                 break;
             case INT_SCHEME_Quad_4:
-                GLData = &(GaussLegendre_2[0][0]);
+                GLData = GaussLegendre_2.front().data();
                 GLSize = 2;
                 break;
             case INT_SCHEME_Quad_9:
-                GLData = &(GaussLegendre_3[0][0]);
+                GLData = GaussLegendre_3.front().data();
                 GLSize = 3;
                 break;
             case INT_SCHEME_Quad_16:
-                GLData = &(GaussLegendre_4[0][0]);
+                GLData = GaussLegendre_4.front().data();
                 GLSize = 4;
                 break;
             default:
@@ -344,19 +344,19 @@ namespace DNDS::Geom::Elem
             switch (scheme)
             {
             case INT_SCHEME_Hex_1:
-                GLData = &(GaussLegendre_1[0][0]);
+                GLData = GaussLegendre_1.front().data();
                 GLSize = 1;
                 break;
             case INT_SCHEME_Hex_8:
-                GLData = &(GaussLegendre_2[0][0]);
+                GLData = GaussLegendre_2.front().data();
                 GLSize = 2;
                 break;
             case INT_SCHEME_Hex_27:
-                GLData = &(GaussLegendre_3[0][0]);
+                GLData = GaussLegendre_3.front().data();
                 GLSize = 3;
                 break;
             case INT_SCHEME_Hex_64:
-                GLData = &(GaussLegendre_4[0][0]);
+                GLData = GaussLegendre_4.front().data();
                 GLSize = 4;
                 break;
             default:
@@ -385,23 +385,23 @@ namespace DNDS::Geom::Elem
             switch (scheme)
             {
             case INT_SCHEME_Pyramid_1:
-                GLData = &(GaussLegendre_1[0][0]);
-                GJData = &(GaussJacobi_01A2B0_1[0][0]);
+                GLData = GaussLegendre_1.front().data();
+                GJData = GaussJacobi_01A2B0_1.front().data();
                 GLSize = 1;
                 break;
             case INT_SCHEME_Pyramid_8:
-                GLData = &(GaussLegendre_2[0][0]);
-                GJData = &(GaussJacobi_01A2B0_2[0][0]);
+                GLData = GaussLegendre_2.front().data();
+                GJData = GaussJacobi_01A2B0_2.front().data();
                 GLSize = 2;
                 break;
             case INT_SCHEME_Pyramid_27:
-                GLData = &(GaussLegendre_3[0][0]);
-                GJData = &(GaussJacobi_01A2B0_3[0][0]);
+                GLData = GaussLegendre_3.front().data();
+                GJData = GaussJacobi_01A2B0_3.front().data();
                 GLSize = 3;
                 break;
             case INT_SCHEME_Pyramid_64:
-                GLData = &(GaussLegendre_4[0][0]);
-                GJData = &(GaussJacobi_01A2B0_4[0][0]);
+                GLData = GaussLegendre_4.front().data();
+                GJData = GaussJacobi_01A2B0_4.front().data();
                 GLSize = 4;
                 break;
             default:
@@ -431,33 +431,33 @@ namespace DNDS::Geom::Elem
             switch (scheme)
             {
             case INT_SCHEME_Prism_1:
-                GLData = &(GaussLegendre_1[0][0]);
+                GLData = GaussLegendre_1.front().data();
                 GLSize = 1;
-                HammerData = &(HammerTri_1[0][0]);
+                HammerData = HammerTri_1.front().data();
                 HammerSize = 1;
                 break;
             case INT_SCHEME_Prism_6:
-                GLData = &(GaussLegendre_2[0][0]);
+                GLData = GaussLegendre_2.front().data();
                 GLSize = 2;
-                HammerData = &(HammerTri_3[0][0]);
+                HammerData = HammerTri_3.front().data();
                 HammerSize = 3;
                 break;
             case INT_SCHEME_Prism_18:
-                GLData = &(GaussLegendre_3[0][0]);
+                GLData = GaussLegendre_3.front().data();
                 GLSize = 3;
-                HammerData = &(HammerTri_6[0][0]);
+                HammerData = HammerTri_6.front().data();
                 HammerSize = 6;
                 break;
             case INT_SCHEME_Prism_21:
-                GLData = &(GaussLegendre_3[0][0]);
+                GLData = GaussLegendre_3.front().data();
                 GLSize = 3;
-                HammerData = &(HammerTri_7[0][0]);
+                HammerData = HammerTri_7.front().data();
                 HammerSize = 7;
                 break;
             case INT_SCHEME_Prism_48:
-                GLData = &(GaussLegendre_4[0][0]);
+                GLData = GaussLegendre_4.front().data();
                 GLSize = 4;
-                HammerData = &(HammerTri_12[0][0]);
+                HammerData = HammerTri_12.front().data();
                 HammerSize = 12;
                 break;
             default:

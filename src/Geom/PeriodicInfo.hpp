@@ -131,7 +131,7 @@ namespace DNDS::Geom
 
         operator std::vector<NodePeriodicBits>() const // copies to a new std::vector<index>
         {
-            return std::vector<NodePeriodicBits>(_p_indices, _p_indices + _row_size);
+            return {_p_indices, _p_indices + _row_size};
         }
 
         void operator=(const std::vector<NodePeriodicBits> &r)
@@ -142,6 +142,8 @@ namespace DNDS::Geom
 
         void operator=(const NodePeriodicBitsRow &r)
         {
+            if (this == &r)
+                return;
             DNDS_assert(_row_size == r.size());
             std::copy(r.cbegin(), r.cend(), _p_indices);
         }

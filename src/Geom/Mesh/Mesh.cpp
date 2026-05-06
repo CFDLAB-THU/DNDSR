@@ -494,6 +494,7 @@ namespace DNDS::Geom
                 for (auto ic : node2cell[iNode])
                     allCellGlobals.insert(ic);
             std::vector<index> neededCells;
+            neededCells.reserve(allCellGlobals.size());
             for (auto ic : allCellGlobals)
                 neededCells.push_back(ic);
 
@@ -1789,7 +1790,7 @@ namespace DNDS::Geom
         auto firstValid = [](std::initializer_list<ssp<GlobalOffsetsMapping>> candidates)
             -> ssp<GlobalOffsetsMapping>
         {
-            for (auto &gm : candidates)
+            for (const auto &gm : candidates)
                 if (gm)
                     return gm;
             return nullptr;

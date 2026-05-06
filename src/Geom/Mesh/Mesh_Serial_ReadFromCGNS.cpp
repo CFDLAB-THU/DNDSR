@@ -52,9 +52,9 @@ namespace DNDS::Geom
                 zonesLeft.insert(static_cast<int>(iGZ));
             std::vector<int> zonesFront;
             zonesFront.push_back(0);
-            DNDS_assert(ZoneNodeSizes.size() >= 1);
+            DNDS_assert(!ZoneNodeSizes.empty());
 
-            while (zonesFront.size())
+            while (!zonesFront.empty())
             {
                 int iGZ = zonesFront.back();
                 zonesFront.pop_back();
@@ -313,7 +313,7 @@ namespace DNDS::Geom
                 if (cg_zone_type(cgns_file, iBase, iZone, &zoneType))
                     cg_error_exit();
                 DNDS_assert(zoneType == Unstructured); //! only supports unstructured
-                Base_Zone.emplace_back(std::make_pair(iBase, iZone));
+                Base_Zone.emplace_back(iBase, iZone);
                 BaseNames.emplace_back(basename.data());
                 ZoneNames.emplace_back(zonename.data());
 
@@ -414,7 +414,7 @@ namespace DNDS::Geom
                         if (etype == MIXED)
                         {
                             std::vector<cgsize_t> elemStarts(nElemSec + 1); //* note size
-                            DNDS_CGNS_CALL_EXIT(cg_poly_elements_read(cgns_file, iBase, iZone, iSection, elemsRead.data(), elemStarts.data(), NULL));
+                            DNDS_CGNS_CALL_EXIT(cg_poly_elements_read(cgns_file, iBase, iZone, iSection, elemsRead.data(), elemStarts.data(), nullptr));
                             for (cgsize_t i = 0; i < nElemSec; i++)
                             {
                                 auto c_etype = static_cast<ElementType_t>(elemsRead.at(elemStarts[i]));
@@ -438,7 +438,7 @@ namespace DNDS::Geom
                         else if (_getElemTypeFromCGNSType(etype) != Elem::UnknownElem)
                         {
                             Elem::ElemType ct = _getElemTypeFromCGNSType(etype);
-                            DNDS_CGNS_CALL_EXIT(cg_elements_read(cgns_file, iBase, iZone, iSection, elemsRead.data(), NULL));
+                            DNDS_CGNS_CALL_EXIT(cg_elements_read(cgns_file, iBase, iZone, iSection, elemsRead.data(), nullptr));
                             DNDS_assert(elemDataSize / Elem::Element{ct}.GetNumNodes() == nElemSec);
                             for (cgsize_t i = 0; i < nElemSec; i++)
                             {

@@ -90,12 +90,12 @@ namespace DNDS::Geom
         int ret{0};
         if (metisType == "RB")
             ret = METIS_PartGraphRecursive(
-                &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
-                &nPart, NULL, NULL, options.data(), &objval, partOut.data());
+                &nCell, &nCon, xadj.data(), adjncy.data(), nullptr, nullptr, nullptr,
+                &nPart, nullptr, nullptr, options.data(), &objval, partOut.data());
         else if (metisType == "KWAY")
             ret = METIS_PartGraphKway(
-                &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
-                &nPart, NULL, NULL, options.data(), &objval, partOut.data());
+                &nCell, &nCon, xadj.data(), adjncy.data(), nullptr, nullptr, nullptr,
+                &nPart, nullptr, nullptr, options.data(), &objval, partOut.data());
 
         DNDS_assert_info(ret == METIS_OK, fmt::format("Metis return not ok, [{}]", ret));
 
@@ -135,7 +135,7 @@ namespace DNDS::Geom
         perm.resize(nCell);
         iPerm.resize(nCell);
 
-        int ret = METIS_NodeND(&nCell, xadj.data(), adjncy.data(), NULL, options.data(), perm.data(), iPerm.data());
+        int ret = METIS_NodeND(&nCell, xadj.data(), adjncy.data(), nullptr, options.data(), perm.data(), iPerm.data());
         DNDS_assert_info(ret == METIS_OK, fmt::format("Metis return not ok, [{}]", ret));
 
         std::vector<index> localFillOrderingNew2Old, localFillOrderingOld2New;

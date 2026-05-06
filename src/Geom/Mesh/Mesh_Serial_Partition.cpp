@@ -124,11 +124,11 @@ namespace DNDS::Geom
                 DNDS_assert_info(c_options.metisType == std::string("KWAY") or c_options.metisType == std::string("RB"), "metisType must be KWAY or RB!");
                 int ret = c_options.metisType == std::string("KWAY")
                               ? METIS_PartGraphKway(
-                                    &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, c_options.edgeWeightMethod ? adjncyWeights.data() : NULL,
-                                    &nPart, NULL, NULL, options.data(), &objval, partOut.data())
+                                    &nCell, &nCon, xadj.data(), adjncy.data(), nullptr, nullptr, c_options.edgeWeightMethod ? adjncyWeights.data() : nullptr,
+                                    &nPart, nullptr, nullptr, options.data(), &objval, partOut.data())
                               : METIS_PartGraphRecursive(
-                                    &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, c_options.edgeWeightMethod ? adjncyWeights.data() : NULL,
-                                    &nPart, NULL, NULL, options.data(), &objval, partOut.data());
+                                    &nCell, &nCon, xadj.data(), adjncy.data(), nullptr, nullptr, c_options.edgeWeightMethod ? adjncyWeights.data() : nullptr,
+                                    &nPart, nullptr, nullptr, options.data(), &objval, partOut.data());
                 if (ret != METIS_OK)
                 {
                     DNDS::log() << "METIS returned not OK: [" << ret << "]" << std::endl;
@@ -150,7 +150,7 @@ namespace DNDS::Geom
                 optsC[2] = 0;
                 idx_t objval;
                 int ret = ParMETIS_V3_PartKway(
-                    vtxdist.data(), xadj.data(), adjncy.data(), NULL, NULL, &wgtflag, &numflag,
+                    vtxdist.data(), xadj.data(), adjncy.data(), nullptr, nullptr, &wgtflag, &numflag,
                     &nCon, &nPart, tpWeights.data(), ubVec.data(), optsC.data(), &objval, partOut.data(),
                     &mesh->getMPI().comm);
                 if (ret != METIS_OK)

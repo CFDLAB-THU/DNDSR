@@ -119,7 +119,7 @@ namespace DNDS::Geom
 
         /// Direct adjacency: from != to. `via` is ignored.
         constexpr AdjKind(EntityKind from_, EntityKind to_)
-            : from(from_), to(to_), via(EntityKind::Node)
+            : from(from_), to(to_)
         {
         }
 
@@ -261,7 +261,7 @@ namespace DNDS::Geom
         int nodeId{};       ///< ID of the tree node.
         int parentId{};     ///< ID of the parent node (-1 for roots).
         EntityKind kind{};  ///< Entity kind of this node.
-        AdjKind hop{};      ///< Hop used to reach this node.
+        AdjKind hop;        ///< Hop used to reach this node.
         bool collect{};     ///< Whether to collect at this node.
         bool hasChildren{}; ///< Whether this node has children (needs pull).
     };
@@ -329,7 +329,7 @@ namespace DNDS::Geom
         [[nodiscard]] index totalGhosts() const
         {
             index total = 0;
-            for (auto &[k, v] : ghostIndices)
+            for (const auto &[k, v] : ghostIndices)
                 total += static_cast<index>(v.size());
             return total;
         }

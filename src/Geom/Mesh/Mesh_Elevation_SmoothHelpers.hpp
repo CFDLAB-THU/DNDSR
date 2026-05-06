@@ -165,7 +165,7 @@ namespace DNDS::Geom
             return ref->operator[](idx)(dim);
         }
         template <class BBOX>
-        bool kdtree_get_bbox(BBOX &) const { return false; }
+        bool kdtree_get_bbox(BBOX &bbox) const { return false; }
     };
 
 } // namespace DNDS::Geom

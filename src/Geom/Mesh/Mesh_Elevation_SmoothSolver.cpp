@@ -75,9 +75,8 @@ namespace DNDS::Geom
     {
         tCoord ref;
         using coord_t = real; //!< The type of each coordinate
-        PointCloudKDTreeCoordPair(tCoord &v)
+        PointCloudKDTreeCoordPair(tCoord &v) : ref(v)
         {
-            ref = v;
         }
 
         // Must return the number of data points
@@ -596,6 +595,7 @@ namespace DNDS::Geom
             // }
         }
 
+        // NOLINTNEXTLINE(readability-simplify-boolean-expr): disabled code block
         if (false)
         { // use superlu_dist to solve
 
@@ -672,6 +672,7 @@ namespace DNDS::Geom
 
             // superlu_gridexit(&grid);
         }
+        // NOLINTNEXTLINE(readability-simplify-boolean-expr): forced code path
         if (true)
         { // use GMRES to solve
             boundInterpCoef.father->createGlobalMapping();

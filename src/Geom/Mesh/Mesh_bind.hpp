@@ -189,7 +189,7 @@ namespace DNDS::Geom
                         std::vector<py::ssize_t> shape = {py::ssize_t(N), py::ssize_t(3)};
                         std::vector<py::ssize_t> strides = {py::ssize_t(sizeof(real) * 3),
                                                             py::ssize_t(sizeof(real))};
-                        return py::array_t<real>(shape, strides, arr->data(), self);
+                        return {shape, strides, arr->data(), self};
                     };
                     if (mesh.coords.father->Size() > 0)
                         f(make_view(mesh.coords.father));

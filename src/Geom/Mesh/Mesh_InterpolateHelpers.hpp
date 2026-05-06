@@ -42,7 +42,7 @@ namespace DNDS::Geom
          * \param[in]     coordsSize    Total number of nodes (father + son), for node2face sizing.
          * \param[in]     isPeriodic    Whether periodic mesh handling is enabled.
          */
-        FaceEnumerationResult EnumerateFacesFromCells(
+        [[maybe_unused]] FaceEnumerationResult EnumerateFacesFromCells(
             tAdjPair &cell2face,
             const tElemInfoArrayPair &cellElemInfo,
             const tAdjPair &cell2node,
@@ -137,7 +137,7 @@ namespace DNDS::Geom
                         face2nodeV.emplace_back(faceNodes); // note: faceVerts invalid here!
                         if (isPeriodic)
                             face2nodePbiV.emplace_back(faceNodePeriodicBits);
-                        face2cellV.emplace_back(std::make_pair(iCell, DNDS::UnInitIndex));
+                        face2cellV.emplace_back(iCell, DNDS::UnInitIndex);
                         // important note: f2nPbi node pbi is always same as cell f2c[0]'s corresponding nodes
                         faceElemInfoV.emplace_back(ElemInfo{eFace.type, 0});
                         for (auto iV : faceVerts)
@@ -179,7 +179,7 @@ namespace DNDS::Geom
          * \param[in] nMPIRanks         Number of MPI ranks.
          * \param[in] myRank            This process's MPI rank.
          */
-        FaceCollectionResult CollectFaces(
+        [[maybe_unused]] FaceCollectionResult CollectFaces(
             const std::vector<ElemInfo> &faceElemInfoV,
             const std::vector<std::pair<DNDS::index, DNDS::index>> &face2cellV,
             DNDS::index nFaces,
@@ -198,8 +198,10 @@ namespace DNDS::Geom
             {
                 if (faceElemInfoV[iFace].zone <= 0) // if internal
                 {
+                    // NOLINTNEXTLINE(bugprone-branch-clone): distinct conditions with same outcome
                     if (face2cellV[iFace].second == UnInitIndex && face2cellV[iFace].first >= nLocalCells) // has not other cell with ghost parent
                         result.iFaceAllToCollected[iFace] = UnInitIndex;                                   // * discard
+                    // NOLINTNEXTLINE(bugprone-branch-clone): distinct conditions with same outcome
                     else if (face2cellV[iFace].first >= nLocalCells &&
                              face2cellV[iFace].second >= nLocalCells)    // both sides ghost
                         result.iFaceAllToCollected[iFace] = UnInitIndex; // * discard
@@ -253,7 +255,7 @@ namespace DNDS::Geom
          * \param[in]  isPeriodic         Whether periodic mesh handling is enabled.
          * \param[in]  mpiComm            MPI communicator for barrier.
          */
-        void CompactFacesAndRemapCell2Face(
+        [[maybe_unused]] void CompactFacesAndRemapCell2Face(
             const FaceEnumerationResult &faceEnum,
             const FaceCollectionResult &faceCollect,
             tAdj2Pair &face2cell,
@@ -393,7 +395,7 @@ namespace DNDS::Geom
          * For each ghost face, iterates over both its cells, finds the matching
          * topological face slot in cell2face, and assigns the ghost face index.
          */
-        void AssignGhostFacesToCells(
+        [[maybe_unused]] void AssignGhostFacesToCells(
             const tAdj2 &face2cellSon,
             const tAdj &face2nodeSon,
             const tElemInfoArray &faceElemInfoSon,

@@ -144,7 +144,7 @@ namespace DNDS::ETensor
     }
 
     template <typename T, Index d0, Index d1, Index d2>
-    std::ostream &operator<<(std::ostream &out, ETensorR3<T, d0, d1, d2> &&R)
+    std::ostream &operator<<(std::ostream &out, const ETensorR3<T, d0, d1, d2> &R)
     {
         out << "[";
         for (Index i0 = 0; i0 < d0; i0++)

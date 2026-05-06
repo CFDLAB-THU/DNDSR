@@ -102,9 +102,9 @@ namespace DNDS::Geom::Elem
         t_index int_scheme = 0;
 
         DNDS_DEVICE_CALLABLE Quadrature(Element n_elem = Element{UnknownElem}, int n_int_order = 0)
-            : elem(n_elem), int_order(n_int_order), ps(elem.GetParamSpace())
+            : elem(n_elem), int_order(n_int_order), ps(elem.GetParamSpace()),
+              int_scheme(GetQuadratureScheme(ps, int_order))
         {
-            int_scheme = GetQuadratureScheme(ps, int_order);
         }
 
         /**
@@ -202,7 +202,7 @@ namespace DNDS::Geom::Elem
         {
             if (q.elem.GetOrder() == 1 || q.elem.GetOrder() == 2) // omitting the middle point
             {
-                t_index nGL = static_cast<t_index>(std::round(std::sqrt(q.GetNumPoints())));
+                auto nGL = static_cast<t_index>(std::round(std::sqrt(q.GetNumPoints())));
                 auto ijG = [=](int i, int j)
                 { return nGL * j + i; };
                 t_index iMax = nGL - 1;

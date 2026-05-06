@@ -10,7 +10,7 @@ namespace DNDS::Geom::OpenFOAM
 {
     struct OpenFOAMBoundaryCondition
     {
-        std::string type{};
+        std::string type;
         index nFaces{UnInitIndex};
         index startFace{UnInitIndex};
     };

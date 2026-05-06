@@ -8,7 +8,7 @@ namespace DNDS::Geom
     {
         using coord_t = real; //!< The type of each coordinate
 
-        std::vector<tPoint> pts{};
+        std::vector<tPoint> pts;
 
         // Must return the number of data points
         [[nodiscard]] size_t kdtree_get_point_count() const { return pts.size(); }
@@ -38,7 +38,7 @@ namespace DNDS::Geom
         t_f _fun;
         index _size;
 
-        PointCloudFunctional(const t_f &fun, index size) : _fun(fun), _size(size)
+        PointCloudFunctional(t_f fun, index size) : _fun(std::move(fun)), _size(size)
         {
         }
 
