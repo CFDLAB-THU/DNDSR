@@ -398,12 +398,14 @@ namespace DNDS::Geom::OpenFOAM
             for (index iF = 0; iF < reader.faces.size(); iF++)
             {
                 faceElemInfo.at(iF).zone = BC_ID_NULL;
+                // NOLINTBEGIN(bugprone-branch-clone) — branches differ only in enum value; false positive
                 if (reader.faces.at(iF).size() == 4)
                     faceElemInfo.at(iF).type = Elem::ElemType::Quad4;
                 else if (reader.faces.at(iF).size() == 3)
                     faceElemInfo.at(iF).type = Elem::ElemType::Tri3;
                 else
                     DNDS_assert_info(false, fmt::format("face {} has {} nodes, not supported", iF, reader.faces.at(iF).size()));
+                // NOLINTEND(bugprone-branch-clone)
             }
         }
 

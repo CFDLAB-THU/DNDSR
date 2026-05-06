@@ -163,9 +163,9 @@ namespace DNDS::Geom
         }
         const std::array<char, 9> magic_word{"#!TDV112"};
         const int b_magic_word = magic_word.size() - 1;
-        int32_t intBuf;
-        double_t doubleBuf;
-        float_t floatBuf;
+        int32_t intBuf = 0;
+        double_t doubleBuf = 0.0;
+        float_t floatBuf = 0.0f;
 
         auto writeInt = [&](int d) -> void
         {
@@ -1670,7 +1670,7 @@ namespace DNDS::Geom
         for (size_t i = 0; i < allNames.size(); i++)
             if (bocoListLengthsGlobal[i] > 0)
             {
-                int iBC;
+                int iBC = 0;
                 DNDS_CGNS_CALL_EXIT(cg_boco_write(cgns_file, iBase, iZone, allNames[i].data(), BCType_t::BCTypeNull, PointList,
                                                   bocoListLengthsGlobal[i], NULL, &iBC)); // use NULL to postpone the data write
                 DNDS_CGNS_CALL_EXIT(cg_boco_gridlocation_write(cgns_file, iBase, iZone, iBC, this->dim == 3 ? GridLocation_t::FaceCenter : GridLocation_t::EdgeCenter));
