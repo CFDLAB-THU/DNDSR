@@ -170,27 +170,27 @@ namespace DNDS::Geom
         auto writeInt = [&](int d) -> void
         {
             intBuf = d;
-            fout.write((char *)(&intBuf), sizeof(intBuf));
+            fout.write(reinterpret_cast<char *>(&intBuf), sizeof(intBuf));
         };
         auto writeFloat = [&](float_t d) -> void
         {
             floatBuf = d;
-            fout.write((char *)(&floatBuf), sizeof(floatBuf));
+            fout.write(reinterpret_cast<char *>(&floatBuf), sizeof(floatBuf));
         };
         auto writeDouble = [&](double_t d) -> void
         {
             doubleBuf = d;
-            fout.write((char *)(&doubleBuf), sizeof(doubleBuf));
+            fout.write(reinterpret_cast<char *>(&doubleBuf), sizeof(doubleBuf));
         };
         auto writeString = [&](const std::string &title) -> void
         {
             for (auto i : title)
             {
                 intBuf = i;
-                fout.write((char *)(&intBuf), sizeof(intBuf));
+                fout.write(reinterpret_cast<char *>(&intBuf), sizeof(intBuf));
             }
             intBuf = 0;
-            fout.write((char *)(&intBuf), sizeof(intBuf));
+            fout.write(reinterpret_cast<char *>(&intBuf), sizeof(intBuf));
         };
         fout.write(magic_word.data(), b_magic_word);
         writeInt(1);
@@ -872,21 +872,21 @@ namespace DNDS::Geom
                                 std::vector<uint8_t> dataOutBytes;
                                 dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                 size_t top{0};
-                                *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
+                                *reinterpret_cast<uint64_t *>(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
                                 for (index i = 0; i < nodeDedu2Old.size(); i++)
                                 {
                                     index iN = nodeDedu2Old.at(i);
                                     if (iN < nNode)
                                     {
-                                        *(double *)(dataOutBytes.data() + top) = double(coordOut[iN](0)), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = double(coordOut[iN](1)), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = double(coordOut[iN](2)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(coordOut[iN](0)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(coordOut[iN](1)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(coordOut[iN](2)), top += sizeof(double);
                                     }
                                     else
                                     {
-                                        *(double *)(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(0)), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(1)), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(2)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(0)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(1)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(2)), top += sizeof(double);
                                     }
                                 }
                                 out << cppcodec::base64_rfc4648::encode(dataOutBytes);
@@ -1014,9 +1014,9 @@ namespace DNDS::Geom
                                     std::vector<uint8_t> dataOutBytes;
                                     dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                     size_t top{0};
-                                    *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
+                                    *reinterpret_cast<uint64_t *>(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
                                     for (index iCell = 0; iCell < nCell; iCell++)
-                                        *(double *)(dataOutBytes.data() + top) = double(data(i, iCell)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(data(i, iCell)), top += sizeof(double);
                                     out << cppcodec::base64_rfc4648::encode(dataOutBytes);
                                 }
                                 else if (vtuFloatEncodeMode == "ascii")
@@ -1081,12 +1081,12 @@ namespace DNDS::Geom
                                     std::vector<uint8_t> dataOutBytes;
                                     dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                     size_t top{0};
-                                    *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
+                                    *reinterpret_cast<uint64_t *>(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
                                     for (index iCell = 0; iCell < nCell; iCell++)
                                     {
-                                        *(double *)(dataOutBytes.data() + top) = vectorData(i, iCell, 0), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = vectorData(i, iCell, 1), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = vectorData(i, iCell, 2), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorData(i, iCell, 0), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorData(i, iCell, 1), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorData(i, iCell, 2), top += sizeof(double);
                                     }
                                     out << cppcodec::base64_rfc4648::encode(dataOutBytes);
                                 }
@@ -1147,14 +1147,14 @@ namespace DNDS::Geom
                                     std::vector<uint8_t> dataOutBytes;
                                     dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                     size_t top{0};
-                                    *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
+                                    *reinterpret_cast<uint64_t *>(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
                                     for (index ii = 0; ii < nodeDedu2Old.size(); ii++)
                                     {
                                         index iN = nodeDedu2Old.at(ii);
                                         if (iN < nNode)
-                                            *(double *)(dataOutBytes.data() + top) = dataPoint(i, iN), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = dataPoint(i, iN), top += sizeof(double);
                                         else
-                                            *(double *)(dataOutBytes.data() + top) = dataPoint(i, nodesExtraAtOriginal.at(iN - nNode)), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = dataPoint(i, nodesExtraAtOriginal.at(iN - nNode)), top += sizeof(double);
                                     }
                                     out << cppcodec::base64_rfc4648::encode(dataOutBytes);
                                 }
@@ -1195,21 +1195,21 @@ namespace DNDS::Geom
                                     std::vector<uint8_t> dataOutBytes;
                                     dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                     size_t top{0};
-                                    *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
+                                    *reinterpret_cast<uint64_t *>(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
                                     for (index ii = 0; ii < nodeDedu2Old.size(); ii++)
                                     {
                                         index iN = nodeDedu2Old.at(ii);
                                         if (iN < nNode)
                                         {
-                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 0), top += sizeof(double);
-                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 1), top += sizeof(double);
-                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 2), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 0), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 1), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 2), top += sizeof(double);
                                         }
                                         else
                                         {
-                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 0), top += sizeof(double);
-                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 1), top += sizeof(double);
-                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 2), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 0), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 1), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 2), top += sizeof(double);
                                         }
                                     }
                                     out << cppcodec::base64_rfc4648::encode(dataOutBytes);
@@ -1246,7 +1246,7 @@ namespace DNDS::Geom
 
         std::string endianName{"BigEndian"};
         uint32_t beTest = 1; // need c++20 for STL support
-        uint8_t beTestS = *(uint8_t *)(&beTest);
+        uint8_t beTestS = *reinterpret_cast<uint8_t *>(&beTest);
         if (beTestS == 1)
             endianName = "LittleEndian";
 
