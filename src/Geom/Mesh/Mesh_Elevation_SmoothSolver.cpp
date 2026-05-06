@@ -20,8 +20,17 @@
 
 namespace DNDS::Geom
 {
+    // Value-semantic class: all members are value types (ssp, TTrans);
+    // = default for all special members per rule of five.
     struct CoordPairDOF : public tCoordPair
     {
+        CoordPairDOF() = default;
+        ~CoordPairDOF() = default;
+        CoordPairDOF(const CoordPairDOF &) = default;
+        CoordPairDOF(CoordPairDOF &&) = default;
+        CoordPairDOF &operator=(const CoordPairDOF &) = default;
+        CoordPairDOF &operator=(CoordPairDOF &&) = default;
+
         real dot(CoordPairDOF &R)
         {
             real ret = 0;

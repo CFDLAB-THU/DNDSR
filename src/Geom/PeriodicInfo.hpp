@@ -108,6 +108,15 @@ namespace DNDS::Geom
     public:
         NodePeriodicBitsRow(NodePeriodicBits *ptr, rowsize siz) : _p_indices(ptr), _row_size(siz) {} // default actually
 
+        // --- Special members (cppcoreguidelines-special-member-functions) ---
+        // NodePeriodicBitsRow is a non-owning view (pointer + size).
+        // The copy-assignment operator deep-copies the pointed-to contents;
+        // all other special members are shallow (trivially copyable members).
+        ~NodePeriodicBitsRow() = default;
+        NodePeriodicBitsRow(const NodePeriodicBitsRow &) = default;
+        NodePeriodicBitsRow(NodePeriodicBitsRow &&) = default;
+        NodePeriodicBitsRow &operator=(NodePeriodicBitsRow &&) = default;
+
         NodePeriodicBits &operator[](rowsize j)
         {
             DNDS_assert(j >= 0 && j < _row_size);
