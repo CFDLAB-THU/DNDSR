@@ -140,7 +140,7 @@ namespace DNDS::Geom
                 ///@todo //TODO: parmetis needs testing!
                 for (int i = 0; i < vtxdist.size() - 1; i++)
                     DNDS_assert_info(vtxdist[i + 1] - vtxdist[i] > 0, "need more than zero cells on each proc!");
-                std::vector<real_t> tpWeights(nPart * nCon, 1.0 / nPart); //! assuming homogenous
+                std::vector<real_t> tpWeights(static_cast<index>(nPart) * nCon, 1.0 / nPart); //! assuming homogenous
                 std::array<real_t, 1> ubVec{1.05};
                 DNDS_assert(nCon == 1);
                 std::array<idx_t, 3> optsC{};

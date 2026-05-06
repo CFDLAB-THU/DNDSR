@@ -193,7 +193,8 @@ namespace DNDS::Geom::Elem
         static constexpr int numFaces = 4;
         static constexpr ParamSpace paramSpace = QuadSpace;
         static constexpr t_real paramSpaceVol = 4.0;
-
+        // 3 * NNodes is a compile-time constant; no overflow possible.
+        // NOLINTNEXTLINE(bugprone-implicit-widening-of-multiplication-result)
         static constexpr std::array<t_real, 3 * 9> standardCoords = {
             -1, -1, 0, // Node 0: vertex
             1, -1, 0,  // Node 1: vertex
