@@ -150,8 +150,8 @@ namespace DNDS::Geom
 
         NodePeriodicBits *begin() { return __p_indices; }
         NodePeriodicBits *end() { return __p_indices + __Row_size; } // past-end
-        const NodePeriodicBits *cbegin() const { return __p_indices; }
-        const NodePeriodicBits *cend() const { return __p_indices + __Row_size; } // past-end
+        [[nodiscard]] const NodePeriodicBits *cbegin() const { return __p_indices; }
+        [[nodiscard]] const NodePeriodicBits *cend() const { return __p_indices + __Row_size; } // past-end
         [[nodiscard]] rowsize size() const { return __Row_size; }
     };
 

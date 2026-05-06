@@ -99,7 +99,7 @@ namespace DNDS
 
             /// Resolve an old global index to its new global index.
             /// The old global must be in the local father or ghost (son) range.
-            index resolve(index oldGlobal) const
+            [[nodiscard]] index resolve(index oldGlobal) const
             {
                 DNDS_assert(pair.trans.pLGhostMapping);
                 if (oldGlobal == UnInitIndex)
@@ -122,7 +122,7 @@ namespace DNDS
         /// @param mpi      MPI communicator.
         /// @return LookupResult with resolve() method.
         /// @warning Collective.
-        LookupResult buildLookup(
+        [[nodiscard]] LookupResult buildLookup(
             const std::vector<index> &pullSet,
             const MPIInfo &mpi) const;
 

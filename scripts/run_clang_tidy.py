@@ -444,36 +444,51 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _print_site_list(log_path: Path) -> None:
-    """Parse clang-tidy log and print unique warning/error sites."""
-    seen: set[tuple[str, str, str, str]] = set()  # (file, line, col, message)
-    grouped: dict[str, list[tuple[str, str, str, str]]
-                  ] = collections.defaultdict(list)
+def _compute_unique_sites(
+    log_path: Path,
+) -> dict[str, list[tuple[str, str, str, str]]]:
+    """Return deduped sites grouped by check. Key is (file, line, col, check)."""
+    seen: set[tuple[str, str, str, str]] = set()
+    grouped: dict[str, list[tuple[str, str, str, str]]]
+    grouped = collections.defaultdict(list)
     if not log_path.exists():
-        return
+        return grouped
     for line in log_path.read_text().splitlines():
         m = SITE_RE.match(line)
         if not m:
             continue
         file, lno, col, sev, msg, check = m.groups()
-        # Skip note lines (they accompany a warning/error)
         if sev == "note":
             continue
-        key = (file, lno, col, msg)
+        check_name = check or "?"
+        key = (file, lno, col, check_name)
         if key in seen:
             continue
         seen.add(key)
-        check_name = check or "?"
         grouped[check_name].append((file, lno, col, msg))
+    return grouped
+
+
+def _print_site_list(log_path: Path) -> None:
+    grouped = _compute_unique_sites(log_path)
     if not grouped:
         return
     print()
     print("=== site listing ===")
     for check_name in sorted(grouped.keys()):
         sites = grouped[check_name]
+        # Sort by file path, then line, then column.
+
+        def _sort_key(site: tuple[str, str, str, str]) -> tuple[str, int, int]:
+            f, l, c, _msg = site
+            try:
+                rel = str(Path(f).resolve().relative_to(PROJECT_ROOT))
+            except ValueError:
+                rel = f
+            return (rel, int(l), int(c))
+        sites.sort(key=_sort_key)
         print(f"\n[{check_name}]  ({len(sites)} site(s))")
         for file, lno, col, msg in sites:
-            # Only print the short filename (relative to project)
             try:
                 rel = str(Path(file).resolve().relative_to(PROJECT_ROOT))
             except ValueError:
@@ -586,7 +601,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     quiet = args.quiet or args.summary or args.list
-    exit_code, counts = _run_parallel(
+    exit_code, _counts = _run_parallel(
         selected, base, jobs=effective_jobs, quiet=quiet, log_path=log_path,
     )
 
@@ -595,15 +610,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print()
     print(f"=== diagnostic summary ({log_path}) ===")
-    if not counts:
+    unique = _compute_unique_sites(log_path)
+    if not unique:
         print("  (no diagnostics)")
     else:
-        items = counts.most_common(args.top_checks or None)
-        total = sum(counts.values())
-        for name, n in items:
-            print(f"  {n:>6}  {name}")
+        items = sorted(unique.items(), key=lambda x: -len(x[1]))
+        if args.top_checks:
+            items = items[:args.top_checks]
+        total = sum(len(v) for _, v in unique.items())
+        for name, sites in items:
+            print(f"  {len(sites):>6}  {name}")
         print("  " + "-" * 6)
-        print(f"  {total:>6}  TOTAL ({len(counts)} distinct checks)")
+        print(f"  {total:>6}  TOTAL ({len(unique)} distinct checks)")
 
     return exit_code if args.strict else 0
 
