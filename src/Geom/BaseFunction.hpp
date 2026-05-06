@@ -232,7 +232,7 @@ namespace DNDS::Geom::Base
     }
 
     template <int dim, int order>
-    inline constexpr int PolynomialNDOF() //  2-d specific
+    constexpr int PolynomialNDOF() //  2-d specific
     {
         switch (dim)
         {

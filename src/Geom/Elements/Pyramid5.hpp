@@ -12,14 +12,15 @@ namespace DNDS::Geom::Elem
 {
 
     // Forward declaration (primary template is in ElementTraitsBase.hpp)
-    template <ElemType> struct ShapeFuncImpl;
+    template <ElemType>
+    struct ShapeFuncImpl;
 
     // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Pyramid5>
     {
         template <class TPoint, class TArray>
-        static inline void Diff0(const TPoint &p, TArray &&v)
+        static void Diff0(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
@@ -30,20 +31,20 @@ namespace DNDS::Geom::Elem
             const t_real _t0 = zt - 1;
             const t_real _t1 = _t0 + et;
             const t_real _t2 = _t0 + xi;
-            const t_real _t3 = (1.0 / (4*zt - 4));
+            const t_real _t3 = (1.0 / (4 * zt - 4));
             const t_real _t4 = 1 - zt;
             const t_real _t5 = _t4 + xi;
-            const t_real _t6 = ((0.25))/_t0;
+            const t_real _t6 = ((0.25)) / _t0;
             const t_real _t7 = _t4 + et;
-            v(0, 0) = -_t1*_t2*_t3;
-            v(0, 1) = _t1*_t5*_t6;
-            v(0, 2) = -_t3*_t5*_t7;
-            v(0, 3) = _t2*_t6*_t7;
+            v(0, 0) = -_t1 * _t2 * _t3;
+            v(0, 1) = _t1 * _t5 * _t6;
+            v(0, 2) = -_t3 * _t5 * _t7;
+            v(0, 3) = _t2 * _t6 * _t7;
             v(0, 4) = zt;
         }
 
         template <class TPoint, class TArray>
-        static inline void Diff1(const TPoint &p, TArray &&v)
+        static void Diff1(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
@@ -53,26 +54,26 @@ namespace DNDS::Geom::Elem
                 zt -= DNDS::signP(1 - zt) * 1e-15;
             const t_real _t0 = zt - 1;
             const t_real _t1 = _t0 + et;
-            const t_real _t2 = ((0.25))/_t0;
+            const t_real _t2 = ((0.25)) / _t0;
             const t_real _t3 = 1 - zt;
             const t_real _t4 = _t3 + et;
             const t_real _t5 = _t0 + xi;
             const t_real _t6 = _t3 + xi;
-            const t_real _t7 = 2*zt;
-            const t_real _t8 = et*xi;
+            const t_real _t7 = 2 * zt;
+            const t_real _t8 = et * xi;
             const t_real _t9 = ((zt) * (zt));
             const t_real _t10 = -_t7 + _t9 + 1;
-            const t_real _t11 = ((0.25))/_t10;
-            const t_real _t12 = _t11*(_t7 + _t8 - _t9 - 1);
-            const t_real _t13 = _t11*(-_t10 - _t8);
-            v(0, 0) = -_t1*_t2;
-            v(0, 1) = _t1*_t2;
-            v(0, 2) = -_t2*_t4;
-            v(0, 3) = _t2*_t4;
-            v(1, 0) = -_t2*_t5;
-            v(1, 1) = _t2*_t6;
-            v(1, 2) = -_t2*_t6;
-            v(1, 3) = _t2*_t5;
+            const t_real _t11 = ((0.25)) / _t10;
+            const t_real _t12 = _t11 * (_t7 + _t8 - _t9 - 1);
+            const t_real _t13 = _t11 * (-_t10 - _t8);
+            v(0, 0) = -_t1 * _t2;
+            v(0, 1) = _t1 * _t2;
+            v(0, 2) = -_t2 * _t4;
+            v(0, 3) = _t2 * _t4;
+            v(1, 0) = -_t2 * _t5;
+            v(1, 1) = _t2 * _t6;
+            v(1, 2) = -_t2 * _t6;
+            v(1, 3) = _t2 * _t5;
             v(2, 0) = _t12;
             v(2, 1) = _t13;
             v(2, 2) = _t12;
@@ -81,7 +82,7 @@ namespace DNDS::Geom::Elem
         }
 
         template <class TPoint, class TArray>
-        static inline void Diff2(const TPoint &p, TArray &&v)
+        static void Diff2(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
@@ -91,16 +92,16 @@ namespace DNDS::Geom::Elem
                 zt -= DNDS::signP(1 - zt) * 1e-15;
             const t_real _t0 = ((zt) * (zt));
             const t_real _t1 = ((zt) * (zt) * (zt));
-            const t_real _t2 = et*xi;
-            const t_real _t3 = -_t2/(-6*_t0 + 2*_t1 + 6*zt - 2);
-            const t_real _t4 = ((0.5))*_t2/(-3*_t0 + _t1 + 3*zt - 1);
-            const t_real _t5 = -1/(4*zt - 4);
+            const t_real _t2 = et * xi;
+            const t_real _t3 = -_t2 / (-6 * _t0 + 2 * _t1 + 6 * zt - 2);
+            const t_real _t4 = ((0.5)) * _t2 / (-3 * _t0 + _t1 + 3 * zt - 1);
+            const t_real _t5 = -1 / (4 * zt - 4);
             const t_real _t6 = zt - 1;
-            const t_real _t7 = ((0.25))/_t6;
-            const t_real _t8 = ((0.25))/((_t6) * (_t6));
-            const t_real _t9 = _t8*xi;
+            const t_real _t7 = ((0.25)) / _t6;
+            const t_real _t8 = ((0.25)) / ((_t6) * (_t6));
+            const t_real _t9 = _t8 * xi;
             const t_real _t10 = -_t9;
-            const t_real _t11 = _t8*et;
+            const t_real _t11 = _t8 * et;
             const t_real _t12 = -_t11;
             v(2, 0) = _t3;
             v(2, 1) = _t4;
@@ -121,7 +122,7 @@ namespace DNDS::Geom::Elem
         }
 
         template <class TPoint, class TArray>
-        static inline void Diff3(const TPoint &p, TArray &&v)
+        static void Diff3(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
@@ -132,16 +133,16 @@ namespace DNDS::Geom::Elem
             const t_real _t0 = ((zt) * (zt) * (zt) * (zt));
             const t_real _t1 = ((zt) * (zt));
             const t_real _t2 = ((zt) * (zt) * (zt));
-            const t_real _t3 = et*xi;
-            const t_real _t4 = ((1.5))*_t3/(_t0 + 6*_t1 - 4*_t2 - 4*zt + 1);
-            const t_real _t5 = -3*_t3/(2*_t0 + 12*_t1 - 8*_t2 - 8*zt + 2);
+            const t_real _t3 = et * xi;
+            const t_real _t4 = ((1.5)) * _t3 / (_t0 + 6 * _t1 - 4 * _t2 - 4 * zt + 1);
+            const t_real _t5 = -3 * _t3 / (2 * _t0 + 12 * _t1 - 8 * _t2 - 8 * zt + 2);
             const t_real _t6 = zt - 1;
-            const t_real _t7 = ((0.5))/((_t6) * (_t6) * (_t6));
-            const t_real _t8 = _t7*xi;
+            const t_real _t7 = ((0.5)) / ((_t6) * (_t6) * (_t6));
+            const t_real _t8 = _t7 * xi;
             const t_real _t9 = -_t8;
-            const t_real _t10 = _t7*et;
+            const t_real _t10 = _t7 * et;
             const t_real _t11 = -_t10;
-            const t_real _t12 = ((0.25))/((_t6) * (_t6));
+            const t_real _t12 = ((0.25)) / ((_t6) * (_t6));
             const t_real _t13 = -_t12;
             v(2, 0) = _t4;
             v(2, 1) = _t5;
@@ -179,53 +180,48 @@ namespace DNDS::Geom::Elem
         static constexpr t_real paramSpaceVol = 4.0 / 3.0;
 
         static constexpr std::array<t_real, 3 * 5> standardCoords = {
-            -1, -1, 0,  // Node 0: vertex
+            -1, -1, 0, // Node 0: vertex
             1, -1, 0,  // Node 1: vertex
-            1, 1, 0,  // Node 2: vertex
+            1, 1, 0,   // Node 2: vertex
             -1, 1, 0,  // Node 3: vertex
             0, 0, 1};  // Node 4: vertex
 
         static constexpr ElemType GetFaceType(t_index iFace)
         {
-            if (iFace < 1) return Quad4;
+            if (iFace < 1)
+                return Quad4;
             return Tri3;
         }
 
-        static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{
-            {0, 3, 2, 1},
-            {0, 1, 4},
-            {1, 2, 4},
-            {2, 3, 4},
-            {3, 0, 4}
-        }};
+        static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{{0, 3, 2, 1},
+                                                                              {0, 1, 4},
+                                                                              {1, 2, 4},
+                                                                              {2, 3, 4},
+                                                                              {3, 0, 4}}};
 
         static constexpr ElemType GetEdgeType(t_index /*iEdge*/) { return Line2; }
 
-        static constexpr std::array<std::array<t_index, 3>, 8> edgeNodes = {{
-            {0, 1},
-            {1, 2},
-            {2, 3},
-            {3, 0},
-            {0, 4},
-            {1, 4},
-            {2, 4},
-            {3, 4}
-        }};
+        static constexpr std::array<std::array<t_index, 3>, 8> edgeNodes = {{{0, 1},
+                                                                             {1, 2},
+                                                                             {2, 3},
+                                                                             {3, 0},
+                                                                             {0, 4},
+                                                                             {1, 4},
+                                                                             {2, 4},
+                                                                             {3, 4}}};
 
         static constexpr ElemType elevatedType = Pyramid14;
         static constexpr int numElevNodes = 9;
 
-        static constexpr std::array<tElevSpan, 9> elevSpans = {{
-            {0, 1},
-            {1, 2},
-            {2, 3},
-            {3, 0},
-            {0, 4},
-            {1, 4},
-            {2, 4},
-            {3, 4},
-            {0, 3, 2, 1}
-        }};
+        static constexpr std::array<tElevSpan, 9> elevSpans = {{{0, 1},
+                                                                {1, 2},
+                                                                {2, 3},
+                                                                {3, 0},
+                                                                {0, 4},
+                                                                {1, 4},
+                                                                {2, 4},
+                                                                {3, 4},
+                                                                {0, 3, 2, 1}}};
 
         static constexpr std::array<ElemType, 9> elevNodeSpanTypes = {
             Line2, Line2, Line2, Line2, Line2, Line2, Line2, Line2, Quad4};
@@ -235,6 +231,5 @@ namespace DNDS::Geom::Elem
         static constexpr std::array<int, 5> vtkNodeOrder = {0, 1, 2, 3, 4};
     };
     // <GEN_ELEM_TRAITS_END>
-
 
 } // namespace DNDS::Geom::Elem

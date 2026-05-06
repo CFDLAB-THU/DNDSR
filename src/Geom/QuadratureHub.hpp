@@ -34,7 +34,7 @@ namespace DNDS::Geom::Elem
     //   - The number of quadrature points
     // =========================================================================
 
-    inline constexpr t_index GetQuadratureScheme(ParamSpace ps, int int_order)
+    constexpr t_index GetQuadratureScheme(ParamSpace ps, int int_order)
     {
         if (ps == LineSpace)
             switch (int_order)

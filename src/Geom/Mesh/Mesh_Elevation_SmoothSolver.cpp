@@ -72,14 +72,14 @@ namespace DNDS::Geom
         }
 
         // Must return the number of data points
-        [[nodiscard]] inline size_t
+        [[nodiscard]] size_t
         kdtree_get_point_count() const
         {
             DNDS_assert(ref);
             return ref->Size();
         }
 
-        [[nodiscard]] inline real kdtree_get_pt(const size_t idx, const size_t dim) const
+        [[nodiscard]] real kdtree_get_pt(const size_t idx, const size_t dim) const
         {
             DNDS_assert(ref);
             return ref->operator[](idx)(dim);

@@ -53,6 +53,12 @@ CHECK_RE = re.compile(
     r"\[([a-z][a-z0-9]*(?:[.-][a-z0-9]+)+)(?:,-warnings-as-errors)?\]"
 )
 
+SITE_RE = re.compile(
+    # Match a clang-tidy warning/error/note line:
+    #   path:line:col: severity: message [check]
+    r"^(.+?):(\d+):(\d+):\s+(warning|error|note):\s+(.+?)(?:\s+\[(.+?)\])?\s*$"
+)
+
 
 def _resolve_build_dir(arg: str | None) -> Path:
     if arg:
@@ -398,6 +404,15 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the selected files and exit (no tidy run).",
     )
+    out_grp.add_argument(
+        "--list",
+        action="store_true",
+        help=(
+            "After the run, extract and print every unique "
+            "file:line:col: warning/error site (deduplicated "
+            "by location + message). Implies --quiet."
+        ),
+    )
     p.add_argument(
         "--clang-tidy",
         default=None,
@@ -427,6 +442,44 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     return p
+
+
+def _print_site_list(log_path: Path) -> None:
+    """Parse clang-tidy log and print unique warning/error sites."""
+    seen: set[tuple[str, str, str, str]] = set()  # (file, line, col, message)
+    grouped: dict[str, list[tuple[str, str, str, str]]
+                  ] = collections.defaultdict(list)
+    if not log_path.exists():
+        return
+    for line in log_path.read_text().splitlines():
+        m = SITE_RE.match(line)
+        if not m:
+            continue
+        file, lno, col, sev, msg, check = m.groups()
+        # Skip note lines (they accompany a warning/error)
+        if sev == "note":
+            continue
+        key = (file, lno, col, msg)
+        if key in seen:
+            continue
+        seen.add(key)
+        check_name = check or "?"
+        grouped[check_name].append((file, lno, col, msg))
+    if not grouped:
+        return
+    print()
+    print("=== site listing ===")
+    for check_name in sorted(grouped.keys()):
+        sites = grouped[check_name]
+        print(f"\n[{check_name}]  ({len(sites)} site(s))")
+        for file, lno, col, msg in sites:
+            # Only print the short filename (relative to project)
+            try:
+                rel = str(Path(file).resolve().relative_to(PROJECT_ROOT))
+            except ValueError:
+                rel = file
+            msg_trunc = msg[:120] + "…" if len(msg) > 120 else msg
+            print(f"  {rel}:{lno}:{col}: {msg_trunc}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -532,10 +585,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("   " + os.path.relpath(f, PROJECT_ROOT))
         return 0
 
-    quiet = args.quiet or args.summary
+    quiet = args.quiet or args.summary or args.list
     exit_code, counts = _run_parallel(
         selected, base, jobs=effective_jobs, quiet=quiet, log_path=log_path,
     )
+
+    if args.list:
+        _print_site_list(log_path)
 
     print()
     print(f"=== diagnostic summary ({log_path}) ===")

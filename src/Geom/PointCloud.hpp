@@ -11,9 +11,9 @@ namespace DNDS::Geom
         std::vector<tPoint> pts;
 
         // Must return the number of data points
-        [[nodiscard]] inline size_t kdtree_get_point_count() const { return pts.size(); }
+        [[nodiscard]] size_t kdtree_get_point_count() const { return pts.size(); }
 
-        [[nodiscard]] inline real kdtree_get_pt(const size_t idx, const size_t dim) const
+        [[nodiscard]] real kdtree_get_pt(const size_t idx, const size_t dim) const
         {
             if (dim == 0)
                 return pts[idx].x();
@@ -51,9 +51,9 @@ namespace DNDS::Geom
         }
 
         // Must return the number of data points
-        [[nodiscard]] inline size_t kdtree_get_point_count() const { return _size; }
+        [[nodiscard]] size_t kdtree_get_point_count() const { return _size; }
 
-        [[nodiscard]] inline real kdtree_get_pt(const size_t idx, const size_t dim) const
+        [[nodiscard]] real kdtree_get_pt(const size_t idx, const size_t dim) const
         {
             return this->operator[](idx)(dim);
         }
