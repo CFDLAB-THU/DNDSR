@@ -62,7 +62,8 @@ namespace DNDS::Geom
         case EntityKind::Face:
             return dim - 1;
         case EntityKind::Edge:
-            return (dim == 2) ? 1 : 1; // always 1; coincides with Face in 2D
+            // NOLINTNEXTLINE(bugprone-branch-clone) — Edge depth is always 1 in both 2D and 3D
+            return (dim == 2) ? 1 : 1;
         case EntityKind::Node:
             return 0;
         case EntityKind::Bnd:

@@ -19,6 +19,7 @@ namespace DNDS::Geom::RBF
         CPC0,
     };
 
+    // NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays)
     DNDS_DEFINE_ENUM_JSON(
         RBFKernelType,
         {
@@ -31,6 +32,7 @@ namespace DNDS::Geom::RBF
             {RBFKernelType::CPC2, "CPC2"},
             {RBFKernelType::CPC0, "CPC0"},
         })
+    // NOLINTEND(cppcoreguidelines-avoid-c-arrays)
     inline bool KernelIsCompact(RBFKernelType t)
     {
         return t == CPC0 || t == CPC2 || t == InversedDistanceA1Compact;

@@ -635,7 +635,8 @@ namespace DNDS::Geom
                         if (b ^ bndBit)
                             match1 = false;
                     if (match0 && !match1)
-                        ;
+                    {
+                    } // keep current ordering — match0 alone wins
                     else if (match1 && !match0)
                         std::swap(bnd2cell(i, 0), bnd2cell(i, 1));
                     else
@@ -1381,6 +1382,7 @@ namespace DNDS::Geom
         for (DNDS::index iFace = 0; iFace < faceElemInfo.Size(); iFace++)
         {
             auto faceID = faceElemInfo(iFace, 0).zone;
+            // NOLINTBEGIN(bugprone-branch-clone) — branches share asserts but are semantically distinct
             if (FaceIDIsInternal(faceID))
             {
                 // if (FaceIDIsPeriodic(faceID))
@@ -1409,6 +1411,7 @@ namespace DNDS::Geom
                 DNDS_assert(face2cell[iFace][0] >= 0 && face2cell[iFace][0] < cell2cell.father->Size());
                 cCont[face2cell[iFace][0]]++;
             }
+            // NOLINTEND(bugprone-branch-clone)
         }
         for (DNDS::index iCell = 0; iCell < cellElemInfo.father->Size(); iCell++) // for every non-ghost
         {

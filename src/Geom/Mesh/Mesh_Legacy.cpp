@@ -424,7 +424,8 @@ namespace DNDS::Geom
                         if (b ^ bndBit)
                             match1 = false;
                     if (match0 && !match1)
-                        ; // keep
+                    {
+                    } // keep current ordering — match0 alone wins
                     else if (match1 && !match0)
                         std::swap(bnd2cell(i, 0), bnd2cell(i, 1));
                     else

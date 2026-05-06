@@ -35,6 +35,7 @@ namespace CorrectRCM
         using index = int64_t;
 
     private:
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
         const tGraphAdjFunctor &GraphAdjFunctor;
         index nVertices;
 

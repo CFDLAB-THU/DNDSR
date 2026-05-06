@@ -111,7 +111,7 @@ namespace DNDS::Geom
         {
             std::string meshRead;
             index dimRead{0}, sizeRead{0};
-            int isPeriodicRead;
+            int isPeriodicRead = 0;
             serializerP->ReadString("mesh", meshRead);
             serializerP->ReadIndex("dim", dimRead);
             serializerP->ReadIndex("MPISize", sizeRead);
@@ -314,7 +314,7 @@ namespace DNDS::Geom
             std::vector<real_t> tpWeights(static_cast<size_t>(nPart) * nCon, 1.0 / nPart);
             std::array<real_t, 1> ubVec{1.05};
             std::array<idx_t, 3> optsC{1, 0, static_cast<idx_t>(partitionOptions.metisSeed)};
-            idx_t objval;
+            idx_t objval = 0;
             std::vector<idx_t> partOut(cell2cellFacial->Size());
             if (partOut.empty())
                 partOut.resize(1, 0);
@@ -376,8 +376,8 @@ namespace DNDS::Geom
             for (rowsize ic2n = 0; ic2n < cell2node.father->RowSize(iCell); ic2n++)
             {
                 index iNode = (*cell2node.father)(iCell, ic2n);
-                MPI_int rank;
-                index val;
+                MPI_int rank = UnInitMPIInt;
+                index val = UnInitIndex;
                 bool found = coords.father->pLGlobalMapping->search(iNode, rank, val);
                 DNDS_assert(found);
                 if (rank == mpi.rank)
@@ -402,8 +402,8 @@ namespace DNDS::Geom
         for (index iBnd = 0; iBnd < bnd2node.father->Size(); iBnd++)
         {
             index iOwnerCell = bnd2cell(iBnd, 0);
-            MPI_int ownerRank;
-            index ownerVal;
+            MPI_int ownerRank = UnInitMPIInt;
+            index ownerVal = UnInitIndex;
             bool found = cellPartArr->pLGlobalMapping->search(iOwnerCell, ownerRank, ownerVal);
             DNDS_assert(found);
             if (ownerRank != mpi.rank)
@@ -421,11 +421,11 @@ namespace DNDS::Geom
             index iOwnerCell = bnd2cell(iBnd, 0);
             DNDS_assert_info(iOwnerCell != UnInitIndex,
                              fmt::format("bnd {} has no owner cell after RecoverCell2CellAndBnd2Cell", iBnd));
-            MPI_int ownerRank;
-            index ownerVal;
+            MPI_int ownerRank = UnInitMPIInt;
+            index ownerVal = UnInitIndex;
             bool foundOwner = cellPartArr->pLGlobalMapping->search(iOwnerCell, ownerRank, ownerVal);
             DNDS_assert(foundOwner);
-            index targetPart;
+            index targetPart = UnInitIndex;
             if (ownerRank == mpi.rank)
                 targetPart = (*cellPartArr)(ownerVal, 0);
             else
