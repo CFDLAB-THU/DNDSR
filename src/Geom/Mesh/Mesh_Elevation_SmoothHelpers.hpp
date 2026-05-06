@@ -28,7 +28,7 @@ namespace DNDS::Geom
             real ret = 0;
             for (index i = 0; i < this->father->Size(); i++)
                 ret += (*this)[i].dot(R[i]);
-            real retSum;
+            real retSum = UnInitReal;
             MPI::Allreduce(&ret, &retSum, 1, DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
             return retSum;
         }

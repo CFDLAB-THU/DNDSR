@@ -156,8 +156,8 @@ namespace DNDS::Geom
                     index &v = adj(i, j);
                     if (v == UnInitIndex)
                         continue;
-                    MPI_int rank;
-                    index val;
+                    MPI_int rank = UnInitMPIInt;
+                    index val = UnInitIndex;
                     if (_targetMapping->search_indexAppend(v, rank, val))
                         v = val;
                     else
@@ -205,8 +205,8 @@ namespace DNDS::Geom
                     index &v = adj(i, j);
                     if (v == UnInitIndex)
                         continue;
-                    MPI_int rank;
-                    index val;
+                    MPI_int rank = UnInitMPIInt;
+                    index val = UnInitIndex;
                     if (_targetMapping->search_indexAppend(v, rank, val))
                         v = val;
                     else

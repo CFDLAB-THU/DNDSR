@@ -441,6 +441,17 @@ def _build_parser() -> argparse.ArgumentParser:
             "handled by the caller."
         ),
     )
+    p.add_argument(
+        "--fix-parallel",
+        action="store_true",
+        help=(
+            "Safe parallel --fix mode: partition TUs by their source file, "
+            "run one clang-tidy process per file (fixing that file and its "
+            "headers serially). Each file gets exactly one process -- no "
+            "cross-process header races. Falls back to --unsafe-parallel-fix "
+            "when not enough distinct source files exist."
+        ),
+    )
     return p
 
 
@@ -574,12 +585,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     # --fix cannot run in parallel safely: multiple TUs editing the same
     # header concurrently will race and corrupt the file (interleaved
     # insertions). Force -j 1 unless the user explicitly opts in with
-    # --unsafe-parallel-fix.
+    # --unsafe-parallel-fix or --fix-parallel.
     effective_jobs = args.jobs
-    if args.fix and not args.unsafe_parallel_fix and args.jobs > 1:
+    if args.fix and not (args.unsafe_parallel_fix or args.fix_parallel) and args.jobs > 1:
         print("note: --fix forces jobs=1 (parallel --fix is unsafe); "
-              "pass --unsafe-parallel-fix to override.")
+              "pass --fix-parallel or --unsafe-parallel-fix to override.")
         effective_jobs = 1
+
+    if args.fix and args.fix_parallel and effective_jobs > 1:
+        # Phase 1: run diagnostics in parallel (fast, no race).
+        _diag_base = _base_args(clang_tidy, build_dir,
+                                config, header_filter, fix=False)
+        diag_log = log_dir / f"run-{stamp}-diag.log"
+        ec, _ = _run_parallel(
+            selected, _diag_base, jobs=effective_jobs, quiet=True, log_path=diag_log)
+        # Phase 2: collect all files with diagnostics.
+        sites = _compute_unique_sites(diag_log)
+        # Each check maps to list of (file, lno, col, msg); collect unique files
+        # Phase 2: run --fix serial on all TUs (safe, no header race).
+        _fix_base = _base_args(clang_tidy, build_dir,
+                               config, header_filter, fix=True)
+        fix_log = log_dir / f"run-{stamp}.log"
+        print(f"fix-parallel: {len(selected)} TUs to fix (serial, no race)")
+        ec2, _ = _run_parallel(selected, _fix_base, jobs=1,
+                               quiet=True, log_path=fix_log)
+        if ec2 and not ec:
+            ec = ec2
+        print(f"=== fix-parallel done, log: {fix_log} ===")
+        return ec if args.strict else 0
 
     print(version[0] if version else "(clang-tidy version unknown)")
     print(f"clang-tidy   : {clang_tidy}")

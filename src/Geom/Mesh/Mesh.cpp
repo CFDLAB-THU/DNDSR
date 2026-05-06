@@ -311,7 +311,7 @@ namespace DNDS::Geom
                 break;
             }
         }
-        int hasBadAll;
+        int hasBadAll = 0;
         MPI::Allreduce(&hasBad, &hasBadAll, 1, MPI_INT, MPI_SUM, mpi.comm);
         return hasBad == 0;
     }
@@ -339,7 +339,7 @@ namespace DNDS::Geom
                 break;
             }
         }
-        int hasBadAll;
+        int hasBadAll = 0;
         MPI::Allreduce(&hasBad, &hasBadAll, 1, MPI_INT, MPI_SUM, mpi.comm);
         return hasBad == 0;
     }
@@ -762,8 +762,8 @@ namespace DNDS::Geom
                     for (DNDS::rowsize j = 0; j < bnd2node.RowSize(iBnd); j++)
                     {
                         auto iNode = bnd2node(iBnd, j);
-                        DNDS::MPI_int rank;
-                        DNDS::index val;
+                        DNDS::MPI_int rank = UnInitMPIInt;
+                        DNDS::index val = UnInitIndex;
                         if (!coords.trans.pLGhostMapping->search_indexAppend(iNode, rank, val))
                             extraGhostNodes.push_back(iNode);
                     }
@@ -1468,7 +1468,7 @@ namespace DNDS::Geom
 
         std::string meshRead;
         index dimRead{0}, rankRead{0}, sizeRead{0};
-        int isPeriodicRead;
+        int isPeriodicRead = 0;
         serializerP->ReadString("mesh", meshRead);
         serializerP->ReadIndex("dim", dimRead);
         if (serializerP->IsPerRank())
