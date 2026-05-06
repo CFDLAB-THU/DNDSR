@@ -1,6 +1,7 @@
 #include "Geom/Quadrature.hpp"
 #include "Mesh.hpp"
 #include "Geom/CGNS.hpp"
+#include <array>
 #include <thread>
 #include <filesystem>
 #include <base64_rfc4648.hpp>
@@ -149,9 +150,9 @@ namespace DNDS::Geom
 
             std::filesystem::path outPath{fname + ".dir"};
             std::filesystem::create_directories(outPath);
-            char BUF[512];
-            std::sprintf(BUF, "%06d", mpi.rank);
-            fname = getStringForcePath(outPath / (std::string(BUF) + ".plt"));
+            std::array<char, 512> BUF{};
+            std::sprintf(BUF.data(), "%06d", mpi.rank);
+            fname = getStringForcePath(outPath / (std::string(BUF.data()) + ".plt"));
         }
 
         std::ofstream fout(fname, std::ios::binary);
@@ -160,8 +161,8 @@ namespace DNDS::Geom
             DNDS::log() << "Error: WriteMeshDebugTecASCII open \"" << fname << "\" failure" << std::endl;
             DNDS_assert(false);
         }
-        const char magic_word[] = "#!TDV112";
-        const int b_magic_word = sizeof(magic_word) - 1;
+        const std::array<char, 9> magic_word{"#!TDV112"};
+        const int b_magic_word = magic_word.size() - 1;
         int32_t intBuf;
         double_t doubleBuf;
         float_t floatBuf;
@@ -191,7 +192,7 @@ namespace DNDS::Geom
             intBuf = 0;
             fout.write((char *)(&intBuf), sizeof(intBuf));
         };
-        fout.write(magic_word, b_magic_word);
+        fout.write(magic_word.data(), b_magic_word);
         writeInt(1);
         writeInt(0); //! full: write both grid and data
         writeString("Title Here");
@@ -717,10 +718,10 @@ namespace DNDS::Geom
                                 });
                             for (DNDS::MPI_int iRank = 0; iRank < nMPIRanks; iRank++)
                             {
-                                char BUF[512];
-                                std::sprintf(BUF, "%04d", iRank);
+                                std::array<char, 512> BUF{};
+                                std::sprintf(BUF.data(), "%04d", iRank);
                                 std::string cFileNameRelPVTU = getStringForcePath(
-                                    outPath.lexically_relative(outPath.parent_path()) / (std::string(BUF) + ".vtu"));
+                                    outPath.lexically_relative(outPath.parent_path()) / (std::string(BUF.data()) + ".vtu"));
                                 writeXMLEntity(
                                     out, level, "Piece",
                                     {{"Source", cFileNameRelPVTU}},
@@ -783,9 +784,9 @@ namespace DNDS::Geom
         {
             outPath = {fname + ".vtu.dir"};
             std::filesystem::create_directories(outPath);
-            char BUF[512];
-            std::sprintf(BUF, "%04d", mpi.rank);
-            fname = getStringForcePath(outPath / (std::string(BUF) + ".vtu"));
+            std::array<char, 512> BUF{};
+            std::sprintf(BUF.data(), "%04d", mpi.rank);
+            fname = getStringForcePath(outPath / (std::string(BUF.data()) + ".vtu"));
         }
 
         std::ofstream fout(fname);

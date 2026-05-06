@@ -3,6 +3,7 @@
 #include "Mesh_PartitionHelpers.hpp"
 #include "Geom/Metis.hpp"
 
+#include <array>
 #include <unordered_set>
 
 namespace DNDS::Geom
@@ -311,8 +312,8 @@ namespace DNDS::Geom
             idx_t nCon{1};
             idx_t wgtflag{0}, numflag{0};
             std::vector<real_t> tpWeights(static_cast<size_t>(nPart) * nCon, 1.0 / nPart);
-            real_t ubVec[1]{1.05};
-            idx_t optsC[3]{1, 0, static_cast<idx_t>(partitionOptions.metisSeed)};
+            std::array<real_t, 1> ubVec{1.05};
+            std::array<idx_t, 3> optsC{1, 0, static_cast<idx_t>(partitionOptions.metisSeed)};
             idx_t objval;
             std::vector<idx_t> partOut(cell2cellFacial->Size());
             if (partOut.empty())
@@ -321,7 +322,7 @@ namespace DNDS::Geom
             int ret = ParMETIS_V3_PartKway(
                 vtxdist.data(), xadj.data(), adjncy.data(),
                 NULL, NULL, &wgtflag, &numflag,
-                &nCon, &nPart, tpWeights.data(), ubVec, optsC,
+                &nCon, &nPart, tpWeights.data(), ubVec.data(), optsC.data(),
                 &objval, partOut.data(), &mpi.comm);
             DNDS_assert_info(ret == METIS_OK,
                              fmt::format("ParMETIS_V3_PartKway returned {}", ret));

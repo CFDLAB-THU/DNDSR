@@ -2,6 +2,7 @@
 #include "Geom/CGNS.hpp"
 #include "Geom/OpenFOAMMesh.hpp"
 
+#include <array>
 #include <fmt/core.h>
 
 #include <cgnslib.h>
@@ -292,29 +293,29 @@ namespace DNDS::Geom
         {
 
             int cgns_base = -1;
-            char basename[48]{0};
+            std::array<char, 48> basename{};
             int celldim = -1;
             int physdim = -1;
             int nzones = -1;
 
-            if (cg_base_read(cgns_file, iBase, basename, &celldim, &physdim))
+            if (cg_base_read(cgns_file, iBase, basename.data(), &celldim, &physdim))
                 cg_error_exit();
             DNDS_assert_info(celldim == mesh->dim, "CGNS file need to be with correct dim");
             if (cg_nzones(cgns_file, iBase, &nzones))
                 cg_error_exit();
             for (int iZone = 1; iZone <= nzones; iZone++)
             {
-                char zonename[48]{0};
+                std::array<char, 48> zonename{};
                 std::array<cgsize_t, 9> size{0, 0, 0, 0, 0, 0, 0, 0, 0};
-                if (cg_zone_read(cgns_file, iBase, iZone, zonename, size.data()))
+                if (cg_zone_read(cgns_file, iBase, iZone, zonename.data(), size.data()))
                     cg_error_exit();
                 ZoneType_t zoneType;
                 if (cg_zone_type(cgns_file, iBase, iZone, &zoneType))
                     cg_error_exit();
                 DNDS_assert(zoneType == Unstructured); //! only supports unstructured
                 Base_Zone.emplace_back(std::make_pair(iBase, iZone));
-                BaseNames.emplace_back(basename);
-                ZoneNames.emplace_back(zonename);
+                BaseNames.emplace_back(basename.data());
+                ZoneNames.emplace_back(zonename.data());
 
                 // !  family name used for Volume condition not used now
                 // if (cg_goto(cgns_file, iBase, "Zone_t", iZone, ""))
@@ -338,20 +339,20 @@ namespace DNDS::Geom
                     ZoneCoords.emplace_back(std::make_shared<decltype(ZoneCoords)::value_type::element_type>());
                     ZoneCoords.back()->Resize(nNodes);
                     std::vector<double> coordsRead(nNodes);
-                    cgsize_t RMin[3]{1, 0, 0};
-                    cgsize_t RMax[3]{nNodes, 0, 0};
+                    std::array<cgsize_t, 3> RMin{1, 0, 0};
+                    std::array<cgsize_t, 3> RMax{nNodes, 0, 0};
                     //* READ X
-                    DNDS_CGNS_CALL_EXIT(cg_coord_read(cgns_file, iBase, iZone, "CoordinateX", RealDouble, RMin, RMax, coordsRead.data()));
+                    DNDS_CGNS_CALL_EXIT(cg_coord_read(cgns_file, iBase, iZone, "CoordinateX", RealDouble, RMin.data(), RMax.data(), coordsRead.data()));
                     for (DNDS::index i = 0; i < nNodes; i++)
                         ZoneCoords.back()->operator[](i)[0] = coordsRead.at(i);
                     //* READ Y
-                    DNDS_CGNS_CALL_EXIT(cg_coord_read(cgns_file, iBase, iZone, "CoordinateY", RealDouble, RMin, RMax, coordsRead.data()));
+                    DNDS_CGNS_CALL_EXIT(cg_coord_read(cgns_file, iBase, iZone, "CoordinateY", RealDouble, RMin.data(), RMax.data(), coordsRead.data()));
                     for (DNDS::index i = 0; i < nNodes; i++)
                         ZoneCoords.back()->operator[](i)[1] = coordsRead.at(i);
                     //* READ Z
                     if (mesh->dim == 3)
                     {
-                        DNDS_CGNS_CALL_EXIT(cg_coord_read(cgns_file, iBase, iZone, "CoordinateZ", RealDouble, RMin, RMax, coordsRead.data()));
+                        DNDS_CGNS_CALL_EXIT(cg_coord_read(cgns_file, iBase, iZone, "CoordinateZ", RealDouble, RMin.data(), RMax.data(), coordsRead.data()));
                     }
                     else
                         for (auto &i : coordsRead)
@@ -379,12 +380,12 @@ namespace DNDS::Geom
                     //*Total size
                     for (int iSection = 1; iSection <= nSections; iSection++)
                     {
-                        char sectionName[48];
+                        std::array<char, 48> sectionName{};
                         ElementType_t etype;
                         cgsize_t start;
                         cgsize_t end;
                         int nBnd{0}, parentFlag{0};
-                        DNDS_CGNS_CALL_EXIT(cg_section_read(cgns_file, iBase, iZone, iSection, sectionName, &etype, &start, &end, &nBnd, &parentFlag));
+                        DNDS_CGNS_CALL_EXIT(cg_section_read(cgns_file, iBase, iZone, iSection, sectionName.data(), &etype, &start, &end, &nBnd, &parentFlag));
                         // cgsize_t elemDataSize{0};
                         // DNDS_CGNS_CALL_EXIT(cg_ElementDataSize(cgns_file, iBase, iZone, iSection, &elemDataSize));
                         // DNDS_assert(cend == start - 1); //? testing//!not valid!
@@ -399,12 +400,12 @@ namespace DNDS::Geom
                     //*Resize row
                     for (int iSection = 1; iSection <= nSections; iSection++)
                     {
-                        char sectionName[48];
+                        std::array<char, 48> sectionName{};
                         ElementType_t etype;
                         cgsize_t start;
                         cgsize_t end;
                         int nBnd{0}, parentFlag{0};
-                        DNDS_CGNS_CALL_EXIT(cg_section_read(cgns_file, iBase, iZone, iSection, sectionName, &etype, &start, &end, &nBnd, &parentFlag));
+                        DNDS_CGNS_CALL_EXIT(cg_section_read(cgns_file, iBase, iZone, iSection, sectionName.data(), &etype, &start, &end, &nBnd, &parentFlag));
                         cgsize_t elemDataSize{0};
                         DNDS_CGNS_CALL_EXIT(cg_ElementDataSize(cgns_file, iBase, iZone, iSection, &elemDataSize));
                         std::vector<cgsize_t> elemsRead(elemDataSize);
@@ -465,15 +466,15 @@ namespace DNDS::Geom
                     DNDS_CGNS_CALL_EXIT(cg_nbocos(cgns_file, iBase, iZone, &nBC));
                     for (int iBC = 1; iBC <= nBC; iBC++)
                     {
-                        char boconame[48];
+                        std::array<char, 48> boconame{};
                         PointSetType_t pType;
                         cgsize_t nPts, normalListSize;
                         BCType_t bcType;
-                        int NormalIndex[3];
+                        std::array<int, 3> NormalIndex{};
                         DataType_t normalDataType;
                         int nDataset;
                         GridLocation_t gloc;
-                        DNDS_CGNS_CALL_EXIT(cg_boco_info(cgns_file, iBase, iZone, iBC, boconame, &bcType, &pType, &nPts, NormalIndex, &normalListSize, &normalDataType, &nDataset));
+                        DNDS_CGNS_CALL_EXIT(cg_boco_info(cgns_file, iBase, iZone, iBC, boconame.data(), &bcType, &pType, &nPts, NormalIndex.data(), &normalListSize, &normalDataType, &nDataset));
                         DNDS_CGNS_CALL_EXIT(cg_boco_gridlocation_read(cgns_file, iBase, iZone, iBC, &gloc));
                         DNDS_assert_info(pType == PointRange || pType == PointList, "Only PointRange / PointList supported in BC!");
                         if (mesh->dim == 2)
@@ -485,10 +486,10 @@ namespace DNDS::Geom
                         DNDS_CGNS_CALL_EXIT(cg_boco_read(cgns_file, iBase, iZone, iBC, pts.data(), normalBuf.data()));
                         DNDS_assert(pts[0] >= 1 && pts[1] <= ZoneElems.back()->Size());
 
-                        t_index BCCode = FBCName_2_ID(std::string(boconame));
+                        t_index BCCode = FBCName_2_ID(std::string(boconame.data()));
                         if (BCCode == BC_ID_NULL)
                         {
-                            DNDS_assert_info(false, fmt::format("BC NAME [{}] NOT FOUND IN DATABASE", boconame));
+                            DNDS_assert_info(false, fmt::format("BC NAME [{}] NOT FOUND IN DATABASE", boconame.data()));
                         }
                         if (pType == PointRange)
                         {
@@ -516,21 +517,21 @@ namespace DNDS::Geom
         {
 
             int cgns_base = -1;
-            char basename[48]{0};
+            std::array<char, 48> basename{};
             int celldim = -1;
             int physdim = -1;
             int nzones = -1;
 
-            if (cg_base_read(cgns_file, iBase, basename, &celldim, &physdim))
+            if (cg_base_read(cgns_file, iBase, basename.data(), &celldim, &physdim))
                 cg_error_exit();
             DNDS_assert(celldim == mesh->dim);
             if (cg_nzones(cgns_file, iBase, &nzones))
                 cg_error_exit();
             for (int iZone = 1; iZone <= nzones; iZone++)
             {
-                char zonename[48]{0};
+                std::array<char, 48> zonename{};
                 std::array<cgsize_t, 9> size{0, 0, 0, 0, 0, 0, 0, 0, 0};
-                if (cg_zone_read(cgns_file, iBase, iZone, zonename, size.data()))
+                if (cg_zone_read(cgns_file, iBase, iZone, zonename.data(), size.data()))
                     cg_error_exit();
                 ZoneType_t zoneType;
                 if (cg_zone_type(cgns_file, iBase, iZone, &zoneType))
@@ -550,7 +551,7 @@ namespace DNDS::Geom
                     DNDS_CGNS_CALL_EXIT(cg_nconns(cgns_file, iBase, iZone, &nConns));
                     for (int iConn = 1; iConn <= nConns; iConn++)
                     {
-                        char connName[48], donorName[48];
+                        std::array<char, 48> connName{}, donorName{};
                         GridLocation_t gLoc;
                         GridConnectivityType_t connType;
                         PointSetType_t ptType, ptType_donor;
@@ -558,8 +559,8 @@ namespace DNDS::Geom
                         ZoneType_t donorZT;
                         DataType_t donorDT;
 
-                        DNDS_CGNS_CALL_EXIT(cg_conn_info(cgns_file, iBase, iZone, iConn, connName, &gLoc, &connType, &ptType, &npts,
-                                                         donorName, &donorZT, &ptType_donor, &donorDT, &npts_donor));
+                        DNDS_CGNS_CALL_EXIT(cg_conn_info(cgns_file, iBase, iZone, iConn, connName.data(), &gLoc, &connType, &ptType, &npts,
+                                                         donorName.data(), &donorZT, &ptType_donor, &donorDT, &npts_donor));
 
                         DNDS_assert_info(connType == Abutting1to1, "Only support Abutting1to1 in connection!");
                         DNDS_assert_info(ptType == PointList, "Only Supports PointList in connection!");
@@ -577,7 +578,7 @@ namespace DNDS::Geom
                         {
                             if (Base_Zone.at(iGZ).first == iBase)
                             {
-                                if (ZoneNames.at(iGZ) == donorName)
+                                if (ZoneNames.at(iGZ) == donorName.data())
                                 {
                                     iGZFound = iGZ;
                                 }
