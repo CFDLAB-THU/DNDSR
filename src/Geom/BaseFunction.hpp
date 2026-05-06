@@ -134,7 +134,7 @@ namespace DNDS::Geom::Base
         std::array<std::array<int, 3>, 3>,
         std::array<std::array<std::array<int, 3>, 3>, 3>>;
     template <int dim, int NDiffC>
-    constexpr t_diffOpIJK2I __get_diffOperatorIJK2I(const std::array<std::array<int, 3>, NDiffC> &diffOps)
+    constexpr t_diffOpIJK2I _get_diffOperatorIJK2I(const std::array<std::array<int, 3>, NDiffC> &diffOps)
     {
         auto ret = t_diffOpIJK2I();
         std::get<0>(ret) = 0;
@@ -179,9 +179,9 @@ namespace DNDS::Geom::Base
         return ret;
     }
 
-    static const t_diffOpIJK2I diffOperatorIJK2I = __get_diffOperatorIJK2I<3, ndiffSiz>(diffOperatorOrderList);
+    static const t_diffOpIJK2I diffOperatorIJK2I = _get_diffOperatorIJK2I<3, ndiffSiz>(diffOperatorOrderList);
 
-    static const t_diffOpIJK2I diffOperatorIJK2I2D = __get_diffOperatorIJK2I<2, ndiffSiz2D>(diffOperatorOrderList2D);
+    static const t_diffOpIJK2I diffOperatorIJK2I2D = _get_diffOperatorIJK2I<2, ndiffSiz2D>(diffOperatorOrderList2D);
 
     template <int dim>
     constexpr auto &getDiffOperatorIJK2I()

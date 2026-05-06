@@ -1591,13 +1591,13 @@ namespace DNDS::Geom
         std::vector<cgsize_t> elementPolyData(bndCellOffsets.back());
         for (index iBnd = 0; iBnd < nBnd; iBnd++)
         {
-            elementPolyData.at(bndCellOffsets[iBnd]) = __getCGNSTypeFromElemType(this->bndElemInfo(iBnd, 0).getElemType());
+            elementPolyData.at(bndCellOffsets[iBnd]) = _getCGNSTypeFromElemType(this->bndElemInfo(iBnd, 0).getElemType());
             for (rowsize ib2n = 0; ib2n < bnd2node[iBnd].size(); ib2n++)
                 elementPolyData.at(bndCellOffsets[iBnd] + 1 + ib2n) = bnd2node[iBnd][ib2n] + 1; // global node index, 1 based
         }
         for (index iCell = 0; iCell < nCell; iCell++)
         {
-            elementPolyData.at(bndCellOffsets[iCell + nBnd]) = __getCGNSTypeFromElemType(this->cellElemInfo(iCell, 0).getElemType());
+            elementPolyData.at(bndCellOffsets[iCell + nBnd]) = _getCGNSTypeFromElemType(this->cellElemInfo(iCell, 0).getElemType());
             for (rowsize ic2n = 0; ic2n < cell2node[iCell].size(); ic2n++)
                 elementPolyData.at(bndCellOffsets[iCell + nBnd] + 1 + ic2n) = cell2node[iCell][ic2n] + 1; // global node index, 1 based
         }

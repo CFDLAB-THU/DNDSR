@@ -417,12 +417,12 @@ namespace DNDS::Geom
                             for (cgsize_t i = 0; i < nElemSec; i++)
                             {
                                 auto c_etype = static_cast<ElementType_t>(elemsRead.at(elemStarts[i]));
-                                if (__getElemTypeFromCGNSType(c_etype) == Elem::UnknownElem)
+                                if (_getElemTypeFromCGNSType(c_etype) == Elem::UnknownElem)
                                 {
                                     DNDS::log() << "Error ETYPE " << std::to_string(c_etype) << std::endl;
                                     DNDS_assert_info(false, "Unsupported Element! ");
                                 }
-                                Elem::ElemType ct = __getElemTypeFromCGNSType(c_etype);
+                                Elem::ElemType ct = _getElemTypeFromCGNSType(c_etype);
                                 DNDS_assert_info(Elem::Element{ct}.GetNumNodes() + 1 == elemStarts[i + 1] - elemStarts[i],
                                                  "Element Node Number Mismatch!");
                                 ZoneElems.back()->ResizeRow(start - 1 + i, Elem::Element{ct}.GetNumNodes());
@@ -434,9 +434,9 @@ namespace DNDS::Geom
                             }
                             /// @todo //TODO: TEST with actual data (MIXED TYPE) !!!!!!
                         }
-                        else if (__getElemTypeFromCGNSType(etype) != Elem::UnknownElem)
+                        else if (_getElemTypeFromCGNSType(etype) != Elem::UnknownElem)
                         {
-                            Elem::ElemType ct = __getElemTypeFromCGNSType(etype);
+                            Elem::ElemType ct = _getElemTypeFromCGNSType(etype);
                             DNDS_CGNS_CALL_EXIT(cg_elements_read(cgns_file, iBase, iZone, iSection, elemsRead.data(), NULL));
                             DNDS_assert(elemDataSize / Elem::Element{ct}.GetNumNodes() == nElemSec);
                             for (cgsize_t i = 0; i < nElemSec; i++)

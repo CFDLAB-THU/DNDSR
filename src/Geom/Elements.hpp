@@ -153,18 +153,18 @@ namespace DNDS::Geom::Elem
                 return UnknownElem; });
     }
 
-    DNDS_DEVICE_CALLABLE static constexpr real __iipow(real x, int y)
+    DNDS_DEVICE_CALLABLE static constexpr real _iipow(real x, int y)
     {
         if (y == 0)
             return 1.;
         if (y == 1)
             return x;
         if (y > 1)
-            return x * __iipow(x, y - 1);
+            return x * _iipow(x, y - 1);
         if (y == -1)
             return 1. / x;
         if (y < -1)
-            return 1. / x * __iipow(x, y + 1);
+            return 1. / x * _iipow(x, y + 1);
         return UnInitReal;
     }
 

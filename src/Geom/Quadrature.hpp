@@ -45,39 +45,40 @@ namespace DNDS::Geom::Elem
     };
 
     // =========================================================================
-    // Precomputed Shape Function Buffers at Quadrature Points
-    // =========================================================================
-    // This static structure caches shape function values (D01Nj) at all
-    // quadrature points for all element types and integration orders.
-    // This avoids recomputing shape functions during integration loops.
-    // =========================================================================
-    static struct __TNBufferAtQuadrature
+    namespace detail
     {
-        std::array<std::array<std::vector<tD01Nj>, INT_ORDER_MAX + 1>, ElemType_NUM> buf;
 
-        __TNBufferAtQuadrature()
+        // Precomputed Shape Function Buffers at Quadrature Points
+        // =========================================================================
+        static struct TNBufferAtQuadrature
         {
-            for (t_index i = 1; i < ElemType_NUM; i++)
+            std::array<std::array<std::vector<tD01Nj>, INT_ORDER_MAX + 1>, ElemType_NUM> buf;
+
+            TNBufferAtQuadrature()
             {
-                Element c_elem{ElemType(i)};
-                for (int order = 0; order <= INT_ORDER_MAX; order++)
+                for (t_index i = 1; i < ElemType_NUM; i++)
                 {
-                    auto int_scheme = GetQuadratureScheme(c_elem.GetParamSpace(), order);
-                    buf.at(i).at(order).resize(int_scheme);
-                    for (auto &m : buf.at(i).at(order))
-                        m.resize(4, c_elem.GetNumNodes());
-                    for (int iG = 0; iG < int_scheme; iG++)
+                    Element c_elem{ElemType(i)};
+                    for (int order = 0; order <= INT_ORDER_MAX; order++)
                     {
-                        tPoint pParam{0, 0, 0};
-                        t_real w;
-                        GetQuadraturePoint(c_elem.GetParamSpace(), int_scheme, iG, pParam, w);
-                        c_elem.GetD01Nj(pParam, buf.at(i).at(order).at(iG));
+                        auto int_scheme = GetQuadratureScheme(c_elem.GetParamSpace(), order);
+                        buf.at(i).at(order).resize(int_scheme);
+                        for (auto &m : buf.at(i).at(order))
+                            m.resize(4, c_elem.GetNumNodes());
+                        for (int iG = 0; iG < int_scheme; iG++)
+                        {
+                            tPoint pParam{0, 0, 0};
+                            t_real w;
+                            GetQuadraturePoint(c_elem.GetParamSpace(), int_scheme, iG, pParam, w);
+                            c_elem.GetD01Nj(pParam, buf.at(i).at(order).at(iG));
+                        }
                     }
                 }
             }
-        }
 
-    } __NBufferAtQuadrature{};
+        } NBufferAtQuadrature{};
+
+    } // namespace detail
 
     // =========================================================================
     // Quadrature Class
@@ -87,7 +88,7 @@ namespace DNDS::Geom::Elem
     // Usage:
     //   Element elem{Quad4};
     //   Quadrature quad(elem, 3);  // Order 3 integration
-    //   
+    //
     //   real sum = 0;
     //   quad.Integration(sum, [](real& acc, int iG, tPoint p, tD01Nj D01Nj) {
     //       acc = function_value(p);
@@ -119,7 +120,7 @@ namespace DNDS::Geom::Elem
                 t_real w;
                 GetQuadraturePoint(ps, int_scheme, iG, pParam, w);
                 TAcc acc;
-                f(acc, iG, pParam, __NBufferAtQuadrature.buf.at(elem.type).at(int_order).at(iG));
+                f(acc, iG, pParam, detail::NBufferAtQuadrature.buf.at(elem.type).at(int_order).at(iG));
                 buf += acc * w;
             }
         }

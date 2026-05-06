@@ -32,7 +32,7 @@ namespace DNDS::Geom
         index ind_offset = 0,
         std::string metisType = "KWAY", int metisNcuts = 3, int metisUfactor = 5, int metisSeed = 0)
     {
-        idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat_end - mat_begin));
+        idx_t nCell = METIS::indexToIdx(size_t_to_signed<index>(mat_end - mat_begin));
         idx_t nCon{1}, options[METIS_NOPTIONS];
         METIS_SetDefaultOptions(options);
         {
@@ -78,7 +78,7 @@ namespace DNDS::Geom
             {
                 index iLocal = iCOther - ind_offset;
                 if (iLocal >= 0 && iLocal < nCell)
-                    adjncy[pos++] = _METIS::indexToIdx(iLocal);
+                    adjncy[pos++] = METIS::indexToIdx(iLocal);
             }
         }
 
@@ -102,7 +102,7 @@ namespace DNDS::Geom
 
     inline std::pair<std::vector<index>, std::vector<index>> ReorderSerialAdj_Metis(const tLocalMatStruct &mat)
     {
-        idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat.size()));
+        idx_t nCell = METIS::indexToIdx(size_t_to_signed<index>(mat.size()));
         idx_t nCon{1}, options[METIS_NOPTIONS];
         METIS_SetDefaultOptions(options);
         {
@@ -191,10 +191,10 @@ namespace DNDS::Geom
         Vertex startVert = vertex(0, cell2cellG);
         cuthill_mckee_ordering(cell2cellG, startVert, localFillOrderingNew2Old.rbegin(),
                                get(vertex_color, cell2cellG), get(vertex_degree, cell2cellG));
-        std::unordered_set<index> __checkOrder;
+        std::unordered_set<index> _checkOrder;
         for (auto v : localFillOrderingNew2Old)
-            DNDS_assert(v < mat.size() && v >= 0), __checkOrder.insert(v);
-        DNDS_assert_info(__checkOrder.size() == localFillOrderingNew2Old.size(), "The output of boost::cuthill_mckee_ordering is invalid!");
+            DNDS_assert(v < mat.size() && v >= 0), _checkOrder.insert(v);
+        DNDS_assert_info(_checkOrder.size() == localFillOrderingNew2Old.size(), "The output of boost::cuthill_mckee_ordering is invalid!");
 
         for (index iCell = 0; iCell < size_t_to_signed<index>(mat.size()); iCell++)
             localFillOrderingOld2New[localFillOrderingNew2Old[iCell]] = iCell;
@@ -320,10 +320,10 @@ namespace DNDS::Geom
             v = localFillOrderingOld2New.size() - 1 - v;
 
         std::unordered_set<index>
-            __checkOrder;
+            _checkOrder;
         for (auto v : localFillOrderingOld2New)
-            DNDS_assert(v < size_t_to_signed<index>(mat_size) && v >= 0), __checkOrder.insert(v);
-        DNDS_check_throw_info(__checkOrder.size() == localFillOrderingOld2New.size(), "The output of CorrectRCM::CuthillMcKeeOrdering is invalid!");
+            DNDS_assert(v < size_t_to_signed<index>(mat_size) && v >= 0), _checkOrder.insert(v);
+        DNDS_check_throw_info(_checkOrder.size() == localFillOrderingOld2New.size(), "The output of CorrectRCM::CuthillMcKeeOrdering is invalid!");
 
         for (index iCell = 0; iCell < size_t_to_signed<index>(mat_size); iCell++)
             localFillOrderingNew2Old[localFillOrderingOld2New[iCell]] = iCell;

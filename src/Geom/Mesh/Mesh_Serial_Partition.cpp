@@ -29,13 +29,13 @@ namespace DNDS::Geom
 #    pragma omp parallel for
 #endif
         for (DNDS::MPI_int r = 0; r <= mesh->getMPI().size; r++)
-            vtxdist[r] = _METIS::indexToIdx(cell2cellSerialFacial->pLGlobalMapping->ROffsets().at(r));
+            vtxdist[r] = METIS::indexToIdx(cell2cellSerialFacial->pLGlobalMapping->ROffsets().at(r));
         std::vector<idx_t> xadj(cell2cellSerialFacial->Size() + 1);
 #ifdef DNDS_USE_OMP
 #    pragma omp parallel for
 #endif
         for (DNDS::index iCell = 0; iCell < xadj.size(); iCell++)
-            xadj[iCell] = _METIS::indexToIdx(cell2cellSerialFacial->rowPtr(iCell) - cell2cellSerialFacial->rowPtr(0));
+            xadj[iCell] = METIS::indexToIdx(cell2cellSerialFacial->rowPtr(iCell) - cell2cellSerialFacial->rowPtr(0));
         std::vector<idx_t> adjncy(xadj.back());
         std::vector<idx_t> adjncyWeights;
         DNDS_assert(cell2cellSerialFacial->DataSize() == xadj.back());
@@ -43,7 +43,7 @@ namespace DNDS::Geom
 #    pragma omp parallel for
 #endif
         for (DNDS::index iAdj = 0; iAdj < xadj.back(); iAdj++)
-            adjncy[iAdj] = _METIS::indexToIdx(cell2cellSerialFacial->data()[iAdj]);
+            adjncy[iAdj] = METIS::indexToIdx(cell2cellSerialFacial->data()[iAdj]);
         if (c_options.edgeWeightMethod == 1)
         {
             adjncyWeights.reserve(xadj.back());
@@ -90,7 +90,7 @@ namespace DNDS::Geom
         if (adjncy.empty())
             adjncy.resize(1, -1); //*coping with zero sized data
 
-        idx_t nCell = _METIS::indexToIdx(cell2cellSerialFacial->Size());
+        idx_t nCell = METIS::indexToIdx(cell2cellSerialFacial->Size());
         idx_t nCon{1}, options[METIS_NOPTIONS];
         METIS_SetDefaultOptions(options);
         {
