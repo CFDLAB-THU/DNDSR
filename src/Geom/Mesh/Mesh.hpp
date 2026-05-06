@@ -249,8 +249,8 @@ namespace DNDS::Geom
             DNDS_assert(pair.trans.pLGhostMapping);
             if (iGlobal == UnInitIndex)
                 return iGlobal;
-            DNDS::MPI_int rank;
-            DNDS::index val;
+            DNDS::MPI_int rank = UnInitMPIInt;
+            DNDS::index val = UnInitIndex;
             auto result = pair.trans.pLGhostMapping->search_indexAppend(iGlobal, rank, val);
             if (result)
                 return val;

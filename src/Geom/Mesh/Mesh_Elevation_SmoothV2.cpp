@@ -212,7 +212,7 @@ namespace DNDS::Geom
                             {
                                 tJacobi J = Elem::ShapeJacobianCoordD01Nj(coos, DiNj);
                                 tJacobi JInv = tJacobi::Identity();
-                                real JDet;
+                                real JDet = UnInitReal;
                                 if (dim == 2)
                                     JDet = J(EigenAll, 0).cross(J(EigenAll, 1)).stableNorm();
                                 else

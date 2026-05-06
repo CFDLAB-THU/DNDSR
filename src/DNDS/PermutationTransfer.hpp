@@ -104,8 +104,8 @@ namespace DNDS
                 DNDS_assert(pair.trans.pLGhostMapping);
                 if (oldGlobal == UnInitIndex)
                     return UnInitIndex;
-                MPI_int rank;
-                index val;
+                MPI_int rank = UnInitMPIInt;
+                index val = UnInitIndex;
                 bool found = pair.trans.pLGhostMapping->search_indexAppend(
                     oldGlobal, rank, val);
                 DNDS_assert_info(found,
@@ -206,7 +206,7 @@ namespace DNDS
                 localFlag = 0;
                 break;
             }
-        int globalFlag;
+        int globalFlag = 0;
         MPI_Allreduce(&localFlag, &globalFlag, 1, MPI_INT, MPI_LAND, mpi.comm);
         pt.isLocalOnly = (globalFlag != 0);
 

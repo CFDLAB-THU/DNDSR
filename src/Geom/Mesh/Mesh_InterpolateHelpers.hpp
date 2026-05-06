@@ -210,8 +210,8 @@ namespace DNDS::Geom
                         // * check both sided's info //TODO: optimize so that pLGhostMapping returns rank directly ?
                         index cellGlobL = ghostMapping(-1, face2cellV[iFace].first);
                         index cellGlobR = ghostMapping(-1, face2cellV[iFace].second);
-                        MPI_int rankL, rankR;
-                        index valL, valR;
+                        MPI_int rankL = UnInitMPIInt, rankR = UnInitMPIInt;
+                        index valL = UnInitIndex, valR = UnInitIndex;
                         auto retL = globalMapping.search(cellGlobL, rankL, valL);
                         auto retR = globalMapping.search(cellGlobR, rankR, valR);
                         DNDS_assert(retL && retR && (rankL != rankR));

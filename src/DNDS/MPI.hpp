@@ -61,6 +61,11 @@ namespace DNDS
 
     /// @brief Vector of MPI counts.
     using tMPI_sizeVec = std::vector<MPI_int>;
+
+    /// @brief Sentinel "not initialised" MPI_int value (= -1, invalid rank).
+    constexpr MPI_int UnInitMPIInt = -1;
+    /// @brief Sentinel "not initialised" MPI_Aint value (= -1).
+    constexpr MPI_Aint UnInitMPIAint = -1;
     /// @brief Alias for #tMPI_sizeVec; used where the name "int vec" reads better.
     using tMPI_intVec = tMPI_sizeVec;
     /// @brief Vector of MPI_Aint byte-offsets for hindexed datatypes.
@@ -316,7 +321,7 @@ namespace DNDS
     /// @brief Convenience: `MPI_Comm_size(MPI_COMM_WORLD)`.
     inline MPI_int MPIWorldSize()
     {
-        MPI_int ret{0};
+        MPI_int ret{UnInitMPIInt};
         MPI_Comm_size(MPI_COMM_WORLD, &ret);
         return ret;
     }
@@ -324,7 +329,7 @@ namespace DNDS
     /// @brief Convenience: `MPI_Comm_rank(MPI_COMM_WORLD)`.
     inline MPI_int MPIWorldRank()
     {
-        MPI_int ret{0};
+        MPI_int ret{UnInitMPIInt};
         MPI_Comm_rank(MPI_COMM_WORLD, &ret);
         return ret;
     }
