@@ -257,12 +257,12 @@ namespace DNDS::Geom
     /// Used by the precomputed per-level lists.
     struct LevelEntry
     {
-        int nodeId;       ///< ID of the tree node.
-        int parentId;     ///< ID of the parent node (-1 for roots).
-        EntityKind kind;  ///< Entity kind of this node.
-        AdjKind hop;      ///< Hop used to reach this node.
-        bool collect;     ///< Whether to collect at this node.
-        bool hasChildren; ///< Whether this node has children (needs pull).
+        int nodeId{};       ///< ID of the tree node.
+        int parentId{};     ///< ID of the parent node (-1 for roots).
+        EntityKind kind{};  ///< Entity kind of this node.
+        AdjKind hop{};      ///< Hop used to reach this node.
+        bool collect{};     ///< Whether to collect at this node.
+        bool hasChildren{}; ///< Whether this node has children (needs pull).
     };
 
     /// Compiled forest of ghost traversal chains.

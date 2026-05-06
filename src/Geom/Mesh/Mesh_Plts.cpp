@@ -1646,7 +1646,7 @@ namespace DNDS::Geom
         int iZone{0};
         std::array<cgsize_t, 3> zone_sizes{nNodeGlobal, nCellGlobal, 0};
         DNDS_CGNS_CALL_EXIT(cg_zone_write(cgns_file, iBase, "Zone_0", zone_sizes.data(), Unstructured, &iZone));
-        std::array<int, 3> iCoords;
+        std::array<int, 3> iCoords{};
         DNDS_CGNS_CALL_EXIT(cgp_coord_write(cgns_file, iBase, iZone, RealDouble, "CoordinateX", &iCoords[0]));
         DNDS_CGNS_CALL_EXIT(cgp_coord_write(cgns_file, iBase, iZone, RealDouble, "CoordinateY", &iCoords[1]));
         DNDS_CGNS_CALL_EXIT(cgp_coord_write(cgns_file, iBase, iZone, RealDouble, "CoordinateZ", &iCoords[2]));

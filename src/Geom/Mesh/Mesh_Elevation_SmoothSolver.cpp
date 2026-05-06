@@ -113,9 +113,9 @@ namespace DNDS::Geom
      */
     struct SmoothSolverSetup
     {
-        std::unordered_set<index> nodesBoundInterpolated;
-        tCoordPair boundInterpCoo;
-        tCoordPair boundInterpVal;
+        std::unordered_set<index> nodesBoundInterpolated{};
+        tCoordPair boundInterpCoo{};
+        tCoordPair boundInterpVal{};
     };
 
     /**
