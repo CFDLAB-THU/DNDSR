@@ -111,6 +111,18 @@
 #                                           thread_local, singletons,
 #                                           or class members is out of
 #                                           scope for a tidy pass.
+#   -cppcoreguidelines-narrowing-conversions,
+#   -bugprone-narrowing-conversions         The project uses signed
+#                                           index/rowsize types
+#                                           pervasively; container
+#                                           .size() (size_t) assigned
+#                                           to signed types is the
+#                                           standard idiom. Casting
+#                                           every site defeats the
+#                                           purpose of the signed
+#                                           layer.  145 unique sites
+#                                           in Geom alone, all the
+#                                           same pattern.
 #
 # Notes on ExtraArgs:
 #   - -UDNDS_USE_OMP: skip #include <omp.h> which requires
@@ -161,6 +173,8 @@ Checks: >
   -cppcoreguidelines-c-copy-assignment-signature,
   -cppcoreguidelines-macro-usage,
   -cppcoreguidelines-avoid-non-const-global-variables,
+  -cppcoreguidelines-narrowing-conversions,
+  -bugprone-narrowing-conversions,
 
 WarningsAsErrors: ''
 

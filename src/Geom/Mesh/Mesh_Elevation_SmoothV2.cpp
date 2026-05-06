@@ -174,7 +174,7 @@ namespace DNDS::Geom
                 }
 
                 MatrixXR ALoc;
-                ALoc.setZero(3 * nnLoc, 3 * nnLoc + 1);
+                ALoc.setZero(static_cast<index>(nnLoc) * 3, static_cast<index>(nnLoc) * 3 + 1);
                 auto localNodeIdx = Eigen::ArrayXi::LinSpaced(c2n.size(), 0, c2n.size() - 1);
 
                 // Bisect the O2 element into O1 sub-elements.
@@ -195,8 +195,8 @@ namespace DNDS::Geom
                     auto qCellSub = Elem::Quadrature{eCellSub, 6};
                     auto nnLocSub = rowsize(c2nSubLocal.size());
                     MatrixXR ALocSub, mLoc;
-                    ALocSub.setZero(3 * nnLocSub, 3 * nnLocSub + 1);
-                    mLoc.resize(6, 3 * nnLocSub);
+                    ALocSub.setZero(static_cast<index>(nnLocSub) * 3, static_cast<index>(nnLocSub) * 3 + 1);
+                    mLoc.resize(6, static_cast<index>(nnLocSub) * 3);
                     Eigen::ArrayXi c2nSubLocal3;
                     c2nSubLocal3.resize(c2nSubLocal.size() * 3);
                     c2nSubLocal3(Eigen::seq(c2nSubLocal.size() * 0, c2nSubLocal.size() * 1 - 1)) = c2nSubLocal + nnLoc * 0;
