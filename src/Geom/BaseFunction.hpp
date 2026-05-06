@@ -189,11 +189,10 @@ namespace DNDS::Geom::Base
         return (dim == 2) ? diffOperatorIJK2I2D : diffOperatorIJK2I;
     }
 
-    static const int dFactorials[ndiff + 1][ndiff + 1] = {
-        {1, 0, 0, 0},
-        {1, 1, 0, 0},
-        {1, 2, 2, 0},
-        {1, 3, 6, 6}};
+    static const std::array<std::array<int, ndiff + 1>, ndiff + 1> dFactorials = {{{1, 0, 0, 0},
+                                                                                   {1, 1, 0, 0},
+                                                                                   {1, 2, 2, 0},
+                                                                                   {1, 3, 6, 6}}};
 
     static const std::array<int, ndiff * 3 + 1> factorials = {
         1,

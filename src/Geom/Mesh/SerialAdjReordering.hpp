@@ -6,6 +6,7 @@
 
 #include "Geom/Metis.hpp"
 
+#include <array>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graph_utility.hpp>
 #include <boost/graph/minimum_degree_ordering.hpp>
@@ -33,8 +34,9 @@ namespace DNDS::Geom
         std::string metisType = "KWAY", int metisNcuts = 3, int metisUfactor = 5, int metisSeed = 0)
     {
         idx_t nCell = METIS::indexToIdx(size_t_to_signed<index>(mat_end - mat_begin));
-        idx_t nCon{1}, options[METIS_NOPTIONS];
-        METIS_SetDefaultOptions(options);
+        idx_t nCon{1};
+        std::array<idx_t, METIS_NOPTIONS> options{};
+        METIS_SetDefaultOptions(options.data());
         {
             options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
             options[METIS_OPTION_CTYPE] = METIS_CTYPE_SHEM; //? could try shem?
@@ -89,11 +91,11 @@ namespace DNDS::Geom
         if (metisType == "RB")
             ret = METIS_PartGraphRecursive(
                 &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
-                &nPart, NULL, NULL, options, &objval, partOut.data());
+                &nPart, NULL, NULL, options.data(), &objval, partOut.data());
         else if (metisType == "KWAY")
             ret = METIS_PartGraphKway(
                 &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
-                &nPart, NULL, NULL, options, &objval, partOut.data());
+                &nPart, NULL, NULL, options.data(), &objval, partOut.data());
 
         DNDS_assert_info(ret == METIS_OK, fmt::format("Metis return not ok, [{}]", ret));
 
@@ -103,8 +105,9 @@ namespace DNDS::Geom
     inline std::pair<std::vector<index>, std::vector<index>> ReorderSerialAdj_Metis(const tLocalMatStruct &mat)
     {
         idx_t nCell = METIS::indexToIdx(size_t_to_signed<index>(mat.size()));
-        idx_t nCon{1}, options[METIS_NOPTIONS];
-        METIS_SetDefaultOptions(options);
+        idx_t nCon{1};
+        std::array<idx_t, METIS_NOPTIONS> options{};
+        METIS_SetDefaultOptions(options.data());
         {
             options[METIS_OPTION_CTYPE] = METIS_CTYPE_SHEM;
             options[METIS_OPTION_RTYPE] = METIS_RTYPE_FM;
@@ -132,7 +135,7 @@ namespace DNDS::Geom
         perm.resize(nCell);
         iPerm.resize(nCell);
 
-        int ret = METIS_NodeND(&nCell, xadj.data(), adjncy.data(), NULL, options, perm.data(), iPerm.data());
+        int ret = METIS_NodeND(&nCell, xadj.data(), adjncy.data(), NULL, options.data(), perm.data(), iPerm.data());
         DNDS_assert_info(ret == METIS_OK, fmt::format("Metis return not ok, [{}]", ret));
 
         std::vector<index> localFillOrderingNew2Old, localFillOrderingOld2New;

@@ -3,6 +3,8 @@
 #include "Geom/Metis.hpp"
 #include "SerialAdjReordering.hpp"
 
+#include <array>
+
 namespace DNDS::Geom
 {
     void UnstructuredMeshSerialRW::
@@ -91,8 +93,9 @@ namespace DNDS::Geom
             adjncy.resize(1, -1); //*coping with zero sized data
 
         idx_t nCell = METIS::indexToIdx(cell2cellSerialFacial->Size());
-        idx_t nCon{1}, options[METIS_NOPTIONS];
-        METIS_SetDefaultOptions(options);
+        idx_t nCon{1};
+        std::array<idx_t, METIS_NOPTIONS> options{};
+        METIS_SetDefaultOptions(options.data());
         {
             options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
             options[METIS_OPTION_CTYPE] = METIS_CTYPE_SHEM; //? could try shem?
@@ -122,10 +125,10 @@ namespace DNDS::Geom
                 int ret = c_options.metisType == std::string("KWAY")
                               ? METIS_PartGraphKway(
                                     &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, c_options.edgeWeightMethod ? adjncyWeights.data() : NULL,
-                                    &nPart, NULL, NULL, options, &objval, partOut.data())
+                                    &nPart, NULL, NULL, options.data(), &objval, partOut.data())
                               : METIS_PartGraphRecursive(
                                     &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, c_options.edgeWeightMethod ? adjncyWeights.data() : NULL,
-                                    &nPart, NULL, NULL, options, &objval, partOut.data());
+                                    &nPart, NULL, NULL, options.data(), &objval, partOut.data());
                 if (ret != METIS_OK)
                 {
                     DNDS::log() << "METIS returned not OK: [" << ret << "]" << std::endl;
@@ -138,9 +141,9 @@ namespace DNDS::Geom
                 for (int i = 0; i < vtxdist.size() - 1; i++)
                     DNDS_assert_info(vtxdist[i + 1] - vtxdist[i] > 0, "need more than zero cells on each proc!");
                 std::vector<real_t> tpWeights(nPart * nCon, 1.0 / nPart); //! assuming homogenous
-                real_t ubVec[1]{1.05};
+                std::array<real_t, 1> ubVec{1.05};
                 DNDS_assert(nCon == 1);
-                idx_t optsC[3];
+                std::array<idx_t, 3> optsC{};
                 idx_t wgtflag{0}, numflag{0};
                 optsC[0] = 1;
                 optsC[1] = 1;
@@ -148,7 +151,7 @@ namespace DNDS::Geom
                 idx_t objval;
                 int ret = ParMETIS_V3_PartKway(
                     vtxdist.data(), xadj.data(), adjncy.data(), NULL, NULL, &wgtflag, &numflag,
-                    &nCon, &nPart, tpWeights.data(), ubVec, optsC, &objval, partOut.data(),
+                    &nCon, &nPart, tpWeights.data(), ubVec.data(), optsC.data(), &objval, partOut.data(),
                     &mesh->getMPI().comm);
                 if (ret != METIS_OK)
                 {
