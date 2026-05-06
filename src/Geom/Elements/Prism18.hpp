@@ -12,200 +12,201 @@ namespace DNDS::Geom::Elem
 {
 
     // Forward declaration (primary template is in ElementTraitsBase.hpp)
-    template <ElemType> struct ShapeFuncImpl;
+    template <ElemType>
+    struct ShapeFuncImpl;
 
     // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Prism18>
     {
         template <class TPoint, class TArray>
-        DNDS_DEVICE_CALLABLE static inline void Diff0(const TPoint &p, TArray &&v)
+        DNDS_DEVICE_CALLABLE static void Diff0(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
             t_real zt = p[2];
             const t_real _t0 = zt - 1;
-            const t_real _t1 = ((0.5))*zt;
-            const t_real _t2 = _t0*_t1;
+            const t_real _t1 = ((0.5)) * zt;
+            const t_real _t2 = _t0 * _t1;
             const t_real _t3 = et + xi - 1;
-            const t_real _t4 = 2*et;
-            const t_real _t5 = 2*xi;
+            const t_real _t4 = 2 * et;
+            const t_real _t5 = 2 * xi;
             const t_real _t6 = _t5 - 1;
             const t_real _t7 = _t4 + _t6;
-            const t_real _t8 = _t3*_t7;
-            const t_real _t9 = _t6*xi;
-            const t_real _t10 = et*(_t4 - 1);
+            const t_real _t8 = _t3 * _t7;
+            const t_real _t9 = _t6 * xi;
+            const t_real _t10 = et * (_t4 - 1);
             const t_real _t11 = zt + 1;
-            const t_real _t12 = _t1*_t11;
-            const t_real _t13 = _t0*zt;
-            const t_real _t14 = _t13*_t3;
-            const t_real _t15 = _t4*xi;
-            const t_real _t16 = _t11*zt;
-            const t_real _t17 = _t16*_t3;
+            const t_real _t12 = _t1 * _t11;
+            const t_real _t13 = _t0 * zt;
+            const t_real _t14 = _t13 * _t3;
+            const t_real _t15 = _t4 * xi;
+            const t_real _t16 = _t11 * zt;
+            const t_real _t17 = _t16 * _t3;
             const t_real _t18 = ((zt) * (zt)) - 1;
-            const t_real _t19 = _t18*_t3;
-            const t_real _t20 = 4*xi;
-            v(0, 0) = _t2*_t8;
-            v(0, 1) = _t2*_t9;
-            v(0, 2) = _t10*_t2;
-            v(0, 3) = _t12*_t8;
-            v(0, 4) = _t12*_t9;
-            v(0, 5) = _t10*_t12;
-            v(0, 6) = -_t14*_t5;
-            v(0, 7) = _t13*_t15;
-            v(0, 8) = -_t14*_t4;
-            v(0, 9) = -_t17*_t5;
-            v(0, 10) = _t15*_t16;
-            v(0, 11) = -_t17*_t4;
-            v(0, 12) = -_t19*_t7;
-            v(0, 13) = -_t18*_t9;
-            v(0, 14) = -_t10*_t18;
-            v(0, 15) = _t19*_t20;
-            v(0, 16) = -_t18*_t20*et;
-            v(0, 17) = 4*_t19*et;
+            const t_real _t19 = _t18 * _t3;
+            const t_real _t20 = 4 * xi;
+            v(0, 0) = _t2 * _t8;
+            v(0, 1) = _t2 * _t9;
+            v(0, 2) = _t10 * _t2;
+            v(0, 3) = _t12 * _t8;
+            v(0, 4) = _t12 * _t9;
+            v(0, 5) = _t10 * _t12;
+            v(0, 6) = -_t14 * _t5;
+            v(0, 7) = _t13 * _t15;
+            v(0, 8) = -_t14 * _t4;
+            v(0, 9) = -_t17 * _t5;
+            v(0, 10) = _t15 * _t16;
+            v(0, 11) = -_t17 * _t4;
+            v(0, 12) = -_t19 * _t7;
+            v(0, 13) = -_t18 * _t9;
+            v(0, 14) = -_t10 * _t18;
+            v(0, 15) = _t19 * _t20;
+            v(0, 16) = -_t18 * _t20 * et;
+            v(0, 17) = 4 * _t19 * et;
         }
 
         template <class TPoint, class TArray>
-        DNDS_DEVICE_CALLABLE static inline void Diff1(const TPoint &p, TArray &&v)
+        DNDS_DEVICE_CALLABLE static void Diff1(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
             t_real zt = p[2];
-            const t_real _t0 = 4*et;
-            const t_real _t1 = 4*xi;
+            const t_real _t0 = 4 * et;
+            const t_real _t1 = 4 * xi;
             const t_real _t2 = _t0 + _t1 - 3;
             const t_real _t3 = zt - 1;
-            const t_real _t4 = ((0.5))*zt;
-            const t_real _t5 = _t3*_t4;
-            const t_real _t6 = _t2*_t5;
+            const t_real _t4 = ((0.5)) * zt;
+            const t_real _t5 = _t3 * _t4;
+            const t_real _t6 = _t2 * _t5;
             const t_real _t7 = _t1 - 1;
             const t_real _t8 = zt + 1;
-            const t_real _t9 = _t4*_t8;
-            const t_real _t10 = _t2*_t9;
-            const t_real _t11 = 2*xi;
+            const t_real _t9 = _t4 * _t8;
+            const t_real _t10 = _t2 * _t9;
+            const t_real _t11 = 2 * xi;
             const t_real _t12 = _t11 - 1;
             const t_real _t13 = _t12 + et;
-            const t_real _t14 = 2*zt;
-            const t_real _t15 = -_t13*_t14;
-            const t_real _t16 = 2*et;
-            const t_real _t17 = _t16*zt;
+            const t_real _t14 = 2 * zt;
+            const t_real _t15 = -_t13 * _t14;
+            const t_real _t16 = 2 * et;
+            const t_real _t17 = _t16 * zt;
             const t_real _t18 = -_t3;
-            const t_real _t19 = _t17*_t8;
+            const t_real _t19 = _t17 * _t8;
             const t_real _t20 = ((zt) * (zt)) - 1;
-            const t_real _t21 = -_t2*_t20;
-            const t_real _t22 = 4*_t20;
+            const t_real _t21 = -_t2 * _t20;
+            const t_real _t22 = 4 * _t20;
             const t_real _t23 = -_t20;
             const t_real _t24 = _t0 - 1;
-            const t_real _t25 = _t11*zt;
+            const t_real _t25 = _t11 * zt;
             const t_real _t26 = _t16 - 1;
             const t_real _t27 = _t26 + xi;
-            const t_real _t28 = -_t14*_t27;
-            const t_real _t29 = _t25*_t8;
+            const t_real _t28 = -_t14 * _t27;
+            const t_real _t29 = _t25 * _t8;
             const t_real _t30 = _t14 - 1;
-            const t_real _t31 = ((0.5))*_t30;
+            const t_real _t31 = ((0.5)) * _t30;
             const t_real _t32 = et + xi - 1;
-            const t_real _t33 = _t32*(_t12 + _t16);
-            const t_real _t34 = _t12*xi;
-            const t_real _t35 = _t26*et;
+            const t_real _t33 = _t32 * (_t12 + _t16);
+            const t_real _t34 = _t12 * xi;
+            const t_real _t35 = _t26 * et;
             const t_real _t36 = _t14 + 1;
-            const t_real _t37 = ((0.5))*_t36;
-            const t_real _t38 = -_t30*_t32;
-            const t_real _t39 = _t11*et;
-            const t_real _t40 = -_t32*_t36;
-            const t_real _t41 = 8*xi*zt;
+            const t_real _t37 = ((0.5)) * _t36;
+            const t_real _t38 = -_t30 * _t32;
+            const t_real _t39 = _t11 * et;
+            const t_real _t40 = -_t32 * _t36;
+            const t_real _t41 = 8 * xi * zt;
             v(0, 0) = _t6;
-            v(0, 1) = _t5*_t7;
+            v(0, 1) = _t5 * _t7;
             v(0, 3) = _t10;
-            v(0, 4) = _t7*_t9;
-            v(0, 6) = _t15*_t3;
-            v(0, 7) = _t17*_t3;
-            v(0, 8) = _t17*_t18;
-            v(0, 9) = _t15*_t8;
+            v(0, 4) = _t7 * _t9;
+            v(0, 6) = _t15 * _t3;
+            v(0, 7) = _t17 * _t3;
+            v(0, 8) = _t17 * _t18;
+            v(0, 9) = _t15 * _t8;
             v(0, 10) = _t19;
             v(0, 11) = -_t19;
             v(0, 12) = _t21;
-            v(0, 13) = -_t20*_t7;
-            v(0, 15) = _t13*_t22;
-            v(0, 16) = _t0*_t23;
-            v(0, 17) = _t0*_t20;
+            v(0, 13) = -_t20 * _t7;
+            v(0, 15) = _t13 * _t22;
+            v(0, 16) = _t0 * _t23;
+            v(0, 17) = _t0 * _t20;
             v(1, 0) = _t6;
-            v(1, 2) = _t24*_t5;
+            v(1, 2) = _t24 * _t5;
             v(1, 3) = _t10;
-            v(1, 5) = _t24*_t9;
-            v(1, 6) = _t18*_t25;
-            v(1, 7) = _t25*_t3;
-            v(1, 8) = _t28*_t3;
+            v(1, 5) = _t24 * _t9;
+            v(1, 6) = _t18 * _t25;
+            v(1, 7) = _t25 * _t3;
+            v(1, 8) = _t28 * _t3;
             v(1, 9) = -_t29;
             v(1, 10) = _t29;
-            v(1, 11) = _t28*_t8;
+            v(1, 11) = _t28 * _t8;
             v(1, 12) = _t21;
-            v(1, 14) = -_t20*_t24;
-            v(1, 15) = _t1*_t20;
-            v(1, 16) = _t1*_t23;
-            v(1, 17) = _t22*_t27;
-            v(2, 0) = _t31*_t33;
-            v(2, 1) = _t31*_t34;
-            v(2, 2) = _t31*_t35;
-            v(2, 3) = _t33*_t37;
-            v(2, 4) = _t34*_t37;
-            v(2, 5) = _t35*_t37;
-            v(2, 6) = _t11*_t38;
-            v(2, 7) = _t30*_t39;
-            v(2, 8) = _t16*_t38;
-            v(2, 9) = _t11*_t40;
-            v(2, 10) = _t36*_t39;
-            v(2, 11) = _t16*_t40;
-            v(2, 12) = -_t14*_t33;
-            v(2, 13) = -_t12*_t25;
-            v(2, 14) = -_t17*_t26;
-            v(2, 15) = _t32*_t41;
-            v(2, 16) = -_t41*et;
-            v(2, 17) = 8*_t32*et*zt;
+            v(1, 14) = -_t20 * _t24;
+            v(1, 15) = _t1 * _t20;
+            v(1, 16) = _t1 * _t23;
+            v(1, 17) = _t22 * _t27;
+            v(2, 0) = _t31 * _t33;
+            v(2, 1) = _t31 * _t34;
+            v(2, 2) = _t31 * _t35;
+            v(2, 3) = _t33 * _t37;
+            v(2, 4) = _t34 * _t37;
+            v(2, 5) = _t35 * _t37;
+            v(2, 6) = _t11 * _t38;
+            v(2, 7) = _t30 * _t39;
+            v(2, 8) = _t16 * _t38;
+            v(2, 9) = _t11 * _t40;
+            v(2, 10) = _t36 * _t39;
+            v(2, 11) = _t16 * _t40;
+            v(2, 12) = -_t14 * _t33;
+            v(2, 13) = -_t12 * _t25;
+            v(2, 14) = -_t17 * _t26;
+            v(2, 15) = _t32 * _t41;
+            v(2, 16) = -_t41 * et;
+            v(2, 17) = 8 * _t32 * et * zt;
         }
 
         template <class TPoint, class TArray>
-        DNDS_DEVICE_CALLABLE static inline void Diff2(const TPoint &p, TArray &&v)
+        DNDS_DEVICE_CALLABLE static void Diff2(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
             t_real zt = p[2];
             const t_real _t0 = zt - 1;
-            const t_real _t1 = 2*zt;
-            const t_real _t2 = _t0*_t1;
+            const t_real _t1 = 2 * zt;
+            const t_real _t2 = _t0 * _t1;
             const t_real _t3 = zt + 1;
-            const t_real _t4 = _t1*_t3;
+            const t_real _t4 = _t1 * _t3;
             const t_real _t5 = -_t0;
-            const t_real _t6 = 4*zt;
-            const t_real _t7 = _t5*_t6;
-            const t_real _t8 = -_t3*_t6;
+            const t_real _t6 = 4 * zt;
+            const t_real _t7 = _t5 * _t6;
+            const t_real _t8 = -_t3 * _t6;
             const t_real _t9 = ((zt) * (zt));
-            const t_real _t10 = 4*_t9 - 4;
+            const t_real _t10 = 4 * _t9 - 4;
             const t_real _t11 = -_t10;
-            const t_real _t12 = 8*_t9 - 8;
+            const t_real _t12 = 8 * _t9 - 8;
             const t_real _t13 = et + xi - 1;
-            const t_real _t14 = 2*et;
-            const t_real _t15 = 2*xi;
+            const t_real _t14 = 2 * et;
+            const t_real _t15 = 2 * xi;
             const t_real _t16 = _t15 - 1;
-            const t_real _t17 = _t13*(_t14 + _t16);
-            const t_real _t18 = _t16*xi;
+            const t_real _t17 = _t13 * (_t14 + _t16);
+            const t_real _t18 = _t16 * xi;
             const t_real _t19 = _t14 - 1;
-            const t_real _t20 = _t19*et;
+            const t_real _t20 = _t19 * et;
             const t_real _t21 = -_t13;
-            const t_real _t22 = 4*xi;
-            const t_real _t23 = _t21*_t22;
-            const t_real _t24 = 4*et;
-            const t_real _t25 = _t24*xi;
-            const t_real _t26 = _t21*_t24;
-            const t_real _t27 = 8*xi;
-            const t_real _t28 = 8*et;
-            const t_real _t29 = _t1*_t5;
+            const t_real _t22 = 4 * xi;
+            const t_real _t23 = _t21 * _t22;
+            const t_real _t24 = 4 * et;
+            const t_real _t25 = _t24 * xi;
+            const t_real _t26 = _t21 * _t24;
+            const t_real _t27 = 8 * xi;
+            const t_real _t28 = 8 * et;
+            const t_real _t29 = _t1 * _t5;
             const t_real _t30 = -_t4;
-            const t_real _t31 = -3*zt;
+            const t_real _t31 = -3 * zt;
             const t_real _t32 = -_t15;
-            const t_real _t33 = _t6*xi;
+            const t_real _t33 = _t6 * xi;
             const t_real _t34 = _t32 + _t33;
             const t_real _t35 = -_t14;
-            const t_real _t36 = _t24*zt;
+            const t_real _t36 = _t24 * zt;
             const t_real _t37 = _t35 + _t36;
             const t_real _t38 = _t31 + _t34 + _t37 + (1.5);
             const t_real _t39 = -zt;
@@ -215,14 +216,14 @@ namespace DNDS::Geom::Elem
             const t_real _t43 = _t31 + _t41 + _t42 + (-1.5);
             const t_real _t44 = _t1 - 1;
             const t_real _t45 = -_t44;
-            const t_real _t46 = -4*zt;
-            const t_real _t47 = _t28*zt;
+            const t_real _t46 = -4 * zt;
+            const t_real _t47 = _t28 * zt;
             const t_real _t48 = _t46 + _t47;
             const t_real _t49 = _t1 + 1;
             const t_real _t50 = -_t49;
-            const t_real _t51 = _t1*(-_t22 - _t24 + 3);
-            const t_real _t52 = _t27*zt;
-            const t_real _t53 = 8*zt;
+            const t_real _t51 = _t1 * (-_t22 - _t24 + 3);
+            const t_real _t52 = _t27 * zt;
+            const t_real _t53 = 8 * zt;
             const t_real _t54 = _t33 + _t39;
             const t_real _t55 = _t46 + _t52;
             v(0, 0) = _t2;
@@ -255,12 +256,12 @@ namespace DNDS::Geom::Elem
             v(2, 9) = _t23;
             v(2, 10) = _t25;
             v(2, 11) = _t26;
-            v(2, 12) = -2*_t17;
-            v(2, 13) = -_t15*_t16;
-            v(2, 14) = -_t14*_t19;
-            v(2, 15) = _t13*_t27;
-            v(2, 16) = -_t27*et;
-            v(2, 17) = _t13*_t28;
+            v(2, 12) = -2 * _t17;
+            v(2, 13) = -_t15 * _t16;
+            v(2, 14) = -_t14 * _t19;
+            v(2, 15) = _t13 * _t27;
+            v(2, 16) = -_t27 * et;
+            v(2, 17) = _t13 * _t28;
             v(3, 0) = _t2;
             v(3, 3) = _t4;
             v(3, 6) = _t29;
@@ -277,56 +278,56 @@ namespace DNDS::Geom::Elem
             v(4, 2) = _t35 + _t40 + (0.5);
             v(4, 3) = _t43;
             v(4, 5) = _t14 + _t40 + (-0.5);
-            v(4, 6) = _t15*_t45;
-            v(4, 7) = _t15*_t44;
+            v(4, 6) = _t15 * _t45;
+            v(4, 7) = _t15 * _t44;
             v(4, 8) = _t24 - _t34 - _t48 - 2;
-            v(4, 9) = _t15*_t50;
-            v(4, 10) = _t15*_t49;
+            v(4, 9) = _t15 * _t50;
+            v(4, 10) = _t15 * _t49;
             v(4, 11) = -_t24 - _t41 - _t48 + 2;
             v(4, 12) = _t51;
-            v(4, 14) = _t1*(1 - _t24);
+            v(4, 14) = _t1 * (1 - _t24);
             v(4, 15) = _t52;
             v(4, 16) = -_t52;
-            v(4, 17) = _t53*(_t19 + xi);
+            v(4, 17) = _t53 * (_t19 + xi);
             v(5, 0) = _t38;
             v(5, 1) = _t32 + _t54 + (0.5);
             v(5, 3) = _t43;
             v(5, 4) = _t15 + _t54 + (-0.5);
             v(5, 6) = _t22 - _t37 - _t55 - 2;
-            v(5, 7) = _t14*_t44;
-            v(5, 8) = _t14*_t45;
+            v(5, 7) = _t14 * _t44;
+            v(5, 8) = _t14 * _t45;
             v(5, 9) = -_t22 - _t42 - _t55 + 2;
-            v(5, 10) = _t14*_t49;
-            v(5, 11) = _t14*_t50;
+            v(5, 10) = _t14 * _t49;
+            v(5, 11) = _t14 * _t50;
             v(5, 12) = _t51;
-            v(5, 13) = _t1*(1 - _t22);
-            v(5, 15) = _t53*(_t16 + et);
+            v(5, 13) = _t1 * (1 - _t22);
+            v(5, 15) = _t53 * (_t16 + et);
             v(5, 16) = -_t47;
             v(5, 17) = _t47;
         }
 
         template <class TPoint, class TArray>
-        DNDS_DEVICE_CALLABLE static inline void Diff3(const TPoint &p, TArray &&v)
+        DNDS_DEVICE_CALLABLE static void Diff3(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
             t_real zt = p[2];
-            const t_real _t0 = 4*zt;
+            const t_real _t0 = 4 * zt;
             const t_real _t1 = _t0 - 2;
             const t_real _t2 = _t0 + 2;
-            const t_real _t3 = 8*zt;
+            const t_real _t3 = 8 * zt;
             const t_real _t4 = 4 - _t3;
             const t_real _t5 = -_t3 - 4;
             const t_real _t6 = -_t3;
-            const t_real _t7 = 16*zt;
-            const t_real _t8 = 4*et;
-            const t_real _t9 = 4*xi;
+            const t_real _t7 = 16 * zt;
+            const t_real _t8 = 4 * et;
+            const t_real _t9 = 4 * xi;
             const t_real _t10 = _t8 + _t9 - 3;
             const t_real _t11 = _t8 - 1;
             const t_real _t12 = -_t9;
-            const t_real _t13 = 8*et;
+            const t_real _t13 = 8 * et;
             const t_real _t14 = -_t13 - _t9 + 4;
-            const t_real _t15 = 8*xi;
+            const t_real _t15 = 8 * xi;
             const t_real _t16 = -_t13 - _t15 + 6;
             const t_real _t17 = _t9 - 1;
             const t_real _t18 = -_t15 - _t8 + 4;
@@ -356,7 +357,7 @@ namespace DNDS::Geom::Elem
             v(6, 14) = 2 - _t13;
             v(6, 15) = _t15;
             v(6, 16) = -_t15;
-            v(6, 17) = _t15 + 16*et - 8;
+            v(6, 17) = _t15 + 16 * et - 8;
             v(7, 0) = _t10;
             v(7, 1) = _t17;
             v(7, 3) = _t10;
@@ -369,7 +370,7 @@ namespace DNDS::Geom::Elem
             v(7, 11) = _t19;
             v(7, 12) = _t16;
             v(7, 13) = 2 - _t15;
-            v(7, 15) = _t13 + 16*xi - 8;
+            v(7, 15) = _t13 + 16 * xi - 8;
             v(7, 16) = -_t13;
             v(7, 17) = _t13;
             v(8, 0) = _t1;
@@ -413,52 +414,49 @@ namespace DNDS::Geom::Elem
         static constexpr t_real paramSpaceVol = 1.0;
 
         static constexpr std::array<t_real, 3 * 18> standardCoords = {
-            0, 0, -1,  // Node 0: vertex
-            1, 0, -1,  // Node 1: vertex
-            0, 1, -1,  // Node 2: vertex
-            0, 0, 1,  // Node 3: vertex
-            1, 0, 1,  // Node 4: vertex
-            0, 1, 1,  // Node 5: vertex
-            0.5, 0, -1,  // Node 6
-            0.5, 0.5, -1,  // Node 7
-            0, 0.5, -1,  // Node 8
-            0.5, 0, 1,  // Node 9
+            0, 0, -1,     // Node 0: vertex
+            1, 0, -1,     // Node 1: vertex
+            0, 1, -1,     // Node 2: vertex
+            0, 0, 1,      // Node 3: vertex
+            1, 0, 1,      // Node 4: vertex
+            0, 1, 1,      // Node 5: vertex
+            0.5, 0, -1,   // Node 6
+            0.5, 0.5, -1, // Node 7
+            0, 0.5, -1,   // Node 8
+            0.5, 0, 1,    // Node 9
             0.5, 0.5, 1,  // Node 10
-            0, 0.5, 1,  // Node 11
-            0, 0, 0,  // Node 12
-            1, 0, 0,  // Node 13
-            0, 1, 0,  // Node 14
-            0.5, 0, 0,  // Node 15
+            0, 0.5, 1,    // Node 11
+            0, 0, 0,      // Node 12
+            1, 0, 0,      // Node 13
+            0, 1, 0,      // Node 14
+            0.5, 0, 0,    // Node 15
             0.5, 0.5, 0,  // Node 16
-            0, 0.5, 0};  // Node 17
+            0, 0.5, 0};   // Node 17
 
         static constexpr ElemType GetFaceType(t_index iFace)
         {
-            if (iFace < 3) return Quad9;
+            if (iFace < 3)
+                return Quad9;
             return Tri6;
         }
 
-        static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{
-            {0, 1, 4, 3, 6, 13, 9, 12, 15},
-            {1, 2, 5, 4, 7, 14, 10, 13, 16},
-            {2, 0, 3, 5, 8, 12, 11, 14, 17},
-            {0, 2, 1, 8, 7, 6},
-            {3, 4, 5, 9, 10, 11}
-        }};
+        static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{{0, 1, 4, 3, 6, 13, 9, 12, 15},
+                                                                              {1, 2, 5, 4, 7, 14, 10, 13, 16},
+                                                                              {2, 0, 3, 5, 8, 12, 11, 14, 17},
+                                                                              {0, 2, 1, 8, 7, 6},
+                                                                              {3, 4, 5, 9, 10, 11}}};
 
         static constexpr ElemType GetEdgeType(t_index /*iEdge*/) { return Line3; }
 
-        static constexpr std::array<std::array<t_index, 3>, 9> edgeNodes = {{
-            {0, 1, 6},
-            {1, 2, 7},
-            {2, 0, 8},
-            {0, 3, 12},
-            {1, 4, 13},
-            {2, 5, 14},
-            {3, 4, 9},
-            {4, 5, 10},
-            {5, 3, 11}
-        }};
+        static constexpr std::array<std::array<t_index, 3>, 9> edgeNodes = {{{0, 1, 6},
+                                                                             {1, 2, 7},
+                                                                             {2, 0, 8},
+                                                                             {0, 3, 12},
+                                                                             {1, 4, 13},
+                                                                             {2, 5, 14},
+                                                                             {3, 4, 9},
+                                                                             {4, 5, 10},
+                                                                             {5, 3, 11}}};
 
         static constexpr ElemType elevatedType = UnknownElem;
         static constexpr int numElevNodes = 0;
@@ -468,22 +466,19 @@ namespace DNDS::Geom::Elem
 
         static constexpr ElemType GetBisectElemType(t_index /*i*/) { return Prism6; }
 
-        static constexpr std::array<tBisectSub, 8> bisectElements = {{
-            {0, 6, 8, 12, 15, 17},
-            {6, 1, 7, 15, 13, 16},
-            {8, 6, 7, 17, 15, 16},
-            {8, 7, 2, 17, 16, 14},
-            {12, 15, 17, 3, 9, 11},
-            {15, 13, 16, 9, 4, 10},
-            {17, 15, 16, 11, 9, 10},
-            {17, 16, 14, 11, 10, 5}
-        }};
+        static constexpr std::array<tBisectSub, 8> bisectElements = {{{0, 6, 8, 12, 15, 17},
+                                                                      {6, 1, 7, 15, 13, 16},
+                                                                      {8, 6, 7, 17, 15, 16},
+                                                                      {8, 7, 2, 17, 16, 14},
+                                                                      {12, 15, 17, 3, 9, 11},
+                                                                      {15, 13, 16, 9, 4, 10},
+                                                                      {17, 15, 16, 11, 9, 10},
+                                                                      {17, 16, 14, 11, 10, 5}}};
 
         static constexpr int vtkCellType = 26;
 
         static constexpr std::array<int, 15> vtkNodeOrder = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
     };
     // <GEN_ELEM_TRAITS_END>
-
 
 } // namespace DNDS::Geom::Elem

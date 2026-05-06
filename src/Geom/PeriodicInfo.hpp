@@ -41,7 +41,7 @@ namespace DNDS::Geom
         static MPI_Datatype CommType() { return MPI_UINT8_T; }
         static int CommMult() { return 1; }
 
-        inline friend std::ostream &operator<<(std::ostream &o, const NodePeriodicBits &b)
+        friend std::ostream &operator<<(std::ostream &o, const NodePeriodicBits &b)
         {
             o << int(b.__v);
             return o;
@@ -55,11 +55,11 @@ namespace DNDS::Geom
 }
 namespace DNDS
 {
-//     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(Geom::NodePeriodicBits, extern)
-//     DNDS_DEVICE_STORAGE_INST(Geom::NodePeriodicBits, DeviceBackend::Host, extern)
-// #ifdef DNDS_USE_CUDA
-//     DNDS_DEVICE_STORAGE_INST(Geom::NodePeriodicBits, DeviceBackend::CUDA, extern)
-// #endif
+    //     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(Geom::NodePeriodicBits, extern)
+    //     DNDS_DEVICE_STORAGE_INST(Geom::NodePeriodicBits, DeviceBackend::Host, extern)
+    // #ifdef DNDS_USE_CUDA
+    //     DNDS_DEVICE_STORAGE_INST(Geom::NodePeriodicBits, DeviceBackend::CUDA, extern)
+    // #endif
 }
 namespace DNDS::Geom
 {
