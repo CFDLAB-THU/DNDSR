@@ -271,9 +271,9 @@ namespace DNDS::Geom
         explicit OffsetRange(const std::vector<const T> &vec, T offset)
             : begin_(vec.data()), end_(vec.data() + vec.size()), offset_(offset) {}
 
-        OffsetIterator<T> begin() const { return {begin_, offset_}; }
-        OffsetIterator<T> end() const { return {end_, offset_}; }
-        ptrdiff_t size() const { return end_ - begin_; }
+        [[nodiscard]] OffsetIterator<T> begin() const { return {begin_, offset_}; }
+        [[nodiscard]] OffsetIterator<T> end() const { return {end_, offset_}; }
+        [[nodiscard]] ptrdiff_t size() const { return end_ - begin_; }
     };
 
     inline std::pair<std::vector<index>, std::vector<index>> ReorderSerialAdj_CorrectRCM(

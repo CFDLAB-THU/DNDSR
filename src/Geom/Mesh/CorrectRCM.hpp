@@ -73,7 +73,7 @@ namespace CorrectRCM
             return 0;
         }
 
-        auto GetAdj(index i) const { return GraphAdjFunctor(i); }
+        [[nodiscard]] auto GetAdj(index i) const { return GraphAdjFunctor(i); }
 
     private:
         template <typename iter0, typename iter1, typename TFInLayerCompare, typename TLayer>

@@ -289,17 +289,17 @@ namespace DNDS::Geom
         static CompiledGhostTree compile(const GhostSpec &spec);
 
         /// Collect all distinct AdjKind values used by any hop in the tree.
-        std::unordered_set<AdjKind, AdjKindHash> requiredAdjs() const;
+        [[nodiscard]] std::unordered_set<AdjKind, AdjKindHash> requiredAdjs() const;
 
         /// Pre-check that all required adjacencies exist in the DAG.
         /// Returns the set of missing AdjKind values (empty = all available).
-        std::vector<AdjKind> checkAvailable(const MeshConnectivity &dag) const;
+        [[nodiscard]] std::vector<AdjKind> checkAvailable(const MeshConnectivity &dag) const;
 
         /// Collect all EntityKind values that appear at COLLECT nodes.
-        std::unordered_set<EntityKind> collectedKinds() const;
+        [[nodiscard]] std::unordered_set<EntityKind> collectedKinds() const;
 
         /// Pretty-print the tree (for diagnostics).
-        std::string dump() const;
+        [[nodiscard]] std::string dump() const;
     };
 
     // =================================================================
