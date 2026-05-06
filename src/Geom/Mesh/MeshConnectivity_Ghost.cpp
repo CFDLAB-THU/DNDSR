@@ -120,7 +120,7 @@ namespace DNDS::Geom
     CompiledGhostTree CompiledGhostTree::compile(const GhostSpec &spec)
     {
         CompiledGhostTree tree;
-        for (auto &chain : spec.chains)
+        for (const auto &chain : spec.chains)
             insertChainIntoTrie(tree.roots, chain);
 
         // Assign IDs and parent IDs, compute maxLevel, build per-level lists.
@@ -171,10 +171,10 @@ namespace DNDS::Geom
                 n.collect,
                 !n.children.empty(),
             });
-            for (auto &child : n.children)
+            for (const auto &child : n.children)
                 buildLevels(child);
         };
-        for (auto &root : tree.roots)
+        for (const auto &root : tree.roots)
             buildLevels(root);
 
         return tree;
@@ -188,7 +188,7 @@ namespace DNDS::Geom
         const GhostTreeNode &node,
         std::unordered_set<AdjKind, AdjKindHash> &out)
     {
-        for (auto &child : node.children)
+        for (const auto &child : node.children)
         {
             out.insert(child.hop);
             collectRequiredAdjsHelper(child, out);
@@ -198,7 +198,7 @@ namespace DNDS::Geom
     std::unordered_set<AdjKind, AdjKindHash> CompiledGhostTree::requiredAdjs() const
     {
         std::unordered_set<AdjKind, AdjKindHash> result;
-        for (auto &root : roots)
+        for (const auto &root : roots)
             collectRequiredAdjsHelper(root, result);
         return result;
     }
@@ -208,7 +208,7 @@ namespace DNDS::Geom
     {
         auto required = requiredAdjs();
         std::vector<AdjKind> missing;
-        for (auto &adj : required)
+        for (const auto &adj : required)
         {
             if (!dag.hasAdj(adj))
                 missing.push_back(adj);
@@ -222,14 +222,14 @@ namespace DNDS::Geom
     {
         if (node.collect)
             out.insert(node.kind);
-        for (auto &child : node.children)
+        for (const auto &child : node.children)
             collectCollectedKindsHelper(child, out);
     }
 
     std::unordered_set<EntityKind> CompiledGhostTree::collectedKinds() const
     {
         std::unordered_set<EntityKind> result;
-        for (auto &root : roots)
+        for (const auto &root : roots)
             collectCollectedKindsHelper(root, result);
         return result;
     }
@@ -252,14 +252,14 @@ namespace DNDS::Geom
         if (node.collect)
             oss << ", COLLECT";
         oss << ")\n";
-        for (auto &child : node.children)
+        for (const auto &child : node.children)
             dumpNode(child, oss, indent + 1);
     }
 
     std::string CompiledGhostTree::dump() const
     {
         std::ostringstream oss;
-        for (auto &root : roots)
+        for (const auto &root : roots)
             dumpNode(root, oss, 0);
         return oss.str();
     }
@@ -409,7 +409,7 @@ namespace DNDS::Geom
         };
 
         // --- Initialize roots (level 0) ---
-        for (auto &entry : tree.levels[0])
+        for (const auto &entry : tree.levels[0])
         {
             auto gm = getGlobalMapping(entry.kind);
             DNDS_assert_info(gm,
@@ -438,11 +438,11 @@ namespace DNDS::Geom
         // --- Level-by-level evaluation ---
         for (int level = 0; level <= tree.maxLevel; level++)
         {
-            auto &levelEntries = tree.levels[level];
+            const auto &levelEntries = tree.levels[level];
 
             // Step 1: Collect ghosts from ALL nodes into intermediateGhosts;
             // only COLLECT nodes feed the output result.ghostIndices.
-            for (auto &entry : levelEntries)
+            for (const auto &entry : levelEntries)
             {
                 auto gm = getGlobalMapping(entry.kind);
                 DNDS_assert_info(gm,
@@ -466,7 +466,7 @@ namespace DNDS::Geom
             // intermediateGhosts[parentKind] has grown beyond the last pull.
             {
                 std::vector<AdjKind> hopsNeedingScratch;
-                for (auto &childEntry : tree.levels[level + 1])
+                for (const auto &childEntry : tree.levels[level + 1])
                 {
                     AdjKind hop = childEntry.hop;
                     EntityKind parentKind = hop.from;
@@ -539,8 +539,8 @@ namespace DNDS::Geom
             }
 
             // Step 3: Traverse children at level+1 using live adjacencies.
-            auto &nextLevelEntries = tree.levels[level + 1];
-            for (auto &childEntry : nextLevelEntries)
+            const auto &nextLevelEntries = tree.levels[level + 1];
+            for (const auto &childEntry : nextLevelEntries)
             {
                 auto &parentSet = nodeSets[childEntry.parentId];
 

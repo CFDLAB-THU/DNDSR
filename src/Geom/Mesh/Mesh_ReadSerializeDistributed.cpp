@@ -321,7 +321,7 @@ namespace DNDS::Geom
 
             int ret = ParMETIS_V3_PartKway(
                 vtxdist.data(), xadj.data(), adjncy.data(),
-                NULL, NULL, &wgtflag, &numflag,
+                nullptr, nullptr, &wgtflag, &numflag,
                 &nCon, &nPart, tpWeights.data(), ubVec.data(), optsC.data(),
                 &objval, partOut.data(), &mpi.comm);
             DNDS_assert_info(ret == METIS_OK,

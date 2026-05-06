@@ -16,6 +16,7 @@ namespace DNDS::Geom
         struct MatElem
         {
             index j{UnInitIndex};
+            // NOLINTNEXTLINE(readability-redundant-member-init): Eigen Matrix default-init is uninitialized
             Eigen::Matrix<real, 3, 3> m{};
         };
 
@@ -63,7 +64,7 @@ namespace DNDS::Geom
             for (index iN = 0; iN < x.father->Size(); iN++)
             {
                 Ax[iN].setZero();
-                for (auto &ME : A[iN])
+                for (const auto &ME : A[iN])
                     Ax[iN] += ME.m * x[ME.j];
             }
             Ax.trans.startPersistentPull();

@@ -94,7 +94,7 @@ namespace CorrectRCM
 
     public:
         template <typename TFNode, typename TFInLayerCompare = int>
-        std::vector<index> BreadthFirstSearch(TFNode &&FNode, index root = 0, TFInLayerCompare &&FInLayerCompare = int(0)) const
+        std::vector<index> BreadthFirstSearch(TFNode &&FNode, index root = 0, TFInLayerCompare &&FInLayerCompare = 0) const
         {
             if (root >= nVertices || root < 0)
                 throw std::range_error("Invalid root vertex");

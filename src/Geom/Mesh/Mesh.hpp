@@ -594,9 +594,9 @@ namespace DNDS::Geom
         /// Legacy implementation preserved for reference/fallback.
         void ReorderLocalCellsLegacy(int nParts = 1, int nPartsInner = 1);
 
-        int NLocalParts() const { return localPartitionStarts.size() ? localPartitionStarts.size() - 1 : 1; }
-        index LocalPartStart(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart) : 0; }
-        index LocalPartEnd(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart + 1) : this->NumCell(); }
+        int NLocalParts() const { return !localPartitionStarts.empty() ? localPartitionStarts.size() - 1 : 1; }
+        index LocalPartStart(int iPart) const { return !localPartitionStarts.empty() ? localPartitionStarts.at(iPart) : 0; }
+        index LocalPartEnd(int iPart) const { return !localPartitionStarts.empty() ? localPartitionStarts.at(iPart + 1) : this->NumCell(); }
 
         index NumNode() const
         {
@@ -990,7 +990,8 @@ namespace DNDS::Geom
             int wallDistExecution = 0;
             real minWallDist = 1e-10;
             int verbose = 0;
-            WallDistOptions() {} //? why = default is not working
+            // NOLINTNEXTLINE(modernize-use-equals-default): nested class default-init quirk with = default
+            WallDistOptions() {}
 
             DNDS_DECLARE_CONFIG(WallDistOptions)
             {
@@ -1215,8 +1216,8 @@ namespace DNDS::Geom
                 _detail_GetCoordsOnElemSerial((*cell2nodeSerial)[iCell], (*cell2nodePbiSerial)[iCell], cs, coo);
         }
 
-        UnstructuredMeshSerialRW(const decltype(mesh) &n_mesh, DNDS::MPI_int n_mRank)
-            : mesh(n_mesh), mRank(n_mRank) {}
+        UnstructuredMeshSerialRW(decltype(mesh) n_mesh, DNDS::MPI_int n_mRank)
+            : mesh(std::move(n_mesh)), mRank(n_mRank) {}
 
         /// @brief reads a cgns file as serial input
         /**
@@ -1240,7 +1241,7 @@ namespace DNDS::Geom
 
         void ReadFromOpenFOAMAndConvertSerial(const std::string &fName, const std::map<std::string, std::string> &nameMapping, const t_FBCName_2_ID &FBCName_2_ID = FBC_Name_2_ID_Default);
 
-        void Deduplicate1to1Periodic(real searchEps = 1e-8);
+        void Deduplicate1to1Periodic(real search_eps = 1e-8);
 
         // void InterpolateTopology();
 

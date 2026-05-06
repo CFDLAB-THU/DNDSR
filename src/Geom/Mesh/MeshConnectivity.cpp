@@ -77,7 +77,7 @@ namespace DNDS::Geom
 
     const ConeAdj *MeshConnectivity::findCone(int fromDepth, int toDepth) const
     {
-        for (auto &c : cones)
+        for (const auto &c : cones)
             if (c.fromDepth == fromDepth && c.toDepth == toDepth)
                 return &c;
         return nullptr;
@@ -110,7 +110,7 @@ namespace DNDS::Geom
 
     const SupportAdj *MeshConnectivity::findSupport(int fromDepth, int toDepth) const
     {
-        for (auto &s : supports)
+        for (const auto &s : supports)
             if (s.fromDepth == fromDepth && s.toDepth == toDepth)
                 return &s;
         return nullptr;
