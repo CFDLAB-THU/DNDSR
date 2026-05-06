@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef __CORRECTRCM_H
-#    define __CORRECTRCM_H
+#ifndef CORRECTRCM_H
+#    define CORRECTRCM_H
 
 #    include <iostream>
 #    include <map>

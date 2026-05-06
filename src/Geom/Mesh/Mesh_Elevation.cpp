@@ -879,9 +879,9 @@ namespace DNDS::Geom
         auto GetCoordsOnFaceExtended = [&](index iFace, tSmallCoords &cs)
         {
             if (!isPeriodic)
-                __GetCoords(face2nodeExtended[iFace], cs);
+                _detail_GetCoords(face2nodeExtended[iFace], cs);
             else
-                __GetCoordsOnElem(face2nodeExtended[iFace], face2nodePbiExtended[iFace], cs);
+                _detail_GetCoordsOnElem(face2nodeExtended[iFace], face2nodePbiExtended[iFace], cs);
         };
 
         for (index iFace = 0; iFace < face2nodeExtended.Size(); iFace++)

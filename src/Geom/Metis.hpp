@@ -4,11 +4,11 @@
 #include <metis.h>
 #include <parmetis.h>
 
-namespace _METIS
+namespace METIS
 {
 }
 
-namespace _METIS
+namespace METIS
 {
     static idx_t indexToIdx(DNDS::index v)
     {

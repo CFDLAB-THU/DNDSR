@@ -287,15 +287,15 @@ namespace DNDS::Geom
 
         std::vector<idx_t> vtxdist(mpi.size + 1);
         for (MPI_int r = 0; r <= mpi.size; r++)
-            vtxdist[r] = _METIS::indexToIdx(cell2cellFacial->pLGlobalMapping->ROffsets().at(r));
+            vtxdist[r] = METIS::indexToIdx(cell2cellFacial->pLGlobalMapping->ROffsets().at(r));
 
         std::vector<idx_t> xadj(cell2cellFacial->Size() + 1);
         for (index i = 0; i <= cell2cellFacial->Size(); i++)
-            xadj[i] = _METIS::indexToIdx(cell2cellFacial->rowPtr(i) - cell2cellFacial->rowPtr(0));
+            xadj[i] = METIS::indexToIdx(cell2cellFacial->rowPtr(i) - cell2cellFacial->rowPtr(0));
 
         std::vector<idx_t> adjncy(xadj.back());
         for (index i = 0; i < xadj.back(); i++)
-            adjncy[i] = _METIS::indexToIdx(cell2cellFacial->data()[i]);
+            adjncy[i] = METIS::indexToIdx(cell2cellFacial->data()[i]);
 
         if (adjncy.empty())
             adjncy.resize(1, -1); // cope with zero-sized data
