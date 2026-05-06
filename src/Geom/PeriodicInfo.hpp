@@ -66,8 +66,8 @@ namespace DNDS::Geom
 
     struct NodeIndexPBI
     {
-        index i;
-        NodePeriodicBits pbi;
+        index i{UnInitIndex};
+        NodePeriodicBits pbi{};
 
         bool operator<(const NodeIndexPBI &r) const
         {
@@ -184,9 +184,9 @@ namespace DNDS::Geom
 
     struct Periodicity
     {
-        std::array<tGPointPortable, 4> rotation;
-        std::array<tPointPortable, 4> translation;
-        std::array<tPointPortable, 4> rotationCenter;
+        std::array<tGPointPortable, 4> rotation{};
+        std::array<tPointPortable, 4> translation{};
+        std::array<tPointPortable, 4> rotationCenter{};
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(Periodicity, Periodicity)
         DNDS_DEVICE_CALLABLE Periodicity()
         {

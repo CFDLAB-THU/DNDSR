@@ -10,9 +10,9 @@ namespace DNDS::Geom::OpenFOAM
 {
     struct OpenFOAMBoundaryCondition
     {
-        std::string type;
-        index nFaces;
-        index startFace;
+        std::string type{};
+        index nFaces{UnInitIndex};
+        index startFace{UnInitIndex};
     };
 
     inline int passOpenFOAMSpaces(std::istream &in)

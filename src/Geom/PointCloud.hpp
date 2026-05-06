@@ -8,7 +8,7 @@ namespace DNDS::Geom
     {
         using coord_t = real; //!< The type of each coordinate
 
-        std::vector<tPoint> pts;
+        std::vector<tPoint> pts{};
 
         // Must return the number of data points
         [[nodiscard]] size_t kdtree_get_point_count() const { return pts.size(); }

@@ -271,7 +271,7 @@ namespace DNDS::Geom
             for (int iNNode = 0; iNNode < eCell.GetNumElev_O1O2(); iNNode++)
             {
                 auto eSpan = eCell.ObtainElevNodeSpan(iNNode);
-                std::array<index, Elem::CellNumNodeMax> spanNodes;
+                std::array<index, Elem::CellNumNodeMax> spanNodes{};
                 eCell.ExtractElevNodeSpanNodes(iNNode, c2n, spanNodes);
                 auto spanNodesSrt = spanNodes;
                 std::sort(spanNodesSrt.begin(), spanNodesSrt.begin() + eSpan.GetNumNodes());

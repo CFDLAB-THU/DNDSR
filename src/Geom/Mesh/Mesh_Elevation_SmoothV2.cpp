@@ -15,8 +15,8 @@ namespace DNDS::Geom
     {
         struct MatElem
         {
-            index j;
-            Eigen::Matrix<real, 3, 3> m;
+            index j{UnInitIndex};
+            Eigen::Matrix<real, 3, 3> m{};
         };
 
         // Build node-to-node adjacency from cell connectivity.
