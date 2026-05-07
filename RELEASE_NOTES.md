@@ -1,3 +1,68 @@
+# 🚀 DNDSR v0.2.1 — Geom Module Quality Release
+
+15 commits · 183 files changed
+
+Bugfix release completing the Geom module clang-tidy sanitation and polishing infrastructure.
+
+---
+
+## 🧹 Geom Module Clang-Tidy Sanitation (12 passes)
+
+From baseline to zero warnings across the Geom/ module. Carry-forward of the DNDS sanitation strategy.
+
+| Pass | Check | Sites | Method |
+|---|---|---|---|
+| G1 | `readability-redundant-inline-specifier` | 1,553 | `--fix` auto (Phase 1 parallel + Phase 2 serial) |
+| G2 | `modernize-use-nodiscard` | 719 | `--fix` auto |
+| G3 | `bugprone-reserved-identifier` | 47 | 5 subagents, manual edits |
+| G4 | `cppcoreguidelines-special-member-functions` | 3 Geom classes | Manual rule-of-five close |
+| G5 | `cppcoreguidelines-init-variables` + UnInit | 107 | 2 subagents, canonical sentinels |
+| G6 | `cppcoreguidelines-pro-type-member-init` | 19 | Subagent: `{}` / `UnInit*` init |
+| G7 | `cppcoreguidelines-avoid-c-arrays` | 45 | 2 subagents: `std::array<T,N>` |
+| G8 | `cppcoreguidelines-pro-type-cstyle-cast` | 29 | Subagent: `(T*)` → `reinterpret_cast<T*>` |
+| G9 | narrowing + widening | 145+18 | narrowing disabled (project design), widening `static_cast` |
+| G11 | residuals | 7 | NOLINTs for branch-clone, init-vars |
+| G12 | long tail (15 checks) | 90+ | `container-data-pointer`, `use-nullptr`, `use-auto`, etc. |
+
+### Notable Geom transformations
+
+- **Quadrature constants** moved into `detail::` namespace (`src/Geom/Quadratures/*.hpp`)
+- **Mesh buffers** (`src/Geom/Mesh/`) converted from `T arr[N]` to `std::array<T,N>` with `.data()` at C-API boundaries
+- **C-style casts** eliminated from `Mesh_Plts.cpp` — all `(T*)(ptr)` → `reinterpret_cast<T*>(ptr)`
+- **Reserved identifier** `__[A-Z]` → `_detail_*` (class members) or `detail::` namespace (free functions)
+- **`CoordPairDOF` default constructor** added (missing from earlier DNDS pass — fixed after build failure)
+
+---
+
+## 🔧 DNDS & Solver Fixups
+
+- **`UnInit` sentinel completeness** — replaced remaining `= 0` / `= NAN` init values across DNDS and Geom with canonical `UnInitReal`, `UnInitIndex`, `UnInitRowsize` sentinels
+- **Added `UnInitMPIInt` / `UnInitMPIAint`** to `src/DNDS/MPI.hpp` (required for CUDA TUs — MPI types not visible through `Defines.hpp`)
+- **`Linear.hpp` audit** — `<math.h>` → `<cmath>`, `NAN` → `UnInitReal`
+
+---
+
+## ⚙️ Infrastructure
+
+- **CI CJK fonts** — installed in CI and added to Marp CSS font stack for Chinese presentation rendering
+- **VTKHDF test artifact cleanup** — `test_basic_eulerP.py` now writes test output to `tempfile.mkdtemp` instead of leaking files to the project root; `*.vtkhdf` / `*.vtkhdf.series` added to `.gitignore`
+- **`run_clang_tidy.py` improvements** — `--list` flag (deduped site listing), `--fix-parallel` flag (Phase 1 parallel diag + Phase 2 serial fix), `SITE_RE` regex, deduped summary counts
+- **`.clang-tidy`** — 16 project-specific disables with rationale; `narrowing-conversions` added
+
+---
+
+## 📊 By the Numbers
+
+| Metric | Δ |
+|---|---|
+| Commits | 15 |
+| Files changed | 183 |
+| Geom clang-tidy passes | 12 |
+| Geom warnings resolved | ~2,700+ |
+| New `.clang-tidy` disables | 2 (narrowing, macro-usage) |
+
+---
+
 # 🚀 DNDSR v0.2.0 — Infrastructure & Quality Release
 
 155 commits · 385 files changed · 56,227 insertions · 10,506 deletions
