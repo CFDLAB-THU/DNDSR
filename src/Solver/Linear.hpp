@@ -1,6 +1,6 @@
 #pragma once
 
-#include <math.h>
+#include <cmath>
 
 #include "DNDS/HardEigen.hpp"
 #include "DNDS/Defines.hpp"
@@ -56,7 +56,7 @@ namespace DNDS::Linear
                 FA(x, V_temp);          // V_temp = A * x
                 FML(V_temp, Vs[0]);     // Vs[0] = ML * A * x
                 Vs[0].addTo(MLb, -1.0); // Vs[0] = ML * A * x - ML * b = -r
-                real beta = NAN;
+                real beta = UnInitReal;
                 beta = std::sqrt(fDot(Vs[0], Vs[0])); // beta = norm2(r)
                 if (FStop(iRestart, beta, scale_MLb)) // see if converge
                     break;
