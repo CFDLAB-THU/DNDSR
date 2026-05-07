@@ -311,7 +311,7 @@ namespace DNDS::Geom
                 break;
             }
         }
-        int hasBadAll;
+        int hasBadAll = 0;
         MPI::Allreduce(&hasBad, &hasBadAll, 1, MPI_INT, MPI_SUM, mpi.comm);
         return hasBad == 0;
     }
@@ -339,7 +339,7 @@ namespace DNDS::Geom
                 break;
             }
         }
-        int hasBadAll;
+        int hasBadAll = 0;
         MPI::Allreduce(&hasBad, &hasBadAll, 1, MPI_INT, MPI_SUM, mpi.comm);
         return hasBad == 0;
     }
@@ -494,6 +494,7 @@ namespace DNDS::Geom
                 for (auto ic : node2cell[iNode])
                     allCellGlobals.insert(ic);
             std::vector<index> neededCells;
+            neededCells.reserve(allCellGlobals.size());
             for (auto ic : allCellGlobals)
                 neededCells.push_back(ic);
 
@@ -635,7 +636,8 @@ namespace DNDS::Geom
                         if (b ^ bndBit)
                             match1 = false;
                     if (match0 && !match1)
-                        ;
+                    {
+                    } // keep current ordering — match0 alone wins
                     else if (match1 && !match0)
                         std::swap(bnd2cell(i, 0), bnd2cell(i, 1));
                     else
@@ -762,8 +764,8 @@ namespace DNDS::Geom
                     for (DNDS::rowsize j = 0; j < bnd2node.RowSize(iBnd); j++)
                     {
                         auto iNode = bnd2node(iBnd, j);
-                        DNDS::MPI_int rank;
-                        DNDS::index val;
+                        DNDS::MPI_int rank = UnInitMPIInt;
+                        DNDS::index val = UnInitIndex;
                         if (!coords.trans.pLGhostMapping->search_indexAppend(iNode, rank, val))
                             extraGhostNodes.push_back(iNode);
                     }
@@ -1381,6 +1383,7 @@ namespace DNDS::Geom
         for (DNDS::index iFace = 0; iFace < faceElemInfo.Size(); iFace++)
         {
             auto faceID = faceElemInfo(iFace, 0).zone;
+            // NOLINTBEGIN(bugprone-branch-clone) — branches share asserts but are semantically distinct
             if (FaceIDIsInternal(faceID))
             {
                 // if (FaceIDIsPeriodic(faceID))
@@ -1409,6 +1412,7 @@ namespace DNDS::Geom
                 DNDS_assert(face2cell[iFace][0] >= 0 && face2cell[iFace][0] < cell2cell.father->Size());
                 cCont[face2cell[iFace][0]]++;
             }
+            // NOLINTEND(bugprone-branch-clone)
         }
         for (DNDS::index iCell = 0; iCell < cellElemInfo.father->Size(); iCell++) // for every non-ghost
         {
@@ -1468,7 +1472,7 @@ namespace DNDS::Geom
 
         std::string meshRead;
         index dimRead{0}, rankRead{0}, sizeRead{0};
-        int isPeriodicRead;
+        int isPeriodicRead = 0;
         serializerP->ReadString("mesh", meshRead);
         serializerP->ReadIndex("dim", dimRead);
         if (serializerP->IsPerRank())
@@ -1786,7 +1790,7 @@ namespace DNDS::Geom
         auto firstValid = [](std::initializer_list<ssp<GlobalOffsetsMapping>> candidates)
             -> ssp<GlobalOffsetsMapping>
         {
-            for (auto &gm : candidates)
+            for (const auto &gm : candidates)
                 if (gm)
                     return gm;
             return nullptr;

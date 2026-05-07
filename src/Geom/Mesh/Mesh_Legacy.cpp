@@ -424,7 +424,8 @@ namespace DNDS::Geom
                         if (b ^ bndBit)
                             match1 = false;
                     if (match0 && !match1)
-                        ; // keep
+                    {
+                    } // keep current ordering — match0 alone wins
                     else if (match1 && !match0)
                         std::swap(bnd2cell(i, 0), bnd2cell(i, 1));
                     else
@@ -479,8 +480,8 @@ namespace DNDS::Geom
                 for (DNDS::rowsize ic2c = 0; ic2c < cell2cell.father->RowSize(iCell); ic2c++)
                 {
                     auto iCellOther = (*cell2cell.father)(iCell, ic2c);
-                    DNDS::MPI_int rank;
-                    DNDS::index val;
+                    DNDS::MPI_int rank = UnInitMPIInt;
+                    DNDS::index val = UnInitIndex;
                     if (!cell2cell.trans.pLGlobalMapping->search(iCellOther, rank, val))
                         DNDS_assert_info(false, "search failed");
                     if (rank != mpi.rank)
@@ -512,8 +513,8 @@ namespace DNDS::Geom
                 for (DNDS::rowsize ic2c = 0; ic2c < cell2node.RowSize(iCell); ic2c++)
                 {
                     auto iNode = cell2node(iCell, ic2c);
-                    DNDS::MPI_int rank;
-                    DNDS::index val;
+                    DNDS::MPI_int rank = UnInitMPIInt;
+                    DNDS::index val = UnInitIndex;
                     if (!coords.trans.pLGlobalMapping->search(iNode, rank, val))
                         DNDS_assert_info(false, "search failed");
                     if (rank != mpi.rank)
@@ -568,8 +569,8 @@ namespace DNDS::Geom
                     for (DNDS::rowsize j = 0; j < bnd2node.RowSize(iBnd); j++)
                     {
                         auto iNode = bnd2node(iBnd, j);
-                        DNDS::MPI_int rank;
-                        DNDS::index val;
+                        DNDS::MPI_int rank = UnInitMPIInt;
+                        DNDS::index val = UnInitIndex;
                         if (!coords.trans.pLGhostMapping->search_indexAppend(iNode, rank, val))
                             extraGhostNodes.push_back(iNode);
                     }

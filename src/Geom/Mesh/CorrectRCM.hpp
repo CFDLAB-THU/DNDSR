@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef __CORRECTRCM_H
-#    define __CORRECTRCM_H
+#ifndef CORRECTRCM_H
+#    define CORRECTRCM_H
 
 #    include <iostream>
 #    include <map>
@@ -35,6 +35,7 @@ namespace CorrectRCM
         using index = int64_t;
 
     private:
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
         const tGraphAdjFunctor &GraphAdjFunctor;
         index nVertices;
 
@@ -73,7 +74,7 @@ namespace CorrectRCM
             return 0;
         }
 
-        auto GetAdj(index i) const { return GraphAdjFunctor(i); }
+        [[nodiscard]] auto GetAdj(index i) const { return GraphAdjFunctor(i); }
 
     private:
         template <typename iter0, typename iter1, typename TFInLayerCompare, typename TLayer>
@@ -93,7 +94,7 @@ namespace CorrectRCM
 
     public:
         template <typename TFNode, typename TFInLayerCompare = int>
-        std::vector<index> BreadthFirstSearch(TFNode &&FNode, index root = 0, TFInLayerCompare &&FInLayerCompare = int(0)) const
+        std::vector<index> BreadthFirstSearch(TFNode &&FNode, index root = 0, TFInLayerCompare &&FInLayerCompare = 0) const
         {
             if (root >= nVertices || root < 0)
                 throw std::range_error("Invalid root vertex");

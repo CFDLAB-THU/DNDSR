@@ -64,8 +64,6 @@ namespace DNDS::Geom
     tPy_AdjPairTracked<_row_size, _row_max, _align>
     pybind11_AdjPairTracked_declare(py::module_ &m)
     {
-        using TPair = ArrayAdjacencyPair<_row_size, _row_max, _align>;
-
         // Get the already-registered base class from the DNDS module
         auto dnds_m = py::module_::import("DNDSR.DNDS");
         auto baseCls = pybind11_ArrayAdjacencyPair_get_class<_row_size, _row_max, _align>(dnds_m);

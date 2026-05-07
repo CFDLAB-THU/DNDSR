@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 #include "DNDS/HardEigen.hpp"
 #include "DNDS/Defines.hpp"
 
@@ -48,14 +50,15 @@ namespace DNDS::Linear
             real scale_MLb = std::sqrt(fDot(MLb, MLb));
             MatrixXR h;
             h.setZero(kSubspace + 1, kSubspace);
-            uint32_t iRestart;
+            uint32_t iRestart = 0;
             for (iRestart = 0; iRestart <= nRestart; iRestart++)
             {
-                FA(x, V_temp);                             // V_temp = A * x
-                FML(V_temp, Vs[0]);                        // Vs[0] = ML * A * x
-                Vs[0].addTo(MLb, -1.0);                    // Vs[0] = ML * A * x - ML * b = -r
-                real beta = std::sqrt(fDot(Vs[0], Vs[0])); // beta = norm2(r)
-                if (FStop(iRestart, beta, scale_MLb))      // see if converge
+                FA(x, V_temp);          // V_temp = A * x
+                FML(V_temp, Vs[0]);     // Vs[0] = ML * A * x
+                Vs[0].addTo(MLb, -1.0); // Vs[0] = ML * A * x - ML * b = -r
+                real beta = UnInitReal;
+                beta = std::sqrt(fDot(Vs[0], Vs[0])); // beta = norm2(r)
+                if (FStop(iRestart, beta, scale_MLb)) // see if converge
                     break;
                 if (std::abs(beta) < verySmallReal || // beta is floating-point negligible
                     (iRestart == nRestart))

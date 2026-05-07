@@ -145,7 +145,7 @@ namespace DNDS::Geom
 
         AutoAppendName2ID()
         {
-            for (auto [k, v] : n2id_map)
+            for (const auto &[k, v] : n2id_map)
                 id_cap = std::max(v + 1, id_cap);
         }
 

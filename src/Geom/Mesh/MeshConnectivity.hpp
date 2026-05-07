@@ -62,7 +62,8 @@ namespace DNDS::Geom
         case EntityKind::Face:
             return dim - 1;
         case EntityKind::Edge:
-            return (dim == 2) ? 1 : 1; // always 1; coincides with Face in 2D
+            // NOLINTNEXTLINE(bugprone-branch-clone) — Edge depth is always 1 in both 2D and 3D
+            return (dim == 2) ? 1 : 1;
         case EntityKind::Node:
             return 0;
         case EntityKind::Bnd:
@@ -118,7 +119,7 @@ namespace DNDS::Geom
 
         /// Direct adjacency: from != to. `via` is ignored.
         constexpr AdjKind(EntityKind from_, EntityKind to_)
-            : from(from_), to(to_), via(EntityKind::Node)
+            : from(from_), to(to_)
         {
         }
 
@@ -257,12 +258,12 @@ namespace DNDS::Geom
     /// Used by the precomputed per-level lists.
     struct LevelEntry
     {
-        int nodeId;       ///< ID of the tree node.
-        int parentId;     ///< ID of the parent node (-1 for roots).
-        EntityKind kind;  ///< Entity kind of this node.
-        AdjKind hop;      ///< Hop used to reach this node.
-        bool collect;     ///< Whether to collect at this node.
-        bool hasChildren; ///< Whether this node has children (needs pull).
+        int nodeId{};       ///< ID of the tree node.
+        int parentId{};     ///< ID of the parent node (-1 for roots).
+        EntityKind kind{};  ///< Entity kind of this node.
+        AdjKind hop;        ///< Hop used to reach this node.
+        bool collect{};     ///< Whether to collect at this node.
+        bool hasChildren{}; ///< Whether this node has children (needs pull).
     };
 
     /// Compiled forest of ghost traversal chains.
@@ -289,17 +290,17 @@ namespace DNDS::Geom
         static CompiledGhostTree compile(const GhostSpec &spec);
 
         /// Collect all distinct AdjKind values used by any hop in the tree.
-        std::unordered_set<AdjKind, AdjKindHash> requiredAdjs() const;
+        [[nodiscard]] std::unordered_set<AdjKind, AdjKindHash> requiredAdjs() const;
 
         /// Pre-check that all required adjacencies exist in the DAG.
         /// Returns the set of missing AdjKind values (empty = all available).
-        std::vector<AdjKind> checkAvailable(const MeshConnectivity &dag) const;
+        [[nodiscard]] std::vector<AdjKind> checkAvailable(const MeshConnectivity &dag) const;
 
         /// Collect all EntityKind values that appear at COLLECT nodes.
-        std::unordered_set<EntityKind> collectedKinds() const;
+        [[nodiscard]] std::unordered_set<EntityKind> collectedKinds() const;
 
         /// Pretty-print the tree (for diagnostics).
-        std::string dump() const;
+        [[nodiscard]] std::string dump() const;
     };
 
     // =================================================================
@@ -328,7 +329,7 @@ namespace DNDS::Geom
         [[nodiscard]] index totalGhosts() const
         {
             index total = 0;
-            for (auto &[k, v] : ghostIndices)
+            for (const auto &[k, v] : ghostIndices)
                 total += static_cast<index>(v.size());
             return total;
         }

@@ -23,6 +23,8 @@
 
 namespace DNDS::Geom::Elem
 {
+    using namespace detail;
+
     // =========================================================================
     // Scheme Selection
     // =========================================================================
@@ -34,7 +36,7 @@ namespace DNDS::Geom::Elem
     //   - The number of quadrature points
     // =========================================================================
 
-    inline constexpr t_index GetQuadratureScheme(ParamSpace ps, int int_order)
+    constexpr t_index GetQuadratureScheme(ParamSpace ps, int int_order)
     {
         if (ps == LineSpace)
             switch (int_order)
@@ -196,20 +198,20 @@ namespace DNDS::Geom::Elem
             switch (scheme)
             {
             case INT_SCHEME_Line_1:
-                pParam[0] = __GaussLegendre_1[0][iG];
-                w = __GaussLegendre_1[1][iG];
+                pParam[0] = GaussLegendre_1[0][iG];
+                w = GaussLegendre_1[1][iG];
                 return;
             case INT_SCHEME_Line_2:
-                pParam[0] = __GaussLegendre_2[0][iG];
-                w = __GaussLegendre_2[1][iG];
+                pParam[0] = GaussLegendre_2[0][iG];
+                w = GaussLegendre_2[1][iG];
                 return;
             case INT_SCHEME_Line_3:
-                pParam[0] = __GaussLegendre_3[0][iG];
-                w = __GaussLegendre_3[1][iG];
+                pParam[0] = GaussLegendre_3[0][iG];
+                w = GaussLegendre_3[1][iG];
                 return;
             case INT_SCHEME_Line_4:
-                pParam[0] = __GaussLegendre_4[0][iG];
-                w = __GaussLegendre_4[1][iG];
+                pParam[0] = GaussLegendre_4[0][iG];
+                w = GaussLegendre_4[1][iG];
                 return;
             default:
                 w = 1e100;
@@ -224,29 +226,29 @@ namespace DNDS::Geom::Elem
             switch (scheme)
             {
             case INT_SCHEME_Tri_1:
-                pParam[0] = __HammerTri_1[0][iG];
-                pParam[1] = __HammerTri_1[1][iG];
-                w = __HammerTri_1[2][iG];
+                pParam[0] = HammerTri_1[0][iG];
+                pParam[1] = HammerTri_1[1][iG];
+                w = HammerTri_1[2][iG];
                 return;
             case INT_SCHEME_Tri_3:
-                pParam[0] = __HammerTri_3[0][iG];
-                pParam[1] = __HammerTri_3[1][iG];
-                w = __HammerTri_3[2][iG];
+                pParam[0] = HammerTri_3[0][iG];
+                pParam[1] = HammerTri_3[1][iG];
+                w = HammerTri_3[2][iG];
                 return;
             case INT_SCHEME_Tri_6:
-                pParam[0] = __HammerTri_6[0][iG];
-                pParam[1] = __HammerTri_6[1][iG];
-                w = __HammerTri_6[2][iG];
+                pParam[0] = HammerTri_6[0][iG];
+                pParam[1] = HammerTri_6[1][iG];
+                w = HammerTri_6[2][iG];
                 return;
             case INT_SCHEME_Tri_7:
-                pParam[0] = __HammerTri_7[0][iG];
-                pParam[1] = __HammerTri_7[1][iG];
-                w = __HammerTri_7[2][iG];
+                pParam[0] = HammerTri_7[0][iG];
+                pParam[1] = HammerTri_7[1][iG];
+                w = HammerTri_7[2][iG];
                 return;
             case INT_SCHEME_Tri_12:
-                pParam[0] = __HammerTri_12[0][iG];
-                pParam[1] = __HammerTri_12[1][iG];
-                w = __HammerTri_12[2][iG];
+                pParam[0] = HammerTri_12[0][iG];
+                pParam[1] = HammerTri_12[1][iG];
+                w = HammerTri_12[2][iG];
                 return;
             default:
                 w = 1e100;
@@ -261,34 +263,34 @@ namespace DNDS::Geom::Elem
             switch (scheme)
             {
             case INT_SCHEME_Tet_1:
-                pParam[0] = __HammerTet_1[0][iG];
-                pParam[1] = __HammerTet_1[1][iG];
-                pParam[2] = __HammerTet_1[2][iG];
-                w = __HammerTet_1[3][iG];
+                pParam[0] = HammerTet_1[0][iG];
+                pParam[1] = HammerTet_1[1][iG];
+                pParam[2] = HammerTet_1[2][iG];
+                w = HammerTet_1[3][iG];
                 return;
             case INT_SCHEME_Tet_4:
-                pParam[0] = __HammerTet_4[0][iG];
-                pParam[1] = __HammerTet_4[1][iG];
-                pParam[2] = __HammerTet_4[2][iG];
-                w = __HammerTet_4[3][iG];
+                pParam[0] = HammerTet_4[0][iG];
+                pParam[1] = HammerTet_4[1][iG];
+                pParam[2] = HammerTet_4[2][iG];
+                w = HammerTet_4[3][iG];
                 return;
             case INT_SCHEME_Tet_8:
-                pParam[0] = __HammerTet_8[0][iG];
-                pParam[1] = __HammerTet_8[1][iG];
-                pParam[2] = __HammerTet_8[2][iG];
-                w = __HammerTet_8[3][iG];
+                pParam[0] = HammerTet_8[0][iG];
+                pParam[1] = HammerTet_8[1][iG];
+                pParam[2] = HammerTet_8[2][iG];
+                w = HammerTet_8[3][iG];
                 return;
             case INT_SCHEME_Tet_14:
-                pParam[0] = __HammerTet_14[0][iG];
-                pParam[1] = __HammerTet_14[1][iG];
-                pParam[2] = __HammerTet_14[2][iG];
-                w = __HammerTet_14[3][iG];
+                pParam[0] = HammerTet_14[0][iG];
+                pParam[1] = HammerTet_14[1][iG];
+                pParam[2] = HammerTet_14[2][iG];
+                w = HammerTet_14[3][iG];
                 return;
             case INT_SCHEME_Tet_24:
-                pParam[0] = __HammerTet_24[0][iG];
-                pParam[1] = __HammerTet_24[1][iG];
-                pParam[2] = __HammerTet_24[2][iG];
-                w = __HammerTet_24[3][iG];
+                pParam[0] = HammerTet_24[0][iG];
+                pParam[1] = HammerTet_24[1][iG];
+                pParam[2] = HammerTet_24[2][iG];
+                w = HammerTet_24[3][iG];
                 return;
             default:
                 w = 1e100;
@@ -305,19 +307,19 @@ namespace DNDS::Geom::Elem
             switch (scheme)
             {
             case INT_SCHEME_Quad_1:
-                GLData = &(__GaussLegendre_1[0][0]);
+                GLData = GaussLegendre_1.front().data();
                 GLSize = 1;
                 break;
             case INT_SCHEME_Quad_4:
-                GLData = &(__GaussLegendre_2[0][0]);
+                GLData = GaussLegendre_2.front().data();
                 GLSize = 2;
                 break;
             case INT_SCHEME_Quad_9:
-                GLData = &(__GaussLegendre_3[0][0]);
+                GLData = GaussLegendre_3.front().data();
                 GLSize = 3;
                 break;
             case INT_SCHEME_Quad_16:
-                GLData = &(__GaussLegendre_4[0][0]);
+                GLData = GaussLegendre_4.front().data();
                 GLSize = 4;
                 break;
             default:
@@ -342,19 +344,19 @@ namespace DNDS::Geom::Elem
             switch (scheme)
             {
             case INT_SCHEME_Hex_1:
-                GLData = &(__GaussLegendre_1[0][0]);
+                GLData = GaussLegendre_1.front().data();
                 GLSize = 1;
                 break;
             case INT_SCHEME_Hex_8:
-                GLData = &(__GaussLegendre_2[0][0]);
+                GLData = GaussLegendre_2.front().data();
                 GLSize = 2;
                 break;
             case INT_SCHEME_Hex_27:
-                GLData = &(__GaussLegendre_3[0][0]);
+                GLData = GaussLegendre_3.front().data();
                 GLSize = 3;
                 break;
             case INT_SCHEME_Hex_64:
-                GLData = &(__GaussLegendre_4[0][0]);
+                GLData = GaussLegendre_4.front().data();
                 GLSize = 4;
                 break;
             default:
@@ -383,23 +385,23 @@ namespace DNDS::Geom::Elem
             switch (scheme)
             {
             case INT_SCHEME_Pyramid_1:
-                GLData = &(__GaussLegendre_1[0][0]);
-                GJData = &(__GaussJacobi_01A2B0_1[0][0]);
+                GLData = GaussLegendre_1.front().data();
+                GJData = GaussJacobi_01A2B0_1.front().data();
                 GLSize = 1;
                 break;
             case INT_SCHEME_Pyramid_8:
-                GLData = &(__GaussLegendre_2[0][0]);
-                GJData = &(__GaussJacobi_01A2B0_2[0][0]);
+                GLData = GaussLegendre_2.front().data();
+                GJData = GaussJacobi_01A2B0_2.front().data();
                 GLSize = 2;
                 break;
             case INT_SCHEME_Pyramid_27:
-                GLData = &(__GaussLegendre_3[0][0]);
-                GJData = &(__GaussJacobi_01A2B0_3[0][0]);
+                GLData = GaussLegendre_3.front().data();
+                GJData = GaussJacobi_01A2B0_3.front().data();
                 GLSize = 3;
                 break;
             case INT_SCHEME_Pyramid_64:
-                GLData = &(__GaussLegendre_4[0][0]);
-                GJData = &(__GaussJacobi_01A2B0_4[0][0]);
+                GLData = GaussLegendre_4.front().data();
+                GJData = GaussJacobi_01A2B0_4.front().data();
                 GLSize = 4;
                 break;
             default:
@@ -429,33 +431,33 @@ namespace DNDS::Geom::Elem
             switch (scheme)
             {
             case INT_SCHEME_Prism_1:
-                GLData = &(__GaussLegendre_1[0][0]);
+                GLData = GaussLegendre_1.front().data();
                 GLSize = 1;
-                HammerData = &(__HammerTri_1[0][0]);
+                HammerData = HammerTri_1.front().data();
                 HammerSize = 1;
                 break;
             case INT_SCHEME_Prism_6:
-                GLData = &(__GaussLegendre_2[0][0]);
+                GLData = GaussLegendre_2.front().data();
                 GLSize = 2;
-                HammerData = &(__HammerTri_3[0][0]);
+                HammerData = HammerTri_3.front().data();
                 HammerSize = 3;
                 break;
             case INT_SCHEME_Prism_18:
-                GLData = &(__GaussLegendre_3[0][0]);
+                GLData = GaussLegendre_3.front().data();
                 GLSize = 3;
-                HammerData = &(__HammerTri_6[0][0]);
+                HammerData = HammerTri_6.front().data();
                 HammerSize = 6;
                 break;
             case INT_SCHEME_Prism_21:
-                GLData = &(__GaussLegendre_3[0][0]);
+                GLData = GaussLegendre_3.front().data();
                 GLSize = 3;
-                HammerData = &(__HammerTri_7[0][0]);
+                HammerData = HammerTri_7.front().data();
                 HammerSize = 7;
                 break;
             case INT_SCHEME_Prism_48:
-                GLData = &(__GaussLegendre_4[0][0]);
+                GLData = GaussLegendre_4.front().data();
                 GLSize = 4;
-                HammerData = &(__HammerTri_12[0][0]);
+                HammerData = HammerTri_12.front().data();
                 HammerSize = 12;
                 break;
             default:

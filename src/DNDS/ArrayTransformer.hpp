@@ -313,8 +313,8 @@ namespace DNDS
         void AssertDataType()
         {
             DNDS_check_throw(dataType != MPI_DATATYPE_NULL);
-            MPI_Aint lb = 0;
-            MPI_Aint extent = 0;
+            MPI_Aint lb = UnInitMPIAint;
+            MPI_Aint extent = UnInitMPIAint;
             MPI_Type_get_extent(dataType, &lb, &extent);
             DNDS_check_throw(lb == 0 && extent * typeMult == sizeof(T));
         }
@@ -1132,8 +1132,8 @@ namespace DNDS
             for (MPI_int r = 0; r < mpi.size; r++)
             {
                 // pull
-                MPI_Aint pullDisp = 0;
-                MPI_int pullSize = 0; // same as pushSizes
+                MPI_Aint pullDisp = UnInitMPIAint;
+                MPI_int pullSize = UnInitMPIInt; // same as pushSizes
                 auto gRPtr = son->operator[](index(pLGhostMapping->ghostStart[r + 1]));
                 auto gLPtr = son->operator[](index(pLGhostMapping->ghostStart[r]));
                 auto ghostSpan = gRPtr - gLPtr;
@@ -1189,8 +1189,8 @@ namespace DNDS
             for (MPI_int r = 0; r < mpi.size; r++)
             {
                 // pull
-                MPI_Aint pullDisp = 0;
-                MPI_int pullSize = 0; // same as pushSizes
+                MPI_Aint pullDisp = UnInitMPIAint;
+                MPI_int pullSize = UnInitMPIInt; // same as pushSizes
                 auto gRPtr = son->operator[](index(pLGhostMapping->ghostStart[r + 1]));
                 auto gLPtr = son->operator[](index(pLGhostMapping->ghostStart[r]));
                 auto ghostSpan = gRPtr - gLPtr;

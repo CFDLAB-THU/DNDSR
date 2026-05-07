@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DNDS/Defines.hpp"
+#include <array>
 #include <assert.h>
 #include <iostream>
 
@@ -14,7 +15,7 @@ namespace DNDS::ETensor
         static const Index stride0 = d1 * d2;
         static const Index stride1 = d2;
         static const Index stride2 = 1;
-        T data[siz];
+        std::array<T, siz> data;
 
     public:
         ETensorR3(const T &fill)
@@ -41,19 +42,19 @@ namespace DNDS::ETensor
         Map01 GetMap01(Index i2)
         {
             DNDS_assert(i2 < d2);
-            return Map01(data + i2 * stride2);
+            return Map01(data.data() + i2 * stride2);
         }
 
         Map12 GetMap12(Index i0)
         {
             DNDS_assert(i0 < d0);
-            return Map12(data + i0 * stride0);
+            return Map12(data.data() + i0 * stride0);
         }
 
         Map02 GetMap02(Index i1)
         {
             DNDS_assert(i1 < d1);
-            return Map02(data + i1 * stride1);
+            return Map02(data.data() + i1 * stride1);
         }
 
         template <class Tmat>
@@ -143,7 +144,7 @@ namespace DNDS::ETensor
     }
 
     template <typename T, Index d0, Index d1, Index d2>
-    std::ostream &operator<<(std::ostream &out, ETensorR3<T, d0, d1, d2> &&R)
+    std::ostream &operator<<(std::ostream &out, const ETensorR3<T, d0, d1, d2> &R)
     {
         out << "[";
         for (Index i0 = 0; i0 < d0; i0++)

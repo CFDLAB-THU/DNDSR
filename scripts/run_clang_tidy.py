@@ -53,6 +53,12 @@ CHECK_RE = re.compile(
     r"\[([a-z][a-z0-9]*(?:[.-][a-z0-9]+)+)(?:,-warnings-as-errors)?\]"
 )
 
+SITE_RE = re.compile(
+    # Match a clang-tidy warning/error/note line:
+    #   path:line:col: severity: message [check]
+    r"^(.+?):(\d+):(\d+):\s+(warning|error|note):\s+(.+?)(?:\s+\[(.+?)\])?\s*$"
+)
+
 
 def _resolve_build_dir(arg: str | None) -> Path:
     if arg:
@@ -398,6 +404,15 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the selected files and exit (no tidy run).",
     )
+    out_grp.add_argument(
+        "--list",
+        action="store_true",
+        help=(
+            "After the run, extract and print every unique "
+            "file:line:col: warning/error site (deduplicated "
+            "by location + message). Implies --quiet."
+        ),
+    )
     p.add_argument(
         "--clang-tidy",
         default=None,
@@ -426,7 +441,71 @@ def _build_parser() -> argparse.ArgumentParser:
             "handled by the caller."
         ),
     )
+    p.add_argument(
+        "--fix-parallel",
+        action="store_true",
+        help=(
+            "Safe parallel --fix mode: partition TUs by their source file, "
+            "run one clang-tidy process per file (fixing that file and its "
+            "headers serially). Each file gets exactly one process -- no "
+            "cross-process header races. Falls back to --unsafe-parallel-fix "
+            "when not enough distinct source files exist."
+        ),
+    )
     return p
+
+
+def _compute_unique_sites(
+    log_path: Path,
+) -> dict[str, list[tuple[str, str, str, str]]]:
+    """Return deduped sites grouped by check. Key is (file, line, col, check)."""
+    seen: set[tuple[str, str, str, str]] = set()
+    grouped: dict[str, list[tuple[str, str, str, str]]]
+    grouped = collections.defaultdict(list)
+    if not log_path.exists():
+        return grouped
+    for line in log_path.read_text().splitlines():
+        m = SITE_RE.match(line)
+        if not m:
+            continue
+        file, lno, col, sev, msg, check = m.groups()
+        if sev == "note":
+            continue
+        check_name = check or "?"
+        key = (file, lno, col, check_name)
+        if key in seen:
+            continue
+        seen.add(key)
+        grouped[check_name].append((file, lno, col, msg))
+    return grouped
+
+
+def _print_site_list(log_path: Path) -> None:
+    grouped = _compute_unique_sites(log_path)
+    if not grouped:
+        return
+    print()
+    print("=== site listing ===")
+    for check_name in sorted(grouped.keys()):
+        sites = grouped[check_name]
+        # Sort by file path, then line, then column.
+
+        def _sort_key(site: tuple[str, str, str, str]) -> tuple[str, int, int]:
+            f, l, c, _msg = site
+            try:
+                rel = str(Path(f).resolve().relative_to(PROJECT_ROOT))
+            except ValueError:
+                rel = f
+            return (rel, int(l), int(c))
+        sites.sort(key=_sort_key)
+        print(f"\n[{check_name}]  ({len(sites)} site(s))")
+        for file, lno, col, msg in sites:
+            try:
+                rel = str(Path(file).resolve().relative_to(PROJECT_ROOT))
+            except ValueError:
+                rel = file
+            msg_trunc = msg[:120] + "…" if len(msg) > 120 else msg
+            print(f"  {rel}:{lno}:{col}: {msg_trunc}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -506,12 +585,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     # --fix cannot run in parallel safely: multiple TUs editing the same
     # header concurrently will race and corrupt the file (interleaved
     # insertions). Force -j 1 unless the user explicitly opts in with
-    # --unsafe-parallel-fix.
+    # --unsafe-parallel-fix or --fix-parallel.
     effective_jobs = args.jobs
-    if args.fix and not args.unsafe_parallel_fix and args.jobs > 1:
+    if args.fix and not (args.unsafe_parallel_fix or args.fix_parallel) and args.jobs > 1:
         print("note: --fix forces jobs=1 (parallel --fix is unsafe); "
-              "pass --unsafe-parallel-fix to override.")
+              "pass --fix-parallel or --unsafe-parallel-fix to override.")
         effective_jobs = 1
+
+    if args.fix and args.fix_parallel and effective_jobs > 1:
+        # Phase 1: run diagnostics in parallel (fast, no race).
+        _diag_base = _base_args(clang_tidy, build_dir,
+                                config, header_filter, fix=False)
+        diag_log = log_dir / f"run-{stamp}-diag.log"
+        ec, _ = _run_parallel(
+            selected, _diag_base, jobs=effective_jobs, quiet=True, log_path=diag_log)
+        # Phase 2: collect all files with diagnostics.
+        sites = _compute_unique_sites(diag_log)
+        # Each check maps to list of (file, lno, col, msg); collect unique files
+        # Phase 2: run --fix serial on all TUs (safe, no header race).
+        _fix_base = _base_args(clang_tidy, build_dir,
+                               config, header_filter, fix=True)
+        fix_log = log_dir / f"run-{stamp}.log"
+        print(f"fix-parallel: {len(selected)} TUs to fix (serial, no race)")
+        ec2, _ = _run_parallel(selected, _fix_base, jobs=1,
+                               quiet=True, log_path=fix_log)
+        if ec2 and not ec:
+            ec = ec2
+        print(f"=== fix-parallel done, log: {fix_log} ===")
+        return ec if args.strict else 0
 
     print(version[0] if version else "(clang-tidy version unknown)")
     print(f"clang-tidy   : {clang_tidy}")
@@ -532,22 +633,28 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("   " + os.path.relpath(f, PROJECT_ROOT))
         return 0
 
-    quiet = args.quiet or args.summary
-    exit_code, counts = _run_parallel(
+    quiet = args.quiet or args.summary or args.list
+    exit_code, _counts = _run_parallel(
         selected, base, jobs=effective_jobs, quiet=quiet, log_path=log_path,
     )
 
+    if args.list:
+        _print_site_list(log_path)
+
     print()
     print(f"=== diagnostic summary ({log_path}) ===")
-    if not counts:
+    unique = _compute_unique_sites(log_path)
+    if not unique:
         print("  (no diagnostics)")
     else:
-        items = counts.most_common(args.top_checks or None)
-        total = sum(counts.values())
-        for name, n in items:
-            print(f"  {n:>6}  {name}")
+        items = sorted(unique.items(), key=lambda x: -len(x[1]))
+        if args.top_checks:
+            items = items[:args.top_checks]
+        total = sum(len(v) for _, v in unique.items())
+        for name, sites in items:
+            print(f"  {len(sites):>6}  {name}")
         print("  " + "-" * 6)
-        print(f"  {total:>6}  TOTAL ({len(counts)} distinct checks)")
+        print(f"  {total:>6}  TOTAL ({len(unique)} distinct checks)")
 
     return exit_code if args.strict else 0
 

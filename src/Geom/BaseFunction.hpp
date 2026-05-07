@@ -134,7 +134,7 @@ namespace DNDS::Geom::Base
         std::array<std::array<int, 3>, 3>,
         std::array<std::array<std::array<int, 3>, 3>, 3>>;
     template <int dim, int NDiffC>
-    constexpr t_diffOpIJK2I __get_diffOperatorIJK2I(const std::array<std::array<int, 3>, NDiffC> &diffOps)
+    constexpr t_diffOpIJK2I _get_diffOperatorIJK2I(const std::array<std::array<int, 3>, NDiffC> &diffOps)
     {
         auto ret = t_diffOpIJK2I();
         std::get<0>(ret) = 0;
@@ -179,9 +179,9 @@ namespace DNDS::Geom::Base
         return ret;
     }
 
-    static const t_diffOpIJK2I diffOperatorIJK2I = __get_diffOperatorIJK2I<3, ndiffSiz>(diffOperatorOrderList);
+    static const t_diffOpIJK2I diffOperatorIJK2I = _get_diffOperatorIJK2I<3, ndiffSiz>(diffOperatorOrderList);
 
-    static const t_diffOpIJK2I diffOperatorIJK2I2D = __get_diffOperatorIJK2I<2, ndiffSiz2D>(diffOperatorOrderList2D);
+    static const t_diffOpIJK2I diffOperatorIJK2I2D = _get_diffOperatorIJK2I<2, ndiffSiz2D>(diffOperatorOrderList2D);
 
     template <int dim>
     constexpr auto &getDiffOperatorIJK2I()
@@ -189,11 +189,10 @@ namespace DNDS::Geom::Base
         return (dim == 2) ? diffOperatorIJK2I2D : diffOperatorIJK2I;
     }
 
-    static const int dFactorials[ndiff + 1][ndiff + 1] = {
-        {1, 0, 0, 0},
-        {1, 1, 0, 0},
-        {1, 2, 2, 0},
-        {1, 3, 6, 6}};
+    static const std::array<std::array<int, ndiff + 1>, ndiff + 1> dFactorials = {{{1, 0, 0, 0},
+                                                                                   {1, 1, 0, 0},
+                                                                                   {1, 2, 2, 0},
+                                                                                   {1, 3, 6, 6}}};
 
     static const std::array<int, ndiff * 3 + 1> factorials = {
         1,
@@ -232,7 +231,7 @@ namespace DNDS::Geom::Base
     }
 
     template <int dim, int order>
-    inline constexpr int PolynomialNDOF() //  2-d specific
+    constexpr int PolynomialNDOF() //  2-d specific
     {
         switch (dim)
         {

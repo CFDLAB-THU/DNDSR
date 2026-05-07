@@ -77,7 +77,7 @@ namespace DNDS::Geom
             {
                 localPartsAdj.emplace_back();
                 localPartsAdj.back().reserve(row.size());
-                for (auto &v : row)
+                for (const auto &v : row)
                     localPartsAdj.back().emplace_back(v);
             }
 
@@ -171,8 +171,8 @@ namespace DNDS::Geom
             {
                 auto &row = mat_begin[iC + local_offset];
                 auto last = std::remove_if(row.begin(), row.end(), [&](index v)
-                                            { return (v < local_offset + ind_offset) ||
-                                                     (v >= local_offset + ind_offset + local_nelem); });
+                                           { return (v < local_offset + ind_offset) ||
+                                                    (v >= local_offset + ind_offset + local_nelem); });
                 row.erase(last, row.end());
             }
             index bwOld, bwNew;
