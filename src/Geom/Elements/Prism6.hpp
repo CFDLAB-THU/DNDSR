@@ -12,44 +12,45 @@ namespace DNDS::Geom::Elem
 {
 
     // Forward declaration (primary template is in ElementTraitsBase.hpp)
-    template <ElemType> struct ShapeFuncImpl;
+    template <ElemType>
+    struct ShapeFuncImpl;
 
     // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Prism6>
     {
         template <class TPoint, class TArray>
-        DNDS_DEVICE_CALLABLE static inline void Diff0(const TPoint &p, TArray &&v)
+        DNDS_DEVICE_CALLABLE static void Diff0(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
             t_real zt = p[2];
             const t_real _t0 = zt - 1;
-            const t_real _t1 = ((0.5))*et + ((0.5))*xi + (-0.5);
-            const t_real _t2 = -(0.5)*_t0;
+            const t_real _t1 = ((0.5)) * et + ((0.5)) * xi + (-0.5);
+            const t_real _t2 = -(0.5) * _t0;
             const t_real _t3 = zt + 1;
-            const t_real _t4 = ((0.5))*_t3;
-            v(0, 0) = _t0*_t1;
-            v(0, 1) = _t2*xi;
-            v(0, 2) = _t2*et;
-            v(0, 3) = -_t1*_t3;
-            v(0, 4) = _t4*xi;
-            v(0, 5) = _t4*et;
+            const t_real _t4 = ((0.5)) * _t3;
+            v(0, 0) = _t0 * _t1;
+            v(0, 1) = _t2 * xi;
+            v(0, 2) = _t2 * et;
+            v(0, 3) = -_t1 * _t3;
+            v(0, 4) = _t4 * xi;
+            v(0, 5) = _t4 * et;
         }
 
         template <class TPoint, class TArray>
-        DNDS_DEVICE_CALLABLE static inline void Diff1(const TPoint &p, TArray &&v)
+        DNDS_DEVICE_CALLABLE static void Diff1(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
             t_real zt = p[2];
-            const t_real _t0 = ((0.5))*zt;
+            const t_real _t0 = ((0.5)) * zt;
             const t_real _t1 = _t0 + (-0.5);
             const t_real _t2 = -_t1;
             const t_real _t3 = _t0 + (0.5);
             const t_real _t4 = -_t3;
-            const t_real _t5 = ((0.5))*et;
-            const t_real _t6 = ((0.5))*xi;
+            const t_real _t5 = ((0.5)) * et;
+            const t_real _t6 = ((0.5)) * xi;
             const t_real _t7 = _t5 + _t6 + (-0.5);
             v(0, 0) = _t1;
             v(0, 1) = _t2;
@@ -68,7 +69,7 @@ namespace DNDS::Geom::Elem
         }
 
         template <class TPoint, class TArray>
-        DNDS_DEVICE_CALLABLE static inline void Diff2(const TPoint &p, TArray &&v)
+        DNDS_DEVICE_CALLABLE static void Diff2(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
@@ -84,7 +85,7 @@ namespace DNDS::Geom::Elem
         }
 
         template <class TPoint, class TArray>
-        DNDS_DEVICE_CALLABLE static inline void Diff3(const TPoint &p, TArray &&v)
+        DNDS_DEVICE_CALLABLE static void Diff3(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
@@ -108,60 +109,56 @@ namespace DNDS::Geom::Elem
         static constexpr int numEdges = 9;
         static constexpr ParamSpace paramSpace = PrismSpace;
         static constexpr t_real paramSpaceVol = 1.0;
-
+        // 3 * NNodes is a compile-time constant; no overflow possible.
+        // NOLINTNEXTLINE(bugprone-implicit-widening-of-multiplication-result)
         static constexpr std::array<t_real, 3 * 6> standardCoords = {
-            0, 0, -1,  // Node 0: vertex
-            1, 0, -1,  // Node 1: vertex
-            0, 1, -1,  // Node 2: vertex
+            0, 0, -1, // Node 0: vertex
+            1, 0, -1, // Node 1: vertex
+            0, 1, -1, // Node 2: vertex
             0, 0, 1,  // Node 3: vertex
             1, 0, 1,  // Node 4: vertex
-            0, 1, 1};  // Node 5: vertex
+            0, 1, 1}; // Node 5: vertex
 
         static constexpr ElemType GetFaceType(t_index iFace)
         {
-            if (iFace < 3) return Quad4;
+            if (iFace < 3)
+                return Quad4;
             return Tri3;
         }
 
-        static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{
-            {0, 1, 4, 3},
-            {1, 2, 5, 4},
-            {2, 0, 3, 5},
-            {0, 2, 1},
-            {3, 4, 5}
-        }};
+        static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{{0, 1, 4, 3},
+                                                                              {1, 2, 5, 4},
+                                                                              {2, 0, 3, 5},
+                                                                              {0, 2, 1},
+                                                                              {3, 4, 5}}};
 
         static constexpr ElemType GetEdgeType(t_index /*iEdge*/) { return Line2; }
 
-        static constexpr std::array<std::array<t_index, 3>, 9> edgeNodes = {{
-            {0, 1},
-            {1, 2},
-            {2, 0},
-            {0, 3},
-            {1, 4},
-            {2, 5},
-            {3, 4},
-            {4, 5},
-            {5, 3}
-        }};
+        static constexpr std::array<std::array<t_index, 3>, 9> edgeNodes = {{{0, 1},
+                                                                             {1, 2},
+                                                                             {2, 0},
+                                                                             {0, 3},
+                                                                             {1, 4},
+                                                                             {2, 5},
+                                                                             {3, 4},
+                                                                             {4, 5},
+                                                                             {5, 3}}};
 
         static constexpr ElemType elevatedType = Prism18;
         static constexpr int numElevNodes = 12;
 
-        static constexpr std::array<tElevSpan, 12> elevSpans = {{
-            {0, 1},
-            {1, 2},
-            {2, 0},
-            {3, 4},
-            {4, 5},
-            {5, 3},
-            {0, 3},
-            {1, 4},
-            {2, 5},
-            {0, 1, 4, 3},
-            {1, 2, 5, 4},
-            {2, 0, 3, 5}
-        }};
+        static constexpr std::array<tElevSpan, 12> elevSpans = {{{0, 1},
+                                                                 {1, 2},
+                                                                 {2, 0},
+                                                                 {3, 4},
+                                                                 {4, 5},
+                                                                 {5, 3},
+                                                                 {0, 3},
+                                                                 {1, 4},
+                                                                 {2, 5},
+                                                                 {0, 1, 4, 3},
+                                                                 {1, 2, 5, 4},
+                                                                 {2, 0, 3, 5}}};
 
         static constexpr std::array<ElemType, 12> elevNodeSpanTypes = {
             Line2, Line2, Line2, Line2, Line2, Line2, Line2, Line2, Line2, Quad4, Quad4, Quad4};
@@ -171,6 +168,5 @@ namespace DNDS::Geom::Elem
         static constexpr std::array<int, 6> vtkNodeOrder = {0, 1, 2, 3, 4, 5};
     };
     // <GEN_ELEM_TRAITS_END>
-
 
 } // namespace DNDS::Geom::Elem

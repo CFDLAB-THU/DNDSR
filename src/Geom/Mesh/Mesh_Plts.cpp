@@ -1,6 +1,7 @@
 #include "Geom/Quadrature.hpp"
 #include "Mesh.hpp"
 #include "Geom/CGNS.hpp"
+#include <array>
 #include <thread>
 #include <filesystem>
 #include <base64_rfc4648.hpp>
@@ -149,9 +150,9 @@ namespace DNDS::Geom
 
             std::filesystem::path outPath{fname + ".dir"};
             std::filesystem::create_directories(outPath);
-            char BUF[512];
-            std::sprintf(BUF, "%06d", mpi.rank);
-            fname = getStringForcePath(outPath / (std::string(BUF) + ".plt"));
+            std::array<char, 512> BUF{};
+            std::sprintf(BUF.data(), "%06d", mpi.rank);
+            fname = getStringForcePath(outPath / (std::string(BUF.data()) + ".plt"));
         }
 
         std::ofstream fout(fname, std::ios::binary);
@@ -160,38 +161,38 @@ namespace DNDS::Geom
             DNDS::log() << "Error: WriteMeshDebugTecASCII open \"" << fname << "\" failure" << std::endl;
             DNDS_assert(false);
         }
-        const char magic_word[] = "#!TDV112";
-        const int b_magic_word = sizeof(magic_word) - 1;
-        int32_t intBuf;
-        double_t doubleBuf;
-        float_t floatBuf;
+        const std::array<char, 9> magic_word{"#!TDV112"};
+        const int b_magic_word = magic_word.size() - 1;
+        int32_t intBuf = 0;
+        double_t doubleBuf = 0.0;
+        float_t floatBuf = 0.0F;
 
         auto writeInt = [&](int d) -> void
         {
             intBuf = d;
-            fout.write((char *)(&intBuf), sizeof(intBuf));
+            fout.write(reinterpret_cast<char *>(&intBuf), sizeof(intBuf));
         };
         auto writeFloat = [&](float_t d) -> void
         {
             floatBuf = d;
-            fout.write((char *)(&floatBuf), sizeof(floatBuf));
+            fout.write(reinterpret_cast<char *>(&floatBuf), sizeof(floatBuf));
         };
         auto writeDouble = [&](double_t d) -> void
         {
             doubleBuf = d;
-            fout.write((char *)(&doubleBuf), sizeof(doubleBuf));
+            fout.write(reinterpret_cast<char *>(&doubleBuf), sizeof(doubleBuf));
         };
         auto writeString = [&](const std::string &title) -> void
         {
             for (auto i : title)
             {
-                intBuf = i;
-                fout.write((char *)(&intBuf), sizeof(intBuf));
+                intBuf = static_cast<unsigned char>(i);
+                fout.write(reinterpret_cast<char *>(&intBuf), sizeof(intBuf));
             }
             intBuf = 0;
-            fout.write((char *)(&intBuf), sizeof(intBuf));
+            fout.write(reinterpret_cast<char *>(&intBuf), sizeof(intBuf));
         };
-        fout.write(magic_word, b_magic_word);
+        fout.write(magic_word.data(), b_magic_word);
         writeInt(1);
         writeInt(0); //! full: write both grid and data
         writeString("Title Here");
@@ -301,9 +302,8 @@ namespace DNDS::Geom
         std::vector<double_t> minValPoint(arraySizPoint, DNDS::veryLargeReal);
         std::vector<double_t> maxValPoint(arraySizPoint, -DNDS::veryLargeReal); //! Tecplot is sensitive to the correctness of min/max val
         for (int idim = 0; idim < 3; idim++)
-            for (DNDS::index i = 0; i < nodeDedu2Old.size(); i++)
+            for (DNDS::index iN : nodeDedu2Old)
             {
-                index iN = nodeDedu2Old.at(i);
                 if (iN < nNode)
                 {
                     minVal[idim] = std::min(coordOut[iN](idim), minVal[idim]);
@@ -350,9 +350,8 @@ namespace DNDS::Geom
 
         for (int idim = 0; idim < 3; idim++)
         {
-            for (DNDS::index i = 0; i < nodeDedu2Old.size(); i++)
+            for (auto iN : nodeDedu2Old)
             {
-                DNDS::index iN = nodeDedu2Old.at(i);
                 if (iN < nNode)
                     writeDouble(coordOut[iN](idim));
                 else
@@ -362,9 +361,8 @@ namespace DNDS::Geom
 
         for (int idata = 0; idata < arraySizPoint; idata++)
         {
-            for (DNDS::index i = 0; i < nodeDedu2Old.size(); i++)
+            for (auto iN : nodeDedu2Old)
             {
-                DNDS::index iN = nodeDedu2Old.at(i);
                 if (iN < nNode)
                     writeDouble(dataPoint(idata, iN));
                 else
@@ -620,7 +618,7 @@ namespace DNDS::Geom
             std::filesystem::path foutPP{fnameIN + ".pvtu"};
             std::ofstream foutP{foutPP};
             DNDS_assert(foutP);
-            if (seriesName.size())
+            if (!seriesName.empty())
                 updateVTKSeries(seriesName + ".pvtu.series", getStringForcePath(foutPP.filename()), t);
 
             writeXMLEntity(
@@ -717,10 +715,10 @@ namespace DNDS::Geom
                                 });
                             for (DNDS::MPI_int iRank = 0; iRank < nMPIRanks; iRank++)
                             {
-                                char BUF[512];
-                                std::sprintf(BUF, "%04d", iRank);
+                                std::array<char, 512> BUF{};
+                                std::sprintf(BUF.data(), "%04d", iRank);
                                 std::string cFileNameRelPVTU = getStringForcePath(
-                                    outPath.lexically_relative(outPath.parent_path()) / (std::string(BUF) + ".vtu"));
+                                    outPath.lexically_relative(outPath.parent_path()) / (std::string(BUF.data()) + ".vtu"));
                                 writeXMLEntity(
                                     out, level, "Piece",
                                     {{"Source", cFileNameRelPVTU}},
@@ -775,7 +773,7 @@ namespace DNDS::Geom
             std::filesystem::path outFile{fname};
             std::filesystem::create_directories(outFile.parent_path() / ".");
             DNDS_assert(mode == SerialOutput && dataIsSerialOut);
-            if (seriesName.size())
+            if (!seriesName.empty())
                 updateVTKSeries(seriesName + ".vtu.series", getStringForcePath(outFile.filename()), t);
         }
         std::filesystem::path outPath; // only valid if parallel out
@@ -783,9 +781,9 @@ namespace DNDS::Geom
         {
             outPath = {fname + ".vtu.dir"};
             std::filesystem::create_directories(outPath);
-            char BUF[512];
-            std::sprintf(BUF, "%04d", mpi.rank);
-            fname = getStringForcePath(outPath / (std::string(BUF) + ".vtu"));
+            std::array<char, 512> BUF{};
+            std::sprintf(BUF.data(), "%04d", mpi.rank);
+            fname = getStringForcePath(outPath / (std::string(BUF.data()) + ".vtu"));
         }
 
         std::ofstream fout(fname);
@@ -871,21 +869,20 @@ namespace DNDS::Geom
                                 std::vector<uint8_t> dataOutBytes;
                                 dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                 size_t top{0};
-                                *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
-                                for (index i = 0; i < nodeDedu2Old.size(); i++)
+                                *reinterpret_cast<uint64_t *>(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
+                                for (auto iN : nodeDedu2Old)
                                 {
-                                    index iN = nodeDedu2Old.at(i);
                                     if (iN < nNode)
                                     {
-                                        *(double *)(dataOutBytes.data() + top) = double(coordOut[iN](0)), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = double(coordOut[iN](1)), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = double(coordOut[iN](2)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(coordOut[iN](0)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(coordOut[iN](1)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(coordOut[iN](2)), top += sizeof(double);
                                     }
                                     else
                                     {
-                                        *(double *)(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(0)), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(1)), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(2)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(0)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(1)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(nodesExtra.at(iN - nNode)(2)), top += sizeof(double);
                                     }
                                 }
                                 out << cppcodec::base64_rfc4648::encode(dataOutBytes);
@@ -1013,9 +1010,9 @@ namespace DNDS::Geom
                                     std::vector<uint8_t> dataOutBytes;
                                     dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                     size_t top{0};
-                                    *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
+                                    *reinterpret_cast<uint64_t *>(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
                                     for (index iCell = 0; iCell < nCell; iCell++)
-                                        *(double *)(dataOutBytes.data() + top) = double(data(i, iCell)), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = double(data(i, iCell)), top += sizeof(double);
                                     out << cppcodec::base64_rfc4648::encode(dataOutBytes);
                                 }
                                 else if (vtuFloatEncodeMode == "ascii")
@@ -1080,12 +1077,12 @@ namespace DNDS::Geom
                                     std::vector<uint8_t> dataOutBytes;
                                     dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                     size_t top{0};
-                                    *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
+                                    *reinterpret_cast<uint64_t *>(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
                                     for (index iCell = 0; iCell < nCell; iCell++)
                                     {
-                                        *(double *)(dataOutBytes.data() + top) = vectorData(i, iCell, 0), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = vectorData(i, iCell, 1), top += sizeof(double);
-                                        *(double *)(dataOutBytes.data() + top) = vectorData(i, iCell, 2), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorData(i, iCell, 0), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorData(i, iCell, 1), top += sizeof(double);
+                                        *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorData(i, iCell, 2), top += sizeof(double);
                                     }
                                     out << cppcodec::base64_rfc4648::encode(dataOutBytes);
                                 }
@@ -1146,14 +1143,13 @@ namespace DNDS::Geom
                                     std::vector<uint8_t> dataOutBytes;
                                     dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                     size_t top{0};
-                                    *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
-                                    for (index ii = 0; ii < nodeDedu2Old.size(); ii++)
+                                    *reinterpret_cast<uint64_t *>(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
+                                    for (auto iN : nodeDedu2Old)
                                     {
-                                        index iN = nodeDedu2Old.at(ii);
                                         if (iN < nNode)
-                                            *(double *)(dataOutBytes.data() + top) = dataPoint(i, iN), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = dataPoint(i, iN), top += sizeof(double);
                                         else
-                                            *(double *)(dataOutBytes.data() + top) = dataPoint(i, nodesExtraAtOriginal.at(iN - nNode)), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = dataPoint(i, nodesExtraAtOriginal.at(iN - nNode)), top += sizeof(double);
                                     }
                                     out << cppcodec::base64_rfc4648::encode(dataOutBytes);
                                 }
@@ -1162,9 +1158,8 @@ namespace DNDS::Geom
                                     /************************/
                                     // ascii
                                     out << std::setprecision(ascii_precision);
-                                    for (index ii = 0; ii < nodeDedu2Old.size(); ii++)
+                                    for (auto iN : nodeDedu2Old)
                                     {
-                                        index iN = nodeDedu2Old.at(ii);
                                         if (iN < nNode)
                                             out << dataPoint(i, iN) << " ";
                                         else
@@ -1194,21 +1189,20 @@ namespace DNDS::Geom
                                     std::vector<uint8_t> dataOutBytes;
                                     dataOutBytes.resize(binSize + sizeof(binSize), 0);
                                     size_t top{0};
-                                    *(uint64_t *)(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
-                                    for (index ii = 0; ii < nodeDedu2Old.size(); ii++)
+                                    *reinterpret_cast<uint64_t *>(dataOutBytes.data() + top) = binSize, top += sizeof(uint64_t);
+                                    for (auto iN : nodeDedu2Old)
                                     {
-                                        index iN = nodeDedu2Old.at(ii);
                                         if (iN < nNode)
                                         {
-                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 0), top += sizeof(double);
-                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 1), top += sizeof(double);
-                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 2), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 0), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 1), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorDataPoint(i, iN, 2), top += sizeof(double);
                                         }
                                         else
                                         {
-                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 0), top += sizeof(double);
-                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 1), top += sizeof(double);
-                                            *(double *)(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 2), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 0), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 1), top += sizeof(double);
+                                            *reinterpret_cast<double *>(dataOutBytes.data() + top) = vectorDataPoint(i, nodesExtraAtOriginal.at(iN - nNode), 2), top += sizeof(double);
                                         }
                                     }
                                     out << cppcodec::base64_rfc4648::encode(dataOutBytes);
@@ -1218,9 +1212,8 @@ namespace DNDS::Geom
                                     /****************************/
                                     // ascii
                                     out << std::setprecision(ascii_precision);
-                                    for (index ii = 0; ii < nodeDedu2Old.size(); ii++)
+                                    for (auto iN : nodeDedu2Old)
                                     {
-                                        index iN = nodeDedu2Old.at(ii);
                                         if (iN < nNode)
                                         {
                                             out << vectorDataPoint(i, iN, 0) << " ";
@@ -1245,7 +1238,7 @@ namespace DNDS::Geom
 
         std::string endianName{"BigEndian"};
         uint32_t beTest = 1; // need c++20 for STL support
-        uint8_t beTestS = *(uint8_t *)(&beTest);
+        uint8_t beTestS = *reinterpret_cast<uint8_t *>(&beTest);
         if (beTestS == 1)
             endianName = "LittleEndian";
 
@@ -1322,13 +1315,13 @@ namespace DNDS::Geom
         std::array<hsize_t, 2> ranksFullUnlim{H5S_UNLIMITED, hsize_t(dim2)};
         std::array<hsize_t, 2> offset{hsize_t(nOffset), 0};
         std::array<hsize_t, 2> siz{hsize_t(nLocal), hsize_t(dim2)};
-        hid_t memSpace = H5Screate_simple(rank, siz.data(), NULL);
+        hid_t memSpace = H5Screate_simple(rank, siz.data(), nullptr);
         hid_t fileSpace = H5Screate_simple(rank, ranksFull.data(), ranksFullUnlim.data());
         hid_t dset_id = H5Dcreate(loc, name, file_dataType, fileSpace, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
         DNDS_assert_info(H5I_INVALID_HID != dset_id, "dataset create failed");
         herr = H5Sclose(fileSpace);
         fileSpace = H5Dget_space(dset_id);
-        herr |= H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), NULL, siz.data(), NULL);
+        herr |= H5Sselect_hyperslab(fileSpace, H5S_SELECT_SET, offset.data(), nullptr, siz.data(), nullptr);
         herr |= H5Dwrite(dset_id, mem_dataType, memSpace, fileSpace, plist_id, buf);
         herr |= H5Dclose(dset_id);
         herr |= H5Sclose(fileSpace);
@@ -1357,7 +1350,7 @@ namespace DNDS::Geom
         // if (mpi.rank == mRank) // only mRank creates could be faulty?
         std::filesystem::create_directories(outFile.parent_path() / ".");
         if (mpi.rank == mRank)
-            if (seriesName.size())
+            if (!seriesName.empty())
                 updateVTKSeries(seriesName + ".vtkhdf.series", getStringForcePath(outFile.filename()), t);
 
         if (isPeriodic)
@@ -1427,7 +1420,7 @@ namespace DNDS::Geom
         // herr |= H5LTset_attribute_long_long(file_id, "VTKHDF", "Version", version.data(), 2);
         {
             std::array<hsize_t, 2> dims{2, 1};
-            hid_t space = H5Screate_simple(1, dims.data(), NULL);
+            hid_t space = H5Screate_simple(1, dims.data(), nullptr);
             hid_t type_attr_id = H5Acreate(VTKHDF_group_id, "Version", H5T_NATIVE_LLONG, space, H5P_DEFAULT, H5P_DEFAULT);
             herr |= H5Awrite(type_attr_id, H5T_NATIVE_LLONG, version.data());
             H5Aclose(type_attr_id);
@@ -1591,13 +1584,13 @@ namespace DNDS::Geom
         std::vector<cgsize_t> elementPolyData(bndCellOffsets.back());
         for (index iBnd = 0; iBnd < nBnd; iBnd++)
         {
-            elementPolyData.at(bndCellOffsets[iBnd]) = __getCGNSTypeFromElemType(this->bndElemInfo(iBnd, 0).getElemType());
+            elementPolyData.at(bndCellOffsets[iBnd]) = _getCGNSTypeFromElemType(this->bndElemInfo(iBnd, 0).getElemType());
             for (rowsize ib2n = 0; ib2n < bnd2node[iBnd].size(); ib2n++)
                 elementPolyData.at(bndCellOffsets[iBnd] + 1 + ib2n) = bnd2node[iBnd][ib2n] + 1; // global node index, 1 based
         }
         for (index iCell = 0; iCell < nCell; iCell++)
         {
-            elementPolyData.at(bndCellOffsets[iCell + nBnd]) = __getCGNSTypeFromElemType(this->cellElemInfo(iCell, 0).getElemType());
+            elementPolyData.at(bndCellOffsets[iCell + nBnd]) = _getCGNSTypeFromElemType(this->cellElemInfo(iCell, 0).getElemType());
             for (rowsize ic2n = 0; ic2n < cell2node[iCell].size(); ic2n++)
                 elementPolyData.at(bndCellOffsets[iCell + nBnd] + 1 + ic2n) = cell2node[iCell][ic2n] + 1; // global node index, 1 based
         }
@@ -1616,7 +1609,7 @@ namespace DNDS::Geom
             coordsZ[iNode] = coords[iNode](2);
 
         std::map<std::string, std::vector<cgsize_t>> bocoLists;
-        for (auto &name : allNames)
+        for (const auto &name : allNames)
             bocoLists.insert({name, std::vector<cgsize_t>()});
         for (index iBnd = 0; iBnd < nBnd; iBnd++)
         {
@@ -1646,8 +1639,8 @@ namespace DNDS::Geom
         int iZone{0};
         std::array<cgsize_t, 3> zone_sizes{nNodeGlobal, nCellGlobal, 0};
         DNDS_CGNS_CALL_EXIT(cg_zone_write(cgns_file, iBase, "Zone_0", zone_sizes.data(), Unstructured, &iZone));
-        std::array<int, 3> iCoords;
-        DNDS_CGNS_CALL_EXIT(cgp_coord_write(cgns_file, iBase, iZone, RealDouble, "CoordinateX", &iCoords[0]));
+        std::array<int, 3> iCoords{};
+        DNDS_CGNS_CALL_EXIT(cgp_coord_write(cgns_file, iBase, iZone, RealDouble, "CoordinateX", iCoords.data()));
         DNDS_CGNS_CALL_EXIT(cgp_coord_write(cgns_file, iBase, iZone, RealDouble, "CoordinateY", &iCoords[1]));
         DNDS_CGNS_CALL_EXIT(cgp_coord_write(cgns_file, iBase, iZone, RealDouble, "CoordinateZ", &iCoords[2]));
         std::array<cgsize_t, 1> rmin{nNodeProcOffset + 1};     // note 1 based
@@ -1669,9 +1662,9 @@ namespace DNDS::Geom
         for (size_t i = 0; i < allNames.size(); i++)
             if (bocoListLengthsGlobal[i] > 0)
             {
-                int iBC;
+                int iBC = 0;
                 DNDS_CGNS_CALL_EXIT(cg_boco_write(cgns_file, iBase, iZone, allNames[i].data(), BCType_t::BCTypeNull, PointList,
-                                                  bocoListLengthsGlobal[i], NULL, &iBC)); // use NULL to postpone the data write
+                                                  bocoListLengthsGlobal[i], nullptr, &iBC)); // use nullptr to postpone the data write
                 DNDS_CGNS_CALL_EXIT(cg_boco_gridlocation_write(cgns_file, iBase, iZone, iBC, this->dim == 3 ? GridLocation_t::FaceCenter : GridLocation_t::EdgeCenter));
                 DNDS_CGNS_CALL_EXIT(cg_goto(cgns_file, iBase, "Zone_t", iZone, "ZoneBC_t", 1, "BC_t", iBC, "PointList", 0, ""));
                 index nBCLocal = bocoListLengths[i];

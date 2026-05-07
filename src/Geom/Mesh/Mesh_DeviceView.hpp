@@ -113,9 +113,9 @@ namespace DNDS::Geom
 
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(AdjIndexInfoDeviceView, AdjIndexInfoDeviceView)
 
-        DNDS_DEVICE_CALLABLE bool isLocal() const { return state == Adj_PointToLocal; }
-        DNDS_DEVICE_CALLABLE bool isGlobal() const { return state == Adj_PointToGlobal; }
-        DNDS_DEVICE_CALLABLE bool isBuilt() const { return state != Adj_Unknown; }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] bool isLocal() const { return state == Adj_PointToLocal; }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] bool isGlobal() const { return state == Adj_PointToGlobal; }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] bool isBuilt() const { return state != Adj_Unknown; }
     };
 
     /// \brief Mutable device view for AdjPairTracked.
@@ -309,20 +309,20 @@ namespace DNDS::Geom
 
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(UnstructuredMeshDeviceView, UnstructuredMeshDeviceView)
 
-        DNDS_DEVICE_CALLABLE index NumNode() const { return coords.father.Size(); }
-        DNDS_DEVICE_CALLABLE index NumCell() const { return cell2node.father.Size(); }
-        DNDS_DEVICE_CALLABLE index NumFace() const { return face2node.father.Size(); }
-        DNDS_DEVICE_CALLABLE index NumBnd() const { return bnd2node.father.Size(); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index NumNode() const { return coords.father.Size(); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index NumCell() const { return cell2node.father.Size(); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index NumFace() const { return face2node.father.Size(); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index NumBnd() const { return bnd2node.father.Size(); }
 
-        DNDS_DEVICE_CALLABLE index NumNodeGhost() const { return coords.son.Size(); }
-        DNDS_DEVICE_CALLABLE index NumCellGhost() const { return cell2node.son.Size(); }
-        DNDS_DEVICE_CALLABLE index NumFaceGhost() const { return face2node.son.Size(); }
-        DNDS_DEVICE_CALLABLE index NumBndGhost() const { return bnd2node.son.Size(); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index NumNodeGhost() const { return coords.son.Size(); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index NumCellGhost() const { return cell2node.son.Size(); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index NumFaceGhost() const { return face2node.son.Size(); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index NumBndGhost() const { return bnd2node.son.Size(); }
 
-        DNDS_DEVICE_CALLABLE index NumNodeProc() const { return coords.Size(); }
-        DNDS_DEVICE_CALLABLE index NumCellProc() const { return cell2node.Size(); }
-        DNDS_DEVICE_CALLABLE index NumFaceProc() const { return face2node.Size(); }
-        DNDS_DEVICE_CALLABLE index NumBndProc() const { return bnd2node.Size(); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index NumNodeProc() const { return coords.Size(); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index NumCellProc() const { return cell2node.Size(); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index NumFaceProc() const { return face2node.Size(); }
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index NumBndProc() const { return bnd2node.Size(); }
 
         DNDS_DEVICE_CALLABLE Elem::Element GetCellElement(index iC) { return Elem::Element{cellElemInfo(iC, 0).getElemType()}; }
         DNDS_DEVICE_CALLABLE Elem::Element GetFaceElement(index iF) { return Elem::Element{faceElemInfo(iF, 0).getElemType()}; }
@@ -366,7 +366,7 @@ namespace DNDS::Geom
          * @brief directly load coords; gets faulty if isPeriodic!
          */
         template <class tC2n>
-        DNDS_DEVICE_CALLABLE void __GetCoords(const tC2n &c2n, tSmallCoords &cs)
+        DNDS_DEVICE_CALLABLE void _detail_GetCoords(const tC2n &c2n, tSmallCoords &cs)
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
@@ -381,7 +381,7 @@ namespace DNDS::Geom
          * @brief directly load coords; gets faulty if isPeriodic!
          */
         template <class tC2n, class tCoordExt>
-        DNDS_DEVICE_CALLABLE void __GetCoords(const tC2n &c2n, tSmallCoords &cs, tCoordExt &coo)
+        DNDS_DEVICE_CALLABLE void _detail_GetCoords(const tC2n &c2n, tSmallCoords &cs, tCoordExt &coo)
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
@@ -396,7 +396,7 @@ namespace DNDS::Geom
          * @brief specially for periodicity
          */
         template <class tC2n, class tC2nPbi>
-        DNDS_DEVICE_CALLABLE void __GetCoordsOnElem(const tC2n &c2n, const tC2nPbi &c2nPbi, tSmallCoords &cs)
+        DNDS_DEVICE_CALLABLE void _detail_GetCoordsOnElem(const tC2n &c2n, const tC2nPbi &c2nPbi, tSmallCoords &cs)
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
@@ -411,7 +411,7 @@ namespace DNDS::Geom
          * @brief specially for periodicity
          */
         template <class tC2n, class tC2nPbi, class tCoordExt>
-        DNDS_DEVICE_CALLABLE void __GetCoordsOnElem(const tC2n &c2n, const tC2nPbi &c2nPbi, tSmallCoords &cs, tCoordExt &coo)
+        DNDS_DEVICE_CALLABLE void _detail_GetCoordsOnElem(const tC2n &c2n, const tC2nPbi &c2nPbi, tSmallCoords &cs, tCoordExt &coo)
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
@@ -425,25 +425,25 @@ namespace DNDS::Geom
         DNDS_DEVICE_CALLABLE void GetCoordsOnCell(index iCell, tSmallCoords &cs)
         {
             if (!isPeriodic)
-                __GetCoords(cell2node[iCell], cs);
+                _detail_GetCoords(cell2node[iCell], cs);
             else
-                __GetCoordsOnElem(cell2node[iCell], cell2nodePbi[iCell], cs);
+                _detail_GetCoordsOnElem(cell2node[iCell], cell2nodePbi[iCell], cs);
         }
 
         DNDS_DEVICE_CALLABLE void GetCoordsOnCell(index iCell, tSmallCoords &cs, tCoordPair &coo)
         {
             if (!isPeriodic)
-                __GetCoords(cell2node[iCell], cs, coo);
+                _detail_GetCoords(cell2node[iCell], cs, coo);
             else
-                __GetCoordsOnElem(cell2node[iCell], cell2nodePbi[iCell], cs, coo);
+                _detail_GetCoordsOnElem(cell2node[iCell], cell2nodePbi[iCell], cs, coo);
         }
 
         DNDS_DEVICE_CALLABLE void GetCoordsOnFace(index iFace, tSmallCoords &cs)
         {
             if (!isPeriodic)
-                __GetCoords(face2node[iFace], cs);
+                _detail_GetCoords(face2node[iFace], cs);
             else
-                __GetCoordsOnElem(face2node[iFace], face2nodePbi[iFace], cs);
+                _detail_GetCoordsOnElem(face2node[iFace], face2nodePbi[iFace], cs);
         }
 
         DNDS_DEVICE_CALLABLE tPoint GetCoordNodeOnCell(index iCell, rowsize ic2n)
@@ -474,13 +474,13 @@ namespace DNDS::Geom
         //     return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[face2node(iFace, if2n)], face2nodePbi(iFace, if2n));
         // }
 
-        DNDS_DEVICE_CALLABLE bool CellIsFaceBack(index iCell, index iFace) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] bool CellIsFaceBack(index iCell, index iFace) const
         {
             DNDS_assert(face2cell(iFace, 0) == iCell || face2cell(iFace, 1) == iCell);
             return face2cell(iFace, 0) == iCell;
         }
 
-        DNDS_DEVICE_CALLABLE index CellFaceOther(index iCell, index iFace) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index CellFaceOther(index iCell, index iFace) const
         {
             return CellIsFaceBack(iCell, iFace)
                        ? face2cell(iFace, 1)

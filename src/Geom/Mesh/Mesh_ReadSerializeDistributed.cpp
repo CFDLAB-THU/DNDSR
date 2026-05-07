@@ -3,6 +3,7 @@
 #include "Mesh_PartitionHelpers.hpp"
 #include "Geom/Metis.hpp"
 
+#include <array>
 #include <unordered_set>
 
 namespace DNDS::Geom
@@ -110,7 +111,7 @@ namespace DNDS::Geom
         {
             std::string meshRead;
             index dimRead{0}, sizeRead{0};
-            int isPeriodicRead;
+            int isPeriodicRead = 0;
             serializerP->ReadString("mesh", meshRead);
             serializerP->ReadIndex("dim", dimRead);
             serializerP->ReadIndex("MPISize", sizeRead);
@@ -287,15 +288,15 @@ namespace DNDS::Geom
 
         std::vector<idx_t> vtxdist(mpi.size + 1);
         for (MPI_int r = 0; r <= mpi.size; r++)
-            vtxdist[r] = _METIS::indexToIdx(cell2cellFacial->pLGlobalMapping->ROffsets().at(r));
+            vtxdist[r] = METIS::indexToIdx(cell2cellFacial->pLGlobalMapping->ROffsets().at(r));
 
         std::vector<idx_t> xadj(cell2cellFacial->Size() + 1);
         for (index i = 0; i <= cell2cellFacial->Size(); i++)
-            xadj[i] = _METIS::indexToIdx(cell2cellFacial->rowPtr(i) - cell2cellFacial->rowPtr(0));
+            xadj[i] = METIS::indexToIdx(cell2cellFacial->rowPtr(i) - cell2cellFacial->rowPtr(0));
 
         std::vector<idx_t> adjncy(xadj.back());
         for (index i = 0; i < xadj.back(); i++)
-            adjncy[i] = _METIS::indexToIdx(cell2cellFacial->data()[i]);
+            adjncy[i] = METIS::indexToIdx(cell2cellFacial->data()[i]);
 
         if (adjncy.empty())
             adjncy.resize(1, -1); // cope with zero-sized data
@@ -311,17 +312,17 @@ namespace DNDS::Geom
             idx_t nCon{1};
             idx_t wgtflag{0}, numflag{0};
             std::vector<real_t> tpWeights(static_cast<size_t>(nPart) * nCon, 1.0 / nPart);
-            real_t ubVec[1]{1.05};
-            idx_t optsC[3]{1, 0, static_cast<idx_t>(partitionOptions.metisSeed)};
-            idx_t objval;
+            std::array<real_t, 1> ubVec{1.05};
+            std::array<idx_t, 3> optsC{1, 0, static_cast<idx_t>(partitionOptions.metisSeed)};
+            idx_t objval = 0;
             std::vector<idx_t> partOut(cell2cellFacial->Size());
             if (partOut.empty())
                 partOut.resize(1, 0);
 
             int ret = ParMETIS_V3_PartKway(
                 vtxdist.data(), xadj.data(), adjncy.data(),
-                NULL, NULL, &wgtflag, &numflag,
-                &nCon, &nPart, tpWeights.data(), ubVec, optsC,
+                nullptr, nullptr, &wgtflag, &numflag,
+                &nCon, &nPart, tpWeights.data(), ubVec.data(), optsC.data(),
                 &objval, partOut.data(), &mpi.comm);
             DNDS_assert_info(ret == METIS_OK,
                              fmt::format("ParMETIS_V3_PartKway returned {}", ret));
@@ -375,8 +376,8 @@ namespace DNDS::Geom
             for (rowsize ic2n = 0; ic2n < cell2node.father->RowSize(iCell); ic2n++)
             {
                 index iNode = (*cell2node.father)(iCell, ic2n);
-                MPI_int rank;
-                index val;
+                MPI_int rank = UnInitMPIInt;
+                index val = UnInitIndex;
                 bool found = coords.father->pLGlobalMapping->search(iNode, rank, val);
                 DNDS_assert(found);
                 if (rank == mpi.rank)
@@ -401,8 +402,8 @@ namespace DNDS::Geom
         for (index iBnd = 0; iBnd < bnd2node.father->Size(); iBnd++)
         {
             index iOwnerCell = bnd2cell(iBnd, 0);
-            MPI_int ownerRank;
-            index ownerVal;
+            MPI_int ownerRank = UnInitMPIInt;
+            index ownerVal = UnInitIndex;
             bool found = cellPartArr->pLGlobalMapping->search(iOwnerCell, ownerRank, ownerVal);
             DNDS_assert(found);
             if (ownerRank != mpi.rank)
@@ -420,11 +421,11 @@ namespace DNDS::Geom
             index iOwnerCell = bnd2cell(iBnd, 0);
             DNDS_assert_info(iOwnerCell != UnInitIndex,
                              fmt::format("bnd {} has no owner cell after RecoverCell2CellAndBnd2Cell", iBnd));
-            MPI_int ownerRank;
-            index ownerVal;
+            MPI_int ownerRank = UnInitMPIInt;
+            index ownerVal = UnInitIndex;
             bool foundOwner = cellPartArr->pLGlobalMapping->search(iOwnerCell, ownerRank, ownerVal);
             DNDS_assert(foundOwner);
-            index targetPart;
+            index targetPart = UnInitIndex;
             if (ownerRank == mpi.rank)
                 targetPart = (*cellPartArr)(ownerVal, 0);
             else

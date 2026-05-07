@@ -20,14 +20,23 @@
 
 namespace DNDS::Geom
 {
+    // Value-semantic class: all members are value types (ssp, TTrans);
+    // = default for all special members per rule of five.
     struct CoordPairDOF : public tCoordPair
     {
+        CoordPairDOF() = default;
+        ~CoordPairDOF() = default;
+        CoordPairDOF(const CoordPairDOF &) = default;
+        CoordPairDOF(CoordPairDOF &&) = default;
+        CoordPairDOF &operator=(const CoordPairDOF &) = default;
+        CoordPairDOF &operator=(CoordPairDOF &&) = default;
+
         real dot(CoordPairDOF &R)
         {
             real ret = 0;
             for (index i = 0; i < this->father->Size(); i++)
                 ret += (*this)[i].dot(R[i]);
-            real retSum;
+            real retSum = UnInitReal;
             MPI::Allreduce(&ret, &retSum, 1, DNDS_MPI_REAL, MPI_SUM, this->father->getMPI().comm);
             return retSum;
         }
@@ -66,20 +75,19 @@ namespace DNDS::Geom
     {
         tCoord ref;
         using coord_t = real; //!< The type of each coordinate
-        PointCloudKDTreeCoordPair(tCoord &v)
+        PointCloudKDTreeCoordPair(tCoord &v) : ref(v)
         {
-            ref = v;
         }
 
         // Must return the number of data points
-        [[nodiscard]] inline size_t
+        [[nodiscard]] size_t
         kdtree_get_point_count() const
         {
             DNDS_assert(ref);
             return ref->Size();
         }
 
-        [[nodiscard]] inline real kdtree_get_pt(const size_t idx, const size_t dim) const
+        [[nodiscard]] real kdtree_get_pt(const size_t idx, const size_t dim) const
         {
             DNDS_assert(ref);
             return ref->operator[](idx)(dim);
@@ -104,9 +112,9 @@ namespace DNDS::Geom
      */
     struct SmoothSolverSetup
     {
-        std::unordered_set<index> nodesBoundInterpolated;
-        tCoordPair boundInterpCoo;
-        tCoordPair boundInterpVal;
+        std::unordered_set<index> nodesBoundInterpolated{};
+        tCoordPair boundInterpCoo{};
+        tCoordPair boundInterpVal{};
     };
 
     /**
@@ -587,6 +595,7 @@ namespace DNDS::Geom
             // }
         }
 
+        // NOLINTNEXTLINE(readability-simplify-boolean-expr): disabled code block
         if (false)
         { // use superlu_dist to solve
 
@@ -663,6 +672,7 @@ namespace DNDS::Geom
 
             // superlu_gridexit(&grid);
         }
+        // NOLINTNEXTLINE(readability-simplify-boolean-expr): forced code path
         if (true)
         { // use GMRES to solve
             boundInterpCoef.father->createGlobalMapping();

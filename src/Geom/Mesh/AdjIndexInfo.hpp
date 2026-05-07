@@ -40,14 +40,14 @@ namespace DNDS::Geom
         // Queries
         // ============================================================
 
-        MeshAdjState state() const { return _state; }
-        bool isLocal() const { return _state == Adj_PointToLocal; }
-        bool isGlobal() const { return _state == Adj_PointToGlobal; }
-        bool isBuilt() const { return _state != Adj_Unknown; }
-        bool isWired() const { return _targetMapping != nullptr; }
+        [[nodiscard]] MeshAdjState state() const { return _state; }
+        [[nodiscard]] bool isLocal() const { return _state == Adj_PointToLocal; }
+        [[nodiscard]] bool isGlobal() const { return _state == Adj_PointToGlobal; }
+        [[nodiscard]] bool isBuilt() const { return _state != Adj_Unknown; }
+        [[nodiscard]] bool isWired() const { return _targetMapping != nullptr; }
 
         /// Read-only access to the stored mapping (for assertions/comparisons).
-        const t_pLGhostMapping &mapping() const { return _targetMapping; }
+        [[nodiscard]] const t_pLGhostMapping &mapping() const { return _targetMapping; }
 
         // ============================================================
         // State transitions
@@ -156,8 +156,8 @@ namespace DNDS::Geom
                     index &v = adj(i, j);
                     if (v == UnInitIndex)
                         continue;
-                    MPI_int rank;
-                    index val;
+                    MPI_int rank = UnInitMPIInt;
+                    index val = UnInitIndex;
                     if (_targetMapping->search_indexAppend(v, rank, val))
                         v = val;
                     else
@@ -205,8 +205,8 @@ namespace DNDS::Geom
                     index &v = adj(i, j);
                     if (v == UnInitIndex)
                         continue;
-                    MPI_int rank;
-                    index val;
+                    MPI_int rank = UnInitMPIInt;
+                    index val = UnInitIndex;
                     if (_targetMapping->search_indexAppend(v, rank, val))
                         v = val;
                     else
@@ -306,15 +306,15 @@ namespace DNDS::Geom
         }
 
         // State queries (delegate to idx, with data-presence checks)
-        MeshAdjState state() const { return idx.state(); }
-        bool isLocal() const { return idx.isLocal(); }
-        bool isGlobal() const { return idx.isGlobal(); }
+        [[nodiscard]] MeshAdjState state() const { return idx.state(); }
+        [[nodiscard]] bool isLocal() const { return idx.isLocal(); }
+        [[nodiscard]] bool isGlobal() const { return idx.isGlobal(); }
         /// Whether this adjacency is built and has live data.
         /// Unlike AdjIndexInfo::isBuilt(), this also checks that the
         /// father array is non-null, catching stale states after reset.
-        bool isBuilt() const { return this->father && idx.isBuilt(); }
-        bool isWired() const { return idx.isWired(); }
-        const t_pLGhostMapping &mapping() const { return idx.mapping(); }
+        [[nodiscard]] bool isBuilt() const { return this->father && idx.isBuilt(); }
+        [[nodiscard]] bool isWired() const { return idx.isWired(); }
+        [[nodiscard]] const t_pLGhostMapping &mapping() const { return idx.mapping(); }
 
         /// Tear down both the array data and the per-adj state atomically.
         /// After this call, isBuilt() returns false.
@@ -343,7 +343,7 @@ namespace DNDS::Geom
         }
 
         template <DeviceBackend B>
-        auto deviceView() const
+        [[nodiscard]] auto deviceView() const
         {
             auto base = TPair::template deviceView<B>();
             return AdjPairTrackedDeviceViewConst<B, typename TPair::t_arr>{

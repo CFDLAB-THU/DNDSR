@@ -134,13 +134,13 @@ namespace DNDS::Geom::detail
                 }
                 return 0;
             };
-            int nLocalParts = result.localPartitionStarts.size()
+            int nLocalParts = !result.localPartitionStarts.empty()
                                   ? static_cast<int>(result.localPartitionStarts.size()) - 1
                                   : 1;
             auto localPartStart = [&](int iPart) -> index
-            { return result.localPartitionStarts.size() ? result.localPartitionStarts.at(iPart) : 0; };
+            { return !result.localPartitionStarts.empty() ? result.localPartitionStarts.at(iPart) : 0; };
             auto localPartEnd = [&](int iPart) -> index
-            { return result.localPartitionStarts.size() ? result.localPartitionStarts.at(iPart + 1) : nCell; };
+            { return !result.localPartitionStarts.empty() ? result.localPartitionStarts.at(iPart + 1) : nCell; };
 
             std::vector<index> cellNew2Old_new;
             cellNew2Old_new.reserve(nCell);

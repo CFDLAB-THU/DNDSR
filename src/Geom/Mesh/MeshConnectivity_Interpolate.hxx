@@ -30,7 +30,7 @@ namespace DNDS::Geom
 
         // Temporary storage (compacted into ArrayPair at end)
         std::vector<std::vector<index>> ent2nodeVec;
-        std::vector<std::vector<index>> ent2parentVec;  // variable-width: accumulates all parents
+        std::vector<std::vector<index>> ent2parentVec; // variable-width: accumulates all parents
 
         // Per-entity creating (parent, sub) pair — needed for matchExtra callback
         struct EntityOrigin
@@ -588,8 +588,8 @@ namespace DNDS::Geom
         auto getParentRank = [&](index parentLocal) -> MPI_int
         {
             index parentGlobal = parentGhostMapping(-1, parentLocal);
-            MPI_int rank;
-            index val;
+            MPI_int rank = UnInitMPIInt;
+            index val = UnInitIndex;
             auto ret = parentGlobalMapping.search(parentGlobal, rank, val);
             DNDS_assert(ret);
             return rank;
@@ -598,7 +598,7 @@ namespace DNDS::Geom
         struct EntityClassification
         {
             bool owned{false};
-            bool discard{false}; // fully ghost
+            bool discard{false};            // fully ghost
             std::vector<MPI_int> peerRanks; // ranks that need this B's global ID
         };
         std::vector<EntityClassification> classifications(nAllEntities);

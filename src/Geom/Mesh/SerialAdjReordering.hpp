@@ -6,6 +6,7 @@
 
 #include "Geom/Metis.hpp"
 
+#include <array>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graph_utility.hpp>
 #include <boost/graph/minimum_degree_ordering.hpp>
@@ -32,9 +33,10 @@ namespace DNDS::Geom
         index ind_offset = 0,
         std::string metisType = "KWAY", int metisNcuts = 3, int metisUfactor = 5, int metisSeed = 0)
     {
-        idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat_end - mat_begin));
-        idx_t nCon{1}, options[METIS_NOPTIONS];
-        METIS_SetDefaultOptions(options);
+        idx_t nCell = METIS::indexToIdx(size_t_to_signed<index>(mat_end - mat_begin));
+        idx_t nCon{1};
+        std::array<idx_t, METIS_NOPTIONS> options{};
+        METIS_SetDefaultOptions(options.data());
         {
             options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
             options[METIS_OPTION_CTYPE] = METIS_CTYPE_SHEM; //? could try shem?
@@ -78,7 +80,7 @@ namespace DNDS::Geom
             {
                 index iLocal = iCOther - ind_offset;
                 if (iLocal >= 0 && iLocal < nCell)
-                    adjncy[pos++] = _METIS::indexToIdx(iLocal);
+                    adjncy[pos++] = METIS::indexToIdx(iLocal);
             }
         }
 
@@ -88,12 +90,12 @@ namespace DNDS::Geom
         int ret{0};
         if (metisType == "RB")
             ret = METIS_PartGraphRecursive(
-                &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
-                &nPart, NULL, NULL, options, &objval, partOut.data());
+                &nCell, &nCon, xadj.data(), adjncy.data(), nullptr, nullptr, nullptr,
+                &nPart, nullptr, nullptr, options.data(), &objval, partOut.data());
         else if (metisType == "KWAY")
             ret = METIS_PartGraphKway(
-                &nCell, &nCon, xadj.data(), adjncy.data(), NULL, NULL, NULL,
-                &nPart, NULL, NULL, options, &objval, partOut.data());
+                &nCell, &nCon, xadj.data(), adjncy.data(), nullptr, nullptr, nullptr,
+                &nPart, nullptr, nullptr, options.data(), &objval, partOut.data());
 
         DNDS_assert_info(ret == METIS_OK, fmt::format("Metis return not ok, [{}]", ret));
 
@@ -102,9 +104,10 @@ namespace DNDS::Geom
 
     inline std::pair<std::vector<index>, std::vector<index>> ReorderSerialAdj_Metis(const tLocalMatStruct &mat)
     {
-        idx_t nCell = _METIS::indexToIdx(size_t_to_signed<index>(mat.size()));
-        idx_t nCon{1}, options[METIS_NOPTIONS];
-        METIS_SetDefaultOptions(options);
+        idx_t nCell = METIS::indexToIdx(size_t_to_signed<index>(mat.size()));
+        idx_t nCon{1};
+        std::array<idx_t, METIS_NOPTIONS> options{};
+        METIS_SetDefaultOptions(options.data());
         {
             options[METIS_OPTION_CTYPE] = METIS_CTYPE_SHEM;
             options[METIS_OPTION_RTYPE] = METIS_RTYPE_FM;
@@ -132,7 +135,7 @@ namespace DNDS::Geom
         perm.resize(nCell);
         iPerm.resize(nCell);
 
-        int ret = METIS_NodeND(&nCell, xadj.data(), adjncy.data(), NULL, options, perm.data(), iPerm.data());
+        int ret = METIS_NodeND(&nCell, xadj.data(), adjncy.data(), nullptr, options.data(), perm.data(), iPerm.data());
         DNDS_assert_info(ret == METIS_OK, fmt::format("Metis return not ok, [{}]", ret));
 
         std::vector<index> localFillOrderingNew2Old, localFillOrderingOld2New;
@@ -191,10 +194,10 @@ namespace DNDS::Geom
         Vertex startVert = vertex(0, cell2cellG);
         cuthill_mckee_ordering(cell2cellG, startVert, localFillOrderingNew2Old.rbegin(),
                                get(vertex_color, cell2cellG), get(vertex_degree, cell2cellG));
-        std::unordered_set<index> __checkOrder;
+        std::unordered_set<index> _checkOrder;
         for (auto v : localFillOrderingNew2Old)
-            DNDS_assert(v < mat.size() && v >= 0), __checkOrder.insert(v);
-        DNDS_assert_info(__checkOrder.size() == localFillOrderingNew2Old.size(), "The output of boost::cuthill_mckee_ordering is invalid!");
+            DNDS_assert(v < mat.size() && v >= 0), _checkOrder.insert(v);
+        DNDS_assert_info(_checkOrder.size() == localFillOrderingNew2Old.size(), "The output of boost::cuthill_mckee_ordering is invalid!");
 
         for (index iCell = 0; iCell < size_t_to_signed<index>(mat.size()); iCell++)
             localFillOrderingOld2New[localFillOrderingNew2Old[iCell]] = iCell;
@@ -271,9 +274,9 @@ namespace DNDS::Geom
         explicit OffsetRange(const std::vector<const T> &vec, T offset)
             : begin_(vec.data()), end_(vec.data() + vec.size()), offset_(offset) {}
 
-        OffsetIterator<T> begin() const { return {begin_, offset_}; }
-        OffsetIterator<T> end() const { return {end_, offset_}; }
-        ptrdiff_t size() const { return end_ - begin_; }
+        [[nodiscard]] OffsetIterator<T> begin() const { return {begin_, offset_}; }
+        [[nodiscard]] OffsetIterator<T> end() const { return {end_, offset_}; }
+        [[nodiscard]] ptrdiff_t size() const { return end_ - begin_; }
     };
 
     inline std::pair<std::vector<index>, std::vector<index>> ReorderSerialAdj_CorrectRCM(
@@ -320,10 +323,10 @@ namespace DNDS::Geom
             v = localFillOrderingOld2New.size() - 1 - v;
 
         std::unordered_set<index>
-            __checkOrder;
+            _checkOrder;
         for (auto v : localFillOrderingOld2New)
-            DNDS_assert(v < size_t_to_signed<index>(mat_size) && v >= 0), __checkOrder.insert(v);
-        DNDS_check_throw_info(__checkOrder.size() == localFillOrderingOld2New.size(), "The output of CorrectRCM::CuthillMcKeeOrdering is invalid!");
+            DNDS_assert(v < size_t_to_signed<index>(mat_size) && v >= 0), _checkOrder.insert(v);
+        DNDS_check_throw_info(_checkOrder.size() == localFillOrderingOld2New.size(), "The output of CorrectRCM::CuthillMcKeeOrdering is invalid!");
 
         for (index iCell = 0; iCell < size_t_to_signed<index>(mat_size); iCell++)
             localFillOrderingNew2Old[localFillOrderingOld2New[iCell]] = iCell;

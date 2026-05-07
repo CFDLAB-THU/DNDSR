@@ -10,29 +10,29 @@ namespace DNDS::Geom
 {
     struct NodePeriodicBits
     {
-        uint8_t __v{0U};
-        [[nodiscard]] bool getP1() const { return __v & 0x01U; }
-        [[nodiscard]] bool getP2() const { return __v & 0x02U; }
-        [[nodiscard]] bool getP3() const { return __v & 0x04U; }
-        void setP1True() { __v |= 0x01U; }
-        void setP2True() { __v |= 0x02U; }
-        void setP3True() { __v |= 0x04U; }
+        uint8_t _v{0U};
+        [[nodiscard]] bool getP1() const { return _v & 0x01U; }
+        [[nodiscard]] bool getP2() const { return _v & 0x02U; }
+        [[nodiscard]] bool getP3() const { return _v & 0x04U; }
+        void setP1True() { _v |= 0x01U; }
+        void setP2True() { _v |= 0x02U; }
+        void setP3True() { _v |= 0x04U; }
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE(NodePeriodicBits, NodePeriodicBits)
         DNDS_DEVICE_CALLABLE uint8_t operator^(const NodePeriodicBits &r) const
         {
-            return uint8_t(__v ^ r.__v);
+            return uint8_t(_v ^ r._v);
         }
         DNDS_DEVICE_CALLABLE NodePeriodicBits operator&(const NodePeriodicBits &r) const
         {
-            return NodePeriodicBits{uint8_t(__v & r.__v)};
+            return NodePeriodicBits{uint8_t(_v & r._v)};
         }
         DNDS_DEVICE_CALLABLE operator uint8_t() const
         {
-            return uint8_t{__v};
+            return uint8_t{_v};
         }
         DNDS_DEVICE_CALLABLE operator bool() const
         {
-            return bool(__v);
+            return bool(_v);
         }
         DNDS_DEVICE_CALLABLE bool operator==(const NodePeriodicBits &r) const
         {
@@ -41,9 +41,9 @@ namespace DNDS::Geom
         static MPI_Datatype CommType() { return MPI_UINT8_T; }
         static int CommMult() { return 1; }
 
-        inline friend std::ostream &operator<<(std::ostream &o, const NodePeriodicBits &b)
+        friend std::ostream &operator<<(std::ostream &o, const NodePeriodicBits &b)
         {
-            o << int(b.__v);
+            o << int(b._v);
             return o;
         }
     };
@@ -55,19 +55,19 @@ namespace DNDS::Geom
 }
 namespace DNDS
 {
-//     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(Geom::NodePeriodicBits, extern)
-//     DNDS_DEVICE_STORAGE_INST(Geom::NodePeriodicBits, DeviceBackend::Host, extern)
-// #ifdef DNDS_USE_CUDA
-//     DNDS_DEVICE_STORAGE_INST(Geom::NodePeriodicBits, DeviceBackend::CUDA, extern)
-// #endif
+    //     DNDS_DEVICE_STORAGE_BASE_DELETER_INST(Geom::NodePeriodicBits, extern)
+    //     DNDS_DEVICE_STORAGE_INST(Geom::NodePeriodicBits, DeviceBackend::Host, extern)
+    // #ifdef DNDS_USE_CUDA
+    //     DNDS_DEVICE_STORAGE_INST(Geom::NodePeriodicBits, DeviceBackend::CUDA, extern)
+    // #endif
 }
 namespace DNDS::Geom
 {
 
     struct NodeIndexPBI
     {
-        index i;
-        NodePeriodicBits pbi;
+        index i{UnInitIndex};
+        NodePeriodicBits pbi{};
 
         bool operator<(const NodeIndexPBI &r) const
         {
@@ -102,39 +102,50 @@ namespace DNDS::Geom
 
     class NodePeriodicBitsRow // instead of std::vector<NodePeriodicBits> for building on raw buffer as a "mapping" object
     {
-        NodePeriodicBits *__p_indices;
-        rowsize __Row_size;
+        NodePeriodicBits *_p_indices;
+        rowsize _row_size;
 
     public:
-        NodePeriodicBitsRow(NodePeriodicBits *ptr, rowsize siz) : __p_indices(ptr), __Row_size(siz) {} // default actually
+        NodePeriodicBitsRow(NodePeriodicBits *ptr, rowsize siz) : _p_indices(ptr), _row_size(siz) {} // default actually
+
+        // --- Special members (cppcoreguidelines-special-member-functions) ---
+        // NodePeriodicBitsRow is a non-owning view (pointer + size).
+        // The copy-assignment operator deep-copies the pointed-to contents;
+        // all other special members are shallow (trivially copyable members).
+        ~NodePeriodicBitsRow() = default;
+        NodePeriodicBitsRow(const NodePeriodicBitsRow &) = default;
+        NodePeriodicBitsRow(NodePeriodicBitsRow &&) = default;
+        NodePeriodicBitsRow &operator=(NodePeriodicBitsRow &&) = default;
 
         NodePeriodicBits &operator[](rowsize j)
         {
-            DNDS_assert(j >= 0 && j < __Row_size);
-            return __p_indices[j];
+            DNDS_assert(j >= 0 && j < _row_size);
+            return _p_indices[j];
         }
 
         NodePeriodicBits operator[](rowsize j) const
         {
-            DNDS_assert(j >= 0 && j < __Row_size);
-            return __p_indices[j];
+            DNDS_assert(j >= 0 && j < _row_size);
+            return _p_indices[j];
         }
 
         operator std::vector<NodePeriodicBits>() const // copies to a new std::vector<index>
         {
-            return std::vector<NodePeriodicBits>(__p_indices, __p_indices + __Row_size);
+            return {_p_indices, _p_indices + _row_size};
         }
 
         void operator=(const std::vector<NodePeriodicBits> &r)
         {
-            DNDS_assert(__Row_size == r.size());
-            std::copy(r.begin(), r.end(), __p_indices);
+            DNDS_assert(_row_size == r.size());
+            std::copy(r.begin(), r.end(), _p_indices);
         }
 
         void operator=(const NodePeriodicBitsRow &r)
         {
-            DNDS_assert(__Row_size == r.size());
-            std::copy(r.cbegin(), r.cend(), __p_indices);
+            if (this == &r)
+                return;
+            DNDS_assert(_row_size == r.size());
+            std::copy(r.cbegin(), r.cend(), _p_indices);
         }
 
         NodePeriodicBits bitandReduce()
@@ -148,11 +159,11 @@ namespace DNDS::Geom
             return ret;
         }
 
-        NodePeriodicBits *begin() { return __p_indices; }
-        NodePeriodicBits *end() { return __p_indices + __Row_size; } // past-end
-        const NodePeriodicBits *cbegin() const { return __p_indices; }
-        const NodePeriodicBits *cend() const { return __p_indices + __Row_size; } // past-end
-        [[nodiscard]] rowsize size() const { return __Row_size; }
+        NodePeriodicBits *begin() { return _p_indices; }
+        NodePeriodicBits *end() { return _p_indices + _row_size; } // past-end
+        [[nodiscard]] const NodePeriodicBits *cbegin() const { return _p_indices; }
+        [[nodiscard]] const NodePeriodicBits *cend() const { return _p_indices + _row_size; } // past-end
+        [[nodiscard]] rowsize size() const { return _row_size; }
     };
 
     template <rowsize _row_size = 1, rowsize _row_max = _row_size, rowsize _align = NoAlign>
@@ -175,9 +186,9 @@ namespace DNDS::Geom
 
     struct Periodicity
     {
-        std::array<tGPointPortable, 4> rotation;
-        std::array<tPointPortable, 4> translation;
-        std::array<tPointPortable, 4> rotationCenter;
+        std::array<tGPointPortable, 4> rotation{};
+        std::array<tPointPortable, 4> translation{};
+        std::array<tPointPortable, 4> rotationCenter{};
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(Periodicity, Periodicity)
         DNDS_DEVICE_CALLABLE Periodicity()
         {

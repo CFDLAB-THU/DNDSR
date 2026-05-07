@@ -42,7 +42,7 @@ namespace DNDS::Geom
         // Step 1: Build a ghost-pullable lookup of leader's targetRanks.
         ArrayAdjacencyPair<1> leaderLookup;
         leaderLookup.InitPair("followMap_leaderLookup", mpi);
-        index nLeader = static_cast<index>(leaderTargetRanks.size());
+        auto nLeader = static_cast<index>(leaderTargetRanks.size());
         leaderLookup.father->Resize(nLeader);
         for (index i = 0; i < nLeader; i++)
             leaderLookup(i, 0) = static_cast<index>(leaderTargetRanks[i]);
@@ -84,7 +84,7 @@ namespace DNDS::Geom
                 bool found = leaderLookup.trans.pLGhostMapping->search_indexAppend(
                     leaderGlobal, rank, val);
                 DNDS_assert(found);
-                MPI_int leaderTarget = static_cast<MPI_int>(leaderLookup(val, 0));
+                auto leaderTarget = static_cast<MPI_int>(leaderLookup(val, 0));
                 minRank = std::min(minRank, leaderTarget);
             }
             // If no leaders found (should not happen for valid mesh), stay put
@@ -107,7 +107,7 @@ namespace DNDS::Geom
 
         // --- Step 1: Merge explicit maps into allMaps ---
         std::unordered_map<EntityKind, std::vector<MPI_int>> allMaps;
-        for (auto &em : input.explicitMaps)
+        for (const auto &em : input.explicitMaps)
             allMaps[em.kind] = em.targetRanks;
 
         // --- Step 2: Compute follow maps ---
@@ -318,7 +318,7 @@ namespace DNDS::Geom
         auto firstValid = [](std::initializer_list<ssp<GlobalOffsetsMapping>> candidates)
             -> ssp<GlobalOffsetsMapping>
         {
-            for (auto &gm : candidates)
+            for (const auto &gm : candidates)
                 if (gm)
                     return gm;
             return nullptr;

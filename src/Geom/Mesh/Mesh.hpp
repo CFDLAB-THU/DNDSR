@@ -249,8 +249,8 @@ namespace DNDS::Geom
             DNDS_assert(pair.trans.pLGhostMapping);
             if (iGlobal == UnInitIndex)
                 return iGlobal;
-            DNDS::MPI_int rank;
-            DNDS::index val;
+            DNDS::MPI_int rank = UnInitMPIInt;
+            DNDS::index val = UnInitIndex;
             auto result = pair.trans.pLGhostMapping->search_indexAppend(iGlobal, rank, val);
             if (result)
                 return val;
@@ -594,9 +594,9 @@ namespace DNDS::Geom
         /// Legacy implementation preserved for reference/fallback.
         void ReorderLocalCellsLegacy(int nParts = 1, int nPartsInner = 1);
 
-        int NLocalParts() const { return localPartitionStarts.size() ? localPartitionStarts.size() - 1 : 1; }
-        index LocalPartStart(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart) : 0; }
-        index LocalPartEnd(int iPart) const { return localPartitionStarts.size() ? localPartitionStarts.at(iPart + 1) : this->NumCell(); }
+        int NLocalParts() const { return !localPartitionStarts.empty() ? localPartitionStarts.size() - 1 : 1; }
+        index LocalPartStart(int iPart) const { return !localPartitionStarts.empty() ? localPartitionStarts.at(iPart) : 0; }
+        index LocalPartEnd(int iPart) const { return !localPartitionStarts.empty() ? localPartitionStarts.at(iPart + 1) : this->NumCell(); }
 
         index NumNode() const
         {
@@ -712,7 +712,7 @@ namespace DNDS::Geom
          * @brief directly load coords; gets faulty if isPeriodic!
          */
         template <class tC2n>
-        void __GetCoords(const tC2n &c2n, tSmallCoords &cs)
+        void _detail_GetCoords(const tC2n &c2n, tSmallCoords &cs)
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
@@ -731,7 +731,7 @@ namespace DNDS::Geom
          * @brief directly load coords; gets faulty if isPeriodic!
          */
         template <class tC2n, class tCoordExt>
-        void __GetCoords(const tC2n &c2n, tSmallCoords &cs, tCoordExt &coo)
+        void _detail_GetCoords(const tC2n &c2n, tSmallCoords &cs, tCoordExt &coo)
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
@@ -750,7 +750,7 @@ namespace DNDS::Geom
          * @brief specially for periodicity
          */
         template <class tC2n, class tC2nPbi>
-        void __GetCoordsOnElem(const tC2n &c2n, const tC2nPbi &c2nPbi, tSmallCoords &cs)
+        void _detail_GetCoordsOnElem(const tC2n &c2n, const tC2nPbi &c2nPbi, tSmallCoords &cs)
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
@@ -769,7 +769,7 @@ namespace DNDS::Geom
          * @brief specially for periodicity
          */
         template <class tC2n, class tC2nPbi, class tCoordExt>
-        void __GetCoordsOnElem(const tC2n &c2n, const tC2nPbi &c2nPbi, tSmallCoords &cs, tCoordExt &coo)
+        void _detail_GetCoordsOnElem(const tC2n &c2n, const tC2nPbi &c2nPbi, tSmallCoords &cs, tCoordExt &coo)
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
@@ -787,25 +787,25 @@ namespace DNDS::Geom
         void GetCoordsOnCell(index iCell, tSmallCoords &cs)
         {
             if (!isPeriodic)
-                __GetCoords(cell2node[iCell], cs);
+                _detail_GetCoords(cell2node[iCell], cs);
             else
-                __GetCoordsOnElem(cell2node[iCell], cell2nodePbi[iCell], cs);
+                _detail_GetCoordsOnElem(cell2node[iCell], cell2nodePbi[iCell], cs);
         }
 
         void GetCoordsOnCell(index iCell, tSmallCoords &cs, tCoordPair &coo)
         {
             if (!isPeriodic)
-                __GetCoords(cell2node[iCell], cs, coo);
+                _detail_GetCoords(cell2node[iCell], cs, coo);
             else
-                __GetCoordsOnElem(cell2node[iCell], cell2nodePbi[iCell], cs, coo);
+                _detail_GetCoordsOnElem(cell2node[iCell], cell2nodePbi[iCell], cs, coo);
         }
 
         void GetCoordsOnFace(index iFace, tSmallCoords &cs)
         {
             if (!isPeriodic)
-                __GetCoords(face2node[iFace], cs);
+                _detail_GetCoords(face2node[iFace], cs);
             else
-                __GetCoordsOnElem(face2node[iFace], face2nodePbi[iFace], cs);
+                _detail_GetCoordsOnElem(face2node[iFace], face2nodePbi[iFace], cs);
         }
 
         tPoint GetCoordNodeOnCell(index iCell, rowsize ic2n)
@@ -990,7 +990,8 @@ namespace DNDS::Geom
             int wallDistExecution = 0;
             real minWallDist = 1e-10;
             int verbose = 0;
-            WallDistOptions() {} //? why = default is not working
+            // NOLINTNEXTLINE(modernize-use-equals-default): nested class default-init quirk with = default
+            WallDistOptions() {}
 
             DNDS_DECLARE_CONFIG(WallDistOptions)
             {
@@ -1181,7 +1182,7 @@ namespace DNDS::Geom
          * @brief directly load coords; gets faulty if isPeriodic!, analog of mesh's method
          */
         template <class tC2n, class tCoordExt>
-        void __GetCoordsSerial(const tC2n &c2n, tSmallCoords &cs, tCoordExt &coo)
+        void _detail_GetCoordsSerial(const tC2n &c2n, tSmallCoords &cs, tCoordExt &coo)
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
@@ -1195,7 +1196,7 @@ namespace DNDS::Geom
          * @brief specially for periodicity, analog of mesh's method
          */
         template <class tC2n, class tC2nPbi, class tCoordExt>
-        void __GetCoordsOnElemSerial(const tC2n &c2n, const tC2nPbi &c2nPbi, tSmallCoords &cs, tCoordExt &coo)
+        void _detail_GetCoordsOnElemSerial(const tC2n &c2n, const tC2nPbi &c2nPbi, tSmallCoords &cs, tCoordExt &coo)
         {
             cs.resize(Eigen::NoChange, c2n.size());
             for (rowsize i = 0; i < c2n.size(); i++)
@@ -1210,13 +1211,13 @@ namespace DNDS::Geom
         void GetCoordsOnCellSerial(index iCell, tSmallCoords &cs, tCoord &coo)
         {
             if (!mesh->isPeriodic)
-                __GetCoordsSerial((*cell2nodeSerial)[iCell], cs, coo);
+                _detail_GetCoordsSerial((*cell2nodeSerial)[iCell], cs, coo);
             else
-                __GetCoordsOnElemSerial((*cell2nodeSerial)[iCell], (*cell2nodePbiSerial)[iCell], cs, coo);
+                _detail_GetCoordsOnElemSerial((*cell2nodeSerial)[iCell], (*cell2nodePbiSerial)[iCell], cs, coo);
         }
 
-        UnstructuredMeshSerialRW(const decltype(mesh) &n_mesh, DNDS::MPI_int n_mRank)
-            : mesh(n_mesh), mRank(n_mRank) {}
+        UnstructuredMeshSerialRW(decltype(mesh) n_mesh, DNDS::MPI_int n_mRank)
+            : mesh(std::move(n_mesh)), mRank(n_mRank) {}
 
         /// @brief reads a cgns file as serial input
         /**
@@ -1240,7 +1241,7 @@ namespace DNDS::Geom
 
         void ReadFromOpenFOAMAndConvertSerial(const std::string &fName, const std::map<std::string, std::string> &nameMapping, const t_FBCName_2_ID &FBCName_2_ID = FBC_Name_2_ID_Default);
 
-        void Deduplicate1to1Periodic(real searchEps = 1e-8);
+        void Deduplicate1to1Periodic(real search_eps = 1e-8);
 
         // void InterpolateTopology();
 

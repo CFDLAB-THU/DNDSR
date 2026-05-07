@@ -62,114 +62,109 @@ namespace DNDS::Geom::Elem
     // These preserve the old free-function signatures for backward compat.
     // ================================================================
 
-    DNDS_DEVICE_CALLABLE inline constexpr ParamSpace ElemType_to_ParamSpace(const ElemType t)
+    DNDS_DEVICE_CALLABLE constexpr ParamSpace ElemType_to_ParamSpace(const ElemType t)
     {
         return DispatchElementType(t, [](auto tr) -> ParamSpace
                                    { return decltype(tr)::paramSpace; });
     }
 
-    DNDS_DEVICE_CALLABLE inline constexpr ElemType GetFaceType(ElemType t_v, t_index iFace)
+    DNDS_DEVICE_CALLABLE constexpr ElemType GetFaceType(ElemType t_v, t_index iFace)
     {
         return DispatchElementType(t_v, [iFace](auto tr) -> ElemType
                                    { return decltype(tr)::GetFaceType(iFace); });
     }
 
     /// Get the number of edges for a 3D element. Returns 0 for 1D/2D elements.
-    DNDS_DEVICE_CALLABLE inline constexpr t_index GetNumEdges(ElemType t_v)
+    DNDS_DEVICE_CALLABLE constexpr t_index GetNumEdges(ElemType t_v)
     {
         return DispatchElementType(t_v, [](auto tr) -> t_index
-        {
+                                   {
             using T = decltype(tr);
             if constexpr (T::dim >= 3)
                 return T::numEdges;
             else
-                return 0;
-        });
+                return 0; });
     }
 
     /// Get the element type of edge iEdge for a 3D element. Returns UnknownElem for 1D/2D.
-    DNDS_DEVICE_CALLABLE inline constexpr ElemType GetEdgeType(ElemType t_v, t_index iEdge)
+    DNDS_DEVICE_CALLABLE constexpr ElemType GetEdgeType(ElemType t_v, t_index iEdge)
     {
         return DispatchElementType(t_v, [iEdge](auto tr) -> ElemType
-        {
+                                   {
             using T = decltype(tr);
             if constexpr (T::dim >= 3)
                 return T::GetEdgeType(iEdge);
             else
-                return UnknownElem;
-        });
+                return UnknownElem; });
     }
 
-    DNDS_DEVICE_CALLABLE inline constexpr t_real ParamSpaceVol(ParamSpace ps)
+    DNDS_DEVICE_CALLABLE constexpr t_real ParamSpaceVol(ParamSpace ps)
     {
         return Elem::ParamSpaceVolume(ps);
     }
 
-    DNDS_DEVICE_CALLABLE inline constexpr int GetElemElevation_O1O2_NumNode(ElemType t)
+    DNDS_DEVICE_CALLABLE constexpr int GetElemElevation_O1O2_NumNode(ElemType t)
     {
         return DispatchElementType(t, [](auto tr) -> int
                                    { return decltype(tr)::numElevNodes; });
     }
 
-    DNDS_DEVICE_CALLABLE inline constexpr ElemType GetElemElevation_O1O2_ElevatedType(ElemType t)
+    DNDS_DEVICE_CALLABLE constexpr ElemType GetElemElevation_O1O2_ElevatedType(ElemType t)
     {
         return DispatchElementType(t, [](auto tr) -> ElemType
                                    { return decltype(tr)::elevatedType; });
     }
 
-    DNDS_DEVICE_CALLABLE inline constexpr ElemType GetElemElevation_O1O2_NodeSpanType(ElemType t, t_index ine)
+    DNDS_DEVICE_CALLABLE constexpr ElemType GetElemElevation_O1O2_NodeSpanType(ElemType t, t_index ine)
     {
         return DispatchElementType(t, [ine](auto tr) -> ElemType
-        {
+                                   {
             using T = decltype(tr);
             if constexpr (T::numElevNodes > 0)
                 return T::elevNodeSpanTypes[ine];
             else
-                return UnknownElem;
-        });
+                return UnknownElem; });
     }
 
-    DNDS_DEVICE_CALLABLE inline constexpr ElemType GetElemO1(ParamSpace ps)
+    DNDS_DEVICE_CALLABLE constexpr ElemType GetElemO1(ParamSpace ps)
     {
         return ParamSpaceO1Elem(ps);
     }
 
-    DNDS_DEVICE_CALLABLE inline constexpr t_index GetO2ElemBisectNum(ElemType t)
+    DNDS_DEVICE_CALLABLE constexpr t_index GetO2ElemBisectNum(ElemType t)
     {
         return DispatchElementType(t, [](auto tr) -> t_index
-        {
+                                   {
             using T = decltype(tr);
             if constexpr (T::order == 2)
                 return T::numBisect;
             else
-                return 0;
-        });
+                return 0; });
     }
 
-    DNDS_DEVICE_CALLABLE inline constexpr ElemType GetO2ElemBisectElem(ElemType t, t_index i)
+    DNDS_DEVICE_CALLABLE constexpr ElemType GetO2ElemBisectElem(ElemType t, t_index i)
     {
         return DispatchElementType(t, [i](auto tr) -> ElemType
-        {
+                                   {
             using T = decltype(tr);
             if constexpr (T::order == 2)
                 return T::GetBisectElemType(i);
             else
-                return UnknownElem;
-        });
+                return UnknownElem; });
     }
 
-    DNDS_DEVICE_CALLABLE static constexpr real __iipow(real x, int y)
+    DNDS_DEVICE_CALLABLE static constexpr real _iipow(real x, int y)
     {
         if (y == 0)
             return 1.;
         if (y == 1)
             return x;
         if (y > 1)
-            return x * __iipow(x, y - 1);
+            return x * _iipow(x, y - 1);
         if (y == -1)
             return 1. / x;
         if (y < -1)
-            return 1. / x * __iipow(x, y + 1);
+            return 1. / x * _iipow(x, y + 1);
         return UnInitReal;
     }
 
@@ -191,7 +186,7 @@ namespace DNDS::Geom::Elem
         static_assert(diffOrder == 0 || diffOrder == 1 || diffOrder == 2 || diffOrder == 3);
 
         DispatchElementType(t, [&](auto traits)
-        {
+                            {
             constexpr ElemType eType = decltype(traits)::elemType;
             if constexpr (diffOrder == 0)
                 ShapeFuncImpl<eType>::Diff0(p, std::forward<TArray>(v));
@@ -200,8 +195,7 @@ namespace DNDS::Geom::Elem
             else if constexpr (diffOrder == 2)
                 ShapeFuncImpl<eType>::Diff2(p, std::forward<TArray>(v));
             else if constexpr (diffOrder == 3)
-                ShapeFuncImpl<eType>::Diff3(p, std::forward<TArray>(v));
-        });
+                ShapeFuncImpl<eType>::Diff3(p, std::forward<TArray>(v)); });
     }
 
     using tNj = Eigen::RowVector<t_real, Eigen::Dynamic>;
@@ -286,14 +280,13 @@ namespace DNDS::Geom::Elem
         {
             DNDS_assert(iEdge < this->GetNumEdges());
             DispatchElementType(type, [&](auto tr)
-            {
+                                {
                 using T = decltype(tr);
                 if constexpr (T::dim >= 3)
                 {
                     for (t_index i = 0; i < ObtainEdge(iEdge).GetNumNodes(); i++)
                         edgeNodesOut[i] = nodes[T::edgeNodes[iEdge][i]];
-                }
-            });
+                } });
         }
 
         /**
@@ -304,14 +297,13 @@ namespace DNDS::Geom::Elem
         {
             DNDS_assert(iFace < this->GetNumFaces());
             DispatchElementType(type, [&](auto tr)
-            {
+                                {
                 using T = decltype(tr);
                 if constexpr (T::numFaces > 0)
                 {
                     for (t_index i = 0; i < ObtainFace(iFace).GetNumNodes(); i++)
                         faceNodesOut[i] = nodes[T::faceNodes[iFace][i]];
-                }
-            });
+                } });
         }
 
         [[nodiscard]] constexpr Element ObtainElevNodeSpan(t_index iNodeElev) const
@@ -341,15 +333,14 @@ namespace DNDS::Geom::Elem
         {
             DNDS_assert(iNodeElev < this->GetNumElev_O1O2());
             DispatchElementType(type, [&](auto tr)
-            {
+                                {
                 using T = decltype(tr);
                 if constexpr (T::numElevNodes > 0)
                 {
                     auto spanElem = Element{T::elevNodeSpanTypes[iNodeElev]};
                     for (t_index i = 0; i < spanElem.GetNumNodes(); i++)
                         spanNodes[i] = nodes[T::elevSpans[iNodeElev][i]];
-                }
-            });
+                } });
         }
 
         template <class TIn, class TOut>
@@ -357,7 +348,7 @@ namespace DNDS::Geom::Elem
         {
             DNDS_assert(iSubElem < this->GetO2NumBisect());
             DispatchElementType(type, [&](auto tr)
-            {
+                                {
                 using T = decltype(tr);
                 if constexpr (T::order == 2)
                 {
@@ -366,8 +357,7 @@ namespace DNDS::Geom::Elem
                     auto subElem = Element{T::GetBisectElemType(iSubElem)};
                     for (t_index i = 0; i < subElem.GetNumNodes(); i++)
                         subNodes[i] = nodes[T::bisectElements[offset][i]];
-                }
-            });
+                } });
         }
 
         /**
@@ -622,14 +612,13 @@ namespace DNDS::Geom::Elem
     std::pair<int, std::vector<index>> ToVTKVertsAndData(Element e, const TIn &vin)
     {
         return DispatchElementType(e.type, [&](auto tr) -> std::pair<int, std::vector<index>>
-        {
+                                   {
             using T = decltype(tr);
             constexpr int nOut = static_cast<int>(
                 std::tuple_size<decltype(T::vtkNodeOrder)>::value);
             std::vector<index> v(nOut);
             for (int i = 0; i < nOut; i++)
                 v[i] = vin[T::vtkNodeOrder[i]];
-            return {T::vtkCellType, std::move(v)};
-        });
+            return {T::vtkCellType, std::move(v)}; });
     }
 }

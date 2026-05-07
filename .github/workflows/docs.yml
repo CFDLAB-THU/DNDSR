@@ -67,7 +67,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             doxygen graphviz cmake ninja-build \
-            libopenmpi-dev openmpi-bin
+            libopenmpi-dev openmpi-bin \
+            fonts-wqy-microhei
 
       # ------------------------------------------------------------------
       # 3. Node.js + Marp CLI + Mermaid CLI (for slide-deck rendering)

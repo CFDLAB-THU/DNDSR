@@ -3,6 +3,9 @@ import json
 from DNDSR.Geom.utils import *
 import numpy as np
 from DNDSR.DNDS.Debug_Py import MPIDebugHold
+import os
+import tempfile
+import shutil
 
 
 def get_fv(mpi):
@@ -306,12 +309,14 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo, isCuda=False):
             data["uGrad"][iCell], copy=False
         )[0, 1]
 
+    scratch = tempfile.mkdtemp(prefix="dnds_test_eulerP_")
     eval.PrintDataVTKHDF(
-        "test_0",
-        "test",
+        os.path.join(scratch, "test_0"),
+        os.path.join(scratch, "test"),
         [cell_out, cell_out1, cell_out2, data["p"]],
         ["cell_out", "cell_out1", "cell_out2", "p"],
     )
+    shutil.rmtree(scratch, ignore_errors=True)
 
     # for iCell in range(mesh.NumCell()):
     #     print(iCell)

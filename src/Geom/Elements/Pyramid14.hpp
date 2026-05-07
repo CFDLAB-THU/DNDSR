@@ -12,14 +12,15 @@ namespace DNDS::Geom::Elem
 {
 
     // Forward declaration (primary template is in ElementTraitsBase.hpp)
-    template <ElemType> struct ShapeFuncImpl;
+    template <ElemType>
+    struct ShapeFuncImpl;
 
     // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Pyramid14>
     {
         template <class TPoint, class TArray>
-        static inline void Diff0(const TPoint &p, TArray &&v)
+        static void Diff0(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
@@ -30,45 +31,45 @@ namespace DNDS::Geom::Elem
             const t_real _t0 = zt - 1;
             const t_real _t1 = _t0 + xi;
             const t_real _t2 = _t0 + et;
-            const t_real _t3 = ((0.25))*_t2;
-            const t_real _t4 = _t1*_t3;
-            const t_real _t5 = 2*zt - 1;
-            const t_real _t6 = _t5/((_t0) * (_t0) * (_t0));
-            const t_real _t7 = _t6*xi;
-            const t_real _t8 = _t7*et;
+            const t_real _t3 = ((0.25)) * _t2;
+            const t_real _t4 = _t1 * _t3;
+            const t_real _t5 = 2 * zt - 1;
+            const t_real _t6 = _t5 / ((_t0) * (_t0) * (_t0));
+            const t_real _t7 = _t6 * xi;
+            const t_real _t8 = _t7 * et;
             const t_real _t9 = 1 - zt;
             const t_real _t10 = _t9 + xi;
-            const t_real _t11 = _t10*_t7;
-            const t_real _t12 = _t11*et;
+            const t_real _t11 = _t10 * _t7;
+            const t_real _t12 = _t11 * et;
             const t_real _t13 = _t9 + et;
-            const t_real _t14 = ((0.25))*_t13;
-            const t_real _t15 = _t1*_t14;
+            const t_real _t14 = ((0.25)) * _t13;
+            const t_real _t15 = _t1 * _t14;
             const t_real _t16 = ((_t0) * (_t0));
             const t_real _t17 = -_t16;
-            const t_real _t18 = _t6*(_t17 + ((xi) * (xi)));
-            const t_real _t19 = ((0.5))*_t18*et;
+            const t_real _t18 = _t6 * (_t17 + ((xi) * (xi)));
+            const t_real _t19 = ((0.5)) * _t18 * et;
             const t_real _t20 = _t17 + ((et) * (et));
-            const t_real _t21 = ((0.5))*_t20;
-            const t_real _t22 = (((_t5) * (_t5)) - 1)/_t16;
-            const t_real _t23 = _t10*_t22;
-            v(0, 0) = _t4*_t8;
-            v(0, 1) = _t12*_t3;
-            v(0, 2) = _t12*_t14;
-            v(0, 3) = _t15*_t8;
-            v(0, 4) = _t5*zt;
-            v(0, 5) = -_t19*_t2;
-            v(0, 6) = -_t11*_t21;
-            v(0, 7) = -_t13*_t19;
-            v(0, 8) = -_t1*_t21*_t7;
-            v(0, 9) = -_t22*_t4;
-            v(0, 10) = _t23*_t3;
-            v(0, 11) = -_t14*_t23;
-            v(0, 12) = _t15*_t22;
-            v(0, 13) = _t18*_t20;
+            const t_real _t21 = ((0.5)) * _t20;
+            const t_real _t22 = (((_t5) * (_t5)) - 1) / _t16;
+            const t_real _t23 = _t10 * _t22;
+            v(0, 0) = _t4 * _t8;
+            v(0, 1) = _t12 * _t3;
+            v(0, 2) = _t12 * _t14;
+            v(0, 3) = _t15 * _t8;
+            v(0, 4) = _t5 * zt;
+            v(0, 5) = -_t19 * _t2;
+            v(0, 6) = -_t11 * _t21;
+            v(0, 7) = -_t13 * _t19;
+            v(0, 8) = -_t1 * _t21 * _t7;
+            v(0, 9) = -_t22 * _t4;
+            v(0, 10) = _t23 * _t3;
+            v(0, 11) = -_t14 * _t23;
+            v(0, 12) = _t15 * _t22;
+            v(0, 13) = _t18 * _t20;
         }
 
         template <class TPoint, class TArray>
-        static inline void Diff1(const TPoint &p, TArray &&v)
+        static void Diff1(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
@@ -76,117 +77,117 @@ namespace DNDS::Geom::Elem
             // singularity guard
             if (std::abs(1 - zt) < 1e-15)
                 zt -= DNDS::signP(1 - zt) * 1e-15;
-            const t_real _t0 = 2*xi;
+            const t_real _t0 = 2 * xi;
             const t_real _t1 = zt - 1;
             const t_real _t2 = _t0 + _t1;
             const t_real _t3 = _t1 + et;
-            const t_real _t4 = 2*zt - 1;
+            const t_real _t4 = 2 * zt - 1;
             const t_real _t5 = (1.0 / ((_t1) * (_t1) * (_t1)));
-            const t_real _t6 = _t4*_t5;
-            const t_real _t7 = _t6*et;
-            const t_real _t8 = ((0.25))*_t7;
-            const t_real _t9 = _t3*_t8;
+            const t_real _t6 = _t4 * _t5;
+            const t_real _t7 = _t6 * et;
+            const t_real _t8 = ((0.25)) * _t7;
+            const t_real _t9 = _t3 * _t8;
             const t_real _t10 = 1 - zt;
             const t_real _t11 = _t0 + _t10;
             const t_real _t12 = _t10 + et;
-            const t_real _t13 = _t12*_t8;
-            const t_real _t14 = _t3*xi;
+            const t_real _t13 = _t12 * _t8;
+            const t_real _t14 = _t3 * xi;
             const t_real _t15 = ((et) * (et));
             const t_real _t16 = ((_t1) * (_t1));
             const t_real _t17 = -_t16;
             const t_real _t18 = _t15 + _t17;
-            const t_real _t19 = _t18*_t6;
-            const t_real _t20 = ((0.5))*_t19;
-            const t_real _t21 = _t12*xi;
-            const t_real _t22 = zt/_t1;
+            const t_real _t19 = _t18 * _t6;
+            const t_real _t20 = ((0.5)) * _t19;
+            const t_real _t21 = _t12 * xi;
+            const t_real _t22 = zt / _t1;
             const t_real _t23 = _t1 + xi;
-            const t_real _t24 = 2*et;
+            const t_real _t24 = 2 * et;
             const t_real _t25 = _t1 + _t24;
-            const t_real _t26 = _t6*xi;
-            const t_real _t27 = ((0.25))*_t26;
-            const t_real _t28 = _t25*_t27;
+            const t_real _t26 = _t6 * xi;
+            const t_real _t27 = ((0.25)) * _t26;
+            const t_real _t28 = _t25 * _t27;
             const t_real _t29 = _t10 + xi;
             const t_real _t30 = _t10 + _t24;
-            const t_real _t31 = _t27*_t30;
+            const t_real _t31 = _t27 * _t30;
             const t_real _t32 = ((xi) * (xi));
             const t_real _t33 = _t17 + _t32;
-            const t_real _t34 = _t33*_t6;
-            const t_real _t35 = ((0.5))*_t34;
-            const t_real _t36 = _t29*et;
-            const t_real _t37 = _t23*et;
-            const t_real _t38 = 4*zt;
+            const t_real _t34 = _t33 * _t6;
+            const t_real _t35 = ((0.5)) * _t34;
+            const t_real _t36 = _t29 * et;
+            const t_real _t37 = _t23 * et;
+            const t_real _t38 = 4 * zt;
             const t_real _t39 = _t38 - 3;
-            const t_real _t40 = _t23*_t3;
+            const t_real _t40 = _t23 * _t3;
             const t_real _t41 = _t14 + _t37;
             const t_real _t42 = (1.0 / ((_t1) * (_t1) * (_t1) * (_t1)));
-            const t_real _t43 = ((0.25))*_t42*et*xi;
-            const t_real _t44 = _t29*_t3;
+            const t_real _t43 = ((0.25)) * _t42 * et * xi;
+            const t_real _t44 = _t29 * _t3;
             const t_real _t45 = _t14 + _t36;
-            const t_real _t46 = _t12*_t29;
+            const t_real _t46 = _t12 * _t29;
             const t_real _t47 = _t21 + _t36;
-            const t_real _t48 = _t12*_t23;
+            const t_real _t48 = _t12 * _t23;
             const t_real _t49 = _t21 + _t37;
             const t_real _t50 = -_t39;
-            const t_real _t51 = _t3*_t33;
-            const t_real _t52 = 2*_t32;
-            const t_real _t53 = _t33*et;
-            const t_real _t54 = ((0.5))*_t42;
-            const t_real _t55 = _t54*et;
-            const t_real _t56 = _t18*_t29;
-            const t_real _t57 = 2*_t15;
-            const t_real _t58 = _t18*xi;
-            const t_real _t59 = _t54*xi;
-            const t_real _t60 = _t12*_t33;
-            const t_real _t61 = _t18*_t23;
-            const t_real _t62 = _t1*_t4;
+            const t_real _t51 = _t3 * _t33;
+            const t_real _t52 = 2 * _t32;
+            const t_real _t53 = _t33 * et;
+            const t_real _t54 = ((0.5)) * _t42;
+            const t_real _t55 = _t54 * et;
+            const t_real _t56 = _t18 * _t29;
+            const t_real _t57 = 2 * _t15;
+            const t_real _t58 = _t18 * xi;
+            const t_real _t59 = _t54 * xi;
+            const t_real _t60 = _t12 * _t33;
+            const t_real _t61 = _t18 * _t23;
+            const t_real _t62 = _t1 * _t4;
             const t_real _t63 = ((_t4) * (_t4)) - 1;
-            const t_real _t64 = ((0.25))*_t63;
+            const t_real _t64 = ((0.25)) * _t63;
             const t_real _t65 = (1.0 / (_t16));
-            const t_real _t66 = _t15*_t32*_t42;
-            v(0, 0) = _t2*_t9;
-            v(0, 1) = _t11*_t9;
-            v(0, 2) = _t11*_t13;
-            v(0, 3) = _t13*_t2;
-            v(0, 5) = -_t14*_t7;
-            v(0, 6) = -_t11*_t20;
-            v(0, 7) = -_t21*_t7;
-            v(0, 8) = -_t2*_t20;
-            v(0, 9) = -_t22*_t3;
-            v(0, 10) = _t22*_t3;
-            v(0, 11) = -_t12*_t22;
-            v(0, 12) = _t12*_t22;
-            v(0, 13) = _t0*_t19;
-            v(1, 0) = _t23*_t28;
-            v(1, 1) = _t28*_t29;
-            v(1, 2) = _t29*_t31;
-            v(1, 3) = _t23*_t31;
-            v(1, 5) = -_t25*_t35;
-            v(1, 6) = -_t26*_t36;
-            v(1, 7) = -_t30*_t35;
-            v(1, 8) = -_t26*_t37;
-            v(1, 9) = -_t22*_t23;
-            v(1, 10) = _t22*_t29;
-            v(1, 11) = -_t22*_t29;
-            v(1, 12) = _t22*_t23;
-            v(1, 13) = _t24*_t34;
-            v(2, 0) = _t43*(_t23*_t3*_t39 - _t4*(2*_t40 + _t41));
-            v(2, 1) = _t43*(_t29*_t3*_t39 - _t4*(2*_t44 + _t45));
-            v(2, 2) = _t43*(_t12*_t29*_t39 - _t4*(2*_t46 + _t47));
-            v(2, 3) = _t43*(_t12*_t23*_t39 - _t4*(2*_t48 + _t49));
+            const t_real _t66 = _t15 * _t32 * _t42;
+            v(0, 0) = _t2 * _t9;
+            v(0, 1) = _t11 * _t9;
+            v(0, 2) = _t11 * _t13;
+            v(0, 3) = _t13 * _t2;
+            v(0, 5) = -_t14 * _t7;
+            v(0, 6) = -_t11 * _t20;
+            v(0, 7) = -_t21 * _t7;
+            v(0, 8) = -_t2 * _t20;
+            v(0, 9) = -_t22 * _t3;
+            v(0, 10) = _t22 * _t3;
+            v(0, 11) = -_t12 * _t22;
+            v(0, 12) = _t12 * _t22;
+            v(0, 13) = _t0 * _t19;
+            v(1, 0) = _t23 * _t28;
+            v(1, 1) = _t28 * _t29;
+            v(1, 2) = _t29 * _t31;
+            v(1, 3) = _t23 * _t31;
+            v(1, 5) = -_t25 * _t35;
+            v(1, 6) = -_t26 * _t36;
+            v(1, 7) = -_t30 * _t35;
+            v(1, 8) = -_t26 * _t37;
+            v(1, 9) = -_t22 * _t23;
+            v(1, 10) = _t22 * _t29;
+            v(1, 11) = -_t22 * _t29;
+            v(1, 12) = _t22 * _t23;
+            v(1, 13) = _t24 * _t34;
+            v(2, 0) = _t43 * (_t23 * _t3 * _t39 - _t4 * (2 * _t40 + _t41));
+            v(2, 1) = _t43 * (_t29 * _t3 * _t39 - _t4 * (2 * _t44 + _t45));
+            v(2, 2) = _t43 * (_t12 * _t29 * _t39 - _t4 * (2 * _t46 + _t47));
+            v(2, 3) = _t43 * (_t12 * _t23 * _t39 - _t4 * (2 * _t48 + _t49));
             v(2, 4) = _t38 - 1;
-            v(2, 5) = _t55*(_t4*(_t3*_t52 + _t51 + _t53) + _t50*_t51);
-            v(2, 6) = _t59*(_t4*(_t29*_t57 + _t56 + _t58) + _t50*_t56);
-            v(2, 7) = _t55*(_t4*(_t12*_t52 + _t53 + _t60) + _t50*_t60);
-            v(2, 8) = _t59*(_t4*(_t23*_t57 + _t58 + _t61) + _t50*_t61);
-            v(2, 9) = _t5*(-_t40*_t62 + ((0.25))*_t41*_t63);
-            v(2, 10) = _t5*(_t44*_t62 - _t45*_t64);
-            v(2, 11) = _t5*(-_t46*_t62 + ((0.25))*_t47*_t63);
-            v(2, 12) = _t5*(_t48*_t62 - _t49*_t64);
-            v(2, 13) = _t15*_t65 + _t32*_t65 - _t38*_t66 + _t39 + _t66;
+            v(2, 5) = _t55 * (_t4 * (_t3 * _t52 + _t51 + _t53) + _t50 * _t51);
+            v(2, 6) = _t59 * (_t4 * (_t29 * _t57 + _t56 + _t58) + _t50 * _t56);
+            v(2, 7) = _t55 * (_t4 * (_t12 * _t52 + _t53 + _t60) + _t50 * _t60);
+            v(2, 8) = _t59 * (_t4 * (_t23 * _t57 + _t58 + _t61) + _t50 * _t61);
+            v(2, 9) = _t5 * (-_t40 * _t62 + ((0.25)) * _t41 * _t63);
+            v(2, 10) = _t5 * (_t44 * _t62 - _t45 * _t64);
+            v(2, 11) = _t5 * (-_t46 * _t62 + ((0.25)) * _t47 * _t63);
+            v(2, 12) = _t5 * (_t48 * _t62 - _t49 * _t64);
+            v(2, 13) = _t15 * _t65 + _t32 * _t65 - _t38 * _t66 + _t39 + _t66;
         }
 
         template <class TPoint, class TArray>
-        static inline void Diff2(const TPoint &p, TArray &&v)
+        static void Diff2(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
@@ -196,52 +197,52 @@ namespace DNDS::Geom::Elem
                 zt -= DNDS::signP(1 - zt) * 1e-15;
             const t_real _t0 = zt - 1;
             const t_real _t1 = _t0 + et;
-            const t_real _t2 = 2*zt;
+            const t_real _t2 = 2 * zt;
             const t_real _t3 = _t2 - 1;
-            const t_real _t4 = _t3/((_t0) * (_t0) * (_t0));
-            const t_real _t5 = _t4*et;
-            const t_real _t6 = _t1*_t5;
-            const t_real _t7 = ((0.5))*_t6;
+            const t_real _t4 = _t3 / ((_t0) * (_t0) * (_t0));
+            const t_real _t5 = _t4 * et;
+            const t_real _t6 = _t1 * _t5;
+            const t_real _t7 = ((0.5)) * _t6;
             const t_real _t8 = 1 - zt;
             const t_real _t9 = _t8 + et;
-            const t_real _t10 = _t5*_t9;
-            const t_real _t11 = ((0.5))*_t10;
+            const t_real _t10 = _t5 * _t9;
+            const t_real _t11 = ((0.5)) * _t10;
             const t_real _t12 = ((et) * (et));
             const t_real _t13 = ((_t0) * (_t0));
             const t_real _t14 = -_t13;
-            const t_real _t15 = _t4*(_t12 + _t14);
+            const t_real _t15 = _t4 * (_t12 + _t14);
             const t_real _t16 = -_t15;
             const t_real _t17 = _t0 + xi;
-            const t_real _t18 = _t4*xi;
-            const t_real _t19 = _t17*_t18;
-            const t_real _t20 = ((0.5))*_t19;
+            const t_real _t18 = _t4 * xi;
+            const t_real _t19 = _t17 * _t18;
+            const t_real _t20 = ((0.5)) * _t19;
             const t_real _t21 = _t8 + xi;
-            const t_real _t22 = _t18*_t21;
-            const t_real _t23 = ((0.5))*_t22;
+            const t_real _t22 = _t18 * _t21;
+            const t_real _t23 = ((0.5)) * _t22;
             const t_real _t24 = ((xi) * (xi));
-            const t_real _t25 = _t4*(_t14 + _t24);
+            const t_real _t25 = _t4 * (_t14 + _t24);
             const t_real _t26 = -_t25;
             const t_real _t27 = ((zt) * (zt));
-            const t_real _t28 = _t27*xi;
-            const t_real _t29 = 2*_t28;
+            const t_real _t28 = _t27 * xi;
+            const t_real _t29 = 2 * _t28;
             const t_real _t30 = -_t2 + _t27 + 1;
             const t_real _t31 = _t29 + _t30;
             const t_real _t32 = -xi;
-            const t_real _t33 = xi*zt;
-            const t_real _t34 = et*zt;
-            const t_real _t35 = 6*_t34;
-            const t_real _t36 = _t35*xi;
+            const t_real _t33 = xi * zt;
+            const t_real _t34 = et * zt;
+            const t_real _t35 = 6 * _t34;
+            const t_real _t36 = _t35 * xi;
             const t_real _t37 = _t32 - _t33 + _t36;
             const t_real _t38 = -et;
-            const t_real _t39 = _t27*et;
-            const t_real _t40 = 2*_t39;
+            const t_real _t39 = _t27 * et;
+            const t_real _t40 = 2 * _t39;
             const t_real _t41 = -_t34 + _t38 + _t40;
             const t_real _t42 = ((zt) * (zt) * (zt) * (zt) * (zt));
             const t_real _t43 = ((zt) * (zt) * (zt));
             const t_real _t44 = ((zt) * (zt) * (zt) * (zt));
-            const t_real _t45 = (1.0 / (-10*_t27 + _t42 + 10*_t43 - 5*_t44 + 5*zt - 1));
-            const t_real _t46 = et*xi;
-            const t_real _t47 = ((0.5))*_t45*_t46;
+            const t_real _t45 = (1.0 / (-10 * _t27 + _t42 + 10 * _t43 - 5 * _t44 + 5 * zt - 1));
+            const t_real _t46 = et * xi;
+            const t_real _t47 = ((0.5)) * _t45 * _t46;
             const t_real _t48 = -_t27 + _t3;
             const t_real _t49 = _t48 + et;
             const t_real _t50 = -_t40;
@@ -250,80 +251,80 @@ namespace DNDS::Geom::Elem
             const t_real _t53 = -_t29;
             const t_real _t54 = _t33 + _t36 + _t53;
             const t_real _t55 = _t48 + xi;
-            const t_real _t56 = _t24*_t35;
-            const t_real _t57 = _t24*zt;
-            const t_real _t58 = _t24*_t27;
-            const t_real _t59 = _t24 + _t57 - 2*_t58;
-            const t_real _t60 = _t2*et;
+            const t_real _t56 = _t24 * _t35;
+            const t_real _t57 = _t24 * zt;
+            const t_real _t58 = _t24 * _t27;
+            const t_real _t59 = _t24 + _t57 - 2 * _t58;
+            const t_real _t60 = _t2 * et;
             const t_real _t61 = -_t60;
             const t_real _t62 = _t39 + _t61 + et;
-            const t_real _t63 = _t45*et;
-            const t_real _t64 = 6*_t12*_t33;
-            const t_real _t65 = _t12*zt;
-            const t_real _t66 = _t12*_t27;
-            const t_real _t67 = _t12 + _t65 - 2*_t66;
-            const t_real _t68 = _t2*xi;
+            const t_real _t63 = _t45 * et;
+            const t_real _t64 = 6 * _t12 * _t33;
+            const t_real _t65 = _t12 * zt;
+            const t_real _t66 = _t12 * _t27;
+            const t_real _t67 = _t12 + _t65 - 2 * _t66;
+            const t_real _t68 = _t2 * xi;
             const t_real _t69 = -_t28 + _t32 + _t68;
-            const t_real _t70 = _t45*xi;
+            const t_real _t70 = _t45 * xi;
             const t_real _t71 = _t38 - _t39 + _t60;
             const t_real _t72 = -_t68;
             const t_real _t73 = _t28 + _t72 + xi;
-            const t_real _t74 = 3*zt;
-            const t_real _t75 = 3*_t27;
+            const t_real _t74 = 3 * zt;
+            const t_real _t75 = 3 * _t27;
             const t_real _t76 = _t43 + _t74 - _t75 - 1;
-            const t_real _t77 = 2/_t76;
-            const t_real _t78 = _t77*(-_t46 - _t76);
+            const t_real _t77 = 2 / _t76;
+            const t_real _t78 = _t77 * (-_t46 - _t76);
             const t_real _t79 = -_t74;
-            const t_real _t80 = _t77*(-_t43 + _t46 + _t75 + _t79 + 1);
-            const t_real _t81 = _t17*et;
-            const t_real _t82 = _t1*xi + _t46;
-            const t_real _t83 = ((0.25))*_t4;
-            const t_real _t84 = _t21*et;
-            const t_real _t85 = _t46 + _t9*xi;
-            const t_real _t86 = 2*et;
-            const t_real _t87 = 2*xi;
-            const t_real _t88 = zt/_t0;
+            const t_real _t80 = _t77 * (-_t43 + _t46 + _t75 + _t79 + 1);
+            const t_real _t81 = _t17 * et;
+            const t_real _t82 = _t1 * xi + _t46;
+            const t_real _t83 = ((0.25)) * _t4;
+            const t_real _t84 = _t21 * et;
+            const t_real _t85 = _t46 + _t9 * xi;
+            const t_real _t86 = 2 * et;
+            const t_real _t87 = 2 * xi;
+            const t_real _t88 = zt / _t0;
             const t_real _t89 = -_t88;
-            const t_real _t90 = 4*_t34;
-            const t_real _t91 = 4*_t39;
+            const t_real _t90 = 4 * _t34;
+            const t_real _t91 = 4 * _t39;
             const t_real _t92 = -_t90 + _t91;
-            const t_real _t93 = 8*_t34;
-            const t_real _t94 = _t93*xi;
-            const t_real _t95 = _t94 - 2*et*xi;
+            const t_real _t93 = 8 * _t34;
+            const t_real _t94 = _t93 * xi;
+            const t_real _t95 = _t94 - 2 * et * xi;
             const t_real _t96 = _t31 + _t72;
-            const t_real _t97 = 4*zt;
-            const t_real _t98 = 6*_t27 - 4*_t43 + _t44 - _t97 + 1;
+            const t_real _t97 = 4 * zt;
+            const t_real _t98 = 6 * _t27 - 4 * _t43 + _t44 - _t97 + 1;
             const t_real _t99 = (1.0 / (_t98));
-            const t_real _t100 = ((0.25))*_t99;
-            const t_real _t101 = _t100*xi;
-            const t_real _t102 = 2*_t46 - _t94;
+            const t_real _t100 = ((0.25)) * _t99;
+            const t_real _t101 = _t100 * xi;
+            const t_real _t102 = 2 * _t46 - _t94;
             const t_real _t103 = _t30 + _t53 + _t68;
             const t_real _t104 = _t90 - _t91;
-            const t_real _t105 = _t24*et;
+            const t_real _t105 = _t24 * et;
             const t_real _t106 = -_t57 + _t58 + _t98;
             const t_real _t107 = 3 - _t97;
-            const t_real _t108 = 4*xi;
+            const t_real _t108 = 4 * xi;
             const t_real _t109 = _t79 + 3;
             const t_real _t110 = (1.0 / ((_t0) * (_t0) * (_t0) * (_t0)));
-            const t_real _t111 = _t110*_t46;
+            const t_real _t111 = _t110 * _t46;
             const t_real _t112 = _t74 - 3;
             const t_real _t113 = (1.0 / (_t30));
             const t_real _t114 = (1.0 / (_t13));
-            const t_real _t115 = _t110*_t24;
+            const t_real _t115 = _t110 * _t24;
             const t_real _t116 = _t30 + _t95;
             const t_real _t117 = _t40 + _t61;
-            const t_real _t118 = 4*_t33;
-            const t_real _t119 = 4*_t28;
+            const t_real _t118 = 4 * _t33;
+            const t_real _t119 = 4 * _t28;
             const t_real _t120 = -_t118 + _t119;
-            const t_real _t121 = _t100*et;
+            const t_real _t121 = _t100 * et;
             const t_real _t122 = _t118 - _t119;
             const t_real _t123 = _t102 + _t30;
             const t_real _t124 = _t50 + _t60;
-            const t_real _t125 = 4*et;
-            const t_real _t126 = _t12*xi;
+            const t_real _t125 = 4 * et;
+            const t_real _t126 = _t12 * xi;
             const t_real _t127 = -_t65 + _t66 + _t98;
             const t_real _t128 = _t30 + et;
-            const t_real _t129 = _t110*_t12;
+            const t_real _t129 = _t110 * _t12;
             v(0, 0) = _t7;
             v(0, 1) = _t7;
             v(0, 2) = _t11;
@@ -332,7 +333,7 @@ namespace DNDS::Geom::Elem
             v(0, 6) = _t16;
             v(0, 7) = -_t10;
             v(0, 8) = _t16;
-            v(0, 13) = 2*_t15;
+            v(0, 13) = 2 * _t15;
             v(1, 0) = _t20;
             v(1, 1) = _t23;
             v(1, 2) = _t23;
@@ -341,64 +342,64 @@ namespace DNDS::Geom::Elem
             v(1, 6) = -_t22;
             v(1, 7) = _t26;
             v(1, 8) = -_t19;
-            v(1, 13) = 2*_t25;
-            v(2, 0) = _t47*(_t31 + _t37 + _t41);
-            v(2, 1) = _t47*(_t29 + _t37 + _t49 + _t51);
-            v(2, 2) = _t47*(_t51 + _t52 + _t54 + et);
-            v(2, 3) = _t47*(_t41 + _t54 + _t55);
+            v(1, 13) = 2 * _t25;
+            v(2, 0) = _t47 * (_t31 + _t37 + _t41);
+            v(2, 1) = _t47 * (_t29 + _t37 + _t49 + _t51);
+            v(2, 2) = _t47 * (_t51 + _t52 + _t54 + et);
+            v(2, 3) = _t47 * (_t41 + _t54 + _t55);
             v(2, 4) = 4;
-            v(2, 5) = _t63*(-_t56 + _t59 + _t62);
-            v(2, 6) = _t70*(-_t64 - _t67 - _t69);
-            v(2, 7) = _t63*(-_t56 - _t59 - _t71);
-            v(2, 8) = _t70*(-_t64 + _t67 + _t73);
+            v(2, 5) = _t63 * (-_t56 + _t59 + _t62);
+            v(2, 6) = _t70 * (-_t64 - _t67 - _t69);
+            v(2, 7) = _t63 * (-_t56 - _t59 - _t71);
+            v(2, 8) = _t70 * (-_t64 + _t67 + _t73);
             v(2, 9) = _t78;
             v(2, 10) = _t80;
             v(2, 11) = _t78;
             v(2, 12) = _t80;
-            v(2, 13) = 2*_t45*(6*_t12*_t24*zt + 2*_t12*zt - _t12 + 2*_t24*zt - _t24 - 20*_t27 + 2*_t42 + 20*_t43 - 10*_t44 - _t58 - _t66 + 10*zt - 2);
-            v(3, 0) = _t83*(_t1*_t17 + _t81 + _t82);
-            v(3, 1) = _t83*(_t1*_t21 + _t82 + _t84);
-            v(3, 2) = _t83*(_t21*_t9 + _t84 + _t85);
-            v(3, 3) = _t83*(_t17*_t9 + _t81 + _t85);
-            v(3, 5) = _t18*(-_t0 - _t86);
-            v(3, 6) = _t5*(-_t8 - _t87);
-            v(3, 7) = _t18*(-_t8 - _t86);
-            v(3, 8) = _t5*(-_t0 - _t87);
+            v(2, 13) = 2 * _t45 * (6 * _t12 * _t24 * zt + 2 * _t12 * zt - _t12 + 2 * _t24 * zt - _t24 - 20 * _t27 + 2 * _t42 + 20 * _t43 - 10 * _t44 - _t58 - _t66 + 10 * zt - 2);
+            v(3, 0) = _t83 * (_t1 * _t17 + _t81 + _t82);
+            v(3, 1) = _t83 * (_t1 * _t21 + _t82 + _t84);
+            v(3, 2) = _t83 * (_t21 * _t9 + _t84 + _t85);
+            v(3, 3) = _t83 * (_t17 * _t9 + _t81 + _t85);
+            v(3, 5) = _t18 * (-_t0 - _t86);
+            v(3, 6) = _t5 * (-_t8 - _t87);
+            v(3, 7) = _t18 * (-_t8 - _t86);
+            v(3, 8) = _t5 * (-_t0 - _t87);
             v(3, 9) = _t89;
             v(3, 10) = _t88;
             v(3, 11) = _t89;
             v(3, 12) = _t88;
-            v(3, 13) = 4*_t4*_t46;
-            v(4, 0) = _t101*(-_t92 - _t95 - _t96);
-            v(4, 1) = _t101*(_t102 + _t103 + _t92);
-            v(4, 2) = _t101*(-_t103 - _t104 - _t95);
-            v(4, 3) = _t101*(_t102 + _t104 + _t96);
-            v(4, 5) = _t99*(-_t105 + _t106 + _t24*_t90 + _t71);
-            v(4, 6) = _t111*(_t107*_t21 + _t3*(_t108 + _t109));
-            v(4, 7) = _t99*(-_t105 - _t106 + 4*_t24*et*zt - _t62);
-            v(4, 8) = _t111*(_t107*_t17 + _t3*(_t108 + _t112));
-            v(4, 9) = _t113*_t55;
-            v(4, 10) = -_t113*_t52;
-            v(4, 11) = _t113*_t52;
-            v(4, 12) = -_t113*_t55;
-            v(4, 13) = _t114*_t86 + _t115*_t86 - _t115*_t93;
-            v(5, 0) = _t121*(-_t116 - _t117 - _t120);
-            v(5, 1) = _t121*(_t117 + _t122 + _t123);
-            v(5, 2) = _t121*(-_t116 - _t122 - _t124);
-            v(5, 3) = _t121*(_t120 + _t123 + _t124);
-            v(5, 5) = _t111*(_t1*_t107 + _t3*(_t112 + _t125));
-            v(5, 6) = _t99*(4*_t12*xi*zt - _t126 - _t127 - _t73);
-            v(5, 7) = _t111*(_t107*_t9 + _t3*(_t109 + _t125));
-            v(5, 8) = _t99*(_t118*_t12 - _t126 + _t127 + _t69);
-            v(5, 9) = _t113*_t49;
-            v(5, 10) = -_t113*_t49;
-            v(5, 11) = _t113*_t128;
-            v(5, 12) = -_t113*_t128;
-            v(5, 13) = _t114*_t87 - 8*_t129*_t33 + _t129*_t87;
+            v(3, 13) = 4 * _t4 * _t46;
+            v(4, 0) = _t101 * (-_t92 - _t95 - _t96);
+            v(4, 1) = _t101 * (_t102 + _t103 + _t92);
+            v(4, 2) = _t101 * (-_t103 - _t104 - _t95);
+            v(4, 3) = _t101 * (_t102 + _t104 + _t96);
+            v(4, 5) = _t99 * (-_t105 + _t106 + _t24 * _t90 + _t71);
+            v(4, 6) = _t111 * (_t107 * _t21 + _t3 * (_t108 + _t109));
+            v(4, 7) = _t99 * (-_t105 - _t106 + 4 * _t24 * et * zt - _t62);
+            v(4, 8) = _t111 * (_t107 * _t17 + _t3 * (_t108 + _t112));
+            v(4, 9) = _t113 * _t55;
+            v(4, 10) = -_t113 * _t52;
+            v(4, 11) = _t113 * _t52;
+            v(4, 12) = -_t113 * _t55;
+            v(4, 13) = _t114 * _t86 + _t115 * _t86 - _t115 * _t93;
+            v(5, 0) = _t121 * (-_t116 - _t117 - _t120);
+            v(5, 1) = _t121 * (_t117 + _t122 + _t123);
+            v(5, 2) = _t121 * (-_t116 - _t122 - _t124);
+            v(5, 3) = _t121 * (_t120 + _t123 + _t124);
+            v(5, 5) = _t111 * (_t1 * _t107 + _t3 * (_t112 + _t125));
+            v(5, 6) = _t99 * (4 * _t12 * xi * zt - _t126 - _t127 - _t73);
+            v(5, 7) = _t111 * (_t107 * _t9 + _t3 * (_t109 + _t125));
+            v(5, 8) = _t99 * (_t118 * _t12 - _t126 + _t127 + _t69);
+            v(5, 9) = _t113 * _t49;
+            v(5, 10) = -_t113 * _t49;
+            v(5, 11) = _t113 * _t128;
+            v(5, 12) = -_t113 * _t128;
+            v(5, 13) = _t114 * _t87 - 8 * _t129 * _t33 + _t129 * _t87;
         }
 
         template <class TPoint, class TArray>
-        static inline void Diff3(const TPoint &p, TArray &&v)
+        static void Diff3(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             t_real et = p[1];
@@ -406,29 +407,29 @@ namespace DNDS::Geom::Elem
             // singularity guard
             if (std::abs(1 - zt) < 1e-15)
                 zt -= DNDS::signP(1 - zt) * 1e-15;
-            const t_real _t0 = 2*et;
-            const t_real _t1 = _t0*xi;
-            const t_real _t2 = xi*zt;
-            const t_real _t3 = 8*et;
-            const t_real _t4 = _t2*_t3;
-            const t_real _t5 = 2*zt;
+            const t_real _t0 = 2 * et;
+            const t_real _t1 = _t0 * xi;
+            const t_real _t2 = xi * zt;
+            const t_real _t3 = 8 * et;
+            const t_real _t4 = _t2 * _t3;
+            const t_real _t5 = 2 * zt;
             const t_real _t6 = ((zt) * (zt));
             const t_real _t7 = -_t5 + _t6 + 1;
             const t_real _t8 = _t1 + _t4 + _t7;
             const t_real _t9 = -_t0;
-            const t_real _t10 = 2*xi;
-            const t_real _t11 = _t10*_t6;
+            const t_real _t10 = 2 * xi;
+            const t_real _t11 = _t10 * _t6;
             const t_real _t12 = _t11 + _t9;
-            const t_real _t13 = _t0*_t6;
+            const t_real _t13 = _t0 * _t6;
             const t_real _t14 = -_t10;
             const t_real _t15 = _t13 + _t14;
-            const t_real _t16 = 6*zt;
+            const t_real _t16 = 6 * zt;
             const t_real _t17 = ((zt) * (zt) * (zt));
             const t_real _t18 = ((zt) * (zt) * (zt) * (zt));
             const t_real _t19 = ((zt) * (zt) * (zt) * (zt) * (zt));
-            const t_real _t20 = (1.0 / (-_t16 - 20*_t17 + 15*_t18 - 6*_t19 + 15*_t6 + ((zt) * (zt) * (zt) * (zt) * (zt) * (zt)) + 1));
-            const t_real _t21 = et*xi;
-            const t_real _t22 = ((1.5))*_t20*_t21;
+            const t_real _t20 = (1.0 / (-_t16 - 20 * _t17 + 15 * _t18 - 6 * _t19 + 15 * _t6 + ((zt) * (zt) * (zt) * (zt) * (zt) * (zt)) + 1));
+            const t_real _t21 = et * xi;
+            const t_real _t22 = ((1.5)) * _t20 * _t21;
             const t_real _t23 = -_t13;
             const t_real _t24 = _t0 + _t23;
             const t_real _t25 = -_t6;
@@ -438,220 +439,220 @@ namespace DNDS::Geom::Elem
             const t_real _t29 = -_t11;
             const t_real _t30 = _t10 + _t29;
             const t_real _t31 = ((xi) * (xi));
-            const t_real _t32 = 2*_t31;
-            const t_real _t33 = _t32*_t6;
+            const t_real _t32 = 2 * _t31;
+            const t_real _t33 = _t32 * _t6;
             const t_real _t34 = -et;
-            const t_real _t35 = _t6*et;
+            const t_real _t35 = _t6 * et;
             const t_real _t36 = -_t35;
-            const t_real _t37 = _t0*zt;
-            const t_real _t38 = _t31*zt;
-            const t_real _t39 = _t0*_t31 + _t3*_t38 + _t34 + _t36 + _t37;
-            const t_real _t40 = 3*_t20;
-            const t_real _t41 = _t40*et;
+            const t_real _t37 = _t0 * zt;
+            const t_real _t38 = _t31 * zt;
+            const t_real _t39 = _t0 * _t31 + _t3 * _t38 + _t34 + _t36 + _t37;
+            const t_real _t40 = 3 * _t20;
+            const t_real _t41 = _t40 * et;
             const t_real _t42 = ((et) * (et));
-            const t_real _t43 = 2*_t42;
-            const t_real _t44 = _t43*_t6;
+            const t_real _t43 = 2 * _t42;
+            const t_real _t44 = _t43 * _t6;
             const t_real _t45 = -_t44;
             const t_real _t46 = -xi;
-            const t_real _t47 = _t6*xi;
+            const t_real _t47 = _t6 * xi;
             const t_real _t48 = -_t47;
-            const t_real _t49 = _t10*zt;
-            const t_real _t50 = 8*_t42;
-            const t_real _t51 = _t10*_t42 + _t2*_t50 + _t46 + _t48 + _t49;
-            const t_real _t52 = _t40*xi;
+            const t_real _t49 = _t10 * zt;
+            const t_real _t50 = 8 * _t42;
+            const t_real _t51 = _t10 * _t42 + _t2 * _t50 + _t46 + _t48 + _t49;
+            const t_real _t52 = _t40 * xi;
             const t_real _t53 = -_t33;
-            const t_real _t54 = 4*zt;
-            const t_real _t55 = (1.0 / (-4*_t17 + _t18 - _t54 + 6*_t6 + 1));
-            const t_real _t56 = 6*_t21*_t55;
+            const t_real _t54 = 4 * zt;
+            const t_real _t55 = (1.0 / (-4 * _t17 + _t18 - _t54 + 6 * _t6 + 1));
+            const t_real _t56 = 6 * _t21 * _t55;
             const t_real _t57 = -_t56;
             const t_real _t58 = zt - 1;
             const t_real _t59 = _t0 + _t58;
-            const t_real _t60 = _t26/((_t58) * (_t58) * (_t58));
-            const t_real _t61 = ((0.5))*_t60;
-            const t_real _t62 = _t59*_t61;
+            const t_real _t60 = _t26 / ((_t58) * (_t58) * (_t58));
+            const t_real _t61 = ((0.5)) * _t60;
+            const t_real _t62 = _t59 * _t61;
             const t_real _t63 = -zt;
             const t_real _t64 = _t63 + 1;
             const t_real _t65 = _t0 + _t64;
-            const t_real _t66 = _t61*_t65;
-            const t_real _t67 = -_t0*_t60;
-            const t_real _t68 = 4*et;
+            const t_real _t66 = _t61 * _t65;
+            const t_real _t67 = -_t0 * _t60;
+            const t_real _t68 = 4 * et;
             const t_real _t69 = _t10 + _t58;
-            const t_real _t70 = _t61*_t69;
+            const t_real _t70 = _t61 * _t69;
             const t_real _t71 = _t10 + _t64;
-            const t_real _t72 = _t61*_t71;
-            const t_real _t73 = -_t10*_t60;
-            const t_real _t74 = 4*xi;
+            const t_real _t72 = _t61 * _t71;
+            const t_real _t73 = -_t10 * _t60;
+            const t_real _t74 = 4 * xi;
             const t_real _t75 = _t58 + xi;
             const t_real _t76 = _t54 - 3;
-            const t_real _t77 = 3*zt;
+            const t_real _t77 = 3 * zt;
             const t_real _t78 = _t77 - 3;
             const t_real _t79 = _t74 + _t78;
             const t_real _t80 = (1.0 / ((_t58) * (_t58) * (_t58) * (_t58)));
-            const t_real _t81 = _t80*xi;
-            const t_real _t82 = ((0.5))*_t81;
-            const t_real _t83 = _t82*(-_t26*_t79 + _t75*_t76);
+            const t_real _t81 = _t80 * xi;
+            const t_real _t82 = ((0.5)) * _t81;
+            const t_real _t83 = _t82 * (-_t26 * _t79 + _t75 * _t76);
             const t_real _t84 = _t64 + xi;
             const t_real _t85 = 3 - _t77;
             const t_real _t86 = _t74 + _t85;
-            const t_real _t87 = _t82*(-_t26*_t86 + _t76*_t84);
+            const t_real _t87 = _t82 * (-_t26 * _t86 + _t76 * _t84);
             const t_real _t88 = (1.0 / ((_t58) * (_t58)));
-            const t_real _t89 = _t31*_t80;
-            const t_real _t90 = 4*_t31*_t80*zt - _t88 - _t89;
+            const t_real _t89 = _t31 * _t80;
+            const t_real _t90 = 4 * _t31 * _t80 * zt - _t88 - _t89;
             const t_real _t91 = -_t76;
-            const t_real _t92 = 2*_t88;
-            const t_real _t93 = 12*et;
-            const t_real _t94 = _t2*_t93;
+            const t_real _t92 = 2 * _t88;
+            const t_real _t93 = 12 * et;
+            const t_real _t94 = _t2 * _t93;
             const t_real _t95 = _t7 + _t94;
             const t_real _t96 = -_t2;
             const t_real _t97 = _t46 + _t96;
-            const t_real _t98 = 4*_t35;
+            const t_real _t98 = 4 * _t35;
             const t_real _t99 = -_t37 + _t98;
-            const t_real _t100 = (1.0 / (10*_t17 - 5*_t18 + _t19 - 10*_t6 + 5*zt - 1));
-            const t_real _t101 = ((0.5))*_t100;
-            const t_real _t102 = _t101*xi;
+            const t_real _t100 = (1.0 / (10 * _t17 - 5 * _t18 + _t19 - 10 * _t6 + 5 * zt - 1));
+            const t_real _t101 = ((0.5)) * _t100;
+            const t_real _t102 = _t101 * xi;
             const t_real _t103 = _t27 + _t94;
             const t_real _t104 = _t0 + _t37 - _t98;
             const t_real _t105 = _t2 + _t29 + xi;
-            const t_real _t106 = _t54*et;
-            const t_real _t107 = _t38*_t93;
+            const t_real _t106 = _t54 * et;
+            const t_real _t107 = _t38 * _t93;
             const t_real _t108 = _t31 + _t38 + _t53;
-            const t_real _t109 = _t16*xi;
-            const t_real _t110 = 2*_t6;
+            const t_real _t109 = _t16 * xi;
+            const t_real _t110 = 2 * _t6;
             const t_real _t111 = -_t110 + zt + 1;
-            const t_real _t112 = _t1*_t100;
+            const t_real _t112 = _t1 * _t100;
             const t_real _t113 = _t110 + _t63 - 1;
-            const t_real _t114 = (1.0 / (_t17 - 3*_t6 + _t77 - 1));
-            const t_real _t115 = _t10*_t114;
+            const t_real _t114 = (1.0 / (_t17 - 3 * _t6 + _t77 - 1));
+            const t_real _t115 = _t10 * _t114;
             const t_real _t116 = -_t115;
-            const t_real _t117 = 4*_t47;
+            const t_real _t117 = 4 * _t47;
             const t_real _t118 = _t117 - _t49;
-            const t_real _t119 = et*zt;
+            const t_real _t119 = et * zt;
             const t_real _t120 = -_t119;
             const t_real _t121 = _t120 + _t34;
-            const t_real _t122 = _t101*et;
+            const t_real _t122 = _t101 * et;
             const t_real _t123 = _t119 + _t23 + et;
             const t_real _t124 = _t10 - _t117 + _t49;
-            const t_real _t125 = _t16*et;
-            const t_real _t126 = _t54*xi;
-            const t_real _t127 = 12*_t2*_t42;
-            const t_real _t128 = _t42*zt;
+            const t_real _t125 = _t16 * et;
+            const t_real _t126 = _t54 * xi;
+            const t_real _t127 = 12 * _t2 * _t42;
+            const t_real _t128 = _t42 * zt;
             const t_real _t129 = _t128 + _t42 + _t45;
-            const t_real _t130 = _t0*_t114;
+            const t_real _t130 = _t0 * _t114;
             const t_real _t131 = -_t130;
             const t_real _t132 = _t58 + et;
             const t_real _t133 = _t68 + _t78;
-            const t_real _t134 = _t80*et;
-            const t_real _t135 = ((0.5))*_t134;
-            const t_real _t136 = _t135*(_t132*_t76 - _t133*_t26);
+            const t_real _t134 = _t80 * et;
+            const t_real _t135 = ((0.5)) * _t134;
+            const t_real _t136 = _t135 * (_t132 * _t76 - _t133 * _t26);
             const t_real _t137 = _t64 + et;
             const t_real _t138 = _t68 + _t85;
-            const t_real _t139 = _t135*(_t137*_t76 - _t138*_t26);
-            const t_real _t140 = 4*_t42*_t80*zt - _t42*_t80 - _t88;
-            const t_real _t141 = -(0.5)*zt;
-            const t_real _t142 = ((0.25))*_t6;
+            const t_real _t139 = _t135 * (_t137 * _t76 - _t138 * _t26);
+            const t_real _t140 = 4 * _t42 * _t80 * zt - _t42 * _t80 - _t88;
+            const t_real _t141 = -(0.5) * zt;
+            const t_real _t142 = ((0.25)) * _t6;
             const t_real _t143 = _t120 + _t141 + _t142 + _t35 + (0.25);
-            const t_real _t144 = _t21*_t54;
-            const t_real _t145 = _t144 - et*xi;
+            const t_real _t144 = _t21 * _t54;
+            const t_real _t145 = _t144 - et * xi;
             const t_real _t146 = _t47 + _t96;
             const t_real _t147 = _t2 + _t48;
             const t_real _t148 = -_t144 + _t21;
             const t_real _t149 = _t119 + _t141 + _t142 + _t36 + (0.25);
             const t_real _t150 = _t106 + _t34;
             const t_real _t151 = _t6 + _t63;
-            const t_real _t152 = _t10*_t55;
+            const t_real _t152 = _t10 * _t55;
             const t_real _t153 = _t25 + zt;
             const t_real _t154 = _t126 + _t46;
-            const t_real _t155 = _t0*_t55;
+            const t_real _t155 = _t0 * _t55;
             const t_real _t156 = (1.0 / (_t7));
             const t_real _t157 = -_t156;
-            v(2, 0) = _t22*(-_t12 - _t15 - _t8);
-            v(2, 1) = _t22*(-_t11 - _t14 - _t24 - _t28);
-            v(2, 2) = _t22*(-_t24 - _t30 - _t8);
-            v(2, 3) = _t22*(-_t13 - _t28 - _t30 - _t9);
-            v(2, 5) = _t41*(-_t32 + _t33 + _t39);
-            v(2, 6) = _t52*(_t43 + _t45 + _t51);
-            v(2, 7) = _t41*(_t32 + _t39 + _t53);
-            v(2, 8) = _t52*(-_t43 + _t44 + _t51);
+            v(2, 0) = _t22 * (-_t12 - _t15 - _t8);
+            v(2, 1) = _t22 * (-_t11 - _t14 - _t24 - _t28);
+            v(2, 2) = _t22 * (-_t24 - _t30 - _t8);
+            v(2, 3) = _t22 * (-_t13 - _t28 - _t30 - _t9);
+            v(2, 5) = _t41 * (-_t32 + _t33 + _t39);
+            v(2, 6) = _t52 * (_t43 + _t45 + _t51);
+            v(2, 7) = _t41 * (_t32 + _t39 + _t53);
+            v(2, 8) = _t52 * (-_t43 + _t44 + _t51);
             v(2, 9) = _t56;
             v(2, 10) = _t57;
             v(2, 11) = _t56;
             v(2, 12) = _t57;
-            v(2, 13) = 6*_t20*(-_t31*_t5 + _t31*_t6 + _t31 - _t32*_t42 - _t38*_t50 - _t42*_t5 + _t42*_t6 + _t42);
+            v(2, 13) = 6 * _t20 * (-_t31 * _t5 + _t31 * _t6 + _t31 - _t32 * _t42 - _t38 * _t50 - _t42 * _t5 + _t42 * _t6 + _t42);
             v(3, 0) = _t62;
             v(3, 1) = _t62;
             v(3, 2) = _t66;
             v(3, 3) = _t66;
-            v(3, 5) = -_t59*_t60;
+            v(3, 5) = -_t59 * _t60;
             v(3, 6) = _t67;
-            v(3, 7) = -_t60*_t65;
+            v(3, 7) = -_t60 * _t65;
             v(3, 8) = _t67;
-            v(3, 13) = _t60*_t68;
+            v(3, 13) = _t60 * _t68;
             v(4, 0) = _t70;
             v(4, 1) = _t72;
             v(4, 2) = _t72;
             v(4, 3) = _t70;
             v(4, 5) = _t73;
-            v(4, 6) = -_t60*_t71;
+            v(4, 6) = -_t60 * _t71;
             v(4, 7) = _t73;
-            v(4, 8) = -_t60*_t69;
-            v(4, 13) = _t60*_t74;
+            v(4, 8) = -_t60 * _t69;
+            v(4, 13) = _t60 * _t74;
             v(5, 0) = _t83;
             v(5, 1) = _t87;
             v(5, 2) = _t87;
             v(5, 3) = _t83;
             v(5, 5) = _t90;
-            v(5, 6) = _t81*(_t26*_t86 + _t84*_t91);
+            v(5, 6) = _t81 * (_t26 * _t86 + _t84 * _t91);
             v(5, 7) = _t90;
-            v(5, 8) = _t81*(_t26*_t79 + _t75*_t91);
-            v(5, 13) = _t32*_t80 - 8*_t89*zt + _t92;
-            v(6, 0) = _t102*(_t12 + _t95 + _t97 + _t99);
-            v(6, 1) = _t102*(_t103 + _t104 + _t11 + _t97);
-            v(6, 2) = _t102*(_t104 + _t105 + _t95);
-            v(6, 3) = _t102*(_t103 + _t105 + _t9 + _t99);
-            v(6, 5) = _t100*(_t0 - _t106 - _t107 + _t108 + _t13);
-            v(6, 6) = _t112*(-_t109 - _t111);
-            v(6, 7) = _t100*(-_t106 - _t107 - _t108 - _t23 - _t9);
-            v(6, 8) = _t112*(-_t109 - _t113);
+            v(5, 8) = _t81 * (_t26 * _t79 + _t75 * _t91);
+            v(5, 13) = _t32 * _t80 - 8 * _t89 * zt + _t92;
+            v(6, 0) = _t102 * (_t12 + _t95 + _t97 + _t99);
+            v(6, 1) = _t102 * (_t103 + _t104 + _t11 + _t97);
+            v(6, 2) = _t102 * (_t104 + _t105 + _t95);
+            v(6, 3) = _t102 * (_t103 + _t105 + _t9 + _t99);
+            v(6, 5) = _t100 * (_t0 - _t106 - _t107 + _t108 + _t13);
+            v(6, 6) = _t112 * (-_t109 - _t111);
+            v(6, 7) = _t100 * (-_t106 - _t107 - _t108 - _t23 - _t9);
+            v(6, 8) = _t112 * (-_t109 - _t113);
             v(6, 9) = _t116;
             v(6, 10) = _t115;
             v(6, 11) = _t116;
             v(6, 12) = _t115;
-            v(6, 13) = _t100*_t68*(_t16*_t31 + _t27);
-            v(7, 0) = _t122*(_t118 + _t121 + _t15 + _t95);
-            v(7, 1) = _t122*(_t103 + _t118 + _t123 + _t14);
-            v(7, 2) = _t122*(_t123 + _t124 + _t95);
-            v(7, 3) = _t122*(_t103 + _t121 + _t124 + _t13);
-            v(7, 5) = _t112*(-_t113 - _t125);
-            v(7, 6) = _t100*(-_t126 - _t127 - _t129 - _t14 - _t29);
-            v(7, 7) = _t112*(-_t111 - _t125);
-            v(7, 8) = _t100*(_t10 + _t11 - _t126 - _t127 + _t129);
+            v(6, 13) = _t100 * _t68 * (_t16 * _t31 + _t27);
+            v(7, 0) = _t122 * (_t118 + _t121 + _t15 + _t95);
+            v(7, 1) = _t122 * (_t103 + _t118 + _t123 + _t14);
+            v(7, 2) = _t122 * (_t123 + _t124 + _t95);
+            v(7, 3) = _t122 * (_t103 + _t121 + _t124 + _t13);
+            v(7, 5) = _t112 * (-_t113 - _t125);
+            v(7, 6) = _t100 * (-_t126 - _t127 - _t129 - _t14 - _t29);
+            v(7, 7) = _t112 * (-_t111 - _t125);
+            v(7, 8) = _t100 * (_t10 + _t11 - _t126 - _t127 + _t129);
             v(7, 9) = _t131;
             v(7, 10) = _t130;
             v(7, 11) = _t131;
             v(7, 12) = _t130;
-            v(7, 13) = _t100*_t74*(_t16*_t42 + _t27);
+            v(7, 13) = _t100 * _t74 * (_t16 * _t42 + _t27);
             v(8, 0) = _t136;
             v(8, 1) = _t136;
             v(8, 2) = _t139;
             v(8, 3) = _t139;
-            v(8, 5) = _t134*(_t132*_t91 + _t133*_t26);
+            v(8, 5) = _t134 * (_t132 * _t91 + _t133 * _t26);
             v(8, 6) = _t140;
-            v(8, 7) = _t134*(_t137*_t91 + _t138*_t26);
+            v(8, 7) = _t134 * (_t137 * _t91 + _t138 * _t26);
             v(8, 8) = _t140;
-            v(8, 13) = -8*_t128*_t80 + _t43*_t80 + _t92;
-            v(9, 0) = _t55*(-_t143 - _t145 - _t146);
-            v(9, 1) = _t55*(_t143 + _t147 + _t148);
-            v(9, 2) = _t55*(-_t145 - _t147 - _t149);
-            v(9, 3) = _t55*(_t146 + _t148 + _t149);
-            v(9, 5) = _t152*(_t150 + _t151);
-            v(9, 6) = _t155*(_t153 + _t154);
-            v(9, 7) = _t152*(_t150 + _t153);
-            v(9, 8) = _t155*(_t151 + _t154);
+            v(8, 13) = -8 * _t128 * _t80 + _t43 * _t80 + _t92;
+            v(9, 0) = _t55 * (-_t143 - _t145 - _t146);
+            v(9, 1) = _t55 * (_t143 + _t147 + _t148);
+            v(9, 2) = _t55 * (-_t145 - _t147 - _t149);
+            v(9, 3) = _t55 * (_t146 + _t148 + _t149);
+            v(9, 5) = _t152 * (_t150 + _t151);
+            v(9, 6) = _t155 * (_t153 + _t154);
+            v(9, 7) = _t152 * (_t150 + _t153);
+            v(9, 8) = _t155 * (_t151 + _t154);
             v(9, 9) = _t156;
             v(9, 10) = _t157;
             v(9, 11) = _t156;
             v(9, 12) = _t157;
-            v(9, 13) = _t134*_t74*(1 - _t54);
+            v(9, 13) = _t134 * _t74 * (1 - _t54);
         }
     };
     // <GEN_SHAPE_FUNCS_END>
@@ -670,49 +671,47 @@ namespace DNDS::Geom::Elem
         static constexpr int numEdges = 8;
         static constexpr ParamSpace paramSpace = PyramidSpace;
         static constexpr t_real paramSpaceVol = 4.0 / 3.0;
-
+        // 3 * NNodes is a compile-time constant; no overflow possible.
+        // NOLINTNEXTLINE(bugprone-implicit-widening-of-multiplication-result)
         static constexpr std::array<t_real, 3 * 14> standardCoords = {
-            -1, -1, 0,  // Node 0: vertex
-            1, -1, 0,  // Node 1: vertex
-            1, 1, 0,  // Node 2: vertex
-            -1, 1, 0,  // Node 3: vertex
-            0, 0, 1,  // Node 4: vertex
-            0, -1, 0,  // Node 5
-            1, 0, 0,  // Node 6
-            0, 1, 0,  // Node 7
-            -1, 0, 0,  // Node 8
-            -0.5, -0.5, 0.5,  // Node 9
+            -1, -1, 0,       // Node 0: vertex
+            1, -1, 0,        // Node 1: vertex
+            1, 1, 0,         // Node 2: vertex
+            -1, 1, 0,        // Node 3: vertex
+            0, 0, 1,         // Node 4: vertex
+            0, -1, 0,        // Node 5
+            1, 0, 0,         // Node 6
+            0, 1, 0,         // Node 7
+            -1, 0, 0,        // Node 8
+            -0.5, -0.5, 0.5, // Node 9
             0.5, -0.5, 0.5,  // Node 10
-            0.5, 0.5, 0.5,  // Node 11
+            0.5, 0.5, 0.5,   // Node 11
             -0.5, 0.5, 0.5,  // Node 12
-            0, 0, 0};  // Node 13
+            0, 0, 0};        // Node 13
 
         static constexpr ElemType GetFaceType(t_index iFace)
         {
-            if (iFace < 1) return Quad9;
+            if (iFace < 1)
+                return Quad9;
             return Tri6;
         }
 
-        static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{
-            {0, 3, 2, 1, 8, 7, 6, 5, 13},
-            {0, 1, 4, 5, 10, 9},
-            {1, 2, 4, 6, 11, 10},
-            {2, 3, 4, 7, 12, 11},
-            {3, 0, 4, 8, 9, 12}
-        }};
+        static constexpr std::array<std::array<t_index, 10>, 5> faceNodes = {{{0, 3, 2, 1, 8, 7, 6, 5, 13},
+                                                                              {0, 1, 4, 5, 10, 9},
+                                                                              {1, 2, 4, 6, 11, 10},
+                                                                              {2, 3, 4, 7, 12, 11},
+                                                                              {3, 0, 4, 8, 9, 12}}};
 
         static constexpr ElemType GetEdgeType(t_index /*iEdge*/) { return Line3; }
 
-        static constexpr std::array<std::array<t_index, 3>, 8> edgeNodes = {{
-            {0, 1, 5},
-            {1, 2, 6},
-            {2, 3, 7},
-            {3, 0, 8},
-            {0, 4, 9},
-            {1, 4, 10},
-            {2, 4, 11},
-            {3, 4, 12}
-        }};
+        static constexpr std::array<std::array<t_index, 3>, 8> edgeNodes = {{{0, 1, 5},
+                                                                             {1, 2, 6},
+                                                                             {2, 3, 7},
+                                                                             {3, 0, 8},
+                                                                             {0, 4, 9},
+                                                                             {1, 4, 10},
+                                                                             {2, 4, 11},
+                                                                             {3, 4, 12}}};
 
         static constexpr ElemType elevatedType = UnknownElem;
         static constexpr int numElevNodes = 0;
@@ -722,44 +721,42 @@ namespace DNDS::Geom::Elem
 
         static constexpr ElemType GetBisectElemType(t_index i)
         {
-            if (i < 4) return Pyramid5;
+            if (i < 4)
+                return Pyramid5;
             return Tet4;
         }
 
-        static constexpr std::array<tBisectSub, 24> bisectElements = {{
-            // Variant 0
-            {0, 5, 13, 8, 9},
-            {5, 1, 6, 13, 10},
-            {8, 13, 7, 3, 12},
-            {13, 6, 2, 7, 11},
-            {12, 9, 8, 13},
-            {9, 10, 5, 13},
-            {10, 11, 6, 13},
-            {11, 12, 7, 13},
-            {9, 11, 12, 4},
-            {9, 10, 11, 4},
-            {9, 11, 10, 13},
-            {9, 12, 11, 13},
-            // Variant 1
-            {0, 5, 13, 8, 9},
-            {5, 1, 6, 13, 10},
-            {8, 13, 7, 3, 12},
-            {13, 6, 2, 7, 11},
-            {12, 9, 8, 13},
-            {9, 10, 5, 13},
-            {10, 11, 6, 13},
-            {11, 12, 7, 13},
-            {10, 12, 9, 4},
-            {10, 11, 12, 4},
-            {10, 12, 11, 13},
-            {10, 9, 12, 13}
-        }};
+        static constexpr std::array<tBisectSub, 24> bisectElements = {{// Variant 0
+                                                                       {0, 5, 13, 8, 9},
+                                                                       {5, 1, 6, 13, 10},
+                                                                       {8, 13, 7, 3, 12},
+                                                                       {13, 6, 2, 7, 11},
+                                                                       {12, 9, 8, 13},
+                                                                       {9, 10, 5, 13},
+                                                                       {10, 11, 6, 13},
+                                                                       {11, 12, 7, 13},
+                                                                       {9, 11, 12, 4},
+                                                                       {9, 10, 11, 4},
+                                                                       {9, 11, 10, 13},
+                                                                       {9, 12, 11, 13},
+                                                                       // Variant 1
+                                                                       {0, 5, 13, 8, 9},
+                                                                       {5, 1, 6, 13, 10},
+                                                                       {8, 13, 7, 3, 12},
+                                                                       {13, 6, 2, 7, 11},
+                                                                       {12, 9, 8, 13},
+                                                                       {9, 10, 5, 13},
+                                                                       {10, 11, 6, 13},
+                                                                       {11, 12, 7, 13},
+                                                                       {10, 12, 9, 4},
+                                                                       {10, 11, 12, 4},
+                                                                       {10, 12, 11, 13},
+                                                                       {10, 9, 12, 13}}};
 
         static constexpr int vtkCellType = 27;
 
         static constexpr std::array<int, 14> vtkNodeOrder = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
     };
     // <GEN_ELEM_TRAITS_END>
-
 
 } // namespace DNDS::Geom::Elem

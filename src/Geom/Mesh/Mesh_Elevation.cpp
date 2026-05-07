@@ -123,7 +123,7 @@ namespace DNDS::Geom
         // std::cout << fmt::format("Num NewNode {} ", localNewNodeNum) << std::endl;
         // for (auto v : newCoords)
         //     std::cout << v.transpose() << std::endl;
-        index numNewNode;
+        index numNewNode = UnInitIndex;
         MPI::Allreduce(&localNewNodeNum, &numNewNode, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
         if (mpi.rank == mRank)
             log() << fmt::format("=== Mesh Elevation: Num NewNode {} ", numNewNode) << std::endl;
@@ -192,8 +192,8 @@ namespace DNDS::Geom
             {
                 if (iNodeNew < 0)
                     continue;
-                MPI_int rank;
-                index val;
+                MPI_int rank = UnInitMPIInt;
+                index val = UnInitIndex;
                 if (!coords.trans.pLGlobalMapping->search(iNodeNew, rank, val))
                     DNDS_assert_info(false, "search failed");
                 if (rank != mpi.rank)
@@ -271,7 +271,7 @@ namespace DNDS::Geom
             for (int iNNode = 0; iNNode < eCell.GetNumElev_O1O2(); iNNode++)
             {
                 auto eSpan = eCell.ObtainElevNodeSpan(iNNode);
-                std::array<index, Elem::CellNumNodeMax> spanNodes;
+                std::array<index, Elem::CellNumNodeMax> spanNodes{};
                 eCell.ExtractElevNodeSpanNodes(iNNode, c2n, spanNodes);
                 auto spanNodesSrt = spanNodes;
                 std::sort(spanNodesSrt.begin(), spanNodesSrt.begin() + eSpan.GetNumNodes());
@@ -759,8 +759,8 @@ namespace DNDS::Geom
                 DNDS_assert_info(iFace >= 0 || iFace == UnInitIndex, fmt::format("iFace {}", iFace));
                 if (iFace == UnInitIndex) // old cell2face could contain void pointing
                     continue;
-                DNDS::MPI_int rank;
-                DNDS::index val;
+                DNDS::MPI_int rank = UnInitMPIInt;
+                DNDS::index val = UnInitIndex;
                 if (!face2node.trans.pLGlobalMapping->search(iFace, rank, val))
                     DNDS_assert_info(false, "search failed");
                 if (rank != mpi.rank)
@@ -803,8 +803,8 @@ namespace DNDS::Geom
         {
             if (iNodeOther == UnInitIndex)
                 return;
-            DNDS::MPI_int rank;
-            DNDS::index val;
+            DNDS::MPI_int rank = UnInitMPIInt;
+            DNDS::index val = UnInitIndex;
             // if (!cell2cell.trans.pLGlobalMapping->search(iCellOther, rank, val))
             //     DNDS_assert_info(false, "search failed");
             // if (rank != mpi.rank)
@@ -879,9 +879,9 @@ namespace DNDS::Geom
         auto GetCoordsOnFaceExtended = [&](index iFace, tSmallCoords &cs)
         {
             if (!isPeriodic)
-                __GetCoords(face2nodeExtended[iFace], cs);
+                _detail_GetCoords(face2nodeExtended[iFace], cs);
             else
-                __GetCoordsOnElem(face2nodeExtended[iFace], face2nodePbiExtended[iFace], cs);
+                _detail_GetCoordsOnElem(face2nodeExtended[iFace], face2nodePbiExtended[iFace], cs);
         };
 
         for (index iFace = 0; iFace < face2nodeExtended.Size(); iFace++)

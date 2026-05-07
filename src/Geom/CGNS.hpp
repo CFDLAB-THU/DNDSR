@@ -6,10 +6,14 @@
 
 namespace DNDS::Geom
 {
-#define DNDS_CGNS_CALL_EXIT(call) {if (call) cg_error_exit();}
+#define DNDS_CGNS_CALL_EXIT(call) \
+    {                             \
+        if (call)                 \
+            cg_error_exit();      \
+    }
 
     // todo: make these mappings easy to maintain (like, inverted with program)
-    inline constexpr Elem::ElemType __getElemTypeFromCGNSType(ElementType_t cgns_et)
+    constexpr Elem::ElemType _getElemTypeFromCGNSType(ElementType_t cgns_et)
     {
         switch (cgns_et)
         {
@@ -46,7 +50,7 @@ namespace DNDS::Geom
         }
     }
 
-    inline constexpr ElementType_t __getCGNSTypeFromElemType(Elem::ElemType et)
+    constexpr ElementType_t _getCGNSTypeFromElemType(Elem::ElemType et)
     {
         switch (et)
         {

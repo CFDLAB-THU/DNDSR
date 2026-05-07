@@ -42,8 +42,8 @@ namespace DNDS::Geom
     /// over all leaders referencing it.
     struct FollowSpec
     {
-        EntityKind follower;     ///< Entity kind to derive map for.
-        EntityKind leader;       ///< Explicit-map entity kind to follow.
+        EntityKind follower{};   ///< Entity kind to derive map for.
+        EntityKind leader{};     ///< Explicit-map entity kind to follow.
         AdjKind follower2leader; ///< Support adj: follower -> leader.
     };
 

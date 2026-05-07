@@ -12,33 +12,34 @@ namespace DNDS::Geom::Elem
 {
 
     // Forward declaration (primary template is in ElementTraitsBase.hpp)
-    template <ElemType> struct ShapeFuncImpl;
+    template <ElemType>
+    struct ShapeFuncImpl;
 
     // <GEN_SHAPE_FUNCS_BEGIN>
     template <>
     struct ShapeFuncImpl<Line3>
     {
         template <class TPoint, class TArray>
-        DNDS_DEVICE_CALLABLE static inline void Diff0(const TPoint &p, TArray &&v)
+        DNDS_DEVICE_CALLABLE static void Diff0(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
-            const t_real _t0 = ((0.5))*xi;
-            v(0, 0) = _t0*(xi - 1);
-            v(0, 1) = _t0*(xi + 1);
+            const t_real _t0 = ((0.5)) * xi;
+            v(0, 0) = _t0 * (xi - 1);
+            v(0, 1) = _t0 * (xi + 1);
             v(0, 2) = 1 - ((xi) * (xi));
         }
 
         template <class TPoint, class TArray>
-        DNDS_DEVICE_CALLABLE static inline void Diff1(const TPoint &p, TArray &&v)
+        DNDS_DEVICE_CALLABLE static void Diff1(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             v(0, 0) = xi + (-0.5);
             v(0, 1) = xi + (0.5);
-            v(0, 2) = -2*xi;
+            v(0, 2) = -2 * xi;
         }
 
         template <class TPoint, class TArray>
-        DNDS_DEVICE_CALLABLE static inline void Diff2(const TPoint &p, TArray &&v)
+        DNDS_DEVICE_CALLABLE static void Diff2(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             v(0, 0) = 1;
@@ -47,7 +48,7 @@ namespace DNDS::Geom::Elem
         }
 
         template <class TPoint, class TArray>
-        DNDS_DEVICE_CALLABLE static inline void Diff3(const TPoint &p, TArray &&v)
+        DNDS_DEVICE_CALLABLE static void Diff3(const TPoint &p, TArray &&v)
         {
             t_real xi = p[0];
             // all zero
@@ -68,11 +69,12 @@ namespace DNDS::Geom::Elem
         static constexpr int numFaces = 0;
         static constexpr ParamSpace paramSpace = LineSpace;
         static constexpr t_real paramSpaceVol = 2.0;
-
+        // 3 * NNodes is a compile-time constant; no overflow possible.
+        // NOLINTNEXTLINE(bugprone-implicit-widening-of-multiplication-result)
         static constexpr std::array<t_real, 3 * 3> standardCoords = {
-            -1, 0, 0,  // Node 0: vertex
+            -1, 0, 0, // Node 0: vertex
             1, 0, 0,  // Node 1: vertex
-            0, 0, 0};  // Node 2
+            0, 0, 0}; // Node 2
 
         static constexpr ElemType GetFaceType(t_index /*iFace*/) { return UnknownElem; }
 
@@ -84,17 +86,13 @@ namespace DNDS::Geom::Elem
 
         static constexpr ElemType GetBisectElemType(t_index /*i*/) { return Line2; }
 
-        static constexpr std::array<tBisectSub, 2> bisectElements = {{
-            {0, 2},
-            {2, 1}
-        }};
+        static constexpr std::array<tBisectSub, 2> bisectElements = {{{0, 2},
+                                                                      {2, 1}}};
 
         static constexpr int vtkCellType = 4;
 
         static constexpr std::array<int, 3> vtkNodeOrder = {0, 2, 1};
     };
     // <GEN_ELEM_TRAITS_END>
-
-
 
 } // namespace DNDS::Geom::Elem
