@@ -406,8 +406,14 @@ namespace DNDS::Geom
     /// `toDepth`. Row order is defined by element topology and must not be
     /// permuted (e.g., cell2node ordering determines element shape functions).
     ///
-    /// Periodic bits (`pbi`) are only meaningful when `toDepth == 0` (nodes).
-    /// For non-periodic meshes or non-node targets, `pbi` remains uninitialized.
+    /// Periodic bits (`pbi`) are available on all cones as an optional
+    /// payload.  For non-periodic meshes or cones where the caller does
+    /// not populate pbi, the member remains uninitialised and `hasPbi()`
+    /// returns false.
+    ///
+    /// Cones to nodes (`toDepth == 0`) are the most common carrier because
+    /// pbi naturally lives on node-periodic data, but cell2face or cell2edge
+    /// cones may also carry pbi when needed.
     ///
     /// The adjacency data is stored via `ssp<AdjVariant>` for shared ownership.
     /// Both the DAG and legacy mesh members can share the same allocation.
@@ -416,7 +422,7 @@ namespace DNDS::Geom
         int fromDepth{-1};   ///< Source stratum (e.g., dim for cells, dim-1 for faces)
         int toDepth{-1};     ///< Target stratum (e.g., 0 for nodes, dim-1 for faces)
         ssp<AdjVariant> adj; ///< Shared adjacency pair (typed by row width)
-        tPbiPair pbi;        ///< Periodic bits per entry (only for toDepth==0, optional)
+        tPbiPair pbi;        ///< Periodic bits per entry (optional, any toDepth)
 
         /// Access as variable-width tAdjPair. Throws if adj holds a fixed-width type.
         tAdjPair &asAdj() { return std::get<tAdjPair>(*adj); }
@@ -453,7 +459,7 @@ namespace DNDS::Geom
                               { return bool(p.father); }, *adj);
         }
 
-        /// Check if pbi is attached (only valid for toDepth==0).
+        /// Check if pbi is attached.
         [[nodiscard]] bool hasPbi() const { return bool(pbi.father); }
     };
 
@@ -465,7 +471,7 @@ namespace DNDS::Geom
     /// `toDepth`. Row order is determined by the creation method (typically
     /// Inverse), and is stable but not semantically ordered.
     ///
-    /// Supports never carry periodic bits — pbi is a property of cones to nodes.
+    /// Supports never carry periodic bits — pbi is a property of cones.
     ///
     /// The adjacency data is stored via `ssp<AdjVariant>` for shared ownership.
     struct SupportAdj

@@ -50,6 +50,8 @@ namespace DNDS::Geom
         MeshAdjState adjN2CBState{Adj_Unknown};
         // state of: cell2cellFace
         MeshAdjState adjC2CFaceState{Adj_Unknown};
+        // state of: cell2edge, edge2node, edge2cell
+        MeshAdjState adjEdgeState{Adj_Unknown};
         Periodicity periodicInfo;
         index nNodeO1{-1};
         MeshElevationState elevState = Elevation_Untouched;
@@ -104,6 +106,7 @@ namespace DNDS::Geom
         std::vector<index> bnd2faceV;               // no device
         std::unordered_map<index, index> face2bndM; // no device
         /// periodic only, after interpolated
+        tPbiPair cell2facePbi;
         tPbiPair face2nodePbi;
 
         auto device_array_list_facial()
@@ -111,6 +114,7 @@ namespace DNDS::Geom
             return std::make_tuple(
                 DNDS_MAKE_1_MEMBER_REF(face2cell),
                 DNDS_MAKE_1_MEMBER_REF(face2node),
+                DNDS_MAKE_1_MEMBER_REF(cell2facePbi),
                 DNDS_MAKE_1_MEMBER_REF(face2nodePbi),
                 DNDS_MAKE_1_MEMBER_REF(faceElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(face2bnd));
@@ -121,6 +125,25 @@ namespace DNDS::Geom
             return std::make_tuple(
                 DNDS_MAKE_1_MEMBER_REF(cell2face),
                 DNDS_MAKE_1_MEMBER_REF(bnd2face));
+        }
+
+        /// interpolated edges (3D only)
+        AdjPairTracked<tAdjPair> cell2edge; // → Edge
+        AdjPairTracked<tAdjPair> edge2node; // → Node
+        AdjPairTracked<tAdjPair> edge2cell; // → Cell (variable-width, N-parent)
+        tElemInfoArrayPair edgeElemInfo;
+        /// periodic only, after edge interpolation
+        tPbiPair cell2edgePbi;
+        tPbiPair edge2nodePbi;
+
+        auto device_array_list_edge()
+        {
+            return std::make_tuple(
+                DNDS_MAKE_1_MEMBER_REF(edge2cell),
+                DNDS_MAKE_1_MEMBER_REF(edge2node),
+                DNDS_MAKE_1_MEMBER_REF(cell2edgePbi),
+                DNDS_MAKE_1_MEMBER_REF(edge2nodePbi),
+                DNDS_MAKE_1_MEMBER_REF(edgeElemInfo));
         }
 
         /// constructed on demand
@@ -487,6 +510,11 @@ namespace DNDS::Geom
         void MatchFaceBoundary();
         void InterpolateFaceLegacy();
         void AssertOnFaces();
+
+        void InterpolateEdge();
+        void BuildGhostEdge();
+        void AdjGlobal2LocalEdge();
+        void AdjLocal2GlobalEdge();
 
         void ConstructBndMesh(UnstructuredMesh &bMesh);
 

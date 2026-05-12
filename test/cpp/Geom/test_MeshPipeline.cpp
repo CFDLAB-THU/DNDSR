@@ -2116,3 +2116,111 @@ TEST_CASE("MultiLayerGhost: global cell count preserved across layers")
         CHECK(globalCells == cfg.expectedCells);
     }
 }
+
+// ===========================================================================
+// InterpolateEdge tests (3D only — Ball2, expensive, run manually)
+// ===========================================================================
+// Edge interpolation is tested at the DSL level in
+// test_MeshConnectivity_Interpolate.cpp (InterpolateGlobal with edges).
+// The mesh-pipeline tests below are expensive on Ball2 (~960K cells)
+// and are commented out; run manually with
+//   mpirun -np 8 ./build/test/cpp/geom_test_mesh_pipeline -tc="InterpolateEdge:*"
+#if 0
+TEST_CASE("InterpolateEdge: edge count is positive")
+{
+    if (g_mpi.size != 8 || !g_full[4])
+        return;
+    auto &m = *g_full[4];
+    m.InterpolateEdge();
+    m.AdjGlobal2LocalEdge();
+    CHECK(m.cell2edge.father);
+    CHECK(m.edge2node.father);
+    CHECK(m.edge2cell.father);
+    CHECK(m.edgeElemInfo.father);
+    DNDS::index localEdges = m.edge2node.father->Size();
+    CHECK(localEdges > 0);
+    DNDS::index localCells = m.NumCell();
+    for (DNDS::index iC = 0; iC < localCells; iC++)
+    {
+        auto elem = m.GetCellElement(iC);
+        int nEdgeExpected = elem.GetNumEdges();
+        CHECK(m.cell2edge.RowSize(iC) == nEdgeExpected);
+    }
+}
+
+TEST_CASE("InterpolateEdge: edge2node indices in valid range")
+{
+    if (g_mpi.size != 8 || !g_full[4])
+        return;
+    auto &m = *g_full[4];    DNDS::index totalNodes = m.NumNode() + m.NumNodeGhost();
+    for (DNDS::index iE = 0; iE < m.edge2node.father->Size(); iE++)
+        for (DNDS::rowsize j = 0; j < m.edge2node.RowSize(iE); j++)
+        {
+            DNDS::index iN = m.edge2node(iE, j);
+            CHECK(iN >= 0);
+            CHECK(iN < totalNodes);
+        }
+}
+
+TEST_CASE("InterpolateEdge: edge2cell has at least 1 parent per edge")
+{
+    if (g_mpi.size != 8 || !g_full[4])
+        return;
+    auto &m = *g_full[4];    DNDS::index totalCells = m.NumCell() + m.NumCellGhost();
+    for (DNDS::index iE = 0; iE < m.edge2cell.father->Size(); iE++)
+    {
+        CHECK(m.edge2cell.RowSize(iE) >= 1);
+        for (DNDS::rowsize j = 0; j < m.edge2cell.RowSize(iE); j++)
+        {
+            DNDS::index iC = m.edge2cell(iE, j);
+            CHECK(iC >= 0);
+            CHECK(iC < totalCells);
+        }
+    }
+}
+
+TEST_CASE("InterpolateEdge: cell2edge row sizes match expected edge count")
+{
+    if (g_mpi.size != 8 || !g_full[4])
+        return;
+    auto &m = *g_full[4];    for (DNDS::index iC = 0; iC < m.NumCell(); iC++)
+    {
+        auto elem = m.GetCellElement(iC);
+        int nEdgeExpected = elem.GetNumEdges();
+        CHECK(m.cell2edge.RowSize(iC) == nEdgeExpected);
+    }
+}
+
+TEST_CASE("InterpolateEdge: cell2edge entries are valid edge indices")
+{
+    if (g_mpi.size != 8 || !g_full[4])
+        return;
+    auto &m = *g_full[4];    DNDS::index totalEdges = m.edge2node.father->Size() + m.edge2node.son->Size();
+    for (DNDS::index iC = 0; iC < m.NumCell(); iC++)
+        for (DNDS::rowsize j = 0; j < m.cell2edge.RowSize(iC); j++)
+        {
+            DNDS::index iE = m.cell2edge(iC, j);
+            CHECK(iE >= 0);
+            CHECK(iE < totalEdges);
+        }
+}
+
+TEST_CASE("InterpolateEdge: edge adjacency state is Local after pipeline")
+{
+    if (g_mpi.size != 8 || !g_full[4])
+        return;
+    auto &m = *g_full[4];    CHECK(m.adjEdgeState == Adj_PointToLocal);
+}
+
+TEST_CASE("InterpolateEdge: edge elem types are valid Line2 or Line3")
+{
+    if (g_mpi.size != 8 || !g_full[4])
+        return;
+    auto &m = *g_full[4];    for (DNDS::index iE = 0; iE < m.edgeElemInfo.father->Size(); iE++)
+    {
+        auto eType = m.edgeElemInfo(iE, 0).getElemType();
+        auto dim = Elem::Element{eType}.GetDim();
+        CHECK(dim == 1);
+    }
+}
+#endif

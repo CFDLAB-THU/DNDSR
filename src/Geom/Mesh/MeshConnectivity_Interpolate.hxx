@@ -45,7 +45,10 @@ namespace DNDS::Geom
         std::vector<std::vector<index>> node2entity(nNode);
 
         // Scratch buffer for extracted sub-entity nodes
-        constexpr int maxSubEntityNodes = 10; // Quad9 = 9, padded
+        constexpr int maxSubEntityNodes = 10; // Quad9 face = 9 nodes, padded
+        static_assert(maxSubEntityNodes >= 10,
+                      "maxSubEntityNodes must be >= 10 (Quad9 face = 9 nodes); "
+                      "bump if adding richer elements");
         std::array<index, maxSubEntityNodes> subNodesBuf{};
 
         const bool hasMatchExtra = bool(query.matchExtra);
@@ -466,6 +469,9 @@ namespace DNDS::Geom
         // Pbi is extracted from the FIRST parent's perspective.
         // Stored per local entity, used for dedup fingerprint and output.
         constexpr int maxSubEntityNodes = 10;
+        static_assert(maxSubEntityNodes >= 10,
+                      "maxSubEntityNodes must be >= 10 (Quad9 face = 9 nodes); "
+                      "bump if adding richer elements");
         std::vector<std::vector<NodePeriodicBits>> localEntityPbi(nAllEntities);
         if (hasPbi && query.extractPbi)
         {
