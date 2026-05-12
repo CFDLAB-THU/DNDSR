@@ -38,6 +38,7 @@
 #include "EulerBC.hpp"
 #include "EulerJacobian.hpp"
 #include "EulerEvaluatorSettings.hpp"
+#include "SourceTermContributor.hpp"
 #include "DNDS/Serializer/SerializerBase.hpp"
 #include "RANS_ke.hpp"
 
@@ -77,7 +78,7 @@ namespace DNDS::Euler
     class EulerEvaluator
     {
     public:
-        using Traits = EulerModelTraits<model>; ///< Compile-time traits: hasSA, has2EQ, etc.
+        using Traits = EulerModelTraits<model>;             ///< Compile-time traits: hasSA, has2EQ, etc.
         static const int nVarsFixed = getnVarsFixed(model); ///< Number of conserved variables (compile-time fixed).
         static const int dim = getDim_Fixed(model);         ///< Spatial dimension (2 or 3).
         static const int gDim = getGeomDim_Fixed(model);    ///< Geometric dimension of the mesh.
@@ -87,22 +88,22 @@ namespace DNDS::Euler
         /// @brief Compute the maximum batch-multiplied column count for batched Eigen matrices.
         static constexpr int MaxBatchMult(int n) { return MaxBatch > 0 ? (n * MaxBatch) : Eigen::Dynamic; }
 
-        typedef Eigen::VectorFMTSafe<real, dim> TVec;           ///< Spatial vector (dim components).
-        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatch> TVec_Batch; ///< Batch of spatial vectors.
-        typedef Eigen::MatrixFMTSafe<real, dim, dim> TMat;      ///< Spatial matrix (dim x dim).
-        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatchMult(3)> TMat_Batch; ///< Batch of spatial matrices.
-        typedef Eigen::VectorFMTSafe<real, nVarsFixed> TU;      ///< Conservative variable vector (nVarsFixed components).
+        typedef Eigen::VectorFMTSafe<real, dim> TVec;                                                                   ///< Spatial vector (dim components).
+        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatch> TVec_Batch;             ///< Batch of spatial vectors.
+        typedef Eigen::MatrixFMTSafe<real, dim, dim> TMat;                                                              ///< Spatial matrix (dim x dim).
+        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatchMult(3)> TMat_Batch;      ///< Batch of spatial matrices.
+        typedef Eigen::VectorFMTSafe<real, nVarsFixed> TU;                                                              ///< Conservative variable vector (nVarsFixed components).
         typedef Eigen::MatrixFMTSafe<real, nVarsFixed, Eigen::Dynamic, Eigen::ColMajor, nVarsFixed, MaxBatch> TU_Batch; ///< Batch of conservative variable vectors.
-        typedef Eigen::MatrixFMTSafe<real, 1, Eigen::Dynamic, Eigen::RowMajor, 1, MaxBatch> TReal_Batch; ///< Batch of scalar values.
-        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, nVarsFixed> TJacobianU;  ///< Jacobian matrix (nVars x nVars) of the flux w.r.t. conserved variables.
-        typedef Eigen::MatrixFMTSafe<real, dim, nVarsFixed> TDiffU;             ///< Gradient of conserved variables (dim x nVars).
-        typedef Eigen::MatrixFMTSafe<real, Eigen::Dynamic, nVarsFixed, Eigen::ColMajor, MaxBatchMult(3)> TDiffU_Batch; ///< Batch of gradient matrices.
-        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, dim> TDiffUTransposed;   ///< Transposed gradient (nVars x dim).
-        typedef ArrayDOFV<nVarsFixed> TDof;     ///< Cell-centered DOF array (mean values).
-        typedef ArrayRECV<nVarsFixed> TRec;     ///< Reconstruction coefficient array (per-cell polynomial coefficients).
-        typedef ArrayRECV<1> TScalar;           ///< Scalar reconstruction coefficient array.
+        typedef Eigen::MatrixFMTSafe<real, 1, Eigen::Dynamic, Eigen::RowMajor, 1, MaxBatch> TReal_Batch;                ///< Batch of scalar values.
+        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, nVarsFixed> TJacobianU;                                          ///< Jacobian matrix (nVars x nVars) of the flux w.r.t. conserved variables.
+        typedef Eigen::MatrixFMTSafe<real, dim, nVarsFixed> TDiffU;                                                     ///< Gradient of conserved variables (dim x nVars).
+        typedef Eigen::MatrixFMTSafe<real, Eigen::Dynamic, nVarsFixed, Eigen::ColMajor, MaxBatchMult(3)> TDiffU_Batch;  ///< Batch of gradient matrices.
+        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, dim> TDiffUTransposed;                                           ///< Transposed gradient (nVars x dim).
+        typedef ArrayDOFV<nVarsFixed> TDof;                                                                             ///< Cell-centered DOF array (mean values).
+        typedef ArrayRECV<nVarsFixed> TRec;                                                                             ///< Reconstruction coefficient array (per-cell polynomial coefficients).
+        typedef ArrayRECV<1> TScalar;                                                                                   ///< Scalar reconstruction coefficient array.
 
-        typedef CFV::VariationalReconstruction<gDim> TVFV;      ///< Variational reconstruction type for this geometric dimension.
+        typedef CFV::VariationalReconstruction<gDim> TVFV;       ///< Variational reconstruction type for this geometric dimension.
         typedef ssp<CFV::VariationalReconstruction<gDim>> TpVFV; ///< Shared pointer to the variational reconstruction object.
         typedef ssp<BoundaryHandler<model>> TpBCHandler;         ///< Shared pointer to the boundary condition handler.
 
@@ -174,28 +175,28 @@ namespace DNDS::Euler
 
     private:
     public:
-        ssp<Geom::UnstructuredMesh> mesh;                        ///< Shared pointer to the unstructured mesh.
+        ssp<Geom::UnstructuredMesh> mesh;              ///< Shared pointer to the unstructured mesh.
         ssp<CFV::VariationalReconstruction<gDim>> vfv; //! gDim -> 3 for intellisense //!tmptmp  ///< Variational reconstruction object.
-        ssp<BoundaryHandler<model>> pBCHandler;                  ///< Boundary condition handler.
-        int kAv = 0;                                             ///< Artificial viscosity polynomial order (maxOrder + 1).
+        ssp<BoundaryHandler<model>> pBCHandler;        ///< Boundary condition handler.
+        int kAv = 0;                                   ///< Artificial viscosity polynomial order (maxOrder + 1).
 
         // buffer for fdtau
         // std::vector<real> lambdaCell;
-        std::vector<real> lambdaFace;       ///< Per-face spectral radius (inviscid + viscous combined).
-        std::vector<real> lambdaFaceC;      ///< Per-face convective spectral radius.
-        std::vector<real> lambdaFaceVis;    ///< Per-face viscous spectral radius.
-        std::vector<real> lambdaFace0;      ///< Per-face eigenvalue |u·n| (contact wave).
-        std::vector<real> lambdaFace123;    ///< Per-face eigenvalue |u·n + a| (acoustic wave).
-        std::vector<real> lambdaFace4;      ///< Per-face eigenvalue |u·n - a| (acoustic wave).
-        std::vector<real> deltaLambdaFace;  ///< Per-face spectral radius difference for implicit diagonal.
-        ArrayDOFV<1> deltaLambdaCell;       ///< Per-cell accumulated spectral radius difference.
+        std::vector<real> lambdaFace;      ///< Per-face spectral radius (inviscid + viscous combined).
+        std::vector<real> lambdaFaceC;     ///< Per-face convective spectral radius.
+        std::vector<real> lambdaFaceVis;   ///< Per-face viscous spectral radius.
+        std::vector<real> lambdaFace0;     ///< Per-face eigenvalue |u·n| (contact wave).
+        std::vector<real> lambdaFace123;   ///< Per-face eigenvalue |u·n + a| (acoustic wave).
+        std::vector<real> lambdaFace4;     ///< Per-face eigenvalue |u·n - a| (acoustic wave).
+        std::vector<real> deltaLambdaFace; ///< Per-face spectral radius difference for implicit diagonal.
+        ArrayDOFV<1> deltaLambdaCell;      ///< Per-cell accumulated spectral radius difference.
 
         // grad fix
         std::vector<TDiffU> gradUFix; ///< Green-Gauss gradient correction buffer for source term stabilization.
 
         // wall distance
-        std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall;  ///< Per-cell wall distance (one value per cell node/quadrature point).
-        std::vector<real> dWallFace;                             ///< Per-face wall distance (interpolated from cell values).
+        std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall; ///< Per-cell wall distance (one value per cell node/quadrature point).
+        std::vector<real> dWallFace;                            ///< Per-face wall distance (interpolated from cell values).
 
         // maps from bc id to various objects
         std::map<Geom::t_index, AnchorPointRecorder<nVarsFixed>> anchorRecorders; ///< Per-BC anchor point recorders for profile extraction.
@@ -203,21 +204,25 @@ namespace DNDS::Euler
         std::map<Geom::t_index, IntegrationRecorder> bndIntegrations;             ///< Per-BC boundary flux/force integration accumulators.
         std::map<Geom::t_index, std::ofstream> bndIntegrationLogs;                ///< Per-BC log file streams for integration output.
 
-        std::set<Geom::t_index> cLDriverBndIDs;  ///< Boundary IDs driven by the CL (lift-coefficient) driver.
-        std::unique_ptr<CLDriver> pCLDriver;     ///< Lift-coefficient driver for AoA adaptation (null if unused).
+        std::set<Geom::t_index> cLDriverBndIDs; ///< Boundary IDs driven by the CL (lift-coefficient) driver.
+        std::unique_ptr<CLDriver> pCLDriver;    ///< Lift-coefficient driver for AoA adaptation (null if unused).
 
         // ArrayVDOF<25> dRdUrec;
         // ArrayVDOF<25> dRdb;
         ArrayGRADV<nVarsFixed, gDim> uGradBuf, uGradBufNoLim; ///< Gradient buffers: limited and unlimited.
 
-        Eigen::Vector<real, -1> fluxWallSum;       ///< Accumulated wall flux integral (force on wall boundaries).
-        std::vector<TU> fluxBnd;                   ///< Per-boundary-face flux values.
-        std::vector<TVec> fluxBndForceT;           ///< Per-boundary-face tangential force.
-        index nFaceReducedOrder = 0;               ///< Count of faces where reconstruction order was reduced.
+        Eigen::Vector<real, -1> fluxWallSum; ///< Accumulated wall flux integral (force on wall boundaries).
+        std::vector<TU> fluxBnd;             ///< Per-boundary-face flux values.
+        std::vector<TVec> fluxBndForceT;     ///< Per-boundary-face tangential force.
+        index nFaceReducedOrder = 0;         ///< Count of faces where reconstruction order was reduced.
 
-        ssp<Direct::SerialSymLUStructure> symLU;   ///< Symmetric LU structure for direct preconditioner.
+        ssp<Direct::SerialSymLUStructure> symLU; ///< Symmetric LU structure for direct preconditioner.
 
-        EulerEvaluatorSettings<model> settings;    ///< Physics and numerics settings for this evaluator.
+        EulerEvaluatorSettings<model> settings; ///< Physics and numerics settings for this evaluator.
+
+        /// @brief Source term contributors for extended models (NS_EX / NS_EX_3D).
+        ///        Empty for fixed-size models — those use the if-constexpr path in source().
+        std::vector<SourceTermVariant> sourceContributors;
 
         /**
          * @brief Construct an EulerEvaluator and initialize all internal buffers.
@@ -243,6 +248,9 @@ namespace DNDS::Euler
                 DNDS_assert_info(nVars >= getDim_Fixed(model) + 2, "nVars too small");
             else
                 DNDS_assert_info(nVars == getNVars(model), "do not change the nVars for this model");
+
+            if (settings.reactiveFlow.enabled)
+                DNDS_assert_info(nVars > I4 + 1, "reactive flow requires at least one species variable (nVars > dim+2)");
 
             vfv->BuildUGrad(uGradBuf, nVars);
             vfv->BuildUGrad(uGradBufNoLim, nVars);
@@ -303,6 +311,9 @@ namespace DNDS::Euler
             }
             if (cLDriverBndIDs.size())
                 pCLDriver = std::make_unique<CLDriver>(settings.cLDriverSettings);
+
+            if constexpr (Traits::isExtended)
+                sourceContributors = buildSourceContributors(settings, axisSymmetric);
         }
 
         /**
@@ -334,9 +345,8 @@ namespace DNDS::Euler
         void GetWallDist_ComputeFaceDistances();
 
     public:
-
         /******************************************************/
-        static const uint64_t DT_No_Flags = 0x0ull;                 ///< No flags for EvaluateDt.
+        static const uint64_t DT_No_Flags = 0x0ull;                     ///< No flags for EvaluateDt.
         static const uint64_t DT_Dont_update_lambda01234 = 0x1ull << 0; ///< Skip recomputation of per-face eigenvalues lambda0/123/4.
         /**
          * @brief Estimate the local or global time step for each cell.
@@ -367,15 +377,15 @@ namespace DNDS::Euler
 
         /// @name RHS evaluation flags (bitwise OR combinable)
         /// @{
-        static const uint64_t RHS_No_Flags = 0x0ull;                              ///< Default: full RHS evaluation.
-        static const uint64_t RHS_Ignore_Viscosity = 0x1ull << 0;                 ///< Skip viscous flux contribution.
-        static const uint64_t RHS_Dont_Update_Integration = 0x1ull << 1;          ///< Skip boundary integration accumulation.
-        static const uint64_t RHS_Dont_Record_Bud_Flux = 0x1ull << 2;            ///< Skip recording per-boundary flux.
-        static const uint64_t RHS_Direct_2nd_Rec = 0x1ull << 8;                  ///< Use direct 2nd-order reconstruction.
-        static const uint64_t RHS_Direct_2nd_Rec_1st_Conv = 0x1ull << 9;         ///< 2nd-order rec with 1st-order convection.
-        static const uint64_t RHS_Direct_2nd_Rec_use_limiter = 0x1ull << 10;     ///< Apply limiter when using direct 2nd rec.
+        static const uint64_t RHS_No_Flags = 0x0ull;                                        ///< Default: full RHS evaluation.
+        static const uint64_t RHS_Ignore_Viscosity = 0x1ull << 0;                           ///< Skip viscous flux contribution.
+        static const uint64_t RHS_Dont_Update_Integration = 0x1ull << 1;                    ///< Skip boundary integration accumulation.
+        static const uint64_t RHS_Dont_Record_Bud_Flux = 0x1ull << 2;                       ///< Skip recording per-boundary flux.
+        static const uint64_t RHS_Direct_2nd_Rec = 0x1ull << 8;                             ///< Use direct 2nd-order reconstruction.
+        static const uint64_t RHS_Direct_2nd_Rec_1st_Conv = 0x1ull << 9;                    ///< 2nd-order rec with 1st-order convection.
+        static const uint64_t RHS_Direct_2nd_Rec_use_limiter = 0x1ull << 10;                ///< Apply limiter when using direct 2nd rec.
         static const uint64_t RHS_Direct_2nd_Rec_already_have_uGradBufNoLim = 0x1ull << 11; ///< uGradBufNoLim is already computed.
-        static const uint64_t RHS_Recover_IncFScale = 0x1ull << 12;              ///< Recover incremental face scaling.
+        static const uint64_t RHS_Recover_IncFScale = 0x1ull << 12;                         ///< Recover incremental face scaling.
         /// @}
 
         /**
@@ -599,7 +609,7 @@ namespace DNDS::Euler
         void MeanValuePrim2Cons(ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &u);
 
         using tFCompareField = std::function<TU(const Geom::tPoint &, real)>;         ///< Callback type for analytical comparison field.
-        using tFCompareFieldWeight = std::function<real(const Geom::tPoint &, real)>;  ///< Callback type for comparison weighting function.
+        using tFCompareFieldWeight = std::function<real(const Geom::tPoint &, real)>; ///< Callback type for comparison weighting function.
 
         /**
          * @brief Compute the norm of the RHS residual vector.
@@ -638,7 +648,7 @@ namespace DNDS::Euler
 
         /// @name Limiter flags
         /// @{
-        static const uint64_t LIMITER_UGRAD_No_Flags = 0x0ull;                  ///< Default limiter flags.
+        static const uint64_t LIMITER_UGRAD_No_Flags = 0x0ull;                   ///< Default limiter flags.
         static const uint64_t LIMITER_UGRAD_Disable_Shock_Limiter = 0x1ull << 0; ///< Disable shock-detecting component of the limiter.
         /// @}
 
@@ -656,7 +666,7 @@ namespace DNDS::Euler
         void LimiterUGrad(ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew,
                           uint64_t flags = LIMITER_UGRAD_No_Flags);
 
-        static const int EvaluateURecBeta_DEFAULT = 0x00;           ///< Default: evaluate beta without compression.
+        static const int EvaluateURecBeta_DEFAULT = 0x00;          ///< Default: evaluate beta without compression.
         static const int EvaluateURecBeta_COMPRESS_TO_MEAN = 0x01; ///< Compress reconstruction toward cell mean to enforce positivity.
         /**
          * @brief Evaluate the positivity-preserving reconstruction limiter (beta).
@@ -688,7 +698,7 @@ namespace DNDS::Euler
         bool AssertMeanValuePP(
             ArrayDOFV<nVarsFixed> &u, bool panic);
 
-        static const int EvaluateCellRHSAlpha_DEFAULT = 0x00;          ///< Default alpha evaluation mode.
+        static const int EvaluateCellRHSAlpha_DEFAULT = 0x00;        ///< Default alpha evaluation mode.
         static const int EvaluateCellRHSAlpha_MIN_IF_NOT_ONE = 0x01; ///< Take min(alpha, prev) only if prev != 1.
         static const int EvaluateCellRHSAlpha_MIN_ALL = 0x02;        ///< Always take min(alpha, prev).
         /**
@@ -1425,7 +1435,6 @@ namespace DNDS::Euler
         /// @}
 
     public:
-
         /// @brief Write boundary profile data to CSV files (rank 0 only).
         void PrintBCProfiles(const std::string &name, ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
         {
@@ -1969,10 +1978,10 @@ namespace DNDS::Euler
          */
         struct OutputOverlapDataRefs
         {
-            ArrayDOFV<nVarsFixed> &u;      ///< Cell-centered conservative DOFs.
-            ArrayRECV<nVarsFixed> &uRec;   ///< Reconstruction coefficients.
-            ArrayDOFV<1> &betaPP;          ///< PP reconstruction limiter beta.
-            ArrayDOFV<1> &alphaPP;         ///< PP RHS limiter alpha.
+            ArrayDOFV<nVarsFixed> &u;    ///< Cell-centered conservative DOFs.
+            ArrayRECV<nVarsFixed> &uRec; ///< Reconstruction coefficients.
+            ArrayDOFV<1> &betaPP;        ///< PP reconstruction limiter beta.
+            ArrayDOFV<1> &alphaPP;       ///< PP RHS limiter alpha.
         };
 
         /// @brief Initialize an OutputPicker with field callbacks for VTK/HDF5 output.
@@ -2034,7 +2043,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &uIncNew,                                                                               \
             JacobianDiagBlock<nVarsFixed> &JDiag,                                                                         \
             bool forward, bool gsUpdate, TU &sumInc,                                                                      \
-            bool uIncIsZero);                                                                     \
+            bool uIncIsZero);                                                                                             \
         ext template void EulerEvaluator<model>::UpdateSGSWithRec(                                                        \
             real alphaDiag,                                                                                               \
             real t,                                                                                                       \
@@ -2186,26 +2195,26 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
                 bool fixUL,                                                                                                \
                 int geomMode, int linMode);                                                                                \
         ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_FarField(                        \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                        \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
+            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                         \
         ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_SpecialFar(                      \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index);                                                                   \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
+            const Geom::tPoint &, real, Geom::t_index);                                                                    \
         ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_InviscidWall(                    \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index);                                                                   \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
+            const Geom::tPoint &, real, Geom::t_index);                                                                    \
         ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_ViscousWall(                     \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                        \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
+            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                         \
         ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Outflow(                         \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index);                                                                   \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
+            const Geom::tPoint &, real, Geom::t_index);                                                                    \
         ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Inflow(                          \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index);                                                                   \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
+            const Geom::tPoint &, real, Geom::t_index);                                                                    \
         ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_TotalConditionInflow(            \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index);                                                                   \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
+            const Geom::tPoint &, real, Geom::t_index);                                                                    \
         ext template void EulerEvaluator<model>::InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs); \
     }
 

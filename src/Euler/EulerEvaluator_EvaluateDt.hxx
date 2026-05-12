@@ -23,7 +23,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Collect wall boundary face triangulations for AABB-based wall distance computation.
      *
      *  Iterates over wall and isothermal-wall boundary faces, decomposes them into triangles
@@ -112,7 +113,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Compute face-averaged wall distances from cell wall distances.
      *
      *  For each face, averages the wall distance of its two adjacent cells (or uses
@@ -134,7 +136,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Compute geometric wall distance using CGAL AABB tree (all-to-all broadcast).
      *
      *  Gathers all wall triangles globally, builds a CGAL AABB tree, and queries the
@@ -245,7 +248,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Compute geometric wall distance using batched CGAL AABB tree queries.
      *
      *  Builds a local AABB tree from wall triangles (using quadrature patches), then
@@ -419,7 +423,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Compute wall distance by solving a Poisson equation with pseudo-time stepping.
      *
      *  Solves a p-Poisson equation (grad^2 phi = -1) with Dirichlet BC (phi=0) on
@@ -429,48 +434,95 @@ namespace DNDS::Euler
      */
     void EulerEvaluator<model>::GetWallDist_Poisson()
     {
-            int nSweep = settings.wallDistNJacobiSweep;
-            int nIter = settings.wallDistIter;
-            int nIterSee = 10;
-            real smoothBias = 0.0;
-            int nGmresSubspace = 10;
-            int nGmresRestart = 1;
-            int useGmres = settings.wallDistLinSolver;
-            real resTh = settings.wallDistResTol;
+        int nSweep = settings.wallDistNJacobiSweep;
+        int nIter = settings.wallDistIter;
+        int nIterSee = 10;
+        real smoothBias = 0.0;
+        int nGmresSubspace = 10;
+        int nGmresRestart = 1;
+        int useGmres = settings.wallDistLinSolver;
+        real resTh = settings.wallDistResTol;
 
-            int nPPoissonStartIter = settings.wallDistIterStart;
-            int nPPoisson = settings.wallDistPoissonP;
+        int nPPoissonStartIter = settings.wallDistIterStart;
+        int nPPoisson = settings.wallDistPoissonP;
 
-            real dTauScale = settings.wallDistDTauScale;
+        real dTauScale = settings.wallDistDTauScale;
 
-            ArrayDOFV<1> phi, rPhi, dPhi, dPhiNew, phiTmp, dTauInv;
-            ArrayDOFV<3> diffPhi;
-            vfv->BuildUDof(phi, 1);
-            vfv->BuildUDof(rPhi, 1);
-            vfv->BuildUDof(dPhi, 1);
-            vfv->BuildUDof(dPhiNew, 1);
-            vfv->BuildUDof(phiTmp, 1);
-            vfv->BuildUDof(dTauInv, 1);
-            vfv->BuildUDof(diffPhi, 3);
-            phi.setConstant(0.0);
-            dTauInv.setConstant(0.0);
+        ArrayDOFV<1> phi, rPhi, dPhi, dPhiNew, phiTmp, dTauInv;
+        ArrayDOFV<3> diffPhi;
+        vfv->BuildUDof(phi, 1);
+        vfv->BuildUDof(rPhi, 1);
+        vfv->BuildUDof(dPhi, 1);
+        vfv->BuildUDof(dPhiNew, 1);
+        vfv->BuildUDof(phiTmp, 1);
+        vfv->BuildUDof(dTauInv, 1);
+        vfv->BuildUDof(diffPhi, 3);
+        phi.setConstant(0.0);
+        dTauInv.setConstant(0.0);
 
-            std::vector<std::vector<real>> coefs;
-            coefs.resize(mesh->NumCell());
-            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                coefs.at(iCell).resize(mesh->cell2face[iCell].size() + 1);
+        std::vector<std::vector<real>> coefs;
+        coefs.resize(mesh->NumCell());
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            coefs.at(iCell).resize(mesh->cell2face[iCell].size() + 1);
 
-            std::vector<MatrixXR> mGGs;
-            mGGs.resize(mesh->NumCell());
+        std::vector<MatrixXR> mGGs;
+        mGGs.resize(mesh->NumCell());
 
-            // get mGG coefs
+        // get mGG coefs
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        {
+            Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
+            auto &mGG = mGGs.at(iCell);
+            mGG.setZero(3 + mesh->cell2face[iCell].size(), 3 + mesh->cell2face[iCell].size());
+            mGG({0, 1, 2}, {0, 1, 2}) = Eigen::Matrix3d::Identity();
+            real sumFaceArea = 0.;
+            for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+            {
+                index iFace = mesh->cell2face[iCell][ic2f];
+                index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
+                auto faceBndID = mesh->GetFaceZone(iFace);
+                auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+                Geom::tPoint baryOther = bary;
+                Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
+                if (iCellOther != UnInitIndex)
+                {
+                    baryOther = vfv->GetOtherCellPointFromCell(
+                        iCell, iCellOther, iFace,
+                        vfv->GetCellQuadraturePPhys(iCellOther, -1));
+                }
+                else
+                {
+                    DNDS_assert(faceBCType != BCUnknown);
+                    DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
+                    baryOther = bFace * 2 - bary;
+                }
+                mGG({0, 1, 2}, 3 + ic2f) = -uNormOut * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
+                mGG(3 + ic2f, {0, 1, 2}) = (baryOther + bary - 2 * bFace).transpose();
+                mGG(3 + ic2f, 3 + ic2f) = 2;
+                sumFaceArea += vfv->GetFaceArea(iFace);
+            }
+            diffPhi[iCell] /= vfv->GetCellVol(iCell);
+            auto mGGLU = mGG.fullPivLu();
+            DNDS_assert_info(mGGLU.isInvertible(), fmt::format("[[{}]]\n", Eigen::MatrixFMTSafe<real, -1, -1>(mGG)));
+            MatrixXR mGGInv = mGGLU.inverse();
+            mGG = mGGInv;
+
+            real LCell = vfv->GetCellVol(iCell) / sumFaceArea;
+            dTauInv[iCell](0) = 1. / (1. / std::pow(LCell, 2) * dTauScale);
+        }
+        dTauInv.trans.startPersistentPull();
+        dTauInv.trans.waitPersistentPull();
+
+        auto getDiffPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<3> &diffPhi)
+        {
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
-                auto &mGG = mGGs.at(iCell);
-                mGG.setZero(3 + mesh->cell2face[iCell].size(), 3 + mesh->cell2face[iCell].size());
-                mGG({0, 1, 2}, {0, 1, 2}) = Eigen::Matrix3d::Identity();
-                real sumFaceArea = 0.;
+                diffPhi[iCell].setZero();
+                Eigen::Vector<real, Eigen::Dynamic> bGG;
+                bGG.setZero(3 + mesh->cell2face[iCell].size());
                 for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                 {
                     index iFace = mesh->cell2face[iCell][ic2f];
@@ -479,10 +531,12 @@ namespace DNDS::Euler
                     Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
                     auto faceBndID = mesh->GetFaceZone(iFace);
                     auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+                    real phiOther = phi[iCell](0);
                     Geom::tPoint baryOther = bary;
                     Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
                     if (iCellOther != UnInitIndex)
                     {
+                        phiOther = phi[iCellOther](0);
                         baryOther = vfv->GetOtherCellPointFromCell(
                             iCell, iCellOther, iFace,
                             vfv->GetCellQuadraturePPhys(iCellOther, -1));
@@ -491,309 +545,261 @@ namespace DNDS::Euler
                     {
                         DNDS_assert(faceBCType != BCUnknown);
                         DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
+                        if (faceBCType == BCWall || faceBCType == BCWallIsothermal)
+                            phiOther = -phi[iCell](0);
                         baryOther = bFace * 2 - bary;
                     }
-                    mGG({0, 1, 2}, 3 + ic2f) = -uNormOut * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
-                    mGG(3 + ic2f, {0, 1, 2}) = (baryOther + bary - 2 * bFace).transpose();
-                    mGG(3 + ic2f, 3 + ic2f) = 2;
-                    sumFaceArea += vfv->GetFaceArea(iFace);
+                    real distThis = (bFace - bary).norm();
+                    real distOther = (bFace - baryOther).norm();
+                    real phiFace = (distOther * phi[iCell](0) + distThis * phiOther) / (distOther + distThis) - phi[iCell](0);
+                    diffPhi[iCell] += uNormOut * vfv->GetFaceArea(iFace) * phiFace;
+                    bGG(3 + ic2f) = phiOther + phi[iCell](0);
                 }
                 diffPhi[iCell] /= vfv->GetCellVol(iCell);
-                auto mGGLU = mGG.fullPivLu();
-                DNDS_assert_info(mGGLU.isInvertible(), fmt::format("[[{}]]\n", Eigen::MatrixFMTSafe<real, -1, -1>(mGG)));
-                MatrixXR mGGInv = mGGLU.inverse();
-                mGG = mGGInv;
-
-                real LCell = vfv->GetCellVol(iCell) / sumFaceArea;
-                dTauInv[iCell](0) = 1. / (1. / std::pow(LCell, 2) * dTauScale);
+                diffPhi[iCell] = (mGGs.at(iCell) * bGG)({0, 1, 2}); // comment to use traditional GG
             }
-            dTauInv.trans.startPersistentPull();
-            dTauInv.trans.waitPersistentPull();
+        };
 
-            auto getDiffPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<3> &diffPhi)
+        int pPoissonCur = 2;
+
+        auto rhsPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<3> &diffPhi, ArrayDOFV<1> &rhs, std::vector<std::vector<real>> &coefs, bool updateCoefs)
+        {
+            const real supressRec = 1.0;
+            getDiffPhi(phi, diffPhi);
+            diffPhi.trans.startPersistentPull();
+            diffPhi.trans.waitPersistentPull();
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
-                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                rhs[iCell](0) = 1.;
+                Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
+                if (updateCoefs)
+                    coefs.at(iCell).at(0) = 0.;
+                for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                 {
-                    Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
-                    diffPhi[iCell].setZero();
-                    Eigen::Vector<real, Eigen::Dynamic> bGG;
-                    bGG.setZero(3 + mesh->cell2face[iCell].size());
-                    for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+                    index iFace = mesh->cell2face[iCell][ic2f];
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                    int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
+                    auto faceBndID = mesh->GetFaceZone(iFace);
+                    auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+                    real phiOther = phi[iCell](0);
+                    Geom::tPoint baryOther = bary;
+                    Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
+                    real phiThisFace = phi[iCell](0) + (bFace - bary).dot(diffPhi[iCell]) * supressRec;
+                    real phiOtherFace = phiThisFace;
+                    real diffPhiNormThis = diffPhi[iCell].dot(uNormOut) * supressRec;
+                    real diffPhiNormOther = diffPhiNormThis;
+                    Geom::tPoint diffPhiFace = diffPhi[iCell] * supressRec;
+                    if (iCellOther != UnInitIndex)
                     {
-                        index iFace = mesh->cell2face[iCell][ic2f];
-                        index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                        int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
-                        Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
-                        auto faceBndID = mesh->GetFaceZone(iFace);
-                        auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
-                        real phiOther = phi[iCell](0);
-                        Geom::tPoint baryOther = bary;
-                        Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
-                        if (iCellOther != UnInitIndex)
-                        {
-                            phiOther = phi[iCellOther](0);
-                            baryOther = vfv->GetOtherCellPointFromCell(
-                                iCell, iCellOther, iFace,
-                                vfv->GetCellQuadraturePPhys(iCellOther, -1));
-                        }
-                        else
-                        {
-                            DNDS_assert(faceBCType != BCUnknown);
-                            DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
-                            if (faceBCType == BCWall || faceBCType == BCWallIsothermal)
-                                phiOther = -phi[iCell](0);
-                            baryOther = bFace * 2 - bary;
-                        }
-                        real distThis = (bFace - bary).norm();
-                        real distOther = (bFace - baryOther).norm();
-                        real phiFace = (distOther * phi[iCell](0) + distThis * phiOther) / (distOther + distThis) - phi[iCell](0);
-                        diffPhi[iCell] += uNormOut * vfv->GetFaceArea(iFace) * phiFace;
-                        bGG(3 + ic2f) = phiOther + phi[iCell](0);
-                    }
-                    diffPhi[iCell] /= vfv->GetCellVol(iCell);
-                    diffPhi[iCell] = (mGGs.at(iCell) * bGG)({0, 1, 2}); // comment to use traditional GG
-                }
-            };
-
-            int pPoissonCur = 2;
-
-            auto rhsPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<3> &diffPhi, ArrayDOFV<1> &rhs, std::vector<std::vector<real>> &coefs, bool updateCoefs)
-            {
-                const real supressRec = 1.0;
-                getDiffPhi(phi, diffPhi);
-                diffPhi.trans.startPersistentPull();
-                diffPhi.trans.waitPersistentPull();
-                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                {
-                    rhs[iCell](0) = 1.;
-                    Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
-                    if (updateCoefs)
-                        coefs.at(iCell).at(0) = 0.;
-                    for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
-                    {
-                        index iFace = mesh->cell2face[iCell][ic2f];
-                        index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                        int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
-                        Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
-                        auto faceBndID = mesh->GetFaceZone(iFace);
-                        auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
-                        real phiOther = phi[iCell](0);
-                        Geom::tPoint baryOther = bary;
-                        Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
-                        real phiThisFace = phi[iCell](0) + (bFace - bary).dot(diffPhi[iCell]) * supressRec;
-                        real phiOtherFace = phiThisFace;
-                        real diffPhiNormThis = diffPhi[iCell].dot(uNormOut) * supressRec;
-                        real diffPhiNormOther = diffPhiNormThis;
-                        Geom::tPoint diffPhiFace = diffPhi[iCell] * supressRec;
-                        if (iCellOther != UnInitIndex)
-                        {
-                            phiOther = phi[iCellOther](0);
-                            baryOther = vfv->GetOtherCellPointFromCell(
-                                iCell, iCellOther, iFace,
-                                vfv->GetCellQuadraturePPhys(iCellOther, -1));
-                            phiOtherFace = phiOther + (bFace - baryOther).dot(diffPhi[iCellOther]) * supressRec;
-                            diffPhiNormOther = diffPhi[iCellOther].dot(uNormOut) * supressRec; //! todo: periodic!!
-                            diffPhiFace = 0.5 * (diffPhiFace + diffPhi[iCellOther] * supressRec);
-                        }
-                        else
-                        {
-                            DNDS_assert(faceBCType != BCUnknown);
-                            DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
-                            if (faceBCType == BCWall || faceBCType == BCWallIsothermal)
-                                phiOther = -phi[iCell](0), phiOtherFace = -phiThisFace;
-                            else
-                            {
-                                diffPhiNormOther = -diffPhiNormThis;
-                                diffPhiFace.setZero();
-                            }
-                            baryOther = bFace * 2 - bary;
-                        }
-                        // real dist = (baryOther - bary).norm();
-                        real dist = std::abs((baryOther - bary).dot(uNormOut));
-
-                        real diffPhiNorm = ((phiOtherFace - phiThisFace) * 1.0 / dist + 0.5 * (diffPhiNormOther + diffPhiNormThis));
-                        diffPhiFace += ((phiOtherFace - phiThisFace) * 1.0 / dist) * uNormOut;
-                        real diffPhiFaceMag = diffPhiFace.norm();
-
-                        // rhs[iCell](0) += (phiOther - phi[iCell](0)) * 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
-                        rhs[iCell](0) += std::pow(diffPhiFaceMag, pPoissonCur - 2) * diffPhiNorm * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
-                        if (updateCoefs)
-                        {
-                            coefs.at(iCell).at(0) -= 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * std::pow(diffPhiFaceMag, pPoissonCur - 2) * (pPoissonCur - 1);
-                            coefs.at(iCell).at(1 + ic2f) = 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * std::pow(diffPhiFaceMag, pPoissonCur - 2) * (pPoissonCur - 1);
-                        }
-                    }
-                }
-            };
-
-            auto solveDphi = [&](ArrayDOFV<1> &rhsPhi, ArrayDOFV<1> &dphi, ArrayDOFV<1> &dphiNew, std::vector<std::vector<real>> &coefs, ArrayDOFV<1> &dTauInv)
-            {
-                dphi.setConstant(0.0);
-                for (int iSweep = 1; iSweep <= nSweep; iSweep++)
-                {
-                    for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                    {
-                        dphiNew[iCell] = rhsPhi[iCell];
-                        for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
-                        {
-                            index iFace = mesh->cell2face[iCell][ic2f];
-                            index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                            if (iCellOther != UnInitIndex)
-                                dphiNew[iCell] += coefs[iCell][ic2f + 1] * dphi[iCellOther];
-                        }
-                        dphiNew[iCell] /= -coefs[iCell][0] + dTauInv[iCell](0);
-                    }
-                    dphiNew.trans.startPersistentPull();
-                    dphiNew.trans.waitPersistentPull();
-                    dphi = dphiNew;
-                }
-            };
-            Linear::GMRES_LeftPreconditioned<ArrayDOFV<1>> gmres(
-                nGmresSubspace,
-                [&](ArrayDOFV<1> &v)
-                {
-                    vfv->BuildUDof(v, 1);
-                });
-            for (; pPoissonCur <= nPPoisson; pPoissonCur += 2)
-            {
-
-                real incNormBase{0};
-                real resNormBase{0};
-                for (int iIter = 1; iIter <= nIter; iIter++)
-                {
-                    rhsPhi(phi, diffPhi, rPhi, coefs, true);
-                    real normR = rPhi.norm2();
-                    real normPhi = phi.norm2();
-                    dPhi.setConstant(0.0);
-
-                    if (useGmres == 0)
-                    {
-                        solveDphi(rPhi, dPhi, dPhiNew, coefs, dTauInv);
+                        phiOther = phi[iCellOther](0);
+                        baryOther = vfv->GetOtherCellPointFromCell(
+                            iCell, iCellOther, iFace,
+                            vfv->GetCellQuadraturePPhys(iCellOther, -1));
+                        phiOtherFace = phiOther + (bFace - baryOther).dot(diffPhi[iCellOther]) * supressRec;
+                        diffPhiNormOther = diffPhi[iCellOther].dot(uNormOut) * supressRec; //! todo: periodic!!
+                        diffPhiFace = 0.5 * (diffPhiFace + diffPhi[iCellOther] * supressRec);
                     }
                     else
                     {
-                        gmres.solve(
-                            [&](ArrayDOFV<1> &x, ArrayDOFV<1> &Ax)
-                            {
-                                real normX = x.norm2();
-                                real ratio = normPhi * 1e-7 / (normX + normPhi * 1e-7 + verySmallReal) + 1e-12;
-                                dPhiNew = phi;
-                                rhsPhi(dPhiNew, diffPhi, phiTmp, coefs, false);
-                                dPhiNew.addTo(x, ratio);
-                                rhsPhi(dPhiNew, diffPhi, Ax, coefs, false);
-                                Ax.addTo(phiTmp, -1.0);
-                                Ax *= -1. / ratio;
-                                phiTmp = x;
-                                phiTmp *= dTauInv;
-                                Ax += phiTmp;
-                                Ax.trans.startPersistentPull();
-                                Ax.trans.waitPersistentPull();
-
-                                // for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                                // {
-                                //     Ax[iCell] = -coefs[iCell][0] * x[iCell];
-                                //     for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
-                                //     {
-                                //         index iFace = mesh->cell2face[iCell][ic2f];
-                                //         index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                                //         if (iCellOther != UnInitIndex)
-                                //             Ax[iCell] += -coefs[iCell][ic2f + 1] * x[iCellOther];
-                                //     }
-                                // }
-                                // Ax.trans.startPersistentPull();
-                                // Ax.trans.waitPersistentPull();
-                            },
-                            [&](ArrayDOFV<1> &x, ArrayDOFV<1> &Mx)
-                            {
-                                Mx.setConstant(0.0);
-                                solveDphi(x, Mx, dPhiNew, coefs, dTauInv);
-                                // Mx.trans.startPersistentPull();
-                                // Mx.trans.waitPersistentPull();
-                            },
-                            [&](ArrayDOFV<1> &a, ArrayDOFV<1> &b) -> real
-                            {
-                                return a.dot(b);
-                            },
-                            rPhi,
-                            dPhi,
-                            nGmresRestart,
-                            [&](int iRestart, real res, real resB)
-                            {
-                                // if (res < resB * 1e-6)
-                                //     return true;
-                                return false;
-                            });
+                        DNDS_assert(faceBCType != BCUnknown);
+                        DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
+                        if (faceBCType == BCWall || faceBCType == BCWallIsothermal)
+                            phiOther = -phi[iCell](0), phiOtherFace = -phiThisFace;
+                        else
+                        {
+                            diffPhiNormOther = -diffPhiNormThis;
+                            diffPhiFace.setZero();
+                        }
+                        baryOther = bFace * 2 - bary;
                     }
+                    // real dist = (baryOther - bary).norm();
+                    real dist = std::abs((baryOther - bary).dot(uNormOut));
 
-                    real incNorm = dPhi.norm2();
-                    DNDS_assert(std::isfinite(incNorm));
-                    phi += dPhi;
-                    phi.trans.startPersistentPull();
-                    phi.trans.waitPersistentPull();
-                    if (iIter == 1)
-                        incNormBase = incNorm;
-                    resNormBase = std::max(resNormBase, normR);
-                    bool nowExit = false;
-                    if ((normR < resNormBase * resTh * std::pow(0.1, pPoissonCur - 2)) && iIter > nPPoissonStartIter)
-                        nowExit = true;
-                    if (iIter % nIterSee == 0 || iIter == nIter || nowExit)
-                        if (phi.father->getMPI().rank == 0)
-                            log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson [p={}] [{}] inc:  [{:.4e}] -> [{:.4e}],  res: [{:.4e}] -> [{:.4e}]",
-                                                 pPoissonCur, iIter, incNormBase, incNorm, resNormBase, normR)
-                                  << std::endl;
-                    if (nowExit)
-                        break;
+                    real diffPhiNorm = ((phiOtherFace - phiThisFace) * 1.0 / dist + 0.5 * (diffPhiNormOther + diffPhiNormThis));
+                    diffPhiFace += ((phiOtherFace - phiThisFace) * 1.0 / dist) * uNormOut;
+                    real diffPhiFaceMag = diffPhiFace.norm();
+
+                    // rhs[iCell](0) += (phiOther - phi[iCell](0)) * 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
+                    rhs[iCell](0) += std::pow(diffPhiFaceMag, pPoissonCur - 2) * diffPhiNorm * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
+                    if (updateCoefs)
+                    {
+                        coefs.at(iCell).at(0) -= 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * std::pow(diffPhiFaceMag, pPoissonCur - 2) * (pPoissonCur - 1);
+                        coefs.at(iCell).at(1 + ic2f) = 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * std::pow(diffPhiFaceMag, pPoissonCur - 2) * (pPoissonCur - 1);
+                    }
                 }
-                getDiffPhi(phi, diffPhi);
-                diffPhi.trans.startPersistentPull();
-                diffPhi.trans.waitPersistentPull();
+            }
+        };
+
+        auto solveDphi = [&](ArrayDOFV<1> &rhsPhi, ArrayDOFV<1> &dphi, ArrayDOFV<1> &dphiNew, std::vector<std::vector<real>> &coefs, ArrayDOFV<1> &dTauInv)
+        {
+            dphi.setConstant(0.0);
+            for (int iSweep = 1; iSweep <= nSweep; iSweep++)
+            {
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
-                    Geom::tPoint gradPhi;
-                    gradPhi.setZero();
-                    gradPhi = diffPhi[iCell];
-                    real nD = 1;
+                    dphiNew[iCell] = rhsPhi[iCell];
                     for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                     {
                         index iFace = mesh->cell2face[iCell][ic2f];
                         index iCellOther = mesh->CellFaceOther(iCell, iFace);
                         if (iCellOther != UnInitIndex)
-                        {
-                            gradPhi += diffPhi[iCell];
-                            gradPhi += diffPhi[iCellOther] * smoothBias;
-                            nD += 1. + smoothBias;
-                        }
+                            dphiNew[iCell] += coefs[iCell][ic2f + 1] * dphi[iCellOther];
                     }
-                    gradPhi /= nD;
-                    real gradPhiNorm = gradPhi.norm();
-                    real dEst = std::pow(pPoissonCur / real(pPoissonCur - 1) * phi[iCell](0) + std::pow(gradPhiNorm, pPoissonCur), real(pPoissonCur - 1) / pPoissonCur) - std::pow(gradPhiNorm, pPoissonCur - 1);
-                    // dPhi[iCell](0) = phi[iCell](0);
-                    dPhi[iCell](0) = dEst;
+                    dphiNew[iCell] /= -coefs[iCell][0] + dTauInv[iCell](0);
                 }
-                dPhi.trans.startPersistentPull();
-                dPhi.trans.waitPersistentPull();
-                phi = dPhi;
+                dphiNew.trans.startPersistentPull();
+                dphiNew.trans.waitPersistentPull();
+                dphi = dphiNew;
             }
-
-            auto minval = dPhi.min();
-
-            dWall.resize(mesh->NumCellProc());
-            for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+        };
+        Linear::GMRES_LeftPreconditioned<ArrayDOFV<1>> gmres(
+            nGmresSubspace,
+            [&](ArrayDOFV<1> &v)
             {
-                auto quadCell = vfv->GetCellQuad(iCell);
-                dWall[iCell].resize(quadCell.GetNumPoints());
-            }
+                vfv->BuildUDof(v, 1);
+            });
+        for (; pPoissonCur <= nPPoisson; pPoissonCur += 2)
+        {
 
-            for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
-                dWall.at(iCell).setConstant(std::max(dPhi[iCell](0), settings.minWallDist));
-            if (phi.father->getMPI().rank == 0)
-                log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson min dist [{}]", minval(0)) << std::endl;
+            real incNormBase{0};
+            real resNormBase{0};
+            for (int iIter = 1; iIter <= nIter; iIter++)
+            {
+                rhsPhi(phi, diffPhi, rPhi, coefs, true);
+                real normR = rPhi.norm2();
+                real normPhi = phi.norm2();
+                dPhi.setConstant(0.0);
+
+                if (useGmres == 0)
+                {
+                    solveDphi(rPhi, dPhi, dPhiNew, coefs, dTauInv);
+                }
+                else
+                {
+                    gmres.solve(
+                        [&](ArrayDOFV<1> &x, ArrayDOFV<1> &Ax)
+                        {
+                            real normX = x.norm2();
+                            real ratio = normPhi * 1e-7 / (normX + normPhi * 1e-7 + verySmallReal) + 1e-12;
+                            dPhiNew = phi;
+                            rhsPhi(dPhiNew, diffPhi, phiTmp, coefs, false);
+                            dPhiNew.addTo(x, ratio);
+                            rhsPhi(dPhiNew, diffPhi, Ax, coefs, false);
+                            Ax.addTo(phiTmp, -1.0);
+                            Ax *= -1. / ratio;
+                            phiTmp = x;
+                            phiTmp *= dTauInv;
+                            Ax += phiTmp;
+                            Ax.trans.startPersistentPull();
+                            Ax.trans.waitPersistentPull();
+
+                            // for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                            // {
+                            //     Ax[iCell] = -coefs[iCell][0] * x[iCell];
+                            //     for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+                            //     {
+                            //         index iFace = mesh->cell2face[iCell][ic2f];
+                            //         index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                            //         if (iCellOther != UnInitIndex)
+                            //             Ax[iCell] += -coefs[iCell][ic2f + 1] * x[iCellOther];
+                            //     }
+                            // }
+                            // Ax.trans.startPersistentPull();
+                            // Ax.trans.waitPersistentPull();
+                        },
+                        [&](ArrayDOFV<1> &x, ArrayDOFV<1> &Mx)
+                        {
+                            Mx.setConstant(0.0);
+                            solveDphi(x, Mx, dPhiNew, coefs, dTauInv);
+                            // Mx.trans.startPersistentPull();
+                            // Mx.trans.waitPersistentPull();
+                        },
+                        [&](ArrayDOFV<1> &a, ArrayDOFV<1> &b) -> real
+                        {
+                            return a.dot(b);
+                        },
+                        rPhi,
+                        dPhi,
+                        nGmresRestart,
+                        [&](int iRestart, real res, real resB)
+                        {
+                            // if (res < resB * 1e-6)
+                            //     return true;
+                            return false;
+                        });
+                }
+
+                real incNorm = dPhi.norm2();
+                DNDS_assert(std::isfinite(incNorm));
+                phi += dPhi;
+                phi.trans.startPersistentPull();
+                phi.trans.waitPersistentPull();
+                if (iIter == 1)
+                    incNormBase = incNorm;
+                resNormBase = std::max(resNormBase, normR);
+                bool nowExit = false;
+                if ((normR < resNormBase * resTh * std::pow(0.1, pPoissonCur - 2)) && iIter > nPPoissonStartIter)
+                    nowExit = true;
+                if (iIter % nIterSee == 0 || iIter == nIter || nowExit)
+                    if (phi.father->getMPI().rank == 0)
+                        log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson [p={}] [{}] inc:  [{:.4e}] -> [{:.4e}],  res: [{:.4e}] -> [{:.4e}]",
+                                             pPoissonCur, iIter, incNormBase, incNorm, resNormBase, normR)
+                              << std::endl;
+                if (nowExit)
+                    break;
+            }
+            getDiffPhi(phi, diffPhi);
+            diffPhi.trans.startPersistentPull();
+            diffPhi.trans.waitPersistentPull();
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                Geom::tPoint gradPhi;
+                gradPhi.setZero();
+                gradPhi = diffPhi[iCell];
+                real nD = 1;
+                for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+                {
+                    index iFace = mesh->cell2face[iCell][ic2f];
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                    if (iCellOther != UnInitIndex)
+                    {
+                        gradPhi += diffPhi[iCell];
+                        gradPhi += diffPhi[iCellOther] * smoothBias;
+                        nD += 1. + smoothBias;
+                    }
+                }
+                gradPhi /= nD;
+                real gradPhiNorm = gradPhi.norm();
+                real dEst = std::pow(pPoissonCur / real(pPoissonCur - 1) * phi[iCell](0) + std::pow(gradPhiNorm, pPoissonCur), real(pPoissonCur - 1) / pPoissonCur) - std::pow(gradPhiNorm, pPoissonCur - 1);
+                // dPhi[iCell](0) = phi[iCell](0);
+                dPhi[iCell](0) = dEst;
+            }
+            dPhi.trans.startPersistentPull();
+            dPhi.trans.waitPersistentPull();
+            phi = dPhi;
+        }
+
+        auto minval = dPhi.min();
+
+        dWall.resize(mesh->NumCellProc());
+        for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+        {
+            auto quadCell = vfv->GetCellQuad(iCell);
+            dWall[iCell].resize(quadCell.GetNumPoints());
+        }
+
+        for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+            dWall.at(iCell).setConstant(std::max(dPhi[iCell](0), settings.minWallDist));
+        if (phi.father->getMPI().rank == 0)
+            log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson min dist [{}]", minval(0)) << std::endl;
     }
 
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Dispatcher for wall distance computation, selecting method based on settings.
      *
      *  Routes to GetWallDist_AABB (schemes 0,1,20), GetWallDist_BatchedAABB (schemes 2,20),
@@ -818,7 +824,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Estimate the local time step and face spectral radii for CFL-based time stepping.
      *
      *  For each face, evaluates L/R states using 2nd-order reconstruction, computes the
@@ -1052,7 +1059,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     /** @brief Evaluate the numerical flux at a single face for a batch of quadrature points.
      *
      *  Computes the inviscid and viscous numerical flux at a face given batched L/R states,
@@ -1513,7 +1521,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Compute source terms for a cell at a quadrature point.
      *
      *  Evaluates volume source terms including: constant mass force, rotating-frame
@@ -1552,6 +1561,30 @@ namespace DNDS::Euler
 #ifdef DNDS_FV_EULEREVALUATOR_SOURCE_TERM_ZERO
         return ret;
 #endif
+
+        // === Extended models (NS_EX / NS_EX_3D): variant-based contributor dispatch ===
+        if constexpr (Traits::isExtended)
+        {
+            SourceCellAux aux;
+            aux.dWallC = dWallC;
+            aux.hMax = vfv->GetCellMaxLenScale(iCell);
+
+            real pMean, asqrMean, Hmean;
+            real gamma = settings.idealGasProperty.gamma;
+            Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0),
+                                 (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
+                                 gamma, pMean, asqrMean, Hmean);
+            real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXy(0));
+            aux.muf = muEff(UMeanXy, T);
+
+            SourceTermVisitor visitor{ret, jacobian, UMeanXy, DiffUxy, pPhy, aux,
+                                      settings.idealGasProperty, iCell, ig, Mode};
+            for (auto &c : sourceContributors)
+                std::visit(visitor, c);
+            return ret;
+        }
+
+        // === Fixed-size models: existing if-constexpr path (unchanged) ===
         if (Mode == 0)
         {
             ret(Seq123) += settings.constMassForce(Seq012) * UMeanXy(0);
@@ -1718,7 +1751,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Dispatcher for boundary ghost-value generation, routing to per-BC-type handlers.
      *
      *  Selects the appropriate boundary value generator based on the BC type (farfield,
@@ -1844,7 +1878,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for farfield and back-pressure outlet boundary conditions.
      *
      *  Uses Riemann-invariant-based switching: supersonic outflow extrapolates the
@@ -1960,7 +1995,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for special farfield BCs (DMR, Rayleigh-Taylor, etc.).
      *
      *  Handles built-in special boundary conditions identified by reserved BC IDs:
@@ -2178,7 +2214,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for inviscid wall (slip wall) and symmetry boundary conditions.
      *
      *  Mirrors the velocity component normal to the wall while preserving the
@@ -2216,7 +2253,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for viscous (no-slip) wall boundary conditions.
      *
      *  Reverses the velocity to enforce zero velocity at the wall (ghost mirroring).
@@ -2325,7 +2363,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for supersonic/extrapolation outflow BC.
      *
      *  Simply returns the interior state as the ghost value, allowing all waves to
@@ -2356,7 +2395,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for prescribed inflow boundary condition.
      *
      *  Sets the ghost state to the BC-prescribed conservative values. Applies
@@ -2394,7 +2434,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for total-condition (stagnation) inflow BC.
      *
      *  Given prescribed stagnation pressure and temperature, computes the static
