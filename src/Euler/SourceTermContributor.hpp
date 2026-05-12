@@ -13,6 +13,7 @@
 #include "Euler.hpp"
 #include "Gas.hpp"
 #include "RANS_ke.hpp"
+#include "Chemistry/ChemicalSource.hpp"
 
 #include <variant>
 #include <vector>
@@ -39,6 +40,8 @@ namespace DNDS::Euler
         real dWallC = 0;
         real hMax = 0;
         real muf = 0;
+        real T = 300;    // temperature [K] (set by caller from perfect-gas EOS)
+        real p = 101325; // pressure [Pa]
     };
 
     // ============================================================================
@@ -289,12 +292,55 @@ namespace DNDS::Euler
 
     struct ChemicalContributor
     {
-        bool active = false;
+        std::shared_ptr<Chemistry::ChemicalSource> chem;
+
+        ChemicalContributor() = default;
+        explicit ChemicalContributor(std::shared_ptr<Chemistry::ChemicalSource> c)
+            : chem(std::move(c)) {}
 
         template <class TRet, class TJac, class TDerivedU, class TGasProp>
-        void evaluate(TRet &, TJac &, const TRet &, const TDerivedU &,
-                      const Geom::tPoint &, const SourceCellAux &,
-                      const TGasProp &, index, index, int) const {}
+        void evaluate(TRet &ret, TJac &jac, const TRet &U, const TDerivedU &,
+                      const Geom::tPoint &, const SourceCellAux &aux,
+                      const TGasProp &, index, index, int Mode) const
+        {
+            if (!chem)
+                return;
+            int Ns = chem->nSpecies();
+            int Ns1 = Ns - 1;
+            int I4 = 5;
+
+            double rho = U[0];
+            double rhoInv = 1.0 / std::max(rho, 1e-60);
+
+            std::vector<double> Ybuf(Ns), omegabuf(Ns), Jbuf(Ns * ret.size());
+            for (int k = 0; k < Ns1; ++k)
+                Ybuf[k] = U[I4 + k] * rhoInv;
+            double sumY = 0;
+            for (int k = 0; k < Ns1; ++k)
+                sumY += Ybuf[k];
+            Ybuf[Ns1] = 1.0 - sumY;
+
+            Chemistry::ConstSpeciesBufferView Yv{Ybuf.data(), Ns};
+            Chemistry::SpeciesBufferView omegav{omegabuf.data(), Ns};
+
+            if (Mode == 0)
+            {
+                chem->productionRates(aux.T, aux.p, Yv, omegav);
+                for (int k = 0; k < Ns1; ++k)
+                    ret[I4 + k] += omegabuf[k] * chem->molecularWeights()[k];
+            }
+            else if (Mode == 2)
+            {
+                int nVars = static_cast<int>(ret.size());
+                Chemistry::JacobianBufferView Jv{Jbuf.data(), Ns, nVars, Ns};
+                chem->productionRatesAndJacobian(aux.T, aux.p, rho, Yv, omegav, Jv);
+                for (int k = 0; k < Ns1; ++k)
+                    ret[I4 + k] += omegabuf[k] * chem->molecularWeights()[k];
+                for (int i = 0; i < Ns; ++i)
+                    for (int j = 0; j < nVars; ++j)
+                        jac(i, j) += Jv(i, j);
+            }
+        }
     };
 
     // ============================================================================
@@ -348,6 +394,12 @@ namespace DNDS::Euler
             break;
         default:
             break;
+        }
+        if (settings.reactiveFlow.enabled)
+        {
+            auto chemSrc = std::make_shared<Chemistry::ChemicalSource>(
+                settings.reactiveFlow.mechanismFile);
+            contribs.push_back(ChemicalContributor{std::move(chemSrc)});
         }
         return contribs;
     }

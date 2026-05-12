@@ -1574,8 +1574,9 @@ namespace DNDS::Euler
             Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0),
                                  (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
                                  gamma, pMean, asqrMean, Hmean);
-            real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXy(0));
-            aux.muf = muEff(UMeanXy, T);
+            aux.T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXy(0));
+            aux.p = pMean;
+            aux.muf = muEff(UMeanXy, aux.T);
 
             SourceTermVisitor visitor{ret, jacobian, UMeanXy, DiffUxy, pPhy, aux,
                                       settings.idealGasProperty, iCell, ig, Mode};
