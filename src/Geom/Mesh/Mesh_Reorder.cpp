@@ -275,6 +275,9 @@ namespace DNDS::Geom
         regAdj(Adj::Face2Bnd, face2bnd);
         regAdj(Adj::Bnd2Face, bnd2face);
         regAdj(Adj::Cell2CellFace, cell2cellFace);
+        regAdj(Adj::Cell2Edge, cell2edge);
+        regAdj(Adj::Edge2Node, edge2node);
+        regAdj(Adj::Edge2Cell, edge2cell);
 
         // --- Helper: register a companion ---
         auto regComp = [&](EntityKind kind, auto &pair, const char *name)
@@ -299,9 +302,16 @@ namespace DNDS::Geom
             regComp(EntityKind::Bnd, bnd2nodePbi, "bnd2nodePbi");
             if (!destroyKinds.count(EntityKind::Face))
                 regComp(EntityKind::Face, face2nodePbi, "face2nodePbi");
+            if (!destroyKinds.count(EntityKind::Edge))
+            {
+                regComp(EntityKind::Edge, edge2nodePbi, "edge2nodePbi");
+                regComp(EntityKind::Edge, cell2edgePbi, "cell2edgePbi");
+            }
         }
         if (!destroyKinds.count(EntityKind::Face))
             regComp(EntityKind::Face, faceElemInfo, "faceElemInfo");
+        if (!destroyKinds.count(EntityKind::Edge))
+            regComp(EntityKind::Edge, edgeElemInfo, "edgeElemInfo");
         if (coordsElevDisp.father)
             regComp(EntityKind::Node, coordsElevDisp, "coordsElevDisp");
         if (nodeWallDist.father)
@@ -332,6 +342,8 @@ namespace DNDS::Geom
             reg.registerGlobalMapping(EntityKind::Bnd, gm);
         if (auto gm = firstValid({getGM(face2node), getGM(face2cell), getGM(face2bnd)}))
             reg.registerGlobalMapping(EntityKind::Face, gm);
+        if (auto gm = firstValid({getGM(edge2node), getGM(edge2cell)}))
+            reg.registerGlobalMapping(EntityKind::Edge, gm);
 
         // --- Pre-collect pull sets ---
         // For each entity kind, collect off-rank globals from adj entries targeting it.
@@ -373,6 +385,10 @@ namespace DNDS::Geom
         collectPS(EntityKind::Bnd, node2bnd, bndGM);
         if (!shouldSkip(Adj::Face2Bnd))
             collectPS(EntityKind::Bnd, face2bnd, bndGM);
+
+        // Edge as target (from: cell2edge)
+        auto edgeGM = reg.getGlobalMapping(EntityKind::Edge);
+        collectPS(EntityKind::Edge, cell2edge, edgeGM);
 
         // Deduplicate and sort pull sets
         for (auto &[kind, ps] : reg.pullSets)
@@ -569,6 +585,12 @@ namespace DNDS::Geom
                 face2node.father->createGlobalMapping();
                 if (faceElemInfo.father)
                     faceElemInfo.father->pLGlobalMapping = face2node.father->pLGlobalMapping;
+            }
+            else if (kind == EntityKind::Edge && edge2node.father)
+            {
+                edge2node.father->createGlobalMapping();
+                if (edgeElemInfo.father)
+                    edgeElemInfo.father->pLGlobalMapping = edge2node.father->pLGlobalMapping;
             }
         }
 
