@@ -25,6 +25,7 @@
 #include "Gas.hpp"
 #include "CLDriver.hpp"
 #include <unordered_set>
+#include <string>
 
 namespace DNDS::Euler
 {
@@ -146,14 +147,14 @@ namespace DNDS::Euler
 
             /// @brief Compute angular velocity magnitude (rad/s) from RPM.
             /// @return Omega = rpm * 2π / 60.
-            real Omega()
+            real Omega() const
             {
                 return rpm * (2 * pi / 60.);
             }
 
             /// @brief Return the angular velocity vector (axis * Omega).
             /// @return 3-D omega vector aligned with the rotation axis.
-            Geom::tPoint vOmega()
+            Geom::tPoint vOmega() const
             {
                 return axis * Omega();
             }
@@ -325,6 +326,37 @@ namespace DNDS::Euler
             }
         } idealGasProperty; ///< Ideal gas thermodynamic property configuration.
 
+        /**
+         * @brief Reactive flow configuration.
+         *
+         * When @c enabled is true, the solver activates multi-species reactive
+         * flow with chemical source terms and multi-species thermodynamics.
+         * Phase 1: structural placeholder — chemistry evaluation wired in Phase 2.
+         */
+        struct ReactiveFlowSettings
+        {
+            bool enabled = false;
+            std::string mechanismFile;
+            std::string thermoFile;
+            std::string transportModel = "MixtureAveraged";
+            real CFLScale = 1.0;
+            real chemRelaxEps = 1e-3;
+            real chemAbsTol = 1e-10;
+            int nSpeciesOverride = 0;
+
+            DNDS_DECLARE_CONFIG(ReactiveFlowSettings)
+            {
+                DNDS_FIELD(enabled, "Enable reactive flow (multi-species + chemistry)");
+                DNDS_FIELD(mechanismFile, "CHEMKIN-format mechanism YAML path");
+                DNDS_FIELD(thermoFile, "NASA polynomial database path (optional)");
+                DNDS_FIELD(transportModel, "Transport model: MixtureAveraged, Constant, etc.");
+                DNDS_FIELD(CFLScale, "CFL reduction factor for stiff chemistry");
+                DNDS_FIELD(chemRelaxEps, "Pseudo-transient relaxation epsilon");
+                DNDS_FIELD(chemAbsTol, "Absolute species tolerance");
+                DNDS_FIELD(nSpeciesOverride, "Override species count (0 = read from mechanism)");
+            }
+        } reactiveFlow; ///< Reactive flow settings.
+
         /***************************************************************************************************/
         // end of setting entries
         /***************************************************************************************************/
@@ -410,7 +442,9 @@ namespace DNDS::Euler
                 &T::exprtkInitializers, "exprtkInitializers",
                 "Exprtk expression initializers");
             config.field_section(&T::idealGasProperty, "idealGasProperty",
-                                 "Ideal gas thermodynamic properties");
+                                  "Ideal gas thermodynamic properties");
+            config.field_section(&T::reactiveFlow,     "reactiveFlow",
+                                  "Reactive flow settings (multi-species chemistry)");
 
             // Cross-field checks
             config.check("useScalarJacobian and useRoeJacobian are mutually exclusive",

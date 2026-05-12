@@ -28,7 +28,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     /** @brief Evaluate the spatial right-hand side (RHS) of the semi-discrete equations.
      *
      *  This is the core spatial operator. It performs the following steps:
@@ -331,7 +332,7 @@ namespace DNDS::Euler
                         distBaryPerp =
                             std::abs(
                                 (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace) -
-                                 vfv->GetCellBary(f2c[0]))
+                                 vfv->GetCellBary(f2c[0]))(Seq012)
                                     .dot(unitNorm));
                     }
                     else if (true) // is bc
@@ -360,7 +361,7 @@ namespace DNDS::Euler
                         distBaryPerp =
                             std::abs(
                                 (vfv->GetFaceQuadraturePPhysFromCell(iFace, f2c[0], 0, -1) -
-                                 vfv->GetCellBary(f2c[0]))
+                                 vfv->GetCellBary(f2c[0]))(Seq012)
                                     .dot(unitNorm)) *
                             2.;
                     }
