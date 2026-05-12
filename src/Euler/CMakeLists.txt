@@ -21,6 +21,7 @@ foreach(item IN LISTS DNDS_Euler_Models_List)
     _explicit_instantiation/EulerEvaluator_${key}.cpp
     _explicit_instantiation/EulerSolver_PrintData_${key}.cpp
     _explicit_instantiation/EulerSolver_Init_${key}.cpp
+    Chemistry/ChemicalSource.cpp
     )
     set(CPPS
     _explicit_instantiation/EulerSolver_${key}.cpp
