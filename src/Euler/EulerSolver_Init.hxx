@@ -412,15 +412,24 @@ namespace DNDS::Euler
         DNDS_MAKE_SSP(pEval, mesh, vfv, pBCHandler, config.eulerSettings, nVars);
         EulerEvaluator<model> &eval = *pEval;
 
-        JD.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
-        JSource.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
+        // Reactive flow requires full-block Jacobian for chemical coupling
+        int jacMode = eval.settings.useScalarJacobian ? 0 : 1;
+        if (eval.settings.reactiveFlow.enabled)
+        {
+            DNDS_assert_info(!eval.settings.useScalarJacobian,
+                             "reactive flow requires useScalarJacobian=false");
+            jacMode = 1;
+        }
+
+        JD.SetModeAndInit(jacMode, nVars, u);
+        JSource.SetModeAndInit(jacMode, nVars, u);
         if (config.timeMarchControl.timeMarchIsTwoStage())
         {
-            JD1.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
-            JSource1.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
+            JD1.SetModeAndInit(jacMode, nVars, u);
+            JSource1.SetModeAndInit(jacMode, nVars, u);
         }
-        JDTmp.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
-        JSourceTmp.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
+        JDTmp.SetModeAndInit(jacMode, nVars, u);
+        JSourceTmp.SetModeAndInit(jacMode, nVars, u);
         /*******************************/
         // ** initialize output Array
 
