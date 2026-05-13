@@ -39,6 +39,7 @@
 #include "EulerJacobian.hpp"
 #include "EulerEvaluatorSettings.hpp"
 #include "SourceTermContributor.hpp"
+#include "Physics/PhysicsProperties.hpp"
 #include "DNDS/Serializer/SerializerBase.hpp"
 #include "RANS_ke.hpp"
 
@@ -220,8 +221,10 @@ namespace DNDS::Euler
 
         EulerEvaluatorSettings<model> settings; ///< Physics and numerics settings for this evaluator.
 
+        /// @brief Centralized physics property module (EOS coefs, transport, kinetics).
+        PhysicsProperties<model> phys_;
+
         /// @brief Source term contributors for extended models (NS_EX / NS_EX_3D).
-        ///        Empty for fixed-size models — those use the if-constexpr path in source().
         std::vector<SourceTermVariant> sourceContributors;
 
         /**
@@ -241,7 +244,7 @@ namespace DNDS::Euler
         EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler,
                        const EulerEvaluatorSettings<model> &nSettings,
                        int n_nVars = getNVars(model))
-            : nVars(n_nVars), axisSymmetric(Nvfv->GetAxisSymmetric()), mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->getSettings().maxOrder + 1), settings(nSettings)
+            : nVars(n_nVars), axisSymmetric(Nvfv->GetAxisSymmetric()), mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->getSettings().maxOrder + 1), settings(nSettings), phys_(nSettings.idealGasProperty)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             if (getNVars(model) == DynamicSize)
@@ -286,9 +289,9 @@ namespace DNDS::Euler
             if (model == NS_2EQ || model == NS_2EQ_3D)
             {
                 TU farPrim = settings.farFieldStaticValue;
-                real gamma = settings.idealGasProperty.gamma;
+                real gamma = phys_.gamma();
                 Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrim, gamma);
-                real T = farPrim(I4) / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * farPrim(0));
+                real T = farPrim(I4) / ((gamma - 1) / gamma * phys_.Cp() * farPrim(0));
                 // auto [rhs0, rhs] = RANS::SolveZeroGradEquilibrium<dim>(settings.farFieldStaticValue, this->muEff(settings.farFieldStaticValue, T));
                 // if(mesh->getMPI().rank == 0)
                 //     log()
@@ -314,6 +317,12 @@ namespace DNDS::Euler
 
             if constexpr (Traits::isExtended)
                 sourceContributors = buildSourceContributors(settings, axisSymmetric);
+
+            // Wire ChemicalSource into physics module (extract from contributor list)
+            for (auto &c : sourceContributors)
+                if (auto *chem = std::get_if<ChemicalContributor>(&c))
+                    if (chem->chem)
+                        phys_.setChemicalSource(chem->chem.get());
         }
 
         /**
@@ -761,22 +770,22 @@ namespace DNDS::Euler
         real muEff(const TU &U, real T) // TODO: more than sutherland law
         {
 
-            switch (settings.idealGasProperty.muModel)
+            switch (phys_.muModel())
             {
             case 0:
-                return settings.idealGasProperty.muGas;
+                return phys_.muRef();
             case 1:
             {
-                real TRel = T / settings.idealGasProperty.TRef;
-                return settings.idealGasProperty.muGas *
+                real TRel = T / phys_.TRef();
+                return phys_.muRef() *
                        TRel * std::sqrt(TRel) *
-                       (settings.idealGasProperty.TRef + settings.idealGasProperty.CSutherland) /
-                       (T + settings.idealGasProperty.CSutherland);
+                       (phys_.TRef() + phys_.CSutherland()) /
+                       (T + phys_.CSutherland());
             }
             break;
             case 2:
             {
-                return settings.idealGasProperty.muGas * U(0);
+                return phys_.muRef() * U(0);
             }
             break;
             default:
@@ -1047,7 +1056,7 @@ namespace DNDS::Euler
 
             real rhoun = n.dot(U({1, 2, 3}));
             real rhousqr = U({1, 2, 3}).squaredNorm();
-            real gamma = settings.idealGasProperty.gamma;
+            real gamma = phys_.gamma();
             TJacobianU subFdU;
             subFdU.resize(nVars, nVars);
 
@@ -1119,7 +1128,7 @@ namespace DNDS::Euler
             int useRoeTerm, int incFsign = -1, int omitF = 0)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            real gamma = settings.idealGasProperty.gamma;
+            real gamma = phys_.gamma();
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
             Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H);
@@ -1197,7 +1206,7 @@ namespace DNDS::Euler
             const TU &dU)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            real gamma = settings.idealGasProperty.gamma;
+            real gamma = phys_.gamma();
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
             Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H);
@@ -1686,7 +1695,7 @@ namespace DNDS::Euler
             {
                 real declineV = (rhoEinternalNew - rhoEinternal) / (rhoEinternal + verySmallReal);
                 real newrhoEinteralNew = (std::exp(declineV) + verySmallReal) * rhoEinternal;
-                real gamma = settings.idealGasProperty.gamma;
+                real gamma = phys_.gamma();
                 // newrhoEinteralNew = std::max(pEps / (gamma - 1), newrhoEinteralNew);
                 newrhoEinteralNew = pEps / (gamma - 1);
                 real c0 = 2 * u(I4) * u(0) - u(Seq123).squaredNorm() - 2 * u(0) * newrhoEinteralNew;
@@ -1744,7 +1753,7 @@ namespace DNDS::Euler
                     real declineV = ret(I4 + 1) / (u(I4 + 1) + 1e-6);
                     real newu5 = u(I4 + 1) * std::exp(declineV);
                     // ! refvalue:
-                    real muRef = settings.idealGasProperty.muGas;
+                    real muRef = phys_.muRef();
                     newu5 = std::max(1e-6, newu5);
                     ret(I4 + 1) = newu5 - u(I4 + 1);
                 }
@@ -1760,7 +1769,7 @@ namespace DNDS::Euler
                     real declineV = ret(I4 + 1) / (u(I4 + 1) + 1e-6);
                     real newu5 = u(I4 + 1) * std::exp(declineV);
                     // ! refvalue:
-                    real muRef = settings.idealGasProperty.muGas;
+                    real muRef = phys_.muRef();
                     // newu5 = std::max(1e-10, newu5);
                     ret(I4 + 1) = newu5 - u(I4 + 1);
                 }
@@ -1773,7 +1782,7 @@ namespace DNDS::Euler
                     real declineV = ret(I4 + 2) / (u(I4 + 2) + 1e-6);
                     real newu5 = u(I4 + 2) * std::exp(declineV);
                     // ! refvalue:
-                    real muRef = settings.idealGasProperty.muGas;
+                    real muRef = phys_.muRef();
                     // newu5 = std::max(1e-10, newu5);
                     ret(I4 + 2) = newu5 - u(I4 + 2);
                 }
@@ -1838,13 +1847,13 @@ namespace DNDS::Euler
                 //                 // cx[iCell](I4 + 1) = 0.; // superfix, actually works
                 //                 // real d1 = dWall[iCell].minCoeff();
                 //                 real pMean, asqrMean, Hmean;
-                //                 real gamma = settings.idealGasProperty.gamma;
+                //                 real gamma = phys_.gamma();
                 //                 auto ULMeanXy = cx[iCell];
                 //                 Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
                 //                                      gamma, pMean, asqrMean, Hmean);
                 //                 // ! refvalue:
-                //                 real muRef = settings.idealGasProperty.muGas;
-                //                 real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
+                //                 real muRef = phys_.muRef();
+                //                 real T = pMean / ((gamma - 1) / gamma * phys_.Cp() * ULMeanXy(0));
                 //                 real mufPhy1 = muEff(ULMeanXy, T);
 
                 //                 real rhoOmegaaaWall = mufPhy1 / sqr(d1) * 800;
