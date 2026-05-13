@@ -336,6 +336,10 @@ namespace DNDS::Euler
                 sumY += bufY[k];
             bufY[Ns1] = 1.0 - sumY;
 
+            DNDS_assert(std::isfinite(aux.T) && aux.T > 0);
+            DNDS_assert(std::isfinite(aux.p) && aux.p > 0);
+            DNDS_assert(std::isfinite(rho) && rho > 0);
+
             Chemistry::ConstSpeciesBufferView Yv{bufY.data(), Ns};
             Chemistry::SpeciesBufferView omegav{bufOmega.data(), Ns};
 
