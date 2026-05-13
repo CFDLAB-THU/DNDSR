@@ -118,8 +118,42 @@ namespace DNDS::Euler
         void mixtureDiffusivity(real T, real p, const TU &U, TD &&D) const
         {
             if (!chemSrc_)
+            {
+                // Fallback: constant Schmidt number Sc = 1.0 → D_k = μ/(ρ·Sc)
+                real mu = mixtureViscosity(T, p, U);
+                real rho = U[0];
+                real D0 = mu / std::max(rho, 1e-60);         // Sc = 1
+                int Ns = static_cast<int>(U.size()) - 5 + 1; // nVars = 5 + Ns1 → Ns = nVars - 4
+                for (int k = 0; k < Ns; ++k)
+                    D[k] = D0;
                 return;
-            chemSrc_->speciesDiffusivity(T, p, massFractions(U), D);
+            }
+            chemSrc_->speciesDiffusivity(T, p, massFractions(U),
+                                         Chemistry::SpeciesBufferView{&D.derived()(0),
+                                                                      chemSrc_->nSpecies()});
+        }
+
+        /**
+         * @brief Core species diffusion coefficient D_k [m²/s] at a given state.
+         *
+         * When ChemicalSource is present, delegates to Cantera mixture-averaged
+         * transport. Otherwise uses constant Schmidt number (Sc=1 by default).
+         */
+        template <class TU>
+        real speciesDiffusivityK(real T, real p, const TU &U, int kSpecies) const
+        {
+            if (!chemSrc_)
+            {
+                real mu = mixtureViscosity(T, p, U);
+                real rho = U[0];
+                return mu / std::max(rho, 1e-60); // Sc = 1
+            }
+            // Single-species diffusivity via Cantera
+            int Ns = chemSrc_->nSpecies();
+            std::vector<real> Dbuf(Ns);
+            Chemistry::SpeciesBufferView Dv{Dbuf.data(), Ns};
+            chemSrc_->speciesDiffusivity(T, p, massFractions(U), Dv);
+            return Dbuf[kSpecies];
         }
 
         // ---- Kinetics ----
@@ -129,36 +163,28 @@ namespace DNDS::Euler
 
     private:
         template <class TU>
-        auto massFractions(const TU &U) const
+        Chemistry::ConstSpeciesBufferView massFractions(const TU &U) const
         {
             int Ns = chemSrc_ ? chemSrc_->nSpecies() : 0;
             int Ns1 = Ns - 1;
             int nVars = static_cast<int>(U.size());
             int Isp = nVars - Ns1;
             double rhoInv = 1.0 / std::max(real(U[0]), 1e-60);
-            return MassFractionView{U, Isp, rhoInv, Ns};
+            // Fill persistent buffer on-demand (not thread-safe, but caller serialises)
+            if (static_cast<int>(bufY_.size()) < Ns)
+                bufY_.resize(Ns);
+            for (int k = 0; k < Ns1; ++k)
+                bufY_[k] = U[Isp + k] * rhoInv;
+            double sum = 0;
+            for (int k = 0; k < Ns1; ++k)
+                sum += bufY_[k];
+            bufY_[Ns1] = 1.0 - sum;
+            return {bufY_.data(), Ns};
         }
-
-        struct MassFractionView
-        {
-            const Eigen::Matrix<real, Eigen::Dynamic, 1> &U;
-            int Isp;
-            double rhoInv;
-            int Ns;
-            double operator[](int k) const
-            {
-                if (k < Ns - 1)
-                    return U[Isp + k] * rhoInv;
-                // constrained species
-                double sum = 0;
-                for (int j = 0; j < Ns - 1; ++j)
-                    sum += U[Isp + j] * rhoInv;
-                return 1.0 - sum;
-            }
-        };
 
         const IdealGas *igProp_ = nullptr;
         Chemistry::ChemicalSource *chemSrc_ = nullptr;
+        mutable std::vector<real> bufY_; // scratch for massFractions()
     };
 
 } // namespace DNDS::Euler
