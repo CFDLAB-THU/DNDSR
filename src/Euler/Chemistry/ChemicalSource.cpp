@@ -113,6 +113,29 @@ namespace DNDS::Euler::Chemistry
         return std::sqrt(mixtureGamma(T, Y) * mixtureR(Y) * T);
     }
 
+    double ChemicalSource::temperatureFromUV(double u, double v,
+                                             ConstSpeciesBufferView Y,
+                                             double T_guess) const
+    {
+        impl_->gas->setMassFractions_NoNorm(Y.data);
+        double Rmix = mixtureR(Y);
+        double T = T_guess > 300 ? T_guess : 300;
+        for (int iter = 0; iter < 50; iter++)
+        {
+            double p = Rmix * T / v;
+            impl_->gas->setState_TP(T, p);
+            double uCur = impl_->gas->intEnergy_mass();
+            double cv = impl_->gas->cv_mass();
+            double dT = (u - uCur) / std::max(cv, 1e-6);
+            T += dT;
+            if (T < 1)
+                T = 1;
+            if (std::abs(dT) < 1e-6 * std::max(std::abs(T), 1.0))
+                break;
+        }
+        return T;
+    }
+
     // ---- kinetics ------------------------------------------------------------
 
     void ChemicalSource::productionRates(double T, double p,
@@ -141,7 +164,9 @@ namespace DNDS::Euler::Chemistry
 
         I.kin->getNetProductionRates_ddT(I.bufDwdt.data());
         I.kin->getNetProductionRates_ddP(I.bufDwdp.data());
-        I.kin->getNetProductionRates_ddC(I.bufDwdc.data());
+
+        // Per-species concentration Jacobian ∂ω_i/∂C_k (sparse Ns×Ns)
+        auto dWdC = I.kin->netProductionRates_ddCi();
 
         // zero Jacobian
         for (int idx = 0; idx < J.rows * J.cols; ++idx)
@@ -155,7 +180,7 @@ namespace DNDS::Euler::Chemistry
         {
             double invMk = 1.0 / std::max(I.mw[k], 1e-30);
             for (int i = 0; i < I.Ns; ++i)
-                J(i, speciesCol0 + k) = I.bufDwdc[i + k * I.Ns] * invMk;
+                J(i, speciesCol0 + k) = dWdC.coeff(i, k) * invMk;
         }
 
         // ∂ω/∂(ρE) = ∂ω/∂T · 1/(ρ·cv)
@@ -171,7 +196,7 @@ namespace DNDS::Euler::Chemistry
         {
             double d = I.bufDwdp[i] * dp_drho;
             for (int kk = 0; kk < I.Ns; ++kk)
-                d += I.bufDwdc[i + kk * I.Ns] * Y[kk] / std::max(I.mw[kk], 1e-30);
+                d += dWdC.coeff(i, kk) * Y[kk] / std::max(I.mw[kk], 1e-30);
             J(i, 0) = d;
         }
     }

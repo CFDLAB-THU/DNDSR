@@ -1,14 +1,14 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 0.1,
-        "nTimeStep": 100,
+        "dtImplicit": 0.01,
+        "nTimeStep": 500,
         "steadyQuit": false,
         "tEnd": 0.1,
-        "odeCode": 0,
+        "odeCode": 103,
         "odeSetting1": 0.5,
         "rhsFPPMode": 2,
         "rhsFPPScale": 1,
-        "useDtPPLimit": true,
+        "useDtPPLimit": false,
         "dtPPLimitScale": 1
     },
     "outputControl": {
@@ -20,7 +20,7 @@
         "dataOutAtInit": true
     },
     "implicitCFLControl": {
-        "CFL": 10.0,
+        "CFL": 1.0,
         "useLocalDt": true
     },
     "convergenceControl": {
@@ -55,7 +55,7 @@
     },
     "limiterControl": {
         "useLimiter": true,
-        "usePPRecLimiter": true,
+        "usePPRecLimiter": false,
         "nPartialLimiterStart": 1000000
     },
     "linearSolverControl": {
@@ -68,12 +68,13 @@
         "recLinearScheme": 0
     },
     "vfvSettings": {
-        "maxOrder": 3,
-        "intOrder": 5,
+        "maxOrder": 1,
+        "intOrder": 1,
         "jacobiRelax": 1,
         "SORInstead": true,
         "smoothThreshold": 0.001,
-        "WBAP_nStd": 10.0
+        "WBAP_nStd": 10.0,
+        "subs2ndOrder": 1
     },
     "eulerSettings": {
         "ignoreSourceTerm": false,
@@ -86,23 +87,23 @@
         "ransModel": "RANS_None",
         "reactiveFlow": {
             "enabled": true,
-            "mechanismFile": "/home/harry/projects/DNDSR/external/cfd_externals/install/data/h2o2.yaml"
+            "mechanismFile": "h2o2.yaml"
         },
         "farFieldStaticValue": [
             1.0,
             0.0,
             0.0,
             0.0,
-            2.5,
+            4.0,
             0.028,
+            0.0,
+            0.0,
             0.222,
             0.0,
             0.0,
             0.0,
             0.0,
-            0.0,
-            0.0,
-            0.75
+            0.0
         ],
         "constMassForce": [
             0.0,

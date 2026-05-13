@@ -43,6 +43,7 @@ namespace DNDS::Euler
         real T = 300;
         real p = 101325;     // code pressure
         real pPhys = 101325; // physical pressure [Pa] for Cantera
+        real gamma = 1.4;    // EOS gamma at this point (from phys_)
     };
 
     // ============================================================================
@@ -155,24 +156,21 @@ namespace DNDS::Euler
     struct AxisymmetricContributor
     {
         bool active = false;
-        real gamma = 1.4;
 
         template <class TRet, class TJac, class TDerivedU, class TGasProp>
         void evaluate(TRet &ret, TJac &, const TRet &U, const TDerivedU &,
-                      const Geom::tPoint &pPhy, const SourceCellAux &,
+                      const Geom::tPoint &pPhy, const SourceCellAux &aux,
                       const TGasProp &, index, index, int Mode) const
         {
             if (!active)
                 return;
-            evalSourceAxisymmetric(gamma, pPhy, ret, U, Mode);
+            evalSourceAxisymmetric(aux.gamma, pPhy, ret, U, Mode);
         }
     };
 
     struct SASourceContributor
     {
-        real gamma = 1.4;
         real muGas = 1;
-        real CpGas = 1;
         real SADESScale = veryLargeReal;
         int SADESMode = 1;
         int SAVersion = 0;
@@ -191,7 +189,7 @@ namespace DNDS::Euler
             lLES = std::min(lLES, std::max({d * cWall, aux.hMax * cWall}));
             auto call = [&](int mode)
             {
-                RANS::GetSource_SA<ExDim>(U, GradU, muGas, aux.muf, gamma,
+                RANS::GetSource_SA<ExDim>(U, GradU, muGas, aux.muf, aux.gamma,
                                           d, lLES, aux.hMax, SADESMode,
                                           retInc, ransSARotCorrection, mode, SAVersion);
             };
@@ -210,7 +208,6 @@ namespace DNDS::Euler
 
     struct SSTSourceContributor
     {
-        real gamma = 1.4;
         real muGas = 1;
         real SADESScale = veryLargeReal;
 
@@ -337,23 +334,38 @@ namespace DNDS::Euler
                 sumY += bufY[k];
             bufY[Ns1] = 1.0 - sumY;
 
+            for (int k = 0; k < Ns; ++k)
+            {
+                if (bufY[k] < 0)
+                    bufY[k] = 0;
+                if (bufY[k] > 1)
+                    bufY[k] = 1;
+            }
+            double ySum = 0;
+            for (int k = 0; k < Ns; ++k)
+                ySum += bufY[k];
+            if (ySum > 0)
+                for (int k = 0; k < Ns; ++k)
+                    bufY[k] /= ySum;
+
             DNDS_assert(std::isfinite(aux.T) && aux.T > 0);
             DNDS_assert(std::isfinite(aux.p) && aux.p > 0);
             DNDS_assert(std::isfinite(rho) && rho > 0);
+            double Tcantera = std::max(aux.T, 200.0); // NASA poly lower bound
 
             Chemistry::ConstSpeciesBufferView Yv{bufY.data(), Ns};
             Chemistry::SpeciesBufferView omegav{bufOmega.data(), Ns};
 
             if (Mode == 0)
             {
-                chem->productionRates(aux.T, aux.pPhys, Yv, omegav);
+                chem->productionRates(Tcantera, aux.pPhys, Yv, omegav);
                 for (int k = 0; k < Ns1; ++k)
                     ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k];
             }
             else if (Mode == 2)
             {
                 Chemistry::JacobianBufferView Jv{bufJ.data(), Ns, nVars, Ns};
-                chem->productionRatesAndJacobian(aux.T, aux.pPhys, rho, Yv, omegav, Jv);
+                chem->productionRatesAndJacobian(Tcantera, aux.pPhys, rho, Yv, omegav, Jv);
                 for (int k = 0; k < Ns1; ++k)
                     ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k];
                 for (int k = 0; k < Ns1; ++k)
@@ -361,7 +373,16 @@ namespace DNDS::Euler
                     double Mk = chem->molecularWeights()[k];
                     int iRow = Isp + k;
                     for (int j = 0; j < nVars; ++j)
-                        jac(iRow, j) += Mk * Jv(k, j);
+                    {
+                        double val = Mk * Jv(k, j);
+                        if (!std::isfinite(val))
+                        {
+                            fprintf(stderr, "[chem-jac] NaN at row=%d col=%d Jv=%g Mk=%g T=%.1f\n",
+                                    iRow, j, Jv(k, j), Mk, (double)aux.T);
+                            val = 0;
+                        }
+                        jac(iRow, j) -= val;
+                    }
                 }
             }
         }
@@ -395,19 +416,19 @@ namespace DNDS::Euler
         if (settings.frameConstRotation.enabled)
             contribs.push_back(RotatingFrameContributor{settings.frameConstRotation});
         if (axisSymmetric)
-            contribs.push_back(AxisymmetricContributor{true, settings.idealGasProperty.gamma});
+            contribs.push_back(AxisymmetricContributor{true});
 
         switch (settings.ransModel)
         {
         case RANS_SA:
             contribs.push_back(SASourceContributor{
-                settings.idealGasProperty.gamma, settings.idealGasProperty.muGas,
-                settings.idealGasProperty.CpGas, settings.SADESScale,
+                settings.idealGasProperty.muGas,
+                settings.SADESScale,
                 settings.SADESMode, settings.SAVersion, settings.ransSARotCorrection});
             break;
         case RANS_KOSST:
             contribs.push_back(SSTSourceContributor{
-                settings.idealGasProperty.gamma, settings.idealGasProperty.muGas,
+                settings.idealGasProperty.muGas,
                 settings.SADESScale});
             break;
         case RANS_KOWilcox:

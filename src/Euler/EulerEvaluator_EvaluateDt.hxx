@@ -891,8 +891,9 @@ namespace DNDS::Euler
             real pL, asqrL, HL, pR, asqrR, HR;
             TVec vL = UL(Seq123) / UL(0);
             TVec vR = vL;
+            real T_L = phys_.template temperature<dim>(UL);
             Gas::IdealGasThermal(UL(I4), UL(0), vL.squaredNorm(),
-                                 phys_.gamma(),
+                                 phys_.gamma(T_L, UL),
                                  pL, asqrL, HL);
             pR = pL, HR = HL, asqrR = asqrL;
             if (f2c[1] != UnInitIndex)
@@ -901,8 +902,9 @@ namespace DNDS::Euler
                 this->UFromCell2Face(UR, iFace, f2c[1], 1);
                 uMean = (uMean + UR) * 0.5;
                 vR = UR(Seq123) / UR(0);
+                real T_R = phys_.template temperature<dim>(UR);
                 Gas::IdealGasThermal(UR(I4), UR(0), vR.squaredNorm(),
-                                     phys_.gamma(),
+                                     phys_.gamma(T_R, UR),
                                      pR, asqrR, HR);
             }
             TDiffU GradULxy, GradURxy;
@@ -956,12 +958,14 @@ namespace DNDS::Euler
             // uMean(4) = Ek + e;
 
             real pMean, asqrMean, HMean;
+            real T = phys_.template temperature<dim>(uMean);
+            real gamma = phys_.gamma(T, uMean);
             Gas::IdealGasThermal(uMean(I4), uMean(0), veloMean.squaredNorm(),
-                                 phys_.gamma(),
+                                 gamma,
                                  pMean, asqrMean, HMean);
 
             pMean = (pL + pR) * 0.5;
-            real aMean = sqrt(phys_.gamma() * pMean / uMean(0)); // paper
+            real aMean = sqrt(gamma * pMean / uMean(0)); // paper
 
             // DNDS_assert(asqrMean >= 0);
             // real aMean = std::sqrt(asqrMean); // original
@@ -976,8 +980,6 @@ namespace DNDS::Euler
             // ! refvalue:
             real muRef = phys_.muRef();
 
-            real gamma = phys_.gamma();
-            real T = pMean / ((gamma - 1) / gamma * phys_.Cp() * uMean(0));
             real muf = muEff(uMean, T);
             real muPhy = muf;
             real muTurb = this->getMuTur(uMean, GradUMeanXY, muRef, muf, iFace);
@@ -1174,16 +1176,16 @@ namespace DNDS::Euler
         for (int iB = 0; iB < nB; iB++)
         {
             real pMean, asqrMean, Hmean;
-            real gamma = phys_.gamma();
             TU UMeanXYC = UMeanXy(EigenAll, iB);
             auto seqC = Eigen::seq(iB * dim, iB * dim + dim - 1);
             TDiffU DiffUxyC = DiffUxy(seqC, EigenAll);
             TDiffU DiffUxyPrimC = DiffUxyPrim(seqC, EigenAll);
             TVec uNormC = unitNorm(EigenAll, iB);
+            real T = phys_.template temperature<dim>(UMeanXYC);
+            real gamma = phys_.gamma(T, UMeanXYC);
             Gas::IdealGasThermal(UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm(),
                                     gamma, pMean, asqrMean, Hmean);
             DNDS_assert_info(pMean > 0, fmt::format("{}, {}, {}", UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm()));
-            real T = pMean / ((gamma - 1) / gamma * phys_.Cp() * UMeanXYC(0));
             real mufPhy, muf;
             muf = muEff(UMeanXYC, T);
             mufPhy = muf;
@@ -1194,17 +1196,17 @@ namespace DNDS::Euler
                 real muTurb = this->getMuTur(UMeanXYC, DiffUxyC, muRef, muf, iFace); // TODO: make this accept primitive gradients instead
                 muf += muTurb;
 
-                real k = phys_.Cp() * muTurb / 0.9 +
-                            phys_.Cp() * mufPhy / phys_.Pr();
+                real k = phys_.Cp(T, UMeanXYC) * muTurb / 0.9 +
+                            phys_.Cp(T, UMeanXYC) * mufPhy / phys_.Pr();
                 TU VisFlux;
                 VisFlux.resizeLike(ULMeanXy);
                 VisFlux.setZero();
                 Gas::ViscousFlux_IdealGas<dim>(
                     UMeanXYC, DiffUxyPrimC, uNormC, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
-                    phys_.gamma(),
+                    gamma,
                     muf, muTurb / (muf + verySmallReal), settings.ransUseQCR,
                     k,
-                    phys_.Cp(),
+                    phys_.Cp(T, UMeanXYC),
                     VisFlux);
 
                 this->visFluxTurVariable(UMeanXYC, DiffUxyPrimC, muRef, mufPhy, muTurb, uNormC, iFace, VisFlux);
@@ -1262,6 +1264,9 @@ namespace DNDS::Euler
             rsType = settings.rsTypeWall;
         }
 
+        real T_rs = phys_.template temperature<dim>(ULMeanXy);
+        real gamma_rs = phys_.gamma(T_rs, ULMeanXy);
+
         auto runRsOnNorm = [&]()
         {
             if (settings.rsMeanValueEig != 0 &&
@@ -1271,7 +1276,7 @@ namespace DNDS::Euler
                 Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
                     rsType,
                     ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
-                    phys_.gamma(), finc, dLambda, fixScale, incFScale,
+                    gamma_rs, finc, dLambda, fixScale, incFScale,
                     exitFun, lam0, lam123, lam4);
                 lam0V.setConstant(lam0);
                 lam123V.setConstant(lam123);
@@ -1282,7 +1287,7 @@ namespace DNDS::Euler
                 {
                     RSWrapper_XY(rsType, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
                                  vgXY(EigenAll, iB), unitNorm(EigenAll, iB),
-                                 phys_.gamma(), finc(EigenAll, iB), dLambda, fixScale, incFScale,
+                                 gamma_rs, finc(EigenAll, iB), dLambda, fixScale, incFScale,
                                  lam0V(iB), lam123V(iB), lam4V(iB));
                 }
         };
@@ -1359,7 +1364,7 @@ namespace DNDS::Euler
                     Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
                         rsTypeAux,
                         ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N1B, N1,
-                        phys_.gamma(), F1, dLambda, fixScale, incFScale,
+                        gamma_rs, F1, dLambda, fixScale, incFScale,
                         exitFun, lam0, lam123, lam4);
                     lam0V1.setConstant(lam0);
                     lam123V1.setConstant(lam123);
@@ -1370,7 +1375,7 @@ namespace DNDS::Euler
                     {
                         RSWrapper_XY(rsTypeAux, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
                                      vgXY(EigenAll, iB), N1,
-                                     phys_.gamma(), F1(EigenAll, iB), dLambda, fixScale, incFScale,
+                                     gamma_rs, F1(EigenAll, iB), dLambda, fixScale, incFScale,
                                      lam0V1(iB), lam123V1(iB), lam4V1(iB));
                     }
 
@@ -1381,7 +1386,7 @@ namespace DNDS::Euler
                     Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
                         rsType,
                         ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N2, N2C,
-                        phys_.gamma(), finc, dLambda, fixScale, incFScale,
+                        gamma_rs, finc, dLambda, fixScale, incFScale,
                         exitFun, lam0, lam123, lam4);
                     lam0V.setConstant(lam0);
                     lam123V.setConstant(lam123);
@@ -1392,7 +1397,7 @@ namespace DNDS::Euler
                     {
                         RSWrapper_XY(rsType, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
                                      vgXY(EigenAll, iB), N2(EigenAll, iB),
-                                     phys_.gamma(), finc(EigenAll, iB), dLambda, fixScale, incFScale,
+                                     gamma_rs, finc(EigenAll, iB), dLambda, fixScale, incFScale,
                                      lam0V(iB), lam123V(iB), lam4V(iB));
                     }
 
@@ -1571,11 +1576,14 @@ namespace DNDS::Euler
             aux.hMax = vfv->GetCellMaxLenScale(iCell);
 
             real pMean, asqrMean, Hmean;
-            real gamma = phys_.gamma();
+            real T = phys_.template temperature<dim>(UMeanXy);
+            real gamma = phys_.gamma(T, UMeanXy);
             Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0),
                                  (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
                                  gamma, pMean, asqrMean, Hmean);
-            aux.T = pMean / ((gamma - 1) / gamma * phys_.Cp() * UMeanXy(0));
+
+            aux.T = T;
+            aux.gamma = gamma;
             aux.p = pMean;
             aux.pPhys = phys_.toPhysP(pMean);
             aux.muf = muEff(UMeanXy, aux.T);
@@ -1630,7 +1638,9 @@ namespace DNDS::Euler
         {
             TU uPrim;
             uPrim.resizeLike(UMeanXy);
-            Gas::IdealGasThermalConservative2Primitive(UMeanXy, uPrim, phys_.gamma());
+            real T_axi = phys_.template temperature<dim>(UMeanXy);
+            real gamma_axi = phys_.gamma(T_axi, UMeanXy);
+            Gas::IdealGasThermalConservative2Primitive(UMeanXy, uPrim, gamma_axi);
             if (Mode == 0)
                 ret(2) += uPrim(I4) / std::max(verySmallReal, pPhy(1)); // y direction force
             if (Mode == 1)
@@ -1645,12 +1655,12 @@ namespace DNDS::Euler
         {
 
             real pMean, asqrMean, Hmean;
-            real gamma = phys_.gamma();
+            real T = phys_.template temperature<dim>(UMeanXy);
+            real gamma = phys_.gamma(T, UMeanXy);
             Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0), (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
                                  gamma, pMean, asqrMean, Hmean);
             // ! refvalue:
             real muRef = phys_.muRef();
-            real T = pMean / ((gamma - 1) / gamma * phys_.Cp() * UMeanXy(0));
 
             real mufPhy, muf;
             mufPhy = muf = muEff(UMeanXy, T);
@@ -1693,12 +1703,12 @@ namespace DNDS::Euler
         else if constexpr (Traits::has2EQ)
         {
             real pMean, asqrMean, Hmean;
-            real gamma = phys_.gamma();
+            real T = phys_.template temperature<dim>(UMeanXy);
+            real gamma = phys_.gamma(T, UMeanXy);
             Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0), (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
                                  gamma, pMean, asqrMean, Hmean);
             // ! refvalue:
             real muRef = phys_.muRef();
-            real T = pMean / ((gamma - 1) / gamma * phys_.Cp() * UMeanXy(0));
 
             real mufPhy, muf;
             mufPhy = muf = muEff(UMeanXy, T);
@@ -1934,7 +1944,8 @@ namespace DNDS::Euler
             TransformURotatingFrame(ULxyStatic, pPhysics, 1);
 
         real un = ULxy(Seq123).dot(uNorm) / ULxy(0); // using relative velo for in/out judgement
-        real gamma = phys_.gamma();
+        real T = phys_.template temperature<dim>(ULxyStatic);
+        real gamma = phys_.gamma(T, ULxyStatic);
         real asqr, H, p;
         Gas::IdealGasThermal(ULxyStatic(I4), ULxyStatic(0), (ULxyStatic(Seq123) / ULxyStatic(0)).squaredNorm(), gamma, p, asqr, H);
 
@@ -2055,7 +2066,8 @@ namespace DNDS::Euler
         {
             DNDS_assert(dim > 1);
             Eigen::VectorXd far = settings.farFieldStaticValue;
-            real gamma = phys_.gamma();
+            real T = phys_.template temperature<dim>(ULxy);
+            real gamma = phys_.gamma(T, ULxy);
             real un = ULxy(Seq123).dot(uNorm) / ULxy(0);
             real vsqr = (ULxy(Seq123) / ULxy(0)).squaredNorm();
             real asqr, H, p;
@@ -2112,7 +2124,8 @@ namespace DNDS::Euler
         else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_IV_FAR) // Isentropic Vortex
         {
             real chi = 5;
-            real gamma = phys_.gamma();
+            real T_iv = phys_.template temperature<dim>(ULxy);
+            real gamma = phys_.gamma(T_iv, ULxy);
             real xc = 5 + t;
             real yc = 5 + t;
             real r = std::sqrt(sqr(pPhysics(0) - xc) + sqr(pPhysics(1) - yc));
@@ -2135,7 +2148,8 @@ namespace DNDS::Euler
         }
         else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_2DRiemann_FAR) // 2D Riemann
         {
-            real gamma = phys_.gamma();
+            real T = phys_.template temperature<dim>(ULxy);
+            real gamma = phys_.gamma(T, ULxy);
             real bdL = 0.0, bdR = 1.0, bdD = 0.0, bdU = 1.0;
 
             real phi1 = -0.663324958071080;
@@ -2196,7 +2210,9 @@ namespace DNDS::Euler
         else if (pBCHandler->GetFlagFromID(btype, "specialOpt") == 3001) // Noh
         {
             TU farPrimitive;
-            Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, phys_.gamma());
+            real T_noh = phys_.template temperature<dim>(settings.farFieldStaticValue);
+            real gamma_noh = phys_.gamma(T_noh, settings.farFieldStaticValue);
+            Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, gamma_noh);
             real pInf = farPrimitive(I4);
             real r = pPhysics.norm();
             TVec velo = -pPhysics(Seq012) / (r + smallReal);
@@ -2204,7 +2220,7 @@ namespace DNDS::Euler
             farPrimitive(0) = rho;
             farPrimitive(Seq123) = velo;
             farPrimitive(I4) = pInf;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, phys_.gamma());
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma_noh);
         }
         else
             DNDS_assert_info(false, fmt::format(
@@ -2310,11 +2326,13 @@ namespace DNDS::Euler
             real temp = pBCHandler->GetValueFromID(btype)(0);
             TU URxyPrim;
             URxyPrim.resizeLike(ULxy);
-            Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, phys_.gamma());
+            real T = phys_.template temperature<dim>(URxy);
+            real gamma = phys_.gamma(T, URxy);
+            Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gamma);
             DNDS_assert_info(URxyPrim(0) > 0 && URxyPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", URxyPrim(0), URxyPrim(I4), temp));
-            real newDensity = URxyPrim(I4) / temp / phys_.Rgas();
+            real newDensity = URxyPrim(I4) / temp / phys_.Rgas(URxy);
             URxyPrim(0) = newDensity;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, phys_.gamma());
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, gamma);
         }
         if constexpr (Traits::hasSA)
         {
@@ -2337,10 +2355,10 @@ namespace DNDS::Euler
                 real k1 = ULMeanXy(I4 + 1) / ULMeanXy(0);
 
                 real pMean, asqrMean, Hmean;
-                real gamma = phys_.gamma();
+                real T = phys_.template temperature<dim>(ULMeanXy);
+                real gamma = phys_.gamma(T, ULMeanXy);
                 Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
                                      gamma, pMean, asqrMean, Hmean);
-                real T = pMean / ((gamma - 1) / gamma * phys_.Cp() * ULMeanXy(0));
                 real mufPhy1 = muEff(ULMeanXy, T);
                 real epsWall = 2 * mufPhy1 / ULMeanXy(0) * k1 / sqr(d1);
                 URxy(I4 + 2) = 2 * epsWall * ULxy(0) - ULxy(I4 + 2);
@@ -2350,10 +2368,10 @@ namespace DNDS::Euler
             { // BC for SST or KOWilcox
                 real d1 = dWall[iCell].mean();
                 real pMean, asqrMean, Hmean;
-                real gamma = phys_.gamma();
+                real T = phys_.template temperature<dim>(ULMeanXy);
+                real gamma = phys_.gamma(T, ULMeanXy);
                 Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
                                      gamma, pMean, asqrMean, Hmean);
-                real T = pMean / ((gamma - 1) / gamma * phys_.Cp() * ULMeanXy(0));
                 real mufPhy1 = muEff(ULMeanXy, T);
 
                 real rhoOmegaaaWall = mufPhy1 / sqr(d1) * RANS::kWallOmegaCoeff;
@@ -2474,7 +2492,9 @@ namespace DNDS::Euler
             TransformURotatingFrame(ULxyStatic, pPhysics, 1);
         TU ULxyPrimitive;
         ULxyPrimitive.resizeLike(ULxy);
-        real gamma = phys_.gamma();
+        real T = phys_.template temperature<dim>(ULxyStatic);
+        real gamma = phys_.gamma(T, ULxyStatic);
+        real Cp = phys_.Cp(T, ULxyStatic);
         Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
         TVec v = ULxyStatic(Seq123).array() / ULxyStatic(0);
         real vSqr = v.squaredNorm();
@@ -2483,10 +2503,10 @@ namespace DNDS::Euler
 
             real pStag = pBCHandler->GetValueFromID(btype)(0);
             real tStag = pBCHandler->GetValueFromID(btype)(1);
-            vSqr = std::min(vSqr, tStag * 2 * phys_.Cp() * 0.95);
-            real tStatic = tStag - 0.5 * vSqr / (phys_.Cp());
+            vSqr = std::min(vSqr, tStag * 2 * Cp * 0.95);
+            real tStatic = tStag - 0.5 * vSqr / Cp;
             real pStatic = pStag * std::pow(tStatic / tStag, gamma / (gamma - 1));
-            real rStatic = pStatic / (phys_.Rgas() * tStatic);
+            real rStatic = pStatic / (phys_.Rgas(ULxyStatic) * tStatic);
             farPrimitive(0) = rStatic;
             farPrimitive(Seq123) = pBCHandler->GetValueFromID(btype)(Seq234).normalized() * std::sqrt(vSqr);
             farPrimitive(I4) = pStatic;
@@ -2583,13 +2603,13 @@ namespace DNDS::Euler
                         vfv->GetIntPointDiffBaseValue(iCell, -1, -1, -1, std::array<int, 3>{1, 2, 3}, 4) *
                         uRec[iCell]; // 3d specific
                 real pMean, asqrMean, Hmean;
-                real gamma = phys_.gamma();
                 auto ULMeanXy = Uxy;
+                real T = phys_.template temperature<dim>(ULMeanXy);
+                real gamma = phys_.gamma(T, ULMeanXy);
                 Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
                                      gamma, pMean, asqrMean, Hmean);
                 // ! refvalue:
                 real muRef = phys_.muRef();
-                real T = pMean / ((gamma - 1) / gamma * phys_.Cp() * ULMeanXy(0));
                 real mufPhy = muEff(ULMeanXy, T);
                 if (settings.ransModel == RANSModel::RANS_KOSST)
                     mut = RANS::GetMut_SST<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean());
