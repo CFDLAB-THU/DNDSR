@@ -2600,6 +2600,18 @@ namespace DNDS::Euler
             return mut;
         };
 
+        // Species output fields for reactive flow
+        if constexpr (Traits::isExtended)
+        {
+            if (settings.reactiveFlow.enabled)
+            {
+                for (int k = 5; k < nVars; ++k)
+                    outMap["rhoY_" + std::to_string(k - 5)] =
+                        [&, k](index iCell)
+                    { return u[iCell](k); };
+            }
+        }
+
         op.setMap(outMap);
     }
 }
