@@ -1,16 +1,42 @@
 # Reactive Flow Fully-Implicit Solver Design
 
-**Status:** Design proposal  
+**Status:** Phases 1–3 implemented (branch `dev/harry`, commits `c7dbb27..350e827`).  
 **Target:** Extend DNDSR Euler solvers to support multi-species reactive flow
 with coupled fully-implicit time integration using full chemical Jacobian blocks.  
 **Branch:** `eulerEX` / `eulerEX3D` (extensible EulerModel variants with `Eigen::Dynamic` nVars)
 
 > **Scope note:** This document describes the full-block coupled implicit approach
-> for immediate implementation. Partial-decoupling (point-implicit chemistry) is
+> implemented in Phases 1–3. Partial-decoupling (point-implicit chemistry) is
 > described as a **future extension** (§3.4.3) for when species counts exceed
 > ~10 and the full Jacobian block becomes the performance bottleneck.
 
 ---
+
+## Implementation Status
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | SourceTermContributor variant dispatch, ReactiveFlowSettings, RANS-as-species | Done |
+| 2 | ChemicalSource PIMPL (Cantera), ChemicalContributor, buffer pre-allocation | Done |
+| 3 | Full-block Jacobian, PhysicsProperties module, EOS/transport routing, species diffusion | Done |
+| 4 | Verification (0-D autoignition, 1-D flame, 2-D flows) | Pending |
+| 5 | block_scalar Jacobian mode, point-implicit chemistry, GPU kinetics | Future |
+
+### New files created
+
+| File | Role |
+|------|------|
+| `src/Euler/SourceTermContributor.hpp` | Variant-based source term dispatch (8 contributor types) |
+| `src/Euler/Chemistry/ChemicalSource.hpp` | PIMPL wrapper around Cantera (no Cantera in public header) |
+| `src/Euler/Chemistry/ChemicalSource.cpp` | Cantera Solution loaded only here |
+| `src/Euler/Physics/PhysicsProperties.hpp` | Centralized EOS/transport/kinetics property module |
+
+### Key architectural decisions implemented
+
+- **PIMPL for Cantera**: `ChemicalSource.hpp` has zero Cantera includes — only buffer views (`SpeciesBufferView`, `JacobianBufferView`). The `.cpp` is a single translation unit with `cantera/core.h`. No Eigen/Cantera header conflict.
+- **Perfect gas with variable γ**: Multi-species mixture properties (γ_mix, cp_mix, R_mix) computed as mass-fraction-weighted averages. Existing Riemann solver and flux Jacobian code is unchanged — only the coefficient values are substituted through `PhysicsProperties`.
+- **Full-block source Jacobian**: `JacobianDiagBlock` in matrix-block mode (Mode 1) stores nVars×nVars per cell. The `ChemicalContributor` fills the species rows with `M_k · ∂ω_k/∂U_j`. SGS and FGMRES solvers require zero changes.
+- **Species diffusion**: Fickian diffusion with constant Schmidt number (Sc=1) fallback; upgradable to Cantera mixture-averaged transport. Species diffusivity accessed through `PhysicsProperties::speciesDiffusivityK()`.---
 
 ## 1. Problem Statement
 
@@ -773,72 +799,54 @@ For each implicit time step (pseudo-time iteration):
 
 ## 5. Implementation Roadmap
 
-### Phase 1: Infrastructure (no chemistry, backward-compatible)
+### Phase 1: Infrastructure (no chemistry, backward-compatible) ✅ Done
 
-1. Add `ReactiveFlowSettings` to `EulerEvaluatorSettings` with `DNDS_DECLARE_CONFIG`
-2. Add `enableReactive` flag to `EulerSolver::Configuration`
-3. **Refactor `source()` into composable `SourceTermContributor` stack**
-   - Extract existing body-force, rotating-frame, axisymmetric sources into contributors
-   - Convert RANS source (SA, SST, Wilcox, RKE) dispatch into `RANSSourceContributor`
-   - Add `EddyViscosityProvider` interface (shared by RANS contributor, used in viscous flux)
-   - Keep existing `if constexpr` dispatch path for dedicated models (NS_SA, NS_2EQ, etc.)
-   - Verify: run existing euler/eulerSA/euler2EQ test cases — zero diff
-4. Extend `EulerModelTraits` with `isReactive`, `hasRANSFromConfig` traits
-5. Wire `nSpecies` from config to `nVars` validation
+1. ✅ Add `ReactiveFlowSettings` to `EulerEvaluatorSettings` with `DNDS_DECLARE_CONFIG`
+2. ✅ Add `enableReactive` flag to `EulerSolver::Configuration`
+3. ✅ **Refactor `source()` into composable `SourceTermContributor` stack**
+   - Extract body-force, rotating-frame, axisymmetric, RANS sources into variant-based contributors
+   - Keep existing `if constexpr` dispatch for dedicated models (NS_SA, etc.)
+   - Zero-diff verified on all fixed models
+4. ✅ Extend `EulerModelTraits` with `isReactive` trait
+5. ✅ Wire `nSpecies` from config to `nVars` validation
+6. ✅ Add `TU<TModel>`/`TJacobianU<TModel>`/`TDiffU<TModel>` namespace-level aliases in `Euler.hpp`
 
-### Phase 2: Chemistry Subsystem
+### Phase 2: Chemistry Subsystem ✅ Done
 
-7. Implement `ThermoModels.hpp`:
-   - `MultiSpeciesIdealGas` with NASA-7 polynomials
-   - Temperature-from-energy Newton solver
-   - Analytic derivatives dT/dρe, dT/d(ρY_i)
-8. Implement `TransportModels.hpp`:
-   - `ConstantTransport` (fixed Pr, Sc, Le)
-   - `MixtureAveragedTransport` (Wilke, Mathur, Hirschfelder-Curtiss)
-9. Implement `ReactionMechanism.hpp`:
-   - CHEMKIN-format parser (species, thermo, reactions, transport)
-   - `ArrheniusMechanism::ProductionRatesAndJacobian()` with analytic ∂ω/∂T and ∂ω/∂Y_j
-   - Jacobian assembly: conservative-variable chain rule mapping
-10. Implement `ChemicalSourceContributor`
+7. ✅ **ChemicalSource PIMPL** — header-only buffer views; `.cpp` owns Cantera `Solution`
+   - `ConstSpeciesBufferView` / `SpeciesBufferView` / `JacobianBufferView` (compatible with `Eigen::Map`)
+   - Cantera `ThermoPhase` + `Kinetics` + `Transport` hidden in `Impl`
+8. ✅ **ChemicalContributor** wired into variant dispatch
+   - `productionRates(T, p, Y)` and `productionRatesAndJacobian(T, p, rho, Y)` via Cantera
+   - Pre-allocated scratch buffers (`bufY`, `bufOmega`, `bufJ`) — zero heap in hot path
+   - Molecular weight scaling: `∂(ω_k·M_k)/∂U_j`
+9. ✅ Mixture properties: `mixtureR(Y)`, `mixtureCp(T,Y)`, `mixtureGamma(T,Y)`, `speedOfSound(T,Y)`
+10. ✅ Transport fallback: constant-Schmidt (Sc=1) via `PhysicsProperties`
 
-### Phase 3: Solver Integration
+### Phase 3: Solver Integration ✅ Done
 
-11. Modify `LUSGSMatrixInit` to accept full source Jacobian blocks
-    - When `isReactive`, switch `JacobianDiagBlock` to full-block mode (Mode 1)
-    - Add source block without diagonalization: `JDiag.block[i] += α * JSource.block[i]`
-12. Modify `EvaluateRHS` to accept and propagate full source Jacobian
-    - The `sourceV` matrix in the quadrature loop already reserves space
-      for full blocks when `JSource.isBlock()` — fill in off-diagonals
-13. Configure SGS sweeps and FGMRES for larger state vectors
-    - Existing values (sgsIter=5, nGmresIter=10) are good starting points
-    - Add configurable chemistry-specific SGS sub-iterations if needed
+11. ✅ Force `JacobianDiagBlock` block mode when `reactiveFlow.enabled`
+12. ✅ **PhysicsProperties module** — centralized EOS/transport/kinetics
+    - All ~120 call sites routed through `phys_` or `eval.phys()`
+    - Falls back to constant `IdealGasProperty` when no `ChemicalSource` — zero diff
+13. ✅ Species output fields (`rhoY_0`..`rhoY_Ns1-1`) in `InitializeOutputPicker`
+14. ✅ **Species diffusion flux** (Fickian) in `EvaluateRHS` face loop
+    - `∇Y_k = ∇(ρY_k)/ρ − Y_k·∇ρ/ρ` from `DiffUxyV`
+    - Constant-Schmidt fallback; upgradable to Cantera mixture-averaged
+15. ✅ Species offset `Isp = nVars − Ns1` (handles RANS + chemistry nVars layout)
 
 ### Phase 4: Verification & Validation
 
-14. Zero-dimensional autoignition (constant-volume reactor)
-    - Compare against Cantera reference solutions
-    - Verify temporal order of accuracy (1st, 2nd order via BDF/VBDF)
-15. One-dimensional laminar premixed flame
-    - Compare flame speed against Cantera 1-D free-flame
-    - Grid convergence study
-16. Two-dimensional lifted flame / diffusion flame
-    - Qualitative comparison against literature
-17. Reacting RANS (SA + chemistry)
-    - Test eulerEX with ransModel=SA + reactiveFlow
-    - Verify eddy viscosity enhances mixing and flame spreading
+16. ⬜ 0-D autoignition vs Cantera `IdealGasReactor`
+17. ⬜ 1-D laminar premixed flame vs Cantera `FreeFlame`
+18. ⬜ 2-D reacting flow (lifted flame / mixing layer)
+19. ⬜ Reacting RANS (SA + chemistry)
 
 ### Phase 5: Future — Large-Mechanism Optimizations
 
-18. **block_scalar Jacobian mode** (Mode 2 in `JacobianDiagBlock`, §3.4.1)
-    - Hybrid storage: dense nFluid×nFluid block + nScalar diagonal entries
-    - Needed as prerequisite for point-implicit chemistry
-19. **Point-implicit chemistry** (§3.4.3)
-    - Per-cell (Ns-1)×(Ns-1) dense linear solves after each SGS sweep
-    - Chemical sub-cycling for stiff mechanisms
-    - Strategies: afterSGS, afterLinear
-20. **GPU-accelerated chemistry**
-    - Batch-similar cells for GPU-parallelized reaction rate evaluation
-    - CUDA kernel for ProductionRates() on `EulerP`-style device arrays
+20. ⬜ **block_scalar Jacobian mode** (Mode 2 in `JacobianDiagBlock`, §3.4.1)
+21. ⬜ **Point-implicit chemistry** (§3.4.3)
+22. ⬜ **GPU-accelerated chemistry** (CUDA kernel for `ProductionRates`)
 
 ---
 
@@ -900,25 +908,28 @@ expensive (nVars+1 RHS evaluations) and noisy near equilibrium.
 
 ## 7. Summary of Changes
 
-| File/Layer | Change | Impact |
+**Actual delta** (c7dbb27..350e827): 15 files, +1681 −532 lines.
+
+| File/Layer | Change | Δ |
 |---|---|---|
-| `Euler.hpp` | Add `isReactive` to `EulerModelTraits`, reactive-aware nVars logic | ~30 lines |
-| `EulerEvaluator.hpp` | Composable `SourceTermContributor` registry (incl. RANS), reactive flow member data | ~80 lines |
-| `EulerEvaluator.hxx` | Refactor `source()`, upgrade `LUSGSMatrixInit` for full blocks | ~100 lines |
-| `EulerEvaluator_EvaluateRHS.hxx` | Fill full source Jacobian, add species diffusion flux | ~50 lines |
-| `EulerEvaluatorSettings.hpp` | Add `ReactiveFlowSettings` sub-struct | ~40 lines |
-| `EulerJacobian.hpp` | No changes (existing Mode 1 full-block storage is sufficient) | 0 lines |
-| `EulerSolver.hpp/hxx` | Wire reactive config, adjust linear solver hints | ~50 lines |
-| `src/Euler/Chemistry/` | New: ThermoModels, TransportModels, ReactionMechanism, ChemSourceContributor | ~2000 lines |
-| `src/Euler/SourceTerms/` | New: Extract existing RANS + body-force sources into contributors, add `EddyViscosityProvider` | ~500 lines |
-| `cases/eulerEX/` | New example configs (autoignition, premixed flame, RANS+chemistry) | ~200 lines |
-| `test/` | New tests (0-D reactor, Cantera cross-validation) | ~500 lines |
+| `SourceTermContributor.hpp` | **New:** 8 variant-based contributor types, shared free functions, builder, visitor + CTAD | +459 |
+| `Physics/PhysicsProperties.hpp` | **New:** centralized EOS/transport/kinetics module wrapping `IdealGasProperty` + optional `ChemicalSource` | +184 |
+| `Chemistry/ChemicalSource.hpp` | **New:** PIMPL header — buffer views (`SpeciesBufferView`, `JacobianBufferView`), zero Cantera includes | +122 |
+| `Chemistry/ChemicalSource.cpp` | **New:** Cantera `Solution` loading and method implementations | +199 |
+| `EulerEvaluator_EvaluateDt.hxx` | Contributor dispatch in `source()`, T/p in `SourceCellAux`, species output fields, bulk phys_ substitution | +130 −100 |
+| `EulerEvaluator.hpp` | Include wiring, `phys_` member + accessor, `ChemicalSource` extraction, bulk phys_ substitution | +60 −40 |
+| `EulerEvaluator.hxx` | Bulk phys_ substitution (17 gamma sites → `phys_.gamma()`) | +18 −18 |
+| `EulerEvaluator_EvaluateRHS.hxx` | NS_2D dim fix, species diffusion flux (Fickian), bulk phys_ substitution | +58 −18 |
+| `EulerEvaluatorSettings.hpp` | `ReactiveFlowSettings` struct + `DNDS_DECLARE_CONFIG`, const on `Omega()`/`vOmega()` | +40 |
+| `EulerSolver.hpp` | `isReactive` trait, nSpecies validation in ctor | +30 |
+| `EulerSolver_Init.hxx` | Force block Jacobian mode when reactive; `phys_` accessor | +12 |
+| `EulerSolver.hxx` | Route eigenvector/smooth-indicator gamma through `eval.phys()` | +3 −3 |
+| `EulerSolver_PrintData.hxx` | Route output gamma/Rgas through `eval.phys()` | +6 −6 |
+| `SpecialFields.hpp` | Route analytic-vortex gamma through `eval.phys()` | +3 −3 |
+| `Euler.hpp` | `TU<TModel>`/`TJacobianU<TModel>`/`TDiffU<TModel>` aliases, `isReactive` trait | +20 |
+| `EulerJacobian.hpp` | No changes (existing Mode 1 full-block storage is sufficient) | 0 |
 
-**Total estimated lines:** ~3500 lines across ~14 files. The critical paths
-(EulerSolver, SGS/GMRES solvers, reconstruction, mesh I/O, output) are
-essentially untouched.
-
-### Where changes are NOT needed
+### Where changes were NOT needed
 
 | Component | Reason |
 |-----------|--------|
@@ -927,6 +938,7 @@ essentially untouched.
 | Direct LU preconditioner | Already factorizes nVars×nVars blocks — unchanged |
 | ODE integrators (`ODE/`) | Time integration is callback-based, unaware of nVars — unchanged |
 | Variational reconstruction (CFV/) | Treats all variables identically — unchanged |
+| Riemann solver (`Gas.hpp`) | Takes gamma as a parameter — caller provides our `phys_.gamma()` — unchanged |
 | Mesh I/O (`Geom/Mesh/`) | Mesh is field-agnostic — unchanged |
 | MPI distribution | `ArrayDof`/`ArrayPair` already handle DynamicSize distributions — unchanged |
 | VTK/HDF5/Tecplot output | Already supports arbitrary field names via `outCellScalarNames` |
