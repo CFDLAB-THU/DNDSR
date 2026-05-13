@@ -40,8 +40,9 @@ namespace DNDS::Euler
         real dWallC = 0;
         real hMax = 0;
         real muf = 0;
-        real T = 300;    // temperature [K] (set by caller from perfect-gas EOS)
-        real p = 101325; // pressure [Pa]
+        real T = 300;
+        real p = 101325;     // code pressure
+        real pPhys = 101325; // physical pressure [Pa] for Cantera
     };
 
     // ============================================================================
@@ -345,14 +346,14 @@ namespace DNDS::Euler
 
             if (Mode == 0)
             {
-                chem->productionRates(aux.T, aux.p, Yv, omegav);
+                chem->productionRates(aux.T, aux.pPhys, Yv, omegav);
                 for (int k = 0; k < Ns1; ++k)
                     ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k];
             }
             else if (Mode == 2)
             {
                 Chemistry::JacobianBufferView Jv{bufJ.data(), Ns, nVars, Ns};
-                chem->productionRatesAndJacobian(aux.T, aux.p, rho, Yv, omegav, Jv);
+                chem->productionRatesAndJacobian(aux.T, aux.pPhys, rho, Yv, omegav, Jv);
                 for (int k = 0; k < Ns1; ++k)
                     ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k];
                 for (int k = 0; k < Ns1; ++k)

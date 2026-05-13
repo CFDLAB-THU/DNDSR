@@ -1577,6 +1577,7 @@ namespace DNDS::Euler
                                  gamma, pMean, asqrMean, Hmean);
             aux.T = pMean / ((gamma - 1) / gamma * phys_.Cp() * UMeanXy(0));
             aux.p = pMean;
+            aux.pPhys = phys_.toPhysP(pMean);
             aux.muf = muEff(UMeanXy, aux.T);
 
             SourceTermVisitor visitor{ret, jacobian, UMeanXy, DiffUxy, pPhy, aux,
