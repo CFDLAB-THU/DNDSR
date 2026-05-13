@@ -142,7 +142,7 @@ namespace DNDS::Euler
 
         template <class TRet, class TJac, class TDerivedU, class TGasProp>
         void evaluate(TRet &ret, TJac &jac, const TRet &U, const TDerivedU &,
-                      const Geom::tPoint &pPhy, const SourceCellAux &,
+                      const Geom::tPoint &pPhy, const SourceCellAux &aux,
                       const TGasProp &, index, index, int Mode) const
         {
             if (!enabled)
@@ -323,14 +323,14 @@ namespace DNDS::Euler
                 return;
             int Ns = chem->nSpecies();
             int Ns1 = Ns - 1;
-            int I4 = 5;
             int nVars = static_cast<int>(ret.size());
+            int Isp = nVars - Ns1; // species start (= 5 + nRANS)
 
             double rho = U[0];
             double rhoInv = 1.0 / std::max(rho, 1e-60);
 
             for (int k = 0; k < Ns1; ++k)
-                bufY[k] = U[I4 + k] * rhoInv;
+                bufY[k] = U[Isp + k] * rhoInv;
             double sumY = 0;
             for (int k = 0; k < Ns1; ++k)
                 sumY += bufY[k];
@@ -343,17 +343,21 @@ namespace DNDS::Euler
             {
                 chem->productionRates(aux.T, aux.p, Yv, omegav);
                 for (int k = 0; k < Ns1; ++k)
-                    ret[I4 + k] += bufOmega[k] * chem->molecularWeights()[k];
+                    ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k];
             }
             else if (Mode == 2)
             {
                 Chemistry::JacobianBufferView Jv{bufJ.data(), Ns, nVars, Ns};
                 chem->productionRatesAndJacobian(aux.T, aux.p, rho, Yv, omegav, Jv);
                 for (int k = 0; k < Ns1; ++k)
-                    ret[I4 + k] += bufOmega[k] * chem->molecularWeights()[k];
-                for (int i = 0; i < Ns; ++i)
+                    ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k];
+                for (int k = 0; k < Ns1; ++k)
+                {
+                    double Mk = chem->molecularWeights()[k];
+                    int iRow = Isp + k;
                     for (int j = 0; j < nVars; ++j)
-                        jac(i, j) += Jv(i, j);
+                        jac(iRow, j) += Mk * Jv(k, j);
+                }
             }
         }
     };
