@@ -1458,8 +1458,9 @@ namespace DNDS::Euler
             auto vnR = ((URxy(Seq123, EigenAll).array().rowwise() / URxy(0, EigenAll).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
             auto vnL = ((ULxy(Seq123, EigenAll).array().rowwise() / ULxy(0, EigenAll).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
             finc(SeqI52Last, EigenAll) =
-                ((vnL * ULxy(SeqI52Last, EigenAll).array() + vnR * URxy(SeqI52Last, EigenAll).array()) -
-                 (URxy(SeqI52Last, EigenAll).array() - ULxy(SeqI52Last, EigenAll).array()) * lambdaFaceCC.array()) *
+                ((ULxy(SeqI52Last, EigenAll).array().rowwise() * vnL.array() +
+                  URxy(SeqI52Last, EigenAll).array().rowwise() * vnR.array()) -
+                 (URxy(SeqI52Last, EigenAll).array() - ULxy(SeqI52Last, EigenAll).array()).rowwise() * lambdaFaceCC.array()) *
                 0.5;
         }
 
