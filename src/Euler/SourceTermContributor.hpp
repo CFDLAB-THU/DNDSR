@@ -294,9 +294,25 @@ namespace DNDS::Euler
     {
         std::shared_ptr<Chemistry::ChemicalSource> chem;
 
+        // Pre-allocated buffers — allocated once, reused every evaluate() call.
+        // Thread-unsafe (callers serialise via the SGS sweep over cells).
+        mutable std::vector<double> bufY;
+        mutable std::vector<double> bufOmega;
+        mutable std::vector<double> bufJ;
+
         ChemicalContributor() = default;
         explicit ChemicalContributor(std::shared_ptr<Chemistry::ChemicalSource> c)
-            : chem(std::move(c)) {}
+            : chem(std::move(c))
+        {
+            if (chem)
+            {
+                int Ns = chem->nSpecies();
+                int nVars = 5 + Ns - 1;
+                bufY.resize(Ns);
+                bufOmega.resize(Ns);
+                bufJ.resize(Ns * nVars);
+            }
+        }
 
         template <class TRet, class TJac, class TDerivedU, class TGasProp>
         void evaluate(TRet &ret, TJac &jac, const TRet &U, const TDerivedU &,
@@ -308,34 +324,33 @@ namespace DNDS::Euler
             int Ns = chem->nSpecies();
             int Ns1 = Ns - 1;
             int I4 = 5;
+            int nVars = static_cast<int>(ret.size());
 
             double rho = U[0];
             double rhoInv = 1.0 / std::max(rho, 1e-60);
 
-            std::vector<double> Ybuf(Ns), omegabuf(Ns), Jbuf(Ns * ret.size());
             for (int k = 0; k < Ns1; ++k)
-                Ybuf[k] = U[I4 + k] * rhoInv;
+                bufY[k] = U[I4 + k] * rhoInv;
             double sumY = 0;
             for (int k = 0; k < Ns1; ++k)
-                sumY += Ybuf[k];
-            Ybuf[Ns1] = 1.0 - sumY;
+                sumY += bufY[k];
+            bufY[Ns1] = 1.0 - sumY;
 
-            Chemistry::ConstSpeciesBufferView Yv{Ybuf.data(), Ns};
-            Chemistry::SpeciesBufferView omegav{omegabuf.data(), Ns};
+            Chemistry::ConstSpeciesBufferView Yv{bufY.data(), Ns};
+            Chemistry::SpeciesBufferView omegav{bufOmega.data(), Ns};
 
             if (Mode == 0)
             {
                 chem->productionRates(aux.T, aux.p, Yv, omegav);
                 for (int k = 0; k < Ns1; ++k)
-                    ret[I4 + k] += omegabuf[k] * chem->molecularWeights()[k];
+                    ret[I4 + k] += bufOmega[k] * chem->molecularWeights()[k];
             }
             else if (Mode == 2)
             {
-                int nVars = static_cast<int>(ret.size());
-                Chemistry::JacobianBufferView Jv{Jbuf.data(), Ns, nVars, Ns};
+                Chemistry::JacobianBufferView Jv{bufJ.data(), Ns, nVars, Ns};
                 chem->productionRatesAndJacobian(aux.T, aux.p, rho, Yv, omegav, Jv);
                 for (int k = 0; k < Ns1; ++k)
-                    ret[I4 + k] += omegabuf[k] * chem->molecularWeights()[k];
+                    ret[I4 + k] += bufOmega[k] * chem->molecularWeights()[k];
                 for (int i = 0; i < Ns; ++i)
                     for (int j = 0; j < nVars; ++j)
                         jac(i, j) += Jv(i, j);
