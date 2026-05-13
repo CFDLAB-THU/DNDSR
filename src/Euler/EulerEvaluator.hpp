@@ -221,6 +221,9 @@ namespace DNDS::Euler
 
         EulerEvaluatorSettings<model> settings; ///< Physics and numerics settings for this evaluator.
 
+        /// @brief Centralized physics property accessor (EOS coefs, transport, kinetics).
+        const PhysicsProperties<model> &phys() const { return phys_; }
+
         /// @brief Centralized physics property module (EOS coefs, transport, kinetics).
         PhysicsProperties<model> phys_;
 

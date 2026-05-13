@@ -37,7 +37,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     /** @brief Main implicit time-marching loop for the compressible Navier-Stokes solver.
      *
      *  Performs the following at each time step:
@@ -472,7 +473,7 @@ namespace DNDS::Euler
                     Eigen::Matrix<real, dim, dim> normBase = Geom::NormBuildLocalBaseV<dim>(n(Seq012));
                     UC(Seq123) = normBase.transpose() * UC(Seq123);
 
-                    auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, eval.settings.idealGasProperty.gamma);
+                    auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, eval.phys().gamma());
                     M(EigenAll, Seq123) *= normBase.transpose();
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
@@ -490,7 +491,7 @@ namespace DNDS::Euler
                     Eigen::Matrix<real, dim, dim> normBase = Geom::NormBuildLocalBaseV<dim>(n(Seq012));
                     UC(Seq123) = normBase.transpose() * UC(Seq123);
 
-                    auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, eval.settings.idealGasProperty.gamma);
+                    auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, eval.phys().gamma());
                     M(Seq123, EigenAll) = normBase * M(Seq123, EigenAll);
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
@@ -519,7 +520,7 @@ namespace DNDS::Euler
                                 v.setConstant(-veryLargeReal * v(I4));
                                 return;
                             }
-                            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, eval.settings.idealGasProperty.gamma);
+                            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, eval.phys().gamma());
                             v.setConstant(prim(I4));
                             return;
                         });
@@ -1386,7 +1387,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     /** @brief Dispatch the linear solve for implicit time stepping.
      *
      *  Solves the linearized system using either SGS sweeps (gmresCode=0) or
@@ -1583,7 +1585,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     /** @brief Apply the preconditioner for the GMRES linear solver.
      *
      *  Depending on jacobiCode: applies symmetric SGS sweeps (code 0/1) or
@@ -1662,7 +1665,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     /** @brief Initialize the running environment for the time-marching loop.
      *
      *  Sets up the ODE solver, error logging stream, temporary arrays, signal handlers,
