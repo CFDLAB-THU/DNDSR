@@ -522,7 +522,37 @@ namespace DNDS::Euler
                 {
                     finc.resizeLike(fluxEs);
                     finc(EigenAll, 0) = fincC(EigenAll, iG);
-                    finc *= (direct2ndRec ? vfv->GetFaceArea(iFace) / vfv->GetFaceParamArea(iFace) : vfv->GetFaceJacobiDet(iFace, iG)); // !don't forget this
+
+                    // Fickian species diffusion flux
+                    if constexpr (Traits::isExtended)
+                    {
+                        if (this->settings.reactiveFlow.enabled)
+                        {
+                            int Ns = this->nVars - 5 + 1;
+                            int Ns1 = Ns - 1;
+                            int Isp = this->nVars - Ns1;
+                            auto seqC = Eigen::seq(iG * dim, iG * dim + dim - 1);
+                            auto uNorm = unitNormV(EigenAll, iG);
+                            real rho = ULxyV(0, iG);
+                            real rhoInv = 1.0 / std::max(rho, 1e-60);
+                            auto gradRho = DiffUxyV(seqC, 0);
+                            // Face-averaged T, p, D_k via phys_ (simplified: 1 call per face point)
+                            for (int k = 0; k < Ns1; ++k)
+                            {
+                                int iVar = Isp + k;
+                                auto gradRhoYk = DiffUxyV(seqC, iVar);
+                                real Yk = ULxyV(iVar, iG) * rhoInv;
+                                real gradYk_dot_n = (gradRhoYk * rhoInv - Yk * gradRho * rhoInv).dot(uNorm);
+                                real Dk = this->phys_.speciesDiffusivityK(
+                                    /*T*/ 300, /*p*/ 101325, ULxyV(EigenAll, iG), k);
+                                finc(iVar, 0) -= rho * Dk * gradYk_dot_n;
+                            }
+                        }
+                    }
+
+                    real detJac = direct2ndRec ? vfv->GetFaceArea(iFace) / vfv->GetFaceParamArea(iFace)
+                                               : vfv->GetFaceJacobiDet(iFace, iG);
+                    finc *= detJac; // !don't forget this
                 });
 
             if (settings.useRoeJacobian)
