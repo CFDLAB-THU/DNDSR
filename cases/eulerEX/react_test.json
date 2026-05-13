@@ -1,6 +1,6 @@
 {
     "timeMarchControl": {
-        "dtImplicit": 1e-1,
+        "dtImplicit": 0.1,
         "nTimeStep": 100,
         "steadyQuit": false,
         "tEnd": 0.1,
@@ -25,7 +25,7 @@
     },
     "convergenceControl": {
         "nTimeStepInternal": 10,
-        "rhsThresholdInternal": 1e-4,
+        "rhsThresholdInternal": 0.0001,
         "res_base": 0,
         "useVolWiseResidual": true
     },
@@ -42,8 +42,16 @@
         "outCellScalarNames": []
     },
     "boundaryDefinition": {
-        "PeriodicTranslation1": [1.0, 0.0, 0.0],
-        "PeriodicTranslation2": [0.0, 1.0, 0.0]
+        "PeriodicTranslation1": [
+            1.0,
+            0.0,
+            0.0
+        ],
+        "PeriodicTranslation2": [
+            0.0,
+            1.0,
+            0.0
+        ]
     },
     "limiterControl": {
         "useLimiter": true,
@@ -64,7 +72,7 @@
         "intOrder": 5,
         "jacobiRelax": 1,
         "SORInstead": true,
-        "smoothThreshold": 1e-3,
+        "smoothThreshold": 0.001,
         "WBAP_nStd": 10.0
     },
     "eulerSettings": {
@@ -80,12 +88,30 @@
             "enabled": true,
             "mechanismFile": "/home/harry/projects/DNDSR/external/cfd_externals/install/data/h2o2.yaml"
         },
-        "farFieldStaticValue": [1.0, 0.0, 0.0, 0.0, 2.5,
-            0.028, 0.222, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.75],
-        "constMassForce": [0.0, 0.0, 0.0],
+        "farFieldStaticValue": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            2.5,
+            0.028,
+            0.222,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.75
+        ],
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
         "idealGasProperty": {
             "gamma": 1.4,
-            "Rgas": 289,
+            "Rgas": 0.002,
             "muGas": 1e-200,
             "prGas": 0.72
         }
