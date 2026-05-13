@@ -122,6 +122,11 @@ namespace DNDS::Euler::Chemistry
                                 ConstSpeciesBufferView Y,
                                 SpeciesBufferView D) const;
 
+        /** Per-species specific enthalpies [J/kg]. h must have nSpecies elements. */
+        void speciesEnthalpies(double T, double p,
+                               ConstSpeciesBufferView Y,
+                               SpeciesBufferView h) const;
+
     private:
         struct Impl;
         std::unique_ptr<Impl> impl_;
