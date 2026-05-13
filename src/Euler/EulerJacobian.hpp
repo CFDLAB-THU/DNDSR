@@ -42,15 +42,15 @@ namespace DNDS::Euler
     class JacobianDiagBlock
     {
     public:
-        using TU = Eigen::Vector<real, nVarsFixed>;                  ///< State vector type.
+        using TU = Eigen::Vector<real, nVarsFixed>;                     ///< State vector type.
         using tComponent = Eigen::Matrix<real, nVarsFixed, nVarsFixed>; ///< Full block matrix type.
-        using tComponentDiag = Eigen::Vector<real, nVarsFixed>;      ///< Diagonal vector type.
+        using tComponentDiag = Eigen::Vector<real, nVarsFixed>;         ///< Diagonal vector type.
 
     private:
-        ArrayDOFV<nVarsFixed> _dataDiag, _dataDiagInvert;           ///< Diagonal data and its inverse (scalar mode).
+        ArrayDOFV<nVarsFixed> _dataDiag, _dataDiagInvert;                                   ///< Diagonal data and its inverse (scalar mode).
         DNDS::ArrayPair<DNDS::ArrayEigenMatrix<nVarsFixed, nVarsFixed>> _data, _dataInvert; ///< Block data and its inverse (matrix mode).
-        bool hasInvert{false};                                      ///< True after GetInvert() has computed the inverse.
-        int _mode{0};                                               ///< Storage mode: 0 = scalar-diagonal, nonzero = matrix-block.
+        bool hasInvert{false};                                                              ///< True after GetInvert() has computed the inverse.
+        int _mode{0};                                                                       ///< Storage mode: 0 = scalar-diagonal, nonzero = matrix-block.
 
     public:
         /// @brief Default constructor; mode and storage are uninitialized until SetModeAndInit().
@@ -155,7 +155,7 @@ namespace DNDS::Euler
             if (!hasInvert)
             {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < Size(); iCell++)
                     if (isBlock())
@@ -163,6 +163,12 @@ namespace DNDS::Euler
                         DNDS_assert(_data[iCell].diagonal().array().abs().minCoeff() != 0);
                         tComponent preCon = _data[iCell].diagonal().array().inverse().matrix().asDiagonal() * _data[iCell];
                         auto luDiag = preCon.fullPivLu();
+                        if (!luDiag.isInvertible())
+                        {
+                            fprintf(stderr, "[LU] cell=%ld NOT invertible diagMin=%.3e det=%.3e\n",
+                                    long(iCell), (double)_data[iCell].diagonal().array().abs().minCoeff(),
+                                    (double)preCon.determinant());
+                        }
                         DNDS_assert(luDiag.isInvertible());
                         _dataInvert[iCell] = luDiag.inverse() * _data[iCell].diagonal().array().inverse().matrix().asDiagonal();
                         if (!_dataInvert[iCell].allFinite() || _dataInvert[iCell].hasNaN())
@@ -226,7 +232,7 @@ namespace DNDS::Euler
             if (isBlock())
             {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
                 for (index i = 0; i < _data.Size(); i++)
                     _data[i].setZero();
@@ -234,7 +240,7 @@ namespace DNDS::Euler
             else
             {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
                 for (index i = 0; i < _dataDiag.Size(); i++)
                     _dataDiag[i].setZero();
@@ -272,12 +278,12 @@ namespace DNDS::Euler
               ArrayDOFV<nVarsFixed>>
     {
         using tLocalMat = ArrayEigenUniMatrixBatch<nVarsFixed, nVarsFixed>; ///< Batch storage for nVars×nVars blocks.
-        using tComponent = Eigen::Matrix<real, nVarsFixed, nVarsFixed>;    ///< Single block matrix type.
-        using tVec = ArrayDOFV<nVarsFixed>;                               ///< Distributed vector type.
+        using tComponent = Eigen::Matrix<real, nVarsFixed, nVarsFixed>;     ///< Single block matrix type.
+        using tVec = ArrayDOFV<nVarsFixed>;                                 ///< Distributed vector type.
         using tBase = Direct::LocalLUBase<
             JacobianLocalLU<nVarsFixed>,
             Eigen::Matrix<real, nVarsFixed, nVarsFixed>,
-            ArrayDOFV<nVarsFixed>>;                                       ///< CRTP base providing decompose/solve.
+            ArrayDOFV<nVarsFixed>>; ///< CRTP base providing decompose/solve.
         // using tIndices = Geom::UnstructuredMesh::tLocalMatStruct;
         /**
          * @brief Sparse row storage for D, L, U blocks.
@@ -314,7 +320,7 @@ namespace DNDS::Euler
         {
             tBase::isDecomposed = false;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < tBase::symLU->Num(); iCell++)
                 for (auto &v : LDU[iCell])
@@ -413,12 +419,12 @@ namespace DNDS::Euler
               ArrayDOFV<nVarsFixed>>
     {
         using tLocalMat = ArrayEigenUniMatrixBatch<nVarsFixed, nVarsFixed>; ///< Batch storage for nVars×nVars blocks.
-        using tComponent = Eigen::Matrix<real, nVarsFixed, nVarsFixed>;    ///< Single block matrix type.
-        using tVec = ArrayDOFV<nVarsFixed>;                               ///< Distributed vector type.
+        using tComponent = Eigen::Matrix<real, nVarsFixed, nVarsFixed>;     ///< Single block matrix type.
+        using tVec = ArrayDOFV<nVarsFixed>;                                 ///< Distributed vector type.
         using tBase = Direct::LocalLDLTBase<
             JacobianLocalLDLT<nVarsFixed>,
             Eigen::Matrix<real, nVarsFixed, nVarsFixed>,
-            ArrayDOFV<nVarsFixed>>;                                       ///< CRTP base providing decompose/solve.
+            ArrayDOFV<nVarsFixed>>; ///< CRTP base providing decompose/solve.
         // using tIndices = Geom::UnstructuredMesh::tLocalMatStruct;
         /**
          * @brief Sparse row storage for D and L blocks.
@@ -457,7 +463,7 @@ namespace DNDS::Euler
         {
             tBase::isDecomposed = false;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (index iCell = 0; iCell < tBase::symLU->Num(); iCell++)
                 for (auto &v : LDU[iCell])

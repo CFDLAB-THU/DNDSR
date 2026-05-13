@@ -292,9 +292,10 @@ namespace DNDS::Euler
             if (model == NS_2EQ || model == NS_2EQ_3D)
             {
                 TU farPrim = settings.farFieldStaticValue;
-                real gamma = phys_.gamma();
+                real T = phys_.template temperature<dim>(settings.farFieldStaticValue);
+                real gamma = phys_.gamma(T, settings.farFieldStaticValue);
                 Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrim, gamma);
-                real T = farPrim(I4) / ((gamma - 1) / gamma * phys_.Cp() * farPrim(0));
+                T = farPrim(I4) / ((gamma - 1) / gamma * phys_.Cp(T, settings.farFieldStaticValue) * farPrim(0));
                 // auto [rhs0, rhs] = RANS::SolveZeroGradEquilibrium<dim>(settings.farFieldStaticValue, this->muEff(settings.farFieldStaticValue, T));
                 // if(mesh->getMPI().rank == 0)
                 //     log()
@@ -1059,7 +1060,8 @@ namespace DNDS::Euler
 
             real rhoun = n.dot(U({1, 2, 3}));
             real rhousqr = U({1, 2, 3}).squaredNorm();
-            real gamma = phys_.gamma();
+            real T = phys_.template temperature<dim>(U);
+            real gamma = phys_.gamma(T, U);
             TJacobianU subFdU;
             subFdU.resize(nVars, nVars);
 
@@ -1131,7 +1133,8 @@ namespace DNDS::Euler
             int useRoeTerm, int incFsign = -1, int omitF = 0)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            real gamma = phys_.gamma();
+            real T = phys_.template temperature<dim>(U);
+            real gamma = phys_.gamma(T, U);
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
             Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H);
@@ -1209,7 +1212,8 @@ namespace DNDS::Euler
             const TU &dU)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            real gamma = phys_.gamma();
+            real T = phys_.template temperature<dim>(U);
+            real gamma = phys_.gamma(T, U);
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
             Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H);
@@ -1698,7 +1702,8 @@ namespace DNDS::Euler
             {
                 real declineV = (rhoEinternalNew - rhoEinternal) / (rhoEinternal + verySmallReal);
                 real newrhoEinteralNew = (std::exp(declineV) + verySmallReal) * rhoEinternal;
-                real gamma = phys_.gamma();
+                real T = phys_.template temperature<dim>(u);
+                real gamma = phys_.gamma(T, u);
                 // newrhoEinteralNew = std::max(pEps / (gamma - 1), newrhoEinteralNew);
                 newrhoEinteralNew = pEps / (gamma - 1);
                 real c0 = 2 * u(I4) * u(0) - u(Seq123).squaredNorm() - 2 * u(0) * newrhoEinteralNew;

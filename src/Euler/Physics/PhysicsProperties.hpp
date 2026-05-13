@@ -50,48 +50,33 @@ namespace DNDS::Euler
         real toCode(real xPhys) const { return xPhys / invR0(); }
         /// Convert code pressure to physical:  p_phys = p_code · p0.
         real toPhysP(real pCode) const { return pCode * p0(); }
+        /// Convert code temperature to physical:  T_phys = T_code · T0.
+        real toPhysT(real TCode) const { return igProp_->T0 > 0 ? TCode * igProp_->T0 : TCode; }
+        /// Convert physical temperature to code-scaled.
+        real toCodeT(real TPhys) const { return igProp_->T0 > 0 ? TPhys / igProp_->T0 : TPhys; }
 
-        // ---- EOS coefficients (constant — used at init time or without state) ----
+        // ---- EOS coefficients (per-point — uses state T and U vectors) ----
 
-        real gamma() const { return igProp_->gamma; }
-        real Rgas() const { return toCode(igProp_->Rgas); }
-        real Cp() const { return toCode(igProp_->CpGas); }
-        real Cv() const { return Rgas() != toCode(igProp_->Rgas) ? Cp() - Rgas() : igProp_->CpGas - igProp_->Rgas; }
+        template <int dim, class TU>
+        real temperature(const TU &U, real TGuess = 0) const;
+
+        template <class TU>
+        real gamma(real T, const TU &U) const;
+        template <class TU>
+        real Rgas(const TU &U) const;
+        template <class TU>
+        real Cp(real T, const TU &U) const;
+        template <class TU>
+        real Cv(real T, const TU &U) const;
+
+        /// Constant gamma (no state needed) — for initialization / analytic fields.
+        real gammaConst() const { return igProp_->gamma; }
+
         real muRef() const { return igProp_->muGas; }
         real Pr() const { return igProp_->prGas; }
         real TRef() const { return igProp_->TRef; }
         real CSutherland() const { return igProp_->CSutherland; }
         int muModel() const { return igProp_->muModel; }
-
-        // ---- EOS coefficients (mixture — used with state at face/cell points) ----
-
-        template <class TU>
-        real gammaMixture(real T, const TU &U) const
-        {
-            return igProp_->gamma;
-        } // TODO: wired when γ_mix from Cantera is desired
-
-        template <class TU>
-        real RgasMixture(const TU &U) const
-        {
-            if (!chemSrc_)
-                return igProp_->Rgas;
-            return toCode(chemSrc_->mixtureR(massFractions(U)));
-        }
-
-        template <class TU>
-        real CpMixture(real T, const TU &U) const
-        {
-            if (!chemSrc_)
-                return igProp_->CpGas;
-            return toCode(chemSrc_->mixtureCp(T, massFractions(U)));
-        }
-
-        template <class TU>
-        real speedOfSoundMixture(real T, const TU &U) const
-        {
-            return std::sqrt(gammaMixture(T, U) * RgasMixture(U) * T);
-        }
 
         // ---- Transport (mixture) --------------------------------------------
 
@@ -130,6 +115,19 @@ namespace DNDS::Euler
             for (int k = 0; k < Ns1; ++k)
                 sum += bufY_[k];
             bufY_[Ns1] = 1.0 - sum;
+            for (int k = 0; k < Ns; ++k)
+            {
+                if (bufY_[k] < 0)
+                    bufY_[k] = 0;
+                if (bufY_[k] > 1)
+                    bufY_[k] = 1;
+            }
+            real ySum = 0;
+            for (int k = 0; k < Ns; ++k)
+                ySum += bufY_[k];
+            if (ySum > 0)
+                for (int k = 0; k < Ns; ++k)
+                    bufY_[k] /= ySum;
             return {bufY_.data(), Ns};
         }
 
@@ -172,7 +170,7 @@ namespace DNDS::Euler
     real PhysicsProperties<model>::mixtureConductivity(real T, real p, const TU &U) const
     {
         if (!chemSrc_)
-            return Cp() * mixtureViscosity(T, p, U) / Pr();
+            return Cp(T, U) * mixtureViscosity(T, p, U) / Pr();
         real kPhys = chemSrc_->thermalConductivity(T, toPhysP(p), massFractions(U));
         return kPhys / (igProp_->rho0 * igProp_->U0 * igProp_->U0 * igProp_->U0);
     }
@@ -205,6 +203,80 @@ namespace DNDS::Euler
         Chemistry::SpeciesBufferView Dv{Dbuf.data(), Ns};
         chemSrc_->speciesDiffusivity(T, toPhysP(p), massFractions(U), Dv);
         return Dbuf[k] / igProp_->U0;
+    }
+
+    // ========================================================================
+    // Per-point EOS coefficients — unified constant / mixture dispatch
+    // ========================================================================
+
+    template <EulerModel model>
+    template <int dim, class TU>
+    real PhysicsProperties<model>::temperature(const TU &U, real TGuess) const
+    {
+        real rho = U[0];
+        real rhoInv = 1.0 / std::max(rho, 1e-60);
+        real vel2 = rhoInv * rhoInv * (U[1] * U[1] + U[2] * U[2]);
+        if constexpr (dim == 3)
+            vel2 += rhoInv * rhoInv * U[3] * U[3];
+        int I4 = dim + 1;
+        real uInternal = U[I4] * rhoInv - 0.5 * vel2;
+        if (!chemSrc_)
+        {
+            real p = (igProp_->gamma - 1) * rho * uInternal;
+            return p * rhoInv / toCode(igProp_->Rgas);
+        }
+        real uPhys = uInternal * igProp_->U0 * igProp_->U0;
+        real vPhys = rhoInv / igProp_->rho0;
+        double T_guess = TGuess > 0 ? toPhysT(TGuess) : 0;
+        if (T_guess <= 0)
+        {
+            real p = (igProp_->gamma - 1) * rho * uInternal;
+            T_guess = p * rhoInv / toCode(igProp_->Rgas) * igProp_->T0;
+        }
+        if (vPhys < 1e-6 || !std::isfinite(vPhys) || !std::isfinite(uPhys))
+        {
+            static int cnt = 0;
+            if (cnt++ < 3)
+                fprintf(stderr, "[temp-fb] vPhys=%.3e uPhys=%.3e — using const gamma\n", (double)vPhys, (double)uPhys);
+            real p = (igProp_->gamma - 1) * rho * uInternal;
+            return p * rhoInv / toCode(igProp_->Rgas);
+        }
+        double Tphys = chemSrc_->temperatureFromUV(uPhys, vPhys, massFractions(U), T_guess);
+        return toCodeT(Tphys);
+    }
+
+    template <EulerModel model>
+    template <class TU>
+    real PhysicsProperties<model>::gamma(real T, const TU &U) const
+    {
+        if (!chemSrc_)
+            return igProp_->gamma;
+        return chemSrc_->mixtureGamma(toPhysT(T), massFractions(U));
+    }
+
+    template <EulerModel model>
+    template <class TU>
+    real PhysicsProperties<model>::Rgas(const TU &U) const
+    {
+        if (!chemSrc_)
+            return toCode(igProp_->Rgas);
+        return toCode(chemSrc_->mixtureR(massFractions(U)));
+    }
+
+    template <EulerModel model>
+    template <class TU>
+    real PhysicsProperties<model>::Cp(real T, const TU &U) const
+    {
+        if (!chemSrc_)
+            return toCode(igProp_->CpGas);
+        return toCode(chemSrc_->mixtureCp(toPhysT(T), massFractions(U)));
+    }
+
+    template <EulerModel model>
+    template <class TU>
+    real PhysicsProperties<model>::Cv(real T, const TU &U) const
+    {
+        return Cp(T, U) - Rgas(U);
     }
 
 } // namespace DNDS::Euler

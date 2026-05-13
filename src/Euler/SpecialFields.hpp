@@ -49,7 +49,7 @@ namespace DNDS::Euler::SpecialFields
         ret.resize(cnVars);
 
         real xyc = 5;
-        real gamma = eval.phys().gamma();
+        real gamma = eval.phys().gammaConst();
         Geom::tPoint pPhysics = x;
         pPhysics[0] = float_mod(pPhysics[0] - t, 10);
         pPhysics[1] = float_mod(pPhysics[1] - t, 10);
@@ -100,7 +100,7 @@ namespace DNDS::Euler::SpecialFields
 
         real chi = 5;
         real xyc = 5;
-        real gamma = eval.phys().gamma();
+        real gamma = eval.phys().gammaConst();
         Geom::tPoint pPhysics = x;
         pPhysics[0] = float_mod(pPhysics[0] - t + 10, 30) - 10;
         pPhysics[1] = float_mod(pPhysics[1] - t + 10, 30) - 10;
@@ -155,7 +155,7 @@ namespace DNDS::Euler::SpecialFields
 
         real chi = 5;
         real xyc = 0; // center is origin
-        real gamma = eval.phys().gamma();
+        real gamma = eval.phys().gammaConst();
         Geom::tPoint pPhysics = x;
         // pPhysics[0] = float_mod(pPhysics[0] - t, 10);
         // pPhysics[1] = float_mod(pPhysics[1] - t, 10);

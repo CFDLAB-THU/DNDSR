@@ -90,10 +90,10 @@ namespace DNDS::Euler
                         TVec velo = (recu(Seq123).array() / recu(0)).matrix();
                         real vsqr = velo.squaredNorm();
                         real asqr, p, H;
-                        Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.phys().gamma(), p, asqr, H);
+                        real T = eval.phys().template temperature<dim>(recu);
+                        Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.phys().gamma(T, recu), p, asqr, H);
                         // DNDS_assert(asqr > 0);
                         real M = std::sqrt(std::abs(vsqr / asqr));
-                        real T = p / recu(0) / eval.phys().Rgas();
 
                         (*outDist)[iCell][0] = recu(0);
                         for (int i = 0; i < dim; i++)
@@ -180,10 +180,10 @@ namespace DNDS::Euler
                         TVec velo = (recu(Seq123).array() / recu(0)).matrix();
                         real vsqr = velo.squaredNorm();
                         real asqr, p, H;
-                        Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.phys().gamma(), p, asqr, H);
+                        real T = eval.phys().template temperature<dim>(recu);
+                        Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.phys().gamma(T, recu), p, asqr, H);
                         // DNDS_assert(asqr > 0);
                         real M = std::sqrt(std::abs(vsqr / asqr));
-                        real T = p / recu(0) / eval.phys().Rgas();
 
                         outDistPointPair[iN][0] = recu(0);
                         for (int i = 0; i < dim; i++)
@@ -529,10 +529,10 @@ namespace DNDS::Euler
                     TVec velo = (recu(Seq123).array() / recu(0)).matrix();
                     real vsqr = velo.squaredNorm();
                     real asqr, p, H;
-                    Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.phys().gamma(), p, asqr, H);
+                    real T = eval.phys().template temperature<dim>(recu);
+                    Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.phys().gamma(T, recu), p, asqr, H);
                     // DNDS_assert(asqr > 0);
                     real M = std::sqrt(std::abs(vsqr / asqr));
-                    real T = p / recu(0) / eval.phys().Rgas();
 
                     (*outDistBnd)[iB][0] = recu(0);
                     for (int i = 0; i < dim; i++)

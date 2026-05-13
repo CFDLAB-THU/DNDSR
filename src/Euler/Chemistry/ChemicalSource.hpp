@@ -87,6 +87,14 @@ namespace DNDS::Euler::Chemistry
         double mixtureGamma(double T, ConstSpeciesBufferView Y) const;
         double speedOfSound(double T, ConstSpeciesBufferView Y) const;
 
+        /**
+         * Solve T from specific internal energy u [J/kg] and specific volume v [m³/kg].
+         * Uses Cantera setState_UV (Newton). Optional T_guess [K] as warm-start.
+         */
+        double temperatureFromUV(double u, double v,
+                                 ConstSpeciesBufferView Y,
+                                 double T_guess = 0) const;
+
         // ---- Kinetics ----
 
         /** Net production rates ω_i [kmol/m³/s]. omega must have nSpecies elements. */
