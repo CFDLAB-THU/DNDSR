@@ -226,4 +226,14 @@ namespace DNDS::Euler::Chemistry
             D[k] = I.bufD[k];
     }
 
+    void ChemicalSource::speciesEnthalpies(double T, double p,
+                                           ConstSpeciesBufferView Y,
+                                           SpeciesBufferView h) const
+    {
+        impl_->setTPY(T, p, Y);
+        impl_->gas->getPartialMolarEnthalpies(impl_->bufOmega.data());
+        for (int k = 0; k < impl_->Ns; ++k)
+            h[k] = impl_->bufOmega[k] / std::max(impl_->mw[k], 1e-30);
+    }
+
 } // namespace DNDS::Euler::Chemistry

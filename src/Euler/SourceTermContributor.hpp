@@ -297,6 +297,7 @@ namespace DNDS::Euler
         mutable std::vector<double> bufY;
         mutable std::vector<double> bufOmega;
         mutable std::vector<double> bufJ;
+        mutable std::vector<double> bufH; // per-species enthalpies [J/kg]
 
         ChemicalContributor() = default;
         explicit ChemicalContributor(std::shared_ptr<Chemistry::ChemicalSource> c)
@@ -309,6 +310,7 @@ namespace DNDS::Euler
                 bufY.resize(Ns);
                 bufOmega.resize(Ns);
                 bufJ.resize(Ns * nVars);
+                bufH.resize(Ns);
             }
         }
 
