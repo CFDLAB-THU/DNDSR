@@ -402,7 +402,7 @@ namespace DNDS::Euler
                         GradUMeanXy *= 0.;
 
                     TDiffU GradUMeanXyPrim;
-                    real gamma = settings.idealGasProperty.gamma;
+                    real gamma = phys_.gamma();
                     if (settings.usePrimGradInVisFlux)
                     {
                         TDiffU GradULxyPrim, GradURxyPrim;
@@ -458,22 +458,22 @@ namespace DNDS::Euler
                     {
                         TU ULc = ULxy;
                         TU ULcPrim;
-                        Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, settings.idealGasProperty.gamma);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.gamma());
                         ULcPrim(Seq123).setZero();
-                        Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, settings.idealGasProperty.gamma);
+                        Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, phys_.gamma());
                         if (faceBCType == EulerBCType::BCWallIsothermal)
                         {
                             real temp = pBCHandler->GetValueFromID(mesh->GetFaceZone(iFace))(0);
                             TU ULcPrim;
                             ULcPrim.resizeLike(ULc);
-                            Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, settings.idealGasProperty.gamma);
+                            Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.gamma());
                             DNDS_assert(ULcPrim(0) > 0 && temp > 0);
                             DNDS_assert_info(ULcPrim(0) > 0 && ULcPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", ULcPrim(0), ULcPrim(I4), temp));
-                            // real newPressure = ULcPrim(0) * settings.idealGasProperty.Rgas * temp;
+                            // real newPressure = ULcPrim(0) * phys_.Rgas() * temp;
                             // ULcPrim(I4) = newPressure;
-                            real newDensity = ULcPrim(I4) / temp / settings.idealGasProperty.Rgas;
+                            real newDensity = ULcPrim(I4) / temp / phys_.Rgas();
                             ULcPrim(0) = newDensity;
-                            Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, URxy, settings.idealGasProperty.gamma);
+                            Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, URxy, phys_.gamma());
                         }
                         ULxy = ULc;
                         URxy = ULc;
@@ -601,7 +601,7 @@ namespace DNDS::Euler
             if (!dontUpdateIntegration)
                 if (faceBCType == EulerBCType::BCWall || // TODO: update to general
                     faceBCType == EulerBCType::BCWallIsothermal ||
-                    (faceBCType == EulerBCType::BCWallInvis && settings.idealGasProperty.muGas < 1e-99))
+                    (faceBCType == EulerBCType::BCWallInvis && phys_.muRef() < 1e-99))
                 {
                     fluxWallSumLocal -= fluxEs(EigenAll, 0);
                     if (iFace >= mesh->NumFace())
@@ -624,13 +624,13 @@ namespace DNDS::Euler
                     if (settings.frameConstRotation.enabled)
                         this->TransformURotatingFrame(uL, vfv->GetFaceQuadraturePPhys(iFace, -1), 1);
                     TU uLPrim = uL;
-                    auto gamma = settings.idealGasProperty.gamma;
+                    auto gamma = phys_.gamma();
                     Gas::IdealGasThermalConservative2Primitive<dim>(uL, uLPrim, gamma);
                     Eigen::Vector<real, Eigen::Dynamic> vInt;
                     vInt.resize(nVars + 2);
                     vInt(Eigen::seq(0, nVars - 1)) = uL;
 
-                    auto [p0, T0] = Gas::IdealGasThermalPrimitiveGetP0T0<dim>(uLPrim, gamma, settings.idealGasProperty.Rgas);
+                    auto [p0, T0] = Gas::IdealGasThermalPrimitiveGetP0T0<dim>(uLPrim, gamma, phys_.Rgas());
                     vInt(nVars) = p0, vInt(nVars + 1) = T0;
                     vInt(0) = 1;
                     bndIntegrations.at(mesh->GetFaceZone(iFace)).Add(vInt * fluxEs(0, 0), fluxEs(0, 0));

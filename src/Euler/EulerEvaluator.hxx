@@ -184,7 +184,7 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixVec 1");
         int cnvars = nVars;
 
-        auto cellOp = [&](index iCell) __attribute__((always_inline)) {
+        auto cellOp = [&](index iCell) __attribute__((always_inline)){
 
         };
 
@@ -976,11 +976,11 @@ namespace DNDS::Euler
                     // pBCHandler->GetTypeFromID(mesh->GetFaceZone(c2f[ic2f])) == EulerBCType::BCWallIsothermal)
                     {
                         real pMean, asqrMean, Hmean;
-                        real gamma = settings.idealGasProperty.gamma;
+                        real gamma = phys_.gamma();
                         Gas::IdealGasThermal(u[iCell](I4), u[iCell](0), (u[iCell](Seq123) / u[iCell](0)).squaredNorm(),
                                              gamma, pMean, asqrMean, Hmean);
-                        real muRef = settings.idealGasProperty.muGas;
-                        real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * u[iCell](0));
+                        real muRef = phys_.muRef();
+                        real T = pMean / ((gamma - 1) / gamma * phys_.Cp() * u[iCell](0));
                         real mufPhy1 = muEff(u[iCell], T);
                         real rhoOmegaaaWall = mufPhy1 / sqr(d) * RANS::kWallOmegaCoeff * 0.1;
 
@@ -1003,7 +1003,7 @@ namespace DNDS::Euler
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
-                    real gamma = settings.idealGasProperty.gamma;
+                    real gamma = phys_.gamma();
                     real rho = 2;
                     real p = 1 + 2 * pos(1);
                     if (pos(1) >= 0.5)
@@ -1024,7 +1024,7 @@ namespace DNDS::Euler
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
-                    real gamma = settings.idealGasProperty.gamma;
+                    real gamma = phys_.gamma();
                     real rho = 2;
                     real p = 1 + 2 * pos(1);
                     if (pos(1) >= 0.5)
@@ -1106,7 +1106,7 @@ namespace DNDS::Euler
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
                     real M0 = 0.1;
-                    real gamma = settings.idealGasProperty.gamma;
+                    real gamma = phys_.gamma();
                     auto c2n = mesh->cell2node[iCell];
                     auto gCell = vfv->GetCellQuad(iCell);
                     TU um;
@@ -1150,7 +1150,7 @@ namespace DNDS::Euler
             {
                 Geom::tPoint pos = vfv->GetCellBary(iCell);
                 real M0 = 0.1;
-                real gamma = settings.idealGasProperty.gamma;
+                real gamma = phys_.gamma();
                 auto c2n = mesh->cell2node[iCell];
                 auto gCell = vfv->GetCellQuad(iCell);
                 TU um;
@@ -1166,7 +1166,7 @@ namespace DNDS::Euler
                         // std::cout << DiNj << std::endl;
                         Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
                         TU farPrimitive;
-                        Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, settings.idealGasProperty.gamma);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, phys_.gamma());
                         real pInf = farPrimitive(I4);
                         real r = pPhysics.norm();
                         TVec velo = -pPhysics(Seq012) / (r + smallReal);
@@ -1174,7 +1174,7 @@ namespace DNDS::Euler
                         farPrimitive(0) = 1;
                         farPrimitive(Seq123) = velo;
 
-                        Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, inc, settings.idealGasProperty.gamma);
+                        Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, inc, phys_.gamma());
                         inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
                     });
                 u[iCell] = um / vfv->GetCellVol(iCell); // mean value
@@ -1273,7 +1273,7 @@ namespace DNDS::Euler
                             exprtkEval.VarVec("x", 2) = pPhysics(2);
 
                         TU uPrimitive;
-                        Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], uPrimitive, settings.idealGasProperty.gamma);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], uPrimitive, phys_.gamma());
                         for (int i = 0; i < nVars; i++)
                             exprtkEval.VarVec("UPrim", i) = uPrimitive(i);
 
@@ -1286,7 +1286,7 @@ namespace DNDS::Euler
                         if (exprtkEval.Var("inRegion"))
                             for (int i = 0; i < nVars; i++)
                                 uPrimitive(i) = exprtkEval.VarVec("UPrim", i);
-                        Gas::IdealGasThermalPrimitive2Conservative<dim>(uPrimitive, inc, settings.idealGasProperty.gamma);
+                        Gas::IdealGasThermalPrimitive2Conservative<dim>(uPrimitive, inc, phys_.gamma());
                         if (!inc.allFinite())
                         {
                             std::ostringstream oss0, oss1, oss2;
@@ -1352,7 +1352,7 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < u.Size(); iCell++)
         {
-            real gamma = settings.idealGasProperty.gamma;
+            real gamma = phys_.gamma();
             TU out;
             Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], out, gamma);
             w[iCell] = out;
@@ -1372,7 +1372,7 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < w.Size(); iCell++)
         {
-            real gamma = settings.idealGasProperty.gamma;
+            real gamma = phys_.gamma();
             TU out;
             Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], out, gamma);
             u[iCell] = out;
@@ -1662,7 +1662,7 @@ namespace DNDS::Euler
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 TU UPrim;
-                Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], UPrim, settings.idealGasProperty.gamma);
+                Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], UPrim, phys_.gamma());
                 rhoMin = std::min(rhoMin, UPrim(0));
                 pMin = std::min(pMin, UPrim(I4));
             }
@@ -1703,7 +1703,7 @@ namespace DNDS::Euler
             }
             /***********/
             DNDS_assert_info(u[iCell](0) >= rhoEps, fmt::format("rhoMean {}, {}", u[iCell](0), rhoEps));
-            real gamma = settings.idealGasProperty.gamma;
+            real gamma = phys_.gamma();
             real pCent = (gamma - 1) * (u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0));
             DNDS_assert_info(pCent >= pEps, fmt::format("pMean {}, {}", pCent, pEps));
 
@@ -1877,7 +1877,7 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            real gamma = settings.idealGasProperty.gamma;
+            real gamma = phys_.gamma();
             real alphaRho = 1;
             if (u[iCell](0) < rhoEps)
             {
@@ -1963,7 +1963,7 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            real gamma = settings.idealGasProperty.gamma;
+            real gamma = phys_.gamma();
             real alphaRho = 1;
             TU inc = res[iCell];
             DNDS_assert(u[iCell](0) >= rhoEps);
@@ -2113,7 +2113,7 @@ namespace DNDS::Euler
         // for (index iCell : InterCells)
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            real gamma = settings.idealGasProperty.gamma;
+            real gamma = phys_.gamma();
             TU inc = res[iCell];
 
             TU uNew = u[iCell] + inc;
