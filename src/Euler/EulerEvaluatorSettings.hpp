@@ -291,14 +291,21 @@ namespace DNDS::Euler
          */
         struct IdealGasProperty
         {
-            real gamma = 1.4;                        ///< Ratio of specific heats (Cp/Cv).
-            real Rgas = 1;                           ///< Specific gas constant (J/(kg·K) in dimensional runs).
-            real muGas = 1;                          ///< Dynamic viscosity (or reference viscosity for Sutherland).
-            real prGas = 0.72;                       ///< Prandtl number.
-            real CpGas = Rgas * gamma / (gamma - 1); ///< Heat capacity at constant pressure (derived, not serialized).
-            real TRef = 273.15;                      ///< Reference temperature (K) for Sutherland's law.
-            real CSutherland = 110.4;                ///< Sutherland constant (K).
-            int muModel = 1;                         ///< Viscosity model: 0 = constant, 1 = Sutherland, 2 = constant_nu.
+            real gamma = 1.4;
+            real Rgas = 1; ///< code-scaled gas constant R_code = R_phys/U0² (K⁻¹ when T is dimensional)
+            real muGas = 1;
+            real prGas = 0.72;
+            real CpGas = Rgas * gamma / (gamma - 1);
+            real TRef = 273.15;
+            real CSutherland = 110.4;
+            int muModel = 1;
+
+            /// Reference scales for dimensional-physical conversion.
+            /// R_code = R_phys / R0  where R0 = U0² / T0.
+            /// p0 = rho0 · U0².
+            real T0 = 1;   ///< Reference temperature (K).
+            real rho0 = 1; ///< Reference density (kg/m³).
+            real U0 = 1;   ///< Reference velocity (m/s).
 
             DNDS_DECLARE_CONFIG(IdealGasProperty)
             {
@@ -314,6 +321,9 @@ namespace DNDS::Euler
                 DNDS_FIELD(TRef,        "Reference temperature (K)");
                 DNDS_FIELD(CSutherland, "Sutherland constant (K)");
                 DNDS_FIELD(muModel,     "Viscosity model: 0=constant, 1=sutherland, 2=constant_nu");
+                DNDS_FIELD(T0,          "Reference temperature (K). 0 = use Rgas directly for code scaling.");
+                DNDS_FIELD(rho0,        "Reference density (kg/m^3). 0 = unset.");
+                DNDS_FIELD(U0,          "Reference velocity (m/s). 0 = unset.");
                 // CpGas is derived: recomputed after deserialization
                 config.post_read([](T &s) { s.recomputeDerived(); });
                 // clang-format on

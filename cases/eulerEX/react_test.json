@@ -111,9 +111,10 @@
         ],
         "idealGasProperty": {
             "gamma": 1.4,
-            "Rgas": 0.002,
+            "Rgas": 287,
             "muGas": 1e-200,
-            "prGas": 0.72
+            "prGas": 0.72,
+            "U0": 379
         }
     },
     "bcSettings": []
