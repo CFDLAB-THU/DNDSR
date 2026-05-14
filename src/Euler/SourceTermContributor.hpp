@@ -319,14 +319,15 @@ namespace DNDS::Euler
         template <class TRet, class TJac, class TDerivedU, class TGasProp>
         void evaluate(TRet &ret, TJac &jac, const TRet &U, const TDerivedU &,
                       const Geom::tPoint &, const SourceCellAux &aux,
-                      const TGasProp &, index, index, int Mode) const
+                      const TGasProp &gasProp, index, index, int Mode) const
         {
             if (!chem)
                 return;
             int Ns = chem->nSpecies();
             int Ns1 = Ns - 1;
             int nVars = static_cast<int>(ret.size());
-            int Isp = nVars - Ns1; // species start (= 5 + nRANS)
+            int Isp = nVars - Ns1; // species start
+            int I4 = Isp - 1;      // energy index
 
             double rho = U[0];
             double rhoInv = 1.0 / std::max(rho, 1e-60);
@@ -369,7 +370,11 @@ namespace DNDS::Euler
             else if (Mode == 2)
             {
                 Chemistry::JacobianBufferView Jv{bufJ.data(), Ns, nVars, Ns};
-                chem->productionRatesAndJacobian(Tcantera, aux.pPhys, rho, Yv, omegav, Jv);
+                double uM1 = (I4 >= 2) ? U[1] : 0;
+                double uM2 = (I4 >= 3) ? U[2] : 0;
+                double uM3 = (I4 >= 4) ? U[3] : 0;
+                chem->productionRatesAndJacobian(Tcantera, aux.pPhys, rho, U[I4],
+                                                 uM1, uM2, uM3, I4, gasProp.U0, Yv, omegav, Jv);
                 for (int k = 0; k < Ns1; ++k)
                     ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k];
                 for (int k = 0; k < Ns1; ++k)

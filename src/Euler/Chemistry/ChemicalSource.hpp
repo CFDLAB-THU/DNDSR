@@ -97,6 +97,14 @@ namespace DNDS::Euler::Chemistry
 
         // ---- Kinetics ----
 
+        enum JacobianFlags : int
+        {
+            JAC_DEFAULT = 0,
+            JAC_SKIP_FLUID = 1 << 0,      // zero out ρ, ρu_j, ρE columns
+            JAC_SKIP_ABSORPTION = 1 << 1, // don't absorb last-species into independent rows;
+                                          // N2 row is filled, absorption terms omitted.
+        };
+
         /** Net production rates ω_i [kmol/m³/s]. omega must have nSpecies elements. */
         void productionRates(double T, double p,
                              ConstSpeciesBufferView Y,
@@ -104,13 +112,19 @@ namespace DNDS::Euler::Chemistry
 
         /**
          * Production rates AND Jacobian ∂ω/∂U.
-         *   U = [ρ, ρu, ρv, ρw, ρE, ρY_0..ρY_{Ns-2}]
+         *   U = [ρ, ρu, ρv, {ρw,} ρE, ρY_0..ρY_{Ns-2}]
          * dOmegadU: Ns × nVars, column-major.
+         * iEnergy = index of ρE in U (dim+1); species start = iEnergy+1.
+         * velScale = U0 (m/s); rhoE, rhoU/V/W are code-scaled.
+         * jacFlags = bitmask of JacobianFlags.
          */
         void productionRatesAndJacobian(double T, double p, double rho,
+                                        double rhoE, double rhoU, double rhoV, double rhoW,
+                                        int iEnergy, double velScale,
                                         ConstSpeciesBufferView Y,
                                         SpeciesBufferView omega,
-                                        JacobianBufferView dOmegadU) const;
+                                        JacobianBufferView dOmegadU,
+                                        int jacFlags = 0) const;
 
         // ---- Transport ----
 
