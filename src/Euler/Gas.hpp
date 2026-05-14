@@ -1786,8 +1786,7 @@ namespace DNDS::Euler::Gas
 
         Eigen::Vector<real, nVarsFixed> ret = uInc;
         Eigen::Vector<real, nVarsFixed> uNew = u + uInc;
-        // TODO: use sensible internal energy (subtract rhoH_form) for PP check
-        (void)rhoH_form;
+        newrhoEinteralNew += rhoH_form;
         real rhoEOld = u(I4) - u(Seq123).squaredNorm() / (u(0) + verySmallReal) * 0.5;
         newrhoEinteralNew = std::max(smallReal * rhoEOld, newrhoEinteralNew);
         real rhoENew = uNew(I4) - uNew(Seq123).squaredNorm() / (uNew(0) + verySmallReal) * 0.5;
