@@ -75,7 +75,8 @@
         "jacobiCode": 0,
         "sgsIter": 5,
         "gmresCode": 0,
-        "nSgsConsoleCheck": 100
+        "nSgsConsoleCheck": 100,
+        "sourceTauSplitting": 1
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,

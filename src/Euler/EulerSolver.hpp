@@ -711,6 +711,7 @@ namespace DNDS::Euler
                 int nSgsConsoleCheck = 100;
                 int nGmresConsoleCheck = 100;
                 bool initWithLastURecInc = false;
+                int sourceTauSplitting = 0; ///< 0=off, 1=transport-implicit + pointwise reactive source splitting
                 int multiGridLP = 0;
                 int multiGridLPInnerNIter = 4;
                 int multiGridLPStartIter = 0;
@@ -773,6 +774,7 @@ namespace DNDS::Euler
                     DNDS_FIELD(nGmresConsoleCheck,        "Console check interval for GMRES",
                                DNDS::Config::range(1));
                     DNDS_FIELD(initWithLastURecInc,       "Initialize GMRES with last uRec increment");
+                    DNDS_FIELD(sourceTauSplitting,        "Reactive source pseudo-time splitting: 0=off, 1=on");
                     DNDS_FIELD(multiGridLP,               "Multi-grid levels (0=off)");
                     DNDS_FIELD(multiGridLPInnerNIter,     "Multi-grid inner iterations",
                                DNDS::Config::range(1));

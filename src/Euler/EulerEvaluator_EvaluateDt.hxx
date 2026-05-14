@@ -1561,7 +1561,8 @@ namespace DNDS::Euler
         TJacobianU &jacobian,
         index iCell,
         index ig,
-        int Mode) // mode =0: source; mode = 1, diagJacobi; mode = 2,
+        int Mode,
+        SourceFilter filter) // mode =0: source; mode = 1, diagJacobi; mode = 2,
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         TU ret;
@@ -1601,7 +1602,7 @@ namespace DNDS::Euler
             aux.rhoH_form = phys_.mixtureFormationRhoE(UMeanXy);
 
             SourceTermVisitor visitor{ret, jacobian, UMeanXy, DiffUxy, pPhy, aux,
-                                      settings.idealGasProperty, iCell, ig, Mode};
+                                      settings.idealGasProperty, iCell, ig, Mode, filter};
             for (auto &c : sourceContributors)
                 std::visit(visitor, c);
             return ret;
@@ -1774,6 +1775,63 @@ namespace DNDS::Euler
         // if (Mode == 1)
         //     std::cout << ret.transpose() << std::endl;
         return ret;
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, )
+    void EulerEvaluator<model>::EvaluateCellSource(
+        TU &cellRHS,
+        TJacobianU &cellJac,
+        const TU &uCell,
+        const TDiffU &cellGradU,
+        index iCell,
+        int jacMode,
+        SourceFilter filter,
+        real cellAlpha)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        int cnvars = nVars;
+
+        // Use O1 quadrature (cell-center only) — matches direct2ndRec path in EvaluateRHS
+        auto gCell = vfv->GetCellQuadO1(iCell);
+
+        Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> sourceV;
+        sourceV.setZero(cnvars, (jacMode == 2) ? cnvars + 1 : 2);
+
+        Geom::Elem::SummationNoOp noOp;
+
+        gCell.IntegrationSimple(
+            sourceV,
+            [&](decltype(sourceV) &finc, int iG)
+            {
+                // For O1 quadrature (direct2ndRec), iGQ = -1 (cell center)
+                int iGQ = -1;
+
+                finc.resizeLike(sourceV);
+                TJacobianU jac;
+                finc(EigenAll, 0) =
+                    source(uCell, cellGradU,
+                           vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
+                           iCell, iGQ, 0, filter);
+                TU sourceJDiag =
+                    source(uCell, cellGradU,
+                           vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
+                           iCell, iGQ, (jacMode == 2) ? 2 : ((jacMode == 1) ? 1 : 0), filter);
+                if (jacMode == 2)
+                    finc(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast)) = jac;
+                else
+                    finc(EigenAll, 1) = sourceJDiag;
+
+                finc *= vfv->GetCellVol(iCell) / vfv->GetCellParamVol(iCell);
+                DNDS_assert(finc.allFinite());
+            });
+        sourceV *= cellAlpha / vfv->GetCellVol(iCell); // becomes mean value
+
+        cellRHS += sourceV(EigenAll, 0);
+        if (jacMode == 2)
+            cellJac = sourceV(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast));
+        else if (jacMode == 1)
+            cellJac.diagonal() = sourceV(EigenAll, 1);
     }
 
     DNDS_SWITCH_INTELLISENSE(
