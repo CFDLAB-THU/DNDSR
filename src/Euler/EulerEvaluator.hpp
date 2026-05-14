@@ -294,7 +294,7 @@ namespace DNDS::Euler
                 TU farPrim = settings.farFieldStaticValue;
                 real T = phys_.template temperature<dim>(settings.farFieldStaticValue);
                 real gamma = phys_.gamma(T, settings.farFieldStaticValue);
-                Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrim, gamma);
+                Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrim, gamma, 0 /* config, sensible ρE */);
                 T = farPrim(I4) / ((gamma - 1) / gamma * phys_.Cp(T, settings.farFieldStaticValue) * farPrim(0));
                 // auto [rhs0, rhs] = RANS::SolveZeroGradEquilibrium<dim>(settings.farFieldStaticValue, this->muEff(settings.farFieldStaticValue, T));
                 // if(mesh->getMPI().rank == 0)
@@ -1137,10 +1137,12 @@ namespace DNDS::Euler
             real gamma = phys_.gamma(T, U);
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
-            Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H);
+            Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H,
+                                 phys_.mixtureFormationRhoE(U));
             TVec dVelo;
             real dp;
-            Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp);
+            Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp,
+                                         phys_.mixtureFormationRhoE(U));
             TU dF(U.size());
             if (omitF == 0)
                 Gas::GasInviscidFluxFacialIncrement<dim>(
@@ -1158,7 +1160,8 @@ namespace DNDS::Euler
                 TVec veloRoe;
                 real vsqrRoe{0}, aRoe{0}, asqrRoe{0}, HRoe{0};
                 TU uMean(U.size());
-                Gas::GetRoeAverage<dim>(U, UOther, gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, uMean);
+                Gas::GetRoeAverage<dim>(U, UOther, gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, uMean,
+                                        phys_.mixtureFormationRhoE(U), phys_.mixtureFormationRhoE(UOther));
                 {
                     // TVec dVeloRoe;
                     // real dpRoe;
@@ -1216,10 +1219,12 @@ namespace DNDS::Euler
             real gamma = phys_.gamma(T, U);
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
-            Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H);
+            Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H,
+                                 phys_.mixtureFormationRhoE(U));
             TVec dVelo;
             real dp;
-            Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp);
+            Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp,
+                                         phys_.mixtureFormationRhoE(U));
             TU dF(U.size());
             Gas::GasInviscidFluxFacialIncrement<dim>(
                 U, dU,

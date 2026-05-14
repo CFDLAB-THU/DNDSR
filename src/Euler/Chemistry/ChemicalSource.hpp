@@ -127,6 +127,12 @@ namespace DNDS::Euler::Chemistry
                                ConstSpeciesBufferView Y,
                                SpeciesBufferView h) const;
 
+        /** Per-species formation enthalpies [J/kg] at 298 K (constant, pre-cached). */
+        void speciesFormationEnthalpies(SpeciesBufferView hf) const;
+
+        /** Mixture formation energy Σ Y_k * h_f_k [J/kg]. In physical (SI) units. */
+        double mixtureFormationEnergy(ConstSpeciesBufferView Y) const;
+
     private:
         struct Impl;
         std::unique_ptr<Impl> impl_;

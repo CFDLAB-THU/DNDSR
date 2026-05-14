@@ -69,6 +69,26 @@ namespace DNDS::Euler
         template <class TU>
         real Cv(real T, const TU &U) const;
 
+        /// Code-scaled volumetric formation enthalpy ρ·Σ Y_k·h_f_k.  0 when no chemistry.
+        template <class TU>
+        real mixtureFormationRhoE(const TU &U) const
+        {
+            if (!chemSrc_)
+                return 0;
+            auto Y = massFractions(U);
+            real ePhys = chemSrc_->mixtureFormationEnergy(Y); // J/kg
+            real U0sq = igProp_->U0 * igProp_->U0;
+            return U[0] * (U0sq > 0 ? ePhys / U0sq : ePhys);
+        }
+
+        /** Sensible ρE = total ρE − ρ·Σ Y_k·h_f_k. Returns U[I4] when no chemistry.
+         *  @param iEnergy  Index of the energy variable (dim+1). */
+        template <class TU>
+        real sensibleRhoE(const TU &U, int iEnergy) const
+        {
+            return U[iEnergy] - mixtureFormationRhoE(U);
+        }
+
         /// Constant gamma (no state needed) — for initialization / analytic fields.
         real gammaConst() const { return igProp_->gamma; }
 
@@ -225,12 +245,13 @@ namespace DNDS::Euler
             real p = (igProp_->gamma - 1) * rho * uInternal;
             return p * rhoInv / toCode(igProp_->Rgas);
         }
+        real uSensible = sensibleRhoE(U, I4) * rhoInv - 0.5 * vel2;
         real uPhys = uInternal * igProp_->U0 * igProp_->U0;
         real vPhys = rhoInv / igProp_->rho0;
         double T_guess = TGuess > 0 ? toPhysT(TGuess) : 0;
         if (T_guess <= 0)
         {
-            real p = (igProp_->gamma - 1) * rho * uInternal;
+            real p = (igProp_->gamma - 1) * rho * uSensible;
             T_guess = p * rhoInv / toCode(igProp_->Rgas) * igProp_->T0;
         }
         if (vPhys < 1e-6 || !std::isfinite(vPhys) || !std::isfinite(uPhys))
@@ -238,7 +259,7 @@ namespace DNDS::Euler
             static int cnt = 0;
             if (cnt++ < 3)
                 fprintf(stderr, "[temp-fb] vPhys=%.3e uPhys=%.3e — using const gamma\n", (double)vPhys, (double)uPhys);
-            real p = (igProp_->gamma - 1) * rho * uInternal;
+            real p = (igProp_->gamma - 1) * rho * uSensible;
             return p * rhoInv / toCode(igProp_->Rgas);
         }
         double Tphys = chemSrc_->temperatureFromUV(uPhys, vPhys, massFractions(U), T_guess);

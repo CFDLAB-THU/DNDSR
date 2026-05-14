@@ -27,8 +27,8 @@
 
 namespace DNDS::Euler::Gas
 {
-    using tVec = Eigen::Vector3d;   ///< Convenience alias for 3-D real vector.
-    using tVec2 = Eigen::Vector2d;  ///< Convenience alias for 2-D real vector.
+    using tVec = Eigen::Vector3d;  ///< Convenience alias for 3-D real vector.
+    using tVec2 = Eigen::Vector2d; ///< Convenience alias for 2-D real vector.
 
     /// Maximum column count for batched (SIMD-style) Riemann solver evaluation.
     static const int MaxBatch = 16;
@@ -188,9 +188,10 @@ namespace DNDS::Euler::Gas
 
     /// @brief Thin wrapper delegating to IdealGas::IdealGasThermal.
     inline void IdealGasThermal(
-        real E, real rho, real vSqr, real gamma, real &p, real &asqr, real &H)
+        real E, real rho, real vSqr, real gamma, real &p, real &asqr, real &H,
+        real rhoH_form = 0)
     {
-        IdealGas::IdealGasThermal(E, rho, vSqr, gamma, p, asqr, H);
+        IdealGas::IdealGasThermal(E, rho, vSqr, gamma, p, asqr, H, rhoH_form);
     }
 
     /**
@@ -205,12 +206,12 @@ namespace DNDS::Euler::Gas
     {
         using TVec = Eigen::Vector<real, dim>;
         // L/R mean-state thermodynamics
-        TVec veloLm, veloRm;                   ///< Left/right mean-state velocity vectors.
+        TVec veloLm, veloRm;                     ///< Left/right mean-state velocity vectors.
         real asqrLm, asqrRm, pLm, pRm, HLm, HRm; ///< Speed-of-sound², pressure, and enthalpy for L/R mean states.
-        real vsqrLm, vsqrRm;                   ///< Squared velocity magnitudes for L/R mean states.
+        real vsqrLm, vsqrRm;                     ///< Squared velocity magnitudes for L/R mean states.
         // Roe averages
-        TVec veloRoe;                           ///< Roe-averaged velocity vector.
-        real sqrtRhoLm, sqrtRhoRm;              ///< √ρ for L/R states (used in Roe weighting).
+        TVec veloRoe;                              ///< Roe-averaged velocity vector.
+        real sqrtRhoLm, sqrtRhoRm;                 ///< √ρ for L/R states (used in Roe weighting).
         real vsqrRoe, HRoe, asqrRoe, rhoRoe, aRoe; ///< Roe-averaged |v|², H, a², ρ, and speed of sound.
     };
 
@@ -228,7 +229,8 @@ namespace DNDS::Euler::Gas
      */
     template <int dim = 3, typename TULm, typename TURm, typename TFdumpInfo>
     RoePreamble<dim> ComputeRoePreamble(const TULm &ULm, const TURm &URm,
-                                        real gamma, const TFdumpInfo &dumpInfo)
+                                        real gamma, const TFdumpInfo &dumpInfo,
+                                        real rhoH_form_Lm = 0, real rhoH_form_Rm = 0)
     {
         RoePreamble<dim> rp;
 
@@ -236,8 +238,8 @@ namespace DNDS::Euler::Gas
         rp.veloRm = (URm(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / URm(0)).matrix();
         rp.vsqrLm = rp.veloLm.squaredNorm();
         rp.vsqrRm = rp.veloRm.squaredNorm();
-        IdealGasThermal(ULm(dim + 1), ULm(0), rp.vsqrLm, gamma, rp.pLm, rp.asqrLm, rp.HLm);
-        IdealGasThermal(URm(dim + 1), URm(0), rp.vsqrRm, gamma, rp.pRm, rp.asqrRm, rp.HRm);
+        IdealGasThermal(ULm(dim + 1), ULm(0), rp.vsqrLm, gamma, rp.pLm, rp.asqrLm, rp.HLm, rhoH_form_Lm);
+        IdealGasThermal(URm(dim + 1), URm(0), rp.vsqrRm, gamma, rp.pRm, rp.asqrRm, rp.HRm, rhoH_form_Rm);
 
         rp.sqrtRhoLm = std::sqrt(ULm(0));
         rp.sqrtRhoRm = std::sqrt(URm(0));
@@ -245,8 +247,10 @@ namespace DNDS::Euler::Gas
         rp.veloRoe = (rp.sqrtRhoLm * rp.veloLm + rp.sqrtRhoRm * rp.veloRm) / (rp.sqrtRhoLm + rp.sqrtRhoRm);
         rp.vsqrRoe = rp.veloRoe.squaredNorm();
         rp.HRoe = (rp.sqrtRhoLm * rp.HLm + rp.sqrtRhoRm * rp.HRm) / (rp.sqrtRhoLm + rp.sqrtRhoRm);
-        rp.asqrRoe = (gamma - 1) * (rp.HRoe - 0.5 * rp.vsqrRoe);
         rp.rhoRoe = rp.sqrtRhoLm * rp.sqrtRhoRm;
+
+        real rhoH_roe = (rp.sqrtRhoLm * rhoH_form_Lm + rp.sqrtRhoRm * rhoH_form_Rm) / (rp.sqrtRhoLm + rp.sqrtRhoRm);
+        rp.asqrRoe = (gamma - 1) * (rp.HRoe - 0.5 * rp.vsqrRoe - rhoH_roe / std::max(rp.rhoRoe, verySmallReal));
 
         if (!(rp.asqrRoe > 0))
         {
@@ -277,13 +281,13 @@ namespace DNDS::Euler::Gas
      */
     template <int dim = 3, class TCons, class TPrim>
     inline void IdealGasThermalConservative2Primitive(
-        const TCons &U, TPrim &prim, real gamma)
+        const TCons &U, TPrim &prim, real gamma, real rhoH_form = 0)
     {
         prim = U / U(0);
         real vSqr = (U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) / U(0)).squaredNorm();
         real rho = U(0);
         real E = U(1 + dim);
-        real p = (gamma - 1) * (E - rho * 0.5 * vSqr);
+        real p = (gamma - 1) * (E - rho * 0.5 * vSqr - rhoH_form);
         prim(0) = rho;
         prim(1 + dim) = p;
         DNDS_assert(rho > 0);
@@ -304,13 +308,13 @@ namespace DNDS::Euler::Gas
      */
     template <int dim = 3, class TCons, class TPrim>
     inline void IdealGasThermalPrimitive2Conservative(
-        const TPrim &prim, TCons &U, real gamma)
+        const TPrim &prim, TCons &U, real gamma, real rhoH_form = 0)
     {
         U = prim * prim(0);
         real vSqr = prim(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).squaredNorm();
         real rho = prim(0);
         real p = prim(dim + 1);
-        real E = p / (gamma - 1) + (rho * 0.5 * vSqr);
+        real E = p / (gamma - 1) + (rho * 0.5 * vSqr) + rhoH_form;
         U(0) = rho;
         U(dim + 1) = E;
         DNDS_assert(rho > 0);
@@ -460,11 +464,13 @@ namespace DNDS::Euler::Gas
      * @param[out] dp     Pressure increment (output).
      */
     template <int dim = 3, typename TU, class TVec>
-    inline void IdealGasUIncrement(const TU &U, const TU &dU, const TVec &velo, real gamma, TVec &dVelo, real &dp)
+    inline void IdealGasUIncrement(const TU &U, const TU &dU, const TVec &velo, real gamma, TVec &dVelo, real &dp,
+                                   real rhoH_form = 0)
     {
         dVelo = (dU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) -
                  U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) / U(0) * dU(0)) /
                 U(0);
+        (void)rhoH_form;
         dp = (gamma - 1) * (dU(dim + 1) -
                             0.5 * (dU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).dot(velo) +
                                    U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).dot(dVelo)));
@@ -525,7 +531,7 @@ namespace DNDS::Euler::Gas
      * @return Eigen::Matrix<real, dim+2, dim+2>  Right eigenvector matrix.
      */
     template <int dim = 3, typename TU>
-    inline auto IdealGas_EulerGasRightEigenVector(const TU &U, real gamma)
+    inline auto IdealGas_EulerGasRightEigenVector(const TU &U, real gamma, real rhoH_form = 0)
     {
         DNDS_assert(U(0) > 0);
         Eigen::Matrix<real, dim + 2, dim + 2> ReV;
@@ -533,7 +539,7 @@ namespace DNDS::Euler::Gas
             (U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / U(0)).matrix();
         real vsqr = velo.squaredNorm();
         real asqr, p, H;
-        IdealGasThermal(U(dim + 1), U(0), vsqr, gamma, p, asqr, H);
+        IdealGasThermal(U(dim + 1), U(0), vsqr, gamma, p, asqr, H, rhoH_form);
         DNDS_assert(asqr >= 0);
         EulerGasRightEigenVector<dim>(velo, vsqr, H, std::sqrt(asqr), ReV);
         return ReV;
@@ -552,7 +558,7 @@ namespace DNDS::Euler::Gas
      * @return Eigen::Matrix<real, dim+2, dim+2>  Left eigenvector matrix.
      */
     template <int dim = 3, typename TU>
-    inline auto IdealGas_EulerGasLeftEigenVector(const TU &U, real gamma)
+    inline auto IdealGas_EulerGasLeftEigenVector(const TU &U, real gamma, real rhoH_form = 0)
     {
         DNDS_assert(U(0) > 0);
         Eigen::Matrix<real, dim + 2, dim + 2> LeV;
@@ -560,7 +566,7 @@ namespace DNDS::Euler::Gas
             (U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).array() / U(0)).matrix();
         real vsqr = velo.squaredNorm();
         real asqr, p, H;
-        IdealGasThermal(U(dim + 1), U(0), vsqr, gamma, p, asqr, H);
+        IdealGasThermal(U(dim + 1), U(0), vsqr, gamma, p, asqr, H, rhoH_form);
         DNDS_assert(asqr >= 0);
         EulerGasLeftEigenVector<dim>(velo, vsqr, H, std::sqrt(asqr), gamma, LeV);
         return LeV;
@@ -605,7 +611,9 @@ namespace DNDS::Euler::Gas
     void HLLEPFlux_IdealGas(const TUL &UL, const TUR &UR, const TULm &ULm, const TURm &URm,
                             const TVecVG &vg, const TVecN &n,
                             real gamma, TF &F, real dLambda, real fixScale,
-                            const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
+                            const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4,
+                            real rhoH_form_L = 0, real rhoH_form_R = 0,
+                            real rhoH_form_Lm = 0, real rhoH_form_Rm = 0)
     {
         using TVec = Eigen::Vector<real, dim>;
 
@@ -620,10 +628,10 @@ namespace DNDS::Euler::Gas
         real asqrL, asqrR, pL, pR, HL, HR;
         real vsqrL = veloL.squaredNorm();
         real vsqrR = veloR.squaredNorm();
-        IdealGasThermal(UL(dim + 1), UL(0), vsqrL, gamma, pL, asqrL, HL);
-        IdealGasThermal(UR(dim + 1), UR(0), vsqrR, gamma, pR, asqrR, HR);
+        IdealGasThermal(UL(dim + 1), UL(0), vsqrL, gamma, pL, asqrL, HL, rhoH_form_L);
+        IdealGasThermal(UR(dim + 1), UR(0), vsqrR, gamma, pR, asqrR, HR, rhoH_form_R);
 
-        auto rp = ComputeRoePreamble<dim>(ULm, URm, gamma, dumpInfo);
+        auto rp = ComputeRoePreamble<dim>(ULm, URm, gamma, dumpInfo, rhoH_form_Lm, rhoH_form_Rm);
 
         Eigen::Vector<real, dim + 2> FL, FR;
         GasInviscidFlux_XY<dim>(UL, veloL, vg, n, pL, FL);
@@ -740,7 +748,9 @@ namespace DNDS::Euler::Gas
     void HLLCFlux_IdealGas_HartenYee(const TUL &UL, const TUR &UR, const TULm &ULm, const TURm &URm,
                                      const TVecVG &vg, const TVecN &n,
                                      real gamma, TF &F, real dLambda, real fixScale,
-                                     const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
+                                     const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4,
+                                     real rhoH_form_L = 0, real rhoH_form_R = 0,
+                                     real rhoH_form_Lm = 0, real rhoH_form_Rm = 0)
     {
         //! warning: has accuracy issue (see IV test)
         using TVec = Eigen::Vector<real, dim>;
@@ -756,10 +766,10 @@ namespace DNDS::Euler::Gas
         real asqrL, asqrR, pL, pR, HL, HR;
         real vsqrL = veloL.squaredNorm();
         real vsqrR = veloR.squaredNorm();
-        IdealGasThermal(UL(dim + 1), UL(0), vsqrL, gamma, pL, asqrL, HL);
-        IdealGasThermal(UR(dim + 1), UR(0), vsqrR, gamma, pR, asqrR, HR);
+        IdealGasThermal(UL(dim + 1), UL(0), vsqrL, gamma, pL, asqrL, HL, rhoH_form_L);
+        IdealGasThermal(UR(dim + 1), UR(0), vsqrR, gamma, pR, asqrR, HR, rhoH_form_R);
 
-        auto rp = ComputeRoePreamble<dim>(ULm, URm, gamma, dumpInfo);
+        auto rp = ComputeRoePreamble<dim>(ULm, URm, gamma, dumpInfo, rhoH_form_Lm, rhoH_form_Rm);
 
         Eigen::Vector<real, dim + 2> FL, FR;
         GasInviscidFlux_XY<dim>(UL, veloL, vg, n, pL, FL);
@@ -1045,7 +1055,9 @@ namespace DNDS::Euler::Gas
                                     const TVecVG &vg, const TVecN &n,
                                     real gamma, TF &F, real dLambda, real fixScale,
                                     real incFScale,
-                                    const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
+                                    const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4,
+                                    real rhoH_form_L = 0, real rhoH_form_R = 0,
+                                    real rhoH_form_Lm = 0, real rhoH_form_Rm = 0)
     {
         using TVec = Eigen::Vector<real, dim>;
 
@@ -1060,10 +1072,10 @@ namespace DNDS::Euler::Gas
         real asqrL, asqrR, pL, pR, HL, HR;
         real vsqrL = veloL.squaredNorm();
         real vsqrR = veloR.squaredNorm();
-        IdealGasThermal(UL(dim + 1), UL(0), vsqrL, gamma, pL, asqrL, HL);
-        IdealGasThermal(UR(dim + 1), UR(0), vsqrR, gamma, pR, asqrR, HR);
+        IdealGasThermal(UL(dim + 1), UL(0), vsqrL, gamma, pL, asqrL, HL, rhoH_form_L);
+        IdealGasThermal(UR(dim + 1), UR(0), vsqrR, gamma, pR, asqrR, HR, rhoH_form_R);
 
-        auto rp = ComputeRoePreamble<dim>(ULm, URm, gamma, dumpInfo);
+        auto rp = ComputeRoePreamble<dim>(ULm, URm, gamma, dumpInfo, rhoH_form_Lm, rhoH_form_Rm);
 
         Eigen::Vector<real, dim + 2> FL, FR;
         GasInviscidFlux_XY<dim>(UL, veloL, vg, n, pL, FL);
@@ -1147,7 +1159,8 @@ namespace DNDS::Euler::Gas
      */
     template <int dim = 3, typename TUL, typename TUR, typename TVecV, typename TUOut>
     void GetRoeAverage(const TUL &UL, const TUR &UR, real gamma,
-                       TVecV &veloRoe, real &vsqrRoe, real &aRoe, real &asqrRoe, real &HRoe, TUOut &UOut)
+                       TVecV &veloRoe, real &vsqrRoe, real &aRoe, real &asqrRoe, real &HRoe, TUOut &UOut,
+                       real rhoH_form_L = 0, real rhoH_form_R = 0)
     {
         using TVec = Eigen::Vector<real, dim>;
         static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
@@ -1157,8 +1170,8 @@ namespace DNDS::Euler::Gas
         real asqrLm, asqrRm, pLm, pRm, HLm, HRm;
         real vsqrLm = veloLm.squaredNorm();
         real vsqrRm = veloRm.squaredNorm();
-        IdealGasThermal(UL(dim + 1), UL(0), vsqrLm, gamma, pLm, asqrLm, HLm);
-        IdealGasThermal(UR(dim + 1), UR(0), vsqrRm, gamma, pRm, asqrRm, HRm);
+        IdealGasThermal(UL(dim + 1), UL(0), vsqrLm, gamma, pLm, asqrLm, HLm, rhoH_form_L);
+        IdealGasThermal(UR(dim + 1), UR(0), vsqrRm, gamma, pRm, asqrRm, HRm, rhoH_form_R);
         DNDS_assert(UL(0) >= 0 && UR(0) >= 0);
         real sqrtRhoLm = std::sqrt(UL(0));
         real sqrtRhoRm = std::sqrt(UR(0));
@@ -1166,14 +1179,16 @@ namespace DNDS::Euler::Gas
         veloRoe = (sqrtRhoLm * veloLm + sqrtRhoRm * veloRm) / (sqrtRhoLm + sqrtRhoRm);
         vsqrRoe = veloRoe.squaredNorm();
         HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
-        asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
+        real rhoRoe = sqrtRhoLm * sqrtRhoRm;
+        real rhoH_roe = (sqrtRhoLm * rhoH_form_L + sqrtRhoRm * rhoH_form_R) / (sqrtRhoLm + sqrtRhoRm);
+        asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe - rhoH_roe / std::max(rhoRoe, verySmallReal));
         DNDS_assert(asqrRoe >= 0);
         aRoe = std::sqrt(asqrRoe);
 
-        UOut(0) = sqrtRhoLm * sqrtRhoRm;
+        UOut(0) = rhoRoe;
         UOut(Seq123) = veloRoe * UOut(0);
-        real pRoe = asqrRoe * UOut(0) / gamma;
-        UOut(I4) = pRoe / (gamma - 1) + 0.5 * vsqrRoe * UOut(0);
+        real pRoeOut = asqrRoe * UOut(0) / gamma;
+        UOut(I4) = pRoeOut / (gamma - 1) + 0.5 * vsqrRoe * UOut(0);
         UOut(Eigen::seq(I4 + 1, EigenLast)) =
             UOut(0) / (sqrtRhoLm + sqrtRhoRm) *
             (UL(Eigen::seq(I4 + 1, EigenLast)) / sqrtRhoLm +
@@ -1282,7 +1297,8 @@ namespace DNDS::Euler::Gas
                                           real gamma, TF &F,
                                           real dLambda, real fixScale,
                                           real incFScale,
-                                          const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
+                                          const TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4,
+                                          real rhoH_form_Lm = 0, real rhoH_form_Rm = 0)
     {
         using TVec = Eigen::Vector<real, dim>;
         using TVec_Batch = Eigen::Matrix<real, dim, -1, Eigen::ColMajor, dim, MaxBatch>;
@@ -1308,15 +1324,15 @@ namespace DNDS::Euler::Gas
             real asqrL, asqrR, HL, HR;
             real vsqrL = veloL(EigenAll, iB).squaredNorm();
             real vsqrR = veloR(EigenAll, iB).squaredNorm();
-            IdealGasThermal(UL(dim + 1, iB), UL(0, iB), vsqrL, gamma, pL(iB), asqrL, HL);
-            IdealGasThermal(UR(dim + 1, iB), UR(0, iB), vsqrR, gamma, pR(iB), asqrR, HR);
+            IdealGasThermal(UL(dim + 1, iB), UL(0, iB), vsqrL, gamma, pL(iB), asqrL, HL, rhoH_form_Lm);
+            IdealGasThermal(UR(dim + 1, iB), UR(0, iB), vsqrR, gamma, pR(iB), asqrR, HR, rhoH_form_Rm);
         }
 
         real asqrLm, asqrRm, pLm, pRm, HLm, HRm;
         real vsqrLm = veloLm.squaredNorm();
         real vsqrRm = veloRm.squaredNorm();
-        IdealGasThermal(ULm(dim + 1), ULm(0), vsqrLm, gamma, pLm, asqrLm, HLm);
-        IdealGasThermal(URm(dim + 1), URm(0), vsqrRm, gamma, pRm, asqrRm, HRm);
+        IdealGasThermal(ULm(dim + 1), ULm(0), vsqrLm, gamma, pLm, asqrLm, HLm, rhoH_form_Lm);
+        IdealGasThermal(URm(dim + 1), URm(0), vsqrRm, gamma, pRm, asqrRm, HRm, rhoH_form_Rm);
 
         real sqrtRhoLm = std::sqrt(ULm(0));
         real sqrtRhoRm = std::sqrt(URm(0));
@@ -1324,8 +1340,9 @@ namespace DNDS::Euler::Gas
         TVec veloRoe = (sqrtRhoLm * veloLm + sqrtRhoRm * veloRm) / (sqrtRhoLm + sqrtRhoRm);
         real vsqrRoe = veloRoe.squaredNorm();
         real HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
-        real asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
         real rhoRoe = sqrtRhoLm * sqrtRhoRm;
+        real rhoH_roe = (sqrtRhoLm * rhoH_form_Lm + sqrtRhoRm * rhoH_form_Rm) / (sqrtRhoLm + sqrtRhoRm);
+        real asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe - rhoH_roe / std::max(rhoRoe, verySmallReal));
         real veloRoeN = veloRoe.dot(nm);
         real vgmN = vgm.dot(nm);
         real veloRoeRN = veloRoeN - vgmN;
@@ -1442,17 +1459,21 @@ namespace DNDS::Euler::Gas
         TVecVG &&vg, TVecN &&n, real gamma, TF &&F,
         real dLambda, real fixScale,
         real incFScale,
-        TFdumpInfo &&dumpInfo, real &lam0, real &lam123, real &lam4)
+        TFdumpInfo &&dumpInfo, real &lam0, real &lam123, real &lam4,
+        real rhoH_form_L = 0, real rhoH_form_R = 0,
+        real rhoH_form_Lm = 0, real rhoH_form_Rm = 0)
     {
 #define DNDS_GAS_CALL_ROE(type)                                          \
     RoeFlux_IdealGas_HartenYee<dim, type>(                               \
         UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale, incFScale, \
-        dumpInfo, lam0, lam123, lam4)
+        dumpInfo, lam0, lam123, lam4,                                    \
+        rhoH_form_L, rhoH_form_R, rhoH_form_Lm, rhoH_form_Rm)
 
         if (type == Roe)
             RoeFlux_IdealGas_HartenYee<dim>(
                 UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale, incFScale,
-                dumpInfo, lam0, lam123, lam4);
+                dumpInfo, lam0, lam123, lam4,
+                rhoH_form_L, rhoH_form_R, rhoH_form_Lm, rhoH_form_Rm);
         else if (type == Roe_M1)
             DNDS_GAS_CALL_ROE(1);
         else if (type == Roe_M2)
@@ -1474,15 +1495,18 @@ namespace DNDS::Euler::Gas
         else if (type == HLLEP)
             HLLEPFlux_IdealGas<dim, 0>(
                 UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale,
-                dumpInfo, lam0, lam123, lam4);
+                dumpInfo, lam0, lam123, lam4,
+                rhoH_form_L, rhoH_form_R, rhoH_form_Lm, rhoH_form_Rm);
         else if (type == HLLEP_V1)
             HLLEPFlux_IdealGas<dim, 1>(
                 UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale,
-                dumpInfo, lam0, lam123, lam4);
+                dumpInfo, lam0, lam123, lam4,
+                rhoH_form_L, rhoH_form_R, rhoH_form_Lm, rhoH_form_Rm);
         else if (type == HLLC)
             HLLCFlux_IdealGas_HartenYee<dim>(
                 UL, UR, ULm, URm, vg, n, gamma, F, dLambda, fixScale,
-                dumpInfo, lam0, lam123, lam4);
+                dumpInfo, lam0, lam123, lam4,
+                rhoH_form_L, rhoH_form_R, rhoH_form_Lm, rhoH_form_Rm);
         else
             DNDS_assert_info(false, "the rs type is invalid");
 #undef DNDS_GAS_CALL_ROE
@@ -1525,17 +1549,18 @@ namespace DNDS::Euler::Gas
         TVecN &&n, TVecNm &&nm,
         real gamma, TF &&F, real dLambda, real fixScale,
         real incFScale,
-        TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4)
+        TFdumpInfo &dumpInfo, real &lam0, real &lam123, real &lam4,
+        real rhoH_form_Lm = 0, real rhoH_form_Rm = 0)
     {
 #define DNDS_GAS_CALL_ROE(type)                                                   \
     RoeFlux_IdealGas_HartenYee_Batch<dim, type>(                                  \
         UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda, fixScale, incFScale, \
-        dumpInfo, lam0, lam123, lam4)
+        dumpInfo, lam0, lam123, lam4, rhoH_form_Lm, rhoH_form_Rm)
 
         if (type == Roe)
             RoeFlux_IdealGas_HartenYee_Batch<dim>(
                 UL, UR, ULm, URm, vg, vgm, n, nm, gamma, F, dLambda, fixScale, incFScale,
-                dumpInfo, lam0, lam123, lam4);
+                dumpInfo, lam0, lam123, lam4, rhoH_form_Lm, rhoH_form_Rm);
         else if (type == Roe_M1)
             DNDS_GAS_CALL_ROE(1);
         else if (type == Roe_M2)
@@ -1593,7 +1618,8 @@ namespace DNDS::Euler::Gas
      */
     template <int dim = 3, typename TU, typename TGradU, typename TFlux, typename TNorm>
     void ViscousFlux_IdealGas(const TU &U, const TGradU &GradUPrim, TNorm norm, bool adiabatic, real gamma,
-                              real mu, real mutRatio, bool mutQCRFix, real k, real Cp, TFlux &Flux)
+                              real mu, real mutRatio, bool mutQCRFix, real k, real Cp, TFlux &Flux,
+                              real rhoH_form = 0)
     {
         static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -1604,7 +1630,7 @@ namespace DNDS::Euler::Gas
         Eigen::Matrix<real, dim, dim> diffVelo = GradUPrim(Seq012, Seq123); // dU_j/dx_i
         Eigen::Vector<real, dim> GradP = GradUPrim(Seq012, dim + 1);
         real vSqr = velo.squaredNorm();
-        real p = (gamma - 1) * (U(dim + 1) - U(0) * 0.5 * vSqr);
+        real p = (gamma - 1) * (U(dim + 1) - U(0) * 0.5 * vSqr - rhoH_form);
         Eigen::Vector<real, dim> GradT = (gamma / ((gamma - 1) * Cp * U(0) * U(0))) *
                                          (U(0) * GradP - p * GradUPrim(Seq012, 0)); // GradU(:,0) is grad rho no matter prim or not
 
@@ -1675,7 +1701,8 @@ namespace DNDS::Euler::Gas
      * @param  gamma        Ratio of specific heats (γ).
      */
     template <int dim = 3, typename TU, typename TGradU, typename TGradUPrim>
-    void GradientCons2Prim_IdealGas(const TU &U, const TGradU &GradU, TGradUPrim &GradUPrim, real gamma)
+    void GradientCons2Prim_IdealGas(const TU &U, const TGradU &GradU, TGradUPrim &GradUPrim, real gamma,
+                                    real rhoH_form = 0)
     {
         static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -1693,6 +1720,7 @@ namespace DNDS::Euler::Gas
                                  0.5 *
                                      (GradU(Seq012, Seq123) * velo +
                                       GradUPrim(Seq012, Seq123) * Eigen::Vector<real, dim>(U(Seq123))));
+        (void)rhoH_form; // d(rhoH_form) = 0 approximation for gradient; TODO: full formation gradient
         GradUPrim(Seq012, Eigen::seq(Eigen::fix<I4 + 1>, EigenLast)) -= GradU(Seq012, 0) * U(Eigen::seq(Eigen::fix<I4 + 1>, EigenLast)).transpose() / U(0);
         GradUPrim(Seq012, Eigen::seq(Eigen::fix<I4 + 1>, EigenLast)) /= U(0);
     }
@@ -1747,7 +1775,8 @@ namespace DNDS::Euler::Gas
      * @return The safe scaling factor α in [0, 1].
      */
     template <int dim = 3, int scheme = 0, int nVarsFixed, typename TU, typename TUInc>
-    real IdealGasGetCompressionRatioPressure(const TU &u, const TUInc &uInc, real newrhoEinteralNew)
+    real IdealGasGetCompressionRatioPressure(const TU &u, const TUInc &uInc, real newrhoEinteralNew,
+                                             real rhoH_form = 0)
     {
         static const real safetyRatio = 1 - 1e-5;
         static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>);
@@ -1757,6 +1786,8 @@ namespace DNDS::Euler::Gas
 
         Eigen::Vector<real, nVarsFixed> ret = uInc;
         Eigen::Vector<real, nVarsFixed> uNew = u + uInc;
+        // TODO: use sensible internal energy (subtract rhoH_form) for PP check
+        (void)rhoH_form;
         real rhoEOld = u(I4) - u(Seq123).squaredNorm() / (u(0) + verySmallReal) * 0.5;
         newrhoEinteralNew = std::max(smallReal * rhoEOld, newrhoEinteralNew);
         real rhoENew = uNew(I4) - uNew(Seq123).squaredNorm() / (uNew(0) + verySmallReal) * 0.5;

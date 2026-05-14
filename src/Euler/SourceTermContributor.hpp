@@ -44,6 +44,7 @@ namespace DNDS::Euler
         real p = 101325;     // code pressure
         real pPhys = 101325; // physical pressure [Pa] for Cantera
         real gamma = 1.4;    // EOS gamma at this point (from phys_)
+        real rhoH_form = 0;  // volumetric formation enthalpy (0 when no chemistry)
     };
 
     // ============================================================================
@@ -94,14 +95,15 @@ namespace DNDS::Euler
 
     template <class TRet>
     inline void evalSourceAxisymmetric(real gamma, const Geom::tPoint &pPhy,
-                                       TRet &ret, const TRet &U, int Mode)
+                                       TRet &ret, const TRet &U, int Mode,
+                                       real rhoH_form = 0)
     {
         auto I4 = 4; // dim=3 -> I4=4
         if (Mode == 0)
         {
             TRet uPrim;
             uPrim.resizeLike(U);
-            Gas::IdealGasThermalConservative2Primitive(U, uPrim, gamma);
+            Gas::IdealGasThermalConservative2Primitive(U, uPrim, gamma, rhoH_form);
             ret(2) += uPrim(I4) / std::max(verySmallReal, pPhy(1));
         }
     }
@@ -164,7 +166,7 @@ namespace DNDS::Euler
         {
             if (!active)
                 return;
-            evalSourceAxisymmetric(aux.gamma, pPhy, ret, U, Mode);
+            evalSourceAxisymmetric(aux.gamma, pPhy, ret, U, Mode, aux.rhoH_form);
         }
     };
 

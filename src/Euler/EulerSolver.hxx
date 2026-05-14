@@ -475,7 +475,7 @@ namespace DNDS::Euler
 
                     // TODO: use cell-wise cached mixture gamma when available
                     auto gamma_val = eval.phys().gammaConst();
-                    auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, gamma_val);
+                    auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, gamma_val, 0);
                     M(EigenAll, Seq123) *= normBase.transpose();
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
@@ -495,7 +495,7 @@ namespace DNDS::Euler
 
                     // TODO: use cell-wise cached mixture gamma when available
                     auto gamma_val = eval.phys().gammaConst();
-                    auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, gamma_val);
+                    auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, gamma_val, 0);
                     M(Seq123, EigenAll) = normBase * M(Seq123, EigenAll);
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
@@ -525,7 +525,7 @@ namespace DNDS::Euler
                                 return;
                             }
                             // TODO: use cell-wise cached mixture gamma when available
-                            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, eval.phys().gammaConst());
+                            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, eval.phys().gammaConst(), 0 /* fluid-only (WBAP), no chemistry */);
                             v.setConstant(prim(I4));
                             return;
                         });

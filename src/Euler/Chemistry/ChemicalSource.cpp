@@ -21,10 +21,14 @@ namespace DNDS::Euler::Chemistry
         Cantera::Kinetics *kin = nullptr;
         Cantera::Transport *trn = nullptr;
 
+        std::shared_ptr<Cantera::Solution> solT; // separate phase for temperatureFromUV
+        Cantera::ThermoPhase *gasT = nullptr;
+
         int Ns = 0;
         std::vector<std::string> speciesNames;
         std::vector<double> mw;
         std::vector<double> Rk; // species gas constants
+        std::vector<double> hf; // per-species formation enthalpy [J/kg] at 298 K
 
         // work buffers
         mutable std::vector<double> bufOmega;
@@ -52,15 +56,21 @@ namespace DNDS::Euler::Chemistry
         I.kin = &(*I.sol->kinetics());
         I.trn = &(*I.sol->transport());
 
+        // Dedicated phase for temperatureFromUV (avoids state corruption from shared phase)
+        I.solT = Cantera::newSolution(mechanismFile, phaseName, "");
+        I.gasT = &(*I.solT->thermo());
+
         I.Ns = static_cast<int>(I.gas->nSpecies());
         I.speciesNames.resize(I.Ns);
         I.mw.resize(I.Ns);
         I.Rk.resize(I.Ns);
+        I.hf.resize(I.Ns);
         I.gas->getMolecularWeights(I.mw.data());
         for (int k = 0; k < I.Ns; ++k)
         {
             I.speciesNames[k] = I.gas->speciesName(k);
             I.Rk[k] = Cantera::GasConstant / I.mw[k];
+            I.hf[k] = I.gas->Hf298SS(k) / I.mw[k];
         }
 
         I.bufOmega.resize(I.Ns);
@@ -117,23 +127,12 @@ namespace DNDS::Euler::Chemistry
                                              ConstSpeciesBufferView Y,
                                              double T_guess) const
     {
-        impl_->gas->setMassFractions_NoNorm(Y.data);
-        double Rmix = mixtureR(Y);
-        double T = T_guess > 300 ? T_guess : 300;
-        for (int iter = 0; iter < 50; iter++)
-        {
-            double p = Rmix * T / v;
-            impl_->gas->setState_TP(T, p);
-            double uCur = impl_->gas->intEnergy_mass();
-            double cv = impl_->gas->cv_mass();
-            double dT = (u - uCur) / std::max(cv, 1e-6);
-            T += dT;
-            if (T < 1)
-                T = 1;
-            if (std::abs(dT) < 1e-6 * std::max(std::abs(T), 1.0))
-                break;
-        }
-        return T;
+        impl_->gasT->setMassFractions_NoNorm(Y.data);
+        double Tinit = T_guess > 300 ? T_guess : 300;
+        double p_init = mixtureR(Y) * Tinit / v;
+        impl_->gasT->setState_TP(Tinit, p_init);
+        impl_->gasT->setState_UV(u, v);
+        return impl_->gasT->temperature();
     }
 
     // ---- kinetics ------------------------------------------------------------
@@ -234,6 +233,20 @@ namespace DNDS::Euler::Chemistry
         impl_->gas->getPartialMolarEnthalpies(impl_->bufOmega.data());
         for (int k = 0; k < impl_->Ns; ++k)
             h[k] = impl_->bufOmega[k] / std::max(impl_->mw[k], 1e-30);
+    }
+
+    void ChemicalSource::speciesFormationEnthalpies(SpeciesBufferView hf) const
+    {
+        for (int k = 0; k < impl_->Ns; ++k)
+            hf[k] = impl_->hf[k];
+    }
+
+    double ChemicalSource::mixtureFormationEnergy(ConstSpeciesBufferView Y) const
+    {
+        double e = 0;
+        for (int k = 0; k < impl_->Ns; ++k)
+            e += Y[k] * impl_->hf[k];
+        return e;
     }
 
 } // namespace DNDS::Euler::Chemistry
