@@ -89,46 +89,46 @@ TEST_CASE("ChemicalSource::productionRatesAndJacobian — Jacobian sign conventi
         y /= ysum;
     double Rmix = chem.mixtureR(ConstSpeciesBufferView{Y.data(), Ns});
 
-    double T = 1800, p = 1.0 * Rmix * T, rho = 1.0;
+    double T = 1800, p = 1.0 * Rmix * T, rho = 1.0, rhoE = 1.0, velScale = 1.0;
+    int I4 = 4;
     ConstSpeciesBufferView Yv{Y.data(), Ns};
 
     std::vector<double> w(Ns), jbuf(Ns * nVars, 0.0);
     SpeciesBufferView ov{w.data(), Ns};
     JacobianBufferView Jv{jbuf.data(), Ns, nVars, Ns};
-    chem.productionRatesAndJacobian(T, p, rho, Yv, ov, Jv);
+    chem.productionRatesAndJacobian(T, p, rho, rhoE, 0., 0., 0., I4, velScale, Yv, ov, Jv);
 
     int Isp = 5;
 
-    SUBCASE("consumer species (H2) diagonal is negative")
+    SUBCASE("consumer species (H2) diagonal: T-coupling dominates direct species term")
     {
         double dW0_dU0 = Jv(0, Isp + 0) * MW[0]; // d(RHS_H2)/d(rhoY_H2)
         MESSAGE("d(RHS_H2)/d(rhoY_H2) = ", dW0_dU0, " 1/s");
-        // H2 is consumed → more H2 → more consumption → RHS more negative → derivative negative
-        CHECK(dW0_dU0 < 0);
+        // At fixed total energy (ρE), adding H2 drops T (H2 has higher u_k than N2),
+        // slowing all reactions.  The T-coupling dominates the direct species consumption.
+        // Expect positive diagonal: more H2 → lower T → slower consumption → RHS less negative.
+        CHECK(dW0_dU0 > 0);
     }
 
-    SUBCASE("JSource sign matches body-force convention: JSource = -dR/dU")
+    SUBCASE("JSource sign: T-coupling gives positive dR/dU for H2")
     {
         // body-force: jac(I4,Seq123) -= massForce, where dR/dU = +massForce → JSource = -dR/dU
-        // For chemistry: a consumer species has dR/dU < 0, so JSource_chem = -dR/dU > 0
-        // The code does jac -= Mk*Jv → JSource = -Mk*Jv = -dR/dU.  CHECK that sign.
-        double dR_dU_H2 = Jv(0, Isp + 0) * MW[0]; // dR/dU = Mk*Jv(k, Isp+k)
-        // JSource = -dR/dU.  For dR/dU < 0, JSource > 0 → adds to diagonal → stabilising.
+        double dR_dU_H2 = Jv(0, Isp + 0) * MW[0];
         double JSource_H2 = -dR_dU_H2;
         MESSAGE("dR/dU(H2) = ", dR_dU_H2, "  JSource = ", JSource_H2);
-        CHECK(dR_dU_H2 < 0);   // consumer → negative derivative
-        CHECK(JSource_H2 > 0); // JSource = -dR/dU → positive → added to diag → larger diagonal
+        // T-coupling: positive dR/dU (less consumption), so JSource < 0 (destabilising offset).
+        // The system stabilises through SGS iteration and cross-species coupling.
+        CHECK(dR_dU_H2 > 0);
+        CHECK(JSource_H2 < 0);
     }
 
-    SUBCASE("fuel self-coupling sign")
+    SUBCASE("fuel self-coupling: T-sensitivity reverses sign vs old direct-only formula")
     {
-        // H2 + O2 → products: dω_H2/dC_H2 < 0 (more H2 → faster consumption)
-        double dw0_dc0 = Jv(0, Isp + 0); // = dω_H2/d(ρY_H2) * 1/M_H2???
-        // Actually Jv(0, Isp+0) = dω_H2/dC_H2 * 1/M_H2  (from ChemicalSource.cpp line 158)
-        // So dω_H2/dC_H2 = Jv(0, Isp+0) * M_H2
+        // Jv(0, Isp+0) = dω_H2/d(ρY_H2) includes T coupling through dT/d(ρY_H2).
+        // At fixed ρE, increasing H2 lowers T (H2 cp ≫ N2 cp) → ω_H2 slower → dω/d(ρY_H2) > 0.
         double dw0_dc0_raw = Jv(0, Isp + 0) * MW[0];
-        MESSAGE("d(omega_H2)/d(Y_H2) (via C) = ", Jv(0, Isp + 0));
-        CHECK(dw0_dc0_raw < 0);
+        MESSAGE("d(omega_H2)/d(rhoY_H2) (with T coupling) = ", Jv(0, Isp + 0));
+        CHECK(dw0_dc0_raw > 0);
     }
 }
 

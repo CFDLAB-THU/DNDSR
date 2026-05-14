@@ -38,3 +38,27 @@ TEST_CASE("setState_UV internal energy consistency")
     }
     CHECK(chem.temperatureFromUV(4.3e6, 1.0, Yv) > chem.temperatureFromUV(861846, 1.0, Yv));
 }
+
+TEST_CASE("setState_UV with evolved composition from ODE step 5")
+{
+    ChemicalSource chem(mechFile());
+    int Ns = chem.nSpecies();
+
+    // Composition from ODE step 5 (slightly drifted, H/H2O clamped)
+    std::vector<double> Y(Ns, 0.0);
+    Y[0] = 0.028449;
+    Y[1] = 1e-30;
+    Y[2] = 0;
+    Y[3] = 0.22547;
+    Y[4] = 0;
+    Y[5] = 1e-30;
+    Y[6] = 0;
+    Y[7] = 0;
+    Y[8] = 0;
+    Y[9] = 1.0 - (0.028449 + 1e-30 + 0.22547 + 1e-30);
+    ConstSpeciesBufferView Yv{Y.data(), Ns};
+
+    double T = chem.temperatureFromUV(861846, 1.0, Yv, 1200);
+    fprintf(stderr, "[UV-evolved] T=%.1fK\n", T);
+    CHECK(T > 300);
+}

@@ -1,6 +1,7 @@
 {
+    "$schema": "../eulerSA_schema.json",
     "timeMarchControl": {
-        "dtImplicit": 0.01,
+        "dtImplicit": 0.001,
         "nTimeStep": 500,
         "steadyQuit": false,
         "tEnd": 0.1,
@@ -8,7 +9,7 @@
         "odeSetting1": 0.5,
         "rhsFPPMode": 2,
         "rhsFPPScale": 1,
-        "useDtPPLimit": false,
+        "useDtPPLimit": true,
         "dtPPLimitScale": 1
     },
     "outputControl": {
@@ -20,19 +21,19 @@
         "dataOutAtInit": true
     },
     "implicitCFLControl": {
-        "CFL": 1.0,
+        "CFL": 1e-1,
         "useLocalDt": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 10,
+        "nTimeStepInternal": 100,
         "rhsThresholdInternal": 0.0001,
         "res_base": 0,
         "useVolWiseResidual": true
     },
     "dataIOControl": {
         "uniqueStamps": true,
-        "meshFile": "data/mesh/UniformSquare_10.cgns",
-        "outPltName": "data/out/react_",
+        "meshFile": "../data/mesh/UniformSquare_10.cgns",
+        "outPltName": "../data/out/react_",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,

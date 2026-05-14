@@ -149,10 +149,13 @@ namespace DNDS::Euler::Chemistry
     }
 
     void ChemicalSource::productionRatesAndJacobian(
-        double T, double p, double rho,
+        double T, double p, double rho, double rhoE,
+        double rhoU, double rhoV, double rhoW,
+        int iEnergy, double velScale,
         ConstSpeciesBufferView Y,
         SpeciesBufferView omega,
-        JacobianBufferView J) const
+        JacobianBufferView J,
+        int jacFlags) const
     {
         auto &I = *impl_;
         I.setTPY(T, p, Y);
@@ -162,40 +165,80 @@ namespace DNDS::Euler::Chemistry
             omega[k] = I.bufOmega[k];
 
         I.kin->getNetProductionRates_ddT(I.bufDwdt.data());
-        I.kin->getNetProductionRates_ddP(I.bufDwdp.data());
 
         // Per-species concentration Jacobian ∂ω_i/∂C_k (sparse Ns×Ns)
         auto dWdC = I.kin->netProductionRates_ddCi();
+
+        // Per-species h_k/(R_u·T) — needed for u_k = (hRT_k - 1)·R_u·T
+        std::vector<double> hRT(I.Ns);
+        I.gas->getEnthalpy_RT(hRT.data());
 
         // zero Jacobian
         for (int idx = 0; idx < J.rows * J.cols; ++idx)
             J.data[idx] = 0;
 
         int Ns1 = I.Ns - 1;
-        int speciesCol0 = 5;
+        int speciesCol0 = iEnergy + 1;
 
-        // ∂ω/∂(ρY_k) = ∂ω/∂C_k · 1/M_k
+        double cv = I.gas->cv_mass();
+        double vs2 = velScale * velScale;
+        double cvSafe = std::max(cv, 1e-30);
+        double rhoInv = 1.0 / std::max(rho, 1e-60);
+        double Ru = Cantera::GasConstant;
+
+        bool skipFluid = jacFlags & JAC_SKIP_FLUID;
+        bool skipAbsorb = jacFlags & JAC_SKIP_ABSORPTION;
+
+        int nRows = skipAbsorb ? I.Ns : Ns1; // Ns1 excludes the derived last-species row
+        double invMlast = skipAbsorb ? 0.0 : (1.0 / std::max(I.mw[Ns1], 1e-30));
+
+        // ── Species columns (∂ω/∂(ρY_k)) ──
+        double dT_pre = -rhoInv / cvSafe;
         for (int k = 0; k < Ns1; ++k)
         {
             double invMk = 1.0 / std::max(I.mw[k], 1e-30);
-            for (int i = 0; i < I.Ns; ++i)
-                J(i, speciesCol0 + k) = dWdC.coeff(i, k) * invMk;
+            double du = Ru * T * ((hRT[k] - 1.0) * invMk);
+            if (!skipAbsorb)
+                du -= Ru * T * ((hRT[Ns1] - 1.0) * invMlast);
+            double dT_drY = dT_pre * du;
+            for (int i = 0; i < nRows; ++i)
+            {
+                J(i, speciesCol0 + k) = dWdC.coeff(i, k) * invMk + I.bufDwdt[i] * dT_drY;
+                if (!skipAbsorb)
+                    J(i, speciesCol0 + k) -= dWdC.coeff(i, Ns1) * invMlast;
+            }
         }
 
-        // ∂ω/∂(ρE) = ∂ω/∂T · 1/(ρ·cv)
-        double cv = I.gas->cv_mass();
-        double dT_drhoe = 1.0 / (rho * std::max(cv, 1e-30));
-        for (int i = 0; i < I.Ns; ++i)
-            J(i, 4) = I.bufDwdt[i] * dT_drhoe;
+        if (skipFluid)
+            return;
 
-        // ∂ω/∂ρ ≈ ∂ω/∂p · ∂p/∂ρ + Σ_k ∂ω/∂C_k · Y_k/M_k
-        double cp = I.gas->cp_mass();
-        double dp_drho = cp / std::max(cv, 1e-30) * p / std::max(rho, 1e-60);
-        for (int i = 0; i < I.Ns; ++i)
+        // ── Fluid columns (∂ω/∂(ρu_j), ∂ω/∂(ρE), ∂ω/∂ρ) ──
+
+        // ∂ω/∂(ρE) = ∂ω/∂T · velScale² / (ρ·cv)
+        double dT_drhoe = vs2 * rhoInv / cvSafe;
+        for (int i = 0; i < nRows; ++i)
+            J(i, iEnergy) = I.bufDwdt[i] * dT_drhoe;
+
+        // ∂ω/∂(ρu_j) = ∂ω/∂T · dT/d(ρu_j)
+        double dT_factor = -vs2 * rhoInv * rhoInv / cvSafe;
+        for (int jd = 0; jd < iEnergy - 1; ++jd)
         {
-            double d = I.bufDwdp[i] * dp_drho;
-            for (int kk = 0; kk < I.Ns; ++kk)
-                d += dWdC.coeff(i, kk) * Y[kk] / std::max(I.mw[kk], 1e-30);
+            double rhoUk = (jd == 0) ? rhoU : (jd == 1) ? rhoV
+                                                        : rhoW;
+            if (rhoUk == 0)
+                continue;
+            double dT_dm = dT_factor * rhoUk;
+            for (int i = 0; i < nRows; ++i)
+                J(i, 1 + jd) = I.bufDwdt[i] * dT_dm;
+        }
+
+        // ∂ω/∂ρ = ∂ω/∂T·dT/dρ + ∂ω/∂C_last·∂C_last/∂ρ  (∂C_last/∂ρ = 1/M_last)
+        double dT_drho = -vs2 * rhoE * rhoInv * rhoInv / cvSafe;
+        for (int i = 0; i < nRows; ++i)
+        {
+            double d = I.bufDwdt[i] * dT_drho;
+            if (!skipAbsorb)
+                d += dWdC.coeff(i, Ns1) * invMlast;
             J(i, 0) = d;
         }
     }
