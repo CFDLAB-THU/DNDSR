@@ -805,6 +805,12 @@ namespace DNDS::Euler
             auto &dTauC = config.timeMarchControl.rhsFPPMode == 2 ? dTauTmp : dTau;
             Timer().StopTimer(PerformanceTimer::Positivity);
 
+            // Source time splitting: zero out source Jacobian so the implicit
+            // linear solve only sees transport + pseudo-time terms.  The source
+            // contribution to the RHS residual is still present.
+            if (config.linearSolverControl.sourceTauSplitting)
+                JSourceC.clearValues();
+
             if (config.limiterControl.useLimiter) // uses urec value
                 eval.LUSGSMatrixInit(JDC, JSourceC,
                                      dTauC, dt, alphaDiag,
@@ -825,6 +831,50 @@ namespace DNDS::Euler
             cxInc.setConstant(0.0);
             this->solveLinear(alphaDiag, tSimu, cres, cx, cxInc, uRecC, uRecIncC,
                               JDC, *gmres, !isTPMGLevel ? 0 : 1); //! here we borrow PMG's level1 setting into TPMG
+
+            // ----------------------------------------------------------------
+            // Source time splitting: pointwise Newton correction for chemistry
+            // ----------------------------------------------------------------
+            if (config.linearSolverControl.sourceTauSplitting && !eval.settings.ignoreSourceTerm)
+            {
+                // 1. Apply compressed increment to get u* = cx + compressed(cxInc)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uStar)
+                uStar = cx;
+                fincrement(uStar, cxInc, 1.0, uPos);
+
+                // 2. Recompute full RHS at u* (also fills JSourceC with source Jacobian at u*)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsStar)
+                fdtau(uStar, dTauC, alphaDiag, uPos);
+                frhs(rhsStar, uStar, dTauC, iter, ct, uPos);
+
+                // 3. Assemble full residual at u*:
+                //    R(u*) = alphaDiag * rhsStar + resOther - u* / dt
+                //    (same as ODE residual assembly: rhs = alphaDiag*RHS + u^n/dt - u*/dt)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(residual)
+                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                    residual[iCell] = alphaDiag * rhsStar[iCell] + resOther[iCell] - uStar[iCell] / dt;
+
+                // 4. Pointwise Newton solve: (1/dt - alphaDiag * JSource) * delta = R(u*)
+                //    JSourceC was filled by frhs at u*.
+                //    Note: JSource stores -dSource/dU (jac(iRow,j) -= val in SourceTermContributor),
+                //    so the diagonal block is (1/dt + alphaDiag * JSource_stored).
+                DNDS_assert(JSourceC.isBlock());
+                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                {
+                    auto js = JSourceC.getBlock(iCell);
+                    TJacobianU A = alphaDiag * js; // JSource stores -dSource/dU, so A = -alphaDiag * dS/dU
+                    A.diagonal().array() += 1.0 / dt;
+                    // Solve A * delta = residual[iCell]
+                    TU delta = A.partialPivLu().solve(residual[iCell].eval());
+                    uStar[iCell] += delta;
+                }
+                eval.FixUMaxFilter(uStar);
+
+                // 5. cxInc = uStar - cx (so that fincrement(cx, cxInc) reproduces uStar)
+                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                    cxInc[iCell] = uStar[iCell] - cx[iCell];
+            }
+
             // cxInc: in: full increment from previous level; out: full increment form current level
             const auto solve_multigrid = [&](TDof &x_upper, TDof &xIncBuf, TDof &rhsBuf, const TDof &resOther, int mgLevelInit, int mgLevelMax)
             {
@@ -978,6 +1028,10 @@ namespace DNDS::Euler
 
             if (config.linearSolverControl.multiGridLP >= 1 && iter > config.linearSolverControl.multiGridLPStartIter)
             {
+                // TODO: sourceTimeSplitting is not yet supported with multigrid.
+                //       When splitting is enabled, the multigrid correction should
+                //       only handle transport terms; pointwise source correction
+                //       should happen after the multigrid cycle completes.
                 DNDS_assert(config.linearSolverControl.multiGridLP <= 2);
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(cxTemp)
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(resTemp)

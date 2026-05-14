@@ -47,6 +47,16 @@ namespace DNDS::Euler
         real rhoH_form = 0;  // volumetric formation enthalpy (0 when no chemistry)
     };
 
+    /**
+     * @brief Filter which source contributors to evaluate.
+     */
+    enum class SourceFilter
+    {
+        All,            ///< All source contributors (default).
+        ReactiveOnly,   ///< Only reactive (chemical) source.
+        NonReactiveOnly ///< Everything except reactive source.
+    };
+
     // ============================================================================
     // Shared free functions
     // ============================================================================
@@ -477,10 +487,16 @@ namespace DNDS::Euler
         const TGasProp &gasProp;
         index iCell, ig;
         int Mode;
+        SourceFilter filter = SourceFilter::All;
 
         template <typename TContrib>
         void operator()(TContrib &c) const
         {
+            constexpr bool isReactive = std::is_same_v<std::decay_t<TContrib>, ChemicalContributor>;
+            if (filter == SourceFilter::ReactiveOnly && !isReactive)
+                return;
+            if (filter == SourceFilter::NonReactiveOnly && isReactive)
+                return;
             c.evaluate(ret, jac, U, GradU, pPhy, aux, gasProp, iCell, ig, Mode);
         }
     };
@@ -490,6 +506,13 @@ namespace DNDS::Euler
     SourceTermVisitor(TRet &, TJac &, const TRet &, const TDerivedU &,
                       const Geom::tPoint &, const SourceCellAux &,
                       const TGasProp &, index, index, int)
+        -> SourceTermVisitor<TRet, TJac, TDerivedU, TGasProp>;
+
+    // Deduction guide with SourceFilter
+    template <class TRet, class TJac, class TDerivedU, class TGasProp>
+    SourceTermVisitor(TRet &, TJac &, const TRet &, const TDerivedU &,
+                      const Geom::tPoint &, const SourceCellAux &,
+                      const TGasProp &, index, index, int, SourceFilter)
         -> SourceTermVisitor<TRet, TJac, TDerivedU, TGasProp>;
 
 } // namespace DNDS::Euler

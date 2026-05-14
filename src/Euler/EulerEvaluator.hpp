@@ -1050,8 +1050,37 @@ namespace DNDS::Euler
             TJacobianU &jacobian,
             index iCell,
             index ig,
-            int Mode) // mode =0: source; mode = 1, diagJacobi; mode = 2,
+            int Mode,
+            SourceFilter filter = SourceFilter::All) // mode =0: source; mode = 1, diagJacobi; mode = 2,
             ;
+
+        /**
+         * @brief Evaluate the cell-integrated source term for a single cell.
+         *
+         * Performs the same quadrature integration, gradient interpolation, and volume
+         * scaling as the source loop in EvaluateRHS, but for a single cell. The caller
+         * provides the cell state and gradient; when called from the pointwise Newton
+         * solver, pass zero gradient (WARNING: 2nd-order source gradient terms will be
+         * missing in that case).
+         *
+         * @param[out] cellRHS     Source contribution to the cell RHS (added to, not overwritten).
+         * @param[out] cellJac     Source Jacobian block for this cell (overwritten when jacMode=2).
+         * @param[in]  uCell       Cell-mean conservative state.
+         * @param[in]  cellGradU   Gradient of conservative variables at this cell (dim x nVars).
+         * @param[in]  iCell       Cell index.
+         * @param[in]  jacMode     0=no Jacobian, 1=diagonal, 2=full block.
+         * @param[in]  filter      Which source contributors to include.
+         * @param[in]  cellAlpha   PP alpha scaling factor for this cell (default 1).
+         */
+        void EvaluateCellSource(
+            TU &cellRHS,
+            TJacobianU &cellJac,
+            const TU &uCell,
+            const TDiffU &cellGradU,
+            index iCell,
+            int jacMode,
+            SourceFilter filter = SourceFilter::All,
+            real cellAlpha = 1.0);
 
         /**
          * @brief inviscid flux approx jacobian (flux term not reconstructed / no riemann)
@@ -2209,7 +2238,17 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
                 TJacobianU &jacobian,                                                                                      \
                 index iCell,                                                                                               \
                 index ig,                                                                                                  \
-                int Mode);                                                                                                 \
+                int Mode,                                                                                                  \
+                SourceFilter filter);                                                                                      \
+        ext template void EulerEvaluator<model>::EvaluateCellSource(                                                       \
+            TU &cellRHS,                                                                                                   \
+            TJacobianU &cellJac,                                                                                           \
+            const TU &uCell,                                                                                               \
+            const TDiffU &cellGradU,                                                                                       \
+            index iCell,                                                                                                   \
+            int jacMode,                                                                                                   \
+            SourceFilter filter,                                                                                           \
+            real cellAlpha);                                                                                               \
         ext template                                                                                                       \
             typename EulerEvaluator<model>::TU                                                                             \
             EulerEvaluator<model>::generateBoundaryValue(                                                                  \
