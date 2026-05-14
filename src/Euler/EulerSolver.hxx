@@ -842,35 +842,44 @@ namespace DNDS::Euler
                 uStar = cx;
                 fincrement(uStar, cxInc, 1.0, uPos);
 
-                // 2. Recompute full RHS at u* (also fills JSourceC with source Jacobian at u*)
-                DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsStar)
-                fdtau(uStar, dTauC, alphaDiag, uPos);
-                frhs(rhsStar, uStar, dTauC, iter, ct, uPos);
+                // 2. Pointwise Newton iterations for reactive source correction.
+                //    At u*, the transport residual is approximately zero (solved
+                //    implicitly). The remaining residual is dominated by reactive
+                //    source terms. We do fixed Newton steps per cell using
+                //    EvaluateCellSource(ReactiveOnly).
+                //
+                //    WARNING: zero gradient is used for the pointwise source
+                //    evaluation. This is exact for chemical source (which depends
+                //    on state, not gradients) but will miss gradient-dependent
+                //    reactive terms if any are added in the future.
+                const int nSourceNewtonSteps = 3; // TODO: make configurable
+                TDiffU zeroGrad;
+                zeroGrad.resize(Eigen::NoChange, nVars);
+                zeroGrad.setZero();
 
-                // 3. Assemble full residual at u*:
-                //    R(u*) = alphaDiag * rhsStar + resOther - u* / dt
-                //    (same as ODE residual assembly: rhs = alphaDiag*RHS + u^n/dt - u*/dt)
-                DNDS_EULER_SOLVER_GET_TEMP_UDOF(residual)
-                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                    residual[iCell] = alphaDiag * rhsStar[iCell] + resOther[iCell] - uStar[iCell] / dt;
-
-                // 4. Pointwise Newton solve: (1/dt - alphaDiag * JSource) * delta = R(u*)
-                //    JSourceC was filled by frhs at u*.
-                //    Note: JSource stores -dSource/dU (jac(iRow,j) -= val in SourceTermContributor),
-                //    so the diagonal block is (1/dt + alphaDiag * JSource_stored).
-                DNDS_assert(JSourceC.isBlock());
-                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                for (int iNewton = 0; iNewton < nSourceNewtonSteps; iNewton++)
                 {
-                    auto js = JSourceC.getBlock(iCell);
-                    TJacobianU A = alphaDiag * js; // JSource stores -dSource/dU, so A = -alphaDiag * dS/dU
-                    A.diagonal().array() += 1.0 / dt;
-                    // Solve A * delta = residual[iCell]
-                    TU delta = A.partialPivLu().solve(residual[iCell].eval());
-                    uStar[iCell] += delta;
+                    for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                    {
+                        TU srcRHS;
+                        srcRHS.setZero(nVars);
+                        TJacobianU srcJac;
+                        TU uLocal = uStar[iCell];
+                        eval.EvaluateCellSource(srcRHS, srcJac, uLocal, zeroGrad,
+                                                iCell, 2, SourceFilter::ReactiveOnly);
+
+                        // Assemble: (1/dt + alphaDiag * (-dS/dU)) * delta = alphaDiag * S(u*)
+                        // srcJac stores -dS/dU (from jac(i,j) -= val convention)
+                        TJacobianU A = alphaDiag * srcJac;
+                        A.diagonal().array() += 1.0 / dt;
+                        TU rhs_local = alphaDiag * srcRHS;
+                        TU delta = A.partialPivLu().solve(rhs_local.eval());
+                        uStar[iCell] += delta;
+                    }
                 }
                 eval.FixUMaxFilter(uStar);
 
-                // 5. cxInc = uStar - cx (so that fincrement(cx, cxInc) reproduces uStar)
+                // 3. cxInc = uStar - cx (so that fincrement(cx, cxInc) reproduces uStar)
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                     cxInc[iCell] = uStar[iCell] - cx[iCell];
             }
