@@ -996,14 +996,6 @@ namespace DNDS::Euler
                         // u[iCell](I4 + 1) = rhoOmegaaaNew / rhoOmegaaaOld * u[iCell](I4 + 1);
                     }
                 }
-            if (settings.reactiveFlow.enabled)
-            {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(runtime)
-#endif
-                for (index iCell = 0; iCell < u.Size(); iCell++)
-                    u[iCell](I4) += phys_.mixtureFormationRhoE(u[iCell]);
-            }
         }
 
         switch (settings.specialBuiltinInitializer)
@@ -1326,6 +1318,14 @@ namespace DNDS::Euler
                 if (someIn)
                     u[iCell] = um / vfv->GetCellVol(iCell); // mean value
             }
+        }
+        if (settings.reactiveFlow.enabled)
+        {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(runtime)
+#endif
+            for (index iCell = 0; iCell < u.Size(); iCell++)
+                u[iCell](I4) += phys_.mixtureFormationRhoE(u[iCell]);
         }
     }
 
@@ -1945,7 +1945,7 @@ namespace DNDS::Euler
 #endif
                 ret = false;
             }
-            real rhoEi = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0);
+            real rhoEi = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoE(u[iCell]);
             if (rhoEi < pEps / (gamma - 1))
             {
                 if (panic)
