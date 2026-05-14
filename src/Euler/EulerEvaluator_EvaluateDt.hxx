@@ -1787,13 +1787,50 @@ namespace DNDS::Euler
         index iCell,
         int jacMode,
         SourceFilter filter,
-        real cellAlpha)
+        real cellAlpha,
+        bool useRecArrays,
+        ArrayDOFV<nVarsFixed> *pU,
+        ArrayRECV<nVarsFixed> *pURecUnlim,
+        ArrayRECV<nVarsFixed> *pURec,
+        bool direct2ndRec,
+        real t)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         int cnvars = nVars;
 
-        // Use O1 quadrature (cell-center only) — matches direct2ndRec path in EvaluateRHS
-        auto gCell = vfv->GetCellQuadO1(iCell);
+        auto gCell = (useRecArrays && !direct2ndRec)
+                         ? vfv->GetCellQuad(iCell)
+                         : vfv->GetCellQuadO1(iCell);
+
+        // Construct 2nd-order cell gradient if needed (source2nd / ransSource2nd)
+        TDiffU cellGrad2nd;
+        if (useRecArrays && (settings.ransSource2nd || settings.source2nd))
+        {
+            DNDS_assert(pU);
+            cellGrad2nd.setZero(Eigen::NoChange, uCell.size());
+            TU uC = uCell;
+            for (index iFace : mesh->cell2face[iCell])
+            {
+                index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                TVec uNorm = vfv->GetFaceNormFromCell(iFace, iCell, -1, -1)(Seq012) *
+                             (mesh->CellIsFaceBack(iCell, iFace) ? 1 : -1);
+                TU uR;
+                if (iCellOther != UnInitIndex)
+                    uR = (*pU)[iCellOther], this->UFromOtherCell(uR, iFace, iCell, iCellOther, -1);
+                else
+                    uR = generateBoundaryValue(
+                        uC, uC, iCell, iFace, -1,
+                        uNorm, Geom::NormBuildLocalBaseV<dim>(uNorm),
+                        vfv->GetFaceQuadraturePPhys(iFace, -1),
+                        t, mesh->GetFaceZone(iFace), true, 0);
+                cellGrad2nd += vfv->GetFaceArea(iFace) * uNorm * (uR - uC).transpose() * 0.5;
+            }
+            cellGrad2nd /= vfv->GetCellVol(iCell);
+        }
+
+        TDiffU cellGradFix;
+        if (useRecArrays && settings.useSourceGradFixGG)
+            cellGradFix = gradUFix[iCell] / vfv->GetCellVol(iCell);
 
         Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> sourceV;
         sourceV.setZero(cnvars, (jacMode == 2) ? cnvars + 1 : 2);
@@ -1804,25 +1841,78 @@ namespace DNDS::Euler
             sourceV,
             [&](decltype(sourceV) &finc, int iG)
             {
-                // For O1 quadrature (direct2ndRec), iGQ = -1 (cell center)
-                int iGQ = -1;
+                int iGQ = (useRecArrays && !direct2ndRec) ? iG : -1;
+
+                TDiffU GradU;
+                GradU.resize(Eigen::NoChange, cnvars);
+                GradU.setZero();
+
+                if (!useRecArrays)
+                {
+                    // Simple mode: use caller-provided gradient
+                    GradU = cellGradU;
+                }
+                else if (direct2ndRec)
+                {
+                    GradU(SeqG012, EigenAll) = uGradBufNoLim[iCell];
+                }
+                else if (settings.source2nd)
+                {
+                    GradU = cellGrad2nd;
+                }
+                else
+                {
+                    DNDS_assert(pURecUnlim);
+                    if constexpr (gDim == 2)
+                        GradU({0, 1}, EigenAll) =
+                            vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 2>{1, 2}, 3) *
+                            (*pURecUnlim)[iCell]; // IF_NOT_NOREC = 1
+                    else
+                        GradU({0, 1, 2}, EigenAll) =
+                            vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 3>{1, 2, 3}, 4) *
+                            (*pURecUnlim)[iCell]; // IF_NOT_NOREC = 1
+                    if (settings.useSourceGradFixGG)
+                        GradU += cellGradFix;
+                    if (settings.ransSource2nd)
+                    {
+                        if constexpr (Traits::hasSA)
+                            GradU(EigenAll, I4 + 1) = cellGrad2nd(EigenAll, I4 + 1);
+                        if constexpr (Traits::has2EQ)
+                            GradU(EigenAll, {I4 + 1, I4 + 2}) = cellGrad2nd(EigenAll, {I4 + 1, I4 + 2});
+                    }
+                }
+
+                TU ULxy = uCell;
+                if (useRecArrays && !direct2ndRec)
+                {
+                    DNDS_assert(pURec);
+                    ULxy +=
+                        (vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 1>{0}, 1) *
+                         (*pURec)[iCell])
+                            .transpose(); // IF_NOT_NOREC = 1
+                }
 
                 finc.resizeLike(sourceV);
                 TJacobianU jac;
                 finc(EigenAll, 0) =
-                    source(uCell, cellGradU,
+                    source(ULxy, GradU,
                            vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
                            iCell, iGQ, 0, filter);
-                TU sourceJDiag =
-                    source(uCell, cellGradU,
-                           vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
-                           iCell, iGQ, (jacMode == 2) ? 2 : ((jacMode == 1) ? 1 : 0), filter);
-                if (jacMode == 2)
-                    finc(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast)) = jac;
-                else
-                    finc(EigenAll, 1) = sourceJDiag;
+                if (jacMode >= 1)
+                {
+                    TU sourceJDiag =
+                        source(ULxy, GradU,
+                               vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
+                               iCell, iGQ, (jacMode == 2) ? 2 : 1, filter);
+                    if (jacMode == 2)
+                        finc(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast)) = jac;
+                    else
+                        finc(EigenAll, 1) = sourceJDiag;
+                }
 
-                finc *= vfv->GetCellVol(iCell) / vfv->GetCellParamVol(iCell);
+                finc *= (useRecArrays && !direct2ndRec)
+                            ? vfv->GetCellJacobiDet(iCell, iG)
+                            : vfv->GetCellVol(iCell) / vfv->GetCellParamVol(iCell);
                 DNDS_assert(finc.allFinite());
             });
         sourceV *= cellAlpha / vfv->GetCellVol(iCell); // becomes mean value

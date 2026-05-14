@@ -1058,19 +1058,30 @@ namespace DNDS::Euler
          * @brief Evaluate the cell-integrated source term for a single cell.
          *
          * Performs the same quadrature integration, gradient interpolation, and volume
-         * scaling as the source loop in EvaluateRHS, but for a single cell. The caller
-         * provides the cell state and gradient; when called from the pointwise Newton
-         * solver, pass zero gradient (WARNING: 2nd-order source gradient terms will be
-         * missing in that case).
+         * scaling as the source loop in EvaluateRHS. Two modes of operation:
          *
-         * @param[out] cellRHS     Source contribution to the cell RHS (added to, not overwritten).
-         * @param[out] cellJac     Source Jacobian block for this cell (overwritten when jacMode=2).
-         * @param[in]  uCell       Cell-mean conservative state.
-         * @param[in]  cellGradU   Gradient of conservative variables at this cell (dim x nVars).
-         * @param[in]  iCell       Cell index.
-         * @param[in]  jacMode     0=no Jacobian, 1=diagonal, 2=full block.
-         * @param[in]  filter      Which source contributors to include.
-         * @param[in]  cellAlpha   PP alpha scaling factor for this cell (default 1).
+         * **Full mode** (useRecArrays=true): uses reconstruction arrays for high-order
+         * gradient/state interpolation. Called from EvaluateRHS.
+         *
+         * **Simple mode** (useRecArrays=false): uses the provided uCell and cellGradU
+         * directly with O1 quadrature. Called from the pointwise Newton solver.
+         * WARNING: 2nd-order source gradient terms will be missing in simple mode.
+         *
+         * @param[out] cellRHS      Source contribution to the cell RHS (added to, not overwritten).
+         * @param[out] cellJac      Source Jacobian block for this cell (overwritten when jacMode>=1).
+         * @param[in]  uCell        Cell-mean conservative state.
+         * @param[in]  cellGradU    Gradient of conservative variables (used in simple mode;
+         *                          in full mode, gradient is reconstructed internally).
+         * @param[in]  iCell        Cell index.
+         * @param[in]  jacMode      0=no Jacobian, 1=diagonal, 2=full block.
+         * @param[in]  filter       Which source contributors to include.
+         * @param[in]  cellAlpha    PP alpha scaling factor for this cell (default 1).
+         * @param[in]  useRecArrays If true, use uRecUnlim/uRec/uGradBufNoLim for gradient/state
+         *                          interpolation (must be populated). If false, use uCell/cellGradU.
+         * @param[in]  pURecUnlim   Pointer to unlimited reconstruction (used when useRecArrays=true).
+         * @param[in]  pURec        Pointer to limited reconstruction (used when useRecArrays=true).
+         * @param[in]  direct2ndRec Whether to use O1 quadrature (direct 2nd-order rec path).
+         * @param[in]  t            Simulation time (for boundary value generation in 2nd-order gradient).
          */
         void EvaluateCellSource(
             TU &cellRHS,
@@ -1080,7 +1091,13 @@ namespace DNDS::Euler
             index iCell,
             int jacMode,
             SourceFilter filter = SourceFilter::All,
-            real cellAlpha = 1.0);
+            real cellAlpha = 1.0,
+            bool useRecArrays = false,
+            ArrayDOFV<nVarsFixed> *pU = nullptr,
+            ArrayRECV<nVarsFixed> *pURecUnlim = nullptr,
+            ArrayRECV<nVarsFixed> *pURec = nullptr,
+            bool direct2ndRec = true,
+            real t = 0);
 
         /**
          * @brief inviscid flux approx jacobian (flux term not reconstructed / no riemann)
@@ -2248,7 +2265,13 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
             index iCell,                                                                                                   \
             int jacMode,                                                                                                   \
             SourceFilter filter,                                                                                           \
-            real cellAlpha);                                                                                               \
+            real cellAlpha,                                                                                                \
+            bool useRecArrays,                                                                                             \
+            ArrayDOFV<nVarsFixed> *pU,                                                                                     \
+            ArrayRECV<nVarsFixed> *pURecUnlim,                                                                             \
+            ArrayRECV<nVarsFixed> *pURec,                                                                                  \
+            bool direct2ndRec,                                                                                             \
+            real t);                                                                                                       \
         ext template                                                                                                       \
             typename EulerEvaluator<model>::TU                                                                             \
             EulerEvaluator<model>::generateBoundaryValue(                                                                  \
