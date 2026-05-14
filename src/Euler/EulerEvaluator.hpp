@@ -1692,38 +1692,31 @@ namespace DNDS::Euler
             {
                 real declineV = ret(0) / (u(0) + verySmallReal);
                 real newrho = u(0) * std::exp(declineV);
-                // newrho = std::max(newrho, rhoEps);
                 newrho = rhoEps;
                 ret *= (newrho - u(0)) / (ret(0) - verySmallReal);
-                // std::cout << (newrho - u(0)) / (ret(0) + verySmallReal) << std::endl;
-                // DNDS_assert(false);
             }
+            real rhoH_form_old = phys_.mixtureFormationRhoE(u);
             real ekOld = 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal);
-            real rhoEinternal = u(I4) - ekOld;
-            DNDS_assert(rhoEinternal > 0);
+            real rhoEinternal_sensible = u(I4) - ekOld - rhoH_form_old;
+            DNDS_assert(rhoEinternal_sensible > 0);
             real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-            real rhoEinternalNew = u(I4) + ret(I4) - ek;
-            if (rhoEinternalNew <= pEps)
+            real rhoH_form_new = phys_.mixtureFormationRhoE(u + ret);
+            real rhoEinternalNew_sensible = u(I4) + ret(I4) - ek - rhoH_form_new;
+            if (rhoEinternalNew_sensible <= pEps)
             {
-                real declineV = (rhoEinternalNew - rhoEinternal) / (rhoEinternal + verySmallReal);
-                real newrhoEinteralNew = (std::exp(declineV) + verySmallReal) * rhoEinternal;
+                real declineV = (rhoEinternalNew_sensible - rhoEinternal_sensible) / (rhoEinternal_sensible + verySmallReal);
+                real newrhoEinteralNew_sensible = (std::exp(declineV) + verySmallReal) * rhoEinternal_sensible;
                 real T = phys_.template temperature<dim>(u);
                 real gamma = phys_.gamma(T, u);
-                // newrhoEinteralNew = std::max(pEps / (gamma - 1), newrhoEinteralNew);
-                newrhoEinteralNew = pEps / (gamma - 1);
-                real c0 = 2 * u(I4) * u(0) - u(Seq123).squaredNorm() - 2 * u(0) * newrhoEinteralNew;
-                real c1 = 2 * u(I4) * ret(0) + 2 * u(0) * ret(I4) - 2 * u(Seq123).dot(ret(Seq123)) - 2 * ret(0) * newrhoEinteralNew;
+                newrhoEinteralNew_sensible = pEps / (gamma - 1);
+                real newrhoEinteralNew_total = newrhoEinteralNew_sensible + rhoH_form_old;
+                real c0 = 2 * u(I4) * u(0) - u(Seq123).squaredNorm() - 2 * u(0) * newrhoEinteralNew_total;
+                real c1 = 2 * u(I4) * ret(0) + 2 * u(0) * ret(I4) - 2 * u(Seq123).dot(ret(Seq123)) - 2 * ret(0) * newrhoEinteralNew_total;
                 real c2 = 2 * ret(I4) * ret(0) - ret(Seq123).squaredNorm();
                 real deltaC = sqr(c1) - 4 * c0 * c2;
                 DNDS_assert(deltaC > 0);
                 real alphaL = (-std::sqrt(deltaC) - c1) / (2 * c2);
                 real alphaR = (std::sqrt(deltaC) - c1) / (2 * c2);
-                // if (c2 > 0)
-                //     DNDS_assert(alphaL > 0);
-                // DNDS_assert(alphaR > 0);
-                // DNDS_assert(alphaL < 1);
-                // if (c2 < 0)
-                //     DNDS_assert(alphaR < 1);
                 real alpha = std::min((c2 > 0 ? alphaL : alphaL), 1.);
                 alpha = std::max(0., alpha);
                 ret *= alpha * (0.99);
@@ -1732,22 +1725,24 @@ namespace DNDS::Euler
                 for (int iter = 0; iter < 1000; iter++)
                 {
                     ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-                    if (ret(I4) + u(I4) - ek < newrhoEinteralNew)
+                    rhoH_form_new = phys_.mixtureFormationRhoE(u + ret);
+                    if (u(I4) + ret(I4) - ek - rhoH_form_new < newrhoEinteralNew_sensible)
                         ret *= decay, alpha *= decay;
                     else
                         break;
                 }
 
                 ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
+                rhoH_form_new = phys_.mixtureFormationRhoE(u + ret);
 
-                if (ret(I4) + u(I4) - ek < newrhoEinteralNew * 0.5)
+                if (u(I4) + ret(I4) - ek - rhoH_form_new < newrhoEinteralNew_sensible * 0.5)
                 {
                     std::cout << std::scientific << std::setprecision(5);
                     std::cout << u(0) << " " << ret(0) << std::endl;
-                    std::cout << rhoEinternalNew << " " << rhoEinternal << std::endl;
+                    std::cout << rhoEinternalNew_sensible << " " << rhoEinternal_sensible << std::endl;
                     std::cout << declineV << std::endl;
-                    std::cout << newrhoEinteralNew << std::endl;
-                    std::cout << ret(I4) + u(I4) - ek << std::endl;
+                    std::cout << newrhoEinteralNew_sensible << std::endl;
+                    std::cout << u(I4) + ret(I4) - ek - rhoH_form_new << std::endl;
                     std::cout << alpha << std::endl;
                     DNDS_assert(false);
                 }

@@ -1737,8 +1737,20 @@ namespace DNDS::Euler
             DNDS_assert_info(u[iCell](0) >= rhoEps, fmt::format("rhoMean {}, {}", u[iCell](0), rhoEps));
             real T_cell = phys_.template temperature<dim>(u[iCell]);
             real gamma = phys_.gamma(T_cell, u[iCell]);
-            real pCent = (gamma - 1) * (u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0));
+            real rhoH_form_cell = phys_.mixtureFormationRhoE(u[iCell]);
+            real pCent = (gamma - 1) * (u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - rhoH_form_cell);
             DNDS_assert_info(pCent >= pEps, fmt::format("pMean {}, {}", pCent, pEps));
+
+            auto rhoH_form_perQ = [&](const Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> &rec)
+            {
+                Eigen::Vector<real, Eigen::Dynamic> hf(rec.rows());
+                for (int ig = 0; ig < rec.rows(); ++ig)
+                {
+                    typename EulerEvaluator<model>::TU tmp = rec.row(ig);
+                    hf(ig) = phys_.mixtureFormationRhoE(tmp);
+                }
+                return hf;
+            };
 
             // alter uRec if necessary
             int curOrder = vfv->GetCellOrder(iCell);
@@ -1757,7 +1769,8 @@ namespace DNDS::Euler
                         return false;
                 Eigen::Vector<real, Eigen::Dynamic> ek =
                     0.5 * (recBase(EigenAll, Seq123).array().square().rowwise().sum()) / recBase(EigenAll, 0).array();
-                Eigen::Vector<real, Eigen::Dynamic> eInternalS = (recBase(EigenAll, I4) - ek);
+                Eigen::Vector<real, Eigen::Dynamic> rhoH_form_q = rhoH_form_perQ(recBase);
+                Eigen::Vector<real, Eigen::Dynamic> eInternalS = (recBase(EigenAll, I4) - ek - rhoH_form_q);
                 if (eInternalS.minCoeff() < pEps)
                     return false;
                 return true;
@@ -1834,8 +1847,10 @@ namespace DNDS::Euler
                 recVRhoG = recInc + recBase;
 
             Eigen::Vector<real, Eigen::Dynamic> ek = 0.5 * (recVRhoG(EigenAll, Seq123).array().square().rowwise().sum()) / recVRhoG(EigenAll, 0).array();
-            Eigen::Vector<real, Eigen::Dynamic> eInternalS = recVRhoG(EigenAll, I4) - ek;
+            Eigen::Vector<real, Eigen::Dynamic> rhoH_form_VR = rhoH_form_perQ(recVRhoG);
+            Eigen::Vector<real, Eigen::Dynamic> eInternalS = recVRhoG(EigenAll, I4) - ek - rhoH_form_VR;
             real thetaP = 1.0;
+            Eigen::Vector<real, Eigen::Dynamic> rhoH_form_B = rhoH_form_perQ(recBase);
 
             if (pCent <= 2 * pEps)
                 thetaP = 0;
@@ -1846,7 +1861,7 @@ namespace DNDS::Euler
                     {
                         real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
                             recBase(iG, EigenAll).transpose(), recInc(iG, EigenAll).transpose(),
-                            pEps);
+                            pEps, rhoH_form_B(iG));
                         thetaP = std::min(thetaP, thetaThis);
                     }
                 }
@@ -1876,7 +1891,8 @@ namespace DNDS::Euler
             recInc = quadBase * uRec[iCell];
             recVRhoG = recInc.rowwise() + u[iCell].transpose();
             ek = 0.5 * (recVRhoG(EigenAll, Seq123).array().square().rowwise().sum()) / recVRhoG(EigenAll, 0).array();
-            eInternalS = (recVRhoG(EigenAll, I4) - ek);
+            rhoH_form_VR = rhoH_form_perQ(recVRhoG);
+            eInternalS = (recVRhoG(EigenAll, I4) - ek - rhoH_form_VR);
             for (int iG = 0; iG < eInternalS.size(); iG++)
             {
                 if (eInternalS(iG) < pEps)
