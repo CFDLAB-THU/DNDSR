@@ -374,7 +374,8 @@ namespace DNDS::Euler
                 double uM2 = (I4 >= 3) ? U[2] : 0;
                 double uM3 = (I4 >= 4) ? U[3] : 0;
                 chem->productionRatesAndJacobian(Tcantera, aux.pPhys, rho, U[I4],
-                                                 uM1, uM2, uM3, I4, gasProp.U0, Yv, omegav, Jv);
+                                                 uM1, uM2, uM3, I4, gasProp.U0, Yv, omegav, Jv,
+                                                 Chemistry::ChemicalSource::JAC_SKIP_FLUID);
                 for (int k = 0; k < Ns1; ++k)
                     ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k];
                 for (int k = 0; k < Ns1; ++k)
