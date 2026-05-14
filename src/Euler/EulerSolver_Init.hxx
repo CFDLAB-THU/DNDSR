@@ -549,6 +549,31 @@ namespace DNDS::Euler
         auto [CLCur, CDCur, AOACur] = eval.CLDriverGetIntegrationUpdate(iter);
         if (iter % config.outputControl.nConsoleCheckInternal == 0 || iter > config.convergenceControl.nTimeStepInternal || ifStop)
         {
+            // Compute per-component min/max of u (MPI collective, all ranks)
+            Eigen::VectorFMTSafe<real, -1> uMinVec(nVars), uMaxVec(nVars);
+            eval.EvaluateMinMax(uMinVec, uMaxVec, u);
+
+            // Build console string only if format references {uMinMax}
+            std::string uMinMaxStr;
+            {
+                std::string fmtScan;
+                for (auto &s : config.outputControl.consoleMainOutputFormatInternal)
+                    fmtScan += s;
+                if (fmtScan.find("{uMinMax}") != std::string::npos && mpi.rank == 0)
+                {
+                    std::ostringstream oss;
+                    oss << std::scientific << std::setprecision(4) << "[";
+                    for (int v = 0; v < nVars; v++)
+                    {
+                        if (v)
+                            oss << ", ";
+                        oss << uMinVec(v) << "|" << uMaxVec(v);
+                    }
+                    oss << "]";
+                    uMinMaxStr = oss.str();
+                }
+            }
+
             double tWall = MPI_Wtime();
             real telapsed = MPI_Wtime() - tstartInternal;
             bool useCollectiveTimer = config.outputControl.useCollectiveTimer;
@@ -611,7 +636,8 @@ namespace DNDS::Euler
                                      fmt::arg("termCyan", TermColor::Cyan),
                                      fmt::arg("termYellow", TermColor::Yellow),
                                      fmt::arg("termBold", TermColor::Bold),
-                                     fmt::arg("termReset", TermColor::Reset));
+                                     fmt::arg("termReset", TermColor::Reset),
+                                     fmt::arg("uMinMax", uMinMaxStr));
                 log() << std::endl;
                 log().setf(fmt);
 
@@ -671,6 +697,8 @@ namespace DNDS::Euler
                 DNDS_FILL_IN_LOG_ERR_VAL(tLimiterB);
 
                 DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
+                FillLogValue(logErrVal, "uMin", uMinVec);
+                FillLogValue(logErrVal, "uMax", uMaxVec);
                 real CL{CLCur}, CD{CDCur}, AoA(AOACur);
                 DNDS_FILL_IN_LOG_ERR_VAL(CL);
                 DNDS_FILL_IN_LOG_ERR_VAL(CD);
@@ -791,6 +819,32 @@ namespace DNDS::Euler
             trec = tInternalStats["v"].update(trec).getSum();
             tLim = tInternalStats["l"].update(tLim).getSum();
             auto tPPr = tInternalStats["p"].getSum() + Timer().getTimerColOrLoc(PerformanceTimer::PositivityOuter, mpi, useCollectiveTimer);
+
+            // Compute per-component min/max of u (MPI collective, all ranks)
+            Eigen::VectorFMTSafe<real, -1> uMinVec(nVars), uMaxVec(nVars);
+            eval.EvaluateMinMax(uMinVec, uMaxVec, u);
+
+            // Build console string only if format references {uMinMax}
+            std::string uMinMaxStr;
+            {
+                std::string fmtScan;
+                for (auto &s : config.outputControl.consoleMainOutputFormat)
+                    fmtScan += s;
+                if (fmtScan.find("{uMinMax}") != std::string::npos && mpi.rank == 0)
+                {
+                    std::ostringstream oss;
+                    oss << std::scientific << std::setprecision(4) << "[";
+                    for (int v = 0; v < nVars; v++)
+                    {
+                        if (v)
+                            oss << ", ";
+                        oss << uMinVec(v) << "|" << uMaxVec(v);
+                    }
+                    oss << "]";
+                    uMinMaxStr = oss.str();
+                }
+            }
+
             if (mpi.rank == 0)
             {
                 auto format = log().flags();
@@ -832,7 +886,8 @@ namespace DNDS::Euler
                                      fmt::arg("termCyan", TermColor::Cyan),
                                      fmt::arg("termYellow", TermColor::Yellow),
                                      fmt::arg("termBold", TermColor::Bold),
-                                     fmt::arg("termReset", TermColor::Reset));
+                                     fmt::arg("termReset", TermColor::Reset),
+                                     fmt::arg("uMinMax", uMinMaxStr));
                 log() << std::endl;
                 log().setf(format);
                 auto &fluxWall = eval.fluxWallSum;
@@ -865,6 +920,8 @@ namespace DNDS::Euler
                 DNDS_FILL_IN_LOG_ERR_VAL(tLimiterB);
 
                 DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
+                FillLogValue(logErrVal, "uMin", uMinVec);
+                FillLogValue(logErrVal, "uMax", uMaxVec);
                 real CL{CLCur}, CD{CDCur}, AoA(AOACur);
                 DNDS_FILL_IN_LOG_ERR_VAL(CL);
                 DNDS_FILL_IN_LOG_ERR_VAL(CD);

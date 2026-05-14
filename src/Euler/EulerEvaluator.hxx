@@ -1467,6 +1467,30 @@ namespace DNDS::Euler
         }
     }
 
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, )
+    void EulerEvaluator<model>::EvaluateMinMax(
+        Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u)
+    {
+        uMin.resize(nVars);
+        uMax.resize(nVars);
+        TU localMin, localMax;
+        localMin.setConstant(nVars, std::numeric_limits<real>::max());
+        localMax.setConstant(nVars, std::numeric_limits<real>::lowest());
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp declare reduction(TUMin:TU : omp_out = omp_out.array().min(omp_in.array())) initializer(omp_priv = omp_orig)
+#    pragma omp declare reduction(TUMax:TU : omp_out = omp_out.array().max(omp_in.array())) initializer(omp_priv = omp_orig)
+#    pragma omp parallel for schedule(static) reduction(TUMin : localMin) reduction(TUMax : localMax)
+#endif
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        {
+            localMin = localMin.array().min(u[iCell].array()).matrix();
+            localMax = localMax.array().max(u[iCell].array()).matrix();
+        }
+        MPI::Allreduce(localMin.data(), uMin.data(), nVars, DNDS_MPI_REAL, MPI_MIN, u.father->getMPI().comm);
+        MPI::Allreduce(localMax.data(), uMax.data(), nVars, DNDS_MPI_REAL, MPI_MAX, u.father->getMPI().comm);
+    }
+
     template <class TU>
     struct TU_P_Reduction
     {
