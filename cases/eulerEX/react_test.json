@@ -44,8 +44,8 @@
     },
     "dataIOControl": {
         "uniqueStamps": true,
-        "meshFile": "../data/mesh/UniformSquare_10.cgns",
-        "outPltName": "../data/out/react_",
+        "meshFile": "data/mesh/UniformSquare_10.cgns",
+        "outPltName": "data/out/react_",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
