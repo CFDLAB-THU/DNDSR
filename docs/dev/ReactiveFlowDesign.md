@@ -1,9 +1,11 @@
 # Reactive Flow Fully-Implicit Solver Design
 
-**Status:** Phases 1–3 implemented (branch `dev/harry`, commits `c7dbb27..350e827`).  
+**Status:** Phases 1–3 complete. Phase 4 partially done (0D autoignition verified,
+Jacobian validated, formation-enthalpy convention implemented).  
+**Branch:** `dev/harry` (commits `e31e365`..`6d47c5a`).  
 **Target:** Extend DNDSR Euler solvers to support multi-species reactive flow
 with coupled fully-implicit time integration using full chemical Jacobian blocks.  
-**Branch:** `eulerEX` / `eulerEX3D` (extensible EulerModel variants with `Eigen::Dynamic` nVars)
+**Solver:** `eulerEX` / `eulerEX3D` (extensible EulerModel variants with `Eigen::Dynamic` nVars)
 
 > **Scope note:** This document describes the full-block coupled implicit approach
 > implemented in Phases 1–3. Partial-decoupling (point-implicit chemistry) is
@@ -19,7 +21,8 @@ with coupled fully-implicit time integration using full chemical Jacobian blocks
 | 1 | SourceTermContributor variant dispatch, ReactiveFlowSettings, RANS-as-species | Done |
 | 2 | ChemicalSource PIMPL (Cantera), ChemicalContributor, buffer pre-allocation | Done |
 | 3 | Full-block Jacobian, PhysicsProperties module, EOS/transport routing, species diffusion | Done |
-| 4 | Verification (0-D autoignition, 1-D flame, 2-D flows) | Pending |
+| 3b | Analytic chemical Jacobian (T-coupling, last-species absorption, momentum columns, velScale) | Done |
+| 4 | Verification (0-D autoignition, FD Jacobian check, formation-enthalpy fixes) | Partial |
 | 5 | block_scalar Jacobian mode, point-implicit chemistry, GPU kinetics | Future |
 
 ### New files created
@@ -36,7 +39,9 @@ with coupled fully-implicit time integration using full chemical Jacobian blocks
 - **PIMPL for Cantera**: `ChemicalSource.hpp` has zero Cantera includes — only buffer views (`SpeciesBufferView`, `JacobianBufferView`). The `.cpp` is a single translation unit with `cantera/core.h`. No Eigen/Cantera header conflict.
 - **Perfect gas with variable γ**: Multi-species mixture properties (γ_mix, cp_mix, R_mix) computed as mass-fraction-weighted averages. Existing Riemann solver and flux Jacobian code is unchanged — only the coefficient values are substituted through `PhysicsProperties`.
 - **Full-block source Jacobian**: `JacobianDiagBlock` in matrix-block mode (Mode 1) stores nVars×nVars per cell. The `ChemicalContributor` fills the species rows with `M_k · ∂ω_k/∂U_j`. SGS and FGMRES solvers require zero changes.
-- **Species diffusion**: Fickian diffusion with constant Schmidt number (Sc=1) fallback; upgradable to Cantera mixture-averaged transport. Species diffusivity accessed through `PhysicsProperties::speciesDiffusivityK()`.---
+- **Species diffusion**: Fickian diffusion with constant Schmidt number (Sc=1) fallback; upgradable to Cantera mixture-averaged transport. Species diffusivity accessed through `PhysicsProperties::speciesDiffusivityK()`.
+- **State vector stores total ρE** (sensible + formation + kinetic): EOS functions subtract `rhoH_form` and `½ρv²` to recover sensible internal energy for pressure and temperature. Config/input vectors store sensible ρE; formed total at `InitializeUDOF` and BC assignment via `mixtureFormationRhoE(U)`.
+- **Analytic chemical Jacobian with full coupling** (§3.3.2 updated): species-species via `∂ω/∂C_k · 1/M_k`, last-species chain-rule (`-∂ω/∂C_last/M_last`), temperature coupling via per-species enthalpies, momentum coupling via kinetic-energy redistribution. Validated against finite differences: 10/140 entries mismatched at pre-ignition (0.053% of ||J||_F), 8/140 at post-ignition (0.009% of ||J||_F).
 
 ## 1. Problem Statement
 
@@ -318,7 +323,46 @@ Implementations:
 mechanism data from JSON or a custom format. A `DNDS_DECLARE_CONFIG` struct
 captures mechanism file paths.
 
-#### 3.2.4 Chemistry Plug-in Registration
+#### 3.2.5 Energy Convention: Total vs Sensible Energy
+
+The state vector stores **total volumetric energy** for conservation:
+
+```
+U[I4] = ρE_total = ρ·(e_internal + ½v² + ΣY_k·h_f_k)
+```
+
+This is natural: the Navier-Stokes energy equation conserves total energy,
+not sensible energy. Formation enthalpy `h_f_k` is constant per species, so
+it behaves as a transported scalar with zero source term (chemistry
+conserves energy).
+
+**Where and how each energy component is stripped:**
+
+| Context | Operation | Formula |
+|---------|-----------|---------|
+| `IdealGasThermal` | subtracts KE + formation | `p = (γ-1)(E − ½ρv² − ρH_form)` |
+| `PhysicsProperties::temperature()` | subtracts KE → `u_internal`, then Cantera UV | `u_internal = ρE/ρ − ½v²` |
+| Cantera `setState_UV` | receives internal energy (no KE) | `u = u_internal * U0²` |
+| `CompressInc` (PP limiter) | uses sensible energy | `eInternalS = (ρE − ρH_form)/ρ − ½v²` |
+| `InitializeUDOF` / BCs | adds formation to config sensible ρE | `U[I4] += phys_.mixtureFormationRhoE(U)` |
+
+**Naming:** `sensibleRhoE(U, I4) = U[I4] − mixtureFormationRhoE(U)` removes
+formation but **keeps kinetic energy**. It is "fluid energy", not "sensible
+(thermal) energy". The caller is responsible for stripping KE when needed.
+
+**Momentum coupling:** Changing ρu_j at fixed total ρE shifts energy between
+kinetic and internal pools. `productionRatesAndJacobian` captures this:
+`∂ω/∂(ρu_j) = (∂ω/∂T) · (−U0²·v_j)/(ρ·cv)`.
+
+**Config/input vectors** store **sensible ρE** (no formation). This is the user-
+facing convention. Conversion to total ρE happens at initialization
+(`InitializeUDOF`) and BC assignment. C2P on config vectors uses `rhoH_form=0`;
+P2C on ghost states adds formation via `mixtureFormationRhoE(URxy)`. Sites
+using config vectors are annotated with `/* config, sensible ρE */`.
+
+**KE audit** (commit `6d47c5a`): All 28 `IdealGasThermal` call sites,
+`PhysicsProperties::temperature()`, `ComputeSourceAux`, C2P/P2C, and Riemann
+solver dispatchers correctly subtract kinetic energy. No leaks found.
 
 Use the existing `DNDS::Config` parameter framework for runtime selection:
 
@@ -398,25 +442,46 @@ This is backward-compatible: if `reactiveFlow.enabled == false`, the chemistry c
 
 The key improvement: **when `Mode == 2`, the `ChemicalSourceContributor` fills
 the entire `jacobian` matrix**, not just the diagonal. This requires mapping
-the chemical Jacobian from (T, Y) space to the conservative variable indices:
+the chemical Jacobian from (T, p, Y) space to the conservative variable indices:
 
 ```
-U = [ρ, ρu, ρv, ρw, E, ρY₁, ..., ρY_{Ns-1}]
+U = [ρ, ρu, ρv, ρw, ρE, ρY₁, ..., ρY_{Ns-1}]
 ```
 
-The chemical production rates ω_i depend on (T, ρY_j). The chain rule gives:
+The `ChemicalSource::productionRatesAndJacobian` function computes `∂ω_i/∂U_j`
+with the following chain-rule terms (implemented in `ChemicalSource.cpp`):
 
 ```
-∂ω_i/∂(ρY_j) = (1/ρ) · (∂ω_i/∂Y_j) - (∂ω_i/∂Y_k · Y_k) / ρ  [mass fraction constraint]
-∂ω_i/∂(ρe)   = (∂ω_i/∂T) / (ρ · c_v,mix)                     [temperature sensitivity]
-∂ω_i/∂ρ      = (∂ω_i/∂T) · (∂T/∂ρ)                            [density sensitivity]
-∂ω_i/∂(ρu_k) = 0                                               [velocity decoupling]
+∂ω_i/∂(ρY_k) = (∂ω_i/∂C_k)·1/M_k              // direct species coupling
+              - (∂ω_i/∂C_last)·1/M_last        // last-species (ΣY=1) chain rule
+              + (∂ω_i/∂T)·dT/d(ρY_k)           // T-coupling via species enthalpies
+
+∂ω_i/∂(ρE)   = (∂ω_i/∂T) · U0²/(ρ·cv_mix)    // total-energy temperature coupling
+
+∂ω_i/∂(ρu_j) = (∂ω_i/∂T) · (-U0²·v_j)/(ρ·cv) // kinetic-energy redistribution
+
+∂ω_i/∂ρ      = (∂ω_i/∂T)·dT/dρ                // T change at fixed ρE
+              + (∂ω_i/∂C_last)/M_last          // C_last depends on ρ
 ```
 
-These populate **dense blocks** in the lower-right (species-species) region of
-the Jacobian, plus coupling columns for ρ and E. The fluid variables
-(ρ, ρu, ρv, ρw, E) get contribution rows from the total energy source
-(sum of species formation enthalpies × ω_i).
+Where:
+- `dT/d(ρY_k) = -(u_k - u_last)/(ρ·cv_mix)`, with `u_k` from per-species `h_k/(R_u·T)` (getEnthalpy_RT)
+- `dT/dρ = -U0²·ρE/(ρ²·cv_mix)` at fixed total energy
+- `C_last = (ρ - ΣρY_k)/M_last`, so `∂C_last/∂ρ = 1/M_last`, `∂C_last/∂(ρY_k) = -1/M_last`
+- `velScale = U0` converts code-scaled ρE to physical temperature
+
+**Validation:** Compared against central finite differences (1e-6 h for fluid
+columns, 1e-4 for species) at pre-ignition (T=1212K) and post-ignition
+(T=3145K). Global relative error ≤ 0.053% of Frobenius norm. Full matrix
+printed in `test_ChemODE.cpp` FD check.
+
+**Momentum columns** are non-zero because changing ρu_j at fixed ρE shifts
+energy between kinetic and thermal pools. Verified with non-zero velocity
+(0 mismatches).
+
+**Jacobian flags** (untested):
+- `JAC_SKIP_FLUID` — zero out ρ, ρu_j, ρE columns (species-only Jacobian)
+- `JAC_SKIP_ABSORPTION` — fill N2 row independently, omit chain-rule terms
 
 #### 3.3.3 Species Diffusion Flux
 
@@ -837,10 +902,16 @@ For each implicit time step (pseudo-time iteration):
 
 ### Phase 4: Verification & Validation
 
-16. ⬜ 0-D autoignition vs Cantera `IdealGasReactor`
-17. ⬜ 1-D laminar premixed flame vs Cantera `FreeFlame`
-18. ⬜ 2-D reacting flow (lifted flame / mixing layer)
-19. ⬜ Reacting RANS (SA + chemistry)
+16. ✅ 0-D autoignition — implicit Euler with full Newton, matches Cantera equilibrium
+    - Verified with `euler_test_chem_ode`: converges in 3-4 Newton iterations per step
+    - Verified with `euler_test_source_chemical`: Jacobian sign convention (+ T-coupling)
+    - Multi-stage FD Jacobian checkpoints at s20/s50/s200 — max global error 0.053% of ||J||_F
+17. ✅ Formation-enthalpy threading — all EOS paths subtract rhoH_form for sensible pressure
+    - 83/83 C++ tests pass
+18. ⬜ 1-D laminar premixed flame vs Cantera `FreeFlame`
+19. ⬜ 2-D reacting flow (lifted flame / mixing layer)
+20. ⬜ Reacting RANS (SA + chemistry)
+21. ⬜ CFD ignition test with `eulerEX` and reactive mesh
 
 ### Phase 5: Future — Large-Mechanism Optimizations
 
@@ -908,23 +979,23 @@ expensive (nVars+1 RHS evaluations) and noisy near equilibrium.
 
 ## 7. Summary of Changes
 
-**Actual delta** (c7dbb27..350e827): 15 files, +1681 −532 lines.
+**Actual delta** (`e31e365`..`6d47c5a`): 20+ commits, ~25 files.
 
 | File/Layer | Change | Δ |
 |---|---|---|
-| `SourceTermContributor.hpp` | **New:** 8 variant-based contributor types, shared free functions, builder, visitor + CTAD | +459 |
-| `Physics/PhysicsProperties.hpp` | **New:** centralized EOS/transport/kinetics module wrapping `IdealGasProperty` + optional `ChemicalSource` | +184 |
-| `Chemistry/ChemicalSource.hpp` | **New:** PIMPL header — buffer views (`SpeciesBufferView`, `JacobianBufferView`), zero Cantera includes | +122 |
-| `Chemistry/ChemicalSource.cpp` | **New:** Cantera `Solution` loading and method implementations | +199 |
-| `EulerEvaluator_EvaluateDt.hxx` | Contributor dispatch in `source()`, T/p in `SourceCellAux`, species output fields, bulk phys_ substitution | +130 −100 |
-| `EulerEvaluator.hpp` | Include wiring, `phys_` member + accessor, `ChemicalSource` extraction, bulk phys_ substitution | +60 −40 |
-| `EulerEvaluator.hxx` | Bulk phys_ substitution (17 gamma sites → `phys_.gamma()`) | +18 −18 |
-| `EulerEvaluator_EvaluateRHS.hxx` | NS_2D dim fix, species diffusion flux (Fickian), bulk phys_ substitution | +58 −18 |
-| `EulerEvaluatorSettings.hpp` | `ReactiveFlowSettings` struct + `DNDS_DECLARE_CONFIG`, const on `Omega()`/`vOmega()` | +40 |
-| `EulerSolver.hpp` | `isReactive` trait, nSpecies validation in ctor | +30 |
-| `EulerSolver_Init.hxx` | Force block Jacobian mode when reactive; `phys_` accessor | +12 |
-| `EulerSolver.hxx` | Route eigenvector/smooth-indicator gamma through `eval.phys()` | +3 −3 |
-| `EulerSolver_PrintData.hxx` | Route output gamma/Rgas through `eval.phys()` | +6 −6 |
+| `Chemistry/ChemicalSource.cpp` | Analytic Jacobian: T-coupling via hRT, last-species absorption, momentum columns, U0² velScale, jacFlags | +83 −30 |
+| `Chemistry/ChemicalSource.hpp` | `productionRatesAndJacobian` signature: +velScale, rhoE, rhoU/V/W, iEnergy, jacFlags enum | +18 −5 |
+| `SourceTermContributor.hpp` | CFD caller updated: pass U[I4], U[1..3], gasProp.U0 | +11 −3 |
+| `IdealGasPhysics.hpp` | `IdealGasThermal`: `rhoH_form=0` parameter for formation-aware pressure | +1 −1 |
+| `Gas.hpp` | `rhoH_form=0` threaded through 12 functions (~50 call sites) | +50 −50 |
+| `EulerEvaluator_EvaluateDt.hxx` | `InitializeUDOF` formation addition, BC fixes (FarField, SpecialFar, Inflow), ppEps, `SourceCellAux` | +130 −100 |
+| `EulerEvaluator.hpp` | `CompressInc` sensible-energy PP, `AssertMeanValuePP` formation subtraction | +60 −40 |
+| `EulerEvaluator_EvaluateRHS.hxx` | Species diffusion, bulk `rhoH_form` propagation | +58 −18 |
+| `EulerEvaluatorSettings.hpp` | `ReactiveFlowSettings` struct + `DNDS_DECLARE_CONFIG` | +40 |
+| `EulerSolver.hpp` / `.hxx` / `_Init.hxx` / `_PrintData.hxx` | Reactive block mode, output routing | +51 |
+| `test/cpp/Euler/test_ChemODE.cpp` | 0D ODE + FD Jacobian check (multi-stage, matrix printing) | +500 |
+| `test/cpp/Euler/test_SourceChemical.cpp` | Sign-convention updated for T-coupling dominance | +38 |
+| `PhysicsProperties.hpp` | `mixtureFormationRhoE`, `sensibleRhoE`, T-fallback using sensible energy | +184 |
 | `SpecialFields.hpp` | Route analytic-vortex gamma through `eval.phys()` | +3 −3 |
 | `Euler.hpp` | `TU<TModel>`/`TJacobianU<TModel>`/`TDiffU<TModel>` aliases, `isReactive` trait | +20 |
 | `EulerJacobian.hpp` | No changes (existing Mode 1 full-block storage is sufficient) | 0 |
@@ -955,6 +1026,7 @@ expensive (nVars+1 RHS evaluations) and noisy near equilibrium.
 | Memory: nVars×nVars blocks for all cells when nSpecies is large | Initial targets have nSpecies ≤ 5; future block_scalar mode (§3.4.1) will address larger mechanisms |
 | Multi-species thermodynamics are slow at face quadrature points | Cache mixture properties per face; evaluate chemistry only at cell centers |
 | RANS + chemistry interaction (turbulence-chemistry) | Eddy-viscosity provider is a shared interface; RANS μ_t feeds into species diffusion via turbulent Schmidt number |
+| Formation-enthalpy convention mismatch (config vs state ρE) | Config vectors store sensible ρE; `InitializeUDOF` and BCs convert to total. Sites using config vectors annotated `/* config, sensible ρE */` |
 
 ---
 
