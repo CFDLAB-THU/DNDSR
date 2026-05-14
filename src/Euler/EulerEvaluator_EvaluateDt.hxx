@@ -2021,6 +2021,8 @@ namespace DNDS::Euler
         else // full inflow
         {
             URxy = far;
+            if (settings.reactiveFlow.enabled)
+                URxy(I4) += phys_.mixtureFormationRhoE(URxy);
         }
         if (settings.frameConstRotation.enabled) // to rotating frame velocity
             TransformURotatingFrame(URxy, pPhysics, -1);
@@ -2082,6 +2084,8 @@ namespace DNDS::Euler
                 else
                     URxy({0, 1, 2, 3}) = Eigen::Vector<real, 4>{8, 57.157676649772960, -33, 5.635e2};
             }
+            if (settings.reactiveFlow.enabled)
+                URxy(I4) += phys_.mixtureFormationRhoE(URxy);
         }
         else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_RT_FAR) // Rayleigh-Taylor
         {
@@ -2145,7 +2149,11 @@ namespace DNDS::Euler
                                                                 phys_.mixtureFormationRhoE(far));
             }
             else
+            {
                 URxy = far;
+                if (settings.reactiveFlow.enabled)
+                    URxy(I4) += phys_.mixtureFormationRhoE(URxy);
+            }
         }
         else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_IV_FAR) // Isentropic Vortex
         {
@@ -2480,6 +2488,8 @@ namespace DNDS::Euler
         if (pCLDriver)
             URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);
         // Note: removed dead code that checked bTypeEuler == BCFar (unreachable in BCIn branch)
+        if (settings.reactiveFlow.enabled)
+            URxy(I4) += phys_.mixtureFormationRhoE(URxy);
         if (settings.frameConstRotation.enabled)
             TransformURotatingFrame(URxy, pPhysics, -1);
         return URxy;
