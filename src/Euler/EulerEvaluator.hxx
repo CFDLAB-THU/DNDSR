@@ -984,7 +984,8 @@ namespace DNDS::Euler
                         real T = phys_.template temperature<dim>(u[iCell]);
                         real gamma = phys_.gamma(T, u[iCell]);
                         Gas::IdealGasThermal(u[iCell](I4), u[iCell](0), (u[iCell](Seq123) / u[iCell](0)).squaredNorm(),
-                                             gamma, pMean, asqrMean, Hmean);
+                                             gamma, pMean, asqrMean, Hmean,
+                                             phys_.mixtureFormationRhoE(u[iCell]));
                         real muRef = phys_.muRef();
                         real mufPhy1 = muEff(u[iCell], T);
                         real rhoOmegaaaWall = mufPhy1 / sqr(d) * RANS::kWallOmegaCoeff * 0.1;
@@ -995,6 +996,14 @@ namespace DNDS::Euler
                         // u[iCell](I4 + 1) = rhoOmegaaaNew / rhoOmegaaaOld * u[iCell](I4 + 1);
                     }
                 }
+            if (settings.reactiveFlow.enabled)
+            {
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(runtime)
+#endif
+                for (index iCell = 0; iCell < u.Size(); iCell++)
+                    u[iCell](I4) += phys_.mixtureFormationRhoE(u[iCell]);
+            }
         }
 
         switch (settings.specialBuiltinInitializer)
@@ -1175,7 +1184,7 @@ namespace DNDS::Euler
                         // std::cout << DiNj << std::endl;
                         Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
                         TU farPrimitive;
-                        Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, gamma_far);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, gamma_far, 0 /* config, sensible ρE */);
                         real pInf = farPrimitive(I4);
                         real r = pPhysics.norm();
                         TVec velo = -pPhysics(Seq012) / (r + smallReal);
@@ -1183,7 +1192,7 @@ namespace DNDS::Euler
                         farPrimitive(0) = 1;
                         farPrimitive(Seq123) = velo;
 
-                        Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, inc, gamma_far);
+                        Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, inc, gamma_far, 0 /* config, sensible ρE */);
                         inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
                     });
                 u[iCell] = um / vfv->GetCellVol(iCell); // mean value
@@ -1284,7 +1293,8 @@ namespace DNDS::Euler
                         TU uPrimitive;
                         real T_cell = phys_.template temperature<dim>(u[iCell]);
                         real gamma_cell = phys_.gamma(T_cell, u[iCell]);
-                        Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], uPrimitive, gamma_cell);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], uPrimitive, gamma_cell,
+                                                                        phys_.mixtureFormationRhoE(u[iCell]));
                         for (int i = 0; i < nVars; i++)
                             exprtkEval.VarVec("UPrim", i) = uPrimitive(i);
 
@@ -1297,7 +1307,8 @@ namespace DNDS::Euler
                         if (exprtkEval.Var("inRegion"))
                             for (int i = 0; i < nVars; i++)
                                 uPrimitive(i) = exprtkEval.VarVec("UPrim", i);
-                        Gas::IdealGasThermalPrimitive2Conservative<dim>(uPrimitive, inc, gamma_cell);
+                        Gas::IdealGasThermalPrimitive2Conservative<dim>(uPrimitive, inc, gamma_cell,
+                                                                        phys_.mixtureFormationRhoE(u[iCell]));
                         if (!inc.allFinite())
                         {
                             std::ostringstream oss0, oss1, oss2;
@@ -1366,7 +1377,8 @@ namespace DNDS::Euler
             real T_cell = phys_.template temperature<dim>(u[iCell]);
             real gamma = phys_.gamma(T_cell, u[iCell]);
             TU out;
-            Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], out, gamma);
+            Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], out, gamma,
+                                                            phys_.mixtureFormationRhoE(u[iCell]));
             w[iCell] = out;
         }
     }
@@ -1387,11 +1399,11 @@ namespace DNDS::Euler
             // Two-pass: compute approximate U to get temperature and gamma,
             // then perform the real primitive-to-conservative conversion.
             TU u_approx;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], u_approx, real(1.4));
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], u_approx, real(1.4), 0 /* primitive, no formation info */);
             real T_cell = phys_.template temperature<dim>(u_approx);
             real gamma = phys_.gamma(T_cell, u_approx);
             TU out;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], out, gamma);
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], out, gamma, 0 /* primitive, no formation info */);
             u[iCell] = out;
         }
     }
@@ -1681,7 +1693,8 @@ namespace DNDS::Euler
                 TU UPrim;
                 real T_cell = phys_.template temperature<dim>(u[iCell]);
                 real gamma_cell = phys_.gamma(T_cell, u[iCell]);
-                Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], UPrim, gamma_cell);
+                Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], UPrim, gamma_cell,
+                                                                phys_.mixtureFormationRhoE(u[iCell]));
                 rhoMin = std::min(rhoMin, UPrim(0));
                 pMin = std::min(pMin, UPrim(I4));
             }

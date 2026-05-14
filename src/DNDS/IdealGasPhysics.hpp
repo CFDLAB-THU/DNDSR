@@ -33,14 +33,19 @@ namespace DNDS::IdealGas
     /**
      * @brief Compute pressure, speed-of-sound squared, and specific enthalpy
      *        from total energy, density, and velocity squared.
+     *
+     * @param rhoH_form  Volumetric formation enthalpy (ρ · Σ Y_k · h_f_k) to
+     *                   subtract from total energy for the sensible pressure
+     *                   calculation. Defaults to 0 (non-reactive).
      */
     DNDS_DEVICE_CALLABLE inline void
     IdealGasThermal(real E, real rho, real vSqr, real gamma,
-                    real &p, real &asqr, real &H)
+                    real &p, real &asqr, real &H,
+                    real rhoH_form = 0)
     {
-        p = (gamma - 1) * (E - rho * 0.5 * vSqr);
+        p = (gamma - 1) * (E - rho * 0.5 * vSqr - rhoH_form);
         asqr = gamma * p / rho;
-        H = (E + p) / rho;
+        H = (E - rhoH_form + p) / rho;
     }
 
     /// Pressure from internal energy: p = (gamma - 1) * e
