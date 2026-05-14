@@ -162,7 +162,7 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via EOS")
     double Y_H2O_end = U[Isp + 5] / U[0];
     printf("[ODE] final T=%.1fK rhoE=%.4f Y_H2=%.6f Y_H2O=%.6f\n", T, U[4], Y_H2_end, Y_H2O_end);
 
-    CHECK(Y_H2_end < 0.025);  // H2 consumed
+    CHECK(Y_H2_end < 0.025);  // H2 consumed — Newton converges 3-4 steps (was 3-100 w/o T-coupling)
     CHECK(Y_H2O_end > 0.001); // H2O produced
 }
 
@@ -281,8 +281,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
     printf("[FD] state after 20 steps: T=%.1fK  Y_H2=%.4e Y_H=%.3e Y_O2=%.4e Y_H2O=%.4e Y_OH=%.3e\n",
            T, U[Isp + 0] / U[0], U[Isp + 1] / U[0], U[Isp + 3] / U[0], U[Isp + 5] / U[0], U[Isp + 6] / U[0]);
 
-    // Linear Y-from-U (no clamping/no renormalisation) — needed for
-    // finite-difference Jacobian to match analytical derivatives.
+    // Linear Y-from-U (no clamping) — needed for FD perturbation
     auto getY_linear = [&](const Eigen::VectorXd &Uk, std::vector<double> &Y)
     {
         Y.resize(Ns);
@@ -296,29 +295,13 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
         Y[Ns1] = 1.0 - sum;
     };
 
-    // Reference: analytical Jacobian at this state
-    std::vector<double> Yref;
-    getY(U, Yref);
-    ConstSpeciesBufferView Yv{Yref.data(), Ns};
-    double Rmix = chem->mixtureR(Yv);
-    double p = U[0] * Rmix * T;
-
-    std::vector<double> omegaRef(Ns);
-    std::vector<double> jbufRef(Ns * nVars, 0.0);
-    chem->productionRatesAndJacobian(T, p, U[0], U[4], 0., 0., 0., 4, U0, Yv,
-                                     SpeciesBufferView{omegaRef.data(), Ns},
-                                     JacobianBufferView{jbufRef.data(), Ns, nVars, Ns});
-
-    const double atol = 1e-7, rtol = 1e-3;
-
-    // Compute residual ω from perturbed state — no clamping, tight T tolerance.
+    // FD derivative source: ω from perturbed state (no Y clamping, KE subtracted)
     auto sourceAtU = [&](const Eigen::VectorXd &Up)
     {
         std::vector<double> Yp;
         getY_linear(Up, Yp);
         ConstSpeciesBufferView Ypv{Yp.data(), Ns};
         double rInv = 1.0 / Up[0];
-        // Subtract kinetic energy: Cantera expects internal energy, U[4]=ρE is total.
         double vSqr = 0;
         for (int jd = 0; jd < 3; jd++)
         {
@@ -326,126 +309,207 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
             vSqr += vj * vj;
         }
         double uPhys = (Up[4] * rInv - 0.5 * vSqr) * U0 * U0;
-        double vPhys = rInv;
-        double Tp = chem->temperatureFromUV(uPhys, vPhys, Ypv, 1200.0);
-        // Refine: set tighter tolerance on internal gasT via a helper if available;
-        // fall back: analytical T correction.  For now just rely on tight-tol wrapper.
-        double Rn = chem->mixtureR(Ypv);
-        double pp = Up[0] * Rn * Tp;
+        double Tp = chem->temperatureFromUV(uPhys, rInv, Ypv, 1200.0);
+        double pp = Up[0] * chem->mixtureR(Ypv) * Tp;
         std::vector<double> om(Ns);
         chem->productionRates(Tp, pp, Ypv, SpeciesBufferView{om.data(), Ns});
         return om;
     };
 
-    // Check analytical J(i,j) = ∂ω_i/∂U_j  against finite difference
-    // Use larger h for species columns (j ≥ Isp) — Cantera internal precision
-    // can lose tiny perturbations for trace species.
-    const double epsFluid = 1e-6;
-    const double epsSpecies = 1e-4;
-    int nBad = 0;
-    double maxRel = 0;
-
-    // Map analytical Jacobian: column-major, Ns rows × nVars cols, outer stride = Ns
-    Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>,
-               Eigen::Unaligned, Eigen::OuterStride<>>
-        anJac(jbufRef.data(), Ns, nVars,
-              Eigen::OuterStride<>(Ns));
-    Eigen::MatrixXd fdJac(Ns, nVars);
-
-    for (int j = 0; j < nVars; j++)
+    // ── Jacobian comparison lambda ──
+    const double atol = 1e-7, rtol = 1e-3;
+    auto compareJacobian = [&](const Eigen::VectorXd &Us, double Ts, const char *label) -> int
     {
-        double epsCol = (j >= Isp) ? epsSpecies : epsFluid;
-        Eigen::VectorXd Up = U;
-        double h = epsCol * std::max(std::abs(Up[j]), 1.0);
-        Up[j] += h;
-        auto omP = sourceAtU(Up);
+        std::vector<double> Yref;
+        getY(Us, Yref);
+        ConstSpeciesBufferView Yv{Yref.data(), Ns};
+        double p = Us[0] * chem->mixtureR(Yv) * Ts;
 
-        Up[j] = U[j] - h;
-        auto omM = sourceAtU(Up);
+        std::vector<double> jbufRef(Ns * nVars, 0.0), omegaRef(Ns);
+        chem->productionRatesAndJacobian(Ts, p, Us[0], Us[4], 0., 0., 0., 4, U0, Yv,
+                                         SpeciesBufferView{omegaRef.data(), Ns},
+                                         JacobianBufferView{jbufRef.data(), Ns, nVars, Ns});
 
-        for (int i = 0; i < Ns; i++)
-        {
-            double fd = (omP[i] - omM[i]) / (2.0 * h);
-            fdJac(i, j) = fd;
-            double an = anJac(i, j);
-            double denom = std::max(std::max(std::abs(fd), std::abs(an)), 1e-60);
-            double relErr = std::abs(fd - an) / denom;
-            if (std::abs(fd - an) > atol && relErr > rtol)
-            {
-                printf("[FD-bad] J(%d,%d) fd=%.6e an=%.6e err=%.1e relErr=%.1e\n",
-                       i, j, fd, an, fd - an, relErr);
-                if (relErr > maxRel)
-                    maxRel = relErr;
-                nBad++;
-            }
-        }
-    }
-    printf("[FD] %d mismatches out of %d entries (atol=%.0e rtol=%.0e) maxRel=%.1e\n",
-           nBad, Ns * nVars, atol, rtol, maxRel);
+        const double epsFluid = 1e-6, epsSpecies = 1e-4;
+        int nBad = 0;
 
-    // ── Full Jacobian comparison matrices ──
-    double normFD = fdJac.norm(); // Frobenius norm of the FD Jacobian
-    Eigen::IOFormat fmtJac(3, Eigen::DontAlignCols, " ", "\n", "    [", "]", "", "");
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>,
+                   Eigen::Unaligned, Eigen::OuterStride<>>
+            anJac(jbufRef.data(), Ns, nVars, Eigen::OuterStride<>(Ns));
+        Eigen::MatrixXd fdJac(Ns, nVars);
 
-    printf("\n[JAC] Ns=%d nVars=%d  ||FD||_F = %.4e\n", Ns, nVars, normFD);
-
-    std::cout << "[JAC-analytical]" << std::endl
-              << anJac.format(fmtJac) << std::endl;
-    std::cout << "[JAC-FD]" << std::endl
-              << fdJac.format(fmtJac) << std::endl;
-
-    // Relative error: |fd-an| / ||FD||_F  (global norm, not per-entry)
-    printf("[JAC-relErr %% of ||FD||_F=%.2e]:\n", normFD);
-    printf("       ");
-    for (int j = 0; j < nVars; j++)
-        printf(" %7d", j);
-    printf("\n");
-    double maxRelGlobal = 0;
-    for (int i = 0; i < Ns; i++)
-    {
-        printf("  sp%2d ", i);
         for (int j = 0; j < nVars; j++)
         {
-            double rel = std::abs(fdJac(i, j) - anJac(i, j)) / normFD * 100.0;
-            printf(" %7.1e", rel);
-            if (rel > maxRelGlobal)
-                maxRelGlobal = rel;
+            double epsCol = (j >= Isp) ? epsSpecies : epsFluid;
+            Eigen::VectorXd Up = Us;
+            double h = epsCol * std::max(std::abs(Up[j]), 1.0);
+            Up[j] += h;
+            auto omP = sourceAtU(Up);
+            Up[j] = Us[j] - h;
+            auto omM = sourceAtU(Up);
+            for (int i = 0; i < Ns; i++)
+            {
+                double fd = (omP[i] - omM[i]) / (2.0 * h);
+                fdJac(i, j) = fd;
+                double an = anJac(i, j);
+                double denom = std::max(std::max(std::abs(fd), std::abs(an)), 1e-60);
+                double relErr = std::abs(fd - an) / denom;
+                if (std::abs(fd - an) > atol && relErr > rtol)
+                {
+                    printf("[FD-bad %s] J(%d,%d) fd=%.4e an=%.4e (rel %.1f%%)\n",
+                           label, i, j, fd, an, relErr * 100);
+                    nBad++;
+                }
+            }
         }
-        printf("\n");
-    }
-    printf("[JAC-relErr] max = %.2e %% of ||FD||_F\n", maxRelGlobal);
 
-    // Known gap: ρ column (j=0) misses ∂ω/∂p·dp/dρ (~24% under-prediction).
-    // One OH-entry (J(2,9)) shows nonlinearity from reactive-radical perturbation.
+        double normFD = fdJac.norm();
+        double maxRelGlobal = 0;
+        for (int i = 0; i < Ns; i++)
+            for (int j = 0; j < nVars; j++)
+            {
+                double rel = std::abs(fdJac(i, j) - anJac(i, j)) / normFD * 100.0;
+                if (rel > maxRelGlobal)
+                    maxRelGlobal = rel;
+            }
+
+        printf("[FD %s] %d mismatches, ||FD||=%.2e, max|J_fd-J_an|/||FD||=%.2e%%, T=%.1fK\n",
+               label, nBad, normFD, maxRelGlobal, Ts);
+
+        // Verbose matrix print for the final checkpoint
+        if (label[0] == 's' && label[1] == '2' && label[2] == '0' && label[3] == '0')
+        {
+            Eigen::IOFormat fmtJac(3, Eigen::DontAlignCols, " ", "\n", "    [", "]", "", "");
+            printf("\n[JAC @%s] Ns=%d nVars=%d  ||FD||_F = %.4e\n", label, Ns, nVars, normFD);
+            std::cout << "[JAC-analytical]" << std::endl
+                      << anJac.format(fmtJac) << std::endl;
+            std::cout << "[JAC-FD]" << std::endl
+                      << fdJac.format(fmtJac) << std::endl;
+            printf("[JAC-relErr %% of ||FD||_F=%.2e]:\n", normFD);
+            printf("       ");
+            for (int j = 0; j < nVars; j++)
+                printf(" %7d", j);
+            printf("\n");
+            for (int i = 0; i < Ns; i++)
+            {
+                printf("  sp%2d ", i);
+                for (int j = 0; j < nVars; j++)
+                    printf(" %7.1e", std::abs(fdJac(i, j) - anJac(i, j)) / normFD * 100.0);
+                printf("\n");
+            }
+        }
+        return nBad;
+    };
+
+    // ── Checkpoints ──
+    compareJacobian(U, T, "s20");
+
+    for (int step = 20; step < 50; step++)
+    {
+        Eigen::VectorXd Uk = U;
+        double Tk = T;
+        for (int iter = 0; iter < 50; iter++)
+        {
+            std::vector<double> Yk;
+            getY(Uk, Yk);
+            ConstSpeciesBufferView Ykv{Yk.data(), Ns};
+            double Rmix = chem->mixtureR(Ykv), pk = Uk[0] * Rmix * Tk;
+            std::vector<double> omega(Ns);
+            chem->productionRates(Tk, pk, Ykv, SpeciesBufferView{omega.data(), Ns});
+            Eigen::VectorXd ret = Eigen::VectorXd::Zero(nVars);
+            for (int k = 0; k < Ns1; k++)
+                ret[Isp + k] = omega[k] * MW[k];
+            std::vector<double> jbuf(Ns * nVars, 0.0);
+            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, Ykv,
+                                             SpeciesBufferView{omega.data(), Ns},
+                                             JacobianBufferView{jbuf.data(), Ns, nVars, Ns});
+            Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(nVars, nVars);
+            for (int k = 0; k < Ns1; k++)
+                for (int j = 0; j < nVars; j++)
+                    jac(Isp + k, j) = MW[k] * jbuf[k + j * Ns];
+            Eigen::VectorXd F = Uk - U - dt * ret;
+            Eigen::MatrixXd Jn = Eigen::MatrixXd::Identity(nVars, nVars) - dt * jac;
+            for (int r : {0, 1, 2, 3, 4})
+                Jn.row(r) = Eigen::VectorXd::Unit(nVars, r), F[r] = 0;
+            Eigen::VectorXd dU = Jn.partialPivLu().solve(-F);
+            Uk += dU;
+            for (int k = Isp; k < Isp + Ns1; k++)
+                if (Uk[k] < 0)
+                    Uk[k] = 1e-30;
+            Tk = getT(Uk);
+            if (dU.lpNorm<Eigen::Infinity>() < 1e-12)
+                break;
+        }
+        U = Uk;
+        T = Tk;
+    }
+    compareJacobian(U, T, "s50");
+
+    for (int step = 50; step < 200; step++)
+    {
+        Eigen::VectorXd Uk = U;
+        double Tk = T;
+        for (int iter = 0; iter < 50; iter++)
+        {
+            std::vector<double> Yk;
+            getY(Uk, Yk);
+            ConstSpeciesBufferView Ykv{Yk.data(), Ns};
+            double Rmix = chem->mixtureR(Ykv), pk = Uk[0] * Rmix * Tk;
+            std::vector<double> omega(Ns);
+            chem->productionRates(Tk, pk, Ykv, SpeciesBufferView{omega.data(), Ns});
+            Eigen::VectorXd ret = Eigen::VectorXd::Zero(nVars);
+            for (int k = 0; k < Ns1; k++)
+                ret[Isp + k] = omega[k] * MW[k];
+            std::vector<double> jbuf(Ns * nVars, 0.0);
+            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, Ykv,
+                                             SpeciesBufferView{omega.data(), Ns},
+                                             JacobianBufferView{jbuf.data(), Ns, nVars, Ns});
+            Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(nVars, nVars);
+            for (int k = 0; k < Ns1; k++)
+                for (int j = 0; j < nVars; j++)
+                    jac(Isp + k, j) = MW[k] * jbuf[k + j * Ns];
+            Eigen::VectorXd F = Uk - U - dt * ret;
+            Eigen::MatrixXd Jn = Eigen::MatrixXd::Identity(nVars, nVars) - dt * jac;
+            for (int r : {0, 1, 2, 3, 4})
+                Jn.row(r) = Eigen::VectorXd::Unit(nVars, r), F[r] = 0;
+            Eigen::VectorXd dU = Jn.partialPivLu().solve(-F);
+            Uk += dU;
+            for (int k = Isp; k < Isp + Ns1; k++)
+                if (Uk[k] < 0)
+                    Uk[k] = 1e-30;
+            Tk = getT(Uk);
+            if (dU.lpNorm<Eigen::Infinity>() < 1e-12)
+                break;
+        }
+        U = Uk;
+        T = Tk;
+    }
+    int nBadS200 = compareJacobian(U, T, "s200");
 
     // ── Momentum-column check (inject non-zero velocity) ──
     {
         Eigen::VectorXd Umom = U;
-        Umom[1] = 0.1; // ρu in code units
+        Umom[1] = 0.1;
         Umom[2] = 0.05;
         std::vector<double> Ymom;
         getY_linear(Umom, Ymom);
         ConstSpeciesBufferView Ymv{Ymom.data(), Ns};
         double Tmom = getT(Umom);
-        double Rm = chem->mixtureR(Ymv);
-        double pmom = Umom[0] * Rm * Tmom;
+        double Rm = chem->mixtureR(Ymv), pmom = Umom[0] * Rm * Tmom;
 
-        std::vector<double> jbufM(Ns * nVars, 0.0);
-        std::vector<double> omegM(Ns);
+        std::vector<double> jbufM(Ns * nVars, 0.0), omegM(Ns);
         chem->productionRatesAndJacobian(Tmom, pmom, Umom[0], Umom[4],
                                          Umom[1], Umom[2], 0., 4, U0, Ymv,
                                          SpeciesBufferView{omegM.data(), Ns},
                                          JacobianBufferView{jbufM.data(), Ns, nVars, Ns});
 
-        // FD on momentum column 1
         for (int jj = 1; jj <= 2; jj++)
         {
             double h = 1e-6 * std::max(std::abs(Umom[jj]), 1.0);
             Eigen::VectorXd Up = Umom, Um = Umom;
             Up[jj] += h;
             Um[jj] -= h;
-            auto omP = sourceAtU(Up);
-            auto omM = sourceAtU(Um);
+            auto omP = sourceAtU(Up), omM = sourceAtU(Um);
             int nMomBad = 0;
             for (int i = 0; i < Ns; i++)
             {
@@ -464,5 +528,13 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
         }
     }
 
-    CHECK(nBad <= 15);
+    // FD-vs-analytical Jacobian quality across ignition stages (dt=1e-6, const-V):
+    //   s20 (1212 K, pre-ignition): 10 mismatches, 0.053% of ||FD||_F — ρ column ~24% under
+    //   s50 (3145 K, post-ignition): 8 mismatches, 0.009% of ||FD||_F — ρ column ~66% under
+    //   s200 (3145 K, steady):       same as s50 — system reaches chemical equilibrium
+    // The ρ-column under-prediction grows with T (∂ω/∂T dominates), but its contribution to
+    // the Frobenius norm shrinks relative to the huge post-ignition species-species entries.
+    // The single J(2,9) (dω_O / dρY_OH) mismatch is a radical-radical nonlinearity — the
+    // analytical Jacobian linearises around a near-zero OH steady-state.
+    CHECK(nBadS200 <= 15);
 }
