@@ -1,15 +1,15 @@
 {
     "$schema": "../eulerSA_schema.json",
     "timeMarchControl": {
-        "dtImplicit": 0.001,
-        "nTimeStep": 500,
+        "dtImplicit": 1e-6,
+        "nTimeStep": 50000,
         "steadyQuit": false,
-        "tEnd": 0.1,
+        "tEnd": 1e100,
         "odeCode": 103,
         "odeSetting1": 0.5,
-        "rhsFPPMode": 2,
+        "rhsFPPMode": 0, //!
         "rhsFPPScale": 1,
-        "useDtPPLimit": true,
+        "useDtPPLimit": false, //!
         "dtPPLimitScale": 1
     },
     "outputControl": {
@@ -18,14 +18,26 @@
         "nDataOutC": 1,
         "nDataOut": 10,
         "tDataOut": 3e+200,
-        "dataOutAtInit": true
+        "dataOutAtInit": true,
+        "consoleMainOutputFormat": [
+            "=== Step {termBold}[{step:4d}]   ",
+            "res {termBold}{termRed}{resRel:.3e}{termReset}   ",
+            "t,dT,CFL {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{CFLNow:.3e}]{termReset}   ",
+            "uMinMax {termCyan}{uMinMax}{termReset}"
+        ],
+        "consoleMainOutputFormatInternal": [
+            "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   ",
+            "res {termRed}{resRel:.3e}{termReset}   ",
+            "uMinMax {termCyan}{uMinMax}{termReset}"
+        ]
     },
     "implicitCFLControl": {
-        "CFL": 1e-1,
+        "CFL": 10, 
         "useLocalDt": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 100,
+        "nTimeStepInternal": 10000,
+        "nTimeStepInternalMin": 10,
         "rhsThresholdInternal": 0.0001,
         "res_base": 0,
         "useVolWiseResidual": true
@@ -40,7 +52,7 @@
         "outPltVTKFormat": true,
         "outAtPointData": true,
         "outAtCellData": true,
-        "outCellScalarNames": []
+        "outCellScalarNames": ["RE"]
     },
     "boundaryDefinition": {
         "PeriodicTranslation1": [
@@ -56,13 +68,14 @@
     },
     "limiterControl": {
         "useLimiter": true,
-        "usePPRecLimiter": false,
+        "usePPRecLimiter": false, //! 
         "nPartialLimiterStart": 1000000
     },
     "linearSolverControl": {
         "jacobiCode": 0,
         "sgsIter": 5,
-        "gmresCode": 0
+        "gmresCode": 0,
+        "nSgsConsoleCheck": 100
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
@@ -71,16 +84,16 @@
     "vfvSettings": {
         "maxOrder": 1,
         "intOrder": 1,
-        "jacobiRelax": 1,
+        "jacobiRelax": 0,
         "SORInstead": true,
         "smoothThreshold": 0.001,
         "WBAP_nStd": 10.0,
-        "subs2ndOrder": 1
+        "subs2ndOrder": 0
     },
     "eulerSettings": {
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe_M1",
+        "riemannSolverType": "Roe_M2",
         "rsMeanValueEig": 1,
         "uRecAlphaCompressPower": 1.0,
         "uRecBetaCompressPower": 1.0,
@@ -95,7 +108,7 @@
             0.0,
             0.0,
             0.0,
-            4.0,
+            6.0,
             0.028,
             0.0,
             0.0,

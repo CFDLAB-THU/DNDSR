@@ -329,7 +329,8 @@ namespace DNDS::Euler
                     "nLimBeta", "minBeta",
                     "nLimAlpha", "minAlpha",
                     "tWall", "telapsed", "trec", "trhs", "tcomm", "tLim", "tLimiterA", "tLimiterB",
-                    "fluxWall", "CL", "CD", "AoA"};
+                    "fluxWall", "CL", "CD", "AoA",
+                    "uMin", "uMax"};
                 int nPrecisionLog = 10;
                 bool dataOutAtInit = false;
                 bool restartOutAtInit = false;
@@ -1212,7 +1213,7 @@ namespace DNDS::Euler
             //     "nLimAlpha", "minAlpha",
             //     "tWall", "telapsed", "trec", "trhs", "tcomm", "tLim", "tLimiterA", "tLimiterB",
             //     "fluxWall", "CL", "CD", "AoA"};
-            if (name == "res" || name == "fluxWall")
+            if (name == "res" || name == "fluxWall" || name == "uMin" || name == "uMax")
                 for (int i = 0; i < nVars; i++)
                     v_map[name + std::to_string(i)] = val[i];
             else
@@ -1228,7 +1229,7 @@ namespace DNDS::Euler
             initVec.setZero(nVars);
             std::vector<std::string> realNames;
             for (auto name : config.outputControl.logfileOutputTitles)
-                if (name == "res" || name == "fluxWall")
+                if (name == "res" || name == "fluxWall" || name == "uMin" || name == "uMax")
                 {
                     FillLogValue(v_map, name, initVec);
                     for (int i = 0; i < nVars; i++)

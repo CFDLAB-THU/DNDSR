@@ -636,6 +636,15 @@ namespace DNDS::Euler
         void EvaluateNorm(Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P = 1, bool volWise = false, bool average = false);
 
         /**
+         * @brief Compute per-component min and max of a DOF array with MPI reduction.
+         *
+         * @param[out] uMin  Per-component minimum (resized to nVars).
+         * @param[out] uMax  Per-component maximum (resized to nVars).
+         * @param[in]  u     Cell-centered DOF array.
+         */
+        void EvaluateMinMax(Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u);
+
+        /**
          * @brief Compute the reconstruction error norm (optionally against an analytical field).
          *
          * @param[out] res                 Norm result per variable.
@@ -2099,6 +2108,9 @@ namespace DNDS::Euler
                                                                                                                           \
         ext template void EulerEvaluator<model>::EvaluateNorm(                                                            \
             Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P, bool volWise, bool average);               \
+                                                                                                                          \
+        ext template void EulerEvaluator<model>::EvaluateMinMax(                                                          \
+            Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u);                      \
                                                                                                                           \
         ext template void EulerEvaluator<model>::EvaluateRecNorm(                                                         \
             Eigen::Vector<real, -1> &res,                                                                                 \
