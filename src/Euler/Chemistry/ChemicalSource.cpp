@@ -151,7 +151,7 @@ namespace DNDS::Euler::Chemistry
     void ChemicalSource::productionRatesAndJacobian(
         double T, double p, double rho, double rhoE,
         double rhoU, double rhoV, double rhoW,
-        int iEnergy, double velScale,
+        int iEnergy, double velScale, double rhoScale,
         ConstSpeciesBufferView Y,
         SpeciesBufferView omega,
         JacobianBufferView J,
@@ -192,7 +192,12 @@ namespace DNDS::Euler::Chemistry
         int nRows = skipAbsorb ? I.Ns : Ns1; // Ns1 excludes the derived last-species row
         double invMlast = skipAbsorb ? 0.0 : (1.0 / std::max(I.mw[Ns1], 1e-30));
 
-        // ── Species columns (∂ω/∂(ρY_k)) ──
+        // ── Species columns (∂ω/∂(ρY_k)_code) ──
+        // Concentration chain rule: ∂C_k/∂(ρY_k)_code = rhoScale/MW_k
+        // Temperature chain rule:   dT/d(rhoY_k)_code = -(1/(rho_code*cv)) * du_k
+        //   (rhoScale cancels: d(rhoY_k)_phys = rhoScale * d(rhoY_k)_code,
+        //    but dT/d(rhoY_k)_phys has 1/rho_phys = 1/(rho_code*rhoScale),
+        //    so dT/d(rhoY_k)_code = rhoScale * dT/d(rhoY_k)_phys = -du/(rho_code*cv))
         double dT_pre = -rhoInv / cvSafe;
         for (int k = 0; k < Ns1; ++k)
         {
@@ -203,9 +208,9 @@ namespace DNDS::Euler::Chemistry
             double dT_drY = dT_pre * du;
             for (int i = 0; i < nRows; ++i)
             {
-                J(i, speciesCol0 + k) = dWdC.coeff(i, k) * invMk + I.bufDwdt[i] * dT_drY;
+                J(i, speciesCol0 + k) = dWdC.coeff(i, k) * invMk * rhoScale + I.bufDwdt[i] * dT_drY;
                 if (!skipAbsorb)
-                    J(i, speciesCol0 + k) -= dWdC.coeff(i, Ns1) * invMlast;
+                    J(i, speciesCol0 + k) -= dWdC.coeff(i, Ns1) * invMlast * rhoScale;
             }
         }
 
@@ -214,12 +219,12 @@ namespace DNDS::Euler::Chemistry
 
         // ── Fluid columns (∂ω/∂(ρu_j), ∂ω/∂(ρE), ∂ω/∂ρ) ──
 
-        // ∂ω/∂(ρE) = ∂ω/∂T · velScale² / (ρ·cv)
+        // ∂ω/∂(ρE)_code = ∂ω/∂T · velScale² / (ρ_code·cv)
         double dT_drhoe = vs2 * rhoInv / cvSafe;
         for (int i = 0; i < nRows; ++i)
             J(i, iEnergy) = I.bufDwdt[i] * dT_drhoe;
 
-        // ∂ω/∂(ρu_j) = ∂ω/∂T · dT/d(ρu_j)
+        // ∂ω/∂(ρu_j)_code = ∂ω/∂T · dT/d(ρu_j)_code
         double dT_factor = -vs2 * rhoInv * rhoInv / cvSafe;
         for (int jd = 0; jd < iEnergy - 1; ++jd)
         {
@@ -232,13 +237,14 @@ namespace DNDS::Euler::Chemistry
                 J(i, 1 + jd) = I.bufDwdt[i] * dT_dm;
         }
 
-        // ∂ω/∂ρ = ∂ω/∂T·dT/dρ + ∂ω/∂C_last·∂C_last/∂ρ  (∂C_last/∂ρ = 1/M_last)
+        // ∂ω/∂ρ_code = ∂ω/∂T·dT/dρ_code + ∂ω/∂C_last·∂C_last/∂ρ_code
+        //   ∂C_last/∂ρ_code = rhoScale/M_last  (since ∂(ρ·Y_last)/∂ρ = 1 at fixed ρY_k)
         double dT_drho = -vs2 * rhoE * rhoInv * rhoInv / cvSafe;
         for (int i = 0; i < nRows; ++i)
         {
             double d = I.bufDwdt[i] * dT_drho;
             if (!skipAbsorb)
-                d += dWdC.coeff(i, Ns1) * invMlast;
+                d += dWdC.coeff(i, Ns1) * invMlast * rhoScale;
             J(i, 0) = d;
         }
     }

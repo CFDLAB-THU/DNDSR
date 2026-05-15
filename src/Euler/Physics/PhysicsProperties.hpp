@@ -5,16 +5,23 @@
  * All interfaces use code-scaled values. Conversions between physical (SI) and
  * code-scaled units happen only inside this module at the Cantera boundary.
  *
- * Scaling conventions:
- *   p_code = p_phys / p0        where p0 = rho0 * U0²
- *   rho_code = rho_phys / rho0
- *   T_code = T_phys / T0
- *   R_code = R_phys / R0        where R0 = U0² / T0   (so R_code = R_phys · T0/U0²)
- *   cp_code = cp_phys / R0      (same scaling as Rgas)
- *   μ_code  = μ_phys / (rho0 · U0)   (L_ref = 1 m)
- *   D_code  = D_phys / U0            (L_ref = 1 m)
+ * Fundamental reference scales (user-specified):
+ *   L0   — reference length  [m]    (default 1)
+ *   U0   — reference velocity [m/s]
+ *   rho0 — reference density  [kg/m³]
+ *   T0   — reference temperature [K] (default 1)
  *
- * When T0=rho0=U0=0 (unset), all scaling factors default to 1.
+ * Derived scales:
+ *   t0   = L0 / U0                       [s]       — time
+ *   p0   = rho0 · U0²                    [Pa]      — pressure
+ *   R0   = U0² / T0                      [J/(kg·K)] — gas constant / heat capacity
+ *   mu0  = rho0 · U0 · L0               [Pa·s]    — dynamic viscosity
+ *   k0   = rho0 · U0³ · L0 / T0         [W/(m·K)] — thermal conductivity
+ *   D0   = U0 · L0                       [m²/s]    — diffusivity
+ *   S0   = rho0 · U0 / L0               [kg/(m³·s)] — volumetric source rate
+ *
+ * Code-unit conversions:
+ *   x_code  = x_phys / x0   for each quantity x.
  */
 
 #pragma once
@@ -44,8 +51,23 @@ namespace DNDS::Euler
         /// Reference pressure p0 = rho0 · U0².
         real p0() const { return igProp_->rho0 * igProp_->U0 * igProp_->U0; }
 
+        /// Reference time t0 = L0 / U0.
+        real t0() const { return igProp_->L0 / igProp_->U0; }
+
         /// Conversion factor R0 = U0² / T0.  R_code = R_phys / R0.
         real invR0() const { return igProp_->U0 * igProp_->U0 / igProp_->T0; }
+
+        /// Reference dynamic viscosity mu0 = rho0 · U0 · L0.
+        real mu0() const { return igProp_->rho0 * igProp_->U0 * igProp_->L0; }
+
+        /// Reference thermal conductivity k0 = rho0 · U0³ · L0 / T0.
+        real k0() const { return igProp_->rho0 * igProp_->U0 * igProp_->U0 * igProp_->U0 * igProp_->L0 / igProp_->T0; }
+
+        /// Reference diffusivity D0 = U0 · L0.
+        real D0() const { return igProp_->U0 * igProp_->L0; }
+
+        /// Reference volumetric source rate S0 = rho0 · U0 / L0.
+        real S0() const { return igProp_->rho0 * igProp_->U0 / igProp_->L0; }
 
         /// Convert physical gas-constant / heat-capacity to code-scaled:  X_code = X_phys / R0.
         real toCode(real xPhys) const { return xPhys / invR0(); }
@@ -173,6 +195,10 @@ namespace DNDS::Euler
         real CSutherland() const { return igProp_->CSutherland; }
         int muModel() const { return igProp_->muModel; }
 
+        /// Public access to clamped, renormalized mass fractions. Returns a view into internal buffer.
+        template <class TU>
+        Chemistry::ConstSpeciesBufferView massFractionsPublic(const TU &U) const { return massFractions(U); }
+
         // ---- Transport (mixture) --------------------------------------------
 
         /// Sutherland + const + density-proportional fallback, or Cantera mixture-averaged.
@@ -254,8 +280,8 @@ namespace DNDS::Euler
                 return igProp_->muGas;
             }
         }
-        real muPhys = chemSrc_->viscosity(T, toPhysP(p), massFractions(U));
-        return muPhys / (igProp_->rho0 * igProp_->U0);
+        real muPhys = chemSrc_->viscosity(toPhysT(T), toPhysP(p), massFractions(U));
+        return muPhys / mu0();
     }
 
     template <EulerModel model>
@@ -264,8 +290,8 @@ namespace DNDS::Euler
     {
         if (!chemSrc_)
             return Cp(T, U) * mixtureViscosity(T, p, U) / Pr();
-        real kPhys = chemSrc_->thermalConductivity(T, toPhysP(p), massFractions(U));
-        return kPhys / (igProp_->rho0 * igProp_->U0 * igProp_->U0 * igProp_->U0);
+        real kPhys = chemSrc_->thermalConductivity(toPhysT(T), toPhysP(p), massFractions(U));
+        return kPhys / k0();
     }
 
     template <EulerModel model>
@@ -277,9 +303,9 @@ namespace DNDS::Euler
         int Ns = chemSrc_->nSpecies();
         std::vector<real> Dbuf(Ns);
         Chemistry::SpeciesBufferView Dv{Dbuf.data(), Ns};
-        chemSrc_->speciesDiffusivity(T, toPhysP(p), massFractions(U), Dv);
+        chemSrc_->speciesDiffusivity(toPhysT(T), toPhysP(p), massFractions(U), Dv);
         for (int k = 0; k < Ns; ++k)
-            D[k] = Dbuf[k] / igProp_->U0;
+            D[k] = Dbuf[k] / D0();
     }
 
     template <EulerModel model>
@@ -294,8 +320,8 @@ namespace DNDS::Euler
         int Ns = chemSrc_->nSpecies();
         std::vector<real> Dbuf(Ns);
         Chemistry::SpeciesBufferView Dv{Dbuf.data(), Ns};
-        chemSrc_->speciesDiffusivity(T, toPhysP(p), massFractions(U), Dv);
-        return Dbuf[k] / igProp_->U0;
+        chemSrc_->speciesDiffusivity(toPhysT(T), toPhysP(p), massFractions(U), Dv);
+        return Dbuf[k] / D0();
     }
 
     // ========================================================================

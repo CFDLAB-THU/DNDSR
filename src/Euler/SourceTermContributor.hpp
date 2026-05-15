@@ -366,16 +366,22 @@ namespace DNDS::Euler
             DNDS_assert(std::isfinite(aux.T) && aux.T > 0);
             DNDS_assert(std::isfinite(aux.p) && aux.p > 0);
             DNDS_assert(std::isfinite(rho) && rho > 0);
-            double Tcantera = std::max(aux.T, 200.0); // NASA poly lower bound
+            // aux.T is code-scaled; Cantera needs physical T [K]
+            double Tphys = gasProp.T0 > 0 ? aux.T * gasProp.T0 : aux.T;
+            double Tcantera = std::max(Tphys, 200.0); // NASA poly lower bound
 
             Chemistry::ConstSpeciesBufferView Yv{bufY.data(), Ns};
             Chemistry::SpeciesBufferView omegav{bufOmega.data(), Ns};
+
+            // Source rate scale: S0 = rho0 * U0 / L0  [kg/(m³·s)]
+            // Physical source omega*MW [kg/(m³·s)] -> code source = omega*MW / S0
+            double invS0 = gasProp.L0 / (gasProp.rho0 * gasProp.U0);
 
             if (Mode == 0)
             {
                 chem->productionRates(Tcantera, aux.pPhys, Yv, omegav);
                 for (int k = 0; k < Ns1; ++k)
-                    ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k];
+                    ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k] * invS0;
             }
             else if (Mode == 2)
             {
@@ -384,17 +390,17 @@ namespace DNDS::Euler
                 double uM2 = (I4 >= 3) ? U[2] : 0;
                 double uM3 = (I4 >= 4) ? U[3] : 0;
                 chem->productionRatesAndJacobian(Tcantera, aux.pPhys, rho, U[I4],
-                                                 uM1, uM2, uM3, I4, gasProp.U0, Yv, omegav, Jv,
+                                                 uM1, uM2, uM3, I4, gasProp.U0, gasProp.rho0, Yv, omegav, Jv,
                                                  Chemistry::ChemicalSource::JAC_SKIP_FLUID);
                 for (int k = 0; k < Ns1; ++k)
-                    ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k];
+                    ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k] * invS0;
                 for (int k = 0; k < Ns1; ++k)
                 {
                     double Mk = chem->molecularWeights()[k];
                     int iRow = Isp + k;
                     for (int j = 0; j < nVars; ++j)
                     {
-                        double val = Mk * Jv(k, j);
+                        double val = Mk * Jv(k, j) * invS0;
                         if (!std::isfinite(val))
                         {
                             fprintf(stderr, "[chem-jac] NaN at row=%d col=%d Jv=%g Mk=%g T=%.1f\n",

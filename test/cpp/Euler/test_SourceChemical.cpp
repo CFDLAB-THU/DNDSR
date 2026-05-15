@@ -96,7 +96,7 @@ TEST_CASE("ChemicalSource::productionRatesAndJacobian — Jacobian sign conventi
     std::vector<double> w(Ns), jbuf(Ns * nVars, 0.0);
     SpeciesBufferView ov{w.data(), Ns};
     JacobianBufferView Jv{jbuf.data(), Ns, nVars, Ns};
-    chem.productionRatesAndJacobian(T, p, rho, rhoE, 0., 0., 0., I4, velScale, Yv, ov, Jv);
+    chem.productionRatesAndJacobian(T, p, rho, rhoE, 0., 0., 0., I4, velScale, 1.0, Yv, ov, Jv);
 
     int Isp = 5;
 

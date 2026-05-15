@@ -116,11 +116,12 @@ namespace DNDS::Euler::Chemistry
          * dOmegadU: Ns × nVars, column-major.
          * iEnergy = index of ρE in U (dim+1); species start = iEnergy+1.
          * velScale = U0 (m/s); rhoE, rhoU/V/W are code-scaled.
+         * rhoScale = rho0 (kg/m³); needed for dC_k/d(rhoY_k)_code = rho0/MW_k.
          * jacFlags = bitmask of JacobianFlags.
          */
         void productionRatesAndJacobian(double T, double p, double rho,
                                         double rhoE, double rhoU, double rhoV, double rhoW,
-                                        int iEnergy, double velScale,
+                                        int iEnergy, double velScale, double rhoScale,
                                         ConstSpeciesBufferView Y,
                                         SpeciesBufferView omega,
                                         JacobianBufferView dOmegadU,
