@@ -403,7 +403,7 @@ namespace DNDS::Euler
 
                     TDiffU GradUMeanXyPrim;
                     real T = phys_.template temperature<dim>(UMeanXy);
-                    real gamma = phys_.gamma(T, UMeanXy);
+                    real gamma = phys_.template gammaEq<dim>(T, UMeanXy);
                     if (settings.usePrimGradInVisFlux)
                     {
                         TDiffU GradULxyPrim, GradURxyPrim;
@@ -460,22 +460,22 @@ namespace DNDS::Euler
                         TU ULc = ULxy;
                         real T_noRS = phys_.template temperature<dim>(ULc);
                         TU ULcPrim;
-                        Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.gamma(T_noRS, ULc), phys_.mixtureFormationRhoE(ULc));
+                        Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.template gammaEq<dim>(T_noRS, ULc), phys_.mixtureFormationRhoE(ULc));
                         ULcPrim(Seq123).setZero();
-                        Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, phys_.gamma(T_noRS, ULc), phys_.mixtureFormationRhoE(ULc));
+                        Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, phys_.template gammaEq<dim>(T_noRS, ULc), phys_.mixtureFormationRhoE(ULc));
                         if (faceBCType == EulerBCType::BCWallIsothermal)
                         {
                             real temp = pBCHandler->GetValueFromID(mesh->GetFaceZone(iFace))(0);
                             TU ULcPrim;
                             ULcPrim.resizeLike(ULc);
-                            Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.gamma(T_noRS, ULc), phys_.mixtureFormationRhoE(ULc));
+                            Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.template gammaEq<dim>(T_noRS, ULc), phys_.mixtureFormationRhoE(ULc));
                             DNDS_assert(ULcPrim(0) > 0 && temp > 0);
                             DNDS_assert_info(ULcPrim(0) > 0 && ULcPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", ULcPrim(0), ULcPrim(I4), temp));
                             // real newPressure = ULcPrim(0) * phys_.Rgas() * temp;
                             // ULcPrim(I4) = newPressure;
                             real newDensity = ULcPrim(I4) / temp / phys_.Rgas(ULc);
                             ULcPrim(0) = newDensity;
-                            Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, URxy, phys_.gamma(T_noRS, ULc), phys_.mixtureFormationRhoE(URxy));
+                            Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, URxy, phys_.template gammaEq<dim>(T_noRS, ULc), phys_.mixtureFormationRhoE(URxy));
                         }
                         ULxy = ULc;
                         URxy = ULc;
@@ -657,7 +657,7 @@ namespace DNDS::Euler
                         this->TransformURotatingFrame(uL, vfv->GetFaceQuadraturePPhys(iFace, -1), 1);
                     TU uLPrim = uL;
                     real T_int = phys_.template temperature<dim>(uL);
-                    auto gamma = phys_.gamma(T_int, uL);
+                    auto gamma = phys_.template gammaEq<dim>(T_int, uL);
                     Gas::IdealGasThermalConservative2Primitive<dim>(uL, uLPrim, gamma, phys_.mixtureFormationRhoE(uL));
                     Eigen::Vector<real, Eigen::Dynamic> vInt;
                     vInt.resize(nVars + 2);

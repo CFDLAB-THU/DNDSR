@@ -2,7 +2,7 @@
     "$schema": "../eulerSA_schema.json",
     "timeMarchControl": {
         "dtImplicit": 1e-6,
-        "nTimeStep": 50000,
+        "nTimeStep": 1000,
         "steadyQuit": false,
         "tEnd": 1e100,
         "odeCode": 103,
@@ -32,11 +32,11 @@
         ]
     },
     "implicitCFLControl": {
-        "CFL": 10, 
+        "CFL": 1e10, 
         "useLocalDt": true
     },
     "convergenceControl": {
-        "nTimeStepInternal": 10000,
+        "nTimeStepInternal": 40,
         "nTimeStepInternalMin": 10,
         "rhsThresholdInternal": 0.0001,
         "res_base": 0,
@@ -44,8 +44,8 @@
     },
     "dataIOControl": {
         "uniqueStamps": true,
-        "meshFile": "data/mesh/UniformSquare_10.cgns",
-        "outPltName": "data/out/react_",
+        "meshFile": "../data/mesh/UniformSquare_10.cgns",
+        "outPltName": "../data/out/react_test/react_",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -76,7 +76,7 @@
         "sgsIter": 5,
         "gmresCode": 0,
         "nSgsConsoleCheck": 100,
-        "sourceTauSplitting": 1
+        "sourceTauSplitting": 0
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,

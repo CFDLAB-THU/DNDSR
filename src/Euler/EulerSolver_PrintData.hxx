@@ -91,7 +91,7 @@ namespace DNDS::Euler
                         real vsqr = velo.squaredNorm();
                         real asqr, p, H;
                         real T = eval.phys().template temperature<dim>(recu);
-                        Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.phys().gamma(T, recu), p, asqr, H,
+                        Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.phys().template gammaEq<dim>(T, recu), p, asqr, H,
                                              eval.phys().mixtureFormationRhoE(recu));
                         // DNDS_assert(asqr > 0);
                         real M = std::sqrt(std::abs(vsqr / asqr));
@@ -182,7 +182,7 @@ namespace DNDS::Euler
                         real vsqr = velo.squaredNorm();
                         real asqr, p, H;
                         real T = eval.phys().template temperature<dim>(recu);
-                        Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.phys().gamma(T, recu), p, asqr, H,
+                        Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.phys().template gammaEq<dim>(T, recu), p, asqr, H,
                                              eval.phys().mixtureFormationRhoE(recu));
                         // DNDS_assert(asqr > 0);
                         real M = std::sqrt(std::abs(vsqr / asqr));
@@ -532,7 +532,7 @@ namespace DNDS::Euler
                     real vsqr = velo.squaredNorm();
                     real asqr, p, H;
                     real T = eval.phys().template temperature<dim>(recu);
-                    Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.phys().gamma(T, recu), p, asqr, H,
+                    Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.phys().template gammaEq<dim>(T, recu), p, asqr, H,
                                          eval.phys().mixtureFormationRhoE(recu));
                     // DNDS_assert(asqr > 0);
                     real M = std::sqrt(std::abs(vsqr / asqr));

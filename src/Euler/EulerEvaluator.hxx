@@ -982,7 +982,7 @@ namespace DNDS::Euler
                     {
                         real pMean, asqrMean, Hmean;
                         real T = phys_.template temperature<dim>(u[iCell]);
-                        real gamma = phys_.gamma(T, u[iCell]);
+                        real gamma = phys_.template gammaEq<dim>(T, u[iCell]);
                         Gas::IdealGasThermal(u[iCell](I4), u[iCell](0), (u[iCell](Seq123) / u[iCell](0)).squaredNorm(),
                                              gamma, pMean, asqrMean, Hmean,
                                              phys_.mixtureFormationRhoE(u[iCell]));
@@ -1010,7 +1010,7 @@ namespace DNDS::Euler
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
                     real T = phys_.template temperature<dim>(u[iCell]);
-                    real gamma = phys_.gamma(T, u[iCell]);
+                    real gamma = phys_.template gammaEq<dim>(T, u[iCell]);
                     real rho = 2;
                     real p = 1 + 2 * pos(1);
                     if (pos(1) >= 0.5)
@@ -1032,7 +1032,7 @@ namespace DNDS::Euler
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
                     real T = phys_.template temperature<dim>(u[iCell]);
-                    real gamma = phys_.gamma(T, u[iCell]);
+                    real gamma = phys_.template gammaEq<dim>(T, u[iCell]);
                     real rho = 2;
                     real p = 1 + 2 * pos(1);
                     if (pos(1) >= 0.5)
@@ -1115,7 +1115,7 @@ namespace DNDS::Euler
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
                     real M0 = 0.1;
                     real T_cell = phys_.template temperature<dim>(u[iCell]);
-                    real gamma = phys_.gamma(T_cell, u[iCell]);
+                    real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
                     auto c2n = mesh->cell2node[iCell];
                     auto gCell = vfv->GetCellQuad(iCell);
                     TU um;
@@ -1160,7 +1160,7 @@ namespace DNDS::Euler
                 Geom::tPoint pos = vfv->GetCellBary(iCell);
                 real M0 = 0.1;
                 real T_far = phys_.template temperature<dim>(settings.farFieldStaticValue);
-                real gamma_far = phys_.gamma(T_far, settings.farFieldStaticValue);
+                real gamma_far = phys_.template gammaEq<dim>(T_far, settings.farFieldStaticValue);
                 auto c2n = mesh->cell2node[iCell];
                 auto gCell = vfv->GetCellQuad(iCell);
                 TU um;
@@ -1284,7 +1284,7 @@ namespace DNDS::Euler
 
                         TU uPrimitive;
                         real T_cell = phys_.template temperature<dim>(u[iCell]);
-                        real gamma_cell = phys_.gamma(T_cell, u[iCell]);
+                        real gamma_cell = phys_.template gammaEq<dim>(T_cell, u[iCell]);
                         Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], uPrimitive, gamma_cell,
                                                                         phys_.mixtureFormationRhoE(u[iCell]));
                         for (int i = 0; i < nVars; i++)
@@ -1375,7 +1375,7 @@ namespace DNDS::Euler
         for (index iCell = 0; iCell < u.Size(); iCell++)
         {
             real T_cell = phys_.template temperature<dim>(u[iCell]);
-            real gamma = phys_.gamma(T_cell, u[iCell]);
+            real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
             TU out;
             Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], out, gamma,
                                                             phys_.mixtureFormationRhoE(u[iCell]));
@@ -1401,7 +1401,7 @@ namespace DNDS::Euler
             TU u_approx;
             Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], u_approx, real(1.4), 0 /* primitive, no formation info */);
             real T_cell = phys_.template temperature<dim>(u_approx);
-            real gamma = phys_.gamma(T_cell, u_approx);
+            real gamma = phys_.template gammaEq<dim>(T_cell, u_approx);
             TU out;
             Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], out, gamma, 0 /* primitive, no formation info */);
             u[iCell] = out;
@@ -1716,7 +1716,7 @@ namespace DNDS::Euler
             {
                 TU UPrim;
                 real T_cell = phys_.template temperature<dim>(u[iCell]);
-                real gamma_cell = phys_.gamma(T_cell, u[iCell]);
+                real gamma_cell = phys_.template gammaEq<dim>(T_cell, u[iCell]);
                 Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], UPrim, gamma_cell,
                                                                 phys_.mixtureFormationRhoE(u[iCell]));
                 rhoMin = std::min(rhoMin, UPrim(0));
@@ -1760,7 +1760,7 @@ namespace DNDS::Euler
             /***********/
             DNDS_assert_info(u[iCell](0) >= rhoEps, fmt::format("rhoMean {}, {}", u[iCell](0), rhoEps));
             real T_cell = phys_.template temperature<dim>(u[iCell]);
-            real gamma = phys_.gamma(T_cell, u[iCell]);
+            real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
             real rhoH_form_cell = phys_.mixtureFormationRhoE(u[iCell]);
             real pCent = (gamma - 1) * (u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - rhoH_form_cell);
             DNDS_assert_info(pCent >= pEps, fmt::format("pMean {}, {}", pCent, pEps));
@@ -1951,7 +1951,7 @@ namespace DNDS::Euler
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             real T_cell = phys_.template temperature<dim>(u[iCell]);
-            real gamma = phys_.gamma(T_cell, u[iCell]);
+            real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
             real alphaRho = 1;
             if (u[iCell](0) < rhoEps)
             {
@@ -1986,6 +1986,56 @@ namespace DNDS::Euler
 #endif
                 ret = false;
             }
+
+            // TODO: reactivate this
+            // --- Species positivity assertion (reactive flow) ---
+            //             if (auto *chem = phys_.chemicalSource())
+            //             {
+            //                 int Ns = chem->nSpecies();
+            //                 int Ns1 = Ns - 1;
+            //                 int nV = static_cast<int>(u[iCell].size());
+            //                 int Isp = nV - Ns1;
+
+            //                 for (int k = 0; k < Ns1; ++k)
+            //                 {
+            //                     if (u[iCell](Isp + k) < 0)
+            //                     {
+            //                         if (panic)
+            //                             DNDS_assert_info(
+            //                                 false,
+            //                                 fmt::format(
+            //                                     "AssertMeanValuePP Failed on cell {} rhoY_{}\n",
+            //                                     iCell, k) +
+            //                                     fmt::format(
+            //                                         " value={}",
+            //                                         u[iCell](Isp + k)));
+            // #if defined(DNDS_DIST_MT_USE_OMP)
+            // #    pragma omp critical
+            // #endif
+            //                         ret = false;
+            //                     }
+            //                 }
+
+            //                 real sumRhoY = 0;
+            //                 for (int k = 0; k < Ns1; ++k)
+            //                     sumRhoY += u[iCell](Isp + k);
+            //                 if (sumRhoY > u[iCell](0))
+            //                 {
+            //                     if (panic)
+            //                         DNDS_assert_info(
+            //                             false,
+            //                             fmt::format(
+            //                                 "AssertMeanValuePP Failed on cell {} rhoY_last (dependent)\n",
+            //                                 iCell) +
+            //                                 fmt::format(
+            //                                     " rho={}, sumRhoY={}",
+            //                                     u[iCell](0), sumRhoY));
+            // #if defined(DNDS_DIST_MT_USE_OMP)
+            // #    pragma omp critical
+            // #endif
+            //                     ret = false;
+            //                 }
+            //             }
         }
 
         return ret;
@@ -2038,7 +2088,7 @@ namespace DNDS::Euler
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             real T_cell = phys_.template temperature<dim>(u[iCell]);
-            real gamma = phys_.gamma(T_cell, u[iCell]);
+            real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
             real alphaRho = 1;
             TU inc = res[iCell];
             DNDS_assert(u[iCell](0) >= rhoEps);
@@ -2189,7 +2239,7 @@ namespace DNDS::Euler
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             real T_cell = phys_.template temperature<dim>(u[iCell]);
-            real gamma = phys_.gamma(T_cell, u[iCell]);
+            real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
             TU inc = res[iCell];
 
             TU uNew = u[iCell] + inc;
