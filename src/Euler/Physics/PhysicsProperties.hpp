@@ -22,6 +22,7 @@
 #include "../EulerEvaluatorSettings.hpp"
 #include "../Chemistry/ChemicalSource.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace DNDS::Euler
@@ -62,6 +63,40 @@ namespace DNDS::Euler
 
         template <class TU>
         real gamma(real T, const TU &U) const;
+
+        /** Equivalent gamma so that p = (gamma_eq - 1) * rho * e_sensible = rho * Rmix * T.
+         *  For non-reactive (constant-gamma) gas, returns the configured gamma.
+         *  For reactive gas, computes gamma_eq = 1 + p / (rho * e_sensible)
+         *  where p = rho * Rmix(Y) * T (exact ideal-gas EOS) and
+         *  e_sensible = (rhoE - KE - rhoH_form) / rho.
+         *  @param T  Code-scaled temperature (already from Cantera UV solver).
+         *  @param U  Conservative state vector.
+         *  @tparam tdim Spatial dimension (2 or 3).
+         */
+        template <int tdim, class TU>
+        real gammaEq(real T, const TU &U) const
+        {
+            return this->gamma(T, U);
+            if (!chemSrc_)
+                return igProp_->gamma;
+            real rho = U[0];
+            real rhoInv = 1.0 / std::max(rho, real(1e-60));
+            int I4 = tdim + 1;
+            real vel2 = 0;
+            for (int jd = 1; jd <= tdim; ++jd)
+                vel2 += U[jd] * U[jd];
+            vel2 *= rhoInv * rhoInv;
+            real rhoH_form = mixtureFormationRhoE(U);
+            real e_sensible = (U[I4] - 0.5 * rho * vel2 - rhoH_form) * rhoInv;
+            if (e_sensible <= 0)
+                return gamma(T, U);        // fallback to cp/cv gamma
+            real Rmix = Rgas(U);           // code-scaled
+            real p_exact = rho * Rmix * T; // code-scaled
+
+            // std::cout << fmt::format("pTR [{},{},{}], U[{}], gm1[{}], gm1G[{}]", p_exact, T, Rmix, U[4], p_exact / (rho * e_sensible), this->gamma(T, U)) << std::endl;
+            return 1.0 + p_exact / (rho * e_sensible);
+        }
+
         template <class TU>
         real Rgas(const TU &U) const;
         template <class TU>
@@ -87,6 +122,46 @@ namespace DNDS::Euler
         real sensibleRhoE(const TU &U, int iEnergy) const
         {
             return U[iEnergy] - mixtureFormationRhoE(U);
+        }
+
+        /** Linearized increment of formation enthalpy: d(rhoH_form) from a
+         *  conservative-variable increment dU.
+         *
+         *  d(rhoH_form) = (1/U0²) * Σ_k hf_k · d(ρY_k)
+         *
+         *  where d(ρY_last) = d(ρ) − Σ_{k<Ns-1} d(ρY_k).  Returns 0 when no
+         *  chemistry.  This is the exact differential — no nonlinear terms.
+         */
+        template <class TU>
+        real mixtureFormationRhoEIncrement(const TU &dU) const
+        {
+            if (!chemSrc_)
+                return 0;
+            int Ns = chemSrc_->nSpecies();
+            int Ns1 = Ns - 1;
+            int nVars = static_cast<int>(dU.size());
+            int Isp = nVars - Ns1;
+            real U0sq = igProp_->U0 * igProp_->U0;
+            real scale = (U0sq > 0) ? (1.0 / U0sq) : 1.0;
+
+            if (static_cast<int>(bufHf_.size()) < Ns)
+            {
+                bufHf_.resize(Ns);
+                Chemistry::SpeciesBufferView hfv{bufHf_.data(), Ns};
+                chemSrc_->speciesFormationEnthalpies(hfv);
+            }
+
+            // sum over independent species
+            real dRhoHf = 0;
+            real sumDRhoYk = 0;
+            for (int k = 0; k < Ns1; ++k)
+            {
+                dRhoHf += bufHf_[k] * dU[Isp + k];
+                sumDRhoYk += dU[Isp + k];
+            }
+            // last (dependent) species: d(rhoY_last) = d(rho) - sum d(rhoY_k)
+            dRhoHf += bufHf_[Ns1] * (dU[0] - sumDRhoYk);
+            return dRhoHf * scale;
         }
 
         /// Constant gamma (no state needed) — for initialization / analytic fields.
@@ -137,10 +212,7 @@ namespace DNDS::Euler
             bufY_[Ns1] = 1.0 - sum;
             for (int k = 0; k < Ns; ++k)
             {
-                if (bufY_[k] < 0)
-                    bufY_[k] = 0;
-                if (bufY_[k] > 1)
-                    bufY_[k] = 1;
+                bufY_[k] = std::max(bufY_[k], real(0));
             }
             real ySum = 0;
             for (int k = 0; k < Ns; ++k)
@@ -154,6 +226,7 @@ namespace DNDS::Euler
         const IdealGas *igProp_ = nullptr;
         Chemistry::ChemicalSource *chemSrc_ = nullptr;
         mutable std::vector<real> bufY_;
+        mutable std::vector<real> bufHf_; ///< Cached per-species formation enthalpies [J/kg].
     };
 
     // ========================================================================

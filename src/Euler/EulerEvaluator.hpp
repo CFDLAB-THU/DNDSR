@@ -293,7 +293,7 @@ namespace DNDS::Euler
             {
                 TU farPrim = settings.farFieldStaticValue;
                 real T = phys_.template temperature<dim>(settings.farFieldStaticValue);
-                real gamma = phys_.gamma(T, settings.farFieldStaticValue);
+                real gamma = phys_.template gammaEq<dim>(T, settings.farFieldStaticValue);
                 Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrim, gamma, 0 /* config, sensible ρE */);
                 T = farPrim(I4) / ((gamma - 1) / gamma * phys_.Cp(T, settings.farFieldStaticValue) * farPrim(0));
                 // auto [rhs0, rhs] = RANS::SolveZeroGradEquilibrium<dim>(settings.farFieldStaticValue, this->muEff(settings.farFieldStaticValue, T));
@@ -1116,7 +1116,7 @@ namespace DNDS::Euler
             real rhoun = n.dot(U({1, 2, 3}));
             real rhousqr = U({1, 2, 3}).squaredNorm();
             real T = phys_.template temperature<dim>(U);
-            real gamma = phys_.gamma(T, U);
+            real gamma = phys_.template gammaEq<dim>(T, U);
             TJacobianU subFdU;
             subFdU.resize(nVars, nVars);
 
@@ -1189,7 +1189,7 @@ namespace DNDS::Euler
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             real T = phys_.template temperature<dim>(U);
-            real gamma = phys_.gamma(T, U);
+            real gamma = phys_.template gammaEq<dim>(T, U);
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
             Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H,
@@ -1198,6 +1198,9 @@ namespace DNDS::Euler
             real dp;
             Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp,
                                          phys_.mixtureFormationRhoE(U));
+            // Correct dp for formation-enthalpy variation with species:
+            // p = (γ-1)·(ρE - ½ρv² - ρH_form), so dp includes -(γ-1)·d(ρH_form).
+            // dp -= (gamma - 1) * phys_.mixtureFormationRhoEIncrement(dU);
             TU dF(U.size());
             if (omitF == 0)
                 Gas::GasInviscidFluxFacialIncrement<dim>(
@@ -1271,7 +1274,7 @@ namespace DNDS::Euler
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             real T = phys_.template temperature<dim>(U);
-            real gamma = phys_.gamma(T, U);
+            real gamma = phys_.template gammaEq<dim>(T, U);
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
             Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H,
@@ -1280,6 +1283,8 @@ namespace DNDS::Euler
             real dp;
             Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp,
                                          phys_.mixtureFormationRhoE(U));
+            // Correct dp for formation-enthalpy variation with species.
+            // dp -= (gamma - 1) * phys_.mixtureFormationRhoEIncrement(dU);
             TU dF(U.size());
             Gas::GasInviscidFluxFacialIncrement<dim>(
                 U, dU,
@@ -1762,7 +1767,7 @@ namespace DNDS::Euler
                 real declineV = (rhoEinternalNew_sensible - rhoEinternal_sensible) / (rhoEinternal_sensible + verySmallReal);
                 real newrhoEinteralNew_sensible = (std::exp(declineV) + verySmallReal) * rhoEinternal_sensible;
                 real T = phys_.template temperature<dim>(u);
-                real gamma = phys_.gamma(T, u);
+                real gamma = phys_.template gammaEq<dim>(T, u);
                 newrhoEinteralNew_sensible = pEps / (gamma - 1);
                 real newrhoEinteralNew_total = newrhoEinteralNew_sensible + rhoH_form_old;
                 real c0 = 2 * u(I4) * u(0) - u(Seq123).squaredNorm() - 2 * u(0) * newrhoEinteralNew_total;
@@ -1895,6 +1900,34 @@ namespace DNDS::Euler
                 //               << this->CompressInc(cx[iCell], cxInc[iCell] * alpha).transpose() << "\n"
                 //               << cxInc[iCell].transpose() * alpha << std::endl;
                 cx[iCell] += compressedInc;
+
+                // --- Species positivity clipping (reactive flow) ---
+                if (auto *chem = phys_.chemicalSource())
+                {
+                    int Ns = chem->nSpecies();
+                    int Ns1 = Ns - 1; // number of transported (independent) species
+                    int nV = static_cast<int>(cx[iCell].size());
+                    int Isp = nV - Ns1;               // first transported species index
+                    constexpr real rhoYFloor = 1e-30; // tiny positive floor (matches 0D ODE)
+
+                    // (1) Clip each rhoY_k >= rhoYFloor
+                    for (int k = 0; k < Ns1; ++k)
+                        cx[iCell](Isp + k) = std::max(cx[iCell](Isp + k), rhoYFloor);
+
+                    // (2) Enforce rho - sum(rhoY_k) > 0  (dependent species > 0)
+                    real sumRhoY = 0;
+                    for (int k = 0; k < Ns1; ++k)
+                        sumRhoY += cx[iCell](Isp + k);
+                    real rho = cx[iCell](0);
+                    if (sumRhoY > rho)
+                    {
+                        // Scale all rhoY_k proportionally so sum = rho * (1 - eps)
+                        real scale = rho / sumRhoY * (1.0 - 1e-14);
+                        for (int k = 0; k < Ns1; ++k)
+                            cx[iCell](Isp + k) *= scale;
+                    }
+                }
+
                 // wall fix in not needed
                 // if (model == NS_2EQ || model == NS_2EQ_3D)
                 //     if (iCell < mesh->NumCell())
