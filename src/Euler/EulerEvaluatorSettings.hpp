@@ -306,6 +306,7 @@ namespace DNDS::Euler
             real T0 = 1;   ///< Reference temperature (K).
             real rho0 = 1; ///< Reference density (kg/m³).
             real U0 = 1;   ///< Reference velocity (m/s).
+            real L0 = 1;   ///< Reference length (m).
 
             DNDS_DECLARE_CONFIG(IdealGasProperty)
             {
@@ -324,6 +325,7 @@ namespace DNDS::Euler
                 DNDS_FIELD(T0,          "Reference temperature (K). 0 = use Rgas directly for code scaling.");
                 DNDS_FIELD(rho0,        "Reference density (kg/m^3). 0 = unset.");
                 DNDS_FIELD(U0,          "Reference velocity (m/s). 0 = unset.");
+                DNDS_FIELD(L0,          "Reference length (m). Default 1.");
                 // CpGas is derived: recomputed after deserialization
                 config.post_read([](T &s) { s.recomputeDerived(); });
                 // clang-format on

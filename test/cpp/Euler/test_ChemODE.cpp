@@ -116,7 +116,7 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via EOS")
 
             std::vector<double> jbuf(Ns * nVars, 0.0);
             JacobianBufferView Jv{jbuf.data(), Ns, nVars, Ns};
-            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, Ykv, omegav, Jv);
+            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, 1.0, Ykv, omegav, Jv);
 
             Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(nVars, nVars);
             for (int k = 0; k < Ns1; k++)
@@ -252,7 +252,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
                 ret[Isp + k] = omega[k] * MW[k];
 
             std::vector<double> jbuf(Ns * nVars, 0.0);
-            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, Ykv,
+            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, 1.0, Ykv,
                                              SpeciesBufferView{omega.data(), Ns},
                                              JacobianBufferView{jbuf.data(), Ns, nVars, Ns});
 
@@ -326,7 +326,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
         double p = Us[0] * chem->mixtureR(Yv) * Ts;
 
         std::vector<double> jbufRef(Ns * nVars, 0.0), omegaRef(Ns);
-        chem->productionRatesAndJacobian(Ts, p, Us[0], Us[4], 0., 0., 0., 4, U0, Yv,
+        chem->productionRatesAndJacobian(Ts, p, Us[0], Us[4], 0., 0., 0., 4, U0, 1.0, Yv,
                                          SpeciesBufferView{omegaRef.data(), Ns},
                                          JacobianBufferView{jbufRef.data(), Ns, nVars, Ns});
 
@@ -420,7 +420,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
             for (int k = 0; k < Ns1; k++)
                 ret[Isp + k] = omega[k] * MW[k];
             std::vector<double> jbuf(Ns * nVars, 0.0);
-            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, Ykv,
+            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, 1.0, Ykv,
                                              SpeciesBufferView{omega.data(), Ns},
                                              JacobianBufferView{jbuf.data(), Ns, nVars, Ns});
             Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(nVars, nVars);
@@ -461,7 +461,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
             for (int k = 0; k < Ns1; k++)
                 ret[Isp + k] = omega[k] * MW[k];
             std::vector<double> jbuf(Ns * nVars, 0.0);
-            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, Ykv,
+            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, 1.0, Ykv,
                                              SpeciesBufferView{omega.data(), Ns},
                                              JacobianBufferView{jbuf.data(), Ns, nVars, Ns});
             Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(nVars, nVars);
@@ -499,7 +499,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
 
         std::vector<double> jbufM(Ns * nVars, 0.0), omegM(Ns);
         chem->productionRatesAndJacobian(Tmom, pmom, Umom[0], Umom[4],
-                                         Umom[1], Umom[2], 0., 4, U0, Ymv,
+                                         Umom[1], Umom[2], 0., 4, U0, 1.0, Ymv,
                                          SpeciesBufferView{omegM.data(), Ns},
                                          JacobianBufferView{jbufM.data(), Ns, nVars, Ns});
 
