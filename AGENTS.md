@@ -130,6 +130,25 @@ tree is clean or that all valuable changes are committed/stashed. These
 commands silently overwrite uncommitted modifications and delete untracked
 files, discarding work with no way to recover it.
 
+### Running Solver Executables
+
+Solver executables (`euler`, `eulerEX`, `eulerSA`, etc.) are run from the
+`build/` directory.  **All file paths in JSON config files (mesh, output,
+mechanism) are relative to the CWD at invocation time** — typically
+`build/`.  Use `../` to reach the project root:
+
+```bash
+# From build/ — typical invocation
+cd build
+DNDS_MECH_PATH=../external/cfd_externals/install/data \
+  ./app/eulerEX.exe 14 ../cases/eulerEX/react_test.json
+```
+
+**Path conventions in configs:**
+- `meshFile`: relative to CWD (e.g. `../data/mesh/IV10_10.cgns`)
+- `outPltName`: relative to CWD (e.g. `../data/out/react_test/react_`)
+- `mechanismFile` (in `reactiveFlow`): relative to `DNDS_MECH_PATH` env var or CWD
+
 Tests use **pytest** with **pytest-mpi** and **pytest-timeout**. Test files live under `test/`. A default 120-second timeout is configured in `pyproject.toml` to prevent hung MPI tests from blocking CI.
 
 ```bash
