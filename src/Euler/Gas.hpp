@@ -1702,7 +1702,8 @@ namespace DNDS::Euler::Gas
      */
     template <int dim = 3, typename TU, typename TGradU, typename TGradUPrim>
     void GradientCons2Prim_IdealGas(const TU &U, const TGradU &GradU, TGradUPrim &GradUPrim, real gamma,
-                                    real rhoH_form = 0)
+                                    real rhoH_form = 0,
+                                    const real *pHf = nullptr, int nSpecies = 0)
     {
         static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -1720,9 +1721,26 @@ namespace DNDS::Euler::Gas
                                  0.5 *
                                      (GradU(Seq012, Seq123) * velo +
                                       GradUPrim(Seq012, Seq123) * Eigen::Vector<real, dim>(U(Seq123))));
-        (void)rhoH_form; // d(rhoH_form) = 0 approximation for gradient; TODO: full formation gradient
+        (void)rhoH_form;
         GradUPrim(Seq012, Eigen::seq(Eigen::fix<I4 + 1>, EigenLast)) -= GradU(Seq012, 0) * U(Eigen::seq(Eigen::fix<I4 + 1>, EigenLast)).transpose() / U(0);
         GradUPrim(Seq012, Eigen::seq(Eigen::fix<I4 + 1>, EigenLast)) /= U(0);
+
+        // Correct pressure gradient for formation-enthalpy gradient:
+        //   ∇p = (γ-1)·(∇(ρE) - ½·KE_terms - ∇(rhoH_form))
+        //   ∇(rhoH_form) = Σ (hf_k - hf_N)·∇(ρY_k) + hf_N·∇ρ
+        if (pHf && nSpecies > 1)
+        {
+            int Ns1 = nSpecies - 1;
+            int nVars = static_cast<int>(GradU.cols());
+            int Isp = nVars - Ns1;
+            for (int d = 0; d < dim; ++d)
+            {
+                real gradHF = pHf[Ns1] * GradU(d, 0);
+                for (int k = 0; k < Ns1; ++k)
+                    gradHF += (pHf[k] - pHf[Ns1]) * GradU(d, Isp + k);
+                GradUPrim(d, I4) -= (gamma - 1) * gradHF;
+            }
+        }
     }
 
     /**
