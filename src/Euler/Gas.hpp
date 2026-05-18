@@ -1786,7 +1786,7 @@ namespace DNDS::Euler::Gas
 
         Eigen::Vector<real, nVarsFixed> ret = uInc;
         Eigen::Vector<real, nVarsFixed> uNew = u + uInc;
-        newrhoEinteralNew += rhoH_form;
+        newrhoEinteralNew += rhoH_form; // converts sensible floor → total-energy floor using caller's rhoH_form
         real rhoEOld = u(I4) - u(Seq123).squaredNorm() / (u(0) + verySmallReal) * 0.5;
         newrhoEinteralNew = std::max(smallReal * rhoEOld, newrhoEinteralNew);
         real rhoENew = uNew(I4) - uNew(Seq123).squaredNorm() / (uNew(0) + verySmallReal) * 0.5;
@@ -1864,6 +1864,7 @@ namespace DNDS::Euler::Gas
         for (iter = 0; iter < 1000; iter++)
         {
             real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
+            // TODO: floor uses caller's rhoH_form; if rhoH_form changes significantly during iteration the check may be off by Δ(rhoH_form)
             if (ret(I4) + u(I4) - ek < newrhoEinteralNew)
             {
 
