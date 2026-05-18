@@ -404,12 +404,19 @@ namespace DNDS::Euler
                     TDiffU GradUMeanXyPrim;
                     real T = phys_.template temperature<dim>(UMeanXy);
                     real gamma = phys_.template gammaEq<dim>(T, UMeanXy);
+                    int nSpeciesHF = 0;
+                    const real *pHf = phys_.formationEnthalpies(nSpeciesHF);
+                    auto gradCons2Prim = [&](auto &U, auto &GradU, auto &GradUPrim)
+                    {
+                        Gas::GradientCons2Prim_IdealGas<dim>(U, GradU, GradUPrim, gamma,
+                                                             0, pHf, nSpeciesHF);
+                    };
                     if (settings.usePrimGradInVisFlux)
                     {
                         TDiffU GradULxyPrim, GradURxyPrim;
                         GradULxyPrim.resizeLike(GradURxy), GradURxyPrim.resizeLike(GradURxy);
-                        Gas::GradientCons2Prim_IdealGas<dim>(ULxy, GradULxy, GradULxyPrim, gamma);
-                        Gas::GradientCons2Prim_IdealGas<dim>(URxy, GradURxy, GradURxyPrim, gamma);
+                        gradCons2Prim(ULxy, GradULxy, GradULxyPrim);
+                        gradCons2Prim(URxy, GradURxy, GradURxyPrim);
                         TU URxyPrim(cnvars), ULxyPrim(cnvars);
                         Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrim, gamma, phys_.mixtureFormationRhoE(ULxy));
                         Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gamma, phys_.mixtureFormationRhoE(URxy));
@@ -419,7 +426,7 @@ namespace DNDS::Euler
                                               (unitNorm * (URxyPrim - ULxyPrim).transpose());
                     }
                     else
-                        Gas::GradientCons2Prim_IdealGas(UMeanXy, GradUMeanXy, GradUMeanXyPrim, gamma);
+                        gradCons2Prim(UMeanXy, GradUMeanXy, GradUMeanXyPrim);
 
 #else
                     TDiffU GradUMeanXy;

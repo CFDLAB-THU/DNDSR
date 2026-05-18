@@ -219,6 +219,25 @@ namespace DNDS::Euler
         Chemistry::ChemicalSource *chemicalSource() { return chemSrc_; }
         const Chemistry::ChemicalSource *chemicalSource() const { return chemSrc_; }
 
+        /// Cached per-species formation enthalpies [J/kg] in physical units.
+        /// Populated on first call, returns pointer to Ns elements (or nullptr if no chemistry).
+        const real *formationEnthalpies(int &Ns) const
+        {
+            if (!chemSrc_)
+            {
+                Ns = 0;
+                return nullptr;
+            }
+            Ns = chemSrc_->nSpecies();
+            if (static_cast<int>(bufHf_.size()) < Ns)
+            {
+                bufHf_.resize(Ns);
+                Chemistry::SpeciesBufferView hfv{bufHf_.data(), Ns};
+                chemSrc_->speciesFormationEnthalpies(hfv);
+            }
+            return bufHf_.data();
+        }
+
     private:
         template <class TU>
         Chemistry::ConstSpeciesBufferView massFractions(const TU &U) const

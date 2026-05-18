@@ -1198,9 +1198,7 @@ namespace DNDS::Euler
             real dp;
             Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp,
                                          phys_.mixtureFormationRhoE(U));
-            // Correct dp for formation-enthalpy variation with species:
-            // p = (γ-1)·(ρE - ½ρv² - ρH_form), so dp includes -(γ-1)·d(ρH_form).
-            // dp -= (gamma - 1) * phys_.mixtureFormationRhoEIncrement(dU);
+            dp -= (gamma - 1) * phys_.mixtureFormationRhoEIncrement(dU);
             TU dF(U.size());
             if (omitF == 0)
                 Gas::GasInviscidFluxFacialIncrement<dim>(
@@ -1283,8 +1281,7 @@ namespace DNDS::Euler
             real dp;
             Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp,
                                          phys_.mixtureFormationRhoE(U));
-            // Correct dp for formation-enthalpy variation with species.
-            // dp -= (gamma - 1) * phys_.mixtureFormationRhoEIncrement(dU);
+            dp -= (gamma - 1) * phys_.mixtureFormationRhoEIncrement(dU);
             TU dF(U.size());
             Gas::GasInviscidFluxFacialIncrement<dim>(
                 U, dU,
