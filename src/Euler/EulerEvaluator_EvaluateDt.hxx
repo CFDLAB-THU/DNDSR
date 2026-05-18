@@ -2852,8 +2852,8 @@ namespace DNDS::Euler
         {
             if (settings.reactiveFlow.enabled)
             {
-                for (int k = 5; k < nVars; ++k)
-                    outMap["rhoY_" + std::to_string(k - 5)] =
+                for (int k = I4 + 1; k < nVars; ++k)
+                    outMap["rhoY_" + std::to_string(k - (I4 + 1))] =
                         [&, k](index iCell)
                     { return u[iCell](k); };
             }

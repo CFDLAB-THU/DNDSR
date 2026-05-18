@@ -1648,7 +1648,7 @@ namespace DNDS::Euler::Gas
             vStressQCRFix.setZero();
             vStressQCRFix.diagonal() = (vStress.array() * O.array()).rowwise().sum();
             vStressQCRFix(0, 1) = O(0, 1) * (vStress(1, 1) - vStress(0, 0));
-            if (dim == 3)
+            if constexpr (dim == 3)
             {
                 vStressQCRFix(0, 1) += O(1, 2) * vStress(0, 2) + O(0, 2) * vStress(1, 2);
                 vStressQCRFix(0, 2) = O(0, 2) * (vStress(2, 2) - vStress(0, 0)) + O(0, 1) * vStress(2, 1) + O(2, 1) * vStress(0, 1);
