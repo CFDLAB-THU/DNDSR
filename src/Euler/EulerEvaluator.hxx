@@ -1708,24 +1708,20 @@ namespace DNDS::Euler
         if (settings.ppEpsIsRelaxed)
         {
             real rhoMin = veryLargeReal;
-            real pMin = veryLargeReal;
+            real rhoEiMin = veryLargeReal;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(runtime) reduction(min : rhoMin, pMin)
+#    pragma omp parallel for schedule(runtime) reduction(min : rhoMin, rhoEiMin)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
-                TU UPrim;
-                real T_cell = phys_.template temperature<dim>(u[iCell]);
-                real gamma_cell = phys_.template gammaEq<dim>(T_cell, u[iCell]);
-                Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], UPrim, gamma_cell,
-                                                                phys_.mixtureFormationRhoE(u[iCell]));
-                rhoMin = std::min(rhoMin, UPrim(0));
-                pMin = std::min(pMin, UPrim(I4));
+                rhoMin = std::min(rhoMin, u[iCell](0));
+                real rhoEi_cell = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoE(u[iCell]);
+                rhoEiMin = std::min(rhoEiMin, rhoEi_cell);
             }
             MPI::AllreduceOneReal(rhoMin, MPI_MIN, mesh->getMPI());
-            MPI::AllreduceOneReal(pMin, MPI_MIN, mesh->getMPI());
+            MPI::AllreduceOneReal(rhoEiMin, MPI_MIN, mesh->getMPI());
             rhoEps = std::min(rhoEps, minRatio * rhoMin);
-            pEps = std::min(pEps, minRatio * pMin);
+            pEps = std::min(pEps, minRatio * rhoEiMin);
         }
 
         index nLimLocal = 0;
@@ -1760,9 +1756,10 @@ namespace DNDS::Euler
             /***********/
             DNDS_assert_info(u[iCell](0) >= rhoEps, fmt::format("rhoMean {}, {}", u[iCell](0), rhoEps));
             real T_cell = phys_.template temperature<dim>(u[iCell]);
-            real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
+            // real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
             real rhoH_form_cell = phys_.mixtureFormationRhoE(u[iCell]);
-            real pCent = (gamma - 1) * (u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - rhoH_form_cell);
+            // actually is rhoEi, not p
+            real pCent = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - rhoH_form_cell;
             DNDS_assert_info(pCent >= pEps, fmt::format("pMean {}, {}", pCent, pEps));
 
             auto rhoH_form_perQ = [&](const Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> &rec)
@@ -1780,7 +1777,7 @@ namespace DNDS::Euler
             int curOrder = vfv->GetCellOrder(iCell);
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecBase = uRec[iCell];
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> recBase; // * has to call checkRecBaseGood() to hold valid value
-            auto checkRecBaseGood = [&]()
+            auto checkRecBaseGood = [&]() -> bool
             {
                 recBase = (quadBase * uRecBase).rowwise() + u[iCell].transpose();
                 if (recBase(EigenAll, 0).minCoeff() < rhoEps) // TODO: add relaxation to eps values
@@ -1795,9 +1792,7 @@ namespace DNDS::Euler
                     0.5 * (recBase(EigenAll, Seq123).array().square().rowwise().sum()) / recBase(EigenAll, 0).array();
                 Eigen::Vector<real, Eigen::Dynamic> rhoH_form_q = rhoH_form_perQ(recBase);
                 Eigen::Vector<real, Eigen::Dynamic> eInternalS = (recBase(EigenAll, I4) - ek - rhoH_form_q);
-                if (eInternalS.minCoeff() < pEps)
-                    return false;
-                return true;
+                return eInternalS.minCoeff() >= pEps;
             };
             if (checkRecBaseGood())
             {
@@ -1818,7 +1813,7 @@ namespace DNDS::Euler
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed>
                 recInc = quadBase * (uRec[iCell] - uRecBase);
             Eigen::Vector<real, Eigen::Dynamic> rhoS = recInc(EigenAll, 0) + recBase(EigenAll, 0);
-            Eigen::Index rhoMinIdx;
+            Eigen::Index rhoMinIdx{-1};
             real rhoMin = rhoS.minCoeff(&rhoMinIdx);
             real theta1 = 1;
             if (rhoMin < rhoEps)
@@ -1863,10 +1858,7 @@ namespace DNDS::Euler
                 }
             }
 
-            if constexpr (Traits::hasRANS)
-                recInc(EigenAll, Seq01234) *= theta1; // to leave SA unchanged
-            else
-                recInc *= theta1;
+            recInc(EigenAll, Seq01234) *= theta1; // to leave SA unchanged
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed>
                 recVRhoG = recInc + recBase;
 
@@ -1881,7 +1873,7 @@ namespace DNDS::Euler
             else
                 for (int iG = 0; iG < rhoS.size(); iG++)
                 {
-                    if (eInternalS(iG) < 2 * pEps / (gamma - 1))
+                    if (eInternalS(iG) < 2 * pEps) // pEps is rhoE_sensible floor (not pressure)
                     {
                         real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
                             recBase(iG, EigenAll).transpose(), recInc(iG, EigenAll).transpose(),
@@ -1908,8 +1900,9 @@ namespace DNDS::Euler
                 std::cout << fmt::format("theta1 {}, thetaP {}", theta1, thetaP) << std::endl;
                 DNDS_assert(false);
             }
+            // only compresses main flow part
             if (uRecBeta[iCell](0) < 1)
-                uRec[iCell] = (uRec[iCell] - uRecBase) * uRecBeta[iCell](0) + uRecBase;
+                uRec[iCell](EigenAll, Seq01234) = (uRec[iCell](EigenAll, Seq01234) - uRecBase(EigenAll, Seq01234)) * uRecBeta[iCell](0) + uRecBase(EigenAll, Seq01234);
 
             // validation:
             recInc = quadBase * uRec[iCell];
@@ -1951,7 +1944,6 @@ namespace DNDS::Euler
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             real T_cell = phys_.template temperature<dim>(u[iCell]);
-            real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
             real alphaRho = 1;
             if (u[iCell](0) < rhoEps)
             {
@@ -1970,7 +1962,7 @@ namespace DNDS::Euler
                 ret = false;
             }
             real rhoEi = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoE(u[iCell]);
-            if (rhoEi < pEps / (gamma - 1))
+            if (rhoEi < pEps) // pEps is rhoE_sensible floor
             {
                 if (panic)
                     DNDS_assert_info(
@@ -1980,7 +1972,7 @@ namespace DNDS::Euler
                             iCell) +
                             fmt::format(
                                 " eps={}, value={}",
-                                pEps / (gamma - 1), rhoEi));
+                                pEps, rhoEi));
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp critical
 #endif
@@ -1989,53 +1981,53 @@ namespace DNDS::Euler
 
             // TODO: reactivate this
             // --- Species positivity assertion (reactive flow) ---
-            //             if (auto *chem = phys_.chemicalSource())
-            //             {
-            //                 int Ns = chem->nSpecies();
-            //                 int Ns1 = Ns - 1;
-            //                 int nV = static_cast<int>(u[iCell].size());
-            //                 int Isp = nV - Ns1;
+            if (auto *chem = phys_.chemicalSource())
+            {
+                int Ns = chem->nSpecies();
+                int Ns1 = Ns - 1;
+                int nV = static_cast<int>(u[iCell].size());
+                int Isp = nV - Ns1;
 
-            //                 for (int k = 0; k < Ns1; ++k)
-            //                 {
-            //                     if (u[iCell](Isp + k) < 0)
-            //                     {
-            //                         if (panic)
-            //                             DNDS_assert_info(
-            //                                 false,
-            //                                 fmt::format(
-            //                                     "AssertMeanValuePP Failed on cell {} rhoY_{}\n",
-            //                                     iCell, k) +
-            //                                     fmt::format(
-            //                                         " value={}",
-            //                                         u[iCell](Isp + k)));
-            // #if defined(DNDS_DIST_MT_USE_OMP)
-            // #    pragma omp critical
-            // #endif
-            //                         ret = false;
-            //                     }
-            //                 }
+                for (int k = 0; k < Ns1; ++k)
+                {
+                    if (u[iCell](Isp + k) < 0)
+                    {
+                        if (panic)
+                            DNDS_assert_info(
+                                false,
+                                fmt::format(
+                                    "AssertMeanValuePP Failed on cell {} rhoY_{}\n",
+                                    iCell, k) +
+                                    fmt::format(
+                                        " value={}",
+                                        u[iCell](Isp + k)));
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp critical
+#endif
+                        ret = false;
+                    }
+                }
 
-            //                 real sumRhoY = 0;
-            //                 for (int k = 0; k < Ns1; ++k)
-            //                     sumRhoY += u[iCell](Isp + k);
-            //                 if (sumRhoY > u[iCell](0))
-            //                 {
-            //                     if (panic)
-            //                         DNDS_assert_info(
-            //                             false,
-            //                             fmt::format(
-            //                                 "AssertMeanValuePP Failed on cell {} rhoY_last (dependent)\n",
-            //                                 iCell) +
-            //                                 fmt::format(
-            //                                     " rho={}, sumRhoY={}",
-            //                                     u[iCell](0), sumRhoY));
-            // #if defined(DNDS_DIST_MT_USE_OMP)
-            // #    pragma omp critical
-            // #endif
-            //                     ret = false;
-            //                 }
-            //             }
+                real sumRhoY = 0;
+                for (int k = 0; k < Ns1; ++k)
+                    sumRhoY += u[iCell](Isp + k);
+                if (sumRhoY > u[iCell](0))
+                {
+                    if (panic)
+                        DNDS_assert_info(
+                            false,
+                            fmt::format(
+                                "AssertMeanValuePP Failed on cell {} rhoY_last (dependent)\n",
+                                iCell) +
+                                fmt::format(
+                                    " rho={}, sumRhoY={}",
+                                    u[iCell](0), sumRhoY));
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp critical
+#endif
+                    ret = false;
+                }
+            }
         }
 
         return ret;
@@ -2088,7 +2080,7 @@ namespace DNDS::Euler
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
             real T_cell = phys_.template temperature<dim>(u[iCell]);
-            real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
+            // real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
             real alphaRho = 1;
             TU inc = res[iCell];
             DNDS_assert(u[iCell](0) >= rhoEps);
@@ -2128,8 +2120,8 @@ namespace DNDS::Euler
             inc *= alphaRho;
 
             TU uNew = u[iCell] + inc;
-            real pNew = (uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0)) * (gamma - 1);
-            real pOld = (u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0)) * (gamma - 1);
+            real pNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - phys_.mixtureFormationRhoE(uNew);                 // rhoE_sensible (not pressure)
+            real pOld = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoE(u[iCell]); // rhoE_sensible (not pressure)
             real relaxedP = pEps;
             if (pNew < pOld)
                 relaxedP = pEps + (pOld - pEps) * (1 - relax);
@@ -2139,7 +2131,7 @@ namespace DNDS::Euler
             {
                 // todo: use high order accurate (add control switch)
                 real alphaC = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
-                    u[iCell], inc, relaxedP / (gamma - 1));
+                    u[iCell], inc, relaxedP, phys_.mixtureFormationRhoE(u[iCell]));
                 alphaP = std::min(alphaP, alphaC);
             }
             cellRHSAlpha[iCell](0) = alphaRho * alphaP;
@@ -2238,12 +2230,10 @@ namespace DNDS::Euler
         // for (index iCell : InterCells)
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            real T_cell = phys_.template temperature<dim>(u[iCell]);
-            real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
             TU inc = res[iCell];
 
             TU uNew = u[iCell] + inc;
-            real pNew = (uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0)) * (gamma - 1);
+            real pNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - phys_.mixtureFormationRhoE(uNew); // rhoE_sensible (not pressure)
 
             if (pNew < pEps || uNew(0) < rhoEps)
             {

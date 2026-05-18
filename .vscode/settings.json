@@ -21,7 +21,7 @@
         "*.f90": "FortranFreeForm",
         "*.hypara": "csharp",
         "*config*.json": "jsonc",
-        "cases/**/*.json": "jsonc",
+        "${workspaceFolder}/cases/**/*.json": "jsonc",
         "*.dox": "c",
         "*.h": "cpp",
         "*.c": "cpp",
