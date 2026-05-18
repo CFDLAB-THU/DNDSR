@@ -118,12 +118,12 @@ namespace DNDS::Euler
          *  e_sensible = (rhoE - KE - rhoH_form) / rho.
          *  @param T  Code-scaled temperature (already from Cantera UV solver).
          *  @param U  Conservative state vector.
-         *  @tparam tdim Spatial dimension (2 or 3).
+         *  @tparam dim Spatial dimension (2 or 3).
          */
         template <int dim>
         real gammaEq(real T, const TU &U) const
         {
-            return this->gamma(T, U);
+            // return this->gamma(T, U);
             if (!hasChemicalSource())
                 return igProp_->gamma;
             real rho = U[0];
@@ -356,6 +356,13 @@ namespace DNDS::Euler
         }
         real uSensible = sensibleRhoE(U, I4) * rhoInv - 0.5 * vel2;
         real uPhys = uInternal * igProp_->U0 * igProp_->U0;
+        // uInternal includes Σ Y_k·h_f_k (formation enthalpy). Cantera's setState_UV
+        // uses internal energy u_k = e_sensible + (h_f_k − pV_k). Convert h_f → u_f
+        // via Cantera's own h−u relation at reference conditions (EOS-agnostic).
+        {
+            auto Yv = massFractions(U);
+            uPhys -= chem().pVAtReference(Yv);
+        }
         real vPhys = rhoInv / igProp_->rho0;
         double T_guess = TGuess > 0 ? toPhysT(TGuess) : 0;
         if (T_guess <= 0)
@@ -402,7 +409,9 @@ namespace DNDS::Euler
     template <EulerModel model>
     real PhysicsProperties<model>::Cv(real T, const TU &U) const
     {
-        return Cp(T, U) - Rgas(U);
+        if (!hasChemicalSource())
+            return Cp(T, U) - Rgas(U);
+        return toCode(chem().mixtureCv(toPhysT(T), massFractions(U)));
     }
 
 } // namespace DNDS::Euler

@@ -152,6 +152,11 @@ namespace DNDS::Euler::Chemistry
         /** Mixture formation energy Σ Y_k * h_f_k [J/kg]. In physical (SI) units. */
         double mixtureFormationEnergy(ConstSpeciesBufferView Y) const;
 
+        /** EOS-agnostic enthalpy-internal-energy difference at reference T=298.15 K, p=1 atm.
+         *  Returns h_mix(298,Y) − u_mix(298,Y) for the given composition [J/kg].
+         *  For ideal gas this equals R_mix·298.15; for real gases uses the full EOS. */
+        double pVAtReference(ConstSpeciesBufferView Y) const;
+
         // ---- Per-instance buffers (thread-safe when each thread has its own) ----
 
         /** Compute mass fractions from conservative species densities. Fills bufY_, returns view into it. */

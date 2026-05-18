@@ -118,7 +118,7 @@ namespace DNDS::Euler
                                        const typename EulerModelTraits<model>::TU &U, int Mode,
                                        real rhoH_form = 0)
     {
-        auto I4 = 4;
+        constexpr auto I4 = EulerModelTraits<model>::dim + 1;
         if (Mode == 0)
         {
             typename EulerModelTraits<model>::TU uPrim;
@@ -354,7 +354,6 @@ namespace DNDS::Euler
         typename EulerEvaluatorSettings<model>::IdealGasProperty igProp_;
 
         // Per-thread work buffers (one set per OMP thread)
-        mutable std::vector<std::vector<double>> bufY_;
         mutable std::vector<std::vector<double>> bufOmega_;
         mutable std::vector<std::vector<double>> bufJ_;
 
@@ -377,13 +376,11 @@ namespace DNDS::Euler
                 int nT = static_cast<int>(pool_->size());
                 auto &c0 = (*pool_)[0];
                 int Ns = c0.nSpecies();
-                int nVars = 5 + Ns - 1;
-                bufY_.resize(nT);
+                int nVars = static_cast<int>(EulerModelTraits<model>::dim) + 2 + Ns - 1;
                 bufOmega_.resize(nT);
                 bufJ_.resize(nT);
                 for (int t = 0; t < nT; ++t)
                 {
-                    bufY_[t].resize(Ns);
                     bufOmega_[t].resize(Ns);
                     bufJ_[t].resize(Ns * nVars);
                 }
@@ -408,28 +405,8 @@ namespace DNDS::Euler
             double rho = U[0];
             double rhoInv = 1.0 / std::max(rho, 1e-60);
 
-            auto &bufY = bufY_[tid];
+            auto Yv = c.massFractions(rho, &U[Isp], Ns1);
             auto &bufOmega = bufOmega_[tid];
-            for (int k = 0; k < Ns1; ++k)
-                bufY[k] = U[Isp + k] * rhoInv;
-            double sumY = 0;
-            for (int k = 0; k < Ns1; ++k)
-                sumY += bufY[k];
-            bufY[Ns1] = 1.0 - sumY;
-
-            for (int k = 0; k < Ns; ++k)
-            {
-                if (bufY[k] < 0)
-                    bufY[k] = 0;
-                if (bufY[k] > 1)
-                    bufY[k] = 1;
-            }
-            double ySum = 0;
-            for (int k = 0; k < Ns; ++k)
-                ySum += bufY[k];
-            if (ySum > 0)
-                for (int k = 0; k < Ns; ++k)
-                    bufY[k] /= ySum;
 
             DNDS_assert(std::isfinite(aux.T) && aux.T > 0);
             DNDS_assert(std::isfinite(aux.p) && aux.p > 0);
@@ -438,7 +415,6 @@ namespace DNDS::Euler
             double Tphys = igProp_.T0 > 0 ? aux.T * igProp_.T0 : aux.T;
             double Tcantera = std::max(Tphys, 200.0); // NASA poly lower bound
 
-            Chemistry::ConstSpeciesBufferView Yv{bufY.data(), Ns};
             Chemistry::SpeciesBufferView omegav{bufOmega.data(), Ns};
 
             // Source rate scale: S0 = rho0 * U0 / L0  [kg/(m³·s)]

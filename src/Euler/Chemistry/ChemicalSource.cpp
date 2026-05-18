@@ -110,13 +110,16 @@ namespace DNDS::Euler::Chemistry
 
     double ChemicalSource::mixtureCv(double T, ConstSpeciesBufferView Y) const
     {
-        return mixtureCp(T, Y) - mixtureR(Y);
+        impl_->setTPY(T, 101325, Y);
+        return impl_->gas->cv_mass();
     }
 
     double ChemicalSource::mixtureGamma(double T, ConstSpeciesBufferView Y) const
     {
-        double cp = mixtureCp(T, Y);
-        return cp / std::max(cp - mixtureR(Y), 1e-30);
+        impl_->setTPY(T, 101325, Y);
+        double cp = impl_->gas->cp_mass();
+        double cv = impl_->gas->cv_mass();
+        return cp / std::max(cv, 1e-30);
     }
 
     double ChemicalSource::speedOfSound(double T, ConstSpeciesBufferView Y) const
@@ -300,11 +303,43 @@ namespace DNDS::Euler::Chemistry
         return e;
     }
 
+    double ChemicalSource::pVAtReference(ConstSpeciesBufferView Y) const
+    {
+        impl_->gasT->setMassFractions_NoNorm(Y.data);
+        impl_->gasT->setState_TP(298.15, 101325);
+        return impl_->gasT->enthalpy_mass() - impl_->gasT->intEnergy_mass();
+    }
+
     // ---- clone ---------------------------------------------------------------
 
     std::unique_ptr<ChemicalSource> ChemicalSource::clone() const
     {
-        return std::make_unique<ChemicalSource>(mechanismFile_, phaseName_);
+        // Use Cantera's Solution::clone() (since v3.2) to deep-copy ThermoPhase,
+        // Kinetics, and Transport without re-parsing the YAML mechanism file.
+        auto &I = *impl_;
+        auto c = std::make_unique<ChemicalSource>();
+        c->mechanismFile_ = mechanismFile_;
+        c->phaseName_ = phaseName_;
+        auto &Ic = *c->impl_;
+        Ic.sol = I.sol->clone({}, true, true);
+        Ic.gas = &(*Ic.sol->thermo());
+        Ic.kin = &(*Ic.sol->kinetics());
+        Ic.trn = &(*Ic.sol->transport());
+        Ic.solT = I.solT->clone({}, false, false);
+        Ic.gasT = &(*Ic.solT->thermo());
+
+        Ic.Ns = I.Ns;
+        Ic.speciesNames = I.speciesNames;
+        Ic.mw = I.mw;
+        Ic.Rk = I.Rk;
+        Ic.hf = I.hf;
+
+        Ic.bufOmega.resize(Ic.Ns);
+        Ic.bufDwdt.resize(Ic.Ns);
+        Ic.bufDwdp.resize(Ic.Ns);
+        Ic.bufDwdc.resize(Ic.Ns * Ic.Ns);
+        Ic.bufD.resize(Ic.Ns);
+        return c;
     }
 
     // ---- per-instance buffers -------------------------------------------------
