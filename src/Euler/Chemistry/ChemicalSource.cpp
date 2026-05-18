@@ -154,9 +154,10 @@ namespace DNDS::Euler::Chemistry
         int iEnergy, double velScale, double rhoScale,
         ConstSpeciesBufferView Y,
         SpeciesBufferView omega,
-        JacobianBufferView J,
+        JacobianBufferView dOmegadU,
         int jacFlags) const
     {
+        auto &J = dOmegadU;
         auto &I = *impl_;
         I.setTPY(T, p, Y);
 
