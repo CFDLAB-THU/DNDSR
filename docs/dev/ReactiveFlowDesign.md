@@ -1,8 +1,9 @@
 # Reactive Flow Fully-Implicit Solver Design
 
-**Status:** Phases 1–3 complete. Phase 4 partially done (0D autoignition verified,
-Jacobian validated, formation-enthalpy convention implemented).  
-**Branch:** `dev/harry` (commits `e31e365`..`6d47c5a`).  
+**Status:** Phases 1–4 complete. Full architecture refactor (per-thread pool, traits-typed
+contributors, stateless PhysicsProperties, sensible-ρE PP conventions) done.  
+**Branch:** `dev/harry`.  
+**Last updated:** 2026-05-18.  
 **Target:** Extend DNDSR Euler solvers to support multi-species reactive flow
 with coupled fully-implicit time integration using full chemical Jacobian blocks.  
 **Solver:** `eulerEX` / `eulerEX3D` (extensible EulerModel variants with `Eigen::Dynamic` nVars)
@@ -22,7 +23,8 @@ with coupled fully-implicit time integration using full chemical Jacobian blocks
 | 2 | ChemicalSource PIMPL (Cantera), ChemicalContributor, buffer pre-allocation | Done |
 | 3 | Full-block Jacobian, PhysicsProperties module, EOS/transport routing, species diffusion | Done |
 | 3b | Analytic chemical Jacobian (T-coupling, last-species absorption, momentum columns, velScale) | Done |
-| 4 | Verification (0-D autoignition, FD Jacobian check, formation-enthalpy fixes) | Partial |
+| 4 | Verification (0-D autoignition, FD Jacobian check, formation-enthalpy fixes, CFD ignition) | Done |
+| 4b | Per-thread ChemicalSource pool, traits-typed contributors, stateless PhysicsProperties, PP audit | Done |
 | 5 | block_scalar Jacobian mode, point-implicit chemistry, GPU kinetics | Future |
 
 ### New files created
@@ -34,7 +36,50 @@ with coupled fully-implicit time integration using full chemical Jacobian blocks
 | `src/Euler/Chemistry/ChemicalSource.cpp` | Cantera Solution loaded only here |
 | `src/Euler/Physics/PhysicsProperties.hpp` | Centralized EOS/transport/kinetics property module |
 
-### Key architectural decisions implemented
+### Architecture refactors (Phase 4b)
+
+**Per-thread ChemicalSource pool:** `PhysicsProperties` and `ChemicalContributor` share a
+`std::shared_ptr<std::vector<ChemicalSource>>` indexed by `omp_get_thread_num()`. Each
+thread gets its own Cantera `Solution` objects + work buffers. No locks, no races.
+The pool is sized to `omp_get_max_threads()` at construction (1 when OMP disabled).
+`ChemicalContributor` additionally stores a copy of `IdealGasProperty` (scale factors:
+T0, rho0, U0, L0) so `evaluate()` needs no external configuration object.
+
+**Stateless PhysicsProperties:** `bufY_` and `bufHf_` moved into `ChemicalSource` (per-instance).
+All methods typed via `EulerModelTraits<model>::TU` (not generic `class TU` templates).
+No public `chemicalSource()` accessor — all queries wrapped to dispatch through the pool.
+
+**Contributors templated on EulerModel:** Each contributor struct (`BodyForceContributor`,
+`ChemicalContributor`, etc.) now has `template <EulerModel model>` with typed evaluate
+signatures using `Eigen::Vector<real, nVars>` etc. The `SourceTermVariant<model>` and
+`SourceTermVisitor<model>` are model-aware. `EulerModelTraits` provides `TU`, `TJac`,
+`TDiffU`, `TVec`, `TMat`, and batch type aliases — defined once, used everywhere.
+
+**GPU preparation:** Host-device transferable types defined in `EulerModelTraits`
+are used as the single source of truth for all per-model Eigen types; the EulerP
+CUDA path will use the same traits.
+
+### PP (positivity-preserving) audit
+
+All PP functions (`EvaluateCellRHSAlpha`, `EvaluateURecBeta`, `CompressInc`,
+`AssertMeanValuePP`, `IdealGasGetCompressionRatioPressure`) now use **sensible rhoE**
+(`U[I4] − KE − rhoH_form`) as the positivity floor, not pressure. The `pEps` variable
+is named for historical reasons but stores a sensible-energy floor.
+
+- `IdealGasUIncrement`: uncommented `dp −= (γ−1)·d(rhoH_form)` correction (BUG2)
+- `GradientCons2Prim`: corrected pressure gradient for `∇(rhoH_form)` via `pHf` species
+  enthalpies (BUG3), with `hfSpecies(k)` Eigen indexing
+- Species reconstruction increments and coefficients scaled with `theta1`/`uRecBeta`
+  alongside the Euler part
+
+### Species enthalpy API
+
+`PhysicsProperties::speciesEnthalpies(T, p, U, hView)` fills `hView` with **code-scaled**
+total specific enthalpies `h_k/U0²` where `h_k = e_sensible_k + h_f_k + p/ρ_k` (no KE).
+Cantera's `getPartialMolarEnthalpies` returns `H_k(T)` [J/kmol] ≡ `h_f_k° + ∫ C_p,k dT`,
+which for an ideal gas decomposes as `e_f + e_sensible + RT/M_k`. The `(h_k − h_N)·J_k`
+form in the diffusion energy flux correctly handles the dependent-species flux
+(`J_N = −Σ J_k`), giving the standard multi-species N-S energy transport `Σ h_k·J_k`.
 
 - **PIMPL for Cantera**: `ChemicalSource.hpp` has zero Cantera includes — only buffer views (`SpeciesBufferView`, `JacobianBufferView`). The `.cpp` is a single translation unit with `cantera/core.h`. No Eigen/Cantera header conflict.
 - **Perfect gas with variable γ**: Multi-species mixture properties (γ_mix, cp_mix, R_mix) computed as mass-fraction-weighted averages. Existing Riemann solver and flux Jacobian code is unchanged — only the coefficient values are substituted through `PhysicsProperties`.

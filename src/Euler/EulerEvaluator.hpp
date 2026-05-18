@@ -89,20 +89,20 @@ namespace DNDS::Euler
         /// @brief Compute the maximum batch-multiplied column count for batched Eigen matrices.
         static constexpr int MaxBatchMult(int n) { return MaxBatch > 0 ? (n * MaxBatch) : Eigen::Dynamic; }
 
-        typedef Eigen::VectorFMTSafe<real, dim> TVec;                                                                   ///< Spatial vector (dim components).
-        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatch> TVec_Batch;             ///< Batch of spatial vectors.
-        typedef Eigen::MatrixFMTSafe<real, dim, dim> TMat;                                                              ///< Spatial matrix (dim x dim).
-        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatchMult(3)> TMat_Batch;      ///< Batch of spatial matrices.
-        typedef Eigen::VectorFMTSafe<real, nVarsFixed> TU;                                                              ///< Conservative variable vector (nVarsFixed components).
-        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, Eigen::Dynamic, Eigen::ColMajor, nVarsFixed, MaxBatch> TU_Batch; ///< Batch of conservative variable vectors.
-        typedef Eigen::MatrixFMTSafe<real, 1, Eigen::Dynamic, Eigen::RowMajor, 1, MaxBatch> TReal_Batch;                ///< Batch of scalar values.
-        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, nVarsFixed> TJacobianU;                                          ///< Jacobian matrix (nVars x nVars) of the flux w.r.t. conserved variables.
-        typedef Eigen::MatrixFMTSafe<real, dim, nVarsFixed> TDiffU;                                                     ///< Gradient of conserved variables (dim x nVars).
-        typedef Eigen::MatrixFMTSafe<real, Eigen::Dynamic, nVarsFixed, Eigen::ColMajor, MaxBatchMult(3)> TDiffU_Batch;  ///< Batch of gradient matrices.
-        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, dim> TDiffUTransposed;                                           ///< Transposed gradient (nVars x dim).
-        typedef ArrayDOFV<nVarsFixed> TDof;                                                                             ///< Cell-centered DOF array (mean values).
-        typedef ArrayRECV<nVarsFixed> TRec;                                                                             ///< Reconstruction coefficient array (per-cell polynomial coefficients).
-        typedef ArrayRECV<1> TScalar;                                                                                   ///< Scalar reconstruction coefficient array.
+        typedef typename Traits::TVec TVec;                                    ///< Spatial vector (dim components).
+        typedef typename Traits::template TVec_Batch<MaxBatch> TVec_Batch;     ///< Batch of spatial vectors.
+        typedef typename Traits::TMat TMat;                                    ///< Spatial matrix (dim x dim).
+        typedef typename Traits::template TMat_Batch<MaxBatch> TMat_Batch;     ///< Batch of spatial matrices.
+        typedef typename Traits::TU TU;                                        ///< Conservative variable vector (nVarsFixed components).
+        typedef typename Traits::template TU_Batch<MaxBatch> TU_Batch;         ///< Batch of conservative variable vectors.
+        typedef typename Traits::template TReal_Batch<MaxBatch> TReal_Batch;   ///< Batch of scalar values.
+        typedef typename Traits::TJacobianU TJacobianU;                        ///< Jacobian matrix (nVars x nVars) of the flux w.r.t. conserved variables.
+        typedef typename Traits::TDiffU TDiffU;                                ///< Gradient of conserved variables (dim x nVars).
+        typedef typename Traits::template TDiffU_Batch<MaxBatch> TDiffU_Batch; ///< Batch of gradient matrices.
+        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, dim> TDiffUTransposed;  ///< Transposed gradient (nVars x dim).
+        typedef ArrayDOFV<nVarsFixed> TDof;                                    ///< Cell-centered DOF array (mean values).
+        typedef ArrayRECV<nVarsFixed> TRec;                                    ///< Reconstruction coefficient array (per-cell polynomial coefficients).
+        typedef ArrayRECV<1> TScalar;                                          ///< Scalar reconstruction coefficient array.
 
         typedef CFV::VariationalReconstruction<gDim> TVFV;       ///< Variational reconstruction type for this geometric dimension.
         typedef ssp<CFV::VariationalReconstruction<gDim>> TpVFV; ///< Shared pointer to the variational reconstruction object.
@@ -228,7 +228,7 @@ namespace DNDS::Euler
         PhysicsProperties<model> phys_;
 
         /// @brief Source term contributors for extended models (NS_EX / NS_EX_3D).
-        std::vector<SourceTermVariant> sourceContributors;
+        std::vector<SourceTermVariant<model>> sourceContributors;
 
         /**
          * @brief Construct an EulerEvaluator and initialize all internal buffers.
@@ -324,9 +324,9 @@ namespace DNDS::Euler
 
             // Wire ChemicalSource into physics module (extract from contributor list)
             for (auto &c : sourceContributors)
-                if (auto *chem = std::get_if<ChemicalContributor>(&c))
-                    if (chem->chem)
-                        phys_.setChemicalSource(chem->chem.get());
+                if (auto *chem = std::get_if<ChemicalContributor<model>>(&c))
+                    if (chem->pool_)
+                        phys_.setChemicalSourcePool(chem->pool_);
         }
 
         /**
@@ -1757,7 +1757,7 @@ namespace DNDS::Euler
             real rhoEinternal_sensible = u(I4) - ekOld - rhoH_form_old;
             DNDS_assert(rhoEinternal_sensible > 0);
             real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-            real rhoH_form_new = phys_.mixtureFormationRhoE(u + ret);
+            real rhoH_form_new = phys_.mixtureFormationRhoE(TU(u + ret));
             real rhoEinternalNew_sensible = u(I4) + ret(I4) - ek - rhoH_form_new;
             if (rhoEinternalNew_sensible <= pEps)
             {
@@ -1782,7 +1782,7 @@ namespace DNDS::Euler
                 for (int iter = 0; iter < 1000; iter++)
                 {
                     ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-                    rhoH_form_new = phys_.mixtureFormationRhoE(u + ret);
+                    rhoH_form_new = phys_.mixtureFormationRhoE(TU(u + ret));
                     if (u(I4) + ret(I4) - ek - rhoH_form_new < newrhoEinteralNew_sensible)
                         ret *= decay, alpha *= decay;
                     else
@@ -1790,7 +1790,7 @@ namespace DNDS::Euler
                 }
 
                 ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-                rhoH_form_new = phys_.mixtureFormationRhoE(u + ret);
+                rhoH_form_new = phys_.mixtureFormationRhoE(TU(u + ret));
 
                 if (u(I4) + ret(I4) - ek - rhoH_form_new < newrhoEinteralNew_sensible * 0.5)
                 {
@@ -1899,9 +1899,9 @@ namespace DNDS::Euler
                 cx[iCell] += compressedInc;
 
                 // --- Species positivity clipping (reactive flow) ---
-                if (auto *chem = phys_.chemicalSource())
+                if (phys_.hasChemicalSource())
                 {
-                    int Ns = chem->nSpecies();
+                    int Ns = phys_.nSpecies();
                     int Ns1 = Ns - 1; // number of transported (independent) species
                     int nV = static_cast<int>(cx[iCell].size());
                     int Isp = nV - Ns1;               // first transported species index

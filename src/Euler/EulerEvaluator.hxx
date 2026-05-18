@@ -1862,9 +1862,9 @@ namespace DNDS::Euler
             recInc(EigenAll, Seq01234) *= theta1;
             if constexpr (Traits::isExtended)
             {
-                if (auto *chem = phys_.chemicalSource())
+                if (phys_.hasChemicalSource())
                 {
-                    int Ns1 = chem->nSpecies() - 1;
+                    int Ns1 = phys_.nSpecies() - 1;
                     int Isp = static_cast<int>(u[iCell].size()) - Ns1;
                     recInc(EigenAll, Eigen::seq(Isp, EigenLast)) *= theta1;
                 }
@@ -1917,9 +1917,9 @@ namespace DNDS::Euler
                 uRec[iCell](EigenAll, Seq01234) = (uRec[iCell](EigenAll, Seq01234) - uRecBase(EigenAll, Seq01234)) * uRecBeta[iCell](0) + uRecBase(EigenAll, Seq01234);
                 if constexpr (Traits::isExtended)
                 {
-                    if (auto *chem = phys_.chemicalSource())
+                    if (phys_.hasChemicalSource())
                     {
-                        int Ns1 = chem->nSpecies() - 1;
+                        int Ns1 = phys_.nSpecies() - 1;
                         int Isp = static_cast<int>(u[iCell].size()) - Ns1;
                         auto seqSpecies = Eigen::seq(Isp, EigenLast);
                         uRec[iCell](EigenAll, seqSpecies) = (uRec[iCell](EigenAll, seqSpecies) - uRecBase(EigenAll, seqSpecies)) * uRecBeta[iCell](0) + uRecBase(EigenAll, seqSpecies);
@@ -2004,9 +2004,9 @@ namespace DNDS::Euler
 
             // TODO: reactivate this
             // --- Species positivity assertion (reactive flow) ---
-            if (auto *chem = phys_.chemicalSource())
+            if (phys_.hasChemicalSource())
             {
-                int Ns = chem->nSpecies();
+                int Ns = phys_.nSpecies();
                 int Ns1 = Ns - 1;
                 int nV = static_cast<int>(u[iCell].size());
                 int Isp = nV - Ns1;

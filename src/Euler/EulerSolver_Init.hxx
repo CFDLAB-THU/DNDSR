@@ -562,7 +562,7 @@ namespace DNDS::Euler
                 if (fmtScan.find("{uMinMax}") != std::string::npos && mpi.rank == 0)
                 {
                     std::ostringstream oss;
-                    oss << std::scientific << std::setprecision(4) << "[";
+                    oss << std::scientific << std::setprecision(10) << "[";
                     for (int v = 0; v < nVars; v++)
                     {
                         if (v)
@@ -833,7 +833,7 @@ namespace DNDS::Euler
                 if (fmtScan.find("{uMinMax}") != std::string::npos && mpi.rank == 0)
                 {
                     std::ostringstream oss;
-                    oss << std::scientific << std::setprecision(4) << "[";
+                    oss << std::scientific << std::setprecision(10) << "[";
                     for (int v = 0; v < nVars; v++)
                     {
                         if (v)

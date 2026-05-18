@@ -31,6 +31,9 @@
 
 #include <algorithm>
 #include <cmath>
+#ifdef DNDS_DIST_MT_USE_OMP
+#    include <omp.h>
+#endif
 
 namespace DNDS::Euler
 {
@@ -39,13 +42,36 @@ namespace DNDS::Euler
     class PhysicsProperties
     {
     public:
+        using Traits = EulerModelTraits<model>;
+        using TU = typename Traits::TU;
         using IdealGas = typename EulerEvaluatorSettings<model>::IdealGasProperty;
+        using ChemPtr = std::shared_ptr<std::vector<Chemistry::ChemicalSource>>;
 
-        explicit PhysicsProperties(const IdealGas &ig) : igProp_(&ig) {}
+        explicit PhysicsProperties(const IdealGas &ig) : igProp_(std::make_unique<const IdealGas>(ig)) {}
 
-        void setChemicalSource(Chemistry::ChemicalSource *src) { chemSrc_ = src; }
-        bool hasChemicalSource() const { return chemSrc_ != nullptr; }
+        void setChemicalSourcePool(ChemPtr pool) { pool_ = std::move(pool); }
+        bool hasChemicalSource() const { return pool_ && pool_->size() > 0; }
 
+        // ---- per-thread chemistry helpers -----------------------------------
+
+    private:
+        bool useOMP() const { return pool_ && pool_->size() > 1; }
+        int threadIdx() const
+        {
+#ifdef DNDS_DIST_MT_USE_OMP
+            if (useOMP())
+                return omp_get_thread_num();
+#endif
+            return 0;
+        }
+        Chemistry::ChemicalSource &chem() const
+        {
+            int tid = threadIdx();
+            DNDS_assert(tid < static_cast<int>(pool_->size()));
+            return (*pool_)[tid];
+        }
+
+    public:
         // ---- scale helpers --------------------------------------------------
 
         /// Reference pressure p0 = rho0 · U0².
@@ -80,10 +106,9 @@ namespace DNDS::Euler
 
         // ---- EOS coefficients (per-point — uses state T and U vectors) ----
 
-        template <int dim, class TU>
+        template <int dim>
         real temperature(const TU &U, real TGuess = 0) const;
 
-        template <class TU>
         real gamma(real T, const TU &U) const;
 
         /** Equivalent gamma so that p = (gamma_eq - 1) * rho * e_sensible = rho * Rmix * T.
@@ -95,17 +120,17 @@ namespace DNDS::Euler
          *  @param U  Conservative state vector.
          *  @tparam tdim Spatial dimension (2 or 3).
          */
-        template <int tdim, class TU>
+        template <int dim>
         real gammaEq(real T, const TU &U) const
         {
             return this->gamma(T, U);
-            if (!chemSrc_)
+            if (!hasChemicalSource())
                 return igProp_->gamma;
             real rho = U[0];
             real rhoInv = 1.0 / std::max(rho, real(1e-60));
-            int I4 = tdim + 1;
+            int I4 = dim + 1;
             real vel2 = 0;
-            for (int jd = 1; jd <= tdim; ++jd)
+            for (int jd = 1; jd <= dim; ++jd)
                 vel2 += U[jd] * U[jd];
             vel2 *= rhoInv * rhoInv;
             real rhoH_form = mixtureFormationRhoE(U);
@@ -119,28 +144,26 @@ namespace DNDS::Euler
             return 1.0 + p_exact / (rho * e_sensible);
         }
 
-        template <class TU>
         real Rgas(const TU &U) const;
-        template <class TU>
         real Cp(real T, const TU &U) const;
-        template <class TU>
         real Cv(real T, const TU &U) const;
 
         /// Code-scaled volumetric formation enthalpy ρ·Σ Y_k·h_f_k.  0 when no chemistry.
-        template <class TU>
         real mixtureFormationRhoE(const TU &U) const
         {
-            if (!chemSrc_)
+            if (!hasChemicalSource())
                 return 0;
-            auto Y = massFractions(U);
-            real ePhys = chemSrc_->mixtureFormationEnergy(Y); // J/kg
-            real U0sq = igProp_->U0 * igProp_->U0;
-            return U[0] * (U0sq > 0 ? ePhys / U0sq : ePhys);
+            auto &c = chem();
+            int Ns1 = c.nSpecies() - 1;
+            int nVars = static_cast<int>(U.size());
+            int Isp = nVars - Ns1;
+            auto Y = c.massFractions(U[0], &U[Isp], Ns1);
+            real invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
+            return U[0] * c.mixtureFormationEnergy(Y) * invU0sq;
         }
 
         /** Sensible ρE = total ρE − ρ·Σ Y_k·h_f_k. Returns U[I4] when no chemistry.
          *  @param iEnergy  Index of the energy variable (dim+1). */
-        template <class TU>
         real sensibleRhoE(const TU &U, int iEnergy) const
         {
             return U[iEnergy] - mixtureFormationRhoE(U);
@@ -154,29 +177,17 @@ namespace DNDS::Euler
          *  where d(ρY_last) = d(ρ) − Σ_{k<Ns-1} d(ρY_k).  Returns 0 when no
          *  chemistry.  This is the exact differential — no nonlinear terms.
          */
-        template <class TU>
         real mixtureFormationRhoEIncrement(const TU &dU) const
         {
-            if (!chemSrc_)
+            if (!hasChemicalSource())
                 return 0;
-            int Ns = chemSrc_->nSpecies();
-            int Ns1 = Ns - 1;
+            auto &c = chem();
+            int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(dU.size());
             int Isp = nVars - Ns1;
-
-            auto hfSpecies = mixtureFormationRhoESpecies(); // code-scaled hf_k/U0²
-
-            // sum over independent species
-            real dRhoHf = 0;
-            real sumDRhoYk = 0;
-            for (int k = 0; k < Ns1; ++k)
-            {
-                dRhoHf += hfSpecies(k) * dU[Isp + k];
-                sumDRhoYk += dU[Isp + k];
-            }
-            // last (dependent) species: d(rhoY_last) = d(rho) - sum d(rhoY_k)
-            dRhoHf += hfSpecies(Ns1) * (dU[0] - sumDRhoYk);
-            return dRhoHf;
+            double invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
+            c.mixtureFormationRhoESpecies(invU0sq);
+            return c.mixtureFormationRhoEIncrement(dU[0], dU.data() + Isp, Ns1);
         }
 
         /// Constant gamma (no state needed) — for initialization / analytic fields.
@@ -188,84 +199,73 @@ namespace DNDS::Euler
         real CSutherland() const { return igProp_->CSutherland; }
         int muModel() const { return igProp_->muModel; }
 
-        /// Public access to clamped, renormalized mass fractions. Returns a view into internal buffer.
-        template <class TU>
-        Chemistry::ConstSpeciesBufferView massFractionsPublic(const TU &U) const { return massFractions(U); }
+        /// Public access to clamped, renormalized mass fractions. Returns a view into per-thread buffer.
+        /// Caller must ensure hasChemicalSource() before calling.
+        Chemistry::ConstSpeciesBufferView massFractionsPublic(const TU &U) const
+        {
+            DNDS_assert(hasChemicalSource());
+            auto &c = chem();
+            int Ns1 = c.nSpecies() - 1;
+            int nVars = static_cast<int>(U.size());
+            int Isp = nVars - Ns1;
+            return c.massFractions(U[0], U.data() + Isp, Ns1);
+        }
 
         // ---- Transport (mixture) --------------------------------------------
 
         /// Sutherland + const + density-proportional fallback, or Cantera mixture-averaged.
-        template <class TU>
         real mixtureViscosity(real T, real p, const TU &U) const;
 
-        template <class TU>
         real mixtureConductivity(real T, real p, const TU &U) const;
 
-        template <class TU, class TD>
+        template <class TD>
         void mixtureDiffusivity(real T, real p, const TU &U, TD &&D) const;
 
-        template <class TU>
         real speciesDiffusivityK(real T, real p, const TU &U, int k) const;
 
         // ---- Kinetics accessor ----------------------------------------------
 
-        Chemistry::ChemicalSource *chemicalSource() { return chemSrc_; }
-        const Chemistry::ChemicalSource *chemicalSource() const { return chemSrc_; }
+        int nSpecies() const { return hasChemicalSource() ? chem().nSpecies() : 0; }
 
-        /// Cached per-species formation-enthalpy density in code units (hf_k / U0²).
-        /// Sum over all species equals mixtureFormationRhoE(U).
-        /// Returns empty Map if no chemistry attached.
+        /// Per-species total specific enthalpies in code units (h_k/U0²).
+        /// h_k = e_sensible_k + h_f_k + R_k·T  (no KE term).  Sum_k Y_k·h_k = H_mixture.
+        void speciesEnthalpies(real T, real p, const TU &U, Chemistry::SpeciesBufferView h) const
+        {
+            auto &c = chem();
+            int Ns1 = c.nSpecies() - 1;
+            int nVars = static_cast<int>(U.size());
+            int Isp = nVars - Ns1;
+            auto Yv = c.massFractions(U[0], U.data() + Isp, Ns1);
+            c.speciesEnthalpies(toPhysT(T), toPhysP(p), Yv, h);
+            real invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
+            for (int k = 0; k < c.nSpecies(); ++k)
+                h[k] *= invU0sq;
+        }
+
+        /// Per-species formation-enthalpy in code units (hf_k / U0²) as Eigen Map.
+        /// Sum equals mixtureFormationRhoE(U)/rho. Returns empty Map if no chemistry.
         Eigen::Map<const Eigen::Vector<real, Eigen::Dynamic>> mixtureFormationRhoESpecies() const
         {
-            if (!chemSrc_)
+            if (!hasChemicalSource())
                 return {nullptr, 0};
-            int Ns = chemSrc_->nSpecies();
-            if (static_cast<int>(bufHf_.size()) < Ns)
-            {
-                bufHf_.resize(Ns);
-                Chemistry::SpeciesBufferView hfv{bufHf_.data(), Ns};
-                chemSrc_->speciesFormationEnthalpies(hfv);
-                real invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
-                for (int k = 0; k < Ns; ++k)
-                    bufHf_[k] *= invU0sq;
-            }
-            return Eigen::Map<const Eigen::Vector<real, Eigen::Dynamic>>(bufHf_.data(), Ns);
+            auto &c = chem();
+            double invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
+            auto v = c.mixtureFormationRhoESpecies(invU0sq);
+            return Eigen::Map<const Eigen::Vector<real, Eigen::Dynamic>>(v.data, v.nSpecies);
         }
 
     private:
-        template <class TU>
         Chemistry::ConstSpeciesBufferView massFractions(const TU &U) const
         {
-            int Ns = chemSrc_ ? chemSrc_->nSpecies() : 0;
-            int Ns1 = Ns - 1;
+            auto &c = chem();
+            int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(U.size());
             int Isp = nVars - Ns1;
-            double rhoInv = 1.0 / std::max(real(U[0]), 1e-60);
-            if (static_cast<int>(bufY_.size()) < Ns)
-                bufY_.resize(Ns);
-            for (int k = 0; k < Ns1; ++k)
-                bufY_[k] = U[Isp + k] * rhoInv;
-            double sum = 0;
-            for (int k = 0; k < Ns1; ++k)
-                sum += bufY_[k];
-            bufY_[Ns1] = 1.0 - sum;
-            for (int k = 0; k < Ns; ++k)
-            {
-                bufY_[k] = std::max(bufY_[k], real(0));
-            }
-            real ySum = 0;
-            for (int k = 0; k < Ns; ++k)
-                ySum += bufY_[k];
-            if (ySum > 0)
-                for (int k = 0; k < Ns; ++k)
-                    bufY_[k] /= ySum;
-            return {bufY_.data(), Ns};
+            return c.massFractions(U[0], U.data() + Isp, Ns1);
         }
 
-        const IdealGas *igProp_ = nullptr;
-        Chemistry::ChemicalSource *chemSrc_ = nullptr;
-        mutable std::vector<real> bufY_;
-        mutable std::vector<real> bufHf_; ///< Cached per-species formation enthalpies in code units (hf_k / U0²).
+        ChemPtr pool_;
+        std::unique_ptr<const IdealGas> igProp_;
     };
 
     // ========================================================================
@@ -273,10 +273,9 @@ namespace DNDS::Euler
     // ========================================================================
 
     template <EulerModel model>
-    template <class TU>
     real PhysicsProperties<model>::mixtureViscosity(real T, real p, const TU &U) const
     {
-        if (!chemSrc_)
+        if (!hasChemicalSource())
         {
             switch (igProp_->muModel)
             {
@@ -293,47 +292,45 @@ namespace DNDS::Euler
                 return igProp_->muGas;
             }
         }
-        real muPhys = chemSrc_->viscosity(toPhysT(T), toPhysP(p), massFractions(U));
+        real muPhys = chem().viscosity(toPhysT(T), toPhysP(p), massFractions(U));
         return muPhys / mu0();
     }
 
     template <EulerModel model>
-    template <class TU>
     real PhysicsProperties<model>::mixtureConductivity(real T, real p, const TU &U) const
     {
-        if (!chemSrc_)
+        if (!hasChemicalSource())
             return Cp(T, U) * mixtureViscosity(T, p, U) / Pr();
-        real kPhys = chemSrc_->thermalConductivity(toPhysT(T), toPhysP(p), massFractions(U));
+        real kPhys = chem().thermalConductivity(toPhysT(T), toPhysP(p), massFractions(U));
         return kPhys / k0();
     }
 
     template <EulerModel model>
-    template <class TU, class TD>
+    template <class TD>
     void PhysicsProperties<model>::mixtureDiffusivity(real T, real p, const TU &U, TD &&D) const
     {
-        if (!chemSrc_)
+        if (!hasChemicalSource())
             return;
-        int Ns = chemSrc_->nSpecies();
+        int Ns = chem().nSpecies();
         std::vector<real> Dbuf(Ns);
         Chemistry::SpeciesBufferView Dv{Dbuf.data(), Ns};
-        chemSrc_->speciesDiffusivity(toPhysT(T), toPhysP(p), massFractions(U), Dv);
+        chem().speciesDiffusivity(toPhysT(T), toPhysP(p), massFractions(U), Dv);
         for (int k = 0; k < Ns; ++k)
             D[k] = Dbuf[k] / D0();
     }
 
     template <EulerModel model>
-    template <class TU>
     real PhysicsProperties<model>::speciesDiffusivityK(real T, real p, const TU &U, int k) const
     {
-        if (!chemSrc_)
+        if (!hasChemicalSource())
         {
             real mu = mixtureViscosity(T, p, U);
             return mu / std::max(real(U[0]), 1e-60); // Sc = 1
         }
-        int Ns = chemSrc_->nSpecies();
+        int Ns = chem().nSpecies();
         std::vector<real> Dbuf(Ns);
         Chemistry::SpeciesBufferView Dv{Dbuf.data(), Ns};
-        chemSrc_->speciesDiffusivity(toPhysT(T), toPhysP(p), massFractions(U), Dv);
+        chem().speciesDiffusivity(toPhysT(T), toPhysP(p), massFractions(U), Dv);
         return Dbuf[k] / D0();
     }
 
@@ -342,7 +339,7 @@ namespace DNDS::Euler
     // ========================================================================
 
     template <EulerModel model>
-    template <int dim, class TU>
+    template <int dim>
     real PhysicsProperties<model>::temperature(const TU &U, real TGuess) const
     {
         real rho = U[0];
@@ -352,7 +349,7 @@ namespace DNDS::Euler
             vel2 += rhoInv * rhoInv * U[3] * U[3];
         int I4 = dim + 1;
         real uInternal = U[I4] * rhoInv - 0.5 * vel2;
-        if (!chemSrc_)
+        if (!hasChemicalSource())
         {
             real p = (igProp_->gamma - 1) * rho * uInternal;
             return p * rhoInv / toCode(igProp_->Rgas);
@@ -374,39 +371,35 @@ namespace DNDS::Euler
             real p = (igProp_->gamma - 1) * rho * uSensible;
             return p * rhoInv / toCode(igProp_->Rgas);
         }
-        double Tphys = chemSrc_->temperatureFromUV(uPhys, vPhys, massFractions(U), T_guess);
+        double Tphys = chem().temperatureFromUV(uPhys, vPhys, massFractions(U), T_guess);
         return toCodeT(Tphys);
     }
 
     template <EulerModel model>
-    template <class TU>
     real PhysicsProperties<model>::gamma(real T, const TU &U) const
     {
-        if (!chemSrc_)
+        if (!hasChemicalSource())
             return igProp_->gamma;
-        return chemSrc_->mixtureGamma(toPhysT(T), massFractions(U));
+        return chem().mixtureGamma(toPhysT(T), massFractions(U));
     }
 
     template <EulerModel model>
-    template <class TU>
     real PhysicsProperties<model>::Rgas(const TU &U) const
     {
-        if (!chemSrc_)
+        if (!hasChemicalSource())
             return toCode(igProp_->Rgas);
-        return toCode(chemSrc_->mixtureR(massFractions(U)));
+        return toCode(chem().mixtureR(massFractions(U)));
     }
 
     template <EulerModel model>
-    template <class TU>
     real PhysicsProperties<model>::Cp(real T, const TU &U) const
     {
-        if (!chemSrc_)
+        if (!hasChemicalSource())
             return toCode(igProp_->CpGas);
-        return toCode(chemSrc_->mixtureCp(toPhysT(T), massFractions(U)));
+        return toCode(chem().mixtureCp(toPhysT(T), massFractions(U)));
     }
 
     template <EulerModel model>
-    template <class TU>
     real PhysicsProperties<model>::Cv(real T, const TU &U) const
     {
         return Cp(T, U) - Rgas(U);

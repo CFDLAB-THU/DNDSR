@@ -14,6 +14,10 @@
 #include "Gas.hpp"
 #include "RANS_ke.hpp"
 #include "Chemistry/ChemicalSource.hpp"
+#include "EulerEvaluatorSettings.hpp"
+#ifdef DNDS_DIST_MT_USE_OMP
+#    include <omp.h>
+#endif
 
 #include <variant>
 #include <vector>
@@ -21,13 +25,13 @@
 namespace DNDS::Euler
 {
 
-    // For readability: map EulerModel to matrix types from Euler.hpp
+    // For readability: map EulerModel to matrix types from EulerModelTraits
     template <EulerModel M>
-    using SrcTU = TU<M>;
+    using SrcTU = typename EulerModelTraits<M>::TU;
     template <EulerModel M>
-    using SrcTJac = TJacobianU<M>;
+    using SrcTJac = typename EulerModelTraits<M>::TJacobianU;
     template <EulerModel M>
-    using SrcTDiffU = TDiffU<M>;
+    using SrcTDiffU = typename EulerModelTraits<M>::TDiffU;
 
     /// Static dim for EX models (both NS_EX and NS_EX_3D have dim=3).
     constexpr int ExDim = 3;
@@ -58,12 +62,14 @@ namespace DNDS::Euler
     };
 
     // ============================================================================
-    // Shared free functions
+    // Shared free functions — model-typed via traits
     // ============================================================================
 
-    template <int dim, class TMassForce, class TRet, class TJac>
-    inline void evalSourceBodyForce(const TMassForce &massForce, TRet &ret, TJac &jac,
-                                    const TRet &U, int Mode)
+    template <EulerModel model, int dim, class TMassForce>
+    inline void evalSourceBodyForce(const TMassForce &massForce,
+                                    typename EulerModelTraits<model>::TU &ret,
+                                    typename EulerModelTraits<model>::TJacobianU &jac,
+                                    const typename EulerModelTraits<model>::TU &U, int Mode)
     {
         auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         auto I4 = dim + 1;
@@ -76,12 +82,15 @@ namespace DNDS::Euler
             jac(I4, Seq123) -= massForce(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>));
     }
 
-    template <int dim, class TFrame, class TRet, class TJac>
+    template <EulerModel model, int dim, class TFrame>
     inline void evalSourceRotatingFrame(const TFrame &frame, const Geom::tPoint &pPhy,
-                                        TRet &ret, TJac &jac, const TRet &U, int Mode)
+                                        typename EulerModelTraits<model>::TU &ret,
+                                        typename EulerModelTraits<model>::TJacobianU &jac,
+                                        const typename EulerModelTraits<model>::TU &U, int Mode)
     {
-        using TVec = Eigen::VectorFMTSafe<real, dim>;
-        using TMat = Eigen::MatrixFMTSafe<real, dim, dim>;
+        using Traits = EulerModelTraits<model>;
+        using TVec = typename Traits::TVec;
+        using TMat = typename Traits::TMat;
         auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
         auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
         auto I4 = dim + 1;
@@ -103,15 +112,16 @@ namespace DNDS::Euler
         }
     }
 
-    template <class TRet>
+    template <EulerModel model>
     inline void evalSourceAxisymmetric(real gamma, const Geom::tPoint &pPhy,
-                                       TRet &ret, const TRet &U, int Mode,
+                                       typename EulerModelTraits<model>::TU &ret,
+                                       const typename EulerModelTraits<model>::TU &U, int Mode,
                                        real rhoH_form = 0)
     {
-        auto I4 = 4; // dim=3 -> I4=4
+        auto I4 = 4;
         if (Mode == 0)
         {
-            TRet uPrim;
+            typename EulerModelTraits<model>::TU uPrim;
             uPrim.resizeLike(U);
             Gas::IdealGasThermalConservative2Primitive(U, uPrim, gamma, rhoH_form);
             ret(2) += uPrim(I4) / std::max(verySmallReal, pPhy(1));
@@ -119,29 +129,37 @@ namespace DNDS::Euler
     }
 
     // ============================================================================
-    // Contributor structs — evaluate() is templated on the settings types so it
-    // works with any model (NS_EX, NS_EX_3D, etc.) without nested-type mismatch.
+    // Contributor structs — templated on EulerModel, typed via EulerModelTraits.
     // ============================================================================
 
+    template <EulerModel model>
     struct BodyForceContributor
     {
+        using Traits = EulerModelTraits<model>;
+        using TU = typename Traits::TU;
+        using TJac = typename Traits::TJacobianU;
+        using TDiffU = typename Traits::TDiffU;
+
         Eigen::Vector<real, 3> force{0, 0, 0};
 
-        template <class TRet, class TJac, class TDerivedU, class TGasProp>
-        void evaluate(TRet &ret, TJac &jac, const TRet &U, const TDerivedU &,
+        void evaluate(TU &ret, TJac &jac, const TU &U, const TDiffU &,
                       const Geom::tPoint &, const SourceCellAux &,
-                      const TGasProp &, index, index, int Mode) const
+                      index, index, int Mode) const
         {
             if (force.isZero(0))
                 return;
-            evalSourceBodyForce<ExDim>(force, ret, jac, U, Mode);
+            evalSourceBodyForce<model, ExDim>(force, ret, jac, U, Mode);
         }
     };
 
+    template <EulerModel model>
     struct RotatingFrameContributor
     {
-        // Store only the data we need; the exact FrameConstRotation type is
-        // model-dependent, so we use a generic config subset.
+        using Traits = EulerModelTraits<model>;
+        using TU = typename Traits::TU;
+        using TJac = typename Traits::TJacobianU;
+        using TDiffU = typename Traits::TDiffU;
+
         bool enabled = false;
         Geom::tPoint axis{0, 0, 1};
         Geom::tPoint center{0, 0, 0};
@@ -154,46 +172,55 @@ namespace DNDS::Euler
         explicit RotatingFrameContributor(const TFrame &f)
             : enabled(f.enabled), axis(f.axis), center(f.center), rpm(f.rpm) {}
 
-        template <class TRet, class TJac, class TDerivedU, class TGasProp>
-        void evaluate(TRet &ret, TJac &jac, const TRet &U, const TDerivedU &,
-                      const Geom::tPoint &pPhy, const SourceCellAux &aux,
-                      const TGasProp &, index, index, int Mode) const
+        void evaluate(TU &ret, TJac &jac, const TU &U, const TDiffU &,
+                      const Geom::tPoint &pPhy, const SourceCellAux &,
+                      index, index, int Mode) const
         {
             if (!enabled)
                 return;
-            evalSourceRotatingFrame<ExDim>(*this, pPhy, ret, jac, U, Mode);
+            evalSourceRotatingFrame<model, ExDim>(*this, pPhy, ret, jac, U, Mode);
         }
     };
 
+    template <EulerModel model>
     struct AxisymmetricContributor
     {
+        using Traits = EulerModelTraits<model>;
+        using TU = typename Traits::TU;
+        using TJac = typename Traits::TJacobianU;
+        using TDiffU = typename Traits::TDiffU;
+
         bool active = false;
 
-        template <class TRet, class TJac, class TDerivedU, class TGasProp>
-        void evaluate(TRet &ret, TJac &, const TRet &U, const TDerivedU &,
+        void evaluate(TU &ret, TJac &, const TU &U, const TDiffU &,
                       const Geom::tPoint &pPhy, const SourceCellAux &aux,
-                      const TGasProp &, index, index, int Mode) const
+                      index, index, int Mode) const
         {
             if (!active)
                 return;
-            evalSourceAxisymmetric(aux.gamma, pPhy, ret, U, Mode, aux.rhoH_form);
+            evalSourceAxisymmetric<model>(aux.gamma, pPhy, ret, U, Mode, aux.rhoH_form);
         }
     };
 
+    template <EulerModel model>
     struct SASourceContributor
     {
+        using Traits = EulerModelTraits<model>;
+        using TU = typename Traits::TU;
+        using TJac = typename Traits::TJacobianU;
+        using TDiffU = typename Traits::TDiffU;
+
         real muGas = 1;
         real SADESScale = veryLargeReal;
         int SADESMode = 1;
         int SAVersion = 0;
         int ransSARotCorrection = 1;
 
-        template <class TRet, class TJac, class TDerivedU, class TGasProp>
-        void evaluate(TRet &ret, TJac &jac, const TRet &U, const TDerivedU &GradU,
+        void evaluate(TU &ret, TJac &jac, const TU &U, const TDiffU &GradU,
                       const Geom::tPoint &, const SourceCellAux &aux,
-                      const TGasProp &, index iCell, index, int Mode) const
+                      index iCell, index, int Mode) const
         {
-            TRet retInc;
+            TU retInc;
             retInc.setZero(U.size());
             real d = std::min(aux.dWallC, std::pow(veryLargeReal, 1. / 6.));
             real lLES = aux.hMax * SADESScale;
@@ -218,17 +245,22 @@ namespace DNDS::Euler
         }
     };
 
+    template <EulerModel model>
     struct SSTSourceContributor
     {
+        using Traits = EulerModelTraits<model>;
+        using TU = typename Traits::TU;
+        using TJac = typename Traits::TJacobianU;
+        using TDiffU = typename Traits::TDiffU;
+
         real muGas = 1;
         real SADESScale = veryLargeReal;
 
-        template <class TRet, class TJac, class TDerivedU, class TGasProp>
-        void evaluate(TRet &ret, TJac &jac, const TRet &U, const TDerivedU &GradU,
+        void evaluate(TU &ret, TJac &jac, const TU &U, const TDiffU &GradU,
                       const Geom::tPoint &, const SourceCellAux &aux,
-                      const TGasProp &, index iCell, index, int Mode) const
+                      index iCell, index, int Mode) const
         {
-            TRet retInc;
+            TU retInc;
             retInc.setZero(U.size());
             auto call = [&](int mode)
             {
@@ -248,14 +280,19 @@ namespace DNDS::Euler
         }
     };
 
+    template <EulerModel model>
     struct WilcoxSourceContributor
     {
-        template <class TRet, class TJac, class TDerivedU, class TGasProp>
-        void evaluate(TRet &ret, TJac &jac, const TRet &U, const TDerivedU &GradU,
+        using Traits = EulerModelTraits<model>;
+        using TU = typename Traits::TU;
+        using TJac = typename Traits::TJacobianU;
+        using TDiffU = typename Traits::TDiffU;
+
+        void evaluate(TU &ret, TJac &jac, const TU &U, const TDiffU &GradU,
                       const Geom::tPoint &, const SourceCellAux &aux,
-                      const TGasProp &, index, index, int Mode) const
+                      index, index, int Mode) const
         {
-            TRet retInc;
+            TU retInc;
             retInc.setZero(U.size());
             auto call = [&](int mode)
             {
@@ -274,14 +311,19 @@ namespace DNDS::Euler
         }
     };
 
+    template <EulerModel model>
     struct RKESourceContributor
     {
-        template <class TRet, class TJac, class TDerivedU, class TGasProp>
-        void evaluate(TRet &ret, TJac &jac, const TRet &U, const TDerivedU &GradU,
+        using Traits = EulerModelTraits<model>;
+        using TU = typename Traits::TU;
+        using TJac = typename Traits::TJacobianU;
+        using TDiffU = typename Traits::TDiffU;
+
+        void evaluate(TU &ret, TJac &jac, const TU &U, const TDiffU &GradU,
                       const Geom::tPoint &, const SourceCellAux &aux,
-                      const TGasProp &, index, index, int Mode) const
+                      index, index, int Mode) const
         {
-            TRet retInc;
+            TU retInc;
             retInc.setZero(U.size());
             auto call = [&](int mode)
             {
@@ -300,40 +342,64 @@ namespace DNDS::Euler
         }
     };
 
+    template <EulerModel model>
     struct ChemicalContributor
     {
-        std::shared_ptr<Chemistry::ChemicalSource> chem;
+        using Traits = EulerModelTraits<model>;
+        using TU = typename Traits::TU;
+        using TJac = typename Traits::TJacobianU;
+        using TDiffU = typename Traits::TDiffU;
+        using ChemPool = std::shared_ptr<std::vector<Chemistry::ChemicalSource>>;
+        ChemPool pool_;
+        typename EulerEvaluatorSettings<model>::IdealGasProperty igProp_;
 
-        // Pre-allocated buffers — allocated once, reused every evaluate() call.
-        // Thread-unsafe (callers serialise via the SGS sweep over cells).
-        mutable std::vector<double> bufY;
-        mutable std::vector<double> bufOmega;
-        mutable std::vector<double> bufJ;
-        mutable std::vector<double> bufH; // per-species enthalpies [J/kg]
+        // Per-thread work buffers (one set per OMP thread)
+        mutable std::vector<std::vector<double>> bufY_;
+        mutable std::vector<std::vector<double>> bufOmega_;
+        mutable std::vector<std::vector<double>> bufJ_;
+
+        int threadIdx() const
+        {
+            DNDS_assert(pool_);
+#ifdef DNDS_DIST_MT_USE_OMP
+            if (pool_->size() > 1)
+                return omp_get_thread_num();
+#endif
+            return 0;
+        }
 
         ChemicalContributor() = default;
-        explicit ChemicalContributor(std::shared_ptr<Chemistry::ChemicalSource> c)
-            : chem(std::move(c))
+        explicit ChemicalContributor(ChemPool pool, typename EulerEvaluatorSettings<model>::IdealGasProperty igProp)
+            : pool_(std::move(pool)), igProp_(std::move(igProp))
         {
-            if (chem)
+            if (pool_ && pool_->size() > 0)
             {
-                int Ns = chem->nSpecies();
+                int nT = static_cast<int>(pool_->size());
+                auto &c0 = (*pool_)[0];
+                int Ns = c0.nSpecies();
                 int nVars = 5 + Ns - 1;
-                bufY.resize(Ns);
-                bufOmega.resize(Ns);
-                bufJ.resize(Ns * nVars);
-                bufH.resize(Ns);
+                bufY_.resize(nT);
+                bufOmega_.resize(nT);
+                bufJ_.resize(nT);
+                for (int t = 0; t < nT; ++t)
+                {
+                    bufY_[t].resize(Ns);
+                    bufOmega_[t].resize(Ns);
+                    bufJ_[t].resize(Ns * nVars);
+                }
             }
         }
 
-        template <class TRet, class TJac, class TDerivedU, class TGasProp>
-        void evaluate(TRet &ret, TJac &jac, const TRet &U, const TDerivedU &,
+        void evaluate(TU &ret, TJac &jac, const TU &U, const TDiffU &,
                       const Geom::tPoint &, const SourceCellAux &aux,
-                      const TGasProp &gasProp, index, index, int Mode) const
+                      index, index, int Mode) const
         {
-            if (!chem)
+            if (!pool_)
                 return;
-            int Ns = chem->nSpecies();
+            int tid = threadIdx();
+            DNDS_assert(tid < static_cast<int>(pool_->size()));
+            auto &c = (*pool_)[tid];
+            int Ns = c.nSpecies();
             int Ns1 = Ns - 1;
             int nVars = static_cast<int>(ret.size());
             int Isp = nVars - Ns1; // species start
@@ -342,6 +408,8 @@ namespace DNDS::Euler
             double rho = U[0];
             double rhoInv = 1.0 / std::max(rho, 1e-60);
 
+            auto &bufY = bufY_[tid];
+            auto &bufOmega = bufOmega_[tid];
             for (int k = 0; k < Ns1; ++k)
                 bufY[k] = U[Isp + k] * rhoInv;
             double sumY = 0;
@@ -367,7 +435,7 @@ namespace DNDS::Euler
             DNDS_assert(std::isfinite(aux.p) && aux.p > 0);
             DNDS_assert(std::isfinite(rho) && rho > 0);
             // aux.T is code-scaled; Cantera needs physical T [K]
-            double Tphys = gasProp.T0 > 0 ? aux.T * gasProp.T0 : aux.T;
+            double Tphys = igProp_.T0 > 0 ? aux.T * igProp_.T0 : aux.T;
             double Tcantera = std::max(Tphys, 200.0); // NASA poly lower bound
 
             Chemistry::ConstSpeciesBufferView Yv{bufY.data(), Ns};
@@ -375,28 +443,29 @@ namespace DNDS::Euler
 
             // Source rate scale: S0 = rho0 * U0 / L0  [kg/(m³·s)]
             // Physical source omega*MW [kg/(m³·s)] -> code source = omega*MW / S0
-            double invS0 = gasProp.L0 / (gasProp.rho0 * gasProp.U0);
+            double invS0 = igProp_.L0 / (igProp_.rho0 * igProp_.U0);
 
             if (Mode == 0)
             {
-                chem->productionRates(Tcantera, aux.pPhys, Yv, omegav);
+                c.productionRates(Tcantera, aux.pPhys, Yv, omegav);
                 for (int k = 0; k < Ns1; ++k)
-                    ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k] * invS0;
+                    ret[Isp + k] += bufOmega[k] * c.molecularWeights()[k] * invS0;
             }
             else if (Mode == 2)
             {
+                auto &bufJ = bufJ_[tid];
                 Chemistry::JacobianBufferView Jv{bufJ.data(), Ns, nVars, Ns};
                 double uM1 = (I4 >= 2) ? U[1] : 0;
                 double uM2 = (I4 >= 3) ? U[2] : 0;
                 double uM3 = (I4 >= 4) ? U[3] : 0;
-                chem->productionRatesAndJacobian(Tcantera, aux.pPhys, rho, U[I4],
-                                                 uM1, uM2, uM3, I4, gasProp.U0, gasProp.rho0, Yv, omegav, Jv,
-                                                 Chemistry::ChemicalSource::JAC_SKIP_FLUID);
+                c.productionRatesAndJacobian(Tcantera, aux.pPhys, rho, U[I4],
+                                             uM1, uM2, uM3, I4, igProp_.U0, igProp_.rho0, Yv, omegav, Jv,
+                                             Chemistry::ChemicalSource::JAC_SKIP_FLUID);
                 for (int k = 0; k < Ns1; ++k)
-                    ret[Isp + k] += bufOmega[k] * chem->molecularWeights()[k] * invS0;
+                    ret[Isp + k] += bufOmega[k] * c.molecularWeights()[k] * invS0;
                 for (int k = 0; k < Ns1; ++k)
                 {
-                    double Mk = chem->molecularWeights()[k];
+                    double Mk = c.molecularWeights()[k];
                     int iRow = Isp + k;
                     for (int j = 0; j < nVars; ++j)
                     {
@@ -418,79 +487,88 @@ namespace DNDS::Euler
     // Variant + builder + visitor
     // ============================================================================
 
+    template <EulerModel model>
     using SourceTermVariant = std::variant<
-        BodyForceContributor,
-        RotatingFrameContributor,
-        AxisymmetricContributor,
-        SASourceContributor,
-        SSTSourceContributor,
-        WilcoxSourceContributor,
-        RKESourceContributor,
-        ChemicalContributor>;
+        BodyForceContributor<model>,
+        RotatingFrameContributor<model>,
+        AxisymmetricContributor<model>,
+        SASourceContributor<model>,
+        SSTSourceContributor<model>,
+        WilcoxSourceContributor<model>,
+        RKESourceContributor<model>,
+        ChemicalContributor<model>>;
 
     template <EulerModel model>
-    inline std::vector<SourceTermVariant> buildSourceContributors(
+    inline std::vector<SourceTermVariant<model>> buildSourceContributors(
         const EulerEvaluatorSettings<model> &settings, int axisSymmetric)
     {
         using Traits = EulerModelTraits<model>;
         if (!Traits::isExtended)
             return {};
 
-        std::vector<SourceTermVariant> contribs;
+        std::vector<SourceTermVariant<model>> contribs;
         if (settings.constMassForce.norm() > 0)
-            contribs.push_back(BodyForceContributor{settings.constMassForce});
+            contribs.push_back(BodyForceContributor<model>{settings.constMassForce});
         if (settings.frameConstRotation.enabled)
-            contribs.push_back(RotatingFrameContributor{settings.frameConstRotation});
+            contribs.push_back(RotatingFrameContributor<model>{settings.frameConstRotation});
         if (axisSymmetric)
-            contribs.push_back(AxisymmetricContributor{true});
+            contribs.push_back(AxisymmetricContributor<model>{true});
 
         switch (settings.ransModel)
         {
         case RANS_SA:
-            contribs.push_back(SASourceContributor{
+            contribs.push_back(SASourceContributor<model>{
                 settings.idealGasProperty.muGas,
                 settings.SADESScale,
                 settings.SADESMode, settings.SAVersion, settings.ransSARotCorrection});
             break;
         case RANS_KOSST:
-            contribs.push_back(SSTSourceContributor{
+            contribs.push_back(SSTSourceContributor<model>{
                 settings.idealGasProperty.muGas,
                 settings.SADESScale});
             break;
         case RANS_KOWilcox:
-            contribs.push_back(WilcoxSourceContributor{});
+            contribs.push_back(WilcoxSourceContributor<model>{});
             break;
         case RANS_RKE:
-            contribs.push_back(RKESourceContributor{});
+            contribs.push_back(RKESourceContributor<model>{});
             break;
         default:
             break;
         }
         if (settings.reactiveFlow.enabled)
         {
-            auto chemSrc = std::make_shared<Chemistry::ChemicalSource>(
-                settings.reactiveFlow.mechanismFile);
-            contribs.push_back(ChemicalContributor{std::move(chemSrc)});
+            int nThreads = 1;
+#ifdef DNDS_DIST_MT_USE_OMP
+            nThreads = omp_get_max_threads(); // note: OMP generally uses get_max not get_num
+#endif
+            auto pool = std::make_shared<std::vector<Chemistry::ChemicalSource>>();
+            pool->reserve(nThreads);
+            pool->emplace_back(settings.reactiveFlow.mechanismFile);
+            for (int t = 1; t < nThreads; ++t)
+                pool->push_back(std::move(*pool->at(0).clone()));
+            contribs.push_back(ChemicalContributor<model>{std::move(pool), settings.idealGasProperty});
         }
         return contribs;
     }
 
     /**
      * @brief Visitor dispatching a single contributor evaluation via std::visit.
-     *
-     * Templated on the per-model types (TRet/TJac/TDerivedU/TGasProp) so that it
-     * works with NS_EX, NS_EX_3D, or any future extended model without type mismatch.
      */
-    template <class TRet, class TJac, class TDerivedU, class TGasProp>
+    template <EulerModel model>
     struct SourceTermVisitor
     {
-        TRet &ret;
-        TJac &jac;
-        const TRet &U;
-        const TDerivedU &GradU;
+        using Traits = EulerModelTraits<model>;
+        using TU_t = typename Traits::TU;
+        using TJac_t = typename Traits::TJacobianU;
+        using TDiffU_t = typename Traits::TDiffU;
+
+        TU_t &ret;
+        TJac_t &jac;
+        const TU_t &U;
+        const TDiffU_t &GradU;
         const Geom::tPoint &pPhy;
         const SourceCellAux &aux;
-        const TGasProp &gasProp;
         index iCell, ig;
         int Mode;
         SourceFilter filter = SourceFilter::All;
@@ -498,27 +576,13 @@ namespace DNDS::Euler
         template <typename TContrib>
         void operator()(TContrib &c) const
         {
-            constexpr bool isReactive = std::is_same_v<std::decay_t<TContrib>, ChemicalContributor>;
+            constexpr bool isReactive = std::is_same_v<std::decay_t<TContrib>, ChemicalContributor<model>>;
             if (filter == SourceFilter::ReactiveOnly && !isReactive)
                 return;
             if (filter == SourceFilter::NonReactiveOnly && isReactive)
                 return;
-            c.evaluate(ret, jac, U, GradU, pPhy, aux, gasProp, iCell, ig, Mode);
+            c.evaluate(ret, jac, U, GradU, pPhy, aux, iCell, ig, Mode);
         }
     };
-
-    // Deduction guide for CTAD (C++17)
-    template <class TRet, class TJac, class TDerivedU, class TGasProp>
-    SourceTermVisitor(TRet &, TJac &, const TRet &, const TDerivedU &,
-                      const Geom::tPoint &, const SourceCellAux &,
-                      const TGasProp &, index, index, int)
-        -> SourceTermVisitor<TRet, TJac, TDerivedU, TGasProp>;
-
-    // Deduction guide with SourceFilter
-    template <class TRet, class TJac, class TDerivedU, class TGasProp>
-    SourceTermVisitor(TRet &, TJac &, const TRet &, const TDerivedU &,
-                      const Geom::tPoint &, const SourceCellAux &,
-                      const TGasProp &, index, index, int, SourceFilter)
-        -> SourceTermVisitor<TRet, TJac, TDerivedU, TGasProp>;
 
 } // namespace DNDS::Euler
