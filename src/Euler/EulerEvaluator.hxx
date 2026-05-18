@@ -1858,7 +1858,18 @@ namespace DNDS::Euler
                 }
             }
 
-            recInc(EigenAll, Seq01234) *= theta1; // to leave SA unchanged
+            // only compresses main flow part and rhoY_i species, avoiding RANS part
+            recInc(EigenAll, Seq01234) *= theta1;
+            if constexpr (Traits::isExtended)
+            {
+                if (auto *chem = phys_.chemicalSource())
+                {
+                    int Ns1 = chem->nSpecies() - 1;
+                    int Isp = static_cast<int>(u[iCell].size()) - Ns1;
+                    recInc(EigenAll, Eigen::seq(Isp, EigenLast)) *= theta1;
+                }
+            }
+
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed>
                 recVRhoG = recInc + recBase;
 
@@ -1900,9 +1911,21 @@ namespace DNDS::Euler
                 std::cout << fmt::format("theta1 {}, thetaP {}", theta1, thetaP) << std::endl;
                 DNDS_assert(false);
             }
-            // only compresses main flow part
+            // only compresses main flow part and rhoY_i species, avoiding RANS part
             if (uRecBeta[iCell](0) < 1)
+            {
                 uRec[iCell](EigenAll, Seq01234) = (uRec[iCell](EigenAll, Seq01234) - uRecBase(EigenAll, Seq01234)) * uRecBeta[iCell](0) + uRecBase(EigenAll, Seq01234);
+                if constexpr (Traits::isExtended)
+                {
+                    if (auto *chem = phys_.chemicalSource())
+                    {
+                        int Ns1 = chem->nSpecies() - 1;
+                        int Isp = static_cast<int>(u[iCell].size()) - Ns1;
+                        auto seqSpecies = Eigen::seq(Isp, EigenLast);
+                        uRec[iCell](EigenAll, seqSpecies) = (uRec[iCell](EigenAll, seqSpecies) - uRecBase(EigenAll, seqSpecies)) * uRecBeta[iCell](0) + uRecBase(EigenAll, seqSpecies);
+                    }
+                }
+            }
 
             // validation:
             recInc = quadBase * uRec[iCell];
