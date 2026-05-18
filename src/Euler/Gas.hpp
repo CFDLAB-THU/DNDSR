@@ -1690,20 +1690,28 @@ namespace DNDS::Euler::Gas
      * transformed via the quotient rule, and the pressure gradient column uses
      * the chain rule through the equation of state.
      *
+     * When @p hfSpecies has size > 1 (reactive flow), the pressure
+     * gradient is corrected for the spatial variation of formation enthalpy:
+     *   ∇p_corr = ∇p_raw − (γ−1)·∇(ρH_form)
+     *   ∇(ρH_form) = Σ_k (hf_k − hf_N)·∇(ρY_k) + hf_N·∇ρ
+     * where hfSpecies[k] = hf_k/U0² (per-species formation enthalpy in code units).
+     * Sum hfSpecies is the per-mass mixtureFormationEnergy; rho·Σ_Yk·hfSpecies_k = mixtureFormationRhoE.
+     *
      * @note The input @p GradU has size [dim × nVars], where nVars ≥ dim+2.
      *       Passive-scalar gradient columns beyond index dim+1 are also
      *       converted (divided by ρ after removing the density contribution).
      *
-     * @tparam dim  Spatial dimension (2 or 3).
-     * @param  U            Conservative state vector.
-     * @param  GradU        Gradient of conservative variables [dim × nVars].
-     * @param[out] GradUPrim Gradient of primitive variables [dim × nVars].
-     * @param  gamma        Ratio of specific heats (γ).
+     * @tparam dim       Spatial dimension (2 or 3).
+     * @tparam THf       Eigen vector type for per-species formation-enthalpy code units.
+     * @param  U           Conservative state vector.
+     * @param  GradU       Gradient of conservative variables [dim × nVars].
+     * @param[out] GradUPrim  Gradient of primitive variables [dim × nVars].
+     * @param  gamma       Ratio of specific heats (γ).
+     * @param  hfSpecies   Per-species hf_k/U0² (code units). Empty vector skips correction.
      */
-    template <int dim = 3, typename TU, typename TGradU, typename TGradUPrim>
+    template <int dim = 3, typename TU, typename TGradU, typename TGradUPrim, typename THf>
     void GradientCons2Prim_IdealGas(const TU &U, const TGradU &GradU, TGradUPrim &GradUPrim, real gamma,
-                                    real rhoH_form = 0,
-                                    const real *pHf = nullptr, int nSpecies = 0)
+                                    const THf &hfSpecies)
     {
         static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>);
         static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
@@ -1721,23 +1729,22 @@ namespace DNDS::Euler::Gas
                                  0.5 *
                                      (GradU(Seq012, Seq123) * velo +
                                       GradUPrim(Seq012, Seq123) * Eigen::Vector<real, dim>(U(Seq123))));
-        (void)rhoH_form;
         GradUPrim(Seq012, Eigen::seq(Eigen::fix<I4 + 1>, EigenLast)) -= GradU(Seq012, 0) * U(Eigen::seq(Eigen::fix<I4 + 1>, EigenLast)).transpose() / U(0);
         GradUPrim(Seq012, Eigen::seq(Eigen::fix<I4 + 1>, EigenLast)) /= U(0);
 
         // Correct pressure gradient for formation-enthalpy gradient:
         //   ∇p = (γ-1)·(∇(ρE) - ½·KE_terms - ∇(rhoH_form))
         //   ∇(rhoH_form) = Σ (hf_k - hf_N)·∇(ρY_k) + hf_N·∇ρ
-        if (pHf && nSpecies > 1)
+        if (hfSpecies.size() > 1)
         {
-            int Ns1 = nSpecies - 1;
+            int Ns1 = static_cast<int>(hfSpecies.size()) - 1;
             int nVars = static_cast<int>(GradU.cols());
             int Isp = nVars - Ns1;
             for (int d = 0; d < dim; ++d)
             {
-                real gradHF = pHf[Ns1] * GradU(d, 0);
+                real gradHF = hfSpecies(Ns1) * GradU(d, 0);
                 for (int k = 0; k < Ns1; ++k)
-                    gradHF += (pHf[k] - pHf[Ns1]) * GradU(d, Isp + k);
+                    gradHF += (hfSpecies(k) - hfSpecies(Ns1)) * GradU(d, Isp + k);
                 GradUPrim(d, I4) -= (gamma - 1) * gradHF;
             }
         }
