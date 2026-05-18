@@ -404,12 +404,11 @@ namespace DNDS::Euler
                     TDiffU GradUMeanXyPrim;
                     real T = phys_.template temperature<dim>(UMeanXy);
                     real gamma = phys_.template gammaEq<dim>(T, UMeanXy);
-                    int nSpeciesHF = 0;
-                    const real *pHf = phys_.formationEnthalpies(nSpeciesHF);
+                    auto hfSpecies = phys_.mixtureFormationRhoESpecies();
                     auto gradCons2Prim = [&](auto &U, auto &GradU, auto &GradUPrim)
                     {
                         Gas::GradientCons2Prim_IdealGas<dim>(U, GradU, GradUPrim, gamma,
-                                                             0, pHf, nSpeciesHF);
+                                                             hfSpecies);
                     };
                     if (settings.usePrimGradInVisFlux)
                     {

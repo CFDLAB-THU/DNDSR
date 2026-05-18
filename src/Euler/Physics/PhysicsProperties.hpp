@@ -163,27 +163,20 @@ namespace DNDS::Euler
             int Ns1 = Ns - 1;
             int nVars = static_cast<int>(dU.size());
             int Isp = nVars - Ns1;
-            real U0sq = igProp_->U0 * igProp_->U0;
-            real scale = (U0sq > 0) ? (1.0 / U0sq) : 1.0;
 
-            if (static_cast<int>(bufHf_.size()) < Ns)
-            {
-                bufHf_.resize(Ns);
-                Chemistry::SpeciesBufferView hfv{bufHf_.data(), Ns};
-                chemSrc_->speciesFormationEnthalpies(hfv);
-            }
+            auto hfSpecies = mixtureFormationRhoESpecies(); // code-scaled hf_k/U0²
 
             // sum over independent species
             real dRhoHf = 0;
             real sumDRhoYk = 0;
             for (int k = 0; k < Ns1; ++k)
             {
-                dRhoHf += bufHf_[k] * dU[Isp + k];
+                dRhoHf += hfSpecies(k) * dU[Isp + k];
                 sumDRhoYk += dU[Isp + k];
             }
             // last (dependent) species: d(rhoY_last) = d(rho) - sum d(rhoY_k)
-            dRhoHf += bufHf_[Ns1] * (dU[0] - sumDRhoYk);
-            return dRhoHf * scale;
+            dRhoHf += hfSpecies(Ns1) * (dU[0] - sumDRhoYk);
+            return dRhoHf;
         }
 
         /// Constant gamma (no state needed) — for initialization / analytic fields.
@@ -219,23 +212,24 @@ namespace DNDS::Euler
         Chemistry::ChemicalSource *chemicalSource() { return chemSrc_; }
         const Chemistry::ChemicalSource *chemicalSource() const { return chemSrc_; }
 
-        /// Cached per-species formation enthalpies [J/kg] in physical units.
-        /// Populated on first call, returns pointer to Ns elements (or nullptr if no chemistry).
-        const real *formationEnthalpies(int &Ns) const
+        /// Cached per-species formation-enthalpy density in code units (hf_k / U0²).
+        /// Sum over all species equals mixtureFormationRhoE(U).
+        /// Returns empty Map if no chemistry attached.
+        Eigen::Map<const Eigen::Vector<real, Eigen::Dynamic>> mixtureFormationRhoESpecies() const
         {
             if (!chemSrc_)
-            {
-                Ns = 0;
-                return nullptr;
-            }
-            Ns = chemSrc_->nSpecies();
+                return {nullptr, 0};
+            int Ns = chemSrc_->nSpecies();
             if (static_cast<int>(bufHf_.size()) < Ns)
             {
                 bufHf_.resize(Ns);
                 Chemistry::SpeciesBufferView hfv{bufHf_.data(), Ns};
                 chemSrc_->speciesFormationEnthalpies(hfv);
+                real invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
+                for (int k = 0; k < Ns; ++k)
+                    bufHf_[k] *= invU0sq;
             }
-            return bufHf_.data();
+            return Eigen::Map<const Eigen::Vector<real, Eigen::Dynamic>>(bufHf_.data(), Ns);
         }
 
     private:
@@ -271,7 +265,7 @@ namespace DNDS::Euler
         const IdealGas *igProp_ = nullptr;
         Chemistry::ChemicalSource *chemSrc_ = nullptr;
         mutable std::vector<real> bufY_;
-        mutable std::vector<real> bufHf_; ///< Cached per-species formation enthalpies [J/kg].
+        mutable std::vector<real> bufHf_; ///< Cached per-species formation enthalpies in code units (hf_k / U0²).
     };
 
     // ========================================================================

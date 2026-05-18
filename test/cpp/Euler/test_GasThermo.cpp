@@ -129,11 +129,11 @@ TEST_CASE("Prim2Cons: known state verification")
     Eigen::Vector<real, 5> U;
     IdealGasThermalPrimitive2Conservative<3>(prim, U, g_gamma);
 
-    CHECK(U(0) == doctest::Approx(2.0));       // rho
-    CHECK(U(1) == doctest::Approx(6.0));       // rho*u
-    CHECK(U(2) == doctest::Approx(0.0));       // rho*v
-    CHECK(U(3) == doctest::Approx(0.0));       // rho*w
-    CHECK(U(4) == doctest::Approx(34.0));      // rho*E
+    CHECK(U(0) == doctest::Approx(2.0));  // rho
+    CHECK(U(1) == doctest::Approx(6.0));  // rho*u
+    CHECK(U(2) == doctest::Approx(0.0));  // rho*v
+    CHECK(U(3) == doctest::Approx(0.0));  // rho*w
+    CHECK(U(4) == doctest::Approx(34.0)); // rho*E
 }
 
 // ===================================================================
@@ -248,7 +248,7 @@ TEST_CASE("GasInviscidFlux: x-direction, quiescent gas")
     GasInviscidFlux<3>(U, velo, vg, p, F);
 
     CHECK(F(0) == doctest::Approx(0.0).epsilon(1e-14));
-    CHECK(F(1) == doctest::Approx(p).epsilon(1e-14));   // momentum flux = p
+    CHECK(F(1) == doctest::Approx(p).epsilon(1e-14)); // momentum flux = p
     CHECK(F(2) == doctest::Approx(0.0).epsilon(1e-14));
     CHECK(F(3) == doctest::Approx(0.0).epsilon(1e-14));
     CHECK(F(4) == doctest::Approx(0.0).epsilon(1e-14));
@@ -330,8 +330,8 @@ TEST_CASE("IdealGasUIncrement: finite-difference verification")
 
     Eigen::Vector<real, 5> prim1;
     prim1 << prim0(0) + 0.01 * eps, prim0(1) + 0.5 * eps,
-             prim0(2) - 0.3 * eps, prim0(3) + 0.1 * eps,
-             prim0(4) + 100.0 * eps;
+        prim0(2) - 0.3 * eps, prim0(3) + 0.1 * eps,
+        prim0(4) + 100.0 * eps;
     Eigen::Vector<real, 5> U1;
     IdealGasThermalPrimitive2Conservative<3>(prim1, U1, g_gamma);
 
@@ -403,8 +403,7 @@ TEST_CASE("GradientCons2Prim: zero gradient produces zero")
     Eigen::Matrix<real, 3, 5> GradU = Eigen::Matrix<real, 3, 5>::Zero();
     Eigen::Matrix<real, 3, 5> GradPrim;
 
-    GradientCons2Prim_IdealGas<3>(U, GradU, GradPrim, g_gamma);
-
+    GradientCons2Prim_IdealGas<3>(U, GradU, GradPrim, g_gamma, Eigen::Vector<real, 0>{});
     CHECK(GradPrim.cwiseAbs().maxCoeff() < 1e-12);
 }
 
@@ -428,7 +427,7 @@ TEST_CASE("GradientCons2Prim: finite-difference verification")
     GradU.row(0) = (U1 - U0).transpose() / dx;
 
     Eigen::Matrix<real, 3, 5> GradPrim;
-    GradientCons2Prim_IdealGas<3>(U0, GradU, GradPrim, g_gamma);
+    GradientCons2Prim_IdealGas<3>(U0, GradU, GradPrim, g_gamma, Eigen::Vector<real, 0>{});
 
     // Expected primitive gradient
     Eigen::RowVector<real, 5> dPrimdx_expected = (prim1 - prim0).transpose() / dx;
