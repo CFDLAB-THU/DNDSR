@@ -33,18 +33,19 @@
     },
     "implicitCFLControl": {
         "CFL": 1, 
-        "useLocalDt": true
+        "useLocalDt": false
     },
     "convergenceControl": {
-        "nTimeStepInternal": 100,
-        "nTimeStepInternalMin": 10,
+        "nTimeStepInternal": 10,
+        "nTimeStepInternalMin": 5,
         "rhsThresholdInternal": 0.0001,
         "res_base": 0,
         "useVolWiseResidual": true
     },
     "dataIOControl": {
         "uniqueStamps": true,
-        "meshFile": "../data/mesh/UniformSquare_10.cgns",
+        // "meshFile": "../data/mesh/UniformSquare_10.cgns",
+        "meshFile": "../data/mesh/IV10_10.cgns",
         "outPltName": "../data/out/react_test/react_",
         "outPltMode": 0,
         "readMeshMode": 0,
@@ -56,13 +57,13 @@
     },
     "boundaryDefinition": {
         "PeriodicTranslation1": [
-            1.0,
+            10.0,
             0.0,
             0.0
         ],
         "PeriodicTranslation2": [
             0.0,
-            1.0,
+            10.0,
             0.0
         ]
     },
