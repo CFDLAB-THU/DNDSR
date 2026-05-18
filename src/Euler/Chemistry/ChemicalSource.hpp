@@ -74,6 +74,10 @@ namespace DNDS::Euler::Chemistry
         ChemicalSource(ChemicalSource &&) noexcept;
         ChemicalSource &operator=(ChemicalSource &&) noexcept;
 
+        /// Deep-clone for thread-safety: creates independent Cantera Solution objects
+        /// from the same mechanism file (no shared state between instances).
+        std::unique_ptr<ChemicalSource> clone() const;
+
         int nSpecies() const;
         int nReactions() const;
         const std::vector<std::string> &speciesNames() const;
@@ -148,9 +152,32 @@ namespace DNDS::Euler::Chemistry
         /** Mixture formation energy Σ Y_k * h_f_k [J/kg]. In physical (SI) units. */
         double mixtureFormationEnergy(ConstSpeciesBufferView Y) const;
 
+        // ---- Per-instance buffers (thread-safe when each thread has its own) ----
+
+        /** Compute mass fractions from conservative species densities. Fills bufY_, returns view into it. */
+        ConstSpeciesBufferView massFractions(double rho, const double *rhoYK, int nTransported) const;
+
+        /** Populate and return bufHf_ with per-species formation enthalpies in code units (hf_k/U0²).
+         *  Needs invU0sq = 1/U0² to convert from physical [J/kg] to code units. */
+        ConstSpeciesBufferView mixtureFormationRhoESpecies(double invU0sq) const;
+
+        /** Code-scaled volumetric formation enthalpy: rho · Σ Y_k · hf_k_code. */
+        double mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y) const;
+
+        /** Linearized increment of code-scaled formation enthalpy from a d(ρY_k) increment.
+         *  dRhoYK[0..nTransported-1] are d(ρY_k)_code, rhoInc = d(ρ)_code.
+         *  The dependent species (N2) contribution is absorbed automatically. */
+        double mixtureFormationRhoEIncrement(double rhoInc, const double *dRhoYK, int nTransported) const;
+
     private:
         struct Impl;
         std::unique_ptr<Impl> impl_;
+
+        std::string mechanismFile_;
+        std::string phaseName_;
+
+        mutable std::vector<double> bufY_;  ///< Mass-fractions work buffer (per-instance).
+        mutable std::vector<double> bufHf_; ///< Code-scaled formation enthalpies (per-instance, populated once).
     };
 
 } // namespace DNDS::Euler::Chemistry

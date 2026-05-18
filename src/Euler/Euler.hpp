@@ -1091,6 +1091,29 @@ namespace DNDS::Euler
         /// Geometry (mesh) spatial dimension.
         static constexpr int gDim = getGeomDim_Fixed(model);
 
+        /// Conservative-state vector type (fixed or dynamic size).
+        using TU = Eigen::VectorFMTSafe<real, nVarsFixed>;
+        /// Full Jacobian matrix type (nVars × nVars).
+        using TJacobianU = Eigen::MatrixFMTSafe<real, nVarsFixed, nVarsFixed>;
+        /// Gradient matrix type (dim × nVars).
+        using TDiffU = Eigen::MatrixFMTSafe<real, dim, nVarsFixed>;
+        /// Spatial vector type (dim components).
+        using TVec = Eigen::VectorFMTSafe<real, dim>;
+        /// Spatial matrix type (dim × dim).
+        using TMat = Eigen::MatrixFMTSafe<real, dim, dim>;
+
+        // ---- Batch types (parameterized by MaxBatch for Eigen SmallMatrix optimisation) ----
+        template <int MaxB = 16>
+        using TVec_Batch = Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxB>;
+        template <int MaxB = 16>
+        using TU_Batch = Eigen::MatrixFMTSafe<real, nVarsFixed, Eigen::Dynamic, Eigen::ColMajor, nVarsFixed, MaxB>;
+        template <int MaxB = 16>
+        using TReal_Batch = Eigen::MatrixFMTSafe<real, 1, Eigen::Dynamic, Eigen::RowMajor, 1, MaxB>;
+        template <int MaxB = 16>
+        using TMat_Batch = Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, (MaxB > 0 ? MaxB * 3 : Eigen::Dynamic)>;
+        template <int MaxB = 16>
+        using TDiffU_Batch = Eigen::MatrixFMTSafe<real, Eigen::Dynamic, nVarsFixed, Eigen::ColMajor, (MaxB > 0 ? MaxB * 3 : Eigen::Dynamic)>;
+
         /// True for Spalart-Allmaras models (NS_SA, NS_SA_3D).
         static constexpr bool hasSA = (model == NS_SA || model == NS_SA_3D);
         /// True for 2-equation RANS models (NS_2EQ, NS_2EQ_3D).
@@ -1111,24 +1134,6 @@ namespace DNDS::Euler
         /// True for 3D geometry models.
         static constexpr bool isGeom3D = (gDim == 3);
     };
-
-    /**
-     * @brief Core Eigen matrix/vector type aliases parameterized by EulerModel.
-     *
-     * These mirror the TU / TJacobianU / TDiffU typedefs inside EulerEvaluator,
-     * but live at namespace scope so they are accessible from SourceTermContributor
-     * and EulerSolver without pulling in the full evaluator header.
-     *
-     * @tparam model  EulerModel selector (determines nVarsFixed and dim).
-     */
-    template <EulerModel model>
-    using TU = Eigen::VectorFMTSafe<real, getnVarsFixed(model)>;
-
-    template <EulerModel model>
-    using TJacobianU = Eigen::MatrixFMTSafe<real, getnVarsFixed(model), getnVarsFixed(model)>;
-
-    template <EulerModel model>
-    using TDiffU = Eigen::MatrixFMTSafe<real, getDim_Fixed(model), getnVarsFixed(model)>;
 
     /**
      * @brief Compile-time multiplication that propagates `Eigen::Dynamic`.

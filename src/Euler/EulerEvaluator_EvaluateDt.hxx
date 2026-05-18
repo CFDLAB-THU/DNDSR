@@ -1217,20 +1217,18 @@ namespace DNDS::Euler
                 // Fickian species diffusion + enthalpy transport (reactive flow)
                 if constexpr (Traits::isExtended)
                 {
-                    if (auto *chem = phys_.chemicalSource())
+                    if (phys_.hasChemicalSource())
                     {
-                        int Ns = chem->nSpecies();
+                        int Ns = phys_.nSpecies();
                         int Ns1 = Ns - 1;
                         int nV = static_cast<int>(UMeanXYC.size());
                         int Isp = nV - Ns1;
 
-                        // Per-species total enthalpies h_k [J/kg] (sensible + formation)
+                        // Per-species total enthalpies h_k/U0² (sensible + formation + p/ρ, no KE)
                         std::vector<double> hBuf(Ns);
                         Chemistry::SpeciesBufferView hv{hBuf.data(), Ns};
-                        auto Yv = phys_.massFractionsPublic(UMeanXYC);
-                        chem->speciesEnthalpies(phys_.toPhysT(T), phys_.toPhysP(pMean), Yv, hv);
-                        real U0sq = settings.idealGasProperty.U0 * settings.idealGasProperty.U0;
-                        real hLast_code = hBuf[Ns - 1] / U0sq;
+                        phys_.speciesEnthalpies(T, pMean, UMeanXYC, hv);
+                        real hLast_code = hBuf[Ns - 1];
 
                         real rhoFace = UMeanXYC(0);
                         for (int kk = 0; kk < Ns1; ++kk)
@@ -1241,8 +1239,8 @@ namespace DNDS::Euler
                             // Outward species diffusion flux: J_k·n = -ρ D_k (∇Y_k·n)
                             real Jk_n = -rhoFace * Dk * gradYk_dot_n;
                             VisFlux(Isp + kk) += Jk_n;
-                            // Energy enthalpy transport: Σ_all h_k J_k = Σ_{k<Ns1} (h_k - h_last) J_k
-                            VisFlux(I4) += (hBuf[kk] / U0sq - hLast_code) * Jk_n;
+                            // Energy enthalpy transport: Σ h_k·J_k = Σ_{k<Ns1} (h_k − h_N)·J_k
+                            VisFlux(I4) += (hBuf[kk] - hLast_code) * Jk_n;
                         }
                     }
                 }
@@ -1634,8 +1632,8 @@ namespace DNDS::Euler
             aux.muf = muEff(UMeanXy, aux.T);
             aux.rhoH_form = phys_.mixtureFormationRhoE(UMeanXy);
 
-            SourceTermVisitor visitor{ret, jacobian, UMeanXy, DiffUxy, pPhy, aux,
-                                      settings.idealGasProperty, iCell, ig, Mode, filter};
+            SourceTermVisitor<model> visitor{ret, jacobian, UMeanXy, DiffUxy, pPhy, aux,
+                                             iCell, ig, Mode, filter};
             for (auto &c : sourceContributors)
                 std::visit(visitor, c);
             return ret;

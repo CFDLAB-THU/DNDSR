@@ -48,7 +48,8 @@ namespace DNDS::Euler::Chemistry
 
     ChemicalSource::ChemicalSource(const std::string &mechanismFile,
                                    const std::string &phaseName)
-        : impl_(std::make_unique<Impl>())
+        : impl_(std::make_unique<Impl>()),
+          mechanismFile_(mechanismFile), phaseName_(phaseName)
     {
         auto &I = *impl_;
         I.sol = Cantera::newSolution(mechanismFile, phaseName, "default");
@@ -297,6 +298,78 @@ namespace DNDS::Euler::Chemistry
         for (int k = 0; k < impl_->Ns; ++k)
             e += Y[k] * impl_->hf[k];
         return e;
+    }
+
+    // ---- clone ---------------------------------------------------------------
+
+    std::unique_ptr<ChemicalSource> ChemicalSource::clone() const
+    {
+        return std::make_unique<ChemicalSource>(mechanismFile_, phaseName_);
+    }
+
+    // ---- per-instance buffers -------------------------------------------------
+
+    ConstSpeciesBufferView ChemicalSource::massFractions(double rho, const double *rhoYK, int nTransported) const
+    {
+        int Ns = impl_->Ns;
+        int Ns1 = Ns - 1;
+        double rhoInv = 1.0 / std::max(rho, 1e-60);
+        if (static_cast<int>(bufY_.size()) < Ns)
+            bufY_.resize(Ns);
+        for (int k = 0; k < nTransported; ++k)
+            bufY_[k] = rhoYK[k] * rhoInv;
+        double sum = 0;
+        for (int k = 0; k < nTransported; ++k)
+            sum += bufY_[k];
+        bufY_[Ns1] = 1.0 - sum;
+        for (int k = 0; k < Ns; ++k)
+            bufY_[k] = std::max(bufY_[k], 0.0);
+        double ySum = 0;
+        for (int k = 0; k < Ns; ++k)
+            ySum += bufY_[k];
+        if (ySum > 0)
+            for (int k = 0; k < Ns; ++k)
+                bufY_[k] /= ySum;
+        return {bufY_.data(), Ns};
+    }
+
+    ConstSpeciesBufferView ChemicalSource::mixtureFormationRhoESpecies(double invU0sq) const
+    {
+        int Ns = impl_->Ns;
+        if (static_cast<int>(bufHf_.size()) < Ns)
+        {
+            bufHf_.resize(Ns);
+            SpeciesBufferView hfv{bufHf_.data(), Ns};
+            speciesFormationEnthalpies(hfv);
+            for (int k = 0; k < Ns; ++k)
+                bufHf_[k] *= invU0sq;
+        }
+        return {bufHf_.data(), Ns};
+    }
+
+    double ChemicalSource::mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y) const
+    {
+        double e = 0;
+        for (int k = 0; k < impl_->Ns; ++k)
+            e += Y[k] * impl_->hf[k];
+        return rho * e;
+    }
+
+    double ChemicalSource::mixtureFormationRhoEIncrement(double rhoInc, const double *dRhoYK, int nTransported) const
+    {
+        int Ns = impl_->Ns;
+        int Ns1 = Ns - 1;
+        // bufHf_ must already be populated with code-scaled values
+        const double *hf = bufHf_.data();
+        double dRhoHf = hf[Ns1] * rhoInc;
+        double sumDRhoYk = 0;
+        for (int k = 0; k < nTransported; ++k)
+        {
+            dRhoHf += hf[k] * dRhoYK[k];
+            sumDRhoYk += dRhoYK[k];
+        }
+        dRhoHf -= hf[Ns1] * sumDRhoYk;
+        return dRhoHf;
     }
 
 } // namespace DNDS::Euler::Chemistry
