@@ -613,10 +613,18 @@ namespace DNDS::Direct
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
 #endif
-            for (index iCell = 0; iCell < symLU->Num(); iCell++)
+            for (index jCell = 0; jCell < symLU->Num(); jCell++)
             {
-                for (int ij = 0; ij < symLU->lowerTriStructure[iCell].size(); ij++)
-                    result[symLU->lowerTriStructure[iCell][ij]] += dThis->GetLower(iCell, ij).transpose() * x[iCell]; // transposed mat-vec
+                index jP = symLU->FillingReorderOld2New(jCell);
+                auto &&upperRow = symLU->upperTriStructureNew[jP];
+                for (int ji = 0; ji < (int)upperRow.size(); ji++)
+                {
+                    index iCellP = upperRow[ji];
+                    index iCell = symLU->FillingReorderNew2Old(iCellP);
+                    index posInLower = symLU->upperTriStructureNewInLower[jP][ji];
+                    if (posInLower != -1)
+                        result[jCell] += dThis->GetLower(iCell, posInLower).transpose() * x[iCell];
+                }
             }
         }
 
