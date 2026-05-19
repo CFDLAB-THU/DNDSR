@@ -84,17 +84,20 @@ namespace DNDS::IdealGas
      * @brief Convert conservative energy to primitive energy-index value.
      *
      * @tparam prim  Whether to store pressure or internal energy.
-     * @param E     Total energy (conservative).
+     * @param E     Total energy (conservative), including formation.
      * @param rho   Density.
      * @param vSqr  Velocity squared.
      * @param gamma Ratio of specific heats.
+     * @param rhoH_form  Volumetric formation enthalpy to subtract for
+     *                   sensible pressure/internal-energy (default 0).
      * @return The value to store at prim[I4].
      */
     template <PrimVariable prim>
     DNDS_DEVICE_CALLABLE inline real
-    Cons2PrimEnergy(real E, real rho, real vSqr, real gamma)
+    Cons2PrimEnergy(real E, real rho, real vSqr, real gamma,
+                    real rhoH_form = 0)
     {
-        real e = E - rho * 0.5 * vSqr; // rho * e_internal
+        real e = E - rho * 0.5 * vSqr - rhoH_form;
         if constexpr (prim == PrimVariable::Pressure)
             return (gamma - 1) * e; // p
         else
@@ -109,16 +112,19 @@ namespace DNDS::IdealGas
      * @param rho    Density.
      * @param vSqr   Velocity squared.
      * @param gamma  Ratio of specific heats.
-     * @return Total energy E.
+     * @param rhoH_form  Volumetric formation enthalpy to add back for
+     *                   total energy (default 0).
+     * @return Total energy E, including formation if provided.
      */
     template <PrimVariable prim>
     DNDS_DEVICE_CALLABLE inline real
-    Prim2ConsEnergy(real primE, real rho, real vSqr, real gamma)
+    Prim2ConsEnergy(real primE, real rho, real vSqr, real gamma,
+                    real rhoH_form = 0)
     {
         if constexpr (prim == PrimVariable::Pressure)
-            return primE / (gamma - 1) + rho * 0.5 * vSqr; // E = p/(gamma-1) + 0.5*rho*v^2
+            return primE / (gamma - 1) + rho * 0.5 * vSqr + rhoH_form;
         else
-            return primE + rho * 0.5 * vSqr; // E = e + 0.5*rho*v^2
+            return primE + rho * 0.5 * vSqr + rhoH_form;
     }
 
     /**

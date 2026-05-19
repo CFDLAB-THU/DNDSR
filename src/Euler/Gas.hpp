@@ -249,8 +249,12 @@ namespace DNDS::Euler::Gas
         rp.HRoe = (rp.sqrtRhoLm * rp.HLm + rp.sqrtRhoRm * rp.HRm) / (rp.sqrtRhoLm + rp.sqrtRhoRm);
         rp.rhoRoe = rp.sqrtRhoLm * rp.sqrtRhoRm;
 
-        real rhoH_roe = (rp.sqrtRhoLm * rhoH_form_Lm + rp.sqrtRhoRm * rhoH_form_Rm) / (rp.sqrtRhoLm + rp.sqrtRhoRm);
-        rp.asqrRoe = (gamma - 1) * (rp.HRoe - 0.5 * rp.vsqrRoe - rhoH_roe / std::max(rp.rhoRoe, verySmallReal));
+        // asqrRoe = (γ-1)*(H_sensible - ½v²)
+        // Valid only for ideal/perfect gas EOS where p = (γ-1)ρe_sensible.
+        // HRoe is the √ρ-weighted Roe average of sensible specific enthalpies
+        // (IdealGasThermal already excludes formation enthalpy).
+        // TODO: use a_L/a_R for general EOS
+        rp.asqrRoe = (gamma - 1) * (rp.HRoe - 0.5 * rp.vsqrRoe);
 
         if (!(rp.asqrRoe > 0))
         {
@@ -453,27 +457,29 @@ namespace DNDS::Euler::Gas
      *        increment, used for the Lax-flux Jacobian computation.
      *
      * Given a state U and its increment dU, computes
-     *   dVelo = d(momentum/ρ)  and  dp = (γ−1)(dE − ½(dMomentum·v + momentum·dv)).
+     *   dVelo = d(momentum/ρ)  and  dp = (γ−1)(dE − ½(dM·v + M·dv) − drhoH_form).
      *
      * @tparam dim  Spatial dimension.
      * @param  U     Conservative state vector.
      * @param  dU    Conservative state increment.
      * @param  velo  Velocity vector (= U[1..dim] / U[0]).
      * @param  gamma Ratio of specific heats (γ).
+     * @param  drhoH_form  Increment of formation enthalpy density d(ρh_f),
+     *                     for subtraction from dE before computing dp (default 0).
      * @param[out] dVelo  Velocity increment (output).
      * @param[out] dp     Pressure increment (output).
      */
     template <int dim = 3, typename TU, class TVec>
     inline void IdealGasUIncrement(const TU &U, const TU &dU, const TVec &velo, real gamma, TVec &dVelo, real &dp,
-                                   real rhoH_form = 0)
+                                   real drhoH_form = 0)
     {
         dVelo = (dU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) -
                  U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) / U(0) * dU(0)) /
                 U(0);
-        (void)rhoH_form;
         dp = (gamma - 1) * (dU(dim + 1) -
                             0.5 * (dU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).dot(velo) +
-                                   U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).dot(dVelo)));
+                                   U(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).dot(dVelo)) -
+                            drhoH_form);
     } // For Lax-Flux jacobian
 
     /**
@@ -1153,7 +1159,8 @@ namespace DNDS::Euler::Gas
      * @param[out] vsqrRoe   Roe-averaged squared velocity magnitude.
      * @param[out] aRoe      Roe-averaged speed of sound.
      * @param[out] asqrRoe   Roe-averaged speed of sound squared.
-     * @param[out] HRoe      Roe-averaged total specific enthalpy.
+     * @param[out] HRoe      Roe-averaged sensible specific enthalpy
+     *                       (formation enthalpy already excluded by IdealGasThermal).
      * @param[out] UOut      Roe-averaged state vector (same layout as UL/UR,
      *                       including passive scalars).
      */
@@ -1180,15 +1187,27 @@ namespace DNDS::Euler::Gas
         vsqrRoe = veloRoe.squaredNorm();
         HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
         real rhoRoe = sqrtRhoLm * sqrtRhoRm;
-        real rhoH_roe = (sqrtRhoLm * rhoH_form_L + sqrtRhoRm * rhoH_form_R) / (sqrtRhoLm + sqrtRhoRm);
-        asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe - rhoH_roe / std::max(rhoRoe, verySmallReal));
+
+        // asqrRoe = (γ-1)*(H_sensible - ½v²)
+        // Valid only for ideal/perfect gas EOS where p = (γ-1)ρe_sensible.
+        // TODO: use a_L/a_R for general EOS
+        asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
         DNDS_assert(asqrRoe >= 0);
         aRoe = std::sqrt(asqrRoe);
 
         UOut(0) = rhoRoe;
         UOut(Seq123) = veloRoe * UOut(0);
         real pRoeOut = asqrRoe * UOut(0) / gamma;
-        UOut(I4) = pRoeOut / (gamma - 1) + 0.5 * vsqrRoe * UOut(0);
+
+        // UOut(I4) = ρRoe*HRoe - pRoeOut + rhoH_roe
+        // Derivation:
+        //   HRoe is sensible specific enthalpy: H = e_sensible + ½v² + p/ρ
+        //   → ρRoe*HRoe - pRoeOut = ρRoe*(e_sensible + ½v²) = sensible ρE
+        //   → + rhoH_roe adds formation enthalpy density back → total ρE
+        // Valid only for ideal/perfect gas EOS (p = (γ-1)ρe_sensible).
+        // TODO: use L/R average for general EOS
+        real rhoH_roe = (sqrtRhoLm * rhoH_form_L + sqrtRhoRm * rhoH_form_R) / (sqrtRhoLm + sqrtRhoRm);
+        UOut(I4) = rhoRoe * HRoe - pRoeOut + rhoH_roe;
         UOut(Eigen::seq(I4 + 1, EigenLast)) =
             UOut(0) / (sqrtRhoLm + sqrtRhoRm) *
             (UL(Eigen::seq(I4 + 1, EigenLast)) / sqrtRhoLm +
@@ -1214,7 +1233,8 @@ namespace DNDS::Euler::Gas
      * @param  vsqrRoe  Roe-averaged |v|².
      * @param  aRoe     Roe-averaged speed of sound.
      * @param  asqrRoe  Roe-averaged a².
-     * @param  HRoe     Roe-averaged total enthalpy.
+     * @param  HRoe     Roe-averaged sensible specific enthalpy
+     *                  (formation enthalpy already excluded by IdealGasThermal).
      * @param  lam0     Entropy-fixed eigenvalue |V_n − a|.
      * @param  lam123   Entropy-fixed eigenvalue |V_n|.
      * @param  lam4     Entropy-fixed eigenvalue |V_n + a|.
@@ -1341,8 +1361,11 @@ namespace DNDS::Euler::Gas
         real vsqrRoe = veloRoe.squaredNorm();
         real HRoe = (sqrtRhoLm * HLm + sqrtRhoRm * HRm) / (sqrtRhoLm + sqrtRhoRm);
         real rhoRoe = sqrtRhoLm * sqrtRhoRm;
-        real rhoH_roe = (sqrtRhoLm * rhoH_form_Lm + sqrtRhoRm * rhoH_form_Rm) / (sqrtRhoLm + sqrtRhoRm);
-        real asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe - rhoH_roe / std::max(rhoRoe, verySmallReal));
+
+        // asqrRoe = (γ-1)*(H_sensible - ½v²)
+        // Valid only for ideal/perfect gas EOS where p = (γ-1)ρe_sensible.
+        // TODO: use a_L/a_R for general EOS
+        real asqrRoe = (gamma - 1) * (HRoe - 0.5 * vsqrRoe);
         real veloRoeN = veloRoe.dot(nm);
         real vgmN = vgm.dot(nm);
         real veloRoeRN = veloRoeN - vgmN;

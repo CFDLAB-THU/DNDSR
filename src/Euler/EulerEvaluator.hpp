@@ -159,7 +159,7 @@ namespace DNDS::Euler
         // static const int gdim = 2; //* geometry dim
 
     private:
-        int nVars = 5; ///< Runtime number of conserved variables (may differ from nVarsFixed for dynamic models).
+        int nVars = -1; ///< Runtime number of conserved variables. Always set by constructor initializer; -1 catches accidental use.
 
         bool passiveDiscardSource = false; ///< When true, discard source terms for passive scalar equations.
 
@@ -1101,78 +1101,6 @@ namespace DNDS::Euler
 
         /**
          * @brief inviscid flux approx jacobian (flux term not reconstructed / no riemann)
-         *
-         */
-        auto fluxJacobian0_Right(
-            TU &UR,
-            const TVec &uNorm,
-            Geom::t_index btype)
-        {
-            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            DNDS_assert(dim == 3); // only for 3D!!!!!!!!
-            const TU &U = UR;
-            const TVec &n = uNorm;
-
-            real rhoun = n.dot(U({1, 2, 3}));
-            real rhousqr = U({1, 2, 3}).squaredNorm();
-            real T = phys_.template temperature<dim>(U);
-            real gamma = phys_.template gammaEq<dim>(T, U);
-            TJacobianU subFdU;
-            subFdU.resize(nVars, nVars);
-
-            subFdU.setZero();
-            subFdU(0, 1) = n(1 - 1);
-            subFdU(0, 2) = n(2 - 1);
-            subFdU(0, 3) = n(3 - 1);
-            subFdU(1, 0) = -1.0 / (U(1 - 1) * U(1 - 1)) * U(2 - 1) * rhoun + (1.0 / (U(1 - 1) * U(1 - 1)) * n(1 - 1) * (gamma - 1.0) * (rhousqr - U(1 - 1) * U(5 - 1) * 2.0)) / 2.0 + (U(5 - 1) * n(1 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(1, 1) = (rhoun + U(2 - 1) * n(1 - 1) * 2.0 - U(2 - 1) * gamma * n(1 - 1)) / U(1 - 1);
-            subFdU(1, 2) = (U(2 - 1) * n(2 - 1)) / U(1 - 1) - (U(3 - 1) * n(1 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(1, 3) = (U(2 - 1) * n(3 - 1)) / U(1 - 1) - (U(4 - 1) * n(1 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(1, 4) = n(1 - 1) * (gamma - 1.0);
-            subFdU(2, 0) = -1.0 / (U(1 - 1) * U(1 - 1)) * U(3 - 1) * rhoun + (1.0 / (U(1 - 1) * U(1 - 1)) * n(2 - 1) * (gamma - 1.0) * (rhousqr - U(1 - 1) * U(5 - 1) * 2.0)) / 2.0 + (U(5 - 1) * n(2 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(2, 1) = (U(3 - 1) * n(1 - 1)) / U(1 - 1) - (U(2 - 1) * n(2 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(2, 2) = (rhoun + U(3 - 1) * n(2 - 1) * 2.0 - U(3 - 1) * gamma * n(2 - 1)) / U(1 - 1);
-            subFdU(2, 3) = (U(3 - 1) * n(3 - 1)) / U(1 - 1) - (U(4 - 1) * n(2 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(2, 4) = n(2 - 1) * (gamma - 1.0);
-            subFdU(3, 0) = -1.0 / (U(1 - 1) * U(1 - 1)) * U(4 - 1) * rhoun + (1.0 / (U(1 - 1) * U(1 - 1)) * n(3 - 1) * (gamma - 1.0) * (rhousqr - U(1 - 1) * U(5 - 1) * 2.0)) / 2.0 + (U(5 - 1) * n(3 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(3, 1) = (U(4 - 1) * n(1 - 1)) / U(1 - 1) - (U(2 - 1) * n(3 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(3, 2) = (U(4 - 1) * n(2 - 1)) / U(1 - 1) - (U(3 - 1) * n(3 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(3, 3) = (rhoun + U(4 - 1) * n(3 - 1) * 2.0 - U(4 - 1) * gamma * n(3 - 1)) / U(1 - 1);
-            subFdU(3, 4) = n(3 - 1) * (gamma - 1.0);
-            subFdU(4, 0) = 1.0 / (U(1 - 1) * U(1 - 1) * U(1 - 1)) * rhoun * (-rhousqr + (U(2 - 1) * U(2 - 1)) * gamma + (U(3 - 1) * U(3 - 1)) * gamma + (U(4 - 1) * U(4 - 1)) * gamma - U(1 - 1) * U(5 - 1) * gamma);
-            subFdU(4, 1) = 1.0 / (U(1 - 1) * U(1 - 1)) * n(1 - 1) * (-rhousqr + (U(2 - 1) * U(2 - 1)) * gamma + (U(3 - 1) * U(3 - 1)) * gamma + (U(4 - 1) * U(4 - 1)) * gamma - U(1 - 1) * U(5 - 1) * gamma * 2.0) * (-1.0 / 2.0) - 1.0 / (U(1 - 1) * U(1 - 1)) * U(2 - 1) * rhoun * (gamma - 1.0);
-            subFdU(4, 2) = 1.0 / (U(1 - 1) * U(1 - 1)) * n(2 - 1) * (-rhousqr + (U(2 - 1) * U(2 - 1)) * gamma + (U(3 - 1) * U(3 - 1)) * gamma + (U(4 - 1) * U(4 - 1)) * gamma - U(1 - 1) * U(5 - 1) * gamma * 2.0) * (-1.0 / 2.0) - 1.0 / (U(1 - 1) * U(1 - 1)) * U(3 - 1) * rhoun * (gamma - 1.0);
-            subFdU(4, 3) = 1.0 / (U(1 - 1) * U(1 - 1)) * n(3 - 1) * (-rhousqr + (U(2 - 1) * U(2 - 1)) * gamma + (U(3 - 1) * U(3 - 1)) * gamma + (U(4 - 1) * U(4 - 1)) * gamma - U(1 - 1) * U(5 - 1) * gamma * 2.0) * (-1.0 / 2.0) - 1.0 / (U(1 - 1) * U(1 - 1)) * U(4 - 1) * rhoun * (gamma - 1.0);
-            subFdU(4, 4) = (gamma * rhoun) / U(1 - 1);
-
-            real un = rhoun / U(0);
-
-            if constexpr (Traits::hasSA)
-            {
-                subFdU(5, 5) = un;
-                subFdU(5, 0) = -un * U(5) / U(0);
-                subFdU(5, 1) = n(0) * U(5) / U(0);
-                subFdU(5, 2) = n(1) * U(5) / U(0);
-                subFdU(5, 3) = n(2) * U(5) / U(0);
-            }
-            if constexpr (Traits::has2EQ)
-            {
-                subFdU(5, 5) = un;
-                subFdU(5, 0) = -un * U(5) / U(0);
-                subFdU(5, 1) = n(0) * U(5) / U(0);
-                subFdU(5, 2) = n(1) * U(5) / U(0);
-                subFdU(5, 3) = n(2) * U(5) / U(0);
-                subFdU(6, 6) = un;
-                subFdU(6, 0) = -un * U(6) / U(0);
-                subFdU(6, 1) = n(0) * U(6) / U(0);
-                subFdU(6, 2) = n(1) * U(6) / U(0);
-                subFdU(6, 3) = n(2) * U(6) / U(0);
-            }
-            return subFdU;
-        }
-
-        /**
-         * @brief inviscid flux approx jacobian (flux term not reconstructed / no riemann)
          * if lambdaMain == veryLargeReal, then use lambda0~4 for roe-flux type jacobian
          *
          */
@@ -1197,8 +1125,7 @@ namespace DNDS::Euler
             TVec dVelo;
             real dp;
             Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp,
-                                         phys_.mixtureFormationRhoE(U));
-            dp -= (gamma - 1) * phys_.mixtureFormationRhoEIncrement(dU);
+                                         phys_.mixtureFormationRhoEIncrement(dU));
             TU dF(U.size());
             if (omitF == 0)
                 Gas::GasInviscidFluxFacialIncrement<dim>(
@@ -1280,8 +1207,7 @@ namespace DNDS::Euler
             TVec dVelo;
             real dp;
             Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp,
-                                         phys_.mixtureFormationRhoE(U));
-            dp -= (gamma - 1) * phys_.mixtureFormationRhoEIncrement(dU);
+                                         phys_.mixtureFormationRhoEIncrement(dU));
             TU dF(U.size());
             Gas::GasInviscidFluxFacialIncrement<dim>(
                 U, dU,

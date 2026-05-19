@@ -174,9 +174,9 @@ namespace DNDS::Euler::Chemistry
         // Per-species concentration Jacobian ∂ω_i/∂C_k (sparse Ns×Ns)
         auto dWdC = I.kin->netProductionRates_ddCi();
 
-        // Per-species h_k/(R_u·T) — needed for u_k = (hRT_k - 1)·R_u·T
-        std::vector<double> hRT(I.Ns);
-        I.gas->getEnthalpy_RT(hRT.data());
+        // Per-species partial molar internal energies u_k [J/kmol] (EOS-agnostic)
+        std::vector<double> uBar(I.Ns);
+        I.gas->getPartialMolarIntEnergies(uBar.data());
 
         // zero Jacobian
         for (int idx = 0; idx < J.rows * J.cols; ++idx)
@@ -189,7 +189,6 @@ namespace DNDS::Euler::Chemistry
         double vs2 = velScale * velScale;
         double cvSafe = std::max(cv, 1e-30);
         double rhoInv = 1.0 / std::max(rho, 1e-60);
-        double Ru = Cantera::GasConstant;
 
         bool skipFluid = jacFlags & JAC_SKIP_FLUID;
         bool skipAbsorb = jacFlags & JAC_SKIP_ABSORPTION;
@@ -207,9 +206,9 @@ namespace DNDS::Euler::Chemistry
         for (int k = 0; k < Ns1; ++k)
         {
             double invMk = 1.0 / std::max(I.mw[k], 1e-30);
-            double du = Ru * T * ((hRT[k] - 1.0) * invMk);
+            double du = uBar[k] * invMk; // specific internal energy [J/kg], EOS-agnostic
             if (!skipAbsorb)
-                du -= Ru * T * ((hRT[Ns1] - 1.0) * invMlast);
+                du -= uBar[Ns1] * invMlast;
             double dT_drY = dT_pre * du;
             for (int i = 0; i < nRows; ++i)
             {
@@ -308,6 +307,19 @@ namespace DNDS::Euler::Chemistry
         impl_->gasT->setMassFractions_NoNorm(Y.data);
         impl_->gasT->setState_TP(298.15, 101325);
         return impl_->gasT->enthalpy_mass() - impl_->gasT->intEnergy_mass();
+    }
+
+    double ChemicalSource::sensibleInternalEnergyAtReference(ConstSpeciesBufferView Y) const
+    {
+        impl_->gasT->setMassFractions_NoNorm(Y.data);
+        impl_->gasT->setState_TP(298.15, 101325);
+        return impl_->gasT->cv_mass() * 298.15;
+    }
+
+    bool ChemicalSource::isIdealGas() const
+    {
+        DNDS_assert(impl_->gas);
+        return impl_->gas->isIdeal();
     }
 
     // ---- clone ---------------------------------------------------------------
