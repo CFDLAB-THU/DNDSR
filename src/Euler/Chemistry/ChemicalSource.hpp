@@ -157,6 +157,17 @@ namespace DNDS::Euler::Chemistry
          *  For ideal gas this equals R_mix·298.15; for real gases uses the full EOS. */
         double pVAtReference(ConstSpeciesBufferView Y) const;
 
+        /**
+         * Sensible internal energy of the mixture at reference T=298.15 K,
+         * assuming ideal-gas energy convention (e_sensible = 0 at T = 0 K).
+         * Computed as cv_mass(T_ref, Y) · 298.15 [J/kg] via Cantera's own EOS.
+         * Exact for ideal-gas thermo phases; approximate otherwise.
+         */
+        double sensibleInternalEnergyAtReference(ConstSpeciesBufferView Y) const;
+
+        /** Whether the Cantera thermo phase uses an ideal-gas EOS. */
+        bool isIdealGas() const;
+
         // ---- Per-instance buffers (thread-safe when each thread has its own) ----
 
         /** Compute mass fractions from conservative species densities. Fills bufY_, returns view into it. */

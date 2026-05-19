@@ -33,9 +33,6 @@ namespace DNDS::Euler
     template <EulerModel M>
     using SrcTDiffU = typename EulerModelTraits<M>::TDiffU;
 
-    /// Static dim for EX models (both NS_EX and NS_EX_3D have dim=3).
-    constexpr int ExDim = 3;
-
     /**
      * @brief Per-quadrature-point auxiliary data needed by source term contributors.
      */
@@ -148,7 +145,7 @@ namespace DNDS::Euler
         {
             if (force.isZero(0))
                 return;
-            evalSourceBodyForce<model, ExDim>(force, ret, jac, U, Mode);
+            evalSourceBodyForce<model, Traits::dim>(force, ret, jac, U, Mode);
         }
     };
 
@@ -178,7 +175,7 @@ namespace DNDS::Euler
         {
             if (!enabled)
                 return;
-            evalSourceRotatingFrame<model, ExDim>(*this, pPhy, ret, jac, U, Mode);
+            evalSourceRotatingFrame<model, Traits::dim>(*this, pPhy, ret, jac, U, Mode);
         }
     };
 
@@ -228,9 +225,9 @@ namespace DNDS::Euler
             lLES = std::min(lLES, std::max({d * cWall, aux.hMax * cWall}));
             auto call = [&](int mode)
             {
-                RANS::GetSource_SA<ExDim>(U, GradU, muGas, aux.muf, aux.gamma,
-                                          d, lLES, aux.hMax, SADESMode,
-                                          retInc, ransSARotCorrection, mode, SAVersion);
+                RANS::GetSource_SA<Traits::dim>(U, GradU, muGas, aux.muf, aux.gamma,
+                                                d, lLES, aux.hMax, SADESMode,
+                                                retInc, ransSARotCorrection, mode, SAVersion);
             };
             if (Mode == 0)
                 call(0);
@@ -264,8 +261,8 @@ namespace DNDS::Euler
             retInc.setZero(U.size());
             auto call = [&](int mode)
             {
-                RANS::GetSource_SST<ExDim>(U, GradU, aux.muf, aux.dWallC,
-                                           aux.hMax * SADESScale, retInc, mode);
+                RANS::GetSource_SST<Traits::dim>(U, GradU, aux.muf, aux.dWallC,
+                                                 aux.hMax * SADESScale, retInc, mode);
             };
             if (Mode == 0)
                 call(0);
@@ -296,7 +293,7 @@ namespace DNDS::Euler
             retInc.setZero(U.size());
             auto call = [&](int mode)
             {
-                RANS::GetSource_KOWilcox<ExDim>(U, GradU, aux.muf, aux.dWallC, retInc, mode);
+                RANS::GetSource_KOWilcox<Traits::dim>(U, GradU, aux.muf, aux.dWallC, retInc, mode);
             };
             if (Mode == 0)
                 call(0);
@@ -327,7 +324,7 @@ namespace DNDS::Euler
             retInc.setZero(U.size());
             auto call = [&](int mode)
             {
-                RANS::GetSource_RealizableKe<ExDim>(U, GradU, aux.muf, aux.dWallC, retInc, mode);
+                RANS::GetSource_RealizableKe<Traits::dim>(U, GradU, aux.muf, aux.dWallC, retInc, mode);
             };
             if (Mode == 0)
                 call(0);
@@ -361,10 +358,10 @@ namespace DNDS::Euler
         {
             DNDS_assert(pool_);
 #ifdef DNDS_DIST_MT_USE_OMP
-            if (pool_->size() > 1)
-                return omp_get_thread_num();
-#endif
+            return omp_get_thread_num() % static_cast<int>(pool_->size());
+#else
             return 0;
+#endif
         }
 
         ChemicalContributor() = default;

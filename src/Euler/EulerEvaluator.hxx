@@ -1300,7 +1300,8 @@ namespace DNDS::Euler
                             for (int i = 0; i < nVars; i++)
                                 uPrimitive(i) = exprtkEval.VarVec("UPrim", i);
                         Gas::IdealGasThermalPrimitive2Conservative<dim>(uPrimitive, inc, gamma_cell,
-                                                                        phys_.mixtureFormationRhoE(u[iCell]));
+                                                                        real(0)); // formation added below from
+                                                                                  // actual primitive species
                         if (!inc.allFinite())
                         {
                             std::ostringstream oss0, oss1, oss2;
@@ -2208,9 +2209,29 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &res,
         ArrayDOFV<1> &cellRHSAlpha, index &nLim, real alphaMin)
     {
+        static const real minRatio = 0.5;
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
         real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
+
+        if (settings.ppEpsIsRelaxed)
+        {
+            real rhoMin = veryLargeReal;
+            real rhoEiMin = veryLargeReal;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(runtime) reduction(min : rhoMin, rhoEiMin)
+#endif
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                rhoMin = std::min(rhoMin, u[iCell](0));
+                real rhoEi_cell = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoE(u[iCell]);
+                rhoEiMin = std::min(rhoEiMin, rhoEi_cell);
+            }
+            MPI::AllreduceOneReal(rhoMin, MPI_MIN, mesh->getMPI());
+            MPI::AllreduceOneReal(rhoEiMin, MPI_MIN, mesh->getMPI());
+            rhoEps = std::min(rhoEps, minRatio * rhoMin);
+            pEps = std::min(pEps, minRatio * rhoEiMin);
+        }
 
         auto cellIsHalfAlpha = [&](index iCell) -> bool // iCell should be internal
         {
@@ -2250,9 +2271,12 @@ namespace DNDS::Euler
 
         index nLimLocal = 0;
         index nLimAdd = 0;
-        // for (index iCell : InterCells)
+        // only check cells not already limited (α > alphaMin)
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
+            if (cellRHSAlpha[iCell](0) <= alphaMin)
+                continue;
+
             TU inc = res[iCell];
 
             TU uNew = u[iCell] + inc;
@@ -2260,9 +2284,8 @@ namespace DNDS::Euler
 
             if (pNew < pEps || uNew(0) < rhoEps)
             {
-                // cellRHSAlpha[iCell](0) = cellAdjAlphaMin(iCell);
-                // DNDS_assert(cellRHSAlpha[iCell](0) == alphaMin);
                 cellRHSAlpha[iCell](0) = alphaMin;
+                nLimLocal++;
             }
             if constexpr (Traits::hasSA)
             {

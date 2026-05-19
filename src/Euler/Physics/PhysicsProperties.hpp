@@ -55,14 +55,14 @@ namespace DNDS::Euler
         // ---- per-thread chemistry helpers -----------------------------------
 
     private:
-        bool useOMP() const { return pool_ && pool_->size() > 1; }
         int threadIdx() const
         {
+            DNDS_assert(pool_);
 #ifdef DNDS_DIST_MT_USE_OMP
-            if (useOMP())
-                return omp_get_thread_num();
-#endif
+            return omp_get_thread_num() % static_cast<int>(pool_->size());
+#else
             return 0;
+#endif
         }
         Chemistry::ChemicalSource &chem() const
         {
@@ -356,12 +356,18 @@ namespace DNDS::Euler
         }
         real uSensible = sensibleRhoE(U, I4) * rhoInv - 0.5 * vel2;
         real uPhys = uInternal * igProp_->U0 * igProp_->U0;
-        // uInternal includes Σ Y_k·h_f_k (formation enthalpy). Cantera's setState_UV
-        // uses internal energy u_k = e_sensible + (h_f_k − pV_k). Convert h_f → u_f
-        // via Cantera's own h−u relation at reference conditions (EOS-agnostic).
         {
             auto Yv = massFractions(U);
-            uPhys -= chem().pVAtReference(Yv);
+            uPhys -= chem().pVAtReference(Yv); // h_f → u_f(298): subtract (h−u) at T_ref
+            if (chem().isIdealGas())
+            {
+                uPhys -= chem().sensibleInternalEnergyAtReference(Yv);
+                // DNDSR stores e_sensible measured from 0 K (ideal-gas convention).
+                // Cantera measures thermal energy from T_ref = 298.15 K.
+                // For ideal gas: e_sensible(298) = cv(298)·T_ref.
+            }
+            else
+                DNDS_assert_info(false, "temperature(): non-ideal-gas EOS conversion not yet implemented");
         }
         real vPhys = rhoInv / igProp_->rho0;
         double T_guess = TGuess > 0 ? toPhysT(TGuess) : 0;
