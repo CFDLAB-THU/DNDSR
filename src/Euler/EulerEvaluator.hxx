@@ -2144,7 +2144,8 @@ namespace DNDS::Euler
             inc *= alphaRho;
 
             TU uNew = u[iCell] + inc;
-            real pNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - phys_.mixtureFormationRhoE(uNew);                 // rhoE_sensible (not pressure)
+            real rhoH_form_new = phys_.mixtureFormationRhoE(uNew);
+            real pNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - rhoH_form_new;                                    // rhoE_sensible (not pressure)
             real pOld = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoE(u[iCell]); // rhoE_sensible (not pressure)
             real relaxedP = pEps;
             if (pNew < pOld)
@@ -2155,7 +2156,7 @@ namespace DNDS::Euler
             {
                 // todo: use high order accurate (add control switch)
                 real alphaC = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
-                    u[iCell], inc, relaxedP, phys_.mixtureFormationRhoE(u[iCell]));
+                    u[iCell], inc, relaxedP, rhoH_form_new);
                 alphaP = std::min(alphaP, alphaC);
             }
             cellRHSAlpha[iCell](0) = alphaRho * alphaP;
