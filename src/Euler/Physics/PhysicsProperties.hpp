@@ -619,7 +619,7 @@ namespace DNDS::Euler
                 DNDS_assert_info(false, "temperature(): non-ideal-gas EOS conversion not yet implemented");
         }
         real vPhys = rhoInv / igProp_->rho0;
-        double T_guess = TGuess > 0 ? toPhysT(TGuess) : 0;
+        double T_guess = TGuess > 0 ? toPhysT(TGuess) : 200.0;
         if (T_guess <= 0)
         {
             real p = (igProp_->gamma - 1) * rho * uSensible;
@@ -627,9 +627,8 @@ namespace DNDS::Euler
         }
         if (vPhys < 1e-6 || !std::isfinite(vPhys) || !std::isfinite(uPhys))
         {
-            static int cnt = 0;
-            if (cnt++ < 3)
-                fprintf(stderr, "[temp-fb] vPhys=%.3e uPhys=%.3e — using const gamma\n", (double)vPhys, (double)uPhys);
+            DNDS_assert_info(vPhys > 0 && std::isfinite(vPhys) && std::isfinite(uPhys),
+                             fmt::format("vPhys={:.3e} uPhys={:.3e} — using const gamma fallback", vPhys, uPhys));
             real p = (igProp_->gamma - 1) * rho * uSensible;
             return p * rhoInv / toCode(igProp_->Rgas);
         }

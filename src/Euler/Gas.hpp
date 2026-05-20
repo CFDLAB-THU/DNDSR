@@ -1718,7 +1718,7 @@ namespace DNDS::Euler::Gas
      *   ∇p_corr = ∇p_raw − (γ−1)·∇(ρH_form)
      *   ∇(ρH_form) = Σ_k (hf_k − hf_N)·∇(ρY_k) + hf_N·∇ρ
      * where hfSpecies[k] = hf_k/U0² (per-species formation enthalpy in code units).
-     * Sum hfSpecies is the per-mass mixtureFormationEnergy; rho·Σ_Yk·hfSpecies_k = mixtureFormationRhoE.
+     * Sum hfSpecies is the per-mass mixtureFormationEnthalpy; rho·Σ_Yk·hfSpecies_k = mixtureFormationRhoE.
      *
      * @note The input @p GradU has size [dim × nVars], where nVars ≥ dim+2.
      *       Passive-scalar gradient columns beyond index dim+1 are also

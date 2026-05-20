@@ -25,8 +25,8 @@
 
 ## MEDIUM (24 findings)
 
-| # | Audit | File:Line | Issue |
-|---|-------|-----------|-------|
+| # | Audit | File:Line | Issue | Status |
+|---|-------|-----------|-------| --- |
 | 1 | 1 | `ChemicalSource.cpp:385` | `mixtureFormationRhoE(double rho, Y)` dead method — missing `invU0sq` scaling | **DONE** |
 | 2 | 2 | `IdealGasPhysics.hpp:68-70` | `Enthalpy(E,rho,p)` omits `rhoH_form` parameter | **DONE** |
 | 3 | 2 | `Gas.hpp:1738` | `GradientCons2Prim_IdealGas` skips pHf correction for single-species (hfSpecies.size()==1) | **DONE** |
@@ -39,14 +39,14 @@
 | 10 | 5 | `EulerEvaluator.hxx:2092-2096` | `EvaluateCellRHSAlpha` `ppEpsIsRelaxed` zeroes thresholds instead of using field minima | **ACCEPTED** — by-design config toggle |
 | 11 | 5 | `EulerEvaluator.hpp:1739-1742` | `CompressInc` `ppEpsIsRelaxed` uses `verySmallReal` instead of field minima | **ACCEPTED** — same as #10 |
 | 12 | 5 | `EulerEvaluator.hpp:1755-1768` | `CompressInc` uses `rhoH_form_old` instead of `rhoH_form_new` in quadratic energy solve | **DONE** |
-| 13 | 5 | `EulerEvaluator.hxx:2110-2141` | `EvaluateCellRHSAlpha` limits density only — species increments can go negative |
-| 14 | 6 | `PhysicsProperties.hpp:375-376` | `static int cnt` in `temperature()` — unprotected race in OMP |
-| 15 | 6 | `ChemicalSource.cpp:315-329` | `clone()` dereferences `I.sol`/`I.solT` without null check |
-| 16 | 7 | `SourceTermContributor.hpp:437` | `JAC_SKIP_FLUID` zeroes energy→species coupling in source Jacobian |
-| 17 | 8 | `EulerEvaluator.hpp:292` | Runtime `if(model==NS_2EQ)` should be `if constexpr` |
-| 18 | 9 | `PhysicsProperties.hpp:370-371` | Fallback T-guess can go ≤0 for reactive mixtures near 298K |
-| 19 | 9 | `ChemicalSource.cpp:298-304` | `mixtureFormationEnergy` name — returns enthalpy, not energy |
-| 20 | 9 | `EulerEvaluator.hxx:1402,1406` | `MeanValuePrim2Cons` passes `rhoH_form=0` — round-trip drops formation |
+| 13 | 5 | `EulerEvaluator.hxx:2110-2141` | `EvaluateCellRHSAlpha` limits density only — species increments can go negative | **ACCEPTED** — by-design, species clipped elsewhere |
+| 14 | 6 | `PhysicsProperties.hpp:375-376` | `static int cnt` in `temperature()` — unprotected race in OMP | **DONE** — removed debug counter, replaced with DNDS_assert |
+| 15 | 6 | `ChemicalSource.cpp:315-329` | `clone()` dereferences `I.sol`/`I.solT` without null check | **DONE** — added DNDS_assert null checks |
+| 16 | 7 | `SourceTermContributor.hpp:437` | `JAC_SKIP_FLUID` zeroes energy→species coupling in source Jacobian | **DONE** — added TODO to determine if removable |
+| 17 | 8 | `EulerEvaluator.hpp:292` | Runtime `if(model==NS_2EQ)` should be `if constexpr` | **DONE** |
+| 18 | 9 | `PhysicsProperties.hpp:370-371` | Fallback T-guess can go ≤0 for reactive mixtures near 298K | **DONE** — bottom guess 200 K |
+| 19 | 9 | `ChemicalSource.cpp:298-304` | `mixtureFormationEnergy` name — returns enthalpy, not energy | **DONE** — renamed mixtureFormationEnthalpy |
+| 20 | 9 | `EulerEvaluator.hxx:1402,1406` | `MeanValuePrim2Cons` passes `rhoH_form=0` — round-trip drops formation | **DONE** — computes rhoH_form from species, passes to Prim2Cons |
 | 21 | 11 | `ChemicalSource.cpp:107,113,119` | `mixtureCp/Cv/Gamma` hardcode `p=101325` — real gases need actual pressure |
 | 22 | 11 | `ChemicalSource.cpp:125-128` | `speedOfSound` implements `a=√(γRT)` — dead ideal-gas code |
 | 23 | 11 | `PhysicsProperties.hpp:140-141` | `gammaEq` computes `p_exact = rho·Rmix·T` — ideal-gas assumption |

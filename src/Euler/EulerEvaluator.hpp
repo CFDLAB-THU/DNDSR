@@ -1868,7 +1868,7 @@ namespace DNDS::Euler
                 //                 // cx[iCell](I4 + 2) = rhoOmegaaaWall * 0.5; // this is bad
                 //             }
 
-                if (model == NS_2EQ || model == NS_2EQ_3D)
+                if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
                 { // for SST or KOWilcox
                     if (settings.ransModel == RANSModel::RANS_KOSST ||
                         settings.ransModel == RANSModel::RANS_KOWilcox)

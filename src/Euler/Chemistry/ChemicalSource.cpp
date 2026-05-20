@@ -306,7 +306,7 @@ namespace DNDS::Euler::Chemistry
             hf[k] = impl_->hf[k];
     }
 
-    double ChemicalSource::mixtureFormationEnergy(ConstSpeciesBufferView Y) const
+    double ChemicalSource::mixtureFormationEnthalpy(ConstSpeciesBufferView Y) const
     {
         double e = 0;
         for (int k = 0; k < impl_->Ns; ++k)
@@ -338,9 +338,11 @@ namespace DNDS::Euler::Chemistry
 
     std::unique_ptr<ChemicalSource> ChemicalSource::clone() const
     {
-        // Use Cantera's Solution::clone() (since v3.2) to deep-copy ThermoPhase,
-        // Kinetics, and Transport without re-parsing the YAML mechanism file.
+        // Use Cantera's Solution::clone() to deep-copy ThermoPhase, Kinetics,
+        // and Transport without re-parsing the YAML mechanism file.
         auto &I = *impl_;
+        DNDS_assert(I.sol != nullptr);
+        DNDS_assert(I.solT != nullptr);
         auto c = std::make_unique<ChemicalSource>();
         c->mechanismFile_ = mechanismFile_;
         c->phaseName_ = phaseName_;
@@ -408,7 +410,7 @@ namespace DNDS::Euler::Chemistry
 
     double ChemicalSource::mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y, double invU0sq) const
     {
-        return rho * mixtureFormationEnergy(Y) * invU0sq;
+        return rho * mixtureFormationEnthalpy(Y) * invU0sq;
     }
 
     double ChemicalSource::mixtureFormationRhoEIncrement(double rhoInc, const double *dRhoYK, int nTransported) const

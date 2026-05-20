@@ -1397,14 +1397,28 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < w.Size(); iCell++)
         {
-            // Two-pass: compute approximate U to get temperature and gamma,
+            // Two-pass: compute approximate U to get rhoH_form and gamma,
             // then perform the real primitive-to-conservative conversion.
+            //
+            // Pass 1: convert w→u_approx using γ=1.4 and rhoH=0.  Density and
+            // species densities (ρY_k = ρ·Y_k from primitive) are exact — only
+            // ρE(I4) misses formation.  rhoH_form = phys_.mixtureFormationRhoE(u_approx)
+            // depends only on ρ and ρY_k, which are correct, so rhoH_form is exact.
+            //
+            // Add rhoH_form to u_approx(I4) so temperature and gammaEq see the
+            // correct total energy.  This gives the right T and γ for Pass 2.
+            //
+            // Pass 2: convert w→out using the correct γ (from u_approx with formation)
+            // and add rhoH_form to the energy slot.  Together with Cons2Prim which
+            // subtracts rhoH_form, the round-trip Prim2Cons ∘ Cons2Prim ≈ identity.
             TU u_approx;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], u_approx, real(1.4), 0 /* primitive, no formation info */);
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], u_approx, real(1.4), 0);
+            real rhoH_form = phys_.mixtureFormationRhoE(u_approx);
+            u_approx(I4) += rhoH_form;
             real T_cell = phys_.template temperature<dim>(u_approx);
             real gamma = phys_.template gammaEq<dim>(T_cell, u_approx);
             TU out;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], out, gamma, 0 /* primitive, no formation info */);
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], out, gamma, rhoH_form);
             u[iCell] = out;
         }
     }
