@@ -294,14 +294,19 @@ int main(int argc, char **argv)
                 U[0] /= cfg.rho0;
             for (int j = 1; j <= dim; ++j)
                 U[j] /= cfg.U0;
-            U[dim + 1] /= (cfg.rho0 * cfg.U0 * cfg.U0);
+            if (fromStr == "prim-rhoT")
+                U[dim + 1] /= cfg.T0; // T_phys → T_code
+            else
+                U[dim + 1] /= (cfg.rho0 * cfg.U0 * cfg.U0); // p_phys → p_code
         }
-        else
+        else // cons-total, cons-sensible
         {
             U[0] /= cfg.rho0;
             for (int j = 1; j <= dim; ++j)
-                U[j] /= (cfg.rho0 * cfg.U0);
-            U[dim + 1] /= (cfg.rho0 * cfg.U0 * cfg.U0);
+                U[j] /= (cfg.rho0 * cfg.U0);            // ρu_phys → ρu_code
+            U[dim + 1] /= (cfg.rho0 * cfg.U0 * cfg.U0); // ρE_phys → ρE_code
+            for (int k = dim + 2; k < nVars; ++k)
+                U[k] /= cfg.rho0; // ρY_k phys → code
         }
         inputState = U;
     }
@@ -316,6 +321,7 @@ int main(int argc, char **argv)
 
     // --- Dispatch by dim for gas conversion functions ---
     real rhoH_form = 0;
+    real gammaPrimCons = cfg.gamma; // converged gamma for prim→cons (equals cfg for non-reactive)
     Eigen::VectorXd consTotal(nVars);
     if (fromStr == "cons-total")
     {
@@ -332,7 +338,7 @@ int main(int argc, char **argv)
     {
         auto fullPrim = inputState;
 
-        // Compute mixture gas constant code (needed for prim-TP)
+        // Compute mixture gas constant code (needed for prim-TP and prim-rhoT)
         auto computeRmixCode = [&](const Eigen::VectorXd &pvec)
         {
             if (!isReactive)
@@ -354,15 +360,16 @@ int main(int argc, char **argv)
         if (fromStr == "prim-TP")
         {
             real T_raw = fullPrim[0];
-            real T_in = inputPhys ? T_raw / cfg.T0 : T_raw; // code T
+            real T_in = inputPhys ? T_raw / cfg.T0 : T_raw;
             real p_code = fullPrim[dim + 1];
             real Rm = computeRmixCode(fullPrim);
-            fullPrim[0] = p_code / std::max(Rm * T_in, 1e-60); // ρ = p/(RT)
+            fullPrim[0] = p_code / std::max(Rm * T_in, 1e-60); // ρ = p/(R·T)
         }
         else if (fromStr == "prim-rhoT")
         {
-            real RT_code = fullPrim[dim + 1];
-            fullPrim[dim + 1] = fullPrim[0] * RT_code; // p = ρ·RT
+            real T_code = fullPrim[dim + 1];
+            real Rm = computeRmixCode(fullPrim);
+            fullPrim[dim + 1] = fullPrim[0] * Rm * T_code; // p = ρ·R·T
         }
 
         Eigen::VectorXd prim = fullPrim;
@@ -382,10 +389,29 @@ int main(int argc, char **argv)
             rhoH_form += lastY * prim[0] * hfView[Ns1];
         }
 
-        if (dim == 3)
-            Gas::IdealGasThermalPrimitive2Conservative<3>(prim, consTotal, cfg.gamma, rhoH_form);
-        else
-            Gas::IdealGasThermalPrimitive2Conservative<2>(prim, consTotal, cfg.gamma, rhoH_form);
+        // Prim→Cons: iterate with gammaEq for reactive (cfg.gamma only as initial guess)
+        real gammaUse = cfg.gamma;
+        for (int iter = 0; iter < 10; ++iter)
+        {
+            if (dim == 3)
+                Gas::IdealGasThermalPrimitive2Conservative<3>(prim, consTotal, gammaUse, rhoH_form);
+            else
+                Gas::IdealGasThermalPrimitive2Conservative<2>(prim, consTotal, gammaUse, rhoH_form);
+
+            if (!isReactive)
+                break;
+
+            real T_iter = (dim == 3) ? phys->temperature<3>(consTotal)
+                                     : phys->temperature<2>(consTotal);
+            real gamma_iter = (dim == 3) ? phys->gammaEq<3>(T_iter, consTotal)
+                                         : phys->gammaEq<2>(T_iter, consTotal);
+
+            if (std::abs(gamma_iter - gammaUse) < 1e-8)
+                break;
+            gammaUse = gamma_iter;
+        }
+        // Store converged gamma for cons→prim round-trip
+        gammaPrimCons = gammaUse;
     }
 
     // --- Compute temperature, gamma, rhoH_form from consTotal ---
@@ -412,15 +438,15 @@ int main(int argc, char **argv)
         Rmix_code = R_code;
     }
 
-    // --- Convert consTotal to prim --- (use cfg.gamma for exact round-trip)
+    // --- Convert consTotal to prim --- (use iterated gamma for reactive, cfg for non-reactive)
     Eigen::VectorXd primCode(nVars);
     if (dim == 3)
     {
-        Gas::IdealGasThermalConservative2Primitive<3>(consTotal, primCode, cfg.gamma, rhoH_form_cons);
+        Gas::IdealGasThermalConservative2Primitive<3>(consTotal, primCode, gammaPrimCons, rhoH_form_cons);
     }
     else
     {
-        Gas::IdealGasThermalConservative2Primitive<2>(consTotal, primCode, cfg.gamma, rhoH_form_cons);
+        Gas::IdealGasThermalConservative2Primitive<2>(consTotal, primCode, gammaPrimCons, rhoH_form_cons);
     }
 
     // --- Build consSensible ---
