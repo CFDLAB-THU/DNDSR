@@ -1887,9 +1887,9 @@ namespace DNDS::Euler
                 {
                     if (eInternalS(iG) < 2 * pEps) // pEps is rhoE_sensible floor (not pressure)
                     {
-                        real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
+                        real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
                             recBase(iG, EigenAll).transpose(), recInc(iG, EigenAll).transpose(),
-                            pEps, rhoH_form_B(iG));
+                            pEps, rhoH_form_B(iG), rhoH_form_VR(iG));
                         thetaP = std::min(thetaP, thetaThis);
                     }
                 }
@@ -2155,8 +2155,8 @@ namespace DNDS::Euler
             if (pNew < relaxedP)
             {
                 // todo: use high order accurate (add control switch)
-                real alphaC = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
-                    u[iCell], inc, relaxedP, rhoH_form_new);
+                real alphaC = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
+                    u[iCell], inc, relaxedP, phys_.mixtureFormationRhoE(u[iCell]), rhoH_form_new);
                 alphaP = std::min(alphaP, alphaC);
             }
             cellRHSAlpha[iCell](0) = alphaRho * alphaP;

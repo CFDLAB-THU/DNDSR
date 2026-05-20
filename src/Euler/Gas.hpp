@@ -1799,32 +1799,36 @@ namespace DNDS::Euler::Gas
 
     /**
      * @brief Computes the maximum safe compression ratio (scaling factor α ∈ [0,1])
-     *        for a conservative-variable increment that keeps internal energy
+     *        for a conservative-variable increment that keeps sensible internal energy
      *        above a prescribed positive floor.
      *
      * Given a state @p u and an increment @p uInc, finds the largest α such that
-     * the internal energy e = E − ½ρ|v|² of (u + α·uInc) remains above
-     * @p newrhoEinteralNew.  Two schemes are available:
+     * the sensible internal energy rho·e_sensible = ρE − ½ρ|v|² − rho·ΣY_k·h_f_k
+     * of (u + α·uInc) remains above @p newrhoEinteralNew.
+     *
+     * Two schemes are available:
      *   - scheme 0: analytic quadratic solve with iterative safety fallback.
-     *   - scheme 1: convex (linear) estimation only.
+     *   - scheme 1: linear (concave) estimate only.
      *
-     * Used during implicit time stepping and limiting to prevent negative
-     * pressures.
+     * The quadratic accounts for the formation-energy change between u and u+uInc
+     * via ΔrhoH = rhoH_form_uNew − rhoH_form_u.  Without this correction the root
+     * shifts proportionally to α·ΔrhoH, which can be unsafe when formation decreases.
      *
-     * TODO: vectorize
+     * Used during implicit time stepping and limiting to prevent negative pressures.
      *
      * @tparam dim         Spatial dimension (2 or 3).
-     * @tparam scheme      0 = quadratic solve, 1 = convex estimate.
+     * @tparam scheme      0 = quadratic solve, 1 = linear (concave) estimate.
      * @tparam nVarsFixed  Compile-time size of the state vector.
-     * @param  u           Current conservative state.
-     * @param  uInc        Proposed conservative state increment.
-     * @param  newrhoEinteralNew  Desired minimum internal energy floor ρ·e_min
-     *                            (= p_min / (γ−1)).
+     * @param  u            Current conservative state (ρE_total at dim+1).
+     * @param  uInc         Proposed conservative state increment.
+     * @param  newrhoEinteralNew  Sensible rhoE floor ρ·e_sensible_min (= p_min/(γ−1)).
+     * @param  rhoH_form_u  Volumetric formation energy of u (= ρ·ΣY_k·h_f_k).
+     * @param  rhoH_form_uNew  Volumetric formation energy of u + uInc.
      * @return The safe scaling factor α in [0, 1].
      */
     template <int dim = 3, int scheme = 0, int nVarsFixed, typename TU, typename TUInc>
     real IdealGasGetCompressionRatioPressure(const TU &u, const TUInc &uInc, real newrhoEinteralNew,
-                                             real rhoH_form = 0)
+                                             real rhoH_form_u, real rhoH_form_uNew)
     {
         static const real safetyRatio = 1 - 1e-5;
         static const auto Seq01234 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim + 1>);
@@ -1834,24 +1838,36 @@ namespace DNDS::Euler::Gas
 
         Eigen::Vector<real, nVarsFixed> ret = uInc;
         Eigen::Vector<real, nVarsFixed> uNew = u + uInc;
-        newrhoEinteralNew += rhoH_form; // converts sensible floor → total-energy floor using caller's rhoH_form
-        real rhoEOld = u(I4) - u(Seq123).squaredNorm() / (u(0) + verySmallReal) * 0.5;
-        newrhoEinteralNew = std::max(smallReal * rhoEOld, newrhoEinteralNew);
+        real deltaRhoH = rhoH_form_uNew - rhoH_form_u;
+
+        // Sensible rhoE (= total − KE − formation) at old and new states
+        real rhoeOld = u(I4) - u(Seq123).squaredNorm() / (u(0) + verySmallReal) * 0.5 - rhoH_form_u;
+        real rhoeNew = uNew(I4) - uNew(Seq123).squaredNorm() / (uNew(0) + verySmallReal) * 0.5 - rhoH_form_uNew;
+
+        // Convert sensible floor → total-energy floor using u's formation (for quadratic)
+        newrhoEinteralNew += rhoH_form_u;
+        real rhoEOld = rhoeOld + rhoH_form_u; // total rhoE − KE (for quadratic compatibility)
         real rhoENew = uNew(I4) - uNew(Seq123).squaredNorm() / (uNew(0) + verySmallReal) * 0.5;
-        real alphaEst1 = (rhoEOld - newrhoEinteralNew) / std::max(-rhoENew + rhoEOld, verySmallReal);
-        if (rhoENew > rhoEOld)
+
+        newrhoEinteralNew = std::max(smallReal * rhoEOld, newrhoEinteralNew);
+
+        // Linear (concave) estimate: rhoe(θ) is concave, secant ≤ function.
+        //  α = (rhoeOld − floorSensible) / (rhoeOld − rhoeNew + ε)
+        real alphaEst1 = (rhoeOld - (newrhoEinteralNew - rhoH_form_u)) /
+                         std::max(rhoeOld - rhoeNew, verySmallReal);
+        if (rhoeNew > rhoeOld)
             alphaEst1 = 1;
         alphaEst1 = std::min(alphaEst1, 1.);
         alphaEst1 = std::max(alphaEst1, 0.);
-        real alpha = alphaEst1; //! using convex estimation
+        real alpha = alphaEst1; // linear (concave) estimate
 
         real alphaL, alphaR, c0, c1, c2;
         alphaL = alphaR = c0 = c1 = c2 = 0;
         if constexpr (scheme == 0)
         {
             c0 = 2 * u(I4) * u(0) - u(Seq123).squaredNorm() - 2 * u(0) * newrhoEinteralNew;
-            c1 = 2 * u(I4) * ret(0) + 2 * u(0) * ret(I4) - 2 * u(Seq123).dot(ret(Seq123)) - 2 * ret(0) * newrhoEinteralNew;
-            c2 = 2 * ret(I4) * ret(0) - ret(Seq123).squaredNorm();
+            c1 = 2 * u(I4) * ret(0) + 2 * u(0) * ret(I4) - 2 * u(Seq123).dot(ret(Seq123)) - 2 * ret(0) * newrhoEinteralNew - 2 * deltaRhoH * u(0); // ΔrhoH correction: extra α·ΔrhoH·u₀ term on RHS
+            c2 = 2 * ret(I4) * ret(0) - ret(Seq123).squaredNorm() - 2 * deltaRhoH * ret(0);                                                        // ΔrhoH correction: extra α·ΔrhoH·inc₀ term on RHS
             c2 += signP(c2) * verySmallReal;
             real deltaC = sqr(c1) - 4 * c0 * c2;
             if (deltaC <= -sqr(c0) * smallReal)
@@ -1896,7 +1912,7 @@ namespace DNDS::Euler::Gas
         }
         else if constexpr (scheme == 1)
         {
-            // has used convex
+            // linear (concave) estimate
             alpha *= safetyRatio;
             if (alpha < smallReal)
                 alpha = 0;
