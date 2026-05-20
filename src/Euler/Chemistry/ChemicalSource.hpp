@@ -91,6 +91,12 @@ namespace DNDS::Euler::Chemistry
         double mixtureGamma(double T, ConstSpeciesBufferView Y) const;
         double speedOfSound(double T, ConstSpeciesBufferView Y) const;
 
+        /** Specific internal energy [J/kg] at (T, p=1 atm, Y). */
+        double mixtureIntEnergy(double T, ConstSpeciesBufferView Y) const;
+
+        /** Specific enthalpy [J/kg] at (T, p=1 atm, Y). */
+        double mixtureEnthalpy(double T, ConstSpeciesBufferView Y) const;
+
         /**
          * Solve T from specific internal energy u [J/kg] and specific volume v [m³/kg].
          * Uses Cantera setState_UV (Newton). Optional T_guess [K] as warm-start.
