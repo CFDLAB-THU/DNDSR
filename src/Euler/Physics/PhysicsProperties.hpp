@@ -641,7 +641,10 @@ namespace DNDS::Euler
     {
         if (!hasChemicalSource())
             return igProp_->gamma;
-        return chem().mixtureGamma(toPhysT(T), massFractions(U));
+        // Ideal-gas pressure: p = ρ_phys · R_phys · T_phys.  Non-ideal EOS
+        // paths would need the actual pressure from the primitive state.
+        double pPhys = U(0) * igProp_->rho0 * chem().mixtureR(massFractions(U)) * toPhysT(T);
+        return chem().mixtureGamma(toPhysT(T), massFractions(U), pPhys);
     }
 
     template <EulerModel model>
@@ -657,7 +660,8 @@ namespace DNDS::Euler
     {
         if (!hasChemicalSource())
             return toCode(igProp_->CpGas);
-        return toCode(chem().mixtureCp(toPhysT(T), massFractions(U)));
+        double pPhys = U(0) * igProp_->rho0 * chem().mixtureR(massFractions(U)) * toPhysT(T);
+        return toCode(chem().mixtureCp(toPhysT(T), massFractions(U), pPhys));
     }
 
     template <EulerModel model>
@@ -665,7 +669,8 @@ namespace DNDS::Euler
     {
         if (!hasChemicalSource())
             return Cp(T, U) - Rgas(U);
-        return toCode(chem().mixtureCv(toPhysT(T), massFractions(U)));
+        double pPhys = U(0) * igProp_->rho0 * chem().mixtureR(massFractions(U)) * toPhysT(T);
+        return toCode(chem().mixtureCv(toPhysT(T), massFractions(U), pPhys));
     }
 
 } // namespace DNDS::Euler
