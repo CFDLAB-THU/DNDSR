@@ -431,6 +431,8 @@ namespace DNDS::Euler
                 double uM1 = (I4 >= 2) ? U[1] : 0;
                 double uM2 = (I4 >= 3) ? U[2] : 0;
                 double uM3 = (I4 >= 4) ? U[3] : 0;
+                // TODO(#audit MED16): determine if JAC_SKIP_FLUID should be removed.
+                // Currently zeroes energy→species coupling in the source Jacobian.
                 c.productionRatesAndJacobian(Tcantera, aux.pPhys, rho, U[I4],
                                              uM1, uM2, uM3, I4, igProp_.U0, igProp_.rho0, Yv, omegav, Jv,
                                              Chemistry::ChemicalSource::JAC_SKIP_FLUID);

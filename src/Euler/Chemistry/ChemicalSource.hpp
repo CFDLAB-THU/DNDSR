@@ -156,7 +156,8 @@ namespace DNDS::Euler::Chemistry
         void speciesFormationEnthalpies(SpeciesBufferView hf) const;
 
         /** Mixture formation energy Σ Y_k * h_f_k [J/kg]. In physical (SI) units. */
-        double mixtureFormationEnergy(ConstSpeciesBufferView Y) const;
+        /** Specific formation enthalpy per mass Σ Y_k·h_{f,k} [J/kg] (physical units). */
+        double mixtureFormationEnthalpy(ConstSpeciesBufferView Y) const;
 
         /** EOS-agnostic enthalpy-internal-energy difference at reference T=298.15 K, p=1 atm.
          *  Returns h_mix(298,Y) − u_mix(298,Y) for the given composition [J/kg].
