@@ -598,10 +598,10 @@ int main(int argc, char **argv)
         }
         ConstSpeciesBufferView Yv{Ybuf.data(), Ns};
         auto &chem = (*pool)[0];
-        double u_ct = chem.mixtureIntEnergy(T_phys, Yv);
-        double h_ct = chem.mixtureEnthalpy(T_phys, Yv);
-        double cv_ct = chem.mixtureCv(T_phys, Yv);
-        double cp_ct = chem.mixtureCp(T_phys, Yv);
+        double u_ct = chem.mixtureIntEnergy(T_phys, Yv, p_phys);
+        double h_ct = chem.mixtureEnthalpy(T_phys, Yv, p_phys);
+        double cv_ct = chem.mixtureCv(T_phys, Yv, p_phys);
+        double cp_ct = chem.mixtureCp(T_phys, Yv, p_phys);
         double a_ct = chem.speedOfSound(T_phys, Yv);
         double R_ct = chem.mixtureR(Yv);
 

@@ -102,35 +102,35 @@ namespace DNDS::Euler::Chemistry
         return R;
     }
 
-    double ChemicalSource::mixtureCp(double T, ConstSpeciesBufferView Y) const
+    double ChemicalSource::mixtureCp(double T, ConstSpeciesBufferView Y, double p) const
     {
-        impl_->setTPY(T, 101325, Y);
+        impl_->setTPY(T, p, Y);
         return impl_->gas->cp_mass();
     }
 
-    double ChemicalSource::mixtureCv(double T, ConstSpeciesBufferView Y) const
+    double ChemicalSource::mixtureCv(double T, ConstSpeciesBufferView Y, double p) const
     {
-        impl_->setTPY(T, 101325, Y);
+        impl_->setTPY(T, p, Y);
         return impl_->gas->cv_mass();
     }
 
-    double ChemicalSource::mixtureGamma(double T, ConstSpeciesBufferView Y) const
+    double ChemicalSource::mixtureGamma(double T, ConstSpeciesBufferView Y, double p) const
     {
-        impl_->setTPY(T, 101325, Y);
+        impl_->setTPY(T, p, Y);
         double cp = impl_->gas->cp_mass();
         double cv = impl_->gas->cv_mass();
         return cp / std::max(cv, 1e-30);
     }
 
-    double ChemicalSource::mixtureIntEnergy(double T, ConstSpeciesBufferView Y) const
+    double ChemicalSource::mixtureIntEnergy(double T, ConstSpeciesBufferView Y, double p) const
     {
-        impl_->setTPY(T, 101325, Y);
+        impl_->setTPY(T, p, Y);
         return impl_->gas->intEnergy_mass();
     }
 
-    double ChemicalSource::mixtureEnthalpy(double T, ConstSpeciesBufferView Y) const
+    double ChemicalSource::mixtureEnthalpy(double T, ConstSpeciesBufferView Y, double p) const
     {
-        impl_->setTPY(T, 101325, Y);
+        impl_->setTPY(T, p, Y);
         return impl_->gas->enthalpy_mass();
     }
 

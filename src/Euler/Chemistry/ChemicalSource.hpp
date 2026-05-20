@@ -86,16 +86,16 @@ namespace DNDS::Euler::Chemistry
         // ---- Mixture thermodynamic properties (perfect gas, variable γ) ----
 
         double mixtureR(ConstSpeciesBufferView Y) const;
-        double mixtureCp(double T, ConstSpeciesBufferView Y) const;
-        double mixtureCv(double T, ConstSpeciesBufferView Y) const;
-        double mixtureGamma(double T, ConstSpeciesBufferView Y) const;
+        double mixtureCp(double T, ConstSpeciesBufferView Y, double p = 101325) const;
+        double mixtureCv(double T, ConstSpeciesBufferView Y, double p = 101325) const;
+        double mixtureGamma(double T, ConstSpeciesBufferView Y, double p = 101325) const;
         double speedOfSound(double T, ConstSpeciesBufferView Y) const;
 
-        /** Specific internal energy [J/kg] at (T, p=1 atm, Y). */
-        double mixtureIntEnergy(double T, ConstSpeciesBufferView Y) const;
+        /** Specific internal energy [J/kg] at (T, p, Y). */
+        double mixtureIntEnergy(double T, ConstSpeciesBufferView Y, double p = 101325) const;
 
-        /** Specific enthalpy [J/kg] at (T, p=1 atm, Y). */
-        double mixtureEnthalpy(double T, ConstSpeciesBufferView Y) const;
+        /** Specific enthalpy [J/kg] at (T, p, Y). */
+        double mixtureEnthalpy(double T, ConstSpeciesBufferView Y, double p = 101325) const;
 
         /**
          * Solve T from specific internal energy u [J/kg] and specific volume v [m³/kg].
