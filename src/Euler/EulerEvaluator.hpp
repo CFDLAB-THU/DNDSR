@@ -1692,7 +1692,7 @@ namespace DNDS::Euler
                 real T = phys_.template temperature<dim>(u);
                 // real gamma = phys_.template gammaEq<dim>(T, u);
                 newrhoEinteralNew_sensible = pEps; // pEps is rhoE_sensible floor (not pressure)
-                real newrhoEinteralNew_total = newrhoEinteralNew_sensible + rhoH_form_old;
+                real newrhoEinteralNew_total = newrhoEinteralNew_sensible + rhoH_form_new;
                 real c0 = 2 * u(I4) * u(0) - u(Seq123).squaredNorm() - 2 * u(0) * newrhoEinteralNew_total;
                 real c1 = 2 * u(I4) * ret(0) + 2 * u(0) * ret(I4) - 2 * u(Seq123).dot(ret(Seq123)) - 2 * ret(0) * newrhoEinteralNew_total;
                 real c2 = 2 * ret(I4) * ret(0) - ret(Seq123).squaredNorm();
