@@ -27,11 +27,11 @@
 
 | # | Audit | File:Line | Issue |
 |---|-------|-----------|-------|
-| 1 | 1 | `ChemicalSource.cpp:385` | `mixtureFormationRhoE(double rho, Y)` dead method — missing `invU0sq` scaling |
-| 2 | 2 | `IdealGasPhysics.hpp:68-70` | `Enthalpy(E,rho,p)` omits `rhoH_form` parameter |
-| 3 | 2 | `Gas.hpp:1738` | `GradientCons2Prim_IdealGas` skips pHf correction for single-species (hfSpecies.size()==1) |
-| 4 | 2 | `Gas.hpp:534,561` | Eigenvector helpers pass sensible H to standard eigenvectors (offset by h_form) |
-| 5 | 4 | `EvaluateDt.hxx:1456-1458` | Rotated Riemann scheme overwrites blended eigenvalues with N1-direction values |
+| 1 | 1 | `ChemicalSource.cpp:385` | `mixtureFormationRhoE(double rho, Y)` dead method — missing `invU0sq` scaling | **DONE** |
+| 2 | 2 | `IdealGasPhysics.hpp:68-70` | `Enthalpy(E,rho,p)` omits `rhoH_form` parameter | **DONE** |
+| 3 | 2 | `Gas.hpp:1738` | `GradientCons2Prim_IdealGas` skips pHf correction for single-species (hfSpecies.size()==1) | **DONE** |
+| 4 | 2 | `Gas.hpp:534,561` | Eigenvector helpers pass sensible H to standard eigenvectors (offset by h_form) | **DONE** |
+| 5 | 4 | `EvaluateDt.hxx:1456-1458` | Rotated Riemann scheme overwrites blended eigenvalues with N1-direction values | **DONE** |
 | 6 | 4 | `Gas.hpp:1634-1635` | `ViscousFlux_IdealGas` ∇T formula assumes constant R_mix; missing ∇R_mix term |
 | 7 | 5 | `EulerEvaluator.hxx:1918-1927` | Species reconstruction scaled by `uRecBeta` (θ1·θP) instead of `θ1` — over-compressed |
 | 8 | 5 | `EulerEvaluator.hxx:1780-1796` | `checkRecBaseGood()` lacks species positivity check |

@@ -183,8 +183,9 @@ namespace DNDS::Euler::Chemistry
          *  Needs invU0sq = 1/U0² to convert from physical [J/kg] to code units. */
         ConstSpeciesBufferView mixtureFormationRhoESpecies(double invU0sq) const;
 
-        /** Code-scaled volumetric formation enthalpy: rho · Σ Y_k · hf_k_code. */
-        double mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y) const;
+        /** Code-scaled volumetric formation enthalpy: rho · Σ Y_k · hf_k / U0².
+         *  @param invU0sq  1 / U0² to convert physical [J/kg] to code units. */
+        double mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y, double invU0sq) const;
 
         /** Linearized increment of code-scaled formation enthalpy from a d(ρY_k) increment.
          *  dRhoYK[0..nTransported-1] are d(ρY_k)_code, rhoInc = d(ρ)_code.

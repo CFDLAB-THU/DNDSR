@@ -160,7 +160,7 @@ namespace DNDS::Euler
             int Isp = nVars - Ns1;
             auto Y = c.massFractions(U[0], &U[Isp], Ns1);
             real invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
-            return U[0] * c.mixtureFormationEnergy(Y) * invU0sq;
+            return c.mixtureFormationRhoE(U[0], Y, invU0sq);
         }
 
         /** Sensible ρE = total ρE − ρ·Σ Y_k·h_f_k. Returns U[I4] when no chemistry.

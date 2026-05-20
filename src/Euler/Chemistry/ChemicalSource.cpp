@@ -406,12 +406,9 @@ namespace DNDS::Euler::Chemistry
         return {bufHf_.data(), Ns};
     }
 
-    double ChemicalSource::mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y) const
+    double ChemicalSource::mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y, double invU0sq) const
     {
-        double e = 0;
-        for (int k = 0; k < impl_->Ns; ++k)
-            e += Y[k] * impl_->hf[k];
-        return rho * e;
+        return rho * mixtureFormationEnergy(Y) * invU0sq;
     }
 
     double ChemicalSource::mixtureFormationRhoEIncrement(double rhoInc, const double *dRhoYK, int nTransported) const

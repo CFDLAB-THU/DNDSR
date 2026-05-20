@@ -62,11 +62,13 @@ namespace DNDS::IdealGas
         return p / (gamma - 1);
     }
 
-    /// Specific enthalpy from conservative state: H = (E + p) / rho
+    /// Specific enthalpy (per mass) from conservative state: H = (E + p) / rho.
+    /// When rhoH_form is nonzero, returns total specific enthalpy including
+    /// formation: h_total = (E + p + rhoH_form) / rho  (ρE + p + ρ·Σ Y_k·h_f_k) / ρ.
     DNDS_DEVICE_CALLABLE inline real
-    Enthalpy(real E, real rho, real p)
+    Enthalpy(real E, real rho, real p, real rhoH_form = 0)
     {
-        return (E + p) / rho;
+        return (E + p + rhoH_form) / rho;
     }
 
     /// Speed of sound squared: a^2 = gamma * p / rho

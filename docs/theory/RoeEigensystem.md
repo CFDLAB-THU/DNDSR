@@ -129,6 +129,10 @@ which is incorrect.
 | 5 | `Gas.hpp:718` | `RoeFlux_HartenYee` | Energy flux uses HRoe (sensible) in eigenvector components |
 
 All consumption sites use the same sensible H convention derived at step 1.
+The standalone eigenvector extractors `IdealGas_EulerGasRightEigenVector` /
+`IdealGas_EulerGasLeftEigenVector` (Gas.hpp:540,567) also pass `rhoH_form=0`
+to compute sensible H — intentionally, for diagnostic use and consistency
+with the Roe eigensystem convention.
 
 ## EulerP note
 
