@@ -123,9 +123,10 @@ namespace DNDS::Euler
         template <int dim>
         real gammaEq(real T, const TU &U) const
         {
-            // return this->gamma(T, U);
             if (!hasChemicalSource())
                 return igProp_->gamma;
+            DNDS_assert_info(chem().isIdealGas(),
+                             "gammaEq(): requires ideal-gas EOS (p = rho·R·T)");
             real rho = U[0];
             real rhoInv = 1.0 / std::max(rho, real(1e-60));
             int I4 = dim + 1;
@@ -211,6 +212,254 @@ namespace DNDS::Euler
             return c.massFractions(U[0], U.data() + Isp, Ns1);
         }
 
+        // ---- State conversion (I/O helpers, not for tight loops) ------------
+
+        /**
+         * @brief cons-total → cons-sensible: subtracts formation enthalpy from U[I4].
+         * @note  For I/O purposes — not for performance-critical tight loops.
+         */
+        template <int dim>
+        void consTotalToSensible(const TU &consTotal, TU &consSensible) const
+        {
+            consSensible = consTotal;
+            consSensible[dim + 1] -= mixtureFormationRhoE(consTotal);
+        }
+
+        /**
+         * @brief cons-sensible → cons-total: adds formation enthalpy to U[I4].
+         * @note  For I/O purposes — not for performance-critical tight loops.
+         */
+        template <int dim>
+        void consSensibleToTotal(const TU &consSensible, TU &consTotal) const
+        {
+            consTotal = consSensible;
+            consTotal[dim + 1] += mixtureFormationRhoE(consSensible);
+        }
+
+        /**
+         * @brief Primitive → conservative.
+         *  Iterates gamma via gammaEq for reactive models (cfg.gamma is initial guess).
+         *  For non-reactive, uses cfg.gamma directly.
+         * @note  For I/O purposes — not for performance-critical tight loops.
+         */
+        template <int dim>
+        void primToConservative(const TU &prim, TU &cons) const
+        {
+            if (hasChemicalSource())
+                DNDS_assert_info(chem().isIdealGas(),
+                                 "primToConservative(): requires ideal-gas EOS");
+
+            real rhoH_form = formationFromPrimitive<dim>(prim);
+            real gammaUse = igProp_->gamma;
+            for (int iter = 0; iter < 10; ++iter)
+            {
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(prim, cons, gammaUse, rhoH_form);
+                if (!hasChemicalSource())
+                    break;
+                real T_iter = temperature<dim>(cons);
+                real gamma_iter = gammaEq<dim>(T_iter, cons);
+                if (std::abs(gamma_iter - gammaUse) < 1e-8)
+                    break;
+                gammaUse = gamma_iter;
+            }
+        }
+
+        /**
+         * @brief Conservative → primitive.
+         *  Uses gammaEq from the current conservative state.
+         * @note  For I/O purposes — not for performance-critical tight loops.
+         */
+        template <int dim>
+        void conservativeToPrimitive(const TU &cons, TU &prim) const
+        {
+            if (hasChemicalSource())
+                DNDS_assert_info(chem().isIdealGas(),
+                                 "conservativeToPrimitive(): requires ideal-gas EOS");
+
+            real T = temperature<dim>(cons);
+            real gamma = gammaEq<dim>(T, cons);
+            real rhoH_form = mixtureFormationRhoE(cons);
+            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, gamma, rhoH_form);
+        }
+
+        /**
+         * @brief prim-rhoT → conservative.  Input: [rho, u, v, (w), T, Y_k].
+         * @note  For I/O purposes — not for performance-critical tight loops.
+         */
+        template <int dim>
+        void primRhoTToConservative(const TU &primRhoT, TU &cons) const
+        {
+            auto prim = primRhoT;
+            int I4 = dim + 1;
+            real T_code = prim[I4];
+            real Rmix = mixtureRfromPrimitive(prim);
+            prim[I4] = prim[0] * Rmix * T_code;
+            primToConservative<dim>(prim, cons);
+        }
+
+        /**
+         * @brief Conservative → prim-rhoT.  Output: [rho, u, v, (w), T, Y_k].
+         * @note  For I/O purposes — not for performance-critical tight loops.
+         */
+        template <int dim>
+        void conservativeToPrimRhoT(const TU &cons, TU &primRhoT) const
+        {
+            conservativeToPrimitive<dim>(cons, primRhoT);
+            primRhoT[dim + 1] = temperature<dim>(cons);
+        }
+
+        /**
+         * @brief prim-TP → conservative.  Input: [T, u, v, (w), p, Y_k].
+         * @note  For I/O purposes — not for performance-critical tight loops.
+         */
+        template <int dim>
+        void primTPToConservative(const TU &primTP, TU &cons) const
+        {
+            auto prim = primTP;
+            int I4 = dim + 1;
+            real T_code = prim[0];
+            real p_code = prim[I4];
+            real Rmix = mixtureRfromPrimitive(prim);
+            prim[0] = p_code / std::max(Rmix * T_code, 1e-60);
+            primToConservative<dim>(prim, cons);
+        }
+
+        /**
+         * @brief Conservative → prim-TP.  Output: [T, u, v, (w), p, Y_k].
+         * @note  For I/O purposes — not for performance-critical tight loops.
+         */
+        template <int dim>
+        void conservativeToPrimTP(const TU &cons, TU &primTP) const
+        {
+            conservativeToPrimitive<dim>(cons, primTP);
+            primTP[0] = temperature<dim>(cons);
+        }
+
+        // ---- Unit-scaling helpers (I/O only) ---------------------------------
+
+        template <int dim>
+        void consCodeToPhys(const TU &code, TU &phys) const
+        {
+            phys = code;
+            phys[0] *= igProp_->rho0;
+            for (int j = 1; j <= dim; ++j)
+                phys[j] *= (igProp_->rho0 * igProp_->U0);
+            phys[dim + 1] *= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
+            for (int k = dim + 2; k < (int)phys.size(); ++k)
+                phys[k] *= igProp_->rho0;
+        }
+
+        template <int dim>
+        void consPhysToCode(const TU &phys, TU &code) const
+        {
+            code = phys;
+            code[0] /= igProp_->rho0;
+            for (int j = 1; j <= dim; ++j)
+                code[j] /= (igProp_->rho0 * igProp_->U0);
+            code[dim + 1] /= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
+            for (int k = dim + 2; k < (int)code.size(); ++k)
+                code[k] /= igProp_->rho0;
+        }
+
+        template <int dim>
+        void primCodeToPhys(const TU &code, TU &phys) const
+        {
+            phys = code;
+            phys[0] *= igProp_->rho0;
+            for (int j = 1; j <= dim; ++j)
+                phys[j] *= igProp_->U0;
+            phys[dim + 1] *= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
+        }
+
+        template <int dim>
+        void primPhysToCode(const TU &phys, TU &code) const
+        {
+            code = phys;
+            code[0] /= igProp_->rho0;
+            for (int j = 1; j <= dim; ++j)
+                code[j] /= igProp_->U0;
+            code[dim + 1] /= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
+        }
+
+        template <int dim>
+        void primRhoTCodeToPhys(const TU &code, TU &phys) const
+        {
+            phys = code;
+            phys[0] *= igProp_->rho0;
+            for (int j = 1; j <= dim; ++j)
+                phys[j] *= igProp_->U0;
+            phys[dim + 1] *= igProp_->T0;
+        }
+
+        template <int dim>
+        void primRhoTPhysToCode(const TU &phys, TU &code) const
+        {
+            code = phys;
+            code[0] /= igProp_->rho0;
+            for (int j = 1; j <= dim; ++j)
+                code[j] /= igProp_->U0;
+            code[dim + 1] /= igProp_->T0;
+        }
+
+        template <int dim>
+        void primTPCodeToPhys(const TU &code, TU &phys) const
+        {
+            phys = code;
+            phys[0] *= igProp_->T0;
+            for (int j = 1; j <= dim; ++j)
+                phys[j] *= igProp_->U0;
+            phys[dim + 1] *= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
+        }
+
+        template <int dim>
+        void primTPPhysToCode(const TU &phys, TU &code) const
+        {
+            code = phys;
+            code[0] /= igProp_->T0;
+            for (int j = 1; j <= dim; ++j)
+                code[j] /= igProp_->U0;
+            code[dim + 1] /= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
+        }
+
+    private:
+        /// Compute rhoH_form from a primitive vector [rho, u, v, (w), p/T, Y_k].
+        template <int dim>
+        real formationFromPrimitive(const TU &prim) const
+        {
+            if (!hasChemicalSource())
+                return 0;
+            auto &c = chem();
+            int Ns1 = c.nSpecies() - 1;
+            int nVars = static_cast<int>(prim.size());
+            int Isp = nVars - Ns1;
+            double invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
+            auto hfView = c.mixtureFormationRhoESpecies(invU0sq);
+            real rhoH = 0;
+            real sumY = 0;
+            for (int k = 0; k < Ns1; ++k)
+            {
+                rhoH += prim[Isp + k] * prim[0] * hfView[k];
+                sumY += prim[Isp + k];
+            }
+            real lastY = 1.0 - sumY;
+            rhoH += lastY * prim[0] * hfView[Ns1];
+            return rhoH;
+        }
+
+        /// Compute code-scaled mixture Rgas from a primitive vector (uses mass fractions directly).
+        real mixtureRfromPrimitive(const TU &prim) const
+        {
+            if (!hasChemicalSource())
+                return toCode(igProp_->Rgas);
+            auto &c = chem();
+            int Ns1 = c.nSpecies() - 1;
+            int nVars = static_cast<int>(prim.size());
+            int Isp = nVars - Ns1;
+            auto Yview = c.massFractions(1.0, prim.data() + Isp, Ns1); // rho=1 → Y_k directly
+            return toCode(c.mixtureR(Yview));
+        }
+
+    public:
         // ---- Transport (mixture) --------------------------------------------
 
         /// Sutherland + const + density-proportional fallback, or Cantera mixture-averaged.

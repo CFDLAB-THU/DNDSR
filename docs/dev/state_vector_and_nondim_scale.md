@@ -1,14 +1,14 @@
-# Nondimensionalization and Unit Scaling
+# State Vector, Nondimensionalization, and Unit Scaling
 
-This document describes the nondimensionalization system used by the Euler
-solvers, including reactive (multi-species) flow.  All conversions between
-physical (SI) and code-scaled units happen inside `PhysicsProperties` at
-the Cantera boundary.
+This document describes the state-vector layout, the nondimensionalization
+system, and the energy-convention bridge to Cantera used by the Euler solvers
+(including reactive multi-species flow).
 
-## Fundamental reference scales
+## Nondimensionalization
 
-Four user-specified scales define the system.  They live in
-`EulerEvaluatorSettings::IdealGasProperty`:
+### Fundamental reference scales
+
+Four user-specified scales live in `EulerEvaluatorSettings::IdealGasProperty`:
 
 | Symbol | Config key | Default | SI unit | Description |
 |--------|-----------|---------|---------|-------------|
@@ -17,146 +17,245 @@ Four user-specified scales define the system.  They live in
 | `rho0` | `rho0`    | 1       | kg/m^3  | Reference density |
 | `T0`   | `T0`      | 1       | K       | Reference temperature |
 
-When all four are 1 (the default), code units equal SI units.
+When all four are 1 (default), code units equal SI units.
 
-## Derived scales
-
-Mechanical dimensions (M, L, T) are fully determined by `rho0`, `U0`, `L0`.
-Temperature adds an independent scale `T0`.
+### Derived scales
 
 | Scale | Formula | SI unit | Purpose |
 |-------|---------|---------|---------|
 | `t0`  | `L0 / U0` | s | Time |
 | `p0`  | `rho0 * U0^2` | Pa | Pressure, energy density |
-| `R0`  | `U0^2 / T0` | J/(kg K) | Gas constant, heat capacity |
-| `mu0` | `rho0 * U0 * L0` | Pa s | Dynamic viscosity |
-| `k0`  | `rho0 * U0^3 * L0 / T0` | W/(m K) | Thermal conductivity |
+| `R0`  | `U0^2 / T0` | J/(kg·K) | Gas constant, heat capacity |
+| `mu0` | `rho0 * U0 * L0` | Pa·s | Dynamic viscosity |
+| `k0`  | `rho0 * U0^3 * L0 / T0` | W/(m·K) | Thermal conductivity |
 | `D0`  | `U0 * L0` | m^2/s | Mass diffusivity |
-| `S0`  | `rho0 * U0 / L0` | kg/(m^3 s) | Volumetric source rate |
+| `S0`  | `rho0 * U0 / L0` | kg/(m^3·s) | Volumetric source rate |
 
-All derived scales are available as methods on `PhysicsProperties`:
-`p0()`, `t0()`, `mu0()`, `k0()`, `D0()`, `S0()`, `invR0()` (= R0).
+### Code-unit conversions
 
-## Code-unit conversions
-
-Every physical quantity `x_phys` is stored in code as
-`x_code = x_phys / x0`, where `x0` is the appropriate reference scale.
+Every physical quantity `x_phys` is stored as `x_code = x_phys / x0`:
 
 | Quantity | Code form | Conversion |
 |----------|-----------|------------|
-| Position | `x_code = x_phys / L0` | `dx_code = L0 * dx_phys` for gradients |
-| Velocity | `v_code = v_phys / U0` | |
 | Density | `rho_code = rho_phys / rho0` | |
-| Pressure | `p_code = p_phys / p0` | `toPhysP(p_code)` |
-| Temperature | `T_code = T_phys / T0` | `toPhysT(T_code)`, `toCodeT(T_phys)` |
-| Energy/mass | `e_code = e_phys / U0^2` | Specific energy, enthalpy |
-| Energy/vol | `(rho*e)_code = (rho*e)_phys / (rho0 * U0^2)` | rhoE, rhoH_form |
-| R, Cp, Cv | `R_code = R_phys / R0` | `toCode(R_phys)` |
-| Viscosity | `mu_code = mu_phys / mu0` | |
-| Conductivity | `k_code = k_phys / k0` | |
-| Diffusivity | `D_code = D_phys / D0` | |
-| Source rate | `S_code = S_phys / S0` | Chemical production rate |
-| Mass fraction | `Y_k` | Dimensionless -- no scaling |
+| Velocity | `v_code = v_phys / U0` | |
+| Pressure | `p_code = p_phys / p0` | |
+| Temperature | `T_code = T_phys / T0` | |
+| Specific energy | `e_code = e_phys / U0^2` | |
+| Volumetric energy | `rhoE_code = rhoE_phys / (rho0 * U0^2)` | |
+| R, Cp, Cv | `R_code = R_phys / R0` | = `R_phys * T0 / U0^2` |
+| Momentum density | `(rho*u)_code = (rho*u)_phys / (rho0 * U0)` | |
+| Mass fraction | `Y_k` | Dimensionless |
 
-## Conservation equations in code units
+## State Vector Layout
 
-The NS equations in code units:
+### Conservative (dim=3, Ns=10, nVars=14)
 
+`U = [rho, rho*u, rho*v, rho*w, rho*E, rho*Y_0, ..., rho*Y_{Ns-2}]`
+
+- `U[0]`: density `rho`
+- `U[1..dim]`: momentum density `rho*u_j`
+- `U[dim+1]` (I4): total volumetric energy `rho*E`
+- `U[dim+2 ..]`: species densities `rho*Y_k` (first `Ns-1` species)
+- Last species (N2) is derived: `rho*Y_last = rho - sum(rho*Y_k)`
+
+`rhoE_total` includes **sensible + kinetic + formation-enthalpy**:
 ```
-d(rho_code)/dt_code + div_code(rho_code * v_code) = 0
-
-d(rho_code * v_code)/dt_code + div_code(rho_code * v v + p I) = div_code(tau) + f_code
-
-d(rhoE_code)/dt_code + div_code((rhoE + p) * v) = div_code(tau*v + k*gradT + Sigma h_k J_k)
-
-d(rhoY_k_code)/dt_code + div_code(rhoY_k * v) = div_code(rho D_k gradY_k) + S_k_code
+rhoE_total = rho * (e_sensible + 1/2 * |v|^2 + Sum_k Y_k * h_f_k)
 ```
 
-All terms are in code units. The time derivative uses code time `t_code`.
+### Primitive (dim=3, Ns=10, nVars=14)
 
-## Cantera boundary
+`W = [rho, u, v, w, p, Y_0, ..., Y_{Ns-2}]`
 
-All Cantera functions expect physical SI inputs and return physical SI
-outputs.  `PhysicsProperties` handles all conversions:
+- `W[0]`: density `rho`
+- `W[1..dim]`: velocity `u_j`
+- `W[dim+1]` (I4): pressure `p`
+- `W[dim+2 ..]`: mass fractions `Y_k` (first `Ns-1` species, dimensionless)
+- Last species mass fraction is derived: `Y_last = 1 - sum(Y_k)`
 
-| Cantera function | Inputs | Output | Conversion |
-|-----------------|--------|--------|------------|
-| `temperatureFromUV` | `u_phys = e_internal_code * U0^2`, `v_phys = 1/(rho_code * rho0)` | T [K] | `toCodeT(T_phys)` |
-| `productionRates` | `toPhysT(T)`, `toPhysP(p)`, Y | omega [kmol/(m^3 s)] | `omega * MW / S0` |
-| `productionRatesAndJacobian` | `T_phys`, `p_phys`, rho_code, rhoE_code, velScale=U0, rhoScale=rho0 | J [omega/U_code] | `MW * J * invS0` |
-| `viscosity` | `toPhysT(T)`, `toPhysP(p)`, Y | mu [Pa s] | `/ mu0()` |
-| `thermalConductivity` | `toPhysT(T)`, `toPhysP(p)`, Y | k [W/(m K)] | `/ k0()` |
-| `speciesDiffusivity` | `toPhysT(T)`, `toPhysP(p)`, Y | D [m^2/s] | `/ D0()` |
-| `speciesEnthalpies` | `toPhysT(T)`, `toPhysP(p)`, Y | h_k [J/kg] | `/ U0^2` |
-| `mixtureGamma` | `toPhysT(T)`, Y | gamma [-] | dimensionless |
-| `mixtureR` | Y | R [J/(kg K)] | `toCode(R)` |
-| `mixtureCp` | `toPhysT(T)`, Y | Cp [J/(kg K)] | `toCode(Cp)` |
-| `mixtureFormationEnergy` | Y | e_f [J/kg] | `* rho_code / U0^2` |
+### Variants (I/O only)
 
-## Chemical source Jacobian
+Two additional primitive layouts are supported for input/output convenience:
 
-The Jacobian `productionRatesAndJacobian` computes `d(omega_i)/d(U_j_code)`
-where `omega_i` is in molar rate [kmol/(m^3 s)] and `U_j` is in code units.
+**`prim-rhoT`**: `[rho, u, v, w, T, Y_k]` — temperature at I4 instead of pressure.
+`p = rho * Rmix * T`.
 
-Two chain-rule contributions for species columns:
+**`prim-TP`**: `[T, u, v, w, p, Y_k]` — temperature at index 0 instead of density.
+`rho = p / (Rmix * T)`.
 
-1. **Concentration chain rule**: `dC_k/d(rhoY_k)_code = rho0 / MW_k`.
-   Requires `rhoScale = rho0` parameter.
+## Formation Enthalpy Convention
 
-2. **Temperature chain rule**: `dT/d(rhoY_k)_code = -(u_k - u_last) / (rho_code * cv)`.
-   The `rho0` factors cancel: `dT/d(rhoY_k)_phys` has `1/rho_phys` and
-   `d(rhoY_k)_phys/d(rhoY_k)_code = rho0`, giving `rho0/rho_phys = 1/rho_code`.
+The conservative `rhoE` includes formation enthalpy at reference T=298.15 K.
+Configuration input vectors (JSON `farFieldStaticValue`) store **sensible** rhoE;
+formation is added at initialization.
 
-The caller (`ChemicalContributor`) applies `MW_k * invS0` to convert from
-molar Jacobian to code-unit mass-source Jacobian with correct sign
-(`jac -= val`, storing `-dS/dU`).
-
-## Formation enthalpy convention
-
-The state vector stores **total** rhoE = sensible + formation + kinetic.
-Configuration input vectors store **sensible** rhoE; formation is added at
-initialization and BC assignment via `mixtureFormationRhoE(U)`.
-
-Formation enthalpy per species: `h_f_k = H_f_298(k) / MW_k` [J/kg].
-For H2, O2, N2: `h_f = 0`.  For H2O: `h_f = -13.4 MJ/kg`.
+Formation enthalpy per species: `h_f_k = H_f_298(k) / M_k` [J/kg].
+For elements (H2, O2, N2): `h_f = 0`. For H2O: `h_f ≈ −13.4 MJ/kg`.
 
 Code-unit formation energy density:
-`rhoH_form_code = rho_code * (Sigma Y_k * h_f_k) / U0^2`.
-
-## Species diffusion enthalpy transport
-
-The energy equation includes `div(Sigma h_k J_k)` where `J_k = -rho D_k gradY_k`
-is the Fickian diffusion flux and `h_k` is the total specific enthalpy
-(sensible + formation).
-
-In code units (implemented in `fluxFace`):
 ```
-VisFlux(energy) += Sigma_{k<Ns-1} (h_k/U0^2 - h_last/U0^2) * (-rho_code * D_code * gradY_k . n)
+rhoH_form_code = rho_code * Sum_k(Y_k * h_f_k) / U0^2
 ```
 
-The `(h_k - h_last)` form enforces the constraint `Sigma J_k = 0` for the
-dependent last species (N2).
+## Energy Convention: DNDSR ↔ Cantera Bridge
 
-## Equivalent gamma
+### DNDSR's calorically-perfect convention
 
-`gammaEq = 1 + p / (rho * e_sensible)` where `p = rho * R_mix * T` (exact
-ideal-gas EOS).  This ensures `(gammaEq - 1) * rho * e_sensible = p` exactly,
-eliminating the thermodynamic inconsistency between the UV-based temperature
-and the `(gamma-1)` pressure formula for variable-property mixtures.
+DNDSR stores energy measured from **0 K** assuming a calorically-perfect ideal
+gas.  The sensible internal energy is:
 
-For non-reactive (constant gamma) gas, `gammaEq = gamma` identically.
+```
+e_sensible(T) = cv_stored * T    where    cv_stored = R / (gamma_stored − 1)
+```
 
-All evaluator-side `gamma` computations use `gammaEq`.  The Gas.hpp
-Riemann solver functions receive gamma as a parameter from evaluator
-callers, so they also use the corrected value.
+`cv_stored` is a **chord slope** — the straight line from (0, 0) to (T, e_sensible).
+It is constant for a given gamma_stored; it does **not** vary with temperature.
+This is the defining assumption of a calorically-perfect gas:
 
-## Relevant source files
+```
+p = (gamma_stored − 1) * rho * e_sensible
+  = (gamma_stored − 1) * rho * cv_stored * T
+  = rho * R * T                                        [ideal gas EOS]
+```
+
+### Cantera's NASA-polynomial convention
+
+Cantera measures thermal energy from the reference temperature **T_ref = 298.15 K**.
+At T_ref the thermal part is zero by definition.  Formation internal energy is
+stored separately:
+
+```
+u_k(T) = u_f_k(T_ref) + Integral(T_ref -> T) cv_k(T') dT'
+```
+
+Cantera's `cv_mass(T)` is the **local slope** — the temperature derivative
+of the `u(T)` curve at the given T.  It varies with T because rotational and
+vibrational modes become active at different temperatures (notably H2 near
+1000 K).
+
+### The three gammas
+
+| Name | Formula | Source | Meaning |
+|------|---------|--------|---------|
+| `gamma_stored` | `1 + R / cv_stored` | User config `IdealGasProperty.gamma` | Defines `e_sensible ↔ T` and `p ↔ e_sensible` in the DNDSR state |
+| `gammaEq` | `1 + rho*Rmix*T / (rho*e_sensible)` | PhysicsProperties | Self-consistency check — always equals gamma_stored because `e_sensible` was encoded with that gamma. Uses `Rmix` from Cantera. |
+| `cp/cv` | `cp_mass(T,Y) / cv_mass(T,Y)` | Cantera NASA polynomials | Real thermodynamic ratio at temperature T.  Differs from gamma_stored because cv_mass(T) ≠ cv_stored. |
+
+**Why `gammaEq` ≠ `cp/cv`**: DNDSR's energy convention `e_sensible = c_v_stored * T`
+uses a constant (chord) cv, while Cantera's `cv_mass(T)` varies with T. The
+difference is the gap between a straight-line chord and a curved EOS:
+
+```
+cv_stored  = e_sensible / T                    (chord slope, 0K -> T)
+cv_mass(T) = du/dT                              (local slope, at T)
+cp/cv      = (cv_mass + R) / cv_mass           (real ratio at T)
+gammaEq    = (cv_stored + R) / cv_stored       (stored ratio = gamma_stored)
+```
+
+At 845 K for H2/O2/N2, `cv_stored ≈ 1020`, `cv_local ≈ 1103` J/(kg·K),
+`gamma_stored = 1.4`, `cp/cv ≈ 1.359`.
+
+### Cantera temperature bridge
+
+To convert DNDSR's internal energy (measured from 0 K) to Cantera's convention
+(measured from 298.15 K), `PhysicsProperties::temperature()` subtracts two
+quantities before calling `setState_UV`:
+
+```
+u_sent = u_DNDSR_code * U0^2 − pVAtReference(Y) − e_sens_ref(Y)
+```
+
+- `pVAtReference(Y)` = `h(T_ref) − u(T_ref)` = `Rmix * T_ref` for ideal gas.
+  Converts formation enthalpy → formation internal energy at T_ref.
+- `e_sens_ref(Y)` = `cv_mass(T_ref,Y) * T_ref`.  Subtracts the 0K→T_ref
+  sensible energy that DNDSR includes but Cantera starts counting after.
+
+After these subtractions `u_sent` matches Cantera's `intEnergy_mass(T)` for
+the same T.  This conversion is guarded by `isIdealGas()` — non-ideal phases
+crash with an assertion.
+
+## PhysicsProperties State-Conversion API
+
+All conversion methods operate in **code units**.  Methods that iterate
+gamma (prim → cons) are marked *for I/O only, not tight loops*.
+
+### Conservative ↔ Sensible
+
+| Method | Description |
+|--------|-------------|
+| `consSensibleToTotal<dim>(sens, total)` | Add formation to `U[I4]` |
+| `consTotalToSensible<dim>(total, sens)` | Subtract formation from `U[I4]` |
+
+### Primitive ↔ Conservative
+
+| Method | Description |
+|--------|-------------|
+| `primToConservative<dim>(prim, cons)` | Iterates gammaEq; cfg.gamma as initial guess |
+| `conservativeToPrimitive<dim>(cons, prim)` | Uses gammaEq from cons state |
+| `primRhoTToConservative<dim>(primRhoT, cons)` | Converts via `p = rho*Rmix*T` |
+| `conservativeToPrimRhoT<dim>(cons, primRhoT)` | Replaces p with T |
+| `primTPToConservative<dim>(primTP, cons)` | Converts via `rho = p/(Rmix*T)` |
+| `conservativeToPrimTP<dim>(cons, primTP)` | Replaces rho with T |
+
+### Code ↔ Physical (I/O only)
+
+| Method | Description |
+|--------|-------------|
+| `consCodeToPhys<dim>(code, phys)` | Conservative code → physical |
+| `consPhysToCode<dim>(phys, code)` | Conservative physical → code |
+| `primCodeToPhys<dim>(code, phys)` | Primitive code → physical |
+| `primPhysToCode<dim>(phys, code)` | Primitive physical → code |
+| `primRhoTCodeToPhys<dim>(code, phys)` | prim-rhoT code → physical |
+| `primRhoTPhysToCode<dim>(phys, code)` | prim-rhoT physical → code |
+| `primTPCodeToPhys<dim>(code, phys)` | prim-TP code → physical |
+| `primTPPhysToCode<dim>(phys, code)` | prim-TP physical → code |
+
+### Ideal-gas guard
+
+Every conversion method that invokes the ideal-gas EOS
+(`p = rho*R*T` or `p = (gamma−1)*rho*e_sensible`) asserts
+`chem().isIdealGas()` before proceeding.  Non-ideal Cantera phases
+crash with a clear message.
+
+## IdealGasProperty::Rgas Convention
+
+`IdealGasProperty::Rgas` stores the **physical** gas constant in J/(kg·K),
+defaulting to 287 (dry air).  All consumption passes through
+`PhysicsProperties::toCode(Rgas_phys)` which divides by `R0 = U0^2/T0`.
+The reactive path uses Cantera's `mixtureR()` instead — `Rgas` only
+serves as the non-reactive fallback.
+
+## State-Convert CLI Tool (`eulerState`)
+
+`app/eulerState.exe` converts a single Euler state between all
+representations using the PhysicsProperties API:
+
+```
+eulerState --model NS_EX --nVars 14 --from cons-sensible --scaling code \
+  --config "gamma=1.4,Rgas=287,U0=379,rho0=1" --mechanism h2o2.yaml \
+  --state "[1.0,0,0,0,6.0,0.028,0,0,0.222,0,0,0,0,0]"
+```
+
+**Input formats** (`--from`):
+- `cons-total`, `cons-sensible`: conservative, with/without formation
+- `prim`: standard primitive `[rho, u, v, w, p, Y_k]`
+- `prim-rhoT`: `[rho, u, v, w, T, Y_k]` — temperature at energy slot
+- `prim-TP`: `[T, u, v, w, p, Y_k]` — temperature at density slot
+
+**Output**: prints all state representations (conservative total+sensible,
+primitive, prim-rhoT, prim-TP), derived quantities (T, p, gamma_stored,
+gammaEq, Rmix, rhoH_form), reference scales with SI units, Cantera state
+(intEnergy, enthalpy, cv, cp, speed_of_sound), and energy-consistency
+check (u_sent − u_cantera = 0).  All arrays include JSON versions with
+full precision.
+
+## Relevant Source Files
 
 | File | Role |
 |------|------|
-| `EulerEvaluatorSettings.hpp` | `IdealGasProperty` struct: L0, U0, rho0, T0 |
-| `Physics/PhysicsProperties.hpp` | Scale methods, Cantera boundary conversions |
-| `SourceTermContributor.hpp` | `ChemicalContributor`: source + Jacobian with invS0 |
-| `Chemistry/ChemicalSource.cpp` | `productionRatesAndJacobian`: rhoScale for dC/d(rhoY) |
-| `EulerEvaluator_EvaluateDt.hxx` | `fluxFace`: species diffusion + enthalpy transport |
-| `Gas.hpp` | `ViscousFlux_IdealGas`, `IdealGasThermal` |
+| `EulerEvaluatorSettings.hpp` | `IdealGasProperty` struct: L0, U0, rho0, T0, gamma, Rgas |
+| `Physics/PhysicsProperties.hpp` | Scale methods, Cantera boundary, state conversion API |
+| `Chemistry/ChemicalSource.hpp/cpp` | PIMPL Cantera wrapper, isIdealGas, pVAtReference, sensibleInternalEnergyAtReference |
+| `Gas.hpp` | `IdealGasThermal`, Roe flux, Prim2Cons / Cons2Prim |
+| `app/Euler/eulerState.cpp` | CLI state-conversion tool |
