@@ -32,13 +32,13 @@
 | 3 | 2 | `Gas.hpp:1738` | `GradientCons2Prim_IdealGas` skips pHf correction for single-species (hfSpecies.size()==1) | **DONE** |
 | 4 | 2 | `Gas.hpp:534,561` | Eigenvector helpers pass sensible H to standard eigenvectors (offset by h_form) | **DONE** |
 | 5 | 4 | `EvaluateDt.hxx:1456-1458` | Rotated Riemann scheme overwrites blended eigenvalues with N1-direction values | **DONE** |
-| 6 | 4 | `Gas.hpp:1634-1635` | `ViscousFlux_IdealGas` ∇T formula assumes constant R_mix; missing ∇R_mix term |
-| 7 | 5 | `EulerEvaluator.hxx:1918-1927` | Species reconstruction scaled by `uRecBeta` (θ1·θP) instead of `θ1` — over-compressed |
-| 8 | 5 | `EulerEvaluator.hxx:1780-1796` | `checkRecBaseGood()` lacks species positivity check |
-| 9 | 5 | `EulerEvaluator.hxx:1931-1948` | Validation loop lacks species bounds assertion |
-| 10 | 5 | `EulerEvaluator.hxx:2092-2096` | `EvaluateCellRHSAlpha` `ppEpsIsRelaxed` zeroes thresholds instead of using field minima |
-| 11 | 5 | `EulerEvaluator.hpp:1739-1742` | `CompressInc` `ppEpsIsRelaxed` uses `verySmallReal` instead of field minima |
-| 12 | 5 | `EulerEvaluator.hpp:1755-1768` | `CompressInc` uses `rhoH_form_old` instead of `rhoH_form_new` in quadratic energy solve |
+| 6 | 4 | `Gas.hpp:1634-1635` | `ViscousFlux_IdealGas` ∇T formula assumes constant R_mix; missing ∇R_mix term | **ACCEPTED** — negligible ∇R_mix in practice |
+| 7 | 5 | `EulerEvaluator.hxx:1918-1927` | Species reconstruction scaled by `uRecBeta` (θ1·θP) instead of `θ1` — over-compressed | **ACCEPTED** — consistent: ρYₖ inherit same compression as ρ |
+| 8 | 5 | `EulerEvaluator.hxx:1780-1796` | `checkRecBaseGood()` lacks species positivity check | **ACCEPTED** — Yₖ clipped directly, not in checkRecBaseGood |
+| 9 | 5 | `EulerEvaluator.hxx:1931-1948` | Validation loop lacks species bounds assertion | **ACCEPTED** — same as #8 |
+| 10 | 5 | `EulerEvaluator.hxx:2092-2096` | `EvaluateCellRHSAlpha` `ppEpsIsRelaxed` zeroes thresholds instead of using field minima | **ACCEPTED** — by-design config toggle |
+| 11 | 5 | `EulerEvaluator.hpp:1739-1742` | `CompressInc` `ppEpsIsRelaxed` uses `verySmallReal` instead of field minima | **ACCEPTED** — same as #10 |
+| 12 | 5 | `EulerEvaluator.hpp:1755-1768` | `CompressInc` uses `rhoH_form_old` instead of `rhoH_form_new` in quadratic energy solve | **DONE** |
 | 13 | 5 | `EulerEvaluator.hxx:2110-2141` | `EvaluateCellRHSAlpha` limits density only — species increments can go negative |
 | 14 | 6 | `PhysicsProperties.hpp:375-376` | `static int cnt` in `temperature()` — unprotected race in OMP |
 | 15 | 6 | `ChemicalSource.cpp:315-329` | `clone()` dereferences `I.sol`/`I.solT` without null check |
