@@ -134,7 +134,7 @@ int main(int argc, char **argv)
         .help("Number of conservative variables (for dynamic models)");
     program.add_argument("--from")
         .required()
-        .help("Input format: cons-total, cons-sensible, prim");
+        .help("Input format: cons-total, cons-sensible, prim, prim-RT, prim-TP");
     program.add_argument("--scaling")
         .default_value(std::string("code"))
         .help("Input scaling: code, phys");
@@ -263,9 +263,44 @@ int main(int argc, char **argv)
         consTotal = inputState;
         consTotal[dim + 1] += rhoH_form;
     }
-    else // prim
+    else // prim, prim-RT, prim-TP
     {
-        Eigen::VectorXd prim = inputState;
+        auto fullPrim = inputState;
+
+        // Compute mixture gas constant code (needed for prim-TP)
+        auto computeRmixCode = [&](const Eigen::VectorXd &pvec)
+        {
+            if (!isReactive)
+                return R_code;
+            int Isp = dim + 2;
+            int Ns1 = nSpecies - 1;
+            double Ru = 8314.46261815324; // J/(kmol·K)
+            double invR0 = cfg.T0 / (cfg.U0 * cfg.U0);
+            double Rmix = 0;
+            for (int k = 0; k < Ns1; ++k)
+                Rmix += pvec[Isp + k] * (Ru / (*pool)[0].molecularWeights()[k]);
+            real lastY = 1.0;
+            for (int k = 0; k < Ns1; ++k)
+                lastY -= pvec[Isp + k];
+            Rmix += lastY * (Ru / (*pool)[0].molecularWeights()[Ns1]);
+            return Rmix * invR0; // code-scaled
+        };
+
+        if (fromStr == "prim-TP")
+        {
+            real T_raw = fullPrim[0];
+            real T_in = inputPhys ? T_raw / cfg.T0 : T_raw; // code T
+            real p_code = fullPrim[dim + 1];
+            real Rm = computeRmixCode(fullPrim);
+            fullPrim[0] = p_code / std::max(Rm * T_in, 1e-60); // ρ = p/(RT)
+        }
+        else if (fromStr == "prim-RT")
+        {
+            real RT_code = fullPrim[dim + 1];
+            fullPrim[dim + 1] = fullPrim[0] * RT_code; // p = ρ·RT
+        }
+
+        Eigen::VectorXd prim = fullPrim;
         int Ns1 = nSpecies;
         if (isReactive)
         {
