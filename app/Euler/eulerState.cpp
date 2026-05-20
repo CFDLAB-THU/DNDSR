@@ -156,7 +156,7 @@ int main(int argc, char **argv)
         .help("Number of conservative variables (for dynamic models)");
     program.add_argument("--from")
         .required()
-        .help("Input format: cons-total, cons-sensible, prim, prim-RT, prim-TP");
+        .help("Input format: cons-total, cons-sensible, prim, prim-rhoT, prim-TP");
     program.add_argument("--scaling")
         .default_value(std::string("code"))
         .help("Input scaling: code, phys");
@@ -246,9 +246,13 @@ int main(int argc, char **argv)
     if (inputPhys)
     {
         auto U = inputState;
-        if (fromStr == "prim")
+        bool isPrim = (fromStr == "prim" || fromStr == "prim-rhoT" || fromStr == "prim-TP");
+        if (isPrim)
         {
-            U[0] /= cfg.rho0;
+            if (fromStr == "prim-TP")
+                U[0] /= cfg.T0;
+            else
+                U[0] /= cfg.rho0;
             for (int j = 1; j <= dim; ++j)
                 U[j] /= cfg.U0;
             U[dim + 1] /= (cfg.rho0 * cfg.U0 * cfg.U0);
@@ -285,7 +289,7 @@ int main(int argc, char **argv)
         consTotal = inputState;
         consTotal[dim + 1] += rhoH_form;
     }
-    else // prim, prim-RT, prim-TP
+    else // prim, prim-rhoT, prim-TP
     {
         auto fullPrim = inputState;
 
@@ -316,7 +320,7 @@ int main(int argc, char **argv)
             real Rm = computeRmixCode(fullPrim);
             fullPrim[0] = p_code / std::max(Rm * T_in, 1e-60); // ρ = p/(RT)
         }
-        else if (fromStr == "prim-RT")
+        else if (fromStr == "prim-rhoT")
         {
             real RT_code = fullPrim[dim + 1];
             fullPrim[dim + 1] = fullPrim[0] * RT_code; // p = ρ·RT
