@@ -2,12 +2,15 @@
 #include "doctest.h"
 
 #include "Euler/Chemistry/ChemicalSource.hpp"
+#include "Euler/Euler.hpp"
+#include "Euler/Physics/PhysicsProperties.hpp"
 #include <Eigen/Dense>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
 
+using namespace DNDS::Euler;
 using namespace DNDS::Euler::Chemistry;
 
 static std::string mechFile()
@@ -16,17 +19,47 @@ static std::string mechFile()
     return env ? std::string(env) + "/h2o2.yaml" : "h2o2.yaml";
 }
 
-TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via EOS")
+// Shared setup: create a PhysicsProperties<NS_EX> with IdealGasProperty
+// matching the reference-config scales, plus the underlying ChemicalSource pool
+// held externally so the test can call kinetics/transport directly.
+static auto makeTestFixture()
 {
-    auto chem = std::make_shared<ChemicalSource>(mechFile());
-    int Ns = chem->nSpecies();
+    auto pool = std::make_shared<std::vector<ChemicalSource>>();
+    pool->emplace_back(mechFile()); // pool[0] is the per-thread instance
+
+    typename EulerEvaluatorSettings<NS_EX>::IdealGasProperty igProp;
+    igProp.gamma = 1.4;
+    igProp.Rgas = 287.0; // physical J/(kg·K); toCode() converts via U0²/T0
+    igProp.U0 = 379.0;
+    igProp.rho0 = 1.0;
+    igProp.T0 = 1.0;
+    igProp.muGas = 1e-200;
+    igProp.prGas = 0.72;
+
+    auto phys = std::make_unique<PhysicsProperties<NS_EX>>(igProp);
+    phys->setChemicalSourcePool(pool); // shares ownership of pool
+
+    struct Fixture
+    {
+        std::shared_ptr<std::vector<ChemicalSource>> pool;
+        std::unique_ptr<PhysicsProperties<NS_EX>> phys;
+    };
+    return Fixture{std::move(pool), std::move(phys)};
+}
+
+TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via PhysicsProperties")
+{
+    auto fx = makeTestFixture();
+    auto &phys = *fx.phys;
+    auto &chem = (*fx.pool)[0];
+    int Ns = chem.nSpecies();
     int Ns1 = Ns - 1;
     int nVars = 5 + Ns1; // 14
     REQUIRE(Ns == 10);
-    auto MW = chem->molecularWeights();
+    auto MW = chem.molecularWeights();
     int Isp = 5;
 
-    double rho0 = 1.0, rhoE0 = 6.0;
+    double rho0 = 1.0, rhoE0 = 8.25; // gives T≈1200K via PhysicsProperties
     double U0 = 379.0;
 
     Eigen::VectorXd U = Eigen::VectorXd::Zero(nVars);
@@ -59,7 +92,6 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via EOS")
         Y[Ns1] = 1.0 - sum;
         if (Y[Ns1] < 0)
             Y[Ns1] = 0;
-        // renormalise
         double s = 0;
         for (int k = 0; k < Ns; k++)
             s += Y[k];
@@ -70,13 +102,9 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via EOS")
 
     auto getT = [&](const Eigen::VectorXd &Uk)
     {
-        double rhoInv = 1.0 / Uk[0];
-        double uPhys = Uk[4] * rhoInv * U0 * U0;
-        double vPhys = rhoInv;
-        std::vector<double> Y;
-        getY(Uk, Y);
-        return chem->temperatureFromUV(uPhys, vPhys,
-                                       ConstSpeciesBufferView{Y.data(), Ns}, 1200.0);
+        // Map into PhysicsProperties-compatible TU (dynamic-sized for NS_EX)
+        Eigen::Map<const Eigen::VectorXd> ukMap(Uk.data(), Uk.size());
+        return phys.template temperature<3>(ukMap);
     };
 
     double T = getT(U);
@@ -90,10 +118,9 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via EOS")
         std::vector<double> Y;
         getY(U, Y);
         ConstSpeciesBufferView Yv{Y.data(), Ns};
-        double Rmix = chem->mixtureR(Yv);
+        double Rmix = chem.mixtureR(Yv);
         double p = U[0] * Rmix * T;
 
-        // Newton for implicit Euler (species only, ρ and ρE frozen)
         Eigen::VectorXd Uk = U;
         double Tk = T;
         Eigen::VectorXd ret = Eigen::VectorXd::Zero(nVars);
@@ -104,11 +131,11 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via EOS")
             std::vector<double> Yk;
             getY(Uk, Yk);
             ConstSpeciesBufferView Ykv{Yk.data(), Ns};
-            double pk = Uk[0] * chem->mixtureR(Ykv) * Tk;
+            double pk = Uk[0] * chem.mixtureR(Ykv) * Tk;
 
             std::vector<double> omega(Ns);
             SpeciesBufferView omegav{omega.data(), Ns};
-            chem->productionRates(Tk, pk, Ykv, omegav);
+            chem.productionRates(Tk, pk, Ykv, omegav);
 
             ret.setZero();
             for (int k = 0; k < Ns1; k++)
@@ -116,7 +143,7 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via EOS")
 
             std::vector<double> jbuf(Ns * nVars, 0.0);
             JacobianBufferView Jv{jbuf.data(), Ns, nVars, Ns};
-            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, 1.0, Ykv, omegav, Jv);
+            chem.productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, 1.0, Ykv, omegav, Jv);
 
             Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(nVars, nVars);
             for (int k = 0; k < Ns1; k++)
@@ -162,8 +189,8 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via EOS")
     double Y_H2O_end = U[Isp + 5] / U[0];
     printf("[ODE] final T=%.1fK rhoE=%.4f Y_H2=%.6f Y_H2O=%.6f\n", T, U[4], Y_H2_end, Y_H2O_end);
 
-    CHECK(Y_H2_end < 0.025);  // H2 consumed — Newton converges 3-4 steps (was 3-100 w/o T-coupling)
-    CHECK(Y_H2O_end > 0.001); // H2O produced
+    CHECK(Y_H2_end < 0.025);
+    CHECK(Y_H2O_end > 0.001);
 }
 
 TEST_CASE("Finite-difference Jacobian check at non-initial state")

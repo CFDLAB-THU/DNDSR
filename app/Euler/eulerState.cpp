@@ -611,6 +611,7 @@ int main(int argc, char **argv)
         std::cout << fmt::format("  cv_mass        = {:12.4g} J/(kg K)\n", cv_ct);
         std::cout << fmt::format("  cp_mass        = {:12.4g} J/(kg K)\n", cp_ct);
         std::cout << fmt::format("  gamma (cp/cv)  = {:12.4g}\n", cp_ct / std::max(cv_ct, 1e-30));
+        std::cout << fmt::format("  gamma (eq)     = {:12.4g}  (from DNDSR state)\n", gammaEq);
         std::cout << fmt::format("  speed_of_sound = {:12.4g} m/s\n", a_ct);
         std::cout << fmt::format("  mixture_R      = {:12.4g} J/(kg K)\n", R_ct);
 
