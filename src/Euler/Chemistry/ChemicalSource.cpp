@@ -122,6 +122,18 @@ namespace DNDS::Euler::Chemistry
         return cp / std::max(cv, 1e-30);
     }
 
+    double ChemicalSource::mixtureIntEnergy(double T, ConstSpeciesBufferView Y) const
+    {
+        impl_->setTPY(T, 101325, Y);
+        return impl_->gas->intEnergy_mass();
+    }
+
+    double ChemicalSource::mixtureEnthalpy(double T, ConstSpeciesBufferView Y) const
+    {
+        impl_->setTPY(T, 101325, Y);
+        return impl_->gas->enthalpy_mass();
+    }
+
     double ChemicalSource::speedOfSound(double T, ConstSpeciesBufferView Y) const
     {
         return std::sqrt(mixtureGamma(T, Y) * mixtureR(Y) * T);
@@ -135,7 +147,7 @@ namespace DNDS::Euler::Chemistry
         double Tinit = T_guess > 300 ? T_guess : 300;
         double p_init = mixtureR(Y) * Tinit / v;
         impl_->gasT->setState_TP(Tinit, p_init);
-        impl_->gasT->setState_UV(u, v);
+        impl_->gasT->setState_UV(u, v, 1e-12);
         return impl_->gasT->temperature();
     }
 

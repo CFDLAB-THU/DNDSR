@@ -28,6 +28,7 @@ namespace
         real U0 = 1.0;
         real rho0 = 1.0;
         real T0 = 1.0;
+        real L0 = 1.0;
     };
 
     EulerModel parseModel(const std::string &s)
@@ -75,6 +76,8 @@ namespace
                 c.rho0 = std::stod(val);
             else if (key == "T0")
                 c.T0 = std::stod(val);
+            else if (key == "L0")
+                c.L0 = std::stod(val);
         }
         return c;
     }
@@ -130,16 +133,52 @@ namespace
 
     void printSection(const Eigen::VectorXd &v,
                       const std::vector<std::string> &names,
-                      int nVars,
-                      const std::string &title, const std::string &jsonLabel)
+                      int nVars, int dim,
+                      const std::string &title, const std::string &jsonLabel,
+                      const Cfg &cfg, bool isPrim)
     {
+        std::string unitRho = "kg/m^3", unitVel = "kg/(m^2 s)", unitPress = "J/m^3";
+        if (isPrim)
+            unitVel = "m/s", unitPress = "Pa";
         std::cout << fmt::format("\n--- {} ---\n", title);
+        std::cout << fmt::format("  {:12s} {:>12s} {:>12s}  {}\n", "var", "code", "phys", "unit");
+        std::cout << fmt::format("  {:12s} {:>12s} {:>12s}  {}\n",
+                                 std::string(12, '-'), std::string(12, '-'), std::string(12, '-'), std::string(20, '-'));
+        int I4 = dim + 1;
         for (int i = 0; i < nVars; ++i)
         {
             const std::string nm = (i < (int)names.size()) ? names[i] : fmt::format("[{}]", i);
-            std::cout << fmt::format("  {:10s} = {:12.4g}\n", nm, v[i]);
+            real phys;
+            std::string unit;
+            if (i == 0)
+            {
+                phys = v[i] * cfg.rho0;
+                unit = unitRho;
+            }
+            else if (i >= 1 && i <= dim)
+            {
+                phys = v[i] * (isPrim ? cfg.U0 : cfg.rho0 * cfg.U0);
+                unit = unitVel;
+            }
+            else if (i == I4)
+            {
+                phys = v[i] * cfg.rho0 * cfg.U0 * cfg.U0;
+                unit = unitPress;
+            }
+            else
+            {
+                phys = v[i];
+                unit = "-";
+            }
+            std::cout << fmt::format("  {:12s} {:12.4g} {:12.4g}  {}\n", nm, v[i], phys, unit);
         }
         printJsonVec(v, jsonLabel);
+        Eigen::VectorXd vPhys = v;
+        vPhys[0] = v[0] * cfg.rho0;
+        for (int j = 1; j <= dim; ++j)
+            vPhys[j] = v[j] * (isPrim ? cfg.U0 : cfg.rho0 * cfg.U0);
+        vPhys[I4] = v[I4] * cfg.rho0 * cfg.U0 * cfg.U0;
+        printJsonVec(vPhys, jsonLabel + "-phys");
     }
 
 } // anonymous namespace
@@ -422,13 +461,36 @@ int main(int argc, char **argv)
         primNames.push_back(nm);
     }
 
+    // --- Scales ---
+    {
+        real p0 = cfg.rho0 * cfg.U0 * cfg.U0;
+        real t0 = cfg.L0 > 0 ? cfg.L0 / cfg.U0 : 0;
+        real R0 = cfg.U0 * cfg.U0 / std::max(cfg.T0, 1e-60);
+        real mu0 = cfg.rho0 * cfg.U0 * cfg.L0;
+        real k0 = cfg.rho0 * cfg.U0 * cfg.U0 * cfg.U0 * cfg.L0 / std::max(cfg.T0, 1e-60);
+        real D0 = cfg.U0 * cfg.L0;
+        real S0 = cfg.rho0 * cfg.U0 / std::max(cfg.L0, 1e-60);
+        std::cout << "\n--- Reference Scales ---\n";
+        std::cout << fmt::format("  p0   = {:12.4g} Pa         (rho0 * U0^2)\n", p0);
+        std::cout << fmt::format("  rho0 = {:12.4g} kg/m^3\n", cfg.rho0);
+        std::cout << fmt::format("  U0   = {:12.4g} m/s\n", cfg.U0);
+        std::cout << fmt::format("  T0   = {:12.4g} K\n", cfg.T0);
+        std::cout << fmt::format("  L0   = {:12.4g} m\n", cfg.L0);
+        std::cout << fmt::format("  t0   = {:12.4g} s          (L0 / U0)\n", t0);
+        std::cout << fmt::format("  R0   = {:12.4g} J/(kg K)   (U0^2 / T0)\n", R0);
+        std::cout << fmt::format("  mu0  = {:12.4g} Pa s       (rho0 * U0 * L0)\n", mu0);
+        std::cout << fmt::format("  k0   = {:12.4g} W/(m K)    (rho0 * U0^3 * L0 / T0)\n", k0);
+        std::cout << fmt::format("  D0   = {:12.4g} m^2/s      (U0 * L0)\n", D0);
+        std::cout << fmt::format("  S0   = {:12.4g} kg/(m^3 s) (rho0 * U0 / L0)\n", S0);
+    }
+
     // --- Print all representations ---
-    printSection(consTotal, consNames, nVars,
-                 "Conservative (total rhoE, code)", "cons-total");
-    printSection(consSensible, consNames, nVars,
-                 "Conservative (sensible rhoE, code)", "cons-sensible");
-    printSection(primCode, primNames, nVars,
-                 "Primitive (code)", "prim");
+    printSection(consTotal, consNames, nVars, dim,
+                 "Conservative (total rhoE, code)", "cons-total", cfg, false);
+    printSection(consSensible, consNames, nVars, dim,
+                 "Conservative (sensible rhoE, code)", "cons-sensible", cfg, false);
+    printSection(primCode, primNames, nVars, dim,
+                 "Primitive (code)", "prim", cfg, true);
 
     real T_phys = T_code * cfg.T0;
     real p_phys = primCode[dim + 1] * cfg.rho0 * cfg.U0 * cfg.U0;
@@ -472,26 +534,58 @@ int main(int argc, char **argv)
                                  speciesNames[Ns1], Y_derived, rhoY_derived);
     }
 
-    if (inputPhys)
+    if (isReactive)
     {
-        std::cout << "\n--- Physical units ---\n";
-        Eigen::VectorXd consPhys = consTotal;
-        consPhys[0] *= cfg.rho0;
+        int Ns = nSpecies;
+        std::vector<double> Ybuf(Ns);
+        for (int k = 0; k < Ns; ++k)
+        {
+            if (k < Ns - 1)
+                Ybuf[k] = primCode[dim + 2 + k];
+            else
+            {
+                real sumY = 0;
+                for (int j = 0; j < Ns - 1; ++j)
+                    sumY += primCode[dim + 2 + j];
+                Ybuf[k] = 1.0 - sumY;
+            }
+        }
+        ConstSpeciesBufferView Yv{Ybuf.data(), Ns};
+        auto &chem = (*pool)[0];
+        double u_ct = chem.mixtureIntEnergy(T_phys, Yv);
+        double h_ct = chem.mixtureEnthalpy(T_phys, Yv);
+        double cv_ct = chem.mixtureCv(T_phys, Yv);
+        double cp_ct = chem.mixtureCp(T_phys, Yv);
+        double a_ct = chem.speedOfSound(T_phys, Yv);
+        double R_ct = chem.mixtureR(Yv);
+
+        std::cout << "\n--- Cantera state at T_phys ---\n";
+        std::cout << fmt::format("  intEnergy_mass = {:12.4g} J/kg\n", u_ct);
+        std::cout << fmt::format("  enthalpy_mass  = {:12.4g} J/kg\n", h_ct);
+        std::cout << fmt::format("  cv_mass        = {:12.4g} J/(kg K)\n", cv_ct);
+        std::cout << fmt::format("  cp_mass        = {:12.4g} J/(kg K)\n", cp_ct);
+        std::cout << fmt::format("  gamma (cp/cv)  = {:12.4g}\n", cp_ct / std::max(cv_ct, 1e-30));
+        std::cout << fmt::format("  speed_of_sound = {:12.4g} m/s\n", a_ct);
+        std::cout << fmt::format("  mixture_R      = {:12.4g} J/(kg K)\n", R_ct);
+
+        // Code-unit conversions
+        std::cout << fmt::format("  intEnergy_code = {:12.4g}\n", u_ct / (cfg.U0 * cfg.U0));
+        std::cout << fmt::format("  enthalpy_code  = {:12.4g}\n", h_ct / (cfg.U0 * cfg.U0));
+        std::cout << fmt::format("  cv_code        = {:12.4g}\n", cv_ct / (cfg.U0 * cfg.U0 / cfg.T0));
+        std::cout << fmt::format("  cp_code        = {:12.4g}\n", cp_ct / (cfg.U0 * cfg.U0 / cfg.T0));
+
+        // Verify energy consistency: u_sent should match Cantera's intEnergy_mass
+        real velSqr = 0;
         for (int j = 1; j <= dim; ++j)
-            consPhys[j] *= (cfg.rho0 * cfg.U0);
-        consPhys[dim + 1] *= (cfg.rho0 * cfg.U0 * cfg.U0);
-        for (int k = dim + 2; k < nVars; ++k)
-            consPhys[k] *= cfg.rho0;
-
-        printVec(consPhys, "  cons-total = [", 4);
-
-        Eigen::VectorXd primPhys = primCode;
-        primPhys[0] *= cfg.rho0;
-        for (int j = 1; j <= dim; ++j)
-            primPhys[j] *= cfg.U0;
-        primPhys[dim + 1] *= (cfg.rho0 * cfg.U0 * cfg.U0);
-
-        printVec(primPhys, "  prim       = [", 4);
+            velSqr += consTotal[j] * consTotal[j];
+        velSqr /= (consTotal[0] * consTotal[0]);
+        real uInternal = consTotal[dim + 1] / consTotal[0] - 0.5 * velSqr;
+        real uPhysFromInput = uInternal * cfg.U0 * cfg.U0;
+        std::cout << fmt::format("  u_phys(input)  = {:12.4g} J/kg  (from consTotal, pre-conversion)\n", uPhysFromInput);
+        std::cout << fmt::format("  u_phys(sent)   = {:12.4g} J/kg  (after pVRef + sensible offset)\n",
+                                 uPhysFromInput - chem.pVAtReference(Yv) - chem.sensibleInternalEnergyAtReference(Yv));
+        std::cout << fmt::format("  diff           = {:12.4g} J/kg  (sent - cantera)\n",
+                                 (uPhysFromInput - chem.pVAtReference(Yv) - chem.sensibleInternalEnergyAtReference(Yv)) - u_ct);
     }
 
     return 0;
