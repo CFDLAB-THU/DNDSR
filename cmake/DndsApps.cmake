@@ -152,4 +152,4 @@ foreach(item IN LISTS DNDS_Euler_Models_List)
     # ADD_EXE_APP("${EXE_NAME}" "app/Euler" "dnds;geom;cfv;euler_library_fast_${key};euler_library_${key};")
 endforeach()
 
-ADD_EXE_APP("state_convert" "app/Euler" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds;" ON cpp)
+ADD_EXE_APP("eulerState" "app/Euler" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds;" ON cpp)

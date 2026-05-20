@@ -115,16 +115,38 @@ namespace
         {
             if (i > 0 && i % nPerLine == 0)
                 std::cout << fmt::format("\n{:{}}", "", prefix.size());
-            std::cout << fmt::format("{:12.6f}", v[i]);
+            std::cout << fmt::format("{:12.4g}", v[i]);
         }
         std::cout << "\n";
+    }
+
+    void printJsonVec(const Eigen::VectorXd &v, const std::string &label)
+    {
+        json j;
+        for (int i = 0; i < (int)v.size(); ++i)
+            j.push_back(v[i]);
+        std::cout << fmt::format("  // {}: {}\n", label, j.dump());
+    }
+
+    void printSection(const Eigen::VectorXd &v,
+                      const std::vector<std::string> &names,
+                      int nVars,
+                      const std::string &title, const std::string &jsonLabel)
+    {
+        std::cout << fmt::format("\n--- {} ---\n", title);
+        for (int i = 0; i < nVars; ++i)
+        {
+            const std::string nm = (i < (int)names.size()) ? names[i] : fmt::format("[{}]", i);
+            std::cout << fmt::format("  {:10s} = {:12.4g}\n", nm, v[i]);
+        }
+        printJsonVec(v, jsonLabel);
     }
 
 } // anonymous namespace
 
 int main(int argc, char **argv)
 {
-    argparse::ArgumentParser program("state_convert", "1.0");
+    argparse::ArgumentParser program("eulerState", "1.0");
     program.add_argument("--model")
         .required()
         .help("Euler model: NS, NS_3D, NS_EX, NS_EX_3D, NS_SA, NS_SA_3D, NS_2EQ, NS_2EQ_3D");
@@ -243,9 +265,9 @@ int main(int argc, char **argv)
 
     std::cout << fmt::format("=== Input: {}, {} units ===\n", fromStr,
                              inputPhys ? "physical" : "code");
-    std::cout << fmt::format("  model={}  dim={}  nVars={}  gamma={:.6f}  Rgas={:.1f} J/(kg.K)  U0={:.1f}  rho0={:.1f}  T0={:.1f}\n",
+    std::cout << fmt::format("  model={}  dim={}  nVars={}  gamma={:.4g}  Rgas_cfg={:.4g}  U0={:.4g}  rho0={:.4g}  T0={:.4g}\n",
                              program.get<std::string>("--model"), dim, nVars,
-                             cfg.gamma, cfg.Rgas, cfg.U0, cfg.rho0, cfg.T0);
+                             cfg.gamma, R_code, cfg.U0, cfg.rho0, cfg.T0);
     std::cout << "\n";
     printVec(inputState, "  input = [", 4);
 
@@ -372,8 +394,14 @@ int main(int argc, char **argv)
     if (dim >= 3)
         consNames.push_back("rhoW");
     consNames.push_back("rhoE");
-    for (int k = 0; k < nVars - (dim + 2); ++k)
-        consNames.push_back("rhoY_" + std::to_string(k));
+    int Nsp = nVars - (dim + 2);
+    for (int k = 0; k < Nsp; ++k)
+    {
+        std::string nm = "rhoY_" + std::to_string(k);
+        if (k < (int)speciesNames.size())
+            nm = "rho" + speciesNames[k];
+        consNames.push_back(nm);
+    }
 
     std::vector<std::string> primNames;
     primNames.push_back("rho");
@@ -382,49 +410,31 @@ int main(int argc, char **argv)
     if (dim >= 3)
         primNames.push_back("w");
     primNames.push_back("p");
-    for (int k = 0; k < nVars - (dim + 2); ++k)
-        primNames.push_back("Y_" + std::to_string(k));
+    for (int k = 0; k < Nsp; ++k)
+    {
+        std::string nm = "Y_" + std::to_string(k);
+        if (k < (int)speciesNames.size())
+            nm = speciesNames[k];
+        primNames.push_back(nm);
+    }
 
     // --- Print all representations ---
-    std::cout << "\n--- Conservative (total rhoE, code) ---\n";
-    for (int i = 0; i < nVars; ++i)
-    {
-        const std::string nm = (i < (int)consNames.size()) ? consNames[i] : fmt::format("[{}]", i);
-        std::string sp;
-        if (i >= dim + 2 && !speciesNames.empty() && i - (dim + 2) < (int)speciesNames.size())
-            sp = fmt::format("  ({})", speciesNames[i - (dim + 2)]);
-        std::cout << fmt::format("  {:10s} = {:12.6f}{}\n", nm, consTotal[i], sp);
-    }
-
-    std::cout << "\n--- Conservative (sensible rhoE, code) ---\n";
-    for (int i = 0; i < nVars; ++i)
-    {
-        const std::string nm = (i < (int)consNames.size()) ? consNames[i] : fmt::format("[{}]", i);
-        std::string sp;
-        if (i >= dim + 2 && !speciesNames.empty() && i - (dim + 2) < (int)speciesNames.size())
-            sp = fmt::format("  ({})", speciesNames[i - (dim + 2)]);
-        std::cout << fmt::format("  {:10s} = {:12.6f}{}\n", nm, consSensible[i], sp);
-    }
-
-    std::cout << "\n--- Primitive (code) ---\n";
-    for (int i = 0; i < nVars; ++i)
-    {
-        const std::string nm = (i < (int)primNames.size()) ? primNames[i] : fmt::format("[{}]", i);
-        std::string sp;
-        if (i >= dim + 2 && !speciesNames.empty() && i - (dim + 2) < (int)speciesNames.size())
-            sp = fmt::format("  ({})", speciesNames[i - (dim + 2)]);
-        std::cout << fmt::format("  {:10s} = {:12.6f}{}\n", nm, primCode[i], sp);
-    }
+    printSection(consTotal, consNames, nVars,
+                 "Conservative (total rhoE, code)", "cons-total");
+    printSection(consSensible, consNames, nVars,
+                 "Conservative (sensible rhoE, code)", "cons-sensible");
+    printSection(primCode, primNames, nVars,
+                 "Primitive (code)", "prim");
 
     real T_phys = T_code * cfg.T0;
     real p_phys = primCode[dim + 1] * cfg.rho0 * cfg.U0 * cfg.U0;
 
     std::cout << "\n--- Derived ---\n";
-    std::cout << fmt::format("  T          = {:12.6f} K (code)\n", T_code);
-    std::cout << fmt::format("  T_phys     = {:12.6f} K (physical)\n", T_phys);
-    std::cout << fmt::format("  p_phys     = {:12.6f} Pa\n", p_phys);
-    std::cout << fmt::format("  gamma_cfg  = {:12.6f} (input config)\n", cfg.gamma);
-    std::cout << fmt::format("  gamma_eq   = {:12.6f} (from Cantera EOS)\n", gammaEq);
+    std::cout << fmt::format("  T          = {:12.4g} K (code)\n", T_code);
+    std::cout << fmt::format("  T_phys     = {:12.4g} K (physical)\n", T_phys);
+    std::cout << fmt::format("  p_phys     = {:12.4g} Pa\n", p_phys);
+    std::cout << fmt::format("  gamma_cfg  = {:12.4g} (input config)\n", cfg.gamma);
+    std::cout << fmt::format("  gamma_eq   = {:12.4g} (from Cantera EOS)\n", gammaEq);
     if (isReactive && std::abs(gammaEq - cfg.gamma) > 1e-4)
     {
         real vel2 = 0;
@@ -432,12 +442,12 @@ int main(int argc, char **argv)
             vel2 += consTotal[j] * consTotal[j];
         vel2 /= (consTotal[0] * consTotal[0]);
         real e_sensible = consTotal[dim + 1] / consTotal[0] - 0.5 * vel2 - rhoH_form_cons / consTotal[0];
-        std::cout << fmt::format("  p_eos      = {:12.6f} (code, via gamma_eq; differs from input gamma_cfg)\n",
+        std::cout << fmt::format("  p_eos      = {:12.4g} (code, via gamma_eq)\n",
                                  gammaEq * consTotal[0] * e_sensible);
     }
-    std::cout << fmt::format("  Rmix_phys  = {:12.6f} J/(kg.K)\n",
+    std::cout << fmt::format("  Rmix_phys  = {:12.4g} J/(kg.K)\n",
                              Rmix_code * cfg.U0 * cfg.U0 / cfg.T0);
-    std::cout << fmt::format("  rhoH_form  = {:12.6f} (code)\n", rhoH_form_cons);
+    std::cout << fmt::format("  rhoH_form  = {:12.4g} (code)\n", rhoH_form_cons);
 
     if (!speciesNames.empty())
     {
@@ -445,7 +455,7 @@ int main(int argc, char **argv)
         int Isp = dim + 2;
         std::cout << fmt::format("\n--- Species ({} transported + 1 derived) ---\n", Ns1);
         for (int k = 0; k < Ns1; ++k)
-            std::cout << fmt::format("  {:10s} Y={:.6f}  rhoY={:.6f}\n",
+            std::cout << fmt::format("  {:10s} Y={:12.4g}  rhoY={:12.4g}\n",
                                      speciesNames[k], primCode[Isp + k], consTotal[Isp + k]);
         real Y_derived = 1.0;
         real rhoY_derived = consTotal[0];
@@ -454,7 +464,7 @@ int main(int argc, char **argv)
             Y_derived -= primCode[Isp + k];
             rhoY_derived -= consTotal[Isp + k];
         }
-        std::cout << fmt::format("  {:10s} Y={:.6f}  rhoY={:.6f} (derived)\n",
+        std::cout << fmt::format("  {:10s} Y={:12.4g}  rhoY={:12.4g} (derived)\n",
                                  speciesNames[Ns1], Y_derived, rhoY_derived);
     }
 
