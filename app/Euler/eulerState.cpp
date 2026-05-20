@@ -281,34 +281,79 @@ int main(int argc, char **argv)
         phys->setChemicalSourcePool(pool);
     }
 
-    // --- Scaling conversion (phys → code) ---
+    using TU = typename PhysicsProperties<NS_EX>::TU; // VectorFMTSafe<real,Dynamic> assignable from VectorXd
+
+    // --- Scaling conversion (phys → code) --- using PhysicsProperties API
     if (inputPhys)
     {
-        auto U = inputState;
-        bool isPrim = (fromStr == "prim" || fromStr == "prim-rhoT" || fromStr == "prim-TP");
-        if (isPrim)
+        if (isReactive)
         {
-            if (fromStr == "prim-TP")
-                U[0] /= cfg.T0;
+            TU u(inputState.size());
+            u = inputState;
+            TU o(u.size());
+            auto callSc = [&](auto fn)
+            { fn(u, o); inputState = o; };
+            bool isPrim = (fromStr == "prim" || fromStr == "prim-rhoT" || fromStr == "prim-TP");
+            if (dim == 3)
+            {
+                if (!isPrim)
+                    callSc([&](auto &a, auto &b)
+                           { phys->consPhysToCode<3>(a, b); });
+                else if (fromStr == "prim-rhoT")
+                    callSc([&](auto &a, auto &b)
+                           { phys->primRhoTPhysToCode<3>(a, b); });
+                else if (fromStr == "prim-TP")
+                    callSc([&](auto &a, auto &b)
+                           { phys->primTPPhysToCode<3>(a, b); });
+                else
+                    callSc([&](auto &a, auto &b)
+                           { phys->primPhysToCode<3>(a, b); });
+            }
             else
+            {
+                if (!isPrim)
+                    callSc([&](auto &a, auto &b)
+                           { phys->consPhysToCode<2>(a, b); });
+                else if (fromStr == "prim-rhoT")
+                    callSc([&](auto &a, auto &b)
+                           { phys->primRhoTPhysToCode<2>(a, b); });
+                else if (fromStr == "prim-TP")
+                    callSc([&](auto &a, auto &b)
+                           { phys->primTPPhysToCode<2>(a, b); });
+                else
+                    callSc([&](auto &a, auto &b)
+                           { phys->primPhysToCode<2>(a, b); });
+            }
+        }
+        else
+        {
+            // Non-reactive phys→code: use local scaling
+            auto U = inputState;
+            bool isPrim = (fromStr == "prim" || fromStr == "prim-rhoT" || fromStr == "prim-TP");
+            if (isPrim)
+            {
+                if (fromStr == "prim-TP")
+                    U[0] /= cfg.T0;
+                else
+                    U[0] /= cfg.rho0;
+                for (int j = 1; j <= dim; ++j)
+                    U[j] /= cfg.U0;
+                if (fromStr == "prim-rhoT")
+                    U[dim + 1] /= cfg.T0;
+                else
+                    U[dim + 1] /= (cfg.rho0 * cfg.U0 * cfg.U0);
+            }
+            else
+            {
                 U[0] /= cfg.rho0;
-            for (int j = 1; j <= dim; ++j)
-                U[j] /= cfg.U0;
-            if (fromStr == "prim-rhoT")
-                U[dim + 1] /= cfg.T0; // T_phys → T_code
-            else
-                U[dim + 1] /= (cfg.rho0 * cfg.U0 * cfg.U0); // p_phys → p_code
+                for (int j = 1; j <= dim; ++j)
+                    U[j] /= (cfg.rho0 * cfg.U0);
+                U[dim + 1] /= (cfg.rho0 * cfg.U0 * cfg.U0);
+                for (int k = dim + 2; k < nVars; ++k)
+                    U[k] /= cfg.rho0;
+            }
+            inputState = U;
         }
-        else // cons-total, cons-sensible
-        {
-            U[0] /= cfg.rho0;
-            for (int j = 1; j <= dim; ++j)
-                U[j] /= (cfg.rho0 * cfg.U0);            // ρu_phys → ρu_code
-            U[dim + 1] /= (cfg.rho0 * cfg.U0 * cfg.U0); // ρE_phys → ρE_code
-            for (int k = dim + 2; k < nVars; ++k)
-                U[k] /= cfg.rho0; // ρY_k phys → code
-        }
-        inputState = U;
     }
 
     std::cout << fmt::format("=== Input: {}, {} units ===\n", fromStr,
@@ -319,113 +364,72 @@ int main(int argc, char **argv)
     std::cout << "\n";
     printVec(inputState, "  input = [", 4);
 
-    // --- Dispatch by dim for gas conversion functions ---
-    real rhoH_form = 0;
-    real gammaPrimCons = cfg.gamma; // converged gamma for prim→cons (equals cfg for non-reactive)
-    Eigen::VectorXd consTotal(nVars);
+    // --- State conversion --- using PhysicsProperties API
+    TU consTotal(nVars);
     if (fromStr == "cons-total")
     {
         consTotal = inputState;
     }
     else if (fromStr == "cons-sensible")
     {
-        rhoH_form = phys ? phys->mixtureFormationRhoE(inputState)
-                         : real(0.0);
-        consTotal = inputState;
-        consTotal[dim + 1] += rhoH_form;
-    }
-    else // prim, prim-rhoT, prim-TP
-    {
-        auto fullPrim = inputState;
-
-        // Compute mixture gas constant code (needed for prim-TP and prim-rhoT)
-        auto computeRmixCode = [&](const Eigen::VectorXd &pvec)
-        {
-            if (!isReactive)
-                return R_code;
-            int Isp = dim + 2;
-            int Ns1 = nSpecies - 1;
-            double Ru = 8314.46261815324; // J/(kmol·K)
-            double invR0 = cfg.T0 / (cfg.U0 * cfg.U0);
-            double Rmix = 0;
-            for (int k = 0; k < Ns1; ++k)
-                Rmix += pvec[Isp + k] * (Ru / (*pool)[0].molecularWeights()[k]);
-            real lastY = 1.0;
-            for (int k = 0; k < Ns1; ++k)
-                lastY -= pvec[Isp + k];
-            Rmix += lastY * (Ru / (*pool)[0].molecularWeights()[Ns1]);
-            return Rmix * invR0; // code-scaled
-        };
-
-        if (fromStr == "prim-TP")
-        {
-            real T_raw = fullPrim[0];
-            real T_in = inputPhys ? T_raw / cfg.T0 : T_raw;
-            real p_code = fullPrim[dim + 1];
-            real Rm = computeRmixCode(fullPrim);
-            fullPrim[0] = p_code / std::max(Rm * T_in, 1e-60); // ρ = p/(R·T)
-        }
-        else if (fromStr == "prim-rhoT")
-        {
-            real T_code = fullPrim[dim + 1];
-            real Rm = computeRmixCode(fullPrim);
-            fullPrim[dim + 1] = fullPrim[0] * Rm * T_code; // p = ρ·R·T
-        }
-
-        Eigen::VectorXd prim = fullPrim;
-        int Ns1 = nSpecies;
+        TU u(nVars);
+        u = inputState;
         if (isReactive)
         {
-            Ns1 = nSpecies - 1;
-            int Isp = dim + 2;
-            double invU0sq = 1.0 / (cfg.U0 * cfg.U0);
-            auto hfView = (*pool)[0].mixtureFormationRhoESpecies(invU0sq);
-            rhoH_form = 0;
-            for (int k = 0; k < Ns1; ++k)
-                rhoH_form += prim[Isp + k] * prim[0] * hfView[k];
-            real lastY = 1.0;
-            for (int k = 0; k < Ns1; ++k)
-                lastY -= prim[Isp + k];
-            rhoH_form += lastY * prim[0] * hfView[Ns1];
-        }
-
-        // Prim→Cons: iterate with gammaEq for reactive (cfg.gamma only as initial guess)
-        real gammaUse = cfg.gamma;
-        for (int iter = 0; iter < 10; ++iter)
-        {
             if (dim == 3)
-                Gas::IdealGasThermalPrimitive2Conservative<3>(prim, consTotal, gammaUse, rhoH_form);
+                phys->consSensibleToTotal<3>(u, consTotal);
             else
-                Gas::IdealGasThermalPrimitive2Conservative<2>(prim, consTotal, gammaUse, rhoH_form);
-
-            if (!isReactive)
-                break;
-
-            real T_iter = (dim == 3) ? phys->temperature<3>(consTotal)
-                                     : phys->temperature<2>(consTotal);
-            real gamma_iter = (dim == 3) ? phys->gammaEq<3>(T_iter, consTotal)
-                                         : phys->gammaEq<2>(T_iter, consTotal);
-
-            if (std::abs(gamma_iter - gammaUse) < 1e-8)
-                break;
-            gammaUse = gamma_iter;
+                phys->consSensibleToTotal<2>(u, consTotal);
         }
-        // Store converged gamma for cons→prim round-trip
-        gammaPrimCons = gammaUse;
+        else
+        {
+            consTotal = u;
+        }
+    }
+    else if (fromStr == "prim" && isReactive)
+    {
+        TU u(nVars);
+        u = inputState;
+        if (dim == 3)
+            phys->primToConservative<3>(u, consTotal);
+        else
+            phys->primToConservative<2>(u, consTotal);
+    }
+    else if (fromStr == "prim-rhoT" && isReactive)
+    {
+        TU u(nVars);
+        u = inputState;
+        if (dim == 3)
+            phys->primRhoTToConservative<3>(u, consTotal);
+        else
+            phys->primRhoTToConservative<2>(u, consTotal);
+    }
+    else if (fromStr == "prim-TP" && isReactive)
+    {
+        TU u(nVars);
+        u = inputState;
+        if (dim == 3)
+            phys->primTPToConservative<3>(u, consTotal);
+        else
+            phys->primTPToConservative<2>(u, consTotal);
+    }
+    else
+    {
+        // Non-reactive prim→cons: use cfg.gamma directly
+        TU prim(nVars);
+        prim = inputState;
+        if (dim == 3)
+            Gas::IdealGasThermalPrimitive2Conservative<3>(prim, consTotal, cfg.gamma, 0);
+        else
+            Gas::IdealGasThermalPrimitive2Conservative<2>(prim, consTotal, cfg.gamma, 0);
     }
 
     // --- Compute temperature, gamma, rhoH_form from consTotal ---
-    real T_code;
-    real gammaEq;
-    real rhoH_form_cons;
-    real Rmix_code;
-
+    real T_code, gammaEq, rhoH_form_cons, Rmix_code;
     if (isReactive)
     {
-        T_code = (dim == 3) ? phys->temperature<3>(consTotal)
-                            : phys->temperature<2>(consTotal);
-        gammaEq = (dim == 3) ? phys->gammaEq<3>(T_code, consTotal)
-                             : phys->gammaEq<2>(T_code, consTotal);
+        T_code = (dim == 3) ? phys->temperature<3>(consTotal) : phys->temperature<2>(consTotal);
+        gammaEq = (dim == 3) ? phys->gammaEq<3>(T_code, consTotal) : phys->gammaEq<2>(T_code, consTotal);
         rhoH_form_cons = phys->mixtureFormationRhoE(consTotal);
         Rmix_code = phys->Rgas(consTotal);
     }
@@ -438,20 +442,36 @@ int main(int argc, char **argv)
         Rmix_code = R_code;
     }
 
-    // --- Convert consTotal to prim --- (use iterated gamma for reactive, cfg for non-reactive)
-    Eigen::VectorXd primCode(nVars);
-    if (dim == 3)
+    // --- Convert consTotal to prim ---
+    TU primCode(nVars);
+    if (isReactive)
     {
-        Gas::IdealGasThermalConservative2Primitive<3>(consTotal, primCode, gammaPrimCons, rhoH_form_cons);
+        if (dim == 3)
+            phys->conservativeToPrimitive<3>(consTotal, primCode);
+        else
+            phys->conservativeToPrimitive<2>(consTotal, primCode);
     }
     else
     {
-        Gas::IdealGasThermalConservative2Primitive<2>(consTotal, primCode, gammaPrimCons, rhoH_form_cons);
+        if (dim == 3)
+            Gas::IdealGasThermalConservative2Primitive<3>(consTotal, primCode, gammaEq, 0);
+        else
+            Gas::IdealGasThermalConservative2Primitive<2>(consTotal, primCode, gammaEq, 0);
     }
 
     // --- Build consSensible ---
-    Eigen::VectorXd consSensible = consTotal;
-    consSensible[dim + 1] -= rhoH_form_cons;
+    TU consSensible(nVars);
+    if (isReactive)
+    {
+        if (dim == 3)
+            phys->consTotalToSensible<3>(consTotal, consSensible);
+        else
+            phys->consTotalToSensible<2>(consTotal, consSensible);
+    }
+    else
+    {
+        consSensible = consTotal; // no formation
+    }
 
     // --- Build variable names ---
     std::vector<std::string> consNames;
