@@ -105,7 +105,8 @@ function(ADD_EXE_APP EXES MAIN_DIR LIBS USE_EXCLUDE_FROM_ALL SRC_SUFFIX)
             set_property(TARGET ${EXE} PROPERTY CXX_COMPILER_LAUNCHER ${DNDS_CCACHE_EXEC})
             set_property(TARGET ${EXE} PROPERTY CUDA_COMPILER_LAUNCHER ${DNDS_CCACHE_EXEC})
         endif()
-    endforeach()
+endforeach()
+
 endfunction(ADD_EXE_APP)
 
 # -------------------------------------------------------------------
@@ -150,3 +151,5 @@ foreach(item IN LISTS DNDS_Euler_Models_List)
     ## This works because cmake detects dependency and reorders the libraries
     # ADD_EXE_APP("${EXE_NAME}" "app/Euler" "dnds;geom;cfv;euler_library_fast_${key};euler_library_${key};")
 endforeach()
+
+ADD_EXE_APP("state_convert" "app/Euler" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds;" ON cpp)
