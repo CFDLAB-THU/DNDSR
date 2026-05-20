@@ -55,4 +55,5 @@ stubs/
 /compile_commands.json
 /DNDSR
 workspace
-.opencode/**/local
+/.opencode/**/local
+/session_backup
