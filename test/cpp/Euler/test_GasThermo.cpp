@@ -450,7 +450,7 @@ TEST_CASE("CompressionRatio: zero increment gives alpha=0 (no compression needed
     auto U = primToCons3D(1.225, 100.0, -50.0, 25.0, 101325.0);
     Eigen::Vector<real, 5> dU = Eigen::Vector<real, 5>::Zero();
 
-    real alpha = IdealGasGetCompressionRatioPressure<3, 0, 5>(U, dU, 0.0);
+    real alpha = IdealGasGetCompressionRatioPressure<3, 0, 5>(U, dU, 0.0, 0, 0);
     CHECK(alpha == doctest::Approx(0.0).epsilon(1e-14));
 }
 
@@ -461,7 +461,7 @@ TEST_CASE("CompressionRatio: alpha in [0,1]")
     Eigen::Vector<real, 5> dU;
     dU << 0, 0, 0, 0, -100.0; // massive energy reduction
 
-    real alpha = IdealGasGetCompressionRatioPressure<3, 0, 5>(U, dU, 0.0);
+    real alpha = IdealGasGetCompressionRatioPressure<3, 0, 5>(U, dU, 0.0, 0, 0);
     CHECK(alpha >= 0.0);
     CHECK(alpha <= 1.0);
     // With alpha, the state should maintain non-negative internal energy

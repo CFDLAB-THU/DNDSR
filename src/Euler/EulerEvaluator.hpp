@@ -1687,45 +1687,34 @@ namespace DNDS::Euler
             real rhoEinternalNew_sensible = u(I4) + ret(I4) - ek - rhoH_form_new;
             if (rhoEinternalNew_sensible <= pEps)
             {
-                real declineV = (rhoEinternalNew_sensible - rhoEinternal_sensible) / (rhoEinternal_sensible + verySmallReal);
-                real newrhoEinteralNew_sensible = (std::exp(declineV) + verySmallReal) * rhoEinternal_sensible;
-                real T = phys_.template temperature<dim>(u);
-                // real gamma = phys_.template gammaEq<dim>(T, u);
-                newrhoEinteralNew_sensible = pEps; // pEps is rhoE_sensible floor (not pressure)
-                real newrhoEinteralNew_total = newrhoEinteralNew_sensible + rhoH_form_new;
-                real c0 = 2 * u(I4) * u(0) - u(Seq123).squaredNorm() - 2 * u(0) * newrhoEinteralNew_total;
-                real c1 = 2 * u(I4) * ret(0) + 2 * u(0) * ret(I4) - 2 * u(Seq123).dot(ret(Seq123)) - 2 * ret(0) * newrhoEinteralNew_total;
-                real c2 = 2 * ret(I4) * ret(0) - ret(Seq123).squaredNorm();
-                real deltaC = sqr(c1) - 4 * c0 * c2;
-                DNDS_assert(deltaC > 0);
-                real alphaL = (-std::sqrt(deltaC) - c1) / (2 * c2);
-                real alphaR = (std::sqrt(deltaC) - c1) / (2 * c2);
-                real alpha = std::min((c2 > 0 ? alphaL : alphaL), 1.);
-                alpha = std::max(0., alpha);
+                // Use linear-concave compression ratio (scheme=1).
+                // rhoe_sensible(θ) is concave → secant ≤ function, linear estimate safe.
+                real alpha = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
+                    u, ret, pEps, rhoH_form_old, rhoH_form_new);
                 ret *= alpha * (0.99);
 
+                // Iterative pull-up: concave → rhoe(ret) ≥ linear estimate, may still overshoot.
                 real decay = 1 - 1e-1;
                 for (int iter = 0; iter < 1000; iter++)
                 {
-                    ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-                    rhoH_form_new = phys_.mixtureFormationRhoE(TU(u + ret));
-                    if (u(I4) + ret(I4) - ek - rhoH_form_new < newrhoEinteralNew_sensible)
+                    real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
+                    real rhoH_ret = phys_.mixtureFormationRhoE(TU(u + ret));
+                    if (u(I4) + ret(I4) - ek - rhoH_ret < pEps)
                         ret *= decay, alpha *= decay;
                     else
                         break;
                 }
 
-                ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-                rhoH_form_new = phys_.mixtureFormationRhoE(TU(u + ret));
+                real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
+                real rhoH_ret = phys_.mixtureFormationRhoE(TU(u + ret));
 
-                if (u(I4) + ret(I4) - ek - rhoH_form_new < newrhoEinteralNew_sensible * 0.5)
+                if (u(I4) + ret(I4) - ek - rhoH_ret < pEps * 0.5)
                 {
                     std::cout << std::scientific << std::setprecision(5);
                     std::cout << u(0) << " " << ret(0) << std::endl;
                     std::cout << rhoEinternalNew_sensible << " " << rhoEinternal_sensible << std::endl;
-                    std::cout << declineV << std::endl;
-                    std::cout << newrhoEinteralNew_sensible << std::endl;
-                    std::cout << u(I4) + ret(I4) - ek - rhoH_form_new << std::endl;
+                    std::cout << pEps << std::endl;
+                    std::cout << u(I4) + ret(I4) - ek - rhoH_ret << std::endl;
                     std::cout << alpha << std::endl;
                     DNDS_assert(false);
                 }
