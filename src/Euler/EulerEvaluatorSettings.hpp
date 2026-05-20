@@ -292,7 +292,7 @@ namespace DNDS::Euler
         struct IdealGasProperty
         {
             real gamma = 1.4;
-            real Rgas = 1; ///< code-scaled gas constant R_code = R_phys/U0² (K⁻¹ when T is dimensional)
+            real Rgas = 287; ///< physical gas constant R_phys [J/(kg·K)]; consumed via toCode() → R_code = R_phys·T0/U0²
             real muGas = 1;
             real prGas = 0.72;
             real CpGas = Rgas * gamma / (gamma - 1);
