@@ -1445,17 +1445,26 @@ namespace DNDS::Euler
                 finc.array().rowwise() *= N2Proj.array();
                 finc.array() += F1.array().rowwise() * N1Proj.array();
 
-                TReal_Batch N12ProjSum = N1Proj.array() + N2Proj.array();
-                lam0V.array() *= N2Proj.array() / N12ProjSum.array();
-                lam4V.array() *= N2Proj.array() / N12ProjSum.array();
-                lam123V.array() *= N2Proj.array() / N12ProjSum.array();
-                lam0V.array() += N1Proj.array() * lam0V1.array() / N12ProjSum.array();
-                lam4V.array() += N1Proj.array() * lam4V1.array() / N12ProjSum.array();
-                lam123V.array() += N1Proj.array() * lam123V1.array() / N12ProjSum.array(); // todo: fix these
+                // Recover acoustic speed a from either direction (isotropic).
+                // a = max(|lam0 - lam123|, |lam4 - lam123|) — exact for all sign combos:
+                //   subsonic: lam0 = a∓un, lam4 = a±un → |lam4−lam123|=a, |lam0−lam123|=a
+                //   supersonic: lam0 = |un|−a, lam4 = |un|+a → both diffs = a
+                TReal_Batch aV;
+                aV.resizeLike(lam0V);
+                aV = (lam0V1 - lam123V1).array().abs().max((lam4V1 - lam123V1).array().abs());
+                // Guard: if N1 direction gives zero (static fluid), recover a from N2.
+                aV = aV.array().max((lam0V - lam123V).array().abs().max((lam4V - lam123V).array().abs()));
 
-                lam0V = lam0V1;
-                lam123V = lam123V1;
-                lam4V = lam4V1;
+                // N1 and N2 are orthogonal → combined normal-velo magnitude:
+                //   un = sqrt(un_n1² + un_n2²) = sqrt(lam123V1² + lam123V²)
+                TReal_Batch unV;
+                unV.resizeLike(lam0V);
+                unV = (lam123V1.array().pow(2) + lam123V.array().pow(2)).sqrt();
+
+                // Reconstruct face-combined eigenvalues.
+                lam0V = (unV - aV).array().abs();   // |un − a| (vanishes at sonic point)
+                lam123V = unV;                       // |un|
+                lam4V = unV + aV;                    // un + a ≥ 0 always
             }
         }
 

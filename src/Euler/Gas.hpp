@@ -1758,7 +1758,7 @@ namespace DNDS::Euler::Gas
         // Correct pressure gradient for formation-enthalpy gradient:
         //   ∇p = (γ-1)·(∇(ρE) - ½·KE_terms - ∇(rhoH_form))
         //   ∇(rhoH_form) = Σ (hf_k - hf_N)·∇(ρY_k) + hf_N·∇ρ
-        if (hfSpecies.size() > 1)
+        if (hfSpecies.size() >= 1)
         {
             int Ns1 = static_cast<int>(hfSpecies.size()) - 1;
             int nVars = static_cast<int>(GradU.cols());
