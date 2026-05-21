@@ -81,7 +81,7 @@ namespace DNDS::Euler
         real t0() const { return igProp_->L0 / igProp_->U0; }
 
         /// Conversion factor R0 = U0² / T0.  R_code = R_phys / R0.
-        real invR0() const { return igProp_->U0 * igProp_->U0 / igProp_->T0; }
+        real R0() const { return igProp_->U0 * igProp_->U0 / igProp_->T0; }
 
         /// Reference dynamic viscosity mu0 = rho0 · U0 · L0.
         real mu0() const { return igProp_->rho0 * igProp_->U0 * igProp_->L0; }
@@ -96,7 +96,7 @@ namespace DNDS::Euler
         real S0() const { return igProp_->rho0 * igProp_->U0 / igProp_->L0; }
 
         /// Convert physical gas-constant / heat-capacity to code-scaled:  X_code = X_phys / R0.
-        real toCode(real xPhys) const { return xPhys / invR0(); }
+        real toCode(real xPhys) const { return xPhys / R0(); }
         /// Convert code pressure to physical:  p_phys = p_code · p0.
         real toPhysP(real pCode) const { return pCode * p0(); }
         /// Convert code temperature to physical:  T_phys = T_code · T0.
@@ -136,8 +136,8 @@ namespace DNDS::Euler
             vel2 *= rhoInv * rhoInv;
             real rhoH_form = mixtureFormationRhoE(U);
             real e_sensible = (U[I4] - 0.5 * rho * vel2 - rhoH_form) * rhoInv;
-            if (e_sensible <= 0)
-                return gamma(T, U);        // fallback to cp/cv gamma
+            DNDS_assert_info(e_sensible > 0,
+                             fmt::format("gammaEq(): e_sensible={:.3e} ≤ 0 — invalid state", e_sensible));
             real Rmix = Rgas(U);           // code-scaled
             real p_exact = rho * Rmix * T; // code-scaled
 
@@ -477,7 +477,10 @@ namespace DNDS::Euler
         int nSpecies() const { return hasChemicalSource() ? chem().nSpecies() : 0; }
 
         /// Per-species total specific enthalpies in code units (h_k/U0²).
-        /// h_k = e_sensible_k + h_f_k + R_k·T  (no KE term).  Sum_k Y_k·h_k = H_mixture.
+        /// For ideal-gas EOS: h_k = e_sensible_k + h_f_k + R_k·T  (no KE term).
+        /// For non-ideal EOS, Cantera's speciesEnthalpies includes EOS-specific
+        /// non-ideal contributions; the additive decomposition above does not hold.
+        /// Sum_k Y_k·h_k = H_mixture.
         void speciesEnthalpies(real T, real p, const TU &U, Chemistry::SpeciesBufferView h) const
         {
             auto &c = chem();

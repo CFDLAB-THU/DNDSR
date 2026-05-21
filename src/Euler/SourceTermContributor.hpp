@@ -42,8 +42,8 @@ namespace DNDS::Euler
         real hMax = 0;
         real muf = 0;
         real T = 300;
-        real p = 101325;     // code pressure
-        real pPhys = 101325; // physical pressure [Pa] for Cantera
+        real p = 101325;     // default pressure (code=phys when scaling defaults are 1)
+        real pPhys = 101325; // physical pressure [Pa] for Cantera (same as p with default scaling)
         real gamma = 1.4;    // EOS gamma at this point (from phys_)
         real rhoH_form = 0;  // volumetric formation enthalpy (0 when no chemistry)
     };
@@ -428,9 +428,9 @@ namespace DNDS::Euler
             {
                 auto &bufJ = bufJ_[tid];
                 Chemistry::JacobianBufferView Jv{bufJ.data(), Ns, nVars, Ns};
-                double uM1 = (I4 >= 2) ? U[1] : 0;
-                double uM2 = (I4 >= 3) ? U[2] : 0;
-                double uM3 = (I4 >= 4) ? U[3] : 0;
+                double uM1 = (I4 >= 2) ? U[1] : 0; // ρu (I4=dim+1≥3, guard always true)
+                double uM2 = (I4 >= 3) ? U[2] : 0; // ρv (I4≥3 always for dim≥2)
+                double uM3 = (I4 >= 4) ? U[3] : 0; // ρw (present only for 3D, 0 for 2D)
                 // TODO(#audit MED16): determine if JAC_SKIP_FLUID should be removed.
                 // Currently zeroes energy→species coupling in the source Jacobian.
                 c.productionRatesAndJacobian(Tcantera, aux.pPhys, rho, U[I4],

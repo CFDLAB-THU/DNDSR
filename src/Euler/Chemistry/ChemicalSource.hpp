@@ -83,7 +83,7 @@ namespace DNDS::Euler::Chemistry
         const std::vector<std::string> &speciesNames() const;
         const std::vector<double> &molecularWeights() const;
 
-        // ---- Mixture thermodynamic properties (perfect gas, variable γ) ----
+        // ---- Mixture thermodynamic properties (via Cantera EOS) ----
 
         double mixtureR(ConstSpeciesBufferView Y) const;
         double mixtureCp(double T, ConstSpeciesBufferView Y, double p = 101325) const;

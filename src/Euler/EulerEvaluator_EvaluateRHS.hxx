@@ -403,6 +403,9 @@ namespace DNDS::Euler
 
                     TDiffU GradUMeanXyPrim;
                     real T = phys_.template temperature<dim>(UMeanXy);
+                    // γ from face-mean state, computed before wall-fix (below) modifies
+                    // ULxy/URxy.  Valid because wall-fix alters velocity/pressure but
+                    // γ varies weakly with those — and UMeanXy itself is unchanged.
                     real gamma = phys_.template gammaEq<dim>(T, UMeanXy);
                     auto hfSpecies = phys_.mixtureFormationRhoESpecies();
                     auto gradCons2Prim = [&](auto &U, auto &GradU, auto &GradUPrim)

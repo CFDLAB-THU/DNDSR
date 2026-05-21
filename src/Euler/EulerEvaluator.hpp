@@ -1732,8 +1732,6 @@ namespace DNDS::Euler
                     DNDS_assert(u(I4 + 1) >= 0); //! might be bad using gmres, add this to gmres inc!
                     real declineV = ret(I4 + 1) / (u(I4 + 1) + 1e-6);
                     real newu5 = u(I4 + 1) * std::exp(declineV);
-                    // ! refvalue:
-                    real muRef = phys_.muRef();
                     newu5 = std::max(1e-6, newu5);
                     ret(I4 + 1) = newu5 - u(I4 + 1);
                 }
@@ -1748,8 +1746,6 @@ namespace DNDS::Euler
                     DNDS_assert(u(I4 + 1) >= 0); //! might be bad using gmres, add this to gmres inc!
                     real declineV = ret(I4 + 1) / (u(I4 + 1) + 1e-6);
                     real newu5 = u(I4 + 1) * std::exp(declineV);
-                    // ! refvalue:
-                    real muRef = phys_.muRef();
                     // newu5 = std::max(1e-10, newu5);
                     ret(I4 + 1) = newu5 - u(I4 + 1);
                 }
@@ -1761,8 +1757,6 @@ namespace DNDS::Euler
                     DNDS_assert(u(I4 + 2) >= 0); //! might be bad using gmres, add this to gmres inc!
                     real declineV = ret(I4 + 2) / (u(I4 + 2) + 1e-6);
                     real newu5 = u(I4 + 2) * std::exp(declineV);
-                    // ! refvalue:
-                    real muRef = phys_.muRef();
                     // newu5 = std::max(1e-10, newu5);
                     ret(I4 + 2) = newu5 - u(I4 + 2);
                 }
