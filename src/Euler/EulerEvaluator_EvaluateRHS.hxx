@@ -480,11 +480,9 @@ namespace DNDS::Euler
                             Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.template gammaEq<dim>(T_noRS, ULc), phys_.mixtureFormationRhoE(ULc));
                             DNDS_assert(ULcPrim(0) > 0 && temp > 0);
                             DNDS_assert_info(ULcPrim(0) > 0 && ULcPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", ULcPrim(0), ULcPrim(I4), temp));
-                            // real newPressure = ULcPrim(0) * phys_.Rgas() * temp;
-                            // ULcPrim(I4) = newPressure;
                             real newDensity = ULcPrim(I4) / temp / phys_.Rgas(ULc);
                             ULcPrim(0) = newDensity;
-                            Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, URxy, phys_.template gammaEq<dim>(T_noRS, ULc), phys_.mixtureFormationRhoE(URxy));
+                            Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, phys_.template gammaEq<dim>(T_noRS, ULc), phys_.mixtureFormationRhoE(ULc));
                         }
                         ULxy = ULc;
                         URxy = ULc;
